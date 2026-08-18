@@ -1,0 +1,48 @@
+{
+  "name": "training-monitor-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server/dev.ts",
+    "dev:web": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "tsc -b && vite build",
+    "start": "tsx server/index.ts",
+    "check": "tsc -b --pretty false",
+    "plan-check": "node scripts/training-plan-check.mjs",
+    "plan-visual-check": "node scripts/training-plan-visual-check.mjs",
+    "api-check": "node scripts/api-check.mjs",
+    "visual-check": "node scripts/visual-check.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "bcryptjs": "latest",
+    "exceljs": "latest",
+    "express": "latest",
+    "html2canvas": "latest",
+    "jsonwebtoken": "latest",
+    "jspdf": "latest",
+    "lucide-react": "latest",
+    "multer": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/jsonwebtoken": "latest",
+    "@types/multer": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "playwright-core": "latest",
+    "tsx": "latest",
+    "typescript": "5.9.3",
+    "vite": "latest"
+  },
+  "overrides": {
+    "uuid": "11.1.1",
+    "brace-expansion": "5.0.8"
+  }
+}
