@@ -175,6 +175,67 @@ export const api = {
       body: JSON.stringify({ athleteId, data, planId: planId || undefined })
     });
   },
+  // AI 训练计划 API
+  async analyzeAITrainingPlan(formData: FormData) {
+    return request<{
+      plan: {
+        title: string;
+        summary: string;
+        durationWeeks: number;
+        startDate: string;
+        endDate: string;
+        scheduleLabel: string;
+        bodyWeight: number | null;
+        age: number | null;
+        weeklyPlans: Array<{
+          weekNumber: number;
+          focus: string;
+          totalLoad: number;
+          days: Array<{
+            dayOfWeek: string;
+            exercises: Array<{
+              name: string;
+              sets: string;
+              reps: string;
+              percentage: number;
+              notes?: string;
+            }>;
+          }>;
+        }>;
+        exercises: Array<{
+          id: string;
+          name: string;
+          maxWeight: number | null;
+          unitNote: string;
+        }>;
+      };
+      aiMetadata: {
+        inputType: 'text' | 'file';
+        inputContent: string;
+        fileMetadata?: {
+          filename: string;
+          mimetype: string;
+          size: number;
+        };
+        modelUsed: string;
+        attempts: number;
+        generatedAt: string;
+      };
+    }>('/api/training-plans/ai/analyze', {
+      method: 'POST',
+      body: formData
+    });
+  },
+  async saveAITrainingPlan(params: {
+    athleteId: number;
+    plan: unknown;
+    aiMetadata: unknown;
+  }) {
+    return request<{ message: string; id: number }>('/api/training-plans/ai/save', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  },
   async deleteTrainingPlan(planId: number) {
     return request<{ message: string }>(`/api/training-plans/${planId}`, { method: 'DELETE' });
   },

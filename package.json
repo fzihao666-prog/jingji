@@ -18,7 +18,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "bcryptjs": "latest",
-    "exceljs": "latest",
+    "exceljs": "^4.4.0",
     "express": "latest",
     "html2canvas": "latest",
     "jsonwebtoken": "latest",

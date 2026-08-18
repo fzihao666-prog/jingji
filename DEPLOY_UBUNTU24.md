@@ -2,6 +2,8 @@
 
 本文档详细说明如何在 Ubuntu 24.04 LTS 服务器上部署竞迹训练监控平台。
 
+> **本地开发测试**：如需在 Windows 本地测试，请参考 [WINDOWS_LOCAL_DEV.md](./WINDOWS_LOCAL_DEV.md)
+
 ---
 
 ## 目录

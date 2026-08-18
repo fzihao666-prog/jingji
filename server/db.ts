@@ -141,6 +141,7 @@ db.exec(`
     title TEXT NOT NULL DEFAULT '',
     schedule_label TEXT NOT NULL DEFAULT '',
     plan_data TEXT NOT NULL DEFAULT '{}',
+    ai_metadata TEXT,  -- AI生成信息：输入类型、模型、分析摘要等
     created_by INTEGER NOT NULL,
     updated_by INTEGER NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -411,6 +412,9 @@ if (!hasColumn('training_plans', 'start_date')) {
 }
 if (!hasColumn('training_plans', 'end_date')) {
   db.exec("ALTER TABLE training_plans ADD COLUMN end_date TEXT NOT NULL DEFAULT ''");
+}
+if (!hasColumn('training_plans', 'ai_metadata')) {
+  db.exec('ALTER TABLE training_plans ADD COLUMN ai_metadata TEXT');
 }
 db.exec(`
   UPDATE training_plans

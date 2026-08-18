@@ -30,6 +30,8 @@ import {
   STRENGTH_METRICS,
   type StrengthMetricValues
 } from '../shared/strength-model.ts';
+import { TrainingPlanAIService, type AthleteContext } from './ai-service.ts';
+import { extractFileContent, isFileTypeSupported, getSupportedFileTypesDescription } from './file-parser.ts';
 
 try {
   process.loadEnvFile(resolve(process.cwd(), '.env'));
@@ -167,6 +169,19 @@ const photoUpload = multer({
       return;
     }
     callback(null, true);
+  }
+});
+
+// AI 训练计划文件上传配置
+const trainingPlanAIUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, callback) => {
+    if (isFileTypeSupported(file.mimetype)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`不支持的文件类型。支持格式：${getSupportedFileTypesDescription()}`));
+    }
   }
 });
 const port = Number(process.env.PORT || 8787);
@@ -2202,6 +2217,248 @@ app.delete('/api/training-plans/:id', requireAuth, requireRole('SCC', 'PRJ', 'RE
     throw deleteError;
   }
 });
+
+// ============================================
+// AI 驱动训练计划 API
+// ============================================
+
+/**
+ * 获取运动员上下文（历史数据）
+ */
+function getAthleteContext(athleteId: number): AthleteContext {
+  // 获取运动员基本信息
+  const athlete = db.prepare(`
+    SELECT id, name, project, team, gender, region
+    FROM athletes WHERE id = ?
+  `).get(athleteId) as {
+    id: number;
+    name: string;
+    project: string;
+    team: string;
+    gender: string;
+    region: string;
+  };
+
+  // 获取最近6个月的训练计划
+  const recentPlans = db.prepare(`
+    SELECT plan_date as date, plan_data as dataJson
+    FROM training_plans
+    WHERE athlete_id = ? AND plan_date >= date('now', '-6 months')
+    ORDER BY plan_date DESC
+    LIMIT 3
+  `).all(athleteId) as Array<{ date: string; dataJson: string }>;
+
+  const parsedPlans = recentPlans.map(plan => {
+    try {
+      const data = JSON.parse(plan.dataJson);
+      return {
+        date: plan.date,
+        duration: data.durationWeeks || 4,
+        title: data.title || '',
+        exercises: data.exercises?.map((e: { name: string }) => e.name) || [],
+        maxWeights: data.exercises?.reduce((acc: Record<string, number>, e: { name: string; maxWeight: number | null }) => {
+          if (e.maxWeight) acc[e.name] = e.maxWeight;
+          return acc;
+        }, {} as Record<string, number>) || {}
+      };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+
+  // 获取最近28天训练记录
+  const recentRecords = db.prepare(`
+    SELECT date, training_type as trainingType, duration_min as durationMin, rpe, fatigue_index as fatigueIndex, status
+    FROM training_records
+    WHERE athlete_id = ? AND date >= date('now', '-28 days')
+    ORDER BY date DESC
+  `).all(athleteId) as Array<{
+    date: string;
+    trainingType: string;
+    durationMin: number;
+    rpe: number | null;
+    fatigueIndex: number | null;
+    status: string;
+  }>;
+
+  // 获取最近3次力量测试
+  const strengthTests = db.prepare(`
+    SELECT test_date as date, metrics_json as metricsJson
+    FROM athlete_strength_tests
+    WHERE athlete_id = ?
+    ORDER BY test_date DESC
+    LIMIT 3
+  `).all(athleteId) as Array<{ date: string; metricsJson: string }>;
+
+  const parsedTests = strengthTests.map(test => {
+    try {
+      return {
+        date: test.date,
+        metrics: JSON.parse(test.metricsJson)
+      };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+
+  return {
+    athlete,
+    recentPlans: parsedPlans as AthleteContext['recentPlans'],
+    recentRecords,
+    strengthTests: parsedTests as AthleteContext['strengthTests']
+  };
+}
+
+/**
+ * POST /api/training-plans/ai/analyze
+ * AI 分析输入内容，生成训练计划预览
+ */
+app.post(
+  '/api/training-plans/ai/analyze',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  trainingPlanAIUpload.single('file'),
+  async (req, res) => {
+    try {
+      const athleteId = Number(req.body.athleteId);
+      const inputType = req.body.inputType as 'text' | 'file';
+
+      if (!athleteId) {
+        return res.status(400).json({ message: '请选择运动员' });
+      }
+
+      if (!hasAthleteAccess(req.authUser!, athleteId)) {
+        return res.status(403).json({ message: '无权访问该运动员数据' });
+      }
+
+      // 获取运动员上下文
+      const context = getAthleteContext(athleteId);
+
+      // 提取输入内容
+      let inputContent: string;
+      let fileMetadata: { filename?: string; mimetype?: string; size?: number } = {};
+
+      if (inputType === 'file') {
+        if (!req.file) {
+          return res.status(400).json({ message: '请上传文件' });
+        }
+        const extracted = await extractFileContent(req.file.buffer, req.file.mimetype, req.file.originalname);
+        inputContent = extracted.content;
+        fileMetadata = extracted.metadata;
+      } else {
+        inputContent = req.body.text || '';
+        if (!inputContent.trim()) {
+          return res.status(400).json({ message: '请输入训练需求描述' });
+        }
+      }
+
+      // 调用 AI 生成训练计划
+      const aiService = new TrainingPlanAIService();
+      const result = await aiService.generateTrainingPlan(context, inputContent, inputType);
+
+      // 记录审计日志
+      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
+        .run(
+          req.authUser!.id,
+          'AI_GENERATE_TRAINING_PLAN',
+          'training_plan',
+          athleteId,
+          JSON.stringify({ model: result.modelUsed, inputType })
+        );
+
+      res.json({
+        plan: result.plan,
+        aiMetadata: {
+          inputType,
+          inputContent: inputContent.slice(0, 1000),
+          fileMetadata,
+          modelUsed: result.modelUsed,
+          attempts: result.attempts,
+          generatedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('[AI Training Plan] Error:', error);
+      res.status(500).json({
+        message: `AI 生成失败：${error instanceof Error ? error.message : '未知错误'}`
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/training-plans/ai/save
+ * 保存 AI 生成的训练计划
+ */
+app.post(
+  '/api/training-plans/ai/save',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    try {
+      const { athleteId, plan, aiMetadata } = req.body;
+
+      if (!athleteId || !plan) {
+        return res.status(400).json({ message: '缺少必要参数' });
+      }
+
+      if (!hasAthleteAccess(req.authUser!, athleteId)) {
+        return res.status(403).json({ message: '无权访问该运动员数据' });
+      }
+
+      // 转换动态格式为传统格式存储
+      const legacyPlan = {
+        title: plan.title,
+        startDate: plan.startDate,
+        endDate: plan.endDate,
+        scheduleLabel: plan.scheduleLabel || '',
+        bodyWeight: plan.bodyWeight,
+        age: plan.age,
+        durationWeeks: plan.durationWeeks,
+        weeklyPlans: plan.weeklyPlans,
+        exercises: plan.exercises || []
+      };
+
+      // 保存到数据库
+      const result = db.prepare(`
+        INSERT INTO training_plans
+          (athlete_id, plan_date, start_date, end_date, title, schedule_label, plan_data, ai_metadata, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        athleteId,
+        plan.startDate,
+        plan.startDate,
+        plan.endDate,
+        plan.title,
+        plan.scheduleLabel || '',
+        JSON.stringify(legacyPlan),
+        JSON.stringify(aiMetadata),
+        req.authUser!.id,
+        req.authUser!.id
+      );
+
+      // 记录审计日志
+      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
+        .run(
+          req.authUser!.id,
+          'SAVE_AI_TRAINING_PLAN',
+          'training_plan',
+          result.lastInsertRowid,
+          JSON.stringify({ athleteId, title: plan.title, model: aiMetadata?.modelUsed })
+        );
+
+      res.json({
+        message: 'AI 训练计划已保存',
+        id: result.lastInsertRowid
+      });
+    } catch (error) {
+      console.error('[AI Training Plan Save] Error:', error);
+      res.status(500).json({
+        message: `保存失败：${error instanceof Error ? error.message : '未知错误'}`
+      });
+    }
+  }
+);
 
 app.get('/api/training-plans/:id/export', requireAuth, async (req, res) => {
   const planId = Number(req.params.id);

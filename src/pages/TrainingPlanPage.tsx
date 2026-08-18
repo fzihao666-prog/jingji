@@ -23,6 +23,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { api } from '../api';
+import { AITrainingPlanGenerator } from '../components/AITrainingPlanGenerator';
 import type {
   Athlete,
   BatchTrainingPlanPreview,
@@ -298,6 +299,16 @@ export function TrainingPlanPage(props: Props) {
       .catch((error) => setMessage(error instanceof Error ? error.message : '训练计划读取失败。'))
       .finally(() => setLoading(false));
   }, [athlete?.id]);
+
+  const refresh = async () => {
+    if (!athlete) return;
+    const response = await api.trainingPlans(athlete.id);
+    setPlans(response.plans);
+    const latest = response.plans[0];
+    setPlanId(latest?.id || null);
+    setData(latest?.data || emptyPlan());
+    if (latest?.photoUrl) setPhotoUrl(latest.photoUrl);
+  };
 
   const selectPlan = (id: number) => {
     const plan = plans.find((item) => item.id === id);
@@ -696,68 +707,82 @@ export function TrainingPlanPage(props: Props) {
           {message && <div className={message.includes('已') ? 'plan-message success' : 'plan-message'}>{message}</div>}
 
           <section className="plan-matrix-shell">
-            <div className="plan-matrix-title">
-              <div><Dumbbell size={18} /><strong>{data.scheduleLabel || '训练安排'}</strong></div>
-              <span>重量由MAX和百分比计算；填写完成次数后雷达图自动更新</span>
-            </div>
-            <div className="plan-matrix-scroll">
-              <table className="plan-matrix">
-                <thead>
-                  <tr>
-                    <th rowSpan={2} className="max-head">MAX</th>
-                    <th rowSpan={2} className="exercise-head">项目</th>
-                    {weekKeys.map((weekKey, index) => <th key={weekKey} colSpan={6} className={`week-band week-${index + 1}`}>WEEK {weekKey}</th>)}
-                    {canEdit && <th rowSpan={2} className="tools-head">操作</th>}
-                  </tr>
-                  <tr>
-                    {weekKeys.flatMap((weekKey, weekIndex) => ['组', '×', '次', '%', '重量', '完成次数'].map((label, index) => (
-                      <th key={`${weekKey}-${label}`} className={`week-sub week-${weekIndex + 1} ${index === 5 ? 'actual-head' : ''}`}>{label}</th>
-                    )))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.exercises.map((exercise) => exercise.lines.map((line, lineIndex) => (
-                    <tr key={line.id}>
-                      {lineIndex === 0 && (
-                        <>
-                          <td rowSpan={exercise.lines.length} className="max-cell">
-                            <input aria-label={`${exercise.name || '项目'} MAX重量`} type="number" step="0.1" disabled={!canEdit} value={exercise.maxWeight ?? ''} onChange={(event) => updateExercise(exercise.id, { maxWeight: numericValue(event.target.value) })} />
-                            <small>kg</small>
-                          </td>
-                          <td rowSpan={exercise.lines.length} className="exercise-cell">
-                            <textarea aria-label="项目名称" disabled={!canEdit} value={exercise.name} onChange={(event) => updateExercise(exercise.id, { name: event.target.value })} />
-                            {canEdit && (
-                              <div className="exercise-tools">
-                                <button type="button" onClick={() => addLine(exercise.id)}><Plus size={13} />加行</button>
-                                <button type="button" onClick={() => removeExercise(exercise.id)}><Trash2 size={13} />删除</button>
-                              </div>
-                            )}
-                          </td>
-                        </>
-                      )}
-                      {weekKeys.flatMap((weekKey, weekIndex) => {
-                        const week = line.weeks[weekKey];
-                        return [
-                          <td key={`${weekKey}-sets`} className={`week-body week-${weekIndex + 1}`}><input aria-label={`第${weekKey}周组数`} disabled={!canEdit} value={week.sets} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { sets: event.target.value })} /></td>,
-                          <td key={`${weekKey}-times`} className={`week-body week-${weekIndex + 1} times-cell`}>×</td>,
-                          <td key={`${weekKey}-reps`} className={`week-body week-${weekIndex + 1}`}><input aria-label={`第${weekKey}周次数`} disabled={!canEdit} value={week.reps} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { reps: event.target.value })} /></td>,
-                          <td key={`${weekKey}-percent`} className={`week-body week-${weekIndex + 1} percent-cell`}><input aria-label={`第${weekKey}周百分比`} type="number" min="0" max="100" step="0.1" disabled={!canEdit} value={week.percentage ?? ''} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { percentage: numericValue(event.target.value) })} /><span>%</span></td>,
-                          <td key={`${weekKey}-weight`} className={`week-body week-${weekIndex + 1} weight-cell`}>{plannedWeight(exercise.maxWeight, week.percentage)}</td>,
-                          <td key={`${weekKey}-actual`} className={`week-body week-${weekIndex + 1} actual-cell`}><input aria-label={`第${weekKey}周实际完成次数`} inputMode="decimal" disabled={!canEdit} placeholder="填写次数" value={week.actualCompleted} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { actualCompleted: event.target.value })} /></td>
-                        ];
-                      })}
-                      {canEdit && <td className="line-tools"><button type="button" aria-label="删除处方行" onClick={() => removeLine(exercise.id, line.id)}><Trash2 size={14} /></button></td>}
+            <>
+              <div className="plan-matrix-title">
+                <div><Dumbbell size={18} /><strong>{data.scheduleLabel || '训练安排'}</strong></div>
+                <span>重量由MAX和百分比计算；填写完成次数后雷达图自动更新</span>
+              </div>
+              <div className="plan-matrix-scroll">
+                <table className="plan-matrix">
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} className="max-head">MAX</th>
+                      <th rowSpan={2} className="exercise-head">项目</th>
+                      {weekKeys.map((weekKey, index) => <th key={weekKey} colSpan={6} className={`week-band week-${index + 1}`}>WEEK {weekKey}</th>)}
+                      {canEdit && <th rowSpan={2} className="tools-head">操作</th>}
                     </tr>
-                  )))}
-                </tbody>
-              </table>
-            </div>
-            {canEdit && data.exercises.length < 8 && (
-              <button className="plan-add-exercise" type="button" onClick={() => setData((current) => ({ ...current, exercises: [...current.exercises, emptyExercise()] }))}>
-                <Plus size={16} />添加训练项目（最多8项）
-              </button>
-            )}
+                    <tr>
+                      {weekKeys.flatMap((weekKey, weekIndex) => ['组', '×', '次', '%', '重量', '完成次数'].map((label, index) => (
+                        <th key={`${weekKey}-${label}`} className={`week-sub week-${weekIndex + 1} ${index === 5 ? 'actual-head' : ''}`}>{label}</th>
+                      )))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.exercises.map((exercise) => exercise.lines.map((line, lineIndex) => (
+                      <tr key={line.id}>
+                        {lineIndex === 0 && (
+                          <>
+                            <td rowSpan={exercise.lines.length} className="max-cell">
+                              <input aria-label={`${exercise.name || '项目'} MAX重量`} type="number" step="0.1" disabled={!canEdit} value={exercise.maxWeight ?? ''} onChange={(event) => updateExercise(exercise.id, { maxWeight: numericValue(event.target.value) })} />
+                              <small>kg</small>
+                            </td>
+                            <td rowSpan={exercise.lines.length} className="exercise-cell">
+                              <textarea aria-label="项目名称" disabled={!canEdit} value={exercise.name} onChange={(event) => updateExercise(exercise.id, { name: event.target.value })} />
+                              {canEdit && (
+                                <div className="exercise-tools">
+                                  <button type="button" onClick={() => addLine(exercise.id)}><Plus size={13} />加行</button>
+                                  <button type="button" onClick={() => removeExercise(exercise.id)}><Trash2 size={13} />删除</button>
+                                </div>
+                              )}
+                            </td>
+                          </>
+                        )}
+                        {weekKeys.flatMap((weekKey, weekIndex) => {
+                          const week = line.weeks[weekKey];
+                          return [
+                            <td key={`${weekKey}-sets`} className={`week-body week-${weekIndex + 1}`}><input aria-label={`第${weekKey}周组数`} disabled={!canEdit} value={week.sets} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { sets: event.target.value })} /></td>,
+                            <td key={`${weekKey}-times`} className={`week-body week-${weekIndex + 1} times-cell`}>×</td>,
+                            <td key={`${weekKey}-reps`} className={`week-body week-${weekIndex + 1}`}><input aria-label={`第${weekKey}周次数`} disabled={!canEdit} value={week.reps} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { reps: event.target.value })} /></td>,
+                            <td key={`${weekKey}-percent`} className={`week-body week-${weekIndex + 1} percent-cell`}><input aria-label={`第${weekKey}周百分比`} type="number" min="0" max="100" step="0.1" disabled={!canEdit} value={week.percentage ?? ''} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { percentage: numericValue(event.target.value) })} /><span>%</span></td>,
+                            <td key={`${weekKey}-weight`} className={`week-body week-${weekIndex + 1} weight-cell`}>{plannedWeight(exercise.maxWeight, week.percentage)}</td>,
+                            <td key={`${weekKey}-actual`} className={`week-body week-${weekIndex + 1} actual-cell`}><input aria-label={`第${weekKey}周实际完成次数`} inputMode="decimal" disabled={!canEdit} placeholder="填写次数" value={week.actualCompleted} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { actualCompleted: event.target.value })} /></td>
+                          ];
+                        })}
+                        {canEdit && <td className="line-tools"><button type="button" aria-label="删除处方行" onClick={() => removeLine(exercise.id, line.id)}><Trash2 size={14} /></button></td>}
+                      </tr>
+                    )))}
+                  </tbody>
+                </table>
+              </div>
+              {canEdit && data.exercises.length < 8 && (
+                <button className="plan-add-exercise" type="button" onClick={() => setData((current) => ({ ...current, exercises: [...current.exercises, emptyExercise()] }))}>
+                  <Plus size={16} />添加训练项目（最多8项）
+                </button>
+              )}
+            </>
           </section>
+          {canEdit && athlete && (
+            <section className="ai-mode-container">
+              <AITrainingPlanGenerator
+                user={props.user}
+                athlete={athlete}
+                onSaved={() => {
+                  refresh();
+                  props.onChanged();
+                }}
+              />
+            </section>
+          )}
         </>
       )}
     </div>
