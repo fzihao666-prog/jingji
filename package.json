@@ -24,7 +24,9 @@
     "jsonwebtoken": "latest",
     "jspdf": "latest",
     "lucide-react": "latest",
+    "mammoth": "^1.12.1",
     "multer": "latest",
+    "pdfjs-dist": "^6.2.108",
     "react": "latest",
     "react-dom": "latest",
     "recharts": "latest"
@@ -43,6 +45,6 @@
   },
   "overrides": {
     "uuid": "11.1.1",
-    "brace-expansion": "5.0.8"
+    "brace-expansion": "5.0.9"
   }
 }

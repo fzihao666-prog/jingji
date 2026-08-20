@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import ExcelJS from 'exceljs';
 
@@ -13,9 +14,109 @@ for (const target of cleanupTargets) {
   if (target.startsWith(resolve(root, 'data')) && existsSync(target)) rmSync(target);
 }
 
+const aiMockPort = 8793;
+const aiRecordResponse = {
+  summary: '识别到林舟一条水上训练记录。',
+  confidence: 0.96,
+  warnings: [],
+  unmappedContent: [],
+  rows: [{
+    sourceRow: '2026-08-02 林舟 水上U2 12公里 90分钟 RPE6',
+    athleteName: '林舟',
+    date: '2026-08-02',
+    trainingType: '水上训练',
+    structureType: '专项耐力',
+    intensityZone: 'U2',
+    content: '水上U2耐力划行',
+    durationMin: 90,
+    distanceKm: 12,
+    rpe: 6,
+    srpe: 540,
+    smvl: null,
+    morningPulse: 52,
+    weightKg: 58.6,
+    sleepHours: 7.5,
+    fatigueIndex: 3,
+    status: 'normal',
+    coachNote: '',
+    trainingBreakdown: {
+      waterMinutes: 90,
+      ergMinutes: 0,
+      landMinutes: { functional: 0, endurance: 0, maxStrength: 0, speedStrength: 0, recovery: 0, running: 0, other: 0 },
+      waterDistanceByZone: { U3: 0, U2: 12, U1: 0, AT: 0, TPT: 0, AN: 0, ATP: 0 },
+      waterTimeByZone: { U3: 0, U2: 90, U1: 0, AT: 0, TPT: 0, AN: 0, ATP: 0 },
+      ergDistanceByZone: { U3: 0, U2: 0, U1: 0, AT: 0, TPT: 0, AN: 0, ATP: 0 }
+    },
+    confidence: 0.96,
+    warnings: []
+  }]
+};
+function aiPlanResponse(secondWeek = false) {
+  return {
+    title: '两周水上训练计划',
+    summary: '测试用分批训练计划。',
+    startDate: secondWeek ? '2026-09-08' : '2026-09-01',
+    endDate: secondWeek ? '2026-09-14' : '2026-09-07',
+    scheduleLabel: '周一至周六训练',
+    bodyWeight: null,
+    age: null,
+    durationWeeks: 1,
+    weeklyPlans: [{
+      weekNumber: secondWeek ? 2 : 1,
+      label: secondWeek ? '第2周' : '第1周',
+      focus: '有氧技术',
+      days: [{
+        date: secondWeek ? '2026-09-08' : '2026-09-01',
+        dayLabel: '周一',
+        focus: 'U2',
+        items: [{
+          name: '水上U2', category: '水上', sets: null, reps: null, load: null,
+          percentage: null, duration: '90分钟', distance: '12km', intensity: 'U2', pace: null,
+          notes: null, rawText: '水上U2 12km 90分钟', confidence: 0.95
+        }]
+      }]
+    }],
+    confidence: 0.95,
+    warnings: [],
+    unmappedContent: []
+  };
+}
+const aiMock = createServer(async (request, response) => {
+  const bodyChunks = [];
+  for await (const chunk of request) bodyChunks.push(chunk);
+  let requestPayload = {};
+  try { requestPayload = JSON.parse(Buffer.concat(bodyChunks).toString('utf8')); } catch {}
+  const systemPrompt = requestPayload.messages?.[0]?.content || '';
+  const userPrompt = JSON.stringify(requestPayload.messages?.[1]?.content || '');
+  const result = systemPrompt.includes('判断训练文件')
+    ? (userPrompt.includes('plan-batch.xlsx')
+        ? { documentType: 'training_plan', confidence: 0.99, reason: '测试文件标题和内容均为预定周计划' }
+        : { documentType: 'training_record', confidence: 0.99, reason: '测试文件包含明确姓名和已完成训练数据' })
+    : systemPrompt.includes('已有训练计划')
+      ? aiPlanResponse(userPrompt.includes('第2周'))
+      : aiRecordResponse;
+  response.writeHead(200, { 'content-type': 'application/json' });
+  response.end(JSON.stringify({
+    choices: [{
+      message: {
+        content: JSON.stringify(result)
+      }
+    }]
+  }));
+});
+await new Promise((resolveListen) => aiMock.listen(aiMockPort, '127.0.0.1', resolveListen));
+
 const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
   cwd: root,
-  env: { ...process.env, PORT: String(port), DATABASE_PATH: databasePath },
+  env: {
+    ...process.env,
+    PORT: String(port),
+    DATABASE_PATH: databasePath,
+    AI_BASE_URL: `http://127.0.0.1:${aiMockPort}`,
+    AI_API_KEY: 'api-check-key',
+    AI_MODEL: 'qwen-api-check',
+    AI_TIMEOUT_MS: '30000'
+  },
   stdio: ['ignore', 'pipe', 'pipe']
 });
 let serverError = '';
@@ -55,7 +156,7 @@ try {
   assert(adminLogin.status === 200 && adminToken && adminLogin.payload.user.role === 'DMD', '数据监控总监登录或角色迁移失败');
 
   const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
-  const analysisAthlete = adminAthletesForAnalysis.payload.athletes[0];
+  const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.project === '赛艇');
   const modelResult = await request(`/api/analysis/model?project=${encodeURIComponent(analysisAthlete.project)}`, {}, adminToken);
   const analysisResult = await request(
     `/api/analysis/summary?from=2026-06-01&to=2026-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,
@@ -172,6 +273,124 @@ try {
       && importedRow?.trainingBreakdown.waterDistanceByZone.U2 === 12
       && importedRow?.trainingBreakdown.ergDistanceByZone.U2 === 6,
     'Excel分项数据入库或周期报告数据读取失败'
+  );
+
+  const aiImportForm = new FormData();
+  aiImportForm.append('project', '赛艇');
+  aiImportForm.append('file', new Blob([
+    '2026-08-02 林舟 水上U2耐力训练，12公里，90分钟，RPE6。'
+  ], { type: 'text/plain' }), 'coach-note.txt');
+  const aiImportPreview = await request('/api/import/ai/preview', { method: 'POST', body: aiImportForm }, adminToken);
+  const aiPreviewRow = aiImportPreview.payload.rows?.[0];
+  assert(
+    aiImportPreview.status === 200
+      && aiImportPreview.payload.sourceType === 'ai_recognition'
+      && aiImportPreview.payload.modelUsed.includes('qwen-api-check')
+      && aiImportPreview.payload.valid === 1
+      && aiPreviewRow.athleteName === '林舟'
+      && aiPreviewRow.durationMin === 90
+      && aiPreviewRow.trainingBreakdown.waterDistanceByZone.U2 === 12,
+    'AI训练数据识别预览或字段归一化失败'
+  );
+  const aiImportCommit = await request('/api/import/commit', {
+    method: 'POST',
+    body: JSON.stringify({ importId: aiImportPreview.payload.importId, rows: aiImportPreview.payload.rows })
+  }, adminToken);
+  const aiImportedRecords = await request('/api/records?from=2026-08-02&to=2026-08-02&project=赛艇', {}, adminToken);
+  const aiImportedRow = aiImportedRecords.payload.records?.find((item) => item.athleteName === '林舟');
+  assert(
+    aiImportCommit.status === 200
+      && aiImportCommit.payload.imported === 1
+      && aiImportedRow?.durationMin === 90
+      && aiImportedRow?.distanceKm === 12
+      && aiImportedRow?.rpe === 6,
+    'AI识别记录人工确认后入库失败'
+  );
+
+  const batchWorkbook = new ExcelJS.Workbook();
+  batchWorkbook.addWorksheet('第一周').addRows([
+    ['2026-08-02', '林舟', '水上U2 12公里 90分钟 RPE6'],
+    ['批次校验', '第一张工作表必须被识别']
+  ]);
+  batchWorkbook.addWorksheet('第二周').addRows([
+    ['2026-08-02', '林舟', '同日补充说明'],
+    ['批次校验', '第二张工作表也必须被识别']
+  ]);
+  const batchBytes = await batchWorkbook.xlsx.writeBuffer();
+  const batchInspectForm = new FormData();
+  batchInspectForm.append('project', '赛艇');
+  batchInspectForm.append(
+    'file',
+    new Blob([batchBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    'two-sheet-ai-import.xlsx'
+  );
+  const batchInspection = await request('/api/import/ai/inspect', { method: 'POST', body: batchInspectForm }, adminToken);
+  assert(
+    batchInspection.status === 200
+      && batchInspection.payload.sections.length === 2
+      && batchInspection.payload.sourceFile.chunkCount === 2,
+    'AI导入工作表预检未完整枚举工作簿'
+  );
+  const batchStart = await request('/api/import/ai/start', {
+    method: 'POST',
+    body: JSON.stringify({
+      fileId: batchInspection.payload.fileId,
+      sectionNames: batchInspection.payload.sections.map((section) => section.name),
+      targetType: 'auto'
+    })
+  }, adminToken);
+  let batchJob = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const status = await request(`/api/import/ai/jobs/${batchStart.payload.jobId}`, {}, adminToken);
+    batchJob = status.payload;
+    if (batchJob.status === 'complete' || batchJob.status === 'failed') break;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  assert(
+    batchStart.status === 200
+      && batchJob?.status === 'complete'
+      && batchJob.result.documentType === 'training_record'
+      && batchJob.result.processedChunks === 2
+      && batchJob.result.sourceFile.sections.length === 2
+      && batchJob.result.rows.length === 1,
+    `AI分批识别、自动分类或跨批合并失败：${batchJob?.error || '无完成结果'}`
+  );
+
+  const planBatchWorkbook = new ExcelJS.Workbook();
+  planBatchWorkbook.addWorksheet('第1周').addRows([['训练计划'], ['周一', '水上U2', '12km', '90分钟']]);
+  planBatchWorkbook.addWorksheet('第2周').addRows([['训练计划'], ['周一', '水上U2', '12km', '90分钟']]);
+  const planBatchBytes = await planBatchWorkbook.xlsx.writeBuffer();
+  const planBatchForm = new FormData();
+  planBatchForm.append('project', '赛艇');
+  planBatchForm.append(
+    'file',
+    new Blob([planBatchBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    'plan-batch.xlsx'
+  );
+  const planInspection = await request('/api/import/ai/inspect', { method: 'POST', body: planBatchForm }, adminToken);
+  const planStart = await request('/api/import/ai/start', {
+    method: 'POST',
+    body: JSON.stringify({
+      fileId: planInspection.payload.fileId,
+      sectionNames: planInspection.payload.sections.map((section) => section.name),
+      targetType: 'auto'
+    })
+  }, adminToken);
+  let planJob = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const status = await request(`/api/import/ai/jobs/${planStart.payload.jobId}`, {}, adminToken);
+    planJob = status.payload;
+    if (planJob.status === 'complete' || planJob.status === 'failed') break;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  assert(
+    planJob?.status === 'complete'
+      && planJob.result.documentType === 'training_plan'
+      && planJob.result.processedChunks === 2
+      && planJob.result.plan.weeklyPlans.length === 2
+      && planJob.result.plan.startDate === '2026-09-01'
+      && planJob.result.plan.endDate === '2026-09-14',
+    `AI计划自动分流或跨工作表合并失败：${planJob?.error || '无完成结果'}`
   );
 
   const invalidRole = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
@@ -395,10 +614,14 @@ try {
     auditLog: 'passed',
     nameEditing: 'passed',
     excelImport: 'passed',
+    aiDataImport: 'passed',
+    aiBatchImport: 'passed',
+    aiPlanRouting: 'passed',
     passwordChange: 'passed'
   }, null, 2));
 } finally {
   server.kill();
+  await new Promise((resolveClose) => aiMock.close(resolveClose));
   await new Promise((resolveWait) => setTimeout(resolveWait, 300));
   for (const target of cleanupTargets) {
     if (target.startsWith(resolve(root, 'data')) && existsSync(target)) rmSync(target);

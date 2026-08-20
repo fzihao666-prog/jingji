@@ -3,7 +3,10 @@ import type {
   AreaPermission,
   Athlete,
   AuditLog,
+  ImportInspection,
+  ImportJobStatus,
   ImportPreview,
+  ImportRow,
   InjuryRecord,
   InjuryStatus,
   Project,
@@ -17,7 +20,8 @@ import type {
   TeamPermission,
   TrainingPlan,
   TrainingPlanData,
-  BatchTrainingPlanPreview,
+  AIImportedTrainingPlan,
+  AITrainingPlanImportMetadata,
   TrainingRecord,
   User
 } from './types';
@@ -210,7 +214,7 @@ export const api = {
         }>;
       };
       aiMetadata: {
-        inputType: 'text' | 'file';
+        inputType: 'text';
         inputContent: string;
         fileMetadata?: {
           filename: string;
@@ -226,12 +230,33 @@ export const api = {
       body: formData
     });
   },
+  async previewAITrainingPlanImport(file: File, athleteId: number) {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('athleteId', String(athleteId));
+    return request<{
+      plan: AIImportedTrainingPlan;
+      aiMetadata: AITrainingPlanImportMetadata;
+    }>('/api/training-plans/ai/import/preview', {
+      method: 'POST',
+      body
+    });
+  },
   async saveAITrainingPlan(params: {
-    athleteId: number;
+    athleteId?: number;
+    athleteIds?: number[];
     plan: unknown;
     aiMetadata: unknown;
+    replaceExisting?: boolean;
   }) {
-    return request<{ message: string; id: number }>('/api/training-plans/ai/save', {
+    return request<{
+      message: string;
+      id: number;
+      created: number;
+      replaced: number;
+      skipped: number;
+      results: Array<{ athleteId: number; athleteName: string; status: 'created' | 'replaced' | 'skipped'; planId: number }>;
+    }>('/api/training-plans/ai/save', {
       method: 'POST',
       body: JSON.stringify(params)
     });
@@ -262,43 +287,42 @@ export const api = {
     link.click();
     URL.revokeObjectURL(link.href);
   },
-  async previewBatchTrainingPlan(file: File, athleteIds: number[]) {
-    const body = new FormData();
-    body.append('file', file);
-    body.append('athleteIds', JSON.stringify(athleteIds));
-    return request<BatchTrainingPlanPreview>('/api/training-plans/batch/preview', { method: 'POST', body });
-  },
-  async commitBatchTrainingPlan(importId: string, replaceExisting: boolean) {
-    return request<{ message: string; created: number; replaced: number; skipped: number; firstAthleteId: number | null }>(
-      '/api/training-plans/batch/commit',
-      { method: 'POST', body: JSON.stringify({ importId, replaceExisting }) }
-    );
-  },
-  async downloadTrainingPlanBatchTemplate() {
-    const response = await fetch('/api/training-plans/batch/template', {
-      headers: { Authorization: `Bearer ${getToken()}` }
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.message || '批量计划模板下载失败。');
-    }
-    const blob = await response.blob();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = '多人四周训练计划导入模板.xlsx';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  },
   async previewImport(file: File, project: Project) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
-    return request<ImportPreview>('/api/import/preview', { method: 'POST', body });
+    return request<ImportPreview>('/api/import/ai/preview', { method: 'POST', body });
   },
-  async commitImport(importId: string) {
+  async inspectImport(file: File, project: Project) {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('project', project);
+    return request<ImportInspection>('/api/import/ai/inspect', { method: 'POST', body });
+  },
+  async recognizeInspectedImport(
+    fileId: string,
+    sectionNames: string[],
+    targetType: 'auto' | 'training_plan' | 'training_record',
+    onProgress?: (status: ImportJobStatus) => void
+  ) {
+    const started = await request<{ jobId: string; totalChunks: number }>('/api/import/ai/start', {
+      method: 'POST',
+      body: JSON.stringify({ fileId, sectionNames, targetType })
+    });
+    const deadline = Date.now() + 60 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const status = await request<ImportJobStatus>(`/api/import/ai/jobs/${encodeURIComponent(started.jobId)}`);
+      onProgress?.(status);
+      if (status.status === 'complete' && status.result) return status.result;
+      if (status.status === 'failed') throw new Error(status.error || 'AI识别失败');
+      await new Promise((resolve) => window.setTimeout(resolve, 800));
+    }
+    throw new Error('AI识别任务等待超过1小时，请重新选择文件。');
+  },
+  async commitImport(importId: string, rows?: ImportRow[]) {
     return request<{ imported: number; skipped: number }>('/api/import/commit', {
       method: 'POST',
-      body: JSON.stringify({ importId })
+      body: JSON.stringify({ importId, rows })
     });
   },
   async downloadTemplate() {

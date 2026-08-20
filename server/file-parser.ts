@@ -1,225 +1,362 @@
 /**
- * 文件内容提取工具
- * 支持 Excel、Word、PDF、文本、图片等格式
+ * 将训练计划文件转换为可交给 AI 的真实输入。
+ * 这里只做无业务规则的内容提取，不猜测周数、表头或训练字段。
  */
 
-import * as XLSX from 'exceljs';
+import ExcelJS from 'exceljs';
+import * as mammoth from 'mammoth';
 
-/**
- * 提取文件内容
- */
-export async function extractFileContent(
-  buffer: Buffer,
-  mimetype: string,
-  filename: string
-): Promise<{ content: string; metadata: FileMetadata }> {
-  const metadata: FileMetadata = {
-    filename,
-    mimetype,
-    size: buffer.length,
-    extractedAt: new Date().toISOString()
-  };
-
-  try {
-    switch (mimetype) {
-      case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
-      case 'application/vnd.ms-excel':
-        return { content: await extractExcelContent(buffer), metadata };
-
-      case 'application/pdf':
-        return { content: await extractPdfContent(buffer), metadata };
-
-      case 'application/msword':
-      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-        return { content: await extractWordContent(buffer), metadata };
-
-      case 'text/plain':
-      case 'text/markdown':
-      case 'text/csv':
-        return { content: extractTextContent(buffer), metadata };
-
-      case 'image/jpeg':
-      case 'image/png':
-      case 'image/webp':
-        return { content: extractImagePlaceholder(filename), metadata };
-
-      default:
-        // 尝试作为文本读取
-        return { content: extractTextContent(buffer), metadata };
-    }
-  } catch (error) {
-    console.error(`[FileParser] 提取文件内容失败 (${filename}):`, error);
-    throw new Error(`无法解析文件 ${filename}: ${(error as Error).message}`);
-  }
-}
-
-/**
- * 提取 Excel 内容
- */
-async function extractExcelContent(buffer: Buffer): Promise<string> {
-  const workbook = new XLSX.Workbook();
-  await workbook.xlsx.load(buffer);
-
-  let content = '';
-
-  workbook.eachSheet((sheet, index) => {
-    content += `\n--- 工作表: ${sheet.name} ---\n`;
-
-    sheet.eachRow((row, rowNumber) => {
-      const rowValues: string[] = [];
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        let value: string;
-
-        if (cell.value === null || cell.value === undefined) {
-          value = '';
-        } else if (typeof cell.value === 'object') {
-          // 处理富文本或公式结果
-          if ('richText' in cell.value) {
-            value = (cell.value as { richText: Array<{ text: string }> }).richText.map(t => t.text).join('');
-          } else if ('result' in cell.value) {
-            value = String((cell.value as { result: unknown }).result);
-          } else {
-            value = JSON.stringify(cell.value);
-          }
-        } else {
-          value = String(cell.value);
-        }
-
-        rowValues.push(value);
-      });
-
-      // 过滤掉全空行
-      if (rowValues.some(v => v.trim())) {
-        content += rowValues.join('\t') + '\n';
-      }
-    });
-  });
-
-  return content.trim();
-}
-
-/**
- * 提取 PDF 内容
- * 注意：Node.js 环境下需要特殊处理，这里使用简单实现
- */
-async function extractPdfContent(buffer: Buffer): Promise<string> {
-  // 由于 pdf-parse 在 TypeScript ESM 环境下可能有问题
-  // 这里先返回一个占位符，实际使用时可以集成 pdf-parse 或其他库
-  // 或者将 PDF 上传给 AI，让 AI 直接处理
-
-  // 尝试简单提取文本（仅适用于文本型 PDF）
-  const text = buffer.toString('utf-8');
-
-  // 如果能找到可读文本，返回它
-  if (text.includes('%PDF')) {
-    // 尝试提取文本流
-    const textMatches = text.match(/stream\r?\n([\s\S]*?)\r?\nendstream/g);
-    if (textMatches) {
-      return textMatches
-        .map(m => m.replace(/stream\r?\n/, '').replace(/\r?\nendstream/, ''))
-        .join('\n')
-        .slice(0, 10000); // 限制长度
-    }
-  }
-
-  // 如果无法提取，返回说明
-  return `[PDF 文件内容提取]\n文件名包含训练相关内容，AI 将直接分析文件。\n文件大小: ${buffer.length} bytes\n建议：如需精确提取，请上传文本或 Word 格式。`;
-}
-
-/**
- * 提取 Word 文档内容
- * 注意：mammoth 在 TypeScript ESM 环境下可能有问题
- */
-async function extractWordContent(buffer: Buffer): Promise<string> {
-  // 尝试简单提取文本
-  const text = buffer.toString('utf-8');
-
-  // Word 文档通常包含大量 XML，尝试提取可读文本
-  const textMatches = text.match(/<[^[]>>([\s\S]*?)<\/[^[]>>/g);
-  if (textMatches) {
-    const extracted = textMatches
-      .map(m => m.replace(/<[^[]>>/g, '').replace(/<\/[^[]>>/g, ''))
-      .filter(t => t.trim().length > 0)
-      .join('\n');
-
-    if (extracted.length > 100) {
-      return extracted.slice(0, 10000);
-    }
-  }
-
-  return `[Word 文档内容提取]\n文件名包含训练相关内容，AI 将直接分析文件。\n文件大小: ${buffer.length} bytes\n建议：如需精确提取，请复制文本内容粘贴。`;
-}
-
-/**
- * 提取纯文本内容
- */
-function extractTextContent(buffer: Buffer): string {
-  // 尝试多种编码
-  const encodings = ['utf-8', 'gbk', 'gb2312', 'big5'];
-
-  for (const encoding of encodings) {
-    try {
-      const text = new TextDecoder(encoding, { fatal: true }).decode(buffer);
-      // 如果解码成功且包含合理内容，返回
-      if (text.length > 0 && !text.includes('\u0000')) {
-        return text.slice(0, 20000); // 限制长度
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  // 默认使用 utf-8（非严格模式）
-  return buffer.toString('utf-8').slice(0, 20000);
-}
-
-/**
- * 图片占位符
- * 图片将由 AI 视觉能力直接分析
- */
-function extractImagePlaceholder(filename: string): string {
-  return `[图片文件: ${filename}]\n\n这是一张训练相关的图片文件。AI 将分析图片中的内容，包括：\n- 训练计划表格\n- 训练数据图表\n- 训练动作示范\n- 手写训练记录\n- 其他训练相关资料\n\n请确保图片清晰可读，以获得最佳分析效果。`;
-}
-
-/**
- * 文件元数据
- */
-interface FileMetadata {
+export interface FileMetadata {
   filename: string;
   mimetype: string;
   size: number;
   extractedAt: string;
+  extractionMethod: 'excel-cells' | 'pdf-text' | 'docx-text' | 'plain-text' | 'vision';
+  sheetCount?: number;
+  pageCount?: number;
+  chunkCount?: number;
+  sections?: Array<{
+    name: string;
+    chunkCount: number;
+    characterCount: number;
+  }>;
+  warnings: string[];
 }
 
-/**
- * 支持的文件类型
- */
+export interface PreparedAITextChunk {
+  id: string;
+  label: string;
+  content: string;
+  sectionName: string;
+  order: number;
+}
+
+export type PreparedAIFile =
+  | { kind: 'text'; content: string; chunks: PreparedAITextChunk[]; metadata: FileMetadata }
+  | { kind: 'image'; dataUrl: string; metadata: FileMetadata };
+
+const MAX_EXTRACTED_CHARACTERS = 120_000;
+const MAX_CHUNK_CHARACTERS = 30_000;
+
+export async function prepareAITrainingPlanFile(
+  buffer: Buffer,
+  mimetype: string,
+  filename: string
+): Promise<PreparedAIFile> {
+  const effectiveMimetype = resolveFileMimetype(mimetype, filename);
+  const baseMetadata = {
+    filename,
+    mimetype: effectiveMimetype,
+    size: buffer.length,
+    extractedAt: new Date().toISOString(),
+    warnings: [] as string[]
+  };
+
+  try {
+    if (effectiveMimetype.startsWith('image/')) {
+      return {
+        kind: 'image',
+        dataUrl: `data:${effectiveMimetype};base64,${buffer.toString('base64')}`,
+        metadata: { ...baseMetadata, extractionMethod: 'vision' }
+      };
+    }
+
+    if (effectiveMimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      const extracted = await extractExcelContent(buffer);
+      return {
+        kind: 'text',
+        content: extracted.content,
+        chunks: extracted.chunks,
+        metadata: {
+          ...baseMetadata,
+          extractionMethod: 'excel-cells',
+          sheetCount: extracted.sheetCount,
+          chunkCount: extracted.chunks.length,
+          sections: extracted.sections,
+          warnings: extracted.warnings
+        }
+      };
+    }
+
+    if (effectiveMimetype === 'application/vnd.ms-excel') {
+      throw new Error('暂不支持旧版 .xls，请先在 Excel 中另存为 .xlsx 后再导入');
+    }
+
+    if (effectiveMimetype === 'application/pdf') {
+      const extracted = await extractPdfContent(buffer);
+      return {
+        kind: 'text',
+        content: extracted.content,
+        chunks: extracted.chunks,
+        metadata: {
+          ...baseMetadata,
+          extractionMethod: 'pdf-text',
+          pageCount: extracted.pageCount,
+          chunkCount: extracted.chunks.length,
+          sections: sectionSummary(extracted.chunks),
+          warnings: extracted.warnings
+        }
+      };
+    }
+
+    if (effectiveMimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const extracted = await mammoth.extractRawText({ buffer });
+      const content = normalizeText(extracted.value);
+      if (!content) throw new Error('Word 文档中没有识别到可读文字');
+      const warnings = extracted.messages.map((message) => message.message);
+      const chunks = chunkText(content, 'Word 文档');
+      return {
+        kind: 'text',
+        content: previewText(content),
+        chunks,
+        metadata: {
+          ...baseMetadata,
+          extractionMethod: 'docx-text',
+          chunkCount: chunks.length,
+          sections: sectionSummary(chunks),
+          warnings: batchWarnings(content, warnings)
+        }
+      };
+    }
+
+    if (effectiveMimetype === 'application/msword') {
+      throw new Error('暂不支持旧版 .doc，请先另存为 .docx 后再导入');
+    }
+
+    if (['text/plain', 'text/markdown', 'text/csv'].includes(effectiveMimetype)) {
+      const warnings: string[] = [];
+      const content = extractTextContent(buffer);
+      if (!content) throw new Error('文件中没有识别到可读文字');
+      const chunks = chunkText(content, '文本内容');
+      return {
+        kind: 'text',
+        content: previewText(content),
+        chunks,
+        metadata: {
+          ...baseMetadata,
+          extractionMethod: 'plain-text',
+          chunkCount: chunks.length,
+          sections: sectionSummary(chunks),
+          warnings: batchWarnings(content, warnings)
+        }
+      };
+    }
+
+    throw new Error(`不支持的文件类型：${effectiveMimetype || '未知类型'}`);
+  } catch (error) {
+    console.error(`[FileParser] 解析失败 (${filename}):`, error);
+    throw new Error(`无法解析文件 ${filename}：${error instanceof Error ? error.message : '未知错误'}`);
+  }
+}
+
+async function extractExcelContent(buffer: Buffer): Promise<{
+  content: string;
+  chunks: PreparedAITextChunk[];
+  sections: FileMetadata['sections'];
+  sheetCount: number;
+  warnings: string[];
+}> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(Uint8Array.from(buffer).buffer);
+  const sections: string[] = [];
+  const chunks: PreparedAITextChunk[] = [];
+  const formulaWarnings: Array<{ sheetName: string; count: number }> = [];
+
+  workbook.eachSheet((sheet) => {
+    const rows: string[] = [`## 工作表：${sheet.name}`];
+    let formulaWithoutResult = 0;
+    sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      const cells: string[] = [];
+      row.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+        if (cell.isMerged && cell.master.address !== cell.address) return;
+        if (cell.value && typeof cell.value === 'object' && 'formula' in cell.value && (!('result' in cell.value) || cell.value.result === null || cell.value.result === undefined)) {
+          formulaWithoutResult += 1;
+        }
+        const value = formatExcelValue(cell.value);
+        if (value) cells.push(`${sheet.getColumn(columnNumber).letter}${rowNumber}=${value}`);
+      });
+      if (cells.length) rows.push(cells.join(' | '));
+    });
+    if (rows.length > 1) {
+      const section = rows.join('\n');
+      sections.push(section);
+      chunks.push(...chunkText(section, sheet.name, sheet.name, chunks.length));
+    }
+    if (formulaWithoutResult > 0) {
+      formulaWarnings.push({ sheetName: sheet.name, count: formulaWithoutResult });
+    }
+  });
+
+  if (!sections.length) throw new Error('Excel 中没有识别到非空单元格');
+  const joined = sections.join('\n\n');
+  const formulaWarningText = formulaWarnings.length
+    ? [`${formulaWarnings.length}个工作表共有${formulaWarnings.reduce((sum, item) => sum + item.count, 0)}个公式单元格没有缓存结果；系统已保留其他可读文字和数值，相关公式结果请人工核对`]
+    : [];
+  const warnings = batchWarnings(joined, formulaWarningText);
+  return {
+    content: previewText(joined),
+    chunks,
+    sections: sectionSummary(chunks),
+    sheetCount: workbook.worksheets.length,
+    warnings
+  };
+}
+
+function formatExcelValue(value: ExcelJS.CellValue): string {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value !== 'object') return String(value).trim();
+  if ('richText' in value) return value.richText.map((part) => part.text).join('').trim();
+  if ('formula' in value && (!('result' in value) || value.result === null || value.result === undefined)) return '';
+  if ('result' in value) return String(value.result ?? '').trim();
+  if ('text' in value) return String(value.text ?? '').trim();
+  return JSON.stringify(value);
+}
+
+async function extractPdfContent(buffer: Buffer): Promise<{
+  content: string;
+  chunks: PreparedAITextChunk[];
+  pageCount: number;
+  warnings: string[];
+}> {
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const document = await getDocument({
+    data: new Uint8Array(buffer),
+    useWorkerFetch: false
+  }).promise;
+  const pages: string[] = [];
+
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const textContent = await page.getTextContent();
+    const text = textContent.items
+      .map((item) => ('str' in item ? item.str : ''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) pages.push(`## 第 ${pageNumber} 页\n${text}`);
+  }
+
+  const normalized = normalizeText(pages.join('\n\n'));
+  if (normalized.length < 20) {
+    throw new Error('PDF 中没有足够的可读文字，可能是扫描件；请将相关页面导出为清晰的 PNG/JPG 图片后导入');
+  }
+  const warnings: string[] = [];
+  const chunks = chunkText(normalized, 'PDF 文档');
+  return {
+    content: previewText(normalized),
+    chunks,
+    pageCount: document.numPages,
+    warnings: batchWarnings(normalized, warnings)
+  };
+}
+
+function extractTextContent(buffer: Buffer): string {
+  for (const encoding of ['utf-8', 'gbk', 'gb18030', 'big5']) {
+    try {
+      const decoded = new TextDecoder(encoding, { fatal: true }).decode(buffer);
+      if (decoded && !decoded.includes('\u0000')) return normalizeText(decoded);
+    } catch {
+      // 继续尝试下一种编码。
+    }
+  }
+  return normalizeText(buffer.toString('utf8'));
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\n{4,}/g, '\n\n\n').trim();
+}
+
+function previewText(value: string): string {
+  return value.slice(0, MAX_EXTRACTED_CHARACTERS);
+}
+
+function batchWarnings(value: string, warnings: string[]): string[] {
+  const result = [...warnings];
+  if (value.length > MAX_EXTRACTED_CHARACTERS) {
+    result.push(`文件文字超过 ${MAX_EXTRACTED_CHARACTERS.toLocaleString()} 字，已自动拆分为多个批次完整识别，不再截断后半部分`);
+  }
+  return [...new Set(result)];
+}
+
+function chunkText(
+  value: string,
+  label: string,
+  sectionName = label,
+  startOrder = 0
+): PreparedAITextChunk[] {
+  const normalized = normalizeText(value);
+  const sheetHeader = `## 工作表：${sectionName}`;
+  const body = normalized.startsWith(sheetHeader)
+    ? normalized.slice(sheetHeader.length).replace(/^\n+/, '')
+    : normalized;
+  const lines = body.split('\n');
+  const parts: string[] = [];
+  let current = '';
+
+  const pushCurrent = () => {
+    const trimmed = current.trim();
+    if (trimmed) parts.push(trimmed);
+    current = '';
+  };
+
+  for (const line of lines) {
+    if (line.length > MAX_CHUNK_CHARACTERS) {
+      pushCurrent();
+      for (let offset = 0; offset < line.length; offset += MAX_CHUNK_CHARACTERS) {
+        parts.push(line.slice(offset, offset + MAX_CHUNK_CHARACTERS));
+      }
+      continue;
+    }
+    const candidate = current ? `${current}\n${line}` : line;
+    if (candidate.length > MAX_CHUNK_CHARACTERS) pushCurrent();
+    current = current ? `${current}\n${line}` : line;
+  }
+  pushCurrent();
+
+  return parts.map((part, index) => ({
+    id: `chunk-${startOrder + index + 1}`,
+    label: parts.length > 1 ? `${label} · 第${index + 1}/${parts.length}批` : label,
+    sectionName,
+    order: startOrder + index,
+    content: `${sheetHeader}\n${part}`
+  }));
+}
+
+function sectionSummary(chunks: PreparedAITextChunk[]): NonNullable<FileMetadata['sections']> {
+  const sections = new Map<string, { name: string; chunkCount: number; characterCount: number }>();
+  for (const chunk of chunks) {
+    const current = sections.get(chunk.sectionName) || { name: chunk.sectionName, chunkCount: 0, characterCount: 0 };
+    current.chunkCount += 1;
+    current.characterCount += chunk.content.length;
+    sections.set(chunk.sectionName, current);
+  }
+  return [...sections.values()];
+}
+
 export const SUPPORTED_FILE_TYPES = [
-  { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: '.xlsx', name: 'Excel 2007+' },
-  { mime: 'application/vnd.ms-excel', ext: '.xls', name: 'Excel 97-2003' },
+  { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: '.xlsx', name: 'Excel' },
   { mime: 'application/pdf', ext: '.pdf', name: 'PDF' },
-  { mime: 'application/msword', ext: '.doc', name: 'Word 97-2003' },
-  { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: '.docx', name: 'Word 2007+' },
+  { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: '.docx', name: 'Word' },
   { mime: 'text/plain', ext: '.txt', name: '纯文本' },
   { mime: 'text/markdown', ext: '.md', name: 'Markdown' },
   { mime: 'text/csv', ext: '.csv', name: 'CSV' },
   { mime: 'image/jpeg', ext: '.jpg', name: 'JPEG 图片' },
+  { mime: 'image/jpeg', ext: '.jpeg', name: 'JPEG 图片' },
   { mime: 'image/png', ext: '.png', name: 'PNG 图片' },
-  { mime: 'image/webp', ext: '.webp', name: 'WebP 图片' },
+  { mime: 'image/webp', ext: '.webp', name: 'WebP 图片' }
 ];
 
-/**
- * 检查文件类型是否支持
- */
-export function isFileTypeSupported(mimetype: string): boolean {
-  return SUPPORTED_FILE_TYPES.some(t => t.mime === mimetype);
+function resolveFileMimetype(mimetype: string, filename: string): string {
+  if (SUPPORTED_FILE_TYPES.some((type) => type.mime === mimetype)) return mimetype;
+  const lowerName = filename.toLowerCase();
+  return SUPPORTED_FILE_TYPES.find((type) => lowerName.endsWith(type.ext))?.mime || mimetype;
 }
 
-/**
- * 获取支持的文件类型描述
- */
+export function isFileTypeSupported(mimetype: string, filename = ''): boolean {
+  return SUPPORTED_FILE_TYPES.some((type) => type.mime === resolveFileMimetype(mimetype, filename));
+}
+
 export function getSupportedFileTypesDescription(): string {
-  return SUPPORTED_FILE_TYPES.map(t => `${t.name} (${t.ext})`).join('、');
+  return SUPPORTED_FILE_TYPES.map((type) => `${type.name} (${type.ext})`).join('、');
 }
-
-export type { FileMetadata };

@@ -6,3 +6,5 @@ data/*.db-wal
 data/.jwt-secret
 .env
 *.log
+tmp/
+.idea/

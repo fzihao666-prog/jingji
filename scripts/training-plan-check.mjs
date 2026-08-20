@@ -168,6 +168,86 @@ try {
   const afterDelete = await jsonRequest('/api/training-plans?athleteId=1', coachToken);
   if (afterDelete.payload.plans.some((item) => item.id === createHistory.payload.id)) throw new Error('历史计划删除后仍可读取。');
 
+  const rosterResult = await jsonRequest('/api/athletes', coachToken);
+  const targetIds = rosterResult.payload.athletes.slice(0, 2).map((athlete) => athlete.id);
+  if (targetIds.length !== 2) throw new Error('AI多人矩阵测试至少需要2名运动员。');
+  const importedPlan = {
+    sourceType: 'ai_import',
+    title: 'AI三阶段专项训练计划',
+    summary: '用于验证AI计划直接进入统一矩阵。',
+    startDate: '2026-10-01',
+    endDate: '2026-10-21',
+    scheduleLabel: '周一 / 周三 / 周六',
+    bodyWeight: null,
+    age: null,
+    durationWeeks: 3,
+    exercises: [],
+    confidence: 0.95,
+    warnings: [],
+    unmappedContent: [],
+    weeklyPlans: [1, 2, 3].map((weekNumber) => ({
+      id: `week-${weekNumber}`,
+      weekNumber,
+      label: weekNumber === 3 ? '赛前调整' : '',
+      focus: weekNumber === 1 ? '基础适应' : weekNumber === 2 ? '负荷提升' : '减量恢复',
+      days: [{
+        id: `day-${weekNumber}`,
+        date: `2026-10-${String(weekNumber * 3 - 2).padStart(2, '0')}`,
+        dayLabel: weekNumber === 1 ? '周一' : weekNumber === 2 ? '周三' : '周六',
+        focus: '专项力量',
+        items: [{
+          id: `item-${weekNumber}`,
+          name: '卧拉',
+          category: 'strength',
+          sets: String(weekNumber + 2),
+          reps: '8',
+          load: null,
+          percentage: 70 + weekNumber * 5,
+          duration: '45分钟',
+          distance: '8km',
+          intensity: 'U2',
+          pace: null,
+          notes: '动作稳定',
+          rawText: '',
+          confidence: 0.95
+        }]
+      }]
+    }))
+  };
+  const aiMetadata = { operation: 'import', modelUsed: 'test-model' };
+  const aiCreate = await jsonRequest('/api/training-plans/ai/save', coachToken, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds: targetIds, plan: importedPlan, aiMetadata, replaceExisting: false })
+  });
+  if (!aiCreate.response.ok || aiCreate.payload.created !== 2) throw new Error(`AI多人矩阵写入失败：${aiCreate.payload?.message}`);
+  const importedResults = await Promise.all(targetIds.map((athleteId) => jsonRequest(`/api/training-plans?athleteId=${athleteId}`, coachToken)));
+  const importedMatrices = importedResults.map(({ payload }) => payload.plans.find((item) => item.data.startDate === importedPlan.startDate));
+  if (importedMatrices.some((item) => !item)) throw new Error('AI导入后未在运动员计划历史中找到矩阵。');
+  const firstImported = importedMatrices[0];
+  const importedExercise = firstImported.data.exercises.find((exercise) => exercise.name === '卧拉');
+  if (
+    firstImported.data.weekKeys.length !== 3
+    || firstImported.data.weekLabels['3'] !== '赛前调整'
+    || importedExercise.lines[0].weeks['1'].sets !== '3'
+    || !importedExercise.lines[0].weeks['1'].arrangement.includes('距离 8km')
+  ) throw new Error('AI计划没有按三阶段结构映射到统一矩阵。');
+  importedExercise.lines[0].weeks['1'].actualCompleted = '7';
+  const editImported = await jsonRequest('/api/training-plans', coachToken, {
+    method: 'POST',
+    body: JSON.stringify({ athleteId: targetIds[0], planId: firstImported.id, data: firstImported.data })
+  });
+  if (!editImported.response.ok) throw new Error(`AI矩阵二次编辑保存失败：${editImported.payload?.message}`);
+  const aiSkip = await jsonRequest('/api/training-plans/ai/save', coachToken, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds: targetIds, plan: importedPlan, aiMetadata, replaceExisting: false })
+  });
+  if (!aiSkip.response.ok || aiSkip.payload.skipped !== 2) throw new Error('AI多人导入未按默认规则跳过同期计划。');
+  const aiReplace = await jsonRequest('/api/training-plans/ai/save', coachToken, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds: targetIds, plan: importedPlan, aiMetadata, replaceExisting: true })
+  });
+  if (!aiReplace.response.ok || aiReplace.payload.replaced !== 2) throw new Error('AI多人导入覆盖同期计划失败。');
+
   console.log(JSON.stringify({
     coachCanSave: true,
     athleteCanRead: true,
@@ -184,7 +264,15 @@ try {
     actualCompletedRepetitions: sheet.getCell('H7').value,
     itemProjectOnly: itemValue,
     headerProjectNames: sheet.getCell('G3').value,
-    exportBytes: (await fs.stat(exportPath)).size
+    exportBytes: (await fs.stat(exportPath)).size,
+    aiMatrixTargets: targetIds.length,
+    aiMatrixWeeks: firstImported.data.weekKeys.length,
+    aiMatrixSchedule: firstImported.data.scheduleLabel,
+    aiMatrixArrangement: importedExercise.lines[0].weeks['1'].arrangement,
+    aiMatrixCreated: aiCreate.payload.created,
+    aiMatrixSkipped: aiSkip.payload.skipped,
+    aiMatrixReplaced: aiReplace.payload.replaced,
+    aiMatrixEditable: true
   }, null, 2));
 } finally {
   server.kill();

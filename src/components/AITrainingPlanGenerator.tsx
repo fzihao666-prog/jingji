@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import './AITrainingPlanGenerator.css';
 import { 
   LoaderCircle, 
@@ -31,26 +31,22 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  LineChart,
-  Line,
   Area,
   AreaChart,
   PieChart as RePieChart,
   Pie,
   Cell,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar
+  Legend
 } from 'recharts';
 import { api } from '../api';
 import type { Athlete, User } from '../types';
+import { AITrainingPlanImporter } from './AITrainingPlanImporter';
 
 interface Props {
   user: User;
   athlete: Athlete;
-  onSaved: () => void;
+  athletes: Athlete[];
+  onSaved: (planId?: number) => void | Promise<void>;
 }
 
 interface AIPlan {
@@ -101,40 +97,66 @@ interface AIPlan {
 }
 
 const COLORS = ['#176f7f', '#1b9d95', '#e1a42c', '#e65d43', '#7cc7b5'];
+const CATEGORY_COLORS: Record<string, string> = {
+  strength: '#176f7f',
+  endurance: '#1b9d95',
+  power: '#e1a42c',
+  recovery: '#7cc7b5'
+};
 
-export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
+function categoryName(category: string) {
+  return category === 'strength' ? '力量' : category === 'endurance' ? '耐力' : category === 'power' ? '爆发力' : '恢复';
+}
+
+function prescriptionNumber(value: string | number | undefined) {
+  const values = String(value ?? '').match(/\d+(?:\.\d+)?/g)?.map(Number).filter(Number.isFinite) || [];
+  if (!values.length) return 0;
+  return values.reduce((sum, item) => sum + item, 0) / values.length;
+}
+
+function relativeExerciseLoad(exercise: AIPlan['weeklyPlans'][number]['days'][number]['exercises'][number]) {
+  const sets = prescriptionNumber(exercise.sets);
+  const reps = prescriptionNumber(exercise.reps);
+  const percentage = Number(exercise.percentage);
+  if (!sets || !reps) return 1;
+  return sets * reps * (Number.isFinite(percentage) && percentage > 0 ? percentage / 100 : 1);
+}
+
+export function AITrainingPlanGenerator(props: Props) {
+  const [workflow, setWorkflow] = useState<'generate' | 'import'>('generate');
+
+  return (
+    <div className="ai-workflow-shell">
+      <nav className="ai-workflow-switch" aria-label="AI训练计划方式">
+        <button type="button" className={workflow === 'generate' ? 'active' : ''} onClick={() => setWorkflow('generate')}>
+          <Sparkles size={20} />
+          <span><strong>生成新计划</strong><small>描述目标，由AI制定方案</small></span>
+        </button>
+        <button type="button" className={workflow === 'import' ? 'active' : ''} onClick={() => setWorkflow('import')}>
+          <Upload size={20} />
+          <span><strong>识别已有计划</strong><small>上传原文件，校正后导入</small></span>
+        </button>
+      </nav>
+      {workflow === 'generate'
+        ? <AITrainingPlanGeneratorContent athlete={props.athlete} onSaved={props.onSaved} />
+        : <AITrainingPlanImporter athlete={props.athlete} athletes={props.athletes} onSaved={props.onSaved} />}
+    </div>
+  );
+}
+
+function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athlete' | 'onSaved'>) {
   const [step, setStep] = useState<'input' | 'analyzing' | 'preview'>('input');
-  const [inputMode, setInputMode] = useState<'text' | 'file'>('text');
   const [textInput, setTextInput] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<AIPlan | null>(null);
   const [aiMetadata, setAiMetadata] = useState<any>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [expandedWeek, setExpandedWeek] = useState<number | null>(1);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError('文件大小不能超过 10MB');
-        return;
-      }
-      setSelectedFile(file);
-      setError('');
-    }
-  };
-
   const handleAnalyze = async () => {
     setError('');
     
-    if (inputMode === 'text' && !textInput.trim()) {
+    if (!textInput.trim()) {
       setError('请输入训练需求描述');
-      return;
-    }
-    if (inputMode === 'file' && !selectedFile) {
-      setError('请选择要上传的文件');
       return;
     }
 
@@ -143,13 +165,7 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
     try {
       const formData = new FormData();
       formData.append('athleteId', String(athlete.id));
-      formData.append('inputType', inputMode);
-
-      if (inputMode === 'file' && selectedFile) {
-        formData.append('file', selectedFile);
-      } else {
-        formData.append('text', textInput);
-      }
+      formData.append('text', textInput);
 
       const result = await api.analyzeAITrainingPlan(formData);
       
@@ -185,12 +201,12 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
 
     setSaving(true);
     try {
-      await api.saveAITrainingPlan({
+      const result = await api.saveAITrainingPlan({
         athleteId: athlete.id,
         plan: generatedPlan,
         aiMetadata
       });
-      onSaved();
+      await onSaved(result.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
       setSaving(false);
@@ -203,7 +219,8 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
     return generatedPlan.weeklyPlans.map(w => ({
       week: `第${w.weekNumber}周`,
       load: w.totalLoad,
-      intensity: w.intensity === 'high' ? 3 : w.intensity === 'medium' ? 2 : 1
+      days: w.days.length,
+      prescriptions: w.days.reduce((sum, day) => sum + day.exercises.length, 0)
     }));
   }, [generatedPlan]);
 
@@ -219,19 +236,82 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
       });
     });
     return Array.from(dist.entries()).map(([name, value]) => ({
-      name: name === 'strength' ? '力量' : name === 'endurance' ? '耐力' : name === 'power' ? '爆发力' : '恢复',
-      value
+      key: name,
+      name: categoryName(name),
+      value,
+      color: CATEGORY_COLORS[name] || COLORS[0]
     }));
   }, [generatedPlan]);
 
-  const intensityRadarData = useMemo(() => {
-    if (!generatedPlan) return [];
-    return generatedPlan.weeklyPlans.map(w => ({
-      week: `W${w.weekNumber}`,
-      intensity: w.totalLoad,
-      fullMark: 100
-    }));
+  const dashboardData = useMemo(() => {
+    if (!generatedPlan) return {
+      intensityByWeek: [],
+      exerciseVolumes: [],
+      dailyLoads: [],
+      heatmapWeeks: [],
+      metrics: { days: 0, prescriptions: 0, averageIntensity: 0, peakWeek: '—' }
+    };
+    const intensityByWeek: Array<{ week: string; low: number; medium: number; high: number }> = [];
+    const volumeMap = new Map<string, number>();
+    const dailyLoads: Array<{ day: string; load: number; prescriptions: number }> = [];
+    const heatmapWeeks: Array<{ week: string; focus: string; days: Array<{ day: string; load: number; prescriptions: number }> }> = [];
+    const percentages: number[] = [];
+    let totalDays = 0;
+    let totalPrescriptions = 0;
+
+    generatedPlan.weeklyPlans.forEach((week) => {
+      const zones = { week: `W${week.weekNumber}`, low: 0, medium: 0, high: 0 };
+      const heatmapDays: Array<{ day: string; load: number; prescriptions: number }> = [];
+      week.days.forEach((day) => {
+        totalDays += 1;
+        totalPrescriptions += day.exercises.length;
+        let dayLoad = 0;
+        day.exercises.forEach((exercise) => {
+          const load = relativeExerciseLoad(exercise);
+          dayLoad += load;
+          volumeMap.set(exercise.name, (volumeMap.get(exercise.name) || 0) + load);
+          const percentage = Number(exercise.percentage);
+          if (Number.isFinite(percentage) && percentage > 0) percentages.push(percentage);
+          const resolved = Number.isFinite(percentage) && percentage > 0
+            ? percentage
+            : week.intensity === 'high' ? 85 : week.intensity === 'medium' ? 70 : 55;
+          if (resolved >= 80) zones.high += 1;
+          else if (resolved >= 65) zones.medium += 1;
+          else zones.low += 1;
+        });
+        const point = {
+          day: day.dayOfWeek || `训练日${heatmapDays.length + 1}`,
+          load: Math.round(dayLoad * 10) / 10,
+          prescriptions: day.exercises.length
+        };
+        heatmapDays.push(point);
+        dailyLoads.push({ ...point, day: `W${week.weekNumber}·${point.day}` });
+      });
+      intensityByWeek.push(zones);
+      heatmapWeeks.push({ week: `WEEK ${week.weekNumber}`, focus: week.focus, days: heatmapDays });
+    });
+
+    const exerciseVolumes = [...volumeMap.entries()]
+      .map(([name, load]) => ({ name, load: Math.round(load * 10) / 10 }))
+      .sort((a, b) => b.load - a.load)
+      .slice(0, 8);
+    const peak = [...generatedPlan.weeklyPlans].sort((a, b) => b.totalLoad - a.totalLoad)[0];
+    return {
+      intensityByWeek,
+      exerciseVolumes,
+      dailyLoads,
+      heatmapWeeks,
+      metrics: {
+        days: totalDays,
+        prescriptions: totalPrescriptions,
+        averageIntensity: percentages.length ? Math.round(percentages.reduce((sum, value) => sum + value, 0) / percentages.length) : 0,
+        peakWeek: peak ? `W${peak.weekNumber}` : '—'
+      }
+    };
   }, [generatedPlan]);
+  const distributionTotal = exerciseDistribution.reduce((sum, item) => sum + item.value, 0);
+  const maxDailyLoad = Math.max(1, ...dashboardData.dailyLoads.map((item) => item.load));
+  const hasHeatmapDays = dashboardData.heatmapWeeks.some((week) => week.days.length > 0);
 
   if (step === 'input') {
     return (
@@ -246,77 +326,22 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
         </div>
 
         <div className="input-section">
-          <div className="input-tabs">
-            <button
-              className={inputMode === 'text' ? 'active' : ''}
-              onClick={() => setInputMode('text')}
-            >
-              <FileText size={18} />
-              <span>文字描述</span>
-            </button>
-            <button
-              className={inputMode === 'file' ? 'active' : ''}
-              onClick={() => setInputMode('file')}
-            >
-              <Upload size={18} />
-              <span>上传文件</span>
-            </button>
-          </div>
-
           <div className="input-content">
-            {inputMode === 'text' ? (
-              <div className="text-input-wrapper">
-                <label>描述训练需求和目标</label>
-                <textarea
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  placeholder={`例如：\n• 运动员准备参加全运会，需要提升最大力量\n• 当前卧拉MAX 65kg，深蹲MAX 80kg\n• 希望在未来8周内重点提升上肢力量\n• 每周可训练3次，周二、周四、周六\n• 请制定渐进超负荷的科学训练计划`}
-                  rows={10}
-                />
-                <div className="input-hint">
-                  <Lightbulb size={14} />
-                  <span>描述越详细，AI 生成的计划越精准</span>
-                </div>
+            <div className="generation-mode-label"><FileText size={18} /><span>用文字描述一个新的训练目标</span></div>
+            <div className="text-input-wrapper">
+              <label htmlFor="ai-training-goal">描述训练需求和目标</label>
+              <textarea
+                id="ai-training-goal"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                placeholder={`例如：\n• 运动员准备参加全运会，需要提升最大力量\n• 当前卧拉MAX 65kg，深蹲MAX 80kg\n• 希望在未来8周内重点提升上肢力量\n• 每周可训练3次，周二、周四、周六\n• 请制定渐进超负荷的科学训练计划`}
+                rows={10}
+              />
+              <div className="input-hint">
+                <Lightbulb size={14} />
+                <span>这里用于生成新计划；已有文件请切换到“识别已有计划”</span>
               </div>
-            ) : (
-              <div className="file-upload-wrapper">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileSelect}
-                  accept=".xlsx,.xls,.pdf,.doc,.docx,.txt,.md,.jpg,.jpeg,.png"
-                  hidden
-                />
-                <div
-                  className={`upload-zone ${selectedFile ? 'has-file' : ''}`}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {selectedFile ? (
-                    <>
-                      <CheckCircle size={48} className="success-icon" />
-                      <h4>{selectedFile.name}</h4>
-                      <p>{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                      <button
-                        className="change-file"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedFile(null);
-                        }}
-                      >
-                        更换文件
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={48} />
-                      <h4>点击或拖拽上传文件</h4>
-                      <p>支持 Excel、Word、PDF、文本、图片</p>
-                      <span className="file-types">.xlsx .doc .pdf .txt .jpg</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
           {error && (
@@ -327,7 +352,7 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
           )}
 
           <div className="action-bar">
-            <button className="btn-secondary" onClick={() => { setTextInput(''); setSelectedFile(null); setError(''); setStep('input'); }}>
+            <button className="btn-secondary" onClick={() => { setTextInput(''); setError(''); setStep('input'); }}>
               <X size={16} /> 重置
             </button>
             <button className="btn-primary ai-generate" onClick={handleAnalyze}>
@@ -462,76 +487,139 @@ export function AITrainingPlanGenerator({ user, athlete, onSaved }: Props) {
 
           {/* 数据可视化 */}
           <div className="charts-section">
-            <h3><BarChart3 size={18} /> 训练数据分析</h3>
-            
-            <div className="charts-grid">
-              {/* 训练负荷趋势 */}
-              <div className="chart-card">
-                <h4>周训练负荷趋势</h4>
-                <ResponsiveContainer width="100%" height={200}>
+            <div className="charts-section-heading">
+              <div><BarChart3 size={19} /><span><strong>训练计划数据看板</strong><small>保存前检查训练量、强度与结构是否均衡</small></span></div>
+              <em>PLAN INTELLIGENCE</em>
+            </div>
+
+            <div className="plan-dashboard-strip">
+              <div><span>训练周期</span><strong>{generatedPlan.durationWeeks}</strong><small>WEEKS</small></div>
+              <div><span>训练日</span><strong>{dashboardData.metrics.days}</strong><small>SESSIONS</small></div>
+              <div><span>处方条目</span><strong>{dashboardData.metrics.prescriptions}</strong><small>ITEMS</small></div>
+              <div><span>平均强度</span><strong>{dashboardData.metrics.averageIntensity || '—'}</strong><small>{dashboardData.metrics.averageIntensity ? '% 1RM' : '未标注'}</small></div>
+              <div className="peak"><span>峰值周</span><strong>{dashboardData.metrics.peakWeek}</strong><small>PEAK LOAD</small></div>
+            </div>
+
+            <div className="charts-grid enhanced">
+              <div className="chart-card wide chart-primary">
+                <div className="chart-card-heading"><span>LOAD</span><div><h4>周训练负荷趋势</h4><p>AI给出的周期负荷指数与训练频次</p></div></div>
+                <ResponsiveContainer width="100%" height={240}>
                   <AreaChart data={loadChartData}>
                     <defs>
                       <linearGradient id="loadGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#176f7f" stopOpacity={0.3}/>
+                        <stop offset="5%" stopColor="#168f88" stopOpacity={0.42}/>
                         <stop offset="95%" stopColor="#176f7f" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="week" />
-                    <YAxis />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 6" stroke="#d9e5e6" vertical={false} />
+                    <XAxis dataKey="week" interval={0} tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#b9cccf' }} />
+                    <YAxis domain={[0, 100]} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value, name) => [value, name === 'load' ? '负荷指数' : name]} />
                     <Area 
                       type="monotone" 
                       dataKey="load" 
-                      stroke="#176f7f" 
+                      stroke="#0b5963"
+                      strokeWidth={3}
+                      dot={{ r: 5, fill: '#ffc20a', stroke: '#0b5963', strokeWidth: 2 }}
                       fillOpacity={1} 
                       fill="url(#loadGradient)" 
                     />
                   </AreaChart>
                 </ResponsiveContainer>
+                <div className="chart-inline-stats">
+                  {loadChartData.map((item) => <span key={item.week}><b>{item.week}</b>{item.days}天 · {item.prescriptions}条</span>)}
+                </div>
               </div>
 
-              {/* 训练类型分布 */}
               <div className="chart-card">
-                <h4>训练类型分布</h4>
-                <ResponsiveContainer width="100%" height={200}>
-                  <RePieChart>
-                    <Pie
-                      data={exerciseDistribution}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={70}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {exerciseDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </RePieChart>
+                <div className="chart-card-heading"><span>MIX</span><div><h4>训练类型占比</h4><p>按处方条目统计</p></div></div>
+                <div className="chart-donut-wrap">
+                  {distributionTotal > 0 ? <>
+                    <ResponsiveContainer width="100%" height={210}>
+                      <RePieChart>
+                        <Pie data={exerciseDistribution} cx="50%" cy="50%" innerRadius={58} outerRadius={86} paddingAngle={3} dataKey="value" stroke="none">
+                          {exerciseDistribution.map((entry) => <Cell key={entry.key} fill={entry.color} />)}
+                        </Pie>
+                        <Tooltip formatter={(value) => [`${value} 条`, '处方']} />
+                      </RePieChart>
+                    </ResponsiveContainer>
+                    <div className="donut-center"><strong>{distributionTotal}</strong><span>条处方</span></div>
+                  </> : <div className="chart-empty">AI未返回可统计的训练类型</div>}
+                </div>
+                <div className="chart-legend-list">
+                  {exerciseDistribution.map((entry) => (
+                    <span key={entry.key}><i style={{ background: entry.color }} /><b>{entry.name}</b><em>{distributionTotal ? Math.round(entry.value / distributionTotal * 100) : 0}%</em></span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="chart-card">
+                <div className="chart-card-heading"><span>ZONE</span><div><h4>强度分区结构</h4><p>低于65% / 65—79% / 80%以上</p></div></div>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={dashboardData.intensityByWeek}>
+                    <CartesianGrid strokeDasharray="3 6" stroke="#e0e9ea" vertical={false} />
+                    <XAxis dataKey="week" tickLine={false} axisLine={{ stroke: '#bdcdcf' }} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value, name) => [`${value} 条`, name === 'low' ? '低强度' : name === 'medium' ? '中强度' : '高强度']} />
+                    <Legend formatter={(value) => value === 'low' ? '低强度' : value === 'medium' ? '中强度' : '高强度'} />
+                    <Bar dataKey="low" stackId="zone" fill="#7cc7b5" radius={[0, 0, 3, 3]} />
+                    <Bar dataKey="medium" stackId="zone" fill="#e1a42c" />
+                    <Bar dataKey="high" stackId="zone" fill="#d85445" radius={[3, 3, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
 
-              {/* 强度雷达图 */}
-              <div className="chart-card wide">
-                <h4>周期强度分布</h4>
-                <ResponsiveContainer width="100%" height={250}>
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={intensityRadarData}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="week" />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]}/>
-                    <Radar
-                      name="训练强度"
-                      dataKey="intensity"
-                      stroke="#1b9d95"
-                      fill="#1b9d95"
-                      fillOpacity={0.3}
-                    />
-                    <Tooltip />
-                  </RadarChart>
-                </ResponsiveContainer>
+              <div className="chart-card">
+                <div className="chart-card-heading"><span>VOLUME</span><div><h4>项目相对训练量排行</h4><p>组 × 次 × 强度，取前8项</p></div></div>
+                {dashboardData.exerciseVolumes.length > 0 ? <ResponsiveContainer width="100%" height={Math.max(230, dashboardData.exerciseVolumes.length * 34)}>
+                  <BarChart data={dashboardData.exerciseVolumes} layout="vertical" margin={{ left: 10, right: 28 }}>
+                    <CartesianGrid strokeDasharray="3 6" stroke="#e1e9ea" horizontal={false} />
+                    <XAxis type="number" tickLine={false} axisLine={{ stroke: '#bdcdcf' }} />
+                    <YAxis type="category" dataKey="name" width={92} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value) => [value, '相对训练量']} />
+                    <Bar dataKey="load" fill="#176f7f" radius={[0, 5, 5, 0]} />
+                  </BarChart>
+                </ResponsiveContainer> : <div className="chart-empty">AI未返回可计算的项目处方</div>}
+              </div>
+
+              <div className="chart-card">
+                <div className="chart-card-heading"><span>SESSION</span><div><h4>单日相对负荷</h4><p>比较每个训练日的处方密度</p></div></div>
+                {dashboardData.dailyLoads.length > 0 ? <ResponsiveContainer width="100%" height={Math.max(230, dashboardData.dailyLoads.length * 31)}>
+                  <BarChart data={dashboardData.dailyLoads} layout="vertical" margin={{ left: 8, right: 28 }}>
+                    <CartesianGrid strokeDasharray="3 6" stroke="#e1e9ea" horizontal={false} />
+                    <XAxis type="number" tickLine={false} axisLine={{ stroke: '#bdcdcf' }} />
+                    <YAxis type="category" dataKey="day" width={92} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value, name) => [value, name === 'load' ? '相对负荷' : name]} />
+                    <Bar dataKey="load" fill="#1b9d95" radius={[0, 5, 5, 0]} />
+                  </BarChart>
+                </ResponsiveContainer> : <div className="chart-empty">AI未返回训练日处方</div>}
+              </div>
+
+              <div className="chart-card wide heatmap-card">
+                <div className="chart-card-heading"><span>DENSITY</span><div><h4>周期训练密度热力图</h4><p>颜色越深，代表该训练日的相对处方负荷越高</p></div></div>
+                {hasHeatmapDays ? <div className="microcycle-heatmap" role="img" aria-label="周期训练密度热力图">
+                  {dashboardData.heatmapWeeks.map((week) => (
+                    <div className="heatmap-week" key={week.week}>
+                      <div className="heatmap-week-label"><strong>{week.week}</strong><span>{week.focus}</span></div>
+                      <div className="heatmap-days">
+                        {week.days.map((day, index) => {
+                          const ratio = day.load / maxDailyLoad;
+                          return (
+                            <div
+                              className={ratio > 0.56 ? 'heatmap-day high' : 'heatmap-day'}
+                              key={`${day.day}-${index}`}
+                              style={{ backgroundColor: `rgba(11, 89, 99, ${0.10 + ratio * 0.84})` }}
+                              title={`${day.day}：相对负荷 ${day.load}，${day.prescriptions} 条处方`}
+                            >
+                              <span>{day.day}</span><strong>{day.load}</strong><small>{day.prescriptions} 条</small>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div> : <div className="chart-empty">AI未返回可展示的周期训练日</div>}
+                {hasHeatmapDays && <div className="heatmap-scale"><span>低</span><i /><i /><i /><i /><span>高</span></div>}
               </div>
             </div>
           </div>

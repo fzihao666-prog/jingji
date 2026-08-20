@@ -84,10 +84,10 @@ JWT_SECRET=your-local-dev-secret-key-123456789
 # 运动员照片存储目录
 ATHLETE_PHOTO_ROOT=C:/Projects/jingji-training-monitor/data/uploads/athlete-photos
 
-# AI 配置（如果你有 API 密钥）
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=sk-your-openai-api-key
-AI_MODEL=gpt-4
+# AI 配置（阿里云百炼 OpenAI 兼容接口）
+AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+AI_API_KEY=
+AI_MODEL=qwen3.7-plus
 
 # 时区
 TZ=Asia/Shanghai
@@ -221,14 +221,16 @@ npm run dev
 
 ## 五、本地测试 AI 功能
 
-### 1. 如果你有 OpenAI API 密钥
+### 1. 如果你有阿里云百炼 API 密钥
 
 直接在 `.env` 中配置：
 ```env
-AI_BASE_URL=https://api.openai.com/v1
-AI_API_KEY=sk-your-real-api-key
-AI_MODEL=gpt-4
+AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+AI_API_KEY=在这里填写百炼API密钥
+AI_MODEL=qwen3.7-plus
 ```
+
+密钥从阿里云百炼控制台获取。不要把真实 API 密钥提交到 Git。
 
 ### 2. 如果没有 API 密钥（使用模拟数据）
 

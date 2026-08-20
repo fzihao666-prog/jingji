@@ -168,7 +168,7 @@ await page.getByRole('button', { name: '登录', exact: true }).click();
 await page.getByRole('heading', { name: '训练总览' }).waitFor();
 await page.waitForTimeout(800);
 const regionalAthleteRows = await page.locator('.roster-preview tbody tr').count();
-const regionalHasImport = await page.getByRole('button', { name: 'Excel导入' }).count();
+const regionalHasImport = await page.getByRole('button', { name: 'AI识别导入' }).count();
 const regionalOwnNameEdit = await page.locator('.sidebar-footer .name-edit-trigger').count();
 await page.screenshot({ path: `${outputDirectory}/training-regional-overview.png`, fullPage: true });
 

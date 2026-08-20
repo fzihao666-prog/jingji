@@ -30,8 +30,20 @@ import {
   STRENGTH_METRICS,
   type StrengthMetricValues
 } from '../shared/strength-model.ts';
-import { TrainingPlanAIService, type AthleteContext } from './ai-service.ts';
-import { extractFileContent, isFileTypeSupported, getSupportedFileTypesDescription } from './file-parser.ts';
+import {
+  TrainingPlanAIService,
+  type AIImportBatchProgress,
+  type AIRecognizedTrainingRecord,
+  type AthleteContext,
+  type ImportedTrainingPlan,
+  type TrainingDocumentType
+} from './ai-service.ts';
+import {
+  prepareAITrainingPlanFile,
+  isFileTypeSupported,
+  getSupportedFileTypesDescription,
+  type PreparedAIFile
+} from './file-parser.ts';
 
 try {
   process.loadEnvFile(resolve(process.cwd(), '.env'));
@@ -71,11 +83,12 @@ type TrainingPlanWeekEntry = {
   reps: string;
   percentage: number | null;
   actualCompleted: string;
+  arrangement: string;
 };
 
 type TrainingPlanLine = {
   id: string;
-  weeks: Record<'1' | '2' | '3' | '4', TrainingPlanWeekEntry>;
+  weeks: Record<string, TrainingPlanWeekEntry>;
 };
 
 type TrainingPlanExercise = {
@@ -94,11 +107,22 @@ type TrainingPlanData = {
   bodyWeight: number | null;
   age: number | null;
   exercises: TrainingPlanExercise[];
+  weekKeys: string[];
+  weekLabels: Record<string, string>;
+  sourceType?: 'ai_import' | 'ai_generated';
+  summary?: string;
+  durationWeeks?: number | null;
+  weeklyPlans?: unknown[];
+  confidence?: number | null;
+  warnings?: string[];
+  unmappedContent?: string[];
 };
 
 type ImportRow = {
   rowNumber: number;
   athleteId: number | null;
+  confidence?: number;
+  sourceText?: string;
   athleteName: string;
   province: string;
   city: string;
@@ -177,7 +201,7 @@ const trainingPlanAIUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (_req, file, callback) => {
-    if (isFileTypeSupported(file.mimetype)) {
+    if (isFileTypeSupported(file.mimetype, file.originalname)) {
       callback(null, true);
     } else {
       callback(new Error(`不支持的文件类型。支持格式：${getSupportedFileTypesDescription()}`));
@@ -193,15 +217,35 @@ const jwtSecret = (() => {
   writeFileSync(jwtSecretPath, generated, { encoding: 'utf8', flag: 'wx' });
   return generated;
 })();
-const importCache = new Map<string, { ownerId: number; rows: ImportRow[]; expiresAt: number }>();
-const specialTestImportCache = new Map<string, { ownerId: number; rows: SpecialTestImportRow[]; expiresAt: number }>();
-const trainingPlanBatchCache = new Map<string, {
+const importCache = new Map<string, {
   ownerId: number;
-  athleteIds: number[];
-  data: TrainingPlanData;
-  conflicts: number[];
+  rows: ImportRow[];
+  expiresAt: number;
+  mode?: 'legacy' | 'ai';
+  project?: Project;
+  modelUsed?: string;
+}>();
+type AIImportJobStatus = 'queued' | 'classifying' | 'recognizing' | 'complete' | 'failed';
+type AIImportJob = {
+  ownerId: number;
+  status: AIImportJobStatus;
+  phase: string;
+  completedChunks: number;
+  totalChunks: number;
+  currentLabel: string;
+  documentType?: TrainingDocumentType;
+  result?: Record<string, unknown>;
+  error?: string;
+  expiresAt: number;
+};
+const aiImportFileCache = new Map<string, {
+  ownerId: number;
+  project: Project;
+  file: PreparedAIFile;
   expiresAt: number;
 }>();
+const aiImportJobs = new Map<string, AIImportJob>();
+const specialTestImportCache = new Map<string, { ownerId: number; rows: SpecialTestImportRow[]; expiresAt: number }>();
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 const provinceSet = new Set<string>(PROVINCES);
 const projectSet = new Set<string>(PROJECTS);
@@ -516,8 +560,215 @@ function hasAthleteAccess(user: AuthUser, athleteId: number) {
   return accessibleAthleteIds(user).includes(athleteId);
 }
 
+function importAthletesForProject(user: AuthUser, project: Project) {
+  const accessibleIds = accessibleAthleteIds(user);
+  if (!accessibleIds.length) return [];
+  const placeholders = accessibleIds.map(() => '?').join(',');
+  return db.prepare(`
+    SELECT id, name, team FROM athletes
+    WHERE active = 1 AND id IN (${placeholders}) AND project = ?
+    ORDER BY team, name
+  `).all(...accessibleIds, project) as Array<{ id: number; name: string; team: string }>;
+}
+
+function selectedPreparedFile(file: PreparedAIFile, sectionNames: string[]): PreparedAIFile {
+  if (file.kind === 'image') return file;
+  const selected = new Set(sectionNames);
+  const chunks = file.chunks.filter((chunk) => selected.has(chunk.sectionName));
+  if (!chunks.length) throw new Error('请至少选择一个工作表或内容分区');
+  const sections = (file.metadata.sections || []).filter((section) => selected.has(section.name));
+  return {
+    kind: 'text',
+    chunks,
+    content: chunks.map((chunk) => chunk.content).join('\n\n').slice(0, 120_000),
+    metadata: {
+      ...file.metadata,
+      chunkCount: chunks.length,
+      sections,
+      warnings: file.metadata.warnings
+    }
+  };
+}
+
+function preparedFileChunkCount(file: PreparedAIFile) {
+  return file.kind === 'text' ? file.chunks.length : 1;
+}
+
+function importedPlanItemCount(plan: ImportedTrainingPlan) {
+  return plan.weeklyPlans.reduce(
+    (weekTotal, week) => weekTotal + week.days.reduce((dayTotal, day) => dayTotal + day.items.length, 0),
+    0
+  );
+}
+
+function updateAIImportJob(jobId: string, patch: Partial<AIImportJob>) {
+  const current = aiImportJobs.get(jobId);
+  if (current) aiImportJobs.set(jobId, { ...current, ...patch });
+}
+
+async function executeAIImportJob(input: {
+  jobId: string;
+  user: AuthUser;
+  project: Project;
+  file: PreparedAIFile;
+  athletes: Array<{ id: number; name: string; team: string }>;
+  requestedType: TrainingDocumentType | 'auto';
+}) {
+  const { jobId, user, project, file, athletes, requestedType } = input;
+  try {
+    const aiService = new TrainingPlanAIService();
+    updateAIImportJob(jobId, { status: 'classifying', phase: '正在判断文件属于训练计划还是完成记录' });
+    const classification = requestedType === 'auto'
+      ? await aiService.classifyTrainingDocument(project, file)
+      : {
+          documentType: requestedType,
+          confidence: 1,
+          reason: '由用户在识别前明确指定',
+          modelUsed: '人工指定',
+          attempts: 0
+        };
+    if (classification.documentType === 'mixed' || classification.documentType === 'unknown') {
+      throw new Error(`AI无法确定唯一导入类型（${classification.reason || '文件可能同时包含计划和完成记录'}），请返回后手动选择“训练计划”或“完成记录”`);
+    }
+
+    updateAIImportJob(jobId, {
+      status: 'recognizing',
+      phase: classification.documentType === 'training_plan' ? '正在逐批识别训练计划' : '正在逐批识别完成记录',
+      documentType: classification.documentType,
+      completedChunks: 0,
+      currentLabel: ''
+    });
+    const onProgress = (progress: AIImportBatchProgress) => updateAIImportJob(jobId, {
+      completedChunks: progress.completed,
+      totalChunks: progress.total,
+      currentLabel: progress.label,
+      phase: progress.status === 'failed'
+        ? `${progress.label}识别失败，继续处理其他批次`
+        : `正在处理 ${progress.label}`
+    });
+
+    if (classification.documentType === 'training_plan') {
+      const context = getAthleteContext(athletes[0].id);
+      const recognized = await aiService.recognizeTrainingPlanBatched(context, file, { onProgress });
+      recognized.plan.warnings = [...new Set([...file.metadata.warnings, ...recognized.plan.warnings])];
+      const totalItems = importedPlanItemCount(recognized.plan);
+      const result: Record<string, unknown> = {
+        documentType: 'training_plan',
+        sourceType: 'ai_recognition',
+        fileName: file.metadata.filename,
+        modelUsed: recognized.modelUsed,
+        confidence: recognized.plan.confidence,
+        summary: recognized.plan.summary,
+        warnings: recognized.plan.warnings,
+        unmappedContent: recognized.plan.unmappedContent,
+        sourceFile: file.metadata,
+        classification,
+        processedChunks: recognized.processedChunks,
+        failedChunks: recognized.failedChunks,
+        athletes,
+        total: totalItems,
+        valid: totalItems,
+        invalid: 0,
+        warningCount: recognized.plan.warnings.length + recognized.plan.unmappedContent.length,
+        rows: [],
+        plan: recognized.plan,
+        aiMetadata: {
+          operation: 'import',
+          sourceFile: file.metadata,
+          modelUsed: recognized.modelUsed,
+          attempts: recognized.attempts,
+          classification,
+          processedChunks: recognized.processedChunks,
+          failedChunks: recognized.failedChunks,
+          generatedAt: new Date().toISOString()
+        }
+      };
+      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
+        .run(user.id, 'AI_RECOGNIZE_TRAINING_PLAN_BATCH', 'training_plan', JSON.stringify({
+          fileName: file.metadata.filename,
+          project,
+          model: recognized.modelUsed,
+          chunks: recognized.processedChunks,
+          failedChunks: recognized.failedChunks,
+          sections: file.metadata.sections?.map((section) => section.name) || [],
+          itemCount: totalItems
+        }));
+      updateAIImportJob(jobId, {
+        status: 'complete',
+        phase: '完整识别已完成，等待人工确认',
+        completedChunks: preparedFileChunkCount(file),
+        result
+      });
+      return;
+    }
+
+    const recognized = await aiService.recognizeTrainingRecordsBatched(project, athletes, file, { onProgress });
+    const rows = normalizeAITrainingImportRows(recognized.rows, user, project);
+    const importId = randomUUID();
+    importCache.set(importId, {
+      ownerId: user.id,
+      rows,
+      project,
+      mode: 'ai',
+      modelUsed: recognized.modelUsed,
+      expiresAt: Date.now() + 30 * 60 * 1000
+    });
+    const result: Record<string, unknown> = {
+      importId,
+      documentType: 'training_record',
+      sourceType: 'ai_recognition',
+      fileName: file.metadata.filename,
+      modelUsed: recognized.modelUsed,
+      confidence: recognized.confidence,
+      summary: recognized.summary,
+      warnings: [...file.metadata.warnings, ...recognized.warnings],
+      unmappedContent: recognized.unmappedContent,
+      sourceFile: file.metadata,
+      classification,
+      processedChunks: recognized.processedChunks,
+      failedChunks: recognized.failedChunks,
+      athletes,
+      total: rows.length,
+      valid: rows.filter((row) => row.errors.length === 0).length,
+      invalid: rows.filter((row) => row.errors.length > 0).length,
+      warningCount: rows.reduce((sum, row) => sum + row.warnings.length, 0),
+      rows
+    };
+    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
+      .run(user.id, 'AI_RECOGNIZE_TRAINING_DATA_BATCH', 'training_record', JSON.stringify({
+        fileName: file.metadata.filename,
+        project,
+        model: recognized.modelUsed,
+        chunks: recognized.processedChunks,
+        failedChunks: recognized.failedChunks,
+        sections: file.metadata.sections?.map((section) => section.name) || [],
+        rowCount: rows.length
+      }));
+    updateAIImportJob(jobId, {
+      status: 'complete',
+      phase: '完整识别已完成，等待人工确认',
+      completedChunks: preparedFileChunkCount(file),
+      result
+    });
+  } catch (error) {
+    console.error('[AI Import Job] Error:', error);
+    updateAIImportJob(jobId, {
+      status: 'failed',
+      phase: '识别失败',
+      error: error instanceof Error ? error.message : '未知错误'
+    });
+  }
+}
+
 function cleanString(value: unknown) {
   return String(value ?? '').trim();
+}
+
+function normalizeUploadFilename(value: unknown) {
+  const original = cleanString(value);
+  if (!original) return 'uploaded-file';
+  const decoded = Buffer.from(original, 'latin1').toString('utf8');
+  return decoded.includes('\uFFFD') ? original : decoded;
 }
 
 function optionalNumber(value: unknown, min: number, max: number, label: string, errors: string[]) {
@@ -528,6 +779,23 @@ function optionalNumber(value: unknown, min: number, max: number, label: string,
     return null;
   }
   return Math.round(numeric * 10) / 10;
+}
+
+const defaultTrainingPlanWeekKeys = ['1', '2', '3', '4'];
+
+function trainingPlanWeekKeys(source: Record<string, unknown>) {
+  const explicit = Array.isArray(source.weekKeys)
+    ? source.weekKeys.map(cleanString).filter(Boolean)
+    : [];
+  const exercises = Array.isArray(source.exercises) ? source.exercises : [];
+  const firstExercise = exercises.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
+  const lines = Array.isArray(firstExercise?.lines) ? firstExercise.lines : [];
+  const firstLine = lines.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
+  const weeks = firstLine?.weeks && typeof firstLine.weeks === 'object' && !Array.isArray(firstLine.weeks)
+    ? Object.keys(firstLine.weeks as Record<string, unknown>)
+    : [];
+  const sourceKeys = explicit.length ? explicit : weeks.length ? weeks : defaultTrainingPlanWeekKeys;
+  return [...new Set(sourceKeys.map((key) => key.slice(0, 20)))].slice(0, 52);
 }
 
 function parseTrainingPlanData(input: unknown) {
@@ -544,20 +812,31 @@ function parseTrainingPlanData(input: unknown) {
   })();
   const title = cleanString(source.title);
   const scheduleLabel = cleanString(source.scheduleLabel);
+  const sourceType = source.sourceType === 'ai_import' || source.sourceType === 'ai_generated' ? source.sourceType : undefined;
+  const isAIPlan = Boolean(sourceType);
+  const weekKeys = trainingPlanWeekKeys(source);
+  const rawWeekLabels = source.weekLabels && typeof source.weekLabels === 'object' && !Array.isArray(source.weekLabels)
+    ? source.weekLabels as Record<string, unknown>
+    : {};
+  const weekLabels = Object.fromEntries(weekKeys.map((key, index) => [key, cleanString(rawWeekLabels[key]).slice(0, 60) || `WEEK ${index + 1}`]));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
     errors.push('请选择有效的开始日期和结束日期');
   } else {
     const days = Math.round((Date.parse(`${endDate}T12:00:00Z`) - Date.parse(`${startDate}T12:00:00Z`)) / 86400000) + 1;
-    if (days < 28 || days > 31) errors.push('训练计划须按一个月设置，起止日期应覆盖28至31天');
+    if (isAIPlan ? (days < 1 || days > 730) : (days < 28 || days > 31)) {
+      errors.push(isAIPlan ? 'AI计划起止日期应覆盖1至730天' : '训练计划须按一个月设置，起止日期应覆盖28至31天');
+    }
   }
-  if (!title || title.length > 60) errors.push('计划名称应为1至60个字符');
-  if (!scheduleLabel || scheduleLabel.length > 40) errors.push('训练日安排应为1至40个字符');
+  if (!title || title.length > (isAIPlan ? 80 : 60)) errors.push(`计划名称应为1至${isAIPlan ? 80 : 60}个字符`);
+  if ((!scheduleLabel && !isAIPlan) || scheduleLabel.length > 80) errors.push(`训练日安排应为${isAIPlan ? '0至80' : '1至80'}个字符`);
+  if (!weekKeys.length) errors.push('至少需要一个训练阶段');
 
   const rawExercises = Array.isArray(source.exercises) ? source.exercises : [];
   if (!rawExercises.length) errors.push('至少添加一个训练项目');
-  if (rawExercises.length > 8) errors.push('训练项目最多8项');
+  const exerciseLimit = isAIPlan ? 40 : 8;
+  if (rawExercises.length > exerciseLimit) errors.push(`训练项目最多${exerciseLimit}项`);
   let totalLines = 0;
-  const exercises: TrainingPlanExercise[] = rawExercises.slice(0, 8).map((rawExercise, exerciseIndex) => {
+  const exercises: TrainingPlanExercise[] = rawExercises.slice(0, exerciseLimit).map((rawExercise, exerciseIndex) => {
     const exercise = rawExercise && typeof rawExercise === 'object' && !Array.isArray(rawExercise)
       ? rawExercise as Record<string, unknown>
       : {};
@@ -567,9 +846,10 @@ function parseTrainingPlanData(input: unknown) {
     if (unitNote.length > 20) errors.push(`第${exerciseIndex + 1}项备注不能超过20个字符`);
     const rawLines = Array.isArray(exercise.lines) ? exercise.lines : [];
     if (!rawLines.length) errors.push(`第${exerciseIndex + 1}项至少需要一行处方`);
-    if (rawLines.length > 8) errors.push(`第${exerciseIndex + 1}项处方最多8行`);
+    const lineLimit = isAIPlan ? 20 : 8;
+    if (rawLines.length > lineLimit) errors.push(`第${exerciseIndex + 1}项处方最多${lineLimit}行`);
     totalLines += rawLines.length;
-    const lines: TrainingPlanLine[] = rawLines.slice(0, 8).map((rawLine, lineIndex) => {
+    const lines: TrainingPlanLine[] = rawLines.slice(0, lineLimit).map((rawLine, lineIndex) => {
       const line = rawLine && typeof rawLine === 'object' && !Array.isArray(rawLine)
         ? rawLine as Record<string, unknown>
         : {};
@@ -577,21 +857,24 @@ function parseTrainingPlanData(input: unknown) {
         ? line.weeks as Record<string, unknown>
         : {};
       const weeks = {} as TrainingPlanLine['weeks'];
-      for (const weekKey of ['1', '2', '3', '4'] as const) {
+      for (const weekKey of weekKeys) {
         const rawWeek = rawWeeks[weekKey] && typeof rawWeeks[weekKey] === 'object' && !Array.isArray(rawWeeks[weekKey])
           ? rawWeeks[weekKey] as Record<string, unknown>
           : {};
         const sets = cleanString(rawWeek.sets);
         const reps = cleanString(rawWeek.reps);
         const actualCompleted = cleanString(rawWeek.actualCompleted);
+        const arrangement = cleanString(rawWeek.arrangement);
         if (sets.length > 12 || reps.length > 20 || actualCompleted.length > 30) {
           errors.push(`第${exerciseIndex + 1}项第${lineIndex + 1}行第${weekKey}周输入过长`);
         }
+        if (arrangement.length > 500) errors.push(`第${exerciseIndex + 1}项第${lineIndex + 1}行第${weekKey}周安排不能超过500个字符`);
         weeks[weekKey] = {
           sets,
           reps,
           percentage: optionalNumber(rawWeek.percentage, 0, 100, '训练百分比', errors),
-          actualCompleted
+          actualCompleted,
+          arrangement
         };
       }
       return {
@@ -609,7 +892,7 @@ function parseTrainingPlanData(input: unknown) {
     };
   });
   if (!exercises.some((exercise) => exercise.name)) errors.push('至少填写一个训练项目名称');
-  if (totalLines > 30) errors.push('导出模板最多容纳30行训练处方');
+  if (totalLines > (isAIPlan ? 200 : 30)) errors.push(isAIPlan ? 'AI计划最多容纳200行训练处方' : '导出模板最多容纳30行训练处方');
 
   const data: TrainingPlanData = {
     startDate,
@@ -618,9 +901,153 @@ function parseTrainingPlanData(input: unknown) {
     scheduleLabel,
     bodyWeight: optionalNumber(source.bodyWeight, 0, 400, '体重', errors),
     age: optionalNumber(source.age, 8, 80, '年龄', errors),
-    exercises
+    exercises,
+    weekKeys,
+    weekLabels,
+    ...(sourceType ? {
+      sourceType,
+      summary: cleanString(source.summary).slice(0, 1000),
+      durationWeeks: optionalNumber(source.durationWeeks, 0, 52, '训练阶段数', errors),
+      weeklyPlans: Array.isArray(source.weeklyPlans) ? source.weeklyPlans : [],
+      confidence: optionalNumber(source.confidence, 0, 1, '识别置信度', errors),
+      warnings: Array.isArray(source.warnings) ? source.warnings.map(cleanString).filter(Boolean).slice(0, 50) : [],
+      unmappedContent: Array.isArray(source.unmappedContent) ? source.unmappedContent.map(cleanString).filter(Boolean).slice(0, 100) : []
+    } : {})
   };
   return { data, errors: [...new Set(errors)] };
+}
+
+function planRecord(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function emptyMatrixWeek(): TrainingPlanWeekEntry {
+  return { sets: '', reps: '', percentage: null, actualCompleted: '', arrangement: '' };
+}
+
+function aiPercentage(value: unknown) {
+  if (value === '' || value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 10) / 10 : null;
+}
+
+function recentTrainingPlanMaxWeights(athleteId: number) {
+  const rows = db.prepare(`
+    SELECT plan_data AS dataJson FROM training_plans
+    WHERE athlete_id = ? ORDER BY start_date DESC, id DESC LIMIT 12
+  `).all(athleteId) as Array<{ dataJson: string }>;
+  const maxWeights = new Map<string, number>();
+  for (const row of rows) {
+    try {
+      const stored = planRecord(JSON.parse(row.dataJson));
+      const exercises = Array.isArray(stored.exercises) ? stored.exercises : [];
+      for (const exerciseValue of exercises) {
+        const exercise = planRecord(exerciseValue);
+        const name = cleanString(exercise.name);
+        const maxWeight = Number(exercise.maxWeight);
+        if (name && Number.isFinite(maxWeight) && maxWeight >= 0 && !maxWeights.has(name.toLocaleLowerCase())) {
+          maxWeights.set(name.toLocaleLowerCase(), maxWeight);
+        }
+      }
+    } catch {}
+  }
+  return maxWeights;
+}
+
+function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
+  const plan = planRecord(planValue);
+  const sourceType = plan.sourceType === 'ai_import' ? 'ai_import' : 'ai_generated';
+  const sourceWeeks = Array.isArray(plan.weeklyPlans) ? plan.weeklyPlans.map(planRecord) : [];
+  const weekKeys = sourceWeeks.map((_week, index) => String(index + 1));
+  const weekLabels = Object.fromEntries(sourceWeeks.map((week, index) => {
+    const weekNumber = Number(week.weekNumber);
+    const label = cleanString(week.label);
+    return [weekKeys[index], label || (Number.isFinite(weekNumber) && weekNumber > 0 ? `WEEK ${weekNumber}` : `阶段 ${index + 1}`)];
+  }));
+  const configuredMax = new Map<string, number>();
+  for (const exerciseValue of Array.isArray(plan.exercises) ? plan.exercises : []) {
+    const exercise = planRecord(exerciseValue);
+    const name = cleanString(exercise.name);
+    const maxWeight = Number(exercise.maxWeight);
+    if (name && Number.isFinite(maxWeight) && maxWeight >= 0) configuredMax.set(name.toLocaleLowerCase(), maxWeight);
+  }
+  const recentMax = athleteId ? recentTrainingPlanMaxWeights(athleteId) : new Map<string, number>();
+  const exerciseMap = new Map<string, TrainingPlanExercise>();
+
+  sourceWeeks.forEach((week, weekIndex) => {
+    const weekKey = weekKeys[weekIndex];
+    const occurrenceByExercise = new Map<string, number>();
+    const days = Array.isArray(week.days) ? week.days.map(planRecord) : [];
+    for (const day of days) {
+      const dayLabel = sourceType === 'ai_import'
+        ? [cleanString(day.date), cleanString(day.dayLabel)].filter(Boolean).join(' ')
+        : cleanString(day.dayOfWeek);
+      const dayFocus = cleanString(day.focus);
+      const items = sourceType === 'ai_import'
+        ? (Array.isArray(day.items) ? day.items.map(planRecord) : [])
+        : (Array.isArray(day.exercises) ? day.exercises.map(planRecord) : []);
+      for (const item of items) {
+        const name = cleanString(item.name);
+        if (!name) continue;
+        const normalizedName = name.toLocaleLowerCase();
+        const occurrence = occurrenceByExercise.get(normalizedName) || 0;
+        occurrenceByExercise.set(normalizedName, occurrence + 1);
+        let exercise = exerciseMap.get(normalizedName);
+        if (!exercise) {
+          exercise = {
+            id: randomUUID(),
+            name,
+            maxWeight: configuredMax.get(normalizedName) ?? recentMax.get(normalizedName) ?? null,
+            unitNote: '',
+            lines: []
+          };
+          exerciseMap.set(normalizedName, exercise);
+        }
+        while (exercise.lines.length <= occurrence) {
+          exercise.lines.push({
+            id: randomUUID(),
+            weeks: Object.fromEntries(weekKeys.map((key) => [key, emptyMatrixWeek()]))
+          });
+        }
+        const detailParts = [
+          dayLabel,
+          dayFocus,
+          cleanString(item.load) && `负荷 ${cleanString(item.load)}`,
+          cleanString(item.duration) && `时长 ${cleanString(item.duration)}`,
+          cleanString(item.distance) && `距离 ${cleanString(item.distance)}`,
+          cleanString(item.intensity) && `强度区间 ${cleanString(item.intensity)}`,
+          cleanString(item.pace) && `配速 ${cleanString(item.pace)}`,
+          cleanString(item.notes),
+          sourceType === 'ai_import' && cleanString(item.rawText) !== name ? cleanString(item.rawText) : ''
+        ].filter((part): part is string => Boolean(part));
+        exercise.lines[occurrence].weeks[weekKey] = {
+          sets: cleanString(item.sets),
+          reps: cleanString(item.reps),
+          percentage: aiPercentage(item.percentage),
+          actualCompleted: '',
+          arrangement: [...new Set(detailParts)].join(' · ').slice(0, 500)
+        };
+      }
+    }
+  });
+
+  return {
+    ...plan,
+    sourceType,
+    weekKeys,
+    weekLabels,
+    exercises: [...exerciseMap.values()]
+  };
+}
+
+function readStoredTrainingPlanData(dataJson: string): unknown {
+  const raw = JSON.parse(dataJson || '{}') as Record<string, unknown>;
+  if (raw.sourceType === 'ai_import' || raw.sourceType === 'ai_generated' || Array.isArray(raw.weeklyPlans)) {
+    const exercises = Array.isArray(raw.exercises) ? raw.exercises.map(planRecord) : [];
+    const hasMatrixLines = exercises.some((exercise) => Array.isArray(exercise.lines));
+    return parseTrainingPlanData(hasMatrixLines ? raw : normalizeAIPlanToMatrix(raw)).data;
+  }
+  return parseTrainingPlanData(raw).data;
 }
 
 function excelCellText(cell: ExcelJS.Cell) {
@@ -632,176 +1059,6 @@ function excelCellText(cell: ExcelJS.Cell) {
     return cleanString(result);
   }
   return cell.text.trim();
-}
-
-function findBatchPlanSheet(workbook: ExcelJS.Workbook) {
-  for (const sheet of workbook.worksheets) {
-    for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 15); rowNumber += 1) {
-      const headings: string[] = [];
-      sheet.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => {
-        headings.push(excelCellText(cell).replace(/\s+/g, ''));
-      });
-      if (headings.includes('项目') && headings.includes('第1周组数') && headings.includes('第1周强度%')) {
-        return { sheet, headerRowNumber: rowNumber };
-      }
-    }
-  }
-  return null;
-}
-
-async function parseBatchTrainingPlanWorkbook(buffer: Buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  const found = findBatchPlanSheet(workbook);
-  if (!found) throw new Error('未找到批量计划表头，请下载并使用最新模板');
-  const { sheet, headerRowNumber } = found;
-  const metadata: Record<string, string> = {};
-  for (let rowNumber = 1; rowNumber < headerRowNumber; rowNumber += 1) {
-    const label = excelCellText(sheet.getCell(rowNumber, 1)).replace(/[：:]/g, '').trim();
-    const value = excelCellText(sheet.getCell(rowNumber, 2));
-    if (label) metadata[label] = value;
-  }
-  const headers: Record<string, number> = {};
-  sheet.getRow(headerRowNumber).eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-    const heading = excelCellText(cell).replace(/\s+/g, '');
-    if (heading) headers[heading] = columnNumber;
-  });
-  const required = ['项目', '第1周组数', '第1周次数', '第1周强度%', '第2周组数', '第2周次数', '第2周强度%', '第3周组数', '第3周次数', '第3周强度%', '第4周组数', '第4周次数', '第4周强度%'];
-  const missing = required.filter((heading) => !headers[heading]);
-  if (missing.length) throw new Error(`模板缺少字段：${missing.join('、')}`);
-
-  const exerciseMap = new Map<string, TrainingPlanExercise>();
-  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-    if (rowNumber <= headerRowNumber) return;
-    const name = excelCellText(row.getCell(headers['项目']));
-    if (!name) return;
-    let exercise = exerciseMap.get(name);
-    if (!exercise) {
-      exercise = { id: randomUUID(), name, maxWeight: null, unitNote: '', lines: [] };
-      exerciseMap.set(name, exercise);
-    }
-    const weeks = {} as TrainingPlanLine['weeks'];
-    for (const weekKey of ['1', '2', '3', '4'] as const) {
-      const percentageText = excelCellText(row.getCell(headers[`第${weekKey}周强度%`]));
-      const percentage = percentageText === '' ? null : Number(percentageText.replace('%', ''));
-      weeks[weekKey] = {
-        sets: excelCellText(row.getCell(headers[`第${weekKey}周组数`])),
-        reps: excelCellText(row.getCell(headers[`第${weekKey}周次数`])),
-        percentage: Number.isFinite(percentage) ? percentage : null,
-        actualCompleted: ''
-      };
-    }
-    exercise.lines.push({ id: randomUUID(), weeks });
-  });
-
-  const parsed = parseTrainingPlanData({
-    title: metadata['计划名称'],
-    startDate: metadata['开始日期'],
-    endDate: metadata['结束日期'],
-    scheduleLabel: metadata['训练日安排'],
-    bodyWeight: null,
-    age: null,
-    exercises: [...exerciseMap.values()]
-  });
-  if (parsed.errors.length) throw new Error(parsed.errors.join('；'));
-  return parsed.data;
-}
-
-function latestPlanData(athleteId: number) {
-  const row = db.prepare(`
-    SELECT plan_data AS dataJson FROM training_plans
-    WHERE athlete_id = ? ORDER BY start_date DESC, id DESC LIMIT 1
-  `).get(athleteId) as { dataJson: string } | undefined;
-  if (!row) return null;
-  try {
-    return parseTrainingPlanData(JSON.parse(row.dataJson)).data;
-  } catch {
-    return null;
-  }
-}
-
-function personalizeBatchPlan(template: TrainingPlanData, athleteId: number) {
-  const previous = latestPlanData(athleteId);
-  const previousMax = new Map((previous?.exercises || []).map((exercise) => [exercise.name.trim(), exercise.maxWeight]));
-  return {
-    ...template,
-    bodyWeight: previous?.bodyWeight ?? null,
-    age: previous?.age ?? null,
-    exercises: template.exercises.map((exercise) => ({
-      ...exercise,
-      id: randomUUID(),
-      maxWeight: previousMax.get(exercise.name.trim()) ?? null,
-      lines: exercise.lines.map((line) => ({
-        ...line,
-        id: randomUUID(),
-        weeks: Object.fromEntries(Object.entries(line.weeks).map(([weekKey, week]) => [weekKey, { ...week, actualCompleted: '' }])) as TrainingPlanLine['weeks']
-      }))
-    }))
-  } satisfies TrainingPlanData;
-}
-
-async function buildBatchTrainingPlanTemplate() {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = '竞迹训练监控平台';
-  const sheet = workbook.addWorksheet('多人四周训练计划', { views: [{ state: 'frozen', ySplit: 8 }] });
-  sheet.mergeCells('A1:N1');
-  sheet.getCell('A1').value = '多人四周力量训练计划导入模板';
-  sheet.getCell('A1').font = { name: 'Microsoft YaHei', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
-  sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF073B49' } };
-  sheet.getRow(1).height = 34;
-  const nextMonth = new Date();
-  nextMonth.setDate(1);
-  nextMonth.setMonth(nextMonth.getMonth() + 1);
-  const startDate = nextMonth.toISOString().slice(0, 10);
-  const end = new Date(`${startDate}T12:00:00Z`);
-  end.setUTCDate(end.getUTCDate() + 29);
-  const metadata = [
-    ['计划名称', '四周力量训练计划'],
-    ['开始日期', startDate],
-    ['结束日期', end.toISOString().slice(0, 10)],
-    ['训练日安排', '周二 / 周五'],
-    ['填写说明', '每行是一条处方；同一项目可填写多行。MAX按运动员已有数据自动沿用，导入后可逐人调整。']
-  ];
-  metadata.forEach(([label, value], index) => {
-    const row = index + 2;
-    sheet.getCell(row, 1).value = label;
-    sheet.getCell(row, 1).font = { bold: true, color: { argb: 'FF0B5963' } };
-    sheet.mergeCells(row, 2, row, 14);
-    sheet.getCell(row, 2).value = value;
-  });
-  const headers = ['项目', '处方行', ...(['1', '2', '3', '4'].flatMap((week) => [`第${week}周组数`, `第${week}周次数`, `第${week}周强度%`]))];
-  sheet.getRow(8).values = headers;
-  sheet.getRow(8).height = 36;
-  sheet.getRow(8).eachCell((cell, columnNumber) => {
-    const gold = columnNumber <= 2;
-    cell.font = { name: 'Microsoft YaHei', bold: true, color: { argb: gold ? 'FF14343E' : 'FFFFFFFF' } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: gold ? 'FFFFC20A' : 'FF167F83' } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.border = { top: { style: 'thin', color: { argb: 'FFB8CBCE' } }, bottom: { style: 'thin', color: { argb: 'FFB8CBCE' } }, left: { style: 'thin', color: { argb: 'FFB8CBCE' } }, right: { style: 'thin', color: { argb: 'FFB8CBCE' } } };
-  });
-  const examples = [
-    ['卧拉', 1, 1, 10, 70, 1, 10, 70, 1, 10, 72, 1, 10, 72],
-    ['卧拉', 2, 2, 8, 75, 2, 8, 75, 2, 8, 78, 2, 8, 78],
-    ['卧推', 1, 1, 10, 70, 1, 10, 70, 1, 10, 72, 1, 10, 72],
-    ['深蹲', 1, 4, 8, 70, 4, 8, 72, 4, 8, 75, 4, 8, 75]
-  ];
-  examples.forEach((values, index) => { sheet.getRow(9 + index).values = values; });
-  for (let rowNumber = 9; rowNumber <= 38; rowNumber += 1) {
-    const row = sheet.getRow(rowNumber);
-    row.height = 25;
-    row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: columnNumber <= 2 ? 'FFFFF7DA' : rowNumber % 2 ? 'FFF3F8F8' : 'FFFFFFFF' } };
-      cell.border = { bottom: { style: 'hair', color: { argb: 'FFB8CBCE' } }, right: { style: 'hair', color: { argb: 'FFD5E0E2' } } };
-    });
-    for (const columnNumber of [5, 8, 11, 14]) {
-      row.getCell(columnNumber).dataValidation = { type: 'decimal', operator: 'between', formulae: [0, 100], allowBlank: true, showErrorMessage: true, errorTitle: '强度格式错误', error: '请输入0至100之间的数字。' };
-    }
-  }
-  headers.forEach((_header, index) => { sheet.getColumn(index + 1).width = index === 0 ? 19 : index === 1 ? 10 : 14; });
-  sheet.autoFilter = { from: 'A8', to: 'N38' };
-  return workbook;
 }
 
 function excelNumberOrText(value: string) {
@@ -1166,6 +1423,8 @@ async function buildAiAdvice(test: AdviceTestRow) {
       body: JSON.stringify({
         model,
         temperature: 0.2,
+        ...(model.toLowerCase().startsWith('qwen') ? { enable_thinking: false } : {}),
+        max_completion_tokens: 12000,
         response_format: { type: 'json_object' },
         messages: [
           {
@@ -1187,7 +1446,7 @@ async function buildAiAdvice(test: AdviceTestRow) {
           }
         ]
       }),
-      signal: AbortSignal.timeout(90000)
+      signal: AbortSignal.timeout(Number(process.env.AI_TIMEOUT_MS) || 180000)
     });
     if (!response.ok) throw new Error(`AI service returned ${response.status}`);
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
@@ -1487,6 +1746,144 @@ function deriveStatus(input: {
   if ((input.fatigueIndex ?? 0) >= 7 || (input.sleepHours !== null && input.sleepHours < 5.5) || (input.rpe ?? 0) >= 9) return 'alert';
   if ((input.fatigueIndex ?? 0) >= 5 || (input.sleepHours !== null && input.sleepHours < 7) || (input.rpe ?? 0) >= 8) return 'attention';
   return 'normal';
+}
+
+function normalizeAITrainingBreakdown(value: unknown): TrainingBreakdown {
+  const source = planRecord(value);
+  const land = planRecord(source.landMinutes);
+  const waterDistance = planRecord(source.waterDistanceByZone);
+  const waterTime = planRecord(source.waterTimeByZone);
+  const ergDistance = planRecord(source.ergDistanceByZone);
+  const zones = (record: Record<string, unknown>) => Object.fromEntries(
+    intensityZones.map((zone) => [zone, numberOrZero(record[zone])])
+  ) as Record<IntensityZoneKey, number>;
+  return {
+    waterMinutes: numberOrZero(source.waterMinutes),
+    ergMinutes: numberOrZero(source.ergMinutes),
+    landMinutes: {
+      functional: numberOrZero(land.functional),
+      endurance: numberOrZero(land.endurance),
+      maxStrength: numberOrZero(land.maxStrength),
+      speedStrength: numberOrZero(land.speedStrength),
+      recovery: numberOrZero(land.recovery),
+      running: numberOrZero(land.running),
+      other: numberOrZero(land.other)
+    },
+    waterDistanceByZone: zones(waterDistance),
+    waterTimeByZone: zones(waterTime),
+    ergDistanceByZone: zones(ergDistance)
+  };
+}
+
+function normalizeAITrainingImportRows(
+  values: unknown[],
+  user: AuthUser,
+  project: Project
+): ImportRow[] {
+  const athletes = db.prepare(`
+    SELECT id, name, region AS province, city, county, project, team
+    FROM athletes WHERE active = 1
+  `).all() as Array<{
+    id: number;
+    name: string;
+    province: string;
+    city: string;
+    county: string;
+    project: string;
+    team: string;
+  }>;
+  const athleteByName = new Map(athletes.map((athlete) => [athlete.name.replace(/\s+/g, ''), athlete]));
+  const allowed = new Set(accessibleAthleteIds(user));
+
+  return values.slice(0, 300).map((value, index) => {
+    const source = planRecord(value) as Record<string, unknown> & Partial<AIRecognizedTrainingRecord>;
+    const errors: string[] = [];
+    const warnings = Array.isArray(source.warnings)
+      ? source.warnings.map(cleanString).filter(Boolean).slice(0, 12)
+      : [];
+    const trainingBreakdown = normalizeAITrainingBreakdown(source.trainingBreakdown);
+    const componentDuration = breakdownDuration(trainingBreakdown);
+    const componentDistance = breakdownDistance(trainingBreakdown);
+    const hasComponentData = breakdownNumbers(trainingBreakdown).some((item) => item !== 0);
+    const athleteName = cleanString(source.athleteName);
+    const athlete = athleteByName.get(athleteName.replace(/\s+/g, ''));
+    const sourceText = cleanString(source.sourceRow || source.sourceText).slice(0, 1000);
+    const date = parseDate(source.date);
+    const trainingType = cleanString(source.trainingType) || inferTrainingType(trainingBreakdown);
+    const structureType = cleanString(source.structureType) || trainingType;
+    const intensityZone = cleanString(source.intensityZone) || dominantIntensity(trainingBreakdown);
+    const content = cleanString(source.content) || inferTrainingContent(trainingBreakdown);
+    const explicitDuration = numberOrNull(source.durationMin);
+    const duration = explicitDuration ?? (hasComponentData ? componentDuration : null);
+    const explicitDistance = numberOrNull(source.distanceKm);
+    const distance = explicitDistance ?? componentDistance;
+    const rpe = numberOrNull(source.rpe);
+    const rawSrpe = numberOrNull(source.srpe);
+    const smvl = numberOrNull(source.smvl);
+    const morningPulse = numberOrNull(source.morningPulse);
+    const weightKg = numberOrNull(source.weightKg);
+    const sleepHours = numberOrNull(source.sleepHours);
+    const fatigueIndex = numberOrNull(source.fatigueIndex);
+    const confidence = Math.max(0, Math.min(1, numberOrNull(source.confidence) ?? 0.5));
+
+    if (!athleteName) errors.push('缺少运动员姓名');
+    else if (!athlete) errors.push('运动员不在系统名单中');
+    else if (!allowed.has(athlete.id)) errors.push('当前账户无权导入该运动员数据');
+    else if (athlete.project !== project) errors.push(`当前为${project}空间，不能导入${athlete.project}数据`);
+    if (!date) errors.push('日期格式无效，应为YYYY-MM-DD');
+    if (date && sourceText && !/(?:19|20)\d{2}/.test(sourceText)) warnings.push('原文定位中未见明确年份，请人工核对日期');
+    if (duration === null || (duration === 0 && !trainingType.includes('休息'))) errors.push('缺少训练时长');
+    if (duration !== null && duration < 0) errors.push('训练时长不能为负数');
+    if (distance !== null && distance < 0) errors.push('训练距离不能为负数');
+    if (breakdownNumbers(trainingBreakdown).some((item) => item < 0)) errors.push('分项训练时长和距离不能为负数');
+    if (rpe !== null && (rpe < 0 || rpe > 10)) errors.push('RPE应在0—10之间');
+    if (fatigueIndex !== null && (fatigueIndex < 0 || fatigueIndex > 10)) errors.push('疲劳指数应在0—10之间');
+    if (confidence < 0.75) warnings.push(`AI识别置信度较低（${Math.round(confidence * 100)}%），请人工核对`);
+    if (sleepHours === null) warnings.push('未识别到睡眠时间');
+    if (morningPulse === null) warnings.push('未识别到晨脉');
+    if (weightKg === null) warnings.push('未识别到体重');
+    if (!content && !trainingType.includes('休息')) warnings.push('未识别到训练内容');
+    if (hasComponentData && explicitDuration === null) warnings.push('已根据分项训练时长计算总时长');
+    if (componentDistance > 0 && explicitDistance === null) warnings.push('已根据分项距离计算总距离');
+
+    return {
+      rowNumber: Number(source.rowNumber) || index + 1,
+      confidence,
+      sourceText,
+      athleteId: athlete?.id ?? null,
+      athleteName,
+      province: athlete?.province || '',
+      city: athlete?.city || '',
+      county: athlete?.county || '',
+      project: athlete?.project || '',
+      team: athlete?.team || '',
+      date,
+      trainingType,
+      structureType,
+      intensityZone,
+      content,
+      durationMin: duration ?? 0,
+      distanceKm: distance ?? 0,
+      rpe,
+      srpe: rawSrpe ?? Math.round((duration ?? 0) * (rpe ?? 0)),
+      smvl: smvl ?? 0,
+      morningPulse,
+      weightKg,
+      sleepHours,
+      fatigueIndex,
+      status: deriveStatus({
+        explicit: cleanString(source.status),
+        trainingType,
+        rpe,
+        sleepHours,
+        fatigueIndex
+      }),
+      coachNote: cleanString(source.coachNote),
+      trainingBreakdown,
+      errors,
+      warnings: [...new Set(warnings)]
+    };
+  });
 }
 
 async function parseWorkbook(buffer: Buffer, user: AuthUser): Promise<ImportRow[]> {
@@ -1993,131 +2390,9 @@ app.get('/api/training-plans', requireAuth, (req, res) => {
   res.json({
     plans: rows.map(({ dataJson, ...row }) => ({
       ...row,
-      data: parseTrainingPlanData(JSON.parse(dataJson || '{}')).data
+      data: readStoredTrainingPlanData(dataJson)
     }))
   });
-});
-
-app.get('/api/training-plans/batch/template', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), async (_req, res) => {
-  const workbook = await buildBatchTrainingPlanTemplate();
-  const buffer = await workbook.xlsx.writeBuffer();
-  const filename = '多人四周训练计划导入模板.xlsx';
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="batch-training-plan-template.xlsx"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-  res.send(Buffer.from(buffer));
-});
-
-app.post(
-  '/api/training-plans/batch/preview',
-  requireAuth,
-  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
-  upload.single('file'),
-  async (req, res) => {
-    if (!req.file) return res.status(400).json({ message: '请选择Excel计划文件。' });
-    if (!req.file.originalname.toLowerCase().endsWith('.xlsx')) return res.status(400).json({ message: '计划导入仅支持.xlsx文件。' });
-    let athleteIds: number[] = [];
-    try {
-      const raw = JSON.parse(cleanString(req.body?.athleteIds) || '[]');
-      athleteIds = [...new Set((Array.isArray(raw) ? raw : []).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
-    } catch {
-      return res.status(400).json({ message: '运动员选择数据格式错误。' });
-    }
-    if (!athleteIds.length) return res.status(400).json({ message: '请至少选择一名运动员。' });
-    if (athleteIds.length > 100) return res.status(400).json({ message: '单次最多为100名运动员生成计划。' });
-    if (athleteIds.some((athleteId) => !hasAthleteAccess(req.authUser!, athleteId))) {
-      return res.status(403).json({ message: '所选人员中包含无权管理的运动员。' });
-    }
-    try {
-      const data = await parseBatchTrainingPlanWorkbook(req.file.buffer);
-      const athletes = athleteIds.map((athleteId) => {
-        const athlete = db.prepare('SELECT id, name, team FROM athletes WHERE id = ?').get(athleteId) as { id: number; name: string; team: string } | undefined;
-        if (!athlete) throw new Error(`运动员ID ${athleteId} 不存在`);
-        const hasConflict = Boolean(db.prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?').get(athleteId, data.startDate));
-        const personalized = personalizeBatchPlan(data, athleteId);
-        return {
-          ...athlete,
-          hasConflict,
-          reusedMaxCount: personalized.exercises.filter((exercise) => exercise.maxWeight !== null).length
-        };
-      });
-      const importId = randomUUID();
-      const conflicts = athletes.filter((athlete) => athlete.hasConflict).map((athlete) => athlete.id);
-      trainingPlanBatchCache.set(importId, {
-        ownerId: req.authUser!.id,
-        athleteIds,
-        data,
-        conflicts,
-        expiresAt: Date.now() + 30 * 60 * 1000
-      });
-      res.json({
-        importId,
-        fileName: req.file.originalname,
-        data,
-        exerciseCount: data.exercises.length,
-        lineCount: data.exercises.reduce((sum, exercise) => sum + exercise.lines.length, 0),
-        athletes,
-        conflictCount: conflicts.length
-      });
-    } catch (error) {
-      res.status(400).json({ message: `无法读取计划Excel：${error instanceof Error ? error.message : '文件格式错误'}` });
-    }
-  }
-);
-
-app.post('/api/training-plans/batch/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const importId = cleanString(req.body?.importId);
-  const replaceExisting = req.body?.replaceExisting === true;
-  const cached = trainingPlanBatchCache.get(importId);
-  if (!cached || cached.ownerId !== req.authUser!.id || cached.expiresAt < Date.now()) {
-    return res.status(400).json({ message: '批量计划预览已失效，请重新上传Excel。' });
-  }
-  if (cached.athleteIds.some((athleteId) => !hasAthleteAccess(req.authUser!, athleteId))) {
-    return res.status(403).json({ message: '运动员权限已变化，请重新选择人员。' });
-  }
-  const insert = db.prepare(`
-    INSERT INTO training_plans
-      (athlete_id, plan_date, start_date, end_date, title, schedule_label, plan_data, created_by, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const update = db.prepare(`
-    UPDATE training_plans SET title = ?, schedule_label = ?, end_date = ?, plan_data = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE athlete_id = ? AND plan_date = ?
-  `);
-  let created = 0;
-  let replaced = 0;
-  let skipped = 0;
-  db.exec('BEGIN');
-  try {
-    for (const athleteId of cached.athleteIds) {
-      const existing = db.prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?').get(athleteId, cached.data.startDate) as { id: number } | undefined;
-      if (existing && !replaceExisting) {
-        skipped += 1;
-        continue;
-      }
-      const personalized = personalizeBatchPlan(cached.data, athleteId);
-      if (existing) {
-        update.run(personalized.title, personalized.scheduleLabel, personalized.endDate, JSON.stringify(personalized), req.authUser!.id, athleteId, personalized.startDate);
-        replaced += 1;
-      } else {
-        insert.run(athleteId, personalized.startDate, personalized.startDate, personalized.endDate, personalized.title, personalized.scheduleLabel, JSON.stringify(personalized), req.authUser!.id, req.authUser!.id);
-        created += 1;
-      }
-    }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
-      .run(req.authUser!.id, 'BATCH_IMPORT_TRAINING_PLAN', 'training_plan', JSON.stringify({ importId, athleteIds: cached.athleteIds, created, replaced, skipped, startDate: cached.data.startDate }));
-    db.exec('COMMIT');
-    trainingPlanBatchCache.delete(importId);
-    res.json({
-      message: `已生成${created + replaced}份个人计划${skipped ? `，跳过${skipped}份已有计划` : ''}。现在可逐人调整MAX、组数、次数和强度。`,
-      created,
-      replaced,
-      skipped,
-      firstAthleteId: cached.athleteIds[0] || null
-    });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: `批量生成失败：${error instanceof Error ? error.message : '未知错误'}` });
-  }
 });
 
 app.post('/api/training-plans', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
@@ -2317,11 +2592,10 @@ app.post(
   '/api/training-plans/ai/analyze',
   requireAuth,
   requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
-  trainingPlanAIUpload.single('file'),
+  trainingPlanAIUpload.none(),
   async (req, res) => {
     try {
       const athleteId = Number(req.body.athleteId);
-      const inputType = req.body.inputType as 'text' | 'file';
 
       if (!athleteId) {
         return res.status(400).json({ message: '请选择运动员' });
@@ -2334,27 +2608,14 @@ app.post(
       // 获取运动员上下文
       const context = getAthleteContext(athleteId);
 
-      // 提取输入内容
-      let inputContent: string;
-      let fileMetadata: { filename?: string; mimetype?: string; size?: number } = {};
-
-      if (inputType === 'file') {
-        if (!req.file) {
-          return res.status(400).json({ message: '请上传文件' });
-        }
-        const extracted = await extractFileContent(req.file.buffer, req.file.mimetype, req.file.originalname);
-        inputContent = extracted.content;
-        fileMetadata = extracted.metadata;
-      } else {
-        inputContent = req.body.text || '';
-        if (!inputContent.trim()) {
-          return res.status(400).json({ message: '请输入训练需求描述' });
-        }
+      const inputContent = cleanString(req.body.text);
+      if (!inputContent) {
+        return res.status(400).json({ message: '请输入训练需求描述' });
       }
 
       // 调用 AI 生成训练计划
       const aiService = new TrainingPlanAIService();
-      const result = await aiService.generateTrainingPlan(context, inputContent, inputType);
+      const result = await aiService.generateTrainingPlan(context, inputContent);
 
       // 记录审计日志
       db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
@@ -2363,15 +2624,14 @@ app.post(
           'AI_GENERATE_TRAINING_PLAN',
           'training_plan',
           athleteId,
-          JSON.stringify({ model: result.modelUsed, inputType })
+          JSON.stringify({ model: result.modelUsed, inputType: 'text' })
         );
 
       res.json({
         plan: result.plan,
         aiMetadata: {
-          inputType,
+          inputType: 'text',
           inputContent: inputContent.slice(0, 1000),
-          fileMetadata,
           modelUsed: result.modelUsed,
           attempts: result.attempts,
           generatedAt: new Date().toISOString()
@@ -2387,6 +2647,66 @@ app.post(
 );
 
 /**
+ * POST /api/training-plans/ai/import/preview
+ * 忠实识别已有训练计划，只返回可校正的预览，不直接写入数据库。
+ */
+app.post(
+  '/api/training-plans/ai/import/preview',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  trainingPlanAIUpload.single('file'),
+  async (req, res) => {
+    try {
+      const athleteId = Number(req.body.athleteId);
+      if (!athleteId) return res.status(400).json({ message: '请选择运动员' });
+      if (!hasAthleteAccess(req.authUser!, athleteId)) {
+        return res.status(403).json({ message: '无权访问该运动员数据' });
+      }
+      if (!req.file) return res.status(400).json({ message: '请选择要识别的训练计划文件' });
+
+      const preparedFile = await prepareAITrainingPlanFile(
+        req.file.buffer,
+        req.file.mimetype,
+        normalizeUploadFilename(req.file.originalname)
+      );
+      const context = getAthleteContext(athleteId);
+      const aiService = new TrainingPlanAIService();
+      const result = await aiService.recognizeTrainingPlanBatched(context, preparedFile);
+      result.plan.warnings = [...preparedFile.metadata.warnings, ...result.plan.warnings];
+
+      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
+        .run(
+          req.authUser!.id,
+          'AI_PREVIEW_TRAINING_PLAN_IMPORT',
+          'training_plan',
+          athleteId,
+          JSON.stringify({
+            model: result.modelUsed,
+            filename: preparedFile.metadata.filename,
+            extractionMethod: preparedFile.metadata.extractionMethod
+          })
+        );
+
+      res.json({
+        plan: result.plan,
+        aiMetadata: {
+          operation: 'import',
+          sourceFile: preparedFile.metadata,
+          modelUsed: result.modelUsed,
+          attempts: result.attempts,
+          generatedAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('[AI Training Plan Import] Error:', error);
+      const message = error instanceof Error ? error.message : '未知错误';
+      const isFileError = message.startsWith('无法解析文件');
+      res.status(isFileError ? 400 : 500).json({ message: `AI 识别失败：${message}` });
+    }
+  }
+);
+
+/**
  * POST /api/training-plans/ai/save
  * 保存 AI 生成的训练计划
  */
@@ -2396,66 +2716,160 @@ app.post(
   requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
   (req, res) => {
     try {
-      const { athleteId, plan, aiMetadata } = req.body;
+      const { athleteId, athleteIds, plan, aiMetadata, replaceExisting } = req.body;
+      const isImport = plan?.sourceType === 'ai_import' || aiMetadata?.operation === 'import';
+      const targetIds = [...new Set(
+        (isImport && Array.isArray(athleteIds) ? athleteIds : [athleteId])
+          .map(Number)
+          .filter((id) => Number.isInteger(id) && id > 0)
+      )];
 
-      if (!athleteId || !plan) {
+      if (!targetIds.length || !plan) {
         return res.status(400).json({ message: '缺少必要参数' });
       }
+      if (targetIds.length > 100) return res.status(400).json({ message: '单次最多导入100名运动员' });
 
-      if (!hasAthleteAccess(req.authUser!, athleteId)) {
-        return res.status(403).json({ message: '无权访问该运动员数据' });
+      if (targetIds.some((targetId) => !hasAthleteAccess(req.authUser!, targetId))) {
+        return res.status(403).json({ message: '导入对象中包含无权管理的运动员' });
       }
 
-      // 转换动态格式为传统格式存储
-      const legacyPlan = {
+      if (!cleanString(plan.title) || cleanString(plan.title).length > 80) {
+        return res.status(400).json({ message: '请确认计划名称，长度应为1至80个字符' });
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanString(plan.startDate)) || !/^\d{4}-\d{2}-\d{2}$/.test(cleanString(plan.endDate))) {
+        return res.status(400).json({ message: '请人工确认有效的开始日期和结束日期' });
+      }
+      if (plan.startDate > plan.endDate) {
+        return res.status(400).json({ message: '结束日期不能早于开始日期' });
+      }
+      if (!Array.isArray(plan.weeklyPlans) || plan.weeklyPlans.length === 0) {
+        return res.status(400).json({ message: isImport ? '识别结果中没有可导入的训练安排' : '训练计划内容为空' });
+      }
+
+      // 保留AI原始结构，同时为每名运动员生成可直接进入训练矩阵的数据。
+      const basePlan = {
+        sourceType: isImport ? 'ai_import' : 'ai_generated',
         title: plan.title,
+        summary: plan.summary || '',
         startDate: plan.startDate,
         endDate: plan.endDate,
         scheduleLabel: plan.scheduleLabel || '',
-        bodyWeight: plan.bodyWeight,
-        age: plan.age,
-        durationWeeks: plan.durationWeeks,
+        bodyWeight: plan.bodyWeight ?? null,
+        age: plan.age ?? null,
+        durationWeeks: plan.durationWeeks ?? null,
         weeklyPlans: plan.weeklyPlans,
-        exercises: plan.exercises || []
+        exercises: Array.isArray(plan.exercises) ? plan.exercises : [],
+        ...(isImport ? {
+          confidence: plan.confidence ?? null,
+          warnings: Array.isArray(plan.warnings) ? plan.warnings : [],
+          unmappedContent: Array.isArray(plan.unmappedContent) ? plan.unmappedContent : []
+        } : {})
       };
-
-      // 保存到数据库
-      const result = db.prepare(`
+      const metadataJson = JSON.stringify(aiMetadata);
+      const findExisting = db.prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?');
+      const insertPlan = db.prepare(`
         INSERT INTO training_plans
           (athlete_id, plan_date, start_date, end_date, title, schedule_label, plan_data, ai_metadata, created_by, updated_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        athleteId,
-        plan.startDate,
-        plan.startDate,
-        plan.endDate,
-        plan.title,
-        plan.scheduleLabel || '',
-        JSON.stringify(legacyPlan),
-        JSON.stringify(aiMetadata),
-        req.authUser!.id,
-        req.authUser!.id
+      `);
+      const updatePlan = db.prepare(`
+        UPDATE training_plans SET
+          start_date = ?, end_date = ?, title = ?, schedule_label = ?, plan_data = ?, ai_metadata = ?,
+          updated_by = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      const audit = db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)');
+      const names = new Map(
+        (db.prepare(`SELECT id, name FROM athletes WHERE id IN (${targetIds.map(() => '?').join(',')})`).all(...targetIds) as Array<{ id: number; name: string }>)
+          .map((row) => [row.id, row.name])
       );
+      if (names.size !== targetIds.length) return res.status(400).json({ message: '部分运动员不存在，请刷新名单后重试' });
 
-      // 记录审计日志
-      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-        .run(
-          req.authUser!.id,
-          'SAVE_AI_TRAINING_PLAN',
-          'training_plan',
-          result.lastInsertRowid,
-          JSON.stringify({ athleteId, title: plan.title, model: aiMetadata?.modelUsed })
-        );
+      if (!isImport) {
+        const existing = findExisting.get(targetIds[0], plan.startDate) as { id: number } | undefined;
+        if (existing) return res.status(409).json({ message: '该运动员已有相同开始日期的训练计划' });
+      }
+
+      const results: Array<{ athleteId: number; athleteName: string; status: 'created' | 'replaced' | 'skipped'; planId: number }> = [];
+      db.exec('BEGIN');
+      try {
+        for (const targetId of targetIds) {
+          const existing = findExisting.get(targetId, plan.startDate) as { id: number } | undefined;
+          if (existing && !replaceExisting) {
+            results.push({ athleteId: targetId, athleteName: names.get(targetId) || '', status: 'skipped', planId: existing.id });
+            continue;
+          }
+
+          const storedPlan = normalizeAIPlanToMatrix(basePlan, targetId);
+          const matrixExercises = Array.isArray(storedPlan.exercises) ? storedPlan.exercises : [];
+          if (!matrixExercises.length) throw new Error('AI计划没有可写入训练矩阵的项目');
+          const planJson = JSON.stringify(storedPlan);
+
+          let planId: number;
+          let status: 'created' | 'replaced';
+          if (existing) {
+            updatePlan.run(
+              plan.startDate,
+              plan.endDate,
+              plan.title,
+              plan.scheduleLabel || '',
+              planJson,
+              metadataJson,
+              req.authUser!.id,
+              existing.id
+            );
+            planId = existing.id;
+            status = 'replaced';
+          } else {
+            const inserted = insertPlan.run(
+              targetId,
+              plan.startDate,
+              plan.startDate,
+              plan.endDate,
+              plan.title,
+              plan.scheduleLabel || '',
+              planJson,
+              metadataJson,
+              req.authUser!.id,
+              req.authUser!.id
+            );
+            planId = Number(inserted.lastInsertRowid);
+            status = 'created';
+          }
+          results.push({ athleteId: targetId, athleteName: names.get(targetId) || '', status, planId });
+          audit.run(
+            req.authUser!.id,
+            isImport ? (status === 'replaced' ? 'REPLACE_AI_TRAINING_PLAN_IMPORT' : 'IMPORT_AI_TRAINING_PLAN') : 'SAVE_AI_TRAINING_PLAN',
+            'training_plan',
+            planId,
+            JSON.stringify({ athleteId: targetId, title: plan.title, model: aiMetadata?.modelUsed, targetCount: targetIds.length })
+          );
+        }
+        db.exec('COMMIT');
+      } catch (saveError) {
+        db.exec('ROLLBACK');
+        throw saveError;
+      }
+
+      const created = results.filter((result) => result.status === 'created').length;
+      const replaced = results.filter((result) => result.status === 'replaced').length;
+      const skipped = results.filter((result) => result.status === 'skipped').length;
+      const summary = [created && `新建${created}份`, replaced && `覆盖${replaced}份`, skipped && `跳过${skipped}份`].filter(Boolean).join('，');
 
       res.json({
-        message: 'AI 训练计划已保存',
-        id: result.lastInsertRowid
+        message: isImport ? `AI 识别计划导入完成：${summary}` : 'AI 训练计划已保存',
+        id: results.find((result) => result.status !== 'skipped')?.planId || results[0]?.planId,
+        created,
+        replaced,
+        skipped,
+        results
       });
     } catch (error) {
       console.error('[AI Training Plan Save] Error:', error);
-      res.status(500).json({
-        message: `保存失败：${error instanceof Error ? error.message : '未知错误'}`
-      });
+      if (error instanceof Error && error.message.includes('UNIQUE')) {
+        return res.status(409).json({ message: '该运动员已有相同开始日期的训练计划' });
+      }
+      res.status(500).json({ message: `保存失败：${error instanceof Error ? error.message : '未知错误'}` });
     }
   }
 );
@@ -3058,6 +3472,156 @@ app.get('/api/special-tests/import/template', requireAuth, requireRole('SCC', 'P
   }
 });
 
+app.post('/api/import/ai/inspect', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), trainingPlanAIUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: '请选择要识别的训练文件。' });
+  const project = cleanString(req.body?.project) as Project;
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  try {
+    const athletes = importAthletesForProject(req.authUser!, project);
+    if (!athletes.length) return res.status(400).json({ message: `当前账户没有可导入的${project}运动员。` });
+    const uploadedFilename = normalizeUploadFilename(req.file.originalname);
+    const preparedFile = await prepareAITrainingPlanFile(req.file.buffer, req.file.mimetype, uploadedFilename);
+    const fileId = randomUUID();
+    aiImportFileCache.set(fileId, {
+      ownerId: req.authUser!.id,
+      project,
+      file: preparedFile,
+      expiresAt: Date.now() + 30 * 60 * 1000
+    });
+    const sections = preparedFile.kind === 'text'
+      ? preparedFile.metadata.sections || []
+      : [{ name: '图片内容', chunkCount: 1, characterCount: req.file.size }];
+    res.json({
+      fileId,
+      fileName: uploadedFilename,
+      sourceFile: preparedFile.metadata,
+      sections,
+      athletes
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误';
+    res.status(message.startsWith('无法解析文件') ? 400 : 500).json({ message });
+  }
+});
+
+app.post('/api/import/ai/start', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  const fileId = cleanString(req.body?.fileId);
+  const cached = aiImportFileCache.get(fileId);
+  if (!cached || cached.ownerId !== req.authUser!.id || cached.expiresAt < Date.now()) {
+    return res.status(400).json({ message: '文件预检已失效，请重新选择文件。' });
+  }
+  const requestedType = cleanString(req.body?.targetType || 'auto') as TrainingDocumentType | 'auto';
+  if (!['auto', 'training_plan', 'training_record'].includes(requestedType)) {
+    return res.status(400).json({ message: '请选择自动判断、训练计划或完成记录。' });
+  }
+  const availableSections = cached.file.kind === 'text'
+    ? new Set(cached.file.chunks.map((chunk) => chunk.sectionName))
+    : new Set(['图片内容']);
+  const selectedSections: string[] = Array.isArray(req.body?.sectionNames)
+    ? [...new Set((req.body.sectionNames as unknown[]).map((value) => cleanString(value)).filter((name) => availableSections.has(name)))]
+    : [...availableSections];
+  if (!selectedSections.length) return res.status(400).json({ message: '请至少选择一个工作表或内容分区。' });
+
+  try {
+    const file = selectedPreparedFile(cached.file, selectedSections);
+    const athletes = importAthletesForProject(req.authUser!, cached.project);
+    if (!athletes.length) return res.status(400).json({ message: `当前账户没有可导入的${cached.project}运动员。` });
+    const jobId = randomUUID();
+    aiImportJobs.set(jobId, {
+      ownerId: req.authUser!.id,
+      status: 'queued',
+      phase: '等待开始识别',
+      completedChunks: 0,
+      totalChunks: preparedFileChunkCount(file),
+      currentLabel: '',
+      expiresAt: Date.now() + 60 * 60 * 1000
+    });
+    const user = { ...req.authUser! };
+    setImmediate(() => void executeAIImportJob({
+      jobId,
+      user,
+      project: cached.project,
+      file,
+      athletes,
+      requestedType
+    }));
+    res.json({ jobId, totalChunks: preparedFileChunkCount(file), selectedSections });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : '无法开始识别' });
+  }
+});
+
+app.get('/api/import/ai/jobs/:jobId', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  const job = aiImportJobs.get(cleanString(req.params.jobId));
+  if (!job || job.ownerId !== req.authUser!.id || job.expiresAt < Date.now()) {
+    return res.status(404).json({ message: '识别任务不存在或已经失效。' });
+  }
+  res.json({
+    status: job.status,
+    phase: job.phase,
+    completedChunks: job.completedChunks,
+    totalChunks: job.totalChunks,
+    currentLabel: job.currentLabel,
+    documentType: job.documentType,
+    result: job.result,
+    error: job.error
+  });
+});
+
+app.post('/api/import/ai/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), trainingPlanAIUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: '请选择要识别的训练数据文件。' });
+  const project = cleanString(req.body?.project) as Project;
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  try {
+    const athletes = importAthletesForProject(req.authUser!, project);
+    if (!athletes.length) return res.status(400).json({ message: `当前账户没有可导入的${project}运动员。` });
+
+    const uploadedFilename = normalizeUploadFilename(req.file.originalname);
+    const preparedFile = await prepareAITrainingPlanFile(req.file.buffer, req.file.mimetype, uploadedFilename);
+    const aiService = new TrainingPlanAIService();
+    const recognized = await aiService.recognizeTrainingRecordsBatched(project, athletes, preparedFile);
+    const rows = normalizeAITrainingImportRows(recognized.rows, req.authUser!, project);
+    const importId = randomUUID();
+    importCache.set(importId, {
+      ownerId: req.authUser!.id,
+      rows,
+      project,
+      mode: 'ai',
+      modelUsed: recognized.modelUsed,
+      expiresAt: Date.now() + 30 * 60 * 1000
+    });
+    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
+      .run(req.authUser!.id, 'AI_RECOGNIZE_TRAINING_DATA', 'training_record', JSON.stringify({
+        fileName: uploadedFilename,
+        project,
+        model: recognized.modelUsed,
+        rowCount: rows.length
+      }));
+    res.json({
+      importId,
+      sourceType: 'ai_recognition',
+      documentType: 'training_record',
+      fileName: uploadedFilename,
+      modelUsed: recognized.modelUsed,
+      confidence: recognized.confidence,
+      summary: recognized.summary,
+      warnings: [...preparedFile.metadata.warnings, ...recognized.warnings],
+      unmappedContent: recognized.unmappedContent,
+      sourceFile: preparedFile.metadata,
+      athletes,
+      total: rows.length,
+      valid: rows.filter((row) => row.errors.length === 0).length,
+      invalid: rows.filter((row) => row.errors.length > 0).length,
+      warningCount: rows.reduce((sum, row) => sum + row.warnings.length, 0),
+      rows
+    });
+  } catch (error) {
+    console.error('[AI Data Import] Error:', error);
+    const message = error instanceof Error ? error.message : '未知错误';
+    res.status(message.startsWith('无法解析文件') ? 400 : 500).json({ message: `AI 识别失败：${message}` });
+  }
+});
+
 app.post('/api/import/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: '请选择Excel文件。' });
   if (!req.file.originalname.toLowerCase().endsWith('.xlsx')) return res.status(400).json({ message: '当前版本仅支持.xlsx文件。' });
@@ -3089,9 +3653,17 @@ app.post('/api/import/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD
   const importId = cleanString(req.body?.importId);
   const cached = importCache.get(importId);
   if (!cached || cached.expiresAt < Date.now() || cached.ownerId !== req.authUser!.id) {
-    return res.status(400).json({ message: '导入预览已失效，请重新上传Excel。' });
+    return res.status(400).json({ message: '导入预览已失效，请重新上传文件。' });
   }
-  const validRows = cached.rows.filter((row) => row.errors.length === 0 && row.athleteId);
+  const reviewedRows = cached.mode === 'ai' && cached.project
+    ? normalizeAITrainingImportRows(
+        Array.isArray(req.body?.rows) ? req.body.rows : cached.rows,
+        req.authUser!,
+        cached.project
+      )
+    : cached.rows;
+  const validRows = reviewedRows.filter((row) => row.errors.length === 0 && row.athleteId);
+  if (!validRows.length) return res.status(400).json({ message: '没有可入库的记录，请先修正红色错误。' });
   const upsert = db.prepare(`
     INSERT INTO training_records (
       athlete_id, date, training_type, structure_type, intensity_zone, content,
@@ -3137,10 +3709,15 @@ app.post('/api/import/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD
       );
     }
     db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
-      .run(req.authUser!.id, 'IMPORT_EXCEL', 'training_record', JSON.stringify({ count: validRows.length }));
+      .run(
+        req.authUser!.id,
+        cached.mode === 'ai' ? 'IMPORT_AI_RECOGNIZED_DATA' : 'IMPORT_EXCEL',
+        'training_record',
+        JSON.stringify({ count: validRows.length, model: cached.modelUsed || null })
+      );
     db.exec('COMMIT');
     importCache.delete(importId);
-    res.json({ imported: validRows.length, skipped: cached.rows.length - validRows.length });
+    res.json({ imported: validRows.length, skipped: reviewedRows.length - validRows.length });
   } catch (error) {
     db.exec('ROLLBACK');
     res.status(500).json({ message: `写入数据失败：${error instanceof Error ? error.message : '未知错误'}` });

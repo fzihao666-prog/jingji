@@ -34,6 +34,7 @@ export default function App() {
   const [athletesReady, setAthletesReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [requestedPlanId, setRequestedPlanId] = useState<number | null>(null);
   const [globalError, setGlobalError] = useState('');
 
   useEffect(() => {
@@ -146,11 +147,22 @@ export default function App() {
         {page === 'overview' && <OverviewPage {...shared} user={user} onAthleteNameChange={renameAthlete} onUserNameChange={renameVisibleUser} onOpenCalendar={() => setPage('calendar')} />}
         {page === 'calendar' && <CalendarPage {...shared} user={user} onAthleteNameChange={renameAthlete} />}
         {page === 'specialTests' && <SpecialTestsPage user={user} project={project} from={from} to={to} onRangeChange={shared.onRangeChange} />}
-        {page === 'plans' && <TrainingPlanPage user={user} athletes={projectAthletes} athleteId={athleteId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'plans' && <TrainingPlanPage user={user} athletes={projectAthletes} athleteId={athleteId} initialPlanId={requestedPlanId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'personal' && <PersonalPage {...shared} user={user} />}
         {page === 'report' && <ReportPage {...shared} user={user} athletes={reportAthletes} />}
-        {page === 'import' && user.role !== 'ATL' && <ImportPage project={project} onImported={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'import' && user.role !== 'ATL' && (
+          <ImportPage
+            project={project}
+            onImported={() => setRefreshKey((key) => key + 1)}
+            onOpenTrainingPlan={(targetAthleteId, targetPlanId) => {
+              setAthleteId(targetAthleteId);
+              setRequestedPlanId(targetPlanId);
+              setPage('plans');
+            }}
+            onOpenRecords={() => setPage('calendar')}
+          />
+        )}
         {page === 'roster' && user.role !== 'ATL' && <RosterPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'regions' && user.role !== 'ATL' && <RegionAccessPage user={user} />}
         {page === 'accounts' && user.role !== 'ATL' && <AccountsPage />}

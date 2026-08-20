@@ -190,7 +190,7 @@ export function PersonalPage(props: Props) {
     <div className="page-content personal-page">
       <header className="page-heading">
         <div>
-          <h1>个人训练档案</h1>
+          <h1>个人档案</h1>
           <p>按周、按日生成总结和原始训练日志</p>
         </div>
         <DateToolbar {...props} />

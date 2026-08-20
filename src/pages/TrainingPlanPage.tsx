@@ -1,17 +1,12 @@
 import {
   Camera,
-  CheckCircle2,
   Download,
   Dumbbell,
-  FileSpreadsheet,
   FilePlus2,
   LoaderCircle,
   Plus,
   Save,
-  Trash2,
-  Upload,
-  Users,
-  X
+  Trash2
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import {
@@ -26,7 +21,6 @@ import { api } from '../api';
 import { AITrainingPlanGenerator } from '../components/AITrainingPlanGenerator';
 import type {
   Athlete,
-  BatchTrainingPlanPreview,
   TrainingPlan,
   TrainingPlanData,
   TrainingPlanExercise,
@@ -39,14 +33,15 @@ type Props = {
   user: User;
   athletes: Athlete[];
   athleteId: number | null;
+  initialPlanId?: number | null;
   onAthleteChange: (athleteId: number | null) => void;
   onChanged: () => void;
 };
 
-const weekKeys = ['1', '2', '3', '4'] as const;
+const defaultWeekKeys = ['1', '2', '3', '4'];
 
 function emptyWeek(): TrainingPlanWeekEntry {
-  return { sets: '', reps: '', percentage: null, actualCompleted: '' };
+  return { sets: '', reps: '', percentage: null, actualCompleted: '', arrangement: '' };
 }
 
 let planItemIdSequence = 0;
@@ -56,15 +51,23 @@ function createPlanItemId() {
   return `plan-${Date.now().toString(36)}-${planItemIdSequence.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function emptyLine() {
+function emptyLine(weekKeys = defaultWeekKeys) {
   return {
     id: createPlanItemId(),
-    weeks: { '1': emptyWeek(), '2': emptyWeek(), '3': emptyWeek(), '4': emptyWeek() }
+    weeks: Object.fromEntries(weekKeys.map((weekKey) => [weekKey, emptyWeek()]))
   };
 }
 
-function emptyExercise(name = ''): TrainingPlanExercise {
-  return { id: createPlanItemId(), name, maxWeight: null, unitNote: '', lines: [emptyLine()] };
+function emptyExercise(name = '', weekKeys = defaultWeekKeys): TrainingPlanExercise {
+  return { id: createPlanItemId(), name, maxWeight: null, unitNote: '', lines: [emptyLine(weekKeys)] };
+}
+
+function planWeekKeys(data: TrainingPlanData) {
+  const explicit = (data.weekKeys || []).map(String).filter(Boolean);
+  if (explicit.length) return [...new Set(explicit)];
+  const firstLine = data.exercises.flatMap((exercise) => exercise.lines).find(Boolean);
+  const stored = firstLine ? Object.keys(firstLine.weeks || {}) : [];
+  return stored.length ? stored : defaultWeekKeys;
 }
 
 function emptyPlan(): TrainingPlanData {
@@ -76,6 +79,8 @@ function emptyPlan(): TrainingPlanData {
     scheduleLabel: '周二 / 周五',
     bodyWeight: null,
     age: null,
+    weekKeys: defaultWeekKeys,
+    weekLabels: Object.fromEntries(defaultWeekKeys.map((key) => [key, `WEEK ${key}`])),
     exercises: [emptyExercise('卧拉'), emptyExercise('卧推'), emptyExercise('深蹲')]
   };
 }
@@ -100,7 +105,7 @@ function completedRepetitions(value: string) {
   return prescriptionNumber(value);
 }
 
-function actualAverageWeight(exercise: TrainingPlanExercise) {
+function actualAverageWeight(exercise: TrainingPlanExercise, weekKeys: string[]) {
   if (exercise.maxWeight === null || exercise.maxWeight <= 0 || !exercise.name.trim()) return null;
   let weightedLoad = 0;
   let completedCount = 0;
@@ -133,11 +138,11 @@ type TrainingRadarDatum = {
   actualRatio: number;
 };
 
-function trainingRadarData(exercises: TrainingPlanExercise[]) {
+function trainingRadarData(exercises: TrainingPlanExercise[], weekKeys: string[]) {
   const slots = exercises.slice(0, 8).map((exercise, index) => {
     const project = exercise?.name.trim().replace(/\s*\n\s*/g, ' / ') || '';
     const maxWeight = project ? exercise?.maxWeight || 0 : 0;
-    const actualAverage = project && exercise ? actualAverageWeight(exercise) : null;
+    const actualAverage = project && exercise ? actualAverageWeight(exercise, weekKeys) : null;
     const actualRatio = weightToMaxRatio(actualAverage, maxWeight || null);
     return {
       slot: index,
@@ -202,8 +207,8 @@ function RadarAxisTick({ x = 0, y = 0, payload }: {
   );
 }
 
-function TrainingVolumeRadar({ exercises }: { exercises: TrainingPlanExercise[] }) {
-  const radarData = useMemo(() => trainingRadarData(exercises), [exercises]);
+function TrainingVolumeRadar({ exercises, weekKeys }: { exercises: TrainingPlanExercise[]; weekKeys: string[] }) {
+  const radarData = useMemo(() => trainingRadarData(exercises, weekKeys), [exercises, weekKeys]);
   const activeCount = radarData.filter((item) => item.project).length;
   return (
     <section className="training-volume-radar">
@@ -253,23 +258,12 @@ export function TrainingPlanPage(props: Props) {
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [planId, setPlanId] = useState<number | null>(null);
   const [data, setData] = useState<TrainingPlanData>(emptyPlan);
+  const isAIPlan = Boolean(data.sourceType);
+  const matrixWeekKeys = useMemo(() => planWeekKeys(data), [data]);
   const [photoUrl, setPhotoUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
-  const [batchOpen, setBatchOpen] = useState(false);
-  const [batchAthleteIds, setBatchAthleteIds] = useState<number[]>([]);
-  const [batchPreview, setBatchPreview] = useState<BatchTrainingPlanPreview | null>(null);
-  const [batchBusy, setBatchBusy] = useState('');
-  const [batchError, setBatchError] = useState('');
-  const [replaceExisting, setReplaceExisting] = useState(false);
-  const [athleteSearch, setAthleteSearch] = useState('');
-
-  const visibleBatchAthletes = useMemo(() => {
-    const query = athleteSearch.trim().toLowerCase();
-    if (!query) return props.athletes;
-    return props.athletes.filter((item) => `${item.name} ${item.team} ${item.project} ${item.region}`.toLowerCase().includes(query));
-  }, [athleteSearch, props.athletes]);
 
   useEffect(() => {
     if (!selectedId && props.user.role !== 'ATL' && props.athletes[0]) {
@@ -291,23 +285,23 @@ export function TrainingPlanPage(props: Props) {
     api.trainingPlans(athlete.id)
       .then(({ plans: nextPlans }) => {
         setPlans(nextPlans);
-        const latest = nextPlans[0];
-        setPlanId(latest?.id || null);
-        setData(latest?.data || emptyPlan());
-        if (latest?.photoUrl) setPhotoUrl(latest.photoUrl);
+        const selected = nextPlans.find((plan) => plan.id === props.initialPlanId) || nextPlans[0];
+        setPlanId(selected?.id || null);
+        setData(selected?.data || emptyPlan());
+        if (selected?.photoUrl) setPhotoUrl(selected.photoUrl);
       })
       .catch((error) => setMessage(error instanceof Error ? error.message : '训练计划读取失败。'))
       .finally(() => setLoading(false));
-  }, [athlete?.id]);
+  }, [athlete?.id, props.initialPlanId]);
 
-  const refresh = async () => {
+  const refresh = async (selectedPlanId?: number) => {
     if (!athlete) return;
     const response = await api.trainingPlans(athlete.id);
     setPlans(response.plans);
-    const latest = response.plans[0];
-    setPlanId(latest?.id || null);
-    setData(latest?.data || emptyPlan());
-    if (latest?.photoUrl) setPhotoUrl(latest.photoUrl);
+    const selected = response.plans.find((item) => item.id === selectedPlanId) || response.plans[0];
+    setPlanId(selected?.id || null);
+    setData(selected?.data || emptyPlan());
+    if (selected?.photoUrl) setPhotoUrl(selected.photoUrl);
   };
 
   const selectPlan = (id: number) => {
@@ -332,7 +326,7 @@ export function TrainingPlanPage(props: Props) {
   const updateWeek = (
     exerciseId: string,
     lineId: string,
-    weekKey: typeof weekKeys[number],
+    weekKey: string,
     patch: Partial<TrainingPlanWeekEntry>
   ) => {
     setData((current) => ({
@@ -341,7 +335,7 @@ export function TrainingPlanPage(props: Props) {
         ...exercise,
         lines: exercise.lines.map((line) => line.id !== lineId ? line : {
           ...line,
-          weeks: { ...line.weeks, [weekKey]: { ...line.weeks[weekKey], ...patch } }
+          weeks: { ...line.weeks, [weekKey]: { ...(line.weeks[weekKey] || emptyWeek()), ...patch } }
         })
       })
     }));
@@ -350,8 +344,8 @@ export function TrainingPlanPage(props: Props) {
   const addLine = (exerciseId: string) => {
     setData((current) => ({
       ...current,
-      exercises: current.exercises.map((exercise) => exercise.id === exerciseId && exercise.lines.length < 8
-        ? { ...exercise, lines: [...exercise.lines, emptyLine()] }
+      exercises: current.exercises.map((exercise) => exercise.id === exerciseId && exercise.lines.length < (current.sourceType ? 20 : 8)
+        ? { ...exercise, lines: [...exercise.lines, emptyLine(planWeekKeys(current))] }
         : exercise)
     }));
   };
@@ -448,69 +442,6 @@ export function TrainingPlanPage(props: Props) {
     }
   };
 
-  const openBatchImport = () => {
-    setBatchAthleteIds(selectedId ? [selectedId] : []);
-    setBatchPreview(null);
-    setBatchError('');
-    setReplaceExisting(false);
-    setAthleteSearch('');
-    setBatchOpen(true);
-  };
-
-  const toggleBatchAthlete = (athleteId: number) => {
-    setBatchPreview(null);
-    setBatchAthleteIds((current) => current.includes(athleteId)
-      ? current.filter((id) => id !== athleteId)
-      : [...current, athleteId]);
-  };
-
-  const previewBatchFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!batchAthleteIds.length) {
-      setBatchError('请先选择需要生成计划的运动员。');
-      event.target.value = '';
-      return;
-    }
-    setBatchBusy('preview');
-    setBatchError('');
-    setBatchPreview(null);
-    try {
-      setBatchPreview(await api.previewBatchTrainingPlan(file, batchAthleteIds));
-    } catch (error) {
-      setBatchError(error instanceof Error ? error.message : '计划Excel读取失败。');
-    } finally {
-      setBatchBusy('');
-      event.target.value = '';
-    }
-  };
-
-  const commitBatchImport = async () => {
-    if (!batchPreview) return;
-    setBatchBusy('commit');
-    setBatchError('');
-    try {
-      const result = await api.commitBatchTrainingPlan(batchPreview.importId, replaceExisting);
-      const targetAthleteId = result.firstAthleteId;
-      setBatchOpen(false);
-      setMessage(result.message);
-      if (targetAthleteId && targetAthleteId !== selectedId) {
-        props.onAthleteChange(targetAthleteId);
-      } else if (athlete) {
-        const response = await api.trainingPlans(athlete.id);
-        setPlans(response.plans);
-        const latest = response.plans[0];
-        setPlanId(latest?.id || null);
-        setData(latest?.data || emptyPlan());
-      }
-      props.onChanged();
-    } catch (error) {
-      setBatchError(error instanceof Error ? error.message : '批量生成失败。');
-    } finally {
-      setBatchBusy('');
-    }
-  };
-
   return (
     <div className="page-content training-plan-page">
       <header className="page-heading training-plan-heading">
@@ -542,18 +473,13 @@ export function TrainingPlanPage(props: Props) {
             </button>
           )}
           {canEdit && (
-            <button className="secondary-button batch-plan-button" onClick={openBatchImport}>
-              <Users size={17} />多人导入
-            </button>
-          )}
-          {canEdit && (
             <button className="secondary-button" onClick={() => { setPlanId(null); setData(emptyPlan()); setMessage(''); }}>
               <FilePlus2 size={17} />新建
             </button>
           )}
-          <button className="secondary-button" disabled={!planId || busy === 'download'} onClick={download}>
+          {!isAIPlan && <button className="secondary-button" disabled={!planId || busy === 'download'} onClick={download}>
             {busy === 'download' ? <LoaderCircle className="spin" size={17} /> : <Download size={17} />}导出模板
-          </button>
+          </button>}
           {canEdit && (
             <button className="primary-button" disabled={busy === 'save'} onClick={save}>
               {busy === 'save' ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}保存计划
@@ -561,108 +487,6 @@ export function TrainingPlanPage(props: Props) {
           )}
         </div>
       </header>
-
-      {batchOpen && (
-        <div className="batch-plan-overlay" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !batchBusy) setBatchOpen(false);
-        }}>
-          <section className="batch-plan-dialog" role="dialog" aria-modal="true" aria-labelledby="batch-plan-title">
-            <header>
-              <div className="batch-plan-mark"><FileSpreadsheet size={23} /></div>
-              <div>
-                <span>TEAM PLAN ASSIGNMENT</span>
-                <h2 id="batch-plan-title">Excel批量生成个人计划</h2>
-                <p>统一导入处方，生成后每名运动员仍可单独调整。</p>
-              </div>
-              <button type="button" aria-label="关闭" onClick={() => setBatchOpen(false)} disabled={Boolean(batchBusy)}><X size={19} /></button>
-            </header>
-
-            <div className="batch-plan-steps">
-              <div className={batchAthleteIds.length ? 'done' : 'active'}><b>1</b><span>选择人员<small>{batchAthleteIds.length}人</small></span></div>
-              <i />
-              <div className={batchPreview ? 'done' : batchAthleteIds.length ? 'active' : ''}><b>2</b><span>上传校验<small>.xlsx模板</small></span></div>
-              <i />
-              <div className={batchPreview ? 'active' : ''}><b>3</b><span>生成计划<small>可逐人修改</small></span></div>
-            </div>
-
-            <div className="batch-plan-body">
-              <aside className="batch-athlete-panel">
-                <div className="batch-panel-title">
-                  <div><strong>分配对象</strong><small>仅显示你有权管理的运动员</small></div>
-                  <button type="button" onClick={() => { setBatchAthleteIds(batchAthleteIds.length === props.athletes.length ? [] : props.athletes.map((item) => item.id)); setBatchPreview(null); }}>
-                    {batchAthleteIds.length === props.athletes.length ? '取消全选' : '全选'}
-                  </button>
-                </div>
-                <input className="batch-athlete-search" placeholder="搜索姓名、队伍或项目" value={athleteSearch} onChange={(event) => setAthleteSearch(event.target.value)} />
-                <div className="batch-athlete-list">
-                  {visibleBatchAthletes.map((item) => {
-                    const checked = batchAthleteIds.includes(item.id);
-                    return (
-                      <button type="button" key={item.id} className={checked ? 'selected' : ''} onClick={() => toggleBatchAthlete(item.id)}>
-                        <span className="batch-check">{checked && <CheckCircle2 size={15} />}</span>
-                        <span><strong>{item.name}</strong><small>{item.project} · {item.team}</small></span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </aside>
-
-              <main className="batch-upload-panel">
-                {!batchPreview ? (
-                  <>
-                    <div className="batch-template-strip">
-                      <div><strong>先下载标准模板</strong><small>只填动作、组数、次数和强度；同一项目可填写多行。</small></div>
-                      <button type="button" onClick={() => api.downloadTrainingPlanBatchTemplate().catch((error) => setBatchError(error instanceof Error ? error.message : '模板下载失败。'))}><Download size={15} />下载模板</button>
-                    </div>
-                    <label className={`batch-drop-zone ${batchBusy === 'preview' ? 'loading' : ''}`}>
-                      {batchBusy === 'preview' ? <LoaderCircle className="spin" size={31} /> : <Upload size={31} />}
-                      <strong>{batchBusy === 'preview' ? '正在读取并校验计划' : '选择填写完成的Excel'}</strong>
-                      <span>将为已选择的 {batchAthleteIds.length} 名运动员生成独立计划</span>
-                      <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={batchBusy === 'preview'} onChange={previewBatchFile} />
-                    </label>
-                  </>
-                ) : (
-                  <div className="batch-preview-card">
-                    <div className="batch-preview-head">
-                      <CheckCircle2 size={22} />
-                      <div><strong>模板校验通过</strong><small>{batchPreview.fileName}</small></div>
-                      <button type="button" onClick={() => { setBatchPreview(null); setReplaceExisting(false); }}>重新上传</button>
-                    </div>
-                    <div className="batch-preview-metrics">
-                      <div><span>周期</span><strong>{batchPreview.data.startDate}<small>至</small>{batchPreview.data.endDate}</strong></div>
-                      <div><span>计划内容</span><strong>{batchPreview.exerciseCount} 项<small>·</small>{batchPreview.lineCount} 行处方</strong></div>
-                      <div><span>生成对象</span><strong>{batchPreview.athletes.length} 人<small>·</small>{batchPreview.conflictCount} 份冲突</strong></div>
-                    </div>
-                    <div className="batch-preview-roster">
-                      {batchPreview.athletes.map((item) => (
-                        <span key={item.id} className={item.hasConflict ? 'conflict' : ''}>
-                          <b>{item.name}</b><small>{item.reusedMaxCount}项MAX沿用{item.hasConflict ? ' · 已有同期计划' : ''}</small>
-                        </span>
-                      ))}
-                    </div>
-                    {batchPreview.conflictCount > 0 && (
-                      <label className="batch-replace-option">
-                        <input type="checkbox" checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} />
-                        <span><strong>覆盖同期已有计划</strong><small>不勾选时，已有相同开始日期的运动员会被跳过。</small></span>
-                      </label>
-                    )}
-                  </div>
-                )}
-                {batchError && <div className="batch-plan-error">{batchError}</div>}
-              </main>
-            </div>
-
-            <footer>
-              <p>导入后进入任一运动员个人页，即可单独修改MAX、组数、次数、强度及实际完成次数。</p>
-              <button type="button" className="secondary-button" onClick={() => setBatchOpen(false)} disabled={Boolean(batchBusy)}>取消</button>
-              <button type="button" className="primary-button" disabled={!batchPreview || batchBusy === 'commit'} onClick={commitBatchImport}>
-                {batchBusy === 'commit' ? <LoaderCircle className="spin" size={17} /> : <Users size={17} />}
-                生成{batchPreview ? batchPreview.athletes.length : batchAthleteIds.length}份个人计划
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
 
       {!athlete ? (
         <section className="plan-empty"><Dumbbell size={34} /><strong>暂无可查看的运动员</strong></section>
@@ -690,40 +514,40 @@ export function TrainingPlanPage(props: Props) {
               </div>
 
               <div className="plan-meta-form">
-                <label><span>开始日期</span><input type="date" disabled={!canEdit} value={data.startDate} onChange={(event) => {
+              <label><span>开始日期</span><input type="date" disabled={!canEdit} value={data.startDate} onChange={(event) => {
                   const startDate = event.target.value;
                   setData((current) => ({ ...current, startDate, endDate: startDate ? addDays(startDate, 30) : '' }));
                 }} /></label>
-                <label><span>结束日期</span><input type="date" disabled={!canEdit} min={data.startDate} value={data.endDate} onChange={(event) => updateField('endDate', event.target.value)} /></label>
-                <label className="plan-meta-title"><span>计划名称</span><input disabled={!canEdit} value={data.title} onChange={(event) => updateField('title', event.target.value)} /></label>
-                <label className="plan-meta-schedule"><span>训练日安排</span><input disabled={!canEdit} value={data.scheduleLabel} onChange={(event) => updateField('scheduleLabel', event.target.value)} /></label>
-                <label><span>体重 kg</span><input type="number" step="0.1" disabled={!canEdit} value={data.bodyWeight ?? ''} onChange={(event) => updateField('bodyWeight', numericValue(event.target.value))} /></label>
-                <label><span>年龄</span><input type="number" disabled={!canEdit} value={data.age ?? ''} onChange={(event) => updateField('age', numericValue(event.target.value))} /></label>
+              <label><span>结束日期</span><input type="date" disabled={!canEdit} min={data.startDate} value={data.endDate} onChange={(event) => updateField('endDate', event.target.value)} /></label>
+              <label className="plan-meta-title"><span>计划名称</span><input disabled={!canEdit} value={data.title} onChange={(event) => updateField('title', event.target.value)} /></label>
+              <label className="plan-meta-schedule"><span>训练日安排</span><input disabled={!canEdit} value={data.scheduleLabel} onChange={(event) => updateField('scheduleLabel', event.target.value)} /></label>
+              <label><span>体重 kg</span><input type="number" step="0.1" disabled={!canEdit} value={data.bodyWeight ?? ''} onChange={(event) => updateField('bodyWeight', numericValue(event.target.value))} /></label>
+              <label><span>年龄</span><input type="number" disabled={!canEdit} value={data.age ?? ''} onChange={(event) => updateField('age', numericValue(event.target.value))} /></label>
               </div>
             </div>
-            <TrainingVolumeRadar exercises={data.exercises} />
+            <TrainingVolumeRadar exercises={data.exercises} weekKeys={matrixWeekKeys} />
           </section>
 
           {message && <div className={message.includes('已') ? 'plan-message success' : 'plan-message'}>{message}</div>}
 
           <section className="plan-matrix-shell">
-            <>
+            {isAIPlan && <div className="matrix-ai-origin"><strong>{data.sourceType === 'ai_import' ? 'AI 识别导入' : 'AI 生成计划'}</strong><span>已写入统一训练矩阵，可继续修改并保存</span></div>}
               <div className="plan-matrix-title">
                 <div><Dumbbell size={18} /><strong>{data.scheduleLabel || '训练安排'}</strong></div>
-                <span>重量由MAX和百分比计算；填写完成次数后雷达图自动更新</span>
+                <span>{matrixWeekKeys.length} 个训练阶段 · 重量由MAX和百分比计算；填写完成次数后雷达图自动更新</span>
               </div>
               <div className="plan-matrix-scroll">
-                <table className="plan-matrix">
+                <table className="plan-matrix" style={{ minWidth: `${235 + matrixWeekKeys.length * 500 + (canEdit ? 44 : 0)}px` }}>
                   <thead>
                     <tr>
                       <th rowSpan={2} className="max-head">MAX</th>
                       <th rowSpan={2} className="exercise-head">项目</th>
-                      {weekKeys.map((weekKey, index) => <th key={weekKey} colSpan={6} className={`week-band week-${index + 1}`}>WEEK {weekKey}</th>)}
+                      {matrixWeekKeys.map((weekKey, index) => <th key={weekKey} colSpan={7} className={`week-band week-${index % 4 + 1}`}>{data.weekLabels?.[weekKey] || `WEEK ${index + 1}`}</th>)}
                       {canEdit && <th rowSpan={2} className="tools-head">操作</th>}
                     </tr>
                     <tr>
-                      {weekKeys.flatMap((weekKey, weekIndex) => ['组', '×', '次', '%', '重量', '完成次数'].map((label, index) => (
-                        <th key={`${weekKey}-${label}`} className={`week-sub week-${weekIndex + 1} ${index === 5 ? 'actual-head' : ''}`}>{label}</th>
+                      {matrixWeekKeys.flatMap((weekKey, weekIndex) => ['安排', '组', '×', '次', '%', '重量', '完成次数'].map((label, index) => (
+                        <th key={`${weekKey}-${label}`} className={`week-sub week-${weekIndex % 4 + 1} ${index === 0 ? 'arrangement-head' : ''} ${index === 6 ? 'actual-head' : ''}`}>{label}</th>
                       )))}
                     </tr>
                   </thead>
@@ -747,15 +571,17 @@ export function TrainingPlanPage(props: Props) {
                             </td>
                           </>
                         )}
-                        {weekKeys.flatMap((weekKey, weekIndex) => {
-                          const week = line.weeks[weekKey];
+                        {matrixWeekKeys.flatMap((weekKey, weekIndex) => {
+                          const week = line.weeks[weekKey] || emptyWeek();
+                          const weekClass = `week-${weekIndex % 4 + 1}`;
                           return [
-                            <td key={`${weekKey}-sets`} className={`week-body week-${weekIndex + 1}`}><input aria-label={`第${weekKey}周组数`} disabled={!canEdit} value={week.sets} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { sets: event.target.value })} /></td>,
-                            <td key={`${weekKey}-times`} className={`week-body week-${weekIndex + 1} times-cell`}>×</td>,
-                            <td key={`${weekKey}-reps`} className={`week-body week-${weekIndex + 1}`}><input aria-label={`第${weekKey}周次数`} disabled={!canEdit} value={week.reps} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { reps: event.target.value })} /></td>,
-                            <td key={`${weekKey}-percent`} className={`week-body week-${weekIndex + 1} percent-cell`}><input aria-label={`第${weekKey}周百分比`} type="number" min="0" max="100" step="0.1" disabled={!canEdit} value={week.percentage ?? ''} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { percentage: numericValue(event.target.value) })} /><span>%</span></td>,
-                            <td key={`${weekKey}-weight`} className={`week-body week-${weekIndex + 1} weight-cell`}>{plannedWeight(exercise.maxWeight, week.percentage)}</td>,
-                            <td key={`${weekKey}-actual`} className={`week-body week-${weekIndex + 1} actual-cell`}><input aria-label={`第${weekKey}周实际完成次数`} inputMode="decimal" disabled={!canEdit} placeholder="填写次数" value={week.actualCompleted} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { actualCompleted: event.target.value })} /></td>
+                            <td key={`${weekKey}-arrangement`} className={`week-body ${weekClass} arrangement-cell`}><textarea aria-label={`第${weekKey}阶段安排`} disabled={!canEdit} placeholder="训练日或其他安排" value={week.arrangement || ''} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { arrangement: event.target.value })} /></td>,
+                            <td key={`${weekKey}-sets`} className={`week-body ${weekClass}`}><input aria-label={`第${weekKey}周组数`} disabled={!canEdit} value={week.sets} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { sets: event.target.value })} /></td>,
+                            <td key={`${weekKey}-times`} className={`week-body ${weekClass} times-cell`}>×</td>,
+                            <td key={`${weekKey}-reps`} className={`week-body ${weekClass}`}><input aria-label={`第${weekKey}周次数`} disabled={!canEdit} value={week.reps} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { reps: event.target.value })} /></td>,
+                            <td key={`${weekKey}-percent`} className={`week-body ${weekClass} percent-cell`}><input aria-label={`第${weekKey}周百分比`} type="number" min="0" max="100" step="0.1" disabled={!canEdit} value={week.percentage ?? ''} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { percentage: numericValue(event.target.value) })} /><span>%</span></td>,
+                            <td key={`${weekKey}-weight`} className={`week-body ${weekClass} weight-cell`}>{plannedWeight(exercise.maxWeight, week.percentage)}</td>,
+                            <td key={`${weekKey}-actual`} className={`week-body ${weekClass} actual-cell`}><input aria-label={`第${weekKey}周实际完成次数`} inputMode="decimal" disabled={!canEdit} placeholder="填写次数" value={week.actualCompleted} onChange={(event) => updateWeek(exercise.id, line.id, weekKey, { actualCompleted: event.target.value })} /></td>
                           ];
                         })}
                         {canEdit && <td className="line-tools"><button type="button" aria-label="删除处方行" onClick={() => removeLine(exercise.id, line.id)}><Trash2 size={14} /></button></td>}
@@ -764,20 +590,20 @@ export function TrainingPlanPage(props: Props) {
                   </tbody>
                 </table>
               </div>
-              {canEdit && data.exercises.length < 8 && (
-                <button className="plan-add-exercise" type="button" onClick={() => setData((current) => ({ ...current, exercises: [...current.exercises, emptyExercise()] }))}>
-                  <Plus size={16} />添加训练项目（最多8项）
+              {canEdit && data.exercises.length < (isAIPlan ? 40 : 8) && (
+                <button className="plan-add-exercise" type="button" onClick={() => setData((current) => ({ ...current, exercises: [...current.exercises, emptyExercise('', planWeekKeys(current))] }))}>
+                  <Plus size={16} />添加训练项目（最多{isAIPlan ? 40 : 8}项）
                 </button>
               )}
-            </>
           </section>
           {canEdit && athlete && (
             <section className="ai-mode-container">
               <AITrainingPlanGenerator
                 user={props.user}
                 athlete={athlete}
-                onSaved={() => {
-                  refresh();
+                athletes={props.athletes}
+                onSaved={async (savedPlanId) => {
+                  await refresh(savedPlanId);
                   props.onChanged();
                 }}
               />

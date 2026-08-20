@@ -184,9 +184,9 @@ JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 ATHLETE_PHOTO_ROOT=/home/jingji/jingji-data/uploads/athlete-photos
 
 # AI 服务配置（可选）
-AI_API_KEY=your-ai-api-key
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4
+AI_API_KEY=your-model-studio-api-key
+AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+AI_MODEL=qwen3.7-plus
 
 # 时区设置
 TZ=Asia/Shanghai

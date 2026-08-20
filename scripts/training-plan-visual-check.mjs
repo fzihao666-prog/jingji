@@ -25,13 +25,16 @@ await page.getByRole('button', { name: /训练计划/ }).click();
 await page.getByRole('heading', { name: '训练计划', exact: true }).waitFor();
 await page.locator('.plan-matrix').waitFor();
 
-await page.getByRole('button', { name: '多人导入', exact: true }).click();
-await page.getByRole('heading', { name: 'Excel批量生成个人计划', exact: true }).waitFor();
-const batchSelectedCount = await page.locator('.batch-athlete-list > button.selected').count();
-const batchTemplateButtons = await page.getByRole('button', { name: '下载模板', exact: true }).count();
-if (batchSelectedCount !== 1 || batchTemplateButtons !== 1) throw new Error(`批量导入弹窗初始化错误：selected=${batchSelectedCount}, template=${batchTemplateButtons}`);
-await page.screenshot({ path: path.join(outputDirectory, '多人Excel计划导入.png'), fullPage: true });
-await page.getByRole('button', { name: '关闭', exact: true }).click();
+await page.getByRole('button', { name: /识别已有计划/ }).click();
+await page.getByRole('heading', { name: /把已有计划录入给/ }).waitFor();
+const initialImportTargets = await page.locator('.import-roster-list > button.selected').count();
+await page.locator('.import-roster-list > button').nth(1).click();
+const multiImportTargets = await page.locator('.import-roster-list > button.selected').count();
+const dynamicScheduleCopy = await page.getByText('训练日按文件实际内容识别并可修改；同一份确认后的计划可以一次导入多人。', { exact: true }).count();
+if (initialImportTargets !== 1 || multiImportTargets !== 2 || dynamicScheduleCopy !== 1) {
+  throw new Error(`AI多人导入初始化错误：initial=${initialImportTargets}, selected=${multiImportTargets}, schedule=${dynamicScheduleCopy}`);
+}
+await page.screenshot({ path: path.join(outputDirectory, 'AI识别多人计划导入.png'), fullPage: true });
 
 const firstMax = await page.locator('.max-cell input').first().inputValue();
 const firstPercentage = await page.getByLabel('第1周百分比').first().inputValue();
@@ -110,8 +113,9 @@ console.log(JSON.stringify({
   startDate,
   endDate,
   coachDeleteButtons,
-  batchSelectedCount,
-  batchTemplateButtons,
+  initialImportTargets,
+  multiImportTargets,
+  dynamicScheduleCopy,
   actualCompletedEditable,
   initialRadarRatios,
   radarSlotCount,

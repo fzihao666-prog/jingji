@@ -117,7 +117,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
       try {
         await exportPdfSheets(
           pdfRef.current,
-          `${athlete.name}_力量测试个人档案_${selected.testDate}`,
+          `${athlete.name}_个人档案_${selected.testDate}`,
           '齐总'
         );
       } catch (error) {
@@ -175,14 +175,14 @@ export function StrengthProfileModule({ athlete, user }: Props) {
       <header className="strength-module-heading">
         <div className="strength-module-title">
           <Dumbbell size={22} />
-          <span><small>STRENGTH PROFILE</small><strong>力量测试个人评价</strong></span>
+          <span><small>STRENGTH PROFILE</small><strong>个人档案</strong></span>
         </div>
         <div className="strength-module-actions">
           {tests.length > 1 && <label className="strength-history-select"><History size={15} /><select value={selected?.id || ''} onChange={(event) => setSelectedId(Number(event.target.value))}>{tests.map((test) => <option key={test.id} value={test.id}>{test.testDate}</option>)}</select></label>}
           {canEdit && <button className="secondary-button" onClick={openEditor}><PencilLine size={16} />{selected ? '更新测试' : '录入测试'}</button>}
           <button className="primary-button" onClick={beginExport} disabled={!selected || pdfBusy}>
             {pdfBusy ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}
-            {pdfBusy ? '生成中…' : '导出力量档案'}
+            {pdfBusy ? '生成中…' : '导出个人档案'}
           </button>
         </div>
       </header>
@@ -206,7 +206,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
         <div className="strength-empty">
           <Dumbbell size={34} />
           <strong>暂无力量测试数据</strong>
-          <p>{canEdit ? '录入实测值和教练目标后，系统会生成身体力量分布图与个人评价。' : '教练录入测试后，可在这里查看和下载个人力量档案。'}</p>
+            <p>{canEdit ? '录入实测值和教练目标后，系统会生成身体力量分布图与个人评价。' : '教练录入测试后，可在这里查看和下载个人档案。'}</p>
           {canEdit && <button className="primary-button" onClick={openEditor}>录入第一次测试</button>}
         </div>
       )}
@@ -259,7 +259,7 @@ function StrengthPoster({ athlete, test, variant }: { athlete: Athlete; test: St
   return <div className={`strength-poster strength-poster-${variant}`}>
     <header className="strength-poster-header">
       <div className="strength-poster-brand"><BrandLogo className="print" /><span><strong>竞迹</strong><small>JINGJI PERFORMANCE</small></span></div>
-      <div><span>{athlete.project === '皮划艇' ? 'CANOE / KAYAK STRENGTH ASSESSMENT' : athlete.project === '激流' ? 'CANOE SLALOM STRENGTH ASSESSMENT' : 'ROWING STRENGTH ASSESSMENT'}</span><h2>{athlete.project}力量测试个人档案</h2><p>目标值由教练确认 · 测试日期 {formatDate(test.testDate)}</p></div>
+      <div><span>{athlete.project === '皮划艇' ? 'CANOE / KAYAK STRENGTH ASSESSMENT' : athlete.project === '激流' ? 'CANOE SLALOM STRENGTH ASSESSMENT' : 'ROWING STRENGTH ASSESSMENT'}</span><h2>个人档案</h2><p>目标值由教练确认 · 测试日期 {formatDate(test.testDate)}</p></div>
       <span className="strength-poster-date">{test.testDate}</span>
     </header>
 
@@ -291,7 +291,7 @@ function StrengthPoster({ athlete, test, variant }: { athlete: Athlete; test: St
       <p>{evaluation}</p>
       {test.notes && <small>测试备注：{test.notes}</small>}
     </section>
-    {variant === 'pdf' && <footer className="strength-pdf-footer"><span>竞迹 · {athlete.project}训练数据中心</span><span>水印：齐总</span><span>力量测试档案</span></footer>}
+    {variant === 'pdf' && <footer className="strength-pdf-footer"><span>竞迹 · {athlete.project}训练数据中心</span><span>水印：齐总</span><span>个人档案</span></footer>}
   </div>;
 }
 

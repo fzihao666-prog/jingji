@@ -13,9 +13,6 @@ import {
   UserCheck,
   UserRound,
   UsersRound,
-  Waves,
-  ShipWheel,
-  MountainSnow,
   X,
   BluetoothConnected
 } from 'lucide-react';
@@ -25,7 +22,7 @@ import type { Project, Role, User } from '../types';
 import { roleMeta } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
-import { PROJECT_META } from '../../shared/projects';
+import { ProjectMark } from './ProjectMark';
 
 export type PageKey = 'overview' | 'calendar' | 'specialTests' | 'plans' | 'personal' | 'report' | 'import' | 'roster' | 'regions' | 'accounts' | 'bluetooth';
 
@@ -42,7 +39,7 @@ const navItems: Array<{
   { key: 'bluetooth', label: '蓝牙连接', icon: BluetoothConnected },
   { key: 'personal', label: '个人档案', icon: UserRound },
   { key: 'report', label: '周期报告', icon: ClipboardList },
-  { key: 'import', label: 'Excel导入', icon: FileUp, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'import', label: 'AI识别导入', icon: FileUp, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'roster', label: '人员关系', icon: UsersRound, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'regions', label: '账号权限', icon: MapPinned, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'accounts', label: '账户审核', icon: UserCheck, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
@@ -118,9 +115,15 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
 
         <div className="project-lanes" aria-label="当前运动项目">
           {projects.map((item) => {
-            const Icon = item === '赛艇' ? ShipWheel : item === '激流' ? MountainSnow : Waves;
-            return <button key={item} className={`${item === project ? 'active' : ''} ${item === '皮划艇' ? 'canoe' : item === '激流' ? 'slalom' : 'rowing'}`} onClick={() => onProjectChange(item)}>
-              <Icon size={17} /><span><strong>{item}</strong><small>{PROJECT_META[item].english}</small></span>
+            return <button
+              key={item}
+              className={`${item === project ? 'active' : ''} ${item === '皮划艇' ? 'canoe' : item === '激流' ? 'slalom' : 'rowing'}`}
+              onClick={() => onProjectChange(item)}
+              aria-label={`切换到${item}`}
+              title={item}
+            >
+              <ProjectMark project={item} />
+              <strong>{item}</strong>
             </button>;
           })}
         </div>

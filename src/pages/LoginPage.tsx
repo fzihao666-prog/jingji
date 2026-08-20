@@ -68,7 +68,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   };
 
   return (
-    <main className="login-page">
+    <main className={`login-page login-page-${mode}`}>
       <section className="login-story">
         <div className="login-brand">
           <BrandLogo className="large" variant="full" />

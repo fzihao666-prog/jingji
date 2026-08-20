@@ -1,8 +1,9 @@
-import { CalendarRange, Check, ChevronDown, MountainSnow, Search, ShipWheel, Waves, X } from 'lucide-react';
+import { CalendarRange, Check, ChevronDown, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Athlete, Project } from '../types';
 import { addDays, startOfWeek, toIsoDate } from '../utils';
 import { EditableName } from './EditableName';
+import { ProjectMark } from './ProjectMark';
 
 type Props = {
   from: string;
@@ -66,8 +67,8 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
 
       <label className={`project-filter ${project === '皮划艇' ? 'canoe' : project === '激流' ? 'slalom' : 'rowing'}`}>
         <span className="visually-hidden">选择项目大类</span>
-        {project === '赛艇' ? <ShipWheel size={15} /> : project === '激流' ? <MountainSnow size={15} /> : <Waves size={15} />}
-        <select value={project} onChange={(event) => onProjectChange(event.target.value as Project)}>
+        <ProjectMark project={project} />
+        <select aria-label="选择项目大类" value={project} onChange={(event) => onProjectChange(event.target.value as Project)}>
           {projects.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
         <ChevronDown size={14} />
@@ -85,7 +86,7 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
             <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`搜索${project}运动员、地区或队伍`} onKeyDown={(event) => { if (event.key === 'Escape') setAthleteOpen(false); }} />
             {query && <button type="button" onClick={() => setQuery('')} aria-label="清空搜索"><X size={14} /></button>}
           </label>
-          <div className="athlete-picker-project"><i />{project}<span>{athletes.length}人</span></div>
+          <div className={`athlete-picker-project ${project === '皮划艇' ? 'canoe' : project === '激流' ? 'slalom' : 'rowing'}`}><ProjectMark project={project} />{project}<span>{athletes.length}人</span></div>
           <div className="athlete-picker-options">
             <button type="button" className={athleteId === null ? 'selected' : ''} onClick={() => { onAthleteChange(null); setAthleteOpen(false); setQuery(''); }}>
               <span><strong>全部{project}运动员</strong><small>查看当前项目汇总</small></span>{athleteId === null && <Check size={15} />}
