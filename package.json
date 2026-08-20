@@ -27,6 +27,7 @@
     "mammoth": "^1.12.1",
     "multer": "latest",
     "pdfjs-dist": "^6.2.108",
+    "province-city-china": "^8.5.8",
     "react": "latest",
     "react-dom": "latest",
     "recharts": "latest"

@@ -45,6 +45,8 @@ db.exec(`
     project TEXT,
     team TEXT,
     gender TEXT,
+    identity_number TEXT,
+    native_place TEXT,
     region TEXT,
     city TEXT,
     county TEXT,
@@ -399,6 +401,12 @@ if (!hasColumn('registration_requests', 'city')) {
 if (!hasColumn('registration_requests', 'county')) {
   db.exec('ALTER TABLE registration_requests ADD COLUMN county TEXT');
 }
+if (!hasColumn('registration_requests', 'identity_number')) {
+  db.exec('ALTER TABLE registration_requests ADD COLUMN identity_number TEXT');
+}
+if (!hasColumn('registration_requests', 'native_place')) {
+  db.exec('ALTER TABLE registration_requests ADD COLUMN native_place TEXT');
+}
 for (const column of ['province', 'city', 'county', 'project', 'team']) {
   if (!hasColumn('training_records', column)) {
     db.exec(`ALTER TABLE training_records ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
@@ -483,6 +491,8 @@ if (registrationsTable && !registrationsTable.sql.includes("'ATL'")) {
         project TEXT,
         team TEXT,
         gender TEXT,
+        identity_number TEXT,
+        native_place TEXT,
         region TEXT,
         city TEXT,
         county TEXT,
@@ -493,12 +503,12 @@ if (registrationsTable && !registrationsTable.sql.includes("'ATL'")) {
         FOREIGN KEY (reviewed_by) REFERENCES users(id)
       );
       INSERT INTO registration_requests_access_v2 (
-        id, username, password_hash, display_name, requested_role, project, team, gender,
+        id, username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place,
         region, city, county, status, reviewed_by, reviewed_at, created_at
       )
       SELECT id, username, password_hash, display_name,
         CASE requested_role WHEN 'athlete' THEN 'ATL' WHEN 'coach' THEN 'SCC' ELSE requested_role END,
-        project, team, gender, region, city, county, status, reviewed_by, reviewed_at, created_at
+        project, team, gender, identity_number, native_place, region, city, county, status, reviewed_by, reviewed_at, created_at
       FROM registration_requests;
       DROP TABLE registration_requests;
       ALTER TABLE registration_requests_access_v2 RENAME TO registration_requests;

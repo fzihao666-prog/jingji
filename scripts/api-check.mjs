@@ -494,9 +494,21 @@ try {
   }, createdRegionalLogin.payload.token);
   assert(forbiddenCrossLevel.status === 404, '区域负责人不应能管理训练总监');
 
+  const invalidIdentityRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'invalid_id_test', password: 'Secure123', displayName: '证件测试', role: 'ATL',
+    project: '赛艇', team: '测试组', gender: '女', identityNumber: '51010720000101123', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
+  }) });
+  assert(invalidIdentityRegister.status === 400, '不足18位的身份证号不应通过注册校验');
+
+  const invalidNativePlaceRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'invalid_native_test', password: 'Secure123', displayName: '籍贯测试', role: 'ATL',
+    project: '赛艇', team: '测试组', gender: '女', identityNumber: '510107200001011234', nativePlace: '四川/武汉市', region: '四川', city: '成都市', county: '武侯区'
+  }) });
+  assert(invalidNativePlaceRegister.status === 400, '缺少县/市的籍贯不应通过注册校验');
+
   const athleteRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'athlete_test', password: 'Secure123', displayName: '测试运动员', role: 'ATL',
-    project: '赛艇', team: '测试组', gender: '女', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', gender: '女', identityNumber: '510107200001011234', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
   }) });
   assert(athleteRegister.status === 201, '运动员注册申请失败');
 
@@ -505,7 +517,13 @@ try {
 
   const pending = await request('/api/admin/registrations?status=pending', {}, adminToken);
   const athleteRequest = pending.payload.requests.find((item) => item.username === 'athlete_test');
-  assert(pending.status === 200 && athleteRequest, '管理员未看到注册申请');
+  assert(
+    pending.status === 200
+      && athleteRequest?.identityNumber === '510107200001011234'
+      && athleteRequest?.nativePlace === '四川/成都市'
+      && athleteRequest?.gender === '女',
+    '管理员未看到完整的注册申请资料'
+  );
   const renameRequest = await request(`/api/admin/registrations/${athleteRequest.id}/name`, {
     method: 'PUT', body: JSON.stringify({ name: '测试运动员修订' })
   }, adminToken);
@@ -538,7 +556,7 @@ try {
 
   const coachRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'coach_test', password: 'Secure123', displayName: '测试教练', role: 'SCC',
-    project: '赛艇', team: '测试组', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', gender: '男', identityNumber: '51010719900101123X', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
   }) });
   assert(coachRegister.status === 201, '教练注册申请失败');
   const pendingCoaches = await request('/api/admin/registrations?status=pending', {}, adminToken);

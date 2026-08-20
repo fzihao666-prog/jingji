@@ -367,6 +367,8 @@ export type RegistrationRequest = {
   project: string | null;
   team: string | null;
   gender: string | null;
+  identityNumber: string | null;
+  nativePlace: string | null;
   region: string | null;
   city: string | null;
   county: string | null;

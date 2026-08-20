@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from './db.ts';
-import { PROVINCES } from '../shared/regions.ts';
+import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import {
   AREA_LEVEL_META,
   AREA_LEVELS,
@@ -2018,10 +2018,13 @@ app.post('/api/auth/register', (req, res) => {
   const project = cleanString(req.body?.project);
   const team = cleanString(req.body?.team);
   const gender = cleanString(req.body?.gender);
+  const identityNumber = cleanString(req.body?.identityNumber).toUpperCase();
+  const nativePlace = cleanString(req.body?.nativePlace);
   const region = cleanString(req.body?.region);
   const city = cleanString(req.body?.city);
   const county = cleanString(req.body?.county);
   const errors: string[] = [];
+  const [nativePlaceProvince = '', nativePlaceCity = '', ...nativePlaceRest] = nativePlace.split('/');
 
   if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
   if (password.length < 8 || password.length > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
@@ -2034,7 +2037,11 @@ app.post('/api/auth/register', (req, res) => {
   if (!provinceSet.has(region)) errors.push('请选择所属省份');
   if (city.length < 2 || city.length > 30) errors.push('请填写所属城市');
   if (county.length < 2 || county.length > 30) errors.push('请填写所属区县');
-  if (gender && !['男', '女'].includes(gender)) errors.push('性别信息无效');
+  if (!['男', '女'].includes(gender)) errors.push('请选择性别');
+  if (!/^\d{17}[\dX]$/.test(identityNumber)) errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
+  if (nativePlaceRest.length || !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)) {
+    errors.push('请选择有效且对应的籍贯省市');
+  }
   if (errors.length) return res.status(400).json({ message: errors.join('；') });
 
   const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
@@ -2047,15 +2054,15 @@ app.post('/api/auth/register', (req, res) => {
   if (existingRequest?.status === 'rejected') {
     db.prepare(`
       UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
-        project = ?, team = ?, gender = ?, region = ?, city = ?, county = ?, status = 'pending', reviewed_by = NULL,
+        project = ?, team = ?, gender = ?, identity_number = ?, native_place = ?, region = ?, city = ?, county = ?, status = 'pending', reviewed_by = NULL,
         reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(passwordHash, displayName, requestedRole, project, team, gender || null, region, city, county, existingRequest.id);
+    `).run(passwordHash, displayName, requestedRole, project, team, gender, identityNumber, nativePlace, region, city, county, existingRequest.id);
   } else {
     db.prepare(`
       INSERT INTO registration_requests (
-        username, password_hash, display_name, requested_role, project, team, gender, region, city, county
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(username, passwordHash, displayName, requestedRole, project, team, gender || null, region, city, county);
+        username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place, region, city, county
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(username, passwordHash, displayName, requestedRole, project, team, gender, identityNumber, nativePlace, region, city, county);
   }
   res.status(201).json({ message: '申请已提交，审核通过后即可登录。' });
 });
@@ -3745,7 +3752,7 @@ app.get('/api/admin/registrations', requireAuth, requireRole('SCC', 'PRJ', 'REG'
   const status = ['pending', 'approved', 'rejected'].includes(requestedStatus) ? requestedStatus : 'pending';
   const allRequests = db.prepare(`
     SELECT id, username, display_name AS displayName, requested_role AS requestedRole,
-      project, team, gender, region, city, county, status,
+      project, team, gender, identity_number AS identityNumber, native_place AS nativePlace, region, city, county, status,
       created_at AS createdAt, reviewed_at AS reviewedAt
     FROM registration_requests WHERE status = ? ORDER BY created_at ASC
   `).all(status) as Array<{
@@ -3756,6 +3763,8 @@ app.get('/api/admin/registrations', requireAuth, requireRole('SCC', 'PRJ', 'REG'
     project: string;
     team: string;
     gender: string | null;
+    identityNumber: string | null;
+    nativePlace: string | null;
     region: string;
     city: string;
     county: string;
@@ -3855,12 +3864,13 @@ app.post('/api/admin/registrations/:id/approve', requireAuth, requireRole('SCC',
   const requestId = Number(req.params.id);
   const request = db.prepare(`
     SELECT id, username, password_hash, display_name, requested_role,
-      project, team, gender, region, city, county, status
+      project, team, gender, identity_number, native_place, region, city, county, status
     FROM registration_requests WHERE id = ?
   `).get(requestId) as {
     id: number; username: string; password_hash: string; display_name: string;
     requested_role: 'ATL' | 'SCC'; project: string; team: string;
     gender: string | null; region: string; city: string; county: string; status: string;
+    identity_number: string | null; native_place: string | null;
   } | undefined;
   if (!request) return res.status(404).json({ message: '注册申请不存在。' });
   if (request.status !== 'pending') return res.status(409).json({ message: '该申请已经处理。' });

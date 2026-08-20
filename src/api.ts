@@ -65,6 +65,8 @@ export const api = {
     project?: string;
     team?: string;
     gender?: string;
+    identityNumber: string;
+    nativePlace: string;
     region?: string;
     city?: string;
     county?: string;
