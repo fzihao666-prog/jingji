@@ -1,4 +1,4 @@
-import { CalendarRange, Check, ChevronDown, Search, X } from 'lucide-react';
+import { CalendarRange, Check, ChevronDown, Search, UserRound, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Athlete, Project } from '../types';
 import { addDays, startOfWeek, toIsoDate } from '../utils';
@@ -17,9 +17,11 @@ type Props = {
   onProjectChange: (project: Project) => void;
   canRenameAthletes?: boolean;
   onAthleteNameChange?: (id: number, name: string) => Promise<void>;
+  presetMode?: 'default' | 'dayWeekMonth';
+  athleteMode?: 'select' | 'team' | 'self';
 };
 
-export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange }: Props) {
+export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, presetMode = 'default', athleteMode = 'select' }: Props) {
   const selectedAthlete = athletes.find((athlete) => athlete.id === athleteId);
   const [athleteOpen, setAthleteOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -43,19 +45,29 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, []);
-  const setPreset = (preset: 'week' | 'fourWeeks' | 'month') => {
-    const today = toIsoDate(new Date());
-    if (preset === 'week') onRangeChange(startOfWeek(today), today);
-    if (preset === 'fourWeeks') onRangeChange(addDays(today, -27), today);
-    if (preset === 'month') onRangeChange(`${today.slice(0, 7)}-01`, today);
+  const today = toIsoDate(new Date());
+  const presetRanges = {
+    day: { from: today, to: today },
+    week: { from: startOfWeek(today), to: today },
+    fourWeeks: { from: addDays(today, -27), to: today },
+    month: { from: `${today.slice(0, 7)}-01`, to: today }
+  };
+  const presets = presetMode === 'dayWeekMonth'
+    ? ([['day', '日', '查看今日数据'], ['week', '周', '查看本周数据'], ['month', '月', '查看本月数据']] as const)
+    : ([['week', '本周', '查看本周数据'], ['fourWeeks', '近4周', '查看最近四周数据'], ['month', '本月', '查看本月数据']] as const);
+  const setPreset = (preset: keyof typeof presetRanges) => {
+    const range = presetRanges[preset];
+    onRangeChange(range.from, range.to);
   };
 
   return (
     <div className="date-toolbar">
       <div className="range-presets" aria-label="快速选择时间范围">
-        <button onClick={() => setPreset('week')}>本周</button>
-        <button onClick={() => setPreset('fourWeeks')}>近4周</button>
-        <button onClick={() => setPreset('month')}>本月</button>
+        {presets.map(([key, label, title]) => {
+          const range = presetRanges[key];
+          const active = from === range.from && to === range.to;
+          return <button key={key} type="button" className={active ? 'active' : ''} aria-pressed={active} title={title} onClick={() => setPreset(key)}>{label}</button>;
+        })}
       </div>
 
       <label className="date-input">
@@ -74,7 +86,7 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
         <ChevronDown size={14} />
       </label>
 
-      <div className={`athlete-picker ${athleteOpen ? 'open' : ''}`} ref={pickerRef}>
+      {athleteMode === 'select' ? <div className={`athlete-picker ${athleteOpen ? 'open' : ''}`} ref={pickerRef}>
         <button className="athlete-picker-trigger" type="button" onClick={() => setAthleteOpen((value) => !value)} aria-expanded={athleteOpen}>
           <Search size={15} />
           <span>{selectedAthlete ? selectedAthlete.name : `全部${project}运动员`}</span>
@@ -97,8 +109,13 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
             {!filteredAthletes.length && <div className="athlete-picker-empty">没有找到“{query}”</div>}
           </div>
         </div>}
-      </div>
-      {selectedAthlete && canRenameAthletes && onAthleteNameChange && (
+      </div> : (
+        <div className={`overview-scope-filter ${athleteMode}`} aria-label={athleteMode === 'team' ? '当前按权限范围汇总团队数据' : '当前仅展示本人数据'}>
+          {athleteMode === 'team' ? <UsersRound size={16} /> : <UserRound size={16} />}
+          <span><strong>{athleteMode === 'team' ? '权限团队汇总' : selectedAthlete?.name || '本人数据'}</strong><small>{athleteMode === 'team' ? `${athletes.length}名${project}运动员` : '仅本人训练数据'}</small></span>
+        </div>
+      )}
+      {athleteMode === 'select' && selectedAthlete && canRenameAthletes && onAthleteNameChange && (
         <EditableName
           value={selectedAthlete.name}
           showValue={false}

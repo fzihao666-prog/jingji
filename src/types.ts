@@ -443,6 +443,41 @@ export type StrengthTest = {
   updatedBy: string;
 };
 
+export type OverviewMeasurement = {
+  code: string;
+  label: string;
+  domain: string;
+  value: number | null;
+  target: number | null;
+  previous: number | null;
+  changePct: number | null;
+  unit: string;
+  quality: 'valid' | 'partial' | 'insufficient' | 'outlier' | 'estimated';
+  source: string;
+  sampleCount: number;
+  isDemo: boolean;
+};
+
+export type OverviewPayload = {
+  records: TrainingRecord[];
+  strengthTests: StrengthTest[];
+  measurements: OverviewMeasurement[];
+  meta: {
+    project: string;
+    from: string;
+    to: string;
+    athleteCount: number;
+    sessionCount: number;
+    wellnessDays: number;
+    testCount: number;
+    coverage: number;
+    containsDemoData: boolean;
+    sources: string[];
+    scope: 'individual' | 'team';
+    generatedAt: string;
+  };
+};
+
 export type StrengthAdviceWeek = {
   week: number;
   focus: string;

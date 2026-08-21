@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db } from './db.ts';
+import { buildOverviewPayload } from './overview-service.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import {
   AREA_LEVEL_META,
@@ -2915,6 +2916,37 @@ app.get('/api/training-plans/:id/export', requireAuth, async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
   res.send(Buffer.from(buffer));
+});
+
+app.get('/api/overview', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const from = cleanString(req.query.from);
+  const to = cleanString(req.query.to);
+  const requestedId = Number(req.query.athleteId || 0);
+  const project = cleanString(req.query.project);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+    return res.status(400).json({ message: '请选择有效的分析日期范围。' });
+  }
+  if (user.role !== 'ATL' && requestedId) {
+    return res.status(400).json({ message: '管理账号的训练总览按权限范围进行团队聚合，请前往个人档案查看单人数据。' });
+  }
+  if (user.role === 'ATL' && requestedId && requestedId !== user.athleteId) {
+    return res.status(403).json({ message: '运动员账号只能查看本人的训练总览。' });
+  }
+  let ids = accessibleAthleteIds(user);
+  if (ids.length) {
+    const placeholders = ids.map(() => '?').join(',');
+    ids = (db.prepare(`SELECT id FROM athletes WHERE id IN (${placeholders}) AND project = ? AND active = 1`)
+      .all(...ids, project) as Array<{ id: number }>).map((row) => row.id);
+  }
+  if (user.role === 'ATL') {
+    if (!user.athleteId) return res.status(403).json({ message: '当前运动员账号未绑定人员档案。' });
+    const selected = db.prepare('SELECT project FROM athletes WHERE id = ?').get(user.athleteId) as { project: string } | undefined;
+    if (!selected || selected.project !== project) return res.status(400).json({ message: '本人档案不属于当前项目。' });
+    ids = [user.athleteId];
+  }
+  res.json({ overview: buildOverviewPayload({ athleteIds: ids, from, to, project, individual: user.role === 'ATL' }) });
 });
 
 app.get('/api/records', requireAuth, (req, res) => {

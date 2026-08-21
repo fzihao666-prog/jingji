@@ -157,6 +157,12 @@ try {
 
   const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
   const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.project === '赛艇');
+  const forbiddenAdminIndividualOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,
+    {},
+    adminToken
+  );
+  assert(forbiddenAdminIndividualOverview.status === 400, '训练总监类账号不应在训练总览读取单人数据');
   const modelResult = await request(`/api/analysis/model?project=${encodeURIComponent(analysisAthlete.project)}`, {}, adminToken);
   const analysisResult = await request(
     `/api/analysis/summary?from=2026-06-01&to=2026-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,
@@ -172,6 +178,28 @@ try {
     '赛艇分析标准或个人分析接口失败'
   );
 
+  const overviewRequiredMetrics = {
+    赛艇: ['seven_stroke_power_w', 'erg_2k_sec', 'movement_squat_score'],
+    皮划艇: ['sprint_200_sec', 'left_paddle_power_w', 'movement_shoulder_score'],
+    激流: ['gate_technique_score', 'movement_trunk_score']
+  };
+  for (const [overviewProject, requiredCodes] of Object.entries(overviewRequiredMetrics)) {
+    const result = await request(
+      `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(overviewProject)}`,
+      {},
+      adminToken
+    );
+    const codes = new Set(result.payload.overview?.measurements?.map((item) => item.code));
+    assert(
+      result.status === 200
+        && result.payload.overview.records.length > 0
+        && result.payload.overview.strengthTests.length >= 2
+        && result.payload.overview.meta.containsDemoData
+        && requiredCodes.every((code) => codes.has(code)),
+      `${overviewProject}统一训练总览数据或演示指标不完整`
+    );
+  }
+
   const strengthAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.name === '林舟');
   const strengthSeed = await request(`/api/strength-tests?athleteId=${strengthAthlete.id}`, {}, adminToken);
   assert(
@@ -184,6 +212,23 @@ try {
   });
   const demoCoachAthletes = await request('/api/athletes', {}, demoCoachLogin.payload.token);
   const coachAthlete = demoCoachAthletes.payload.athletes[0];
+  const coachOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(coachAthlete.project)}`,
+    {},
+    demoCoachLogin.payload.token
+  );
+  const forbiddenCoachIndividualOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&athleteId=${coachAthlete.id}&project=${encodeURIComponent(coachAthlete.project)}`,
+    {},
+    demoCoachLogin.payload.token
+  );
+  assert(
+    coachOverview.status === 200
+      && coachOverview.payload.overview.meta.scope === 'team'
+      && coachOverview.payload.overview.meta.athleteCount === demoCoachAthletes.payload.athletes.filter((item) => item.project === coachAthlete.project).length
+      && forbiddenCoachIndividualOverview.status === 400,
+    '教练训练总览未按负责队员进行团队聚合'
+  );
   const saveStrength = await request('/api/strength-tests', {
     method: 'POST',
     body: JSON.stringify({
@@ -204,6 +249,19 @@ try {
   const demoAthleteLogin = await request('/api/auth/login', {
     method: 'POST', body: JSON.stringify({ username: 'athlete01', password: 'demo123' })
   });
+  const ownAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.id === demoAthleteLogin.payload.user.athleteId);
+  const athleteOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(ownAthlete.project)}`,
+    {},
+    demoAthleteLogin.payload.token
+  );
+  assert(
+    athleteOverview.status === 200
+      && athleteOverview.payload.overview.meta.scope === 'individual'
+      && athleteOverview.payload.overview.meta.athleteCount === 1
+      && athleteOverview.payload.overview.records.every((record) => record.athleteId === demoAthleteLogin.payload.user.athleteId),
+    '运动员训练总览未限制为本人数据'
+  );
   const ownStrength = await request(`/api/strength-tests?athleteId=${demoAthleteLogin.payload.user.athleteId}`, {}, demoAthleteLogin.payload.token);
   const forbiddenStrengthWrite = await request('/api/strength-tests', {
     method: 'POST',
@@ -621,6 +679,7 @@ try {
   );
 
   console.log(JSON.stringify({
+    overviewPipeline: 'passed',
     rowingAnalysis: 'passed',
     strengthProfile: 'passed',
     registration: 'passed',
