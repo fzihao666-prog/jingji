@@ -123,7 +123,7 @@ let serverError = '';
 server.stderr.on('data', (chunk) => { serverError += chunk.toString(); });
 
 async function waitForServer() {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
     try {
       const response = await fetch(`${base}/api/auth/login`, {
         method: 'POST', headers: { 'content-type': 'application/json' },

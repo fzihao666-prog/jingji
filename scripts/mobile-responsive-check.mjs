@@ -48,6 +48,8 @@ async function go(label) {
 
 await assertViewport('01-overview');
 await go('训练日历');
+const calendarPresetLabels = await page.locator('.range-presets button').allTextContents();
+if (calendarPresetLabels.join('|') !== '日|周|月') throw new Error(`训练日历快捷范围错误: ${calendarPresetLabels.join('|')}`);
 await assertViewport('02-calendar');
 await go('个人档案');
 await page.locator('.athlete-picker-trigger').click();
@@ -65,7 +67,11 @@ await page.locator('.report-sheet').first().waitFor();
 await assertViewport('05-report');
 await go('专项训练');
 await assertViewport('06-special-tests', ['.ranking-table-wrap']);
+await go('队伍管理');
+await page.getByRole('heading', { name: '队伍管理', exact: true }).waitFor();
+if (await page.locator('.team-project-card').count() === 0) throw new Error('队伍管理页未读取到项目队伍');
+await assertViewport('07-teams');
 
 if (browserErrors.length) throw new Error(`浏览器错误: ${browserErrors.join(' | ')}`);
-console.log(JSON.stringify({ status: 'passed', viewport: '390x844', pages: results }, null, 2));
+console.log(JSON.stringify({ status: 'passed', viewport: '390x844', calendarPresetLabels, pages: results }, null, 2));
 await browser.close();

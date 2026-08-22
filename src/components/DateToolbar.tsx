@@ -1,7 +1,7 @@
 import { CalendarRange, Check, ChevronDown, Search, UserRound, UsersRound, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Athlete, Project } from '../types';
-import { addDays, toIsoDate } from '../utils';
+import { addDays, startOfWeek, toIsoDate } from '../utils';
 import { EditableName } from './EditableName';
 import { ProjectMark } from './ProjectMark';
 
@@ -17,10 +17,11 @@ type Props = {
   onProjectChange: (project: Project) => void;
   canRenameAthletes?: boolean;
   onAthleteNameChange?: (id: number, name: string) => Promise<void>;
+  presetMode?: 'default' | 'dayWeekMonth';
   athleteMode?: 'select' | 'team' | 'self';
 };
 
-export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select' }: Props) {
+export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, presetMode = 'default', athleteMode = 'select' }: Props) {
   const selectedAthlete = athletes.find((athlete) => athlete.id === athleteId);
   const [athleteOpen, setAthleteOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -47,10 +48,14 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
   const today = toIsoDate(new Date());
   const presetRanges = {
     day: { from: today, to: today },
+    week: { from: startOfWeek(today), to: today },
+    month: { from: `${today.slice(0, 7)}-01`, to: today },
     recentMonth: { from: addDays(today, -29), to: today },
     recentYear: { from: addDays(today, -364), to: today }
   };
-  const presets = ([['day', '今天', '查看今天数据'], ['recentMonth', '最近一月', '查看最近30天数据'], ['recentYear', '最近一年', '查看最近365天数据']] as const);
+  const presets = presetMode === 'dayWeekMonth'
+    ? ([['day', '日', '查看今日数据'], ['week', '周', '查看本周数据'], ['month', '月', '查看本月数据']] as const)
+    : ([['day', '今天', '查看今天数据'], ['recentMonth', '最近一月', '查看最近30天数据'], ['recentYear', '最近一年', '查看最近365天数据']] as const);
   const setPreset = (preset: keyof typeof presetRanges) => {
     const range = presetRanges[preset];
     onRangeChange(range.from, range.to);
