@@ -367,6 +367,8 @@ export type RegistrationRequest = {
   project: string | null;
   team: string | null;
   gender: string | null;
+  identityNumber: string | null;
+  nativePlace: string | null;
   region: string | null;
   city: string | null;
   county: string | null;
@@ -439,6 +441,78 @@ export type StrengthTest = {
   notes: string;
   updatedAt: string;
   updatedBy: string;
+};
+
+export type OverviewMeasurement = {
+  code: string;
+  label: string;
+  domain: string;
+  value: number | null;
+  target: number | null;
+  previous: number | null;
+  changePct: number | null;
+  unit: string;
+  quality: 'valid' | 'partial' | 'insufficient' | 'outlier' | 'estimated';
+  source: string;
+  sampleCount: number;
+  isDemo: boolean;
+};
+
+export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';
+
+export type OverviewAthleteProfile = {
+  athleteId: number;
+  athleteName: string;
+  project: string;
+  team: string;
+  gender: string;
+  province: string;
+  city: string;
+  county: string;
+  originSource: string;
+  originIsDemo: boolean;
+  birthDate: string | null;
+  age: number | null;
+  bodyMeasurementDate: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  previousWeightKg: number | null;
+  bodyFatPct: number | null;
+  competitiveAssessmentDate: string | null;
+  competitiveScore: number | null;
+  previousCompetitiveScore: number | null;
+  competitiveLevel: CompetitiveStateLevel | null;
+  competitiveDimensions: {
+    endurance: number | null;
+    power: number | null;
+    technique: number | null;
+    loadAdaptation: number | null;
+    recovery: number | null;
+    competition: number | null;
+  };
+  source: string;
+  isDemo: boolean;
+};
+
+export type OverviewPayload = {
+  records: TrainingRecord[];
+  strengthTests: StrengthTest[];
+  measurements: OverviewMeasurement[];
+  profiles: OverviewAthleteProfile[];
+  meta: {
+    project: string;
+    from: string;
+    to: string;
+    athleteCount: number;
+    sessionCount: number;
+    wellnessDays: number;
+    testCount: number;
+    coverage: number;
+    containsDemoData: boolean;
+    sources: string[];
+    scope: 'individual' | 'team';
+    generatedAt: string;
+  };
 };
 
 export type StrengthAdviceWeek = {

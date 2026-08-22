@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
 import type { User } from '../types';
-import { PROVINCES } from '../../shared/regions';
+import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { PROJECTS } from '../../shared/projects';
 
 type Mode = 'login' | 'register';
@@ -18,6 +18,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [project, setProject] = useState('赛艇');
   const [team, setTeam] = useState('');
   const [gender, setGender] = useState('');
+  const [identityNumber, setIdentityNumber] = useState('');
+  const [nativePlaceProvince, setNativePlaceProvince] = useState('');
+  const [nativePlaceCity, setNativePlaceCity] = useState('');
   const [region, setRegion] = useState('');
   const [city, setCity] = useState('');
   const [county, setCounty] = useState('');
@@ -54,9 +57,17 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
       setError('两次输入的密码不一致。');
       return;
     }
+    if (!/^\d{17}[\dX]$/.test(identityNumber)) {
+      setError('身份证号须为18位，前17位为数字，末位为数字或X。');
+      return;
+    }
     setSubmitting(true);
     try {
-      const result = await api.register({ username, password, displayName, role, project, team, gender, region, city, county });
+      const result = await api.register({
+        username, password, displayName, role, project, team, gender, identityNumber,
+        nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`,
+        region, city, county
+      });
       setSuccess(result.message);
       setPassword('');
       setConfirmPassword('');
@@ -137,9 +148,12 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                 <div className="register-section-title"><b>01</b><strong>基本资料</strong></div>
                 <div className="form-grid profile-grid">
                   <label><span>姓名</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
+                  <label><span>身份证号</span><input value={identityNumber} onChange={(event) => setIdentityNumber(event.target.value.replace(/\s/g, '').toUpperCase())} maxLength={18} pattern="[0-9]{17}[0-9X]" title="请输入18位身份证号，末位可以是X" placeholder="18位身份证号" required /></label>
                   <label><span>项目</span><select value={project} onChange={(event) => setProject(event.target.value)}>{PROJECTS.map((item) => <option key={item}>{item}</option>)}</select></label>
                   <label><span>队伍</span><input value={team} onChange={(event) => setTeam(event.target.value)} placeholder="如：女子双桨组" required /></label>
-                  {role === 'ATL' && <label><span>性别</span><select value={gender} onChange={(event) => setGender(event.target.value)} required><option value="">请选择</option><option>女</option><option>男</option></select></label>}
+                  <label><span>性别</span><select value={gender} onChange={(event) => setGender(event.target.value)} required><option value="">请选择</option><option>女</option><option>男</option></select></label>
+                  <label><span>籍贯省份</span><select value={nativePlaceProvince} onChange={(event) => { setNativePlaceProvince(event.target.value); setNativePlaceCity(''); }} required><option value="">请选择省份</option>{PROVINCES.map((province) => <option key={province}>{province}</option>)}</select></label>
+                  <label><span>籍贯城市</span><select value={nativePlaceCity} onChange={(event) => setNativePlaceCity(event.target.value)} disabled={!nativePlaceProvince} required><option value="">{nativePlaceProvince ? '请选择城市' : '请先选择省份'}</option>{(PROVINCE_CITIES[nativePlaceProvince] || []).map((cityName) => <option key={cityName}>{cityName}</option>)}</select></label>
                   <label><span>所属省份</span><select value={region} onChange={(event) => setRegion(event.target.value)} required><option value="">请选择</option>{PROVINCES.map((province) => <option key={province}>{province}</option>)}</select></label>
                   <label><span>所属城市</span><input value={city} onChange={(event) => setCity(event.target.value)} placeholder="如：成都市" required /></label>
                   <label><span>所属区县</span><input value={county} onChange={(event) => setCounty(event.target.value)} placeholder="如：武侯区" required /></label>

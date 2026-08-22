@@ -157,6 +157,12 @@ try {
 
   const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
   const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.project === '赛艇');
+  const forbiddenAdminIndividualOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,
+    {},
+    adminToken
+  );
+  assert(forbiddenAdminIndividualOverview.status === 400, '训练总监类账号不应在训练总览读取单人数据');
   const modelResult = await request(`/api/analysis/model?project=${encodeURIComponent(analysisAthlete.project)}`, {}, adminToken);
   const analysisResult = await request(
     `/api/analysis/summary?from=2026-06-01&to=2026-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,
@@ -172,6 +178,33 @@ try {
     '赛艇分析标准或个人分析接口失败'
   );
 
+  const overviewRequiredMetrics = {
+    赛艇: ['seven_stroke_power_w', 'erg_2k_sec', 'movement_squat_score'],
+    皮划艇: ['sprint_200_sec', 'left_paddle_power_w', 'movement_shoulder_score'],
+    激流: ['gate_technique_score', 'movement_trunk_score']
+  };
+  for (const [overviewProject, requiredCodes] of Object.entries(overviewRequiredMetrics)) {
+    const result = await request(
+      `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(overviewProject)}`,
+      {},
+      adminToken
+    );
+    const codes = new Set(result.payload.overview?.measurements?.map((item) => item.code));
+    const profiles = result.payload.overview?.profiles || [];
+    assert(
+      result.status === 200
+        && result.payload.overview.records.length > 0
+        && result.payload.overview.strengthTests.length >= 2
+        && profiles.length > 0
+        && profiles.every((profile) => profile.province && profile.province !== '未设置' && profile.city && profile.originSource)
+        && profiles.every((profile) => profile.birthDate && profile.age > 0 && profile.heightCm > 0 && profile.weightKg > 0)
+        && profiles.every((profile) => profile.competitiveScore > 0 && profile.competitiveLevel && profile.competitiveDimensions.competition > 0)
+        && result.payload.overview.meta.containsDemoData
+        && requiredCodes.every((code) => codes.has(code)),
+      `${overviewProject}统一训练总览数据或演示指标不完整`
+    );
+  }
+
   const strengthAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.name === '林舟');
   const strengthSeed = await request(`/api/strength-tests?athleteId=${strengthAthlete.id}`, {}, adminToken);
   assert(
@@ -184,6 +217,23 @@ try {
   });
   const demoCoachAthletes = await request('/api/athletes', {}, demoCoachLogin.payload.token);
   const coachAthlete = demoCoachAthletes.payload.athletes[0];
+  const coachOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(coachAthlete.project)}`,
+    {},
+    demoCoachLogin.payload.token
+  );
+  const forbiddenCoachIndividualOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&athleteId=${coachAthlete.id}&project=${encodeURIComponent(coachAthlete.project)}`,
+    {},
+    demoCoachLogin.payload.token
+  );
+  assert(
+    coachOverview.status === 200
+      && coachOverview.payload.overview.meta.scope === 'team'
+      && coachOverview.payload.overview.meta.athleteCount === demoCoachAthletes.payload.athletes.filter((item) => item.project === coachAthlete.project).length
+      && forbiddenCoachIndividualOverview.status === 400,
+    '教练训练总览未按负责队员进行团队聚合'
+  );
   const saveStrength = await request('/api/strength-tests', {
     method: 'POST',
     body: JSON.stringify({
@@ -204,6 +254,19 @@ try {
   const demoAthleteLogin = await request('/api/auth/login', {
     method: 'POST', body: JSON.stringify({ username: 'athlete01', password: 'demo123' })
   });
+  const ownAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.id === demoAthleteLogin.payload.user.athleteId);
+  const athleteOverview = await request(
+    `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(ownAthlete.project)}`,
+    {},
+    demoAthleteLogin.payload.token
+  );
+  assert(
+    athleteOverview.status === 200
+      && athleteOverview.payload.overview.meta.scope === 'individual'
+      && athleteOverview.payload.overview.meta.athleteCount === 1
+      && athleteOverview.payload.overview.records.every((record) => record.athleteId === demoAthleteLogin.payload.user.athleteId),
+    '运动员训练总览未限制为本人数据'
+  );
   const ownStrength = await request(`/api/strength-tests?athleteId=${demoAthleteLogin.payload.user.athleteId}`, {}, demoAthleteLogin.payload.token);
   const forbiddenStrengthWrite = await request('/api/strength-tests', {
     method: 'POST',
@@ -494,9 +557,21 @@ try {
   }, createdRegionalLogin.payload.token);
   assert(forbiddenCrossLevel.status === 404, '区域负责人不应能管理训练总监');
 
+  const invalidIdentityRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'invalid_id_test', password: 'Secure123', displayName: '证件测试', role: 'ATL',
+    project: '赛艇', team: '测试组', gender: '女', identityNumber: '51010720000101123', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
+  }) });
+  assert(invalidIdentityRegister.status === 400, '不足18位的身份证号不应通过注册校验');
+
+  const invalidNativePlaceRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'invalid_native_test', password: 'Secure123', displayName: '籍贯测试', role: 'ATL',
+    project: '赛艇', team: '测试组', gender: '女', identityNumber: '510107200001011234', nativePlace: '四川/武汉市', region: '四川', city: '成都市', county: '武侯区'
+  }) });
+  assert(invalidNativePlaceRegister.status === 400, '缺少县/市的籍贯不应通过注册校验');
+
   const athleteRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'athlete_test', password: 'Secure123', displayName: '测试运动员', role: 'ATL',
-    project: '赛艇', team: '测试组', gender: '女', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', gender: '女', identityNumber: '510107200001011234', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
   }) });
   assert(athleteRegister.status === 201, '运动员注册申请失败');
 
@@ -505,7 +580,13 @@ try {
 
   const pending = await request('/api/admin/registrations?status=pending', {}, adminToken);
   const athleteRequest = pending.payload.requests.find((item) => item.username === 'athlete_test');
-  assert(pending.status === 200 && athleteRequest, '管理员未看到注册申请');
+  assert(
+    pending.status === 200
+      && athleteRequest?.identityNumber === '510107200001011234'
+      && athleteRequest?.nativePlace === '四川/成都市'
+      && athleteRequest?.gender === '女',
+    '管理员未看到完整的注册申请资料'
+  );
   const renameRequest = await request(`/api/admin/registrations/${athleteRequest.id}/name`, {
     method: 'PUT', body: JSON.stringify({ name: '测试运动员修订' })
   }, adminToken);
@@ -538,7 +619,7 @@ try {
 
   const coachRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'coach_test', password: 'Secure123', displayName: '测试教练', role: 'SCC',
-    project: '赛艇', team: '测试组', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', gender: '男', identityNumber: '51010719900101123X', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
   }) });
   assert(coachRegister.status === 201, '教练注册申请失败');
   const pendingCoaches = await request('/api/admin/registrations?status=pending', {}, adminToken);
@@ -603,6 +684,7 @@ try {
   );
 
   console.log(JSON.stringify({
+    overviewPipeline: 'passed',
     rowingAnalysis: 'passed',
     strengthProfile: 'passed',
     registration: 'passed',

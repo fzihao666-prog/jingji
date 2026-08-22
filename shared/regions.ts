@@ -1,3 +1,6 @@
+import provinceData from 'province-city-china/dist/province.json' with { type: 'json' };
+import cityData from 'province-city-china/dist/city.json' with { type: 'json' };
+
 export const REGION_GROUPS = [
   { name: '华北', regions: ['北京', '天津', '河北', '山西', '内蒙古'] },
   { name: '东北', regions: ['辽宁', '吉林', '黑龙江'] },
@@ -11,3 +14,16 @@ export const REGION_GROUPS = [
 
 export const PROVINCES = REGION_GROUPS.flatMap((group) => [...group.regions]);
 export type Province = (typeof REGION_GROUPS)[number]['regions'][number];
+
+const provinceCodes = new Map(
+  provinceData.map((item) => [PROVINCES.find((province) => item.name.startsWith(province)), item.province])
+);
+
+export const PROVINCE_CITIES: Record<string, string[]> = Object.fromEntries(
+  PROVINCES.map((province) => {
+    const provinceCode = provinceCodes.get(province);
+    const cities = cityData.filter((item) => item.province === provinceCode).map((item) => item.name);
+    const provinceLevelName = provinceData.find((item) => item.province === provinceCode)?.name;
+    return [province, cities.length ? cities : provinceLevelName ? [provinceLevelName] : []];
+  })
+);

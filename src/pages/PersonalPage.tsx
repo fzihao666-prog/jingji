@@ -24,7 +24,7 @@ import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { exportPdfSheets } from '../pdf/exportPdf';
 import type { Athlete, Project, TrainingRecord, User } from '../types';
-import { addDays, formatDate, formatNumber, groupByDate } from '../utils';
+import { addDays, formatDate, formatNumber, groupByDate, startOfWeek } from '../utils';
 
 type Props = {
   user: User;
@@ -93,6 +93,12 @@ export function PersonalPage(props: Props) {
   const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const modelStandard = standardForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(() => analyzePeriod(selectedRecords), [selectedRecords, analyzePeriod]);
+  const rangeMode = useMemo(() => {
+    if (props.from === props.to) return { key: 'day', label: '当日' } as const;
+    if (props.from === startOfWeek(props.to) || props.to === addDays(props.from, 6)) return { key: 'week', label: '本周' } as const;
+    if (props.from.endsWith('-01') && props.from.slice(0, 7) === props.to.slice(0, 7)) return { key: 'month', label: '本月' } as const;
+    return { key: 'custom', label: '所选周期' } as const;
+  }, [props.from, props.to]);
 
   const days = useMemo(() => {
     const grouped = groupByDate(selectedRecords);
@@ -191,9 +197,9 @@ export function PersonalPage(props: Props) {
       <header className="page-heading">
         <div>
           <h1>个人档案</h1>
-          <p>按周、按日生成总结和原始训练日志</p>
+          <p>按日、周、月查看训练表现，并生成总结和原始训练日志</p>
         </div>
-        <DateToolbar {...props} />
+        <DateToolbar {...props} presetMode="dayWeekMonth" />
       </header>
 
       {!selectedAthlete ? (
@@ -216,16 +222,16 @@ export function PersonalPage(props: Props) {
               <p>{selectedAthlete.province}{selectedAthlete.city}{selectedAthlete.county} · 教练 {selectedAthlete.coaches || '未绑定'}</p>
             </div>
             <div className="personal-grade" style={{ '--grade-color': rangeAnalysis.status.color } as CSSProperties}>
-              <span>当前分级</span>
+              <span>{rangeMode.label}分级</span>
               <strong>{rangeAnalysis.status.label}</strong>
               <small>{rangeAnalysis.status.basis}</small>
             </div>
           </section>
 
           <section className="personal-metric-grid">
-            <PersonalMetric icon={Gauge} label="本期负荷" value={formatNumber(rangeAnalysis.totalSrpe)} unit="SRPE" />
+            <PersonalMetric icon={Gauge} label={`${rangeMode.label}负荷`} value={formatNumber(rangeAnalysis.totalSrpe)} unit="SRPE" />
             <PersonalMetric icon={Route} label="专项距离" value={formatNumber(rangeAnalysis.totalDistanceKm, 1)} unit="km" />
-            <PersonalMetric icon={CalendarRange} label="训练日" value={String(rangeAnalysis.trainingDays)} unit="天" />
+            <PersonalMetric icon={CalendarRange} label="训练课次" value={String(rangeAnalysis.sessions)} unit="课" />
             <PersonalMetric icon={CheckCircle2} label="数据完整率" value={formatNumber(rangeAnalysis.dataCoverage, 1)} unit="%" />
           </section>
 

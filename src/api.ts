@@ -9,6 +9,7 @@ import type {
   ImportRow,
   InjuryRecord,
   InjuryStatus,
+  OverviewPayload,
   Project,
   RegistrationRequest,
   Role,
@@ -65,6 +66,8 @@ export const api = {
     project?: string;
     team?: string;
     gender?: string;
+    identityNumber: string;
+    nativePlace: string;
     region?: string;
     city?: string;
     county?: string;
@@ -108,6 +111,11 @@ export const api = {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
     return request<{ records: TrainingRecord[] }>(`/api/records?${params}`);
+  },
+  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project) {
+    const params = new URLSearchParams({ from, to, project });
+    if (athleteId) params.set('athleteId', String(athleteId));
+    return request<{ overview: OverviewPayload }>(`/api/overview?${params}`);
   },
   async analysisSummary(from: string, to: string, athleteId: number, project: Project) {
     const params = new URLSearchParams({ from, to, athleteId: String(athleteId), project });
