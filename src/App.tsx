@@ -16,6 +16,7 @@ const PersonalPage = lazy(() => import('./pages/PersonalPage').then((module) => 
 const ImportPage = lazy(() => import('./pages/ImportPage').then((module) => ({ default: module.ImportPage })));
 const ReportPage = lazy(() => import('./pages/ReportPage').then((module) => ({ default: module.ReportPage })));
 const RosterPage = lazy(() => import('./pages/RosterPage').then((module) => ({ default: module.RosterPage })));
+const TeamsPage = lazy(() => import('./pages/TeamsPage').then((module) => ({ default: module.TeamsPage })));
 const AccountsPage = lazy(() => import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage })));
 const RegionAccessPage = lazy(() => import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage })));
 
@@ -164,6 +165,7 @@ export default function App() {
           />
         )}
         {page === 'roster' && user.role !== 'ATL' && <RosterPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
         {page === 'regions' && user.role !== 'ATL' && <RegionAccessPage user={user} />}
         {page === 'accounts' && user.role !== 'ATL' && <AccountsPage />}
       </Suspense>

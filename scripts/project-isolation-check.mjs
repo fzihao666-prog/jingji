@@ -43,8 +43,8 @@ async function waitForServer() {
 
 async function specialWorkbook(project, athleteName) {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('专项测试成绩');
-  sheet.addRow(['测试日期', '项目', '测试距离(m)', '艇型', '性别组别', '运动员/组合', '运动员姓名', '上午/下午', '第1轮', '第2轮']);
+  const sheet = workbook.addWorksheet('专项训练成绩');
+  sheet.addRow(['训练日期', '项目', '训练距离(m)', '艇型', '性别组别', '运动员/组合', '运动员姓名', '上午/下午', '第1轮', '第2轮']);
   sheet.addRow(['2026-07-28', project, 250, '单人艇', '公开组', athleteName, athleteName, '下午', '0:58.20', '0:57.80']);
   return workbook.xlsx.writeBuffer();
 }
@@ -53,7 +53,7 @@ async function previewSpecial(project, athleteName, token) {
   const bytes = await specialWorkbook(project, athleteName);
   const body = new FormData();
   body.append('project', project);
-  body.append('file', new Blob([bytes]), `${project}-专项测试.xlsx`);
+  body.append('file', new Blob([bytes]), `${project}-专项训练.xlsx`);
   return request('/api/special-tests/import/preview', { method: 'POST', body }, token);
 }
 

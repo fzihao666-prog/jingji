@@ -57,13 +57,13 @@ await page.locator('.personal-identity-card').waitFor();
 await assertViewport('03-personal');
 await page.locator('.personal-calendar-section').scrollIntoViewIfNeeded();
 await page.locator('.personal-calendar-section').screenshot({ path: `${output}/03b-personal-calendar.png` });
-await go('训练计划');
+await go('体能训练');
 await page.locator('.plan-overview-grid').waitFor();
 await assertViewport('04-training-plan', ['.plan-matrix-scroll']);
 await go('周期报告');
 await page.locator('.report-sheet').first().waitFor();
 await assertViewport('05-report');
-await go('专项测试');
+await go('专项训练');
 await assertViewport('06-special-tests', ['.ranking-table-wrap']);
 
 if (browserErrors.length) throw new Error(`浏览器错误: ${browserErrors.join(' | ')}`);

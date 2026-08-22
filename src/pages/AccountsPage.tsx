@@ -71,7 +71,7 @@ export function AccountsPage() {
               <div className="request-avatar">{request.requestedRole === 'SCC' ? <UserCheck /> : <UserRound />}</div>
               <div className="request-main">
                 <div><h2><EditableName value={request.displayName} canEdit onSave={(name) => renameRequest(request.id, name)} label="申请人姓名" /></h2><span>{request.requestedRole === 'SCC' ? '队伍体能教练' : '运动员'}</span></div>
-                <p>@{request.username} · {request.gender} · 籍贯：{request.nativePlace} · 身份证：{request.identityNumber} · {[request.region, request.city, request.county].filter(Boolean).join(' / ') || '未设置地区'} · {request.project} · {request.team}</p>
+                <p>@{request.username} · {request.gender} · 籍贯：{request.nativePlace} · 身份证：{request.identityNumber} · {request.project} · {request.team}</p>
               </div>
               <time>{new Date(request.createdAt.replace(' ', 'T') + 'Z').toLocaleDateString('zh-CN')}</time>
               {filter === 'pending' && <div className="review-actions">

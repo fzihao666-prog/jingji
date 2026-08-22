@@ -1,5 +1,5 @@
 /**
- * AI 服务 - 支持多模型训练计划生成
+ * AI 服务 - 支持多模型体能训练生成
  * 支持模型：OpenAI GPT-4、Claude、Gemini、文心一言、通义千问等
  */
 
@@ -52,7 +52,7 @@ interface StrengthTest {
   metrics: Record<string, number>;
 }
 
-// 动态训练计划数据结构
+// 动态体能训练数据结构
 interface DynamicTrainingPlan {
   title: string;
   summary: string;
@@ -292,7 +292,7 @@ export class TrainingPlanAIService {
   }
 
   /**
-   * 生成训练计划（自动尝试多个模型）
+   * 生成体能训练（自动尝试多个模型）
    */
   async generateTrainingPlan(
     context: AthleteContext,
@@ -327,7 +327,7 @@ export class TrainingPlanAIService {
   }
 
   /**
-   * 从已有文件中忠实识别训练计划。该流程不读取历史训练数据，
+   * 从已有文件中忠实识别体能训练。该流程不读取历史训练数据，
    * 也不会补写周期、动作或负荷；无法确认的内容会进入 warnings/unmappedContent。
    */
   async recognizeTrainingPlan(
@@ -386,7 +386,7 @@ export class TrainingPlanAIService {
     throw new Error(`所有 AI 模型均失败，最后一个错误: ${lastError?.message}`);
   }
 
-  /** 完整工作簿按通用文本批次识别为训练计划，并在服务端合并。 */
+  /** 完整工作簿按通用文本批次识别为体能训练，并在服务端合并。 */
   async recognizeTrainingPlanBatched(
     context: AthleteContext,
     file: PreparedAIFile,
@@ -479,7 +479,7 @@ export class TrainingPlanAIService {
   }
 
   /**
-   * 从任意结构的训练记录文件中提取逐人逐日记录。沿用训练计划相同的模型配置，
+   * 从任意结构的训练记录文件中提取逐人逐日记录。沿用体能训练相同的模型配置，
    * 只做忠实识别，不补写文件中不存在的训练数据。
    */
   async recognizeTrainingRecords(
@@ -593,10 +593,10 @@ ${classificationSample(file)}`;
       ? `\n\n## 文件中提取的原始内容\n${file.content}`
       : '\n\n图片作为本消息的视觉输入提供，请逐项阅读图片文字和表格。';
 
-    return `你是训练计划数字化录入员。请把已有文件忠实转换为结构化数据。该计划可能会分配给一名或多名${context.athlete.project}运动员，不能根据某位运动员的历史数据改写原文件。
+return `你是体能训练数字化录入员。请把已有文件忠实转换为结构化数据。该训练方案可能会分配给一名或多名${context.athlete.project}运动员，不能根据某位运动员的历史数据改写原文件。
 
 核心规则：
-1. 只提取文件中明确存在的内容，不生成新计划，不优化、不改写、不补全训练学建议。
+1. 只提取文件中明确存在的内容，不生成新的训练方案，不优化、不改写、不补全训练学建议。
 2. 不假定文件有固定表头、固定四周、固定训练日或固定动作类型；按原文件实际层级组织。
 3. 无法确认的字段使用 null 或空字符串，并在 warnings 中说明；不能归类但需要保留的原文放入 unmappedContent。
 4. sets/reps/load/duration/distance/intensity/pace 均保留原文件的表达，例如“4组”“8-10次”“60kg”“30min”。percentage 只有明确百分比时才填写数字。
@@ -608,7 +608,7 @@ ${classificationSample(file)}`;
 
 只输出合法 JSON，不要 Markdown。结构如下（数组长度完全由原文件决定）：
 {
-  "title": "文件中的计划标题或空字符串",
+  "title": "文件中的训练标题或空字符串",
   "summary": "对文件内容的一句客观概括，不添加建议",
   "startDate": "YYYY-MM-DD或空字符串",
   "endDate": "YYYY-MM-DD或空字符串",
@@ -669,10 +669,10 @@ ${classificationSample(file)}`;
 - 性别：${context.athlete.gender}
 ${context.athlete.region ? `- 地区：${context.athlete.region}` : ''}
 
-## 历史训练计划（最近6个月）
+## 历史体能训练（最近6个月）
 ${context.recentPlans.length > 0
   ? JSON.stringify(context.recentPlans.slice(0, 3), null, 2)
-  : '暂无历史训练计划数据'}
+  : '暂无历史体能训练数据'}
 
 ## 近期训练记录（最近28天）
 ${context.recentRecords.length > 0
@@ -689,18 +689,18 @@ ${inputContent}
 
 ---
 
-请根据以上信息，生成科学、个性化的训练计划：
+请根据以上信息，生成科学、个性化的体能训练：
 
 ### 分析要求：
 1. **需求理解**：分析用户输入的训练需求或文件内容
-2. **历史参考**：参考历史训练计划和数据，了解运动员的训练基础和习惯
+2. **历史参考**：参考历史体能训练和数据，了解运动员的训练基础和习惯
 3. **周期规划**：用户未明确周期时默认生成4周；用户明确提出周期时，在2-12周范围内执行
 4. **渐进超负荷**：每周训练负荷合理递增，避免过度训练
 5. **专项结合**：结合${context.athlete.project}项目的专项特点
 
 ### 输出格式（严格JSON）：
 {
-  "title": "训练计划标题（简洁有力）",
+  "title": "体能训练标题（简洁有力）",
   "summary": "AI分析摘要：训练目标、重点、建议等（200字以内）",
   "durationWeeks": 4,
   "startDate": "2026-08-18",
@@ -836,7 +836,7 @@ ${inputContent}
         messages: [
           {
             role: 'system',
-            content: '你只负责把已有训练计划忠实录入为 JSON。严禁创造、优化、补全或套用固定模板。'
+            content: '你只负责把已有体能训练忠实录入为 JSON。严禁创造、优化、补全或套用固定模板。'
           },
           { role: 'user', content: userContent }
         ]
@@ -1310,7 +1310,7 @@ function normalizeImportedPlan(raw: Record<string, unknown>, model: string): Imp
     (total, week) => total + week.days.reduce((dayTotal, day) => dayTotal + day.items.length, 0),
     0
   );
-  if (itemCount === 0) throw new Error('文件中没有识别到训练条目，请确认文件内容清晰且包含训练计划');
+  if (itemCount === 0) throw new Error('文件中没有识别到训练条目，请确认文件内容清晰且包含体能训练');
 
   return {
     sourceType: 'ai_import',

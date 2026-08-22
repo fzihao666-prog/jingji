@@ -1,6 +1,8 @@
 export type StrengthMetricKey =
   | 'heightCm'
   | 'weightKg'
+  | 'bodyFatPct'
+  | 'trainingYears'
   | 'armSpanCm'
   | 'sitReachCm'
   | 'verticalJumpCm'
@@ -38,7 +40,7 @@ export const STRENGTH_GROUPS = {
   core: { label: '核心稳定', color: '#219b63' },
   balance: { label: '力量耐力', color: '#234f8e' },
   explosive: { label: '爆发与柔韧', color: '#d79617' },
-  slalom: { label: '激流专项测试', color: '#0f8d98' }
+  slalom: { label: '激流专项训练', color: '#0f8d98' }
 } as const;
 
 export type StrengthGroupKey = keyof typeof STRENGTH_GROUPS;
@@ -55,6 +57,8 @@ export const STRENGTH_METRICS: Array<{
 }> = [
   { key: 'heightCm', label: '身高', unit: 'cm', group: 'morphology', min: 100, max: 230, targetEnabled: false },
   { key: 'weightKg', label: '体重', unit: 'kg', group: 'morphology', min: 30, max: 200, targetEnabled: false },
+  { key: 'bodyFatPct', label: '体脂率', unit: '%', group: 'morphology', min: 1, max: 60, targetEnabled: true },
+  { key: 'trainingYears', label: '训练年限', unit: '年', group: 'morphology', min: 0, max: 50, targetEnabled: false },
   { key: 'armSpanCm', label: '臂展', unit: 'cm', group: 'morphology', min: 100, max: 250, targetEnabled: false },
   { key: 'sitReachCm', label: '坐位体前屈', unit: 'cm', group: 'explosive', min: -30, max: 60, targetEnabled: true },
   { key: 'verticalJumpCm', label: '垂直纵跳', unit: 'cm', group: 'explosive', min: 0, max: 120, targetEnabled: true },

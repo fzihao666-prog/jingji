@@ -5,6 +5,7 @@ import {
   Dumbbell,
   FileUp,
   KeyRound,
+  Layers3,
   LogOut,
   MapPinned,
   Menu,
@@ -24,7 +25,7 @@ import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
 import { ProjectMark } from './ProjectMark';
 
-export type PageKey = 'overview' | 'calendar' | 'specialTests' | 'plans' | 'personal' | 'report' | 'import' | 'roster' | 'regions' | 'accounts' | 'bluetooth';
+export type PageKey = 'overview' | 'calendar' | 'specialTests' | 'plans' | 'personal' | 'report' | 'import' | 'roster' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
 
 const navItems: Array<{
   key: PageKey;
@@ -34,13 +35,14 @@ const navItems: Array<{
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
   { key: 'calendar', label: '训练日历', icon: CalendarDays },
-  { key: 'specialTests', label: '专项测试', icon: TimerReset },
-  { key: 'plans', label: '训练计划', icon: Dumbbell },
+  { key: 'specialTests', label: '专项训练', icon: TimerReset },
+  { key: 'plans', label: '体能训练', icon: Dumbbell },
   { key: 'bluetooth', label: '蓝牙连接', icon: BluetoothConnected },
   { key: 'personal', label: '个人档案', icon: UserRound },
   { key: 'report', label: '周期报告', icon: ClipboardList },
   { key: 'import', label: 'AI识别导入', icon: FileUp, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'roster', label: '人员关系', icon: UsersRound, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'regions', label: '账号权限', icon: MapPinned, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'accounts', label: '账户审核', icon: UserCheck, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
 ];

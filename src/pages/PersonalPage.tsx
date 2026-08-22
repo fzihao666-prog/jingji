@@ -95,6 +95,8 @@ export function PersonalPage(props: Props) {
   const rangeAnalysis = useMemo(() => analyzePeriod(selectedRecords), [selectedRecords, analyzePeriod]);
   const rangeMode = useMemo(() => {
     if (props.from === props.to) return { key: 'day', label: '当日' } as const;
+    if (props.from === addDays(props.to, -29)) return { key: 'recentMonth', label: '近一月' } as const;
+    if (props.from === addDays(props.to, -364)) return { key: 'recentYear', label: '近一年' } as const;
     if (props.from === startOfWeek(props.to) || props.to === addDays(props.from, 6)) return { key: 'week', label: '本周' } as const;
     if (props.from.endsWith('-01') && props.from.slice(0, 7) === props.to.slice(0, 7)) return { key: 'month', label: '本月' } as const;
     return { key: 'custom', label: '所选周期' } as const;
@@ -197,9 +199,9 @@ export function PersonalPage(props: Props) {
       <header className="page-heading">
         <div>
           <h1>个人档案</h1>
-          <p>按日、周、月查看训练表现，并生成总结和原始训练日志</p>
+          <p>查看今天、最近一月和最近一年的训练表现，并生成总结和原始训练日志</p>
         </div>
-        <DateToolbar {...props} presetMode="dayWeekMonth" />
+        <DateToolbar {...props} />
       </header>
 
       {!selectedAthlete ? (

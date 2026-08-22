@@ -33,7 +33,7 @@ server.stdout.on('data', (chunk) => { serverOutput += chunk.toString(); });
 server.stderr.on('data', (chunk) => { serverOutput += chunk.toString(); });
 
 async function waitForServer() {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
     try {
       const response = await fetch(`${baseUrl}/`);
       if (response.ok) return;
@@ -70,7 +70,7 @@ try {
   const coachToken = await login('coach01');
   const athleteToken = await login('athlete01');
   const plansResult = await jsonRequest('/api/training-plans?athleteId=1', coachToken);
-  if (!plansResult.response.ok || !plansResult.payload?.plans?.length) throw new Error('未读取到示例训练计划。');
+  if (!plansResult.response.ok || !plansResult.payload?.plans?.length) throw new Error('未读取到示例体能训练。');
   const plan = plansResult.payload.plans[0];
   plan.data.exercises[0].lines[0].weeks['1'].actualCompleted = '8';
 
@@ -117,11 +117,11 @@ try {
     method: 'POST',
     body: JSON.stringify({ athleteId: 1, data: plan.data })
   });
-  if (athleteWrite.response.status !== 403) throw new Error('运动员写入训练计划未被服务器拒绝。');
+  if (athleteWrite.response.status !== 403) throw new Error('运动员写入体能训练未被服务器拒绝。');
   const athleteDelete = await jsonRequest(`/api/training-plans/${saveResult.payload.id}`, athleteToken, { method: 'DELETE' });
-  if (athleteDelete.response.status !== 403) throw new Error('运动员删除训练计划未被服务器拒绝。');
+  if (athleteDelete.response.status !== 403) throw new Error('运动员删除体能训练未被服务器拒绝。');
   const athleteRead = await jsonRequest('/api/training-plans?athleteId=1', athleteToken);
-  if (!athleteRead.response.ok) throw new Error('运动员无法读取本人训练计划。');
+  if (!athleteRead.response.ok) throw new Error('运动员无法读取本人体能训练。');
 
   const exportResponse = await fetch(`${baseUrl}/api/training-plans/${saveResult.payload.id}/export`, {
     headers: { Authorization: `Bearer ${coachToken}` }
@@ -131,8 +131,8 @@ try {
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(exportPath);
-  const sheet = workbook.getWorksheet('个人体能计划');
-  if (!sheet) throw new Error('导出文件缺少个人体能计划工作表。');
+  const sheet = workbook.getWorksheet('个人体能训练');
+  if (!sheet) throw new Error('导出文件缺少个人体能训练工作表。');
   const weightCell = sheet.getCell('G7').value;
   const formula = weightCell && typeof weightCell === 'object' && 'formula' in weightCell ? weightCell.formula : '';
   const result = weightCell && typeof weightCell === 'object' && 'result' in weightCell ? weightCell.result : null;
@@ -157,23 +157,23 @@ try {
   const nextMonthData = structuredClone(plan.data);
   nextMonthData.startDate = '2026-09-01';
   nextMonthData.endDate = '2026-09-30';
-  nextMonthData.title = '九月体能训练计划';
+  nextMonthData.title = '九月体能训练';
   const createHistory = await jsonRequest('/api/training-plans', coachToken, {
     method: 'POST',
     body: JSON.stringify({ athleteId: 1, data: nextMonthData })
   });
-  if (!createHistory.response.ok) throw new Error(`历史计划创建失败：${createHistory.payload?.message}`);
+  if (!createHistory.response.ok) throw new Error(`历史训练创建失败：${createHistory.payload?.message}`);
   const deleteHistory = await jsonRequest(`/api/training-plans/${createHistory.payload.id}`, coachToken, { method: 'DELETE' });
-  if (!deleteHistory.response.ok) throw new Error(`历史计划删除失败：${deleteHistory.payload?.message}`);
+  if (!deleteHistory.response.ok) throw new Error(`历史训练删除失败：${deleteHistory.payload?.message}`);
   const afterDelete = await jsonRequest('/api/training-plans?athleteId=1', coachToken);
-  if (afterDelete.payload.plans.some((item) => item.id === createHistory.payload.id)) throw new Error('历史计划删除后仍可读取。');
+  if (afterDelete.payload.plans.some((item) => item.id === createHistory.payload.id)) throw new Error('历史训练删除后仍可读取。');
 
   const rosterResult = await jsonRequest('/api/athletes', coachToken);
   const targetIds = rosterResult.payload.athletes.slice(0, 2).map((athlete) => athlete.id);
   if (targetIds.length !== 2) throw new Error('AI多人矩阵测试至少需要2名运动员。');
   const importedPlan = {
     sourceType: 'ai_import',
-    title: 'AI三阶段专项训练计划',
+    title: 'AI三阶段专项体能训练',
     summary: '用于验证AI计划直接进入统一矩阵。',
     startDate: '2026-10-01',
     endDate: '2026-10-21',
