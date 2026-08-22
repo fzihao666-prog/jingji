@@ -75,7 +75,7 @@ function emptyPlan(): TrainingPlanData {
   return {
     startDate,
     endDate: addDays(startDate, 30),
-    title: '四周体能训练计划',
+    title: '四周体能训练',
     scheduleLabel: '周二 / 周五',
     bodyWeight: null,
     age: null,
@@ -290,7 +290,7 @@ export function TrainingPlanPage(props: Props) {
         setData(selected?.data || emptyPlan());
         if (selected?.photoUrl) setPhotoUrl(selected.photoUrl);
       })
-      .catch((error) => setMessage(error instanceof Error ? error.message : '训练计划读取失败。'))
+      .catch((error) => setMessage(error instanceof Error ? error.message : '体能训练读取失败。'))
       .finally(() => setLoading(false));
   }, [athlete?.id, props.initialPlanId]);
 
@@ -410,8 +410,8 @@ export function TrainingPlanPage(props: Props) {
   const deletePlan = async () => {
     if (!athlete || !planId) return;
     const currentPlan = plans.find((item) => item.id === planId);
-    const period = currentPlan ? `${currentPlan.data.startDate} 至 ${currentPlan.data.endDate}` : '当前历史计划';
-    if (!window.confirm(`确认删除${athlete.name}在${period}的训练计划？删除后无法恢复。`)) return;
+    const period = currentPlan ? `${currentPlan.data.startDate} 至 ${currentPlan.data.endDate}` : '当前记录';
+    if (!window.confirm(`确认删除${athlete.name}在${period}的体能训练记录？删除后无法恢复。`)) return;
     setBusy('delete');
     setMessage('');
     try {
@@ -434,7 +434,7 @@ export function TrainingPlanPage(props: Props) {
     setBusy('download');
     setMessage('');
     try {
-      await api.downloadTrainingPlan(planId, `${athlete.name}_${data.startDate}_至_${data.endDate}_四周体能计划.xlsx`);
+      await api.downloadTrainingPlan(planId, `${athlete.name}_${data.startDate}_至_${data.endDate}_四周体能训练.xlsx`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '导出失败。');
     } finally {
@@ -447,7 +447,7 @@ export function TrainingPlanPage(props: Props) {
       <header className="page-heading training-plan-heading">
         <div>
           <span className="plan-kicker">STRENGTH PRESCRIPTION</span>
-          <h1>训练计划</h1>
+          <h1>体能训练</h1>
           <p>填写实际完成次数后，系统自动计算实际均重与MAX占比</p>
         </div>
         <div className="plan-heading-actions">
@@ -461,7 +461,7 @@ export function TrainingPlanPage(props: Props) {
           )}
           {!!plans.length && (
             <label className="plan-history-select">
-              <span>历史计划</span>
+              <span>历史训练</span>
               <select value={planId || ''} onChange={(event) => selectPlan(Number(event.target.value))}>
                 {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.data.startDate}—{plan.data.endDate} · {plan.data.title}</option>)}
               </select>
@@ -482,7 +482,7 @@ export function TrainingPlanPage(props: Props) {
           </button>}
           {canEdit && (
             <button className="primary-button" disabled={busy === 'save'} onClick={save}>
-              {busy === 'save' ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}保存计划
+              {busy === 'save' ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}保存训练
             </button>
           )}
         </div>
@@ -491,7 +491,7 @@ export function TrainingPlanPage(props: Props) {
       {!athlete ? (
         <section className="plan-empty"><Dumbbell size={34} /><strong>暂无可查看的运动员</strong></section>
       ) : loading ? (
-        <section className="plan-empty"><LoaderCircle className="spin" size={30} /><strong>正在读取训练计划</strong></section>
+        <section className="plan-empty"><LoaderCircle className="spin" size={30} /><strong>正在读取体能训练</strong></section>
       ) : (
         <>
           <section className="plan-overview-grid">
@@ -519,7 +519,7 @@ export function TrainingPlanPage(props: Props) {
                   setData((current) => ({ ...current, startDate, endDate: startDate ? addDays(startDate, 30) : '' }));
                 }} /></label>
               <label><span>结束日期</span><input type="date" disabled={!canEdit} min={data.startDate} value={data.endDate} onChange={(event) => updateField('endDate', event.target.value)} /></label>
-              <label className="plan-meta-title"><span>计划名称</span><input disabled={!canEdit} value={data.title} onChange={(event) => updateField('title', event.target.value)} /></label>
+              <label className="plan-meta-title"><span>训练名称</span><input disabled={!canEdit} value={data.title} onChange={(event) => updateField('title', event.target.value)} /></label>
               <label className="plan-meta-schedule"><span>训练日安排</span><input disabled={!canEdit} value={data.scheduleLabel} onChange={(event) => updateField('scheduleLabel', event.target.value)} /></label>
               <label><span>体重 kg</span><input type="number" step="0.1" disabled={!canEdit} value={data.bodyWeight ?? ''} onChange={(event) => updateField('bodyWeight', numericValue(event.target.value))} /></label>
               <label><span>年龄</span><input type="number" disabled={!canEdit} value={data.age ?? ''} onChange={(event) => updateField('age', numericValue(event.target.value))} /></label>
@@ -531,7 +531,7 @@ export function TrainingPlanPage(props: Props) {
           {message && <div className={message.includes('已') ? 'plan-message success' : 'plan-message'}>{message}</div>}
 
           <section className="plan-matrix-shell">
-            {isAIPlan && <div className="matrix-ai-origin"><strong>{data.sourceType === 'ai_import' ? 'AI 识别导入' : 'AI 生成计划'}</strong><span>已写入统一训练矩阵，可继续修改并保存</span></div>}
+            {isAIPlan && <div className="matrix-ai-origin"><strong>{data.sourceType === 'ai_import' ? 'AI 识别导入' : 'AI 生成训练'}</strong><span>已写入统一训练矩阵，可继续修改并保存</span></div>}
               <div className="plan-matrix-title">
                 <div><Dumbbell size={18} /><strong>{data.scheduleLabel || '训练安排'}</strong></div>
                 <span>{matrixWeekKeys.length} 个训练阶段 · 重量由MAX和百分比计算；填写完成次数后雷达图自动更新</span>

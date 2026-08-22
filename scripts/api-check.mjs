@@ -53,8 +53,8 @@ const aiRecordResponse = {
 };
 function aiPlanResponse(secondWeek = false) {
   return {
-    title: '两周水上训练计划',
-    summary: '测试用分批训练计划。',
+    title: '两周水上体能训练',
+    summary: '测试用分批体能训练。',
     startDate: secondWeek ? '2026-09-08' : '2026-09-01',
     endDate: secondWeek ? '2026-09-14' : '2026-09-07',
     scheduleLabel: '周一至周六训练',
@@ -92,7 +92,7 @@ const aiMock = createServer(async (request, response) => {
     ? (userPrompt.includes('plan-batch.xlsx')
         ? { documentType: 'training_plan', confidence: 0.99, reason: '测试文件标题和内容均为预定周计划' }
         : { documentType: 'training_record', confidence: 0.99, reason: '测试文件包含明确姓名和已完成训练数据' })
-    : systemPrompt.includes('已有训练计划')
+    : systemPrompt.includes('已有体能训练')
       ? aiPlanResponse(userPrompt.includes('第2周'))
       : aiRecordResponse;
   response.writeHead(200, { 'content-type': 'application/json' });
@@ -123,7 +123,7 @@ let serverError = '';
 server.stderr.on('data', (chunk) => { serverError += chunk.toString(); });
 
 async function waitForServer() {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
     try {
       const response = await fetch(`${base}/api/auth/login`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -420,8 +420,8 @@ try {
   );
 
   const planBatchWorkbook = new ExcelJS.Workbook();
-  planBatchWorkbook.addWorksheet('第1周').addRows([['训练计划'], ['周一', '水上U2', '12km', '90分钟']]);
-  planBatchWorkbook.addWorksheet('第2周').addRows([['训练计划'], ['周一', '水上U2', '12km', '90分钟']]);
+  planBatchWorkbook.addWorksheet('第1周').addRows([['体能训练'], ['周一', '水上U2', '12km', '90分钟']]);
+  planBatchWorkbook.addWorksheet('第2周').addRows([['体能训练'], ['周一', '水上U2', '12km', '90分钟']]);
   const planBatchBytes = await planBatchWorkbook.xlsx.writeBuffer();
   const planBatchForm = new FormData();
   planBatchForm.append('project', '赛艇');
@@ -557,21 +557,26 @@ try {
   }, createdRegionalLogin.payload.token);
   assert(forbiddenCrossLevel.status === 404, '区域负责人不应能管理训练总监');
 
+  const createRegistrationTeam = await request('/api/admin/teams', {
+    method: 'POST', body: JSON.stringify({ project: '赛艇', name: '测试组' })
+  }, adminToken);
+  assert(createRegistrationTeam.status === 201, '队伍管理接口无法创建注册测试队伍');
+
   const invalidIdentityRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'invalid_id_test', password: 'Secure123', displayName: '证件测试', role: 'ATL',
-    project: '赛艇', team: '测试组', gender: '女', identityNumber: '51010720000101123', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', identityNumber: '51010720000101123', nativePlace: '四川/成都市'
   }) });
   assert(invalidIdentityRegister.status === 400, '不足18位的身份证号不应通过注册校验');
 
   const invalidNativePlaceRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'invalid_native_test', password: 'Secure123', displayName: '籍贯测试', role: 'ATL',
-    project: '赛艇', team: '测试组', gender: '女', identityNumber: '510107200001011234', nativePlace: '四川/武汉市', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', identityNumber: '510107200001011234', nativePlace: '四川/武汉市'
   }) });
   assert(invalidNativePlaceRegister.status === 400, '缺少县/市的籍贯不应通过注册校验');
 
   const athleteRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'athlete_test', password: 'Secure123', displayName: '测试运动员', role: 'ATL',
-    project: '赛艇', team: '测试组', gender: '女', identityNumber: '510107200001011234', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', identityNumber: '510107200001011234', nativePlace: '四川/成都市'
   }) });
   assert(athleteRegister.status === 201, '运动员注册申请失败');
 
@@ -584,7 +589,7 @@ try {
     pending.status === 200
       && athleteRequest?.identityNumber === '510107200001011234'
       && athleteRequest?.nativePlace === '四川/成都市'
-      && athleteRequest?.gender === '女',
+      && athleteRequest?.gender === '男',
     '管理员未看到完整的注册申请资料'
   );
   const renameRequest = await request(`/api/admin/registrations/${athleteRequest.id}/name`, {
@@ -619,7 +624,7 @@ try {
 
   const coachRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'coach_test', password: 'Secure123', displayName: '测试教练', role: 'SCC',
-    project: '赛艇', team: '测试组', gender: '男', identityNumber: '51010719900101123X', nativePlace: '四川/成都市', region: '四川', city: '成都市', county: '武侯区'
+    project: '赛艇', team: '测试组', identityNumber: '51010719900101123X', nativePlace: '四川/成都市'
   }) });
   assert(coachRegister.status === 201, '教练注册申请失败');
   const pendingCoaches = await request('/api/admin/registrations?status=pending', {}, adminToken);

@@ -6,7 +6,7 @@
   --ai-gradient-end: #1b9d95;
 }
 
-/* AI 训练计划容器 */
+/* AI 体能训练容器 */
 .ai-training-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -915,7 +915,7 @@
   to { transform: rotate(360deg); }
 }
 
-/* 两条工作流：生成新计划 / 忠实识别已有计划 */
+/* 两条工作流：生成体能训练 / 忠实识别已有训练 */
 .ai-workflow-shell {
   max-width: 1248px;
   margin: 0 auto;

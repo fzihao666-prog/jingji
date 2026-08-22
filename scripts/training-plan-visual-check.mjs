@@ -21,16 +21,16 @@ await page.getByLabel('账号', { exact: true }).fill('coach01');
 await page.getByLabel('密码', { exact: true }).fill('demo123');
 await page.getByRole('button', { name: '登录', exact: true }).click();
 await page.getByRole('heading', { name: '训练总览' }).waitFor();
-await page.getByRole('button', { name: /训练计划/ }).click();
-await page.getByRole('heading', { name: '训练计划', exact: true }).waitFor();
+await page.getByRole('button', { name: /体能训练/ }).click();
+await page.getByRole('heading', { name: '体能训练', exact: true }).waitFor();
 await page.locator('.plan-matrix').waitFor();
 
-await page.getByRole('button', { name: /识别已有计划/ }).click();
-await page.getByRole('heading', { name: /把已有计划录入给/ }).waitFor();
+await page.getByRole('button', { name: /识别已有训练/ }).click();
+await page.getByRole('heading', { name: /把已有训练录入给/ }).waitFor();
 const initialImportTargets = await page.locator('.import-roster-list > button.selected').count();
 await page.locator('.import-roster-list > button').nth(1).click();
 const multiImportTargets = await page.locator('.import-roster-list > button.selected').count();
-const dynamicScheduleCopy = await page.getByText('训练日按文件实际内容识别并可修改；同一份确认后的计划可以一次导入多人。', { exact: true }).count();
+const dynamicScheduleCopy = await page.getByText('训练日按文件实际内容识别并可修改；同一份确认后的训练可以一次导入多人。', { exact: true }).count();
 if (initialImportTargets !== 1 || multiImportTargets !== 2 || dynamicScheduleCopy !== 1) {
   throw new Error(`AI多人导入初始化错误：initial=${initialImportTargets}, selected=${multiImportTargets}, schedule=${dynamicScheduleCopy}`);
 }
@@ -83,12 +83,12 @@ if (
 }
 await page.locator('.plan-matrix-scroll').evaluate((element) => { element.scrollTop = 0; element.scrollLeft = 0; });
 await page.evaluate(() => window.scrollTo(0, 0));
-await page.screenshot({ path: path.join(outputDirectory, '训练计划页面_桌面端.png'), fullPage: true });
-await page.locator('.plan-matrix-shell').screenshot({ path: path.join(outputDirectory, '训练计划四周矩阵.png') });
+await page.screenshot({ path: path.join(outputDirectory, '体能训练页面_桌面端.png'), fullPage: true });
+await page.locator('.plan-matrix-shell').screenshot({ path: path.join(outputDirectory, '体能训练四周矩阵.png') });
 
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(400);
-await page.screenshot({ path: path.join(outputDirectory, '训练计划页面_移动端.png'), fullPage: true });
+await page.screenshot({ path: path.join(outputDirectory, '体能训练页面_移动端.png'), fullPage: true });
 
 await page.evaluate(() => localStorage.clear());
 await page.setViewportSize({ width: 1440, height: 900 });
@@ -97,14 +97,14 @@ await page.getByLabel('账号', { exact: true }).fill('athlete01');
 await page.getByLabel('密码', { exact: true }).fill('demo123');
 await page.getByRole('button', { name: '登录', exact: true }).click();
 await page.getByRole('heading', { name: '训练总览' }).waitFor();
-await page.getByRole('button', { name: /训练计划/ }).click();
-await page.getByRole('heading', { name: '训练计划', exact: true }).waitFor();
+await page.getByRole('button', { name: /体能训练/ }).click();
+await page.getByRole('heading', { name: '体能训练', exact: true }).waitFor();
 await page.locator('.plan-matrix').waitFor();
 const athleteEditableInputs = await page.locator('.plan-matrix input:not([disabled]), .plan-matrix textarea:not([disabled])').count();
-const athleteSaveButtons = await page.getByRole('button', { name: '保存计划', exact: true }).count();
+const athleteSaveButtons = await page.getByRole('button', { name: '保存训练', exact: true }).count();
 const athleteDeleteButtons = await page.getByRole('button', { name: '删除历史', exact: true }).count();
-if (athleteEditableInputs !== 0 || athleteSaveButtons !== 0 || athleteDeleteButtons !== 0) throw new Error('运动员端仍可编辑或删除训练计划。');
-await page.screenshot({ path: path.join(outputDirectory, '训练计划页面_运动员只读.png'), fullPage: true });
+if (athleteEditableInputs !== 0 || athleteSaveButtons !== 0 || athleteDeleteButtons !== 0) throw new Error('运动员端仍可编辑或删除体能训练。');
+await page.screenshot({ path: path.join(outputDirectory, '体能训练页面_运动员只读.png'), fullPage: true });
 
 console.log(JSON.stringify({
   firstMax,

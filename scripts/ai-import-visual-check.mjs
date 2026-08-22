@@ -50,15 +50,15 @@ try {
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.waitForTimeout(400);
-  await page.getByRole('button', { name: '训练计划', exact: true }).click();
-  await page.getByRole('heading', { name: '训练计划', exact: true }).waitFor();
+  await page.getByRole('button', { name: '体能训练', exact: true }).click();
+  await page.getByRole('heading', { name: '体能训练', exact: true }).waitFor();
   const athleteSelect = page.locator('.plan-athlete-select select');
   const athleteOptions = await athleteSelect.locator('option').evaluateAll((options) => options.map((option) => ({
     value: option.value,
     label: option.textContent || ''
   })));
   const linZhou = athleteOptions.find((option) => option.label.includes('林舟'));
-  if (!linZhou) throw new Error('训练计划页未找到林舟');
+  if (!linZhou) throw new Error('体能训练页未找到林舟');
   await athleteSelect.selectOption(linZhou.value);
   const historySelect = page.locator('.plan-history-select select');
   await historySelect.waitFor();
@@ -67,7 +67,7 @@ try {
     label: option.textContent || ''
   })));
   const importedPlan = historyOptions.find((option) => option.label.includes('国家赛艇周计划表'));
-  if (!importedPlan) throw new Error('训练计划历史中未找到刚导入的国家赛艇周计划表');
+  if (!importedPlan) throw new Error('体能训练历史中未找到刚导入的国家赛艇周计划表');
   await historySelect.selectOption(importedPlan.value);
   const openedTitle = await page.locator('.plan-meta-title input').inputValue();
   if (openedTitle !== '国家赛艇周计划表') throw new Error(`打开的计划标题不正确：${openedTitle}`);

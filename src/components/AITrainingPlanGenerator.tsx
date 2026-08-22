@@ -127,14 +127,14 @@ export function AITrainingPlanGenerator(props: Props) {
 
   return (
     <div className="ai-workflow-shell">
-      <nav className="ai-workflow-switch" aria-label="AI训练计划方式">
+      <nav className="ai-workflow-switch" aria-label="AI体能训练方式">
         <button type="button" className={workflow === 'generate' ? 'active' : ''} onClick={() => setWorkflow('generate')}>
           <Sparkles size={20} />
-          <span><strong>生成新计划</strong><small>描述目标，由AI制定方案</small></span>
+          <span><strong>生成体能训练</strong><small>描述目标，由AI制定方案</small></span>
         </button>
         <button type="button" className={workflow === 'import' ? 'active' : ''} onClick={() => setWorkflow('import')}>
           <Upload size={20} />
-          <span><strong>识别已有计划</strong><small>上传原文件，校正后导入</small></span>
+          <span><strong>识别已有训练</strong><small>上传原文件，校正后导入</small></span>
         </button>
       </nav>
       {workflow === 'generate'
@@ -322,7 +322,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
             <span>AI 智能训练规划</span>
           </div>
           <h2>为 {athlete.name} 定制专属训练方案</h2>
-          <p>AI 将分析运动员数据，生成科学、个性化的训练计划</p>
+          <p>AI 将分析运动员数据，生成科学、个性化的体能训练方案</p>
         </div>
 
         <div className="input-section">
@@ -334,12 +334,12 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
                 id="ai-training-goal"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
-                placeholder={`例如：\n• 运动员准备参加全运会，需要提升最大力量\n• 当前卧拉MAX 65kg，深蹲MAX 80kg\n• 希望在未来8周内重点提升上肢力量\n• 每周可训练3次，周二、周四、周六\n• 请制定渐进超负荷的科学训练计划`}
+              placeholder={`例如：\n• 运动员准备参加全运会，需要提升最大力量\n• 当前卧拉MAX 65kg，深蹲MAX 80kg\n• 希望在未来8周内重点提升上肢力量\n• 每周可训练3次，周二、周四、周六\n• 请制定渐进超负荷的科学体能训练方案`}
                 rows={10}
               />
               <div className="input-hint">
                 <Lightbulb size={14} />
-                <span>这里用于生成新计划；已有文件请切换到“识别已有计划”</span>
+            <span>这里用于生成体能训练；已有文件请切换到“识别已有训练”</span>
               </div>
             </div>
           </div>
@@ -357,7 +357,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
             </button>
             <button className="btn-primary ai-generate" onClick={handleAnalyze}>
               <Sparkles size={18} /> 
-              生成 AI 训练计划
+              生成 AI 体能训练
             </button>
           </div>
         </div>
@@ -410,7 +410,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
             </div>
             <h2>{generatedPlan.title}</h2>
             <div className="plan-meta">
-              <span><Calendar size={14} /> {generatedPlan.durationWeeks} 周计划</span>
+              <span><Calendar size={14} /> {generatedPlan.durationWeeks} 周训练</span>
               <span><Clock size={14} /> {generatedPlan.scheduleLabel}</span>
               <span><Target size={14} /> {generatedPlan.progression.phase}</span>
             </div>
@@ -488,7 +488,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
           {/* 数据可视化 */}
           <div className="charts-section">
             <div className="charts-section-heading">
-              <div><BarChart3 size={19} /><span><strong>训练计划数据看板</strong><small>保存前检查训练量、强度与结构是否均衡</small></span></div>
+          <div><BarChart3 size={19} /><span><strong>体能训练数据看板</strong><small>保存前检查训练量、强度与结构是否均衡</small></span></div>
               <em>PLAN INTELLIGENCE</em>
             </div>
 
@@ -624,7 +624,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
             </div>
           </div>
 
-          {/* 动态训练计划 */}
+          {/* 动态体能训练 */}
           <div className="training-schedule">
             <h3><Dumbbell size={18} /> 详细训练安排</h3>
             
@@ -724,7 +724,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
               {saving ? (
                 <><LoaderCircle size={16} className="spin" /> 保存中...</>
               ) : (
-                <><Save size={16} /> 保存训练计划</>
+                  <><Save size={16} /> 保存体能训练</>
               )}
             </button>
           </div>
@@ -735,4 +735,3 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
 
   return null;
 }
-

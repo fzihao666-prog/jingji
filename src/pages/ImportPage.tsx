@@ -55,8 +55,8 @@ function refreshPreviewStats(preview: ImportPreview, rows: ImportRow[]): ImportP
 }
 
 const documentTypeOptions = [
-  { value: 'auto', title: 'AI自动判断', note: '推荐：先区分计划与完成记录' },
-  { value: 'training_plan', title: '训练计划', note: '保存到训练计划矩阵，可分配多人' },
+  { value: 'auto', title: 'AI自动判断', note: '推荐：先区分体能训练与完成记录' },
+  { value: 'training_plan', title: '体能训练', note: '保存到体能训练矩阵，可分配多人' },
   { value: 'training_record', title: '完成记录', note: '保存到训练日历与个人档案' }
 ] as const;
 
@@ -209,7 +209,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
   const commitPlan = async () => {
     if (!preview?.plan || !preview.aiMetadata) return;
     if (!planTargetIds.length) {
-      setError('请至少选择一名计划对象；系统不会根据组别自动猜人。');
+      setError('请至少选择一名训练对象；系统不会根据组别自动猜人。');
       return;
     }
     setBusy(true);
@@ -230,13 +230,13 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
         skipped: result.skipped,
         results: result.results
       });
-      setSuccess(`训练计划已保存：新建${result.created}人，替换${result.replaced}人${result.skipped ? `，跳过已有计划${result.skipped}人` : ''}。`);
+      setSuccess(`体能训练已保存：新建${result.created}人，替换${result.replaced}人${result.skipped ? `，跳过已有训练${result.skipped}人` : ''}。`);
       setPreview(null);
       setInspection(null);
       setSelectedFile(null);
       onImported();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : '训练计划保存失败。');
+      setError(requestError instanceof Error ? requestError.message : '体能训练保存失败。');
     } finally {
       setBusy(false);
     }
@@ -289,7 +289,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
           <div className="ai-data-hero-promises">
             <span><ShieldCheck size={13} />确认前不入库</span>
             <span><Layers3 size={13} />整本工作簿分批读取</span>
-            <span><Users size={13} />训练计划可分配多人</span>
+            <span><Users size={13} />体能训练可分配多人</span>
           </div>
         </div>
         <aside>
@@ -305,7 +305,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
           ['选择原文件', 'Excel / 文档 / 图片'],
           ['分批AI识别', '工作表逐批处理'],
           ['人工校正', '确认类型、人员与日期'],
-          ['分类写入', '计划或完成记录']
+          ['分类写入', '体能训练或完成记录']
         ].map(([title, note], index) => {
           const step = index + 1;
           return (
@@ -358,7 +358,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
             <ol>
               <li><i><FileCheck2 size={16} /></i><span><strong>读取文件结构</strong><small>这一步只解析文件，不调用 AI</small></span></li>
               <li><i><Layers3 size={16} /></i><span><strong>选择识别范围</strong><small>Excel 会列出全部工作表，可按周次勾选</small></span></li>
-              <li><i><BookOpenCheck size={16} /></i><span><strong>确认保存位置</strong><small>训练计划进计划矩阵，完成记录进个人档案</small></span></li>
+              <li><i><BookOpenCheck size={16} /></i><span><strong>确认保存位置</strong><small>体能训练进训练矩阵，完成记录进个人档案</small></span></li>
             </ol>
             <div className="ai-data-file-types">
               <span>XLSX</span><span>DOCX</span><span>PDF</span><span>TXT / CSV</span><span>JPG / PNG</span>
@@ -378,7 +378,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
           {!busy ? (
             <>
               <div className="ai-import-type-choice">
-                <div><BrainCircuit /><span><strong>先确定保存位置</strong><small>自动判断不会把团队周计划写进个人完成记录</small></span></div>
+                <div><BrainCircuit /><span><strong>先确定保存位置</strong><small>自动判断不会把团队周训练写进个人完成记录</small></span></div>
                 <section>
                   {documentTypeOptions.map((option) => (
                     <button
@@ -448,13 +448,13 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
         <section className="ai-data-success">
           <div><CheckCircle2 /></div>
           <span>IMPORT COMPLETE</span>
-          <h2>{planSaveReceipt ? '训练计划已写入' : '完成记录已写入'}</h2>
+          <h2>{planSaveReceipt ? '体能训练已写入' : '完成记录已写入'}</h2>
           <p>{success}</p>
           {planSaveReceipt && (
             <div className="ai-import-receipt">
               <header>
-                <span><small>计划名称</small><strong>{planSaveReceipt.title}</strong></span>
-                <span><small>计划周期</small><strong>{planSaveReceipt.startDate} — {planSaveReceipt.endDate}</strong></span>
+                <span><small>训练名称</small><strong>{planSaveReceipt.title}</strong></span>
+                <span><small>训练周期</small><strong>{planSaveReceipt.startDate} — {planSaveReceipt.endDate}</strong></span>
               </header>
               <section>
                 {planSaveReceipt.results.map((result) => (
@@ -462,7 +462,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
                     <i><Check size={13} /></i>
                     <span>
                       <strong>{result.athleteName}</strong>
-                      <small>{result.status === 'created' ? '已新建计划' : result.status === 'replaced' ? '已覆盖原计划' : '已有计划，已跳过'}</small>
+                      <small>{result.status === 'created' ? '已新建训练' : result.status === 'replaced' ? '已覆盖原训练' : '已有训练，已跳过'}</small>
                     </span>
                     <ChevronRight size={15} />
                   </button>
@@ -476,7 +476,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
               : onOpenRecords()
             }>
               {planSaveReceipt ? <BookOpenCheck size={17} /> : <TableProperties size={17} />}
-              {planSaveReceipt ? '查看训练计划' : '查看训练日历'}
+              {planSaveReceipt ? '查看体能训练' : '查看训练日历'}
             </button>
             <button className="secondary-button" onClick={reset}><RotateCcw size={17} />继续导入</button>
           </div>
@@ -490,18 +490,18 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
             <ChevronRight />
             <div className="model"><BrainCircuit /><span><small>分批AI识别</small><strong>{preview.processedChunks || 1}批 · {preview.modelUsed || '当前模型'}</strong></span></div>
             <ChevronRight />
-            <div className="fields">{preview.documentType === 'training_plan' ? <BookOpenCheck /> : <TableProperties />}<span><small>分类写入</small><strong>{preview.documentType === 'training_plan' ? '训练计划矩阵 · 支持多人' : '逐人逐日完成记录'}</strong></span></div>
+            <div className="fields">{preview.documentType === 'training_plan' ? <BookOpenCheck /> : <TableProperties />}<span><small>分类写入</small><strong>{preview.documentType === 'training_plan' ? '体能训练矩阵 · 支持多人' : '逐人逐日完成记录'}</strong></span></div>
           </div>
 
           <div className="ai-data-preview-head">
             <div>
               <span className="file-badge"><FileSpreadsheet size={17} />{preview.sourceFile?.extractionMethod || 'AI识别'} · 置信度 {Math.round((preview.confidence ?? 0) * 100)}%</span>
-              <h2>{preview.documentType === 'training_plan' ? '识别为训练计划' : '逐条核对完成记录'}</h2>
+              <h2>{preview.documentType === 'training_plan' ? '识别为体能训练' : '逐条核对完成记录'}</h2>
               <p>{preview.summary || 'AI已完成分批识别与合并。保存前请确认人员、日期和训练内容。'}</p>
               {preview.classification?.reason && <small className="ai-classification-reason">分类依据：{preview.classification.reason}</small>}
             </div>
             <div className="preview-stats">
-              <span><strong>{preview.documentType === 'training_plan' ? planWeeks.length : preview.total}</strong>{preview.documentType === 'training_plan' ? '计划阶段' : '识别记录'}</span>
+              <span><strong>{preview.documentType === 'training_plan' ? planWeeks.length : preview.total}</strong>{preview.documentType === 'training_plan' ? '训练阶段' : '识别记录'}</span>
               <span className="valid"><strong>{preview.documentType === 'training_plan' ? planItemCount : preview.valid}</strong>{preview.documentType === 'training_plan' ? '训练条目' : '可入库'}</span>
               <span className="invalid"><strong>{preview.failedChunks || preview.invalid}</strong>{preview.documentType === 'training_plan' ? '失败批次' : '待修正'}</span>
               <span className="warning"><strong>{preview.warningCount}</strong>提醒</span>
@@ -526,8 +526,8 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
             <>
               <div className="ai-plan-review-grid">
                 <section className="ai-plan-document">
-                  <div className="ai-plan-section-title"><BookOpenCheck /><span><strong>计划信息</strong><small>系统将保存到训练计划矩阵，不进入训练日历</small></span></div>
-                  <label><span>计划名称</span><input value={preview.plan.title} onChange={(event) => updatePlan({ title: event.target.value })} /></label>
+                  <div className="ai-plan-section-title"><BookOpenCheck /><span><strong>体能训练信息</strong><small>系统将保存到体能训练矩阵，不进入训练日历</small></span></div>
+                  <label><span>训练名称</span><input value={preview.plan.title} onChange={(event) => updatePlan({ title: event.target.value })} /></label>
                   <div className="ai-plan-date-pair">
                     <label><span>开始日期</span><input type="date" value={preview.plan.startDate} onChange={(event) => updatePlan({ startDate: event.target.value })} /></label>
                     <label><span>结束日期</span><input type="date" value={preview.plan.endDate} onChange={(event) => updatePlan({ endDate: event.target.value })} /></label>
@@ -547,7 +547,7 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
                 </section>
 
                 <section className="ai-plan-assignment">
-                  <div className="ai-plan-section-title"><Users /><span><strong>选择计划对象</strong><small>原文件没有姓名时必须手动选择，可同时选择多人</small></span><b>{planTargetIds.length}人</b></div>
+                  <div className="ai-plan-section-title"><Users /><span><strong>选择训练对象</strong><small>原文件没有姓名时必须手动选择，可同时选择多人</small></span><b>{planTargetIds.length}人</b></div>
                   <div className="ai-plan-athlete-grid">
                     {preview.athletes?.map((athlete) => {
                       const checked = planTargetIds.includes(athlete.id);
@@ -561,17 +561,17 @@ export function ImportPage({ onImported, onOpenTrainingPlan, onOpenRecords, proj
                   </div>
                   <label className="ai-replace-option">
                     <input type="checkbox" checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} />
-                    <span><strong>覆盖同一开始日期的已有计划</strong><small>默认不覆盖；不勾选时已有计划会被跳过</small></span>
+                    <span><strong>覆盖同一开始日期的已有训练</strong><small>默认不覆盖；不勾选时已有训练会被跳过</small></span>
                   </label>
                 </section>
               </div>
 
               <footer className="ai-data-preview-actions">
-                <div><ShieldCheck size={17} /><span>计划会复制给你选择的每名运动员；AI不会自行根据组别分配人员。</span></div>
+                <div><ShieldCheck size={17} /><span>体能训练会复制给你选择的每名运动员；AI不会自行根据组别分配人员。</span></div>
                 <span>
                   <button className="secondary-button" disabled={busy} onClick={reset}>重新选择</button>
                   <button className="primary-button" disabled={busy || !planReady} onClick={commitPlan}>
-                    {busy ? <><LoaderCircle className="spin" size={16} />正在保存…</> : `保存到训练计划 · ${planTargetIds.length}人`}
+                    {busy ? <><LoaderCircle className="spin" size={16} />正在保存…</> : `保存到体能训练 · ${planTargetIds.length}人`}
                   </button>
                 </span>
               </footer>

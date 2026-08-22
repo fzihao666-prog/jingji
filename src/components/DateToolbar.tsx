@@ -49,12 +49,13 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
   const presetRanges = {
     day: { from: today, to: today },
     week: { from: startOfWeek(today), to: today },
-    fourWeeks: { from: addDays(today, -27), to: today },
-    month: { from: `${today.slice(0, 7)}-01`, to: today }
+    month: { from: `${today.slice(0, 7)}-01`, to: today },
+    recentMonth: { from: addDays(today, -29), to: today },
+    recentYear: { from: addDays(today, -364), to: today }
   };
   const presets = presetMode === 'dayWeekMonth'
     ? ([['day', '日', '查看今日数据'], ['week', '周', '查看本周数据'], ['month', '月', '查看本月数据']] as const)
-    : ([['week', '本周', '查看本周数据'], ['fourWeeks', '近4周', '查看最近四周数据'], ['month', '本月', '查看本月数据']] as const);
+    : ([['day', '今天', '查看今天数据'], ['recentMonth', '最近一月', '查看最近30天数据'], ['recentYear', '最近一年', '查看最近365天数据']] as const);
   const setPreset = (preset: keyof typeof presetRanges) => {
     const range = presetRanges[preset];
     onRangeChange(range.from, range.to);

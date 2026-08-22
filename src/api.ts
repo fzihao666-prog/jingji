@@ -11,6 +11,7 @@ import type {
   InjuryStatus,
   OverviewPayload,
   Project,
+  ProjectTeam,
   RegistrationRequest,
   Role,
   SpecialTestEvent,
@@ -52,6 +53,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  async teams() {
+    return request<{ teams: ProjectTeam[] }>('/api/teams');
+  },
+  async adminTeams() {
+    return request<{ teams: ProjectTeam[]; canCreateProjects: Project[] }>('/api/admin/teams');
+  },
+  async createTeam(project: string, name: string) {
+    return request<{ message: string; id: number }>('/api/admin/teams', {
+      method: 'POST', body: JSON.stringify({ project, name })
+    });
+  },
+  async deleteTeam(id: number) {
+    return request<{ message: string }>(`/api/admin/teams/${id}`, { method: 'DELETE' });
+  },
   async login(username: string, password: string) {
     return request<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
@@ -68,9 +83,6 @@ export const api = {
     gender?: string;
     identityNumber: string;
     nativePlace: string;
-    region?: string;
-    city?: string;
-    county?: string;
   }) {
     return request<{ message: string }>('/api/auth/register', {
       method: 'POST',
@@ -187,7 +199,7 @@ export const api = {
       body: JSON.stringify({ athleteId, data, planId: planId || undefined })
     });
   },
-  // AI 训练计划 API
+  // AI 体能训练 API
   async analyzeAITrainingPlan(formData: FormData) {
     return request<{
       plan: {
@@ -286,7 +298,7 @@ export const api = {
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.message || '训练计划导出失败。');
+      throw new Error(payload?.message || '体能训练导出失败。');
     }
     const blob = await response.blob();
     const link = document.createElement('a');
@@ -365,12 +377,12 @@ export const api = {
     const response = await fetch('/api/special-tests/import/template', {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
-    if (!response.ok) throw new Error('专项测试模板下载失败。');
+    if (!response.ok) throw new Error('专项训练模板下载失败。');
     const blob = await response.blob();
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = '竞迹专项测试导入模板.xlsx';
+    link.download = '竞迹专项训练导入模板.xlsx';
     document.body.appendChild(link);
     link.click();
     link.remove();
