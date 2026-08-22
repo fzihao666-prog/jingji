@@ -59,7 +59,7 @@ export function CalendarPage(props: Props) {
     <div className="page-content">
       <header className="page-heading">
         <h1>训练日历</h1>
-        <DateToolbar {...props} canRenameAthletes={ROLE_META[props.user.role].level > 1} onAthleteNameChange={props.onAthleteNameChange} />
+        <DateToolbar {...props} presetMode="dayWeekMonth" canRenameAthletes={ROLE_META[props.user.role].level > 1} onAthleteNameChange={props.onAthleteNameChange} />
       </header>
 
       <section className="calendar-summary">
