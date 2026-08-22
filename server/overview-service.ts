@@ -57,6 +57,45 @@ type MeasurementRow = {
   isDemo: number;
 };
 
+type ProfileRow = {
+  athleteId: number;
+  athleteName: string;
+  project: string;
+  team: string;
+  gender: string;
+  province: string;
+  city: string;
+  county: string;
+  originSource: string;
+  originIsDemo: number;
+  birthDate: string | null;
+};
+
+type BodyRow = {
+  athleteId: number;
+  measurementDate: string;
+  heightCm: number | null;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  source: string;
+  isDemo: number;
+};
+
+type CompetitiveRow = {
+  athleteId: number;
+  assessmentDate: string;
+  competitiveScore: number;
+  competitiveLevel: 'peak' | 'good' | 'build' | 'adjust';
+  endurance: number | null;
+  power: number | null;
+  technique: number | null;
+  loadAdaptation: number | null;
+  recovery: number | null;
+  competition: number | null;
+  source: string;
+  isDemo: number;
+};
+
 function emptyBreakdown() {
   return {
     waterMinutes: 0,
@@ -91,9 +130,21 @@ function round(value: number | null, digits = 2) {
   return value === null ? null : Number(value.toFixed(digits));
 }
 
+function ageAt(birthDate: string | null, date: string) {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T00:00:00Z`);
+  const target = new Date(`${date}T00:00:00Z`);
+  if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime())) return null;
+  let age = target.getUTCFullYear() - birth.getUTCFullYear();
+  const birthdayPassed = target.getUTCMonth() > birth.getUTCMonth()
+    || (target.getUTCMonth() === birth.getUTCMonth() && target.getUTCDate() >= birth.getUTCDate());
+  if (!birthdayPassed) age -= 1;
+  return age >= 0 ? age : null;
+}
+
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean }) {
   if (!input.athleteIds.length) return {
-    records: [], strengthTests: [], measurements: [],
+    records: [], strengthTests: [], measurements: [], profiles: [],
     meta: { project: input.project, from: input.from, to: input.to, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
   const placeholders = input.athleteIds.map(() => '?').join(',');
@@ -156,6 +207,69 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       strokeRateSpm: row.strokeRateSpm
     }
   }));
+
+  const profileRows = db.prepare(`
+    SELECT a.id AS athleteId, a.name AS athleteName, a.project, a.team, a.gender,
+      COALESCE(ao.province, '未设置') AS province,
+      COALESCE(ao.city, '') AS city,
+      COALESCE(ao.county, '') AS county,
+      COALESCE(ao.source, 'missing') AS originSource,
+      COALESCE(ao.is_demo, 0) AS originIsDemo,
+      a.birth_date AS birthDate
+    FROM athletes a
+    LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+    WHERE a.id IN (${placeholders}) AND a.active = 1
+    ORDER BY a.team, a.name
+  `).all(...input.athleteIds) as ProfileRow[];
+  const bodyRows = db.prepare(`
+    SELECT athlete_id AS athleteId, measurement_date AS measurementDate,
+      height_cm AS heightCm, weight_kg AS weightKg, body_fat_pct AS bodyFatPct,
+      source, is_demo AS isDemo
+    FROM athlete_body_measurements
+    WHERE athlete_id IN (${placeholders}) AND measurement_date <= ?
+    ORDER BY athlete_id, measurement_date DESC, id DESC
+  `).all(...input.athleteIds, input.to) as BodyRow[];
+  const competitiveRows = db.prepare(`
+    SELECT athlete_id AS athleteId, assessment_date AS assessmentDate,
+      overall_score AS competitiveScore, state_level AS competitiveLevel,
+      endurance_score AS endurance, power_score AS power, technique_score AS technique,
+      load_adaptation_score AS loadAdaptation, recovery_score AS recovery,
+      competition_score AS competition, source, is_demo AS isDemo
+    FROM competitive_state_assessments
+    WHERE athlete_id IN (${placeholders}) AND assessment_date <= ?
+    ORDER BY athlete_id, assessment_date DESC, id DESC
+  `).all(...input.athleteIds, input.to) as CompetitiveRow[];
+  const profiles = profileRows.map((profile) => {
+    const bodyHistory = bodyRows.filter((row) => row.athleteId === profile.athleteId);
+    const stateHistory = competitiveRows.filter((row) => row.athleteId === profile.athleteId);
+    const body = bodyHistory[0];
+    const state = stateHistory[0];
+    return {
+      ...profile,
+      age: ageAt(profile.birthDate, input.to),
+      bodyMeasurementDate: body?.measurementDate || null,
+      heightCm: body?.heightCm ?? null,
+      weightKg: body?.weightKg ?? null,
+      previousWeightKg: bodyHistory[1]?.weightKg ?? null,
+      bodyFatPct: body?.bodyFatPct ?? null,
+      competitiveAssessmentDate: state?.assessmentDate || null,
+      competitiveScore: state?.competitiveScore ?? null,
+      previousCompetitiveScore: stateHistory[1]?.competitiveScore ?? null,
+      competitiveLevel: state?.competitiveLevel || null,
+      competitiveDimensions: {
+        endurance: state?.endurance ?? null,
+        power: state?.power ?? null,
+        technique: state?.technique ?? null,
+        loadAdaptation: state?.loadAdaptation ?? null,
+        recovery: state?.recovery ?? null,
+        competition: state?.competition ?? null
+      },
+      originSource: profile.originSource,
+      originIsDemo: Boolean(profile.originIsDemo),
+      source: [...new Set([body?.source, state?.source].filter(Boolean))].join('、'),
+      isDemo: Boolean(profile.originIsDemo || body?.isDemo || state?.isDemo)
+    };
+  });
 
   const measurementRows = db.prepare(`
     SELECT ts.id AS sessionId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
@@ -221,7 +335,11 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
 
   const wellnessCells = sessions.flatMap((row) => [row.sleepHours, row.morningPulse, row.weightKg, row.fatigueIndex]);
   const availableCells = wellnessCells.filter((value) => typeof value === 'number' && Number.isFinite(value)).length;
-  const sources = [...new Set(sessions.flatMap((row) => [row.sessionSource, row.wellnessSource]).filter(Boolean) as string[])];
+  const sources = [...new Set([
+    ...sessions.flatMap((row) => [row.sessionSource, row.wellnessSource]),
+    ...profileRows.map((row) => row.originSource),
+    ...bodyRows.map((row) => row.source), ...competitiveRows.map((row) => row.source)
+  ].filter(Boolean) as string[])];
   const wellnessDays = db.prepare(`
     SELECT COUNT(*) AS count FROM daily_wellness
     WHERE athlete_id IN (${placeholders}) AND wellness_date BETWEEN ? AND ?
@@ -233,6 +351,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     records,
     strengthTests,
     measurements,
+    profiles,
     meta: {
       project: input.project,
       from: input.from,
@@ -242,7 +361,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       wellnessDays: wellnessDays.count,
       testCount: testCount.count,
       coverage: wellnessCells.length ? round(availableCells / wellnessCells.length * 100, 1) : 0,
-      containsDemoData: sessions.some((row) => Boolean(row.sessionDemo)) || measurementRows.some((row) => Boolean(row.isDemo)),
+      containsDemoData: sessions.some((row) => Boolean(row.sessionDemo)) || measurementRows.some((row) => Boolean(row.isDemo))
+        || profiles.some((profile) => profile.isDemo),
       sources,
       scope: input.individual ? 'individual' : 'team',
       generatedAt: new Date().toISOString()

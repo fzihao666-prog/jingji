@@ -22,8 +22,21 @@ db.exec(`
     region TEXT NOT NULL DEFAULT '未设置',
     city TEXT NOT NULL DEFAULT '未设置',
     county TEXT NOT NULL DEFAULT '未设置',
+    birth_date TEXT,
     photo_url TEXT NOT NULL DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS athlete_origins (
+    athlete_id INTEGER PRIMARY KEY,
+    province TEXT NOT NULL,
+    city TEXT NOT NULL,
+    county TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'manual',
+    quality TEXT NOT NULL DEFAULT 'valid' CHECK(quality IN ('valid', 'estimated')),
+    is_demo INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS users (
@@ -393,6 +406,9 @@ if (!hasColumn('athletes', 'county')) {
 if (!hasColumn('athletes', 'photo_url')) {
   db.exec("ALTER TABLE athletes ADD COLUMN photo_url TEXT NOT NULL DEFAULT ''");
 }
+if (!hasColumn('athletes', 'birth_date')) {
+  db.exec('ALTER TABLE athletes ADD COLUMN birth_date TEXT');
+}
 if (!hasColumn('registration_requests', 'region')) {
   db.exec('ALTER TABLE registration_requests ADD COLUMN region TEXT');
 }
@@ -678,11 +694,82 @@ db.exec(`
     FOREIGN KEY (metric_code) REFERENCES metric_definitions(code)
   );
 
+  CREATE TABLE IF NOT EXISTS athlete_body_measurements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    athlete_id INTEGER NOT NULL,
+    measurement_date TEXT NOT NULL,
+    height_cm REAL,
+    weight_kg REAL,
+    body_fat_pct REAL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    quality TEXT NOT NULL DEFAULT 'valid' CHECK(quality IN ('valid', 'partial', 'insufficient', 'outlier', 'estimated')),
+    is_demo INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (athlete_id, measurement_date),
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS competitive_state_assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    athlete_id INTEGER NOT NULL,
+    assessment_date TEXT NOT NULL,
+    overall_score REAL NOT NULL CHECK(overall_score BETWEEN 0 AND 100),
+    state_level TEXT NOT NULL CHECK(state_level IN ('peak', 'good', 'build', 'adjust')),
+    endurance_score REAL CHECK(endurance_score BETWEEN 0 AND 100),
+    power_score REAL CHECK(power_score BETWEEN 0 AND 100),
+    technique_score REAL CHECK(technique_score BETWEEN 0 AND 100),
+    load_adaptation_score REAL CHECK(load_adaptation_score BETWEEN 0 AND 100),
+    recovery_score REAL CHECK(recovery_score BETWEEN 0 AND 100),
+    competition_score REAL CHECK(competition_score BETWEEN 0 AND 100),
+    note TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'manual',
+    quality TEXT NOT NULL DEFAULT 'valid' CHECK(quality IN ('valid', 'partial', 'insufficient', 'outlier', 'estimated')),
+    is_demo INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (athlete_id, assessment_date),
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_daily_wellness_athlete_date ON daily_wellness (athlete_id, wellness_date);
   CREATE INDEX IF NOT EXISTS idx_training_sessions_athlete_date ON training_sessions (athlete_id, session_date, session_order);
   CREATE INDEX IF NOT EXISTS idx_test_sessions_athlete_date ON test_sessions (athlete_id, test_date DESC);
   CREATE INDEX IF NOT EXISTS idx_test_measurements_session ON test_measurements (test_session_id, metric_code);
+  CREATE INDEX IF NOT EXISTS idx_body_measurements_athlete_date ON athlete_body_measurements (athlete_id, measurement_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
 `);
+
+export function upsertAthleteOrigin(input: {
+  athleteId: number;
+  province: string;
+  city: string;
+  county?: string;
+  source?: string;
+  quality?: 'valid' | 'estimated';
+  isDemo?: boolean;
+}) {
+  db.prepare(`
+    INSERT INTO athlete_origins
+      (athlete_id, province, city, county, source, quality, is_demo, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(athlete_id) DO UPDATE SET
+      province = excluded.province,
+      city = excluded.city,
+      county = excluded.county,
+      source = excluded.source,
+      quality = excluded.quality,
+      is_demo = excluded.is_demo,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(
+    input.athleteId,
+    input.province,
+    input.city,
+    input.county || '',
+    input.source || 'manual',
+    input.quality || 'valid',
+    input.isDemo ? 1 : 0
+  );
+}
 
 function seed() {
   const athleteCount = db.prepare('SELECT COUNT(*) AS count FROM athletes').get() as { count: number };
@@ -844,6 +931,37 @@ function seedRegionalExample() {
 }
 
 seedRegionalExample();
+
+function seedAthleteOrigins() {
+  const registrationOrigins = db.prepare(`
+    SELECT a.id AS athleteId, rr.native_place AS nativePlace
+    FROM athletes a
+    JOIN users u ON u.athlete_id = a.id AND u.role = 'ATL'
+    JOIN registration_requests rr ON rr.username = u.username AND rr.status = 'approved'
+    WHERE rr.native_place IS NOT NULL AND rr.native_place <> ''
+  `).all() as Array<{ athleteId: number; nativePlace: string }>;
+  const insertIfMissing = db.prepare(`
+    INSERT OR IGNORE INTO athlete_origins
+      (athlete_id, province, city, county, source, quality, is_demo)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const row of registrationOrigins) {
+    const [province = '', city = '', county = ''] = row.nativePlace.split('/');
+    if (PROVINCES.includes(province as typeof PROVINCES[number]) && city) {
+      insertIfMissing.run(row.athleteId, province, city, county, 'registration', 'valid', 0);
+    }
+  }
+  const legacyRows = db.prepare(`
+    SELECT id AS athleteId, region AS province, city, county
+    FROM athletes
+    WHERE active = 1 AND region <> '' AND region <> '未设置'
+  `).all() as Array<{ athleteId: number; province: string; city: string; county: string }>;
+  for (const row of legacyRows) {
+    insertIfMissing.run(row.athleteId, row.province, row.city, row.county, 'legacy_migration', 'estimated', 0);
+  }
+}
+
+seedAthleteOrigins();
 
 function areaCode(province: string) {
   const codes: Record<string, string> = { 四川: '510000', 浙江: '330000', 广东: '440000' };
@@ -1059,6 +1177,9 @@ function seedProfessionalOverviewDemo() {
     .all() as Array<{ id: number; project: string; gender: string }>;
   if (!admin || !athletes.length) return;
   db.prepare("DELETE FROM athlete_strength_tests WHERE notes = '训练总览演示测试数据'").run();
+  db.prepare("DELETE FROM test_sessions WHERE source = 'demo_seed' AND is_demo = 1").run();
+  db.prepare("DELETE FROM training_sessions WHERE source = 'demo_seed' AND is_demo = 1").run();
+  db.prepare("DELETE FROM daily_wellness WHERE source = 'demo_seed' AND is_demo = 1").run();
 
   const upsertMetric = db.prepare(`
     INSERT INTO metric_definitions
@@ -1223,6 +1344,92 @@ function seedProfessionalOverviewDemo() {
 }
 
 seedProfessionalOverviewDemo();
+
+function seedOverviewProfileDemo() {
+  const profiles: Record<string, { birthDate: string; heightCm: number; weightKg: number; bodyFatPct: number; score: number; origin: [string, string, string] }> = {
+    林舟: { birthDate: '2002-03-18', heightCm: 174, weightKg: 58.5, bodyFatPct: 17.1, score: 91, origin: ['四川', '成都', '武侯区'] },
+    沈澜: { birthDate: '2001-11-04', heightCm: 176, weightKg: 61.1, bodyFatPct: 16.6, score: 87, origin: ['湖南', '长沙', '岳麓区'] },
+    陈屿: { birthDate: '1999-06-22', heightCm: 186, weightKg: 78.4, bodyFatPct: 11.7, score: 84, origin: ['浙江', '杭州', '西湖区'] },
+    周竞: { birthDate: '2000-09-15', heightCm: 184, weightKg: 81.2, bodyFatPct: 12.1, score: 89, origin: ['山东', '青岛', '市南区'] },
+    许沐: { birthDate: '2003-02-11', heightCm: 172, weightKg: 63.6, bodyFatPct: 17.5, score: 86, origin: ['广东', '广州', '天河区'] },
+    顾川: { birthDate: '2001-07-29', heightCm: 183, weightKg: 76.9, bodyFatPct: 12.4, score: 90, origin: ['湖北', '武汉', '洪山区'] },
+    宋岚: { birthDate: '2002-12-06', heightCm: 168, weightKg: 59.4, bodyFatPct: 18.0, score: 85, origin: ['江苏', '南京', '玄武区'] },
+    江跃: { birthDate: '1998-05-30', heightCm: 181, weightKg: 77.2, bodyFatPct: 12.8, score: 88, origin: ['辽宁', '大连', '中山区'] }
+  };
+  const athletes = db.prepare('SELECT id, name FROM athletes WHERE active = 1 ORDER BY id')
+    .all() as Array<{ id: number; name: string }>;
+  db.prepare("DELETE FROM athlete_body_measurements WHERE source = 'demo_seed' AND is_demo = 1").run();
+  db.prepare("DELETE FROM competitive_state_assessments WHERE source = 'demo_seed' AND is_demo = 1").run();
+  const updateBirthDate = db.prepare('UPDATE athletes SET birth_date = COALESCE(birth_date, ?) WHERE id = ?');
+  const upsertBody = db.prepare(`
+    INSERT INTO athlete_body_measurements
+      (athlete_id, measurement_date, height_cm, weight_kg, body_fat_pct, source, quality, is_demo)
+    VALUES (?, ?, ?, ?, ?, 'demo_seed', 'valid', 1)
+    ON CONFLICT(athlete_id, measurement_date) DO UPDATE SET
+      height_cm = excluded.height_cm, weight_kg = excluded.weight_kg,
+      body_fat_pct = excluded.body_fat_pct, source = excluded.source,
+      quality = excluded.quality, is_demo = excluded.is_demo
+  `);
+  const upsertState = db.prepare(`
+    INSERT INTO competitive_state_assessments
+      (athlete_id, assessment_date, overall_score, state_level, endurance_score,
+       power_score, technique_score, load_adaptation_score, recovery_score,
+       competition_score, note, source, quality, is_demo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo_seed', 'valid', 1)
+    ON CONFLICT(athlete_id, assessment_date) DO UPDATE SET
+      overall_score = excluded.overall_score, state_level = excluded.state_level,
+      endurance_score = excluded.endurance_score, power_score = excluded.power_score,
+      technique_score = excluded.technique_score, load_adaptation_score = excluded.load_adaptation_score,
+      recovery_score = excluded.recovery_score, competition_score = excluded.competition_score,
+      note = excluded.note, source = excluded.source, quality = excluded.quality, is_demo = excluded.is_demo
+  `);
+  const today = new Date();
+  today.setUTCHours(12, 0, 0, 0);
+  const isoDaysAgo = (days: number) => {
+    const date = new Date(today);
+    date.setUTCDate(date.getUTCDate() - days);
+    return date.toISOString().slice(0, 10);
+  };
+  const level = (score: number) => score >= 90 ? 'peak' : score >= 85 ? 'good' : score >= 78 ? 'build' : 'adjust';
+
+  for (const [index, athlete] of athletes.entries()) {
+    const profile = profiles[athlete.name];
+    if (!profile) continue;
+    updateBirthDate.run(profile.birthDate, athlete.id);
+    const existingOrigin = db.prepare('SELECT source, is_demo AS isDemo FROM athlete_origins WHERE athlete_id = ?')
+      .get(athlete.id) as { source: string; isDemo: number } | undefined;
+    if (!existingOrigin || existingOrigin.isDemo || existingOrigin.source === 'legacy_migration') {
+      upsertAthleteOrigin({
+        athleteId: athlete.id,
+        province: profile.origin[0],
+        city: profile.origin[1],
+        county: profile.origin[2],
+        source: 'demo_seed',
+        quality: 'valid',
+        isDemo: true
+      });
+    }
+    upsertBody.run(athlete.id, isoDaysAgo(42), profile.heightCm, Number((profile.weightKg - .4).toFixed(1)), Number((profile.bodyFatPct + .4).toFixed(1)));
+    upsertBody.run(athlete.id, isoDaysAgo(14), profile.heightCm, profile.weightKg, profile.bodyFatPct);
+
+    for (const [daysAgo, improvement] of [[42, -3], [14, 0]] as const) {
+      const score = Math.max(0, Math.min(100, profile.score + improvement));
+      const variation = index % 4;
+      upsertState.run(
+        athlete.id, isoDaysAgo(daysAgo), score, level(score),
+        Math.min(100, score + 1 - variation),
+        Math.min(100, score - 2 + variation),
+        Math.min(100, score + 2),
+        Math.min(100, score - 1),
+        Math.min(100, score - 3 + variation),
+        Math.min(100, score + 1),
+        improvement ? '阶段基础评估（演示）' : '近期综合竞技状态评估（演示）'
+      );
+    }
+  }
+}
+
+seedOverviewProfileDemo();
 
 function seedTrainingPlanExample() {
   const athlete = db.prepare("SELECT id FROM athletes WHERE name = '林舟'").get() as { id: number } | undefined;

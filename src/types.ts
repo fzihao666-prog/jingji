@@ -458,10 +458,47 @@ export type OverviewMeasurement = {
   isDemo: boolean;
 };
 
+export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';
+
+export type OverviewAthleteProfile = {
+  athleteId: number;
+  athleteName: string;
+  project: string;
+  team: string;
+  gender: string;
+  province: string;
+  city: string;
+  county: string;
+  originSource: string;
+  originIsDemo: boolean;
+  birthDate: string | null;
+  age: number | null;
+  bodyMeasurementDate: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  previousWeightKg: number | null;
+  bodyFatPct: number | null;
+  competitiveAssessmentDate: string | null;
+  competitiveScore: number | null;
+  previousCompetitiveScore: number | null;
+  competitiveLevel: CompetitiveStateLevel | null;
+  competitiveDimensions: {
+    endurance: number | null;
+    power: number | null;
+    technique: number | null;
+    loadAdaptation: number | null;
+    recovery: number | null;
+    competition: number | null;
+  };
+  source: string;
+  isDemo: boolean;
+};
+
 export type OverviewPayload = {
   records: TrainingRecord[];
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];
+  profiles: OverviewAthleteProfile[];
   meta: {
     project: string;
     from: string;

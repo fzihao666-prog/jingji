@@ -190,10 +190,15 @@ try {
       adminToken
     );
     const codes = new Set(result.payload.overview?.measurements?.map((item) => item.code));
+    const profiles = result.payload.overview?.profiles || [];
     assert(
       result.status === 200
         && result.payload.overview.records.length > 0
         && result.payload.overview.strengthTests.length >= 2
+        && profiles.length > 0
+        && profiles.every((profile) => profile.province && profile.province !== '未设置' && profile.city && profile.originSource)
+        && profiles.every((profile) => profile.birthDate && profile.age > 0 && profile.heightCm > 0 && profile.weightKg > 0)
+        && profiles.every((profile) => profile.competitiveScore > 0 && profile.competitiveLevel && profile.competitiveDimensions.competition > 0)
         && result.payload.overview.meta.containsDemoData
         && requiredCodes.every((code) => codes.has(code)),
       `${overviewProject}统一训练总览数据或演示指标不完整`

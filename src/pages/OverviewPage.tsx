@@ -1,5 +1,5 @@
 import {
-  Activity, AlarmClock, ArrowRight, BarChart3, Database, Eye, EyeOff, Gauge,
+  Activity, AlarmClock, ArrowRight, BarChart3, Clock3, Database, Eye, EyeOff, Gauge,
   MoreHorizontal, Pin, Route, ShieldCheck, Sparkles, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -16,8 +16,9 @@ import {
 } from '../components/LoadCharts';
 import { StatusPill } from '../components/StatusPill';
 import { EditableName } from '../components/EditableName';
+import { AthleteProfileOverview, BirthplaceMapOverview, CompetitiveStateOverview } from '../components/AthleteProfileCharts';
 import {
-  buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics,
+  buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics, calculateRecoveryTime,
   relativeStrengthRows, strengthChangeRows
 } from '../overview-analytics';
 import type { StrengthMetricKey } from '../../shared/strength-model';
@@ -41,7 +42,7 @@ type Props = {
 };
 
 type CardSize = 'metric' | 'third' | 'half' | 'wide' | 'full';
-type LayoutState = { order: string[]; hidden: string[]; pinned: string[] };
+type LayoutState = { version: number; order: string[]; hidden: string[]; pinned: string[] };
 type DropTarget = { id: string; position: 'before' | 'after' };
 type CardRect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 type PointerDragSession = {
@@ -65,7 +66,8 @@ function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
 }
 
 const defaultOrder = [
-  'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'coverage',
+  'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
+  'athlete-profile', 'competitive-state', 'birthplace-map',
   'performance-radar', 'load-response', 'load-diagnostics', 'recovery',
   'strength-change', 'relative-strength', 'structure', 'intensity', 'status',
   'water-zones', 'project-indicators', 'movement-efficiency', 'roster'
@@ -77,7 +79,10 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   srpe: { title: 'SRPE总负荷', size: 'metric' },
   rpe: { title: '平均主观强度', size: 'metric' },
   'acute-load': { title: '近7日急性负荷', size: 'metric' },
-  coverage: { title: '数据完整率', size: 'metric' },
+  'recovery-time': { title: '恢复时间', size: 'metric' },
+  'athlete-profile': { title: '身体与年龄画像', size: 'half' },
+  'competitive-state': { title: '竞技状态评估', size: 'half' },
+  'birthplace-map': { title: '生源地分布地图', size: 'full' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'load-response': { title: '训练负荷与机体刺激', size: 'half' },
   'load-diagnostics': { title: '负荷诊断', size: 'third' },
@@ -120,6 +125,7 @@ export function OverviewPage(props: Props) {
   }, [props.from, props.to, overviewAthleteId, props.project]);
 
   const analysisRecords = overview?.records ?? props.records;
+  const athleteProfiles = overview?.profiles ?? [];
   const strengthTests = overview?.strengthTests ?? [];
   const strengthLoading = overviewLoading;
   const measurementMap = useMemo(() => new Map((overview?.measurements || []).map((item) => [item.code, item])), [overview]);
@@ -130,6 +136,7 @@ export function OverviewPage(props: Props) {
     [analysisRecords, props.from, props.to, isIndividualOverview, scopeAthleteCount]
   );
   const diagnostics = useMemo(() => calculateLoadDiagnostics(analysisRecords, daily), [analysisRecords, daily]);
+  const recoveryTime = useMemo(() => calculateRecoveryTime(analysisRecords), [analysisRecords]);
   const averageRpe = useMemo(() => average(analysisRecords.map((record) => record.rpe)), [analysisRecords]);
 
   const latestStrength = strengthTests[0];
@@ -172,7 +179,7 @@ export function OverviewPage(props: Props) {
   const perAthlete = (value: number) => value / Math.max(1, scopeAthleteCount);
 
   const storageKey = `jingji-overview-layout:${props.user.id}:${props.project}:${isIndividualOverview ? 'self' : 'team'}`;
-  const [layout, setLayout] = useState<LayoutState>({ order: defaultOrder, hidden: [], pinned: [] });
+  const [layout, setLayout] = useState<LayoutState>({ version: 4, order: defaultOrder, hidden: [], pinned: [] });
   const [layoutReady, setLayoutReady] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -188,13 +195,28 @@ export function OverviewPage(props: Props) {
       const stored = JSON.parse(localStorage.getItem(storageKey) || '{}') as Partial<LayoutState>;
       const known = new Set(defaultOrder);
       const storedOrder = Array.isArray(stored.order) ? stored.order.filter((id) => known.has(id)) : [];
+      const mergedOrder = [...storedOrder];
+      for (const [index, id] of defaultOrder.entries()) {
+        if (mergedOrder.includes(id)) continue;
+        const nextKnown = defaultOrder.slice(index + 1).find((nextId) => mergedOrder.includes(nextId));
+        if (nextKnown) mergedOrder.splice(mergedOrder.indexOf(nextKnown), 0, id);
+        else mergedOrder.push(id);
+      }
+      if ((stored.version || 0) < 3) {
+        const newProfileCards = ['athlete-profile', 'competitive-state', 'birthplace-map'];
+        const withoutNewCards = mergedOrder.filter((id) => !newProfileCards.includes(id));
+        const anchor = withoutNewCards.indexOf('recovery-time');
+        withoutNewCards.splice(anchor >= 0 ? anchor + 1 : 0, 0, ...newProfileCards);
+        mergedOrder.splice(0, mergedOrder.length, ...withoutNewCards);
+      }
       setLayout({
-        order: [...storedOrder, ...defaultOrder.filter((id) => !storedOrder.includes(id))],
+        version: 4,
+        order: mergedOrder,
         hidden: Array.isArray(stored.hidden) ? stored.hidden.filter((id) => known.has(id)) : [],
         pinned: Array.isArray(stored.pinned) ? stored.pinned.filter((id) => known.has(id)) : []
       });
     } catch {
-      setLayout({ order: defaultOrder, hidden: [], pinned: [] });
+      setLayout({ version: 4, order: defaultOrder, hidden: [], pinned: [] });
     }
     setLayoutReady(true);
   }, [storageKey]);
@@ -404,10 +426,40 @@ export function OverviewPage(props: Props) {
   const cards: Record<string, ReactNode> = {
     duration: <Metric icon={<AlarmClock />} label={isIndividualOverview ? '累计训练时间' : '团队训练总时长'} value={formatNumber(summary.totalDuration / 60, 1)} unit="小时" note={isIndividualOverview ? `${summary.days}个记录日` : `人均 ${formatNumber(perAthlete(summary.totalDuration) / 60, 1)} 小时 · ${scopeAthleteCount}人`} tone="navy" />,
     distance: <Metric icon={<Route />} label={isIndividualOverview ? '专项距离' : '团队专项总距离'} value={formatNumber(summary.totalDistance, 1)} unit="km" note={isIndividualOverview ? `${props.project}周期累计` : `人均 ${formatNumber(perAthlete(summary.totalDistance), 1)} km`} tone="teal" />,
-    srpe: <Metric icon={<Gauge />} label={isIndividualOverview ? 'SRPE总负荷' : '团队SRPE总负荷'} value={formatNumber(summary.totalSrpe)} unit="AU" note={isIndividualOverview ? '训练时间 × RPE' : `人均 ${formatNumber(perAthlete(summary.totalSrpe))} AU`} tone="blue" />,
-    rpe: <Metric icon={<Activity />} label="平均主观强度" value={averageRpe ? formatNumber(averageRpe, 1) : '—'} unit="RPE" note="仅统计已填写记录" tone="orange" />,
+    srpe: <Metric icon={<Gauge />} label={isIndividualOverview ? 'SRPE总负荷' : '团队SRPE总负荷'} value={formatNumber(summary.totalSrpe)} unit="AU" note={isIndividualOverview ? '训练时间 × RPE' : `人均 ${formatNumber(perAthlete(summary.totalSrpe))} AU`} tone="orange" />,
+    rpe: <Metric icon={<Activity />} label="平均主观强度" value={averageRpe ? formatNumber(averageRpe, 1) : '—'} unit="RPE" note="仅统计已填写记录" tone="blue" />,
     'acute-load': <Metric icon={<BarChart3 />} label={isIndividualOverview ? '近7日急性负荷' : '团队近7日人均负荷'} value={formatNumber(diagnostics.acuteLoad)} unit="AU" note={diagnostics.acuteChronicRatio === null ? '需至少28天数据计算负荷比' : `${isIndividualOverview ? '前21日周均比' : '前21日人均周负荷比'} ${diagnostics.acuteChronicRatio.toFixed(2)}`} tone="purple" />,
-    coverage: <Metric icon={<Database />} label="数据完整率" value={formatNumber(diagnostics.dataCoverage, 1)} unit="%" note="RPE·晨脉·体重·睡眠·疲劳" tone="green" />,
+    'recovery-time': <Metric
+      icon={<Clock3 />}
+      label={isIndividualOverview ? '日均恢复时间' : '团队日均恢复时间'}
+      value={recoveryTime.averageHours === null ? '—' : formatNumber(recoveryTime.averageHours, 1)}
+      unit="小时"
+      note={recoveryTime.adequateRate === null
+        ? '暂无有效睡眠恢复记录'
+        : `≥${recoveryTime.targetHours}h达标 ${formatNumber(recoveryTime.adequateRate, 1)}% · ${recoveryTime.validPersonDays}${isIndividualOverview ? '个记录日' : '人日'}`}
+      tone="green"
+    />,
+    'athlete-profile': (
+      <article className="panel professional-panel athlete-profile-panel">
+        <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '队伍身体与年龄画像'} subtitle={`${scopeLabel} · 年龄 · 身高 · 体重`} />
+        <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} />
+        <p className="analysis-method-note">年龄由出生日期按分析截止日计算；身高体重读取不晚于截止日的最近一次身体测量。</p>
+      </article>
+    ),
+    'competitive-state': (
+      <article className="panel professional-panel competitive-state-panel">
+        <PanelHeading title="竞技状态评估" subtitle={`${isIndividualOverview ? '本人' : '团队均值与等级分布'} · 六维综合`} />
+        <CompetitiveStateOverview profiles={athleteProfiles} individual={isIndividualOverview} />
+        <p className="analysis-method-note">竞技状态由专项耐力、力量爆发、技术效率、负荷适应、恢复和比赛能力综合形成，不替代教练现场判断。</p>
+      </article>
+    ),
+    'birthplace-map': (
+      <article className="panel professional-panel birthplace-map-panel">
+        <PanelHeading title="生源地分布地图" subtitle={`${scopeLabel} · 籍贯省市 · 运动员明细`} />
+        <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} />
+        <p className="analysis-method-note">生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。</p>
+      </article>
+    ),
     'performance-radar': (
       <article className="panel professional-panel">
         <PanelHeading title="六维运动表现画像" subtitle={`${scopeLabel} · 目标达成制`} />
@@ -485,7 +537,7 @@ export function OverviewPage(props: Props) {
     <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
       <header className="page-heading">
         <div><h1>{isIndividualOverview ? '我的训练总览' : '团队训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
-        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
+        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} presetMode="dayWeekMonth" canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
       </header>
       {overview && <div className={`overview-data-provenance${overview.meta.containsDemoData ? ' demo' : ''}`}>
         <Database size={15} /><strong>{overview.meta.containsDemoData ? '演示数据模式' : '正式数据'} · {overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>

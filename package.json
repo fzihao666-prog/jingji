@@ -18,6 +18,8 @@
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "bcryptjs": "latest",
+    "china-map-geojson": "^1.0.4",
+    "d3-geo": "^3.1.1",
     "exceljs": "^4.4.0",
     "express": "latest",
     "html2canvas": "latest",
@@ -33,6 +35,7 @@
     "recharts": "latest"
   },
   "devDependencies": {
+    "@types/d3-geo": "^3.1.0",
     "@types/express": "latest",
     "@types/jsonwebtoken": "latest",
     "@types/multer": "latest",

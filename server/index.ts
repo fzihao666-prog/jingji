@@ -6,7 +6,7 @@ import ExcelJS from 'exceljs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { db } from './db.ts';
+import { db, upsertAthleteOrigin } from './db.ts';
 import { buildOverviewPayload } from './overview-service.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import {
@@ -3955,6 +3955,17 @@ app.post('/api/admin/registrations/:id/approve', requireAuth, requireRole('SCC',
             request.county
           );
         athleteId = Number(result.lastInsertRowid);
+      }
+      const [originProvince = '', originCity = '', originCounty = ''] = (request.native_place || '').split('/');
+      if (athleteId && provinceSet.has(originProvince) && originCity) {
+        upsertAthleteOrigin({
+          athleteId,
+          province: originProvince,
+          city: originCity,
+          county: originCounty,
+          source: 'registration',
+          quality: 'valid'
+        });
       }
     }
 

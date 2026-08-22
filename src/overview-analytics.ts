@@ -26,6 +26,14 @@ export type LoadDiagnostics = {
   recoveryScore: number | null;
 };
 
+export type RecoveryTimeAnalysis = {
+  averageHours: number | null;
+  targetHours: number;
+  adequateRate: number | null;
+  validPersonDays: number;
+  insufficientPersonDays: number;
+};
+
 export type RadarDimension = {
   key: string;
   label: string;
@@ -55,6 +63,25 @@ function isoDays(from: string, to: string) {
 
 function firstAvailable(rows: TrainingRecord[], key: 'sleepHours' | 'fatigueIndex' | 'morningPulse' | 'weightKg') {
   return rows.find((row) => typeof row[key] === 'number')?.[key] ?? null;
+}
+
+export function calculateRecoveryTime(records: TrainingRecord[], targetHours = 8): RecoveryTimeAnalysis {
+  const athleteDays = new Map<string, TrainingRecord[]>();
+  for (const record of records) {
+    const key = `${record.athleteId}:${record.date}`;
+    athleteDays.set(key, [...(athleteDays.get(key) || []), record]);
+  }
+  const recoveryHours = [...athleteDays.values()]
+    .map((rows) => firstAvailable(rows, 'sleepHours'))
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 24);
+  const adequateDays = recoveryHours.filter((hours) => hours >= targetHours).length;
+  return {
+    averageHours: average(recoveryHours),
+    targetHours,
+    adequateRate: recoveryHours.length ? adequateDays / recoveryHours.length * 100 : null,
+    validPersonDays: recoveryHours.length,
+    insufficientPersonDays: recoveryHours.length - adequateDays
+  };
 }
 
 export function buildDailyPerformance(records: TrainingRecord[], from: string, to: string, mode: 'individual' | 'team' = 'individual', scopeAthleteCount = 1): DailyPerformancePoint[] {
