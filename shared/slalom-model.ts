@@ -87,6 +87,6 @@ export function analyzeSlalomPeriod(records: RowingAnalysisRecord[]): RowingPeri
   return {
     ...analysis,
     recommendations: analysis.recommendations.map((item) => item.replaceAll('皮划艇', '激流')),
-    unavailableMetrics: ['赛道门区分段', '桨频与航速', '乳酸阈测功仪功率', '300米专项测试']
+    unavailableMetrics: ['赛道门区分段', '桨频与航速', '乳酸阈测功仪功率', '300米专项训练']
   };
 }

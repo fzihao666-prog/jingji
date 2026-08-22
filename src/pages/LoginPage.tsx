@@ -1,12 +1,16 @@
 import { AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, LockKeyhole, UserRound, UsersRound } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
-import type { User } from '../types';
+import type { ProjectTeam, User } from '../types';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { PROJECTS } from '../../shared/projects';
 
 type Mode = 'login' | 'register';
+
+function genderFromIdentityNumber(value: string) {
+  return /^\d{17}[\dX]$/.test(value) ? (Number(value[16]) % 2 ? '男' : '女') : '';
+}
 
 export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) => void }) {
   const [mode, setMode] = useState<Mode>('login');
@@ -17,16 +21,23 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [role, setRole] = useState<'ATL' | 'SCC'>('ATL');
   const [project, setProject] = useState('赛艇');
   const [team, setTeam] = useState('');
+  const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [gender, setGender] = useState('');
   const [identityNumber, setIdentityNumber] = useState('');
   const [nativePlaceProvince, setNativePlaceProvince] = useState('');
   const [nativePlaceCity, setNativePlaceCity] = useState('');
-  const [region, setRegion] = useState('');
-  const [city, setCity] = useState('');
-  const [county, setCounty] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const projectTeams = teams.filter((item) => item.project === project);
+
+  useEffect(() => {
+    api.teams().then((result) => setTeams(result.teams)).catch(() => setTeams([]));
+  }, []);
+
+  useEffect(() => {
+    if (!projectTeams.some((item) => item.name === team)) setTeam(projectTeams[0]?.name || '');
+  }, [project, teams]);
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -65,8 +76,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     try {
       const result = await api.register({
         username, password, displayName, role, project, team, gender, identityNumber,
-        nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`,
-        region, city, county
+        nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`
       });
       setSuccess(result.message);
       setPassword('');
@@ -89,11 +99,6 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
           <p className="eyebrow">ROWING · CANOEING</p>
           <h1>让每次训练，<br />留下清晰答案。</h1>
         </div>
-        <ol className="auth-steps" aria-label="申请开通流程">
-          <li><span>01</span><strong>提交申请</strong></li>
-          <li><span>02</span><strong>管理员审核</strong></li>
-          <li><span>03</span><strong>登录使用</strong></li>
-        </ol>
         <div className="lane-visual" aria-hidden="true">
           <div className="boat"><span /><i /><i /><i /><i /></div>
           <div className="lane lane-one" /><div className="lane lane-two" /><div className="lane lane-three" />
@@ -103,7 +108,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
       <section className="login-panel">
         <div className={`login-box login-box-${mode}`}>
           <div className="login-heading">
-            <p>{mode === 'login' ? '训练数据中心' : '账号准入'}</p>
+            <p>{mode === 'login' ? '冠蒂本训练数据中心' : '账号准入'}</p>
             <h2>{mode === 'login' ? '欢迎回来' : '申请注册'}</h2>
             <span>{mode === 'login' ? '使用已开通的账号进入系统' : '提交资料，审核通过后即可登录'}</span>
           </div>
@@ -148,15 +153,12 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                 <div className="register-section-title"><b>01</b><strong>基本资料</strong></div>
                 <div className="form-grid profile-grid">
                   <label><span>姓名</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
-                  <label><span>身份证号</span><input value={identityNumber} onChange={(event) => setIdentityNumber(event.target.value.replace(/\s/g, '').toUpperCase())} maxLength={18} pattern="[0-9]{17}[0-9X]" title="请输入18位身份证号，末位可以是X" placeholder="18位身份证号" required /></label>
+                  <label><span>身份证号</span><input value={identityNumber} onChange={(event) => { const value = event.target.value.replace(/\s/g, '').toUpperCase(); setIdentityNumber(value); setGender(genderFromIdentityNumber(value)); }} maxLength={18} pattern="[0-9]{17}[0-9X]" title="请输入18位身份证号，末位可以是X" placeholder="18位身份证号" required /></label>
                   <label><span>项目</span><select value={project} onChange={(event) => setProject(event.target.value)}>{PROJECTS.map((item) => <option key={item}>{item}</option>)}</select></label>
-                  <label><span>队伍</span><input value={team} onChange={(event) => setTeam(event.target.value)} placeholder="如：女子双桨组" required /></label>
-                  <label><span>性别</span><select value={gender} onChange={(event) => setGender(event.target.value)} required><option value="">请选择</option><option>女</option><option>男</option></select></label>
+                  <label><span>队伍</span><select value={team} onChange={(event) => setTeam(event.target.value)} disabled={!projectTeams.length} required><option value="">{projectTeams.length ? '请选择队伍' : '该项目暂无队伍'}</option>{projectTeams.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
+                  <label><span>性别</span><input value={gender} readOnly placeholder="填写身份证号后自动确定" aria-label="性别（根据身份证号自动确定）" /></label>
                   <label><span>籍贯省份</span><select value={nativePlaceProvince} onChange={(event) => { setNativePlaceProvince(event.target.value); setNativePlaceCity(''); }} required><option value="">请选择省份</option>{PROVINCES.map((province) => <option key={province}>{province}</option>)}</select></label>
                   <label><span>籍贯城市</span><select value={nativePlaceCity} onChange={(event) => setNativePlaceCity(event.target.value)} disabled={!nativePlaceProvince} required><option value="">{nativePlaceProvince ? '请选择城市' : '请先选择省份'}</option>{(PROVINCE_CITIES[nativePlaceProvince] || []).map((cityName) => <option key={cityName}>{cityName}</option>)}</select></label>
-                  <label><span>所属省份</span><select value={region} onChange={(event) => setRegion(event.target.value)} required><option value="">请选择</option>{PROVINCES.map((province) => <option key={province}>{province}</option>)}</select></label>
-                  <label><span>所属城市</span><input value={city} onChange={(event) => setCity(event.target.value)} placeholder="如：成都市" required /></label>
-                  <label><span>所属区县</span><input value={county} onChange={(event) => setCounty(event.target.value)} placeholder="如：武侯区" required /></label>
                 </div>
               </section>
 

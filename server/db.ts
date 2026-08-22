@@ -71,6 +71,15 @@ db.exec(`
     FOREIGN KEY (reviewed_by) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS project_teams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, name)
+  );
+
   CREATE TABLE IF NOT EXISTS coach_athletes (
     coach_user_id INTEGER NOT NULL,
     athlete_id INTEGER NOT NULL,
@@ -896,6 +905,11 @@ function seed() {
 
 seed();
 
+db.exec(`
+  INSERT OR IGNORE INTO project_teams (project, name)
+  SELECT DISTINCT project, team FROM athletes WHERE TRIM(team) <> '';
+`);
+
 function seedRegionalExample() {
   const demoRegions: Record<string, [string, string, string]> = {
     林舟: ['四川', '成都', '武侯区'],
@@ -1269,7 +1283,7 @@ function seedProfessionalOverviewDemo() {
   const insertTestSession = db.prepare(`
     INSERT OR IGNORE INTO test_sessions
       (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by)
-    VALUES (?, ?, '专业综合评估', '统一热身后完成身体形态、力量、爆发、动作效率和专项测试',
+    VALUES (?, ?, '专业综合评估', '统一热身后完成身体形态、力量、爆发、动作效率和专项训练',
       'demo_seed', 'valid', 1, ?)
   `);
   const insertMeasurement = db.prepare(`
@@ -1453,7 +1467,7 @@ function seedTrainingPlanExample() {
   const plan = {
     startDate: '2026-07-28',
     endDate: '2026-08-27',
-    title: '皮划艇夏训体能计划',
+      title: '皮划艇夏训体能训练',
     scheduleLabel: '周二 / 周五',
     bodyWeight: 58.5,
     age: 24,
@@ -1508,6 +1522,13 @@ function seedTrainingPlanExample() {
 }
 
 seedTrainingPlanExample();
+
+// 同步早期演示数据中的旧模块命名；只处理完全匹配的内置示例标题。
+db.prepare(`
+  UPDATE training_plans
+  SET title = ?, plan_data = replace(plan_data, ?, ?)
+  WHERE title = ?
+`).run('皮划艇夏训体能训练', '皮划艇夏训体能计划', '皮划艇夏训体能训练', '皮划艇夏训体能计划');
 
 const validRegions = new Set<string>(PROVINCES);
 const invalidRegions = (db.prepare("SELECT DISTINCT region FROM athletes WHERE region <> '未设置'").all() as { region: string }[])

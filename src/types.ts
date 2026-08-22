@@ -14,6 +14,14 @@ export type User = {
   athleteId: number | null;
 };
 
+export type ProjectTeam = {
+  id: number;
+  project: Project;
+  name: string;
+  athleteCount: number;
+  canDelete?: boolean;
+};
+
 export type TrainingBreakdown = {
   waterMinutes: number;
   ergMinutes: number;
@@ -43,6 +51,10 @@ export type Athlete = {
   county: string;
   coaches: string;
   photoUrl: string;
+  birthDate: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  bodyFatPct: number | null;
   coachUsers?: Array<{ id: number; displayName: string }>;
 };
 
@@ -369,9 +381,6 @@ export type RegistrationRequest = {
   gender: string | null;
   identityNumber: string | null;
   nativePlace: string | null;
-  region: string | null;
-  city: string | null;
-  county: string | null;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   reviewedAt: string | null;

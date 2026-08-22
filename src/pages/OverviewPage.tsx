@@ -1,6 +1,6 @@
 import {
   Activity, AlarmClock, ArrowRight, BarChart3, Clock3, Database, Eye, EyeOff, Gauge,
-  MoreHorizontal, Pin, Route, ShieldCheck, Sparkles, UsersRound
+  MoreHorizontal, Pin, Route, Search, ShieldCheck, Sparkles, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
@@ -15,7 +15,6 @@ import {
   RelativeStrengthChart, StrengthChangeChart, StructureChart, WaterIntensityLoadChart
 } from '../components/LoadCharts';
 import { StatusPill } from '../components/StatusPill';
-import { EditableName } from '../components/EditableName';
 import { AthleteProfileOverview, BirthplaceMapOverview, CompetitiveStateOverview } from '../components/AthleteProfileCharts';
 import {
   buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics, calculateRecoveryTime,
@@ -102,6 +101,7 @@ export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
+  const [rosterSearch, setRosterSearch] = useState('');
   const isIndividualOverview = props.user.role === 'ATL';
   const overviewAthleteId = isIndividualOverview ? props.user.athleteId : null;
 
@@ -159,6 +159,14 @@ export function OverviewPage(props: Props) {
       latestDate
     };
   }), [props.athletes, analysisRecords]);
+  const visibleAthleteRows = useMemo(() => {
+    const query = rosterSearch.trim().toLowerCase();
+    const filtered = query ? athleteRows.filter(({ athlete }) => [
+      athlete.name, athlete.project, athlete.team, athlete.region, athlete.city, athlete.county,
+      athlete.coachUsers?.map((coach) => coach.displayName).join(' ')
+    ].filter(Boolean).join(' ').toLowerCase().includes(query)) : athleteRows;
+    return filtered.slice(0, 5);
+  }, [athleteRows, rosterSearch]);
 
   const statusCount = useMemo(() => {
     const count = { normal: 0, attention: 0, alert: 0, rest: 0, missing: 0 };
@@ -521,13 +529,13 @@ export function OverviewPage(props: Props) {
     ),
     roster: (
       <article className="panel professional-panel roster-preview">
-        <div className="panel-heading"><div><h2>运动员状态</h2></div><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div>
+        <div className="panel-heading roster-panel-heading"><div><h2>运动员状态</h2></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>
         <div className="table-scroll"><table className="data-table">
           <thead><tr><th>运动员</th><th>所属地区</th><th>项目 / 组别</th><th>最新状态</th><th>周期SRPE</th><th>平均睡眠</th><th>疲劳指数</th></tr></thead>
-          <tbody>{athleteRows.map((row) => <tr key={row.athlete.id}>
-            <td><strong><EditableName value={row.athlete.name} canEdit={ROLE_META[props.user.role].level > 1} onSave={(name) => props.onAthleteNameChange(row.athlete.id, name)} label="运动员姓名" /></strong>{row.athlete.coachUsers?.length ? <small className="athlete-coach-names">{row.athlete.coachUsers.map((coach) => <EditableName key={coach.id} value={coach.displayName} canEdit={ROLE_META[props.user.role].level > ROLE_META.SCC.level} onSave={(name) => props.onUserNameChange(coach.id, name)} label="教练姓名" />)}</small> : <small>未绑定教练</small>}</td>
+          <tbody>{visibleAthleteRows.map((row) => <tr key={row.athlete.id}>
+            <td><strong>{row.athlete.name}</strong>{row.athlete.coachUsers?.length ? <small className="athlete-coach-names">{row.athlete.coachUsers.map((coach) => coach.displayName).join('、')}</small> : <small>未绑定教练</small>}</td>
             <td>{[row.athlete.region, row.athlete.city, row.athlete.county].filter(Boolean).join(' / ') || '未设置'}</td><td>{row.athlete.project}<small>{row.athlete.team}</small></td><td><StatusPill status={row.status} compact /></td><td>{formatNumber(row.load)}</td><td>{row.sleep ? `${row.sleep.toFixed(1)} h` : '—'}</td><td>{row.fatigue ? row.fatigue.toFixed(1) : '—'}</td>
-          </tr>)}</tbody>
+          </tr>)}{!visibleAthleteRows.length && <tr><td colSpan={7} className="roster-search-empty">未找到匹配成员</td></tr>}</tbody>
         </table></div>
       </article>
     )
@@ -537,7 +545,7 @@ export function OverviewPage(props: Props) {
     <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
       <header className="page-heading">
         <div><h1>{isIndividualOverview ? '我的训练总览' : '团队训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
-        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} presetMode="dayWeekMonth" canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
+        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
       </header>
       {overview && <div className={`overview-data-provenance${overview.meta.containsDemoData ? ' demo' : ''}`}>
         <Database size={15} /><strong>{overview.meta.containsDemoData ? '演示数据模式' : '正式数据'} · {overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>

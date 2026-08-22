@@ -77,6 +77,7 @@ export function ReportPage(props: Props) {
   const dateRange = useMemo(() => enumerateDates(props.from, props.to), [props.from, props.to]);
   const daily = useMemo(() => buildDailySummaries(dateRange, periodRecords), [dateRange, periodRecords]);
   const chartBuckets = useMemo(() => buildChartBuckets(daily), [daily]);
+  const annualMode = dateRange.length > 92;
   const summary = useMemo(() => aggregateRecords(periodRecords), [periodRecords]);
   const trainingRecords = useMemo(() => periodRecords.filter((record) => record.status !== 'rest'), [periodRecords]);
   const scopeAthleteCount = useMemo(() => new Set(periodRecords.map((record) => record.athleteId)).size, [periodRecords]);
@@ -137,7 +138,7 @@ export function ReportPage(props: Props) {
     };
   }).filter((row) => row.sessions || row.status !== 'missing'), [props.athletes, periodRecords]);
 
-  const schedulePages = chunkRows(daily, 7);
+  const schedulePages = chunkRows(annualMode ? daily.filter((day) => day.records.length) : daily, 7);
   const safeSchedulePages = schedulePages.length ? schedulePages : [[]];
   const detailPages = chunkRows(athleteRows, 8);
   const safeDetailPages = detailPages.length ? detailPages : [[]];
@@ -248,8 +249,8 @@ export function ReportPage(props: Props) {
             <ReportMetric label="异常/关注" value={formatNumber(summary.alerts + summary.attention)} unit="条" tone={summary.alerts ? 'risk' : 'normal'} />
           </section>
           <section className="report-section">
-            <div className="report-section-title"><span>01</span><h2>周期训练负荷</h2><small>{dateRange.length <= 14 ? '按日展示' : '按7天汇总'} · 柱形为SRPE，折线为训练时间</small></div>
-            <PeriodLoadChart rows={chartBuckets} />
+            <div className="report-section-title"><span>01</span><h2>周期训练负荷</h2><small>{annualMode ? '按月汇总' : dateRange.length <= 14 ? '按日展示' : '按7天汇总'} · 柱形为SRPE，折线为训练时间</small></div>
+            <PeriodLoadChart rows={chartBuckets} verticalLabels={annualMode} />
           </section>
           <section className="report-dashboard-ratios">
             <RatioCard title="主辅训练比例" rows={mainAuxiliary} centerLabel="训练结构" />
@@ -454,13 +455,28 @@ function buildChartBuckets(days: DailySummary[]): ChartBucket[] {
     distance: day.distance,
     srpe: day.srpe
   }));
-  return chunkRows(days, 7).map((chunk) => ({
-    label: `${chunk[0].date.slice(5)}-${chunk[chunk.length - 1].date.slice(5)}`,
+  const chunks = days.length > 92 ? groupDaysByMonth(days) : chunkRows(days, 7);
+  return chunks.map((chunk) => ({
+    label: days.length > 92 ? monthChartLabel(chunk[0].date, days) : `${chunk[0].date.slice(5)}-${chunk[chunk.length - 1].date.slice(5)}`,
     sublabel: `${chunk.length}天`,
     duration: chunk.reduce((sum, day) => sum + day.duration, 0),
     distance: chunk.reduce((sum, day) => sum + day.distance, 0),
     srpe: chunk.reduce((sum, day) => sum + day.srpe, 0)
   }));
+}
+
+function groupDaysByMonth(days: DailySummary[]) {
+  const groups = new Map<string, DailySummary[]>();
+  for (const day of days) {
+    const month = day.date.slice(0, 7);
+    groups.set(month, [...(groups.get(month) || []), day]);
+  }
+  return [...groups.values()];
+}
+
+function monthChartLabel(date: string, days: DailySummary[]) {
+  const spansYears = days[0]?.date.slice(0, 4) !== days[days.length - 1]?.date.slice(0, 4);
+  return spansYears ? `${date.slice(2, 4)}.${date.slice(5, 7)}` : `${Number(date.slice(5, 7))}月`;
 }
 
 function groupMetric(records: TrainingRecord[], key: (record: TrainingRecord) => string, value: (record: TrainingRecord) => number) {
@@ -666,14 +682,14 @@ function ReportMetric({ label, value, unit, tone = 'default' }: { label: string;
   return <div className={`metric-${tone}`}><span>{label}</span><strong>{value}</strong><small>{unit}</small></div>;
 }
 
-function PeriodLoadChart({ rows }: { rows: ChartBucket[] }) {
+function PeriodLoadChart({ rows, verticalLabels = false }: { rows: ChartBucket[]; verticalLabels?: boolean }) {
   if (!rows.length) return <div className="report-empty">所选周期暂无训练负荷。</div>;
   const maxSrpe = Math.max(...rows.map((row) => row.srpe), 1);
   const maxDuration = Math.max(...rows.map((row) => row.duration), 1);
   const srpeTicks = [1, .75, .5, .25, 0].map((ratio) => Math.round(maxSrpe * ratio));
   const durationTicks = [1, .75, .5, .25, 0].map((ratio) => Math.round(maxDuration * ratio));
   const linePoints = rows.map((row, index) => `${index * 100 + 50},${94 - row.duration / maxDuration * 82}`).join(' ');
-  return <div className="period-load-chart" style={{ '--period-columns': rows.length } as CSSProperties}>
+  return <div className={`period-load-chart ${verticalLabels || rows.length > 10 ? 'dense-labels' : ''}`} style={{ '--period-columns': rows.length } as CSSProperties}>
     <div className="period-chart-grid" />
     <div className="period-axis period-axis-left"><b>SRPE(AU)</b>{srpeTicks.map((tick, index) => <span key={`${tick}-${index}`}>{formatNumber(tick)}</span>)}</div>
     <div className="period-axis period-axis-right"><b>时间(min)</b>{durationTicks.map((tick, index) => <span key={`${tick}-${index}`}>{formatNumber(tick)}</span>)}</div>
@@ -718,13 +734,22 @@ function RatioCard({ title, rows, centerLabel, compact = false, unit = 'min' }: 
 
 function CoverageRail({ days }: { days: DailySummary[] }) {
   if (!days.length) return <div className="report-empty">请选择有效日期范围。</div>;
-  return <div className="report-coverage-rail" style={{ '--coverage-columns': Math.min(days.length, 31) } as CSSProperties}>
-    {days.slice(0, 31).map((day) => <div key={day.date} className={`coverage-${day.status}`}>
-      <span>{day.date.slice(8)}</span>
+  const annual = days.length > 92;
+  const shown = annual ? groupDaysByMonth(days).map((month) => {
+    const records = month.flatMap((day) => day.records);
+    return {
+      date: month[0].date.slice(0, 7),
+      duration: month.reduce((sum, day) => sum + day.duration, 0),
+      status: records.length ? worstStatus(records) : 'missing' as TrainingStatus
+    };
+  }) : days.slice(0, 31);
+  return <div className={`report-coverage-rail ${annual ? 'monthly' : ''}`} style={{ '--coverage-columns': shown.length } as CSSProperties}>
+    {shown.map((day) => <div key={day.date} className={`coverage-${day.status}`}>
+      <span>{annual ? monthChartLabel(`${day.date}-01`, days) : day.date.slice(8)}</span>
       <i />
       <small>{day.duration ? `${formatNumber(day.duration)}′` : day.status === 'missing' ? '未传' : '休息'}</small>
     </div>)}
-    {days.length > 31 && <p>共 {days.length} 天，图表显示前31天；训练安排页包含完整日期。</p>}
+    {!annual && days.length > 31 && <p>共 {days.length} 天，图表显示前31天；训练安排页包含完整日期。</p>}
   </div>;
 }
 
@@ -749,16 +774,18 @@ function HorizontalBars({ title, rows, unit, emptyText, maxRows = 7, accent = 'c
 }
 
 function MiniDayBars({ days, environment }: { days: DailySummary[]; environment: 'water' | 'land' }) {
-  const rows = days.length <= 14 ? days : chunkRows(days, 7).map((chunk) => ({
-    date: `${chunk[0].date.slice(5)}-${chunk[chunk.length - 1].date.slice(5)}`,
+  const annual = days.length > 92;
+  const rows = days.length <= 14 ? days.map((day) => ({ ...day, chartLabel: day.date.slice(5) })) : (annual ? groupDaysByMonth(days) : chunkRows(days, 7)).map((chunk) => ({
+    date: chunk[0].date,
+    chartLabel: annual ? monthChartLabel(chunk[0].date, days) : `${chunk[0].date.slice(5)}-${chunk[chunk.length - 1].date.slice(5)}`,
     waterDuration: chunk.reduce((sum, day) => sum + day.waterDuration, 0),
     landDuration: chunk.reduce((sum, day) => sum + day.landDuration, 0)
   }));
   const values = rows.map((row) => environment === 'water' ? row.waterDuration : row.landDuration);
   const max = Math.max(...values, 1);
   return <div className="report-mini-days" style={{ '--mini-columns': rows.length } as CSSProperties}>
-    <span>{days.length <= 14 ? '每日时长' : '每7天时长'}</span>
-    <div>{rows.map((row, index) => <i key={`${row.date}-${index}`} style={{ height: `${Math.max(values[index] ? 4 : 0, values[index] / max * 100)}%` }}><b>{values[index] ? formatNumber(values[index]) : ''}</b><small>{row.date.slice(5)}</small></i>)}</div>
+    <span>{annual ? '每月时长' : days.length <= 14 ? '每日时长' : '每7天时长'}</span>
+    <div>{rows.map((row, index) => <i key={`${row.date}-${index}`} style={{ height: `${Math.max(values[index] ? 4 : 0, values[index] / max * 100)}%` }}><b>{values[index] ? formatNumber(values[index]) : ''}</b><small>{row.chartLabel}</small></i>)}</div>
   </div>;
 }
 

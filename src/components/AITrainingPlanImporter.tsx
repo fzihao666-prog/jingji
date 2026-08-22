@@ -94,7 +94,7 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
       return;
     }
     if (!file) {
-      setError('请先选择训练计划文件');
+      setError('请先选择体能训练文件');
       return;
     }
     setBusy('recognize');
@@ -212,7 +212,7 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
       return;
     }
     if (!plan.title.trim()) {
-      setError('请确认计划名称');
+      setError('请确认训练名称');
       return;
     }
     if (!plan.startDate || !plan.endDate) {
@@ -263,8 +263,8 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
     <div className="ai-importer">
       <header className="importer-header">
         <div className="ai-badge"><FileSearch size={23} /><span>AI 识别导入</span></div>
-        <h2>{targetIds.length > 1 ? `把已有计划分配给 ${targetIds.length} 名运动员` : `把已有计划录入给 ${targetNames[0] || athlete.name}`}</h2>
-        <p>训练日按文件实际内容识别并可修改；同一份确认后的计划可以一次导入多人。</p>
+        <h2>{targetIds.length > 1 ? `把已有训练分配给 ${targetIds.length} 名运动员` : `把已有训练录入给 ${targetNames[0] || athlete.name}`}</h2>
+        <p>训练日按文件实际内容识别并可修改；同一份确认后的训练可以一次导入多人。</p>
       </header>
 
       <div className="import-source-chain" aria-label="导入流程">
@@ -274,7 +274,7 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
         <ArrowRight size={17} />
         <div className={plan ? 'active' : ''}><Check size={18} /><span>人工确认<small>可修改</small></span></div>
         <ArrowRight size={17} />
-        <div><Save size={18} /><span>正式导入<small>写入 {targetIds.length || 0} 份计划</small></span></div>
+          <div><Save size={18} /><span>正式导入<small>写入 {targetIds.length || 0} 份训练</small></span></div>
       </div>
 
       <section className="import-roster-panel">
@@ -318,7 +318,7 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
             onDrop={(event) => { event.preventDefault(); pickFile(event.dataTransfer.files?.[0]); }}
           >
             {file ? <CheckCircle2 size={36} /> : <Upload size={36} />}
-            <strong>{file ? file.name : '点击选择或拖入训练计划'}</strong>
+            <strong>{file ? file.name : '点击选择或拖入体能训练文件'}</strong>
             <span>{file ? `${(file.size / 1024).toFixed(1)} KB · 点击可更换` : 'Excel、DOCX、文本型PDF、图片、TXT/CSV · 最大10MB'}</span>
           </button>
           <div className="import-truth-note">
@@ -352,7 +352,7 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
           )}
 
           <div className="import-meta-grid">
-            <label className="wide"><span>计划名称 *</span><input value={plan.title} onChange={(event) => updatePlan('title', event.target.value)} placeholder="请确认计划名称" /></label>
+              <label className="wide"><span>训练名称 *</span><input value={plan.title} onChange={(event) => updatePlan('title', event.target.value)} placeholder="请确认训练名称" /></label>
             <label><span>开始日期 *</span><input type="date" value={plan.startDate} onChange={(event) => updatePlan('startDate', event.target.value)} /></label>
             <label><span>结束日期 *</span><input type="date" value={plan.endDate} onChange={(event) => updatePlan('endDate', event.target.value)} /></label>
             <label className="wide"><span>训练日 / 安排（可修改）</span><input value={plan.scheduleLabel} onChange={(event) => updatePlan('scheduleLabel', event.target.value)} placeholder="例如：周一、周三、周六；原文件未写可留空" /></label>
@@ -363,7 +363,7 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
             {plan.weeklyPlans.map((week, weekIndex) => (
               <article className="import-week" key={week.id}>
                 <header>
-                  <label><span>阶段/周次</span><input value={week.label || (week.weekNumber ? `第 ${week.weekNumber} 周` : '')} onChange={(event) => updateWeek(weekIndex, { label: event.target.value, weekNumber: null })} placeholder={`计划阶段 ${weekIndex + 1}`} /></label>
+                    <label><span>阶段/周次</span><input value={week.label || (week.weekNumber ? `第 ${week.weekNumber} 周` : '')} onChange={(event) => updateWeek(weekIndex, { label: event.target.value, weekNumber: null })} placeholder={`训练阶段 ${weekIndex + 1}`} /></label>
                   <label><span>阶段重点</span><input value={week.focus} onChange={(event) => updateWeek(weekIndex, { focus: event.target.value })} placeholder="原文件未标注" /></label>
                 </header>
                 {week.days.map((day, dayIndex) => (
@@ -401,13 +401,13 @@ export function AITrainingPlanImporter({ athlete, athletes, onSaved }: Props) {
 
           <label className="import-replace-option">
             <input type="checkbox" checked={replaceExisting} onChange={(event) => { setReplaceExisting(event.target.checked); setSuccess(''); }} />
-            <span><strong>覆盖同一开始日期的已有计划</strong><small>默认不覆盖；存在冲突的运动员会被跳过，并在导入结果中说明。</small></span>
+              <span><strong>覆盖同一开始日期的已有训练</strong><small>默认不覆盖；存在冲突的运动员会被跳过，并在导入结果中说明。</small></span>
           </label>
 
           <div className="import-actions sticky">
             <button type="button" className="btn-secondary" disabled={Boolean(busy)} onClick={reset}><RotateCcw size={16} />换一个文件</button>
             <button type="button" className="btn-primary" disabled={busy === 'save'} onClick={save}>
-              {busy === 'save' ? <><LoaderCircle className="spin" size={17} />正在导入 {targetIds.length} 份</> : <><Save size={17} />确认并导入 {targetIds.length} 份计划</>}
+            {busy === 'save' ? <><LoaderCircle className="spin" size={17} />正在导入 {targetIds.length} 份</> : <><Save size={17} />确认并导入 {targetIds.length} 份训练</>}
             </button>
           </div>
         </section>

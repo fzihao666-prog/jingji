@@ -44,7 +44,7 @@ export function SpecialTestsPage({ user, from, to, onRangeChange, project }: Pro
       setEvents(result.events);
       setSelectedId((current) => result.events.some((event) => event.id === current) ? current : result.events[0]?.id ?? null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '专项测试数据加载失败。');
+      setMessage(error instanceof Error ? error.message : '专项训练数据加载失败。');
     } finally {
       setLoading(false);
     }
@@ -71,7 +71,7 @@ export function SpecialTestsPage({ user, from, to, onRangeChange, project }: Pro
     try {
       setPreview(await api.previewSpecialTests(file, project));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '专项测试Excel读取失败。');
+      setMessage(error instanceof Error ? error.message : '专项训练Excel读取失败。');
     } finally {
       setImporting(false);
     }
@@ -82,11 +82,11 @@ export function SpecialTestsPage({ user, from, to, onRangeChange, project }: Pro
     setImporting(true);
     try {
       const result = await api.commitSpecialTests(preview.importId);
-      setMessage(`已导入 ${result.events} 个测试批次、${result.imported} 条成绩。`);
+      setMessage(`已导入 ${result.events} 个训练批次、${result.imported} 条成绩。`);
       setPreview(null);
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '专项测试导入失败。');
+      setMessage(error instanceof Error ? error.message : '专项训练导入失败。');
     } finally {
       setImporting(false);
     }
@@ -97,9 +97,9 @@ export function SpecialTestsPage({ user, from, to, onRangeChange, project }: Pro
     setMessage('');
     try {
       await api.downloadSpecialTestTemplate();
-      setMessage('专项测试Excel模板已下载。');
+      setMessage('专项训练Excel模板已下载。');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '专项测试模板下载失败。');
+      setMessage(error instanceof Error ? error.message : '专项训练模板下载失败。');
     } finally {
       setTemplateDownloading(false);
     }
@@ -110,7 +110,7 @@ export function SpecialTestsPage({ user, from, to, onRangeChange, project }: Pro
       <header className="special-tests-hero">
         <div>
           <span className="eyebrow">ON-WATER PERFORMANCE</span>
-          <h1>{project}专项距离测试</h1>
+          <h1>{project}专项距离训练</h1>
           <p>同距离、艇型与组别内自动排名，比较轮次稳定性和历史最好成绩。</p>
         </div>
         <div className="special-tests-actions">
@@ -135,21 +135,21 @@ export function SpecialTestsPage({ user, from, to, onRangeChange, project }: Pro
           <div><span className="eyebrow">IMPORT CHECK</span><h2>导入校对</h2></div>
           <div className="preview-counts"><b>{preview.valid}</b> 可导入 · <b className={preview.invalid ? 'danger-text' : ''}>{preview.invalid}</b> 错误 · {preview.warningCount} 提醒</div>
         </div>
-        <div className="special-preview-table table-scroll"><table><thead><tr><th>行</th><th>测试</th><th>组合</th><th>轮次</th><th>平均</th><th>校验</th></tr></thead><tbody>
+        <div className="special-preview-table table-scroll"><table><thead><tr><th>行</th><th>训练</th><th>组合</th><th>轮次</th><th>平均</th><th>校验</th></tr></thead><tbody>
           {preview.rows.map((row) => <tr key={row.rowNumber} className={row.errors.length ? 'row-error' : ''}>
             <td>{row.rowNumber}</td><td>{row.testDate}<br />{row.distanceM}m · {row.boatClass}</td><td>{row.crewName}<small>{row.memberNames.join('、')}</small></td>
             <td>{row.attemptsMs.map(formatRaceTime).join(' / ') || '—'}</td><td>{formatRaceTime(row.averageMs)}</td>
             <td>{row.errors.length ? row.errors.join('；') : row.warnings.join('；') || '通过'}</td>
           </tr>)}
         </tbody></table></div>
-        <div className="preview-footer"><p>相同日期、距离、艇型、组别和时段视为同一测试批次，再次导入会覆盖该批次。</p><div><button className="secondary-button" onClick={() => setPreview(null)}>取消</button><button className="primary-button" disabled={importing || preview.invalid > 0} onClick={() => void commit()}>确认入库</button></div></div>
+        <div className="preview-footer"><p>相同日期、距离、艇型、组别和时段视为同一训练批次，再次导入会覆盖该批次。</p><div><button className="secondary-button" onClick={() => setPreview(null)}>取消</button><button className="primary-button" disabled={importing || preview.invalid > 0} onClick={() => void commit()}>确认入库</button></div></div>
       </section>}
 
-      <section className="test-event-strip" aria-label="测试批次">
+      <section className="test-event-strip" aria-label="训练批次">
         {events.map((event) => <button key={event.id} className={event.id === selectedId ? 'active' : ''} onClick={() => setSelectedId(event.id)}>
           <span>{event.testDate.slice(5).replace('-', '.')}</span><strong>{event.distanceM}m</strong><small>{event.boatClass} · {event.genderGroup}</small>
         </button>)}
-        {!events.length && !loading && <div className="special-empty"><TimerReset /><strong>当前日期范围暂无专项测试</strong><span>{canImport ? '下载模板并导入测试成绩后，这里会自动生成排名。' : '教练导入成绩后即可在这里查看。'}</span></div>}
+        {!events.length && !loading && <div className="special-empty"><TimerReset /><strong>当前日期范围暂无专项训练</strong><span>{canImport ? '下载模板并导入训练成绩后，这里会自动生成排名。' : '教练导入成绩后即可在这里查看。'}</span></div>}
       </section>
 
       {selected && summary && <>
