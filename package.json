@@ -12,6 +12,7 @@
     "check": "tsc -b --pretty false",
     "plan-check": "node scripts/training-plan-check.mjs",
     "plan-visual-check": "node scripts/training-plan-visual-check.mjs",
+    "strength-training-check": "node scripts/strength-training-check.mjs",
     "api-check": "node scripts/api-check.mjs",
     "visual-check": "node scripts/visual-check.mjs"
   },
@@ -26,9 +27,7 @@
     "jsonwebtoken": "latest",
     "jspdf": "latest",
     "lucide-react": "latest",
-    "mammoth": "^1.12.1",
     "multer": "latest",
-    "pdfjs-dist": "^6.2.108",
     "province-city-china": "^8.5.8",
     "react": "latest",
     "react-dom": "latest",

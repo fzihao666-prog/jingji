@@ -3,10 +3,6 @@ import type {
   AreaPermission,
   Athlete,
   AuditLog,
-  ImportInspection,
-  ImportJobStatus,
-  ImportPreview,
-  ImportRow,
   InjuryRecord,
   InjuryStatus,
   OverviewPayload,
@@ -16,18 +12,18 @@ import type {
   Role,
   SpecialTestEvent,
   SpecialTestImportPreview,
-  StrengthAdvice,
-  StrengthAdviceContent,
+  StrengthImportPreview,
+  StrengthImportRow,
   StrengthTest,
+  StrengthTrainingSession,
   TeamPermission,
   TrainingPlan,
   TrainingPlanData,
-  AIImportedTrainingPlan,
-  AITrainingPlanImportMetadata,
   TrainingRecord,
   User
 } from './types';
 import type { RowingPeriodAnalysis } from '../shared/rowing-model';
+import type { CoachCategory } from '../shared/coach-categories';
 
 const TOKEN_KEY = 'training-monitor-token';
 
@@ -77,7 +73,7 @@ export const api = {
     username: string;
     password: string;
     displayName: string;
-    role: 'ATL' | 'SCC';
+    role: 'ATL';
     project?: string;
     team?: string;
     gender?: string;
@@ -119,6 +115,33 @@ export const api = {
   async athletes() {
     return request<{ athletes: Athlete[] }>('/api/athletes');
   },
+  async createAthlete(input: Record<string, unknown>) {
+    return request<{ message: string; id: number; accountId: number }>('/api/admin/athletes', {
+      method: 'POST',
+      body: JSON.stringify(input)
+    });
+  },
+  async updateAthlete(id: number, input: Record<string, unknown>) {
+    return request<{ message: string }>(`/api/admin/athletes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input)
+    });
+  },
+  async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
+    return request<{ message: string }>('/api/admin/athletes/bulk/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ ids, ...input })
+    });
+  },
+  async deleteAthlete(id: number) {
+    return request<{ message: string }>(`/api/admin/athletes/${id}`, { method: 'DELETE' });
+  },
+  async bulkDeleteAthletes(ids: number[]) {
+    return request<{ message: string }>('/api/admin/athletes/bulk/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  },
   async records(from: string, to: string, athleteId: number | null | undefined, project: Project) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
@@ -149,25 +172,6 @@ export const api = {
     return request<{ message: string; id: number }>('/api/strength-tests', {
       method: 'POST',
       body: JSON.stringify(input)
-    });
-  },
-  async strengthAdvice(strengthTestId: number) {
-    return request<{ advice: StrengthAdvice | null }>(`/api/strength-tests/${strengthTestId}/advice`);
-  },
-  async generateStrengthAdvice(strengthTestId: number) {
-    return request<{ advice: StrengthAdvice; message: string }>(`/api/strength-tests/${strengthTestId}/advice/generate`, {
-      method: 'POST'
-    });
-  },
-  async saveStrengthAdvice(strengthTestId: number, adviceId: number, content: StrengthAdviceContent) {
-    return request<{ advice: StrengthAdvice; message: string }>(`/api/strength-tests/${strengthTestId}/advice/${adviceId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content })
-    });
-  },
-  async approveStrengthAdvice(strengthTestId: number, adviceId: number) {
-    return request<{ advice: StrengthAdvice; message: string }>(`/api/strength-tests/${strengthTestId}/advice/${adviceId}/approve`, {
-      method: 'POST'
     });
   },
   async trainingPlans(athleteId: number) {
@@ -250,24 +254,10 @@ export const api = {
       body: formData
     });
   },
-  async previewAITrainingPlanImport(file: File, athleteId: number) {
-    const body = new FormData();
-    body.append('file', file);
-    body.append('athleteId', String(athleteId));
-    return request<{
-      plan: AIImportedTrainingPlan;
-      aiMetadata: AITrainingPlanImportMetadata;
-    }>('/api/training-plans/ai/import/preview', {
-      method: 'POST',
-      body
-    });
-  },
   async saveAITrainingPlan(params: {
-    athleteId?: number;
-    athleteIds?: number[];
+    athleteId: number;
     plan: unknown;
     aiMetadata: unknown;
-    replaceExisting?: boolean;
   }) {
     return request<{
       message: string;
@@ -307,55 +297,34 @@ export const api = {
     link.click();
     URL.revokeObjectURL(link.href);
   },
-  async previewImport(file: File, project: Project) {
+  async strengthTrainingResults(athleteId: number) {
+    return request<{ sessions: StrengthTrainingSession[] }>(`/api/strength-training/results?athleteId=${athleteId}`);
+  },
+  async previewStrengthResults(file: File) {
     const body = new FormData();
     body.append('file', file);
-    body.append('project', project);
-    return request<ImportPreview>('/api/import/ai/preview', { method: 'POST', body });
+    return request<StrengthImportPreview>('/api/strength-training/import/preview', { method: 'POST', body });
   },
-  async inspectImport(file: File, project: Project) {
-    const body = new FormData();
-    body.append('file', file);
-    body.append('project', project);
-    return request<ImportInspection>('/api/import/ai/inspect', { method: 'POST', body });
-  },
-  async recognizeInspectedImport(
-    fileId: string,
-    sectionNames: string[],
-    targetType: 'auto' | 'training_plan' | 'training_record',
-    onProgress?: (status: ImportJobStatus) => void
-  ) {
-    const started = await request<{ jobId: string; totalChunks: number }>('/api/import/ai/start', {
+  async commitStrengthResults(token: string, rows: StrengthImportRow[], conflictPolicy: 'skip' | 'update' | 'new') {
+    return request<{ message: string; imported: number; updated: number; skipped: number; sessions: number }>('/api/strength-training/import/commit', {
       method: 'POST',
-      body: JSON.stringify({ fileId, sectionNames, targetType })
-    });
-    const deadline = Date.now() + 60 * 60 * 1000;
-    while (Date.now() < deadline) {
-      const status = await request<ImportJobStatus>(`/api/import/ai/jobs/${encodeURIComponent(started.jobId)}`);
-      onProgress?.(status);
-      if (status.status === 'complete' && status.result) return status.result;
-      if (status.status === 'failed') throw new Error(status.error || 'AI识别失败');
-      await new Promise((resolve) => window.setTimeout(resolve, 800));
-    }
-    throw new Error('AI识别任务等待超过1小时，请重新选择文件。');
-  },
-  async commitImport(importId: string, rows?: ImportRow[]) {
-    return request<{ imported: number; skipped: number }>('/api/import/commit', {
-      method: 'POST',
-      body: JSON.stringify({ importId, rows })
+      body: JSON.stringify({ token, rows, conflictPolicy })
     });
   },
-  async downloadTemplate() {
-    const response = await fetch('/api/import/template', {
+  async downloadStrengthResultTemplate() {
+    const response = await fetch('/api/strength-training/import/template', {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
-    if (!response.ok) throw new Error('模板下载失败。');
+    if (!response.ok) throw new Error('体能训练结果模板下载失败。');
     const blob = await response.blob();
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = '训练数据导入模板.xlsx';
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = '体能训练结果导入模板.xlsx';
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(link.href);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
   async specialTests(from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });
@@ -391,7 +360,7 @@ export const api = {
   async assignments() {
     return request<{
       athletes: Array<Athlete & { coachIds: string }>;
-      coaches: Array<{ id: number; displayName: string }>;
+      coaches: Array<{ id: number; displayName: string; category: CoachCategory }>;
     }>('/api/admin/assignments');
   },
   async updateAssignment(athleteId: number, coachIds: number[], region: string, city: string, county: string) {
@@ -425,6 +394,7 @@ export const api = {
     areas: AreaPermission[];
     projects: string[];
     teams: TeamPermission[];
+    coachCategory?: CoachCategory;
   }) {
     return request<{ message: string; id: number }>('/api/access/accounts', {
       method: 'POST',
@@ -447,6 +417,12 @@ export const api = {
     return request<{ message: string; active: boolean }>(`/api/access/accounts/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ active })
+    });
+  },
+  async updateCoachCategory(id: number, category: CoachCategory) {
+    return request<{ message: string; category: CoachCategory }>(`/api/admin/coaches/${id}/category`, {
+      method: 'PUT',
+      body: JSON.stringify({ category })
     });
   },
   async auditLogs() {

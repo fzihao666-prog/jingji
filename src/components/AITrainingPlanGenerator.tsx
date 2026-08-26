@@ -3,7 +3,6 @@ import './AITrainingPlanGenerator.css';
 import { 
   LoaderCircle, 
   FileText, 
-  Upload, 
   Sparkles, 
   Save, 
   X, 
@@ -39,13 +38,10 @@ import {
   Legend
 } from 'recharts';
 import { api } from '../api';
-import type { Athlete, User } from '../types';
-import { AITrainingPlanImporter } from './AITrainingPlanImporter';
+import type { Athlete } from '../types';
 
 interface Props {
-  user: User;
   athlete: Athlete;
-  athletes: Athlete[];
   onSaved: (planId?: number) => void | Promise<void>;
 }
 
@@ -123,25 +119,7 @@ function relativeExerciseLoad(exercise: AIPlan['weeklyPlans'][number]['days'][nu
 }
 
 export function AITrainingPlanGenerator(props: Props) {
-  const [workflow, setWorkflow] = useState<'generate' | 'import'>('generate');
-
-  return (
-    <div className="ai-workflow-shell">
-      <nav className="ai-workflow-switch" aria-label="AI体能训练方式">
-        <button type="button" className={workflow === 'generate' ? 'active' : ''} onClick={() => setWorkflow('generate')}>
-          <Sparkles size={20} />
-          <span><strong>生成体能训练</strong><small>描述目标，由AI制定方案</small></span>
-        </button>
-        <button type="button" className={workflow === 'import' ? 'active' : ''} onClick={() => setWorkflow('import')}>
-          <Upload size={20} />
-          <span><strong>识别已有训练</strong><small>上传原文件，校正后导入</small></span>
-        </button>
-      </nav>
-      {workflow === 'generate'
-        ? <AITrainingPlanGeneratorContent athlete={props.athlete} onSaved={props.onSaved} />
-        : <AITrainingPlanImporter athlete={props.athlete} athletes={props.athletes} onSaved={props.onSaved} />}
-    </div>
-  );
+  return <AITrainingPlanGeneratorContent athlete={props.athlete} onSaved={props.onSaved} />;
 }
 
 function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athlete' | 'onSaved'>) {
@@ -339,7 +317,7 @@ function AITrainingPlanGeneratorContent({ athlete, onSaved }: Pick<Props, 'athle
               />
               <div className="input-hint">
                 <Lightbulb size={14} />
-            <span>这里用于生成体能训练；已有文件请切换到“识别已有训练”</span>
+                <span>请说明训练目标、周期、频次和当前能力，AI 将生成可编辑的体能训练。</span>
               </div>
             </div>
           </div>

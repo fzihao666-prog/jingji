@@ -24,8 +24,9 @@ try {
     });
 
     await page.goto(baseUrl, { waitUntil: 'networkidle' });
-    await page.getByRole('button', { name: '申请新账号', exact: true }).click();
-    await page.getByRole('heading', { name: '申请注册', exact: true }).waitFor();
+    await page.getByRole('button', { name: '运动员注册', exact: true }).click();
+    await page.getByRole('heading', { name: '运动员注册', exact: true }).waitFor();
+    if (await page.getByText('教练', { exact: true }).count()) throw new Error(`${viewport.name} 注册页仍显示教练入口`);
 
     const layout = await page.evaluate(() => {
       const panel = document.querySelector('.login-panel');

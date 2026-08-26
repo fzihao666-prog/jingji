@@ -34,7 +34,6 @@ type Props = {
   project: Project;
   projects: Project[];
   onProjectChange: (project: Project) => void;
-  onOpenCalendar: () => void;
   user: User;
   onAthleteNameChange: (id: number, name: string) => Promise<void>;
   onUserNameChange: (id: number, name: string) => Promise<void>;
@@ -512,7 +511,7 @@ export function OverviewPage(props: Props) {
     intensity: <article className="panel professional-panel"><PanelHeading title="强度分布" subtitle={`${isIndividualOverview ? '个人' : '团队总时长'} · U3—ATP`} /><IntensityChart records={analysisRecords} /></article>,
     status: (
       <article className="panel status-panel professional-panel">
-        <div className="panel-heading"><div><h2>{isIndividualOverview ? '周期状态' : '团队状态分布'}</h2></div><button className="text-button" onClick={props.onOpenCalendar}>查看日历 <ArrowRight size={15} /></button></div>
+        <div className="panel-heading"><div><h2>{isIndividualOverview ? '周期状态' : '团队状态分布'}</h2></div><span className="panel-heading-note">按训练记录统计</span></div>
         <div className="status-orbit"><div className="orbit-main"><strong>{isIndividualOverview ? statusCount.normal : `${stableRate}%`}</strong><span>{isIndividualOverview ? '正常日' : '状态稳定'}</span></div><div className="orbit-ring" aria-hidden="true" /></div>
         <div className="status-counts">
           <div><i className="dot normal" /><span>正常</span><strong>{statusCount.normal}</strong></div><div><i className="dot attention" /><span>关注</span><strong>{statusCount.attention}</strong></div><div><i className="dot alert" /><span>异常</span><strong>{statusCount.alert}</strong></div><div><i className="dot rest" /><span>休息</span><strong>{statusCount.rest}</strong></div><div><i className="dot missing" /><span>缺失</span><strong>{statusCount.missing}</strong></div>

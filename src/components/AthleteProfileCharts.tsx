@@ -71,7 +71,9 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
   }, [originKey]);
 
   const active = provinces.find((item) => item.province === activeProvince);
-  const activeAthletes = active?.athletes || [];
+  const activeAthletes = (active?.athletes || []).slice().sort((left, right) =>
+    left.team.localeCompare(right.team, 'zh-CN') || left.athleteName.localeCompare(right.athleteName, 'zh-CN')
+  );
   const cityCounts = [...activeAthletes.reduce((map, profile) => {
     const label = [profile.city, profile.county].filter(Boolean).join(' · ') || '城市未设置';
     map.set(label, (map.get(label) || 0) + 1);
@@ -100,38 +102,47 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
                 role="button"
                 tabIndex={0}
                 aria-label={`${province.name}，${count}名运动员`}
-                onPointerEnter={() => setActiveProvince(province.name)}
-                onMouseEnter={() => setActiveProvince(province.name)}
-                onMouseMove={() => activeProvince !== province.name && setActiveProvince(province.name)}
-                onFocus={() => setActiveProvince(province.name)}
+                aria-pressed={activePath}
+                onClick={() => setActiveProvince(province.name)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setActiveProvince(province.name);
+                  }
+                }}
               />
             );
           })}
         </svg>
-        <div className="birthplace-map-legend"><span>少</span><i /><span>多</span><em>悬停省份查看详情</em></div>
+        <div className="birthplace-map-legend"><span>少</span><i /><span>多</span><em>点击省份查看详情</em></div>
       </div>
 
       <aside className="birthplace-detail" aria-live="polite">
         <div className="birthplace-detail-heading">
-          <div><span>当前省份</span><strong>{activeProvince}</strong></div>
-          <div><strong>{active?.count || 0}</strong><span>{individual ? '本人来源' : `人 · ${percentage(active?.count || 0, available.length || 1)}%`}</span></div>
+          <div>
+            <span><i />实时人数</span>
+            <strong>{activeProvince}<em>{active?.count || 0}人</em></strong>
+          </div>
+          <div><span>{individual ? '本人来源地' : `占有效档案 ${percentage(active?.count || 0, available.length || 1)}%`}</span><strong>{available.length}<small>人总计</small></strong></div>
         </div>
         {active ? (
           <>
             <div className="birthplace-city-list">
-              <span>城市构成</span>
+              <span>地区分布</span>
               {cityCounts.map(([city, count]) => <div key={city}><strong>{city}</strong><em>{count}人</em></div>)}
             </div>
             <div className="birthplace-athlete-list">
-              <span>{individual ? '具体生源信息' : '运动员明细'}</span>
-              {activeAthletes.slice(0, 8).map((profile) => (
+              <header><span>{individual ? '具体生源信息' : '人员基本信息'}</span><small>{activeAthletes.length > 3 ? '上下滑动查看全部' : `共 ${activeAthletes.length} 人`}</small></header>
+              <div className="birthplace-athlete-scroll" tabIndex={activeAthletes.length > 3 ? 0 : -1} aria-label={`${activeProvince}运动员名单，共${activeAthletes.length}人`}>
+              {activeAthletes.map((profile) => (
                 <div key={profile.athleteId}>
-                  <strong>{individual ? '本人' : profile.athleteName}</strong>
-                  <span>{[profile.city, profile.county].filter(Boolean).join(' · ') || '城市未设置'}{individual ? '' : ` · ${profile.team}`}</span>
+                  <i>{profile.athleteName.slice(0, 1)}</i>
+                  <span><strong>{individual ? '本人' : profile.athleteName}</strong><small>{[profile.gender, profile.age === null ? '' : `${profile.age}岁`, profile.project].filter(Boolean).join(' · ')}</small></span>
+                  <span><strong>{profile.team || '未分队'}</strong><small>{[profile.city, profile.county].filter(Boolean).join(' · ') || '地区未设置'}</small></span>
                   {profile.originIsDemo && <em>演示</em>}
                 </div>
               ))}
-              {activeAthletes.length > 8 && <p>另有 {activeAthletes.length - 8} 人</p>}
+              </div>
             </div>
           </>
         ) : <div className="birthplace-detail-empty"><strong>暂无生源</strong><span>该省份当前没有权限范围内的运动员记录。</span></div>}

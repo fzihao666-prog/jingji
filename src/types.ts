@@ -55,6 +55,30 @@ export type Athlete = {
   heightCm: number | null;
   weightKg: number | null;
   bodyFatPct: number | null;
+  identityNumber: string;
+  ethnicity: string;
+  phone: string;
+  bloodType: string;
+  emergencyContact: string;
+  emergencyPhone: string;
+  education: string;
+  technicalLevel: string;
+  healthStatus: string;
+  bestResult: string;
+  nativePlace: string;
+  homeAddress: string;
+  athleteStatus: string;
+  startSportDate: string;
+  trainingVenue: string;
+  currentEvent: string;
+  trainingPhase: string;
+  campPeriod: string;
+  originPlace: string;
+  originUnit: string;
+  originCoach: string;
+  specialties: string;
+  notes: string;
+  createdAt: string;
   coachUsers?: Array<{ id: number; displayName: string }>;
 };
 
@@ -79,39 +103,6 @@ export type TrainingPlanExercise = {
   lines: TrainingPlanLine[];
 };
 
-export type FlexibleTrainingItem = {
-  id: string;
-  name: string;
-  category: string | null;
-  sets: string | null;
-  reps: string | null;
-  load: string | null;
-  percentage: number | null;
-  duration: string | null;
-  distance: string | null;
-  intensity: string | null;
-  pace: string | null;
-  notes: string | null;
-  rawText: string;
-  confidence: number;
-};
-
-export type FlexibleTrainingDay = {
-  id: string;
-  date: string | null;
-  dayLabel: string;
-  focus: string;
-  items: FlexibleTrainingItem[];
-};
-
-export type FlexibleTrainingWeek = {
-  id: string;
-  weekNumber: number | null;
-  label: string;
-  focus: string;
-  days: FlexibleTrainingDay[];
-};
-
 export type TrainingPlanData = {
   startDate: string;
   endDate: string;
@@ -125,41 +116,10 @@ export type TrainingPlanData = {
   sourceType?: 'ai_import' | 'ai_generated';
   summary?: string;
   durationWeeks?: number | null;
-  weeklyPlans?: FlexibleTrainingWeek[] | Array<Record<string, unknown>>;
+  weeklyPlans?: Array<Record<string, unknown>>;
   confidence?: number | null;
   warnings?: string[];
   unmappedContent?: string[];
-};
-
-export type AIImportedTrainingPlan = Omit<TrainingPlanData, 'weeklyPlans'> & {
-  sourceType: 'ai_import';
-  weeklyPlans: FlexibleTrainingWeek[];
-  confidence: number;
-  warnings: string[];
-  unmappedContent: string[];
-  aiModel: string;
-};
-
-export type AITrainingPlanImportMetadata = {
-  operation: 'import';
-  sourceFile: {
-    filename: string;
-    mimetype: string;
-    size: number;
-    extractedAt: string;
-    extractionMethod: 'excel-cells' | 'pdf-text' | 'docx-text' | 'plain-text' | 'vision';
-    sheetCount?: number;
-    pageCount?: number;
-    chunkCount?: number;
-    sections?: ImportSection[];
-    warnings: string[];
-  };
-  modelUsed: string;
-  attempts: number;
-  classification?: ImportClassification;
-  processedChunks?: number;
-  failedChunks?: number;
-  generatedAt: string;
 };
 
 export type TrainingPlan = {
@@ -172,6 +132,68 @@ export type TrainingPlan = {
   data: TrainingPlanData;
   updatedAt: string;
   updatedBy: string;
+};
+
+export type StrengthResultSet = {
+  id: number;
+  exerciseName: string;
+  setIndex: number;
+  targetReps: number | null;
+  actualReps: number;
+  actualWeightKg: number;
+  rpe: number | null;
+  completed: boolean;
+  note: string;
+  importBatchId: string;
+  confidence: number | null;
+};
+
+export type StrengthTrainingSession = {
+  id: number;
+  trainingDate: string;
+  sessionOrder: number;
+  sessionLabel: string;
+  rpe: number | null;
+  volume: number;
+  source: string;
+  sourceFilename: string;
+  modelUsed: string;
+  importedAt: string;
+  sets: StrengthResultSet[];
+};
+
+export type StrengthImportRow = {
+  rowNumber: number;
+  athleteId: number | null;
+  athleteName: string;
+  matchedAthleteName: string;
+  team: string;
+  trainingDate: string;
+  sessionLabel: string;
+  exerciseName: string;
+  setIndex: number;
+  targetReps: number | null;
+  actualReps: number | null;
+  actualWeightKg: number | null;
+  rpe: number | null;
+  completed: boolean;
+  note: string;
+  confidence: number | null;
+  originalText: string;
+  duplicate: boolean;
+  errors: string[];
+  warnings: string[];
+};
+
+export type StrengthImportPreview = {
+  token: string;
+  filename: string;
+  modelUsed: string;
+  total: number;
+  valid: number;
+  invalid: number;
+  duplicate: number;
+  rows: StrengthImportRow[];
 };
 
 export type InjuryStatus = 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';
@@ -283,92 +305,6 @@ export type TrainingRecord = {
   trainingBreakdown: TrainingBreakdown;
   updatedAt: string;
   updatedBy: string;
-};
-
-export type ImportRow = Omit<TrainingRecord, 'id' | 'athleteId' | 'updatedAt' | 'updatedBy'> & {
-  rowNumber: number;
-  athleteId: number | null;
-  confidence?: number;
-  sourceText?: string;
-  errors: string[];
-  warnings: string[];
-};
-
-export type ImportSection = {
-  name: string;
-  chunkCount: number;
-  characterCount: number;
-};
-
-export type ImportClassification = {
-  documentType: 'training_plan' | 'training_record' | 'mixed' | 'unknown';
-  confidence: number;
-  reason: string;
-  modelUsed: string;
-  attempts: number;
-};
-
-export type ImportInspection = {
-  fileId: string;
-  fileName: string;
-  sourceFile: {
-    filename: string;
-    mimetype: string;
-    size: number;
-    extractionMethod: string;
-    sheetCount?: number;
-    pageCount?: number;
-    chunkCount?: number;
-    sections?: ImportSection[];
-    warnings: string[];
-  };
-  sections: ImportSection[];
-  athletes: Array<{ id: number; name: string; team: string }>;
-};
-
-export type ImportJobStatus = {
-  status: 'queued' | 'classifying' | 'recognizing' | 'complete' | 'failed';
-  phase: string;
-  completedChunks: number;
-  totalChunks: number;
-  currentLabel: string;
-  documentType?: 'training_plan' | 'training_record';
-  result?: ImportPreview;
-  error?: string;
-};
-
-export type ImportPreview = {
-  importId?: string;
-  fileName: string;
-  sourceType?: 'ai_recognition';
-  documentType?: 'training_plan' | 'training_record';
-  modelUsed?: string;
-  confidence?: number;
-  summary?: string;
-  warnings?: string[];
-  unmappedContent?: string[];
-  sourceFile?: {
-    filename: string;
-    mimetype: string;
-    size: number;
-    extractionMethod: string;
-    sheetCount?: number;
-    pageCount?: number;
-    chunkCount?: number;
-    sections?: ImportSection[];
-    warnings: string[];
-  };
-  classification?: ImportClassification;
-  processedChunks?: number;
-  failedChunks?: number;
-  athletes?: Array<{ id: number; name: string; team: string }>;
-  total: number;
-  valid: number;
-  invalid: number;
-  warningCount: number;
-  rows: ImportRow[];
-  plan?: AIImportedTrainingPlan;
-  aiMetadata?: AITrainingPlanImportMetadata;
 };
 
 export type RegistrationRequest = {
@@ -522,35 +458,4 @@ export type OverviewPayload = {
     scope: 'individual' | 'team';
     generatedAt: string;
   };
-};
-
-export type StrengthAdviceWeek = {
-  week: number;
-  focus: string;
-  load: string;
-  prescription: string[];
-};
-
-export type StrengthAdviceContent = {
-  title: string;
-  overview: string;
-  strengths: string[];
-  priorities: string[];
-  weeks: StrengthAdviceWeek[];
-  recovery: string[];
-  cautions: string[];
-};
-
-export type StrengthAdvice = {
-  id: number;
-  strengthTestId: number;
-  version: number;
-  content: StrengthAdviceContent;
-  source: 'ai' | 'rules';
-  model: string;
-  status: 'draft' | 'approved';
-  generatedAt: string;
-  generatedBy: string;
-  reviewedAt: string | null;
-  reviewedBy: string | null;
 };

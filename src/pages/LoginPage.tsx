@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, LockKeyhole, UserRound, UsersRound } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
@@ -14,11 +14,12 @@ function genderFromIdentityNumber(value: string) {
 
 export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) => void }) {
   const [mode, setMode] = useState<Mode>('login');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => localStorage.getItem('jingji.rememberedUsername') || '');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberUsername, setRememberUsername] = useState(() => Boolean(localStorage.getItem('jingji.rememberedUsername')));
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<'ATL' | 'SCC'>('ATL');
   const [project, setProject] = useState('赛艇');
   const [team, setTeam] = useState('');
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
@@ -45,6 +46,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     setSuccess('');
     setPassword('');
     setConfirmPassword('');
+    setShowPassword(false);
   };
 
   const login = async (event: FormEvent) => {
@@ -53,6 +55,8 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     setError('');
     try {
       const result = await api.login(username, password);
+      if (rememberUsername) localStorage.setItem('jingji.rememberedUsername', username);
+      else localStorage.removeItem('jingji.rememberedUsername');
       onLogin(result.token, result.user);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '登录失败。');
@@ -75,7 +79,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     setSubmitting(true);
     try {
       const result = await api.register({
-        username, password, displayName, role, project, team, gender, identityNumber,
+        username, password, displayName, role: 'ATL', project, team, gender, identityNumber,
         nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`
       });
       setSuccess(result.message);
@@ -93,35 +97,42 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
       <section className="login-story">
         <div className="login-brand">
           <BrandLogo className="large" variant="full" />
-          <div><strong>竞迹</strong><small>JINGJI PERFORMANCE</small></div>
         </div>
+
+        <div className="training-route" aria-hidden="true"><i /><span /><b /></div>
+        <div className="hero-metric hero-metric-pace" aria-hidden="true"><strong>1:38</strong><small>/500m</small></div>
+        <div className="hero-metric hero-metric-rate" aria-hidden="true"><strong>28</strong><small>SPM</small></div>
+        <div className="hero-metric hero-metric-length" aria-hidden="true"><strong>2.1</strong><small>m</small></div>
+
         <div className="story-copy">
-          <p className="eyebrow">ROWING · CANOEING</p>
-          <h1>让每次训练，<br />留下清晰答案。</h1>
-        </div>
-        <div className="lane-visual" aria-hidden="true">
-          <div className="boat"><span /><i /><i /><i /><i /></div>
-          <div className="lane lane-one" /><div className="lane lane-two" /><div className="lane lane-three" />
+          <h1>让训练数据成为<br />下一次突破的依据</h1>
+          <span className="story-rule" />
+          <p className="story-disciplines">赛艇&nbsp;&nbsp;·&nbsp;&nbsp;皮划艇&nbsp;&nbsp;·&nbsp;&nbsp;激流</p>
+          <p className="story-english">PERFORMANCE, TRAINING, RECOVERY</p>
         </div>
       </section>
 
       <section className="login-panel">
         <div className={`login-box login-box-${mode}`}>
           <div className="login-heading">
-            <p>{mode === 'login' ? '冠蒂本训练数据中心' : '账号准入'}</p>
-            <h2>{mode === 'login' ? '欢迎回来' : '申请注册'}</h2>
-            <span>{mode === 'login' ? '使用已开通的账号进入系统' : '提交资料，审核通过后即可登录'}</span>
+            <p>{mode === 'login' ? '竞技表现管理平台' : '运动员账号准入'}</p>
+            <h2>{mode === 'login' ? '欢迎回来' : '运动员注册'}</h2>
+            <span>{mode === 'login' ? '请输入账号和密码进入系统' : '提交资料，审核通过后即可登录'}</span>
           </div>
 
           {mode === 'login' ? (
             <form onSubmit={login}>
               {success && <p className="form-success"><CheckCircle2 size={17} />{success}</p>}
-              <label><span>账号</span><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required /></label>
-              <label><span>密码</span><div className="password-input"><LockKeyhole size={17} /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required /></div></label>
+              <label className="login-field"><span>账号</span><div className="auth-input"><UserRound size={18} /><input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" placeholder="请输入账号" required /></div></label>
+              <label className="login-field"><span>密码</span><div className="auth-input password-auth-input"><LockKeyhole size={18} /><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="请输入密码" required /><button type="button" className="password-visibility" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? '隐藏密码' : '显示密码'}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div></label>
+              <div className="auth-preferences">
+                <label className="remember-control"><input type="checkbox" checked={rememberUsername} onChange={(event) => setRememberUsername(event.target.checked)} /><span>记住账号</span></label>
+                <button type="button" className="forgot-password" onClick={() => setError('暂未开通在线找回，请联系系统管理员重置密码。')}>忘记密码</button>
+              </div>
               {error && <p className="form-error"><AlertCircle size={16} />{error}</p>}
-              <div className="auth-actions">
-                <button type="button" className="form-link" onClick={() => switchMode('register')}>申请新账号</button>
-                <button className="primary-button login-button" disabled={submitting}>{submitting ? '登录中…' : '登录'} <ArrowRight size={18} /></button>
+              <div className="login-submit-stack">
+                <button className="primary-button login-button" disabled={submitting}>{submitting ? '登录中…' : '登录系统'} <ArrowRight size={18} /></button>
+                <button type="button" className="secondary-button register-entry" onClick={() => switchMode('register')}>运动员注册</button>
               </div>
             </form>
           ) : success ? (
@@ -133,22 +144,6 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
             </div>
           ) : (
             <form onSubmit={register} className="registration-form">
-              <fieldset className="register-role">
-                <legend>选择申请身份</legend>
-                <div role="group" aria-label="申请身份">
-                  <button type="button" className={role === 'ATL' ? 'selected' : ''} onClick={() => setRole('ATL')}>
-                    <UserRound aria-hidden="true" />
-                    <span><strong>运动员</strong><small>查看本人训练数据</small></span>
-                    <i><Check aria-hidden="true" /></i>
-                  </button>
-                  <button type="button" className={role === 'SCC' ? 'selected' : ''} onClick={() => setRole('SCC')}>
-                    <UsersRound aria-hidden="true" />
-                    <span><strong>教练</strong><small>上传数据、查看学员</small></span>
-                    <i><Check aria-hidden="true" /></i>
-                  </button>
-                </div>
-              </fieldset>
-
               <section className="register-section">
                 <div className="register-section-title"><b>01</b><strong>基本资料</strong></div>
                 <div className="form-grid profile-grid">

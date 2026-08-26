@@ -569,6 +569,44 @@ db.exec(`
     FOREIGN KEY (parent_user_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS coach_profiles (
+    user_id INTEGER PRIMARY KEY,
+    category TEXT NOT NULL DEFAULT '体能教练'
+      CHECK(category IN ('体能教练', '专项教练')),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS athlete_profiles (
+    athlete_id INTEGER PRIMARY KEY,
+    identity_number TEXT NOT NULL DEFAULT '',
+    ethnicity TEXT NOT NULL DEFAULT '汉族',
+    phone TEXT NOT NULL DEFAULT '',
+    blood_type TEXT NOT NULL DEFAULT '',
+    emergency_contact TEXT NOT NULL DEFAULT '',
+    emergency_phone TEXT NOT NULL DEFAULT '',
+    education TEXT NOT NULL DEFAULT '',
+    technical_level TEXT NOT NULL DEFAULT '',
+    health_status TEXT NOT NULL DEFAULT '健康',
+    best_result TEXT NOT NULL DEFAULT '',
+    native_place TEXT NOT NULL DEFAULT '',
+    home_address TEXT NOT NULL DEFAULT '',
+    athlete_status TEXT NOT NULL DEFAULT '在训',
+    start_sport_date TEXT NOT NULL DEFAULT '',
+    training_venue TEXT NOT NULL DEFAULT '',
+    current_event TEXT NOT NULL DEFAULT '',
+    training_phase TEXT NOT NULL DEFAULT '',
+    camp_period TEXT NOT NULL DEFAULT '',
+    origin_place TEXT NOT NULL DEFAULT '',
+    origin_unit TEXT NOT NULL DEFAULT '',
+    origin_coach TEXT NOT NULL DEFAULT '',
+    specialties TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS user_area_permissions (
     user_id INTEGER NOT NULL,
     area_level TEXT NOT NULL CHECK(area_level IN ('national', 'province', 'city', 'county')),
@@ -653,6 +691,46 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (athlete_id, session_date, session_order),
     FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS strength_import_batches (
+    id TEXT PRIMARY KEY,
+    source_filename TEXT NOT NULL,
+    source_mimetype TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL CHECK(source_type IN ('excel', 'csv', 'image', 'pdf', 'manual')),
+    model_used TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'preview' CHECK(status IN ('preview', 'committed', 'failed')),
+    row_count INTEGER NOT NULL DEFAULT 0,
+    imported_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    committed_at TEXT,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS strength_result_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    training_session_id INTEGER NOT NULL,
+    exercise_name TEXT NOT NULL,
+    set_index INTEGER NOT NULL DEFAULT 1,
+    target_reps REAL,
+    actual_reps REAL NOT NULL,
+    actual_weight_kg REAL NOT NULL,
+    rpe REAL,
+    completed INTEGER NOT NULL DEFAULT 1,
+    note TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'manual',
+    import_batch_id TEXT,
+    source_row TEXT NOT NULL DEFAULT '',
+    original_text TEXT NOT NULL DEFAULT '',
+    ai_confidence REAL,
+    created_by INTEGER,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (training_session_id, exercise_name, set_index),
+    FOREIGN KEY (training_session_id) REFERENCES training_sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (import_batch_id) REFERENCES strength_import_batches(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
 
@@ -741,12 +819,18 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_daily_wellness_athlete_date ON daily_wellness (athlete_id, wellness_date);
   CREATE INDEX IF NOT EXISTS idx_training_sessions_athlete_date ON training_sessions (athlete_id, session_date, session_order);
+  CREATE INDEX IF NOT EXISTS idx_strength_result_sets_session ON strength_result_sets (training_session_id, exercise_name, set_index);
+  CREATE INDEX IF NOT EXISTS idx_strength_result_sets_batch ON strength_result_sets (import_batch_id);
   CREATE INDEX IF NOT EXISTS idx_test_sessions_athlete_date ON test_sessions (athlete_id, test_date DESC);
   CREATE INDEX IF NOT EXISTS idx_test_measurements_session ON test_measurements (test_session_id, metric_code);
   CREATE INDEX IF NOT EXISTS idx_body_measurements_athlete_date ON athlete_body_measurements (athlete_id, measurement_date DESC);
   CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
 `);
+
+if (!hasColumn('strength_import_batches', 'model_used')) {
+  db.exec("ALTER TABLE strength_import_batches ADD COLUMN model_used TEXT NOT NULL DEFAULT ''");
+}
 
 export function upsertAthleteOrigin(input: {
   athleteId: number;
@@ -904,6 +988,38 @@ function seed() {
 }
 
 seed();
+
+const coachProfilesDefinition = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'coach_profiles'").get() as { sql?: string } | undefined;
+if (coachProfilesDefinition?.sql && !coachProfilesDefinition.sql.includes("'体能教练'")) {
+  db.exec(`
+    BEGIN;
+    CREATE TABLE coach_profiles_v2 (
+      user_id INTEGER PRIMARY KEY,
+      category TEXT NOT NULL DEFAULT '体能教练'
+        CHECK(category IN ('体能教练', '专项教练')),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    INSERT INTO coach_profiles_v2 (user_id, category, updated_at)
+    SELECT user_id,
+      CASE WHEN category = '体能师' THEN '体能教练' ELSE '专项教练' END,
+      updated_at
+    FROM coach_profiles;
+    DROP TABLE coach_profiles;
+    ALTER TABLE coach_profiles_v2 RENAME TO coach_profiles;
+    COMMIT;
+  `);
+}
+
+db.exec(`
+  INSERT OR IGNORE INTO coach_profiles (user_id, category)
+  SELECT id, '体能教练' FROM users WHERE role = 'SCC';
+`);
+
+db.exec(`
+  INSERT OR IGNORE INTO athlete_profiles (athlete_id, created_at)
+  SELECT id, '2026-01-01 00:00:00' FROM athletes;
+`);
 
 db.exec(`
   INSERT OR IGNORE INTO project_teams (project, name)

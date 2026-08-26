@@ -13,7 +13,6 @@ import type { Athlete, StrengthTest, User } from '../types';
 import { formatDate, formatNumber, toIsoDate } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { SlalomChampionComparison } from './SlalomChampionComparison';
-import { StrengthAdvicePanel } from './StrengthAdvicePanel';
 
 type Props = { athlete: Athlete; user: User };
 type FormValues = Record<StrengthMetricKey, string>;
@@ -178,7 +177,6 @@ export function StrengthProfileModule({ athlete, user }: Props) {
       {loading ? <div className="strength-loading"><LoaderCircle className="spin" /><span>正在读取个人档案…</span></div> : selected ? <>
         <div className="archive-sheet-scroll"><ArchiveSheet athlete={athlete} test={selected} previous={previous} variant="web" /></div>
         {athlete.project === '激流' && <SlalomChampionComparison athlete={athlete} test={selected} />}
-        <StrengthAdvicePanel athlete={athlete} test={selected} user={user} comparisonPage={<article className="personal-pdf-sheet strength-pdf-sheet"><ArchiveSheet athlete={athlete} test={selected} previous={previous} variant="pdf" /></article>} />
       </> : <div className="strength-empty"><ClipboardList size={34} /><strong>暂无个人档案数据</strong><p>{canEdit ? '录入第一次测试后，系统会生成评分表与雷达图。' : '教练录入测试后，你可以在这里查看和导出个人档案。'}</p>{canEdit && <div className="archive-empty-actions"><button className="primary-button" onClick={() => openEditor('new')}><Plus size={16} />录入第一次测试</button></div>}</div>}
 
       {editorOpen && <div className="modal-backdrop strength-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>

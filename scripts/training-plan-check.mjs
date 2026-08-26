@@ -169,12 +169,12 @@ try {
   if (afterDelete.payload.plans.some((item) => item.id === createHistory.payload.id)) throw new Error('历史训练删除后仍可读取。');
 
   const rosterResult = await jsonRequest('/api/athletes', coachToken);
-  const targetIds = rosterResult.payload.athletes.slice(0, 2).map((athlete) => athlete.id);
-  if (targetIds.length !== 2) throw new Error('AI多人矩阵测试至少需要2名运动员。');
-  const importedPlan = {
-    sourceType: 'ai_import',
+  const targetId = rosterResult.payload.athletes[0]?.id;
+  if (!targetId) throw new Error('AI生成计划保存测试缺少运动员。');
+  const generatedPlan = {
+    sourceType: 'ai_generated',
     title: 'AI三阶段专项体能训练',
-    summary: '用于验证AI计划直接进入统一矩阵。',
+    summary: '用于验证AI生成计划直接进入统一矩阵。',
     startDate: '2026-10-01',
     endDate: '2026-10-21',
     scheduleLabel: '周一 / 周三 / 周六',
@@ -193,9 +193,9 @@ try {
       days: [{
         id: `day-${weekNumber}`,
         date: `2026-10-${String(weekNumber * 3 - 2).padStart(2, '0')}`,
-        dayLabel: weekNumber === 1 ? '周一' : weekNumber === 2 ? '周三' : '周六',
+        dayOfWeek: weekNumber === 1 ? '周一' : weekNumber === 2 ? '周三' : '周六',
         focus: '专项力量',
-        items: [{
+        exercises: [{
           id: `item-${weekNumber}`,
           name: '卧拉',
           category: 'strength',
@@ -214,39 +214,37 @@ try {
       }]
     }))
   };
-  const aiMetadata = { operation: 'import', modelUsed: 'test-model' };
+  const aiMetadata = { operation: 'generate', modelUsed: 'test-model' };
   const aiCreate = await jsonRequest('/api/training-plans/ai/save', coachToken, {
     method: 'POST',
-    body: JSON.stringify({ athleteIds: targetIds, plan: importedPlan, aiMetadata, replaceExisting: false })
+    body: JSON.stringify({ athleteId: targetId, plan: generatedPlan, aiMetadata })
   });
-  if (!aiCreate.response.ok || aiCreate.payload.created !== 2) throw new Error(`AI多人矩阵写入失败：${aiCreate.payload?.message}`);
-  const importedResults = await Promise.all(targetIds.map((athleteId) => jsonRequest(`/api/training-plans?athleteId=${athleteId}`, coachToken)));
-  const importedMatrices = importedResults.map(({ payload }) => payload.plans.find((item) => item.data.startDate === importedPlan.startDate));
-  if (importedMatrices.some((item) => !item)) throw new Error('AI导入后未在运动员计划历史中找到矩阵。');
-  const firstImported = importedMatrices[0];
-  const importedExercise = firstImported.data.exercises.find((exercise) => exercise.name === '卧拉');
+  if (!aiCreate.response.ok || aiCreate.payload.created !== 1) throw new Error(`AI生成计划写入失败：${aiCreate.payload?.message}`);
+  const generatedResult = await jsonRequest(`/api/training-plans?athleteId=${targetId}`, coachToken);
+  const generatedMatrix = generatedResult.payload.plans.find((item) => item.data.startDate === generatedPlan.startDate);
+  if (!generatedMatrix) throw new Error('AI生成计划保存后未在运动员计划历史中找到矩阵。');
+  const generatedExercise = generatedMatrix.data.exercises.find((exercise) => exercise.name === '卧拉');
   if (
-    firstImported.data.weekKeys.length !== 3
-    || firstImported.data.weekLabels['3'] !== '赛前调整'
-    || importedExercise.lines[0].weeks['1'].sets !== '3'
-    || !importedExercise.lines[0].weeks['1'].arrangement.includes('距离 8km')
-  ) throw new Error('AI计划没有按三阶段结构映射到统一矩阵。');
-  importedExercise.lines[0].weeks['1'].actualCompleted = '7';
-  const editImported = await jsonRequest('/api/training-plans', coachToken, {
+    generatedMatrix.data.weekKeys.length !== 3
+    || generatedMatrix.data.weekLabels['3'] !== '赛前调整'
+    || generatedExercise.lines[0].weeks['1'].sets !== '3'
+    || !generatedExercise.lines[0].weeks['1'].arrangement.includes('距离 8km')
+  ) throw new Error('AI生成计划没有按三阶段结构映射到统一矩阵。');
+  generatedExercise.lines[0].weeks['1'].actualCompleted = '7';
+  const editGenerated = await jsonRequest('/api/training-plans', coachToken, {
     method: 'POST',
-    body: JSON.stringify({ athleteId: targetIds[0], planId: firstImported.id, data: firstImported.data })
+    body: JSON.stringify({ athleteId: targetId, planId: generatedMatrix.id, data: generatedMatrix.data })
   });
-  if (!editImported.response.ok) throw new Error(`AI矩阵二次编辑保存失败：${editImported.payload?.message}`);
-  const aiSkip = await jsonRequest('/api/training-plans/ai/save', coachToken, {
+  if (!editGenerated.response.ok) throw new Error(`AI生成矩阵二次编辑保存失败：${editGenerated.payload?.message}`);
+  const removedImportSave = await jsonRequest('/api/training-plans/ai/save', coachToken, {
     method: 'POST',
-    body: JSON.stringify({ athleteIds: targetIds, plan: importedPlan, aiMetadata, replaceExisting: false })
+    body: JSON.stringify({
+      athleteId: targetId,
+      plan: { ...generatedPlan, sourceType: 'ai_import', startDate: '2026-11-01', endDate: '2026-11-21' },
+      aiMetadata: { operation: 'import', modelUsed: 'test-model' }
+    })
   });
-  if (!aiSkip.response.ok || aiSkip.payload.skipped !== 2) throw new Error('AI多人导入未按默认规则跳过同期计划。');
-  const aiReplace = await jsonRequest('/api/training-plans/ai/save', coachToken, {
-    method: 'POST',
-    body: JSON.stringify({ athleteIds: targetIds, plan: importedPlan, aiMetadata, replaceExisting: true })
-  });
-  if (!aiReplace.response.ok || aiReplace.payload.replaced !== 2) throw new Error('AI多人导入覆盖同期计划失败。');
+  if (removedImportSave.response.status !== 400) throw new Error('已删除的AI识别导入载荷仍可保存。');
 
   console.log(JSON.stringify({
     coachCanSave: true,
@@ -265,14 +263,13 @@ try {
     itemProjectOnly: itemValue,
     headerProjectNames: sheet.getCell('G3').value,
     exportBytes: (await fs.stat(exportPath)).size,
-    aiMatrixTargets: targetIds.length,
-    aiMatrixWeeks: firstImported.data.weekKeys.length,
-    aiMatrixSchedule: firstImported.data.scheduleLabel,
-    aiMatrixArrangement: importedExercise.lines[0].weeks['1'].arrangement,
+    aiGeneratedTargets: 1,
+    aiGeneratedWeeks: generatedMatrix.data.weekKeys.length,
+    aiGeneratedSchedule: generatedMatrix.data.scheduleLabel,
+    aiGeneratedArrangement: generatedExercise.lines[0].weeks['1'].arrangement,
     aiMatrixCreated: aiCreate.payload.created,
-    aiMatrixSkipped: aiSkip.payload.skipped,
-    aiMatrixReplaced: aiReplace.payload.replaced,
-    aiMatrixEditable: true
+    aiGeneratedEditable: true,
+    removedImportSaveStatus: removedImportSave.response.status
   }, null, 2));
 } finally {
   server.kill();
