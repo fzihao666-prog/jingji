@@ -193,10 +193,10 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     sleepHours: row.sleepHours,
     fatigueIndex: row.fatigueIndex,
     status: row.status,
-    coachNote: row.sessionDemo ? '演示数据：用于训练总览功能预览。' : '',
+    coachNote: '',
     trainingBreakdown: sessionBreakdown(row),
     updatedAt: row.updatedAt,
-    updatedBy: row.sessionDemo ? '演示数据生成器' : row.sessionSource,
+    updatedBy: row.sessionSource,
     dataQuality: row.sessionQuality,
     dataSource: row.sessionSource,
     isDemo: Boolean(row.sessionDemo),
@@ -303,7 +303,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       targets,
       notes: input.individual ? '专业综合评估' : `${input.project}项目组均值`,
       updatedAt: `${testDate} 12:00:00`,
-      updatedBy: rows.every((row) => row.isDemo) ? '演示数据生成器' : '测试数据汇总'
+      updatedBy: '测试数据汇总'
     };
   });
 

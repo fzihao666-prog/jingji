@@ -139,7 +139,6 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
                   <i>{profile.athleteName.slice(0, 1)}</i>
                   <span><strong>{individual ? '本人' : profile.athleteName}</strong><small>{[profile.gender, profile.age === null ? '' : `${profile.age}岁`, profile.project].filter(Boolean).join(' · ')}</small></span>
                   <span><strong>{profile.team || '未分队'}</strong><small>{[profile.city, profile.county].filter(Boolean).join(' · ') || '地区未设置'}</small></span>
-                  {profile.originIsDemo && <em>演示</em>}
                 </div>
               ))}
               </div>

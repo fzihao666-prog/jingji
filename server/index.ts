@@ -1136,7 +1136,7 @@ function buildRuleAdvice(test: AdviceTestRow): StrengthAdviceContent {
     title: `${test.testDate} 个人力量训练建议方案`,
     overview: comparisons.length
       ? `本次共有${comparisons.length}项指标可与目标比较，其中${strengths.length}项达到目标、${gaps.length}项列为优先改善项。方案以${focus}为主线，采用逐周递进并在末周复核。`
-      : '本次尚未形成完整的目标对比。以下为演示性训练框架，请先由教练补充目标值，再确认具体负荷。',
+      : '本次尚未形成完整的目标对比。以下为建议训练框架，请先由教练补充目标值，再确认具体负荷。',
     strengths: strengths.length ? strengths : ['暂未发现同时具备实测值和目标值的达标项目。'],
     priorities: priorities.length ? priorities : ['补充关键项目目标值，并核对测试动作、单位和测试条件。'],
     weeks: [
@@ -1155,7 +1155,7 @@ async function buildAiAdvice(test: AdviceTestRow) {
   const baseUrl = cleanString(process.env.AI_BASE_URL).replace(/\/+$/, '');
   const model = cleanString(process.env.AI_MODEL);
   if (!apiKey || !baseUrl || !model) {
-    return { content: buildRuleAdvice(test), source: 'rules' as const, model: '内置演示规则' };
+    return { content: buildRuleAdvice(test), source: 'rules' as const, model: '内置规则' };
   }
 
   const metrics = JSON.parse(test.metricsJson || '{}') as StrengthMetricValues;
@@ -1316,6 +1316,12 @@ function parseDate(value: unknown): string {
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
 }
 
+function isValidIsoDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function pick(row: Record<string, unknown>, aliases: string[]) {
   const normalized = new Map(Object.entries(row).map(([key, value]) => [key.replace(/\s+/g, '').toLowerCase(), value]));
   for (const alias of aliases) {
@@ -1367,6 +1373,21 @@ function parseTrainingBreakdownJson(value: string): TrainingBreakdown {
   } catch {
     return emptyTrainingBreakdown();
   }
+}
+
+function trainingSessionBreakdown(input: { trainingType: string; structureType: string; intensityZone: string; durationMin: number; distanceKm: number }): TrainingBreakdown {
+  const breakdown = emptyTrainingBreakdown();
+  const zone = input.intensityZone as IntensityZoneKey;
+  if ((input.trainingType === '专项训练' || input.distanceKm > 0) && intensityZones.includes(zone)) {
+    breakdown.waterMinutes = input.durationMin;
+    breakdown.waterDistanceByZone[zone] = input.distanceKm;
+    breakdown.waterTimeByZone[zone] = input.durationMin;
+  } else if (input.structureType === '最大力量') breakdown.landMinutes.maxStrength = input.durationMin;
+  else if (input.structureType === '速度力量') breakdown.landMinutes.speedStrength = input.durationMin;
+  else if (input.structureType === '功能训练') breakdown.landMinutes.functional = input.durationMin;
+  else if (input.structureType === '再生恢复') breakdown.landMinutes.recovery = input.durationMin;
+  else breakdown.landMinutes.other = input.durationMin;
+  return breakdown;
 }
 
 app.get('/api/teams', (_req, res) => {
@@ -2926,28 +2947,87 @@ app.get('/api/records', requireAuth, (req, res) => {
   if (!ids.length) return res.json({ records: [] });
   const placeholders = ids.map(() => '?').join(',');
   const records = db.prepare(`
-    SELECT tr.id, tr.athlete_id AS athleteId, a.name AS athleteName,
-      tr.project, tr.team, tr.province AS region, tr.province, tr.city, tr.county,
-      tr.date, tr.training_type AS trainingType, tr.structure_type AS structureType,
-      tr.intensity_zone AS intensityZone, tr.content, tr.duration_min AS durationMin,
-      tr.distance_km AS distanceKm, tr.rpe, tr.srpe, tr.smvl,
-      tr.morning_pulse AS morningPulse, tr.weight_kg AS weightKg,
-      tr.sleep_hours AS sleepHours, tr.fatigue_index AS fatigueIndex,
-      tr.status, tr.coach_note AS coachNote, tr.training_breakdown AS trainingBreakdownJson,
-      tr.updated_at AS updatedAt,
-      u.display_name AS updatedBy
-    FROM training_records tr
-    JOIN athletes a ON a.id = tr.athlete_id
-    JOIN users u ON u.id = tr.updated_by
-    WHERE tr.athlete_id IN (${placeholders}) AND tr.date BETWEEN ? AND ?
-    ORDER BY tr.date, a.name
-  `).all(...ids, from, to) as Array<Record<string, unknown> & { trainingBreakdownJson: string }>;
+    SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName,
+      a.project, a.team, a.region, a.region AS province, a.city, a.county,
+      ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
+      ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
+      ts.distance_km AS distanceKm, ts.rpe, ts.srpe, ts.smvl,
+      dw.morning_pulse AS morningPulse, dw.weight_kg AS weightKg,
+      dw.sleep_hours AS sleepHours, dw.fatigue_index AS fatigueIndex,
+      COALESCE(dw.status, 'normal') AS status, '' AS coachNote,
+      ts.average_heart_rate AS averageHeartRate, ts.max_heart_rate AS maxHeartRate,
+      ts.average_power_w AS averagePowerW, ts.stroke_rate_spm AS strokeRateSpm,
+      ts.updated_at AS updatedAt, COALESCE(u.display_name, '系统') AS updatedBy
+    FROM training_sessions ts
+    JOIN athletes a ON a.id = ts.athlete_id
+    LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
+    LEFT JOIN users u ON u.id = ts.created_by
+    WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
+    ORDER BY ts.session_date, ts.session_order, a.name
+  `).all(...ids, from, to) as Array<Record<string, unknown> & { trainingType: string; structureType: string; intensityZone: string; durationMin: number; distanceKm: number }>;
   res.json({
-    records: records.map(({ trainingBreakdownJson, ...record }) => ({
+    records: records.map((record) => ({
       ...record,
-      trainingBreakdown: parseTrainingBreakdownJson(trainingBreakdownJson)
+      trainingBreakdown: trainingSessionBreakdown(record)
     }))
   });
+});
+
+app.post('/api/special-training/sessions', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  const user = req.authUser!;
+  const rows = Array.isArray(req.body?.sessions) ? req.body.sessions.slice(0, 1000) : [];
+  if (!rows.length) return res.status(400).json({ message: '请提供需要保存的训练数据。' });
+  const insert = db.prepare(`
+    INSERT INTO training_sessions
+      (athlete_id, session_date, session_order, start_time, training_type, structure_type,
+       intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl,
+       average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm,
+       source, quality, is_demo, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'valid', 0, ?)
+  `);
+  const nextOrder = db.prepare('SELECT COALESCE(MAX(session_order), 0) + 1 AS value FROM training_sessions WHERE athlete_id = ? AND session_date = ?');
+  let imported = 0;
+  try {
+    db.exec('BEGIN');
+    for (const row of rows) {
+      const athleteId = Number(row?.athleteId || 0);
+      const athlete = db.prepare('SELECT id, project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as { id: number; project: string } | undefined;
+      if (!athlete || !hasAthleteAccess(user, athleteId)) throw new Error('存在无权录入或不存在的运动员。');
+      const date = cleanString(row?.date);
+      if (!isValidIsoDate(date)) throw new Error('训练日期无效，请使用正确的年月日。');
+      if (cleanString(row?.project) && cleanString(row.project) !== athlete.project) throw new Error('训练项目与运动员档案不一致。');
+      const duration = numberOrNull(row?.duration);
+      const distance = numberOrNull(row?.distance);
+      const rpe = numberOrNull(row?.rpe);
+      const heartRate = numberOrNull(row?.heartRate);
+      const maxHeartRate = numberOrNull(row?.maxHeartRate);
+      const power = numberOrNull(row?.power);
+      const strokeRate = numberOrNull(row?.strokeRate);
+      if (duration === null || duration <= 0 || duration > 1440) throw new Error('训练时长须在 1—1440 分钟之间。');
+      if (distance === null || distance < 0 || distance > 500) throw new Error('训练距离须在 0—500 公里之间。');
+      if (rpe === null || rpe < 1 || rpe > 10) throw new Error('RPE 须在 1—10 之间。');
+      if (heartRate === null || heartRate < 30 || heartRate > 240) throw new Error('平均心率须在 30—240 bpm 之间。');
+      if (maxHeartRate === null || maxHeartRate < 30 || maxHeartRate > 240 || maxHeartRate < heartRate) throw new Error('最大心率须在 30—240 bpm 之间，且不能低于平均心率。');
+      if (power === null || power < 0 || power > 3000) throw new Error('平均功率须在 0—3000 W 之间。');
+      if (strokeRate === null || strokeRate < 1 || strokeRate > 250) throw new Error('桨频或划频须在 1—250 次/分之间。');
+      const order = (nextOrder.get(athleteId, date) as { value: number }).value;
+      const trainingType = cleanString(row?.type) || '专项训练';
+      const content = cleanString(row?.content);
+      if (!content || content.length > 100) throw new Error('训练内容须填写且不能超过 100 个字符。');
+      const defaultStructure = trainingType === '专项力量' ? '最大力量' : trainingType === '恢复训练' ? '再生恢复' : '专项训练';
+      insert.run(athleteId, date, order, cleanString(row?.startTime), trainingType,
+        cleanString(row?.structureType) || defaultStructure, cleanString(row?.intensityZone) || 'U2',
+        content, duration, distance, rpe, Math.round(duration * rpe), heartRate,
+        maxHeartRate, power, strokeRate,
+        cleanString(row?.source) === 'import' ? 'table_import' : 'manual', user.id);
+      imported += 1;
+    }
+    db.exec('COMMIT');
+    res.status(201).json({ message: `已保存 ${imported} 条专项训练数据。`, imported });
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    res.status(400).json({ message: error instanceof Error ? error.message : '专项训练数据保存失败。' });
+  }
 });
 
 app.get('/api/analysis/model', requireAuth, (req, res) => {
@@ -3135,7 +3215,7 @@ app.post(
           ? 'AI训练建议草案已生成。'
           : 'fallbackReason' in generated
             ? 'AI服务暂时不可用，已自动生成规则兜底草案。'
-            : '尚未配置AI API，已生成可完整体验的规则演示草案。',
+            : '尚未配置AI API，已根据现有规则生成训练建议草案。',
         advice: latestAdvice(strengthTestId)
       });
     } catch (error) {
@@ -4068,6 +4148,24 @@ app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ message: error.message || '服务器发生错误。' });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Training Monitor API running at http://localhost:${port}`);
 });
+
+let shuttingDown = false;
+function shutdown(signal: NodeJS.Signals) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(() => {
+    try { db.close(); } catch {}
+    process.exit(0);
+  });
+  setTimeout(() => {
+    try { db.close(); } catch {}
+    process.exit(0);
+  }, 5000).unref();
+  console.log(`收到 ${signal}，正在关闭服务。`);
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));

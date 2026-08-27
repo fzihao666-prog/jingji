@@ -142,7 +142,7 @@ export default function App() {
       {globalError && <div className="global-error">{globalError}</div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} onAthleteNameChange={renameAthlete} onUserNameChange={renameVisibleUser} />}
-        {page.startsWith('special-') && <SpecialTestsPage {...shared} user={user} section={page as SpecialPageKey} onSectionChange={setPage} />}
+        {page.startsWith('special-') && <SpecialTestsPage {...shared} user={user} section={page as SpecialPageKey} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'plans' && <TrainingPlanPage user={user} athletes={projectAthletes} athleteId={athleteId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}

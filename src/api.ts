@@ -147,6 +147,15 @@ export const api = {
     if (athleteId) params.set('athleteId', String(athleteId));
     return request<{ records: TrainingRecord[] }>(`/api/records?${params}`);
   },
+  async saveSpecialTrainingSessions(sessions: Array<{
+    athleteId: number; project: Project; date: string; type: string; content: string;
+    duration: number; distance: number; rpe: number; strokeRate: number;
+    heartRate: number; maxHeartRate: number; power: number; source: 'manual' | 'import';
+  }>) {
+    return request<{ message: string; imported: number }>('/api/special-training/sessions', {
+      method: 'POST', body: JSON.stringify({ sessions })
+    });
+  },
   async overview(from: string, to: string, athleteId: number | null | undefined, project: Project) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));

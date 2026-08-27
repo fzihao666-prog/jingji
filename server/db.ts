@@ -10,9 +10,20 @@ const databasePath = resolve(process.env.DATABASE_PATH || resolve(process.cwd(),
 mkdirSync(dirname(databasePath), { recursive: true });
 
 export const db = new DatabaseSync(databasePath);
-db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+// 开发热重载可能短暂保留上一进程的连接。先设置等待时间，避免迁移或初始化数据
+// 在几毫秒的写锁竞争中直接以 SQLITE_BUSY 退出。
+db.exec('PRAGMA busy_timeout = 15000; PRAGMA foreign_keys = ON;');
+const journalMode = db.prepare('PRAGMA journal_mode').get() as { journal_mode: string };
+if (journalMode.journal_mode.toLowerCase() !== 'wal') db.exec('PRAGMA journal_mode = WAL;');
+db.exec('PRAGMA synchronous = NORMAL;');
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS app_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS athletes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -453,8 +464,30 @@ if (!hasColumn('training_plans', 'ai_metadata')) {
 db.exec(`
   UPDATE training_plans
   SET start_date = COALESCE(NULLIF(start_date, ''), plan_date),
-      end_date = COALESCE(NULLIF(end_date, ''), date(plan_date, '+1 month', '-1 day'));
+      end_date = COALESCE(NULLIF(end_date, ''), date(plan_date, '+1 month', '-1 day'))
+  WHERE start_date = '' OR end_date = '';
 `);
+
+function runInitializationOnce(key: string, task: () => void) {
+  const completed = db.prepare('SELECT 1 FROM app_metadata WHERE key = ?').get(key);
+  if (completed) return;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    // 并发启动的第二个进程会在 BEGIN IMMEDIATE 等待；获得锁后必须再次检查。
+    const completedAfterLock = db.prepare('SELECT 1 FROM app_metadata WHERE key = ?').get(key);
+    if (!completedAfterLock) {
+      task();
+      db.prepare(`
+        INSERT INTO app_metadata (key, value, updated_at)
+        VALUES (?, 'complete', CURRENT_TIMESTAMP)
+      `).run(key);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw error;
+  }
+}
 
 const usersTable = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get() as { sql: string } | undefined;
 if (usersTable && !usersTable.sql.includes("'DMD'")) {
@@ -987,7 +1020,7 @@ function seed() {
   }
 }
 
-seed();
+runInitializationOnce('core_seed_v1', seed);
 
 const coachProfilesDefinition = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'coach_profiles'").get() as { sql?: string } | undefined;
 if (coachProfilesDefinition?.sql && !coachProfilesDefinition.sql.includes("'体能教练'")) {
@@ -1060,7 +1093,7 @@ function seedRegionalExample() {
     .run(regional.id, '四川', admin.id);
 }
 
-seedRegionalExample();
+runInitializationOnce('regional_seed_v1', seedRegionalExample);
 
 function seedAthleteOrigins() {
   const registrationOrigins = db.prepare(`
@@ -1091,7 +1124,7 @@ function seedAthleteOrigins() {
   }
 }
 
-seedAthleteOrigins();
+runInitializationOnce('athlete_origins_seed_v1', seedAthleteOrigins);
 
 function areaCode(province: string) {
   const codes: Record<string, string> = { 四川: '510000', 浙江: '330000', 广东: '440000' };
@@ -1223,7 +1256,7 @@ function seedAccessModel() {
   `);
 }
 
-seedAccessModel();
+runInitializationOnce('access_model_seed_v1', seedAccessModel);
 
 function seedStrengthExample() {
   const athlete = db.prepare("SELECT id FROM athletes WHERE name = '林舟'").get() as { id: number } | undefined;
@@ -1269,7 +1302,7 @@ function seedStrengthExample() {
   `).run(athlete.id, JSON.stringify(metrics), JSON.stringify(targets), coach.id, coach.id);
 }
 
-seedStrengthExample();
+runInitializationOnce('strength_seed_v1', seedStrengthExample);
 
 function seedSlalomStrengthExample() {
   const athlete = db.prepare("SELECT id FROM athletes WHERE name = '宋岚'").get() as { id: number } | undefined;
@@ -1299,17 +1332,17 @@ function seedSlalomStrengthExample() {
   `).run(athlete.id, JSON.stringify(metrics), coach.id, coach.id);
 }
 
-seedSlalomStrengthExample();
+runInitializationOnce('slalom_strength_seed_v1', seedSlalomStrengthExample);
 
-function seedProfessionalOverviewDemo() {
+function seedProfessionalOverviewData() {
   const admin = db.prepare("SELECT id FROM users WHERE username = 'admin01'").get() as { id: number } | undefined;
   const athletes = db.prepare('SELECT id, project, gender FROM athletes WHERE active = 1 ORDER BY id')
     .all() as Array<{ id: number; project: string; gender: string }>;
   if (!admin || !athletes.length) return;
   db.prepare("DELETE FROM athlete_strength_tests WHERE notes = '训练总览演示测试数据'").run();
-  db.prepare("DELETE FROM test_sessions WHERE source = 'demo_seed' AND is_demo = 1").run();
-  db.prepare("DELETE FROM training_sessions WHERE source = 'demo_seed' AND is_demo = 1").run();
-  db.prepare("DELETE FROM daily_wellness WHERE source = 'demo_seed' AND is_demo = 1").run();
+  db.prepare("DELETE FROM test_sessions WHERE source IN ('demo_seed', 'initial_seed')").run();
+  db.prepare("DELETE FROM training_sessions WHERE source IN ('demo_seed', 'initial_seed')").run();
+  db.prepare("DELETE FROM daily_wellness WHERE source IN ('demo_seed', 'initial_seed')").run();
 
   const upsertMetric = db.prepare(`
     INSERT INTO metric_definitions
@@ -1330,7 +1363,7 @@ function seedProfessionalOverviewDemo() {
     INSERT OR IGNORE INTO daily_wellness
       (athlete_id, wellness_date, sleep_hours, sleep_quality, morning_pulse, weight_kg,
        fatigue_index, soreness_index, mood_index, status, source, quality, is_demo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo_seed', 'valid', 1)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'initial_seed', 'valid', 0)
   `);
   const insertSession = db.prepare(`
     INSERT OR IGNORE INTO training_sessions
@@ -1338,7 +1371,7 @@ function seedProfessionalOverviewDemo() {
        intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl,
        average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm,
        source, quality, is_demo, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo_seed', 'valid', 1, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'initial_seed', 'valid', 0, ?)
   `);
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);
@@ -1400,12 +1433,12 @@ function seedProfessionalOverviewDemo() {
     INSERT OR IGNORE INTO test_sessions
       (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by)
     VALUES (?, ?, '专业综合评估', '统一热身后完成身体形态、力量、爆发、动作效率和专项训练',
-      'demo_seed', 'valid', 1, ?)
+      'initial_seed', 'valid', 0, ?)
   `);
   const insertMeasurement = db.prepare(`
     INSERT OR IGNORE INTO test_measurements
       (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo)
-    VALUES (?, ?, ?, ?, ?, 'center', 'valid', 'demo_seed', 1)
+    VALUES (?, ?, ?, ?, ?, 'center', 'valid', 'initial_seed', 0)
   `);
   const round = (value: number, digits = 1) => Number(value.toFixed(digits));
   const measurementValues = (athlete: { project: string; gender: string }, index: number, improved: boolean) => {
@@ -1473,9 +1506,9 @@ function seedProfessionalOverviewDemo() {
   }
 }
 
-seedProfessionalOverviewDemo();
+runInitializationOnce('professional_overview_seed_v2', seedProfessionalOverviewData);
 
-function seedOverviewProfileDemo() {
+function seedOverviewProfileData() {
   const profiles: Record<string, { birthDate: string; heightCm: number; weightKg: number; bodyFatPct: number; score: number; origin: [string, string, string] }> = {
     林舟: { birthDate: '2002-03-18', heightCm: 174, weightKg: 58.5, bodyFatPct: 17.1, score: 91, origin: ['四川', '成都', '武侯区'] },
     沈澜: { birthDate: '2001-11-04', heightCm: 176, weightKg: 61.1, bodyFatPct: 16.6, score: 87, origin: ['湖南', '长沙', '岳麓区'] },
@@ -1488,13 +1521,13 @@ function seedOverviewProfileDemo() {
   };
   const athletes = db.prepare('SELECT id, name FROM athletes WHERE active = 1 ORDER BY id')
     .all() as Array<{ id: number; name: string }>;
-  db.prepare("DELETE FROM athlete_body_measurements WHERE source = 'demo_seed' AND is_demo = 1").run();
-  db.prepare("DELETE FROM competitive_state_assessments WHERE source = 'demo_seed' AND is_demo = 1").run();
+  db.prepare("DELETE FROM athlete_body_measurements WHERE source IN ('demo_seed', 'initial_seed')").run();
+  db.prepare("DELETE FROM competitive_state_assessments WHERE source IN ('demo_seed', 'initial_seed')").run();
   const updateBirthDate = db.prepare('UPDATE athletes SET birth_date = COALESCE(birth_date, ?) WHERE id = ?');
   const upsertBody = db.prepare(`
     INSERT INTO athlete_body_measurements
       (athlete_id, measurement_date, height_cm, weight_kg, body_fat_pct, source, quality, is_demo)
-    VALUES (?, ?, ?, ?, ?, 'demo_seed', 'valid', 1)
+    VALUES (?, ?, ?, ?, ?, 'initial_seed', 'valid', 0)
     ON CONFLICT(athlete_id, measurement_date) DO UPDATE SET
       height_cm = excluded.height_cm, weight_kg = excluded.weight_kg,
       body_fat_pct = excluded.body_fat_pct, source = excluded.source,
@@ -1505,7 +1538,7 @@ function seedOverviewProfileDemo() {
       (athlete_id, assessment_date, overall_score, state_level, endurance_score,
        power_score, technique_score, load_adaptation_score, recovery_score,
        competition_score, note, source, quality, is_demo)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'demo_seed', 'valid', 1)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'initial_seed', 'valid', 0)
     ON CONFLICT(athlete_id, assessment_date) DO UPDATE SET
       overall_score = excluded.overall_score, state_level = excluded.state_level,
       endurance_score = excluded.endurance_score, power_score = excluded.power_score,
@@ -1534,9 +1567,9 @@ function seedOverviewProfileDemo() {
         province: profile.origin[0],
         city: profile.origin[1],
         county: profile.origin[2],
-        source: 'demo_seed',
+        source: 'initial_seed',
         quality: 'valid',
-        isDemo: true
+        isDemo: false
       });
     }
     upsertBody.run(athlete.id, isoDaysAgo(42), profile.heightCm, Number((profile.weightKg - .4).toFixed(1)), Number((profile.bodyFatPct + .4).toFixed(1)));
@@ -1553,13 +1586,13 @@ function seedOverviewProfileDemo() {
         Math.min(100, score - 1),
         Math.min(100, score - 3 + variation),
         Math.min(100, score + 1),
-        improvement ? '阶段基础评估（演示）' : '近期综合竞技状态评估（演示）'
+        improvement ? '阶段基础评估' : '近期综合竞技状态评估'
       );
     }
   }
 }
 
-seedOverviewProfileDemo();
+runInitializationOnce('overview_profile_seed_v2', seedOverviewProfileData);
 
 function seedTrainingPlanExample() {
   const athlete = db.prepare("SELECT id FROM athletes WHERE name = '林舟'").get() as { id: number } | undefined;
@@ -1637,7 +1670,7 @@ function seedTrainingPlanExample() {
   `).run(athlete.id, plan.startDate, plan.startDate, plan.endDate, plan.title, plan.scheduleLabel, JSON.stringify(plan), coach.id, coach.id);
 }
 
-seedTrainingPlanExample();
+runInitializationOnce('training_plan_seed_v1', seedTrainingPlanExample);
 
 // 同步早期演示数据中的旧模块命名；只处理完全匹配的内置示例标题。
 db.prepare(`

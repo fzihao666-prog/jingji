@@ -546,10 +546,10 @@ export function OverviewPage(props: Props) {
         <div><h1>{isIndividualOverview ? '我的训练总览' : '训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
         <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
       </header>
-      {overview && <div className={`overview-data-provenance${overview.meta.containsDemoData ? ' demo' : ''}`}>
-        <Database size={15} /><strong>{overview.meta.containsDemoData ? '演示数据模式' : '正式数据'} · {overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>
+      {overview && <div className="overview-data-provenance">
+        <Database size={15} /><strong>{overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>
         <span>{overview.meta.athleteCount}名运动员 · {overview.meta.sessionCount}堂训练 · {overview.meta.wellnessDays}条恢复记录 · {overview.meta.testCount}次测试</span>
-        <small>来源：{overview.meta.sources.join('、') || '未标记'} · 完整率 {formatNumber(overview.meta.coverage, 1)}%</small>
+        <small>数据完整率 {formatNumber(overview.meta.coverage, 1)}%</small>
       </div>}
       {overviewError && <div className="overview-data-provenance error"><Database size={15} /><strong>统一指标接口暂不可用</strong><span>{overviewError}，当前显示兼容数据。</span></div>}
       {layout.hidden.length > 0 && <div className="hidden-card-restore" onClick={(event) => event.stopPropagation()}><Eye size={15} /><span>已隐藏 {layout.hidden.length} 项</span>{layout.hidden.map((id) => <button key={id} type="button" onClick={() => restoreCard(id)}>{cardMeta[id].title}</button>)}</div>}

@@ -300,6 +300,10 @@ export type TrainingRecord = {
   weightKg: number | null;
   sleepHours: number | null;
   fatigueIndex: number | null;
+  averageHeartRate?: number | null;
+  maxHeartRate?: number | null;
+  averagePowerW?: number | null;
+  strokeRateSpm?: number | null;
   status: TrainingStatus;
   coachNote: string;
   trainingBreakdown: TrainingBreakdown;
