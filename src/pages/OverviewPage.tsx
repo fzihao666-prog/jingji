@@ -543,7 +543,7 @@ export function OverviewPage(props: Props) {
   return (
     <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
       <header className="page-heading">
-        <div><h1>{isIndividualOverview ? '我的训练总览' : '团队训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
+        <div><h1>{isIndividualOverview ? '我的训练总览' : '训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
         <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
       </header>
       {overview && <div className={`overview-data-provenance${overview.meta.containsDemoData ? ' demo' : ''}`}>

@@ -199,6 +199,19 @@ h1, h2, h3, p { margin: 0; }
 .primary-nav button:hover { background: rgba(255,255,255,.05); color: #fff; }
 .primary-nav button.active { color: #fff; background: linear-gradient(105deg, rgba(36, 168, 155, .36), rgba(36, 168, 155, .13)); box-shadow: inset 3px 0 #58ccbb; }
 .primary-nav button span, .primary-nav button strong, .primary-nav button small { display: block; }.primary-nav button strong { font-size: 13px; }.primary-nav button small { margin-top: 3px; font-size: 9px; opacity: .48; font-weight: 400; }
+.special-nav { border-radius: 10px; transition: background .18s ease; }
+.special-nav.active { padding-bottom: 7px; background: rgba(19,118,119,.12); box-shadow: inset 3px 0 #58ccbb; }
+.primary-nav .special-nav-parent { width: 100%; }
+.special-nav.active .special-nav-parent { color: #fff; background: transparent; box-shadow: none; }
+.special-nav-chevron { margin-left: auto; opacity: .58; }
+.special-nav.open .special-nav-chevron { transform: rotate(0); }
+.special-nav.collapsed .special-nav-chevron { transform: rotate(-90deg); }
+.special-nav-chevron { transition: transform .18s ease; }
+.special-nav-tree { position: relative; margin: -1px 0 0 31px; padding: 2px 7px 0 12px; border-left: 1px solid rgba(112,204,191,.24); display: grid; gap: 5px; }
+.primary-nav .special-nav-tree button { position: relative; min-height: 29px; padding: 5px 8px; border-radius: 6px; gap: 7px; color: rgba(225,243,240,.56); font-size: 11px; }
+.primary-nav .special-nav-tree button i { width: 4px; height: 4px; border-radius: 50%; background: rgba(126,202,191,.48); }
+.primary-nav .special-nav-tree button.active { color: #fff; background: rgba(62,178,164,.2); box-shadow: none; }
+.primary-nav .special-nav-tree button.active i { background: #66d5c5; box-shadow: 0 0 0 3px rgba(102,213,197,.12); }
 .sidebar-footer { margin-top: auto; padding: 14px 6px 0; border-top: 1px solid rgba(255,255,255,.09); display: flex; align-items: center; gap: 10px; }
 .user-avatar { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: #d8efea; color: var(--ink); }.user-avatar.small { width: 30px; height: 30px; font-size: 12px; }
 .user-copy { min-width: 0; flex: 1; }.user-copy strong, .user-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.user-copy strong { font-size: 12px; }.user-copy small { margin-top: 3px; font-size: 9px; color: rgba(255,255,255,.4); }
@@ -367,7 +380,10 @@ h1, h2, h3, p { margin: 0; }
 .card-size-metric .card-more-button:hover,.card-size-metric .card-more-button:focus-visible { color: #fff; }
 .card-action-menu { position: absolute; z-index: 40; left: -4px; top: 22px; width: 132px; padding: 5px; border: 1px solid #d5e1e3; border-radius: 9px; background: #fff; box-shadow: 0 17px 35px rgba(7,38,49,.18); display: grid; gap: 2px; }.card-action-menu button { min-height: 34px; padding: 0 9px; border: 0; border-radius: 6px; color: #35555f; background: transparent; display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 800; cursor: pointer; }.card-action-menu button:hover { color: #0c746e; background: #edf8f6; }
 .pinned-mark { position: absolute; z-index: 8; right: 11px; top: 11px; padding: 4px 7px; border-radius: 99px; color: #0b756e; background: #e4f5f1; display: flex; align-items: center; gap: 4px; font-size: 8px; font-weight: 900; }.card-size-metric .pinned-mark { color: #fff; background: rgba(2,39,50,.28); }
-.overview-card-shell .metric-card { min-height: 130px; padding: 20px 14px 18px 48px; gap: 10px; }.overview-card-shell .metric-icon { width: 34px; height: 34px; flex: 0 0 auto; }.overview-card-shell .metric-copy strong { font-size: 25px; }.overview-card-shell .metric-copy strong small { margin-left: 4px; }
+.overview-card-shell .metric-card { min-height: 130px; padding: 18px 34px; display: grid; place-items: center; }
+.overview-card-shell .metric-icon { position: absolute; z-index: 2; left: 12px; top: 39px; width: 34px; height: 34px; }
+.overview-card-shell .metric-copy { width: 100%; text-align: center; }
+.overview-card-shell .metric-copy strong { font-size: 25px; }.overview-card-shell .metric-copy strong small { margin-left: 4px; }
 .tone-purple { background: linear-gradient(125deg,#4f477e,#7065a6); }.tone-green { background: linear-gradient(125deg,#176e60,#20a083); }
 .professional-panel { min-width: 0; padding: 20px; overflow: hidden; background: #fff; }.professional-panel .professional-heading,.professional-panel > .panel-heading { padding-left: 37px; }.professional-panel .chart-wrap { height: 275px; }
 .professional-heading small { max-width: 55%; text-align: right; line-height: 1.4; }

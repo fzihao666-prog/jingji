@@ -1,7 +1,7 @@
 import { BluetoothConnectPage } from './pages/BluetoothConnectPage';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { api, getToken, setToken } from './api';
-import { AppShell, type PageKey } from './components/AppShell';
+import { AppShell, type PageKey, type SpecialPageKey } from './components/AppShell';
 import { BrandLogo } from './components/BrandLogo';
 import { LoginPage } from './pages/LoginPage';
 import type { Athlete, Project, TrainingRecord, User } from './types';
@@ -142,7 +142,7 @@ export default function App() {
       {globalError && <div className="global-error">{globalError}</div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} onAthleteNameChange={renameAthlete} onUserNameChange={renameVisibleUser} />}
-        {page === 'specialTests' && <SpecialTestsPage user={user} project={project} from={from} to={to} onRangeChange={shared.onRangeChange} />}
+        {page.startsWith('special-') && <SpecialTestsPage {...shared} user={user} section={page as SpecialPageKey} onSectionChange={setPage} />}
         {page === 'plans' && <TrainingPlanPage user={user} athletes={projectAthletes} athleteId={athleteId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}

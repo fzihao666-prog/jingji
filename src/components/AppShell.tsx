@@ -13,7 +13,8 @@ import {
   UserRound,
   UsersRound,
   X,
-  BluetoothConnected
+  BluetoothConnected,
+  ChevronDown
 } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api';
@@ -23,7 +24,15 @@ import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
 import { ProjectMark } from './ProjectMark';
 
-export type PageKey = 'overview' | 'specialTests' | 'plans' | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
+export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule' | 'special-athletes';
+export type PageKey = 'overview' | SpecialPageKey | 'plans' | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
+
+const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
+  { key: 'special-time', label: '综合分析', pages: ['special-time', 'special-distance', 'special-load'] },
+  { key: 'special-rate', label: '专项指标', pages: ['special-rate', 'special-heart', 'special-power'] },
+  { key: 'special-schedule', label: '训练安排', pages: ['special-schedule'] },
+  { key: 'special-athletes', label: '运动员看板', pages: ['special-athletes'] }
+];
 
 const navItems: Array<{
   key: PageKey;
@@ -32,7 +41,6 @@ const navItems: Array<{
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
-  { key: 'specialTests', label: '专项训练', icon: TimerReset },
   { key: 'plans', label: '体能训练', icon: Dumbbell },
   { key: 'bluetooth', label: '蓝牙连接', icon: BluetoothConnected },
   { key: 'personal', label: '个人档案', icon: UserRound },
@@ -63,8 +71,11 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [specialOpen, setSpecialOpen] = useState(true);
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
-  const current = visibleItems.find((item) => item.key === page) || visibleItems[0];
+  const specialActive = page.startsWith('special-');
+  const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
+  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : visibleItems.find((item) => item.key === page) || visibleItems[0];
 
   const choosePage = (key: PageKey) => {
     onPageChange(key);
@@ -127,7 +138,32 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
         </div>
 
         <nav className="primary-nav" aria-label="主导航">
-          {visibleItems.map((item) => {
+          {visibleItems.slice(0, 1).map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                className={page === item.key ? 'active' : ''}
+                onClick={() => choosePage(item.key)}
+              >
+                <Icon size={19} strokeWidth={1.8} />
+                <span><strong>{item.label}</strong></span>
+              </button>
+            );
+          })}
+          <div className={`special-nav ${specialActive ? 'active' : ''} ${specialOpen ? 'open' : 'collapsed'}`}>
+            <button className="special-nav-parent" onClick={() => setSpecialOpen((open) => !open)} aria-expanded={specialOpen}>
+              <TimerReset size={19} strokeWidth={1.8} />
+              <span><strong>专项训练</strong></span>
+              <ChevronDown className="special-nav-chevron" size={15} />
+            </button>
+            {specialOpen && <div className="special-nav-tree">
+              {specialGroups.map((group) => <button key={group.key} className={group.pages.includes(page as SpecialPageKey) ? 'active' : ''} onClick={() => choosePage(group.key)}>
+                <i /> <span>{group.label}</span>
+              </button>)}
+            </div>}
+          </div>
+          {visibleItems.slice(1).map((item) => {
             const Icon = item.icon;
             return (
               <button
