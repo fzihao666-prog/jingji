@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, UserRound } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
 import type { ProjectTeam, User } from '../types';
@@ -7,6 +7,61 @@ import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { PROJECTS } from '../../shared/projects';
 
 type Mode = 'login' | 'register';
+
+const OLYMPIC_DISCIPLINES = [
+  { label: '射箭', english: 'Archery', col: 0, row: 0 },
+  { label: '花样游泳', english: 'Artistic Swimming', col: 1, row: 0 },
+  { label: '田径', english: 'Athletics', col: 2, row: 0 },
+  { label: '羽毛球', english: 'Badminton', col: 3, row: 0 },
+  { label: '棒球', english: 'Baseball', col: 4, row: 0 },
+  { label: '垒球', english: 'Softball', col: 5, row: 0 },
+  { label: '篮球', english: 'Basketball', col: 6, row: 0 },
+  { label: '三人篮球', english: 'Basketball 3X3', col: 0, row: 1 },
+  { label: '沙滩排球', english: 'Beach Volleyball', col: 1, row: 1 },
+  { label: '拳击', english: 'Boxing', col: 2, row: 1 },
+  { label: '激流回旋', english: 'Canoe Slalom', col: 3, row: 1 },
+  { label: '静水皮划艇', english: 'Canoe Sprint', col: 4, row: 1 },
+  { label: '自由式小轮车', english: 'Cycling BMX Freestyle', col: 5, row: 1 },
+  { label: '竞速小轮车', english: 'Cycling BMX Racing', col: 6, row: 1 },
+  { label: '山地自行车', english: 'Cycling Mountain Bike', col: 0, row: 2 },
+  { label: '公路自行车', english: 'Cycling Road', col: 1, row: 2 },
+  { label: '场地自行车', english: 'Cycling Track', col: 2, row: 2 },
+  { label: '跳水', english: 'Diving', col: 3, row: 2 },
+  { label: '盛装舞步', english: 'Equestrian Dressage', col: 4, row: 2 },
+  { label: '马术三项', english: 'Equestrian Eventing', col: 5, row: 2 },
+  { label: '场地障碍', english: 'Equestrian Jumping', col: 6, row: 2 },
+  { label: '击剑', english: 'Fencing', col: 0, row: 3 },
+  { label: '足球', english: 'Football', col: 1, row: 3 },
+  { label: '高尔夫', english: 'Golf', col: 2, row: 3 },
+  { label: '竞技体操', english: 'Gymnastics Artistic', col: 3, row: 3 },
+  { label: '艺术体操', english: 'Gymnastics Rhythmic', col: 4, row: 3 },
+  { label: '手球', english: 'Handball', col: 5, row: 3 },
+  { label: '曲棍球', english: 'Hockey', col: 6, row: 3 },
+  { label: '柔道', english: 'Judo', col: 0, row: 4 },
+  { label: '空手道·型', english: 'Karate Kata', col: 1, row: 4 },
+  { label: '空手道·组手', english: 'Karate Kumite', col: 2, row: 4 },
+  { label: '马拉松游泳', english: 'Marathon Swimming', col: 3, row: 4 },
+  { label: '现代五项', english: 'Modern Pentathlon', col: 4, row: 4 },
+  { label: '赛艇', english: 'Rowing', col: 5, row: 4 },
+  { label: '七人制橄榄球', english: 'Rugby', col: 6, row: 4 },
+  { label: '帆船', english: 'Sailing', col: 0, row: 5 },
+  { label: '射击', english: 'Shooting', col: 1, row: 5 },
+  { label: '滑板', english: 'Skateboarding', col: 2, row: 5 },
+  { label: '运动攀岩', english: 'Sport Climbing', col: 3, row: 5 },
+  { label: '冲浪', english: 'Surfing', col: 4, row: 5 },
+  { label: '游泳', english: 'Swimming', col: 5, row: 5 },
+  { label: '乒乓球', english: 'Table Tennis', col: 6, row: 5 },
+  { label: '跆拳道', english: 'Taekwondo', col: 0, row: 6 },
+  { label: '网球', english: 'Tennis', col: 1, row: 6 },
+  { label: '蹦床', english: 'Trampoline', col: 2, row: 6 },
+  { label: '铁人三项', english: 'Triathlon', col: 3, row: 6 },
+  { label: '排球', english: 'Volleyball', col: 4, row: 6 },
+  { label: '水球', english: 'Water Polo', col: 5, row: 6 },
+  { label: '举重', english: 'Weightlifting', col: 6, row: 6 },
+  { label: '摔跤', english: 'Wrestling', col: 0, row: 7 }
+] as const;
+
+const OLYMPIC_SPRITE_ROW_Y = [-16, -73, -131, -186, -246, -300, -358, -408] as const;
 
 function genderFromIdentityNumber(value: string) {
   return /^\d{17}[\dX]$/.test(value) ? (Number(value[16]) % 2 ? '男' : '女') : '';
@@ -94,21 +149,39 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
 
   return (
     <main className={`login-page login-page-${mode}`}>
-      <section className="login-story">
+      <section className="login-story olympic-story">
         <div className="login-brand">
           <BrandLogo className="large" variant="full" />
         </div>
 
-        <div className="training-route" aria-hidden="true"><i /><span /><b /></div>
-        <div className="hero-metric hero-metric-pace" aria-hidden="true"><strong>1:38</strong><small>/500m</small></div>
-        <div className="hero-metric hero-metric-rate" aria-hidden="true"><strong>28</strong><small>SPM</small></div>
-        <div className="hero-metric hero-metric-length" aria-hidden="true"><strong>2.1</strong><small>m</small></div>
+        <div className="olympic-story-heading">
+          <div>
+            <p><span /> OLYMPIC DISCIPLINES</p>
+            <h1>让每一道训练痕迹，<br /><em>都成为突破的依据</em></h1>
+          </div>
+        </div>
 
-        <div className="story-copy">
-          <h1>让训练数据成为<br />下一次突破的依据</h1>
-          <span className="story-rule" />
-          <p className="story-disciplines">赛艇&nbsp;&nbsp;·&nbsp;&nbsp;皮划艇&nbsp;&nbsp;·&nbsp;&nbsp;激流</p>
-          <p className="story-english">PERFORMANCE, TRAINING, RECOVERY</p>
+        <div className="olympic-pictogram-panel">
+          <div className="olympic-sports-grid" role="list" aria-label="奥运运动项目图标总览">
+            {OLYMPIC_DISCIPLINES.map((discipline) => (
+              <article
+                className="olympic-sport"
+                key={discipline.english}
+                role="listitem"
+                title={`${discipline.label} / ${discipline.english}`}
+                style={{
+                  '--sport-x': `${-17 - discipline.col * 48.5}px`,
+                  '--sport-y': `${OLYMPIC_SPRITE_ROW_Y[discipline.row]}px`
+                } as CSSProperties}
+              >
+                <span className="olympic-sport-icon" aria-hidden="true"><img src="/assets/olympic-sports-pictograms.png" alt="" /></span>
+                <span>{discipline.label}</span>
+              </article>
+            ))}
+          </div>
+          <div className="olympic-panel-footer">
+            <span>JINGJI PERFORMANCE PLATFORM</span>
+          </div>
         </div>
       </section>
 

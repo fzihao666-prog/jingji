@@ -42,9 +42,9 @@ async function jsonRequest(path, options = {}, token = '') {
 async function previewWorkbook(token, athlete) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('体能训练结果');
-  sheet.addRow(['训练日期', '运动员', '队伍', '训练场次', '动作', '组次', '计划次数', '实际次数', '实际重量kg', 'RPE', '是否完成', '备注']);
-  sheet.addRow(['2026-08-24', athlete.name, athlete.team, '自动化验证场次', '卧推', 1, 8, 8, 60, 7.5, '是', '验证导入']);
-  sheet.addRow(['2026-08-24', athlete.name, athlete.team, '自动化验证场次', '卧推', 2, 8, 7, 60, 8, '是', '验证导入']);
+  sheet.addRow(['训练日期', '运动员', '队伍', '训练场次', '训练类型', '身体位置', '训练环境', '动作', '组次', '计划次数', '实际次数', '计划重量kg', '实际重量kg', '强度%', '强度区间', '训练时间min', '训练距离km', 'RPE', '是否完成', '备注']);
+  sheet.addRow(['2026-08-24', athlete.name, athlete.team, '自动化验证场次', '基础力量', '上肢', '场馆', '卧推', 1, 8, 8, 57.5, 60, 82, 'AN', 12, 0, 7.5, '是', '验证导入']);
+  sheet.addRow(['2026-08-24', athlete.name, athlete.team, '自动化验证场次', '基础力量', '上肢', '场馆', '卧推', 2, 8, 7, 57.5, 60, 82, 'AN', 0, 0, 8, '是', '验证导入']);
   const buffer = await workbook.xlsx.writeBuffer();
   const body = new FormData();
   body.append('file', new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), '体能训练结果验证.xlsx');
@@ -73,6 +73,9 @@ try {
   const importedSessions = results.sessions.filter((session) => session.trainingDate === '2026-08-24' && session.sessionLabel === '自动化验证场次');
   if (importedSessions.length !== 2 || importedSessions.some((session) => session.sets.length !== 2)) throw new Error(`结果持久化错误：${JSON.stringify(importedSessions)}`);
   if (new Set(importedSessions.map((session) => session.sessionOrder)).size !== 2) throw new Error('同日多场训练的场次序号发生覆盖。');
+  if (importedSessions.some((session) => session.durationMin !== 12 || session.srpe <= 0 || session.sets.some((set) => set.trainingCategory !== '基础力量' || set.bodyPosition !== '上肢' || set.trainingEnvironment !== '场馆' || set.plannedWeightKg !== 57.5 || set.intensityPercent !== 82 || set.intensityZone !== 'AN'))) {
+    throw new Error(`扩展体能字段持久化错误：${JSON.stringify(importedSessions)}`);
+  }
 
   console.log(JSON.stringify({ preview: 'passed', persistence: 'passed', duplicateDetection: 'passed', sameDayMultipleSessions: 'passed', sessions: importedSessions.length, rows: importedSessions.reduce((sum, session) => sum + session.sets.length, 0) }, null, 2));
 } finally {

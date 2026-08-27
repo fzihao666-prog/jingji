@@ -865,6 +865,23 @@ if (!hasColumn('strength_import_batches', 'model_used')) {
   db.exec("ALTER TABLE strength_import_batches ADD COLUMN model_used TEXT NOT NULL DEFAULT ''");
 }
 
+const strengthResultColumns = [
+  ['training_category', "TEXT NOT NULL DEFAULT '基础力量'"],
+  ['body_position', "TEXT NOT NULL DEFAULT '全身'"],
+  ['training_environment', "TEXT NOT NULL DEFAULT '陆上'"],
+  ['planned_weight_kg', 'REAL'],
+  ['duration_min', 'REAL NOT NULL DEFAULT 0'],
+  ['distance_km', 'REAL NOT NULL DEFAULT 0'],
+  ['intensity_percent', 'REAL'],
+  ['intensity_zone', "TEXT NOT NULL DEFAULT 'AN'"]
+] as const;
+
+for (const [column, definition] of strengthResultColumns) {
+  if (!hasColumn('strength_result_sets', column)) {
+    db.exec(`ALTER TABLE strength_result_sets ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export function upsertAthleteOrigin(input: {
   athleteId: number;
   province: string;

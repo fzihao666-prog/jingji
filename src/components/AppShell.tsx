@@ -25,13 +25,22 @@ import { EditableName } from './EditableName';
 import { ProjectMark } from './ProjectMark';
 
 export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule' | 'special-athletes';
-export type PageKey = 'overview' | SpecialPageKey | 'plans' | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
+export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
+export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
 
 const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
   { key: 'special-time', label: '综合分析', pages: ['special-time', 'special-distance', 'special-load'] },
   { key: 'special-rate', label: '专项指标', pages: ['special-rate', 'special-heart', 'special-power'] },
   { key: 'special-schedule', label: '训练安排', pages: ['special-schedule'] },
   { key: 'special-athletes', label: '运动员看板', pages: ['special-athletes'] }
+];
+
+const strengthGroups: Array<{ key: StrengthPageKey; label: string }> = [
+  { key: 'strength-overview', label: '体能总览' },
+  { key: 'strength-plan', label: '训练安排' },
+  { key: 'strength-records', label: '训练记录' },
+  { key: 'strength-analysis', label: '训练分析' },
+  { key: 'strength-assessment', label: '体能评估' }
 ];
 
 const navItems: Array<{
@@ -41,7 +50,6 @@ const navItems: Array<{
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
-  { key: 'plans', label: '体能训练', icon: Dumbbell },
   { key: 'bluetooth', label: '蓝牙连接', icon: BluetoothConnected },
   { key: 'personal', label: '个人档案', icon: UserRound },
   { key: 'athletes', label: '运动员管理', icon: UsersRound, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
@@ -71,11 +79,14 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
-  const [specialOpen, setSpecialOpen] = useState(true);
+  const [specialOpen, setSpecialOpen] = useState(() => page.startsWith('special-'));
+  const [strengthOpen, setStrengthOpen] = useState(() => page.startsWith('strength-'));
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
   const specialActive = page.startsWith('special-');
+  const strengthActive = page.startsWith('strength-');
   const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
-  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : visibleItems.find((item) => item.key === page) || visibleItems[0];
+  const strengthCurrent = strengthGroups.find((item) => item.key === page);
+  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : visibleItems.find((item) => item.key === page) || visibleItems[0];
 
   const choosePage = (key: PageKey) => {
     onPageChange(key);
@@ -160,6 +171,18 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
             {specialOpen && <div className="special-nav-tree">
               {specialGroups.map((group) => <button key={group.key} className={group.pages.includes(page as SpecialPageKey) ? 'active' : ''} onClick={() => choosePage(group.key)}>
                 <i /> <span>{group.label}</span>
+              </button>)}
+            </div>}
+          </div>
+          <div className={`special-nav strength-nav ${strengthActive ? 'active' : ''} ${strengthOpen ? 'open' : 'collapsed'}`}>
+            <button className="special-nav-parent" onClick={() => setStrengthOpen((open) => !open)} aria-expanded={strengthOpen}>
+              <Dumbbell size={19} strokeWidth={1.8} />
+              <span><strong>体能训练</strong></span>
+              <ChevronDown className="special-nav-chevron" size={15} />
+            </button>
+            {strengthOpen && <div className="special-nav-tree">
+              {strengthGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}>
+                <i /> <span>{item.label}</span>
               </button>)}
             </div>}
           </div>

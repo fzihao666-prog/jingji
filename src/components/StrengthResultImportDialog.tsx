@@ -2,6 +2,16 @@ import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, LoaderCircle, U
 import { useMemo, useState } from 'react';
 import { api } from '../api';
 import type { Athlete, StrengthImportPreview, StrengthImportRow } from '../types';
+import {
+  STRENGTH_BODY_POSITIONS,
+  STRENGTH_INTENSITY_ZONES,
+  STRENGTH_TRAINING_CATEGORIES,
+  STRENGTH_TRAINING_ENVIRONMENTS,
+  type StrengthBodyPosition,
+  type StrengthIntensityZone,
+  type StrengthTrainingCategory,
+  type StrengthTrainingEnvironment
+} from '../../shared/strength-training';
 
 type Props = {
   athletes: Athlete[];
@@ -81,7 +91,7 @@ export function StrengthResultImportDialog({ athletes, onClose, onCommitted }: P
             </label>
             <div className="strength-import-guidance">
               <strong>建议字段</strong>
-              <span>训练日期、运动员、队伍、训练场次、动作、组次、实际次数、实际重量、RPE</span>
+              <span>训练日期、运动员、训练类型、身体位置、训练环境、动作、计划/实际次数与重量、强度、时间、距离、RPE</span>
             </div>
             {message && <div className="strength-inline-message error"><AlertTriangle size={16} />{message}</div>}
             <footer>
@@ -103,7 +113,7 @@ export function StrengthResultImportDialog({ athletes, onClose, onCommitted }: P
 
             <div className="strength-import-table-wrap">
               <table className="strength-import-table">
-                <thead><tr><th>状态</th><th>日期</th><th>运动员</th><th>场次</th><th>动作</th><th>组次</th><th>计划</th><th>实际</th><th>重量kg</th><th>RPE</th><th>备注</th></tr></thead>
+                <thead><tr><th>状态</th><th>日期</th><th>运动员</th><th>训练类型</th><th>位置</th><th>环境</th><th>场次</th><th>动作</th><th>组次</th><th>计划次数</th><th>实际次数</th><th>计划kg</th><th>实际kg</th><th>强度%</th><th>区间</th><th>时间min</th><th>距离km</th><th>RPE</th><th>备注</th></tr></thead>
                 <tbody>{rows.map((row, index) => (
                   <tr key={`${row.rowNumber}-${index}`} className={row.errors.length ? 'invalid' : row.duplicate ? 'duplicate' : ''}>
                     <td className="import-row-state" title={[...row.errors, ...row.warnings].join('；')}>
@@ -115,12 +125,20 @@ export function StrengthResultImportDialog({ athletes, onClose, onCommitted }: P
                       const athlete = athletes.find((item) => item.id === Number(event.target.value));
                       updateRow(index, { athleteId: athlete?.id || null, athleteName: athlete?.name || '', matchedAthleteName: athlete?.name || '', team: athlete?.team || '' });
                     }}><option value="">请选择</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name} · {athlete.team}</option>)}</select></td>
+                    <td><select value={row.trainingCategory} onChange={(event) => updateRow(index, { trainingCategory: event.target.value as StrengthTrainingCategory })}>{STRENGTH_TRAINING_CATEGORIES.map((value) => <option key={value}>{value}</option>)}</select></td>
+                    <td><select value={row.bodyPosition} onChange={(event) => updateRow(index, { bodyPosition: event.target.value as StrengthBodyPosition })}>{STRENGTH_BODY_POSITIONS.map((value) => <option key={value}>{value}</option>)}</select></td>
+                    <td><select value={row.trainingEnvironment} onChange={(event) => updateRow(index, { trainingEnvironment: event.target.value as StrengthTrainingEnvironment })}>{STRENGTH_TRAINING_ENVIRONMENTS.map((value) => <option key={value}>{value}</option>)}</select></td>
                     <td><input value={row.sessionLabel} onChange={(event) => updateRow(index, { sessionLabel: event.target.value })} /></td>
                     <td><input value={row.exerciseName} onChange={(event) => updateRow(index, { exerciseName: event.target.value })} /></td>
                     <td><input type="number" min="1" value={row.setIndex} onChange={(event) => updateRow(index, { setIndex: Math.max(1, Number(event.target.value) || 1) })} /></td>
                     <td><input type="number" min="0" value={row.targetReps ?? ''} onChange={(event) => updateRow(index, { targetReps: nullableNumber(event.target.value) })} /></td>
                     <td><input type="number" min="0" value={row.actualReps ?? ''} onChange={(event) => updateRow(index, { actualReps: nullableNumber(event.target.value) })} /></td>
+                    <td><input type="number" min="0" step="0.1" value={row.plannedWeightKg ?? ''} onChange={(event) => updateRow(index, { plannedWeightKg: nullableNumber(event.target.value) })} /></td>
                     <td><input type="number" min="0" step="0.1" value={row.actualWeightKg ?? ''} onChange={(event) => updateRow(index, { actualWeightKg: nullableNumber(event.target.value) })} /></td>
+                    <td><input type="number" min="0" max="100" step="0.1" value={row.intensityPercent ?? ''} onChange={(event) => updateRow(index, { intensityPercent: nullableNumber(event.target.value) })} /></td>
+                    <td><select value={row.intensityZone} onChange={(event) => updateRow(index, { intensityZone: event.target.value as StrengthIntensityZone })}>{STRENGTH_INTENSITY_ZONES.map((value) => <option key={value}>{value}</option>)}</select></td>
+                    <td><input type="number" min="0" step="0.1" value={row.durationMin} onChange={(event) => updateRow(index, { durationMin: Number(event.target.value) || 0 })} /></td>
+                    <td><input type="number" min="0" step="0.1" value={row.distanceKm} onChange={(event) => updateRow(index, { distanceKm: Number(event.target.value) || 0 })} /></td>
                     <td><input type="number" min="0" max="10" step="0.5" value={row.rpe ?? ''} onChange={(event) => updateRow(index, { rpe: nullableNumber(event.target.value) })} /></td>
                     <td><input value={row.note} onChange={(event) => updateRow(index, { note: event.target.value })} /></td>
                   </tr>

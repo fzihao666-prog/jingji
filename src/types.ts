@@ -1,5 +1,6 @@
 import type { AreaLevel, Role } from '../shared/access';
 import type { StrengthMetricValues } from '../shared/strength-model';
+import type { StrengthBodyPosition, StrengthIntensityZone, StrengthTrainingCategory, StrengthTrainingEnvironment } from '../shared/strength-training';
 import type { Project } from '../shared/projects';
 
 export type { AreaLevel, Role };
@@ -100,6 +101,10 @@ export type TrainingPlanExercise = {
   name: string;
   maxWeight: number | null;
   unitNote: string;
+  category?: StrengthTrainingCategory;
+  bodyPosition?: StrengthBodyPosition;
+  targetIntensity?: number | null;
+  estimatedMinutes?: number | null;
   lines: TrainingPlanLine[];
 };
 
@@ -141,6 +146,14 @@ export type StrengthResultSet = {
   targetReps: number | null;
   actualReps: number;
   actualWeightKg: number;
+  plannedWeightKg: number | null;
+  trainingCategory: StrengthTrainingCategory;
+  bodyPosition: StrengthBodyPosition;
+  trainingEnvironment: StrengthTrainingEnvironment;
+  durationMin: number;
+  distanceKm: number;
+  intensityPercent: number | null;
+  intensityZone: StrengthIntensityZone;
   rpe: number | null;
   completed: boolean;
   note: string;
@@ -155,6 +168,12 @@ export type StrengthTrainingSession = {
   sessionLabel: string;
   rpe: number | null;
   volume: number;
+  durationMin: number;
+  distanceKm: number;
+  trainingType: string;
+  structureType: string;
+  intensityZone: StrengthIntensityZone;
+  srpe: number;
   source: string;
   sourceFilename: string;
   modelUsed: string;
@@ -170,11 +189,19 @@ export type StrengthImportRow = {
   team: string;
   trainingDate: string;
   sessionLabel: string;
+  trainingCategory: StrengthTrainingCategory;
+  bodyPosition: StrengthBodyPosition;
+  trainingEnvironment: StrengthTrainingEnvironment;
   exerciseName: string;
   setIndex: number;
   targetReps: number | null;
   actualReps: number | null;
   actualWeightKg: number | null;
+  plannedWeightKg: number | null;
+  durationMin: number;
+  distanceKm: number;
+  intensityPercent: number | null;
+  intensityZone: StrengthIntensityZone;
   rpe: number | null;
   completed: boolean;
   note: string;

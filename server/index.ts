@@ -33,6 +33,22 @@ import {
   type StrengthMetricValues
 } from '../shared/strength-model.ts';
 import {
+  STRENGTH_BODY_POSITIONS,
+  STRENGTH_INTENSITY_ZONES,
+  STRENGTH_TRAINING_CATEGORIES,
+  STRENGTH_TRAINING_ENVIRONMENTS,
+  inferStrengthBodyPosition,
+  inferStrengthCategory,
+  isStrengthBodyPosition,
+  isStrengthIntensityZone,
+  isStrengthTrainingCategory,
+  isStrengthTrainingEnvironment,
+  type StrengthBodyPosition,
+  type StrengthIntensityZone,
+  type StrengthTrainingCategory,
+  type StrengthTrainingEnvironment
+} from '../shared/strength-training.ts';
+import {
   TrainingPlanAIService,
   type AthleteContext
 } from './ai-service.ts';
@@ -89,6 +105,10 @@ type TrainingPlanExercise = {
   name: string;
   maxWeight: number | null;
   unitNote: string;
+  category: StrengthTrainingCategory;
+  bodyPosition: StrengthBodyPosition;
+  targetIntensity: number | null;
+  estimatedMinutes: number | null;
   lines: TrainingPlanLine[];
 };
 
@@ -141,11 +161,19 @@ type StrengthImportRow = {
   team: string;
   trainingDate: string;
   sessionLabel: string;
+  trainingCategory: StrengthTrainingCategory;
+  bodyPosition: StrengthBodyPosition;
+  trainingEnvironment: StrengthTrainingEnvironment;
   exerciseName: string;
   setIndex: number;
   targetReps: number | null;
   actualReps: number | null;
   actualWeightKg: number | null;
+  plannedWeightKg: number | null;
+  durationMin: number;
+  distanceKm: number;
+  intensityPercent: number | null;
+  intensityZone: StrengthIntensityZone;
   rpe: number | null;
   completed: boolean;
   note: string;
@@ -586,7 +614,7 @@ function parseTrainingPlanData(input: unknown) {
 
   const rawExercises = Array.isArray(source.exercises) ? source.exercises : [];
   if (!rawExercises.length) errors.push('至少添加一个训练项目');
-  const exerciseLimit = isAIPlan ? 40 : 8;
+  const exerciseLimit = isAIPlan ? 40 : 20;
   if (rawExercises.length > exerciseLimit) errors.push(`训练项目最多${exerciseLimit}项`);
   let totalLines = 0;
   const exercises: TrainingPlanExercise[] = rawExercises.slice(0, exerciseLimit).map((rawExercise, exerciseIndex) => {
@@ -595,6 +623,8 @@ function parseTrainingPlanData(input: unknown) {
       : {};
     const name = cleanString(exercise.name);
     const unitNote = cleanString(exercise.unitNote);
+    const category = isStrengthTrainingCategory(exercise.category) ? exercise.category : inferStrengthCategory(name);
+    const bodyPosition = isStrengthBodyPosition(exercise.bodyPosition) ? exercise.bodyPosition : inferStrengthBodyPosition(name);
     if (name.length > 60) errors.push(`第${exerciseIndex + 1}项训练名称不能超过60个字符`);
     if (unitNote.length > 20) errors.push(`第${exerciseIndex + 1}项备注不能超过20个字符`);
     const rawLines = Array.isArray(exercise.lines) ? exercise.lines : [];
@@ -641,6 +671,10 @@ function parseTrainingPlanData(input: unknown) {
       name,
       maxWeight,
       unitNote,
+      category,
+      bodyPosition,
+      targetIntensity: optionalNumber(exercise.targetIntensity, 0, 100, '目标强度', errors),
+      estimatedMinutes: optionalNumber(exercise.estimatedMinutes, 0, 600, '预计时间', errors),
       lines
     };
   });
@@ -752,6 +786,10 @@ function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
             name,
             maxWeight: configuredMax.get(normalizedName) ?? recentMax.get(normalizedName) ?? null,
             unitNote: '',
+            category: inferStrengthCategory(name),
+            bodyPosition: inferStrengthBodyPosition(name),
+            targetIntensity: aiPercentage(item.percentage),
+            estimatedMinutes: strengthImportNumber(item.duration),
             lines: []
           };
           exerciseMap.set(normalizedName, exercise);
@@ -2588,10 +2626,22 @@ function validateStrengthImportRow(
   const trainingDate = strengthImportDate(source.trainingDate ?? strengthRecordValue(source, ['训练日期', '日期', 'date']));
   const sessionLabel = cleanString(source.sessionLabel ?? strengthRecordValue(source, ['训练场次', '场次', '训练名称', 'session'])) || '体能训练';
   const exerciseName = cleanString(source.exerciseName ?? strengthRecordValue(source, ['动作', '动作名称', '训练项目', '项目', 'exercise']));
+  const categoryValue = cleanString(source.trainingCategory ?? strengthRecordValue(source, ['训练类型', '体能类型', '训练分类', 'category']));
+  const bodyPositionValue = cleanString(source.bodyPosition ?? strengthRecordValue(source, ['身体位置', '训练身体位置', '部位', 'bodyposition']));
+  const environmentValue = cleanString(source.trainingEnvironment ?? strengthRecordValue(source, ['训练环境', '水陆类型', '训练场地', 'environment']));
+  const intensityZoneValue = cleanString(source.intensityZone ?? strengthRecordValue(source, ['强度区间', '强度分区', 'intensityzone'])).toUpperCase();
+  const trainingCategory = isStrengthTrainingCategory(categoryValue) ? categoryValue : inferStrengthCategory(exerciseName);
+  const bodyPosition = isStrengthBodyPosition(bodyPositionValue) ? bodyPositionValue : inferStrengthBodyPosition(exerciseName);
+  const trainingEnvironment = isStrengthTrainingEnvironment(environmentValue) ? environmentValue : '陆上';
+  const intensityZone = isStrengthIntensityZone(intensityZoneValue) ? intensityZoneValue : 'AN';
   const setIndex = Math.max(1, Math.round(strengthImportNumber(source.setIndex ?? strengthRecordValue(source, ['组次', '第几组', '组序号', 'set'])) || 1));
   const targetReps = strengthImportNumber(source.targetReps ?? strengthRecordValue(source, ['计划次数', '目标次数', 'targetreps']));
   const actualReps = strengthImportNumber(source.actualReps ?? strengthRecordValue(source, ['实际次数', '完成次数', '次数', 'actualreps', 'reps']));
+  const plannedWeightKg = strengthImportNumber(source.plannedWeightKg ?? strengthRecordValue(source, ['计划重量kg', '计划重量', '目标重量kg', 'plannedweightkg']));
   const actualWeightKg = strengthImportNumber(source.actualWeightKg ?? strengthRecordValue(source, ['实际重量kg', '实际重量', '重量kg', '重量', 'weightkg']));
+  const durationMin = strengthImportNumber(source.durationMin ?? strengthRecordValue(source, ['训练时间min', '训练时长min', '训练时间', '时长', 'durationmin'])) || 0;
+  const distanceKm = strengthImportNumber(source.distanceKm ?? strengthRecordValue(source, ['训练距离km', '训练距离', '距离km', 'distancekm'])) || 0;
+  const intensityPercent = strengthImportNumber(source.intensityPercent ?? strengthRecordValue(source, ['强度%', '训练强度%', '强度百分比', 'intensitypercent']));
   const rpe = strengthImportNumber(source.rpe ?? strengthRecordValue(source, ['rpe', '主观疲劳']));
   const completed = strengthImportBoolean(source.completed ?? strengthRecordValue(source, ['是否完成', '完成状态', 'completed']), true);
   const note = cleanString(source.note ?? strengthRecordValue(source, ['备注', '说明', 'note']));
@@ -2606,7 +2656,15 @@ function validateStrengthImportRow(
   if (actualReps === null || actualReps < 0 || actualReps > 1000) errors.push('实际次数应在0至1000之间');
   if (actualWeightKg === null || actualWeightKg < 0 || actualWeightKg > 1000) errors.push('实际重量应在0至1000kg之间');
   if (targetReps !== null && (targetReps < 0 || targetReps > 1000)) errors.push('计划次数应在0至1000之间');
+  if (plannedWeightKg !== null && (plannedWeightKg < 0 || plannedWeightKg > 1000)) errors.push('计划重量应在0至1000kg之间');
+  if (durationMin < 0 || durationMin > 1440) errors.push('训练时间应在0至1440分钟之间');
+  if (distanceKm < 0 || distanceKm > 1000) errors.push('训练距离应在0至1000km之间');
+  if (intensityPercent !== null && (intensityPercent < 0 || intensityPercent > 100)) errors.push('训练强度应在0至100%之间');
   if (rpe !== null && (rpe < 0 || rpe > 10)) errors.push('RPE应在0至10之间');
+  if (categoryValue && !isStrengthTrainingCategory(categoryValue)) warnings.push(`训练类型“${categoryValue}”无法识别，已按动作归入${trainingCategory}`);
+  if (bodyPositionValue && !isStrengthBodyPosition(bodyPositionValue)) warnings.push(`身体位置“${bodyPositionValue}”无法识别，已自动归类`);
+  if (environmentValue && !isStrengthTrainingEnvironment(environmentValue)) warnings.push(`训练环境“${environmentValue}”无法识别，已按陆上训练处理`);
+  if (intensityZoneValue && !isStrengthIntensityZone(intensityZoneValue)) warnings.push(`强度区间“${intensityZoneValue}”无法识别，已按AN处理`);
   if (confidence !== null && confidence < 0.7) warnings.push('AI识别置信度较低，请人工核对');
   const duplicate = Boolean(matched && /^\d{4}-\d{2}-\d{2}$/.test(trainingDate) && exerciseName && db.prepare(`
     SELECT srs.id
@@ -2625,11 +2683,19 @@ function validateStrengthImportRow(
     team: matched?.team || team,
     trainingDate,
     sessionLabel,
+    trainingCategory,
+    bodyPosition,
+    trainingEnvironment,
     exerciseName,
     setIndex,
     targetReps,
     actualReps,
     actualWeightKg,
+    plannedWeightKg,
+    durationMin,
+    distanceKm,
+    intensityPercent,
+    intensityZone,
     rpe,
     completed,
     note,
@@ -2709,9 +2775,16 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
   const rows = db.prepare(`
     SELECT ts.id AS sessionId, ts.session_date AS trainingDate, ts.session_order AS sessionOrder,
       ts.content AS sessionLabel, ts.rpe AS sessionRpe, ts.smvl AS volume, ts.source,
+      ts.duration_min AS sessionDurationMin, ts.distance_km AS sessionDistanceKm,
+      ts.training_type AS trainingType, ts.structure_type AS structureType,
+      ts.intensity_zone AS sessionIntensityZone, ts.srpe,
       srs.id, srs.exercise_name AS exerciseName, srs.set_index AS setIndex,
       srs.target_reps AS targetReps, srs.actual_reps AS actualReps,
-      srs.actual_weight_kg AS actualWeightKg, srs.rpe, srs.completed,
+      srs.actual_weight_kg AS actualWeightKg, srs.planned_weight_kg AS plannedWeightKg,
+      srs.training_category AS trainingCategory, srs.body_position AS bodyPosition,
+      srs.training_environment AS trainingEnvironment, srs.duration_min AS durationMin,
+      srs.distance_km AS distanceKm, srs.intensity_percent AS intensityPercent,
+      srs.intensity_zone AS setIntensityZone, srs.rpe, srs.completed,
       srs.note, srs.import_batch_id AS importBatchId, srs.ai_confidence AS confidence,
       sib.source_filename AS sourceFilename, sib.model_used AS modelUsed,
       COALESCE(sib.committed_at, srs.updated_at) AS importedAt
@@ -2721,7 +2794,7 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
     WHERE ts.athlete_id = ?
     ORDER BY ts.session_date DESC, ts.session_order DESC, srs.exercise_name, srs.set_index
   `).all(athleteId) as Array<Record<string, unknown> & { sessionId: number }>;
-  const grouped = new Map<number, { id: number; trainingDate: string; sessionOrder: number; sessionLabel: string; rpe: number | null; volume: number; source: string; sourceFilename: string; modelUsed: string; importedAt: string; sets: Array<Record<string, unknown>> }>();
+  const grouped = new Map<number, { id: number; trainingDate: string; sessionOrder: number; sessionLabel: string; rpe: number | null; volume: number; durationMin: number; distanceKm: number; trainingType: string; structureType: string; intensityZone: StrengthIntensityZone; srpe: number; source: string; sourceFilename: string; modelUsed: string; importedAt: string; sets: Array<Record<string, unknown>> }>();
   for (const row of rows) {
     const sessionId = Number(row.sessionId);
     if (!grouped.has(sessionId)) grouped.set(sessionId, {
@@ -2731,6 +2804,12 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
       sessionLabel: cleanString(row.sessionLabel),
       rpe: row.sessionRpe === null ? null : Number(row.sessionRpe),
       volume: Number(row.volume || 0),
+      durationMin: Number(row.sessionDurationMin || 0),
+      distanceKm: Number(row.sessionDistanceKm || 0),
+      trainingType: cleanString(row.trainingType),
+      structureType: cleanString(row.structureType),
+      intensityZone: isStrengthIntensityZone(row.sessionIntensityZone) ? row.sessionIntensityZone : 'AN',
+      srpe: Number(row.srpe || 0),
       source: cleanString(row.source),
       sourceFilename: cleanString(row.sourceFilename),
       modelUsed: cleanString(row.modelUsed),
@@ -2740,7 +2819,14 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
     grouped.get(sessionId)!.sets.push({
       id: Number(row.id), exerciseName: cleanString(row.exerciseName), setIndex: Number(row.setIndex),
       targetReps: row.targetReps === null ? null : Number(row.targetReps), actualReps: Number(row.actualReps),
-      actualWeightKg: Number(row.actualWeightKg), rpe: row.rpe === null ? null : Number(row.rpe),
+      actualWeightKg: Number(row.actualWeightKg), plannedWeightKg: row.plannedWeightKg === null ? null : Number(row.plannedWeightKg),
+      trainingCategory: isStrengthTrainingCategory(row.trainingCategory) ? row.trainingCategory : inferStrengthCategory(cleanString(row.exerciseName)),
+      bodyPosition: isStrengthBodyPosition(row.bodyPosition) ? row.bodyPosition : inferStrengthBodyPosition(cleanString(row.exerciseName)),
+      trainingEnvironment: isStrengthTrainingEnvironment(row.trainingEnvironment) ? row.trainingEnvironment : '陆上',
+      durationMin: Number(row.durationMin || 0), distanceKm: Number(row.distanceKm || 0),
+      intensityPercent: row.intensityPercent === null ? null : Number(row.intensityPercent),
+      intensityZone: isStrengthIntensityZone(row.setIntensityZone) ? row.setIntensityZone : 'AN',
+      rpe: row.rpe === null ? null : Number(row.rpe),
       completed: Boolean(row.completed), note: cleanString(row.note), importBatchId: cleanString(row.importBatchId),
       confidence: row.confidence === null ? null : Number(row.confidence)
     });
@@ -2749,18 +2835,9 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
 });
 
 app.get('/api/strength-training/import/template', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), async (_req, res) => {
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('体能训练结果');
-  sheet.addRow(['训练日期', '运动员', '队伍', '训练场次', '动作', '组次', '计划次数', '实际次数', '实际重量kg', 'RPE', '是否完成', '备注']);
-  sheet.addRow(['2026-08-24', '示例姓名', '示例队伍', '下午力量训练', '卧推', 1, 8, 8, 60, 7.5, '是', '示例行，导入前请删除']);
-  sheet.columns = [14, 14, 18, 20, 16, 10, 12, 12, 14, 10, 12, 28].map((width) => ({ width }));
-  sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E8F87' } };
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
-  const buffer = await workbook.xlsx.writeBuffer();
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent('体能训练结果导入模板.xlsx')}`);
-  res.send(Buffer.from(buffer));
+  const templatePath = resolve(process.cwd(), 'public', 'templates', '竞迹体能训练数据导入模板.xlsx');
+  if (!existsSync(templatePath)) return res.status(404).json({ message: '体能训练导入模板尚未部署。' });
+  res.download(templatePath, '竞迹体能训练数据导入模板.xlsx');
 });
 
 app.post('/api/strength-training/import/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), upload.single('file'), async (req, res, next) => {
@@ -2854,19 +2931,28 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
       if (existingSet && policy === 'skip') { skipped += 1; continue; }
       if (existingSet) {
         db.prepare(`
-          UPDATE strength_result_sets SET target_reps = ?, actual_reps = ?, actual_weight_kg = ?, rpe = ?, completed = ?,
+          UPDATE strength_result_sets SET target_reps = ?, actual_reps = ?, actual_weight_kg = ?, planned_weight_kg = ?,
+            training_category = ?, body_position = ?, training_environment = ?, duration_min = ?, distance_km = ?,
+            intensity_percent = ?, intensity_zone = ?, rpe = ?, completed = ?,
             note = ?, source = ?, import_batch_id = ?, source_row = ?, original_text = ?, ai_confidence = ?,
             created_by = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
-        `).run(row.targetReps, row.actualReps, row.actualWeightKg, row.rpe, row.completed ? 1 : 0, row.note, source, batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id, existingSet.id);
+        `).run(row.targetReps, row.actualReps, row.actualWeightKg, row.plannedWeightKg,
+          row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin, row.distanceKm,
+          row.intensityPercent, row.intensityZone, row.rpe, row.completed ? 1 : 0, row.note, source,
+          batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id, existingSet.id);
         updated += 1;
       } else {
         db.prepare(`
           INSERT INTO strength_result_sets
-            (training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, rpe,
-             completed, note, source, import_batch_id, source_row, original_text, ai_confidence, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(sessionId, row.exerciseName, row.setIndex, row.targetReps, row.actualReps, row.actualWeightKg, row.rpe, row.completed ? 1 : 0, row.note, source, batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id);
+            (training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg,
+             training_category, body_position, training_environment, duration_min, distance_km, intensity_percent,
+             intensity_zone, rpe, completed, note, source, import_batch_id, source_row, original_text, ai_confidence, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(sessionId, row.exerciseName, row.setIndex, row.targetReps, row.actualReps, row.actualWeightKg,
+          row.plannedWeightKg, row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin,
+          row.distanceKm, row.intensityPercent, row.intensityZone, row.rpe, row.completed ? 1 : 0, row.note,
+          source, batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id);
         imported += 1;
       }
     }
@@ -2874,11 +2960,23 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
     for (const sessionId of sessionIds) {
       const totals = db.prepare(`
         SELECT COALESCE(SUM(actual_reps * actual_weight_kg), 0) AS volume,
-          AVG(CASE WHEN rpe IS NOT NULL THEN rpe END) AS averageRpe
+          AVG(CASE WHEN rpe IS NOT NULL THEN rpe END) AS averageRpe,
+          COALESCE(SUM(duration_min), 0) AS durationMin,
+          COALESCE(SUM(distance_km), 0) AS distanceKm
         FROM strength_result_sets WHERE training_session_id = ?
-      `).get(sessionId) as { volume: number; averageRpe: number | null };
-      db.prepare('UPDATE training_sessions SET rpe = ?, smvl = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(totals.averageRpe, Math.round(Number(totals.volume || 0) * 10) / 10, sessionId);
+      `).get(sessionId) as { volume: number; averageRpe: number | null; durationMin: number; distanceKm: number };
+      const dominant = db.prepare(`
+        SELECT training_environment AS environment, intensity_zone AS zone
+        FROM strength_result_sets WHERE training_session_id = ?
+        GROUP BY training_environment, intensity_zone ORDER BY SUM(duration_min) DESC, COUNT(*) DESC LIMIT 1
+      `).get(sessionId) as { environment: string; zone: string } | undefined;
+      const duration = Math.round(Number(totals.durationMin || 0) * 10) / 10;
+      const averageRpe = totals.averageRpe === null ? null : Math.round(Number(totals.averageRpe) * 10) / 10;
+      db.prepare(`UPDATE training_sessions SET rpe = ?, smvl = ?, duration_min = ?, distance_km = ?, srpe = ?,
+        structure_type = ?, intensity_zone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .run(averageRpe, Math.round(Number(totals.volume || 0) * 10) / 10, duration,
+          Math.round(Number(totals.distanceKm || 0) * 10) / 10, Math.round((averageRpe || 0) * duration * 10) / 10,
+          dominant?.environment || '陆上', isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN', sessionId);
     }
     db.prepare(`
       UPDATE strength_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP

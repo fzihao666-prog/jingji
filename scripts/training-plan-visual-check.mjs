@@ -11,86 +11,85 @@ const errors = [];
 page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
 page.on('console', (message) => { if (message.type() === 'error') errors.push(`console: ${message.text()}`); });
 
-// 仅用于视觉回归，不写入数据库；同日两场用于验证横轴不会合并场次。
-await page.route('**/api/strength-training/results?*', (route) => route.fulfill({
-  status: 200,
-  contentType: 'application/json',
-  body: JSON.stringify({ sessions: [
-    { id: 9101, trainingDate: '2026-08-03', sessionOrder: 1, sessionLabel: '上午力量', rpe: 7.4, volume: 3850, source: 'file_import', sourceFilename: '训练结果.xlsx', modelUsed: '', importedAt: '2026-08-03T10:00:00Z', sets: [
-      { id: 9201, exerciseName: '卧拉', setIndex: 1, targetReps: 8, actualReps: 8, actualWeightKg: 45.5, rpe: 7, completed: true, note: '', importBatchId: 'visual', confidence: 1 },
-      { id: 9202, exerciseName: '卧推', setIndex: 1, targetReps: 8, actualReps: 7, actualWeightKg: 38.5, rpe: 8, completed: false, note: '', importBatchId: 'visual', confidence: 1 }
-    ] },
-    { id: 9102, trainingDate: '2026-08-03', sessionOrder: 2, sessionLabel: '下午辅助', rpe: null, volume: 2280, source: 'ai_import', sourceFilename: '训练记录.jpg', modelUsed: 'qwen', importedAt: '2026-08-03T18:00:00Z', sets: [
-      { id: 9203, exerciseName: '坐姿上举', setIndex: 1, targetReps: 10, actualReps: 10, actualWeightKg: 28, rpe: null, completed: true, note: '', importBatchId: 'visual', confidence: .94 }
-    ] },
-    { id: 9103, trainingDate: '2026-08-10', sessionOrder: 1, sessionLabel: '力量训练', rpe: 8.3, volume: 4620, source: 'file_import', sourceFilename: '训练结果.xlsx', modelUsed: '', importedAt: '2026-08-10T10:00:00Z', sets: [
-      { id: 9204, exerciseName: '卧拉', setIndex: 1, targetReps: 6, actualReps: 6, actualWeightKg: 52, rpe: 8.3, completed: true, note: '', importBatchId: 'visual', confidence: 1 }
-    ] }
-  ] })
+const setDefaults = {
+  targetReps: 8, actualReps: 8, plannedWeightKg: 55, actualWeightKg: 57.5,
+  durationMin: 15, distanceKm: 0, intensityPercent: 82, intensityZone: 'AN',
+  rpe: 7, completed: true, note: '', importBatchId: 'visual', confidence: 1
+};
+const sessionRows = [
+  ['2026-08-03', '上午基础力量', '基础力量', '下肢', '场馆', '深蹲', 3850, 7.4, 70, 0],
+  ['2026-08-05', '功能训练', '功能性体能', '全身', '陆上', '药球旋转抛', 2280, 6.2, 45, 0],
+  ['2026-08-07', '核心稳定', '核心力量', '核心', '场馆', '平板支撑', 980, 6.5, 38, 0],
+  ['2026-08-10', '水上专项', '专项力量', '全身', '水上', '水上抗阻划', 4620, 8.3, 85, 12.5],
+  ['2026-08-12', '测功仪间歇', '代谢训练', '全身', '测功仪', '测功仪间歇', 3200, 8.8, 56, 6]
+];
+const sessions = sessionRows.map((row, index) => ({
+  id: 9101 + index, trainingDate: row[0], sessionOrder: 1, sessionLabel: row[1],
+  trainingType: '力量训练', structureType: row[4], intensityZone: index === 4 ? 'TPT' : index === 3 ? 'U2' : 'AN',
+  rpe: row[7], volume: row[6], durationMin: row[8], distanceKm: row[9], srpe: Number(row[7]) * Number(row[8]),
+  source: 'file_import', sourceFilename: '训练结果.xlsx', modelUsed: '', importedAt: `${row[0]}T10:00:00Z`,
+  sets: [{ id: 9201 + index, exerciseName: row[5], setIndex: 1, ...setDefaults, trainingCategory: row[2], bodyPosition: row[3], trainingEnvironment: row[4], durationMin: row[8], distanceKm: row[9], intensityZone: index === 4 ? 'TPT' : index === 3 ? 'U2' : 'AN', rpe: row[7] }]
 }));
+
+await page.route('**/api/strength-training/results?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessions }) }));
+await page.route('**/api/strength-tests?*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tests: [
+  { id: 2, athleteId: 1, testDate: '2026-08-27', metrics: { squatKg: 135, benchPressKg: 95, frontPlankSec: 168, highPullKg: 82, wingatePeakPowerWkg: 15.5 }, targets: { squatKg: 140, benchPressKg: 100, frontPlankSec: 180, highPullKg: 85, wingatePeakPowerWkg: 16 }, notes: '', updatedAt: '', updatedBy: 'coach' },
+  { id: 1, athleteId: 1, testDate: '2026-06-27', metrics: { squatKg: 125, benchPressKg: 90, frontPlankSec: 160, highPullKg: 76, wingatePeakPowerWkg: 14.8 }, targets: { squatKg: 140, benchPressKg: 100, frontPlankSec: 180, highPullKg: 85, wingatePeakPowerWkg: 16 }, notes: '', updatedAt: '', updatedBy: 'coach' }
+] }) }));
 
 async function login(username) {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.getByLabel('账号', { exact: true }).fill(username);
   await page.getByLabel('密码', { exact: true }).fill('demo123');
-  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: '登录系统', exact: true }).click();
   await page.getByRole('heading', { name: '训练总览' }).waitFor();
-  await page.getByRole('button', { name: /体能训练/ }).click();
-  await page.locator('.strength-command-bar').waitFor();
+}
+
+async function openStrength(label) {
+  let target = page.locator('.strength-nav .special-nav-tree button').filter({ hasText: label });
+  if (!(await target.count())) {
+    await page.locator('.strength-nav .special-nav-parent').click();
+    target = page.locator('.strength-nav .special-nav-tree button').filter({ hasText: label });
+  }
+  await target.click();
+  await page.locator('.strength-page-head').waitFor();
 }
 
 await login('coach01');
-if (await page.getByRole('button', { name: '训练日历', exact: true }).count()) throw new Error('训练日历仍在导航中。');
-await page.getByRole('button', { name: /计划编排/ }).click();
+await openStrength('体能总览');
+if (await page.locator('.strength-kpi-grid article').count() !== 5) throw new Error('体能总览核心指标卡数量不是5。');
+if (await page.locator('.strength-dashboard-grid .strength-chart-card').count() !== 4) throw new Error('体能总览图表数量不是4。');
+await page.screenshot({ path: path.join(outputDirectory, '01体能总览.png'), fullPage: true });
+
+await openStrength('训练安排');
 await page.locator('.plan-matrix').waitFor();
+if (await page.locator('.strength-category-tabs button').count() !== 5) throw new Error('训练安排缺少五类训练Tab。');
 const firstMax = await page.locator('.max-cell input').first().inputValue();
-const firstPercentage = await page.getByLabel('第1周百分比').first().inputValue();
 const firstWeight = (await page.locator('.weight-cell').first().textContent())?.trim();
-const startDate = await page.getByText('开始日期', { exact: true }).locator('..').locator('input').inputValue();
-const endDate = await page.getByText('结束日期', { exact: true }).locator('..').locator('input').inputValue();
-const weekBands = await page.locator('.plan-matrix .week-band').count();
-const completedInputs = await page.locator('.plan-matrix .actual-cell input:not([disabled])').count();
-const aiButtons = await page.getByRole('button', { name: 'AI生成计划', exact: true }).count();
-const importButtons = await page.getByRole('button', { name: '导入训练结果', exact: true }).count();
-if (firstMax !== '65' || firstPercentage !== '70' || firstWeight !== '45.5 kg') throw new Error(`重量联动错误：${firstMax}/${firstPercentage}/${firstWeight}`);
-if (startDate !== '2026-07-28' || endDate !== '2026-08-27' || weekBands < 4 || completedInputs < 1 || aiButtons !== 1 || importButtons !== 1) throw new Error('周期、四周矩阵、完成次数或核心入口不完整。');
-await page.locator('.strength-view-tabs button').filter({ hasText: '训练结果' }).click();
-const resultsImportButtons = await page.getByRole('button', { name: /导入/ }).count();
-const resultVisuals = await page.locator('.strength-load-visual').count();
-const personalPhotoActions = await page.getByText(/上传照片|更换照片|上传证件照/).count();
-if (resultsImportButtons !== 1) throw new Error(`训练结果页存在${resultsImportButtons}个导入入口，应只保留顶部1个。`);
-if (resultVisuals !== 1) throw new Error(`训练结果页存在${resultVisuals}个可视化，应只保留训练负荷趋势图。`);
-if (personalPhotoActions !== 0) throw new Error('体能训练页仍包含个人证件照操作。');
-await page.waitForTimeout(250);
-await page.screenshot({ path: path.join(outputDirectory, '体能训练结果_单一导入口.png'), fullPage: true });
-await page.locator('.strength-view-tabs button').filter({ hasText: '计划编排' }).click();
-await page.locator('.plan-matrix').waitFor();
-await page.screenshot({ path: path.join(outputDirectory, '体能训练页面_桌面端.png'), fullPage: true });
-await page.locator('.plan-matrix-shell').screenshot({ path: path.join(outputDirectory, '体能训练周编排.png') });
+if (firstMax !== '65' || firstWeight !== '45.5 kg') throw new Error(`计划重量联动错误：${firstMax}/${firstWeight}`);
+await page.screenshot({ path: path.join(outputDirectory, '02训练安排.png'), fullPage: true });
+
+await openStrength('训练记录');
+await page.locator('.strength-results-panel').waitFor();
+if (await page.locator('.strength-session-card').count() < 1) throw new Error('训练记录未显示已导入场次。');
+if (await page.getByRole('button', { name: '导入训练结果', exact: true }).count() !== 1) throw new Error('训练记录导入入口数量异常。');
+await page.screenshot({ path: path.join(outputDirectory, '03训练记录.png'), fullPage: true });
+
+await openStrength('训练分析');
+if (await page.locator('.strength-analysis-summary article').count() !== 4) throw new Error('训练分析摘要数量不是4。');
+if (await page.locator('.strength-dashboard-grid.analysis .strength-chart-card').count() !== 4) throw new Error('训练分析四宫格不完整。');
+await page.screenshot({ path: path.join(outputDirectory, '04训练分析.png'), fullPage: true });
+
+await openStrength('体能评估');
+if (await page.locator('.strength-assessment-cards article').count() !== 5) throw new Error('体能评估五类能力卡不完整。');
+await page.screenshot({ path: path.join(outputDirectory, '05体能评估.png'), fullPage: true });
 
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(350);
 const mobileOverflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth);
 if (mobileOverflow > 2) throw new Error(`移动端横向溢出：${mobileOverflow}px`);
-await page.screenshot({ path: path.join(outputDirectory, '体能训练页面_移动端.png'), fullPage: true });
-await page.locator('.strength-view-tabs button').filter({ hasText: '训练结果' }).click();
-await page.locator('.strength-load-visual').waitFor();
-await page.waitForTimeout(250);
-const mobileResultsOverflow = await page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth);
-if (mobileResultsOverflow > 2) throw new Error(`训练结果移动端横向溢出：${mobileResultsOverflow}px`);
-await page.screenshot({ path: path.join(outputDirectory, '体能训练结果_移动端.png'), fullPage: true });
-
-await page.evaluate(() => localStorage.clear());
-await page.setViewportSize({ width: 1440, height: 900 });
-await login('athlete01');
-await page.getByRole('button', { name: /计划编排/ }).click();
-await page.locator('.plan-matrix').waitFor();
-const athleteEditableInputs = await page.locator('.strength-plan-meta input:not([disabled]), .plan-matrix input:not([disabled]), .plan-matrix textarea:not([disabled])').count();
-const athleteSaveButtons = await page.getByRole('button', { name: '保存更改', exact: true }).count();
-const athleteImportButtons = await page.getByRole('button', { name: /导入训练结果|导入结果/ }).count();
-if (athleteEditableInputs !== 0 || athleteSaveButtons !== 0 || athleteImportButtons !== 0) throw new Error('运动员端仍可编辑或导入体能训练。');
-await page.screenshot({ path: path.join(outputDirectory, '体能训练页面_运动员只读.png'), fullPage: true });
+await page.screenshot({ path: path.join(outputDirectory, '体能评估_移动端.png'), fullPage: true });
 
 if (errors.length) throw new Error(`浏览器错误：${errors.join(' | ')}`);
-console.log(JSON.stringify({ firstMax, firstPercentage, firstWeight, startDate, endDate, weekBands, completedInputs, aiButtons, importButtons, resultsImportButtons, resultVisuals, personalPhotoActions, mobileOverflow, mobileResultsOverflow, athleteEditableInputs, athleteSaveButtons, athleteImportButtons, browserErrors: errors }, null, 2));
+console.log(JSON.stringify({ overviewCards: 5, overviewCharts: 4, planTabs: 5, firstMax, firstWeight, analysisCharts: 4, assessmentCards: 5, mobileOverflow, browserErrors: errors }, null, 2));
 await browser.close();

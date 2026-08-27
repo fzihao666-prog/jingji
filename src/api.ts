@@ -329,7 +329,7 @@ export const api = {
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = '体能训练结果导入模板.xlsx';
+    link.download = '竞迹体能训练数据导入模板.xlsx';
     document.body.appendChild(link);
     link.click();
     link.remove();
