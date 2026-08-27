@@ -65,11 +65,12 @@ export default function App() {
     }
     setLoading(true);
     setGlobalError('');
-    api.records(from, to, athleteId, project)
+    const recordAthleteId = page === 'special-athletes' && user.role !== 'ATL' ? null : athleteId;
+    api.records(from, to, recordAthleteId, project)
       .then(({ records: nextRecords }) => setRecords(nextRecords))
       .catch((error) => setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。'))
       .finally(() => setLoading(false));
-  }, [user, athletesReady, athletes, from, to, athleteId, project, refreshKey]);
+  }, [user, athletesReady, athletes, from, to, athleteId, project, page, refreshKey]);
 
   const projects = useMemo(() => {
     if (user?.role === 'DMD' || user?.role === 'TD') return [...PROJECTS];
