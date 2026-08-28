@@ -127,6 +127,12 @@ export const api = {
       body: JSON.stringify(input)
     });
   },
+  async updateAthletePosition(id: number, athletePosition: string) {
+    return request<{ message: string; athletePosition: string }>(`/api/athletes/${id}/position`, {
+      method: 'PUT',
+      body: JSON.stringify({ athletePosition })
+    });
+  },
   async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
     return request<{ message: string }>('/api/admin/athletes/bulk/profile', {
       method: 'PUT',

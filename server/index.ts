@@ -1667,6 +1667,7 @@ function readAthleteAdminPayload(body: Record<string, unknown>) {
     emergencyPhone: cleanString(body.emergencyPhone),
     education: cleanString(body.education),
     technicalLevel: cleanString(body.technicalLevel),
+    athletePosition: cleanString(body.athletePosition),
     healthStatus: cleanString(body.healthStatus) || '健康',
     bestResult: cleanString(body.bestResult),
     nativePlace: cleanString(body.nativePlace),
@@ -1706,15 +1707,15 @@ function upsertAthleteProfile(athleteId: number, payload: ReturnType<typeof read
   db.prepare(`
     INSERT INTO athlete_profiles (
       athlete_id, identity_number, ethnicity, phone, blood_type, emergency_contact, emergency_phone,
-      education, technical_level, health_status, best_result, native_place, home_address, athlete_status,
+      education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status,
       start_sport_date, training_venue, current_event, training_phase, camp_period, origin_place,
       origin_unit, origin_coach, specialties, notes, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(athlete_id) DO UPDATE SET
       identity_number = excluded.identity_number, ethnicity = excluded.ethnicity, phone = excluded.phone,
       blood_type = excluded.blood_type, emergency_contact = excluded.emergency_contact,
       emergency_phone = excluded.emergency_phone, education = excluded.education,
-      technical_level = excluded.technical_level, health_status = excluded.health_status,
+      technical_level = excluded.technical_level, position = excluded.position, health_status = excluded.health_status,
       best_result = excluded.best_result, native_place = excluded.native_place,
       home_address = excluded.home_address, athlete_status = excluded.athlete_status,
       start_sport_date = excluded.start_sport_date, training_venue = excluded.training_venue,
@@ -1725,7 +1726,7 @@ function upsertAthleteProfile(athleteId: number, payload: ReturnType<typeof read
   `).run(
     athleteId, payload.identityNumber, payload.ethnicity, payload.phone, payload.bloodType,
     payload.emergencyContact, payload.emergencyPhone, payload.education, payload.technicalLevel,
-    payload.healthStatus, payload.bestResult, payload.nativePlace, payload.homeAddress,
+    payload.athletePosition, payload.healthStatus, payload.bestResult, payload.nativePlace, payload.homeAddress,
     payload.athleteStatus, payload.startSportDate, payload.trainingVenue, payload.currentEvent,
     payload.trainingPhase, payload.campPeriod, payload.originPlace, payload.originUnit,
     payload.originCoach, payload.specialties, payload.notes
@@ -1820,7 +1821,7 @@ app.put('/api/admin/athletes/bulk/profile', requireAuth, requireRole('PRJ', 'REG
   const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[] : [];
   if (!ids.length || ids.some((id) => !hasAthleteAccess(req.authUser!, id))) return res.status(400).json({ message: '请选择可管理范围内的运动员。' });
   const allowed = [
-    ['technicalLevel', 'technical_level'], ['healthStatus', 'health_status'],
+    ['technicalLevel', 'technical_level'], ['athletePosition', 'position'], ['healthStatus', 'health_status'],
     ['currentEvent', 'current_event'], ['athleteStatus', 'athlete_status'], ['trainingPhase', 'training_phase']
   ] as const;
   const changes = allowed.map(([key, column]) => ({ column, value: cleanString(req.body?.[key]) })).filter((item) => item.value);
@@ -1933,7 +1934,8 @@ app.get('/api/athletes', requireAuth, (req, res) => {
       COALESCE(ap.ethnicity, '汉族') AS ethnicity, COALESCE(ap.phone, '') AS phone,
       COALESCE(ap.blood_type, '') AS bloodType, COALESCE(ap.emergency_contact, '') AS emergencyContact,
       COALESCE(ap.emergency_phone, '') AS emergencyPhone, COALESCE(ap.education, '') AS education,
-      COALESCE(ap.technical_level, '') AS technicalLevel, COALESCE(ap.best_result, '') AS bestResult,
+      COALESCE(ap.technical_level, '') AS technicalLevel, COALESCE(ap.position, '') AS athletePosition,
+      COALESCE(ap.best_result, '') AS bestResult,
       COALESCE(ap.native_place, '') AS nativePlace, COALESCE(ap.home_address, '') AS homeAddress,
       COALESCE(ap.athlete_status, '在训') AS athleteStatus, COALESCE(ap.start_sport_date, '') AS startSportDate,
       COALESCE(ap.training_venue, '') AS trainingVenue, COALESCE(ap.current_event, '') AS currentEvent,
@@ -1976,6 +1978,7 @@ app.get('/api/athletes', requireAuth, (req, res) => {
     emergencyPhone: string;
     education: string;
     technicalLevel: string;
+    athletePosition: string;
     healthStatus: string;
     bestResult: string;
     nativePlace: string;
@@ -2010,6 +2013,26 @@ app.get('/api/athletes', requireAuth, (req, res) => {
         .map(({ id, displayName }) => ({ id, displayName }))
     }))
   });
+});
+
+app.put('/api/athletes/:id/position', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const athleteId = Number(req.params.id);
+  if (!athleteId || !hasAthleteAccess(user, athleteId)) {
+    return res.status(403).json({ message: '无权维护该运动员的位置/号位。' });
+  }
+  if (user.role === 'ATL' && user.athleteId !== athleteId) {
+    return res.status(403).json({ message: '运动员只能修改本人的位置/号位。' });
+  }
+  const athletePosition = cleanString(req.body?.athletePosition);
+  if (athletePosition.length > 40) return res.status(400).json({ message: '位置/号位不能超过40个字符。' });
+  const athlete = db.prepare('SELECT id FROM athletes WHERE id = ? AND active = 1').get(athleteId);
+  if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+  db.prepare('INSERT OR IGNORE INTO athlete_profiles (athlete_id) VALUES (?)').run(athleteId);
+  db.prepare('UPDATE athlete_profiles SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?').run(athletePosition, athleteId);
+  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
+    .run(user.id, 'UPDATE_ATHLETE_POSITION', 'athlete', athleteId, JSON.stringify({ athletePosition }));
+  res.json({ message: '位置/号位已保存。', athletePosition });
 });
 
 app.post('/api/athletes/:id/photo', requireAuth, photoUpload.single('photo'), (req, res) => {

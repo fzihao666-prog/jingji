@@ -1,11 +1,12 @@
-import { CalendarRange, CheckCircle2, Gauge, Route } from 'lucide-react';
-import { useMemo, type CSSProperties } from 'react';
+import { CalendarRange, CheckCircle2, Gauge, Route, Save } from 'lucide-react';
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
 import { DateToolbar } from '../components/DateToolbar';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
+import { api } from '../api';
 import type { Athlete, Project, TrainingRecord, User } from '../types';
 import { addDays, formatNumber, startOfWeek } from '../utils';
 
@@ -22,6 +23,7 @@ type Props = {
   project: Project;
   projects: Project[];
   onProjectChange: (project: Project) => void;
+  onChanged: () => void;
 };
 
 export function PersonalPage(props: Props) {
@@ -33,6 +35,31 @@ export function PersonalPage(props: Props) {
     () => selectedAthlete ? props.records.filter((record) => record.athleteId === selectedAthlete.id) : [],
     [props.records, selectedAthlete]
   );
+  const [positionDraft, setPositionDraft] = useState('');
+  const [positionSaving, setPositionSaving] = useState(false);
+  const [positionMessage, setPositionMessage] = useState('');
+  const canEditOwnPosition = props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
+
+  useEffect(() => {
+    setPositionDraft(selectedAthlete?.athletePosition || '');
+    setPositionMessage('');
+  }, [selectedAthlete?.id, selectedAthlete?.athletePosition]);
+
+  const savePosition = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedAthlete || !canEditOwnPosition) return;
+    setPositionSaving(true);
+    setPositionMessage('');
+    try {
+      await api.updateAthletePosition(selectedAthlete.id, positionDraft);
+      props.onChanged();
+      setPositionMessage('位置/号位已保存。');
+    } catch (error) {
+      setPositionMessage(error instanceof Error ? error.message : '位置/号位保存失败。');
+    } finally {
+      setPositionSaving(false);
+    }
+  };
   const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(() => analyzePeriod(selectedRecords), [selectedRecords, analyzePeriod]);
   const rangeMode = useMemo(() => {
@@ -71,7 +98,12 @@ export function PersonalPage(props: Props) {
             <div className="personal-identity-copy">
               <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
               <h2>{selectedAthlete.name}</h2>
-              <p>{selectedAthlete.province}{selectedAthlete.city}{selectedAthlete.county} · 教练 {selectedAthlete.coaches || '未绑定'}</p>
+              <p>{selectedAthlete.province}{selectedAthlete.city}{selectedAthlete.county} · 位置/号位 {selectedAthlete.athletePosition || '未填写'} · 教练 {selectedAthlete.coaches || '未绑定'}</p>
+              {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
+                <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
+                <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
+                {positionMessage && <small>{positionMessage}</small>}
+              </form>}
             </div>
             <div className="personal-grade" style={{ '--grade-color': rangeAnalysis.status.color } as CSSProperties}>
               <span>{rangeMode.label}分级</span>

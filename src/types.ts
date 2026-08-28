@@ -64,6 +64,7 @@ export type Athlete = {
   emergencyPhone: string;
   education: string;
   technicalLevel: string;
+  athletePosition: string;
   healthStatus: string;
   bestResult: string;
   nativePlace: string;
@@ -442,6 +443,7 @@ export type OverviewAthleteProfile = {
   project: string;
   team: string;
   gender: string;
+  athletePosition: string;
   province: string;
   city: string;
   county: string;

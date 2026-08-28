@@ -340,7 +340,7 @@ export function TrainingPlanPage(props: Props) {
       <section className="strength-training-context">
         <div className="strength-training-avatar">{athlete.name.slice(0, 1)}</div>
         <div className="strength-training-athlete"><span>当前运动员</span><strong>{athlete.name}</strong><small>{athlete.project} · {athlete.team}</small></div>
-        <dl><div><dt>当前周期</dt><dd>{data.startDate} — {data.endDate}</dd></div><div><dt>性别</dt><dd>{athlete.gender || '未填写'}</dd></div><div><dt>训练项目（小项）</dt><dd>{athlete.currentEvent || athlete.project}</dd></div><div><dt>训练安排</dt><dd>{data.scheduleLabel || '未设置'}</dd></div><div><dt>最近结果</dt><dd>{overviewStats.latest}</dd></div></dl>
+        <dl><div><dt>当前周期</dt><dd>{data.startDate} — {data.endDate}</dd></div><div><dt>性别</dt><dd>{athlete.gender || '未填写'}</dd></div><div><dt>位置/号位</dt><dd>{athlete.athletePosition || '未填写'}</dd></div><div><dt>训练项目（小项）</dt><dd>{athlete.currentEvent || athlete.project}</dd></div><div><dt>训练安排</dt><dd>{data.scheduleLabel || '未设置'}</dd></div><div><dt>最近结果</dt><dd>{overviewStats.latest}</dd></div></dl>
       </section>
 
       {['strength-plan', 'strength-records'].includes(props.section) && <StrengthPlanCategoryTabs value={activeCategory} onChange={setActiveCategory} />}

@@ -147,7 +147,7 @@ export default function App() {
         {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}
-        {page === 'personal' && <PersonalPage {...shared} user={user} />}
+        {page === 'personal' && <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'coaches' && user.role !== 'ATL' && <CoachManagementPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
         {page === 'regions' && user.role !== 'ATL' && <RegionAccessPage user={user} />}

@@ -242,6 +242,7 @@ function ArchiveSheet({ athlete, test, previous, variant }: { athlete: Athlete; 
       <ArchiveBasic label="出生年月" english="Birthday" value={athlete.birthDate ? formatDate(athlete.birthDate) : '未录入'} />
       <ArchiveBasic label="性别" english="Gender" value={athlete.gender || '未录入'} />
       <ArchiveBasic label="分项" english="Group" value={`${athlete.project} · ${athlete.team}`} />
+      <ArchiveBasic label="位置/号位" english="Position" value={athlete.athletePosition || '未录入'} />
       <ArchiveBasic label="身高" english="Height" value={metricBasicValue(test, 'heightCm', athlete.heightCm)} />
       <ArchiveBasic label="体重" english="Weight" value={metricBasicValue(test, 'weightKg', athlete.weightKg)} />
       <ArchiveBasic label="体脂率" english="Body fat ratio" value={metricBasicValue(test, 'bodyFatPct', athlete.bodyFatPct)} />

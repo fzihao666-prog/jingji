@@ -63,6 +63,7 @@ type ProfileRow = {
   project: string;
   team: string;
   gender: string;
+  athletePosition: string;
   province: string;
   city: string;
   county: string;
@@ -210,6 +211,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
 
   const profileRows = db.prepare(`
     SELECT a.id AS athleteId, a.name AS athleteName, a.project, a.team, a.gender,
+      COALESCE(ap.position, '') AS athletePosition,
       COALESCE(ao.province, '未设置') AS province,
       COALESCE(ao.city, '') AS city,
       COALESCE(ao.county, '') AS county,
@@ -217,6 +219,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       COALESCE(ao.is_demo, 0) AS originIsDemo,
       a.birth_date AS birthDate
     FROM athletes a
+    LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     WHERE a.id IN (${placeholders}) AND a.active = 1
     ORDER BY a.team, a.name

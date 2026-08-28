@@ -161,7 +161,7 @@ export function OverviewPage(props: Props) {
   const visibleAthleteRows = useMemo(() => {
     const query = rosterSearch.trim().toLowerCase();
     const filtered = query ? athleteRows.filter(({ athlete }) => [
-      athlete.name, athlete.project, athlete.team, athlete.region, athlete.city, athlete.county,
+      athlete.name, athlete.project, athlete.team, athlete.athletePosition, athlete.region, athlete.city, athlete.county,
       athlete.coachUsers?.map((coach) => coach.displayName).join(' ')
     ].filter(Boolean).join(' ').toLowerCase().includes(query)) : athleteRows;
     return filtered.slice(0, 5);
@@ -530,11 +530,11 @@ export function OverviewPage(props: Props) {
       <article className="panel professional-panel roster-preview">
         <div className="panel-heading roster-panel-heading"><div><h2>运动员状态</h2></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>
         <div className="table-scroll"><table className="data-table">
-          <thead><tr><th>运动员</th><th>所属地区</th><th>项目 / 组别</th><th>最新状态</th><th>周期SRPE</th><th>平均睡眠</th><th>疲劳指数</th></tr></thead>
+          <thead><tr><th>运动员</th><th>所属地区</th><th>项目 / 组别</th><th>位置/号位</th><th>最新状态</th><th>周期SRPE</th><th>平均睡眠</th><th>疲劳指数</th></tr></thead>
           <tbody>{visibleAthleteRows.map((row) => <tr key={row.athlete.id}>
             <td><strong>{row.athlete.name}</strong>{row.athlete.coachUsers?.length ? <small className="athlete-coach-names">{row.athlete.coachUsers.map((coach) => coach.displayName).join('、')}</small> : <small>未绑定教练</small>}</td>
-            <td>{[row.athlete.region, row.athlete.city, row.athlete.county].filter(Boolean).join(' / ') || '未设置'}</td><td>{row.athlete.project}<small>{row.athlete.team}</small></td><td><StatusPill status={row.status} compact /></td><td>{formatNumber(row.load)}</td><td>{row.sleep ? `${row.sleep.toFixed(1)} h` : '—'}</td><td>{row.fatigue ? row.fatigue.toFixed(1) : '—'}</td>
-          </tr>)}{!visibleAthleteRows.length && <tr><td colSpan={7} className="roster-search-empty">未找到匹配成员</td></tr>}</tbody>
+            <td>{[row.athlete.region, row.athlete.city, row.athlete.county].filter(Boolean).join(' / ') || '未设置'}</td><td>{row.athlete.project}<small>{row.athlete.team}</small></td><td>{row.athlete.athletePosition || '未填写'}</td><td><StatusPill status={row.status} compact /></td><td>{formatNumber(row.load)}</td><td>{row.sleep ? `${row.sleep.toFixed(1)} h` : '—'}</td><td>{row.fatigue ? row.fatigue.toFixed(1) : '—'}</td>
+          </tr>)}{!visibleAthleteRows.length && <tr><td colSpan={8} className="roster-search-empty">未找到匹配成员</td></tr>}</tbody>
         </table></div>
       </article>
     )

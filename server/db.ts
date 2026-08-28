@@ -620,6 +620,7 @@ db.exec(`
     emergency_phone TEXT NOT NULL DEFAULT '',
     education TEXT NOT NULL DEFAULT '',
     technical_level TEXT NOT NULL DEFAULT '',
+    position TEXT NOT NULL DEFAULT '',
     health_status TEXT NOT NULL DEFAULT '健康',
     best_result TEXT NOT NULL DEFAULT '',
     native_place TEXT NOT NULL DEFAULT '',
@@ -674,6 +675,10 @@ db.exec(`
     FOREIGN KEY (granted_by) REFERENCES users(id)
   );
 `);
+
+if (!hasColumn('athlete_profiles', 'position')) {
+  db.exec("ALTER TABLE athlete_profiles ADD COLUMN position TEXT NOT NULL DEFAULT ''");
+}
 
 // 新版训练总览采用“每日恢复—训练课次—测试批次—测试指标”的分层结构。
 // 旧 training_records 与 athlete_strength_tests 继续保留，供日历和既有接口兼容使用。
