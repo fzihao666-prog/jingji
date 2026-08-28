@@ -84,10 +84,10 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
   if (!profiles.length) return <ProfileEmpty detail="录入运动员籍贯省市后自动生成生源地图。" />;
 
   return (
-    <div className="birthplace-map-visual" aria-label={individual ? '个人生源地地图' : '队伍生源地省份分布地图'}>
+    <div className="birthplace-map-visual" aria-label={individual ? '个人代表和输送单位省份地图' : '队伍代表和输送单位省份分布地图'}>
       <div className="birthplace-map-stage">
-        <svg viewBox="0 0 560 410" role="img" aria-label="中国省级生源地分布图">
-          <title>{individual ? '个人生源地所在省份' : '队伍运动员生源地省份分布'}</title>
+        <svg viewBox="0 0 560 410" role="img" aria-label="中国省级代表和输送单位分布图">
+          <title>{individual ? '个人代表和输送单位所在省份' : '队伍运动员代表和输送单位省份分布'}</title>
           {chinaProvincePaths.map((province) => {
             const row = provinces.find((item) => item.province === province.name);
             const count = row?.count || 0;
@@ -103,6 +103,8 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
                 tabIndex={0}
                 aria-label={`${province.name}，${count}名运动员`}
                 aria-pressed={activePath}
+                onMouseEnter={() => setActiveProvince(province.name)}
+                onFocus={() => setActiveProvince(province.name)}
                 onClick={() => setActiveProvince(province.name)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
@@ -114,7 +116,7 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
             );
           })}
         </svg>
-        <div className="birthplace-map-legend"><span>少</span><i /><span>多</span><em>点击省份查看详情</em></div>
+        <div className="birthplace-map-legend"><span>少</span><i /><span>多</span><em>滑过省份查看详情</em></div>
       </div>
 
       <aside className="birthplace-detail" aria-live="polite">
@@ -132,30 +134,40 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
               {cityCounts.map(([city, count]) => <div key={city}><strong>{city}</strong><em>{count}人</em></div>)}
             </div>
             <div className="birthplace-athlete-list">
-              <header><span>{individual ? '具体生源信息' : '人员基本信息'}</span><small>{activeAthletes.length > 3 ? '上下滑动查看全部' : `共 ${activeAthletes.length} 人`}</small></header>
+              <header><span>{individual ? '本人详细信息' : '运动员详细信息'}</span><small>{activeAthletes.length > 3 ? '上下滑动查看全部' : `共 ${activeAthletes.length} 人`}</small></header>
               <div className="birthplace-athlete-scroll" tabIndex={activeAthletes.length > 3 ? 0 : -1} aria-label={`${activeProvince}运动员名单，共${activeAthletes.length}人`}>
               {activeAthletes.map((profile) => (
                 <div key={profile.athleteId}>
                   <i>{profile.athleteName.slice(0, 1)}</i>
-                  <span><strong>{individual ? '本人' : profile.athleteName}</strong><small>{[profile.gender, profile.age === null ? '' : `${profile.age}岁`, profile.project].filter(Boolean).join(' · ')}</small></span>
-                  <span><strong>{profile.team || '未分队'}</strong><small>{[profile.city, profile.county].filter(Boolean).join(' · ') || '地区未设置'}</small></span>
+                  <span className="birthplace-athlete-identity"><strong>{individual ? '本人' : profile.athleteName}</strong><small>{[profile.gender, profile.age === null ? '' : `${profile.age}岁`, profile.project, profile.athletePosition].filter(Boolean).join(' · ')}</small></span>
+                  <span className="birthplace-athlete-unit"><strong>{profile.team || '代表单位未设置'}</strong><small>输送：{profile.originUnit || '未设置'}</small></span>
+                  <span className="birthplace-athlete-result"><small>最好成绩</small><strong>{profile.bestResult || '暂无记录'}</strong></span>
+                  <span className={`birthplace-athlete-state state-${profile.competitiveLevel || 'none'}`}><strong>{competitiveStateLabel(profile.competitiveLevel)}</strong><small>{profile.competitiveScore === null ? '暂无评分' : `${formatNumber(profile.competitiveScore, 1)}分`}</small></span>
                 </div>
               ))}
               </div>
             </div>
           </>
         ) : <div className="birthplace-detail-empty"><strong>暂无生源</strong><span>该省份当前没有权限范围内的运动员记录。</span></div>}
-        <p className="birthplace-coverage">有效籍贯 <strong>{available.length}/{profiles.length}</strong> · 来源省份 <strong>{provinces.length}</strong></p>
+        <p className="birthplace-coverage">有效单位省份 <strong>{available.length}/{profiles.length}</strong> · 覆盖省份 <strong>{provinces.length}</strong></p>
       </aside>
     </div>
   );
 }
 
+function competitiveStateLabel(level: CompetitiveStateLevel | null) {
+  if (level === 'peak') return '巅峰';
+  if (level === 'good') return '良好';
+  if (level === 'build') return '进阶';
+  if (level === 'adjust') return '调整';
+  return '未知';
+}
+
 const stateMeta: Record<CompetitiveStateLevel, { label: string; color: string }> = {
-  peak: { label: '峰值竞技', color: '#118b83' },
-  good: { label: '良好竞技', color: '#3d82a5' },
-  build: { label: '状态构建', color: '#e2a323' },
-  adjust: { label: '调整恢复', color: '#d95b45' }
+  peak: { label: '巅峰', color: '#118b83' },
+  good: { label: '良好', color: '#3d82a5' },
+  build: { label: '进阶', color: '#e2a323' },
+  adjust: { label: '调整', color: '#d95b45' }
 };
 
 const dimensionMeta = [

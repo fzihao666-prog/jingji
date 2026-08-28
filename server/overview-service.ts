@@ -64,6 +64,8 @@ type ProfileRow = {
   team: string;
   gender: string;
   athletePosition: string;
+  bestResult: string;
+  originUnit: string;
   province: string;
   city: string;
   county: string;
@@ -212,6 +214,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   const profileRows = db.prepare(`
     SELECT a.id AS athleteId, a.name AS athleteName, a.project, a.team, a.gender,
       COALESCE(ap.position, '') AS athletePosition,
+      COALESCE(ap.best_result, '') AS bestResult,
+      COALESCE(ap.origin_unit, '') AS originUnit,
       COALESCE(ao.province, '未设置') AS province,
       COALESCE(ao.city, '') AS city,
       COALESCE(ao.county, '') AS county,

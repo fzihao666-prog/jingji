@@ -444,6 +444,8 @@ export type OverviewAthleteProfile = {
   team: string;
   gender: string;
   athletePosition: string;
+  bestResult: string;
+  originUnit: string;
   province: string;
   city: string;
   county: string;

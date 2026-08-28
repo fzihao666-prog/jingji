@@ -80,7 +80,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'recovery-time': { title: '恢复时间', size: 'metric' },
   'athlete-profile': { title: '身体与年龄画像', size: 'half' },
   'competitive-state': { title: '竞技状态评估', size: 'half' },
-  'birthplace-map': { title: '生源地分布地图', size: 'full' },
+  'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'load-response': { title: '训练负荷与机体刺激', size: 'half' },
   'load-diagnostics': { title: '负荷诊断', size: 'third' },
@@ -462,7 +462,7 @@ export function OverviewPage(props: Props) {
     ),
     'birthplace-map': (
       <article className="panel professional-panel birthplace-map-panel">
-        <PanelHeading title="生源地分布地图" subtitle={`${scopeLabel} · 籍贯省市 · 运动员明细`} />
+        <PanelHeading title="代表单位/输送单位" subtitle={`${scopeLabel} · 省份分布 · 运动员成绩与竞技状态`} />
         <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} />
         <p className="analysis-method-note">生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。</p>
       </article>
