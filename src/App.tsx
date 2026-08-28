@@ -26,7 +26,7 @@ export default function App() {
   const [page, setPage] = useState<PageKey>('overview');
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
-  const [from, setFrom] = useState(addDays(today, -27));
+  const [from, setFrom] = useState(addDays(today, -29));
   const [to, setTo] = useState(today);
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project>('赛艇');

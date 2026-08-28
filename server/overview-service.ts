@@ -145,10 +145,10 @@ function ageAt(birthDate: string | null, date: string) {
   return age >= 0 ? age : null;
 }
 
-export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean }) {
+export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
     records: [], strengthTests: [], measurements: [], profiles: [],
-    meta: { project: input.project, from: input.from, to: input.to, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
+    meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
   const placeholders = input.athleteIds.map(() => '?').join(',');
   const sessions = db.prepare(`
@@ -363,6 +363,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       project: input.project,
       from: input.from,
       to: input.to,
+      period: input.period ?? null,
       athleteCount: input.athleteIds.length,
       sessionCount: sessions.length,
       wellnessDays: wellnessDays.count,

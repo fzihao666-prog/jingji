@@ -162,8 +162,9 @@ export const api = {
       method: 'POST', body: JSON.stringify({ sessions })
     });
   },
-  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project) {
+  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project, period?: 'day' | 'week' | 'month') {
     const params = new URLSearchParams({ from, to, project });
+    if (period) params.set('period', period);
     if (athleteId) params.set('athleteId', String(athleteId));
     return request<{ overview: OverviewPayload }>(`/api/overview?${params}`);
   },

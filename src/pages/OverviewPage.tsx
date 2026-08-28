@@ -43,6 +43,7 @@ type CardSize = 'metric' | 'third' | 'half' | 'wide' | 'full';
 type LayoutState = { version: number; order: string[]; hidden: string[]; pinned: string[] };
 type DropTarget = { id: string; position: 'before' | 'after' };
 type CardRect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+type OverviewPeriod = 'day' | 'week' | 'month';
 type PointerDragSession = {
   id: string;
   pointerId: number;
@@ -54,6 +55,17 @@ type PointerDragSession = {
   preview: HTMLElement | null;
   cleanup: () => void;
 };
+
+function overviewPeriodFromRange(from: string, to: string): OverviewPeriod | undefined {
+  if (from === to) return 'day';
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return undefined;
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  if (days === 7) return 'week';
+  if (days === 30) return 'month';
+  return undefined;
+}
 
 function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
   const left = gridRect.left + element.offsetLeft;
@@ -103,6 +115,7 @@ export function OverviewPage(props: Props) {
   const [rosterSearch, setRosterSearch] = useState('');
   const isIndividualOverview = props.user.role === 'ATL';
   const overviewAthleteId = isIndividualOverview ? props.user.athleteId : null;
+  const overviewPeriod = useMemo(() => overviewPeriodFromRange(props.from, props.to), [props.from, props.to]);
 
   useEffect(() => {
     if (props.athleteId !== overviewAthleteId) props.onAthleteChange(overviewAthleteId);
@@ -112,7 +125,7 @@ export function OverviewPage(props: Props) {
     let active = true;
     setOverviewLoading(true);
     setOverviewError('');
-    api.overview(props.from, props.to, overviewAthleteId, props.project)
+    api.overview(props.from, props.to, overviewAthleteId, props.project, overviewPeriod)
       .then(({ overview: payload }) => { if (active) setOverview(payload); })
       .catch((error) => {
         if (!active) return;
@@ -121,7 +134,7 @@ export function OverviewPage(props: Props) {
       })
       .finally(() => { if (active) setOverviewLoading(false); });
     return () => { active = false; };
-  }, [props.from, props.to, overviewAthleteId, props.project]);
+  }, [props.from, props.to, overviewAthleteId, props.project, overviewPeriod]);
 
   const analysisRecords = overview?.records ?? props.records;
   const athleteProfiles = overview?.profiles ?? [];
@@ -544,7 +557,7 @@ export function OverviewPage(props: Props) {
     <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
       <header className="page-heading">
         <div><h1>{isIndividualOverview ? '我的训练总览' : '训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
-        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
+        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} presetMode="period" canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
       </header>
       {overview && <div className="overview-data-provenance">
         <Database size={15} /><strong>{overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>

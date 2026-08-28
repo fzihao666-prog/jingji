@@ -483,6 +483,7 @@ export type OverviewPayload = {
     project: string;
     from: string;
     to: string;
+    period: 'day' | 'week' | 'month' | null;
     athleteCount: number;
     sessionCount: number;
     wellnessDays: number;

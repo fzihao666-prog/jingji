@@ -552,6 +552,35 @@ function cleanString(value: unknown) {
   return String(value ?? '').trim();
 }
 
+type OverviewPeriod = 'day' | 'week' | 'month';
+
+function isOverviewPeriod(value: string): value is OverviewPeriod {
+  return value === 'day' || value === 'week' || value === 'month';
+}
+
+function toLocalIsoDate(value: Date) {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function addIsoDays(date: string, amount: number) {
+  const target = new Date(`${date}T00:00:00`);
+  target.setDate(target.getDate() + amount);
+  return toLocalIsoDate(target);
+}
+
+function normalizeOverviewRange(input: { from: string; to: string; period: string }) {
+  if (!isOverviewPeriod(input.period)) return { from: input.from, to: input.to, period: null };
+  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(input.to)
+    ? input.to
+    : /^\d{4}-\d{2}-\d{2}$/.test(input.from)
+      ? input.from
+      : toLocalIsoDate(new Date());
+  if (input.period === 'day') return { from: anchor, to: anchor, period: input.period };
+  if (input.period === 'week') return { from: addIsoDays(anchor, -6), to: anchor, period: input.period };
+  return { from: addIsoDays(anchor, -29), to: anchor, period: input.period };
+}
+
 function optionalNumber(value: unknown, min: number, max: number, label: string, errors: string[]) {
   if (value === '' || value === null || value === undefined) return null;
   const numeric = Number(value);
@@ -3018,8 +3047,12 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
 
 app.get('/api/overview', requireAuth, (req, res) => {
   const user = req.authUser!;
-  const from = cleanString(req.query.from);
-  const to = cleanString(req.query.to);
+  const range = normalizeOverviewRange({
+    from: cleanString(req.query.from),
+    to: cleanString(req.query.to),
+    period: cleanString(req.query.period)
+  });
+  const { from, to } = range;
   const requestedId = Number(req.query.athleteId || 0);
   const project = cleanString(req.query.project);
   if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
@@ -3044,7 +3077,7 @@ app.get('/api/overview', requireAuth, (req, res) => {
     if (!selected || selected.project !== project) return res.status(400).json({ message: '本人档案不属于当前项目。' });
     ids = [user.athleteId];
   }
-  res.json({ overview: buildOverviewPayload({ athleteIds: ids, from, to, project, individual: user.role === 'ATL' }) });
+  res.json({ overview: buildOverviewPayload({ athleteIds: ids, from, to, project, individual: user.role === 'ATL', period: range.period }) });
 });
 
 app.get('/api/records', requireAuth, (req, res) => {

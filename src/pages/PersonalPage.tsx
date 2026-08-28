@@ -8,7 +8,7 @@ import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { api } from '../api';
 import type { Athlete, Project, TrainingRecord, User } from '../types';
-import { addDays, formatNumber, startOfWeek } from '../utils';
+import { addDays, formatNumber } from '../utils';
 
 type Props = {
   user: User;
@@ -63,11 +63,9 @@ export function PersonalPage(props: Props) {
   const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(() => analyzePeriod(selectedRecords), [selectedRecords, analyzePeriod]);
   const rangeMode = useMemo(() => {
-    if (props.from === props.to) return { label: '当日' } as const;
-    if (props.from === addDays(props.to, -29)) return { label: '近一月' } as const;
-    if (props.from === addDays(props.to, -364)) return { label: '近一年' } as const;
-    if (props.from === startOfWeek(props.to) || props.to === addDays(props.from, 6)) return { label: '本周' } as const;
-    if (props.from.endsWith('-01') && props.from.slice(0, 7) === props.to.slice(0, 7)) return { label: '本月' } as const;
+    if (props.from === props.to) return { label: '日' } as const;
+    if (props.from === addDays(props.to, -6)) return { label: '周' } as const;
+    if (props.from === addDays(props.to, -29)) return { label: '月' } as const;
     return { label: '所选周期' } as const;
   }, [props.from, props.to]);
 
@@ -78,7 +76,7 @@ export function PersonalPage(props: Props) {
           <h1>个人档案</h1>
           <p>查看运动员基础信息、训练表现、伤病恢复与体能测试档案</p>
         </div>
-        <DateToolbar {...props} />
+        <DateToolbar {...props} presetMode="period" />
       </header>
 
       {!selectedAthlete ? (

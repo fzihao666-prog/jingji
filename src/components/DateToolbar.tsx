@@ -18,9 +18,10 @@ type Props = {
   canRenameAthletes?: boolean;
   onAthleteNameChange?: (id: number, name: string) => Promise<void>;
   athleteMode?: 'select' | 'team' | 'self';
+  presetMode?: 'default' | 'period';
 };
 
-export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select' }: Props) {
+export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select', presetMode = 'default' }: Props) {
   const selectedAthlete = athletes.find((athlete) => athlete.id === athleteId);
   const [athleteOpen, setAthleteOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -45,14 +46,20 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
     return () => document.removeEventListener('mousedown', close);
   }, []);
   const today = toIsoDate(new Date());
-  const presetRanges = {
+  const presetRanges = presetMode === 'period' ? {
+    day: { from: today, to: today },
+    week: { from: addDays(today, -6), to: today },
+    month: { from: addDays(today, -29), to: today }
+  } : {
     day: { from: today, to: today },
     recentMonth: { from: addDays(today, -29), to: today },
     recentYear: { from: addDays(today, -364), to: today }
   };
-  const presets = ([['day', '今天', '查看今天数据'], ['recentMonth', '最近一月', '查看最近30天数据'], ['recentYear', '最近一年', '查看最近365天数据']] as const);
+  const presets = presetMode === 'period'
+    ? ([['day', '日', '查看当天训练总览'], ['week', '周', '查看最近7天训练总览'], ['month', '月', '查看最近30天训练总览']] as const)
+    : ([['day', '今天', '查看今天数据'], ['recentMonth', '最近一月', '查看最近30天数据'], ['recentYear', '最近一年', '查看最近365天数据']] as const);
   const setPreset = (preset: keyof typeof presetRanges) => {
-    const range = presetRanges[preset];
+    const range = presetRanges[preset]!;
     onRangeChange(range.from, range.to);
   };
 
@@ -60,7 +67,7 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
     <div className="date-toolbar">
       <div className="range-presets" aria-label="快速选择时间范围">
         {presets.map(([key, label, title]) => {
-          const range = presetRanges[key];
+          const range = presetRanges[key]!;
           const active = from === range.from && to === range.to;
           return <button key={key} type="button" className={active ? 'active' : ''} aria-pressed={active} title={title} onClick={() => setPreset(key)}>{label}</button>;
         })}
