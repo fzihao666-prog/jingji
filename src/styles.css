@@ -477,8 +477,9 @@ h1, h2, h3, p { margin: 0; }
 .card-action-menu { position: absolute; z-index: 40; left: -4px; top: 22px; width: 132px; padding: 5px; border: 1px solid #d5e1e3; border-radius: 9px; background: #fff; box-shadow: 0 17px 35px rgba(7,38,49,.18); display: grid; gap: 2px; }.card-action-menu button { min-height: 34px; padding: 0 9px; border: 0; border-radius: 6px; color: #35555f; background: transparent; display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 800; cursor: pointer; }.card-action-menu button:hover { color: #0c746e; background: #edf8f6; }
 .pinned-mark { position: absolute; z-index: 8; right: 11px; top: 11px; padding: 4px 7px; border-radius: 99px; color: #0b756e; background: #e4f5f1; display: flex; align-items: center; gap: 4px; font-size: 8px; font-weight: 900; }.card-size-metric .pinned-mark { color: #fff; background: rgba(2,39,50,.28); }
 .overview-card-shell .metric-card { min-height: 130px; padding: 14px 30px; display: grid; place-items: center; }
-.overview-card-shell .metric-icon { position: absolute; z-index: 2; left: 12px; top: 39px; width: 34px; height: 34px; }
-.overview-card-shell .metric-copy { width: 100%; min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; text-align: center; }
+.overview-card-shell .metric-icon { position: absolute; z-index: 1; left: 16px; top: 34px; width: 42px; height: 42px; border-radius: 12px; background: rgba(255,255,255,.16); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.overview-card-shell .metric-icon svg { width: 23px; height: 23px; }
+.overview-card-shell .metric-copy { position: relative; z-index: 2; width: 100%; min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; text-align: center; }
 .overview-card-shell .metric-copy > span { font-size: 11.5px; line-height: 1.25; font-weight: 700; opacity: .82; }
 .overview-card-shell .metric-copy > strong { margin-top: 0; font-size: 30px; line-height: .95; font-weight: 800; }
 .overview-card-shell .metric-copy strong small { margin-left: 4px; font-size: 11.5px; opacity: .72; }
