@@ -285,7 +285,7 @@ export function PersonalPage(props: Props) {
           <h1>个人档案</h1>
           <p>查看运动员基础信息、训练表现、伤病恢复与体能测试档案</p>
         </div>
-        <DateToolbar {...props} presetMode="period" />
+        <DateToolbar {...props} presetMode="period" projectControl="segments" />
       </header>
 
       {!selectedAthlete ? (

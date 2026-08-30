@@ -1,5 +1,5 @@
 import {
-  Activity, AlarmClock, ArrowRight, BarChart3, Clock3, Database, Eye, EyeOff, Gauge,
+  AlarmClock, ArrowRight, BarChart3, Clock3, Database, Eye, EyeOff, Gauge,
   MoreHorizontal, Pin, Route, Search, ShieldCheck, Sparkles, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -86,7 +86,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   duration: { title: '累计训练时间', size: 'metric' },
   distance: { title: '专项距离', size: 'metric' },
   srpe: { title: 'SRPE总负荷', size: 'metric' },
-  rpe: { title: '平均主观强度', size: 'metric' },
+  rpe: { title: '运动员总数', size: 'metric' },
   'acute-load': { title: '近7日急性负荷', size: 'metric' },
   'recovery-time': { title: '恢复时间', size: 'metric' },
   'athlete-profile': { title: '身体与年龄画像', size: 'half' },
@@ -173,7 +173,6 @@ export function OverviewPage(props: Props) {
   );
   const diagnostics = useMemo(() => calculateLoadDiagnostics(analysisRecords, daily), [analysisRecords, daily]);
   const recoveryTime = useMemo(() => calculateRecoveryTime(analysisRecords), [analysisRecords]);
-  const averageRpe = useMemo(() => average(analysisRecords.map((record) => record.rpe)), [analysisRecords]);
 
   const latestStrength = strengthTests[0];
   const measurementSampleCount = Math.max(0, ...(overview?.measurements || []).map((item) => item.sampleCount));
@@ -467,14 +466,14 @@ export function OverviewPage(props: Props) {
   };
 
   const cards: Record<string, ReactNode> = {
-    duration: <Metric icon={<AlarmClock />} label={isIndividualOverview ? '累计训练时间' : '团队训练总时长'} value={formatNumber(summary.totalDuration / 60, 1)} unit="小时" note={isIndividualOverview ? `${summary.days}个记录日` : `人均 ${formatNumber(perAthlete(summary.totalDuration) / 60, 1)} 小时 · ${scopeAthleteCount}人`} tone="navy" />,
-    distance: <Metric icon={<Route />} label={isIndividualOverview ? '专项距离' : '团队专项总距离'} value={formatNumber(summary.totalDistance, 1)} unit="km" note={isIndividualOverview ? `${props.project}周期累计` : `人均 ${formatNumber(perAthlete(summary.totalDistance), 1)} km`} tone="teal" />,
-    srpe: <Metric icon={<Gauge />} label={isIndividualOverview ? 'SRPE总负荷' : '团队SRPE总负荷'} value={formatNumber(summary.totalSrpe)} unit="AU" note={isIndividualOverview ? '训练时间 × RPE' : `人均 ${formatNumber(perAthlete(summary.totalSrpe))} AU`} tone="orange" />,
-    rpe: <Metric icon={<Activity />} label="平均主观强度" value={averageRpe ? formatNumber(averageRpe, 1) : '—'} unit="RPE" note="仅统计已填写记录" tone="blue" />,
-    'acute-load': <Metric icon={<BarChart3 />} label={isIndividualOverview ? '近7日急性负荷' : '团队近7日人均负荷'} value={formatNumber(diagnostics.acuteLoad)} unit="AU" note={diagnostics.acuteChronicRatio === null ? '需至少28天数据计算负荷比' : `${isIndividualOverview ? '前21日周均比' : '前21日人均周负荷比'} ${diagnostics.acuteChronicRatio.toFixed(2)}`} tone="purple" />,
+    duration: <Metric icon={<AlarmClock />} label={isIndividualOverview ? '累计训练时间' : '训练总时长'} value={formatNumber(summary.totalDuration / 60, 1)} unit="小时" note={isIndividualOverview ? `${summary.days}个记录日` : `人均 ${formatNumber(perAthlete(summary.totalDuration) / 60, 1)} 小时 · ${scopeAthleteCount}人`} tone="navy" />,
+    distance: <Metric icon={<Route />} label={isIndividualOverview ? '专项距离' : '专项总距离'} value={formatNumber(summary.totalDistance, 1)} unit="km" note={isIndividualOverview ? `${props.project}周期累计` : `人均 ${formatNumber(perAthlete(summary.totalDistance), 1)} km`} tone="teal" />,
+    srpe: <Metric icon={<Gauge />} label="SRPE总负荷" value={formatNumber(summary.totalSrpe)} unit="AU" note={isIndividualOverview ? '训练时间 × RPE' : `人均 ${formatNumber(perAthlete(summary.totalSrpe))} AU`} tone="orange" />,
+    rpe: <Metric icon={<UsersRound />} label={isIndividualOverview ? '当前运动员' : '运动员总数'} value={formatNumber(scopeAthleteCount)} unit="人" note={isIndividualOverview ? '个人视图 · 本人数据' : `${props.project} · 权限范围内全部运动员`} tone="blue" />,
+    'acute-load': <Metric icon={<BarChart3 />} label={isIndividualOverview ? '近7日急性负荷' : '近7日人均负荷'} value={formatNumber(diagnostics.acuteLoad)} unit="AU" note={diagnostics.acuteChronicRatio === null ? '需至少28天数据计算负荷比' : `${isIndividualOverview ? '前21日周均比' : '前21日人均周负荷比'} ${diagnostics.acuteChronicRatio.toFixed(2)}`} tone="purple" />,
     'recovery-time': <Metric
       icon={<Clock3 />}
-      label={isIndividualOverview ? '日均恢复时间' : '团队日均恢复时间'}
+      label="日均恢复时间"
       value={recoveryTime.averageHours === null ? '—' : formatNumber(recoveryTime.averageHours, 1)}
       unit="小时"
       note={recoveryTime.adequateRate === null

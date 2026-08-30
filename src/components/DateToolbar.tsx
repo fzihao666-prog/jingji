@@ -19,9 +19,10 @@ type Props = {
   onAthleteNameChange?: (id: number, name: string) => Promise<void>;
   athleteMode?: 'select' | 'team' | 'self';
   presetMode?: 'default' | 'period';
+  projectControl?: 'select' | 'segments';
 };
 
-export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select', presetMode = 'default' }: Props) {
+export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select', presetMode = 'default', projectControl = 'select' }: Props) {
   const selectedAthlete = athletes.find((athlete) => athlete.id === athleteId);
   const [athleteOpen, setAthleteOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -80,14 +81,23 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
         <input aria-label="结束日期" type="date" value={to} min={from} onChange={(event) => onRangeChange(from, event.target.value)} />
       </label>
 
-      <label className={`project-filter ${project === '皮划艇' ? 'canoe' : project === '激流' ? 'slalom' : 'rowing'}`}>
-        <span className="visually-hidden">选择项目大类</span>
-        <ProjectMark project={project} />
-        <select aria-label="选择项目大类" value={project} onChange={(event) => onProjectChange(event.target.value as Project)}>
-          {projects.map((item) => <option key={item} value={item}>{item}</option>)}
-        </select>
-        <ChevronDown size={14} />
-      </label>
+      {projectControl === 'segments' ? (
+        <div className="toolbar-project-segments" aria-label="选择运动种类">
+          {projects.map((item) => <button key={item} type="button" className={`${item === project ? 'active' : ''} ${item === '皮划艇' ? 'canoe' : item === '激流' ? 'slalom' : 'rowing'}`} aria-pressed={item === project} onClick={() => onProjectChange(item)}>
+            <ProjectMark project={item} />
+            <span>{item}</span>
+          </button>)}
+        </div>
+      ) : (
+        <label className={`project-filter ${project === '皮划艇' ? 'canoe' : project === '激流' ? 'slalom' : 'rowing'}`}>
+          <span className="visually-hidden">选择项目大类</span>
+          <ProjectMark project={project} />
+          <select aria-label="选择项目大类" value={project} onChange={(event) => onProjectChange(event.target.value as Project)}>
+            {projects.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <ChevronDown size={14} />
+        </label>
+      )}
 
       {athleteMode === 'select' ? <div className={`athlete-picker ${athleteOpen ? 'open' : ''}`} ref={pickerRef}>
         <button className="athlete-picker-trigger" type="button" onClick={() => setAthleteOpen((value) => !value)} aria-expanded={athleteOpen}>
