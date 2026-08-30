@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { api } from '../api';
-import type { Athlete, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
+import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
 import { aggregateRecords, average, formatNumber, groupByDate, percentage, worstStatus } from '../utils';
 import { ROLE_META } from '../../shared/access';
 import { DateToolbar } from '../components/DateToolbar';
@@ -40,7 +40,6 @@ type Props = {
 };
 
 type CardSize = 'metric' | 'third' | 'half' | 'wide' | 'full';
-type LayoutState = { version: number; order: string[]; hidden: string[]; pinned: string[] };
 type DropTarget = { id: string; position: 'before' | 'after' };
 type CardRect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 type OverviewPeriod = 'day' | 'week' | 'month';
@@ -107,6 +106,31 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'movement-efficiency': { title: '动作效率与代偿', size: 'half' },
   roster: { title: '运动员状态', size: 'full' }
 };
+
+function normalizeOverviewLayout(stored: Partial<OverviewLayoutState> | null | undefined): OverviewLayoutState {
+  const known = new Set(defaultOrder);
+  const storedOrder = Array.isArray(stored?.order) ? stored.order.filter((id) => known.has(id)) : [];
+  const mergedOrder = [...storedOrder];
+  for (const [index, id] of defaultOrder.entries()) {
+    if (mergedOrder.includes(id)) continue;
+    const nextKnown = defaultOrder.slice(index + 1).find((nextId) => mergedOrder.includes(nextId));
+    if (nextKnown) mergedOrder.splice(mergedOrder.indexOf(nextKnown), 0, id);
+    else mergedOrder.push(id);
+  }
+  if ((stored?.version || 0) < 3) {
+    const newProfileCards = ['athlete-profile', 'competitive-state', 'birthplace-map'];
+    const withoutNewCards = mergedOrder.filter((id) => !newProfileCards.includes(id));
+    const anchor = withoutNewCards.indexOf('recovery-time');
+    withoutNewCards.splice(anchor >= 0 ? anchor + 1 : 0, 0, ...newProfileCards);
+    mergedOrder.splice(0, mergedOrder.length, ...withoutNewCards);
+  }
+  return {
+    version: 5,
+    order: mergedOrder,
+    hidden: Array.isArray(stored?.hidden) ? stored.hidden.filter((id) => known.has(id)) : [],
+    pinned: Array.isArray(stored?.pinned) ? stored.pinned.filter((id) => known.has(id)) : []
+  };
+}
 
 export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
@@ -198,8 +222,9 @@ export function OverviewPage(props: Props) {
     : `${ROLE_META[props.user.role].label}权限范围 · ${scopeAthleteCount}人`;
   const perAthlete = (value: number) => value / Math.max(1, scopeAthleteCount);
 
-  const storageKey = `jingji-overview-layout:${props.user.id}:${props.project}:${isIndividualOverview ? 'self' : 'team'}`;
-  const [layout, setLayout] = useState<LayoutState>({ version: 4, order: defaultOrder, hidden: [], pinned: [] });
+  const layoutScope = isIndividualOverview ? 'self' : 'team';
+  const storageKey = `jingji-overview-layout:${props.user.id}:${props.project}:${layoutScope}`;
+  const [layout, setLayout] = useState<OverviewLayoutState>(() => normalizeOverviewLayout(null));
   const [layoutReady, setLayoutReady] = useState(false);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -210,40 +235,38 @@ export function OverviewPage(props: Props) {
   const flipRectsRef = useRef<Map<string, CardRect> | null>(null);
 
   useEffect(() => {
+    let active = true;
     setLayoutReady(false);
-    try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '{}') as Partial<LayoutState>;
-      const known = new Set(defaultOrder);
-      const storedOrder = Array.isArray(stored.order) ? stored.order.filter((id) => known.has(id)) : [];
-      const mergedOrder = [...storedOrder];
-      for (const [index, id] of defaultOrder.entries()) {
-        if (mergedOrder.includes(id)) continue;
-        const nextKnown = defaultOrder.slice(index + 1).find((nextId) => mergedOrder.includes(nextId));
-        if (nextKnown) mergedOrder.splice(mergedOrder.indexOf(nextKnown), 0, id);
-        else mergedOrder.push(id);
+    const readLocalLayout = () => {
+      try {
+        return normalizeOverviewLayout(JSON.parse(localStorage.getItem(storageKey) || '{}') as Partial<OverviewLayoutState>);
+      } catch {
+        return normalizeOverviewLayout(null);
       }
-      if ((stored.version || 0) < 3) {
-        const newProfileCards = ['athlete-profile', 'competitive-state', 'birthplace-map'];
-        const withoutNewCards = mergedOrder.filter((id) => !newProfileCards.includes(id));
-        const anchor = withoutNewCards.indexOf('recovery-time');
-        withoutNewCards.splice(anchor >= 0 ? anchor + 1 : 0, 0, ...newProfileCards);
-        mergedOrder.splice(0, mergedOrder.length, ...withoutNewCards);
-      }
-      setLayout({
-        version: 4,
-        order: mergedOrder,
-        hidden: Array.isArray(stored.hidden) ? stored.hidden.filter((id) => known.has(id)) : [],
-        pinned: Array.isArray(stored.pinned) ? stored.pinned.filter((id) => known.has(id)) : []
+    };
+
+    api.getOverviewLayout(props.project, layoutScope)
+      .then(({ layout: remoteLayout }) => {
+        if (!active) return;
+        setLayout(remoteLayout ? normalizeOverviewLayout(remoteLayout) : readLocalLayout());
+      })
+      .catch(() => {
+        if (active) setLayout(readLocalLayout());
+      })
+      .finally(() => {
+        if (active) setLayoutReady(true);
       });
-    } catch {
-      setLayout({ version: 4, order: defaultOrder, hidden: [], pinned: [] });
-    }
-    setLayoutReady(true);
-  }, [storageKey]);
+    return () => { active = false; };
+  }, [layoutScope, props.project, storageKey]);
 
   useEffect(() => {
-    if (layoutReady) localStorage.setItem(storageKey, JSON.stringify(layout));
-  }, [layout, layoutReady, storageKey]);
+    if (!layoutReady) return undefined;
+    localStorage.setItem(storageKey, JSON.stringify(layout));
+    const timeout = window.setTimeout(() => {
+      api.saveOverviewLayout(props.project, layoutScope, layout).catch(() => undefined);
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [layout, layoutReady, layoutScope, props.project, storageKey]);
 
   useEffect(() => () => {
     dragSessionRef.current?.cleanup();

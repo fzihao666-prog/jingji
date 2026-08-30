@@ -80,6 +80,28 @@ type BodyRow = {
   heightCm: number | null;
   weightKg: number | null;
   bodyFatPct: number | null;
+  skeletalMuscleKg: number | null;
+  muscleMassKg: number | null;
+  upperLimbMuscleKg: number | null;
+  lowerLimbMuscleKg: number | null;
+  trunkMuscleKg: number | null;
+  subcutaneousFatMm: number | null;
+  tricepsSkinfoldMm: number | null;
+  abdominalSkinfoldMm: number | null;
+  thighSkinfoldMm: number | null;
+  calfSkinfoldMm: number | null;
+  visceralFatLevel: number | null;
+  basalMetabolismKcal: number | null;
+  totalBodyWaterKg: number | null;
+  ecwTbwRatio: number | null;
+  phaseAngleDeg: number | null;
+  visceralFatAreaCm2: number | null;
+  leftArmLeanKg: number | null;
+  rightArmLeanKg: number | null;
+  trunkLeanKg: number | null;
+  leftLegLeanKg: number | null;
+  rightLegLeanKg: number | null;
+  note: string;
   source: string;
   isDemo: number;
 };
@@ -231,6 +253,18 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   const bodyRows = db.prepare(`
     SELECT athlete_id AS athleteId, measurement_date AS measurementDate,
       height_cm AS heightCm, weight_kg AS weightKg, body_fat_pct AS bodyFatPct,
+      skeletal_muscle_kg AS skeletalMuscleKg, muscle_mass_kg AS muscleMassKg,
+      upper_limb_muscle_kg AS upperLimbMuscleKg, lower_limb_muscle_kg AS lowerLimbMuscleKg,
+      trunk_muscle_kg AS trunkMuscleKg, subcutaneous_fat_mm AS subcutaneousFatMm,
+      triceps_skinfold_mm AS tricepsSkinfoldMm, abdominal_skinfold_mm AS abdominalSkinfoldMm,
+      thigh_skinfold_mm AS thighSkinfoldMm, calf_skinfold_mm AS calfSkinfoldMm,
+      visceral_fat_level AS visceralFatLevel, basal_metabolism_kcal AS basalMetabolismKcal,
+      total_body_water_kg AS totalBodyWaterKg, ecw_tbw_ratio AS ecwTbwRatio,
+      phase_angle_deg AS phaseAngleDeg, visceral_fat_area_cm2 AS visceralFatAreaCm2,
+      left_arm_lean_kg AS leftArmLeanKg, right_arm_lean_kg AS rightArmLeanKg,
+      trunk_lean_kg AS trunkLeanKg, left_leg_lean_kg AS leftLegLeanKg,
+      right_leg_lean_kg AS rightLegLeanKg,
+      note,
       source, is_demo AS isDemo
     FROM athlete_body_measurements
     WHERE athlete_id IN (${placeholders}) AND measurement_date <= ?
@@ -259,6 +293,56 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       weightKg: body?.weightKg ?? null,
       previousWeightKg: bodyHistory[1]?.weightKg ?? null,
       bodyFatPct: body?.bodyFatPct ?? null,
+      skeletalMuscleKg: body?.skeletalMuscleKg ?? null,
+      muscleMassKg: body?.muscleMassKg ?? null,
+      upperLimbMuscleKg: body?.upperLimbMuscleKg ?? null,
+      lowerLimbMuscleKg: body?.lowerLimbMuscleKg ?? null,
+      trunkMuscleKg: body?.trunkMuscleKg ?? null,
+      subcutaneousFatMm: body?.subcutaneousFatMm ?? null,
+      tricepsSkinfoldMm: body?.tricepsSkinfoldMm ?? null,
+      abdominalSkinfoldMm: body?.abdominalSkinfoldMm ?? null,
+      thighSkinfoldMm: body?.thighSkinfoldMm ?? null,
+      calfSkinfoldMm: body?.calfSkinfoldMm ?? null,
+      visceralFatLevel: body?.visceralFatLevel ?? null,
+      basalMetabolismKcal: body?.basalMetabolismKcal ?? null,
+      totalBodyWaterKg: body?.totalBodyWaterKg ?? null,
+      ecwTbwRatio: body?.ecwTbwRatio ?? null,
+      phaseAngleDeg: body?.phaseAngleDeg ?? null,
+      visceralFatAreaCm2: body?.visceralFatAreaCm2 ?? null,
+      leftArmLeanKg: body?.leftArmLeanKg ?? null,
+      rightArmLeanKg: body?.rightArmLeanKg ?? null,
+      trunkLeanKg: body?.trunkLeanKg ?? null,
+      leftLegLeanKg: body?.leftLegLeanKg ?? null,
+      rightLegLeanKg: body?.rightLegLeanKg ?? null,
+      bodyMeasurementNote: body?.note || '',
+      bodyCompositionHistory: bodyHistory.slice(0, 8).map((row) => ({
+        measurementDate: row.measurementDate,
+        heightCm: row.heightCm,
+        weightKg: row.weightKg,
+        bodyFatPct: row.bodyFatPct,
+        skeletalMuscleKg: row.skeletalMuscleKg,
+        muscleMassKg: row.muscleMassKg,
+        upperLimbMuscleKg: row.upperLimbMuscleKg,
+        lowerLimbMuscleKg: row.lowerLimbMuscleKg,
+        trunkMuscleKg: row.trunkMuscleKg,
+        subcutaneousFatMm: row.subcutaneousFatMm,
+        tricepsSkinfoldMm: row.tricepsSkinfoldMm,
+        abdominalSkinfoldMm: row.abdominalSkinfoldMm,
+        thighSkinfoldMm: row.thighSkinfoldMm,
+        calfSkinfoldMm: row.calfSkinfoldMm,
+        visceralFatLevel: row.visceralFatLevel,
+        basalMetabolismKcal: row.basalMetabolismKcal,
+        totalBodyWaterKg: row.totalBodyWaterKg,
+        ecwTbwRatio: row.ecwTbwRatio,
+        phaseAngleDeg: row.phaseAngleDeg,
+        visceralFatAreaCm2: row.visceralFatAreaCm2,
+        leftArmLeanKg: row.leftArmLeanKg,
+        rightArmLeanKg: row.rightArmLeanKg,
+        trunkLeanKg: row.trunkLeanKg,
+        leftLegLeanKg: row.leftLegLeanKg,
+        rightLegLeanKg: row.rightLegLeanKg,
+        note: row.note || ''
+      })),
       competitiveAssessmentDate: state?.assessmentDate || null,
       competitiveScore: state?.competitiveScore ?? null,
       previousCompetitiveScore: stateHistory[1]?.competitiveScore ?? null,

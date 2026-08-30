@@ -61,6 +61,8 @@ type Props = {
   onChanged: () => void;
 };
 
+type StrengthOverviewPeriod = 'day' | 'week' | 'month';
+
 const defaultWeekKeys = ['1', '2', '3', '4'];
 let itemSequence = 0;
 
@@ -137,6 +139,7 @@ export function TrainingPlanPage(props: Props) {
   const [activeCategory, setActiveCategory] = useState<StrengthTrainingCategory>('基础力量');
   const [categoryFilter, setCategoryFilter] = useState<'全部' | StrengthTrainingCategory>('全部');
   const [bodyPosition, setBodyPosition] = useState<'全部' | StrengthBodyPosition>('全部');
+  const [overviewPeriod, setOverviewPeriod] = useState<StrengthOverviewPeriod>('month');
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [planId, setPlanId] = useState<number | null>(null);
   const [data, setData] = useState<TrainingPlanData>(emptyPlan);
@@ -260,16 +263,28 @@ export function TrainingPlanPage(props: Props) {
   };
 
   const allSets = useMemo(() => sessions.flatMap((session) => session.sets.map((set) => ({ ...set, session }))), [sessions]);
-  const filteredSessions = useMemo(() => sessions.map((session) => ({
+  const latestTrainingDate = useMemo(() => sessions.reduce((latest, session) => session.trainingDate > latest ? session.trainingDate : latest, ''), [sessions]);
+  const overviewPeriodRange = useMemo(() => {
+    if (!latestTrainingDate) return { from: '', to: '', label: '暂无结果' };
+    const days = overviewPeriod === 'day' ? 0 : overviewPeriod === 'week' ? 6 : 29;
+    const from = addDays(latestTrainingDate, -days);
+    return { from, to: latestTrainingDate, label: overviewPeriod === 'day' ? latestTrainingDate : `${from} — ${latestTrainingDate}` };
+  }, [latestTrainingDate, overviewPeriod]);
+  const periodSessions = useMemo(() => {
+    if (props.section !== 'strength-overview' || !overviewPeriodRange.from) return sessions;
+    return sessions.filter((session) => session.trainingDate >= overviewPeriodRange.from && session.trainingDate <= overviewPeriodRange.to);
+  }, [overviewPeriodRange.from, overviewPeriodRange.to, props.section, sessions]);
+  const filteredSessions = useMemo(() => periodSessions.map((session) => ({
     ...session,
     sets: session.sets.filter((set) => {
       const setCategory = set.trainingCategory || inferStrengthCategory(set.exerciseName);
       const setBodyPosition = set.bodyPosition || inferStrengthBodyPosition(set.exerciseName);
       const categoryMatches = props.section === 'strength-plan'
         || (props.section === 'strength-records' ? activeCategory === setCategory : categoryFilter === '全部' || categoryFilter === setCategory);
-      return categoryMatches && (bodyPosition === '全部' || setBodyPosition === bodyPosition);
+      const bodyMatches = props.section === 'strength-overview' || bodyPosition === '全部' || setBodyPosition === bodyPosition;
+      return categoryMatches && bodyMatches;
     })
-  })).filter((session) => session.sets.length), [activeCategory, bodyPosition, categoryFilter, props.section, sessions]);
+  })).filter((session) => session.sets.length), [activeCategory, bodyPosition, categoryFilter, periodSessions, props.section]);
   const pageMeta = {
     'strength-overview': ['体能总览', '快速判断运动员最近练得怎么样，优先查看训练负荷与完成情况。'],
     'strength-plan': ['训练安排', '制定并管理五类体能训练处方，明确动作、负荷、强度与时间。'],
@@ -330,9 +345,10 @@ export function TrainingPlanPage(props: Props) {
         <div className="strength-filter-intro"><i><SlidersHorizontal size={18} /></i><div><strong>筛选条件</strong><small>切换后图表与记录同步更新</small></div></div>
         <div className="strength-command-controls">
           {props.user.role !== 'ATL' && <label><span><UserRound size={13} />运动员</span><select aria-label="体能训练运动员" value={selectedId || ''} onChange={(event) => props.onAthleteChange(Number(event.target.value))}>{props.athletes.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.team}</option>)}</select></label>}
-          {!!plans.length && <label className="period-filter"><span><CalendarRange size={13} />训练周期</span><select aria-label="训练周期" value={planId || ''} onChange={(event) => selectPlan(Number(event.target.value))}>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.data.startDate}—{plan.data.endDate} · {plan.data.title}</option>)}</select></label>}
+          {props.section === 'strength-overview' && <div className="strength-period-options"><span><CalendarRange size={13} />训练周期</span><div>{([['day', '日'], ['week', '周'], ['month', '月']] as const).map(([key, label]) => <button key={key} type="button" className={overviewPeriod === key ? 'active' : ''} aria-pressed={overviewPeriod === key} onClick={() => setOverviewPeriod(key)}>{label}</button>)}</div></div>}
+          {['strength-plan', 'strength-records'].includes(props.section) && <label className="period-filter"><span><CalendarRange size={13} />训练周期</span><select aria-label="训练周期" disabled={!plans.length} value={planId || ''} onChange={(event) => selectPlan(Number(event.target.value))}>{plans.length ? plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.data.startDate}—{plan.data.endDate} · {plan.data.title}</option>) : <option value="">暂无训练周期</option>}</select></label>}
           {['strength-overview', 'strength-analysis'].includes(props.section) && <label><span><Dumbbell size={13} />训练类型</span><select aria-label="训练类型" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as '全部' | StrengthTrainingCategory)}><option>全部</option>{STRENGTH_TRAINING_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>}
-          {props.section !== 'strength-assessment' && <label><span><Scale size={13} />身体位置</span><select aria-label="训练身体位置" value={bodyPosition} onChange={(event) => setBodyPosition(event.target.value as '全部' | StrengthBodyPosition)}><option>全部</option>{STRENGTH_BODY_POSITIONS.map((position) => <option key={position}>{position}</option>)}</select></label>}
+          {!['strength-overview', 'strength-assessment'].includes(props.section) && <label><span><Scale size={13} />身体位置</span><select aria-label="训练身体位置" value={bodyPosition} onChange={(event) => setBodyPosition(event.target.value as '全部' | StrengthBodyPosition)}><option>全部</option>{STRENGTH_BODY_POSITIONS.map((position) => <option key={position}>{position}</option>)}</select></label>}
         </div>
         {props.section !== 'strength-assessment' && <button className="strength-filter-reset" onClick={() => { setCategoryFilter('全部'); setBodyPosition('全部'); }} title="重置训练类型和身体位置"><RotateCcw size={15} /><span>重置</span></button>}
       </section>
@@ -340,7 +356,7 @@ export function TrainingPlanPage(props: Props) {
       <section className="strength-training-context">
         <div className="strength-training-avatar">{athlete.name.slice(0, 1)}</div>
         <div className="strength-training-athlete"><span>当前运动员</span><strong>{athlete.name}</strong><small>{athlete.project} · {athlete.team}</small></div>
-        <dl><div><dt>当前周期</dt><dd>{data.startDate} — {data.endDate}</dd></div><div><dt>性别</dt><dd>{athlete.gender || '未填写'}</dd></div><div><dt>位置/号位</dt><dd>{athlete.athletePosition || '未填写'}</dd></div><div><dt>训练项目（小项）</dt><dd>{athlete.currentEvent || athlete.project}</dd></div><div><dt>训练安排</dt><dd>{data.scheduleLabel || '未设置'}</dd></div><div><dt>最近结果</dt><dd>{overviewStats.latest}</dd></div></dl>
+        <dl><div><dt>当前周期</dt><dd>{props.section === 'strength-overview' ? overviewPeriodRange.label : `${data.startDate} — ${data.endDate}`}</dd></div><div><dt>性别</dt><dd>{athlete.gender || '未填写'}</dd></div><div><dt>位置/号位</dt><dd>{athlete.athletePosition || '未填写'}</dd></div><div><dt>训练项目（小项）</dt><dd>{athlete.currentEvent || athlete.project}</dd></div><div><dt>训练安排</dt><dd>{props.section === 'strength-overview' ? ({ day: '日', week: '周', month: '月' }[overviewPeriod]) : data.scheduleLabel || '未设置'}</dd></div><div><dt>最近结果</dt><dd>{overviewStats.latest}</dd></div></dl>
       </section>
 
       {['strength-plan', 'strength-records'].includes(props.section) && <StrengthPlanCategoryTabs value={activeCategory} onChange={setActiveCategory} />}

@@ -15,6 +15,13 @@ export type User = {
   athleteId: number | null;
 };
 
+export type OverviewLayoutState = {
+  version: number;
+  order: string[];
+  hidden: string[];
+  pinned: string[];
+};
+
 export type ProjectTeam = {
   id: number;
   project: Project;
@@ -56,6 +63,29 @@ export type Athlete = {
   heightCm: number | null;
   weightKg: number | null;
   bodyFatPct: number | null;
+  skeletalMuscleKg: number | null;
+  muscleMassKg: number | null;
+  upperLimbMuscleKg: number | null;
+  lowerLimbMuscleKg: number | null;
+  trunkMuscleKg: number | null;
+  subcutaneousFatMm: number | null;
+  tricepsSkinfoldMm: number | null;
+  abdominalSkinfoldMm: number | null;
+  thighSkinfoldMm: number | null;
+  calfSkinfoldMm: number | null;
+  visceralFatLevel: number | null;
+  basalMetabolismKcal: number | null;
+  totalBodyWaterKg: number | null;
+  ecwTbwRatio: number | null;
+  phaseAngleDeg: number | null;
+  visceralFatAreaCm2: number | null;
+  leftArmLeanKg: number | null;
+  rightArmLeanKg: number | null;
+  trunkLeanKg: number | null;
+  leftLegLeanKg: number | null;
+  rightLegLeanKg: number | null;
+  bodyMeasurementDate: string | null;
+  bodyMeasurementNote: string;
   identityNumber: string;
   ethnicity: string;
   phone: string;
@@ -437,6 +467,35 @@ export type OverviewMeasurement = {
 
 export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';
 
+export type BodyCompositionRecord = {
+  measurementDate: string;
+  heightCm: number | null;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  skeletalMuscleKg: number | null;
+  muscleMassKg: number | null;
+  upperLimbMuscleKg: number | null;
+  lowerLimbMuscleKg: number | null;
+  trunkMuscleKg: number | null;
+  subcutaneousFatMm: number | null;
+  tricepsSkinfoldMm: number | null;
+  abdominalSkinfoldMm: number | null;
+  thighSkinfoldMm: number | null;
+  calfSkinfoldMm: number | null;
+  visceralFatLevel: number | null;
+  basalMetabolismKcal: number | null;
+  totalBodyWaterKg: number | null;
+  ecwTbwRatio: number | null;
+  phaseAngleDeg: number | null;
+  visceralFatAreaCm2: number | null;
+  leftArmLeanKg: number | null;
+  rightArmLeanKg: number | null;
+  trunkLeanKg: number | null;
+  leftLegLeanKg: number | null;
+  rightLegLeanKg: number | null;
+  note: string;
+};
+
 export type OverviewAthleteProfile = {
   athleteId: number;
   athleteName: string;
@@ -458,6 +517,29 @@ export type OverviewAthleteProfile = {
   weightKg: number | null;
   previousWeightKg: number | null;
   bodyFatPct: number | null;
+  skeletalMuscleKg: number | null;
+  muscleMassKg: number | null;
+  upperLimbMuscleKg: number | null;
+  lowerLimbMuscleKg: number | null;
+  trunkMuscleKg: number | null;
+  subcutaneousFatMm: number | null;
+  tricepsSkinfoldMm: number | null;
+  abdominalSkinfoldMm: number | null;
+  thighSkinfoldMm: number | null;
+  calfSkinfoldMm: number | null;
+  visceralFatLevel: number | null;
+  basalMetabolismKcal: number | null;
+  totalBodyWaterKg: number | null;
+  ecwTbwRatio: number | null;
+  phaseAngleDeg: number | null;
+  visceralFatAreaCm2: number | null;
+  leftArmLeanKg: number | null;
+  rightArmLeanKg: number | null;
+  trunkLeanKg: number | null;
+  leftLegLeanKg: number | null;
+  rightLegLeanKg: number | null;
+  bodyMeasurementNote: string;
+  bodyCompositionHistory: BodyCompositionRecord[];
   competitiveAssessmentDate: string | null;
   competitiveScore: number | null;
   previousCompetitiveScore: number | null;

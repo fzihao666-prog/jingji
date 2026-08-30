@@ -61,6 +61,17 @@ db.exec(`
     FOREIGN KEY (athlete_id) REFERENCES athletes(id)
   );
 
+  CREATE TABLE IF NOT EXISTS user_dashboard_preferences (
+    user_id INTEGER NOT NULL,
+    dashboard TEXT NOT NULL,
+    project TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    layout_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, dashboard, project, scope),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS registration_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
@@ -826,6 +837,28 @@ db.exec(`
     height_cm REAL,
     weight_kg REAL,
     body_fat_pct REAL,
+    skeletal_muscle_kg REAL,
+    muscle_mass_kg REAL,
+    upper_limb_muscle_kg REAL,
+    lower_limb_muscle_kg REAL,
+    trunk_muscle_kg REAL,
+    subcutaneous_fat_mm REAL,
+    triceps_skinfold_mm REAL,
+    abdominal_skinfold_mm REAL,
+    thigh_skinfold_mm REAL,
+    calf_skinfold_mm REAL,
+    visceral_fat_level REAL,
+    basal_metabolism_kcal REAL,
+    total_body_water_kg REAL,
+    ecw_tbw_ratio REAL,
+    phase_angle_deg REAL,
+    visceral_fat_area_cm2 REAL,
+    left_arm_lean_kg REAL,
+    right_arm_lean_kg REAL,
+    trunk_lean_kg REAL,
+    left_leg_lean_kg REAL,
+    right_leg_lean_kg REAL,
+    note TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manual',
     quality TEXT NOT NULL DEFAULT 'valid' CHECK(quality IN ('valid', 'partial', 'insufficient', 'outlier', 'estimated')),
     is_demo INTEGER NOT NULL DEFAULT 0,
@@ -865,6 +898,36 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
 `);
+
+const bodyMeasurementColumns = [
+  ['skeletal_muscle_kg', 'REAL'],
+  ['muscle_mass_kg', 'REAL'],
+  ['upper_limb_muscle_kg', 'REAL'],
+  ['lower_limb_muscle_kg', 'REAL'],
+  ['trunk_muscle_kg', 'REAL'],
+  ['subcutaneous_fat_mm', 'REAL'],
+  ['triceps_skinfold_mm', 'REAL'],
+  ['abdominal_skinfold_mm', 'REAL'],
+  ['thigh_skinfold_mm', 'REAL'],
+  ['calf_skinfold_mm', 'REAL'],
+  ['visceral_fat_level', 'REAL'],
+  ['basal_metabolism_kcal', 'REAL'],
+  ['total_body_water_kg', 'REAL'],
+  ['ecw_tbw_ratio', 'REAL'],
+  ['phase_angle_deg', 'REAL'],
+  ['visceral_fat_area_cm2', 'REAL'],
+  ['left_arm_lean_kg', 'REAL'],
+  ['right_arm_lean_kg', 'REAL'],
+  ['trunk_lean_kg', 'REAL'],
+  ['left_leg_lean_kg', 'REAL'],
+  ['right_leg_lean_kg', 'REAL'],
+  ['note', "TEXT NOT NULL DEFAULT ''"]
+] as const;
+for (const [column, definition] of bodyMeasurementColumns) {
+  if (!hasColumn('athlete_body_measurements', column)) {
+    db.exec(`ALTER TABLE athlete_body_measurements ADD COLUMN ${column} ${definition}`);
+  }
+}
 
 if (!hasColumn('strength_import_batches', 'model_used')) {
   db.exec("ALTER TABLE strength_import_batches ADD COLUMN model_used TEXT NOT NULL DEFAULT ''");
@@ -1693,6 +1756,139 @@ function seedTrainingPlanExample() {
 }
 
 runInitializationOnce('training_plan_seed_v1', seedTrainingPlanExample);
+
+function seedStrengthDailyVolumeExample() {
+  const seedTag = '21周每日训练量模拟数据';
+  const existing = db.prepare(`
+    SELECT COUNT(*) AS count,
+      SUM(CASE WHEN training_environment = '水上' THEN 1 ELSE 0 END) AS waterCount
+    FROM strength_result_sets
+    WHERE note = ?
+  `).get(seedTag) as { count: number; waterCount: number | null };
+  if (existing.count >= 300 && Number(existing.waterCount || 0) >= 90) return;
+
+  const athlete = db.prepare(`
+    SELECT id, name, team, project
+    FROM athletes
+    WHERE name = '林舟' OR active = 1
+    ORDER BY CASE WHEN name = '林舟' THEN 0 ELSE 1 END, id
+    LIMIT 1
+  `)
+    .get() as { id: number; name: string; team: string; project: string } | undefined;
+  const creator = db.prepare(`
+    SELECT id FROM users
+    WHERE role IN ('DMD', 'SCC', 'PRJ', 'TD')
+    ORDER BY CASE role WHEN 'DMD' THEN 0 ELSE 1 END, id
+    LIMIT 1
+  `).get() as { id: number } | undefined;
+  if (!athlete) return;
+
+  db.prepare(`
+    DELETE FROM strength_result_sets
+    WHERE note = ?
+  `).run(seedTag);
+  db.prepare(`
+    DELETE FROM training_sessions
+    WHERE athlete_id = ? AND source = 'strength_daily_seed'
+  `).run(athlete.id);
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const end = Date.UTC(2026, 7, 30);
+  const start = end - 20 * 7 * msPerDay;
+  const dateAt = (index: number) => new Date(start + index * msPerDay).toISOString().slice(0, 10);
+  const round = (value: number, digits = 1) => Number(value.toFixed(digits));
+  const wave = (index: number, min: number, max: number, phase = 0) => {
+    const normalized = (Math.sin((index + phase) * .43) + Math.sin((index + phase) * .11) * .45 + 1.45) / 2.9;
+    return min + normalized * (max - min);
+  };
+  const templates = [
+    { label: '水上专项耐力', exercise: '水上专项划行', category: '专项力量', body: '全身', environment: '水上', zone: 'U1', distance: [10, 22], duration: [62, 110], weight: [0, 0], reps: [1, 1], intensity: [58, 70], rpe: [5.0, 6.5] },
+    { label: '测功仪功能训练', exercise: '划船测功仪功能', category: '代谢训练', body: '全身', environment: '测功仪', zone: 'U2', distance: [7, 15], duration: [45, 78], weight: [0, 0], reps: [1, 1], intensity: [62, 76], rpe: [5.4, 6.8] },
+    { label: '拉伸再生恢复', exercise: '拉伸再生组合', category: '功能性体能', body: '全身', environment: '陆上', zone: 'U3', distance: [0, 2], duration: [24, 44], weight: [0, 0], reps: [8, 14], intensity: [38, 55], rpe: [3.2, 4.8] },
+    { label: '力量耐力循环', exercise: '循环力量耐力', category: '基础力量', body: '全身', environment: '场馆', zone: 'AT', distance: [0, 0], duration: [42, 68], weight: [28, 54], reps: [14, 22], intensity: [60, 74], rpe: [6.2, 7.4] },
+    { label: '最大力量深蹲', exercise: '深蹲', category: '基础力量', body: '下肢', environment: '场馆', zone: 'AN', distance: [0, 0], duration: [46, 72], weight: [82, 126], reps: [3, 6], intensity: [82, 94], rpe: [7.4, 8.8] },
+    { label: '速度力量爆发', exercise: '高拉速度力量', category: '专项力量', body: '上肢', environment: '场馆', zone: 'ATP', distance: [0, 0], duration: [34, 56], weight: [32, 62], reps: [4, 8], intensity: [74, 88], rpe: [6.8, 8.1] },
+    { label: '跑步有氧训练', exercise: '跑步间歇', category: '代谢训练', body: '全身', environment: '陆上', zone: 'U2', distance: [4, 10], duration: [28, 58], weight: [0, 0], reps: [1, 1], intensity: [54, 72], rpe: [4.8, 6.5] },
+    { label: '其他综合训练', exercise: '综合协调训练', category: '核心力量', body: '全身', environment: '陆上', zone: 'U3', distance: [0, 3], duration: [25, 50], weight: [0, 18], reps: [8, 16], intensity: [46, 64], rpe: [4.2, 6.0] }
+  ] as const;
+  const trainingDays: number[] = [];
+  for (let cycle = 0; trainingDays.length < 300; cycle += 1) {
+    for (let day = 0; day <= 140 && trainingDays.length < 300; day += 1) {
+      const dayOfWeek = day % 7;
+      if (![1, 3].includes(dayOfWeek)) trainingDays.push(day);
+    }
+  }
+  const lessonPattern = [0, 0, 0, 1, 1, 2, 3, 4, 5, 6, 7, 0];
+
+  const insertSession = db.prepare(`
+    INSERT INTO training_sessions
+      (athlete_id, session_date, session_order, start_time, training_type, structure_type,
+       intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl, source, quality, is_demo, created_by)
+    VALUES (?, ?, ?, ?, '力量训练', '体能训练', ?, ?, ?, ?, ?, ?, ?, 'strength_daily_seed', 'estimated', 1, ?)
+  `);
+  const insertSet = db.prepare(`
+    INSERT INTO strength_result_sets
+      (training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg,
+       training_category, body_position, training_environment, duration_min, distance_km, intensity_percent,
+       intensity_zone, rpe, completed, note, source, source_row, original_text, ai_confidence, created_by)
+    VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'strength_daily_seed', ?, ?, 0.92, ?)
+  `);
+
+  for (let index = 0; index < 300; index += 1) {
+    const day = trainingDays[index];
+    const date = dateAt(day);
+    const template = templates[lessonPattern[index % lessonPattern.length]];
+    const orderRow = db.prepare(`
+      SELECT COALESCE(MAX(session_order), 0) AS maxOrder
+      FROM training_sessions
+      WHERE athlete_id = ? AND session_date = ?
+    `).get(athlete.id, date) as { maxOrder: number };
+    const distance = round(wave(index, template.distance[0], template.distance[1], 3), 1);
+    const duration = round(wave(index, template.duration[0], template.duration[1], 8), 0);
+    const rpe = round(wave(index, template.rpe[0], template.rpe[1], 13), 1);
+    const actualReps = round(wave(index, template.reps[0], template.reps[1], 5), 0);
+    const actualWeight = round(wave(index, template.weight[0], template.weight[1], 11), 1);
+    const intensity = round(wave(index, template.intensity[0], template.intensity[1], 2), 0);
+    const volume = round(actualReps * actualWeight, 1);
+    const sessionLabel = `${template.label} ${String(index + 1).padStart(3, '0')}`;
+    const inserted = insertSession.run(
+      athlete.id,
+      date,
+      Number(orderRow.maxOrder || 0) + 1,
+      index % 3 === 0 ? '08:30' : index % 3 === 1 ? '15:30' : '10:00',
+      template.zone,
+      sessionLabel,
+      duration,
+      distance,
+      rpe,
+      round(rpe * duration, 1),
+      volume,
+      creator?.id ?? null
+    );
+    insertSet.run(
+      Number(inserted.lastInsertRowid),
+      template.exercise,
+      actualReps,
+      actualReps,
+      actualWeight,
+      actualWeight || null,
+      template.category,
+      template.body,
+      template.environment,
+      duration,
+      distance,
+      intensity,
+      template.zone,
+      rpe,
+      seedTag,
+      String(index + 1),
+      `${seedTag}：${sessionLabel}`,
+      creator?.id ?? null
+    );
+  }
+}
+
+runInitializationOnce('strength_daily_volume_seed_v4', seedStrengthDailyVolumeExample);
 
 // 同步早期演示数据中的旧模块命名；只处理完全匹配的内置示例标题。
 db.prepare(`

@@ -184,6 +184,13 @@ type StrengthImportRow = {
   warnings: string[];
 };
 
+type OverviewLayoutState = {
+  version: number;
+  order: string[];
+  hidden: string[];
+  pinned: string[];
+};
+
 declare global {
   namespace Express {
     interface Request {
@@ -302,6 +309,17 @@ function requireRole(...roles: Role[]) {
     }
     next();
   };
+}
+
+function isOverviewLayoutState(value: unknown): value is OverviewLayoutState {
+  if (!value || typeof value !== 'object') return false;
+  const layout = value as Record<string, unknown>;
+  return typeof layout.version === 'number'
+    && Number.isFinite(layout.version)
+    && Array.isArray(layout.order)
+    && Array.isArray(layout.hidden)
+    && Array.isArray(layout.pinned)
+    && [layout.order, layout.hidden, layout.pinned].every((items) => items.every((item) => typeof item === 'string'));
 }
 
 type AreaPermission = {
@@ -1621,6 +1639,52 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({ user });
 });
 
+app.get('/api/preferences/overview-layout', requireAuth, (req, res) => {
+  const project = cleanString(req.query.project);
+  const scope = cleanString(req.query.scope);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
+  if (!['self', 'team'].includes(scope)) return res.status(400).json({ message: '总览范围参数无效。' });
+
+  const row = db.prepare(`
+    SELECT layout_json AS layoutJson, updated_at AS updatedAt
+    FROM user_dashboard_preferences
+    WHERE user_id = ? AND dashboard = 'overview' AND project = ? AND scope = ?
+  `).get(req.authUser!.id, project, scope) as { layoutJson: string; updatedAt: string } | undefined;
+
+  if (!row) return res.json({ layout: null, updatedAt: null });
+  try {
+    const layout = JSON.parse(row.layoutJson) as unknown;
+    if (!isOverviewLayoutState(layout)) return res.json({ layout: null, updatedAt: row.updatedAt });
+    res.json({ layout, updatedAt: row.updatedAt });
+  } catch {
+    res.json({ layout: null, updatedAt: row.updatedAt });
+  }
+});
+
+app.put('/api/preferences/overview-layout', requireAuth, (req, res) => {
+  const project = cleanString(req.body?.project);
+  const scope = cleanString(req.body?.scope);
+  const layout = req.body?.layout as unknown;
+  if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
+  if (!['self', 'team'].includes(scope)) return res.status(400).json({ message: '总览范围参数无效。' });
+  if (!isOverviewLayoutState(layout)) return res.status(400).json({ message: '卡片布局数据无效。' });
+
+  db.prepare(`
+    INSERT INTO user_dashboard_preferences (user_id, dashboard, project, scope, layout_json, updated_at)
+    VALUES (?, 'overview', ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id, dashboard, project, scope) DO UPDATE SET
+      layout_json = excluded.layout_json,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(req.authUser!.id, project, scope, JSON.stringify(layout));
+
+  const row = db.prepare(`
+    SELECT updated_at AS updatedAt
+    FROM user_dashboard_preferences
+    WHERE user_id = ? AND dashboard = 'overview' AND project = ? AND scope = ?
+  `).get(req.authUser!.id, project, scope) as { updatedAt: string } | undefined;
+  res.json({ message: '训练总览布局已同步。', updatedAt: row?.updatedAt || new Date().toISOString() });
+});
+
 app.put('/api/profile/name', requireAuth, (req, res) => {
   const { name, error } = validatePersonName(req.body?.name);
   if (error) return res.status(400).json({ message: error });
@@ -1977,6 +2041,29 @@ app.get('/api/athletes', requireAuth, (req, res) => {
       (SELECT bm.height_cm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS heightCm,
       (SELECT bm.weight_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS weightKg,
       (SELECT bm.body_fat_pct FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS bodyFatPct,
+      (SELECT bm.skeletal_muscle_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS skeletalMuscleKg,
+      (SELECT bm.muscle_mass_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS muscleMassKg,
+      (SELECT bm.upper_limb_muscle_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS upperLimbMuscleKg,
+      (SELECT bm.lower_limb_muscle_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS lowerLimbMuscleKg,
+      (SELECT bm.trunk_muscle_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS trunkMuscleKg,
+      (SELECT bm.subcutaneous_fat_mm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS subcutaneousFatMm,
+      (SELECT bm.triceps_skinfold_mm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS tricepsSkinfoldMm,
+      (SELECT bm.abdominal_skinfold_mm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS abdominalSkinfoldMm,
+      (SELECT bm.thigh_skinfold_mm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS thighSkinfoldMm,
+      (SELECT bm.calf_skinfold_mm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS calfSkinfoldMm,
+      (SELECT bm.visceral_fat_level FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS visceralFatLevel,
+      (SELECT bm.basal_metabolism_kcal FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS basalMetabolismKcal,
+      (SELECT bm.total_body_water_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS totalBodyWaterKg,
+      (SELECT bm.ecw_tbw_ratio FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS ecwTbwRatio,
+      (SELECT bm.phase_angle_deg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS phaseAngleDeg,
+      (SELECT bm.visceral_fat_area_cm2 FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS visceralFatAreaCm2,
+      (SELECT bm.left_arm_lean_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS leftArmLeanKg,
+      (SELECT bm.right_arm_lean_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS rightArmLeanKg,
+      (SELECT bm.trunk_lean_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS trunkLeanKg,
+      (SELECT bm.left_leg_lean_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS leftLegLeanKg,
+      (SELECT bm.right_leg_lean_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS rightLegLeanKg,
+      (SELECT bm.measurement_date FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS bodyMeasurementDate,
+      COALESCE((SELECT bm.note FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1), '') AS bodyMeasurementNote,
       GROUP_CONCAT(u.display_name, '、') AS coaches
     FROM athletes a
     LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
@@ -1999,6 +2086,29 @@ app.get('/api/athletes', requireAuth, (req, res) => {
     heightCm: number | null;
     weightKg: number | null;
     bodyFatPct: number | null;
+    skeletalMuscleKg: number | null;
+    muscleMassKg: number | null;
+    upperLimbMuscleKg: number | null;
+    lowerLimbMuscleKg: number | null;
+    trunkMuscleKg: number | null;
+    subcutaneousFatMm: number | null;
+    tricepsSkinfoldMm: number | null;
+    abdominalSkinfoldMm: number | null;
+    thighSkinfoldMm: number | null;
+    calfSkinfoldMm: number | null;
+    visceralFatLevel: number | null;
+    basalMetabolismKcal: number | null;
+    totalBodyWaterKg: number | null;
+    ecwTbwRatio: number | null;
+    phaseAngleDeg: number | null;
+    visceralFatAreaCm2: number | null;
+    leftArmLeanKg: number | null;
+    rightArmLeanKg: number | null;
+    trunkLeanKg: number | null;
+    leftLegLeanKg: number | null;
+    rightLegLeanKg: number | null;
+    bodyMeasurementDate: string | null;
+    bodyMeasurementNote: string;
     identityNumber: string;
     ethnicity: string;
     phone: string;
@@ -2062,6 +2172,127 @@ app.put('/api/athletes/:id/position', requireAuth, (req, res) => {
   db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
     .run(user.id, 'UPDATE_ATHLETE_POSITION', 'athlete', athleteId, JSON.stringify({ athletePosition }));
   res.json({ message: '位置/号位已保存。', athletePosition });
+});
+
+const bodyCompositionFields = [
+  ['heightCm', 'height_cm', 80, 260],
+  ['weightKg', 'weight_kg', 20, 220],
+  ['bodyFatPct', 'body_fat_pct', 3, 60],
+  ['skeletalMuscleKg', 'skeletal_muscle_kg', 5, 90],
+  ['muscleMassKg', 'muscle_mass_kg', 10, 120],
+  ['upperLimbMuscleKg', 'upper_limb_muscle_kg', 1, 30],
+  ['lowerLimbMuscleKg', 'lower_limb_muscle_kg', 3, 60],
+  ['trunkMuscleKg', 'trunk_muscle_kg', 3, 60],
+  ['subcutaneousFatMm', 'subcutaneous_fat_mm', 1, 80],
+  ['tricepsSkinfoldMm', 'triceps_skinfold_mm', 1, 80],
+  ['abdominalSkinfoldMm', 'abdominal_skinfold_mm', 1, 100],
+  ['thighSkinfoldMm', 'thigh_skinfold_mm', 1, 100],
+  ['calfSkinfoldMm', 'calf_skinfold_mm', 1, 80],
+  ['visceralFatLevel', 'visceral_fat_level', 1, 30],
+  ['basalMetabolismKcal', 'basal_metabolism_kcal', 600, 4000],
+  ['totalBodyWaterKg', 'total_body_water_kg', 10, 90],
+  ['ecwTbwRatio', 'ecw_tbw_ratio', 0.3, 0.5],
+  ['phaseAngleDeg', 'phase_angle_deg', 2, 15],
+  ['visceralFatAreaCm2', 'visceral_fat_area_cm2', 5, 300],
+  ['leftArmLeanKg', 'left_arm_lean_kg', 0.5, 20],
+  ['rightArmLeanKg', 'right_arm_lean_kg', 0.5, 20],
+  ['trunkLeanKg', 'trunk_lean_kg', 5, 60],
+  ['leftLegLeanKg', 'left_leg_lean_kg', 2, 35],
+  ['rightLegLeanKg', 'right_leg_lean_kg', 2, 35]
+] as const;
+
+app.get('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const athleteId = Number(req.params.id);
+  if (!athleteId || !hasAthleteAccess(user, athleteId)) {
+    return res.status(403).json({ message: '无权查看该运动员的身体成分数据。' });
+  }
+  const athlete = db.prepare('SELECT id FROM athletes WHERE id = ? AND active = 1').get(athleteId);
+  if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+  const history = db.prepare(`
+    SELECT measurement_date AS measurementDate,
+      height_cm AS heightCm, weight_kg AS weightKg, body_fat_pct AS bodyFatPct,
+      skeletal_muscle_kg AS skeletalMuscleKg, muscle_mass_kg AS muscleMassKg,
+      upper_limb_muscle_kg AS upperLimbMuscleKg, lower_limb_muscle_kg AS lowerLimbMuscleKg,
+      trunk_muscle_kg AS trunkMuscleKg, subcutaneous_fat_mm AS subcutaneousFatMm,
+      triceps_skinfold_mm AS tricepsSkinfoldMm, abdominal_skinfold_mm AS abdominalSkinfoldMm,
+      thigh_skinfold_mm AS thighSkinfoldMm, calf_skinfold_mm AS calfSkinfoldMm,
+      visceral_fat_level AS visceralFatLevel, basal_metabolism_kcal AS basalMetabolismKcal,
+      total_body_water_kg AS totalBodyWaterKg, ecw_tbw_ratio AS ecwTbwRatio,
+      phase_angle_deg AS phaseAngleDeg, visceral_fat_area_cm2 AS visceralFatAreaCm2,
+      left_arm_lean_kg AS leftArmLeanKg, right_arm_lean_kg AS rightArmLeanKg,
+      trunk_lean_kg AS trunkLeanKg, left_leg_lean_kg AS leftLegLeanKg,
+      right_leg_lean_kg AS rightLegLeanKg, COALESCE(note, '') AS note
+    FROM athlete_body_measurements
+    WHERE athlete_id = ?
+    ORDER BY measurement_date DESC, id DESC
+    LIMIT 24
+  `).all(athleteId);
+  res.json({ history });
+});
+
+app.put('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const athleteId = Number(req.params.id);
+  if (!athleteId || !hasAthleteAccess(user, athleteId)) {
+    return res.status(403).json({ message: '无权维护该运动员的身体成分数据。' });
+  }
+  if (user.role === 'ATL' && user.athleteId !== athleteId) {
+    return res.status(403).json({ message: '运动员只能填写本人的身体成分数据。' });
+  }
+  const athlete = db.prepare('SELECT id FROM athletes WHERE id = ? AND active = 1').get(athleteId);
+  if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+  const measurementDate = parseDate(req.body?.measurementDate);
+  if (!measurementDate || !isValidIsoDate(measurementDate)) return res.status(400).json({ message: '测量日期格式无效。' });
+
+  const values: Record<string, number | null> = {};
+  for (const [inputKey, , min, max] of bodyCompositionFields) {
+    const value = numberOrNull(req.body?.[inputKey]);
+    if (value !== null && (value < min || value > max)) {
+      return res.status(400).json({ message: `${inputKey}超出合理范围。` });
+    }
+    values[inputKey] = value;
+  }
+  if (Object.values(values).every((value) => value === null)) {
+    return res.status(400).json({ message: '请至少填写一项身体成分指标。' });
+  }
+  const note = cleanString(req.body?.note).slice(0, 300);
+  db.prepare(`
+    INSERT INTO athlete_body_measurements (
+      athlete_id, measurement_date, height_cm, weight_kg, body_fat_pct,
+      skeletal_muscle_kg, muscle_mass_kg, upper_limb_muscle_kg, lower_limb_muscle_kg,
+      trunk_muscle_kg, subcutaneous_fat_mm, triceps_skinfold_mm, abdominal_skinfold_mm,
+      thigh_skinfold_mm, calf_skinfold_mm, visceral_fat_level, basal_metabolism_kcal,
+      total_body_water_kg, ecw_tbw_ratio, phase_angle_deg, visceral_fat_area_cm2,
+      left_arm_lean_kg, right_arm_lean_kg, trunk_lean_kg, left_leg_lean_kg, right_leg_lean_kg,
+      note, source, quality
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', 'valid')
+    ON CONFLICT(athlete_id, measurement_date) DO UPDATE SET
+      height_cm = excluded.height_cm, weight_kg = excluded.weight_kg, body_fat_pct = excluded.body_fat_pct,
+      skeletal_muscle_kg = excluded.skeletal_muscle_kg, muscle_mass_kg = excluded.muscle_mass_kg,
+      upper_limb_muscle_kg = excluded.upper_limb_muscle_kg, lower_limb_muscle_kg = excluded.lower_limb_muscle_kg,
+      trunk_muscle_kg = excluded.trunk_muscle_kg, subcutaneous_fat_mm = excluded.subcutaneous_fat_mm,
+      triceps_skinfold_mm = excluded.triceps_skinfold_mm, abdominal_skinfold_mm = excluded.abdominal_skinfold_mm,
+      thigh_skinfold_mm = excluded.thigh_skinfold_mm, calf_skinfold_mm = excluded.calf_skinfold_mm,
+      visceral_fat_level = excluded.visceral_fat_level, basal_metabolism_kcal = excluded.basal_metabolism_kcal,
+      total_body_water_kg = excluded.total_body_water_kg, ecw_tbw_ratio = excluded.ecw_tbw_ratio,
+      phase_angle_deg = excluded.phase_angle_deg, visceral_fat_area_cm2 = excluded.visceral_fat_area_cm2,
+      left_arm_lean_kg = excluded.left_arm_lean_kg, right_arm_lean_kg = excluded.right_arm_lean_kg,
+      trunk_lean_kg = excluded.trunk_lean_kg, left_leg_lean_kg = excluded.left_leg_lean_kg,
+      right_leg_lean_kg = excluded.right_leg_lean_kg,
+      note = excluded.note, source = 'manual', quality = 'valid'
+  `).run(
+    athleteId, measurementDate, values.heightCm, values.weightKg, values.bodyFatPct,
+    values.skeletalMuscleKg, values.muscleMassKg, values.upperLimbMuscleKg, values.lowerLimbMuscleKg,
+    values.trunkMuscleKg, values.subcutaneousFatMm, values.tricepsSkinfoldMm, values.abdominalSkinfoldMm,
+    values.thighSkinfoldMm, values.calfSkinfoldMm, values.visceralFatLevel, values.basalMetabolismKcal,
+    values.totalBodyWaterKg, values.ecwTbwRatio, values.phaseAngleDeg, values.visceralFatAreaCm2,
+    values.leftArmLeanKg, values.rightArmLeanKg, values.trunkLeanKg, values.leftLegLeanKg, values.rightLegLeanKg,
+    note
+  );
+  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
+    .run(user.id, 'UPSERT_BODY_COMPOSITION', 'athlete', athleteId, JSON.stringify({ measurementDate }));
+  res.json({ message: '身体成分数据已保存。' });
 });
 
 app.post('/api/athletes/:id/photo', requireAuth, photoUpload.single('photo'), (req, res) => {

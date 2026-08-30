@@ -3,8 +3,10 @@ import type {
   AreaPermission,
   Athlete,
   AuditLog,
+  BodyCompositionRecord,
   InjuryRecord,
   InjuryStatus,
+  OverviewLayoutState,
   OverviewPayload,
   Project,
   ProjectTeam,
@@ -133,6 +135,15 @@ export const api = {
       body: JSON.stringify({ athletePosition })
     });
   },
+  async saveBodyComposition(id: number, input: Record<string, unknown>) {
+    return request<{ message: string }>(`/api/athletes/${id}/body-composition`, {
+      method: 'PUT',
+      body: JSON.stringify(input)
+    });
+  },
+  async getBodyCompositionHistory(id: number) {
+    return request<{ history: BodyCompositionRecord[] }>(`/api/athletes/${id}/body-composition`);
+  },
   async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
     return request<{ message: string }>('/api/admin/athletes/bulk/profile', {
       method: 'PUT',
@@ -167,6 +178,16 @@ export const api = {
     if (period) params.set('period', period);
     if (athleteId) params.set('athleteId', String(athleteId));
     return request<{ overview: OverviewPayload }>(`/api/overview?${params}`);
+  },
+  async getOverviewLayout(project: Project, scope: 'self' | 'team') {
+    const params = new URLSearchParams({ project, scope });
+    return request<{ layout: OverviewLayoutState | null; updatedAt: string | null }>(`/api/preferences/overview-layout?${params}`);
+  },
+  async saveOverviewLayout(project: Project, scope: 'self' | 'team', layout: OverviewLayoutState) {
+    return request<{ message: string; updatedAt: string }>('/api/preferences/overview-layout', {
+      method: 'PUT',
+      body: JSON.stringify({ project, scope, layout })
+    });
   },
   async analysisSummary(from: string, to: string, athleteId: number, project: Project) {
     const params = new URLSearchParams({ from, to, athleteId: String(athleteId), project });

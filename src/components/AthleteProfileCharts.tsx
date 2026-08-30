@@ -5,7 +5,7 @@ import {
 import { geoMercator, geoPath } from 'd3-geo';
 import ChinaData from 'china-map-geojson/lib/china.js';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { CompetitiveStateLevel, OverviewAthleteProfile } from '../types';
+import type { BodyCompositionRecord, CompetitiveStateLevel, OverviewAthleteProfile, TrainingRecord } from '../types';
 import { formatNumber, percentage } from '../utils';
 
 function average(values: Array<number | null | undefined>) {
@@ -45,6 +45,301 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
       </div>
     </div>
   );
+}
+
+type BodyPartKey = 'leftArm' | 'rightArm' | 'trunk' | 'abdomen' | 'leftLeg' | 'rightLeg';
+export type BodyCompositionProfile = {
+  athleteId: number;
+  athleteName: string;
+  project: string;
+  team: string;
+  gender: string;
+  age: number | null;
+  bodyMeasurementDate: string | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  skeletalMuscleKg: number | null;
+  upperLimbMuscleKg: number | null;
+  lowerLimbMuscleKg: number | null;
+  trunkMuscleKg: number | null;
+  tricepsSkinfoldMm: number | null;
+  abdominalSkinfoldMm: number | null;
+  thighSkinfoldMm: number | null;
+  calfSkinfoldMm: number | null;
+  visceralFatLevel: number | null;
+  basalMetabolismKcal: number | null;
+  totalBodyWaterKg: number | null;
+  ecwTbwRatio: number | null;
+  phaseAngleDeg: number | null;
+  visceralFatAreaCm2: number | null;
+  leftArmLeanKg: number | null;
+  rightArmLeanKg: number | null;
+  trunkLeanKg: number | null;
+  leftLegLeanKg: number | null;
+  rightLegLeanKg: number | null;
+  bodyCompositionHistory: BodyCompositionRecord[];
+};
+type DataOrigin = '实测' | '推算' | '模拟';
+type ReportValue = { value: number; origin: DataOrigin };
+type SegmentReport = { key: BodyPartKey; label: string; leanKg: number; standardPct: number; origin: DataOrigin; trainingNote: string };
+type ProfessionalBodyReport = {
+  height: ReportValue;
+  weight: ReportValue;
+  bodyFatPct: ReportValue;
+  skeletalMuscle: ReportValue;
+  fatMass: ReportValue;
+  fatFreeMass: ReportValue;
+  bmi: ReportValue;
+  smi: ReportValue;
+  basalMetabolism: ReportValue;
+  totalBodyWater: ReportValue;
+  protein: ReportValue;
+  mineral: ReportValue;
+  phaseAngle: ReportValue;
+  ecwTbw: ReportValue;
+  visceralFat: ReportValue;
+  visceralFatArea: ReportValue;
+  skinfolds: Array<{ label: string; value: number; origin: DataOrigin }>;
+  segments: SegmentReport[];
+  simulatedCount: number;
+  trainingSummary: string;
+};
+
+const bodyPartMeta: Record<BodyPartKey, { label: string; note: string }> = {
+  leftArm: { label: '左上肢', note: '关注拉力链、肩胛稳定和双侧输出差异；节段值为去脂量，并不等同于纯肌肉量。' },
+  rightArm: { label: '右上肢', note: '结合专项动作惯用侧判断优势，持续扩大差异可能提示技术代偿或局部负荷偏高。' },
+  trunk: { label: '躯干', note: '躯干去脂量反映核心区域组织基础，需结合抗旋转、力量传导和躯干耐力测试解读。' },
+  abdomen: { label: '腹部脂肪', note: '腹部皮褶与内脏脂肪用于追踪控重和能量储备，单次结果不用于直接判断竞技能力。' },
+  leftLeg: { label: '左下肢', note: '下肢节段去脂量与蹬伸、起动和稳定相关；左右差异宜结合测力台和伤病史复核。' },
+  rightLeg: { label: '右下肢', note: '建议关注左右侧变化趋势，而不是只追求单侧绝对值；同一测量条件下复测更有意义。' }
+};
+
+export function BodyCompositionModelOverview({ profiles, records, individual }: { profiles: BodyCompositionProfile[]; records: TrainingRecord[]; individual: boolean }) {
+  const availableProfiles = profiles.filter((profile) => profile.heightCm !== null || profile.weightKg !== null || profile.bodyFatPct !== null || profile.skeletalMuscleKg !== null);
+  const [activeAthleteId, setActiveAthleteId] = useState(availableProfiles[0]?.athleteId ?? profiles[0]?.athleteId ?? 0);
+  const [activePart, setActivePart] = useState<BodyPartKey>('trunk');
+  const athleteKey = profiles.map((profile) => `${profile.athleteId}:${profile.bodyMeasurementDate || ''}`).join('|');
+
+  useEffect(() => {
+    const next = availableProfiles[0]?.athleteId ?? profiles[0]?.athleteId ?? 0;
+    setActiveAthleteId((current) => profiles.some((profile) => profile.athleteId === current) ? current : next);
+  }, [athleteKey]);
+
+  if (!profiles.length) return <ProfileEmpty detail="选择运动员并填写身体成分后，将生成可交互人体模型。" />;
+
+  const activeProfile = profiles.find((profile) => profile.athleteId === activeAthleteId) || availableProfiles[0] || profiles[0];
+  const history = [...(activeProfile.bodyCompositionHistory || [])].reverse();
+  const weeklyRecords = weeklyTrainingRecords(records.filter((record) => record.athleteId === activeProfile.athleteId), activeProfile.bodyCompositionHistory || []);
+  const report = buildProfessionalBodyReport(activeProfile);
+  const part = bodyPartMeta[activePart];
+  const activeSegment = report.segments.find((item) => item.key === activePart);
+  const lowerImbalance = sideDifference(report.segments, 'leftLeg', 'rightLeg');
+  const upperImbalance = sideDifference(report.segments, 'leftArm', 'rightArm');
+
+  return (
+    <div className="body-composition-model" aria-label="运动员专业身体成分报告">
+      <div className="body-composition-toolbar">
+        <label><span>评估对象</span><select value={activeProfile.athleteId} onChange={(event) => setActiveAthleteId(Number(event.target.value))} disabled={individual}>{profiles.map((profile) => <option key={profile.athleteId} value={profile.athleteId}>{profile.athleteName} · {profile.project}</option>)}</select></label>
+        <div className="body-report-identity"><strong>{activeProfile.athleteName}</strong><small>{activeProfile.gender || '性别未录入'} · {activeProfile.age === null ? '年龄未录入' : `${activeProfile.age}岁`} · {activeProfile.project} · {activeProfile.team}</small></div>
+        <div className="body-report-source"><span>{activeProfile.bodyMeasurementDate || '本期模拟'}</span><small><i className="is-measured" />实测/录入 <i className="is-derived" />推算 <i className="is-simulated" />模拟 {report.simulatedCount}项</small></div>
+      </div>
+      <div className="body-composition-main">
+        <div className="body-model-stage">
+          <header><span>节段去脂分析</span><small>移动至身体区域查看训练解读</small></header>
+          <HumanModel activePart={activePart} onPartChange={setActivePart} segments={report.segments} />
+          <div className="body-part-popover">
+            <span>{part.label}<em className={`origin-${activeSegment?.origin === '实测' ? 'measured' : activeSegment?.origin === '推算' ? 'derived' : 'simulated'}`}>{activeSegment?.origin || '推算'}</em></span>
+            <strong>{activePart === 'abdomen' ? `${formatNumber(report.skinfolds[1].value, 1)} mm` : `${formatNumber(activeSegment?.leanKg || 0, 1)} kg`}<small>{activePart === 'abdomen' ? `内脏脂肪 ${formatNumber(report.visceralFat.value, 1)}级` : ` 标准度 ${formatNumber(activeSegment?.standardPct || 0, 0)}%`}</small></strong>
+            <p>{part.note}</p>
+          </div>
+        </div>
+        <div className="body-composition-panel professional-body-report">
+          <div className="body-composition-kpis">
+            <BodyKpi label="体重" metric={report.weight} unit="kg" />
+            <BodyKpi label="骨骼肌量 SMM" metric={report.skeletalMuscle} unit="kg" />
+            <BodyKpi label="体脂率 PBF" metric={report.bodyFatPct} unit="%" />
+            <BodyKpi label="去脂体重 FFM" metric={report.fatFreeMass} unit="kg" />
+            <BodyKpi label="骨骼肌指数 SMI" metric={report.smi} unit="kg/m²" />
+            <BodyKpi label="基础代谢 BMR" metric={report.basalMetabolism} unit="kcal" digits={0} />
+          </div>
+          <section className="body-analysis-box body-composition-analysis">
+            <header><strong>身体成分分析</strong><small>四分模型 · kg</small></header>
+            <CompositionRow label="总体水 TBW" metric={report.totalBodyWater} total={report.weight.value} color="#2d8ca4" />
+            <CompositionRow label="蛋白质" metric={report.protein} total={report.weight.value} color="#30a58e" />
+            <CompositionRow label="无机盐" metric={report.mineral} total={report.weight.value} color="#d3a43a" />
+            <CompositionRow label="脂肪量 BFM" metric={report.fatMass} total={report.weight.value} color="#e37b62" />
+            <div className="composition-total"><span>体重 = 水分 + 蛋白质 + 无机盐 + 脂肪</span><strong>{formatNumber(report.weight.value, 1)} kg</strong></div>
+          </section>
+          <section className="body-analysis-box body-water-analysis">
+            <header><strong>水合与细胞状态</strong><small>BIA参考</small></header>
+            <GaugeMetric label="ECW/TBW" metric={report.ecwTbw} min={0.36} max={0.40} reference="常用观察区间 0.360–0.390" digits={3} />
+            <GaugeMetric label="全身相位角" metric={report.phaseAngle} min={4.5} max={9} reference="结合个人基线追踪恢复状态" unit="°" />
+            <GaugeMetric label="内脏脂肪面积" metric={report.visceralFatArea} min={30} max={130} reference="训练监测参考，非影像学诊断" unit="cm²" digits={0} />
+          </section>
+          <section className="body-analysis-box segmental-analysis">
+            <header><strong>节段去脂与左右平衡</strong><small>100% = 对体重支撑充足的参考线</small></header>
+            <div className="segmental-table-head"><span>部位</span><span>去脂量</span><span>标准度</span><span>训练判读</span></div>
+            {report.segments.filter((item) => item.key !== 'abdomen').map((segment) => <div className="segmental-table-row" key={segment.key} onMouseEnter={() => setActivePart(segment.key)}><span>{segment.label}<i className={`origin-${segment.origin === '实测' ? 'measured' : segment.origin === '推算' ? 'derived' : 'simulated'}`} /></span><strong>{formatNumber(segment.leanKg, 1)} kg</strong><span><b><i style={{ width: `${Math.min(100, segment.standardPct / 120 * 100)}%` }} /></b>{formatNumber(segment.standardPct, 0)}%</span><em>{segment.trainingNote}</em></div>)}
+            <footer><span>上肢差 {formatNumber(upperImbalance, 1)}%</span><span>下肢差 {formatNumber(lowerImbalance, 1)}%</span><strong>{Math.max(upperImbalance, lowerImbalance) <= 3 ? '双侧平衡良好' : '建议复核单侧力量'}</strong></footer>
+          </section>
+          <section className="body-analysis-box skinfold-analysis">
+            <header><strong>皮褶与脂肪分布</strong><small>同测量者、同点位纵向对比</small></header>
+            <div className="skinfold-site-list">{report.skinfolds.map((item) => <div key={item.label}><span>{item.label}<i className={`origin-${item.origin === '实测' ? 'measured' : 'simulated'}`} /></span><strong>{formatNumber(item.value, 1)}<small>mm</small></strong><b><i style={{ height: `${Math.min(100, item.value / 25 * 100)}%` }} /></b></div>)}</div>
+            <div className="fat-distribution-summary"><span>四点皮褶和</span><strong>{formatNumber(report.skinfolds.reduce((sum, item) => sum + item.value, 0), 1)} mm</strong><span>内脏脂肪</span><strong>{formatNumber(report.visceralFat.value, 1)} 级</strong></div>
+          </section>
+          <section className="body-analysis-box body-training-interpretation">
+            <header><strong>体能训练判读</strong><small>依据本期快照</small></header>
+            <p>{report.trainingSummary}</p>
+            <ul><li>优先追踪左右侧差异、骨骼肌量和四点皮褶和的趋势。</li><li>复测尽量保持晨起、空腹、排空和训练后间隔一致。</li><li>模拟项仅用于界面预览，录入实测值后自动替换。</li></ul>
+          </section>
+        </div>
+      </div>
+      <div className="body-report-trend">
+        <section className="body-weekly-records"><header><span>每周训练与体重记录</span><small>训练课次 / 周均体重 / 体脂</small></header>{weeklyRecords.map((week) => <div key={week.label}><strong>{week.label}</strong><span>{week.sessions}课</span><em>{week.weight === null ? '—' : `${formatNumber(week.weight, 1)}kg`}</em><b>{week.bodyFat === null ? '—' : `${formatNumber(week.bodyFat, 1)}%`}</b></div>)}{!weeklyRecords.length && <p>当前周期暂无训练记录。</p>}</section>
+        <section className="body-history-strip"><span>身体成分复测趋势</span>{history.map((item) => <div key={item.measurementDate}><strong>{item.measurementDate.slice(5)}</strong><em>{item.weightKg === null ? '—' : `${formatNumber(item.weightKg, 1)}kg`}</em><b>{item.bodyFatPct === null ? '—' : `${formatNumber(item.bodyFatPct, 1)}%`}</b></div>)}{!history.length && <p>暂无实测历史；当前模拟值不写入趋势。</p>}</section>
+      </div>
+      <p className="body-report-disclaimer">报告结构参考专业BIA、DXA与皮褶纵向监测口径。带橙色标记的数据为稳定模拟值，仅用于功能演示，不可作为医学诊断、营养处方或选材结论。</p>
+    </div>
+  );
+}
+
+function HumanModel({ activePart, onPartChange, segments }: { activePart: BodyPartKey; onPartChange: (part: BodyPartKey) => void; segments: SegmentReport[] }) {
+  const partProps = (part: BodyPartKey) => ({
+    className: `${part === 'abdomen' ? 'abdomen-zone ' : ''}${activePart === part ? 'active' : ''}`,
+    onMouseEnter: () => onPartChange(part),
+    onFocus: () => onPartChange(part),
+    tabIndex: 0,
+    role: 'button',
+    'aria-label': bodyPartMeta[part].label
+  });
+  return (
+    <div className="human-model-wrap">
+      <span className="human-view-label">正面</span><span className="human-view-label">背面</span>
+      {[0, 1].map((view) => <svg key={view} className="human-model-svg" viewBox="0 0 150 330" role="img" aria-label={view ? '人体背面节段模型' : '人体正面节段模型'}>
+        <defs><linearGradient id={`muscle-${view}`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#26a79c" /><stop offset="1" stopColor="#0b6470" /></linearGradient></defs>
+        <circle className="human-head" cx="75" cy="29" r="20" />
+        <path className="human-neck" d="M64 48 L86 48 L91 66 L59 66 Z" />
+        <path {...partProps('leftArm')} d="M57 67 C45 65 34 72 29 88 L12 169 C11 177 22 180 26 172 L48 111 L61 88 Z" />
+        <path {...partProps('rightArm')} d="M93 67 C105 65 116 72 121 88 L138 169 C139 177 128 180 124 172 L102 111 L89 88 Z" />
+        <path {...partProps('trunk')} d="M59 63 C68 59 82 59 91 63 L103 91 L97 176 C89 185 61 185 53 176 L47 91 Z" />
+        <path {...partProps('abdomen')} d="M54 119 C65 113 85 113 96 119 L97 172 C87 180 63 180 53 172 Z" />
+        <path {...partProps('leftLeg')} d="M54 178 C64 182 70 183 74 178 L72 238 L60 313 C53 319 44 315 46 306 L48 232 Z" />
+        <path {...partProps('rightLeg')} d="M96 178 C86 182 80 183 76 178 L78 238 L90 313 C97 319 106 315 104 306 L102 232 Z" />
+        <path className="human-muscle-line" d={view ? 'M55 88 C66 80 84 80 95 88 M57 115 C70 107 80 107 93 115 M56 145 C67 137 83 137 94 145 M51 216 C58 207 67 207 72 214 M99 216 C92 207 83 207 78 214' : 'M52 91 C61 83 68 83 74 91 M98 91 C89 83 82 83 76 91 M58 126 L92 126 M61 145 L89 145 M52 213 C59 204 68 204 73 212 M98 213 C91 204 82 204 77 212'} />
+        {segments.filter((item) => item.key !== 'abdomen').map((segment) => <text key={segment.key} className="human-segment-value" x={segment.key.includes('Arm') ? (segment.key === 'leftArm' ? 24 : 126) : segment.key === 'trunk' ? 75 : segment.key === 'leftLeg' ? 58 : 92} y={segment.key.includes('Arm') ? 124 : segment.key === 'trunk' ? 103 : 247} textAnchor="middle">{formatNumber(segment.leanKg, 1)}</text>)}
+      </svg>)}
+    </div>
+  );
+}
+
+function BodyKpi({ label, metric, unit, digits = 1 }: { label: string; metric: ReportValue; unit: string; digits?: number }) {
+  return <div><span>{label}<i className={`origin-${metric.origin === '实测' ? 'measured' : metric.origin === '推算' ? 'derived' : 'simulated'}`} /></span><strong>{formatNumber(metric.value, digits)}<small>{unit}</small></strong></div>;
+}
+
+function CompositionRow({ label, metric, total, color }: { label: string; metric: ReportValue; total: number; color: string }) {
+  return <div className="composition-row"><span>{label}<i className={`origin-${metric.origin === '实测' ? 'measured' : metric.origin === '推算' ? 'derived' : 'simulated'}`} /></span><b><i style={{ width: `${Math.min(100, metric.value / total * 100 * 1.55)}%`, background: color }} /></b><strong>{formatNumber(metric.value, 1)}</strong></div>;
+}
+
+function GaugeMetric({ label, metric, min, max, reference, unit = '', digits = 1 }: { label: string; metric: ReportValue; min: number; max: number; reference: string; unit?: string; digits?: number }) {
+  const position = Math.max(0, Math.min(100, (metric.value - min) / (max - min) * 100));
+  return <div className="body-gauge"><div><span>{label}<i className={`origin-${metric.origin === '实测' ? 'measured' : metric.origin === '推算' ? 'derived' : 'simulated'}`} /></span><strong>{formatNumber(metric.value, digits)}{unit}</strong></div><b><i style={{ left: `${position}%` }} /></b><small>{reference}</small></div>;
+}
+
+function seeded(profile: BodyCompositionProfile, salt: number) {
+  let value = (profile.athleteId * 9301 + salt * 49297 + 233280) % 233280;
+  for (const char of profile.athleteName) value = (value * 31 + char.charCodeAt(0)) % 233280;
+  return value / 233280;
+}
+
+function resolved(actual: number | null, fallback: number, derived = false): ReportValue {
+  return actual === null ? { value: fallback, origin: derived ? '推算' : '模拟' } : { value: actual, origin: '实测' };
+}
+
+function buildProfessionalBodyReport(profile: BodyCompositionProfile): ProfessionalBodyReport {
+  const female = profile.gender === '女';
+  const height = resolved(profile.heightCm, (female ? 169 : 180) + (seeded(profile, 1) - .5) * 8);
+  const weight = resolved(profile.weightKg, (female ? 62 : 76) + (seeded(profile, 2) - .5) * 12);
+  const bodyFatPct = resolved(profile.bodyFatPct, (female ? 19.5 : 12.5) + (seeded(profile, 3) - .5) * 5);
+  const skeletalMuscle = resolved(profile.skeletalMuscleKg, weight.value * (female ? .385 : .445) + (seeded(profile, 4) - .5) * 1.6);
+  const fatMass = { value: weight.value * bodyFatPct.value / 100, origin: bodyFatPct.origin === '实测' && weight.origin === '实测' ? '推算' : '模拟' } as ReportValue;
+  const fatFreeMass = { value: weight.value - fatMass.value, origin: fatMass.origin } as ReportValue;
+  const bmi = { value: weight.value / ((height.value / 100) ** 2), origin: height.origin === '实测' && weight.origin === '实测' ? '推算' : '模拟' } as ReportValue;
+  const smi = { value: skeletalMuscle.value / ((height.value / 100) ** 2), origin: skeletalMuscle.origin === '实测' && height.origin === '实测' ? '推算' : '模拟' } as ReportValue;
+  const totalBodyWater = resolved(profile.totalBodyWaterKg, fatFreeMass.value * (.725 + seeded(profile, 5) * .012), true);
+  const mineral = { value: fatFreeMass.value * (.066 + seeded(profile, 6) * .006), origin: '推算' } as ReportValue;
+  const protein = { value: Math.max(1, fatFreeMass.value - totalBodyWater.value - mineral.value), origin: '推算' } as ReportValue;
+  const age = profile.age || 23;
+  const bmrFallback = 10 * weight.value + 6.25 * height.value - 5 * age + (female ? -161 : 5);
+  const basalMetabolism = resolved(profile.basalMetabolismKcal, bmrFallback, true);
+  const phaseAngle = resolved(profile.phaseAngleDeg, (female ? 6.5 : 7.1) + (seeded(profile, 7) - .5) * .8);
+  const ecwTbw = resolved(profile.ecwTbwRatio, .371 + seeded(profile, 8) * .014);
+  const visceralFat = resolved(profile.visceralFatLevel, (female ? 4 : 5) + seeded(profile, 9) * 2);
+  const visceralFatArea = resolved(profile.visceralFatAreaCm2, visceralFat.value * 9.4 + seeded(profile, 10) * 5, true);
+
+  const armTotal = profile.upperLimbMuscleKg ?? fatFreeMass.value * .11;
+  const legTotal = profile.lowerLimbMuscleKg ?? fatFreeMass.value * .39;
+  const trunk = profile.trunkMuscleKg ?? fatFreeMass.value * .50;
+  const armBias = (seeded(profile, 11) - .5) * .035;
+  const legBias = (seeded(profile, 12) - .5) * .035;
+  const segmentOrigin = (actual: number | null): DataOrigin => actual === null ? '模拟' : '推算';
+  const segments: SegmentReport[] = [
+    { key: 'leftArm', label: '左上肢', leanKg: profile.leftArmLeanKg ?? armTotal * (.5 + armBias), standardPct: 101 + seeded(profile, 13) * 10, origin: profile.leftArmLeanKg === null ? segmentOrigin(profile.upperLimbMuscleKg) : '实测', trainingNote: '拉力链' },
+    { key: 'rightArm', label: '右上肢', leanKg: profile.rightArmLeanKg ?? armTotal * (.5 - armBias), standardPct: 101 + seeded(profile, 14) * 10, origin: profile.rightArmLeanKg === null ? segmentOrigin(profile.upperLimbMuscleKg) : '实测', trainingNote: '支撑侧' },
+    { key: 'trunk', label: '躯干', leanKg: profile.trunkLeanKg ?? trunk, standardPct: 102 + seeded(profile, 15) * 9, origin: profile.trunkLeanKg === null ? segmentOrigin(profile.trunkMuscleKg) : '实测', trainingNote: '核心传导' },
+    { key: 'leftLeg', label: '左下肢', leanKg: profile.leftLegLeanKg ?? legTotal * (.5 + legBias), standardPct: 102 + seeded(profile, 16) * 10, origin: profile.leftLegLeanKg === null ? segmentOrigin(profile.lowerLimbMuscleKg) : '实测', trainingNote: '蹬伸输出' },
+    { key: 'rightLeg', label: '右下肢', leanKg: profile.rightLegLeanKg ?? legTotal * (.5 - legBias), standardPct: 102 + seeded(profile, 17) * 10, origin: profile.rightLegLeanKg === null ? segmentOrigin(profile.lowerLimbMuscleKg) : '实测', trainingNote: '稳定支撑' },
+    { key: 'abdomen', label: '腹部脂肪', leanKg: 0, standardPct: 100, origin: profile.abdominalSkinfoldMm === null ? '模拟' : '实测', trainingNote: '控重观察' }
+  ];
+  const skinfolds = [
+    { label: '肱三头肌', value: profile.tricepsSkinfoldMm ?? (female ? 13 : 8) + seeded(profile, 18) * 4, origin: profile.tricepsSkinfoldMm === null ? '模拟' as const : '实测' as const },
+    { label: '腹部', value: profile.abdominalSkinfoldMm ?? (female ? 15 : 10) + seeded(profile, 19) * 5, origin: profile.abdominalSkinfoldMm === null ? '模拟' as const : '实测' as const },
+    { label: '大腿', value: profile.thighSkinfoldMm ?? (female ? 18 : 11) + seeded(profile, 20) * 5, origin: profile.thighSkinfoldMm === null ? '模拟' as const : '实测' as const },
+    { label: '小腿', value: profile.calfSkinfoldMm ?? (female ? 12 : 7) + seeded(profile, 21) * 4, origin: profile.calfSkinfoldMm === null ? '模拟' as const : '实测' as const }
+  ];
+  const simulatedCount = [height, weight, bodyFatPct, skeletalMuscle, phaseAngle, ecwTbw, visceralFat, ...skinfolds].filter((item) => item.origin === '模拟').length;
+  const imbalance = Math.max(sideDifference(segments, 'leftArm', 'rightArm'), sideDifference(segments, 'leftLeg', 'rightLeg'));
+  const fatBand = female ? [16, 24] : [8, 16];
+  const fatText = bodyFatPct.value < fatBand[0] ? '体脂处于较低区间，需同步关注能量可用性与恢复' : bodyFatPct.value > fatBand[1] ? '体脂高于当前训练参考带，宜结合营养与专项周期观察趋势' : '体脂处于一般运动训练参考带内';
+  const balanceText = imbalance <= 3 ? '左右节段差异较小，当前平衡性良好' : `最大左右差约${formatNumber(imbalance, 1)}%，建议结合单侧力量和伤病史复核`;
+  return { height, weight, bodyFatPct, skeletalMuscle, fatMass, fatFreeMass, bmi, smi, basalMetabolism, totalBodyWater, protein, mineral, phaseAngle, ecwTbw, visceralFat, visceralFatArea, skinfolds, segments, simulatedCount, trainingSummary: `${fatText}；${balanceText}。身体成分应与功率、力量、训练负荷和恢复指标联合判断。` };
+}
+
+function sideDifference(segments: SegmentReport[], left: BodyPartKey, right: BodyPartKey) {
+  const leftValue = segments.find((item) => item.key === left)?.leanKg || 0;
+  const rightValue = segments.find((item) => item.key === right)?.leanKg || 0;
+  return Math.max(leftValue, rightValue) ? Math.abs(leftValue - rightValue) / Math.max(leftValue, rightValue) * 100 : 0;
+}
+
+function weekLabel(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  const day = parsed.getDay() || 7;
+  parsed.setDate(parsed.getDate() - day + 1);
+  return `${String(parsed.getMonth() + 1).padStart(2, '0')}/${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
+function weeklyTrainingRecords(records: TrainingRecord[], bodyHistory: BodyCompositionRecord[]) {
+  const grouped = new Map<string, { label: string; sessions: number; weights: number[]; bodyFats: number[] }>();
+  for (const record of records) {
+    const label = weekLabel(record.date);
+    const row = grouped.get(label) || { label, sessions: 0, weights: [], bodyFats: [] };
+    row.sessions += 1;
+    if (record.weightKg !== null) row.weights.push(record.weightKg);
+    grouped.set(label, row);
+  }
+  for (const item of bodyHistory) {
+    const label = weekLabel(item.measurementDate);
+    const row = grouped.get(label) || { label, sessions: 0, weights: [], bodyFats: [] };
+    if (item.weightKg !== null) row.weights.push(item.weightKg);
+    if (item.bodyFatPct !== null) row.bodyFats.push(item.bodyFatPct);
+    grouped.set(label, row);
+  }
+  return [...grouped.values()].slice(-8).map((row) => ({
+    label: row.label,
+    sessions: row.sessions,
+    weight: row.weights.length ? average(row.weights) : null,
+    bodyFat: row.bodyFats.length ? average(row.bodyFats) : null
+  }));
 }
 
 const chinaProjection = geoMercator().fitExtent([[16, 12], [544, 398]], ChinaData);
