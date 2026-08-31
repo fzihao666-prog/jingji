@@ -27,66 +27,6 @@ type Props = {
   onChanged: () => void;
 };
 
-type BodyCompositionForm = {
-  measurementDate: string;
-  heightCm: string;
-  weightKg: string;
-  bodyFatPct: string;
-  skeletalMuscleKg: string;
-  muscleMassKg: string;
-  upperLimbMuscleKg: string;
-  lowerLimbMuscleKg: string;
-  trunkMuscleKg: string;
-  subcutaneousFatMm: string;
-  tricepsSkinfoldMm: string;
-  abdominalSkinfoldMm: string;
-  thighSkinfoldMm: string;
-  calfSkinfoldMm: string;
-  visceralFatLevel: string;
-  basalMetabolismKcal: string;
-  totalBodyWaterKg: string;
-  ecwTbwRatio: string;
-  phaseAngleDeg: string;
-  visceralFatAreaCm2: string;
-  leftArmLeanKg: string;
-  rightArmLeanKg: string;
-  trunkLeanKg: string;
-  leftLegLeanKg: string;
-  rightLegLeanKg: string;
-  note: string;
-};
-
-const bodyCompositionFields: Array<{ key: keyof BodyCompositionForm; label: string; unit: string; group: '基础' | '肌肉' | '脂肪' | '节段' | '水合' }> = [
-  { key: 'heightCm', label: '身高', unit: 'cm', group: '基础' },
-  { key: 'weightKg', label: '体重', unit: 'kg', group: '基础' },
-  { key: 'bodyFatPct', label: '体脂率', unit: '%', group: '基础' },
-  { key: 'skeletalMuscleKg', label: '骨骼肌量', unit: 'kg', group: '肌肉' },
-  { key: 'muscleMassKg', label: '肌肉总量', unit: 'kg', group: '肌肉' },
-  { key: 'upperLimbMuscleKg', label: '上肢肌量', unit: 'kg', group: '肌肉' },
-  { key: 'lowerLimbMuscleKg', label: '下肢肌量', unit: 'kg', group: '肌肉' },
-  { key: 'trunkMuscleKg', label: '躯干肌量', unit: 'kg', group: '肌肉' },
-  { key: 'subcutaneousFatMm', label: '皮下脂肪', unit: 'mm', group: '脂肪' },
-  { key: 'tricepsSkinfoldMm', label: '肱三头肌皮褶', unit: 'mm', group: '脂肪' },
-  { key: 'abdominalSkinfoldMm', label: '腹部皮褶', unit: 'mm', group: '脂肪' },
-  { key: 'thighSkinfoldMm', label: '大腿皮褶', unit: 'mm', group: '脂肪' },
-  { key: 'calfSkinfoldMm', label: '小腿皮褶', unit: 'mm', group: '脂肪' },
-  { key: 'visceralFatLevel', label: '内脏脂肪等级', unit: '级', group: '脂肪' },
-  { key: 'visceralFatAreaCm2', label: '内脏脂肪面积', unit: 'cm²', group: '脂肪' },
-  { key: 'basalMetabolismKcal', label: '基础代谢', unit: 'kcal', group: '基础' },
-  { key: 'totalBodyWaterKg', label: '总体水', unit: 'kg', group: '水合' },
-  { key: 'ecwTbwRatio', label: '细胞外水比', unit: '比值', group: '水合' },
-  { key: 'phaseAngleDeg', label: '全身相位角', unit: '°', group: '水合' },
-  { key: 'leftArmLeanKg', label: '左上肢去脂量', unit: 'kg', group: '节段' },
-  { key: 'rightArmLeanKg', label: '右上肢去脂量', unit: 'kg', group: '节段' },
-  { key: 'trunkLeanKg', label: '躯干去脂量', unit: 'kg', group: '节段' },
-  { key: 'leftLegLeanKg', label: '左下肢去脂量', unit: 'kg', group: '节段' },
-  { key: 'rightLegLeanKg', label: '右下肢去脂量', unit: 'kg', group: '节段' }
-];
-
-function bodyValue(value: number | null | undefined) {
-  return value === null || value === undefined ? '' : String(value);
-}
-
 function ageAtDate(birthDate: string | null, date: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T12:00:00`);
@@ -110,40 +50,8 @@ export function PersonalPage(props: Props) {
   const [positionSaving, setPositionSaving] = useState(false);
   const [positionMessage, setPositionMessage] = useState('');
   const canEditOwnPosition = props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
-  const canEditBodyComposition = Boolean(selectedAthlete && (props.user.role !== 'ATL' || selectedAthlete.id === props.user.athleteId));
-  const [bodyForm, setBodyForm] = useState<BodyCompositionForm>({
-    measurementDate: props.to,
-    heightCm: '',
-    weightKg: '',
-    bodyFatPct: '',
-    skeletalMuscleKg: '',
-    muscleMassKg: '',
-    upperLimbMuscleKg: '',
-    lowerLimbMuscleKg: '',
-    trunkMuscleKg: '',
-    subcutaneousFatMm: '',
-    tricepsSkinfoldMm: '',
-    abdominalSkinfoldMm: '',
-    thighSkinfoldMm: '',
-    calfSkinfoldMm: '',
-    visceralFatLevel: '',
-    basalMetabolismKcal: '',
-    totalBodyWaterKg: '',
-    ecwTbwRatio: '',
-    phaseAngleDeg: '',
-    visceralFatAreaCm2: '',
-    leftArmLeanKg: '',
-    rightArmLeanKg: '',
-    trunkLeanKg: '',
-    leftLegLeanKg: '',
-    rightLegLeanKg: '',
-    note: ''
-  });
-  const [bodySaving, setBodySaving] = useState(false);
-  const [bodyMessage, setBodyMessage] = useState('');
   const [bodyHistory, setBodyHistory] = useState<BodyCompositionRecord[]>([]);
   const [bodyHistoryLoading, setBodyHistoryLoading] = useState(false);
-  const [bodyHistoryRevision, setBodyHistoryRevision] = useState(0);
 
   useEffect(() => {
     let ignored = false;
@@ -157,7 +65,7 @@ export function PersonalPage(props: Props) {
       .catch(() => { if (!ignored) setBodyHistory([]); })
       .finally(() => { if (!ignored) setBodyHistoryLoading(false); });
     return () => { ignored = true; };
-  }, [selectedAthlete?.id, bodyHistoryRevision]);
+  }, [selectedAthlete?.id]);
 
   const bodyCompositionProfile = useMemo<BodyCompositionProfile | null>(() => {
     if (!selectedAthlete) return null;
@@ -201,38 +109,6 @@ export function PersonalPage(props: Props) {
     setPositionMessage('');
   }, [selectedAthlete?.id, selectedAthlete?.athletePosition]);
 
-  useEffect(() => {
-    setBodyForm({
-      measurementDate: selectedAthlete?.bodyMeasurementDate || props.to,
-      heightCm: bodyValue(selectedAthlete?.heightCm),
-      weightKg: bodyValue(selectedAthlete?.weightKg),
-      bodyFatPct: bodyValue(selectedAthlete?.bodyFatPct),
-      skeletalMuscleKg: bodyValue(selectedAthlete?.skeletalMuscleKg),
-      muscleMassKg: bodyValue(selectedAthlete?.muscleMassKg),
-      upperLimbMuscleKg: bodyValue(selectedAthlete?.upperLimbMuscleKg),
-      lowerLimbMuscleKg: bodyValue(selectedAthlete?.lowerLimbMuscleKg),
-      trunkMuscleKg: bodyValue(selectedAthlete?.trunkMuscleKg),
-      subcutaneousFatMm: bodyValue(selectedAthlete?.subcutaneousFatMm),
-      tricepsSkinfoldMm: bodyValue(selectedAthlete?.tricepsSkinfoldMm),
-      abdominalSkinfoldMm: bodyValue(selectedAthlete?.abdominalSkinfoldMm),
-      thighSkinfoldMm: bodyValue(selectedAthlete?.thighSkinfoldMm),
-      calfSkinfoldMm: bodyValue(selectedAthlete?.calfSkinfoldMm),
-      visceralFatLevel: bodyValue(selectedAthlete?.visceralFatLevel),
-      basalMetabolismKcal: bodyValue(selectedAthlete?.basalMetabolismKcal),
-      totalBodyWaterKg: bodyValue(selectedAthlete?.totalBodyWaterKg),
-      ecwTbwRatio: bodyValue(selectedAthlete?.ecwTbwRatio),
-      phaseAngleDeg: bodyValue(selectedAthlete?.phaseAngleDeg),
-      visceralFatAreaCm2: bodyValue(selectedAthlete?.visceralFatAreaCm2),
-      leftArmLeanKg: bodyValue(selectedAthlete?.leftArmLeanKg),
-      rightArmLeanKg: bodyValue(selectedAthlete?.rightArmLeanKg),
-      trunkLeanKg: bodyValue(selectedAthlete?.trunkLeanKg),
-      leftLegLeanKg: bodyValue(selectedAthlete?.leftLegLeanKg),
-      rightLegLeanKg: bodyValue(selectedAthlete?.rightLegLeanKg),
-      note: selectedAthlete?.bodyMeasurementNote || ''
-    });
-    setBodyMessage('');
-  }, [selectedAthlete, props.to]);
-
   const savePosition = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedAthlete || !canEditOwnPosition) return;
@@ -249,26 +125,6 @@ export function PersonalPage(props: Props) {
     }
   };
 
-  const saveBodyComposition = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!selectedAthlete || !canEditBodyComposition) return;
-    setBodySaving(true);
-    setBodyMessage('');
-    const payload = Object.fromEntries(Object.entries(bodyForm).map(([key, value]) => [
-      key,
-      key === 'measurementDate' || key === 'note' || value === '' ? value : Number(value)
-    ]));
-    try {
-      await api.saveBodyComposition(selectedAthlete.id, payload);
-      props.onChanged();
-      setBodyHistoryRevision((current) => current + 1);
-      setBodyMessage('身体成分记录已保存。');
-    } catch (error) {
-      setBodyMessage(error instanceof Error ? error.message : '身体成分保存失败。');
-    } finally {
-      setBodySaving(false);
-    }
-  };
   const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(() => analyzePeriod(selectedRecords), [selectedRecords, analyzePeriod]);
   const rangeMode = useMemo(() => {
@@ -333,39 +189,6 @@ export function PersonalPage(props: Props) {
             </header>
             <BodyCompositionModelOverview profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []} records={selectedRecords} individual />
             <p className="analysis-method-note">身体成分用于训练适应、营养干预和控重阶段观察；模拟项仅用于展示，录入实测值后自动替换。</p>
-          </section>
-
-          <section className="personal-body-composition-card">
-            <header>
-              <div>
-                <span>BODY COMPOSITION</span>
-                <h2>身体成分记录</h2>
-                <p>按测量日期记录身体成分、节段去脂、水合相位角与关键皮褶厚度。</p>
-              </div>
-              <strong>{selectedAthlete.bodyMeasurementDate || '暂无记录'}</strong>
-            </header>
-            <form onSubmit={saveBodyComposition}>
-              <div className="personal-body-date-row">
-                <label><span>测量日期</span><input type="date" value={bodyForm.measurementDate} onChange={(event) => setBodyForm({ ...bodyForm, measurementDate: event.target.value })} required disabled={!canEditBodyComposition || bodySaving} /></label>
-                {bodyMessage && <small>{bodyMessage}</small>}
-              </div>
-              {(['基础', '肌肉', '节段', '脂肪', '水合'] as const).map((group) => (
-                <fieldset key={group}>
-                  <legend>{group}指标</legend>
-                  <div className="personal-body-grid">
-                    {bodyCompositionFields.filter((field) => field.group === group).map((field) => (
-                      <label key={field.key}>
-                        <span>{field.label}</span>
-                        <input type="number" step="0.1" value={bodyForm[field.key]} onChange={(event) => setBodyForm({ ...bodyForm, [field.key]: event.target.value })} disabled={!canEditBodyComposition || bodySaving} />
-                        <em>{field.unit}</em>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              ))}
-              <label className="personal-body-note"><span>备注</span><textarea value={bodyForm.note} onChange={(event) => setBodyForm({ ...bodyForm, note: event.target.value })} rows={2} maxLength={300} disabled={!canEditBodyComposition || bodySaving} placeholder="例如：晨起空腹测量、赛前减脂期、恢复周复测" /></label>
-              <footer><button className="primary-button" disabled={!canEditBodyComposition || bodySaving}><Save size={14} />{bodySaving ? '保存中' : '保存身体成分'}</button></footer>
-            </form>
           </section>
 
           <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />
