@@ -3,6 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
+import { ArrowUpRight, Dumbbell, Scale, TrendingUp } from 'lucide-react';
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
 import { formatNumber, percentage } from '../utils';
 
@@ -137,11 +138,12 @@ export function TrainingLoadComparisonChart({ records }: { records: TrainingReco
 export function TrainingVolumeChart({ records }: { records: TrainingRecord[] }) {
   const range = usePeriodRecords(records);
   const data = useMemo(() => aggregateByDate(range.filtered, range.period), [range.filtered, range.period]);
-  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">时长柱 + SRPE面积，悬浮查看单点训练量</span><PeriodTabs control={range} /></div>
+  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">训练时长柱 + SRPE负荷折线，悬浮查看单点训练量</span><PeriodTabs control={range} /></div>
     <div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
-      <defs><linearGradient id="volumeArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#16958d" stopOpacity=".35"/><stop offset="1" stopColor="#16958d" stopOpacity=".03"/></linearGradient></defs>
       <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={20}/><YAxis yAxisId="time" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/><YAxis yAxisId="load" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/>
-      <Tooltip formatter={(value, name) => [`${formatNumber(Number(value))}${name === '训练时长' ? ' min' : ' AU'}`, name]}/><Legend wrapperStyle={{fontSize:10}}/><Bar yAxisId="time" dataKey="duration" name="训练时长" fill="#76b9c0" radius={[4,4,0,0]} maxBarSize={28}/><Area yAxisId="load" type="monotone" dataKey="srpe" name="训练负荷" stroke="#12867f" strokeWidth={2.3} fill="url(#volumeArea)"/>
+      <Tooltip formatter={(value, name) => [`${formatNumber(Number(value))}${name === '训练时长' ? ' min' : ' AU'}`, name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:10}}/>
+      <Bar yAxisId="time" dataKey="duration" name="训练时长" fill="#79b9c1" fillOpacity={.82} radius={[5,5,0,0]} maxBarSize={28}/>
+      <Line yAxisId="load" type="monotone" dataKey="srpe" name="训练负荷" stroke="#0b4d59" strokeWidth={3} dot={{r:3,fill:'#fff',stroke:'#0b4d59',strokeWidth:2}} activeDot={{r:5,fill:'#18a092',stroke:'#fff',strokeWidth:2}} connectNulls />
     </ComposedChart></ResponsiveContainer></div></div>;
 }
 
@@ -186,5 +188,18 @@ export function InjuryAssessmentChart({ injuries, athleteCount }: { injuries: Ov
 
 export function BasicStrengthAnalysis({ changes, relative }: { changes: Array<{ key:string;label:string;unit:string;current:number;previous:number|null;change:number|null }>; relative: Array<{label:string;current:number;previous:number|null}> }) {
   const changeData = changes.filter(row=>row.change!==null).slice(0,6);
-  return <div className="strength-analysis-layout"><div><h3>基础力量前后测变化</h3><ResponsiveContainer width="100%" height="100%"><BarChart data={changeData} margin={{top:10,right:4,left:-16,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis unit="%" tick={{fontSize:9}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>`${formatNumber(Number(value),1)}%`}/><Bar dataKey="change" name="变化率" radius={[4,4,0,0]}>{changeData.map(row=><Cell key={row.key} fill={(row.change||0)>=0?'#168f8a':'#df634d'}/>)}</Bar></BarChart></ResponsiveContainer></div><div><h3>相对力量（倍体重）</h3><ResponsiveContainer width="100%" height="100%"><BarChart data={relative} margin={{top:10,right:4,left:-16,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:9}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>`${formatNumber(Number(value),2)} 倍体重`}/><Legend wrapperStyle={{fontSize:9}}/><Bar dataKey="previous" name="前测" fill="#bccbce"/><Bar dataKey="current" name="本次" fill="#176f7f"/></BarChart></ResponsiveContainer></div></div>;
+  const comparable = changeData.filter((row) => row.change !== null);
+  const averageChange = comparable.length ? comparable.reduce((sum, row) => sum + (row.change || 0), 0) / comparable.length : 0;
+  const improvedCount = comparable.filter((row) => (row.change || 0) > 0).length;
+  const bestRelative = relative.reduce((best, row) => row.current > best.current ? row : best, { label: '暂无', current: 0, previous: null as number | null });
+  const largestGain = comparable.reduce((best, row) => (row.change || 0) > (best?.change || -Infinity) ? row : best, comparable[0]);
+  return <div className="strength-analysis-layout">
+    <div className="strength-summary-strip">
+      <article><span className="strength-summary-icon teal"><TrendingUp size={16}/></span><div><small>平均变化</small><strong className={averageChange >= 0 ? 'positive' : 'negative'}>{averageChange >= 0 ? '+' : ''}{formatNumber(averageChange,1)}%</strong><p>最近两次基础力量测试</p></div></article>
+      <article><span className="strength-summary-icon navy"><ArrowUpRight size={16}/></span><div><small>提升指标</small><strong>{improvedCount}<em> / {comparable.length || '—'}</em></strong><p>{largestGain ? `${largestGain.label}提升最明显` : '等待补充前后测数据'}</p></div></article>
+      <article><span className="strength-summary-icon gold"><Scale size={16}/></span><div><small>最高相对力量</small><strong>{formatNumber(bestRelative.current,2)}<em> 倍体重</em></strong><p>{bestRelative.label}</p></div></article>
+    </div>
+    <section className="strength-chart-card strength-change-card"><header><span><Dumbbell size={15}/></span><div><h3>基础力量前后测变化</h3><p>正值代表较前测提升</p></div><b>{comparable.length}项指标</b></header><div className="strength-chart-canvas"><ResponsiveContainer width="100%" height="100%"><BarChart data={changeData} margin={{top:16,right:8,left:-12,bottom:2}}><defs><linearGradient id="strengthGain" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#15a092"/><stop offset="1" stopColor="#65c4b4"/></linearGradient></defs><CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9,fill:'#526b73',fontWeight:700}} axisLine={false} tickLine={false}/><YAxis unit="%" tick={{fontSize:8,fill:'#82949a'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>`${formatNumber(Number(value),1)}%`} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Bar dataKey="change" name="变化率" radius={[6,6,1,1]} maxBarSize={36}>{changeData.map(row=><Cell key={row.key} fill={(row.change||0)>=0?'url(#strengthGain)':'#df634d'}/>)}</Bar></BarChart></ResponsiveContainer></div></section>
+    <section className="strength-chart-card relative-strength-card"><header><span><Scale size={15}/></span><div><h3>相对力量水平</h3><p>1RM ÷ 体重，观察力量效率</p></div><b>倍体重</b></header><div className="strength-chart-canvas"><ResponsiveContainer width="100%" height="100%"><BarChart data={relative} margin={{top:16,right:8,left:-12,bottom:2}}><defs><linearGradient id="relativeCurrent" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0c5968"/><stop offset="1" stopColor="#278b91"/></linearGradient></defs><CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9,fill:'#526b73',fontWeight:700}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:8,fill:'#82949a'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>`${formatNumber(Number(value),2)} 倍体重`} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:9}}/><Bar dataKey="previous" name="前测" fill="#cbd7d9" radius={[5,5,1,1]} maxBarSize={25}/><Bar dataKey="current" name="本次" fill="url(#relativeCurrent)" radius={[5,5,1,1]} maxBarSize={25}/></BarChart></ResponsiveContainer></div></section>
+  </div>;
 }
