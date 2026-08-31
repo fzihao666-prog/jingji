@@ -169,7 +169,7 @@ function ageAt(birthDate: string | null, date: string) {
 
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
-    records: [], strengthTests: [], measurements: [], profiles: [],
+    records: [], strengthTests: [], measurements: [], profiles: [], injuries: [],
     meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
   const placeholders = input.athleteIds.map(() => '?').join(',');
@@ -362,6 +362,22 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     };
   });
 
+  const injuries = db.prepare(`
+    SELECT ir.athlete_id AS athleteId, a.name AS athleteName,
+      ir.injury_name AS injuryName, ir.body_part AS bodyPart, ir.side, ir.status,
+      ir.pain_score AS painScore, ir.onset_date AS onsetDate, ir.review_date AS reviewDate,
+      CASE WHEN ir.note LIKE '%模拟数据%' THEN 1 ELSE 0 END AS isDemo
+    FROM injury_records ir
+    JOIN athletes a ON a.id = ir.athlete_id
+    WHERE ir.athlete_id IN (${placeholders})
+      AND ir.id = (
+        SELECT latest.id FROM injury_records latest
+        WHERE latest.athlete_id = ir.athlete_id
+        ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+      )
+    ORDER BY ir.pain_score DESC, a.name
+  `).all(...input.athleteIds);
+
   const measurementRows = db.prepare(`
     SELECT ts.id AS sessionId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
       ts.test_type AS testType, ts.source AS testSource, ts.is_demo AS testDemo,
@@ -443,6 +459,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     strengthTests,
     measurements,
     profiles,
+    injuries,
     meta: {
       project: input.project,
       from: input.from,

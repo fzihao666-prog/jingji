@@ -1,6 +1,7 @@
 import {
-  AlarmClock, ArrowRight, BarChart3, Clock3, Database, Eye, EyeOff, Gauge,
-  MoreHorizontal, Pin, Route, Search, ShieldCheck, Sparkles, UsersRound
+  Activity, AlarmClock, ArrowRight, BarChart3, BrainCircuit, Clock3, Database, Dumbbell,
+  Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Route, Search,
+  ShieldCheck, Sparkles, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
@@ -11,9 +12,12 @@ import { aggregateRecords, average, formatNumber, groupByDate, percentage, worst
 import { ROLE_META } from '../../shared/access';
 import { DateToolbar } from '../components/DateToolbar';
 import {
-  IntensityChart, PerformanceRadarChart, ProfessionalLoadChart, RecoveryTrendChart,
-  RelativeStrengthChart, StrengthChangeChart, StructureChart, WaterIntensityLoadChart
+  PerformanceRadarChart, RecoveryTrendChart
 } from '../components/LoadCharts';
+import {
+  BasicStrengthAnalysis, FmsTeamChart, InjuryAssessmentChart, RpeStatisticsChart,
+  TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart
+} from '../components/TrainingAnalysisCharts';
 import { StatusPill } from '../components/StatusPill';
 import { AthleteProfileOverview, BirthplaceMapOverview, CompetitiveStateOverview } from '../components/AthleteProfileCharts';
 import {
@@ -77,9 +81,9 @@ function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
 const defaultOrder = [
   'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
   'athlete-profile', 'competitive-state', 'birthplace-map',
-  'performance-radar', 'load-response', 'load-diagnostics', 'recovery',
-  'strength-change', 'relative-strength', 'structure', 'intensity', 'status',
-  'water-zones', 'project-indicators', 'movement-efficiency', 'roster'
+  'fms-analysis', 'performance-radar', 'strength-analysis', 'injury-analysis',
+  'training-load-analysis', 'training-volume', 'training-content', 'rpe-analysis',
+  'load-diagnostics', 'recovery', 'project-indicators', 'roster'
 ];
 
 const cardMeta: Record<string, { title: string; size: CardSize }> = {
@@ -92,18 +96,17 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'athlete-profile': { title: '身体与年龄画像', size: 'half' },
   'competitive-state': { title: '竞技状态评估', size: 'half' },
   'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
+  'fms-analysis': { title: 'FMS测试全队分析', size: 'half' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
-  'load-response': { title: '训练负荷与机体刺激', size: 'half' },
+  'strength-analysis': { title: '基础力量分析', size: 'full' },
+  'injury-analysis': { title: '运动损伤评估', size: 'half' },
+  'training-load-analysis': { title: '体能与专项训练负荷分析', size: 'full' },
+  'training-volume': { title: '训练量统计', size: 'wide' },
+  'training-content': { title: '训练内容统计', size: 'half' },
+  'rpe-analysis': { title: 'RPE统计', size: 'half' },
   'load-diagnostics': { title: '负荷诊断', size: 'third' },
   recovery: { title: '恢复与机能趋势', size: 'wide' },
-  'strength-change': { title: '力量与爆发前后测', size: 'half' },
-  'relative-strength': { title: '相对力量', size: 'half' },
-  structure: { title: '训练结构', size: 'third' },
-  intensity: { title: '强度分布', size: 'third' },
-  status: { title: '周期状态', size: 'third' },
-  'water-zones': { title: '水上强度距离与时间', size: 'full' },
   'project-indicators': { title: '专项指标矩阵', size: 'half' },
-  'movement-efficiency': { title: '动作效率与代偿', size: 'half' },
   roster: { title: '运动员状态', size: 'full' }
 };
 
@@ -125,7 +128,7 @@ function normalizeOverviewLayout(stored: Partial<OverviewLayoutState> | null | u
     mergedOrder.splice(0, mergedOrder.length, ...withoutNewCards);
   }
   return {
-    version: 5,
+    version: 6,
     order: mergedOrder,
     hidden: Array.isArray(stored?.hidden) ? stored.hidden.filter((id) => known.has(id)) : [],
     pinned: Array.isArray(stored?.pinned) ? stored.pinned.filter((id) => known.has(id)) : []
@@ -502,18 +505,57 @@ export function OverviewPage(props: Props) {
         <p className="analysis-method-note">生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。</p>
       </article>
     ),
+    'fms-analysis': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<BrainCircuit size={17} />} title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人动作筛查' : `全队均值 · n=${measurementSampleCount || '—'}`} · 动作质量与代偿`} />
+        <FmsTeamChart measurements={overview?.measurements || []} />
+        <p className="analysis-method-note">基于深蹲、足踝、推撑、肩部、躯干和颈椎六项动作筛查；悬浮柱形可查看评分与训练目标。</p>
+      </article>
+    ),
     'performance-radar': (
       <article className="panel professional-panel">
-        <PanelHeading title="六维运动表现画像" subtitle={`${scopeLabel} · 目标达成制`} />
+        <PanelHeading icon={<Activity size={17} />} title="全队多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
         {strengthLoading ? <div className="professional-chart-empty">正在读取力量测试…</div> : <PerformanceRadarChart data={radar} />}
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
       </article>
     ),
-    'load-response': (
-      <article className="panel professional-panel">
-        <PanelHeading title="训练负荷与机体刺激" subtitle={`${isIndividualOverview ? '个人' : '团队人均'} SRPE · SMVL · 日序列`} />
-        <ProfessionalLoadChart data={daily} team={!isIndividualOverview} />
-        <p className="analysis-method-note">{isIndividualOverview ? 'SRPE反映个人内部负荷，SMVL反映训练量刺激' : '团队曲线按权限范围内队员人数折算人均值，避免队伍人数变化放大总量'}；二者分离时应结合课表和恢复状态复核。</p>
+    'strength-analysis': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<Dumbbell size={17} />} title="基础力量分析" subtitle={`${isIndividualOverview ? '个人' : '全队均值'} · 前后测变化 · 相对力量`} />
+        <BasicStrengthAnalysis changes={strengthChanges} relative={relativeStrength} />
+        <p className="analysis-method-note">合并原“力量与爆发前后测”和“相对力量”，同时观察变化率与倍体重水平，悬浮可查看精确数值。</p>
+      </article>
+    ),
+    'injury-analysis': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<HeartPulse size={17} />} title="运动损伤评估图" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
+        <InjuryAssessmentChart injuries={overview?.injuries || []} athleteCount={scopeAthleteCount} />
+        <p className="analysis-method-note">按每名运动员最新记录统计健康、观察、受限、康复和停训状态，不能替代医学诊断。</p>
+      </article>
+    ),
+    'training-load-analysis': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<Layers3 size={17} />} title="体能与专项训练负荷分析" subtitle="体能负荷 · 专项负荷 · 对比分析（日/周/月/阶段）" />
+        <TrainingLoadComparisonChart records={analysisRecords} />
+        <p className="analysis-method-note">体能训练自动关联力量、功能、跑步、恢复和测功仪记录；专项训练关联水上、竞速及项目技术训练。</p>
+      </article>
+    ),
+    'training-volume': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<BarChart3 size={17} />} title="训练量统计图" subtitle="训练时长 · SRPE（日/周/月/阶段）" />
+        <TrainingVolumeChart records={analysisRecords} />
+      </article>
+    ),
+    'training-content': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<Layers3 size={17} />} title="训练内容统计图" subtitle="内容结构（日/周/月/阶段）" />
+        <TrainingContentChart records={analysisRecords} />
+      </article>
+    ),
+    'rpe-analysis': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading icon={<Gauge size={17} />} title="RPE统计图" subtitle="主观用力程度（日/周/月/阶段）" />
+        <RpeStatisticsChart records={analysisRecords} />
       </article>
     ),
     'load-diagnostics': (
@@ -529,41 +571,10 @@ export function OverviewPage(props: Props) {
       </article>
     ),
     recovery: <article className="panel professional-panel"><PanelHeading title="恢复与机能趋势" subtitle={`${isIndividualOverview ? '个人' : '团队日均'} · 睡眠 · 晨脉 · 疲劳`} /><RecoveryTrendChart data={daily} /></article>,
-    'strength-change': (
-      <article className="panel professional-panel">
-        <PanelHeading title="力量与爆发前后测" subtitle={`${isIndividualOverview ? '个人' : '团队均值'} · ${strengthTests[1] ? `${strengthTests[1].testDate} → ${strengthTests[0].testDate}` : '最近两次测试'}`} />
-        {strengthLoading ? <div className="professional-chart-empty">正在读取力量测试…</div> : <StrengthChangeChart data={strengthChanges} />}
-      </article>
-    ),
-    'relative-strength': (
-      <article className="panel professional-panel">
-        <PanelHeading title="相对力量" subtitle={`${isIndividualOverview ? '个人' : '团队均值'} · 1RM ÷ 体重`} />
-        {strengthLoading ? <div className="professional-chart-empty">正在读取力量测试…</div> : <RelativeStrengthChart data={relativeStrength} />}
-        <p className="analysis-method-note">{isIndividualOverview ? '相对力量用于本人纵向比较' : '当前为权限队员测试结果的团队均值，不代替个人评估'}；不同项目、性别和训练阶段应采用各自目标。</p>
-      </article>
-    ),
-    structure: <article className="panel professional-panel structure-panel"><PanelHeading title="训练结构" subtitle={`${isIndividualOverview ? '个人' : '团队总量'} · 环境层级 · 训练目的`} /><StructureChart records={analysisRecords} /></article>,
-    intensity: <article className="panel professional-panel"><PanelHeading title="强度分布" subtitle={`${isIndividualOverview ? '个人' : '团队总时长'} · U3—ATP`} /><IntensityChart records={analysisRecords} /></article>,
-    status: (
-      <article className="panel status-panel professional-panel">
-        <div className="panel-heading"><div><h2>{isIndividualOverview ? '周期状态' : '团队状态分布'}</h2></div><span className="panel-heading-note">按训练记录统计</span></div>
-        <div className="status-orbit"><div className="orbit-main"><strong>{isIndividualOverview ? statusCount.normal : `${stableRate}%`}</strong><span>{isIndividualOverview ? '正常日' : '状态稳定'}</span></div><div className="orbit-ring" aria-hidden="true" /></div>
-        <div className="status-counts">
-          <div><i className="dot normal" /><span>正常</span><strong>{statusCount.normal}</strong></div><div><i className="dot attention" /><span>关注</span><strong>{statusCount.attention}</strong></div><div><i className="dot alert" /><span>异常</span><strong>{statusCount.alert}</strong></div><div><i className="dot rest" /><span>休息</span><strong>{statusCount.rest}</strong></div><div><i className="dot missing" /><span>缺失</span><strong>{statusCount.missing}</strong></div>
-        </div>
-      </article>
-    ),
-    'water-zones': <article className="panel professional-panel water-zone-panel"><PanelHeading title="水上强度距离与时间" subtitle={`${isIndividualOverview ? '个人' : '团队总量'} · 距离 · 时间 · /500m配速`} /><WaterIntensityLoadChart records={analysisRecords} /></article>,
     'project-indicators': <article className="panel professional-panel indicator-panel"><PanelHeading title={`${props.project}专项指标矩阵`} subtitle={`${isIndividualOverview ? '最近批次' : `团队均值 · n=${measurementSampleCount || '—'}`} · 统一测试指标`} /><IndicatorMatrix project={props.project} latest={latestStrength} measurements={measurementMap} /></article>,
-    'movement-efficiency': (
-      <article className="panel professional-panel movement-panel">
-        <PanelHeading title="动作效率与代偿" subtitle={`${isIndividualOverview ? '个人' : `团队均值 · n=${measurementSampleCount || '—'}`} · 功能控制`} /><MovementMatrix latest={latestStrength} measurements={measurementMap} />
-        <p className="analysis-method-note">动作评分来自统一测试批次；单腿蹲对称性由左右实测次数自动计算。</p>
-      </article>
-    ),
     roster: (
       <article className="panel professional-panel roster-preview">
-        <div className="panel-heading roster-panel-heading"><div><h2>运动员状态</h2></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>
+        <div className="panel-heading roster-panel-heading"><div><h2><UsersRound size={18} />运动员状态</h2><small>稳定率 {stableRate}% · 正常 {statusCount.normal} · 关注 {statusCount.attention} · 异常 {statusCount.alert}</small></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>
         <div className="table-scroll"><table className="data-table">
           <thead><tr><th>运动员</th><th>所属地区</th><th>项目 / 组别</th><th>位置/号位</th><th>最新状态</th><th>周期SRPE</th><th>平均睡眠</th><th>疲劳指数</th></tr></thead>
           <tbody>{visibleAthleteRows.map((row) => <tr key={row.athlete.id}>
@@ -593,8 +604,8 @@ export function OverviewPage(props: Props) {
   );
 }
 
-function PanelHeading({ title, subtitle }: { title: string; subtitle: string }) {
-  return <div className="panel-heading professional-heading"><div><h2>{title}</h2></div><small>{subtitle}</small></div>;
+function PanelHeading({ title, subtitle, icon }: { title: string; subtitle: string; icon?: ReactNode }) {
+  return <div className="panel-heading professional-heading"><div><h2>{icon && <span className="analysis-title-icon">{icon}</span>}{title}</h2></div><small>{subtitle}</small></div>;
 }
 
 function Metric({ icon, label, value, unit, note, tone }: { icon: ReactNode; label: string; value: string; unit: string; note: string; tone: string }) {

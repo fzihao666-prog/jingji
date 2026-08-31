@@ -1679,6 +1679,45 @@ function seedOverviewProfileData() {
 
 runInitializationOnce('overview_profile_seed_v2', seedOverviewProfileData);
 
+function seedOverviewInjuryData() {
+  const creator = db.prepare("SELECT id FROM users WHERE role IN ('DMD', 'TD', 'PRJ', 'SCC') ORDER BY id LIMIT 1")
+    .get() as { id: number } | undefined;
+  const athletes = db.prepare('SELECT id, name FROM athletes WHERE active = 1 ORDER BY id')
+    .all() as Array<{ id: number; name: string }>;
+  if (!creator || !athletes.length) return;
+  const existing = db.prepare("SELECT COUNT(*) AS count FROM injury_records WHERE note LIKE '%训练总览模拟数据%'")
+    .get() as { count: number };
+  if (existing.count >= Math.min(athletes.length, 6)) return;
+  db.prepare("DELETE FROM injury_records WHERE note LIKE '%训练总览模拟数据%'").run();
+  const insert = db.prepare(`
+    INSERT INTO injury_records
+      (athlete_id, record_type, injury_name, body_part, side, status, pain_score,
+       onset_date, restrictions, rehab_plan, review_date, note, created_by, created_at)
+    VALUES (?, 'formal', ?, ?, ?, ?, ?, ?, ?, ?, ?, '训练总览模拟数据', ?, ?)
+  `);
+  const templates = [
+    { injury: '肩袖疲劳反应', part: '肩部', side: 'right', status: 'observation', pain: 2, restriction: '限制大负荷上肢推举', plan: '肩胛稳定与低强度恢复' },
+    { injury: '腰背肌紧张', part: '腰背部', side: 'center', status: 'restricted', pain: 4, restriction: '减少大重量轴向负荷', plan: '核心控制与软组织放松' },
+    { injury: '膝前区应力反应', part: '膝部', side: 'left', status: 'rehab', pain: 3, restriction: '暂停深屈膝跳跃', plan: '股四头肌等长与渐进负荷' },
+    { injury: '腕部轻度不适', part: '腕部', side: 'right', status: 'observation', pain: 1, restriction: '调整握桨与腕部角度', plan: '活动度练习与训练后冰敷' },
+    { injury: '踝关节扭伤恢复期', part: '踝部', side: 'left', status: 'rehab', pain: 2, restriction: '限制变向和落地冲击', plan: '本体感觉与单脚稳定训练' },
+    { injury: '无活动性损伤', part: '全身', side: 'unspecified', status: 'healthy', pain: 0, restriction: '无', plan: '常规预防性训练' }
+  ] as const;
+  const today = new Date();
+  today.setUTCHours(12, 0, 0, 0);
+  for (const [index, athlete] of athletes.entries()) {
+    const template = templates[index % templates.length];
+    const onset = new Date(today); onset.setUTCDate(onset.getUTCDate() - 4 - index * 3);
+    const review = new Date(today); review.setUTCDate(review.getUTCDate() + 3 + index);
+    const created = new Date(today); created.setUTCMinutes(created.getUTCMinutes() + index);
+    insert.run(athlete.id, template.injury, template.part, template.side, template.status, template.pain,
+      onset.toISOString().slice(0, 10), template.restriction, template.plan, review.toISOString().slice(0, 10),
+      creator.id, created.toISOString());
+  }
+}
+
+runInitializationOnce('overview_injury_seed_v1', seedOverviewInjuryData);
+
 function seedTrainingPlanExample() {
   const athlete = db.prepare("SELECT id FROM athletes WHERE name = '林舟'").get() as { id: number } | undefined;
   const coach = db.prepare("SELECT id FROM users WHERE username = 'coach01'").get() as { id: number } | undefined;
@@ -1824,7 +1863,7 @@ function seedStrengthDailyVolumeExample() {
     INSERT INTO training_sessions
       (athlete_id, session_date, session_order, start_time, training_type, structure_type,
        intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl, source, quality, is_demo, created_by)
-    VALUES (?, ?, ?, ?, '力量训练', '体能训练', ?, ?, ?, ?, ?, ?, ?, 'strength_daily_seed', 'estimated', 1, ?)
+    VALUES (?, ?, ?, ?, '力量训练', '体能训练', ?, ?, ?, ?, ?, ?, ?, 'strength_daily_seed', 'estimated', 0, ?)
   `);
   const insertSet = db.prepare(`
     INSERT INTO strength_result_sets
@@ -1889,6 +1928,9 @@ function seedStrengthDailyVolumeExample() {
 }
 
 runInitializationOnce('strength_daily_volume_seed_v4', seedStrengthDailyVolumeExample);
+
+// 初始化训练量用于开箱即用的分析展示；来源字段仍明确保留，避免与人工录入混淆。
+db.prepare("UPDATE training_sessions SET is_demo = 0 WHERE source = 'strength_daily_seed'").run();
 
 // 同步早期演示数据中的旧模块命名；只处理完全匹配的内置示例标题。
 db.prepare(`

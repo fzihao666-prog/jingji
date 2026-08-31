@@ -561,6 +561,18 @@ export type OverviewPayload = {
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];
   profiles: OverviewAthleteProfile[];
+  injuries: Array<{
+    athleteId: number;
+    athleteName: string;
+    injuryName: string;
+    bodyPart: string;
+    side: 'left' | 'right' | 'bilateral' | 'center' | 'unspecified';
+    status: 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';
+    painScore: number;
+    onsetDate: string;
+    reviewDate: string;
+    isDemo: boolean;
+  }>;
   meta: {
     project: string;
     from: string;
