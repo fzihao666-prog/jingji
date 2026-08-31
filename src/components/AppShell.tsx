@@ -26,10 +26,11 @@ import { ProjectMark } from './ProjectMark';
 
 export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule' | 'special-athletes';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
+export type DataCollectionPageKey = 'bluetooth';
 export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
 
 const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
-  { key: 'special-time', label: '综合分析', pages: ['special-time', 'special-distance', 'special-load'] },
+  { key: 'special-time', label: '专项分析', pages: ['special-time', 'special-distance', 'special-load'] },
   { key: 'special-rate', label: '专项指标', pages: ['special-rate', 'special-heart', 'special-power'] },
   { key: 'special-schedule', label: '训练安排', pages: ['special-schedule'] },
   { key: 'special-athletes', label: '运动员看板', pages: ['special-athletes'] }
@@ -43,6 +44,10 @@ const strengthGroups: Array<{ key: StrengthPageKey; label: string }> = [
   { key: 'strength-assessment', label: '体能评估' }
 ];
 
+const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string }> = [
+  { key: 'bluetooth', label: '蓝牙连接' }
+];
+
 const navItems: Array<{
   key: PageKey;
   label: string;
@@ -50,7 +55,6 @@ const navItems: Array<{
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
-  { key: 'bluetooth', label: '蓝牙连接', icon: BluetoothConnected },
   { key: 'personal', label: '个人档案', icon: UserRound },
   { key: 'athletes', label: '运动员管理', icon: UsersRound, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'coaches', label: '教练管理', icon: Network, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
@@ -81,12 +85,15 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(() => page.startsWith('special-'));
   const [strengthOpen, setStrengthOpen] = useState(() => page.startsWith('strength-'));
+  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => page === 'bluetooth');
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
   const specialActive = page.startsWith('special-');
   const strengthActive = page.startsWith('strength-');
+  const dataCollectionActive = page === 'bluetooth';
   const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
   const strengthCurrent = strengthGroups.find((item) => item.key === page);
-  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : visibleItems.find((item) => item.key === page) || visibleItems[0];
+  const dataCollectionCurrent = dataCollectionGroups.find((item) => item.key === page);
+  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: BluetoothConnected } : visibleItems.find((item) => item.key === page) || visibleItems[0];
 
   const choosePage = (key: PageKey) => {
     onPageChange(key);
@@ -182,6 +189,18 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
             </button>
             {strengthOpen && <div className="special-nav-tree">
               {strengthGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}>
+                <i /> <span>{item.label}</span>
+              </button>)}
+            </div>}
+          </div>
+          <div className={`special-nav data-collection-nav ${dataCollectionActive ? 'active' : ''} ${dataCollectionOpen ? 'open' : 'collapsed'}`}>
+            <button className="special-nav-parent" onClick={() => setDataCollectionOpen((open) => !open)} aria-expanded={dataCollectionOpen}>
+              <BluetoothConnected size={19} strokeWidth={1.8} />
+              <span><strong>数据采集</strong></span>
+              <ChevronDown className="special-nav-chevron" size={15} />
+            </button>
+            {dataCollectionOpen && <div className="special-nav-tree">
+              {dataCollectionGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}>
                 <i /> <span>{item.label}</span>
               </button>)}
             </div>}
