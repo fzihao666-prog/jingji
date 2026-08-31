@@ -276,7 +276,7 @@ export function BluetoothConnectPage({ user }: Props) {
   const busy = status === 'requesting' || status === 'connecting';
 
   return (
-    <div className="page bluetooth-page">
+    <div className="page-content bluetooth-page">
       <div className="page-heading bluetooth-heading">
         <div>
           <span className="eyebrow">BLUETOOTH LINK</span>
