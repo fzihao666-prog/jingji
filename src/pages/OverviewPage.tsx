@@ -508,9 +508,9 @@ export function OverviewPage(props: Props) {
     ),
     'fms-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<BrainCircuit size={17} />} title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人FMS' : `全队均值 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
+        <PanelHeading icon={<BrainCircuit size={17} />} title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人FMS' : `最近一次团队测试 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
         <FmsTeamChart measurements={overview?.measurements || []} />
-        <p className="analysis-method-note">基于FMS标准七项测试，每项0-3分，总分21分；团队图显示各单项均分并汇总为21分制综合分。</p>
+        <p className="analysis-method-note">每个动作按0–3分计，团队柱为最近一次测试的单项平均分；2分表示动作模式基本达标，低于2分列入纠正训练。七项齐全时汇总为21分制队均，14分仅作复查参考，不单独用于判断损伤风险。</p>
       </article>
     ),
     'performance-radar': (

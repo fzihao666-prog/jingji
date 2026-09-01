@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
-  Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis
+  Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
 import { ArrowUpRight, Dumbbell, Scale, TrendingUp } from 'lucide-react';
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
@@ -171,9 +171,18 @@ export function RpeStatisticsChart({ records }: { records: TrainingRecord[] }) {
 
 export function FmsTeamChart({ measurements }: { measurements: OverviewMeasurement[] }) {
   const keys = ['fms_deep_squat','fms_hurdle_step','fms_inline_lunge','fms_shoulder_mobility','fms_active_straight_leg_raise','fms_trunk_stability_pushup','fms_rotary_stability'];
-  const data = keys.map((key, index) => { const row = measurements.find(item=>item.code===key); return { name: row?.label || key, score: row?.value ?? 0, target: row?.target ?? 2, fill: colors[index % colors.length] }; });
-  const total = data.reduce((sum,row)=>sum+row.score,0);
-  return <div className="fms-analysis-layout"><div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{top:4,right:18,left:22,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" horizontal={false}/><XAxis type="number" domain={[0,3]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={96} tick={{fontSize:9,fill:'#4d666e'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value),1)} 分`,name]}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="score" name="全队均分" fill="#178e87" radius={[0,4,4,0]} maxBarSize={16}/><Bar dataKey="target" name="单项目标" fill="#dce7e8" radius={[0,4,4,0]} maxBarSize={16}/></BarChart></ResponsiveContainer></div><div className="fms-summary"><strong>{formatNumber(total,1)}<small>/21</small></strong><span>FMS综合均分</span><p>{total >= 14 ? 'FMS总分达到常用风险筛查参考线，继续关注单项低分和左右侧对称。' : 'FMS总分低于14分，建议优先安排纠正性训练并复测。'}</p></div></div>;
+  const data = keys.map((key) => {
+    const row = measurements.find((item) => item.code === key);
+    const score = row?.value ?? null;
+    return { name: row?.label || key, score, sampleCount: row?.sampleCount || 0 };
+  });
+  const available = data.filter((row) => row.score !== null);
+  const complete = available.length === keys.length;
+  const total = complete ? available.reduce((sum, row) => sum + Number(row.score), 0) : null;
+  const achieved = available.filter((row) => Number(row.score) >= 2).length;
+  const correction = available.filter((row) => Number(row.score) < 2);
+  const sampleCount = Math.max(0, ...available.map((row) => row.sampleCount));
+  return <div className="fms-analysis-layout"><div className="analysis-chart-medium fms-team-chart"><div className="fms-team-legend"><span><i/>本次队均</span><span><i/>动作达标线 2分</span></div><div className="fms-team-plot"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{top:2,right:26,left:22,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" horizontal={false}/><XAxis type="number" domain={[0,3]} ticks={[0,1,2,3]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={96} tick={{fontSize:9,fill:'#4d666e'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value,name,entry)=>[`${formatNumber(Number(value),1)} 分 · n=${entry.payload.sampleCount}`,name]}/><ReferenceLine x={2} stroke="#d89222" strokeWidth={1.6} strokeDasharray="4 3"/><Bar dataKey="score" name="本次队均" fill="#178e87" radius={[0,5,5,0]} maxBarSize={18}>{data.map((row)=><Cell key={row.name} fill={row.score === null ? '#dce6e8' : row.score < 2 ? '#df634d' : row.score < 2.5 ? '#e1a12c' : '#178e87'}/>)}</Bar></BarChart></ResponsiveContainer></div></div><aside className="fms-summary"><strong>{total === null ? '—' : formatNumber(total,1)}<small>/21</small></strong><span>七项综合队均</span><div className="fms-summary-grid"><p><b>{achieved}</b><small>达标项目</small></p><p><b>{correction.length}</b><small>待纠正项目</small></p><p><b>{available.length}/7</b><small>有效项目</small></p></div><em>最近一次团队测试 · {sampleCount ? `最多 ${sampleCount} 人/项` : '暂无有效样本'}</em><p>{correction.length ? `优先复核：${correction.map((row)=>row.name).join('、')}。结合左右侧最低分安排纠正训练。` : complete ? '七个动作队均均达到2分，仍需继续关注个体低分和左右不对称。' : '测试项目不完整，补齐七项后再生成综合分。'}</p></aside></div>;
 }
 
 export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasurement[] }) {
