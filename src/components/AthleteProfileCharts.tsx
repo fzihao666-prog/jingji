@@ -1,5 +1,5 @@
 import {
-  Bar, BarChart, CartesianGrid, LabelList, PolarAngleAxis, PolarGrid, PolarRadiusAxis,
+  Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis,
   Radar, RadarChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip,
   XAxis, YAxis
 } from 'recharts';
@@ -29,22 +29,8 @@ function chartDomain(values: number[], minimumPadding: number): [number, number]
   return [Math.floor((low - padding) * 10) / 10, Math.ceil((high + padding) * 10) / 10];
 }
 
-function ageStructure(profiles: OverviewAthleteProfile[]) {
-  const ages = profiles.map((profile) => profile.age).filter((value): value is number => value !== null && Number.isFinite(value));
-  if (!ages.length) return [];
-  const definitions = [
-    { label: '≤20岁', includes: (age: number) => age <= 20 },
-    { label: '21–23岁', includes: (age: number) => age >= 21 && age <= 23 },
-    { label: '24–26岁', includes: (age: number) => age >= 24 && age <= 26 },
-    { label: '27–29岁', includes: (age: number) => age >= 27 && age <= 29 },
-    { label: '≥30岁', includes: (age: number) => age >= 30 }
-  ];
-  return definitions.map((definition) => {
-    const count = ages.filter(definition.includes).length;
-    const share = Math.round(count / ages.length * 100);
-    return { label: definition.label, count, share, display: `${count}人 · ${share}%` };
-  }).filter((item) => item.count > 0);
-}
+type AgeSort = 'age-asc' | 'age-desc';
+type TeamAgePoint = { athleteId: number; name: string; birthDate: string | null; age: number; averageAge: number; axisLabel: string };
 
 function TeamProfileTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: TeamScatterPoint }> }) {
   const point = payload?.[0]?.payload;
@@ -52,7 +38,15 @@ function TeamProfileTooltip({ active, payload }: { active?: boolean; payload?: A
   return <div className="team-profile-tooltip"><strong>{point.name}</strong><span>年龄：{point.age === null ? '—' : `${formatNumber(point.age, 1)}岁`}</span><span>身高：{formatNumber(point.height, 1)} cm</span><span>体重：{formatNumber(point.weight, 1)} kg</span></div>;
 }
 
+function TeamAgeTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: TeamAgePoint }> }) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point) return null;
+  return <div className="team-profile-tooltip team-age-tooltip"><strong>{point.name}</strong><span>年龄：{formatNumber(point.age, 1)} 岁</span><span>出生日期：{point.birthDate || '未录入'}</span><em>平均年龄：{formatNumber(point.averageAge, 1)} 岁</em></div>;
+}
+
 export function AthleteProfileOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
+  const [ageSort, setAgeSort] = useState<AgeSort>('age-asc');
+  const [hoveredAge, setHoveredAge] = useState<TeamAgePoint | null>(null);
   if (!profiles.length || !profiles.some((profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null)) {
     return <ProfileEmpty title={individual ? '暂无档案画像数据' : '暂无队伍身体数据'} detail="完善出生日期和身体测量后自动生成。" />;
   }
@@ -81,7 +75,24 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
   );
 
   const scatterData: TeamScatterPoint[] = profiles.flatMap((profile) => profile.heightCm !== null && profile.weightKg !== null ? [{ athleteId: profile.athleteId, name: profile.athleteName, age: profile.age, height: profile.heightCm, weight: profile.weightKg }] : []);
-  const ageData = ageStructure(profiles);
+  const ageProfiles = profiles.filter((profile): profile is OverviewAthleteProfile & { age: number } => profile.age !== null && Number.isFinite(profile.age));
+  const sortedAgeProfiles = [...ageProfiles].sort((left, right) => {
+    const difference = left.age - right.age;
+    return ageSort === 'age-asc' ? difference || left.athleteName.localeCompare(right.athleteName, 'zh-CN') : -difference || left.athleteName.localeCompare(right.athleteName, 'zh-CN');
+  });
+  const averageAge = average(ageProfiles.map((profile) => profile.age));
+  const ageData: TeamAgePoint[] = sortedAgeProfiles.map((profile, index) => ({
+    athleteId: profile.athleteId,
+    name: profile.athleteName,
+    birthDate: profile.birthDate,
+    age: profile.age,
+    averageAge: averageAge || profile.age,
+    axisLabel: String(index + 1)
+  }));
+  const ageAxisInterval = Math.max(0, Math.ceil(ageData.length / 8) - 1);
+  const ageValues = ageData.map((item) => item.age);
+  const minAge = ageValues.length ? Math.min(...ageValues) : null;
+  const maxAge = ageValues.length ? Math.max(...ageValues) : null;
   const latestMeasurement = profiles.map((profile) => profile.bodyMeasurementDate).filter((value): value is string => Boolean(value)).sort().at(-1) || '—';
 
   return (
@@ -97,10 +108,10 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
         <section className="team-profile-chart-card team-scatter-card">
           <header><div><h3>身高—体重分布</h3><p>运动员身体形态相对位置</p></div><span>{scatterData.length} 名有效运动员</span></header>
           <div className="team-profile-chart-canvas">
-            {scatterData.length ? <ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 18, right: 26, bottom: 18, left: 2 }}>
+            {scatterData.length ? <ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 18, right: 26, bottom: 27, left: 14 }}>
               <CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" />
-              <XAxis type="number" dataKey="height" name="身高" unit=" cm" domain={chartDomain(scatterData.map((item) => item.height), 2)} tick={{ fontSize: 9, fill: '#74888f' }} axisLine={false} tickLine={false} label={{ value: '身高 cm', position: 'insideBottomRight', offset: -8, fill: '#74888f', fontSize: 9 }} />
-              <YAxis type="number" dataKey="weight" name="体重" unit=" kg" domain={chartDomain(scatterData.map((item) => item.weight), 3)} tick={{ fontSize: 9, fill: '#74888f' }} axisLine={false} tickLine={false} width={42} label={{ value: '体重 kg', angle: -90, position: 'insideLeft', fill: '#74888f', fontSize: 9 }} />
+              <XAxis type="number" dataKey="height" name="身高" domain={chartDomain(scatterData.map((item) => item.height), 2)} tick={{ fontSize: 9, fill: '#74888f' }} axisLine={false} tickLine={false} label={{ value: '身高 cm', position: 'insideBottomRight', offset: -8, fill: '#74888f', fontSize: 9 }} />
+              <YAxis type="number" dataKey="weight" name="体重" domain={chartDomain(scatterData.map((item) => item.weight), 3)} tick={{ fontSize: 9, fill: '#74888f' }} axisLine={false} tickLine={false} width={48} label={{ value: '体重 kg', angle: -90, position: 'insideLeft', offset: 8, fill: '#74888f', fontSize: 9 }} />
               {height !== null && <ReferenceLine x={height} stroke="#2b7d8d" strokeDasharray="5 5" label={{ value: '平均身高', position: 'insideTopRight', fill: '#56808a', fontSize: 8 }} />}
               {weight !== null && <ReferenceLine y={weight} stroke="#2b7d8d" strokeDasharray="5 5" label={{ value: '平均体重', position: 'insideTopLeft', fill: '#56808a', fontSize: 8 }} />}
               <Tooltip content={<TeamProfileTooltip />} cursor={{ stroke: '#a9c5c8', strokeDasharray: '3 4' }} />
@@ -110,16 +121,19 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
         </section>
 
         <section className="team-profile-chart-card team-age-card">
-          <header><div><h3>年龄结构</h3><p>队伍年龄梯队分布</p></div><span>{profiles.filter((profile) => profile.age !== null).length} 名有效运动员</span></header>
+          <header><div><h3>年龄结构</h3><p>展示队伍运动员年龄分布及平均年龄水平</p></div><div className="team-age-actions"><span>共 {ageData.length} 人</span><label><span>排序</span><select aria-label="年龄分布排序" value={ageSort} onChange={(event) => setAgeSort(event.target.value as AgeSort)}><option value="age-asc">年龄从小到大</option><option value="age-desc">年龄从大到小</option></select></label></div></header>
+          <div className="team-age-plot-heading"><strong>运动员年龄分布</strong><span>个体年龄变化与队伍平均年龄</span></div>
           <div className="team-profile-age-canvas">
-            {ageData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={ageData} layout="vertical" margin={{ top: 8, right: 72, bottom: 8, left: 2 }}>
-              <CartesianGrid stroke="#e4ecee" strokeDasharray="3 5" horizontal={false} />
-              <XAxis type="number" hide domain={[0, Math.max(...ageData.map((item) => item.count), 1)]} />
-              <YAxis type="category" dataKey="label" width={58} tick={{ fontSize: 9, fill: '#526b73', fontWeight: 700 }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: 'rgba(22,143,136,.06)' }} formatter={(value) => [`${Number(value)} 人`, '人数']} contentStyle={{ border: '1px solid #d5e3e5', borderRadius: 9, boxShadow: '0 10px 24px rgba(9,54,65,.1)', fontSize: 10 }} />
-              <Bar dataKey="count" name="人数" fill="#168f88" radius={[0, 6, 6, 0]} barSize={18}><LabelList dataKey="display" position="right" fill="#5c737b" fontSize={9} fontWeight={700} /></Bar>
-            </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无有效年龄数据</div>}
+            {ageData.length ? <ResponsiveContainer width="100%" height="100%"><LineChart data={ageData} margin={{ top: 17, right: 14, bottom: 8, left: -8 }}>
+              <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" vertical={false} />
+              <XAxis dataKey="axisLabel" interval={ageAxisInterval} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} label={{ value: '运动员序号', position: 'insideBottomRight', offset: -4, fill: '#87979c', fontSize: 7 }} />
+              <YAxis domain={chartDomain(ageValues, 1.5)} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={false} tickLine={false} width={38} unit="岁" />
+              <Line type="linear" dataKey="age" name="运动员年龄" stroke="#2f7fa3" strokeWidth={2.5} dot={(props: { cx?: number; cy?: number; payload?: TeamAgePoint }) => <circle cx={props.cx} cy={props.cy} r={3.8} fill="#fff" stroke="#2f7fa3" strokeWidth={2} tabIndex={0} aria-label={props.payload ? `${props.payload.name}，${formatNumber(props.payload.age, 1)}岁` : undefined} onMouseEnter={() => setHoveredAge(props.payload || null)} onMouseLeave={() => setHoveredAge(null)} onFocus={() => setHoveredAge(props.payload || null)} onBlur={() => setHoveredAge(null)} />} activeDot={{ r: 5, fill: '#2f7fa3', stroke: '#fff', strokeWidth: 2 }} isAnimationActive={false} />
+              <Line type="linear" dataKey="averageAge" name="平均年龄" stroke="#e59a31" strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} />
+            </LineChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无年龄数据</div>}
+            {hoveredAge && <TeamAgeTooltip active payload={[{ payload: hoveredAge }]} />}
           </div>
+          {ageData.length > 0 && <><div className="team-age-legend"><span><i />运动员年龄</span><span><i />平均年龄</span></div><div className="team-age-summary"><span>平均年龄 <strong>{formatNumber(averageAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最小 <strong>{formatNumber(minAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最大 <strong>{formatNumber(maxAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>年龄跨度 <strong>{formatNumber((maxAge ?? 0) - (minAge ?? 0), 1)} 岁</strong></span></div></>}
         </section>
       </div>
 
