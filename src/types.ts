@@ -465,6 +465,48 @@ export type OverviewMeasurement = {
   isDemo: boolean;
 };
 
+export type ChampionBenchmarkRow = {
+  code: string;
+  label: string;
+  domain: string;
+  unit: string;
+  direction: 'higher_better' | 'lower_better' | 'neutral';
+  value: number | null;
+  previous: number | null;
+  targetMin: number | null;
+  targetMax: number | null;
+  eliteMean: number | null;
+  percent: number | null;
+  score: number | null;
+  gap: number | null;
+  standardDistance: number | null;
+  eliteGapPct: number | null;
+  priorityIndex: number | null;
+  status: 'elite' | 'near' | 'develop' | 'missing';
+  weight: number;
+  rationale: string;
+  sourceNote: string;
+  testDate: string | null;
+};
+
+export type ChampionBenchmarkPayload = {
+  athleteId: number;
+  athleteName: string;
+  project: string;
+  gender: string;
+  modelVersion: string;
+  rows: ChampionBenchmarkRow[];
+  summary: {
+    score: number | null;
+    averageStandardDistance: number | null;
+    topPriorityIndex: number | null;
+    achieved: number;
+    comparable: number;
+    primaryGap: string;
+    source: string;
+  };
+};
+
 export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';
 
 export type BodyCompositionRecord = {

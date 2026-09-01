@@ -1,0 +1,47 @@
+.special-data-dialog-backdrop { position: fixed; z-index: 120; inset: 0; padding: 24px; display: grid; place-items: center; background: rgba(4,35,45,.56); backdrop-filter: blur(3px); }
+.special-data-dialog { width: min(1120px, 96vw); max-height: calc(100vh - 48px); border: 1px solid rgba(255,255,255,.4); border-radius: 14px; overflow: hidden; color: #173b43; background: #f4f8f8; box-shadow: 0 28px 80px rgba(3,33,43,.28); }
+.special-data-dialog > header { min-height: 78px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #d7e3e4; background: #fff; }
+.special-data-dialog > header span { color: #0d9488; font: 800 9px "Bahnschrift", sans-serif; letter-spacing: .18em; }
+.special-data-dialog h2 { margin: 3px 0 0; font-size: 19px; }
+.special-data-dialog header p { margin: 3px 0 0; color: #6e8389; font-size: 10px; }
+.special-data-icon-button { width: 34px; height: 34px; border: 1px solid #d5e1e2; border-radius: 9px; display: grid; place-items: center; color: #587078; background: #fff; cursor: pointer; }
+.special-data-import-start { padding: 22px; }
+.special-data-dropzone { min-height: 220px; padding: 26px; border: 1px dashed #8ebdb8; border-radius: 12px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #0d9488; background: #f8fcfb; cursor: pointer; }
+.special-data-dropzone.has-file { border-style: solid; background: #e8f6f3; }
+.special-data-dropzone input { display: none; }
+.special-data-dropzone strong { color: #173b43; font-size: 14px; }
+.special-data-dropzone span { color: #6e8389; font-size: 10px; }
+.special-data-guidance { margin-top: 10px; padding: 11px 13px; display: grid; gap: 3px; border-radius: 8px; color: #5f767e; background: #eaf2f2; font-size: 10px; }
+.special-data-guidance strong { color: #173b43; }
+.special-data-import-start footer, .special-data-import-review footer { margin-top: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.special-data-button { min-height: 38px; padding: 0 15px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 11px; font-weight: 800; cursor: pointer; }
+.special-data-button.ghost { border: 1px solid #cadadb; color: #476169; background: #fff; }
+.special-data-button.primary { border: 1px solid #0d9488; color: #fff; background: #0d9488; }
+.special-data-button:disabled, .special-data-icon-button:disabled { cursor: not-allowed; opacity: .5; }
+.special-data-import-review { padding: 14px; max-height: calc(100vh - 125px); overflow: auto; }
+.special-data-summary { margin-bottom: 10px; padding: 10px 13px; display: grid; grid-template-columns: repeat(4, 110px) 1fr; align-items: center; gap: 8px; border-radius: 10px; color: #fff; background: #123f49; }
+.special-data-summary > div { display: grid; grid-template-columns: 1fr auto; align-items: end; }
+.special-data-summary span { color: #a9c4cb; font-size: 9px; }
+.special-data-summary strong { font: 800 17px "Bahnschrift", sans-serif; }
+.special-data-summary strong.danger { color: #ffb2a8; }
+.special-data-summary small { justify-self: end; overflow: hidden; color: #c7d9dc; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.special-data-table-wrap { border: 1px solid #d7e3e4; border-radius: 9px; overflow: auto; background: #fff; }
+.special-data-table { width: 100%; min-width: 1120px; border-collapse: collapse; }
+.special-data-table th { height: 34px; padding: 0 8px; color: #71858b; background: #f3f7f7; font-size: 9px; text-align: left; white-space: nowrap; }
+.special-data-table td { padding: 8px; border-top: 1px solid #e6eded; font-size: 10px; vertical-align: middle; }
+.special-data-table tr.invalid { background: #fff5f2; }
+.special-data-table td small { display: block; margin-top: 2px; color: #819297; }
+.row-ok, .validation-ok { color: #0a8d7d; }
+.row-error, .validation-error { color: #b34940; }
+.validation-error { display: block; max-width: 250px; line-height: 1.45; }
+.special-data-message { margin-top: 10px; min-height: 35px; padding: 8px 11px; border-radius: 8px; display: flex; align-items: center; gap: 6px; font-size: 10px; }
+.special-data-message.success { color: #1a746d; background: #eaf7f4; }
+.special-data-message.error { color: #a4483c; background: #fff1ee; }
+
+@media (max-width: 720px) {
+  .special-data-dialog-backdrop { padding: 10px; }
+  .special-data-dialog { width: 100%; max-height: calc(100vh - 20px); }
+  .special-data-summary { grid-template-columns: repeat(2, 1fr); }
+  .special-data-summary small { grid-column: 1 / -1; justify-self: start; }
+  .special-data-import-start footer, .special-data-import-review footer { flex-direction: column; }
+}

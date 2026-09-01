@@ -14,6 +14,7 @@
     "plan-visual-check": "node scripts/training-plan-visual-check.mjs",
     "strength-training-check": "node scripts/strength-training-check.mjs",
     "special-training-check": "node scripts/special-training-check.mjs",
+    "special-test-check": "node scripts/special-test-check.mjs",
     "database-lock-check": "node scripts/database-lock-check.mjs",
     "api-check": "node scripts/api-check.mjs",
     "visual-check": "node scripts/visual-check.mjs"

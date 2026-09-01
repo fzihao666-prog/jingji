@@ -4,6 +4,7 @@ import type {
   Athlete,
   AuditLog,
   BodyCompositionRecord,
+  ChampionBenchmarkPayload,
   InjuryRecord,
   InjuryStatus,
   OverviewLayoutState,
@@ -143,6 +144,13 @@ export const api = {
   },
   async getBodyCompositionHistory(id: number) {
     return request<{ history: BodyCompositionRecord[] }>(`/api/athletes/${id}/body-composition`);
+  },
+  async personalOverview(id: number, from: string, to: string, project: Project) {
+    const params = new URLSearchParams({ from, to, project });
+    return request<{ overview: OverviewPayload }>(`/api/athletes/${id}/overview?${params}`);
+  },
+  async championBenchmark(id: number) {
+    return request<{ benchmark: ChampionBenchmarkPayload }>(`/api/athletes/${id}/champion-model`);
   },
   async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
     return request<{ message: string }>('/api/admin/athletes/bulk/profile', {

@@ -797,6 +797,24 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS champion_model_standards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    gender TEXT NOT NULL CHECK(gender IN ('男', '女')),
+    metric_code TEXT NOT NULL,
+    model_version TEXT NOT NULL DEFAULT 'CHAMPION-2026-R1',
+    target_min REAL,
+    target_max REAL,
+    elite_mean REAL,
+    weight REAL NOT NULL DEFAULT 1,
+    rationale TEXT NOT NULL DEFAULT '',
+    source_note TEXT NOT NULL DEFAULT '项目冠军模型初始化生成',
+    active INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, gender, metric_code, model_version),
+    FOREIGN KEY (metric_code) REFERENCES metric_definitions(code)
+  );
+
   CREATE TABLE IF NOT EXISTS test_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     athlete_id INTEGER NOT NULL,
@@ -895,6 +913,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_test_sessions_athlete_date ON test_sessions (athlete_id, test_date DESC);
   CREATE INDEX IF NOT EXISTS idx_test_measurements_session ON test_measurements (test_session_id, metric_code);
   CREATE INDEX IF NOT EXISTS idx_body_measurements_athlete_date ON athlete_body_measurements (athlete_id, measurement_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_champion_standards_lookup ON champion_model_standards (project, gender, active, metric_code);
   CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
 `);
@@ -1592,6 +1611,74 @@ function seedProfessionalOverviewData() {
 }
 
 runInitializationOnce('professional_overview_seed_v2', seedProfessionalOverviewData);
+
+function seedChampionModelStandards() {
+  const upsert = db.prepare(`
+    INSERT INTO champion_model_standards
+      (project, gender, metric_code, model_version, target_min, target_max, elite_mean, weight, rationale, source_note, active)
+    VALUES (?, ?, ?, 'CHAMPION-2026-R1', ?, ?, ?, ?, ?, '按项目特点生成的冠军模型初始化基线，后续可替换为实测冠军样本', 1)
+    ON CONFLICT(project, gender, metric_code, model_version) DO UPDATE SET
+      target_min = excluded.target_min, target_max = excluded.target_max,
+      elite_mean = excluded.elite_mean, weight = excluded.weight,
+      rationale = excluded.rationale, source_note = excluded.source_note,
+      active = 1, updated_at = CURRENT_TIMESTAMP
+  `);
+  const rows: Array<[string, string, string, number | null, number | null, number, number, string]> = [
+    ['赛艇', '男', 'heightCm', 188, 198, 193, .7, '身高影响杠杆长度和艇速潜力，作为形态参考不单独决定能力。'],
+    ['赛艇', '男', 'armSpanCm', 193, 205, 199, .8, '臂展反映有效划幅和入水长度，是赛艇选材与技术效率的重要形态指标。'],
+    ['赛艇', '男', 'body_fat_pct', 8, 13, 10.5, .9, '低脂体重有助于功率重量比，但需避免过低体脂影响恢复与免疫。'],
+    ['赛艇', '男', 'skeletal_muscle_kg', 39, 48, 43.5, 1.1, '骨骼肌量支撑大艇速下持续输出和陆上最大力量转化。'],
+    ['赛艇', '男', 'benchPullKg', 105, 130, 118, 1.2, '卧拉体现划船专项牵拉链最大力量，是桨端力量的关键陆上指标。'],
+    ['赛艇', '男', 'squatKg', 165, 210, 188, 1.1, '下肢最大力量影响起航、途中腿蹬发力和疲劳后技术保持。'],
+    ['赛艇', '男', 'erg_2k_sec', 340, 372, 356, 1.5, '2km测功仪成绩综合反映专项有氧功率、乳酸耐受和配速能力。'],
+    ['赛艇', '男', 'seven_stroke_power_w', 830, 980, 905, 1.2, '7桨平均功率用于观察起动段神经肌肉动员和艇速建立能力。'],
+    ['赛艇', '女', 'heightCm', 178, 188, 183, .7, '身高影响杠杆长度和划幅，女性组以国际高水平公开级形态建模。'],
+    ['赛艇', '女', 'armSpanCm', 181, 193, 187, .8, '臂展优势通常带来更好的划幅潜力和技术容错空间。'],
+    ['赛艇', '女', 'body_fat_pct', 14, 20, 17, .9, '体脂区间兼顾轻量化、内分泌健康与训练恢复。'],
+    ['赛艇', '女', 'skeletal_muscle_kg', 28, 36, 32, 1.1, '骨骼肌量反映可持续功率基础和力量训练适应水平。'],
+    ['赛艇', '女', 'benchPullKg', 72, 92, 82, 1.2, '卧拉对应赛艇牵拉链能力，需结合体重和技术效率判断。'],
+    ['赛艇', '女', 'squatKg', 115, 150, 132, 1.1, '下肢力量用于支撑蹬伸发力和长距离功率保持。'],
+    ['赛艇', '女', 'erg_2k_sec', 395, 430, 412, 1.5, '2km测功仪为女性组专项竞技水平的核心参考指标。'],
+    ['赛艇', '女', 'seven_stroke_power_w', 620, 760, 690, 1.2, '短时爆发输出评估起动段和冲刺段可用功率。'],
+
+    ['皮划艇', '男', 'body_fat_pct', 8, 13, 10.5, .9, '皮划艇强调高功率重量比，体脂控制需与上肢输出和恢复同步评估。'],
+    ['皮划艇', '男', 'skeletal_muscle_kg', 36, 45, 40.5, 1.1, '骨骼肌量支撑上肢、躯干和髋部连续发力。'],
+    ['皮划艇', '男', 'benchPullKg', 100, 125, 112, 1.2, '卧拉反映划桨牵拉链能力，是静水项目陆上力量核心指标。'],
+    ['皮划艇', '男', 'benchPressKg', 95, 120, 108, 1.0, '卧推体现推撑稳定和上肢抗疲劳能力，需与卧拉平衡观察。'],
+    ['皮划艇', '男', 'sprint_200_sec', 35.5, 39.5, 37.5, 1.4, '200米竞速反映起动、途中加速和短时无氧输出。'],
+    ['皮划艇', '男', 'sprint_500_sec', 98, 112, 105, 1.5, '500米成绩综合评价专项速度耐力和配速控制。'],
+    ['皮划艇', '男', 'left_paddle_power_w', 430, 520, 475, 1.0, '左右划桨功率用于识别单侧输出短板和艇身稳定风险。'],
+    ['皮划艇', '男', 'right_paddle_power_w', 430, 520, 475, 1.0, '左右划桨功率用于识别单侧输出短板和艇身稳定风险。'],
+    ['皮划艇', '女', 'body_fat_pct', 14, 20, 17, .9, '女性高水平皮划艇体脂区间需兼顾功率重量比和恢复质量。'],
+    ['皮划艇', '女', 'skeletal_muscle_kg', 27, 35, 31, 1.1, '骨骼肌量支撑上肢牵拉、躯干旋转和冲刺维持。'],
+    ['皮划艇', '女', 'benchPullKg', 70, 90, 80, 1.2, '卧拉与划桨牵拉链关联度高，适合作为陆上专项力量指标。'],
+    ['皮划艇', '女', 'benchPressKg', 62, 82, 72, 1.0, '卧推用于评估推撑稳定和上肢前链能力。'],
+    ['皮划艇', '女', 'sprint_200_sec', 40.5, 46.5, 43.5, 1.4, '200米成绩体现启动速度和短时峰值输出。'],
+    ['皮划艇', '女', 'sprint_500_sec', 116, 132, 124, 1.5, '500米成绩反映专项速度耐力和节奏保持。'],
+    ['皮划艇', '女', 'left_paddle_power_w', 335, 420, 378, 1.0, '单侧划桨功率用于监控输出对称性和技术稳定性。'],
+    ['皮划艇', '女', 'right_paddle_power_w', 335, 420, 378, 1.0, '单侧划桨功率用于监控输出对称性和技术稳定性。'],
+
+    ['激流', '男', 'benchPressKg', 110, 130, 120, 1.0, '激流上肢推撑能力影响门区支撑、抗冲击和连续变向。'],
+    ['激流', '男', 'benchPullKg', 105, 125, 115, 1.1, '卧拉体现牵拉链最大力量，是回旋加速和纠偏动作基础。'],
+    ['激流', '男', 'benchPressPeakPowerW', 419, 641, 530, 1.2, '峰值功率反映高强度短时动作动员能力。'],
+    ['激流', '男', 'benchPullPeakPowerW', 501, 667, 584, 1.2, '卧拉峰值功率对应短时间牵拉爆发和过门修正能力。'],
+    ['激流', '男', 'wingatePeakPowerWkg', 8.8, 10.2, 9.5, 1.1, 'Wingate相对峰值功率反映无氧爆发能力。'],
+    ['激流', '男', 'benchPress2MinReps', 66, 78, 72, .9, '2分钟卧推用于观察上肢局部肌耐力和动作保持。'],
+    ['激流', '男', 'thresholdErgPowerW', 170, 190, 180, 1.1, '阈功率体现高强度重复过门下的代谢支撑能力。'],
+    ['激流', '男', 'sprint300Sec', 99, 108, 103.5, 1.3, '300米静水竞速用于评估短程专项速度能力。'],
+    ['激流', '女', 'benchPressKg', 75, 92, 83.5, 1.0, '女性组卧推参考上肢推撑与抗冲击能力。'],
+    ['激流', '女', 'benchPullKg', 72, 88, 80, 1.1, '女性组卧拉参考牵拉链最大力量和连续变向基础。'],
+    ['激流', '女', 'benchPressPeakPowerW', 380, 470, 425, 1.2, '卧推峰值功率用于判断短时推撑爆发。'],
+    ['激流', '女', 'benchPullPeakPowerW', 410, 510, 460, 1.2, '卧拉峰值功率反映划桨牵拉爆发能力。'],
+    ['激流', '女', 'benchPress2MinReps', 57, 69, 63, .9, '2分钟卧推用于观察高频动作下的局部肌耐力。'],
+    ['激流', '女', 'thresholdErgPowerW', 140, 160, 150, 1.1, '阈功率体现回旋项目反复高强度输出的代谢底盘。'],
+    ['激流', '女', 'sprint300Sec', 110, 122, 116, 1.3, '300米竞速评价短程速度和专项力量耐力。'],
+    ['激流', '女', 'rightGripKgf', 35.3, 42.7, 39, .7, '握力用于辅助判断桨柄控制、腕前臂稳定和疲劳风险。']
+  ];
+  for (const row of rows) upsert.run(...row);
+}
+
+runInitializationOnce('champion_model_seed_v1', seedChampionModelStandards);
 
 function seedOverviewProfileData() {
   const profiles: Record<string, { birthDate: string; heightCm: number; weightKg: number; bodyFatPct: number; score: number; origin: [string, string, string] }> = {

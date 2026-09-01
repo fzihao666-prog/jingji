@@ -1,4 +1,4 @@
-import { CalendarRange, CheckCircle2, Gauge, Route, Save } from 'lucide-react';
+import { BrainCircuit, CalendarRange, CheckCircle2, Gauge, Route, Save, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
@@ -7,8 +7,10 @@ import { DateToolbar } from '../components/DateToolbar';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { BodyCompositionModelOverview, type BodyCompositionProfile } from '../components/AthleteProfileCharts';
+import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
+import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import { api } from '../api';
-import type { Athlete, BodyCompositionRecord, Project, TrainingRecord, User } from '../types';
+import type { Athlete, BodyCompositionRecord, ChampionBenchmarkPayload, OverviewMeasurement, Project, TrainingRecord, User } from '../types';
 import { addDays, formatNumber } from '../utils';
 
 type Props = {
@@ -52,6 +54,10 @@ export function PersonalPage(props: Props) {
   const canEditOwnPosition = props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
   const [bodyHistory, setBodyHistory] = useState<BodyCompositionRecord[]>([]);
   const [bodyHistoryLoading, setBodyHistoryLoading] = useState(false);
+  const [profileMeasurements, setProfileMeasurements] = useState<OverviewMeasurement[]>([]);
+  const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
+  const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
+  const [championLoading, setChampionLoading] = useState(false);
 
   useEffect(() => {
     let ignored = false;
@@ -66,6 +72,26 @@ export function PersonalPage(props: Props) {
       .finally(() => { if (!ignored) setBodyHistoryLoading(false); });
     return () => { ignored = true; };
   }, [selectedAthlete?.id]);
+
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setProfileMeasurements([]);
+      setChampionBenchmark(null);
+      return;
+    }
+    setProfileAnalysisLoading(true);
+    api.personalOverview(selectedAthlete.id, props.from, props.to, selectedAthlete.project as Project)
+      .then((result) => { if (!ignored) setProfileMeasurements(result.overview.measurements); })
+      .catch(() => { if (!ignored) setProfileMeasurements([]); })
+      .finally(() => { if (!ignored) setProfileAnalysisLoading(false); });
+    setChampionLoading(true);
+    api.championBenchmark(selectedAthlete.id)
+      .then((result) => { if (!ignored) setChampionBenchmark(result.benchmark); })
+      .catch(() => { if (!ignored) setChampionBenchmark(null); })
+      .finally(() => { if (!ignored) setChampionLoading(false); });
+    return () => { ignored = true; };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
 
   const bodyCompositionProfile = useMemo<BodyCompositionProfile | null>(() => {
     if (!selectedAthlete) return null;
@@ -189,6 +215,24 @@ export function PersonalPage(props: Props) {
             </header>
             <BodyCompositionModelOverview profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []} records={selectedRecords} individual />
             <p className="analysis-method-note">身体成分用于训练适应、营养干预和控重阶段观察；模拟项仅用于展示，录入实测值后自动替换。</p>
+          </section>
+
+          <section className="panel professional-panel analysis-feature-panel personal-fms-card">
+            <header className="personal-analysis-card-heading">
+              <div><BrainCircuit size={17} /><span><small>FMS SCREENING</small><h2>个人FMS测试分析</h2><p>六项动作筛查、目标差距与纠正训练优先级</p></span></div>
+              <strong>{profileAnalysisLoading ? '读取中' : `${profileMeasurements.filter((item) => item.domain === 'movement' && item.value !== null).length} 项有效`}</strong>
+            </header>
+            {profileAnalysisLoading ? <div className="professional-chart-empty">正在读取个人FMS测试…</div> : <FmsPersonalChart measurements={profileMeasurements} />}
+            <p className="analysis-method-note">FMS用于发现动作控制、活动度和稳定性短板；评分低于目标的项目优先安排纠正性训练和复测。</p>
+          </section>
+
+          <section className="panel professional-panel analysis-feature-panel personal-champion-card">
+            <header className="personal-analysis-card-heading">
+              <div><Trophy size={17} /><span><small>CHAMPION BENCHMARK</small><h2>冠军模型对标分析图</h2><p>冠军区间达标、标准化差距与补强优先级</p></span></div>
+              <strong>{championBenchmark?.summary.averageStandardDistance === null || championBenchmark?.summary.averageStandardDistance === undefined ? '—' : `${formatNumber(championBenchmark.summary.averageStandardDistance, 2)}差距`}</strong>
+            </header>
+            <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
+            <p className="analysis-method-note">标准化差距以冠军参考区间宽度为单位，0代表进入冠军区间；补强优先级由差距和项目权重共同决定，缺失项不按0分处理。</p>
           </section>
 
           <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />

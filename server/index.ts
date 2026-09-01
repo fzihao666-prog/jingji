@@ -1420,6 +1420,10 @@ function numberOrZero(value: unknown) {
   return numberOrNull(value) ?? 0;
 }
 
+function formatServerNumber(value: number | null | undefined, digits = 1) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '—';
+}
+
 function emptyZoneDistances(): Record<IntensityZoneKey, number> {
   return { U3: 0, U2: 0, U1: 0, AT: 0, TPT: 0, AN: 0, ATP: 0 };
 }
@@ -3454,6 +3458,175 @@ app.get('/api/analysis/summary', requireAuth, (req, res) => {
       missingDataRule: standard.missingDataRule
     },
     analysis: analyzePeriodForProject(project, records)
+  });
+});
+
+app.get('/api/athletes/:id/overview', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const athleteId = Number(req.params.id || 0);
+  const range = normalizeOverviewRange({
+    from: cleanString(req.query.from),
+    to: cleanString(req.query.to),
+    period: cleanString(req.query.period)
+  });
+  const project = cleanString(req.query.project);
+  if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
+  if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员档案分析。' });
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  const athlete = db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as { project: string } | undefined;
+  if (!athlete || athlete.project !== project) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+  res.json({ overview: buildOverviewPayload({ athleteIds: [athleteId], from: range.from, to: range.to, project, individual: true, period: range.period }) });
+});
+
+app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const athleteId = Number(req.params.id || 0);
+  if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
+  if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员冠军模型对标。' });
+  const athlete = db.prepare(`
+    SELECT id, name, project, gender
+    FROM athletes
+    WHERE id = ? AND active = 1
+  `).get(athleteId) as { id: number; name: string; project: Project; gender: string } | undefined;
+  if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+  const gender = athlete.gender?.includes('女') ? '女' : '男';
+  const standards = db.prepare(`
+    SELECT cms.metric_code AS code, cms.model_version AS modelVersion,
+      cms.target_min AS targetMin, cms.target_max AS targetMax, cms.elite_mean AS eliteMean,
+      cms.weight, cms.rationale, cms.source_note AS sourceNote,
+      md.label, md.domain, md.unit, md.direction
+    FROM champion_model_standards cms
+    JOIN metric_definitions md ON md.code = cms.metric_code
+    WHERE cms.project = ? AND cms.gender = ? AND cms.active = 1
+    ORDER BY cms.weight DESC, cms.metric_code
+  `).all(athlete.project, gender) as Array<{
+    code: string; modelVersion: string; targetMin: number | null; targetMax: number | null;
+    eliteMean: number | null; weight: number; rationale: string; sourceNote: string;
+    label: string; domain: string; unit: string; direction: 'higher_better' | 'lower_better' | 'neutral';
+  }>;
+  if (!standards.length) {
+    return res.json({
+      benchmark: {
+        athleteId: athlete.id,
+        athleteName: athlete.name,
+        project: athlete.project,
+        gender,
+        modelVersion: 'CHAMPION-2026-R1',
+        rows: [],
+        summary: { score: null, averageStandardDistance: null, topPriorityIndex: null, achieved: 0, comparable: 0, primaryGap: '暂无该项目冠军模型标准。', source: '暂无标准' }
+      }
+    });
+  }
+  const codes = standards.map((row) => row.code);
+  const placeholders = codes.map(() => '?').join(',');
+  const measurements = db.prepare(`
+    SELECT tm.metric_code AS code, tm.value_num AS value, tm.target_value AS target,
+      ts.test_date AS testDate, ts.id AS sessionId
+    FROM test_sessions ts
+    JOIN test_measurements tm ON tm.test_session_id = ts.id
+    WHERE ts.athlete_id = ? AND tm.metric_code IN (${placeholders})
+    ORDER BY tm.metric_code, ts.test_date DESC, ts.id DESC
+  `).all(athlete.id, ...codes) as Array<{ code: string; value: number; target: number | null; testDate: string; sessionId: number }>;
+  const byCode = new Map<string, Array<{ value: number; target: number | null; testDate: string; sessionId: number }>>();
+  for (const measurement of measurements) {
+    byCode.set(measurement.code, [...(byCode.get(measurement.code) || []), measurement]);
+  }
+  const lowerScore = (value: number, targetMax: number | null) => targetMax && value > 0 ? targetMax / value * 100 : null;
+  const higherScore = (value: number, targetMin: number | null) => targetMin && targetMin > 0 ? value / targetMin * 100 : null;
+  const standardDistanceFor = (value: number, standard: { targetMin: number | null; targetMax: number | null; eliteMean: number | null; direction: 'higher_better' | 'lower_better' | 'neutral' }) => {
+    if (standard.targetMin === null || standard.targetMax === null || standard.targetMin === standard.targetMax) return null;
+    const width = Math.abs(standard.targetMax - standard.targetMin);
+    if (standard.direction === 'higher_better') {
+      if (value >= standard.targetMin && value <= standard.targetMax) return 0;
+      if (value > standard.targetMax) return Math.round((standard.targetMax - value) / width * 100) / 100;
+      return Math.round((standard.targetMin - value) / width * 100) / 100;
+    }
+    if (standard.direction === 'lower_better') {
+      if (value >= standard.targetMin && value <= standard.targetMax) return 0;
+      if (value < standard.targetMin) return Math.round((value - standard.targetMin) / width * 100) / 100;
+      return Math.round((value - standard.targetMax) / width * 100) / 100;
+    }
+    if (!standard.eliteMean) return null;
+    return Math.round(Math.abs(value - standard.eliteMean) / width * 100) / 100;
+  };
+  const rows = standards.map((standard) => {
+    const history = byCode.get(standard.code) || [];
+    const current = history[0];
+    const previous = history.find((item) => item.testDate !== current?.testDate);
+    const value = current?.value ?? null;
+    const rawPercent = value === null ? null : standard.direction === 'lower_better'
+      ? lowerScore(value, standard.targetMax)
+      : standard.direction === 'higher_better'
+        ? higherScore(value, standard.targetMin)
+        : standard.eliteMean ? 100 - Math.abs(value - standard.eliteMean) / standard.eliteMean * 100 : null;
+    const percent = rawPercent === null ? null : Math.round(rawPercent * 10) / 10;
+    const score = percent === null ? null : Math.min(120, Math.max(0, percent));
+    const status = score === null ? 'missing' : score >= 100 ? 'elite' : score >= 90 ? 'near' : 'develop';
+    const standardDistance = value === null ? null : standardDistanceFor(value, standard);
+    const eliteGapPct = value === null || !standard.eliteMean ? null
+      : Math.round(Math.abs(value - standard.eliteMean) / standard.eliteMean * 1000) / 10;
+    const priorityIndex = standardDistance === null ? null : Math.max(0, Math.round(standardDistance * standard.weight * 1000) / 10);
+    const gap = value === null ? null : standard.direction === 'lower_better'
+      ? (standard.targetMax === null ? null : Math.round((value - standard.targetMax) * 100) / 100)
+      : (standard.targetMin === null ? null : Math.round((standard.targetMin - value) * 100) / 100);
+    return {
+      code: standard.code,
+      label: standard.label,
+      domain: standard.domain,
+      unit: standard.unit,
+      direction: standard.direction,
+      value,
+      previous: previous?.value ?? null,
+      targetMin: standard.targetMin,
+      targetMax: standard.targetMax,
+      eliteMean: standard.eliteMean,
+      percent,
+      score,
+      gap,
+      standardDistance,
+      eliteGapPct,
+      priorityIndex,
+      status,
+      weight: standard.weight,
+      rationale: standard.rationale,
+      sourceNote: standard.sourceNote,
+      testDate: current?.testDate ?? null
+    };
+  });
+  const comparable = rows.filter((row) => row.score !== null);
+  const scoreSum = comparable.reduce((sum, row) => sum + (row.score || 0) * row.weight, 0);
+  const weightSum = comparable.reduce((sum, row) => sum + row.weight, 0);
+  const score = weightSum ? Math.round(scoreSum / weightSum * 10) / 10 : null;
+  const gapRows = comparable.filter((row) => row.standardDistance !== null && row.standardDistance > 0);
+  const averageStandardDistance = gapRows.length
+    ? Math.round(gapRows.reduce((sum, row) => sum + (row.standardDistance || 0) * row.weight, 0) / gapRows.reduce((sum, row) => sum + row.weight, 0) * 100) / 100
+    : comparable.length ? 0 : null;
+  const topPriorityIndex = comparable.length ? Math.max(...comparable.map((row) => row.priorityIndex || 0)) : null;
+  const achieved = comparable.filter((row) => row.status === 'elite').length;
+  const primary = comparable
+    .filter((row) => row.status !== 'elite')
+    .sort((left, right) => ((right.priorityIndex || 0) - (left.priorityIndex || 0)))[0];
+  const primaryGap = primary
+    ? `${primary.label}标准化差距 ${formatServerNumber(primary.standardDistance, 2)} 个冠军区间宽度，加权补强优先级 ${formatServerNumber(primary.priorityIndex, 1)}，建议优先纳入下一阶段训练目标。`
+    : comparable.length ? '已测试指标整体达到冠军模型参考区间，下一阶段重点维持专项表现和伤病风险控制。' : '暂无可对标实测数据，请先录入专业综合评估。';
+  res.json({
+    benchmark: {
+      athleteId: athlete.id,
+      athleteName: athlete.name,
+      project: athlete.project,
+      gender,
+      modelVersion: standards[0]?.modelVersion || 'CHAMPION-2026-R1',
+      rows,
+      summary: {
+        score,
+        averageStandardDistance,
+        topPriorityIndex,
+        achieved,
+        comparable: comparable.length,
+        primaryGap,
+        source: standards[0]?.sourceNote || '项目冠军模型初始化生成'
+      }
+    }
   });
 });
 
