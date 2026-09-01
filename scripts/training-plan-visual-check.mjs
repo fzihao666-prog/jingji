@@ -57,8 +57,15 @@ async function openStrength(label) {
 
 await login('coach01');
 await openStrength('体能总览');
+await page.locator('.strength-kpi-grid article').first().waitFor();
 if (await page.locator('.strength-kpi-grid article').count() !== 5) throw new Error('体能总览核心指标卡数量不是5。');
-if (await page.locator('.strength-dashboard-grid .strength-chart-card').count() !== 4) throw new Error('体能总览图表数量不是4。');
+if (await page.locator('.strength-dashboard-grid .strength-chart-card').count() !== 6) throw new Error('体能总览图表数量不是6。');
+if (await page.getByText('低中高强度占比').count()) throw new Error('体能总览仍显示低中高强度占比。');
+if (await page.getByRole('heading', { name: '训练完成情况', exact: true }).count()) throw new Error('体能总览仍单独显示训练完成情况。');
+if (await page.locator('.strength-load-split-card').count() !== 1) throw new Error('体能总览缺少新版水陆负荷面板。');
+if (await page.locator('.strength-lesson-card').count() !== 1) throw new Error('体能总览缺少新版训练课类型构成面板。');
+if (await page.locator('.strength-category-execution-card').count() !== 1) throw new Error('体能总览缺少五类体能训练构成与完成合并面板。');
+if (await page.locator('.strength-body-map-card .body-map-stage img').count() !== 1) throw new Error('体能总览缺少身体部位图。');
 await page.screenshot({ path: path.join(outputDirectory, '01体能总览.png'), fullPage: true });
 
 await openStrength('训练安排');

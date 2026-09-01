@@ -489,6 +489,17 @@ export type ChampionBenchmarkRow = {
   testDate: string | null;
 };
 
+export type ChampionBenchmarkDimension = {
+  key: string;
+  label: string;
+  current: number | null;
+  champion: number;
+  gap: number | null;
+  priorityIndex: number | null;
+  comparable: number;
+  achieved: number;
+};
+
 export type ChampionBenchmarkPayload = {
   athleteId: number;
   athleteName: string;
@@ -496,6 +507,7 @@ export type ChampionBenchmarkPayload = {
   gender: string;
   modelVersion: string;
   rows: ChampionBenchmarkRow[];
+  dimensions: ChampionBenchmarkDimension[];
   summary: {
     score: number | null;
     averageStandardDistance: number | null;

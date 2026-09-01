@@ -34,6 +34,11 @@ export const OVERVIEW_METRICS: OverviewMetricDefinition[] = [
   { code: 'cmj_peak_power_w', label: 'CMJ峰值功率', domain: 'explosive', unit: 'W', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 7000 },
   { code: 'imtp_peak_force_n', label: 'IMTP峰值力量', domain: 'foundation', unit: 'N', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 8000 },
   { code: 'dsd_ratio', label: '动态力量缺陷', domain: 'explosive', unit: '', direction: 'lower_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 2 },
+  { code: 'vo2max_ml_kg_min', label: 'VO2Max', domain: 'vo2max', unit: 'ml/kg/min', direction: 'higher_better', frequency: 'phase', projects: common, minimum: 20, maximum: 90 },
+  { code: 'general_endurance_score', label: '一般耐力', domain: 'endurance', unit: '分', direction: 'higher_better', frequency: 'phase', projects: common, minimum: 0, maximum: 120 },
+  { code: 'anaerobic_power_wkg', label: '无氧功率', domain: 'anaerobic', unit: 'W/kg', direction: 'higher_better', frequency: 'phase', projects: common, minimum: 0, maximum: 30 },
+  { code: 'asymmetry_index_pct', label: '不对称指数', domain: 'asymmetry', unit: '%', direction: 'lower_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 40 },
+  { code: 'core_strength_score', label: '核心力量综合', domain: 'core', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 120 },
   { code: 'seven_stroke_power_w', label: '7桨平均功率', domain: 'project', unit: 'W', direction: 'higher_better', frequency: 'phase', projects: ['赛艇'], minimum: 0, maximum: 1500 },
   { code: 'erg_2k_sec', label: '2km测功仪', domain: 'project', unit: 's', direction: 'lower_better', frequency: 'phase', projects: ['赛艇'], minimum: 300, maximum: 720 },
   { code: 'erg_6k_sec', label: '6km测功仪', domain: 'project', unit: 's', direction: 'lower_better', frequency: 'phase', projects: ['赛艇'], minimum: 900, maximum: 1800 },
@@ -46,12 +51,13 @@ export const OVERVIEW_METRICS: OverviewMetricDefinition[] = [
   { code: 'right_paddle_power_w', label: '右侧划桨功率', domain: 'symmetry', unit: 'W', direction: 'higher_better', frequency: 'phase', projects: ['皮划艇'], minimum: 0, maximum: 1000 },
   { code: 'lactate_threshold_mmol', label: '乳酸阈值', domain: 'metabolic', unit: 'mmol/L', direction: 'neutral', frequency: 'phase', projects: common, minimum: 0, maximum: 20 },
   { code: 'gate_technique_score', label: '门区技术评分', domain: 'technique', unit: '分', direction: 'higher_better', frequency: 'phase', projects: ['激流'], minimum: 0, maximum: 100 },
-  { code: 'movement_squat_score', label: '双腿深蹲', domain: 'movement', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 100 },
-  { code: 'movement_heel_lift_score', label: '足跟抬起控制', domain: 'movement', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 100 },
-  { code: 'movement_pushup_score', label: '俯卧撑动作', domain: 'movement', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 100 },
-  { code: 'movement_shoulder_score', label: '肩关节活动', domain: 'movement', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 100 },
-  { code: 'movement_trunk_score', label: '躯干与腰椎控制', domain: 'movement', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 100 },
-  { code: 'movement_cervical_score', label: '颈椎控制', domain: 'movement', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 100 }
+  { code: 'fms_deep_squat', label: '深蹲', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 },
+  { code: 'fms_hurdle_step', label: '跨栏步', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 },
+  { code: 'fms_inline_lunge', label: '直线弓步蹲', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 },
+  { code: 'fms_shoulder_mobility', label: '肩部灵活性', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 },
+  { code: 'fms_active_straight_leg_raise', label: '主动直腿上抬', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 },
+  { code: 'fms_trunk_stability_pushup', label: '躯干稳定俯卧撑', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 },
+  { code: 'fms_rotary_stability', label: '旋转稳定性', domain: 'fms', unit: '分', direction: 'higher_better', frequency: 'monthly', projects: common, minimum: 0, maximum: 3 }
 ];
 
 export const OVERVIEW_METRIC_MAP = Object.fromEntries(OVERVIEW_METRICS.map((metric) => [metric.code, metric]));

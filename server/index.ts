@@ -3513,6 +3513,7 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
         gender,
         modelVersion: 'CHAMPION-2026-R1',
         rows: [],
+        dimensions: [],
         summary: { score: null, averageStandardDistance: null, topPriorityIndex: null, achieved: 0, comparable: 0, primaryGap: '暂无该项目冠军模型标准。', source: '暂无标准' }
       }
     });
@@ -3593,6 +3594,32 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
       testDate: current?.testDate ?? null
     };
   });
+  const dimensionDefinitions = [
+    { key: 'body_shape', label: '身体形态Body Shape', codes: ['heightCm', 'armSpanCm', 'body_fat_pct', 'skeletal_muscle_kg'] },
+    { key: 'endurance', label: '一般耐力Endurance', codes: ['general_endurance_score', 'erg_6k_sec'] },
+    { key: 'vo2max', label: 'VO2Max', codes: ['vo2max_ml_kg_min'] },
+    { key: 'asymmetry', label: '不对称性asymmetry', codes: ['asymmetry_index_pct', 'dsd_ratio', 'left_paddle_power_w', 'right_paddle_power_w'] },
+    { key: 'power', label: '爆发力Power', codes: ['cmj_peak_power_w', 'seven_stroke_power_w', 'benchPressPeakPowerW', 'benchPullPeakPowerW'] },
+    { key: 'anaerobic_power', label: '无氧功Anaerobic Power', codes: ['anaerobic_power_wkg', 'wingatePeakPowerWkg', 'wingateWorkJkg', 'sprint_200_sec', 'sprint_500_sec', 'sprint300Sec'] },
+    { key: 'fmax', label: '最大力量Fmax', codes: ['imtp_peak_force_n', 'benchPressKg', 'benchPullKg', 'squatKg', 'deadliftKg'] },
+    { key: 'core', label: '核心力量Core', codes: ['core_strength_score', 'frontPlankSec', 'leftPlankSec', 'rightPlankSec'] }
+  ];
+  const dimensions = dimensionDefinitions.map((definition) => {
+    const items = rows.filter((row) => definition.codes.includes(row.code) && row.score !== null);
+    const weight = items.reduce((sum, row) => sum + row.weight, 0);
+    const current = weight ? Math.round(items.reduce((sum, row) => sum + Math.min(120, row.score || 0) * row.weight, 0) / weight * 10) / 10 : null;
+    const priorityIndex = items.length ? Math.round(items.reduce((sum, row) => sum + (row.priorityIndex || 0), 0) * 10) / 10 : null;
+    return {
+      key: definition.key,
+      label: definition.label,
+      current,
+      champion: 100,
+      gap: current === null ? null : Math.round((100 - current) * 10) / 10,
+      priorityIndex,
+      comparable: items.length,
+      achieved: items.filter((row) => row.status === 'elite').length
+    };
+  });
   const comparable = rows.filter((row) => row.score !== null);
   const scoreSum = comparable.reduce((sum, row) => sum + (row.score || 0) * row.weight, 0);
   const weightSum = comparable.reduce((sum, row) => sum + row.weight, 0);
@@ -3617,6 +3644,7 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
       gender,
       modelVersion: standards[0]?.modelVersion || 'CHAMPION-2026-R1',
       rows,
+      dimensions,
       summary: {
         score,
         averageStandardDistance,

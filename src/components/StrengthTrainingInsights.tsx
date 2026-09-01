@@ -22,7 +22,7 @@ import {
   YAxis
 } from 'recharts';
 import { useMemo, useState } from 'react';
-import type { MouseEvent } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import {
   STRENGTH_BODY_POSITIONS,
   STRENGTH_INTENSITY_ZONES,
@@ -41,6 +41,9 @@ const categoryPalette = ['#0d9488', '#2db7a8', '#55c7bb', '#83d6ca', '#b1e4dc'];
 const loadRatioPalette = ['#0d9488', '#dc4f45'];
 const lessonPalette = ['#0d9488', '#3b82f6', '#84cc16', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#64748b'];
 const lessonTypes = ['水上', '测功仪功能', '拉伸再生', '力量耐力', '最大力量', '速度力量', '跑步', '其他'];
+type LoadBreakdownItem = { name: string; value: number; percent: number; sessions: number; duration: number; distance: number; rpe: number; color: string };
+type LessonBreakdownItem = LoadBreakdownItem & { sets: number; completion: number };
+type CategoryExecutionItem = { name: StrengthTrainingCategory; count: number; percent: number; completion: number; done: number; color: string };
 
 function round(value: number, digits = 0) {
   const factor = 10 ** digits;
@@ -104,6 +107,11 @@ function lessonTypeOf(session: StrengthTrainingSession) {
   return '其他';
 }
 
+function isWaterSession(session: StrengthTrainingSession) {
+  const environments = new Set(session.sets.map((set) => set.trainingEnvironment || session.structureType));
+  return environments.has('水上') || environments.has('泳池') || /水上|泳池|划行/.test(`${session.sessionLabel} ${session.trainingType} ${session.structureType}`);
+}
+
 function metricCards(sessions: StrengthTrainingSession[]) {
   const sets = sessions.flatMap((session) => session.sets);
   const rpeValues = sets.map((set) => set.rpe).filter((value): value is number => value !== null);
@@ -162,15 +170,157 @@ function OverviewCards({ sessions }: { sessions: StrengthTrainingSession[] }) {
   const cards = [
     { label: '平均 RPE', value: stats.rpe || '—', suffix: '', icon: Activity },
     { label: '训练时间', value: stats.duration, suffix: 'min', icon: Clock3 },
-    { label: '训练负荷', value: stats.load, suffix: 'AU', icon: Gauge, featured: true },
+    { label: '训练负荷', value: stats.load, suffix: 'AU', icon: Gauge },
     { label: '训练强度', value: stats.intensity, suffix: '%', icon: TrendingUp },
     { label: '完成率', value: stats.completion, suffix: '%', icon: CheckCircle2 }
   ];
-  return <section className="strength-kpi-grid">{cards.map(({ icon: Icon, ...card }) => <article className={card.featured ? 'featured' : ''} key={card.label}><i><Icon size={20} /></i><div><span>{card.label}</span><strong>{typeof card.value === 'number' ? card.value.toLocaleString() : card.value}<small>{card.suffix}</small></strong></div></article>)}</section>;
+  return <section className="strength-kpi-grid">{cards.map(({ icon: Icon, ...card }) => <article key={card.label}><i><Icon size={20} /></i><div><span>{card.label}</span><strong>{typeof card.value === 'number' ? card.value.toLocaleString() : card.value}<small>{card.suffix}</small></strong></div></article>)}</section>;
+}
+
+function WaterLandLoadPanel({ items }: { items: LoadBreakdownItem[] }) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  const water = items.find((item) => item.name === '水上') || items[0];
+  const land = items.find((item) => item.name === '陆上') || items[1];
+  if (!total) return <EmptyChart text="暂无水陆负荷数据" />;
+  return <div className="strength-load-split">
+    <div className="load-split-hero">
+      <div>
+        <span>水上负荷</span>
+        <strong>{water.percent}<small>%</small></strong>
+        <em>{water.value.toLocaleString()} AU</em>
+      </div>
+      <div>
+        <span>陆上负荷</span>
+        <strong>{land.percent}<small>%</small></strong>
+        <em>{land.value.toLocaleString()} AU</em>
+      </div>
+    </div>
+    <div className="load-split-track" aria-label={`水上负荷 ${water.percent}%，陆上负荷 ${land.percent}%`}>
+      {items.map((item) => <i key={item.name} style={{ width: `${item.percent}%`, background: item.color }} />)}
+    </div>
+    <div className="load-split-table">
+      {items.map((item) => <article key={item.name}>
+        <header><i style={{ background: item.color }} /><strong>{item.name}</strong><span>{item.sessions} 场</span></header>
+        <dl>
+          <div><dt>训练时间</dt><dd>{item.duration.toLocaleString()} min</dd></div>
+          <div><dt>训练距离</dt><dd>{item.distance.toLocaleString()} km</dd></div>
+          <div><dt>平均 RPE</dt><dd>{item.rpe || '—'}</dd></div>
+        </dl>
+      </article>)}
+    </div>
+  </div>;
+}
+
+function LessonCompositionPanel({ items }: { items: LessonBreakdownItem[] }) {
+  const visible = items.filter((item) => item.value > 0);
+  const dominant = visible[0];
+  if (!visible.length) return <EmptyChart text="暂无训练课类型数据" />;
+  return <div className="strength-lesson-composition">
+    <div className="lesson-summary">
+      <span>主课型</span>
+      <strong>{dominant.name}</strong>
+      <small>{dominant.percent}% · {dominant.value.toLocaleString()} AU · {dominant.sessions} 场</small>
+    </div>
+    <div className="lesson-rank-list">
+      {visible.map((item) => <article key={item.name}>
+        <header><span><i style={{ background: item.color }} />{item.name}</span><strong>{item.percent}%</strong></header>
+        <div className="lesson-rank-track"><i style={{ width: `${item.percent}%`, background: item.color }} /></div>
+        <footer><span>{item.value.toLocaleString()} AU</span><span>{item.duration.toLocaleString()} min</span><span>{item.sets} 项</span><span>完成 {item.completion}%</span></footer>
+      </article>)}
+    </div>
+  </div>;
+}
+
+function CategoryExecutionPanel({ items }: { items: CategoryExecutionItem[] }) {
+  const total = items.reduce((sum, item) => sum + item.count, 0);
+  const completed = items.reduce((sum, item) => sum + item.done, 0);
+  const leading = items.reduce((best, item) => item.count > best.count ? item : best, items[0]);
+  if (!total) return <EmptyChart text="暂无训练类型与完成数据" />;
+  return <div className="strength-category-execution">
+    <div className="category-execution-summary">
+      <article>
+        <span>训练项</span>
+        <strong>{total}</strong>
+        <small>覆盖 {items.filter((item) => item.count > 0).length} 类</small>
+      </article>
+      <article>
+        <span>总完成率</span>
+        <strong>{round(completed / total * 100)}<small>%</small></strong>
+        <small>{completed} / {total} 项完成</small>
+      </article>
+      <article>
+        <span>主训练类</span>
+        <strong>{leading.name}</strong>
+        <small>{leading.percent}% · {leading.count} 项</small>
+      </article>
+    </div>
+    <div className="category-execution-list">
+      {items.map((item) => <article key={item.name}>
+        <header><span><i style={{ background: item.color }} />{item.name}</span><strong>{item.count} 项</strong><em>{item.completion}%</em></header>
+        <div className="category-execution-track">
+          <i style={{ width: `${item.percent}%`, background: item.color }} />
+          <b style={{ left: `${item.completion}%` }} />
+        </div>
+        <footer><span>构成 {item.percent}%</span><span>完成 {item.done}/{item.count}</span></footer>
+      </article>)}
+    </div>
+  </div>;
+}
+
+function BodyPositionMapPanel({ items }: { items: Array<{ name: StrengthBodyPosition; value: number }> }) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (!total) return <EmptyChart text="暂无身体位置数据" />;
+  const bodyRegions: Record<StrengthBodyPosition, { pointX: number; pointY: number; labelX: number; labelY: number; align: 'left' | 'right'; region: string; note: string; color: string; short: string }> = {
+    上肢: { pointX: 43, pointY: 35, labelX: 25, labelY: 34, align: 'left', region: 'upper', note: '推、拉、肩胛与划桨牵拉链', color: '#0d9488', short: '推拉链' },
+    核心: { pointX: 51, pointY: 50, labelX: 76, labelY: 47, align: 'right', region: 'core', note: '躯干稳定、抗旋转与力量传导', color: '#f59e0b', short: '传导轴' },
+    下肢: { pointX: 49, pointY: 73, labelX: 25, labelY: 76, align: 'left', region: 'lower', note: '蹬伸、支撑、跳跃与跑动能力', color: '#3b82f6', short: '蹬伸端' },
+    全身: { pointX: 50, pointY: 24, labelX: 76, labelY: 25, align: 'right', region: 'full', note: '综合协调与全链条动作', color: '#073b4c', short: '全链路' }
+  };
+  const enriched = items.map((item, index) => ({
+    ...item,
+    order: index + 1,
+    percent: round(item.value / total * 100, 1),
+    ...bodyRegions[item.name]
+  }));
+  const dominant = enriched.reduce((best, item) => item.value > best.value ? item : best, enriched[0]);
+  return <div className="strength-body-position-map">
+    <div className="body-map-stage">
+      <img src="/assets/strength-anatomy-front.png" alt="身体部位训练分布示意图" />
+      <div className={`body-region full ${items.find((item) => item.name === '全身')?.value ? 'active' : ''}`} />
+      {enriched.map((item) => item.name !== '全身' && <div className={`body-region ${item.region}`} key={`${item.name}-region`} style={{ opacity: Math.max(.18, Math.min(.58, .2 + item.percent / 100 * .7)), background: item.color }} />)}
+      <svg className="body-map-connectors" viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="none">
+        {enriched.map((item) => <g key={`${item.name}-connector`}>
+          <line x1={item.pointX} y1={item.pointY} x2={item.labelX} y2={item.labelY} stroke={item.color} />
+          <circle cx={item.pointX} cy={item.pointY} r="1.45" fill={item.color} />
+        </g>)}
+      </svg>
+      {enriched.map((item) => <div className={`body-map-label ${item.align} ${item.value ? 'active' : ''}`} key={item.name} style={{ left: `${item.labelX}%`, top: `${item.labelY}%`, '--hotspot-size': `${Math.max(32, Math.min(62, 32 + item.percent * .55))}px` } as CSSProperties}>
+        <i style={{ color: item.color }}><b>{item.order}</b></i>
+        <span>
+          <strong>{item.name}<small>{item.short}</small></strong>
+          <em>{item.value} 项 · {item.percent}%</em>
+        </span>
+      </div>)}
+    </div>
+    <div className="body-map-detail">
+      <article>
+        <span>重点部位</span>
+        <strong>{dominant.name}</strong>
+        <small>{dominant.note}</small>
+      </article>
+      <div>
+        {enriched.map((item) => <section key={item.name}>
+          <header><span><i style={{ background: item.color }} />{item.name}<small>{item.short}</small></span><strong>{item.percent}%</strong></header>
+          <i><b style={{ width: `${item.percent}%` }} /></i>
+          <footer><span>{item.value} 项</span><span>{item.note}</span></footer>
+        </section>)}
+      </div>
+    </div>
+  </div>;
 }
 
 export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTrainingSession[] }) {
-  const { daily21Weeks, loadRatio, intensityRatio, lessonRatio, trend, categories, positions, completion } = useMemo(() => {
+  const { daily21Weeks, loadRatio, lessonRatio, trend, categoryExecution, positions } = useMemo(() => {
     const ordered = [...sessions].sort((a, b) => a.trainingDate.localeCompare(b.trainingDate));
     const recent = ordered.slice(-7);
     const trend = recent.map((session) => ({ date: session.trainingDate.slice(5), load: round(sessionLoad(session)), rpe: session.rpe || 0 }));
@@ -198,20 +348,31 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
     const categoryMap = new Map(STRENGTH_TRAINING_CATEGORIES.map((name) => [name, 0]));
     const positionMap = new Map(STRENGTH_BODY_POSITIONS.map((name) => [name, 0]));
     const completionMap = new Map(STRENGTH_TRAINING_CATEGORIES.map((name) => [name, { total: 0, done: 0 }]));
-    const loadRatioMap = new Map([['水上', 0], ['陆上', 0]]);
-    const intensityRatioMap = new Map([['低强度', 0], ['中强度', 0], ['高强度', 0]]);
-    const lessonRatioMap = new Map(lessonTypes.map((name) => [name, 0]));
+    const loadRatioMap = new Map(['水上', '陆上'].map((name) => [name, { value: 0, sessions: 0, duration: 0, distance: 0, rpeSum: 0, rpeCount: 0 }]));
+    const lessonRatioMap = new Map(lessonTypes.map((name) => [name, { value: 0, sessions: 0, duration: 0, distance: 0, rpeSum: 0, rpeCount: 0, sets: 0, done: 0 }]));
     ordered.forEach((session) => {
       const load = sessionLoad(session) || session.durationMin || 0;
-      const environments = new Set(session.sets.map((set) => set.trainingEnvironment || session.structureType));
-      const water = environments.has('水上') || environments.has('泳池') || /水上|划行/.test(`${session.sessionLabel} ${session.structureType}`);
-      loadRatioMap.set(water ? '水上' : '陆上', (loadRatioMap.get(water ? '水上' : '陆上') || 0) + load);
-      const intensities = session.sets.map((set) => set.intensityPercent).filter((value): value is number => value !== null);
-      const averageIntensity = intensities.length ? intensities.reduce((sum, value) => sum + value, 0) / intensities.length : 0;
-      const intensityName = averageIntensity >= 82 ? '高强度' : averageIntensity >= 65 ? '中强度' : '低强度';
-      intensityRatioMap.set(intensityName, (intensityRatioMap.get(intensityName) || 0) + load);
+      const environmentItem = loadRatioMap.get(isWaterSession(session) ? '水上' : '陆上')!;
+      environmentItem.value += load;
+      environmentItem.sessions += 1;
+      environmentItem.duration += session.durationMin || 0;
+      environmentItem.distance += session.distanceKm || 0;
+      if (session.rpe !== null) {
+        environmentItem.rpeSum += session.rpe;
+        environmentItem.rpeCount += 1;
+      }
       const lessonType = lessonTypeOf(session);
-      lessonRatioMap.set(lessonType, (lessonRatioMap.get(lessonType) || 0) + load);
+      const lessonItem = lessonRatioMap.get(lessonType)!;
+      lessonItem.value += load;
+      lessonItem.sessions += 1;
+      lessonItem.duration += session.durationMin || 0;
+      lessonItem.distance += session.distanceKm || 0;
+      lessonItem.sets += session.sets.length;
+      lessonItem.done += session.sets.filter((set) => set.completed).length;
+      if (session.rpe !== null) {
+        lessonItem.rpeSum += session.rpe;
+        lessonItem.rpeCount += 1;
+      }
     });
     sessions.flatMap((session) => session.sets).forEach((set) => {
       const category = categoryOf(set.exerciseName, set.trainingCategory);
@@ -222,15 +383,46 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
       item.total += 1;
       if (set.completed) item.done += 1;
     });
+    const loadTotal = [...loadRatioMap.values()].reduce((sum, item) => sum + item.value, 0);
+    const lessonTotal = [...lessonRatioMap.values()].reduce((sum, item) => sum + item.value, 0);
+    const categoryTotal = [...categoryMap.values()].reduce((sum, value) => sum + value, 0);
     return {
       daily21Weeks,
-      loadRatio: [...loadRatioMap].map(([name, value]) => ({ name, value: round(value, 1) })),
-      intensityRatio: [...intensityRatioMap].map(([name, value]) => ({ name, value: round(value, 1) })),
-      lessonRatio: [...lessonRatioMap].map(([name, value]) => ({ name, value: round(value, 1) })),
+      loadRatio: [...loadRatioMap].map(([name, item], index) => ({
+        name,
+        value: round(item.value),
+        percent: loadTotal ? round(item.value / loadTotal * 100) : 0,
+        sessions: item.sessions,
+        duration: round(item.duration),
+        distance: round(item.distance, 1),
+        rpe: item.rpeCount ? round(item.rpeSum / item.rpeCount, 1) : 0,
+        color: loadRatioPalette[index]
+      })),
+      lessonRatio: [...lessonRatioMap].map(([name, item], index) => ({
+        name,
+        value: round(item.value),
+        percent: lessonTotal ? round(item.value / lessonTotal * 100, 1) : 0,
+        sessions: item.sessions,
+        duration: round(item.duration),
+        distance: round(item.distance, 1),
+        rpe: item.rpeCount ? round(item.rpeSum / item.rpeCount, 1) : 0,
+        sets: item.sets,
+        completion: item.sets ? round(item.done / item.sets * 100) : 0,
+        color: lessonPalette[index]
+      })).sort((a, b) => b.value - a.value),
       trend,
-      categories: [...categoryMap].map(([name, value]) => ({ name, value })),
+      categoryExecution: [...categoryMap].map(([name, value], index) => {
+        const item = completionMap.get(name)!;
+        return {
+          name,
+          count: value,
+          percent: categoryTotal ? round(value / categoryTotal * 100, 1) : 0,
+          completion: item.total ? round(item.done / item.total * 100) : 0,
+          done: item.done,
+          color: categoryPalette[index]
+        };
+      }),
       positions: [...positionMap].map(([name, value]) => ({ name, value })),
-      completion: [...completionMap].map(([name, value]) => ({ name, count: value.total, percent: value.total ? round(value.done / value.total * 100) : 0 }))
     };
   }, [sessions]);
   const hasDailyTraining = daily21Weeks.some((item) => item.distance > 0 || item.duration > 0);
@@ -240,20 +432,16 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
   const waterPercent = loadTotal ? round(waterLoad / loadTotal * 100) : 0;
   const landPercent = loadTotal ? 100 - waterPercent : 0;
   const dailyTickInterval = daily21Weeks.length > 60 ? 13 : daily21Weeks.length > 31 ? 6 : daily21Weeks.length > 14 ? 3 : 0;
-  const dominantIntensity = intensityRatio.reduce((best, item) => item.value > best.value ? item : best, intensityRatio[0] || { name: '暂无', value: 0 });
-  const dominantLesson = lessonRatio.reduce((best, item) => item.value > best.value ? item : best, lessonRatio[0] || { name: '暂无', value: 0 });
 
   return <>
     <OverviewCards sessions={sessions} />
     <section className="strength-dashboard-grid">
       <article className="strength-chart-card strength-daily-volume-card"><header><div><span>每日训练量</span><h2>训练距离与训练时间</h2></div><small>柱状：训练距离 · 折线：训练时间</small></header><div className="strength-chart-area daily-volume">{hasDailyTraining ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={daily21Weeks} margin={{ top: 8, right: 8, left: -4, bottom: 0 }}><CartesianGrid stroke="#e8efef" vertical={false} /><XAxis dataKey="label" interval={dailyTickInterval} tick={{ fontSize: 9 }} tickLine={false} /><YAxis yAxisId="distance" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={42} label={{ value: 'km', angle: -90, position: 'insideLeft', offset: 8, fill: '#6f858b', fontSize: 9 }} /><YAxis yAxisId="time" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} width={38} label={{ value: 'min', angle: 90, position: 'insideRight', offset: 5, fill: '#6f858b', fontSize: 9 }} /><Tooltip labelFormatter={(_, payload) => payload?.[0]?.payload?.date || ''} formatter={(value, name) => name === '训练时间' ? [`${value} min`, name] : [`${value} km`, name]} contentStyle={{ border: '1px solid #d5e2e4', borderRadius: 8, boxShadow: '0 10px 24px rgba(7,59,76,.1)', fontSize: 10 }} /><Bar yAxisId="distance" dataKey="distance" name="训练距离" fill="#0d9488" radius={[3, 3, 0, 0]} maxBarSize={12} /><Line yAxisId="time" type="monotone" dataKey="duration" name="训练时间" stroke="#f59e0b" strokeWidth={2.2} dot={false} activeDot={{ r: 4 }} connectNulls /></ComposedChart></ResponsiveContainer> : <EmptyChart text="导入训练距离或训练时间后显示日趋势" />}</div></article>
-      <article className="strength-chart-card strength-round-card"><header><div><span>水陆训练负荷比值</span><h2>水上与陆上负荷</h2></div><small>绿色：水上 · 红色：陆上</small></header><RoundRatioChart items={loadRatio} colors={loadRatioPalette} center={`${waterPercent}:${landPercent}`} unit="负荷比" /></article>
-      <article className="strength-chart-card strength-round-card"><header><div><span>训练强度百分比</span><h2>低中高强度占比</h2></div><small>按强度百分比加权</small></header><RoundRatioChart items={intensityRatio} colors={['#22c55e', '#f59e0b', '#ef4444']} center={dominantIntensity.name} unit="主强度" /></article>
-      <article className="strength-chart-card strength-round-card"><header><div><span>各训练课比值</span><h2>训练课类型构成</h2></div><small>按训练负荷汇总</small></header><RoundRatioChart items={lessonRatio} colors={lessonPalette} center={dominantLesson.name} unit="主课型" /></article>
+      <article className="strength-chart-card strength-load-split-card"><header><div><span>水陆训练负荷</span><h2>水上与陆上负荷</h2></div><small>{loadTotal ? `水上 ${waterPercent}% · 陆上 ${landPercent}%` : '按 sRPE 与训练时间汇总'}</small></header><WaterLandLoadPanel items={loadRatio} /></article>
+      <article className="strength-chart-card strength-lesson-card"><header><div><span>训练环境与课型</span><h2>训练课类型构成</h2></div><small>按负荷、时间、动作项和完成率汇总</small></header><LessonCompositionPanel items={lessonRatio} /></article>
       <article className="strength-chart-card"><header><div><span>最近 7 日</span><h2>训练负荷趋势</h2></div><small>柱状：训练负荷 · 折线：RPE</small></header><div className="strength-chart-area">{trend.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={trend}><CartesianGrid stroke="#e8efef" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 10 }} /><YAxis yAxisId="load" tick={{ fontSize: 10 }} /><YAxis yAxisId="rpe" orientation="right" domain={[0, 10]} tick={{ fontSize: 10 }} /><Tooltip /><Bar yAxisId="load" dataKey="load" name="训练负荷 AU" fill="#0d9488" radius={[5, 5, 0, 0]} maxBarSize={30} /><Line yAxisId="rpe" dataKey="rpe" name="RPE" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} /></ComposedChart></ResponsiveContainer> : <EmptyChart text="导入训练记录后显示近 7 日趋势" />}</div></article>
-      <article className="strength-chart-card"><header><div><span>训练内容</span><h2>五类体能训练构成</h2></div></header><div className="strength-donut-layout">{categories.some((item) => item.value) ? <div className="strength-css-donut" style={{ background: conicGradient(categories, categoryPalette) }}><i><strong>{categories.reduce((sum, item) => sum + item.value, 0)}</strong><small>训练项</small></i></div> : <EmptyChart text="暂无训练类型数据" />}<div className="strength-chart-list">{categories.map((item, index) => <div key={item.name}><i style={{ background: categoryPalette[index] }} /><span>{item.name}</span><strong>{item.value}项</strong></div>)}</div></div></article>
-      <article className="strength-chart-card"><header><div><span>动作覆盖</span><h2>身体位置训练分布</h2></div></header><div className="strength-chart-area compact">{positions.some((item) => item.value) ? <ResponsiveContainer width="100%" height="100%"><BarChart data={positions} layout="vertical" margin={{ left: 10, right: 24 }}><CartesianGrid stroke="#e8efef" horizontal={false} /><XAxis type="number" hide /><YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={42} /><Tooltip /><Bar dataKey="value" name="训练项" fill="#21b7aa" radius={[0, 6, 6, 0]} barSize={16} /></BarChart></ResponsiveContainer> : <EmptyChart text="暂无身体位置数据" />}</div></article>
-      <article className="strength-chart-card"><header><div><span>本周期</span><h2>训练完成情况</h2></div></header><div className="strength-completion-list">{completion.map((item) => <div key={item.name}><div><strong>{item.name}</strong><span>{item.count}项</span><em>{item.percent}%</em></div><i><b style={{ width: `${item.percent}%` }} /></i></div>)}</div></article>
+      <article className="strength-chart-card strength-category-execution-card"><header><div><span>训练内容与执行</span><h2>五类体能训练构成与完成</h2></div><small>训练项占比 · 分类完成率</small></header><CategoryExecutionPanel items={categoryExecution} /></article>
+      <article className="strength-chart-card strength-body-map-card"><header><div><span>动作覆盖</span><h2>身体位置训练分布</h2></div><small>人体部位热点 · 训练项占比</small></header><BodyPositionMapPanel items={positions} /></article>
     </section>
   </>;
 }

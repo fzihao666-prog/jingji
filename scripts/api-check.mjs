@@ -82,9 +82,9 @@ try {
   );
 
   const overviewRequiredMetrics = {
-    赛艇: ['seven_stroke_power_w', 'erg_2k_sec', 'movement_squat_score'],
-    皮划艇: ['sprint_200_sec', 'left_paddle_power_w', 'movement_shoulder_score'],
-    激流: ['gate_technique_score', 'movement_trunk_score']
+    赛艇: ['seven_stroke_power_w', 'erg_2k_sec', 'fms_deep_squat'],
+    皮划艇: ['sprint_200_sec', 'left_paddle_power_w', 'fms_shoulder_mobility'],
+    激流: ['gate_technique_score', 'fms_rotary_stability']
   };
   for (const [overviewProject, requiredCodes] of Object.entries(overviewRequiredMetrics)) {
     const result = await request(
