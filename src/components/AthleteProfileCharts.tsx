@@ -1,6 +1,7 @@
 import {
-  PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart,
-  ResponsiveContainer, Tooltip
+  Bar, BarChart, CartesianGrid, LabelList, PolarAngleAxis, PolarGrid, PolarRadiusAxis,
+  Radar, RadarChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip,
+  XAxis, YAxis
 } from 'recharts';
 import { geoMercator, geoPath } from 'd3-geo';
 import ChinaData from 'china-map-geojson/lib/china.js';
@@ -19,8 +20,42 @@ function range(values: Array<number | null | undefined>, unit: string) {
   return `${formatNumber(Math.min(...valid), 1)}—${formatNumber(Math.max(...valid), 1)} ${unit}`;
 }
 
+type TeamScatterPoint = { athleteId: number; name: string; age: number | null; height: number; weight: number };
+
+function chartDomain(values: number[], minimumPadding: number): [number, number] {
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const padding = Math.max(minimumPadding, (high - low) * .12);
+  return [Math.floor((low - padding) * 10) / 10, Math.ceil((high + padding) * 10) / 10];
+}
+
+function ageStructure(profiles: OverviewAthleteProfile[]) {
+  const ages = profiles.map((profile) => profile.age).filter((value): value is number => value !== null && Number.isFinite(value));
+  if (!ages.length) return [];
+  const definitions = [
+    { label: '≤20岁', includes: (age: number) => age <= 20 },
+    { label: '21–23岁', includes: (age: number) => age >= 21 && age <= 23 },
+    { label: '24–26岁', includes: (age: number) => age >= 24 && age <= 26 },
+    { label: '27–29岁', includes: (age: number) => age >= 27 && age <= 29 },
+    { label: '≥30岁', includes: (age: number) => age >= 30 }
+  ];
+  return definitions.map((definition) => {
+    const count = ages.filter(definition.includes).length;
+    const share = Math.round(count / ages.length * 100);
+    return { label: definition.label, count, share, display: `${count}人 · ${share}%` };
+  }).filter((item) => item.count > 0);
+}
+
+function TeamProfileTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: TeamScatterPoint }> }) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point) return null;
+  return <div className="team-profile-tooltip"><strong>{point.name}</strong><span>年龄：{point.age === null ? '—' : `${formatNumber(point.age, 1)}岁`}</span><span>身高：{formatNumber(point.height, 1)} cm</span><span>体重：{formatNumber(point.weight, 1)} kg</span></div>;
+}
+
 export function AthleteProfileOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
-  if (!profiles.length) return <ProfileEmpty detail="完善出生日期和身体测量后自动生成。" />;
+  if (!profiles.length || !profiles.some((profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null)) {
+    return <ProfileEmpty title={individual ? '暂无档案画像数据' : '暂无队伍身体数据'} detail="完善出生日期和身体测量后自动生成。" />;
+  }
   const age = average(profiles.map((profile) => profile.age));
   const height = average(profiles.map((profile) => profile.heightCm));
   const weight = average(profiles.map((profile) => profile.weightKg));
@@ -30,19 +65,65 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
     ? current.weightKg - current.previousWeightKg
     : null;
 
-  return (
-    <div className="profile-overview-visual" aria-label={individual ? '个人年龄和身体形态' : '团队年龄和身体形态分布'}>
+  if (individual) return (
+    <div className="profile-overview-visual" aria-label="个人年龄和身体形态">
       <div className="profile-stat-grid">
-        <ProfileStat label={individual ? '年龄' : '平均年龄'} value={age === null ? '—' : formatNumber(age, 1)} unit="岁" note={individual ? current.birthDate || '出生日期未录入' : range(profiles.map((item) => item.age), '岁')} />
-        <ProfileStat label={individual ? '身高' : '平均身高'} value={height === null ? '—' : formatNumber(height, 1)} unit="cm" note={individual ? current.bodyMeasurementDate || '未测量' : range(profiles.map((item) => item.heightCm), 'cm')} />
-        <ProfileStat label={individual ? '体重' : '平均体重'} value={weight === null ? '—' : formatNumber(weight, 1)} unit="kg" note={individual ? (weightChange === null ? '暂无前次对比' : `较前次 ${weightChange >= 0 ? '+' : ''}${formatNumber(weightChange, 1)} kg`) : range(profiles.map((item) => item.weightKg), 'kg')} />
+        <ProfileStat label="年龄" value={age === null ? '—' : formatNumber(age, 1)} unit="岁" note={current.birthDate || '出生日期未录入'} />
+        <ProfileStat label="身高" value={height === null ? '—' : formatNumber(height, 1)} unit="cm" note={current.bodyMeasurementDate || '未测量'} />
+        <ProfileStat label="体重" value={weight === null ? '—' : formatNumber(weight, 1)} unit="kg" note={weightChange === null ? '暂无前次对比' : `较前次 ${weightChange >= 0 ? '+' : ''}${formatNumber(weightChange, 1)} kg`} />
       </div>
-
       <div className="profile-data-note">
         <span>身体数据覆盖 <strong>{bodyCoverage}/{profiles.length}</strong></span>
         <span>最近测量 <strong>{profiles.map((profile) => profile.bodyMeasurementDate).filter(Boolean).sort().at(-1) || '—'}</strong></span>
-        <span>口径 <strong>{individual ? '本人最新快照' : '权限队员均值/范围'}</strong></span>
+        <span>口径 <strong>本人最新快照</strong></span>
       </div>
+    </div>
+  );
+
+  const scatterData: TeamScatterPoint[] = profiles.flatMap((profile) => profile.heightCm !== null && profile.weightKg !== null ? [{ athleteId: profile.athleteId, name: profile.athleteName, age: profile.age, height: profile.heightCm, weight: profile.weightKg }] : []);
+  const ageData = ageStructure(profiles);
+  const latestMeasurement = profiles.map((profile) => profile.bodyMeasurementDate).filter((value): value is string => Boolean(value)).sort().at(-1) || '—';
+
+  return (
+    <div className="profile-overview-visual team-profile-visual" aria-label="队伍年龄和身体形态分布">
+      <div className="profile-stat-grid team-profile-stat-grid">
+        <ProfileStat label="队伍人数" value={String(profiles.length)} unit="人" note="当前可见运动员" />
+        <ProfileStat label="平均年龄" value={age === null ? '—' : formatNumber(age, 1)} unit="岁" note={range(profiles.map((item) => item.age), '岁')} />
+        <ProfileStat label="平均身高" value={height === null ? '—' : formatNumber(height, 1)} unit="cm" note={range(profiles.map((item) => item.heightCm), 'cm')} />
+        <ProfileStat label="平均体重" value={weight === null ? '—' : formatNumber(weight, 1)} unit="kg" note={range(profiles.map((item) => item.weightKg), 'kg')} />
+      </div>
+
+      <div className="team-profile-chart-grid">
+        <section className="team-profile-chart-card team-scatter-card">
+          <header><div><h3>身高—体重分布</h3><p>运动员身体形态相对位置</p></div><span>{scatterData.length} 名有效运动员</span></header>
+          <div className="team-profile-chart-canvas">
+            {scatterData.length ? <ResponsiveContainer width="100%" height="100%"><ScatterChart margin={{ top: 18, right: 26, bottom: 18, left: 2 }}>
+              <CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" />
+              <XAxis type="number" dataKey="height" name="身高" unit=" cm" domain={chartDomain(scatterData.map((item) => item.height), 2)} tick={{ fontSize: 9, fill: '#74888f' }} axisLine={false} tickLine={false} label={{ value: '身高 cm', position: 'insideBottomRight', offset: -8, fill: '#74888f', fontSize: 9 }} />
+              <YAxis type="number" dataKey="weight" name="体重" unit=" kg" domain={chartDomain(scatterData.map((item) => item.weight), 3)} tick={{ fontSize: 9, fill: '#74888f' }} axisLine={false} tickLine={false} width={42} label={{ value: '体重 kg', angle: -90, position: 'insideLeft', fill: '#74888f', fontSize: 9 }} />
+              {height !== null && <ReferenceLine x={height} stroke="#2b7d8d" strokeDasharray="5 5" label={{ value: '平均身高', position: 'insideTopRight', fill: '#56808a', fontSize: 8 }} />}
+              {weight !== null && <ReferenceLine y={weight} stroke="#2b7d8d" strokeDasharray="5 5" label={{ value: '平均体重', position: 'insideTopLeft', fill: '#56808a', fontSize: 8 }} />}
+              <Tooltip content={<TeamProfileTooltip />} cursor={{ stroke: '#a9c5c8', strokeDasharray: '3 4' }} />
+              <Scatter data={scatterData} fill="#12978f" stroke="#fff" strokeWidth={2} />
+            </ScatterChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无身高体重配对数据</div>}
+          </div>
+        </section>
+
+        <section className="team-profile-chart-card team-age-card">
+          <header><div><h3>年龄结构</h3><p>队伍年龄梯队分布</p></div><span>{profiles.filter((profile) => profile.age !== null).length} 名有效运动员</span></header>
+          <div className="team-profile-age-canvas">
+            {ageData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={ageData} layout="vertical" margin={{ top: 8, right: 72, bottom: 8, left: 2 }}>
+              <CartesianGrid stroke="#e4ecee" strokeDasharray="3 5" horizontal={false} />
+              <XAxis type="number" hide domain={[0, Math.max(...ageData.map((item) => item.count), 1)]} />
+              <YAxis type="category" dataKey="label" width={58} tick={{ fontSize: 9, fill: '#526b73', fontWeight: 700 }} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{ fill: 'rgba(22,143,136,.06)' }} formatter={(value) => [`${Number(value)} 人`, '人数']} contentStyle={{ border: '1px solid #d5e3e5', borderRadius: 9, boxShadow: '0 10px 24px rgba(9,54,65,.1)', fontSize: 10 }} />
+              <Bar dataKey="count" name="人数" fill="#168f88" radius={[0, 6, 6, 0]} barSize={18}><LabelList dataKey="display" position="right" fill="#5c737b" fontSize={9} fontWeight={700} /></Bar>
+            </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无有效年龄数据</div>}
+          </div>
+        </section>
+      </div>
+
+      <div className="team-profile-footnote"><span>数据覆盖 <strong>{bodyCoverage}/{profiles.length}</strong></span><i>｜</i><span>最近更新 <strong>{latestMeasurement}</strong></span><i>｜</i><span>身高/体重采用最近一次有效测量</span></div>
     </div>
   );
 }
@@ -521,6 +602,6 @@ function ProfileStat({ label, value, unit, note }: { label: string; value: strin
   return <div><span>{label}</span><strong>{value}<small>{unit}</small></strong><p>{note}</p></div>;
 }
 
-function ProfileEmpty({ detail }: { detail: string }) {
-  return <div className="profile-visual-empty"><strong>暂无档案画像数据</strong><span>{detail}</span></div>;
+function ProfileEmpty({ detail, title = '暂无档案画像数据' }: { detail: string; title?: string }) {
+  return <div className="profile-visual-empty"><strong>{title}</strong><span>{detail}</span></div>;
 }

@@ -93,7 +93,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   rpe: { title: '运动员总数', size: 'metric' },
   'acute-load': { title: '近7日急性负荷', size: 'metric' },
   'recovery-time': { title: '恢复时间', size: 'metric' },
-  'athlete-profile': { title: '身体与年龄画像', size: 'half' },
+  'athlete-profile': { title: '身体与年龄画像', size: 'full' },
   'competitive-state': { title: '竞技状态评估', size: 'half' },
   'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
   'fms-analysis': { title: 'FMS测试全队分析', size: 'half' },
@@ -439,12 +439,13 @@ export function OverviewPage(props: Props) {
 
   const renderShell = (id: string, content: ReactNode) => {
     const meta = cardMeta[id];
+    const size = id === 'athlete-profile' && isIndividualOverview ? 'half' : meta.size;
     const pinned = layout.pinned.includes(id);
     return (
       <div
         key={id}
         data-card-id={id}
-        className={`overview-card-shell card-size-${meta.size}${pinned ? ' is-pinned' : ''}${dragging === id ? ' is-dragging' : ''}${dropTarget?.id === id ? ' is-drop-target' : ''}`}
+        className={`overview-card-shell card-size-${size}${pinned ? ' is-pinned' : ''}${dragging === id ? ' is-dragging' : ''}${dropTarget?.id === id ? ' is-drop-target' : ''}`}
       >
         <div className="overview-card-controls" onClick={(event) => event.stopPropagation()}>
           <button
@@ -485,10 +486,10 @@ export function OverviewPage(props: Props) {
       tone="green"
     />,
     'athlete-profile': (
-      <article className="panel professional-panel athlete-profile-panel">
-        <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '队伍身体与年龄画像'} subtitle={`${scopeLabel} · 年龄 · 身高 · 体重`} />
+      <article className={`panel professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
+        <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '队伍可视化画像'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
         <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} />
-        <p className="analysis-method-note">年龄由出生日期按分析截止日计算；身高体重读取不晚于截止日的最近一次身体测量。</p>
+        {isIndividualOverview && <p className="analysis-method-note">年龄由出生日期按分析截止日计算；身高体重读取不晚于截止日的最近一次身体测量。</p>}
       </article>
     ),
     'competitive-state': (

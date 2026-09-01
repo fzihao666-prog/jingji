@@ -106,26 +106,27 @@
 
 .strength-training-context {
   margin-top: 12px;
-  min-height: 76px;
-  padding: 10px 12px;
+  min-height: 88px;
+  padding: 12px 14px;
   display: grid;
-  grid-template-columns: 42px minmax(150px, .55fr) minmax(590px, 2.3fr);
+  grid-template-columns: 44px minmax(180px, .62fr) minmax(0, 3.4fr);
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   border: 1px solid var(--strength-line);
   border-radius: 15px;
   background: rgba(255,255,255,.94);
   box-shadow: 0 8px 24px rgba(7,59,76,.035);
 }
-.strength-training-avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg, #0d9488, #0a6670); box-shadow: 0 6px 14px rgba(13,148,136,.2); font-size: 14px; font-weight: 850; }
-.strength-training-athlete { min-width: 0; padding-right: 12px; }
+.strength-training-avatar { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg, #0d9488, #075d68); box-shadow: 0 7px 16px rgba(13,148,136,.2); font-size: 15px; font-weight: 850; }
+.strength-training-athlete { min-width: 0; padding-right: 18px; border-right: 1px solid #e2eaeb; }
 .strength-training-athlete > span { display: block; color: #83949a; font-size: 8px; }
-.strength-training-athlete strong { display: inline-block; margin-top: 4px; font-size: 13px; }
-.strength-training-athlete small { margin-left: 8px; color: var(--strength-muted); font-size: 8px; }
-.strength-training-context dl { margin: 0; display: grid; grid-template-columns: 1.35fr .46fr 1fr .72fr .62fr; gap: 6px; }
-.strength-training-context dl > div { min-height: 48px; padding: 7px 11px; border: 1px solid #e7eeee; border-radius: 9px; display: grid; align-content: center; background: #f9fbfb; }
+.strength-training-athlete strong { display: block; margin-top: 4px; font-size: 14px; line-height: 1.2; }
+.strength-training-athlete small { display: block; margin-top: 5px; color: var(--strength-muted); font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strength-training-context dl { margin: 0; border: 1px solid #e0e9ea; border-radius: 11px; overflow: hidden; display: grid; grid-template-columns: 1.45fr .52fr .9fr .8fr .78fr .76fr; background: #f8fbfb; }
+.strength-training-context dl > div { min-width: 0; min-height: 58px; padding: 9px 12px; border-right: 1px solid #e3ebec; display: grid; align-content: center; }
+.strength-training-context dl > div:last-child { border-right: 0; }
 .strength-training-context dt { color: #83949a; font-size: 8px; }
-.strength-training-context dd { margin: 4px 0 0; color: var(--strength-ink); font: 750 10px "Bahnschrift", sans-serif; }
+.strength-training-context dd { margin: 5px 0 0; overflow: hidden; color: var(--strength-ink); font: 780 10px "Bahnschrift", sans-serif; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 
 .strength-view-tabs { margin: 14px 0 16px; padding: 4px; width: fit-content; display: flex; gap: 3px; border: 1px solid #d6e2e3; border-radius: 10px; background: #eaf1f1; }
 .strength-view-tabs button { min-height: 34px; padding: 0 15px; border: 0; border-radius: 7px; display: flex; align-items: center; gap: 6px; color: #667b82; background: transparent; font-size: 9px; font-weight: 760; cursor: pointer; }
@@ -204,6 +205,15 @@
 .strength-load-legend i { width: 12px; height: 7px; border-radius: 2px; background: #0e8f87; }
 .strength-load-legend span:last-child i { height: 2px; border-radius: 99px; background: #d1813f; }
 .strength-load-chart { height: 270px; padding: 12px 12px 8px; }
+.strength-record-browser { margin: 13px 13px 0; padding: 10px 12px; border: 1px solid #d9e4e5; border-radius: 10px; display: flex; align-items: center; gap: 10px; background: #f8fbfb; }
+.strength-record-browser > div:first-child { min-width: 190px; margin-right: auto; display: grid; gap: 3px; }
+.strength-record-browser > div:first-child strong { color: var(--strength-ink); font-size: 10px; }
+.strength-record-browser > div:first-child span { color: var(--strength-muted); font-size: 8px; }
+.strength-record-browser label { display: grid; gap: 4px; color: #60777f; font-size: 8px; font-weight: 750; }
+.strength-record-browser label > span { display: flex; align-items: center; gap: 4px; }
+.strength-record-browser input { width: 158px; height: 34px; padding: 0 9px; border: 1px solid #ccdada; border-radius: 7px; color: var(--strength-ink); background: #fff; font: 750 9px "Bahnschrift", sans-serif; }
+.strength-record-browser button { height: 34px; padding: 0 11px; border: 1px solid #b8d4d1; border-radius: 7px; display: inline-flex; align-items: center; gap: 5px; color: var(--strength-teal); background: #fff; font-size: 8px; font-weight: 750; cursor: pointer; }
+.strength-record-browser button:hover { border-color: var(--strength-teal); background: #eef8f6; }
 .strength-session-list { padding: 13px; display: grid; gap: 10px; }
 .strength-session-card { border: 1px solid #d9e4e5; border-radius: 13px; overflow: hidden; box-shadow: 0 8px 20px rgba(7,59,76,.025); transition: transform .18s ease, box-shadow .18s ease; }
 .strength-session-card:hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(7,59,76,.07); }
@@ -278,7 +288,11 @@
   .strength-filter-bar { grid-template-columns: minmax(0, 1fr) auto; }
   .strength-filter-intro { grid-column: 1 / -1; min-width: 0; height: 36px; padding: 0 0 10px; border-right: 0; border-bottom: 1px solid #e5eded; }
   .strength-filter-intro small { white-space: normal; }
-  .strength-training-context { grid-template-columns: 42px minmax(135px, .48fr) minmax(410px, 2fr); }
+  .strength-training-context { grid-template-columns: 42px minmax(145px, .52fr) minmax(0, 2fr); }
+  .strength-training-context dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .strength-training-context dl > div { border-bottom: 1px solid #e3ebec; }
+  .strength-training-context dl > div:nth-child(3n) { border-right: 0; }
+  .strength-training-context dl > div:nth-child(n + 4) { border-bottom: 0; }
   .strength-plan-meta { grid-template-columns: repeat(3, 1fr); }
 }
 
@@ -294,10 +308,10 @@
   .strength-command-controls { grid-template-columns: 1fr; }
   .strength-command-actions .strength-button { padding: 0 7px; font-size: 8px; }
   .strength-filter-reset { width: 100%; height: 36px; display: flex; align-items: center; justify-content: center; gap: 5px; }
-  .strength-training-context { grid-template-columns: 42px 1fr; }
-  .strength-training-athlete { padding: 0; }
-  .strength-training-context dl { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
-  .strength-training-context dl > div { min-height: 44px; padding: 7px 9px; }
+  .strength-training-context { grid-template-columns: 42px 1fr; gap: 10px; }
+  .strength-training-athlete { padding: 0; border-right: 0; }
+  .strength-training-context dl { grid-column: 1 / -1; border: 0; border-radius: 0; overflow: visible; grid-template-columns: 1fr 1fr; gap: 6px; background: transparent; }
+  .strength-training-context dl > div { min-height: 48px; padding: 8px 10px; border: 1px solid #e3ebec !important; border-radius: 8px; background: #f8fbfb; }
   .strength-view-tabs { width: 100%; }
   .strength-view-tabs button { flex: 1; padding: 0 7px; justify-content: center; }
   .strength-status-rail { grid-template-columns: 1fr 1fr; }
@@ -306,6 +320,9 @@
   .strength-comparison-panel > header, .strength-results-panel > header { align-items: flex-start; flex-direction: column; }
   .strength-load-visual > header { align-items: flex-start; flex-direction: column; gap: 8px; }
   .strength-load-chart { height: 235px; padding-left: 4px; }
+  .strength-record-browser { align-items: stretch; flex-direction: column; }
+  .strength-record-browser > div:first-child { min-width: 0; margin-right: 0; }
+  .strength-record-browser input, .strength-record-browser button { width: 100%; }
   .strength-plan-meta { grid-template-columns: 1fr 1fr; }
   .strength-plan-meta label.wide { grid-column: 1 / -1; }
   .strength-week-editor > header { align-items: flex-start; flex-direction: column; }
