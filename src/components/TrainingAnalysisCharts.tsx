@@ -170,28 +170,28 @@ export function RpeStatisticsChart({ records }: { records: TrainingRecord[] }) {
 }
 
 export function FmsTeamChart({ measurements }: { measurements: OverviewMeasurement[] }) {
-  const keys = ['movement_squat_score','movement_heel_lift_score','movement_pushup_score','movement_shoulder_score','movement_trunk_score','movement_cervical_score'];
-  const data = keys.map((key, index) => { const row = measurements.find(item=>item.code===key); return { name: row?.label || key, score: row?.value ?? 0, target: row?.target ?? 85, fill: colors[index] }; });
-  const average = data.reduce((sum,row)=>sum+row.score,0)/Math.max(1,data.length);
-  return <div className="fms-analysis-layout"><div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{top:4,right:18,left:22,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" horizontal={false}/><XAxis type="number" domain={[0,100]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={86} tick={{fontSize:9,fill:'#4d666e'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value),1)} 分`,name]}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="score" name="全队均分" fill="#178e87" radius={[0,4,4,0]} maxBarSize={16}/><Bar dataKey="target" name="训练目标" fill="#dce7e8" radius={[0,4,4,0]} maxBarSize={16}/></BarChart></ResponsiveContainer></div><div className="fms-summary"><strong>{formatNumber(average,1)}<small>分</small></strong><span>动作筛查综合均分</span><p>{average >= 85 ? '动作质量良好，继续关注左右侧对称与疲劳后的动作稳定。' : '存在动作控制短板，建议安排纠正性训练并定期复测。'}</p></div></div>;
+  const keys = ['fms_deep_squat','fms_hurdle_step','fms_inline_lunge','fms_shoulder_mobility','fms_active_straight_leg_raise','fms_trunk_stability_pushup','fms_rotary_stability'];
+  const data = keys.map((key, index) => { const row = measurements.find(item=>item.code===key); return { name: row?.label || key, score: row?.value ?? 0, target: row?.target ?? 2, fill: colors[index % colors.length] }; });
+  const total = data.reduce((sum,row)=>sum+row.score,0);
+  return <div className="fms-analysis-layout"><div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{top:4,right:18,left:22,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" horizontal={false}/><XAxis type="number" domain={[0,3]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={96} tick={{fontSize:9,fill:'#4d666e'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value),1)} 分`,name]}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="score" name="全队均分" fill="#178e87" radius={[0,4,4,0]} maxBarSize={16}/><Bar dataKey="target" name="单项目标" fill="#dce7e8" radius={[0,4,4,0]} maxBarSize={16}/></BarChart></ResponsiveContainer></div><div className="fms-summary"><strong>{formatNumber(total,1)}<small>/21</small></strong><span>FMS综合均分</span><p>{total >= 14 ? 'FMS总分达到常用风险筛查参考线，继续关注单项低分和左右侧对称。' : 'FMS总分低于14分，建议优先安排纠正性训练并复测。'}</p></div></div>;
 }
 
 export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasurement[] }) {
-  const keys = ['movement_squat_score','movement_heel_lift_score','movement_pushup_score','movement_shoulder_score','movement_trunk_score','movement_cervical_score'];
+  const keys = ['fms_deep_squat','fms_hurdle_step','fms_inline_lunge','fms_shoulder_mobility','fms_active_straight_leg_raise','fms_trunk_stability_pushup','fms_rotary_stability'];
   const data = keys.map((key, index) => {
     const row = measurements.find((item) => item.code === key);
     const score = row?.value ?? null;
-    const target = row?.target ?? 85;
-    return { name: row?.label || key, score, target, gap: score === null ? null : score - target, fill: colors[index] };
+    const target = row?.target ?? 2;
+    return { name: row?.label || key, score, target, gap: score === null ? null : score - target, fill: colors[index % colors.length] };
   });
   const available = data.filter((row) => typeof row.score === 'number');
-  const average = available.length ? available.reduce((sum, row) => sum + (row.score || 0), 0) / available.length : null;
+  const total = available.length ? available.reduce((sum, row) => sum + (row.score || 0), 0) : null;
   const weakest = [...available].sort((left, right) => (left.gap || 0) - (right.gap || 0)).slice(0, 2);
   return <div className="fms-personal-layout">
-    <div className="fms-personal-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{ top: 6, right: 18, left: 18, bottom: 2 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" horizontal={false}/><XAxis type="number" domain={[0,100]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={92} tick={{fontSize:9,fill:'#4d666e'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value),1)} 分`,name]}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="score" name="个人得分" fill="#178e87" radius={[0,5,5,0]} maxBarSize={17}/><Bar dataKey="target" name="目标线" fill="#dce7e8" radius={[0,5,5,0]} maxBarSize={17}/></BarChart></ResponsiveContainer></div>
+    <div className="fms-personal-chart"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} layout="vertical" margin={{ top: 6, right: 18, left: 18, bottom: 2 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" horizontal={false}/><XAxis type="number" domain={[0,3]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis type="category" dataKey="name" width={106} tick={{fontSize:9,fill:'#4d666e'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value),1)} 分`,name]}/><Legend wrapperStyle={{fontSize:10}}/><Bar dataKey="score" name="个人得分" fill="#178e87" radius={[0,5,5,0]} maxBarSize={17}/><Bar dataKey="target" name="单项目标" fill="#dce7e8" radius={[0,5,5,0]} maxBarSize={17}/></BarChart></ResponsiveContainer></div>
     <aside className="fms-personal-summary">
-      <article><span>综合分</span><strong>{average === null ? '—' : formatNumber(average, 1)}<small>分</small></strong><em>{available.length}/6 项有效</em></article>
-      <div>{weakest.length ? weakest.map((row) => <p key={row.name}><b>{row.name}</b><span>{(row.gap || 0) >= 0 ? '达到目标' : `低于目标 ${formatNumber(Math.abs(row.gap || 0), 1)} 分`}</span></p>) : <p><b>暂无测试</b><span>录入专业综合评估后生成动作短板</span></p>}</div>
+      <article><span>FMS总分</span><strong>{total === null ? '—' : formatNumber(total, 1)}<small>/21</small></strong><em>{available.length}/7 项有效</em></article>
+      <div>{weakest.length ? weakest.map((row) => <p key={row.name}><b>{row.name}</b><span>{(row.score || 0) >= 2 ? '达到单项目标' : `单项 ${formatNumber(row.score || 0, 1)} 分，需纠正`}</span></p>) : <p><b>暂无测试</b><span>录入标准FMS七项后生成动作短板</span></p>}</div>
     </aside>
   </div>;
 }

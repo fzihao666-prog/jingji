@@ -1,70 +1,72 @@
-import { Activity, Target, Trophy } from 'lucide-react';
-import { useMemo, type CSSProperties } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import type { ChampionBenchmarkPayload, ChampionBenchmarkRow } from '../types';
+import { Activity, Target } from 'lucide-react';
+import { type CSSProperties } from 'react';
+import { Legend, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from 'recharts';
+import type { ChampionBenchmarkDimension, ChampionBenchmarkPayload } from '../types';
 import { formatNumber } from '../utils';
 
-const statusMeta = {
-  elite: { label: '冠军区间', color: '#178f86' },
-  near: { label: '接近区间', color: '#d5a02b' },
-  develop: { label: '重点补强', color: '#df7040' },
-  missing: { label: '未测试', color: '#87979d' }
-} as const;
-
-const domainLabels: Record<string, string> = {
-  morphology: '身体形态',
-  foundation: '基础力量',
-  explosive: '爆发能力',
-  project: '专项能力',
-  technique: '技术效率',
-  symmetry: '对称输出',
-  slalom: '激流专项'
+const dimensionMetricCodes: Record<string, string[]> = {
+  body_shape: ['heightCm', 'armSpanCm', 'body_fat_pct', 'skeletal_muscle_kg'],
+  endurance: ['general_endurance_score', 'erg_6k_sec'],
+  vo2max: ['vo2max_ml_kg_min'],
+  asymmetry: ['asymmetry_index_pct', 'dsd_ratio', 'left_paddle_power_w', 'right_paddle_power_w'],
+  power: ['cmj_peak_power_w', 'seven_stroke_power_w', 'benchPressPeakPowerW', 'benchPullPeakPowerW'],
+  anaerobic_power: ['anaerobic_power_wkg', 'wingatePeakPowerWkg', 'wingateWorkJkg', 'sprint_200_sec', 'sprint_500_sec', 'sprint300Sec'],
+  fmax: ['imtp_peak_force_n', 'benchPressKg', 'benchPullKg', 'squatKg', 'deadliftKg'],
+  core: ['core_strength_score', 'frontPlankSec', 'leftPlankSec', 'rightPlankSec']
 };
+
+function splitDimensionLabel(label: string) {
+  const match = label.match(/^(.+?)([A-Za-z][A-Za-z ]*)$/);
+  return match ? { cn: match[1], en: match[2].trim() } : { cn: label, en: '' };
+}
+
+function dimensionState(dimension: ChampionBenchmarkDimension) {
+  if (dimension.current === null) return { label: '待补测', color: '#87979d' };
+  if (dimension.current >= 100) return { label: '冠军区间', color: '#178f86' };
+  if (dimension.current >= 90) return { label: '接近冠军', color: '#d5a02b' };
+  return { label: '优先补强', color: '#df7040' };
+}
 
 export function ChampionModelBenchmark({ benchmark, loading }: { benchmark: ChampionBenchmarkPayload | null; loading: boolean }) {
   const rows = benchmark?.rows ?? [];
-  const visibleRows = rows.filter((row) => row.standardDistance !== null).map((row) => ({
-    ...row,
-    displayDistance: Math.max(0, row.standardDistance || 0)
-  })).slice(0, 8);
-  const domainScores = useMemo(() => {
-    const groups = new Map<string, ChampionBenchmarkRow[]>();
-    for (const row of rows.filter((item) => item.score !== null)) groups.set(row.domain, [...(groups.get(row.domain) || []), row]);
-    return [...groups].map(([domain, items]) => ({
-      domain: domainLabels[domain] || domain,
-      distance: items.reduce((sum, item) => sum + Math.max(0, item.standardDistance || 0) * item.weight, 0) / items.reduce((sum, item) => sum + item.weight, 0),
-      priority: items.reduce((sum, item) => sum + (item.priorityIndex || 0), 0)
-    })).sort((left, right) => right.priority - left.priority);
-  }, [rows]);
+  const dimensions = benchmark?.dimensions ?? [];
+  const radarData = dimensions.map((dimension) => ({
+    name: splitDimensionLabel(dimension.label).cn,
+    current: dimension.current ?? 0,
+    champion: dimension.champion,
+    gap: dimension.gap,
+    comparable: dimension.comparable
+  }));
   if (loading) return <div className="champion-benchmark-empty">正在读取冠军模型标准与个人测试数据…</div>;
-  if (!benchmark || !rows.length) return <div className="champion-benchmark-empty">暂无冠军模型标准。请先初始化或录入该项目模型。</div>;
-  const missingCount = rows.filter((row) => row.status === 'missing').length;
-  const keyRows = [...rows]
-    .filter((row) => row.score !== null)
-    .sort((left, right) => (right.weight * (100 - Math.min(100, right.score || 0))) - (left.weight * (100 - Math.min(100, left.score || 0))))
+  if (!benchmark || !rows.length || !radarData.length) return <div className="champion-benchmark-empty">暂无冠军模型标准。请先初始化或录入该项目模型。</div>;
+  const validDimensions = dimensions.filter((dimension) => dimension.current !== null);
+  const weakDimensions = [...validDimensions]
+    .sort((left, right) => (right.priorityIndex || 0) - (left.priorityIndex || 0))
+    .slice(0, 3);
+  const dimensionRows = (dimension: ChampionBenchmarkDimension) => rows
+    .filter((row) => (dimensionMetricCodes[dimension.key] || []).includes(row.code) && row.score !== null)
+    .sort((left, right) => (right.priorityIndex || 0) - (left.priorityIndex || 0))
     .slice(0, 3);
 
   return <div className="champion-benchmark">
-    <header className="champion-benchmark-hero">
-      <div><Trophy size={22} /><span><small>{benchmark.project} · {benchmark.gender}子 · {benchmark.modelVersion}</small><strong>冠军模型标准化差距</strong></span></div>
-      <strong>{benchmark.summary.averageStandardDistance === null ? '—' : formatNumber(benchmark.summary.averageStandardDistance, 2)}<small>区间宽度</small></strong>
-      <p>达标 {benchmark.summary.achieved}/{benchmark.summary.comparable} 项，最高补强优先级 {benchmark.summary.topPriorityIndex === null ? '—' : formatNumber(benchmark.summary.topPriorityIndex, 1)}，{missingCount ? `${missingCount} 项待补测。` : '有效指标已完成对标。'}</p>
-    </header>
     <div className="champion-benchmark-body">
       <section className="champion-chart-panel">
-        <div className="champion-chart-canvas"><ResponsiveContainer width="100%" height="100%"><BarChart data={visibleRows} margin={{ top: 10, right: 10, left: -16, bottom: 0 }}><CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9, fill: '#526b73', fontWeight: 700 }} interval={0} angle={-16} textAnchor="end" height={52}/><YAxis tick={{ fontSize: 8, fill: '#82949a' }} axisLine={false} tickLine={false}/><Tooltip formatter={(value) => `${formatNumber(Number(value), 2)} 个区间宽度`} contentStyle={{ border: '1px solid #d5e3e5', borderRadius: 10, boxShadow: '0 10px 24px rgba(9,54,65,.12)' }}/><Bar dataKey="displayDistance" name="标准化差距" radius={[6,6,1,1]} maxBarSize={34}>{visibleRows.map((row) => <Cell key={row.code} fill={statusMeta[row.status].color}/>)}</Bar></BarChart></ResponsiveContainer></div>
-        <div className="champion-domain-strip">{domainScores.map((item) => <span key={item.domain}><b>{item.domain}</b><i><em style={{ width: `${Math.min(100, item.priority)}%` }} /></i><strong>{formatNumber(item.distance, 2)}</strong></span>)}</div>
+        <div className="champion-radar-canvas"><ResponsiveContainer width="100%" height="100%"><RadarChart data={radarData} outerRadius="74%"><PolarGrid radialLines stroke="#d7e4e6" /><PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fill: '#495f66', fontWeight: 800 }} /><PolarRadiusAxis angle={90} domain={[0, 120]} tick={{ fontSize: 8, fill: '#7c9096' }} tickCount={7} /><Tooltip formatter={(value, name) => [`${formatNumber(Number(value), 1)}`, name === 'current' ? '当前水平' : '冠军标准']} contentStyle={{ border: '1px solid #d5e3e5', borderRadius: 10, boxShadow: '0 10px 24px rgba(9,54,65,.12)' }} /><Legend wrapperStyle={{ fontSize: 10 }} /><Radar dataKey="current" name="当前水平" stroke="#8abfe0" fill="#8abfe0" fillOpacity={0.48} strokeWidth={2} /><Radar dataKey="champion" name="冠军标准" stroke="#e60012" fill="transparent" strokeWidth={3} dot /></RadarChart></ResponsiveContainer></div>
       </section>
       <aside className="champion-insight-panel">
         <div><Activity size={16} /><p>{benchmark.summary.primaryGap}</p></div>
-        {keyRows.map((row) => {
-          const meta = statusMeta[row.status];
-          const range = row.targetMin !== null && row.targetMax !== null ? `${formatNumber(row.targetMin, 1)}-${formatNumber(row.targetMax, 1)} ${row.unit}` : '未设区间';
-          return <article key={row.code} style={{ '--champion-row': meta.color } as CSSProperties}>
-            <span><b>{row.label}</b><em>{meta.label}</em></span>
-            <strong>{row.value === null ? '未测试' : `${formatNumber(row.value, row.unit === 's' || row.unit === '秒' ? 1 : 1)} ${row.unit}`}</strong>
-            <small>冠军参考 {range} · 标准化差距 {row.standardDistance === null ? '—' : formatNumber(Math.max(0, row.standardDistance), 2)} · 优先级 {row.priorityIndex === null ? '—' : formatNumber(row.priorityIndex, 1)}</small>
-            <p>{row.rationale}</p>
+        {weakDimensions.map((dimension) => {
+          const state = dimensionState(dimension);
+          const label = splitDimensionLabel(dimension.label);
+          const keyMetrics = dimensionRows(dimension);
+          return <article key={dimension.key} style={{ '--champion-row': state.color } as CSSProperties}>
+            <span><b>{label.cn}</b><em>{state.label}</em></span>
+            <strong>{dimension.current === null ? '—' : `${formatNumber(dimension.current, 1)} / 100`}</strong>
+            <small>维度差距 {dimension.gap === null ? '—' : formatNumber(Math.max(0, dimension.gap), 1)} · 补强优先级 {dimension.priorityIndex === null ? '—' : formatNumber(dimension.priorityIndex, 1)}</small>
+            {keyMetrics.map((row) => {
+              const range = row.targetMin !== null && row.targetMax !== null ? `${formatNumber(row.targetMin, 1)}-${formatNumber(row.targetMax, 1)} ${row.unit}` : '未设区间';
+              return <p key={row.code}><b>{row.label}</b> 当前 {row.value === null ? '未测试' : `${formatNumber(row.value, row.unit === 's' || row.unit === '秒' ? 1 : 1)} ${row.unit}`}，冠军参考 {range}。</p>;
+            })}
           </article>;
         })}
       </aside>

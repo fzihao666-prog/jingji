@@ -219,20 +219,20 @@ export function PersonalPage(props: Props) {
 
           <section className="panel professional-panel analysis-feature-panel personal-fms-card">
             <header className="personal-analysis-card-heading">
-              <div><BrainCircuit size={17} /><span><small>FMS SCREENING</small><h2>个人FMS测试分析</h2><p>六项动作筛查、目标差距与纠正训练优先级</p></span></div>
-              <strong>{profileAnalysisLoading ? '读取中' : `${profileMeasurements.filter((item) => item.domain === 'movement' && item.value !== null).length} 项有效`}</strong>
+              <div><BrainCircuit size={17} /><span><small>FMS SCREENING</small><h2>个人FMS测试分析</h2><p>标准七项、21分制与纠正训练优先级</p></span></div>
+              <strong>{profileAnalysisLoading ? '读取中' : `${profileMeasurements.filter((item) => item.domain === 'fms' && item.value !== null).length} 项有效`}</strong>
             </header>
             {profileAnalysisLoading ? <div className="professional-chart-empty">正在读取个人FMS测试…</div> : <FmsPersonalChart measurements={profileMeasurements} />}
-            <p className="analysis-method-note">FMS用于发现动作控制、活动度和稳定性短板；评分低于目标的项目优先安排纠正性训练和复测。</p>
+            <p className="analysis-method-note">FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。</p>
           </section>
 
           <section className="panel professional-panel analysis-feature-panel personal-champion-card">
             <header className="personal-analysis-card-heading">
-              <div><Trophy size={17} /><span><small>CHAMPION BENCHMARK</small><h2>冠军模型对标分析图</h2><p>冠军区间达标、标准化差距与补强优先级</p></span></div>
-              <strong>{championBenchmark?.summary.averageStandardDistance === null || championBenchmark?.summary.averageStandardDistance === undefined ? '—' : `${formatNumber(championBenchmark.summary.averageStandardDistance, 2)}差距`}</strong>
+              <div><Trophy size={17} /><span><small>CHAMPION RADAR</small><h2>冠军模型八维雷达分析</h2><p>当前水平、冠军标准、维度差距与补强优先级</p></span></div>
+              <strong>八维雷达</strong>
             </header>
             <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
-            <p className="analysis-method-note">标准化差距以冠军参考区间宽度为单位，0代表进入冠军区间；补强优先级由差距和项目权重共同决定，缺失项不按0分处理。</p>
+            <p className="analysis-method-note">八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。</p>
           </section>
 
           <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />

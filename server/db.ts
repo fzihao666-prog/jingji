@@ -1563,9 +1563,18 @@ function seedProfessionalOverviewData() {
       body_fat_pct: round((female ? 17.2 : 11.8) * timeGain), skeletal_muscle_kg: round((female ? 26.8 : 36.5) * gain),
       cmj_peak_power_w: Math.round((female ? 3280 : 4380) * gain), imtp_peak_force_n: Math.round((female ? 2450 : 3450) * gain),
       dsd_ratio: round(.72 * timeGain, 2), lactate_threshold_mmol: round(4.1 + index * .04),
-      movement_squat_score: round(82 * gain), movement_heel_lift_score: round(86 * gain),
-      movement_pushup_score: round(84 * gain), movement_shoulder_score: round(88 * gain),
-      movement_trunk_score: round(81 * gain), movement_cervical_score: round(90 * gain)
+      vo2max_ml_kg_min: round((female ? 57 : 63) * gain, 1),
+      general_endurance_score: round((female ? 86 : 88) * gain, 1),
+      anaerobic_power_wkg: round((female ? 8.8 : 10.1) * gain, 1),
+      asymmetry_index_pct: round((8.5 - index % 3) * timeGain, 1),
+      core_strength_score: round((86 + index % 4) * gain, 1),
+      fms_deep_squat: improved ? 3 : 2,
+      fms_hurdle_step: 2,
+      fms_inline_lunge: improved ? 3 : 2,
+      fms_shoulder_mobility: 2,
+      fms_active_straight_leg_raise: improved ? 3 : 2,
+      fms_trunk_stability_pushup: female ? 2 : (improved ? 3 : 2),
+      fms_rotary_stability: 2
     };
     if (athlete.project === '赛艇') Object.assign(values, {
       seven_stroke_power_w: Math.round((female ? 610 : 790) * gain), erg_2k_sec: round((female ? 432 : 385) * timeGain),
@@ -1602,7 +1611,7 @@ function seedProfessionalOverviewData() {
       for (const [code, value] of Object.entries(values)) {
         const definition = OVERVIEW_METRICS.find((metric) => metric.code === code);
         if (!definition) continue;
-        const target = definition.direction === 'lower_better' ? value * .95
+        const target = code.startsWith('fms_') ? 2 : definition.direction === 'lower_better' ? value * .95
           : definition.direction === 'higher_better' ? value * 1.05 : value;
         insertMeasurement.run(testSession.id, code, value, round(target, 2), definition.unit);
       }
@@ -1611,6 +1620,79 @@ function seedProfessionalOverviewData() {
 }
 
 runInitializationOnce('professional_overview_seed_v2', seedProfessionalOverviewData);
+
+function seedChampionModelSupplementData() {
+  const upsertMetric = db.prepare(`
+    INSERT INTO metric_definitions
+      (code, label, domain, unit, direction, frequency, projects_json, minimum, maximum)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      label = excluded.label, domain = excluded.domain, unit = excluded.unit,
+      direction = excluded.direction, frequency = excluded.frequency,
+      projects_json = excluded.projects_json, minimum = excluded.minimum,
+      maximum = excluded.maximum, active = 1, updated_at = CURRENT_TIMESTAMP
+  `);
+  for (const metric of OVERVIEW_METRICS) {
+    upsertMetric.run(metric.code, metric.label, metric.domain, metric.unit, metric.direction, metric.frequency,
+      JSON.stringify(metric.projects), metric.minimum, metric.maximum);
+  }
+  db.prepare(`
+    UPDATE metric_definitions
+    SET active = 0, updated_at = CURRENT_TIMESTAMP
+    WHERE code IN (
+      'movement_squat_score',
+      'movement_heel_lift_score',
+      'movement_pushup_score',
+      'movement_shoulder_score',
+      'movement_trunk_score',
+      'movement_cervical_score'
+    )
+  `).run();
+
+  const sessions = db.prepare(`
+    SELECT ts.id, ts.athlete_id AS athleteId, ts.test_date AS testDate, a.project, a.gender
+    FROM test_sessions ts
+    JOIN athletes a ON a.id = ts.athlete_id
+    WHERE ts.test_type = '专业综合评估'
+  `).all() as Array<{ id: number; athleteId: number; testDate: string; project: string; gender: string }>;
+  const insertMeasurement = db.prepare(`
+    INSERT INTO test_measurements
+      (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo)
+    VALUES (?, ?, ?, ?, ?, 'center', 'estimated', 'champion_model_supplement', 0)
+    ON CONFLICT(test_session_id, metric_code, side) DO NOTHING
+  `);
+  const round = (value: number, digits = 1) => Number(value.toFixed(digits));
+  for (const [index, session] of sessions.entries()) {
+    const female = session.gender === '女';
+    const improved = index % 2 === 0;
+    const gain = improved ? 1.035 : 1;
+    const timeGain = improved ? .975 : 1;
+    const values: Record<string, number> = {
+      vo2max_ml_kg_min: round((female ? 57 : 63) * gain + index % 3, 1),
+      general_endurance_score: round((female ? 86 : 88) * gain + index % 2, 1),
+      anaerobic_power_wkg: round((female ? 8.8 : 10.1) * gain + (session.project === '激流' ? 1.2 : 0), 1),
+      asymmetry_index_pct: round((8.5 - index % 3) * timeGain, 1),
+      core_strength_score: round((86 + index % 4) * gain, 1),
+      fms_deep_squat: index % 3 === 0 ? 3 : 2,
+      fms_hurdle_step: index % 4 === 0 ? 3 : 2,
+      fms_inline_lunge: index % 5 === 0 ? 3 : 2,
+      fms_shoulder_mobility: 2,
+      fms_active_straight_leg_raise: index % 2 === 0 ? 3 : 2,
+      fms_trunk_stability_pushup: female ? 2 : (index % 3 === 1 ? 3 : 2),
+      fms_rotary_stability: 2
+    };
+    for (const [code, value] of Object.entries(values)) {
+      const definition = OVERVIEW_METRICS.find((metric) => metric.code === code);
+      if (!definition) continue;
+      const target = code.startsWith('fms_') ? 2 : definition.direction === 'lower_better' ? value * .9
+        : definition.direction === 'higher_better' ? value * 1.06 : value;
+      insertMeasurement.run(session.id, code, value, round(target, 2), definition.unit);
+    }
+  }
+  db.prepare("UPDATE test_measurements SET target_value = 2 WHERE metric_code LIKE 'fms_%'").run();
+}
+
+runInitializationOnce('champion_model_supplement_seed_v3', seedChampionModelSupplementData);
 
 function seedChampionModelStandards() {
   const upsert = db.prepare(`
@@ -1675,10 +1757,33 @@ function seedChampionModelStandards() {
     ['激流', '女', 'sprint300Sec', 110, 122, 116, 1.3, '300米竞速评价短程速度和专项力量耐力。'],
     ['激流', '女', 'rightGripKgf', 35.3, 42.7, 39, .7, '握力用于辅助判断桨柄控制、腕前臂稳定和疲劳风险。']
   ];
+  const commonRows: Array<[string, string, string, number | null, number | null, number, number, string]> = [];
+  const addEightDimensionRows = (project: string, gender: string, female: boolean) => {
+    const enduranceBase = project === '赛艇' ? (female ? [91, 105, 98] : [93, 108, 101]) : project === '皮划艇' ? (female ? [88, 101, 94.5] : [90, 104, 97]) : (female ? [86, 99, 92.5] : [88, 102, 95]);
+    const vo2Base = project === '赛艇' ? (female ? [61, 70, 65.5] : [66, 76, 71]) : project === '皮划艇' ? (female ? [58, 67, 62.5] : [63, 72, 67.5]) : (female ? [55, 64, 59.5] : [60, 69, 64.5]);
+    const anaerobicBase = project === '激流' ? (female ? [10.2, 13.2, 11.7] : [11.5, 14.8, 13.1]) : project === '皮划艇' ? (female ? [9.5, 12.2, 10.8] : [10.8, 13.8, 12.3]) : (female ? [8.8, 11.3, 10.1] : [10, 12.8, 11.4]);
+    const powerBase = project === '赛艇' ? (female ? [3600, 4300, 3950] : [4850, 5800, 5325]) : project === '皮划艇' ? (female ? [3400, 4100, 3750] : [4600, 5450, 5025]) : (female ? [3300, 4000, 3650] : [4400, 5250, 4825]);
+    const fmaxBase = project === '赛艇' ? (female ? [2750, 3450, 3100] : [3900, 4800, 4350]) : project === '皮划艇' ? (female ? [2550, 3250, 2900] : [3600, 4500, 4050]) : (female ? [2450, 3150, 2800] : [3450, 4300, 3875]);
+    const coreBase = female ? [92, 108, 100] : [94, 110, 102];
+    commonRows.push(
+      [project, gender, 'vo2max_ml_kg_min', vo2Base[0], vo2Base[1], vo2Base[2], 1.25, 'VO2Max用于评估专项有氧功率上限，是高强度训练承受能力和恢复速度的重要基础。'],
+      [project, gender, 'general_endurance_score', enduranceBase[0], enduranceBase[1], enduranceBase[2], 1.15, '一般耐力综合反映持续训练能力、基础有氧储备和大周期负荷承接能力。'],
+      [project, gender, 'anaerobic_power_wkg', anaerobicBase[0], anaerobicBase[1], anaerobicBase[2], 1.2, '无氧功率体现起动、冲刺和短时间高功率输出，是比赛关键段能力指标。'],
+      [project, gender, 'asymmetry_index_pct', 0, 6, 3, 1.0, '不对称指数越低越好，用于识别左右输出、稳定性和潜在代偿风险。'],
+      [project, gender, 'cmj_peak_power_w', powerBase[0], powerBase[1], powerBase[2], 1.1, 'CMJ峰值功率反映下肢快速伸展能力和神经肌肉动员水平，是爆发力维度基础指标。'],
+      [project, gender, 'imtp_peak_force_n', fmaxBase[0], fmaxBase[1], fmaxBase[2], 1.2, 'IMTP峰值力量用于评估全身最大等长发力能力，和专项力量储备高度相关。'],
+      [project, gender, 'core_strength_score', coreBase[0], coreBase[1], coreBase[2], 1.1, '核心力量综合支撑力的传导、姿态控制和疲劳状态下技术稳定。']
+    );
+  };
+  for (const project of ['赛艇', '皮划艇', '激流']) {
+    addEightDimensionRows(project, '男', false);
+    addEightDimensionRows(project, '女', true);
+  }
+  rows.push(...commonRows);
   for (const row of rows) upsert.run(...row);
 }
 
-runInitializationOnce('champion_model_seed_v1', seedChampionModelStandards);
+runInitializationOnce('champion_model_seed_v3', seedChampionModelStandards);
 
 function seedOverviewProfileData() {
   const profiles: Record<string, { birthDate: string; heightCm: number; weightKg: number; bodyFatPct: number; score: number; origin: [string, string, string] }> = {

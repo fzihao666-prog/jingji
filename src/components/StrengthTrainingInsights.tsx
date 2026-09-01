@@ -270,25 +270,34 @@ function CategoryExecutionPanel({ items }: { items: CategoryExecutionItem[] }) {
 function BodyPositionMapPanel({ items }: { items: Array<{ name: StrengthBodyPosition; value: number }> }) {
   const total = items.reduce((sum, item) => sum + item.value, 0);
   if (!total) return <EmptyChart text="暂无身体位置数据" />;
-  const hotspots: Record<StrengthBodyPosition, { x: number; y: number; align: 'left' | 'right'; note: string }> = {
-    上肢: { x: 27, y: 33, align: 'left', note: '推、拉、肩胛与划桨牵拉链' },
-    核心: { x: 58, y: 48, align: 'right', note: '躯干稳定、抗旋转与力量传导' },
-    下肢: { x: 30, y: 73, align: 'left', note: '蹬伸、支撑、跳跃与跑动能力' },
-    全身: { x: 61, y: 23, align: 'right', note: '综合协调与全链条动作' }
+  const bodyRegions: Record<StrengthBodyPosition, { pointX: number; pointY: number; labelX: number; labelY: number; align: 'left' | 'right'; region: string; note: string; color: string; short: string }> = {
+    上肢: { pointX: 43, pointY: 35, labelX: 25, labelY: 34, align: 'left', region: 'upper', note: '推、拉、肩胛与划桨牵拉链', color: '#0d9488', short: '推拉链' },
+    核心: { pointX: 51, pointY: 50, labelX: 76, labelY: 47, align: 'right', region: 'core', note: '躯干稳定、抗旋转与力量传导', color: '#f59e0b', short: '传导轴' },
+    下肢: { pointX: 49, pointY: 73, labelX: 25, labelY: 76, align: 'left', region: 'lower', note: '蹬伸、支撑、跳跃与跑动能力', color: '#3b82f6', short: '蹬伸端' },
+    全身: { pointX: 50, pointY: 24, labelX: 76, labelY: 25, align: 'right', region: 'full', note: '综合协调与全链条动作', color: '#073b4c', short: '全链路' }
   };
-  const enriched = items.map((item) => ({
+  const enriched = items.map((item, index) => ({
     ...item,
+    order: index + 1,
     percent: round(item.value / total * 100, 1),
-    ...hotspots[item.name]
+    ...bodyRegions[item.name]
   }));
   const dominant = enriched.reduce((best, item) => item.value > best.value ? item : best, enriched[0]);
   return <div className="strength-body-position-map">
     <div className="body-map-stage">
       <img src="/assets/strength-anatomy-front.png" alt="身体部位训练分布示意图" />
-      {enriched.map((item) => <div className={`body-map-hotspot ${item.align}`} key={item.name} style={{ left: `${item.x}%`, top: `${item.y}%` }}>
-        <i style={{ '--hotspot-size': `${Math.max(34, Math.min(72, 34 + item.percent * .75))}px` } as CSSProperties}><b /></i>
+      <div className={`body-region full ${items.find((item) => item.name === '全身')?.value ? 'active' : ''}`} />
+      {enriched.map((item) => item.name !== '全身' && <div className={`body-region ${item.region}`} key={`${item.name}-region`} style={{ opacity: Math.max(.18, Math.min(.58, .2 + item.percent / 100 * .7)), background: item.color }} />)}
+      <svg className="body-map-connectors" viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="none">
+        {enriched.map((item) => <g key={`${item.name}-connector`}>
+          <line x1={item.pointX} y1={item.pointY} x2={item.labelX} y2={item.labelY} stroke={item.color} />
+          <circle cx={item.pointX} cy={item.pointY} r="1.45" fill={item.color} />
+        </g>)}
+      </svg>
+      {enriched.map((item) => <div className={`body-map-label ${item.align} ${item.value ? 'active' : ''}`} key={item.name} style={{ left: `${item.labelX}%`, top: `${item.labelY}%`, '--hotspot-size': `${Math.max(32, Math.min(62, 32 + item.percent * .55))}px` } as CSSProperties}>
+        <i style={{ color: item.color }}><b>{item.order}</b></i>
         <span>
-          <strong>{item.name}</strong>
+          <strong>{item.name}<small>{item.short}</small></strong>
           <em>{item.value} 项 · {item.percent}%</em>
         </span>
       </div>)}
@@ -301,7 +310,7 @@ function BodyPositionMapPanel({ items }: { items: Array<{ name: StrengthBodyPosi
       </article>
       <div>
         {enriched.map((item) => <section key={item.name}>
-          <header><span>{item.name}</span><strong>{item.percent}%</strong></header>
+          <header><span><i style={{ background: item.color }} />{item.name}<small>{item.short}</small></span><strong>{item.percent}%</strong></header>
           <i><b style={{ width: `${item.percent}%` }} /></i>
           <footer><span>{item.value} 项</span><span>{item.note}</span></footer>
         </section>)}

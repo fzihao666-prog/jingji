@@ -57,6 +57,7 @@ async function openStrength(label) {
 
 await login('coach01');
 await openStrength('体能总览');
+await page.locator('.strength-kpi-grid article').first().waitFor();
 if (await page.locator('.strength-kpi-grid article').count() !== 5) throw new Error('体能总览核心指标卡数量不是5。');
 if (await page.locator('.strength-dashboard-grid .strength-chart-card').count() !== 6) throw new Error('体能总览图表数量不是6。');
 if (await page.getByText('低中高强度占比').count()) throw new Error('体能总览仍显示低中高强度占比。');

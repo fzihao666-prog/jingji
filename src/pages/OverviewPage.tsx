@@ -507,9 +507,9 @@ export function OverviewPage(props: Props) {
     ),
     'fms-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<BrainCircuit size={17} />} title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人动作筛查' : `全队均值 · n=${measurementSampleCount || '—'}`} · 动作质量与代偿`} />
+        <PanelHeading icon={<BrainCircuit size={17} />} title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人FMS' : `全队均值 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
         <FmsTeamChart measurements={overview?.measurements || []} />
-        <p className="analysis-method-note">基于深蹲、足踝、推撑、肩部、躯干和颈椎六项动作筛查；悬浮柱形可查看评分与训练目标。</p>
+        <p className="analysis-method-note">基于FMS标准七项测试，每项0-3分，总分21分；团队图显示各单项均分并汇总为21分制综合分。</p>
       </article>
     ),
     'performance-radar': (
@@ -713,13 +713,14 @@ function MovementMatrix({ latest, measurements }: { latest?: StrengthTest; measu
     return value === null ? null : `${formatNumber(value, 0)}分`;
   };
   const rows = [
-    { label: '双腿深蹲', detail: '足踝、膝、髋与躯干代偿', value: score('movement_squat_score') },
-    { label: '足跟抬起控制', detail: '踝关节活动与重心控制', value: score('movement_heel_lift_score') },
+    { label: '深蹲', detail: '踝、膝、髋与躯干整体控制', value: score('fms_deep_squat') },
+    { label: '跨栏步', detail: '单腿支撑、髋膝踝控制', value: score('fms_hurdle_step') },
+    { label: '直线弓步蹲', detail: '分腿姿态下稳定和控制', value: score('fms_inline_lunge') },
+    { label: '肩部灵活性', detail: '肩胛胸廓和肩关节活动度', value: score('fms_shoulder_mobility') },
+    { label: '主动直腿上抬', detail: '髋关节灵活性和骨盆控制', value: score('fms_active_straight_leg_raise') },
+    { label: '躯干稳定俯卧撑', detail: '反伸抗力和躯干稳定', value: score('fms_trunk_stability_pushup') },
+    { label: '旋转稳定性', detail: '多平面核心控制和对称性', value: score('fms_rotary_stability') },
     { label: '单腿蹲对称', detail: '膝内扣与左右功能控制', value: symmetryLabel(latest?.metrics.leftSingleLegSquatReps, latest?.metrics.rightSingleLegSquatReps) },
-    { label: '俯卧撑动作', detail: '头前伸与躯干稳定', value: score('movement_pushup_score') },
-    { label: '肩关节活动', detail: '屈曲与内旋代偿', value: score('movement_shoulder_score') },
-    { label: '躯干/腰椎', detail: '旋转与骨盆控制', value: score('movement_trunk_score') },
-    { label: '颈椎控制', detail: '头位与上肢动作协同', value: score('movement_cervical_score') },
     { label: '柔韧能力', detail: '坐位体前屈', value: typeof latest?.metrics.sitReachCm === 'number' ? `${latest.metrics.sitReachCm.toFixed(1)} cm` : null }
   ];
   return <div className="movement-matrix">{rows.map((row) => <div key={row.label} className={row.value ? 'available' : 'missing'}><i /><span><strong>{row.label}</strong><small>{row.detail}</small></span><b>{row.value || '待补测'}</b></div>)}</div>;
