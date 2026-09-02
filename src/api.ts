@@ -5,6 +5,8 @@ import type {
   AuditLog,
   BodyCompositionRecord,
   ChampionBenchmarkPayload,
+  DataImportBatch,
+  DataImportBatchSummary,
   InjuryRecord,
   InjuryStatus,
   OverviewLayoutState,
@@ -119,7 +121,7 @@ export const api = {
     return request<{ athletes: Athlete[] }>('/api/athletes');
   },
   async createAthlete(input: Record<string, unknown>) {
-    return request<{ message: string; id: number; accountId: number }>('/api/admin/athletes', {
+    return request<{ message: string; id: number; accountId: number | null }>('/api/admin/athletes', {
       method: 'POST',
       body: JSON.stringify(input)
     });
@@ -370,6 +372,42 @@ export const api = {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  },
+  async analyzeDataImport(file: File, project: Project, defaultDate?: string, defaultTeam?: string) {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('project', project);
+    if (defaultDate) body.append('defaultDate', defaultDate);
+    if (defaultTeam) body.append('defaultTeam', defaultTeam);
+    return request<{ batch: DataImportBatch }>('/api/data-import/analyze', { method: 'POST', body });
+  },
+  async dataImportBatches(project: Project) {
+    return request<{ batches: DataImportBatchSummary[] }>(`/api/data-import/batches?project=${encodeURIComponent(project)}`);
+  },
+  async dataImportBatch(id: string) {
+    return request<{ batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}`);
+  },
+  async updateDataImportItems(id: string, corrections: Array<{
+    id: number;
+    athleteId?: number | null;
+    eventDate?: string;
+    valueNum?: number | null;
+    actualReps?: number | null;
+    actualWeightKg?: number | null;
+  }>) {
+    return request<{ batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/items`, {
+      method: 'PUT', body: JSON.stringify({ corrections })
+    });
+  },
+  async updateDataImportAthletes(id: string, corrections: Array<{ id: number; name?: string; team?: string; gender?: string }>) {
+    return request<{ batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/athletes`, {
+      method: 'PUT', body: JSON.stringify({ corrections })
+    });
+  },
+  async commitDataImport(id: string, conflictPolicy: 'skip' | 'update') {
+    return request<{ message: string; imported: number; skipped: number; createdAthletes: number; batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/commit`, {
+      method: 'POST', body: JSON.stringify({ conflictPolicy })
+    });
   },
   async specialTests(from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });

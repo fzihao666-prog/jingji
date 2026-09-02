@@ -65,6 +65,8 @@ type ProfileRow = {
   gender: string;
   athletePosition: string;
   bestResult: string;
+  technicalLevel: string;
+  currentEvent: string;
   originUnit: string;
   province: string;
   city: string;
@@ -237,6 +239,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     SELECT a.id AS athleteId, a.name AS athleteName, a.project, a.team, a.gender,
       COALESCE(ap.position, '') AS athletePosition,
       COALESCE(ap.best_result, '') AS bestResult,
+      COALESCE(ap.technical_level, '') AS technicalLevel,
+      COALESCE(ap.current_event, '') AS currentEvent,
       COALESCE(ap.origin_unit, '') AS originUnit,
       COALESCE(ao.province, '未设置') AS province,
       COALESCE(ao.city, '') AS city,
@@ -344,6 +348,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
         note: row.note || ''
       })),
       competitiveAssessmentDate: state?.assessmentDate || null,
+      technicalLevel: profile.technicalLevel || null,
+      currentEvent: profile.currentEvent || null,
       competitiveScore: state?.competitiveScore ?? null,
       previousCompetitiveScore: stateHistory[1]?.competitiveScore ?? null,
       competitiveLevel: state?.competitiveLevel || null,

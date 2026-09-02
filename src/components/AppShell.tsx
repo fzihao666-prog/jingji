@@ -14,6 +14,7 @@ import {
   UsersRound,
   X,
   BluetoothConnected,
+  FileSpreadsheet,
   ChevronDown
 } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
@@ -26,8 +27,8 @@ import { ProjectMark } from './ProjectMark';
 
 export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule' | 'special-athletes';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
-export type DataCollectionPageKey = 'bluetooth';
-export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | 'bluetooth';
+export type DataCollectionPageKey = 'bluetooth' | 'data-import';
+export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
 
 const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
   { key: 'special-time', label: '专项分析', pages: ['special-time', 'special-distance', 'special-load'] },
@@ -44,8 +45,9 @@ const strengthGroups: Array<{ key: StrengthPageKey; label: string }> = [
   { key: 'strength-assessment', label: '体能评估' }
 ];
 
-const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string }> = [
-  { key: 'bluetooth', label: '蓝牙连接' }
+const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
+  { key: 'bluetooth', label: '蓝牙连接' },
+  { key: 'data-import', label: '数据导入', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
 ];
 
 const navItems: Array<{
@@ -85,15 +87,16 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(() => page.startsWith('special-'));
   const [strengthOpen, setStrengthOpen] = useState(() => page.startsWith('strength-'));
-  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => page === 'bluetooth');
+  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => page === 'bluetooth' || page === 'data-import');
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
   const specialActive = page.startsWith('special-');
   const strengthActive = page.startsWith('strength-');
-  const dataCollectionActive = page === 'bluetooth';
+  const dataCollectionActive = page === 'bluetooth' || page === 'data-import';
   const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
   const strengthCurrent = strengthGroups.find((item) => item.key === page);
-  const dataCollectionCurrent = dataCollectionGroups.find((item) => item.key === page);
-  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: BluetoothConnected } : visibleItems.find((item) => item.key === page) || visibleItems[0];
+  const visibleDataCollectionGroups = dataCollectionGroups.filter((item) => !item.roles || item.roles.includes(user.role));
+  const dataCollectionCurrent = visibleDataCollectionGroups.find((item) => item.key === page);
+  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: itemIcon(dataCollectionCurrent.key) } : visibleItems.find((item) => item.key === page) || visibleItems[0];
 
   const choosePage = (key: PageKey) => {
     onPageChange(key);
@@ -200,7 +203,7 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
               <ChevronDown className="special-nav-chevron" size={15} />
             </button>
             {dataCollectionOpen && <div className="special-nav-tree">
-              {dataCollectionGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}>
+              {visibleDataCollectionGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}>
                 <i /> <span>{item.label}</span>
               </button>)}
             </div>}
@@ -252,4 +255,8 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
       </main>
     </div>
   );
+}
+
+function itemIcon(key: DataCollectionPageKey) {
+  return key === 'data-import' ? FileSpreadsheet : BluetoothConnected;
 }

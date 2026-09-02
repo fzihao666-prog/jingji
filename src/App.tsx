@@ -17,6 +17,7 @@ const CoachManagementPage = lazy(() => import('./pages/CoachManagementPage').the
 const TeamsPage = lazy(() => import('./pages/TeamsPage').then((module) => ({ default: module.TeamsPage })));
 const AccountsPage = lazy(() => import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage })));
 const RegionAccessPage = lazy(() => import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage })));
+const DataImportPage = lazy(() => import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage })));
 
 const today = toIsoDate(new Date());
 
@@ -159,6 +160,7 @@ export default function App() {
         {page.startsWith('special-') && <SpecialTestsPage {...shared} user={user} section={page as SpecialPageKey} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
+        {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}
         {page === 'personal' && <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'coaches' && user.role !== 'ATL' && <CoachManagementPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}

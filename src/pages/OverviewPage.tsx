@@ -560,14 +560,13 @@ export function OverviewPage(props: Props) {
       <article className={`panel professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
         <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '基本信息'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
         <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} />
-        {isIndividualOverview && <p className="analysis-method-note">年龄由出生日期按分析截止日计算；身高体重读取不晚于截止日的最近一次身体测量。</p>}
       </article>
     ),
     'competitive-state': (
       <article className="panel professional-panel competitive-state-panel">
-        <PanelHeading title="竞技状态评估" subtitle={`${isIndividualOverview ? '本人' : '团队均值与等级分布'} · 六维综合`} />
+        <PanelHeading title="竞技状态六维分析" subtitle={`${isIndividualOverview ? '本人' : '团队均值与等级分布'} · 专项耐力 · 力量爆发 · 技术效率 · 负荷适应 · 恢复 · 比赛能力`} />
         <CompetitiveStateOverview profiles={athleteProfiles} individual={isIndividualOverview} />
-        <p className="analysis-method-note">竞技状态由专项耐力、力量爆发、技术效率、负荷适应、恢复和比赛能力综合形成，不替代教练现场判断。</p>
+        <p className="analysis-method-note">六维能力由专项耐力、力量爆发、技术效率、负荷适应、恢复和比赛能力综合形成；与上方「竞技水平」分数分布互为补充，不替代教练现场判断。</p>
       </article>
     ),
     'birthplace-map': (
@@ -677,11 +676,6 @@ export function OverviewPage(props: Props) {
           </div>
         </div>
       </header>
-      {overview && <div className="overview-data-provenance">
-        <Database size={15} /><strong>{overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>
-        <span>{overview.meta.athleteCount}名运动员 · {overview.meta.sessionCount}堂训练 · {overview.meta.wellnessDays}条恢复记录 · {overview.meta.testCount}次测试</span>
-        <small>数据完整率 {formatNumber(overview.meta.coverage, 1)}%</small>
-      </div>}
       {overviewError && <div className="overview-data-provenance error"><Database size={15} /><strong>统一指标接口暂不可用</strong><span>{overviewError}，当前显示兼容数据。</span></div>}
       {layout.hidden.length > 0 && <div className="hidden-card-restore" onClick={(event) => event.stopPropagation()}><Eye size={15} /><span>已隐藏 {layout.hidden.length} 项</span>{layout.hidden.map((id) => <button key={id} type="button" onClick={() => restoreCard(id)}>{cardMeta[id].title}</button>)}</div>}
       {props.loading || (overviewLoading && !overview) ? <PageSkeleton /> : <section className="professional-dashboard-grid">{layout.order.filter((id) => !layout.hidden.includes(id) && (isIndividualOverview ? id !== 'roster' : true)).map((id) => renderShell(id, cards[id]))}</section>}

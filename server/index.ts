@@ -53,6 +53,14 @@ import {
   type AthleteContext
 } from './ai-service.ts';
 import { recognizeStrengthImport, type RecognizedStrengthRow } from './strength-import-ai.ts';
+import {
+  analyzeDataImport,
+  commitDataImport,
+  getDataImportBatch,
+  listDataImportBatches,
+  updateDataImportAthleteCandidates,
+  updateDataImportItems
+} from './data-import.ts';
 
 try {
   process.loadEnvFile(resolve(process.cwd(), '.env'));
@@ -201,6 +209,14 @@ declare global {
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
+const dataImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 80 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (!/\.(xls|xlsx)$/i.test(file.originalname)) return callback(new Error('统一数据导入当前仅支持 XLS 和 XLSX 文件。'));
+    callback(null, true);
+  }
+});
 const athletePhotoRoot = resolve(process.env.ATHLETE_PHOTO_ROOT || resolve(process.cwd(), 'data', 'uploads', 'athlete-photos'));
 mkdirSync(athletePhotoRoot, { recursive: true });
 const photoUpload = multer({
@@ -1752,9 +1768,9 @@ function readAthleteAdminPayload(body: Record<string, unknown>) {
     project: cleanString(body.project),
     team: cleanString(body.team),
     gender: cleanString(body.gender),
-    region: cleanString(body.region),
-    city: cleanString(body.city),
-    county: cleanString(body.county),
+    region: cleanString(body.region) || '未设置',
+    city: cleanString(body.city) || '未设置',
+    county: cleanString(body.county) || '未设置',
     birthDate: cleanString(body.birthDate),
     identityNumber: cleanString(body.identityNumber).toUpperCase(),
     ethnicity: cleanString(body.ethnicity) || '汉族',
@@ -1790,14 +1806,26 @@ function athletePayloadErrors(payload: ReturnType<typeof readAthleteAdminPayload
   if (nameResult.error) errors.push(nameResult.error);
   if (!projectSet.has(payload.project)) errors.push('请选择有效的运动项目');
   if (!db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(payload.project, payload.team)) errors.push('请选择有效的所属队伍');
-  if (!['男', '女'].includes(payload.gender)) errors.push('请选择运动员性别');
-  if (!payload.region || !payload.city || !payload.county) errors.push('请填写完整的省、市、区县');
+  if (payload.gender && !['男', '女'].includes(payload.gender)) errors.push('运动员性别应为男、女或暂不填写');
   if (payload.identityNumber && !/^\d{17}[\dX]$/.test(payload.identityNumber)) errors.push('身份证号格式不正确');
   if (payload.phone && !/^1\d{10}$/.test(payload.phone)) errors.push('手机号须为11位');
   if (payload.emergencyPhone && !/^1\d{10}$/.test(payload.emergencyPhone)) errors.push('紧急联系电话须为11位');
   if (!athleteHealthStatuses.has(payload.healthStatus)) errors.push('请选择有效的身体状态');
   if (!athleteTrainingStatuses.has(payload.athleteStatus)) errors.push('请选择有效的运动员状态');
   return errors;
+}
+
+function athleteProfileComplete(payload: ReturnType<typeof readAthleteAdminPayload>) {
+  return ['男', '女'].includes(payload.gender)
+    && [payload.region, payload.city, payload.county].every((value) => value && value !== '未设置');
+}
+
+function athleteScopeError(user: AuthUser, payload: ReturnType<typeof readAthleteAdminPayload>) {
+  const permissions = accountPermissions(user.id);
+  if (!permissionsAllowProjectTeam(permissions, payload.project, payload.team)) return '运动员项目或队伍不能超出当前账号权限';
+  if ([payload.region, payload.city, payload.county].some((value) => !value || value === '未设置')) return '';
+  const athlete: ScopeAthlete = { id: 0, project: payload.project, team: payload.team, region: payload.region, city: payload.city, county: payload.county };
+  return permissionsAllowAthlete(permissions, athlete) ? '' : '运动员地区不能超出当前账号权限';
 }
 
 function upsertAthleteProfile(athleteId: number, payload: ReturnType<typeof readAthleteAdminPayload>) {
@@ -1830,54 +1858,60 @@ function upsertAthleteProfile(athleteId: number, payload: ReturnType<typeof read
   );
 }
 
-app.post('/api/admin/athletes', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.post('/api/admin/athletes', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
   const currentUser = req.authUser!;
   const payload = readAthleteAdminPayload(req.body || {});
   const username = cleanString(req.body?.username).toLowerCase();
   const password = cleanString(req.body?.password);
+  const createAccount = req.body?.createAccount === true;
   const errors = athletePayloadErrors(payload);
-  if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('登录账号须为4—24位字母、数字或下划线');
-  if (password.length < 8 || password.length > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) errors.push('初始密码须为8—72位，并同时包含字母和数字');
+  if (createAccount && currentUser.role === 'SCC') errors.push('教练可创建和维护运动员档案，但不能直接创建登录账号');
+  if (createAccount && !/^[a-z0-9_]{4,24}$/.test(username)) errors.push('登录账号须为4—24位字母、数字或下划线');
+  if (createAccount && (password.length < 8 || password.length > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password))) errors.push('初始密码须为8—72位，并同时包含字母和数字');
   const permissions = {
     areas: [{ areaLevel: 'county' as const, province: payload.region, city: payload.city, county: payload.county }],
     projects: [payload.project],
     teams: [{ project: payload.project, team: payload.team }]
   };
-  if (!permissionsContain(accountPermissions(currentUser.id), permissions)) errors.push('运动员范围不能超出当前账号权限');
-  if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) errors.push('该登录账号已存在');
-  if (db.prepare('SELECT id FROM athletes WHERE name = ?').get(payload.name)) errors.push('该运动员姓名已存在');
+  const scopeError = athleteScopeError(currentUser, payload);
+  if (scopeError) errors.push(scopeError);
+  if (createAccount && [payload.region, payload.city, payload.county].some((value) => value === '未设置')) errors.push('创建登录账号前请补全省、市、区县');
+  if (createAccount && db.prepare('SELECT id FROM users WHERE username = ?').get(username)) errors.push('该登录账号已存在');
+  if (db.prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team = ?').get(payload.name, payload.project, payload.team)) errors.push('该队伍中已存在同名运动员');
   const coach = payload.coachId ? userById(payload.coachId) : null;
-  if (payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
+  if (currentUser.role !== 'SCC' && payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
   if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
   db.exec('BEGIN');
   try {
     const athleteResult = db.prepare(`
-      INSERT INTO athletes (name, project, team, gender, region, city, county, birth_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(payload.name, payload.project, payload.team, payload.gender, payload.region, payload.city, payload.county, payload.birthDate || null);
+      INSERT INTO athletes (name, project, team, gender, region, city, county, birth_date, profile_status, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
+    `).run(payload.name, payload.project, payload.team, payload.gender, payload.region, payload.city, payload.county, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete');
     const athleteId = Number(athleteResult.lastInsertRowid);
     upsertAthleteProfile(athleteId, payload);
-    const userResult = db.prepare(`
-      INSERT INTO users (username, password_hash, display_name, role, athlete_id, active)
-      VALUES (?, ?, ?, 'ATL', ?, 1)
-    `).run(username, bcrypt.hashSync(password, 11), payload.name, athleteId);
-    const userId = Number(userResult.lastInsertRowid);
-    db.prepare('INSERT INTO account_profiles (user_id, parent_user_id, account_code) VALUES (?, ?, ?)')
-      .run(userId, currentUser.id, accountCodeFor(userId, 'ATL', payload.region, payload.project));
-    replaceAccountScope({ userId, role: 'ATL', parentUserId: currentUser.id, permissions, grantedBy: currentUser.id });
-    if (payload.coachId) db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(payload.coachId, athleteId);
+    let userId: number | null = null;
+    if (createAccount) {
+      const userResult = db.prepare(`INSERT INTO users (username, password_hash, display_name, role, athlete_id, active) VALUES (?, ?, ?, 'ATL', ?, 1)`)
+        .run(username, bcrypt.hashSync(password, 11), payload.name, athleteId);
+      userId = Number(userResult.lastInsertRowid);
+      db.prepare('INSERT INTO account_profiles (user_id, parent_user_id, account_code) VALUES (?, ?, ?)')
+        .run(userId, currentUser.id, accountCodeFor(userId, 'ATL', payload.region, payload.project));
+      replaceAccountScope({ userId, role: 'ATL', parentUserId: currentUser.id, permissions, grantedBy: currentUser.id });
+    }
+    const assignedCoachId = currentUser.role === 'SCC' ? currentUser.id : payload.coachId;
+    if (assignedCoachId) db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(assignedCoachId, athleteId);
     db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(currentUser.id, 'CREATE_ATHLETE', 'athlete', athleteId, JSON.stringify({ username, project: payload.project, team: payload.team }));
+      .run(currentUser.id, 'CREATE_ATHLETE', 'athlete', athleteId, JSON.stringify({ username: createAccount ? username : '', createAccount, project: payload.project, team: payload.team }));
     db.exec('COMMIT');
-    res.status(201).json({ message: '运动员及登录账号已创建。', id: athleteId, accountId: userId });
+    res.status(201).json({ message: createAccount ? '运动员及登录账号已创建。' : '运动员档案已创建，暂未创建登录账号。', id: athleteId, accountId: userId });
   } catch (error) {
     db.exec('ROLLBACK');
     res.status(409).json({ message: error instanceof Error && error.message.includes('UNIQUE') ? '运动员姓名或登录账号已存在。' : '运动员创建失败。' });
   }
 });
 
-app.put('/api/admin/athletes/:id', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.put('/api/admin/athletes/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
   const currentUser = req.authUser!;
   const athleteId = Number(req.params.id);
   if (!hasAthleteAccess(currentUser, athleteId)) return res.status(404).json({ message: '运动员不存在或不在可管理范围内。' });
@@ -1888,22 +1922,25 @@ app.put('/api/admin/athletes/:id', requireAuth, requireRole('PRJ', 'REG', 'TD', 
     projects: [payload.project],
     teams: [{ project: payload.project, team: payload.team }]
   };
-  if (!permissionsContain(accountPermissions(currentUser.id), permissions)) errors.push('运动员范围不能超出当前账号权限');
+  const scopeError = athleteScopeError(currentUser, payload);
+  if (scopeError) errors.push(scopeError);
   const coach = payload.coachId ? userById(payload.coachId) : null;
-  if (payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
+  if (currentUser.role !== 'SCC' && payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
   if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
   db.exec('BEGIN');
   try {
-    db.prepare(`UPDATE athletes SET name = ?, project = ?, team = ?, gender = ?, region = ?, city = ?, county = ?, birth_date = ? WHERE id = ?`)
-      .run(payload.name, payload.project, payload.team, payload.gender, payload.region, payload.city, payload.county, payload.birthDate || null, athleteId);
+    db.prepare(`UPDATE athletes SET name = ?, project = ?, team = ?, gender = ?, region = ?, city = ?, county = ?, birth_date = ?, profile_status = ? WHERE id = ?`)
+      .run(payload.name, payload.project, payload.team, payload.gender, payload.region, payload.city, payload.county, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete', athleteId);
     upsertAthleteProfile(athleteId, payload);
     db.prepare("UPDATE users SET display_name = ? WHERE role = 'ATL' AND athlete_id = ?").run(payload.name, athleteId);
     const athleteUser = db.prepare("SELECT u.id, ap.parent_user_id AS parentUserId FROM users u LEFT JOIN account_profiles ap ON ap.user_id = u.id WHERE u.role = 'ATL' AND u.athlete_id = ?")
       .get(athleteId) as { id: number; parentUserId: number | null } | undefined;
     if (athleteUser) replaceAccountScope({ userId: athleteUser.id, role: 'ATL', parentUserId: athleteUser.parentUserId || currentUser.id, permissions, grantedBy: currentUser.id });
-    db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
-    if (payload.coachId) db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(payload.coachId, athleteId);
+    if (currentUser.role !== 'SCC') {
+      db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
+      if (payload.coachId) db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(payload.coachId, athleteId);
+    }
     db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
       .run(currentUser.id, 'UPDATE_ATHLETE_PROFILE', 'athlete', athleteId);
     db.exec('COMMIT');
@@ -2027,7 +2064,9 @@ app.get('/api/athletes', requireAuth, (req, res) => {
   const placeholders = ids.map(() => '?').join(',');
   const athletes = db.prepare(`
     SELECT a.id, a.name, a.project, a.team, a.gender, a.region, a.region AS province, a.city, a.county,
-      a.photo_url AS photoUrl, a.birth_date AS birthDate, COALESCE(ap.identity_number, '') AS identityNumber,
+      a.photo_url AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
+      EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
+      COALESCE(ap.identity_number, '') AS identityNumber,
       COALESCE(ap.ethnicity, '汉族') AS ethnicity, COALESCE(ap.phone, '') AS phone,
       COALESCE(ap.blood_type, '') AS bloodType, COALESCE(ap.emergency_contact, '') AS emergencyContact,
       COALESCE(ap.emergency_phone, '') AS emergencyPhone, COALESCE(ap.education, '') AS education,
@@ -2087,6 +2126,9 @@ app.get('/api/athletes', requireAuth, (req, res) => {
     county: string;
     photoUrl: string;
     birthDate: string | null;
+    profileStatus: 'incomplete' | 'complete';
+    source: string;
+    hasAccount: number;
     heightCm: number | null;
     weightKg: number | null;
     bodyFatPct: number | null;
@@ -3277,6 +3319,116 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
+  }
+});
+
+function dataImportScope(user: AuthUser, project: string) {
+  const permissions = accountPermissions(user.id);
+  const projectAllowed = permissions.projects.includes('*') || permissions.projects.includes(project);
+  const allTeams = (db.prepare('SELECT name FROM project_teams WHERE project = ? AND active = 1 ORDER BY name').all(project) as Array<{ name: string }>).map((row) => row.name);
+  const allowedTeams = new Set(allTeams.filter((team) => permissions.teams.some((item) =>
+    (item.project === '*' || item.project === project) && (item.team === '*' || item.team === team)
+  )));
+  const area = permissions.areas[0];
+  return {
+    allowed: projectAllowed && allowedTeams.size > 0,
+    allowedTeams,
+    defaultArea: {
+      region: area?.areaLevel === 'national' ? '未设置' : area?.province || '未设置',
+      city: area && ['city', 'county'].includes(area.areaLevel) ? area.city || '未设置' : '未设置',
+      county: area?.areaLevel === 'county' ? area.county || '未设置' : '未设置'
+    }
+  };
+}
+
+app.post('/api/data-import/analyze', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), dataImportUpload.single('file'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: '请选择要导入的 Excel 文件。' });
+    const project = cleanString(req.body?.project);
+    if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
+    const scope = dataImportScope(req.authUser!, project);
+    if (!scope.allowed) return res.status(403).json({ message: '当前账号在该项目下没有可导入的队伍权限。' });
+    const defaultTeam = cleanString(req.body?.defaultTeam);
+    if (defaultTeam && !scope.allowedTeams.has(defaultTeam)) return res.status(403).json({ message: '新运动员默认队伍不在当前账号权限范围内。' });
+    const athletes = strengthImportCandidates(req.authUser!).filter((athlete) => athlete.project === project);
+    const batch = analyzeDataImport({
+      buffer: req.file.buffer,
+      filename: req.file.originalname,
+      mimetype: req.file.mimetype,
+      project,
+      defaultDate: cleanString(req.body?.defaultDate),
+      defaultTeam,
+      defaultArea: scope.defaultArea,
+      userId: req.authUser!.id,
+      athletes
+    });
+    res.json({ batch });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : '数据文件解析失败。' });
+  }
+});
+
+app.get('/api/data-import/batches', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  const project = cleanString(req.query.project);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
+  if (!dataImportScope(req.authUser!, project).allowed) return res.status(403).json({ message: '当前账号无权查看该项目的导入记录。' });
+  res.json({ batches: listDataImportBatches(project, req.authUser!.id) });
+});
+
+app.get('/api/data-import/batches/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  try {
+    res.json({ batch: getDataImportBatch(cleanString(req.params.id), req.authUser!.id) });
+  } catch (error) {
+    res.status(404).json({ message: error instanceof Error ? error.message : '导入批次不存在。' });
+  }
+});
+
+app.put('/api/data-import/batches/:id/items', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  try {
+    const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections.slice(0, 5000) : [];
+    const batch = updateDataImportItems({
+      batchId: cleanString(req.params.id),
+      userId: req.authUser!.id,
+      athletes: strengthImportCandidates(req.authUser!),
+      corrections
+    });
+    res.json({ batch });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : '导入数据校验失败。' });
+  }
+});
+
+app.put('/api/data-import/batches/:id/athletes', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  try {
+    const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
+    const scope = dataImportScope(req.authUser!, batch.project);
+    if (!scope.allowed) return res.status(403).json({ message: '当前账号无权在该项目创建运动员。' });
+    const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections.slice(0, 500) : [];
+    const updated = updateDataImportAthleteCandidates({
+      batchId: batch.id,
+      userId: req.authUser!.id,
+      allowedTeams: scope.allowedTeams,
+      corrections
+    });
+    res.json({ batch: updated });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : '新运动员资料保存失败。' });
+  }
+});
+
+app.post('/api/data-import/batches/:id/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  try {
+    const conflictPolicy = cleanString(req.body?.conflictPolicy) === 'update' ? 'update' : 'skip';
+    const result = commitDataImport({
+      batchId: cleanString(req.params.id),
+      userId: req.authUser!.id,
+      creatorRole: req.authUser!.role,
+      athletes: strengthImportCandidates(req.authUser!),
+      conflictPolicy
+    });
+    res.json({ message: `已创建${result.createdAthletes || 0}名无账号运动员，写入${result.imported}条数据，跳过${result.skipped}条。`, ...result });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : '导入提交失败。' });
   }
 });
 

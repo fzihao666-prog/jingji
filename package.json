@@ -16,10 +16,12 @@
     "special-training-check": "node scripts/special-training-check.mjs",
     "special-test-check": "node scripts/special-test-check.mjs",
     "database-lock-check": "node scripts/database-lock-check.mjs",
+    "data-import-check": "tsx scripts/data-import-check.ts",
     "api-check": "node scripts/api-check.mjs",
     "visual-check": "node scripts/visual-check.mjs"
   },
   "dependencies": {
+    "@e965/xlsx": "^0.20.3",
     "@vitejs/plugin-react": "latest",
     "bcryptjs": "latest",
     "china-map-geojson": "^1.0.4",

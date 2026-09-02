@@ -1,5 +1,5 @@
 import {
-  Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis,
+  Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis,
   Radar, RadarChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip,
   XAxis, YAxis
 } from 'recharts';
@@ -53,7 +53,6 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
   const age = average(profiles.map((profile) => profile.age));
   const height = average(profiles.map((profile) => profile.heightCm));
   const weight = average(profiles.map((profile) => profile.weightKg));
-  const bodyCoverage = profiles.filter((profile) => profile.heightCm !== null && profile.weightKg !== null).length;
   const current = profiles[0];
   const weightChange = current.weightKg !== null && current.previousWeightKg !== null
     ? current.weightKg - current.previousWeightKg
@@ -65,11 +64,6 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
         <ProfileStat label="年龄" value={age === null ? '—' : formatNumber(age, 1)} unit="岁" note={current.birthDate || '出生日期未录入'} />
         <ProfileStat label="身高" value={height === null ? '—' : formatNumber(height, 1)} unit="cm" note={current.bodyMeasurementDate || '未测量'} />
         <ProfileStat label="体重" value={weight === null ? '—' : formatNumber(weight, 1)} unit="kg" note={weightChange === null ? '暂无前次对比' : `较前次 ${weightChange >= 0 ? '+' : ''}${formatNumber(weightChange, 1)} kg`} />
-      </div>
-      <div className="profile-data-note">
-        <span>身体数据覆盖 <strong>{bodyCoverage}/{profiles.length}</strong></span>
-        <span>最近测量 <strong>{profiles.map((profile) => profile.bodyMeasurementDate).filter(Boolean).sort().at(-1) || '—'}</strong></span>
-        <span>口径 <strong>本人最新快照</strong></span>
       </div>
     </div>
   );
@@ -93,18 +87,17 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
   const ageValues = ageData.map((item) => item.age);
   const minAge = ageValues.length ? Math.min(...ageValues) : null;
   const maxAge = ageValues.length ? Math.max(...ageValues) : null;
-  const latestMeasurement = profiles.map((profile) => profile.bodyMeasurementDate).filter((value): value is string => Boolean(value)).sort().at(-1) || '—';
+
+  const heights = scatterData.map((item) => item.height);
+  const weights = scatterData.map((item) => item.weight);
+  const minHeight = heights.length ? Math.min(...heights) : null;
+  const maxHeight = heights.length ? Math.max(...heights) : null;
+  const minWeight = weights.length ? Math.min(...weights) : null;
+  const maxWeight = weights.length ? Math.max(...weights) : null;
 
   return (
-    <div className="profile-overview-visual team-profile-visual" aria-label="队伍年龄和身体形态分布">
-      <div className="profile-stat-grid team-profile-stat-grid">
-        <ProfileStat label="队伍人数" value={String(profiles.length)} unit="人" note="当前可见运动员" />
-        <ProfileStat label="平均年龄" value={age === null ? '—' : formatNumber(age, 1)} unit="岁" note={range(profiles.map((item) => item.age), '岁')} />
-        <ProfileStat label="平均身高" value={height === null ? '—' : formatNumber(height, 1)} unit="cm" note={range(profiles.map((item) => item.heightCm), 'cm')} />
-        <ProfileStat label="平均体重" value={weight === null ? '—' : formatNumber(weight, 1)} unit="kg" note={range(profiles.map((item) => item.weightKg), 'kg')} />
-      </div>
-
-      <div className="team-profile-chart-grid">
+    <div className="profile-overview-visual team-profile-visual" aria-label="队伍年龄、身体形态与竞技水平分布">
+      <div className="team-profile-chart-grid three-columns">
         <section className="team-profile-chart-card team-scatter-card">
           <header><div><h3>身高—体重分布</h3><p>运动员身体形态相对位置</p></div><span>{scatterData.length} 名有效运动员</span></header>
           <div className="team-profile-chart-canvas">
@@ -118,6 +111,7 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
               <Scatter data={scatterData} fill="#12978f" stroke="#fff" strokeWidth={2} />
             </ScatterChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无身高体重配对数据</div>}
           </div>
+          {scatterData.length > 0 && <div className="team-scatter-summary"><span>平均身高 <strong>{formatNumber(height ?? 0, 1)} cm</strong></span><i>｜</i><span>最小身高 <strong>{formatNumber(minHeight ?? 0, 1)} cm</strong></span><i>｜</i><span>最大身高 <strong>{formatNumber(maxHeight ?? 0, 1)} cm</strong></span><i>｜</i><span>平均体重 <strong>{formatNumber(weight ?? 0, 1)} kg</strong></span><i>｜</i><span>最小体重 <strong>{formatNumber(minWeight ?? 0, 1)} kg</strong></span><i>｜</i><span>最大体重 <strong>{formatNumber(maxWeight ?? 0, 1)} kg</strong></span></div>}
         </section>
 
         <section className="team-profile-chart-card team-age-card">
@@ -135,9 +129,9 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
           </div>
           {ageData.length > 0 && <><div className="team-age-legend"><span><i />运动员年龄</span><span><i />平均年龄</span></div><div className="team-age-summary"><span>平均年龄 <strong>{formatNumber(averageAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最小 <strong>{formatNumber(minAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最大 <strong>{formatNumber(maxAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>年龄跨度 <strong>{formatNumber((maxAge ?? 0) - (minAge ?? 0), 1)} 岁</strong></span></div></>}
         </section>
-      </div>
 
-      <div className="team-profile-footnote"><span>数据覆盖 <strong>{bodyCoverage}/{profiles.length}</strong></span><i>｜</i><span>最近更新 <strong>{latestMeasurement}</strong></span><i>｜</i><span>身高/体重采用最近一次有效测量</span></div>
+        <CompetitiveLevelChart profiles={profiles} />
+      </div>
     </div>
   );
 }
@@ -564,6 +558,139 @@ const dimensionMeta = [
   ['endurance', '专项耐力'], ['power', '力量爆发'], ['technique', '技术效率'],
   ['loadAdaptation', '负荷适应'], ['recovery', '恢复能力'], ['competition', '比赛能力']
 ] as const;
+
+type LevelPoint = {
+  level: string;
+  count: number;
+  color: string;
+};
+
+type CompletenessPoint = {
+  athleteId: number;
+  name: string;
+  completeness: number;
+  hasResult: boolean;
+  axisLabel: string;
+};
+
+const LEVEL_ORDER = ['国际健将', '运动健将', '一级', '二级', '三级'];
+const LEVEL_COLORS: Record<string, string> = {
+  '国际健将': '#c9a227',
+  '运动健将': '#2b7d8d',
+  '一级': '#3d82a5',
+  '二级': '#67a35c',
+  '三级': '#a37b5c',
+  '其他': '#9aa8ab',
+  '未录入': '#c4d0d2'
+};
+
+function normalizeTechnicalLevel(value: string): string {
+  if (!value) return '未录入';
+  const clean = value.trim();
+  if (LEVEL_ORDER.includes(clean)) return clean;
+  if (/健将/.test(clean) && /国际/.test(clean)) return '国际健将';
+  if (/健将/.test(clean)) return '运动健将';
+  if (/一级/.test(clean)) return '一级';
+  if (/二级/.test(clean)) return '二级';
+  if (/三级/.test(clean)) return '三级';
+  return '其他';
+}
+
+function CompetitiveLevelTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: CompletenessPoint }> }) {
+  const point = payload?.[0]?.payload;
+  if (!active || !point) return null;
+  return (
+    <div className="team-profile-tooltip">
+      <strong>{point.name}</strong>
+      <span>档案完整度：{formatNumber(point.completeness, 0)} 分</span>
+      <span>最好成绩：{point.hasResult ? '已录入' : '暂无记录'}</span>
+    </div>
+  );
+}
+
+function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[] }) {
+  if (!profiles.length) {
+    return (
+      <section className="team-profile-chart-card team-competitive-card">
+        <header><div><h3>竞技水平</h3><p>成绩、技术等级与竞技档案完整度</p></div></header>
+        <div className="team-profile-chart-empty">暂无运动员数据</div>
+      </section>
+    );
+  }
+
+  const levelCounts = new Map<string, number>();
+  for (const profile of profiles) {
+    const level = normalizeTechnicalLevel(profile.technicalLevel || '');
+    levelCounts.set(level, (levelCounts.get(level) || 0) + 1);
+  }
+  const levelData: LevelPoint[] = [...LEVEL_ORDER, '其他', '未录入']
+    .filter((level) => (levelCounts.get(level) || 0) > 0)
+    .map((level) => ({ level, count: levelCounts.get(level) || 0, color: LEVEL_COLORS[level] }));
+
+  const completenessData: CompletenessPoint[] = profiles.map((profile, index) => {
+    const hasResult = Boolean(profile.bestResult && profile.bestResult.trim());
+    const hasLevel = Boolean(profile.technicalLevel && profile.technicalLevel.trim());
+    const hasEvent = Boolean(profile.currentEvent && profile.currentEvent.trim());
+    const hasPosition = Boolean(profile.athletePosition && profile.athletePosition.trim());
+    return {
+      athleteId: profile.athleteId,
+      name: profile.athleteName,
+      completeness: (hasResult ? 40 : 0) + (hasLevel ? 20 : 0) + (hasEvent ? 20 : 0) + (hasPosition ? 20 : 0),
+      hasResult,
+      axisLabel: String(index + 1)
+    };
+  }).sort((left, right) => right.completeness - left.completeness);
+
+  const completenessValues = completenessData.map((item) => item.completeness);
+  const averageCompleteness = completenessValues.length ? completenessValues.reduce((sum, value) => sum + value, 0) / completenessValues.length : 0;
+  const minCompleteness = completenessValues.length ? Math.min(...completenessValues) : 0;
+  const maxCompleteness = completenessValues.length ? Math.max(...completenessValues) : 0;
+  const withResultCount = completenessData.filter((item) => item.hasResult).length;
+
+  return (
+    <section className="team-profile-chart-card team-competitive-card">
+      <header><div><h3>竞技水平</h3><p>成绩、技术等级与竞技档案完整度</p></div><span>{profiles.length} 名运动员</span></header>
+      <div className="team-competitive-plot-heading"><strong>技术等级分布</strong><span>反映团队整体竞技等级结构</span></div>
+      <div className="team-profile-level-canvas">
+        {levelData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={levelData} margin={{ top: 12, right: 14, bottom: 8, left: -8 }}>
+          <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" vertical={false} />
+          <XAxis dataKey="level" tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} interval={0} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={false} tickLine={false} width={38} unit="人" />
+          <Tooltip formatter={(value, name, props) => [`${value}人`, (props as { payload?: LevelPoint }).payload?.level]} />
+          <Bar dataKey="count" name="人数" radius={[3, 3, 0, 0]}>
+            {levelData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} stroke="#fff" strokeWidth={1} />
+            ))}
+          </Bar>
+        </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无技术等级数据</div>}
+      </div>
+      <div className="team-competitive-plot-heading team-completeness-heading"><strong>竞技档案完整度</strong><span>最好成绩、技术等级、主项、位置越齐全，水平档案越完整</span></div>
+      <div className="team-profile-competitive-canvas team-completeness-canvas">
+        {completenessData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={completenessData} margin={{ top: 12, right: 14, bottom: 8, left: -8 }}>
+          <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" vertical={false} />
+          <XAxis dataKey="axisLabel" tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} label={{ value: '运动员序号', position: 'insideBottomRight', offset: -4, fill: '#87979c', fontSize: 7 }} />
+          <YAxis domain={[0, 100]} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={false} tickLine={false} width={38} unit="分" />
+          <ReferenceLine y={averageCompleteness} stroke="#e59a31" strokeDasharray="5 5" label={{ value: '平均完整度', position: 'insideTopLeft', fill: '#56808a', fontSize: 8 }} />
+          <Tooltip content={<CompetitiveLevelTooltip />} />
+          <Bar dataKey="completeness" name="档案完整度" radius={[2, 2, 0, 0]}>
+            {completenessData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.hasResult ? '#118b83' : '#9cc9c4'} stroke="#fff" strokeWidth={1} />
+            ))}
+          </Bar>
+        </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无数据</div>}
+      </div>
+      <div className="team-competitive-summary">
+        <span>档案完整度平均 <strong>{formatNumber(averageCompleteness, 1)} 分</strong></span>
+        <i>｜</i>
+        <span>最小 <strong>{formatNumber(minCompleteness, 0)} 分</strong></span>
+        <i>｜</i>
+        <span>最大 <strong>{formatNumber(maxCompleteness, 0)} 分</strong></span>
+        <i>｜</i>
+        <span>有最好成绩 <strong>{withResultCount}/{profiles.length}</strong></span>
+      </div>
+    </section>
+  );
+}
 
 export function CompetitiveStateOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
   const available = profiles.filter((profile) => profile.competitiveScore !== null);

@@ -60,6 +60,9 @@ export type Athlete = {
   coaches: string;
   photoUrl: string;
   birthDate: string | null;
+  profileStatus: 'incomplete' | 'complete';
+  source: string;
+  hasAccount: number;
   heightCm: number | null;
   weightKg: number | null;
   bodyFatPct: number | null;
@@ -253,6 +256,87 @@ export type StrengthImportPreview = {
   duplicate: number;
   rows: StrengthImportRow[];
 };
+
+export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
+export type DataImportItemType = 'training_set' | 'test_measurement' | 'body_measurement' | 'scoring_rule';
+
+export type DataImportItem = {
+  id: number;
+  batchId: string;
+  itemType: DataImportItemType;
+  athleteId: number | null;
+  rawAthleteName: string;
+  athleteName: string;
+  athleteProject: string;
+  athleteTeam: string;
+  eventDate: string;
+  sessionLabel: string;
+  testType: string;
+  metricCode: string;
+  metricLabel: string;
+  side: 'left' | 'right' | 'bilateral' | 'center';
+  valueNum: number | null;
+  unit: string;
+  exerciseName: string;
+  setIndex: number;
+  targetReps: number | null;
+  actualReps: number | null;
+  actualWeightKg: number | null;
+  intensityPercent: number | null;
+  payload: Record<string, unknown>;
+  sourceSheet: string;
+  sourceAddress: string;
+  rawValue: string;
+  quality: DataImportQuality;
+  messages: string[];
+  businessKey: string;
+  committedEntityType: string;
+  committedEntityId: number | null;
+};
+
+export type DataImportAthleteCandidate = {
+  id: number;
+  batchId: string;
+  normalizedName: string;
+  name: string;
+  project: string;
+  team: string;
+  gender: string;
+  region: string;
+  city: string;
+  county: string;
+  status: 'pending' | 'matched' | 'created';
+  matchedAthleteId: number | null;
+  createdAthleteId: number | null;
+  sourceSheet: string;
+  messages: string[];
+};
+
+export type DataImportBatch = {
+  id: string;
+  filename: string;
+  project: string;
+  status: 'reviewing' | 'committed' | 'failed' | 'rolled_back';
+  parserVersion: string;
+  sheetCount: number;
+  itemCount: number;
+  validCount: number;
+  warningCount: number;
+  errorCount: number;
+  importedCount: number;
+  skippedCount: number;
+  createdAt: string;
+  committedAt: string | null;
+  summary: {
+    recognizedSheets: Array<{ name: string; type: string; items: number; note: string }>;
+    ignoredSheets: Array<{ name: string; reason: string }>;
+    duplicateFile?: boolean;
+  };
+  athleteCandidates: DataImportAthleteCandidate[];
+  items: DataImportItem[];
+};
+
+export type DataImportBatchSummary = Omit<DataImportBatch, 'sheetCount' | 'summary' | 'items'>;
 
 export type InjuryStatus = 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';
 
@@ -558,6 +642,8 @@ export type OverviewAthleteProfile = {
   gender: string;
   athletePosition: string;
   bestResult: string;
+  technicalLevel: string | null;
+  currentEvent: string | null;
   originUnit: string;
   province: string;
   city: string;

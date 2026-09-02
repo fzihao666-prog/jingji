@@ -26,7 +26,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS athletes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     project TEXT NOT NULL,
     team TEXT NOT NULL,
     gender TEXT,
@@ -35,6 +35,9 @@ db.exec(`
     county TEXT NOT NULL DEFAULT '未设置',
     birth_date TEXT,
     photo_url TEXT NOT NULL DEFAULT '',
+    profile_status TEXT NOT NULL DEFAULT 'complete' CHECK(profile_status IN ('incomplete', 'complete')),
+    source TEXT NOT NULL DEFAULT 'manual',
+    data_import_batch_id TEXT,
     active INTEGER NOT NULL DEFAULT 1
   );
 
@@ -906,6 +909,130 @@ db.exec(`
     FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS data_import_batches (
+    id TEXT PRIMARY KEY,
+    file_hash TEXT NOT NULL,
+    source_filename TEXT NOT NULL,
+    source_mimetype TEXT NOT NULL DEFAULT '',
+    file_size INTEGER NOT NULL DEFAULT 0,
+    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    parser_version TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'reviewing' CHECK(status IN ('reviewing', 'committed', 'failed', 'rolled_back')),
+    sheet_count INTEGER NOT NULL DEFAULT 0,
+    item_count INTEGER NOT NULL DEFAULT 0,
+    valid_count INTEGER NOT NULL DEFAULT 0,
+    warning_count INTEGER NOT NULL DEFAULT 0,
+    error_count INTEGER NOT NULL DEFAULT 0,
+    imported_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    summary_json TEXT NOT NULL DEFAULT '{}',
+    created_by INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    committed_at TEXT,
+    UNIQUE (file_hash, project),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS data_import_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT NOT NULL,
+    item_type TEXT NOT NULL CHECK(item_type IN ('training_set', 'test_measurement', 'body_measurement', 'scoring_rule')),
+    athlete_id INTEGER,
+    raw_athlete_name TEXT NOT NULL DEFAULT '',
+    event_date TEXT NOT NULL DEFAULT '',
+    session_label TEXT NOT NULL DEFAULT '',
+    test_type TEXT NOT NULL DEFAULT '',
+    metric_code TEXT NOT NULL DEFAULT '',
+    metric_label TEXT NOT NULL DEFAULT '',
+    side TEXT NOT NULL DEFAULT 'center' CHECK(side IN ('left', 'right', 'bilateral', 'center')),
+    value_num REAL,
+    unit TEXT NOT NULL DEFAULT '',
+    exercise_name TEXT NOT NULL DEFAULT '',
+    set_index INTEGER NOT NULL DEFAULT 1,
+    target_reps REAL,
+    actual_reps REAL,
+    actual_weight_kg REAL,
+    intensity_percent REAL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    source_sheet TEXT NOT NULL,
+    source_address TEXT NOT NULL,
+    raw_value TEXT NOT NULL DEFAULT '',
+    quality TEXT NOT NULL CHECK(quality IN ('valid', 'warning', 'error', 'skipped')),
+    messages_json TEXT NOT NULL DEFAULT '[]',
+    business_key TEXT NOT NULL DEFAULT '',
+    committed_entity_type TEXT NOT NULL DEFAULT '',
+    committed_entity_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (batch_id, item_type, source_sheet, source_address, metric_code, side, set_index),
+    FOREIGN KEY (batch_id) REFERENCES data_import_batches(id) ON DELETE CASCADE,
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS data_import_athlete_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    name TEXT NOT NULL,
+    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    team TEXT NOT NULL,
+    gender TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '未设置',
+    city TEXT NOT NULL DEFAULT '未设置',
+    county TEXT NOT NULL DEFAULT '未设置',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'matched', 'created')),
+    matched_athlete_id INTEGER,
+    created_athlete_id INTEGER,
+    source_sheet TEXT NOT NULL DEFAULT '',
+    messages_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (batch_id, normalized_name),
+    FOREIGN KEY (batch_id) REFERENCES data_import_batches(id) ON DELETE CASCADE,
+    FOREIGN KEY (matched_athlete_id) REFERENCES athletes(id),
+    FOREIGN KEY (created_athlete_id) REFERENCES athletes(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS athlete_aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    athlete_id INTEGER NOT NULL,
+    alias TEXT NOT NULL,
+    normalized_alias TEXT NOT NULL,
+    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    source TEXT NOT NULL DEFAULT 'manual',
+    confirmed_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (normalized_alias, project),
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE,
+    FOREIGN KEY (confirmed_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS metric_aliases (
+    alias TEXT PRIMARY KEY,
+    normalized_alias TEXT NOT NULL UNIQUE,
+    metric_code TEXT NOT NULL,
+    canonical_label TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT '',
+    side TEXT NOT NULL DEFAULT 'center' CHECK(side IN ('left', 'right', 'bilateral', 'center')),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (metric_code) REFERENCES metric_definitions(code)
+  );
+
+  CREATE TABLE IF NOT EXISTS metric_scoring_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    gender TEXT NOT NULL CHECK(gender IN ('男', '女')),
+    metric_code TEXT NOT NULL,
+    score REAL NOT NULL,
+    threshold_value REAL NOT NULL,
+    comparison TEXT NOT NULL DEFAULT 'gte' CHECK(comparison IN ('gte', 'lte')),
+    rule_version TEXT NOT NULL,
+    source_batch_id TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, gender, metric_code, score, rule_version),
+    FOREIGN KEY (metric_code) REFERENCES metric_definitions(code),
+    FOREIGN KEY (source_batch_id) REFERENCES data_import_batches(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_daily_wellness_athlete_date ON daily_wellness (athlete_id, wellness_date);
   CREATE INDEX IF NOT EXISTS idx_training_sessions_athlete_date ON training_sessions (athlete_id, session_date, session_order);
   CREATE INDEX IF NOT EXISTS idx_strength_result_sets_session ON strength_result_sets (training_session_id, exercise_name, set_index);
@@ -915,8 +1042,67 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_body_measurements_athlete_date ON athlete_body_measurements (athlete_id, measurement_date DESC);
   CREATE INDEX IF NOT EXISTS idx_champion_standards_lookup ON champion_model_standards (project, gender, active, metric_code);
   CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
+  CREATE INDEX IF NOT EXISTS idx_data_import_batches_created ON data_import_batches (created_at DESC, project, status);
+  CREATE INDEX IF NOT EXISTS idx_data_import_items_batch_quality ON data_import_items (batch_id, quality, item_type);
+  CREATE INDEX IF NOT EXISTS idx_data_import_items_athlete_date ON data_import_items (athlete_id, event_date, item_type);
+  CREATE INDEX IF NOT EXISTS idx_data_import_candidates_batch ON data_import_athlete_candidates (batch_id, status, normalized_name);
+  CREATE INDEX IF NOT EXISTS idx_athlete_aliases_lookup ON athlete_aliases (normalized_alias, project);
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_athletes_identity ON athletes (name, project, team);
 `);
+
+const athleteTableDefinition = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'athletes'")
+  .get() as { sql: string } | undefined;
+if (athleteTableDefinition?.sql && /name\s+TEXT\s+NOT\s+NULL\s+UNIQUE/i.test(athleteTableDefinition.sql)) {
+  db.exec('PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON;');
+  try {
+    db.exec(`
+      BEGIN IMMEDIATE;
+      ALTER TABLE athletes RENAME TO athletes_legacy_unique_name;
+      CREATE TABLE athletes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        project TEXT NOT NULL,
+        team TEXT NOT NULL,
+        gender TEXT,
+        region TEXT NOT NULL DEFAULT '未设置',
+        city TEXT NOT NULL DEFAULT '未设置',
+        county TEXT NOT NULL DEFAULT '未设置',
+        birth_date TEXT,
+        photo_url TEXT NOT NULL DEFAULT '',
+        profile_status TEXT NOT NULL DEFAULT 'complete' CHECK(profile_status IN ('incomplete', 'complete')),
+        source TEXT NOT NULL DEFAULT 'manual',
+        data_import_batch_id TEXT,
+        active INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT INTO athletes (
+        id, name, project, team, gender, region, city, county, birth_date, photo_url,
+        profile_status, source, data_import_batch_id, active
+      )
+      SELECT id, name, project, team, gender, region, city, county, birth_date, photo_url,
+        'complete', 'manual', NULL, active
+      FROM athletes_legacy_unique_name;
+      DROP TABLE athletes_legacy_unique_name;
+      CREATE UNIQUE INDEX idx_athletes_identity ON athletes (name, project, team);
+      COMMIT;
+    `);
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch { /* no-op */ }
+    throw error;
+  } finally {
+    db.exec('PRAGMA legacy_alter_table = OFF; PRAGMA foreign_keys = ON;');
+  }
+}
+
+if (!hasColumn('athletes', 'profile_status')) {
+  db.exec("ALTER TABLE athletes ADD COLUMN profile_status TEXT NOT NULL DEFAULT 'complete'");
+}
+if (!hasColumn('athletes', 'source')) {
+  db.exec("ALTER TABLE athletes ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
+}
+if (!hasColumn('athletes', 'data_import_batch_id')) {
+  db.exec('ALTER TABLE athletes ADD COLUMN data_import_batch_id TEXT');
+}
 
 const bodyMeasurementColumns = [
   ['skeletal_muscle_kg', 'REAL'],
@@ -967,6 +1153,15 @@ for (const [column, definition] of strengthResultColumns) {
   if (!hasColumn('strength_result_sets', column)) {
     db.exec(`ALTER TABLE strength_result_sets ADD COLUMN ${column} ${definition}`);
   }
+}
+
+for (const [table, column, definition] of [
+  ['strength_result_sets', 'data_import_batch_id', 'TEXT'],
+  ['test_measurements', 'data_import_batch_id', 'TEXT'],
+  ['test_measurements', 'source_ref', "TEXT NOT NULL DEFAULT ''"],
+  ['athlete_body_measurements', 'data_import_batch_id', 'TEXT']
+] as const) {
+  if (!hasColumn(table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 export function upsertAthleteOrigin(input: {
