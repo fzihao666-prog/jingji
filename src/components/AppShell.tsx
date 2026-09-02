@@ -69,7 +69,7 @@ type Props = {
   onPageChange: (page: PageKey) => void;
   onLogout: () => void;
   onProfileNameChange: (name: string) => Promise<void>;
-  project: Project;
+  project: Project | null;
   projects: Project[];
   onProjectChange: (project: Project) => void;
   children: ReactNode;

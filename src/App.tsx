@@ -29,7 +29,7 @@ export default function App() {
   const [from, setFrom] = useState(addDays(today, -29));
   const [to, setTo] = useState(today);
   const [athleteId, setAthleteId] = useState<number | null>(null);
-  const [project, setProject] = useState<Project>('赛艇');
+  const [project, setProject] = useState<Project | null>(null);
   const [athletesReady, setAthletesReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -48,16 +48,21 @@ export default function App() {
         setAthletes(nextAthletes);
         const ownProject = user.athleteId ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project : '';
         const available = [...new Set(nextAthletes.map((athlete) => athlete.project))].filter(isProject);
+        const fallback = user.role === 'DMD' || user.role === 'TD' ? PROJECTS[0] : null;
         if (isProject(ownProject)) setProject(ownProject);
-        else if (!available.includes(project) && available[0]) setProject(available[0]);
+        else if (available[0]) setProject(available[0]);
+        else setProject(fallback);
         if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
       })
-      .catch((error) => setGlobalError(error instanceof Error ? error.message : '运动员数据加载失败。'))
+      .catch((error) => {
+        setGlobalError(error instanceof Error ? error.message : '运动员数据加载失败。');
+        setProject(user.role === 'DMD' || user.role === 'TD' ? PROJECTS[0] : null);
+      })
       .finally(() => setAthletesReady(true));
   }, [user, refreshKey]);
 
   useEffect(() => {
-    if (!user || !athletesReady) return;
+    if (!user || !athletesReady || !project) return;
     const selected = athleteId ? athletes.find((athlete) => athlete.id === athleteId) : null;
     if (selected && selected.project !== project) {
       setAthleteId(user.role === 'ATL' ? user.athleteId : null);
@@ -91,6 +96,7 @@ export default function App() {
     setAthletes([]);
     setRecords([]);
     setAthleteId(null);
+    setProject(null);
     setAthletesReady(false);
   };
 
@@ -123,12 +129,14 @@ export default function App() {
 
   if (authLoading) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>正在恢复训练数据会话…</p></div>;
   if (!user) return <LoginPage onLogin={login} />;
+  if (!athletesReady) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>正在加载项目信息…</p></div>;
+  if (!project) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>当前账号暂无可访问项目。</p></div>;
 
   const shared = {
     records,
     athletes: projectAthletes,
     project,
-    projects: projects.length ? projects : [project],
+    projects: projects.length ? projects : project ? [project] : [],
     from,
     to,
     athleteId,
