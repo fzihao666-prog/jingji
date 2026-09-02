@@ -1,7 +1,7 @@
 import {
   Activity, AlarmClock, ArrowRight, BarChart3, BrainCircuit, Database, Dumbbell,
   Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Search,
-  ShieldCheck, Sparkles, UsersRound
+  ShieldCheck, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
@@ -662,9 +662,24 @@ export function OverviewPage(props: Props) {
 
   return (
     <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
-      <header className="page-heading">
-        <div><h1>{isIndividualOverview ? '我的训练总览' : '训练总览'}</h1><p className="overview-heading-note"><Sparkles size={14} />{scopeLabel} · 所有评分均基于权限范围内实测数据</p></div>
+      <header className="page-heading overview-page-heading">
+        <div className="overview-title-block">
+          <h1>{isIndividualOverview ? '我的训练总览' : '训练总览'}</h1>
+        </div>
         <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} presetMode="period" canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
+        <div
+          className="overview-principle"
+          role="note"
+          aria-label="有训练就要有数据，有数据就要有统计，有统计就要有分析，有分析就要有对标，有对标就要有超越"
+        >
+          <div className="overview-principle-flow" aria-hidden="true">
+            <span>有训练就要有<strong>数据</strong></span><ArrowRight />
+            <span>有数据就要有<strong>统计</strong></span><ArrowRight />
+            <span>有统计就要有<strong>分析</strong></span><ArrowRight />
+            <span>有分析就要有<strong>对标</strong></span><ArrowRight />
+            <span>有对标就要有<strong>超越</strong></span>
+          </div>
+        </div>
       </header>
       {overview && <div className="overview-data-provenance">
         <Database size={15} /><strong>{overview.meta.scope === 'team' ? '团队聚合' : '个人纵向'}</strong>
