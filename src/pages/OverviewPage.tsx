@@ -1,5 +1,5 @@
 import {
-  Activity, AlarmClock, ArrowRight, BarChart3, BrainCircuit, Database, Dumbbell,
+  AlarmClock, ArrowRight, BarChart3, Database, Dumbbell,
   Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Search,
   ShieldCheck, UsersRound
 } from 'lucide-react';
@@ -576,56 +576,56 @@ export function OverviewPage(props: Props) {
         <p className="analysis-method-note">生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。</p>
       </article>
     ),
-    'fms-analysis': (
+      'fms-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<BrainCircuit size={17} />} title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人FMS' : `最近一次团队测试 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
+        <PanelHeading title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人FMS' : `最近一次团队测试 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
         <FmsTeamChart measurements={overview?.measurements || []} />
         <p className="analysis-method-note">每个动作按0–3分计，团队柱为最近一次测试的单项平均分；2分表示动作模式基本达标，低于2分列入纠正训练。七项齐全时汇总为21分制队均，14分仅作复查参考，不单独用于判断损伤风险。</p>
       </article>
     ),
     'performance-radar': (
       <article className="panel professional-panel">
-        <PanelHeading icon={<Activity size={17} />} title="全队多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
+        <PanelHeading title="全队多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
         {strengthLoading ? <div className="professional-chart-empty">正在读取力量测试…</div> : <PerformanceRadarChart data={radar} />}
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
       </article>
     ),
     'strength-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<Dumbbell size={17} />} title="基础力量分析" subtitle={`${isIndividualOverview ? '个人' : '全队均值'} · 前后测变化 · 相对力量`} />
+        <PanelHeading title="基础力量分析" subtitle={`${isIndividualOverview ? '个人' : '全队均值'} · 前后测变化 · 相对力量`} />
         <BasicStrengthAnalysis changes={strengthChanges} relative={relativeStrength} />
         <p className="analysis-method-note">合并原“力量与爆发前后测”和“相对力量”，同时观察变化率与倍体重水平，悬浮可查看精确数值。</p>
       </article>
     ),
     'injury-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<HeartPulse size={17} />} title="运动损伤评估图" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
+        <PanelHeading title="运动损伤评估图" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
         <InjuryAssessmentChart injuries={overview?.injuries || []} athleteCount={scopeAthleteCount} />
         <p className="analysis-method-note">按每名运动员最新记录统计健康、观察、受限、康复和停训状态，不能替代医学诊断。</p>
       </article>
     ),
     'training-load-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<Layers3 size={17} />} title="体能与专项训练负荷分析" subtitle="体能负荷 · 专项负荷 · 对比分析（日/周/月/阶段）" />
+        <PanelHeading title="体能与专项训练负荷分析" subtitle="体能负荷 · 专项负荷 · 对比分析（日/周/月/阶段）" />
         <TrainingLoadComparisonChart records={analysisRecords} />
         <p className="analysis-method-note">体能训练自动关联力量、功能、跑步、恢复和测功仪记录；专项训练关联水上、竞速及项目技术训练。</p>
       </article>
     ),
     'training-volume': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<BarChart3 size={17} />} title="训练量统计图" subtitle="训练时长 · SRPE（日/周/月/阶段）" />
+        <PanelHeading title="训练量统计图" subtitle="训练时长 · SRPE（日/周/月/阶段）" />
         <TrainingVolumeChart records={analysisRecords} />
       </article>
     ),
     'training-content': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<Layers3 size={17} />} title="训练内容统计图" subtitle="内容结构（日/周/月/阶段）" />
+        <PanelHeading title="训练内容统计图" subtitle="内容结构（日/周/月/阶段）" />
         <TrainingContentChart records={analysisRecords} />
       </article>
     ),
     'rpe-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading icon={<Gauge size={17} />} title="RPE统计图" subtitle="主观用力程度（日/周/月/阶段）" />
+        <PanelHeading title="RPE统计图" subtitle="主观用力程度（日/周/月/阶段）" />
         <RpeStatisticsChart records={analysisRecords} />
       </article>
     ),
