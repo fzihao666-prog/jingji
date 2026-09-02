@@ -88,7 +88,7 @@ export function PeriodTabs({ control }: { control: PeriodController }) {
   </div>;
 }
 
-function classify(record: TrainingRecord) {
+export function trainingLoadCategory(record: TrainingRecord) {
   const text = `${record.trainingType} ${record.structureType} ${record.content}`;
   if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(record.trainingType)) return 'special';
   if (/力量|体能|跑步|功能|核心|恢复|陆上|测功仪/.test(text)) return 'physical';
@@ -109,7 +109,7 @@ function aggregateByDate(records: TrainingRecord[], period: Period) {
   for (const record of records) {
     const label = groupLabel(record.date, period);
     const row = map.get(label) || { label, physical: 0, special: 0, duration: 0, srpe: 0, rpeSum: 0, rpeCount: 0 };
-    row[classify(record)] += record.srpe;
+    row[trainingLoadCategory(record)] += record.srpe;
     row.duration += record.durationMin;
     row.srpe += record.srpe;
     if (record.rpe !== null) { row.rpeSum += record.rpe; row.rpeCount += 1; }

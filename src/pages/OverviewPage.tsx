@@ -1,6 +1,6 @@
 import {
-  Activity, AlarmClock, ArrowRight, BarChart3, BrainCircuit, Clock3, Database, Dumbbell,
-  Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Route, Search,
+  Activity, AlarmClock, ArrowRight, BarChart3, BrainCircuit, Database, Dumbbell,
+  Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Search,
   ShieldCheck, Sparkles, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -8,7 +8,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { api } from '../api';
 import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
-import { aggregateRecords, average, formatNumber, groupByDate, percentage, worstStatus } from '../utils';
+import { addDays, aggregateRecords, average, formatNumber, groupByDate, percentage, worstStatus } from '../utils';
 import { ROLE_META } from '../../shared/access';
 import { DateToolbar } from '../components/DateToolbar';
 import {
@@ -16,12 +16,12 @@ import {
 } from '../components/LoadCharts';
 import {
   BasicStrengthAnalysis, FmsTeamChart, InjuryAssessmentChart, RpeStatisticsChart,
-  TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart
+  TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { StatusPill } from '../components/StatusPill';
 import { AthleteProfileOverview, BirthplaceMapOverview, CompetitiveStateOverview } from '../components/AthleteProfileCharts';
 import {
-  buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics, calculateRecoveryTime,
+  buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics,
   relativeStrengthRows, strengthChangeRows
 } from '../overview-analytics';
 import type { StrengthMetricKey } from '../../shared/strength-model';
@@ -87,12 +87,12 @@ const defaultOrder = [
 ];
 
 const cardMeta: Record<string, { title: string; size: CardSize }> = {
-  duration: { title: '累计训练时间', size: 'metric' },
-  distance: { title: '专项距离', size: 'metric' },
-  srpe: { title: 'SRPE总负荷', size: 'metric' },
+  duration: { title: '训练时长', size: 'metric' },
+  distance: { title: '疲劳指数', size: 'metric' },
+  srpe: { title: '平均负荷', size: 'metric' },
   rpe: { title: '运动员总数', size: 'metric' },
-  'acute-load': { title: '近7日急性负荷', size: 'metric' },
-  'recovery-time': { title: '恢复时间', size: 'metric' },
+  'acute-load': { title: '训练负荷', size: 'metric' },
+  'recovery-time': { title: '损伤情况', size: 'metric' },
   'athlete-profile': { title: '身体与年龄画像', size: 'full' },
   'competitive-state': { title: '竞技状态评估', size: 'half' },
   'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
@@ -169,13 +169,58 @@ export function OverviewPage(props: Props) {
   const strengthLoading = overviewLoading;
   const measurementMap = useMemo(() => new Map((overview?.measurements || []).map((item) => [item.code, item])), [overview]);
   const summary = useMemo(() => aggregateRecords(analysisRecords), [analysisRecords]);
+  const durationBreakdown = useMemo(() => analysisRecords
+    .filter((record) => record.status !== 'rest')
+    .reduce((totals, record) => {
+      totals[trainingLoadCategory(record)] += record.durationMin;
+      return totals;
+    }, { physical: 0, special: 0 }), [analysisRecords]);
+  const recentLoadBreakdown = useMemo(() => {
+    const from = addDays(props.to, -6);
+    return analysisRecords
+      .filter((record) => record.status !== 'rest' && record.date >= from && record.date <= props.to)
+      .reduce((totals, record) => {
+        totals[trainingLoadCategory(record)] += record.srpe;
+        return totals;
+      }, { physical: 0, special: 0 });
+  }, [analysisRecords, props.to]);
+  const recentTrainingLoad = recentLoadBreakdown.physical + recentLoadBreakdown.special;
+  const averageLoadBreakdown = useMemo(() => analysisRecords
+    .filter((record) => record.status !== 'rest')
+    .reduce((totals, record) => {
+      totals[trainingLoadCategory(record)] += record.srpe;
+      return totals;
+    }, { physical: 0, special: 0 }), [analysisRecords]);
+  const fatigueSummary = useMemo(() => {
+    const athleteDays = new Map<string, number>();
+    for (const record of analysisRecords) {
+      if (typeof record.fatigueIndex !== 'number' || !Number.isFinite(record.fatigueIndex)) continue;
+      const key = `${record.athleteId}:${record.date}`;
+      if (!athleteDays.has(key)) athleteDays.set(key, record.fatigueIndex);
+    }
+    const values = [...athleteDays.values()];
+    const averageValue = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+    return {
+      average: averageValue,
+      validDays: values.length,
+      highDays: values.filter((value) => value >= 6).length
+    };
+  }, [analysisRecords]);
   const scopeAthleteCount = overview?.meta.athleteCount || new Set(analysisRecords.map((record) => record.athleteId)).size || props.athletes.length || 1;
+  const injurySummary = useMemo(() => {
+    const injuries = overview?.injuries || [];
+    const counts = { healthy: 0, observation: 0, restricted: 0, rehab: 0, suspended: 0 };
+    for (const injury of injuries) counts[injury.status] += 1;
+    counts.healthy += Math.max(0, scopeAthleteCount - injuries.length);
+    const active = counts.observation + counts.restricted + counts.rehab + counts.suspended;
+    const limited = counts.restricted + counts.rehab + counts.suspended;
+    return { ...counts, active, limited };
+  }, [overview?.injuries, scopeAthleteCount]);
   const daily = useMemo(
     () => buildDailyPerformance(analysisRecords, props.from, props.to, isIndividualOverview ? 'individual' : 'team', scopeAthleteCount),
     [analysisRecords, props.from, props.to, isIndividualOverview, scopeAthleteCount]
   );
   const diagnostics = useMemo(() => calculateLoadDiagnostics(analysisRecords, daily), [analysisRecords, daily]);
-  const recoveryTime = useMemo(() => calculateRecoveryTime(analysisRecords), [analysisRecords]);
 
   const latestStrength = strengthTests[0];
   const measurementSampleCount = Math.max(0, ...(overview?.measurements || []).map((item) => item.sampleCount));
@@ -470,19 +515,47 @@ export function OverviewPage(props: Props) {
   };
 
   const cards: Record<string, ReactNode> = {
-    duration: <Metric icon={<AlarmClock />} label={isIndividualOverview ? '累计训练时间' : '训练总时长'} value={formatNumber(summary.totalDuration / 60, 1)} unit="小时" note={isIndividualOverview ? `${summary.days}个记录日` : `人均 ${formatNumber(perAthlete(summary.totalDuration) / 60, 1)} 小时 · ${scopeAthleteCount}人`} tone="navy" />,
-    distance: <Metric icon={<Route />} label={isIndividualOverview ? '专项距离' : '专项总距离'} value={formatNumber(summary.totalDistance, 1)} unit="km" note={isIndividualOverview ? `${props.project}周期累计` : `人均 ${formatNumber(perAthlete(summary.totalDistance), 1)} km`} tone="teal" />,
-    srpe: <Metric icon={<Gauge />} label="SRPE总负荷" value={formatNumber(summary.totalSrpe)} unit="AU" note={isIndividualOverview ? '训练时间 × RPE' : `人均 ${formatNumber(perAthlete(summary.totalSrpe))} AU`} tone="orange" />,
-    rpe: <Metric icon={<UsersRound />} label={isIndividualOverview ? '当前运动员' : '运动员总数'} value={formatNumber(scopeAthleteCount)} unit="人" note={isIndividualOverview ? '个人视图 · 本人数据' : `${props.project} · 权限范围内全部运动员`} tone="blue" />,
-    'acute-load': <Metric icon={<BarChart3 />} label={isIndividualOverview ? '近7日急性负荷' : '近7日人均负荷'} value={formatNumber(diagnostics.acuteLoad)} unit="AU" note={diagnostics.acuteChronicRatio === null ? '需至少28天数据计算负荷比' : `${isIndividualOverview ? '前21日周均比' : '前21日人均周负荷比'} ${diagnostics.acuteChronicRatio.toFixed(2)}`} tone="purple" />,
-    'recovery-time': <Metric
-      icon={<Clock3 />}
-      label="日均恢复时间"
-      value={recoveryTime.averageHours === null ? '—' : formatNumber(recoveryTime.averageHours, 1)}
+    duration: <Metric
+      icon={<AlarmClock />}
+      label="训练时长"
+      value={formatNumber(summary.totalDuration / 60, 1)}
       unit="小时"
-      note={recoveryTime.adequateRate === null
-        ? '暂无有效睡眠恢复记录'
-        : `≥${recoveryTime.targetHours}h达标 ${formatNumber(recoveryTime.adequateRate, 1)}% · ${recoveryTime.validPersonDays}${isIndividualOverview ? '个记录日' : '人日'}`}
+      note={`体能 ${formatNumber(durationBreakdown.physical / 60, 1)}h · 专项 ${formatNumber(durationBreakdown.special / 60, 1)}h`}
+      tone="navy"
+    />,
+    distance: <Metric
+      icon={<Gauge />}
+      label="疲劳指数"
+      value={fatigueSummary.average === null ? '—' : formatNumber(fatigueSummary.average, 1)}
+      unit={fatigueSummary.average === null ? '' : '分'}
+      note={fatigueSummary.average === null ? '暂无疲劳记录' : `有效 ${fatigueSummary.validDays}人日 · 偏高 ${fatigueSummary.highDays}人日`}
+      tone="teal"
+    />,
+    srpe: <Metric
+      icon={<Gauge />}
+      label="平均负荷"
+      value={formatNumber(perAthlete(summary.totalSrpe))}
+      unit="AU"
+      note={`体能 ${formatNumber(perAthlete(averageLoadBreakdown.physical))}AU · 专项 ${formatNumber(perAthlete(averageLoadBreakdown.special))}AU`}
+      tone="orange"
+    />,
+    rpe: <Metric icon={<UsersRound />} label={isIndividualOverview ? '当前运动员' : '运动员总数'} value={formatNumber(scopeAthleteCount)} unit="人" note={isIndividualOverview ? '个人视图 · 本人数据' : `${props.project} · 权限范围内全部运动员`} tone="blue" />,
+    'acute-load': <Metric
+      icon={<BarChart3 />}
+      label="训练负荷"
+      value={formatNumber(recentTrainingLoad)}
+      unit="AU"
+      note={`体能 ${formatNumber(recentLoadBreakdown.physical)}AU · 专项 ${formatNumber(recentLoadBreakdown.special)}AU`}
+      tone="purple"
+    />,
+    'recovery-time': <Metric
+      icon={<HeartPulse />}
+      label="损伤情况"
+      value={formatNumber(injurySummary.active)}
+      unit="人"
+      note={injurySummary.active
+        ? `观察 ${injurySummary.observation}人 · 受限/康复/停训 ${injurySummary.limited}人`
+        : '当前无活动性损伤'}
       tone="green"
     />,
     'athlete-profile': (
