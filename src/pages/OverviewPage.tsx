@@ -24,7 +24,6 @@ import {
   buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics,
   relativeStrengthRows, strengthChangeRows
 } from '../overview-analytics';
-import type { StrengthMetricKey } from '../../shared/strength-model';
 
 type Props = {
   records: TrainingRecord[];
@@ -83,7 +82,7 @@ const defaultOrder = [
   'athlete-profile', 'competitive-state', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'strength-analysis', 'injury-analysis',
   'training-load-analysis', 'training-volume', 'training-content', 'rpe-analysis',
-  'load-diagnostics', 'recovery', 'project-indicators', 'roster'
+  'load-diagnostics', 'recovery', 'roster'
 ];
 
 const cardMeta: Record<string, { title: string; size: CardSize }> = {
@@ -106,7 +105,6 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'rpe-analysis': { title: 'RPE统计', size: 'half' },
   'load-diagnostics': { title: '负荷诊断', size: 'third' },
   recovery: { title: '恢复与机能趋势', size: 'wide' },
-  'project-indicators': { title: '专项指标矩阵', size: 'half' },
   roster: { title: '运动员状态', size: 'full' }
 };
 
@@ -560,7 +558,7 @@ export function OverviewPage(props: Props) {
     />,
     'athlete-profile': (
       <article className={`panel professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
-        <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '队伍可视化画像'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
+        <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '基本信息'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
         <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} />
         {isIndividualOverview && <p className="analysis-method-note">年龄由出生日期按分析截止日计算；身高体重读取不晚于截止日的最近一次身体测量。</p>}
       </article>
@@ -645,7 +643,6 @@ export function OverviewPage(props: Props) {
       </article>
     ),
     recovery: <article className="panel professional-panel"><PanelHeading title="恢复与机能趋势" subtitle={`${isIndividualOverview ? '个人' : '团队日均'} · 睡眠 · 晨脉 · 疲劳`} /><RecoveryTrendChart data={daily} /></article>,
-    'project-indicators': <article className="panel professional-panel indicator-panel"><PanelHeading title={`${props.project}专项指标矩阵`} subtitle={`${isIndividualOverview ? '最近批次' : `团队均值 · n=${measurementSampleCount || '—'}`} · 统一测试指标`} /><IndicatorMatrix project={props.project} latest={latestStrength} measurements={measurementMap} /></article>,
     roster: (
       <article className="panel professional-panel roster-preview">
         <div className="panel-heading roster-panel-heading"><div><h2><UsersRound size={18} />运动员状态</h2><small>稳定率 {stableRate}% · 正常 {statusCount.normal} · 关注 {statusCount.attention} · 异常 {statusCount.alert}</small></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>
@@ -670,14 +667,13 @@ export function OverviewPage(props: Props) {
         <div
           className="overview-principle"
           role="note"
-          aria-label="有训练就要有数据，有数据就要有统计，有统计就要有分析，有分析就要有对标，有对标就要有超越"
+          aria-label="有训练就要有数据，有数据就要有统计，有统计就要有分析，有分析就要对标对表"
         >
           <div className="overview-principle-flow" aria-hidden="true">
             <span>有训练就要有<strong>数据</strong></span><ArrowRight />
             <span>有数据就要有<strong>统计</strong></span><ArrowRight />
             <span>有统计就要有<strong>分析</strong></span><ArrowRight />
-            <span>有分析就要有<strong>对标</strong></span><ArrowRight />
-            <span>有对标就要有<strong>超越</strong></span>
+            <span>有分析就要<strong>对标对表</strong></span>
           </div>
         </div>
       </header>
@@ -715,85 +711,9 @@ function loadBrief(ratio: number | null, monotony: number | null, alerts: number
     : '当前负荷与恢复记录未见明显冲突，继续保持统一口径并观察个人纵向变化。';
 }
 
-type IndicatorDefinition = { id: string; label: string; note: string };
-const projectIndicatorMap: Record<Project, IndicatorDefinition[]> = {
-  赛艇: [
-    { id: 'cmj', label: 'CMJ纵跳', note: '下肢爆发能力' }, { id: 'relative-squat', label: '相对深蹲', note: '基础力量/体重' },
-    { id: 'seven-stroke', label: '7桨平均功率', note: '动态与代谢功率' }, { id: 'dsd', label: 'DSD动态力量缺陷', note: 'IMTP与CMJ力量平衡' },
-    { id: 'rowing-erg', label: '2km/6km测功仪', note: '专项有氧能力' }, { id: 'rowing-technique', label: '船速/桨频/单桨距离', note: '艇上技术效率' }
-  ],
-  皮划艇: [
-    { id: 'cmj', label: 'CMJ纵跳', note: '下肢爆发能力' }, { id: 'bench-pull', label: '卧拉力量', note: '上肢拉力基础' },
-    { id: 'canoe-sprint', label: '分段竞速', note: '200米与500米' }, { id: 'canoe-technique', label: '桨频与航速', note: '专项技术效率' },
-    { id: 'paddle-symmetry', label: '左右功率差', note: '双侧输出对称' }, { id: 'threshold', label: '乳酸与心率阈', note: '有氧/无氧转换' }
-  ],
-  激流: [
-    { id: 'bench-power', label: '卧推峰值功率', note: '上肢推力功率' }, { id: 'pull-power', label: '卧拉峰值功率', note: '上肢拉力功率' },
-    { id: 'wingate', label: 'Wingate峰值功率', note: '无氧爆发能力' }, { id: 'threshold-power', label: '乳酸阈功率', note: '专项持续输出' },
-    { id: 'slalom-sprint', label: '300米静水竞速', note: '专项速度能力' }, { id: 'grip', label: '左右握力', note: '桨控与双侧差异' }
-  ]
-};
-
 function measurementValue(measurements: Map<string, OverviewMeasurement>, code: string) {
   const value = measurements.get(code)?.value;
   return typeof value === 'number' ? value : null;
-}
-
-function secondsLabel(value: number | null) {
-  if (value === null) return null;
-  const minutes = Math.floor(value / 60);
-  return `${minutes}:${String(Math.round(value % 60)).padStart(2, '0')}`;
-}
-
-function indicatorValue(id: string, latest: StrengthTest | undefined, measurements: Map<string, OverviewMeasurement>) {
-  const metric = (code: string) => measurementValue(measurements, code);
-  const strength = (key: StrengthMetricKey) => typeof latest?.metrics[key] === 'number' ? latest.metrics[key] as number : null;
-  const pair = (left: number | null, right: number | null, unit: string) => left !== null && right !== null ? `${formatNumber(left, 1)} / ${formatNumber(right, 1)} ${unit}` : null;
-  if (id === 'cmj') return strength('verticalJumpCm') === null ? null : `${formatNumber(strength('verticalJumpCm')!, 1)} cm`;
-  if (id === 'relative-squat') {
-    const squat = strength('squatKg'); const weight = strength('weightKg');
-    return squat !== null && weight !== null && weight > 0 ? `${formatNumber(squat / weight, 2)} 倍体重` : null;
-  }
-  if (id === 'seven-stroke') return metric('seven_stroke_power_w') === null ? null : `${formatNumber(metric('seven_stroke_power_w')!, 0)} W`;
-  if (id === 'dsd') return metric('dsd_ratio') === null ? null : formatNumber(metric('dsd_ratio')!, 2);
-  if (id === 'rowing-erg') {
-    const two = secondsLabel(metric('erg_2k_sec')); const six = secondsLabel(metric('erg_6k_sec'));
-    return two && six ? `2k ${two} / 6k ${six}` : null;
-  }
-  if (id === 'rowing-technique') {
-    const speed = metric('boat_speed_mps'); const stroke = metric('stroke_rate_spm'); const distance = metric('distance_per_stroke_m');
-    return speed !== null && stroke !== null && distance !== null ? `${speed.toFixed(2)}m/s · ${stroke.toFixed(0)}spm · ${distance.toFixed(2)}m` : null;
-  }
-  if (id === 'bench-pull') return strength('benchPullKg') === null ? null : `${formatNumber(strength('benchPullKg')!, 1)} kg`;
-  if (id === 'canoe-sprint') return pair(metric('sprint_200_sec'), metric('sprint_500_sec'), 's');
-  if (id === 'canoe-technique') {
-    const stroke = metric('stroke_rate_spm'); const speed = metric('boat_speed_mps');
-    return stroke !== null && speed !== null ? `${stroke.toFixed(0)} spm / ${speed.toFixed(2)} m/s` : null;
-  }
-  if (id === 'paddle-symmetry') {
-    const left = metric('left_paddle_power_w'); const right = metric('right_paddle_power_w');
-    return left !== null && right !== null && Math.max(left, right) > 0 ? `${(Math.abs(left - right) / Math.max(left, right) * 100).toFixed(1)}%` : null;
-  }
-  if (id === 'threshold') {
-    const lactate = metric('lactate_threshold_mmol'); const heartRate = strength('anaerobicThresholdHr');
-    return lactate !== null && heartRate !== null ? `${lactate.toFixed(1)} mmol/L · ${heartRate.toFixed(0)} bpm` : lactate !== null ? `${lactate.toFixed(1)} mmol/L` : null;
-  }
-  const strengthIndicator: Partial<Record<string, [StrengthMetricKey, string]>> = {
-    'bench-power': ['benchPressPeakPowerW', 'W'], 'pull-power': ['benchPullPeakPowerW', 'W'],
-    wingate: ['wingatePeakPowerWkg', 'W/kg'], 'threshold-power': ['thresholdErgPowerW', 'W'],
-    'slalom-sprint': ['sprint300Sec', 's']
-  };
-  const mapped = strengthIndicator[id];
-  if (mapped) return strength(mapped[0]) === null ? null : `${formatNumber(strength(mapped[0])!, 1)} ${mapped[1]}`;
-  if (id === 'grip') return pair(strength('leftGripKgf'), strength('rightGripKgf'), 'kgf');
-  return null;
-}
-
-function IndicatorMatrix({ project, latest, measurements }: { project: Project; latest?: StrengthTest; measurements: Map<string, OverviewMeasurement> }) {
-  return <div className="indicator-matrix">{projectIndicatorMap[project].map((item) => {
-    const value = indicatorValue(item.id, latest, measurements);
-    return <div key={item.id} className={value ? 'available' : 'missing'}><span>{item.label}</span><strong>{value || '待补测'}</strong><small>{item.note}</small></div>;
-  })}</div>;
 }
 
 function MovementMatrix({ latest, measurements }: { latest?: StrengthTest; measurements: Map<string, OverviewMeasurement> }) {
