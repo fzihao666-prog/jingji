@@ -4242,10 +4242,13 @@ app.post('/api/admin/registrations/:id/approve', requireAuth, requireRole('SCC',
   try {
     let athleteId: number | null = null;
     if (request.requested_role === 'ATL') {
-      const athlete = db.prepare('SELECT id FROM athletes WHERE name = ?').get(request.display_name) as { id: number } | undefined;
+      const athlete = db.prepare('SELECT id, project, team FROM athletes WHERE name = ?').get(request.display_name) as { id: number; project: string; team: string } | undefined;
       if (athlete) {
         const linkedUser = db.prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'").get(athlete.id);
         if (linkedUser) throw new Error('该运动员已有登录账户。');
+        if (athlete.project !== request.project || athlete.team !== request.team) {
+          throw new Error(`该姓名已存在于项目「${athlete.project} / ${athlete.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`);
+        }
         athleteId = athlete.id;
       } else {
         const result = db.prepare(`

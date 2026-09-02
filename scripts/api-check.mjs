@@ -299,6 +299,14 @@ try {
     method: 'POST', body: JSON.stringify({ project: '赛艇', name: '测试组' })
   }, adminToken);
   assert(createRegistrationTeam.status === 201, '队伍管理接口无法创建注册测试队伍');
+  const createCanoeTeam = await request('/api/admin/teams', {
+    method: 'POST', body: JSON.stringify({ project: '皮划艇', name: '皮划艇测试组' })
+  }, adminToken);
+  assert(createCanoeTeam.status === 201, '队伍管理接口无法创建皮划艇注册测试队伍');
+  const createSlalomTeam = await request('/api/admin/teams', {
+    method: 'POST', body: JSON.stringify({ project: '激流', name: '激流测试组' })
+  }, adminToken);
+  assert(createSlalomTeam.status === 201, '队伍管理接口无法创建激流注册测试队伍');
 
   const invalidIdentityRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'invalid_id_test', password: 'Secure123', displayName: '证件测试', role: 'ATL',
@@ -357,6 +365,59 @@ try {
       && renamedOwnAthleteList.payload.athletes[0].name === '测试运动员本人',
     '运动员本人改名未同步档案'
   );
+
+  const canoeRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'canoe_test', password: 'Secure123', displayName: '皮划艇测试运动员', role: 'ATL',
+    project: '皮划艇', team: '皮划艇测试组', identityNumber: '510107200001021235', nativePlace: '四川/成都市'
+  }) });
+  assert(canoeRegister.status === 201, '皮划艇运动员注册申请失败');
+  const slalomRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'slalom_test', password: 'Secure123', displayName: '激流测试运动员', role: 'ATL',
+    project: '激流', team: '激流测试组', identityNumber: '510107200001031236', nativePlace: '四川/成都市'
+  }) });
+  assert(slalomRegister.status === 201, '激流运动员注册申请失败');
+
+  const pendingMultiProject = await request('/api/admin/registrations?status=pending', {}, adminToken);
+  const canoeRequest = pendingMultiProject.payload.requests.find((item) => item.username === 'canoe_test');
+  const slalomRequest = pendingMultiProject.payload.requests.find((item) => item.username === 'slalom_test');
+  assert(
+    pendingMultiProject.status === 200
+      && canoeRequest?.project === '皮划艇'
+      && slalomRequest?.project === '激流',
+    '非赛艇项目注册申请的项目信息丢失'
+  );
+  const approveCanoe = await request(`/api/admin/registrations/${canoeRequest.id}/approve`, { method: 'POST' }, adminToken);
+  assert(approveCanoe.status === 200, '皮划艇运动员审核失败');
+  const approveSlalom = await request(`/api/admin/registrations/${slalomRequest.id}/approve`, { method: 'POST' }, adminToken);
+  assert(approveSlalom.status === 200, '激流运动员审核失败');
+
+  const canoeLogin = await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'canoe_test', password: 'Secure123' }) });
+  assert(canoeLogin.status === 200, '获批皮划艇运动员无法登录');
+  const canoeAthleteList = await request('/api/athletes', {}, canoeLogin.payload.token);
+  assert(
+    canoeAthleteList.payload.athletes.length === 1
+      && canoeAthleteList.payload.athletes[0].project === '皮划艇'
+      && canoeAthleteList.payload.athletes[0].team === '皮划艇测试组',
+    '皮划艇运动员落库项目或队伍错误'
+  );
+  const slalomLogin = await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'slalom_test', password: 'Secure123' }) });
+  assert(slalomLogin.status === 200, '获批激流运动员无法登录');
+  const slalomAthleteList = await request('/api/athletes', {}, slalomLogin.payload.token);
+  assert(
+    slalomAthleteList.payload.athletes.length === 1
+      && slalomAthleteList.payload.athletes[0].project === '激流'
+      && slalomAthleteList.payload.athletes[0].team === '激流测试组',
+    '激流运动员落库项目或队伍错误'
+  );
+
+  const duplicateNameCrossProject = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
+    username: 'canoe_duplicate_test', password: 'Secure123', displayName: '皮划艇测试运动员', role: 'ATL',
+    project: '赛艇', team: '测试组', identityNumber: '510107200001041237', nativePlace: '四川/成都市'
+  }) });
+  assert(duplicateNameCrossProject.status === 201, '同名不同项目注册申请失败');
+  const duplicateRequest = (await request('/api/admin/registrations?status=pending', {}, adminToken)).payload.requests.find((item) => item.username === 'canoe_duplicate_test');
+  const approveDuplicate = await request(`/api/admin/registrations/${duplicateRequest.id}/approve`, { method: 'POST' }, adminToken);
+  assert(approveDuplicate.status === 400, '同名不同项目申请不应被错误关联到已有运动员');
 
   const coachRegister = await request('/api/auth/register', { method: 'POST', body: JSON.stringify({
     username: 'coach_test', password: 'Secure123', displayName: '测试教练', role: 'SCC',

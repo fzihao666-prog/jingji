@@ -75,7 +75,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [rememberUsername, setRememberUsername] = useState(() => Boolean(localStorage.getItem('jingji.rememberedUsername')));
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [project, setProject] = useState('赛艇');
+  const [project, setProject] = useState('');
   const [team, setTeam] = useState('');
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [gender, setGender] = useState('');
@@ -129,6 +129,14 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     }
     if (!/^\d{17}[\dX]$/.test(identityNumber)) {
       setError('身份证号须为18位，前17位为数字，末位为数字或X。');
+      return;
+    }
+    if (!project) {
+      setError('请选择运动项目。');
+      return;
+    }
+    if (!team) {
+      setError('请选择所属队伍。');
       return;
     }
     setSubmitting(true);
@@ -222,8 +230,8 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                 <div className="form-grid profile-grid">
                   <label><span>姓名</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
                   <label><span>身份证号</span><input value={identityNumber} onChange={(event) => { const value = event.target.value.replace(/\s/g, '').toUpperCase(); setIdentityNumber(value); setGender(genderFromIdentityNumber(value)); }} maxLength={18} pattern="[0-9]{17}[0-9X]" title="请输入18位身份证号，末位可以是X" placeholder="18位身份证号" required /></label>
-                  <label><span>项目</span><select value={project} onChange={(event) => setProject(event.target.value)}>{PROJECTS.map((item) => <option key={item}>{item}</option>)}</select></label>
-                  <label><span>队伍</span><select value={team} onChange={(event) => setTeam(event.target.value)} disabled={!projectTeams.length} required><option value="">{projectTeams.length ? '请选择队伍' : '该项目暂无队伍'}</option>{projectTeams.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
+                  <label><span>项目</span><select value={project} onChange={(event) => setProject(event.target.value)} required><option value="">请选择项目</option>{PROJECTS.map((item) => <option key={item}>{item}</option>)}</select></label>
+                  <label><span>队伍</span><select value={team} onChange={(event) => setTeam(event.target.value)} disabled={!project || !projectTeams.length} required><option value="">{!project ? '请先选择项目' : projectTeams.length ? '请选择队伍' : '该项目暂无队伍'}</option>{projectTeams.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}</select></label>
                   <label><span>性别</span><input value={gender} readOnly placeholder="填写身份证号后自动确定" aria-label="性别（根据身份证号自动确定）" /></label>
                   <label><span>籍贯省份</span><select value={nativePlaceProvince} onChange={(event) => { setNativePlaceProvince(event.target.value); setNativePlaceCity(''); }} required><option value="">请选择省份</option>{PROVINCES.map((province) => <option key={province}>{province}</option>)}</select></label>
                   <label><span>籍贯城市</span><select value={nativePlaceCity} onChange={(event) => setNativePlaceCity(event.target.value)} disabled={!nativePlaceProvince} required><option value="">{nativePlaceProvince ? '请选择城市' : '请先选择省份'}</option>{(PROVINCE_CITIES[nativePlaceProvince] || []).map((cityName) => <option key={cityName}>{cityName}</option>)}</select></label>
