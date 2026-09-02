@@ -20,6 +20,11 @@ const RegionAccessPage = lazy(() => import('./pages/RegionAccessPage').then((mod
 
 const today = toIsoDate(new Date());
 
+function orderedProjects(values: string[]) {
+  const available = new Set(values.filter(isProject));
+  return PROJECTS.filter((project) => available.has(project));
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
@@ -47,7 +52,7 @@ export default function App() {
       .then(({ athletes: nextAthletes }) => {
         setAthletes(nextAthletes);
         const ownProject = user.athleteId ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project : '';
-        const available = [...new Set(nextAthletes.map((athlete) => athlete.project))].filter(isProject);
+        const available = orderedProjects(nextAthletes.map((athlete) => athlete.project));
         const fallback = user.role === 'DMD' || user.role === 'TD' ? PROJECTS[0] : null;
         if (isProject(ownProject)) setProject(ownProject);
         else if (available[0]) setProject(available[0]);
@@ -79,7 +84,7 @@ export default function App() {
 
   const projects = useMemo(() => {
     if (user?.role === 'DMD' || user?.role === 'TD') return [...PROJECTS];
-    return [...new Set(athletes.map((athlete) => athlete.project))].filter(isProject);
+    return orderedProjects(athletes.map((athlete) => athlete.project));
   }, [athletes, user?.role]);
   const projectAthletes = useMemo(() => athletes.filter((athlete) => athlete.project === project), [athletes, project]);
 
