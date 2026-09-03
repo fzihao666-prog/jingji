@@ -19,11 +19,10 @@ import {
 } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api';
-import type { Project, Role, User } from '../types';
+import type { Role, User } from '../types';
 import { roleMeta } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
-import { ProjectMark } from './ProjectMark';
 
 export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule' | 'special-athletes';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
@@ -71,13 +70,10 @@ type Props = {
   onPageChange: (page: PageKey) => void;
   onLogout: () => void;
   onProfileNameChange: (name: string) => Promise<void>;
-  project: Project | null;
-  projects: Project[];
-  onProjectChange: (project: Project) => void;
   children: ReactNode;
 };
 
-export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChange, project, projects, onProjectChange, children }: Props) {
+export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChange, children }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -141,21 +137,6 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
           <div>
             <span>{roleMeta[user.role].label}</span>
           </div>
-        </div>
-
-        <div className="project-lanes" aria-label="当前运动项目">
-          {projects.map((item) => {
-            return <button
-              key={item}
-              className={`${item === project ? 'active' : ''} ${item === '皮划艇' ? 'canoe' : item === '激流' ? 'slalom' : 'rowing'}`}
-              onClick={() => onProjectChange(item)}
-              aria-label={`切换到${item}`}
-              title={item}
-            >
-              <ProjectMark project={item} />
-              <strong>{item}</strong>
-            </button>;
-          })}
         </div>
 
         <nav className="primary-nav" aria-label="主导航">

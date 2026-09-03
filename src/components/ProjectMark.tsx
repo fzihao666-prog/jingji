@@ -1,13 +1,24 @@
 import { useId } from 'react';
+import { isProject, projectKey } from '../../shared/projects';
 
 type ProjectMarkProps = {
   project: string;
   className?: string;
 };
 
+function DefaultProjectMark({ project, className = '' }: ProjectMarkProps) {
+  return (
+    <svg className={`project-mark project-mark-unknown ${className}`.trim()} viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="24" r="20" fill="currentColor" opacity="0.12" />
+      <text x="24" y="28" textAnchor="middle" fill="currentColor" fontSize="14" fontWeight="800">{project.slice(0, 1)}</text>
+    </svg>
+  );
+}
+
 export function ProjectMark({ project, className = '' }: ProjectMarkProps) {
   const maskId = `project-mark-${useId().replace(/:/g, '')}`;
-  const classes = `project-mark ${className}`.trim();
+  const key = projectKey(project);
+  const classes = `project-mark project-mark-${key} ${className}`.trim();
 
   if (project === '赛艇') {
     return (
@@ -60,23 +71,31 @@ export function ProjectMark({ project, className = '' }: ProjectMarkProps) {
     );
   }
 
-  return (
-    <svg className={classes} viewBox="0 0 48 48" aria-hidden="true">
-      <defs>
-        <mask id={maskId}>
-          <rect width="48" height="48" fill="white" />
-          <ellipse cx="26" cy="25" rx="3.2" ry="5" transform="rotate(45 26 25)" fill="black" />
-        </mask>
-      </defs>
-      <g className="pictogram-waves">
-        <path d="M4 13c3-3 6-3 9 0M3 20c3-3 6-3 9 0M5 28c3-3 6-3 9 0M4 37c3-3 6-3 9 0" />
-        <path d="M13 9c3 3 6 3 9 0M14 16c3 3 6 3 9 0M31 9c3-3 6-3 9 0M34 16c3-3 6-3 9 0M34 34c3-3 6-3 9 0M30 42c3-3 6-3 9 0" />
-        <path d="M10 44c3-3 6-3 9 0M16 38c3 3 6 3 9 0M36 27c3-3 6-3 9 0" />
-      </g>
-      <path className="pictogram-shell" mask={`url(#${maskId})`} d="M10 39C16 29 28 16 40 8c-5 10-17 23-30 31Z" />
-      <path className="pictogram-oar" d="M26 25 39 38" />
-      <path className="pictogram-blade" d="M37 36.2c1.3-1.3 3.6-.8 5.2 1.1l2 2.4-4.1 4.1-2.4-2c-1.9-1.6-2.4-3.9-1.1-5.2l.4-.4Z" />
-      <path className="pictogram-gate" d="M8 4v13M42 29v15" />
-    </svg>
-  );
+  if (project === '激流') {
+    return (
+      <svg className={classes} viewBox="0 0 48 48" aria-hidden="true">
+        <defs>
+          <mask id={maskId}>
+            <rect width="48" height="48" fill="white" />
+            <ellipse cx="26" cy="25" rx="3.2" ry="5" transform="rotate(45 26 25)" fill="black" />
+          </mask>
+        </defs>
+        <g className="pictogram-waves">
+          <path d="M4 13c3-3 6-3 9 0M3 20c3-3 6-3 9 0M5 28c3-3 6-3 9 0M4 37c3-3 6-3 9 0" />
+          <path d="M13 9c3 3 6 3 9 0M14 16c3 3 6 3 9 0M31 9c3-3 6-3 9 0M34 16c3-3 6-3 9 0M34 34c3-3 6-3 9 0M30 42c3-3 6-3 9 0" />
+          <path d="M10 44c3-3 6-3 9 0M16 38c3 3 6 3 9 0M36 27c3-3 6-3 9 0" />
+        </g>
+        <path className="pictogram-shell" mask={`url(#${maskId})`} d="M10 39C16 29 28 16 40 8c-5 10-17 23-30 31Z" />
+        <path className="pictogram-oar" d="M26 25 39 38" />
+        <path className="pictogram-blade" d="M37 36.2c1.3-1.3 3.6-.8 5.2 1.1l2 2.4-4.1 4.1-2.4-2c-1.9-1.6-2.4-3.9-1.1-5.2l.4-.4Z" />
+        <path className="pictogram-gate" d="M8 4v13M42 29v15" />
+      </svg>
+    );
+  }
+
+  if (isProject(project)) {
+    return <DefaultProjectMark project={project} className={className} />;
+  }
+
+  return <DefaultProjectMark project={project} className={className} />;
 }

@@ -2,6 +2,7 @@ import { CalendarRange, Check, ChevronDown, Search, UserRound, UsersRound, X } f
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Athlete, Project } from '../types';
 import { addDays, toIsoDate } from '../utils';
+import { projectKey } from '../../shared/projects';
 import { EditableName } from './EditableName';
 import { ProjectMark } from './ProjectMark';
 
@@ -25,8 +26,10 @@ type Props = {
 export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select', presetMode = 'default', projectControl = 'select' }: Props) {
   const selectedAthlete = athletes.find((athlete) => athlete.id === athleteId);
   const [athleteOpen, setAthleteOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
   const [query, setQuery] = useState('');
   const pickerRef = useRef<HTMLDivElement>(null);
+  const projectRef = useRef<HTMLDivElement>(null);
   const filteredAthletes = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase('zh-CN');
     if (!keyword) return athletes;
@@ -37,11 +40,13 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
   useEffect(() => {
     setQuery('');
     setAthleteOpen(false);
+    setProjectOpen(false);
   }, [project]);
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (!pickerRef.current?.contains(event.target as Node)) setAthleteOpen(false);
+      if (!projectRef.current?.contains(event.target as Node)) setProjectOpen(false);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
@@ -89,14 +94,29 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
           </button>)}
         </div>
       ) : (
-        <label className={`project-filter ${project === '皮划艇' ? 'canoe' : project === '激流' ? 'slalom' : 'rowing'}`}>
-          <span className="visually-hidden">选择项目大类</span>
-          <ProjectMark project={project} />
-          <select aria-label="选择项目大类" value={project} onChange={(event) => onProjectChange(event.target.value as Project)}>
-            {projects.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-          <ChevronDown size={14} />
-        </label>
+        <div className={`project-select project-select-${projectKey(project)} ${projectOpen ? 'open' : ''}`} ref={projectRef}>
+          <button type="button" className="project-select-trigger" onClick={() => setProjectOpen((value) => !value)} aria-expanded={projectOpen} aria-haspopup="listbox" aria-label="选择项目大类">
+            <ProjectMark project={project} />
+            <span>{project}</span>
+            <ChevronDown size={14} className="project-select-chevron" />
+          </button>
+          <div className="project-select-menu" role="listbox" aria-label="项目大类">
+            {projects.map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="option"
+                aria-selected={item === project}
+                className={`project-select-option ${item === project ? 'selected' : ''} project-select-option-${projectKey(item)}`}
+                onClick={() => { onProjectChange(item); setProjectOpen(false); }}
+              >
+                <ProjectMark project={item} />
+                <span>{item}</span>
+                {item === project && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {athleteMode === 'select' ? <div className={`athlete-picker ${athleteOpen ? 'open' : ''}`} ref={pickerRef}>

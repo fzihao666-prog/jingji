@@ -153,7 +153,7 @@ export default function App() {
   };
 
   return (
-    <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile} project={project} projects={projects.length ? projects : [project]} onProjectChange={(nextProject) => { setProject(nextProject); setAthleteId(null); }}>
+    <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
       {globalError && <div className="global-error">{globalError}</div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} onAthleteNameChange={renameAthlete} onUserNameChange={renameVisibleUser} />}
