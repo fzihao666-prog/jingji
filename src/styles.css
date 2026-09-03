@@ -2186,3 +2186,370 @@ aside nav::-webkit-scrollbar-thumb {
   .coach-detail-drawer { width: 100vw; }.coach-detail-groups article > div { grid-template-columns: 1fr; }.coach-detail-drawer > footer { flex-wrap: wrap; }.coach-status-button { width: 100%; margin: 0; justify-content: center; }
   .coach-create-modal { width: calc(100vw - 14px); }.coach-create-fields { grid-template-columns: 1fr; max-height: calc(100vh - 260px); overflow-y: auto; }.coach-create-modal form > footer button { flex: 1; }
 }
+
+/* ========================================================================== */
+/* 2026 DATA VISUALIZATION COLOR REFINEMENT                                   */
+/* Visual-only micro refresh: keep all original class names / DOM / layout.   */
+/* ========================================================================== */
+
+@media screen {
+  :root {
+    /* Keep the original teal sports identity, just make it cleaner/brighter. */
+    --ink: #0b3140;
+    --ink-deep: #072633;
+    --river: #167b8d;
+    --teal: #18a49a;
+    --mint: #75cdbc;
+    --signal: #e66047;
+    --amber: #e4a52a;
+    --mist: #edf4f5;
+    --paper: #ffffff;
+    --line: #d7e4e7;
+    --muted: #6b8088;
+    --shadow: 0 16px 42px rgba(12, 52, 66, .075);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* App background: almost unchanged, slightly cleaner.                    */
+  /* ---------------------------------------------------------------------- */
+
+  html,
+  body,
+  .app-frame {
+    background: #edf4f5;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Sidebar: keep dark sports-science style, add a little blue/cyan energy. */
+  /* ---------------------------------------------------------------------- */
+
+  .sidebar {
+    background:
+      radial-gradient(circle at 18% 0%, rgba(32, 184, 178, .12), transparent 31%),
+      linear-gradient(180deg, #0d3b4c 0%, #0a3040 54%, #082a39 100%);
+    box-shadow: 8px 0 28px rgba(5, 34, 46, .08);
+  }
+
+  .brand-block {
+    border-bottom-color: rgba(255,255,255,.11);
+  }
+
+  .scope-card {
+    border-color: rgba(108, 224, 207, .18);
+    background: rgba(70, 190, 177, .105);
+  }
+
+  .scope-icon {
+    background: rgba(50, 192, 176, .24);
+    color: #83e1d1;
+  }
+
+  .scope-card small {
+    color: rgba(229, 249, 245, .56);
+  }
+
+  .primary-nav button {
+    color: rgba(232, 247, 245, .68);
+  }
+
+  .primary-nav button:hover {
+    color: #fff;
+    background: rgba(255,255,255,.07);
+  }
+
+  .primary-nav button.active {
+    color: #fff;
+    background: linear-gradient(105deg, rgba(32, 190, 177, .38), rgba(24, 145, 156, .18));
+    box-shadow: inset 3px 0 #69dfce, 0 6px 16px rgba(3, 35, 44, .09);
+  }
+
+  .special-nav.active {
+    background: rgba(30, 162, 157, .15);
+    box-shadow: inset 3px 0 #69dfce;
+  }
+
+  .special-nav-tree {
+    border-left-color: rgba(112, 221, 207, .31);
+  }
+
+  .primary-nav .special-nav-tree button {
+    color: rgba(230, 248, 245, .64);
+  }
+
+  .primary-nav .special-nav-tree button:hover {
+    background: rgba(255,255,255,.055);
+  }
+
+  .primary-nav .special-nav-tree button.active {
+    color: #fff;
+    background: rgba(61, 192, 176, .25);
+  }
+
+  .primary-nav .special-nav-tree button.active i {
+    background: #79e4d4;
+    box-shadow: 0 0 0 3px rgba(121, 228, 212, .16);
+  }
+
+  .sidebar-footer {
+    border-top-color: rgba(255,255,255,.11);
+  }
+
+  .sidebar-footer .icon-button:hover {
+    background: rgba(255,255,255,.08);
+  }
+
+  .sidebar nav,
+  .app-sidebar nav,
+  .side-nav nav,
+  .navigation-sidebar nav,
+  .sidebar-menu,
+  .nav-menu,
+  .app-nav,
+  .main-nav,
+  .sidebar-scroll,
+  aside nav {
+    scrollbar-color: rgba(113, 224, 210, .65) transparent;
+  }
+
+  .sidebar nav::-webkit-scrollbar-thumb,
+  .app-sidebar nav::-webkit-scrollbar-thumb,
+  .side-nav nav::-webkit-scrollbar-thumb,
+  .navigation-sidebar nav::-webkit-scrollbar-thumb,
+  .sidebar-menu::-webkit-scrollbar-thumb,
+  .nav-menu::-webkit-scrollbar-thumb,
+  .app-nav::-webkit-scrollbar-thumb,
+  .main-nav::-webkit-scrollbar-thumb,
+  .sidebar-scroll::-webkit-scrollbar-thumb,
+  aside nav::-webkit-scrollbar-thumb {
+    background: rgba(113, 224, 210, .58);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* KPI cards: preserve the original colored-card concept, just fresher.    */
+  /* ---------------------------------------------------------------------- */
+
+  .metric-card {
+    border-color: rgba(255,255,255,.22);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.17),
+      0 13px 28px var(--metric-shadow);
+  }
+
+  .metric-card::before {
+    background:
+      radial-gradient(circle at 88% 2%, rgba(255,255,255,.22), transparent 37%),
+      linear-gradient(125deg, rgba(255,255,255,.025), transparent 45%);
+  }
+
+  .tone-navy {
+    --metric-start: #245c70;
+    --metric-end: #103b4d;
+    --metric-shadow: rgba(15, 65, 83, .22);
+  }
+
+  .tone-teal {
+    --metric-start: #1aa69c;
+    --metric-end: #0e7476;
+    --metric-shadow: rgba(13, 121, 118, .22);
+  }
+
+  .tone-blue {
+    --metric-start: #428eb2;
+    --metric-end: #2b6688;
+    --metric-shadow: rgba(37, 102, 137, .22);
+  }
+
+  .tone-orange {
+    --metric-start: #e67750;
+    --metric-end: #bd4f3d;
+    --metric-shadow: rgba(181, 72, 53, .22);
+  }
+
+  .tone-purple {
+    --metric-start: #786fa9;
+    --metric-end: #565080;
+    --metric-shadow: rgba(82, 73, 126, .22);
+  }
+
+  .tone-green {
+    --metric-start: #2c9b7c;
+    --metric-end: #176b5d;
+    --metric-shadow: rgba(18, 108, 91, .22);
+  }
+
+  .metric-icon {
+    background: rgba(255,255,255,.17);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.09);
+  }
+
+  .metric-copy > span {
+    opacity: .78;
+  }
+
+  .metric-copy > strong {
+    text-shadow: 0 2px 12px rgba(0,0,0,.08);
+  }
+
+  .metric-copy p {
+    opacity: .58;
+  }
+
+  .overview-card-shell.card-size-metric:hover .metric-card,
+  .metric-card:hover {
+    filter: saturate(1.06) brightness(1.015);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Main cards: no redesign, only slightly stronger layering.              */
+  /* ---------------------------------------------------------------------- */
+
+  .panel,
+  .calendar-panel,
+  .day-detail,
+  .strength-chart-card,
+  .coach-directory-card,
+  .coach-bench,
+  .personal-calendar-section,
+  .stored-dynamic-plan > article {
+    border-color: #d7e4e7;
+    background: rgba(255,255,255,.95);
+    box-shadow: 0 12px 32px rgba(10, 52, 66, .055);
+  }
+
+  .panel:hover,
+  .strength-chart-card:hover,
+  .coach-directory-card:hover {
+    border-color: #cbdfe2;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Analysis modules: retain structure, brighten only key accents.          */
+  /* ---------------------------------------------------------------------- */
+
+  .analysis-title-icon,
+  .strength-chart-card > header > span {
+    background: linear-gradient(145deg, #11687a, #19a89b);
+    box-shadow: 0 7px 16px rgba(15, 132, 128, .19);
+  }
+
+  .analysis-period-tabs button.active,
+  .range-presets button.active {
+    background: #159c93;
+    box-shadow: 0 5px 13px rgba(21, 156, 147, .23);
+  }
+
+  .analysis-period-tabs button.active:hover,
+  .range-presets button.active:hover {
+    background: #108b84;
+  }
+
+  .analysis-stage-range {
+    border-color: #82c8c0;
+    color: #0e746f;
+    background: #e8f7f4;
+  }
+
+  .analysis-stage-range:hover {
+    border-color: #31a99f;
+    background: #ddf4f0;
+  }
+
+  .analysis-kpi-strip span {
+    border-color: #d5e6e7;
+    background: linear-gradient(180deg, #ffffff, #f6fbfa);
+  }
+
+  .analysis-kpi-strip strong {
+    color: #0c4d58;
+  }
+
+  .strength-summary-icon.teal {
+    background: linear-gradient(145deg, #16a79b, #58cabb);
+  }
+
+  .strength-summary-icon.navy {
+    background: linear-gradient(145deg, #0f5d70, #2d8791);
+  }
+
+  .strength-summary-icon.gold {
+    background: linear-gradient(145deg, #df941c, #f2be50);
+  }
+
+  .strength-summary-strip strong.positive {
+    color: #0d9488;
+  }
+
+  .strength-summary-strip strong.negative {
+    color: #e05c49;
+  }
+
+  .fms-summary,
+  .fms-personal-summary article {
+    background:
+      radial-gradient(circle at 92% 0%, rgba(77, 216, 200, .16), transparent 34%),
+      linear-gradient(145deg, #0a4a59, #0d7873);
+  }
+
+  .champion-benchmark-hero {
+    background:
+      radial-gradient(circle at 92% 0%, rgba(76, 223, 207, .15), transparent 36%),
+      linear-gradient(125deg, #084957, #09918a);
+  }
+
+  .fms-summary > span,
+  .fms-personal-summary article span,
+  .fms-personal-summary article em,
+  .champion-benchmark-hero small {
+    color: #8ce6d9;
+  }
+
+  .roster-filter-summary {
+    background: linear-gradient(135deg, #0b4b5d, #107b78);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Controls / status: only tune saturation, do not change sizing.          */
+  /* ---------------------------------------------------------------------- */
+
+  .primary-button,
+  .coach-create-button {
+    background: linear-gradient(105deg, #087382, #0f9089);
+    box-shadow: 0 7px 17px rgba(8, 115, 125, .20);
+  }
+
+  .primary-button:hover,
+  .coach-create-button:hover {
+    background: linear-gradient(105deg, #076777, #0d837d);
+  }
+
+  .project-select-option.selected,
+  .athlete-picker-options > button.selected {
+    color: #087970;
+    background: #e0f5f0;
+  }
+
+  .count-chip {
+    background: #e2f3f0;
+  }
+
+  .dot.normal,
+  .status-bg-normal {
+    background: #16ad91 !important;
+  }
+
+  .dot.attention,
+  .status-bg-attention {
+    background: #edaa20 !important;
+  }
+
+  .dot.alert,
+  .status-bg-alert {
+    background: #eb5d45 !important;
+  }
+
+  /* Tooltip: slightly crisper, no structural changes. */
+  .recharts-default-tooltip {
+    border-color: #d4e2e4 !important;
+    box-shadow: 0 8px 22px rgba(8, 48, 61, .12) !important;
+  }
+}
