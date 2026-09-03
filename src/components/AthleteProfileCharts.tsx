@@ -29,8 +29,7 @@ function chartDomain(values: number[], minimumPadding: number): [number, number]
   return [Math.floor((low - padding) * 10) / 10, Math.ceil((high + padding) * 10) / 10];
 }
 
-type AgeSort = 'age-asc' | 'age-desc';
-type TeamAgePoint = { athleteId: number; name: string; birthDate: string | null; age: number; averageAge: number; axisLabel: string };
+type AgeBin = { group: string; male: number; female: number; start: number; end: number };
 
 function TeamProfileTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: TeamScatterPoint }> }) {
   const point = payload?.[0]?.payload;
@@ -38,15 +37,21 @@ function TeamProfileTooltip({ active, payload }: { active?: boolean; payload?: A
   return <div className="team-profile-tooltip"><strong>{point.name}</strong><span>年龄：{point.age === null ? '—' : `${formatNumber(point.age, 1)}岁`}</span><span>身高：{formatNumber(point.height, 1)} cm</span><span>体重：{formatNumber(point.weight, 1)} kg</span></div>;
 }
 
-function TeamAgeTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: TeamAgePoint }> }) {
+function AgePyramidTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: AgeBin }> }) {
   const point = payload?.[0]?.payload;
   if (!active || !point) return null;
-  return <div className="team-profile-tooltip team-age-tooltip"><strong>{point.name}</strong><span>年龄：{formatNumber(point.age, 1)} 岁</span><span>出生日期：{point.birthDate || '未录入'}</span><em>平均年龄：{formatNumber(point.averageAge, 1)} 岁</em></div>;
+  const male = Math.abs(point.male);
+  return (
+    <div className="team-profile-tooltip">
+      <strong>{point.group}</strong>
+      <span>男：{male} 人</span>
+      <span>女：{point.female} 人</span>
+      <span>合计：{male + point.female} 人</span>
+    </div>
+  );
 }
 
 export function AthleteProfileOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
-  const [ageSort, setAgeSort] = useState<AgeSort>('age-asc');
-  const [hoveredAge, setHoveredAge] = useState<TeamAgePoint | null>(null);
   if (!profiles.length || !profiles.some((profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null)) {
     return <ProfileEmpty title={individual ? '暂无档案画像数据' : '暂无队伍身体数据'} detail="完善出生日期和身体测量后自动生成。" />;
   }
@@ -70,23 +75,32 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
 
   const scatterData: TeamScatterPoint[] = profiles.flatMap((profile) => profile.heightCm !== null && profile.weightKg !== null ? [{ athleteId: profile.athleteId, name: profile.athleteName, age: profile.age, height: profile.heightCm, weight: profile.weightKg }] : []);
   const ageProfiles = profiles.filter((profile): profile is OverviewAthleteProfile & { age: number } => profile.age !== null && Number.isFinite(profile.age));
-  const sortedAgeProfiles = [...ageProfiles].sort((left, right) => {
-    const difference = left.age - right.age;
-    return ageSort === 'age-asc' ? difference || left.athleteName.localeCompare(right.athleteName, 'zh-CN') : -difference || left.athleteName.localeCompare(right.athleteName, 'zh-CN');
-  });
-  const averageAge = average(ageProfiles.map((profile) => profile.age));
-  const ageData: TeamAgePoint[] = sortedAgeProfiles.map((profile, index) => ({
-    athleteId: profile.athleteId,
-    name: profile.athleteName,
-    birthDate: profile.birthDate,
-    age: profile.age,
-    averageAge: averageAge || profile.age,
-    axisLabel: String(index + 1)
-  }));
-  const ageAxisInterval = Math.max(0, Math.ceil(ageData.length / 8) - 1);
-  const ageValues = ageData.map((item) => item.age);
-  const minAge = ageValues.length ? Math.min(...ageValues) : null;
-  const maxAge = ageValues.length ? Math.max(...ageValues) : null;
+  const ages = ageProfiles.map((profile) => profile.age);
+  const averageAge = average(ages);
+  const minAge = ages.length ? Math.min(...ages) : null;
+  const maxAge = ages.length ? Math.max(...ages) : null;
+
+  const ageBins: AgeBin[] = useMemo(() => {
+    if (!ageProfiles.length || minAge === null || maxAge === null) return [];
+    const binSize = maxAge - minAge > 16 ? 2 : 1;
+    const start = Math.floor(minAge / binSize) * binSize;
+    const end = Math.ceil((maxAge + 1) / binSize) * binSize;
+    const bins: AgeBin[] = [];
+    for (let s = start; s < end; s += binSize) {
+      const e = s + binSize;
+      const label = binSize === 1 ? `${s}岁` : `${s}-${e - 1}岁`;
+      let male = 0;
+      let female = 0;
+      for (const profile of ageProfiles) {
+        if (profile.age < s || profile.age >= e) continue;
+        if (profile.gender === '男') male += 1;
+        else if (profile.gender === '女') female += 1;
+      }
+      bins.push({ group: label, male: -male, female, start: s, end: e });
+    }
+    return bins.sort((left, right) => right.start - left.start);
+  }, [ageProfiles, minAge, maxAge]);
+  const maxSideCount = useMemo(() => ageBins.reduce((max, bin) => Math.max(max, Math.abs(bin.male), bin.female), 0), [ageBins]);
 
   const heights = scatterData.map((item) => item.height);
   const weights = scatterData.map((item) => item.weight);
@@ -115,19 +129,23 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
         </section>
 
         <section className="team-profile-chart-card team-age-card">
-          <header><div><h3>年龄结构</h3><p>展示队伍运动员年龄分布及平均年龄水平</p></div><div className="team-age-actions"><span>共 {ageData.length} 人</span><label><span>排序</span><select aria-label="年龄分布排序" value={ageSort} onChange={(event) => setAgeSort(event.target.value as AgeSort)}><option value="age-asc">年龄从小到大</option><option value="age-desc">年龄从大到小</option></select></label></div></header>
-          <div className="team-age-plot-heading"><strong>运动员年龄分布</strong><span>个体年龄变化与队伍平均年龄</span></div>
+          <header><div><h3>年龄结构</h3><p>展示队伍运动员年龄性别金字塔结构</p></div><span>共 {ageProfiles.length} 人</span></header>
+          <div className="team-age-plot-heading"><strong>年龄金字塔</strong><span>按性别分组的人数分布</span></div>
           <div className="team-profile-age-canvas">
-            {ageData.length ? <ResponsiveContainer width="100%" height="100%"><LineChart data={ageData} margin={{ top: 17, right: 14, bottom: 8, left: -8 }}>
-              <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" vertical={false} />
-              <XAxis dataKey="axisLabel" interval={ageAxisInterval} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} label={{ value: '运动员序号', position: 'insideBottomRight', offset: -4, fill: '#87979c', fontSize: 7 }} />
-              <YAxis domain={chartDomain(ageValues, 1.5)} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={false} tickLine={false} width={38} unit="岁" />
-              <Line type="linear" dataKey="age" name="运动员年龄" stroke="#2f7fa3" strokeWidth={2.5} dot={(props: { cx?: number; cy?: number; payload?: TeamAgePoint }) => <circle cx={props.cx} cy={props.cy} r={3.8} fill="#fff" stroke="#2f7fa3" strokeWidth={2} tabIndex={0} aria-label={props.payload ? `${props.payload.name}，${formatNumber(props.payload.age, 1)}岁` : undefined} onMouseEnter={() => setHoveredAge(props.payload || null)} onMouseLeave={() => setHoveredAge(null)} onFocus={() => setHoveredAge(props.payload || null)} onBlur={() => setHoveredAge(null)} />} activeDot={{ r: 5, fill: '#2f7fa3', stroke: '#fff', strokeWidth: 2 }} isAnimationActive={false} />
-              <Line type="linear" dataKey="averageAge" name="平均年龄" stroke="#e59a31" strokeWidth={2} dot={false} activeDot={false} isAnimationActive={false} />
-            </LineChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无年龄数据</div>}
-            {hoveredAge && <TeamAgeTooltip active payload={[{ payload: hoveredAge }]} />}
+            {ageBins.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={ageBins} layout="vertical" margin={{ top: 4, right: 14, bottom: 2, left: 4 }} barCategoryGap="16%">
+              <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" horizontal={false} />
+              <XAxis type="number" domain={[-maxSideCount, maxSideCount]} tickFormatter={(value) => `${Math.abs(Number(value))}`} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} />
+              <YAxis type="category" dataKey="group" tick={{ fontSize: 8, fill: '#506c74', fontWeight: 700 }} axisLine={false} tickLine={false} width={48} />
+              <Tooltip content={<AgePyramidTooltip />} cursor={{ fill: 'rgba(17,139,131,.055)' }} />
+              <Bar dataKey="male" name="男" fill="#2f7fa3" radius={[3, 0, 0, 3]} minPointSize={2}>
+                <LabelList dataKey="male" position="left" fill="#4c6870" fontSize={8} fontWeight={800} formatter={(value) => `${Math.abs(Number(value))}人`} />
+              </Bar>
+              <Bar dataKey="female" name="女" fill="#d96e8b" radius={[0, 3, 3, 0]} minPointSize={2}>
+                <LabelList dataKey="female" position="right" fill="#4c6870" fontSize={8} fontWeight={800} formatter={(value) => `${value}人`} />
+              </Bar>
+            </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无年龄数据</div>}
           </div>
-          {ageData.length > 0 && <><div className="team-age-legend"><span><i />运动员年龄</span><span><i />平均年龄</span></div><div className="team-age-summary"><span>平均年龄 <strong>{formatNumber(averageAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最小 <strong>{formatNumber(minAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最大 <strong>{formatNumber(maxAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>年龄跨度 <strong>{formatNumber((maxAge ?? 0) - (minAge ?? 0), 1)} 岁</strong></span></div></>}
+          {ageBins.length > 0 && <><div className="team-age-legend"><span><i />男</span><span><i />女</span></div><div className="team-age-summary"><span>平均年龄 <strong>{formatNumber(averageAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最小 <strong>{formatNumber(minAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>最大 <strong>{formatNumber(maxAge ?? 0, 1)} 岁</strong></span><i>｜</i><span>年龄跨度 <strong>{formatNumber((maxAge ?? 0) - (minAge ?? 0), 1)} 岁</strong></span></div></>}
         </section>
 
         <CompetitiveLevelChart profiles={profiles} />

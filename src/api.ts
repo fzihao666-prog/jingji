@@ -391,6 +391,24 @@ export const api = {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
+  async exportUnifiedData(project: Project) {
+    const response = await fetch(`/api/data-import/export?project=${encodeURIComponent(project)}`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.message || '统一数据导出失败。');
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = `竞迹${project}统一数据导出.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  },
   async analyzeDataImport(file: File, project: Project, defaultDate?: string) {
     const body = new FormData();
     body.append('file', file);

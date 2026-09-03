@@ -68,6 +68,7 @@ if (filledMode) {
   const sessions = [];
   const sets = [];
   const states = [];
+  const competitiveLevels = [];
   const metrics = [['height','height_cm','身高','cm','center'],['weight','weight_kg','体重','kg','center'],['armSpan','arm_span_cm','臂展','cm','center'],['sitReach','sit_reach_cm','坐位体前屈','cm','center'],['supine','supine_support_sec','仰卧支撑','秒','center'],['front','front_plank_sec','俯卧支撑','秒','center'],['leftSide','side_plank_sec','侧支撑','秒','left'],['rightSide','side_plank_sec','侧支撑','秒','right'],['leftLeg','single_leg_squat_reps','单腿蹲','次','left'],['rightLeg','single_leg_squat_reps','单腿蹲','次','right'],['pullUps','pull_ups_reps','引体向上','次','center'],['squat','squat_kg','深蹲','kg','center'],['deadlift','deadlift_kg','硬拉','kg','center'],['hipThrust','hip_thrust_kg','臀推','kg','center'],['benchPress','bench_press_kg','卧推','kg','center'],['benchPull','bench_pull_kg','卧拉','kg','center'],['clean','clean_kg','高翻','kg','center'],['verticalJump','vertical_jump_cm','纵跳','cm','center']];
   const origin = [['辽宁','大连','沙河口区'],['山东','青岛','市南区'],['浙江','杭州','上城区'],['广东','广州','天河区'],['湖北','武汉','武昌区'],['江苏','南京','鼓楼区']];
   for (let index = 0; index < sourceList.length; index += 1) {
@@ -85,7 +86,7 @@ if (filledMode) {
     const maxSquat = athlete.squat ?? deterministic(athlete.name,'squat',athlete.gender === '女' ? 80 : 130,athlete.gender === '女' ? 130 : 200); const maxPull = athlete.benchPull ?? deterministic(athlete.name,'pull',athlete.gender === '女' ? 55 : 85,athlete.gender === '女' ? 90 : 135);
     sets.push([athlete.name,'2026-02-14','力量课','深蹲',1,6,6,Math.round(maxSquat*.75),Math.round(maxSquat*.75),75,7,'完成','基础力量','下肢','模拟训练组次']);
     sets.push([athlete.name,'2026-02-14','力量课','卧拉',2,8,8,Math.round(maxPull*.7),Math.round(maxPull*.7),70,7,'完成','基础力量','上肢','模拟训练组次']);
-    const score = Math.round(deterministic(athlete.name,'score',72,91)); states.push([athlete.name,'2026-02-15',score,score >= 85 ? '良好' : '建设',Math.round(deterministic(athlete.name,'end',70,95)),Math.round(deterministic(athlete.name,'power',70,95)),Math.round(deterministic(athlete.name,'tech',68,93)),Math.round(deterministic(athlete.name,'load',70,92)),Math.round(deterministic(athlete.name,'recover',68,92)),Math.round(deterministic(athlete.name,'comp',68,90)),'测试与恢复数据综合评估']);
+    const score = Math.round(deterministic(athlete.name,'score',72,91)); const state = score >= 85 ? '良好' : '建设'; const level = score >= 91 ? '运动健将' : score >= 88 ? '一级运动员' : score >= 80 ? '二级运动员' : '三级运动员'; const dimensions = [Math.round(deterministic(athlete.name,'end',70,95)),Math.round(deterministic(athlete.name,'power',70,95)),Math.round(deterministic(athlete.name,'tech',68,93)),Math.round(deterministic(athlete.name,'load',70,92)),Math.round(deterministic(athlete.name,'recover',68,92)),Math.round(deterministic(athlete.name,'comp',68,90))]; states.push([athlete.name,'2026-02-15',score,state,...dimensions,'测试与恢复数据综合评估']); competitiveLevels.push([athlete.name,'2026-02-15',level,'',score,state,...dimensions,'测试与恢复数据综合评估']);
   }
   filledRowsBySheet.set('运动员信息', profiles);
   filledRowsBySheet.set('身体测量', bodies);
@@ -93,6 +94,7 @@ if (filledMode) {
   filledRowsBySheet.set('训练课次', sessions);
   filledRowsBySheet.set('力量训练组次', sets);
   filledRowsBySheet.set('测试指标', metricRows);
+  filledRowsBySheet.set('竞技水平评估', competitiveLevels);
   filledRowsBySheet.set('竞技状态', states);
 }
 
@@ -155,10 +157,11 @@ instructions.getRange('A3:F3').format = { fill: dark, font: { bold: true, color:
 instructions.getRange('A4:A8').format = { fill: light, font: { bold: true, color: blue }, horizontalAlignment: 'center' };
 instructions.getRange('A:F').format.columnWidth = 24;
 instructions.getRange('A:A').format.columnWidth = 8;
-instructions.getRange('A10:F10').merge(); instructions.getRange('A10').values = [['必填提示：表头中带“姓名”的每一行都必须能识别到姓名；新运动员必须在导入审核区批量或逐人分配权限内队伍后才能提交。']];
+instructions.getRange('A10:F10').merge(); instructions.getRange('A10').values = [['必填提示：表头中带“姓名”的每一行都必须能识别到姓名；新运动员必须在导入审核区批量或逐人分配权限内队伍后才能提交。具体数值合理区间请查看“数据字典”的最小值、最大值列。']];
 instructions.getRange('A10').format = { fill: '#FFF5E8', font: { color: '#8A4D00', bold: true }, wrapText: true, rowHeight: 34 };
 
-dataSheet('运动员信息', ['姓名','运动项目','所属队伍','性别','出生日期','身份证号','省份','城市','区县','民族','手机号','血型','紧急联系人','紧急电话','学历','技术等级','位置号位','身体状态','最好成绩','籍贯','家庭住址','训练状态','开始运动日期','训练场地','备战赛事','备战阶段','集训时间','输送地','输送单位','输送教练','优势项','备注'], '每名运动员一行。姓名、运动项目必填；已有运动员会按此列更新队伍，新运动员须在导入审核区确认队伍。', { '运动项目':['赛艇','皮划艇','激流'], '性别':['男','女'], '血型':['A','B','AB','O','未知'], '身体状态':['健康','伤病','康复'], '训练状态':['在训','集训','伤停','退役'] });
+dataSheet('运动员信息', ['姓名','运动项目','所属队伍','性别','出生日期','身份证号','省份','城市','区县','民族','手机号','血型','紧急联系人','紧急电话','学历','技术等级','位置号位','身体状态','最好成绩','籍贯','家庭住址','训练状态','开始运动日期','训练场地','备战赛事','备战阶段','集训时间','输送地','输送单位','输送教练','优势项','备注'], '每名运动员一行。姓名、运动项目必填；已有运动员会按此列更新队伍，新运动员须在导入审核区确认队伍。技术等级也可在“竞技水平评估”表中维护。', { '运动项目':['赛艇','皮划艇','激流'], '性别':['男','女'], '血型':['A','B','AB','O','未知'], '技术等级':['国际级运动健将','运动健将','一级运动员','二级运动员','三级运动员'], '身体状态':['健康','伤病','康复'], '训练状态':['在训','集训','伤停','退役'] });
+dataSheet('竞技水平评估', ['姓名','评估日期','技术等级','最好成绩','竞技总分','竞技状态','专项耐力','力量爆发','技术效率','负荷适应','恢复能力','比赛能力','备注'], '训练总览“运动员技术等级分布”和竞技状态六维分析的数据来源。每名运动员每次评估一行；技术等级、竞技总分和竞技状态必填。', { '技术等级':['国际级运动健将','运动健将','一级运动员','二级运动员','三级运动员'], '竞技状态':['巅峰','良好','建设','调整'] });
 dataSheet('身体测量', ['姓名','测量日期','身高cm','体重kg','体脂率%','骨骼肌kg','肌肉量kg','上肢肌肉kg','下肢肌肉kg','躯干肌肉kg','内脏脂肪等级','基础代谢kcal','总水分kg','细胞外水比','相位角°','备注'], '姓名、测量日期必填；身体指标至少填写一项。留空表示未测，不要用0代替缺失。');
 dataSheet('恢复状态', ['姓名','日期','睡眠小时','睡眠质量','晨脉','体重kg','疲劳','肌肉酸痛','情绪','状态','备注'], '每日每名运动员一行。睡眠质量、疲劳、肌肉酸痛、情绪建议使用1—10分。', { '状态':['normal','attention','alert','rest','missing'] });
 dataSheet('训练课次', ['姓名','日期','课次序号','开始时间','训练类型','训练内容','训练阶段','强度区间','时长分钟','距离千米','RPE','SRPE','SMVL','平均心率','最大心率','平均功率W','桨频SPM'], '每个课次一行；同一运动员同一天用课次序号1、2、3区分。SRPE留空时系统按时长×RPE计算。', { '训练类型':['专项训练','力量训练','恢复训练','测试','比赛'], '训练阶段':['专项训练','体能训练','恢复再生','测试比赛'], '强度区间':['UT3','UT2','UT1','AT','TR','AN'] });
@@ -167,20 +170,20 @@ dataSheet('测试指标', ['姓名','测试日期','测试类型','指标代码'
 dataSheet('FMS测试', ['姓名','测试日期','深蹲','跨栏步','直线弓步蹲','肩部灵活性','主动直腿上抬','躯干稳定俯卧撑','旋转稳定性','备注'], '每名运动员每次测试一行。七项均填0、1、2或3分；建议一次录齐，导入后自动展示在个人FMS测试分析。');
 dataSheet('冠军模型测试', ['姓名','测试日期','身高cm','臂展cm','体脂率%','骨骼肌kg','一般耐力评分','VO2Max','不对称指数%','CMJ峰值功率W','无氧功率W/kg','IMTP峰值力量N','核心力量评分','测试协议','备注'], '每名运动员每次评估一行。对应冠军模型八维：身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量、核心力量；按实际已测项目填写即可。');
 dataSheet('伤病记录', ['姓名','发生日期','伤病名称','部位','侧别','状态','疼痛评分','训练限制','康复计划','复查日期','备注'], '正式伤病记录。疼痛评分为0—10；状态和侧别请使用下拉值。', { '侧别':['未指定','左','右','双侧','中央'], '状态':['健康','观察','限训','康复','停训'] });
-dataSheet('竞技状态', ['姓名','评估日期','总分','等级','专项耐力','力量爆发','技术效率','负荷适应','恢复能力','比赛能力','备注'], '各维度和总分均为0—100。总分、等级必填，用于训练总览六维雷达与状态趋势。', { '等级':['巅峰','良好','建设','调整'] });
+dataSheet('竞技状态', ['姓名','评估日期','总分','等级','专项耐力','力量爆发','技术效率','负荷适应','恢复能力','比赛能力','备注'], '兼容已有竞技状态数据。新录入请优先使用“竞技水平评估”表，以便同步维护技术等级、最好成绩和六维状态。', { '等级':['巅峰','良好','建设','调整'] });
 
 const dictionary = workbook.worksheets.add('数据字典');
 dictionary.showGridLines = false;
-title(dictionary, '数据字典', '常用指标代码建议。可以增加自定义指标代码，但同一含义请始终使用同一个代码。', 5);
-dictionary.getRange('A3:E3').values = [['指标代码','指标名称','单位','业务域','说明']];
+title(dictionary, '数据字典', '各测试指标的合理区间。超出范围的数据会在导入预览中标记为异常，需人工确认。', 7);
+dictionary.getRange('A3:G3').values = [['指标代码','指标名称','单位','业务域','最小值','最大值','说明']];
 const dictionaryRows = [
-  ['height_cm','身高','cm','身体形态','身体测量建议直接填身体测量表'],['weight_kg','体重','kg','身体形态','身体测量建议直接填身体测量表'],['squat_kg','深蹲','kg','力量','力量素质测试'],['deadlift_kg','硬拉','kg','力量','力量素质测试'],['bench_press_kg','卧推','kg','力量','力量素质测试'],['bench_pull_kg','卧拉','kg','力量','力量素质测试'],['clean_kg','高翻','kg','爆发力','力量素质测试'],['vertical_jump_cm','纵跳','cm','爆发力','力量素质测试'],['pull_ups_reps','引体向上','次','力量耐力','力量素质测试'],['sit_reach_cm','坐位体前屈','cm','柔韧','力量素质测试'],['front_plank_sec','俯卧支撑','秒','核心','力量素质测试'],['side_plank_sec','侧支撑','秒','核心','左右侧分别记录']
-  ,['fms_deep_squat','FMS深蹲','分','FMS','优先使用FMS测试工作表'],['fms_hurdle_step','FMS跨栏步','分','FMS','优先使用FMS测试工作表'],['fms_inline_lunge','FMS直线弓步蹲','分','FMS','优先使用FMS测试工作表'],['fms_shoulder_mobility','FMS肩部灵活性','分','FMS','优先使用FMS测试工作表'],['fms_active_straight_leg_raise','FMS主动直腿上抬','分','FMS','优先使用FMS测试工作表'],['fms_trunk_stability_pushup','FMS躯干稳定俯卧撑','分','FMS','优先使用FMS测试工作表'],['fms_rotary_stability','FMS旋转稳定性','分','FMS','优先使用FMS测试工作表'],['general_endurance_score','一般耐力','分','冠军模型','优先使用冠军模型测试工作表'],['vo2max_ml_kg_min','最大摄氧量','ml/kg/min','冠军模型','优先使用冠军模型测试工作表'],['asymmetry_index_pct','不对称指数','%','冠军模型','优先使用冠军模型测试工作表'],['cmj_peak_power_w','CMJ峰值功率','W','冠军模型','优先使用冠军模型测试工作表'],['anaerobic_power_wkg','无氧功率','W/kg','冠军模型','优先使用冠军模型测试工作表'],['imtp_peak_force_n','IMTP峰值力量','N','冠军模型','优先使用冠军模型测试工作表'],['core_strength_score','核心力量','分','冠军模型','优先使用冠军模型测试工作表']
+  ['height_cm','身高','cm','身体形态',100,230,'建议直接填身体测量表'],['weight_kg','体重','kg','身体形态',30,200,'建议直接填身体测量表'],['squat_kg','深蹲','kg','力量',0,450,'力量素质测试'],['deadlift_kg','硬拉','kg','力量',0,500,'力量素质测试'],['bench_press_kg','卧推','kg','力量',0,350,'力量素质测试'],['bench_pull_kg','卧拉','kg','力量',0,350,'力量素质测试'],['clean_kg','高翻','kg','爆发力',0,300,'力量素质测试'],['vertical_jump_cm','纵跳','cm','爆发力',0,120,'力量素质测试'],['pull_ups_reps','引体向上','次','力量耐力',0,100,'力量素质测试'],['sit_reach_cm','坐位体前屈','cm','柔韧',-30,60,'力量素质测试'],['front_plank_sec','俯卧支撑','秒','核心',0,900,'力量素质测试'],['side_plank_sec','侧支撑','秒','核心',0,900,'左右侧分别记录'],
+  ['fms_deep_squat','FMS深蹲','分','FMS',0,3,'优先使用FMS测试工作表'],['fms_hurdle_step','FMS跨栏步','分','FMS',0,3,'优先使用FMS测试工作表'],['fms_inline_lunge','FMS直线弓步蹲','分','FMS',0,3,'优先使用FMS测试工作表'],['fms_shoulder_mobility','FMS肩部灵活性','分','FMS',0,3,'优先使用FMS测试工作表'],['fms_active_straight_leg_raise','FMS主动直腿上抬','分','FMS',0,3,'优先使用FMS测试工作表'],['fms_trunk_stability_pushup','FMS躯干稳定俯卧撑','分','FMS',0,3,'优先使用FMS测试工作表'],['fms_rotary_stability','FMS旋转稳定性','分','FMS',0,3,'优先使用FMS测试工作表'],['general_endurance_score','一般耐力','分','冠军模型',0,100,'优先使用冠军模型测试工作表'],['vo2max_ml_kg_min','最大摄氧量','ml/kg/min','冠军模型',20,90,'优先使用冠军模型测试工作表'],['asymmetry_index_pct','不对称指数','%','冠军模型',0,30,'优先使用冠军模型测试工作表'],['cmj_peak_power_w','CMJ峰值功率','W','冠军模型',500,8000,'优先使用冠军模型测试工作表'],['anaerobic_power_wkg','无氧功率','W/kg','冠军模型',1,30,'优先使用冠军模型测试工作表'],['imtp_peak_force_n','IMTP峰值力量','N','冠军模型',500,6000,'优先使用冠军模型测试工作表'],['core_strength_score','核心力量','分','冠军模型',0,100,'优先使用冠军模型测试工作表']
 ];
-dictionary.getRangeByIndexes(3, 0, dictionaryRows.length, 5).values = dictionaryRows;
-dictionary.getRangeByIndexes(2, 0, dictionaryRows.length + 1, 5).format = { borders:{preset:'all',style:'thin',color:'#D9E1EC'}, wrapText:true };
-dictionary.getRange('A3:E3').format = { fill:dark, font:{bold:true,color:'#FFFFFF'}, horizontalAlignment:'center' };
-dictionary.getRange('A:E').format.columnWidth = 20;
+dictionary.getRangeByIndexes(3, 0, dictionaryRows.length, 7).values = dictionaryRows;
+dictionary.getRangeByIndexes(2, 0, dictionaryRows.length + 1, 7).format = { borders:{preset:'all',style:'thin',color:'#D9E1EC'}, wrapText:true };
+dictionary.getRange('A3:G3').format = { fill:dark, font:{bold:true,color:'#FFFFFF'}, horizontalAlignment:'center' };
+dictionary.getRange('A:G').format.columnWidth = 18;
 dictionary.freezePanes.freezeRows(3);
 
 await fs.mkdir(outputDir, { recursive: true });
@@ -194,7 +197,7 @@ if (!filledMode) {
 
 const inspection = await workbook.inspect({ kind: 'sheet,region', maxChars: 9000, tableMaxRows: 5, tableMaxCols: 12 });
 console.log(inspection.ndjson);
-for (const sheetName of ['填写说明','运动员信息','身体测量','恢复状态','训练课次','力量训练组次','测试指标','FMS测试','冠军模型测试','伤病记录','竞技状态','数据字典']) {
+for (const sheetName of ['填写说明','运动员信息','竞技水平评估','身体测量','恢复状态','训练课次','力量训练组次','测试指标','FMS测试','冠军模型测试','伤病记录','竞技状态','数据字典']) {
   const image = await workbook.render({ sheetName, range: sheetName === '填写说明' ? 'A1:F10' : 'A1:J10', scale: 1, format: 'png' });
   await fs.writeFile(path.join(outputDir, `${sheetName}.png`), new Uint8Array(await image.arrayBuffer()));
 }

@@ -5,7 +5,7 @@ import { inferStrengthBodyPosition, inferStrengthCategory } from '../shared/stre
 
 // v4：统一 CJK 兼容字形，避免“张欣⾬ / 张欣雨”被拆成两名运动员。
 // 同一文件重新上传时会按新版本重新解析，而不是复用旧的待审核批次。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v4-unified-template';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v5-competitive-level-template';
 
 export type ImportAthlete = {
   id: number;
@@ -536,7 +536,20 @@ const CHAMPION_TEMPLATE_METRICS = [
   ['核心力量评分', 'core_strength_score', '核心力量', '分']
 ] as const;
 
-const STANDARD_SHEETS = new Set(['运动员信息', '身体测量', '恢复状态', '训练课次', '力量训练组次', '测试指标', 'FMS测试', '冠军模型测试', '伤病记录', '竞技状态']);
+const TECHNICAL_LEVELS = ['国际级运动健将', '运动健将', '一级运动员', '二级运动员', '三级运动员'] as const;
+
+function normalizeTechnicalLevel(value: unknown) {
+  const level = text(value).replace(/\s/g, '');
+  if (!level) return '';
+  if (/国际.*健将/.test(level)) return '国际级运动健将';
+  if (/^(国家)?运动健将$/.test(level)) return '运动健将';
+  if (/(国家)?一级(运动员)?/.test(level)) return '一级运动员';
+  if (/(国家)?二级(运动员)?/.test(level)) return '二级运动员';
+  if (/(国家)?三级(运动员)?/.test(level)) return '三级运动员';
+  return level;
+}
+
+const STANDARD_SHEETS = new Set(['运动员信息', '竞技水平评估', '身体测量', '恢复状态', '训练课次', '力量训练组次', '测试指标', 'FMS测试', '冠军模型测试', '伤病记录', '竞技状态']);
 
 function standardHeader(matrix: Matrix) {
   const rowIndex = matrix.slice(0, 12).findIndex((row) => row?.some((value) => normalizedText(value) === '姓名'));
@@ -594,18 +607,32 @@ function parseStandardSheet(matrix: Matrix, sheet: string, project: string, file
         region: standardText(row, header.columns, '省份'), city: standardText(row, header.columns, '城市'), county: standardText(row, header.columns, '区县'),
         ethnicity: standardText(row, header.columns, '民族'), phone: standardText(row, header.columns, '手机号'), bloodType: standardText(row, header.columns, '血型'),
         emergencyContact: standardText(row, header.columns, '紧急联系人'), emergencyPhone: standardText(row, header.columns, '紧急电话'),
-        education: standardText(row, header.columns, '学历'), technicalLevel: standardText(row, header.columns, '技术等级'), position: standardText(row, header.columns, '位置号位'),
+        education: standardText(row, header.columns, '学历'), technicalLevel: normalizeTechnicalLevel(standardValue(row, header.columns, '技术等级')), position: standardText(row, header.columns, '位置号位'),
         healthStatus: standardText(row, header.columns, '身体状态'), bestResult: standardText(row, header.columns, '最好成绩'), nativePlace: standardText(row, header.columns, '籍贯'),
         homeAddress: standardText(row, header.columns, '家庭住址'), athleteStatus: standardText(row, header.columns, '训练状态'), startSportDate: parseDate(standardValue(row, header.columns, '开始运动日期'), year),
         trainingVenue: standardText(row, header.columns, '训练场地'), currentEvent: standardText(row, header.columns, '备战赛事'), trainingPhase: standardText(row, header.columns, '备战阶段'),
         campPeriod: standardText(row, header.columns, '集训时间'), originPlace: standardText(row, header.columns, '输送地'), originUnit: standardText(row, header.columns, '输送单位'),
         originCoach: standardText(row, header.columns, '输送教练'), specialties: standardText(row, header.columns, '优势项'), notes: standardText(row, header.columns, '备注')
       };
+      if (payload.technicalLevel && !TECHNICAL_LEVELS.includes(payload.technicalLevel as typeof TECHNICAL_LEVELS[number])) messages.push('错误：技术等级须为国际级运动健将、运动健将、一级运动员、二级运动员或三级运动员');
       items.push(itemBase({ ...base, itemType: 'athlete_profile', payload, rawValue: rawName, quality: makeQuality(messages), messages, businessKey: `${normalizedName(rawName)}|profile` }));
       continue;
     }
 
-    if (sheet === '身体测量') {
+    if (sheet === '竞技水平评估') {
+      const technicalLevel = normalizeTechnicalLevel(standardValue(row, header.columns, '技术等级'));
+      const bestResult = standardText(row, header.columns, '最好成绩');
+      const overallScore = numberValue(standardValue(row, header.columns, '竞技总分'));
+      const stateLevel = standardText(row, header.columns, '竞技状态') || '建设';
+      if (!technicalLevel) messages.push('错误：技术等级不能为空');
+      else if (!TECHNICAL_LEVELS.includes(technicalLevel as typeof TECHNICAL_LEVELS[number])) messages.push('错误：技术等级须为国际级运动健将、运动健将、一级运动员、二级运动员或三级运动员');
+      if (overallScore === null || overallScore < 0 || overallScore > 100) messages.push('错误：竞技总分须在0—100之间');
+      if (!['巅峰','良好','建设','调整','peak','good','build','adjust'].includes(stateLevel)) messages.push('错误：竞技状态等级不在允许范围内');
+      const profilePayload = { technicalLevel, bestResult };
+      items.push(itemBase({ ...base, itemType: 'athlete_profile', payload: profilePayload, rawValue: technicalLevel, quality: makeQuality(messages), messages: [...messages], businessKey: `${athlete?.id || normalizedName(rawName)}|competitive-profile` }));
+      const payload = { overallScore, stateLevel, enduranceScore: numberValue(standardValue(row, header.columns, '专项耐力')), powerScore: numberValue(standardValue(row, header.columns, '力量爆发')), techniqueScore: numberValue(standardValue(row, header.columns, '技术效率')), loadAdaptationScore: numberValue(standardValue(row, header.columns, '负荷适应')), recoveryScore: numberValue(standardValue(row, header.columns, '恢复能力')), competitionScore: numberValue(standardValue(row, header.columns, '比赛能力')), note: standardText(row, header.columns, '备注') };
+      items.push(itemBase({ ...base, itemType: 'competitive_state', eventDate: rowDate, metricLabel: '竞技状态', valueNum: overallScore, unit: '分', payload, rawValue: String(overallScore ?? ''), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|competitive` }));
+    } else if (sheet === '身体测量') {
       const fields: Record<string, number | null> = {};
       const mappings = [['heightCm', '身高cm'], ['weightKg', '体重kg'], ['bodyFatPct', '体脂率%'], ['skeletalMuscleKg', '骨骼肌kg'], ['muscleMassKg', '肌肉量kg'], ['upperLimbMuscleKg', '上肢肌肉kg'], ['lowerLimbMuscleKg', '下肢肌肉kg'], ['trunkMuscleKg', '躯干肌肉kg'], ['visceralFatLevel', '内脏脂肪等级'], ['basalMetabolismKcal', '基础代谢kcal'], ['totalBodyWaterKg', '总水分kg'], ['ecwTbwRatio', '细胞外水比'], ['phaseAngleDeg', '相位角°']];
       for (const [key, label] of mappings) fields[key] = numberValue(standardValue(row, header.columns, label));

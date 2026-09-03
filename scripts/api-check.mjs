@@ -57,6 +57,11 @@ try {
   const adminLogin = await request('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'admin01', password: 'demo123' }) });
   const adminToken = adminLogin.payload.token;
   assert(adminLogin.status === 200 && adminToken && adminLogin.payload.user.role === 'DMD', '数据监控总监登录或角色迁移失败');
+  const unifiedExport = await fetch(`${base}/api/data-import/export?project=${encodeURIComponent('赛艇')}`, {
+    headers: { authorization: `Bearer ${adminToken}` }
+  });
+  const unifiedExportBuffer = await unifiedExport.arrayBuffer();
+  assert(unifiedExport.status === 200 && unifiedExport.headers.get('content-type')?.includes('spreadsheetml') && unifiedExportBuffer.byteLength > 2048, '统一数据导出接口失败');
 
   const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
   const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.project === '赛艇');

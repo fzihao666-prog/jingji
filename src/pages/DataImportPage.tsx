@@ -91,7 +91,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
-  const [busy, setBusy] = useState<"analyze" | "save" | "commit" | "load" | "template" | "">(
+  const [busy, setBusy] = useState<"analyze" | "save" | "commit" | "load" | "template" | "export" | "">(
     "",
   );
   const [message, setMessage] = useState("");
@@ -186,6 +186,20 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       setError(
         nextError instanceof Error ? nextError.message : "统一数据导入模板下载失败。",
       );
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const exportUnifiedData = async () => {
+    setBusy("export");
+    setError("");
+    setMessage("");
+    try {
+      await api.exportUnifiedData(project);
+      setMessage("当前权限范围内的运动员数据已开始导出，可直接作为统一导入模板使用。");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "统一数据导出失败。");
     } finally {
       setBusy("");
     }
@@ -390,6 +404,18 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <div>
               <strong>{busy === "template" ? "正在准备模板…" : "下载统一数据模板"}</strong>
               <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy)}
+            onClick={exportUnifiedData}
+          >
+            <FileSpreadsheet size={19} />
+            <div>
+              <strong>{busy === "export" ? "正在导出数据…" : "导出统一数据"}</strong>
+              <span>导出当前项目及权限范围内的全部已入库数据</span>
             </div>
           </button>
           <div className="data-import-safety">
