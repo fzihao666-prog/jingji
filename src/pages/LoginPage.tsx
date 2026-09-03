@@ -9,56 +9,56 @@ import { PROJECTS } from '../../shared/projects';
 type Mode = 'login' | 'register';
 
 const OLYMPIC_DISCIPLINES = [
-  { label: '射箭', english: 'Archery', col: 0, row: 0 },
-  { label: '花样游泳', english: 'Artistic Swimming', col: 1, row: 0 },
-  { label: '田径', english: 'Athletics', col: 2, row: 0 },
-  { label: '羽毛球', english: 'Badminton', col: 3, row: 0 },
-  { label: '棒球', english: 'Baseball', col: 4, row: 0 },
-  { label: '垒球', english: 'Softball', col: 5, row: 0 },
-  { label: '篮球', english: 'Basketball', col: 6, row: 0 },
-  { label: '三人篮球', english: 'Basketball 3X3', col: 0, row: 1 },
-  { label: '沙滩排球', english: 'Beach Volleyball', col: 1, row: 1 },
-  { label: '拳击', english: 'Boxing', col: 2, row: 1 },
-  { label: '激流回旋', english: 'Canoe Slalom', col: 3, row: 1 },
-  { label: '静水皮划艇', english: 'Canoe Sprint', col: 4, row: 1 },
-  { label: '自由式小轮车', english: 'Cycling BMX Freestyle', col: 5, row: 1 },
-  { label: '竞速小轮车', english: 'Cycling BMX Racing', col: 6, row: 1 },
-  { label: '山地自行车', english: 'Cycling Mountain Bike', col: 0, row: 2 },
-  { label: '公路自行车', english: 'Cycling Road', col: 1, row: 2 },
-  { label: '场地自行车', english: 'Cycling Track', col: 2, row: 2 },
-  { label: '跳水', english: 'Diving', col: 3, row: 2 },
-  { label: '盛装舞步', english: 'Equestrian Dressage', col: 4, row: 2 },
-  { label: '马术三项', english: 'Equestrian Eventing', col: 5, row: 2 },
-  { label: '场地障碍', english: 'Equestrian Jumping', col: 6, row: 2 },
-  { label: '击剑', english: 'Fencing', col: 0, row: 3 },
-  { label: '足球', english: 'Football', col: 1, row: 3 },
-  { label: '高尔夫', english: 'Golf', col: 2, row: 3 },
-  { label: '竞技体操', english: 'Gymnastics Artistic', col: 3, row: 3 },
-  { label: '艺术体操', english: 'Gymnastics Rhythmic', col: 4, row: 3 },
-  { label: '手球', english: 'Handball', col: 5, row: 3 },
-  { label: '曲棍球', english: 'Hockey', col: 6, row: 3 },
-  { label: '柔道', english: 'Judo', col: 0, row: 4 },
-  { label: '空手道·型', english: 'Karate Kata', col: 1, row: 4 },
-  { label: '空手道·组手', english: 'Karate Kumite', col: 2, row: 4 },
-  { label: '马拉松游泳', english: 'Marathon Swimming', col: 3, row: 4 },
-  { label: '现代五项', english: 'Modern Pentathlon', col: 4, row: 4 },
-  { label: '赛艇', english: 'Rowing', col: 5, row: 4 },
-  { label: '七人制橄榄球', english: 'Rugby', col: 6, row: 4 },
-  { label: '帆船', english: 'Sailing', col: 0, row: 5 },
-  { label: '射击', english: 'Shooting', col: 1, row: 5 },
-  { label: '滑板', english: 'Skateboarding', col: 2, row: 5 },
-  { label: '运动攀岩', english: 'Sport Climbing', col: 3, row: 5 },
-  { label: '冲浪', english: 'Surfing', col: 4, row: 5 },
-  { label: '游泳', english: 'Swimming', col: 5, row: 5 },
-  { label: '乒乓球', english: 'Table Tennis', col: 6, row: 5 },
-  { label: '跆拳道', english: 'Taekwondo', col: 0, row: 6 },
-  { label: '网球', english: 'Tennis', col: 1, row: 6 },
-  { label: '蹦床', english: 'Trampoline', col: 2, row: 6 },
-  { label: '铁人三项', english: 'Triathlon', col: 3, row: 6 },
-  { label: '排球', english: 'Volleyball', col: 4, row: 6 },
-  { label: '水球', english: 'Water Polo', col: 5, row: 6 },
-  { label: '举重', english: 'Weightlifting', col: 6, row: 6 },
-  { label: '摔跤', english: 'Wrestling', col: 0, row: 7 }
+  { label: '射箭', english: 'Archery', gif:'/assets/olympic-sports/archery.gif' },
+  { label: '花样游泳', english: 'Artistic Swimming', gif:'/assets/olympic-sports/artistic swimming.gif', col: 1, row: 0 },
+  { label: '田径', english: 'Athletics', gif:'/assets/olympic-sports/athletics.gif', col: 2, row: 0 },
+  { label: '羽毛球', english: 'Badminton', gif:'/assets/olympic-sports/badminton.gif', col: 3, row: 0 },
+  { label: '棒球', english: 'Baseball', gif:'/assets/olympic-sports/baseball.gif', col: 4, row: 0 },
+  { label: '垒球', english: 'Softball', gif:'/assets/olympic-sports/softball.gif', col: 5, row: 0 },
+  { label: '篮球', english: 'Basketball', gif:'/assets/olympic-sports/basketball.gif', col: 6, row: 0 },
+  { label: '三人篮球', english: 'Basketball 3X3', gif:'/assets/olympic-sports/3x3 basketball.gif', col: 0, row: 1 },
+  { label: '沙滩排球', english: 'Beach Volleyball', gif:'/assets/olympic-sports/beach volleyball.gif', col: 1, row: 1 },
+  { label: '拳击', english: 'Boxing', gif:'/assets/olympic-sports/boxing.gif', col: 2, row: 1 },
+  { label: '激流回旋', english: 'Canoe Slalom', gif:'/assets/olympic-sports/canoe_slalom.gif', col: 3, row: 1 },
+  { label: '静水皮划艇', english: 'Canoe Sprint', gif:'/assets/olympic-sports/canoe_sprint.gif', col: 4, row: 1 },
+  { label: '自由式小轮车', english: 'Cycling BMX Freestyle', gif:'/assets/olympic-sports/cycling_bmx_freestyle.gif', col: 5, row: 1 },
+  { label: '竞速小轮车', english: 'Cycling BMX Racing', gif:'/assets/olympic-sports/cycling_bmx_racing.gif', col: 6, row: 1 },
+  { label: '山地自行车', english: 'Cycling Mountain Bike', gif:'/assets/olympic-sports/cycling_mountain_bike.gif', col: 0, row: 2 },
+  { label: '公路自行车', english: 'Cycling Road', gif:'/assets/olympic-sports/cycling_road.gif', col: 1, row: 2 },
+  { label: '场地自行车', english: 'Cycling Track', gif:'/assets/olympic-sports/cycling_track.gif', col: 2, row: 2 },
+  { label: '跳水', english: 'Diving', gif:'/assets/olympic-sports/diving.gif', col: 3, row: 2 },
+  { label: '盛装舞步', english: 'Equestrian Dressage', gif:'/assets/olympic-sports/equestrian_dressage.gif', col: 4, row: 2 },
+  { label: '马术三项', english: 'Equestrian Eventing', gif:'/assets/olympic-sports/equestrian_eventing.gif', col: 5, row: 2 },
+  { label: '场地障碍', english: 'Equestrian Jumping', gif:'/assets/olympic-sports/equestrian_jumping.gif', col: 6, row: 2 },
+  { label: '击剑', english: 'Fencing', gif:'/assets/olympic-sports/fencing.gif', col: 0, row: 3 },
+  { label: '足球', english: 'Football', gif:'/assets/olympic-sports/football.gif', col: 1, row: 3 },
+  { label: '高尔夫', english: 'Golf', gif:'/assets/olympic-sports/golf.gif', col: 2, row: 3 },
+  { label: '竞技体操', english: 'Gymnastics Artistic', gif:'/assets/olympic-sports/gymnastics_artistic.gif', col: 3, row: 3 },
+  { label: '艺术体操', english: 'Gymnastics Rhythmic', gif:'/assets/olympic-sports/gymnastics_rhythmic.gif', col: 4, row: 3 },
+  { label: '手球', english: 'Handball', gif:'/assets/olympic-sports/handball.gif', col: 5, row: 3 },
+  { label: '曲棍球', english: 'Hockey', gif:'/assets/olympic-sports/hockey.gif', col: 6, row: 3 },
+  { label: '柔道', english: 'Judo', gif:'/assets/olympic-sports/judo.gif', col: 0, row: 4 },
+  { label: '空手道·型', english: 'Karate Kata', gif:'/assets/olympic-sports/karate_kata.gif', col: 1, row: 4 },
+  { label: '空手道·组手', english: 'Karate Kumite', gif:'/assets/olympic-sports/karate_kumite.gif', col: 2, row: 4 },
+  { label: '马拉松游泳', english: 'Marathon Swimming', gif:'/assets/olympic-sports/marathon_swimming.gif', col: 3, row: 4 },
+  { label: '现代五项', english: 'Modern Pentathlon', gif:'/assets/olympic-sports/modern_pentathlon.gif', col: 4, row: 4 },
+  { label: '赛艇', english: 'Rowing', gif:'/assets/olympic-sports/rowing.gif', col: 5, row: 4 },
+  { label: '七人制橄榄球', english: 'Rugby', gif:'/assets/olympic-sports/rugby.gif', col: 6, row: 4 },
+  { label: '帆船', english: 'Sailing', gif:'/assets/olympic-sports/sailing.gif', col: 0, row: 5 },
+  { label: '射击', english: 'Shooting', gif:'/assets/olympic-sports/shooting.gif', col: 1, row: 5 },
+  { label: '滑板', english: 'Skateboarding', gif:'/assets/olympic-sports/skateboarding.gif', col: 2, row: 5 },
+  { label: '运动攀岩', english: 'Sport Climbing', gif:'/assets/olympic-sports/sport_climbing.gif', col: 3, row: 5 },
+  { label: '冲浪', english: 'Surfing', gif:'/assets/olympic-sports/surfing.gif', col: 4, row: 5 },
+  { label: '游泳', english: 'Swimming', gif:'/assets/olympic-sports/swimming.gif', col: 5, row: 5 },
+  { label: '乒乓球', english: 'Table Tennis', gif:'/assets/olympic-sports/table_tennis.gif', col: 6, row: 5 },
+  { label: '跆拳道', english: 'Taekwondo', gif:'/assets/olympic-sports/taekwondo.gif', col: 0, row: 6 },
+  { label: '网球', english: 'Tennis', gif:'/assets/olympic-sports/tennis.gif', col: 1, row: 6 },
+  { label: '蹦床', english: 'Trampoline', gif:'/assets/olympic-sports/trampoline.gif', col: 2, row: 6 },
+  { label: '铁人三项', english: 'Triathlon', gif:'/assets/olympic-sports/triathlon.gif', col: 3, row: 6 },
+  { label: '排球', english: 'Volleyball', gif:'/assets/olympic-sports/volleyball.gif', col: 4, row: 6 },
+  { label: '水球', english: 'Water Polo', gif:'/assets/olympic-sports/water_polo.gif', col: 5, row: 6 },
+  { label: '举重', english: 'Weightlifting', gif:'/assets/olympic-sports/weightlifting.gif', col: 6, row: 6 },
+  { label: '摔跤', english: 'Wrestling', gif:'/assets/olympic-sports/wrestling.gif', col: 0, row: 7 }
 ] as const;
 
 const OLYMPIC_SPRITE_ROW_Y = [-16, -73, -131, -186, -246, -300, -358, -408] as const;
@@ -168,27 +168,32 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
             <h1>让每一次训练，<br /><em>都成为突破的依据</em></h1>
           </div>
         </div>
-
         <div className="olympic-pictogram-panel">
-          <div className="olympic-sports-grid" role="list" aria-label="奥运运动项目图标总览">
+          <div
+            className="olympic-sports-grid"
+            role="list"
+            aria-label="奥运运动项目图标总览"
+          >
             {OLYMPIC_DISCIPLINES.map((discipline) => (
               <article
                 className="olympic-sport"
                 key={discipline.english}
                 role="listitem"
                 title={`${discipline.label} / ${discipline.english}`}
-                style={{
-                  '--sport-x': `${-17 - discipline.col * 48.5}px`,
-                  '--sport-y': `${OLYMPIC_SPRITE_ROW_Y[discipline.row]}px`
-                } as CSSProperties}
               >
-                <span className="olympic-sport-icon" aria-hidden="true"><img src="/assets/olympic-sports-pictograms.png" alt="" /></span>
+                <span
+                  className="olympic-sport-icon"
+                  aria-hidden="true"
+                >
+                  <img
+                    src={discipline.gif}
+                    alt=""
+                  />
+                </span>
+
                 <span>{discipline.label}</span>
               </article>
             ))}
-          </div>
-          <div className="olympic-panel-footer">
-            <span>JINGJI PERFORMANCE PLATFORM</span>
           </div>
         </div>
       </section>

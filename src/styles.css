@@ -173,7 +173,7 @@ h1, h2, h3, p { margin: 0; }
 .olympic-pictogram-panel {
   position: relative;
   z-index: 2;
-  margin-top: auto;
+  margin-top: 8px;
   padding: clamp(11px, 1.15vw, 17px) clamp(10px, 1.2vw, 18px) 10px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,.62);
@@ -200,8 +200,28 @@ h1, h2, h3, p { margin: 0; }
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 .olympic-sport:hover { z-index: 2; transform: translateY(-3px); border-color: #86c9cc; box-shadow: 0 7px 16px rgba(11, 55, 79, .12); }
-.olympic-sport-icon { position: relative; flex: 0 0 auto; width: 48px; height: 36px; overflow: hidden; display: block; }
-.olympic-sport-icon img { position: absolute; max-width: none; width: 366px; height: auto; left: var(--sport-x); top: var(--sport-y); mix-blend-mode: multiply; }
+
+.olympic-sport-icon {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  display: block;
+  line-height: 0;
+  border-radius: 8px;
+}
+
+.olympic-sport-icon img {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  transform: scale(1.5);
+}
 .olympic-sport > span:last-child { max-width: 100%; min-height: 13px; overflow: hidden; color: #21415e; font-size: clamp(7px, .62vw, 10px); line-height: 1.15; font-weight: 700; text-align: center; white-space: nowrap; text-overflow: ellipsis; }
 .olympic-panel-footer { min-height: 22px; margin-top: 7px; padding: 6px 3px 0; border-top: 1px solid #e5ecef; display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
 .olympic-panel-footer p { color: #0d6671; font-size: 10px; font-weight: 800; letter-spacing: .14em; }
