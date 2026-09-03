@@ -165,7 +165,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
         <div className="olympic-story-heading">
           <div>
             <p><span /> OLYMPIC DISCIPLINES</p>
-            <h1>让每一道训练痕迹，<br /><em>都成为突破的依据</em></h1>
+            <h1>让每一次训练，<br /><em>都成为突破的依据</em></h1>
           </div>
         </div>
 
