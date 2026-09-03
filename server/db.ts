@@ -936,7 +936,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS data_import_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT NOT NULL,
-    item_type TEXT NOT NULL CHECK(item_type IN ('training_set', 'test_measurement', 'body_measurement', 'scoring_rule')),
+    item_type TEXT NOT NULL CHECK(item_type IN ('athlete_profile', 'wellness', 'training_session', 'training_set', 'test_measurement', 'body_measurement', 'injury_record', 'competitive_state', 'scoring_rule')),
     athlete_id INTEGER,
     raw_athlete_name TEXT NOT NULL DEFAULT '',
     event_date TEXT NOT NULL DEFAULT '',
@@ -1102,6 +1102,51 @@ if (!hasColumn('athletes', 'source')) {
 }
 if (!hasColumn('athletes', 'data_import_batch_id')) {
   db.exec('ALTER TABLE athletes ADD COLUMN data_import_batch_id TEXT');
+}
+
+// SQLite 不能直接修改 CHECK 约束。旧库升级时仅重建导入暂存表，完整复制批次数据；
+// 正式运动员、训练与测试数据表不会被改写或清空。
+const importItemTableDefinition = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'data_import_items'")
+  .get() as { sql: string } | undefined;
+if (importItemTableDefinition?.sql && !importItemTableDefinition.sql.includes("'athlete_profile'")) {
+  db.exec('PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON;');
+  try {
+    db.exec(`
+      BEGIN IMMEDIATE;
+      ALTER TABLE data_import_items RENAME TO data_import_items_legacy_types;
+      CREATE TABLE data_import_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id TEXT NOT NULL,
+        item_type TEXT NOT NULL CHECK(item_type IN ('athlete_profile', 'wellness', 'training_session', 'training_set', 'test_measurement', 'body_measurement', 'injury_record', 'competitive_state', 'scoring_rule')),
+        athlete_id INTEGER,
+        raw_athlete_name TEXT NOT NULL DEFAULT '', event_date TEXT NOT NULL DEFAULT '',
+        session_label TEXT NOT NULL DEFAULT '', test_type TEXT NOT NULL DEFAULT '',
+        metric_code TEXT NOT NULL DEFAULT '', metric_label TEXT NOT NULL DEFAULT '',
+        side TEXT NOT NULL DEFAULT 'center' CHECK(side IN ('left', 'right', 'bilateral', 'center')),
+        value_num REAL, unit TEXT NOT NULL DEFAULT '', exercise_name TEXT NOT NULL DEFAULT '',
+        set_index INTEGER NOT NULL DEFAULT 1, target_reps REAL, actual_reps REAL,
+        actual_weight_kg REAL, intensity_percent REAL, payload_json TEXT NOT NULL DEFAULT '{}',
+        source_sheet TEXT NOT NULL, source_address TEXT NOT NULL, raw_value TEXT NOT NULL DEFAULT '',
+        quality TEXT NOT NULL CHECK(quality IN ('valid', 'warning', 'error', 'skipped')),
+        messages_json TEXT NOT NULL DEFAULT '[]', business_key TEXT NOT NULL DEFAULT '',
+        committed_entity_type TEXT NOT NULL DEFAULT '', committed_entity_id INTEGER,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (batch_id, item_type, source_sheet, source_address, metric_code, side, set_index),
+        FOREIGN KEY (batch_id) REFERENCES data_import_batches(id) ON DELETE CASCADE,
+        FOREIGN KEY (athlete_id) REFERENCES athletes(id)
+      );
+      INSERT INTO data_import_items SELECT * FROM data_import_items_legacy_types;
+      DROP TABLE data_import_items_legacy_types;
+      CREATE INDEX IF NOT EXISTS idx_data_import_items_batch_quality ON data_import_items (batch_id, quality, item_type);
+      CREATE INDEX IF NOT EXISTS idx_data_import_items_athlete_date ON data_import_items (athlete_id, event_date, item_type);
+      COMMIT;
+    `);
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.exec('PRAGMA legacy_alter_table = OFF; PRAGMA foreign_keys = ON;');
+  }
 }
 
 const bodyMeasurementColumns = [

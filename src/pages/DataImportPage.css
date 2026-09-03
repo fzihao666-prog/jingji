@@ -44,6 +44,12 @@
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.08);
 }
+
+.data-import-hero-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
 .data-import-safety div,
 .data-import-card-heading div {
   display: flex;
@@ -162,6 +168,37 @@
   font-weight: 850;
   cursor: pointer;
 }
+
+.data-import-template {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  padding: 13px 15px;
+  border: 1px solid rgba(36, 107, 253, 0.22);
+  border-radius: 12px;
+  color: #174ea6;
+  background: #f4f8ff;
+  text-decoration: none;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.data-import-template:hover {
+  border-color: rgba(36, 107, 253, 0.48);
+  background: #edf4ff;
+  transform: translateY(-1px);
+}
+
+.data-import-template:disabled {
+  cursor: wait;
+  opacity: 0.65;
+  transform: none;
+}
+
+.data-import-template div { display: grid; gap: 3px; }
+.data-import-template span { color: #60708a; font-size: 12px; }
 .data-import-upload-card > .data-import-primary {
   width: 100%;
   margin-top: 13px;
@@ -596,6 +633,11 @@
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .data-import-hero-actions {
+    width: 100%;
+    flex-direction: column;
+  }
   .data-import-safety {
     width: 100%;
     min-width: 0;
@@ -670,6 +712,25 @@
 .data-import-candidates .data-import-review-head > button:disabled {
   opacity: 0.45;
 }
+.data-import-candidate-bulk {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.data-import-candidate-bulk select,
+.data-import-candidate-bulk button {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #bdd7d4;
+  border-radius: 8px;
+  color: #11776f;
+  background: #f4faf9;
+  font-size: 8px;
+  font-weight: 800;
+}
+.data-import-candidate-bulk button { cursor: pointer; }
+.data-import-candidate-bulk button:disabled,
+.data-import-candidate-bulk select:disabled { cursor: not-allowed; opacity: 0.5; }
 .data-import-candidate-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -735,6 +796,12 @@
   }
 }
 @media (max-width: 720px) {
+  .data-import-candidates .data-import-review-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .data-import-candidate-bulk { width: 100%; }
+  .data-import-candidate-bulk select { flex: 1; }
   .data-import-candidate-grid {
     grid-template-columns: 1fr;
   }

@@ -3341,6 +3341,18 @@ function dataImportScope(user: AuthUser, project: string) {
   };
 }
 
+app.get('/api/data-import/template', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
+  // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
+  const templateName = '竞迹统一数据导入模板.xlsx';
+  const templatePath = [
+    resolve(process.cwd(), 'public', 'templates', templateName),
+    resolve(process.cwd(), 'dist', 'templates', templateName)
+  ].find(existsSync);
+  if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
+  res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.download(templatePath, templateName);
+});
+
 app.post('/api/data-import/analyze', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), dataImportUpload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: '请选择要导入的 Excel 文件。' });
@@ -3348,8 +3360,6 @@ app.post('/api/data-import/analyze', requireAuth, requireRole('SCC', 'PRJ', 'REG
     if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
     const scope = dataImportScope(req.authUser!, project);
     if (!scope.allowed) return res.status(403).json({ message: '当前账号在该项目下没有可导入的队伍权限。' });
-    const defaultTeam = cleanString(req.body?.defaultTeam);
-    if (defaultTeam && !scope.allowedTeams.has(defaultTeam)) return res.status(403).json({ message: '新运动员默认队伍不在当前账号权限范围内。' });
     const athletes = strengthImportCandidates(req.authUser!).filter((athlete) => athlete.project === project);
     const batch = analyzeDataImport({
       buffer: req.file.buffer,
@@ -3357,7 +3367,6 @@ app.post('/api/data-import/analyze', requireAuth, requireRole('SCC', 'PRJ', 'REG
       mimetype: req.file.mimetype,
       project,
       defaultDate: cleanString(req.body?.defaultDate),
-      defaultTeam,
       defaultArea: scope.defaultArea,
       userId: req.authUser!.id,
       athletes
@@ -3424,6 +3433,7 @@ app.post('/api/data-import/batches/:id/commit', requireAuth, requireRole('SCC', 
       userId: req.authUser!.id,
       creatorRole: req.authUser!.role,
       athletes: strengthImportCandidates(req.authUser!),
+      allowedTeams: dataImportScope(req.authUser!, getDataImportBatch(cleanString(req.params.id), req.authUser!.id).project).allowedTeams,
       conflictPolicy
     });
     res.json({ message: `已创建${result.createdAthletes || 0}名无账号运动员，写入${result.imported}条数据，跳过${result.skipped}条。`, ...result });
@@ -3672,14 +3682,42 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
   }
   const codes = standards.map((row) => row.code);
   const placeholders = codes.map(() => '?').join(',');
-  const measurements = db.prepare(`
-    SELECT tm.metric_code AS code, tm.value_num AS value, tm.target_value AS target,
+  const rawMeasurements = db.prepare(`
+    SELECT tm.metric_code AS code, tm.value_num AS value, tm.target_value AS target, tm.side,
       ts.test_date AS testDate, ts.id AS sessionId
     FROM test_sessions ts
     JOIN test_measurements tm ON tm.test_session_id = ts.id
-    WHERE ts.athlete_id = ? AND tm.metric_code IN (${placeholders})
-    ORDER BY tm.metric_code, ts.test_date DESC, ts.id DESC
-  `).all(athlete.id, ...codes) as Array<{ code: string; value: number; target: number | null; testDate: string; sessionId: number }>;
+    WHERE ts.athlete_id = ?
+    ORDER BY ts.test_date DESC, ts.id DESC
+  `).all(athlete.id) as Array<{ code: string; value: number; target: number | null; side: string; testDate: string; sessionId: number }>;
+  const canonicalCode = (code: string, side = 'center') => {
+    const aliases: Record<string, string> = {
+      height_cm: 'heightCm', arm_span_cm: 'armSpanCm', bench_press_kg: 'benchPressKg',
+      bench_pull_kg: 'benchPullKg', squat_kg: 'squatKg', deadlift_kg: 'deadliftKg',
+      front_plank_sec: 'frontPlankSec'
+    };
+    if (code === 'side_plank_sec') return side === 'left' ? 'leftPlankSec' : side === 'right' ? 'rightPlankSec' : code;
+    return aliases[code] || code;
+  };
+  const bodyMeasurements = db.prepare(`
+    SELECT measurement_date AS testDate, height_cm AS heightCm, body_fat_pct AS bodyFatPct,
+      skeletal_muscle_kg AS skeletalMuscleKg
+    FROM athlete_body_measurements
+    WHERE athlete_id = ?
+    ORDER BY measurement_date DESC, id DESC
+  `).all(athlete.id) as Array<{ testDate: string; heightCm: number | null; bodyFatPct: number | null; skeletalMuscleKg: number | null }>;
+  type ChampionMeasurement = { code: string; value: number; target: number | null; testDate: string; sessionId: number };
+  const bodyChampionMeasurements: ChampionMeasurement[] = bodyMeasurements.flatMap((item) => {
+    const values: Array<[string, number | null]> = [
+      ['heightCm', item.heightCm], ['body_fat_pct', item.bodyFatPct], ['skeletal_muscle_kg', item.skeletalMuscleKg]
+    ];
+    return values.flatMap(([code, value]) => typeof value === 'number' ? [{ code, value, target: null, testDate: item.testDate, sessionId: 0 }] : []);
+  });
+  const measurements: ChampionMeasurement[] = [
+    ...rawMeasurements.map((item) => ({ ...item, code: canonicalCode(item.code, item.side) })),
+    ...bodyChampionMeasurements
+  ].filter((item) => codes.includes(item.code));
+  measurements.sort((left, right) => left.code.localeCompare(right.code) || right.testDate.localeCompare(left.testDate) || right.sessionId - left.sessionId);
   const byCode = new Map<string, Array<{ value: number; target: number | null; testDate: string; sessionId: number }>>();
   for (const measurement of measurements) {
     byCode.set(measurement.code, [...(byCode.get(measurement.code) || []), measurement]);

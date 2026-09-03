@@ -373,12 +373,29 @@ export const api = {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
-  async analyzeDataImport(file: File, project: Project, defaultDate?: string, defaultTeam?: string) {
+  async downloadDataImportTemplate() {
+    const response = await fetch('/api/data-import/template', {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.message || '统一数据导入模板下载失败。');
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = '竞迹统一数据导入模板.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  },
+  async analyzeDataImport(file: File, project: Project, defaultDate?: string) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
     if (defaultDate) body.append('defaultDate', defaultDate);
-    if (defaultTeam) body.append('defaultTeam', defaultTeam);
     return request<{ batch: DataImportBatch }>('/api/data-import/analyze', { method: 'POST', body });
   },
   async dataImportBatches(project: Project) {

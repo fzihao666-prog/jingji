@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Clock3,
   Database,
+  Download,
   FileCheck2,
   FileSpreadsheet,
   RefreshCw,
@@ -52,9 +53,14 @@ function normalizeAthleteName(value: string) {
 }
 
 const ITEM_LABELS: Record<DataImportItem["itemType"], string> = {
+  athlete_profile: "运动员档案",
+  wellness: "恢复状态",
+  training_session: "训练课次",
   training_set: "训练组次",
   test_measurement: "力量测试",
   body_measurement: "身体测量",
+  injury_record: "伤病记录",
+  competitive_state: "竞技状态",
   scoring_rule: "评分规则",
 };
 
@@ -66,6 +72,10 @@ const STATUS_LABELS: Record<DataImportBatch["status"], string> = {
 };
 
 function displayValue(item: DataImportItem) {
+  if (item.itemType === "athlete_profile") return "基础档案与生源信息";
+  if (item.itemType === "wellness") return "每日恢复记录";
+  if (item.itemType === "training_session") return `${item.valueNum ?? 0} min`;
+  if (item.itemType === "injury_record") return item.metricLabel || "伤病记录";
   if (item.itemType === "training_set")
     return `${item.actualWeightKg ?? "—"} kg × ${item.actualReps ?? "—"} 次`;
   if (item.itemType === "scoring_rule")
@@ -77,11 +87,11 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [defaultDate, setDefaultDate] = useState("");
-  const [defaultTeam, setDefaultTeam] = useState("");
+  const [bulkCandidateTeam, setBulkCandidateTeam] = useState("");
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
-  const [busy, setBusy] = useState<"analyze" | "save" | "commit" | "load" | "">(
+  const [busy, setBusy] = useState<"analyze" | "save" | "commit" | "load" | "template" | "">(
     "",
   );
   const [message, setMessage] = useState("");
@@ -125,10 +135,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           (team) => team.project === project,
         );
         setTeams(available);
-        setDefaultTeam((current) =>
-          available.some((team) => team.name === current)
-            ? current
-            : available[0]?.name || "",
+        setBulkCandidateTeam((current) =>
+          available.some((team) => team.name === current) ? current : "",
         );
       })
       .catch((nextError) =>
@@ -148,7 +156,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         file,
         project,
         defaultDate || undefined,
-        defaultTeam || undefined,
       );
       setBatch(result.batch);
       setCorrections(new Map());
@@ -162,6 +169,22 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     } catch (nextError) {
       setError(
         nextError instanceof Error ? nextError.message : "文件解析失败。",
+      );
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const downloadTemplate = async () => {
+    setBusy("template");
+    setError("");
+    setMessage("");
+    try {
+      await api.downloadDataImportTemplate();
+      setMessage("统一数据导入模板已开始下载。");
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : "统一数据导入模板下载失败。",
       );
     } finally {
       setBusy("");
@@ -240,6 +263,20 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       });
       return next;
     });
+  };
+
+  const applyBulkCandidateTeam = () => {
+    if (!batch || !bulkCandidateTeam) {
+      setError("请先选择要批量分配的新运动员所属队伍。");
+      return;
+    }
+    const pending = batch.athleteCandidates.filter(
+      (candidate) => candidate.status === "pending",
+    );
+    if (!pending.length) return;
+    for (const candidate of pending)
+      patchAthleteCandidate(candidate.id, { team: bulkCandidateTeam });
+    setMessage(`已为${pending.length}名待创建运动员填入“${bulkCandidateTeam}”，请保存后提交。`);
   };
 
   const saveCorrections = async () => {
@@ -339,15 +376,28 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           <span>DATA INTAKE</span>
           <h1>统一数据导入</h1>
           <p>
-            确定性识别 Excel
-            中的训练执行、身体测量、力量测试和评分规则，审核通过后再写入正式数据库。
+            确定性识别 Excel 中的运动员档案、恢复、训练、身体测量、测试、伤病和竞技状态，审核通过后再写入正式数据库。
           </p>
         </div>
-        <div className="data-import-safety">
-          <Database size={20} />
-          <div>
-            <strong>先暂存，后入库</strong>
-            <span>原值、工作表和单元格坐标全程保留</span>
+        <div className="data-import-hero-actions">
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy)}
+            onClick={downloadTemplate}
+          >
+            <Download size={19} />
+            <div>
+              <strong>{busy === "template" ? "正在准备模板…" : "下载统一数据模板"}</strong>
+              <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
+            </div>
+          </button>
+          <div className="data-import-safety">
+            <Database size={20} />
+            <div>
+              <strong>先暂存，后入库</strong>
+              <span>原值、工作表和单元格坐标全程保留</span>
+            </div>
           </div>
         </div>
       </header>
@@ -389,21 +439,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               onChange={(event) => setDefaultDate(event.target.value)}
             />
             <small>可选；表内存在日期时仍优先保留表内日期</small>
-          </label>
-          <label className="data-import-date">
-            <span>新运动员默认队伍</span>
-            <select
-              value={defaultTeam}
-              onChange={(event) => setDefaultTeam(event.target.value)}
-            >
-              <option value="">请选择队伍</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.name}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-            <small>仅用于文件中尚未建档的运动员</small>
           </label>
           <button
             className="data-import-primary"
@@ -469,8 +504,29 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                   <span>NEW ATHLETES</span>
                   <h2>新运动员档案</h2>
                   <p>
-                    这些姓名未匹配到现有名册。提交时只创建人员档案，不创建登录账号；其余资料可稍后补充。
+                    这些姓名未匹配到现有名册。请先批量或逐人分配所属队伍；提交时只创建人员档案，不创建登录账号。
                   </p>
+                </div>
+                <div className="data-import-candidate-bulk">
+                  <select
+                    value={bulkCandidateTeam}
+                    disabled={batch.status !== "reviewing" || Boolean(busy)}
+                    onChange={(event) => setBulkCandidateTeam(event.target.value)}
+                  >
+                    <option value="">批量选择所属队伍</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.name}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={batch.status !== "reviewing" || Boolean(busy)}
+                    onClick={applyBulkCandidateTeam}
+                  >
+                    批量应用
+                  </button>
                 </div>
                 <button
                   disabled={
@@ -543,6 +599,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             })
                           }
                         >
+                          <option value="">请选择所属队伍</option>
                           {teams.map((team) => (
                             <option key={team.id} value={team.name}>
                               {team.name}

@@ -420,14 +420,13 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     };
   });
 
-  const latestDate = testDates[0];
-  const previousDate = testDates[1];
-  const latestRows = measurementRows.filter((row) => row.testDate === latestDate);
-  const previousRows = measurementRows.filter((row) => row.testDate === previousDate);
-  const codes = [...new Set(latestRows.map((row) => row.code))];
+  const codes = [...new Set(measurementRows.map((row) => row.code))];
   const measurements = codes.map((code) => {
-    const rows = latestRows.filter((row) => row.code === code);
-    const previous = previousRows.filter((row) => row.code === code);
+    const codeRows = measurementRows.filter((row) => row.code === code);
+    const latestDate = codeRows[0]?.testDate;
+    const previousDate = codeRows.find((row) => row.testDate !== latestDate)?.testDate;
+    const rows = codeRows.filter((row) => row.testDate === latestDate);
+    const previous = codeRows.filter((row) => row.testDate === previousDate);
     const value = average(rows.map((row) => row.value));
     const previousValue = average(previous.map((row) => row.value));
     return {

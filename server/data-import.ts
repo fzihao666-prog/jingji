@@ -3,7 +3,9 @@ import * as XLSX from '@e965/xlsx';
 import { db } from './db.ts';
 import { inferStrengthBodyPosition, inferStrengthCategory } from '../shared/strength-training.ts';
 
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v2-athlete-create';
+// v4：统一 CJK 兼容字形，避免“张欣⾬ / 张欣雨”被拆成两名运动员。
+// 同一文件重新上传时会按新版本重新解析，而不是复用旧的待审核批次。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v4-unified-template';
 
 export type ImportAthlete = {
   id: number;
@@ -13,7 +15,7 @@ export type ImportAthlete = {
   gender: string;
 };
 
-export type DataImportItemType = 'training_set' | 'test_measurement' | 'body_measurement' | 'scoring_rule';
+export type DataImportItemType = 'athlete_profile' | 'wellness' | 'training_session' | 'training_set' | 'test_measurement' | 'body_measurement' | 'injury_record' | 'competitive_state' | 'scoring_rule';
 export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
 
 export type ParsedImportItem = {
@@ -151,7 +153,9 @@ function normalizedText(value: unknown) {
 }
 
 function normalizedName(value: unknown) {
-  return text(value).normalize('NFKC').replace(/[\s·•]/g, '');
+  // 部分 Excel 会把“雨”等汉字写为 CJK 部首兼容字（例如“⾬”）。
+  // NFKC 不会统一这类字符，须先映射，避免同一运动员被误判为新建档案。
+  return text(value).normalize('NFKC').replaceAll('⾬', '雨').replace(/[\s·•]/g, '');
 }
 
 function numberValue(value: unknown): number | null {
@@ -508,6 +512,177 @@ function parseScoringSheet(matrix: Matrix, sheet: string, project: string, batch
   return items;
 }
 
+const FMS_TEMPLATE_METRICS = [
+  ['深蹲', 'fms_deep_squat', '深蹲'],
+  ['跨栏步', 'fms_hurdle_step', '跨栏步'],
+  ['直线弓步蹲', 'fms_inline_lunge', '直线弓步蹲'],
+  ['肩部灵活性', 'fms_shoulder_mobility', '肩部灵活性'],
+  ['主动直腿上抬', 'fms_active_straight_leg_raise', '主动直腿上抬'],
+  ['躯干稳定俯卧撑', 'fms_trunk_stability_pushup', '躯干稳定俯卧撑'],
+  ['旋转稳定性', 'fms_rotary_stability', '旋转稳定性']
+] as const;
+
+const CHAMPION_TEMPLATE_METRICS = [
+  ['身高cm', 'heightCm', '身高', 'cm'],
+  ['臂展cm', 'armSpanCm', '臂展', 'cm'],
+  ['体脂率%', 'body_fat_pct', '体脂率', '%'],
+  ['骨骼肌kg', 'skeletal_muscle_kg', '骨骼肌量', 'kg'],
+  ['一般耐力评分', 'general_endurance_score', '一般耐力', '分'],
+  ['VO2Max', 'vo2max_ml_kg_min', '最大摄氧量', 'ml/kg/min'],
+  ['不对称指数%', 'asymmetry_index_pct', '不对称指数', '%'],
+  ['CMJ峰值功率W', 'cmj_peak_power_w', 'CMJ峰值功率', 'W'],
+  ['无氧功率W/kg', 'anaerobic_power_wkg', '无氧功率', 'W/kg'],
+  ['IMTP峰值力量N', 'imtp_peak_force_n', 'IMTP峰值力量', 'N'],
+  ['核心力量评分', 'core_strength_score', '核心力量', '分']
+] as const;
+
+const STANDARD_SHEETS = new Set(['运动员信息', '身体测量', '恢复状态', '训练课次', '力量训练组次', '测试指标', 'FMS测试', '冠军模型测试', '伤病记录', '竞技状态']);
+
+function standardHeader(matrix: Matrix) {
+  const rowIndex = matrix.slice(0, 12).findIndex((row) => row?.some((value) => normalizedText(value) === '姓名'));
+  if (rowIndex < 0) return null;
+  const columns = new Map<string, number>();
+  for (let column = 0; column < (matrix[rowIndex]?.length || 0); column += 1) {
+    const key = normalizedText(matrix[rowIndex]?.[column]);
+    if (key) columns.set(key, column);
+  }
+  return { rowIndex, columns };
+}
+
+function standardValue(row: unknown[], columns: Map<string, number>, ...labels: string[]) {
+  for (const label of labels) {
+    const column = columns.get(normalizedText(label));
+    if (column !== undefined) return row[column];
+  }
+  return null;
+}
+
+function standardText(row: unknown[], columns: Map<string, number>, ...labels: string[]) {
+  return text(standardValue(row, columns, ...labels));
+}
+
+function parseStandardSheet(matrix: Matrix, sheet: string, project: string, filename: string, defaultDate: string, athletes: ImportAthlete[]) {
+  const header = standardHeader(matrix);
+  if (!header) return [];
+  const items: ParsedImportItem[] = [];
+  const year = workbookYear(filename);
+  for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex] || [];
+    const rawName = standardText(row, header.columns, '姓名');
+    if (!rawName || /^示例/.test(rawName)) continue;
+    const athlete = matchAthlete(rawName, project, athletes);
+    const rowDate = parseDate(standardValue(row, header.columns, '日期', '测量日期', '测试日期', '发生日期', '评估日期'), year) || defaultDate;
+    const messages: string[] = [];
+    if (!athlete) messages.push('警告：未匹配到已有运动员，提交时将创建无登录账号的待补全档案');
+    const base = {
+      athleteId: athlete?.id || null,
+      rawAthleteName: rawName,
+      sourceSheet: sheet,
+      sourceAddress: cellAddress(rowIndex, header.columns.get(normalizedText('姓名')) || 0),
+    };
+    if (sheet !== '运动员信息' && !validIsoDate(rowDate)) messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
+
+    if (sheet === '运动员信息') {
+      const identityNumber = standardText(row, header.columns, '身份证号');
+      const gender = standardText(row, header.columns, '性别');
+      if (identityNumber && !/^\d{17}[\dXx]$/.test(identityNumber)) messages.push('错误：身份证号应为18位，末位可为X');
+      if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
+      const payload = {
+        project: standardText(row, header.columns, '运动项目') || project,
+        team: standardText(row, header.columns, '所属队伍'), gender,
+        birthDate: parseDate(standardValue(row, header.columns, '出生日期'), year), identityNumber,
+        region: standardText(row, header.columns, '省份'), city: standardText(row, header.columns, '城市'), county: standardText(row, header.columns, '区县'),
+        ethnicity: standardText(row, header.columns, '民族'), phone: standardText(row, header.columns, '手机号'), bloodType: standardText(row, header.columns, '血型'),
+        emergencyContact: standardText(row, header.columns, '紧急联系人'), emergencyPhone: standardText(row, header.columns, '紧急电话'),
+        education: standardText(row, header.columns, '学历'), technicalLevel: standardText(row, header.columns, '技术等级'), position: standardText(row, header.columns, '位置号位'),
+        healthStatus: standardText(row, header.columns, '身体状态'), bestResult: standardText(row, header.columns, '最好成绩'), nativePlace: standardText(row, header.columns, '籍贯'),
+        homeAddress: standardText(row, header.columns, '家庭住址'), athleteStatus: standardText(row, header.columns, '训练状态'), startSportDate: parseDate(standardValue(row, header.columns, '开始运动日期'), year),
+        trainingVenue: standardText(row, header.columns, '训练场地'), currentEvent: standardText(row, header.columns, '备战赛事'), trainingPhase: standardText(row, header.columns, '备战阶段'),
+        campPeriod: standardText(row, header.columns, '集训时间'), originPlace: standardText(row, header.columns, '输送地'), originUnit: standardText(row, header.columns, '输送单位'),
+        originCoach: standardText(row, header.columns, '输送教练'), specialties: standardText(row, header.columns, '优势项'), notes: standardText(row, header.columns, '备注')
+      };
+      items.push(itemBase({ ...base, itemType: 'athlete_profile', payload, rawValue: rawName, quality: makeQuality(messages), messages, businessKey: `${normalizedName(rawName)}|profile` }));
+      continue;
+    }
+
+    if (sheet === '身体测量') {
+      const fields: Record<string, number | null> = {};
+      const mappings = [['heightCm', '身高cm'], ['weightKg', '体重kg'], ['bodyFatPct', '体脂率%'], ['skeletalMuscleKg', '骨骼肌kg'], ['muscleMassKg', '肌肉量kg'], ['upperLimbMuscleKg', '上肢肌肉kg'], ['lowerLimbMuscleKg', '下肢肌肉kg'], ['trunkMuscleKg', '躯干肌肉kg'], ['visceralFatLevel', '内脏脂肪等级'], ['basalMetabolismKcal', '基础代谢kcal'], ['totalBodyWaterKg', '总水分kg'], ['ecwTbwRatio', '细胞外水比'], ['phaseAngleDeg', '相位角°']];
+      for (const [key, label] of mappings) fields[key] = numberValue(standardValue(row, header.columns, label));
+      if (!Object.values(fields).some((value) => value !== null)) messages.push('错误：身体测量至少填写一个数值');
+      items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate, metricCode: 'body_composition', metricLabel: '身体成分', valueNum: fields.weightKg ?? fields.heightCm ?? 0, payload: { ...fields, note: standardText(row, header.columns, '备注') }, rawValue: JSON.stringify(fields), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|body` }));
+    } else if (sheet === '恢复状态') {
+      const payload = { sleepHours: numberValue(standardValue(row, header.columns, '睡眠小时')), sleepQuality: numberValue(standardValue(row, header.columns, '睡眠质量')), morningPulse: numberValue(standardValue(row, header.columns, '晨脉')), weightKg: numberValue(standardValue(row, header.columns, '体重kg')), fatigueIndex: numberValue(standardValue(row, header.columns, '疲劳')), sorenessIndex: numberValue(standardValue(row, header.columns, '肌肉酸痛')), moodIndex: numberValue(standardValue(row, header.columns, '情绪')), status: standardText(row, header.columns, '状态') || 'normal', note: standardText(row, header.columns, '备注') };
+      items.push(itemBase({ ...base, itemType: 'wellness', eventDate: rowDate, metricLabel: '每日恢复', valueNum: payload.sleepHours ?? 0, payload, rawValue: JSON.stringify(payload), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|wellness` }));
+    } else if (sheet === '训练课次') {
+      const duration = numberValue(standardValue(row, header.columns, '时长分钟')) ?? 0;
+      const rpe = numberValue(standardValue(row, header.columns, 'RPE'));
+      const payload = { sessionOrder: numberValue(standardValue(row, header.columns, '课次序号')) ?? 1, startTime: standardText(row, header.columns, '开始时间'), trainingType: standardText(row, header.columns, '训练类型') || '专项训练', structureType: standardText(row, header.columns, '训练阶段') || '专项训练', intensityZone: standardText(row, header.columns, '强度区间') || 'AN', content: standardText(row, header.columns, '训练内容'), durationMin: duration, distanceKm: numberValue(standardValue(row, header.columns, '距离千米')) ?? 0, rpe, srpe: numberValue(standardValue(row, header.columns, 'SRPE')) ?? (rpe === null ? 0 : rpe * duration), smvl: numberValue(standardValue(row, header.columns, 'SMVL')) ?? 0, averageHeartRate: numberValue(standardValue(row, header.columns, '平均心率')), maxHeartRate: numberValue(standardValue(row, header.columns, '最大心率')), averagePowerW: numberValue(standardValue(row, header.columns, '平均功率W')), strokeRateSpm: numberValue(standardValue(row, header.columns, '桨频SPM')) };
+      items.push(itemBase({ ...base, itemType: 'training_session', eventDate: rowDate, sessionLabel: payload.content, valueNum: duration, unit: 'min', payload, rawValue: JSON.stringify(payload), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|session|${payload.sessionOrder}` }));
+    } else if (sheet === '力量训练组次') {
+      const exerciseName = standardText(row, header.columns, '动作');
+      const actualReps = numberValue(standardValue(row, header.columns, '实际次数'));
+      const actualWeightKg = numberValue(standardValue(row, header.columns, '实际重量kg'));
+      if (!exerciseName) messages.push('错误：训练动作不能为空');
+      if (actualReps === null || actualWeightKg === null) messages.push('错误：实际次数和实际重量不能为空');
+      items.push(itemBase({ ...base, itemType: 'training_set', eventDate: rowDate, sessionLabel: standardText(row, header.columns, '课次名称') || '力量训练', exerciseName, setIndex: numberValue(standardValue(row, header.columns, '组序')) || 1, targetReps: numberValue(standardValue(row, header.columns, '计划次数')), actualReps, actualWeightKg, intensityPercent: numberValue(standardValue(row, header.columns, '强度百分比')), payload: { rpe: numberValue(standardValue(row, header.columns, 'RPE')), trainingCategory: standardText(row, header.columns, '类别') || inferStrengthCategory(exerciseName), bodyPosition: standardText(row, header.columns, '身体部位') || inferStrengthBodyPosition(exerciseName), note: standardText(row, header.columns, '备注') }, rawValue: `${actualWeightKg || ''}kg×${actualReps || ''}`, quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|${exerciseName}|${numberValue(standardValue(row, header.columns, '组序')) || 1}` }));
+    } else if (sheet === 'FMS测试') {
+      const fmsItems = FMS_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel]) => {
+        const valueNum = numberValue(standardValue(row, header.columns, headerName));
+        if (valueNum === null) return [];
+        const metricMessages = [...messages];
+        if (!Number.isInteger(valueNum) || valueNum < 0 || valueNum > 3) metricMessages.push(`错误：${metricLabel}须填写0、1、2或3分`);
+        return [itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: 'FMS测试', metricCode, metricLabel, valueNum, unit: '分', side: 'center', payload: { protocol: '功能动作筛查（FMS）', note: standardText(row, header.columns, '备注') }, rawValue: String(valueNum), quality: makeQuality(metricMessages), messages: metricMessages, businessKey: `${athlete?.id || 0}|${rowDate}|fms|${metricCode}` })];
+      });
+      if (!fmsItems.length) {
+        messages.push('错误：FMS七项至少填写一项得分');
+        items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: 'FMS测试', metricCode: 'fms_deep_squat', metricLabel: '深蹲', valueNum: null, unit: '分', payload: { protocol: '功能动作筛查（FMS）' }, rawValue: '', quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|fms|empty` }));
+      } else {
+        if (fmsItems.length < FMS_TEMPLATE_METRICS.length) fmsItems.forEach((item) => { item.messages.push('警告：建议一次录齐FMS七项，以便生成完整21分分析'); item.quality = makeQuality(item.messages); });
+        items.push(...fmsItems);
+      }
+    } else if (sheet === '冠军模型测试') {
+      const championItems = CHAMPION_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel, unit]) => {
+        const valueNum = numberValue(standardValue(row, header.columns, headerName));
+        if (valueNum === null) return [];
+        return [itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: '冠军模型综合评估', metricCode, metricLabel, valueNum, unit, side: 'center', payload: { protocol: standardText(row, header.columns, '测试协议') || '冠军模型八维评估', note: standardText(row, header.columns, '备注') }, rawValue: String(valueNum), quality: makeQuality(messages), messages: [...messages], businessKey: `${athlete?.id || 0}|${rowDate}|champion|${metricCode}` })];
+      });
+      if (!championItems.length) {
+        messages.push('错误：冠军模型指标至少填写一项测试数值');
+        items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: '冠军模型综合评估', metricCode: 'general_endurance_score', metricLabel: '一般耐力', valueNum: null, unit: '分', payload: { protocol: '冠军模型八维评估' }, rawValue: '', quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|champion|empty` }));
+      } else {
+        items.push(...championItems);
+      }
+    } else if (sheet === '测试指标') {
+      const metricCode = standardText(row, header.columns, '指标代码');
+      const valueNum = numberValue(standardValue(row, header.columns, '数值'));
+      if (!metricCode) messages.push('错误：指标代码不能为空');
+      if (valueNum === null) messages.push('错误：测试数值不能为空');
+      const sideText = standardText(row, header.columns, '侧别');
+      const side = ({ 左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center' }[sideText] || sideText || 'center') as ParsedImportItem['side'];
+      if (!['left', 'right', 'bilateral', 'center'].includes(side)) messages.push('错误：测试侧别只能使用center、left、right或bilateral');
+      items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: standardText(row, header.columns, '测试类型') || '专项测试', metricCode, metricLabel: standardText(row, header.columns, '指标名称') || metricCode, valueNum, unit: standardText(row, header.columns, '单位'), side, payload: { protocol: standardText(row, header.columns, '协议'), note: standardText(row, header.columns, '备注') }, rawValue: String(valueNum ?? ''), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|${metricCode}|${side}` }));
+    } else if (sheet === '伤病记录') {
+      const payload = { injuryName: standardText(row, header.columns, '伤病名称'), bodyPart: standardText(row, header.columns, '部位'), side: standardText(row, header.columns, '侧别') || 'unspecified', status: standardText(row, header.columns, '状态') || 'observation', painScore: numberValue(standardValue(row, header.columns, '疼痛评分')) ?? 0, restrictions: standardText(row, header.columns, '训练限制'), rehabPlan: standardText(row, header.columns, '康复计划'), reviewDate: parseDate(standardValue(row, header.columns, '复查日期'), year), note: standardText(row, header.columns, '备注') };
+      if (!payload.injuryName || !payload.bodyPart) messages.push('错误：伤病名称和部位不能为空');
+      if (!['未指定','左','右','双侧','中央','unspecified','left','right','bilateral','center'].includes(payload.side)) messages.push('错误：伤病侧别不在允许范围内');
+      if (!['健康','观察','限训','康复','停训','healthy','observation','restricted','rehab','suspended'].includes(payload.status)) messages.push('错误：伤病状态不在允许范围内');
+      if (payload.painScore < 0 || payload.painScore > 10) messages.push('错误：疼痛评分须在0—10之间');
+      items.push(itemBase({ ...base, itemType: 'injury_record', eventDate: rowDate, metricLabel: payload.injuryName, valueNum: payload.painScore, payload, rawValue: payload.injuryName, quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|injury|${payload.injuryName}` }));
+    } else if (sheet === '竞技状态') {
+      const overallScore = numberValue(standardValue(row, header.columns, '总分'));
+      if (overallScore === null || overallScore < 0 || overallScore > 100) messages.push('错误：竞技状态总分须在0—100之间');
+      const payload = { overallScore, stateLevel: standardText(row, header.columns, '等级') || 'build', enduranceScore: numberValue(standardValue(row, header.columns, '专项耐力')), powerScore: numberValue(standardValue(row, header.columns, '力量爆发')), techniqueScore: numberValue(standardValue(row, header.columns, '技术效率')), loadAdaptationScore: numberValue(standardValue(row, header.columns, '负荷适应')), recoveryScore: numberValue(standardValue(row, header.columns, '恢复能力')), competitionScore: numberValue(standardValue(row, header.columns, '比赛能力')), note: standardText(row, header.columns, '备注') };
+      if (!['巅峰','良好','建设','调整','peak','good','build','adjust'].includes(payload.stateLevel)) messages.push('错误：竞技状态等级不在允许范围内');
+      for (const [label, score] of [['专项耐力', payload.enduranceScore], ['力量爆发', payload.powerScore], ['技术效率', payload.techniqueScore], ['负荷适应', payload.loadAdaptationScore], ['恢复能力', payload.recoveryScore], ['比赛能力', payload.competitionScore]] as const) {
+        if (score !== null && (score < 0 || score > 100)) messages.push(`错误：${label}须在0—100之间`);
+      }
+      items.push(itemBase({ ...base, itemType: 'competitive_state', eventDate: rowDate, metricLabel: '竞技状态', valueNum: overallScore, unit: '分', payload, rawValue: String(overallScore ?? ''), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|competitive` }));
+    }
+  }
+  return items;
+}
+
 function ensureMetricDefinitions() {
   const statement = db.prepare(`
     INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, minimum, maximum, active)
@@ -555,7 +730,6 @@ export function analyzeDataImport(input: {
   mimetype: string;
   project: string;
   defaultDate?: string;
-  defaultTeam?: string;
   defaultArea?: { region: string; city: string; county: string };
   userId: number;
   athletes: ImportAthlete[];
@@ -588,7 +762,11 @@ export function analyzeDataImport(input: {
     let parsed: ParsedImportItem[] = [];
     let type = '';
     let note = '';
-    if (/个人档案/.test(sheetName)) {
+    if (STANDARD_SHEETS.has(sheetName)) {
+      parsed = parseStandardSheet(matrix, sheetName, input.project, input.filename, input.defaultDate || '', input.athletes);
+      type = `统一模板·${sheetName}`;
+      note = '按竞迹统一数据模板的固定列确定性解析';
+    } else if (/个人档案/.test(sheetName)) {
       ignoredSheets.push({ name: sheetName, reason: '公式与图表展示页，不作为原始数据导入' });
       continue;
     } else if (/国家赛艇队体能训练负荷统计表/.test(firstRows) || (firstRows.includes('姓名') && firstRows.includes('完成负荷'))) {
@@ -618,15 +796,18 @@ export function analyzeDataImport(input: {
     }
   }
   if (!items.length) throw new Error('没有识别到可导入的训练记录、力量测试或评分规则。');
-  const unmatchedNames = new Map<string, { name: string; sourceSheet: string; gender: string }>();
+  const unmatchedNames = new Map<string, { name: string; sourceSheet: string; gender: string; team: string; region: string; city: string; county: string }>();
   for (const item of items) {
     if (item.itemType === 'scoring_rule' || item.athleteId || !item.rawAthleteName) continue;
     const key = normalizedName(item.rawAthleteName);
-    if (!key || unmatchedNames.has(key)) continue;
+    if (!key) continue;
     const gender = /女子|女队/.test(item.sourceSheet) ? '女' : /男子|男队/.test(item.sourceSheet) ? '男' : '';
-    unmatchedNames.set(key, { name: item.rawAthleteName, sourceSheet: item.sourceSheet, gender });
+    const profile = item.itemType === 'athlete_profile' ? item.payload : {};
+    const current = unmatchedNames.get(key);
+    unmatchedNames.set(key, { name: item.rawAthleteName, sourceSheet: current?.sourceSheet || item.sourceSheet,
+      gender: text(profile.gender) || current?.gender || gender, team: text(profile.team) || current?.team || '',
+      region: text(profile.region) || current?.region || '', city: text(profile.city) || current?.city || '', county: text(profile.county) || current?.county || '' });
   }
-  if (unmatchedNames.size && !text(input.defaultTeam)) throw new Error('文件包含新运动员，请先选择新运动员的默认所属队伍。');
   const counts = summarizeItems(items);
   const summary = { recognizedSheets, ignoredSheets };
   db.exec('BEGIN IMMEDIATE');
@@ -644,9 +825,10 @@ export function analyzeDataImport(input: {
       batch_id, normalized_name, name, project, team, gender, region, city, county, source_sheet, messages_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const [key, candidate] of unmatchedNames) {
-      insertCandidate.run(batchId, key, candidate.name, input.project, text(input.defaultTeam), candidate.gender,
-        text(input.defaultArea?.region) || '未设置', text(input.defaultArea?.city) || '未设置',
-        text(input.defaultArea?.county) || '未设置', candidate.sourceSheet,
+      // 新运动员不自动采纳文件内队伍；必须在审核区由有权限的用户确认后分配。
+      insertCandidate.run(batchId, key, candidate.name, input.project, '', candidate.gender,
+        candidate.region || text(input.defaultArea?.region) || '未设置', candidate.city || text(input.defaultArea?.city) || '未设置',
+        candidate.county || text(input.defaultArea?.county) || '未设置', candidate.sourceSheet,
         JSON.stringify(['将创建无登录账号的运动员档案，身份证、出生日期、联系方式等资料可稍后补充']));
     }
     db.exec('COMMIT');
@@ -750,13 +932,13 @@ function refreshItemValidation(item: DataImportItemView, allowedAthletes: Set<nu
     else if (!item.athleteId && candidateNames.has(normalizedName(item.rawAthleteName))) {
       messages.push('警告：将创建无登录账号的待补全运动员档案');
     } else if (!item.athleteId) messages.push('错误：缺少可创建或可匹配的运动员姓名');
-    if (!validIsoDate(item.eventDate)) messages.push('错误：缺少有效日期，请在预览中补充');
+    if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate)) messages.push('错误：缺少有效日期，请在预览中补充');
   }
   if (item.itemType === 'training_set') {
     if (!item.exerciseName) messages.push('错误：训练动作不能为空');
     if (item.actualReps === null || item.actualReps < 0) messages.push('错误：实际次数不能为空且不能小于0');
     if (item.actualWeightKg === null || item.actualWeightKg < 0) messages.push('错误：实际重量不能为空且不能小于0');
-  } else if (item.itemType !== 'scoring_rule' && (item.valueNum === null || !Number.isFinite(item.valueNum))) {
+  } else if (!['scoring_rule', 'athlete_profile'].includes(item.itemType) && (item.valueNum === null || !Number.isFinite(item.valueNum))) {
     messages.push('错误：测试值不能为空');
   }
   return { messages, quality: makeQuality(messages, item.quality === 'skipped') };
@@ -879,6 +1061,10 @@ function updateSessionTotals(sessionId: number) {
 }
 
 function upsertTestItem(item: DataImportItemView, batchId: string, userId: number, policy: 'skip' | 'update') {
+  db.prepare(`INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, active)
+    VALUES (?, ?, 'custom', ?, 'neutral', 'phase', '["赛艇","皮划艇","激流"]', 1)
+    ON CONFLICT(code) DO UPDATE SET label=excluded.label, unit=excluded.unit, active=1, updated_at=CURRENT_TIMESTAMP`)
+    .run(item.metricCode, item.metricLabel || item.metricCode, item.unit);
   db.prepare(`INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by)
     VALUES (?, ?, ?, '国家队力量素质测试', 'file_import', ?, 0, ?)
     ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET quality = CASE WHEN excluded.quality = 'partial' THEN 'partial' ELSE test_sessions.quality END`)
@@ -902,6 +1088,18 @@ function upsertTestItem(item: DataImportItemView, batchId: string, userId: numbe
 }
 
 function upsertBodyItem(item: DataImportItemView, batchId: string, policy: 'skip' | 'update') {
+  if (item.metricCode === 'body_composition') {
+    const payload = item.payload;
+    const existing = db.prepare('SELECT id FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?').get(item.athleteId, item.eventDate) as { id: number } | undefined;
+    if (existing && policy === 'skip') return { skipped: true, entityId: existing.id };
+    const values = ['heightCm', 'weightKg', 'bodyFatPct', 'skeletalMuscleKg', 'muscleMassKg', 'upperLimbMuscleKg', 'lowerLimbMuscleKg', 'trunkMuscleKg', 'visceralFatLevel', 'basalMetabolismKcal', 'totalBodyWaterKg', 'ecwTbwRatio', 'phaseAngleDeg'].map((key) => numberValue(payload[key]));
+    db.prepare(`INSERT INTO athlete_body_measurements (athlete_id, measurement_date, height_cm, weight_kg, body_fat_pct, skeletal_muscle_kg, muscle_mass_kg, upper_limb_muscle_kg, lower_limb_muscle_kg, trunk_muscle_kg, visceral_fat_level, basal_metabolism_kcal, total_body_water_kg, ecw_tbw_ratio, phase_angle_deg, note, source, quality, is_demo, data_import_batch_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, 0, ?)
+      ON CONFLICT(athlete_id, measurement_date) DO UPDATE SET height_cm=excluded.height_cm, weight_kg=excluded.weight_kg, body_fat_pct=excluded.body_fat_pct, skeletal_muscle_kg=excluded.skeletal_muscle_kg, muscle_mass_kg=excluded.muscle_mass_kg, upper_limb_muscle_kg=excluded.upper_limb_muscle_kg, lower_limb_muscle_kg=excluded.lower_limb_muscle_kg, trunk_muscle_kg=excluded.trunk_muscle_kg, visceral_fat_level=excluded.visceral_fat_level, basal_metabolism_kcal=excluded.basal_metabolism_kcal, total_body_water_kg=excluded.total_body_water_kg, ecw_tbw_ratio=excluded.ecw_tbw_ratio, phase_angle_deg=excluded.phase_angle_deg, note=excluded.note, source='file_import', quality=excluded.quality, is_demo=0, data_import_batch_id=excluded.data_import_batch_id`)
+      .run(item.athleteId, item.eventDate, ...values, text(payload.note), item.quality === 'warning' ? 'partial' : 'valid', batchId);
+    const saved = db.prepare('SELECT id FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?').get(item.athleteId, item.eventDate) as { id: number };
+    return { skipped: false, entityId: saved.id };
+  }
   const existing = db.prepare('SELECT id, height_cm AS heightCm, weight_kg AS weightKg FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?')
     .get(item.athleteId, item.eventDate) as { id: number; heightCm: number | null; weightKg: number | null } | undefined;
   const column = item.metricCode === 'height_cm' ? 'height_cm' : 'weight_kg';
@@ -916,6 +1114,62 @@ function upsertBodyItem(item: DataImportItemView, batchId: string, policy: 'skip
     VALUES (?, ?, ?, 'file_import', ?, 0, ?)`)
     .run(item.athleteId, item.eventDate, item.valueNum, item.quality === 'warning' ? 'partial' : 'valid', batchId);
   return { skipped: false, entityId: Number(inserted.lastInsertRowid) };
+}
+
+function upsertAthleteProfileItem(item: DataImportItemView, batchId: string) {
+  const p = item.payload;
+  db.prepare(`UPDATE athletes SET gender = COALESCE(NULLIF(?, ''), gender), team = COALESCE(NULLIF(?, ''), team),
+    region = COALESCE(NULLIF(?, ''), region), city = COALESCE(NULLIF(?, ''), city), county = COALESCE(NULLIF(?, ''), county),
+    birth_date = COALESCE(NULLIF(?, ''), birth_date), profile_status = CASE WHEN NULLIF(?, '') IS NOT NULL AND NULLIF(?, '') IS NOT NULL AND NULLIF(?, '') IS NOT NULL AND NULLIF(?, '') IS NOT NULL THEN 'complete' ELSE profile_status END,
+    source = 'file_import', data_import_batch_id = ? WHERE id = ?`)
+    .run(text(p.gender), text(p.team), text(p.region), text(p.city), text(p.county), text(p.birthDate), text(p.gender), text(p.region), text(p.city), text(p.county), batchId, item.athleteId);
+  db.prepare(`INSERT INTO athlete_profiles (athlete_id, identity_number, ethnicity, phone, blood_type, emergency_contact, emergency_phone, education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status, start_sport_date, training_venue, current_event, training_phase, camp_period, origin_place, origin_unit, origin_coach, specialties, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(athlete_id) DO UPDATE SET identity_number=COALESCE(NULLIF(excluded.identity_number,''),athlete_profiles.identity_number), ethnicity=COALESCE(NULLIF(excluded.ethnicity,''),athlete_profiles.ethnicity), phone=COALESCE(NULLIF(excluded.phone,''),athlete_profiles.phone), blood_type=COALESCE(NULLIF(excluded.blood_type,''),athlete_profiles.blood_type), emergency_contact=COALESCE(NULLIF(excluded.emergency_contact,''),athlete_profiles.emergency_contact), emergency_phone=COALESCE(NULLIF(excluded.emergency_phone,''),athlete_profiles.emergency_phone), education=COALESCE(NULLIF(excluded.education,''),athlete_profiles.education), technical_level=COALESCE(NULLIF(excluded.technical_level,''),athlete_profiles.technical_level), position=COALESCE(NULLIF(excluded.position,''),athlete_profiles.position), health_status=COALESCE(NULLIF(excluded.health_status,''),athlete_profiles.health_status), best_result=COALESCE(NULLIF(excluded.best_result,''),athlete_profiles.best_result), native_place=COALESCE(NULLIF(excluded.native_place,''),athlete_profiles.native_place), home_address=COALESCE(NULLIF(excluded.home_address,''),athlete_profiles.home_address), athlete_status=COALESCE(NULLIF(excluded.athlete_status,''),athlete_profiles.athlete_status), start_sport_date=COALESCE(NULLIF(excluded.start_sport_date,''),athlete_profiles.start_sport_date), training_venue=COALESCE(NULLIF(excluded.training_venue,''),athlete_profiles.training_venue), current_event=COALESCE(NULLIF(excluded.current_event,''),athlete_profiles.current_event), training_phase=COALESCE(NULLIF(excluded.training_phase,''),athlete_profiles.training_phase), camp_period=COALESCE(NULLIF(excluded.camp_period,''),athlete_profiles.camp_period), origin_place=COALESCE(NULLIF(excluded.origin_place,''),athlete_profiles.origin_place), origin_unit=COALESCE(NULLIF(excluded.origin_unit,''),athlete_profiles.origin_unit), origin_coach=COALESCE(NULLIF(excluded.origin_coach,''),athlete_profiles.origin_coach), specialties=COALESCE(NULLIF(excluded.specialties,''),athlete_profiles.specialties), notes=COALESCE(NULLIF(excluded.notes,''),athlete_profiles.notes), updated_at=CURRENT_TIMESTAMP`)
+    .run(item.athleteId, text(p.identityNumber).toUpperCase(), text(p.ethnicity), text(p.phone), text(p.bloodType), text(p.emergencyContact), text(p.emergencyPhone), text(p.education), text(p.technicalLevel), text(p.position), text(p.healthStatus), text(p.bestResult), text(p.nativePlace), text(p.homeAddress), text(p.athleteStatus), text(p.startSportDate), text(p.trainingVenue), text(p.currentEvent), text(p.trainingPhase), text(p.campPeriod), text(p.originPlace), text(p.originUnit), text(p.originCoach), text(p.specialties), text(p.notes));
+  if (text(p.region) && text(p.city)) db.prepare(`INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo) VALUES (?, ?, ?, ?, 'file_import', 'valid', 0) ON CONFLICT(athlete_id) DO UPDATE SET province=excluded.province, city=excluded.city, county=excluded.county, source='file_import', quality='valid', is_demo=0, updated_at=CURRENT_TIMESTAMP`).run(item.athleteId, text(p.region), text(p.city), text(p.county));
+  return { skipped: false, entityId: Number(item.athleteId) };
+}
+
+function upsertWellnessItem(item: DataImportItemView, policy: 'skip' | 'update') {
+  const p = item.payload;
+  const existing = db.prepare('SELECT id FROM daily_wellness WHERE athlete_id=? AND wellness_date=?').get(item.athleteId, item.eventDate) as { id: number } | undefined;
+  if (existing && policy === 'skip') return { skipped: true, entityId: existing.id };
+  db.prepare(`INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, sleep_quality, morning_pulse, weight_kg, fatigue_index, soreness_index, mood_index, status, source, quality, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, 0) ON CONFLICT(athlete_id, wellness_date) DO UPDATE SET sleep_hours=excluded.sleep_hours, sleep_quality=excluded.sleep_quality, morning_pulse=excluded.morning_pulse, weight_kg=excluded.weight_kg, fatigue_index=excluded.fatigue_index, soreness_index=excluded.soreness_index, mood_index=excluded.mood_index, status=excluded.status, source='file_import', quality=excluded.quality, is_demo=0, updated_at=CURRENT_TIMESTAMP`)
+    .run(item.athleteId, item.eventDate, numberValue(p.sleepHours), numberValue(p.sleepQuality), numberValue(p.morningPulse), numberValue(p.weightKg), numberValue(p.fatigueIndex), numberValue(p.sorenessIndex), numberValue(p.moodIndex), ['normal','attention','alert','rest','missing'].includes(text(p.status)) ? text(p.status) : 'normal', item.quality === 'warning' ? 'partial' : 'valid');
+  const saved = db.prepare('SELECT id FROM daily_wellness WHERE athlete_id=? AND wellness_date=?').get(item.athleteId, item.eventDate) as { id: number };
+  return { skipped: false, entityId: saved.id };
+}
+
+function upsertSessionItem(item: DataImportItemView, userId: number, policy: 'skip' | 'update') {
+  const p = item.payload; const order = Math.max(1, Math.round(numberValue(p.sessionOrder) || 1));
+  const existing = db.prepare('SELECT id FROM training_sessions WHERE athlete_id=? AND session_date=? AND session_order=?').get(item.athleteId, item.eventDate, order) as { id: number } | undefined;
+  if (existing && policy === 'skip') return { skipped: true, entityId: existing.id };
+  db.prepare(`INSERT INTO training_sessions (athlete_id, session_date, session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl, average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm, source, quality, is_demo, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, 0, ?) ON CONFLICT(athlete_id, session_date, session_order) DO UPDATE SET start_time=excluded.start_time, training_type=excluded.training_type, structure_type=excluded.structure_type, intensity_zone=excluded.intensity_zone, content=excluded.content, duration_min=excluded.duration_min, distance_km=excluded.distance_km, rpe=excluded.rpe, srpe=excluded.srpe, smvl=excluded.smvl, average_heart_rate=excluded.average_heart_rate, max_heart_rate=excluded.max_heart_rate, average_power_w=excluded.average_power_w, stroke_rate_spm=excluded.stroke_rate_spm, source='file_import', quality=excluded.quality, is_demo=0, updated_at=CURRENT_TIMESTAMP`)
+    .run(item.athleteId, item.eventDate, order, text(p.startTime), text(p.trainingType), text(p.structureType), text(p.intensityZone), text(p.content), numberValue(p.durationMin) || 0, numberValue(p.distanceKm) || 0, numberValue(p.rpe), numberValue(p.srpe) || 0, numberValue(p.smvl) || 0, numberValue(p.averageHeartRate), numberValue(p.maxHeartRate), numberValue(p.averagePowerW), numberValue(p.strokeRateSpm), item.quality === 'warning' ? 'partial' : 'valid', userId);
+  const saved = db.prepare('SELECT id FROM training_sessions WHERE athlete_id=? AND session_date=? AND session_order=?').get(item.athleteId, item.eventDate, order) as { id: number };
+  return { skipped: false, entityId: saved.id };
+}
+
+function upsertInjuryItem(item: DataImportItemView, userId: number, policy: 'skip' | 'update') {
+  const p = item.payload;
+  const existing = db.prepare('SELECT id FROM injury_records WHERE athlete_id=? AND onset_date=? AND injury_name=?').get(item.athleteId, item.eventDate, text(p.injuryName)) as { id: number } | undefined;
+  if (existing && policy === 'skip') return { skipped: true, entityId: existing.id };
+  const side = ({ 左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center', 未指定: 'unspecified' }[text(p.side)] || text(p.side) || 'unspecified');
+  const status = ({ 健康: 'healthy', 观察: 'observation', 限训: 'restricted', 康复: 'rehab', 停训: 'suspended' }[text(p.status)] || text(p.status) || 'observation');
+  if (existing) { db.prepare('UPDATE injury_records SET body_part=?, side=?, status=?, pain_score=?, restrictions=?, rehab_plan=?, review_date=?, note=? WHERE id=?').run(text(p.bodyPart), side, status, Math.min(10, Math.max(0, numberValue(p.painScore) || 0)), text(p.restrictions), text(p.rehabPlan), text(p.reviewDate), text(p.note), existing.id); return { skipped:false, entityId:existing.id }; }
+  const inserted = db.prepare(`INSERT INTO injury_records (athlete_id, record_type, injury_name, body_part, side, status, pain_score, onset_date, restrictions, rehab_plan, review_date, note, created_by) VALUES (?, 'formal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(item.athleteId, text(p.injuryName), text(p.bodyPart), side, status, Math.min(10, Math.max(0, numberValue(p.painScore) || 0)), item.eventDate, text(p.restrictions), text(p.rehabPlan), text(p.reviewDate), text(p.note), userId);
+  return { skipped:false, entityId:Number(inserted.lastInsertRowid) };
+}
+
+function upsertCompetitiveItem(item: DataImportItemView, policy: 'skip' | 'update') {
+  const p=item.payload; const existing=db.prepare('SELECT id FROM competitive_state_assessments WHERE athlete_id=? AND assessment_date=?').get(item.athleteId,item.eventDate) as {id:number}|undefined;
+  if(existing&&policy==='skip') return {skipped:true,entityId:existing.id};
+  const level=({巅峰:'peak',良好:'good',建设:'build',调整:'adjust'}[text(p.stateLevel)]||text(p.stateLevel)||'build');
+  db.prepare(`INSERT INTO competitive_state_assessments (athlete_id,assessment_date,overall_score,state_level,endurance_score,power_score,technique_score,load_adaptation_score,recovery_score,competition_score,note,source,quality,is_demo) VALUES (?,?,?,?,?,?,?,?,?,?,?,'file_import',?,0) ON CONFLICT(athlete_id,assessment_date) DO UPDATE SET overall_score=excluded.overall_score,state_level=excluded.state_level,endurance_score=excluded.endurance_score,power_score=excluded.power_score,technique_score=excluded.technique_score,load_adaptation_score=excluded.load_adaptation_score,recovery_score=excluded.recovery_score,competition_score=excluded.competition_score,note=excluded.note,source='file_import',quality=excluded.quality,is_demo=0`)
+    .run(item.athleteId,item.eventDate,numberValue(p.overallScore),level,numberValue(p.enduranceScore),numberValue(p.powerScore),numberValue(p.techniqueScore),numberValue(p.loadAdaptationScore),numberValue(p.recoveryScore),numberValue(p.competitionScore),text(p.note),item.quality==='warning'?'partial':'valid');
+  const saved=db.prepare('SELECT id FROM competitive_state_assessments WHERE athlete_id=? AND assessment_date=?').get(item.athleteId,item.eventDate) as {id:number}; return {skipped:false,entityId:saved.id};
 }
 
 function upsertScoringRule(item: DataImportItemView, batchId: string, policy: 'skip' | 'update') {
@@ -976,6 +1230,7 @@ function resolvePendingAthletes(input: {
     .filter((item) => item.itemType !== 'scoring_rule' && !item.athleteId && item.quality !== 'skipped')
     .map((item) => normalizedName(item.rawAthleteName)));
   const resolved = new Map<string, number>();
+  const candidatesByName = new Map(input.batch.athleteCandidates.map((candidate) => [candidate.normalizedName, candidate]));
   let createdCount = 0;
   for (const candidate of input.batch.athleteCandidates) {
     if (!requiredNames.has(candidate.normalizedName)) continue;
@@ -1008,10 +1263,14 @@ function resolvePendingAthletes(input: {
     const athleteId = resolved.get(normalizedName(item.rawAthleteName));
     if (!athleteId) continue;
     item.athleteId = athleteId;
+    if (item.itemType === 'athlete_profile') {
+      const candidate = candidatesByName.get(normalizedName(item.rawAthleteName));
+      if (candidate) item.payload.team = candidate.team;
+    }
     item.messages = item.messages.filter((message) => !message.includes('未匹配到已有运动员') && !message.includes('将创建无登录账号'));
     item.quality = makeQuality(item.messages, item.quality === 'skipped');
-    db.prepare('UPDATE data_import_items SET athlete_id = ?, quality = ?, messages_json = ? WHERE id = ?')
-      .run(athleteId, item.quality, JSON.stringify(item.messages), item.id);
+    db.prepare('UPDATE data_import_items SET athlete_id = ?, payload_json = ?, quality = ?, messages_json = ? WHERE id = ?')
+      .run(athleteId, JSON.stringify(item.payload), item.quality, JSON.stringify(item.messages), item.id);
   }
   return { createdCount, resolvedIds: [...resolved.values()] };
 }
@@ -1021,6 +1280,7 @@ export function commitDataImport(input: {
   userId: number;
   creatorRole: string;
   athletes: ImportAthlete[];
+  allowedTeams?: Set<string>;
   conflictPolicy: 'skip' | 'update';
 }) {
   ensureMetricDefinitions();
@@ -1030,6 +1290,27 @@ export function commitDataImport(input: {
   const allowed = new Set(input.athletes.map((athlete) => athlete.id));
   const candidateNames = new Set(batch.athleteCandidates.map((candidate) => candidate.normalizedName));
   const importable = batch.items.filter((item) => item.quality !== 'skipped');
+  const candidateWithoutTeam = batch.athleteCandidates.find((candidate) =>
+    candidate.status === 'pending'
+    && importable.some((item) => !item.athleteId && normalizedName(item.rawAthleteName) === candidate.normalizedName)
+    && !text(candidate.team)
+  );
+  if (candidateWithoutTeam) throw new Error(`请先在新运动员审核区为“${candidateWithoutTeam.name}”选择所属队伍。`);
+  const candidateTeamOutOfScope = batch.athleteCandidates.find((candidate) =>
+    candidate.status === 'pending'
+    && text(candidate.team)
+    && input.allowedTeams
+    && !input.allowedTeams.has(text(candidate.team))
+  );
+  if (candidateTeamOutOfScope) throw new Error(`“${candidateTeamOutOfScope.name}”选择的所属队伍不在当前账号权限范围内。`);
+  const profileTeamOutOfScope = importable.find((item) =>
+    item.itemType === 'athlete_profile'
+    && Boolean(item.athleteId)
+    && text(item.payload.team)
+    && input.allowedTeams
+    && !input.allowedTeams.has(text(item.payload.team))
+  );
+  if (profileTeamOutOfScope) throw new Error(`“${profileTeamOutOfScope.rawAthleteName}”填写的所属队伍不在当前账号权限范围内。`);
   const invalid = importable.filter((item) => refreshItemValidation(item, allowed, candidateNames).quality === 'error');
   if (invalid.length) throw new Error(`仍有${invalid.length}条数据未通过校验，请先修正红色字段。`);
   let imported = 0;
@@ -1045,7 +1326,16 @@ export function commitDataImport(input: {
     for (const item of importable) {
       let result: { skipped: boolean; entityId: number; sessionId?: number };
       let entityType = '';
-      if (item.itemType === 'training_set') {
+      if (item.itemType === 'athlete_profile') {
+        result = upsertAthleteProfileItem(item, input.batchId);
+        entityType = 'athlete';
+      } else if (item.itemType === 'wellness') {
+        result = upsertWellnessItem(item, input.conflictPolicy);
+        entityType = 'daily_wellness';
+      } else if (item.itemType === 'training_session') {
+        result = upsertSessionItem(item, input.userId, input.conflictPolicy);
+        entityType = 'training_session';
+      } else if (item.itemType === 'training_set') {
         result = upsertTrainingItem(item, input.batchId, input.userId, input.conflictPolicy);
         entityType = 'strength_result_set';
         if (result.sessionId) sessionIds.add(result.sessionId);
@@ -1057,6 +1347,12 @@ export function commitDataImport(input: {
         result = upsertBodyItem(item, input.batchId, input.conflictPolicy);
         entityType = 'athlete_body_measurement';
         athleteDates.add(`${item.athleteId}|${item.eventDate}`);
+      } else if (item.itemType === 'injury_record') {
+        result = upsertInjuryItem(item, input.userId, input.conflictPolicy);
+        entityType = 'injury_record';
+      } else if (item.itemType === 'competitive_state') {
+        result = upsertCompetitiveItem(item, input.conflictPolicy);
+        entityType = 'competitive_state_assessment';
       } else {
         result = upsertScoringRule(item, input.batchId, input.conflictPolicy);
         entityType = 'metric_scoring_rule';

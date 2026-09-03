@@ -258,7 +258,7 @@ export type StrengthImportPreview = {
 };
 
 export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
-export type DataImportItemType = 'training_set' | 'test_measurement' | 'body_measurement' | 'scoring_rule';
+export type DataImportItemType = 'athlete_profile' | 'wellness' | 'training_session' | 'training_set' | 'test_measurement' | 'body_measurement' | 'injury_record' | 'competitive_state' | 'scoring_rule';
 
 export type DataImportItem = {
   id: number;

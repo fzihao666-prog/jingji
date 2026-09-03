@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { geoMercator, geoPath } from 'd3-geo';
 import ChinaData from 'china-map-geojson/lib/china.js';
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { BodyCompositionRecord, CompetitiveStateLevel, OverviewAthleteProfile, TrainingRecord } from '../types';
 import { formatNumber, percentage } from '../utils';
 
@@ -447,12 +447,43 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
       .map(([province, athletes]) => ({ province, athletes, count: athletes.length }))
       .sort((a, b) => b.count - a.count || a.province.localeCompare(b.province, 'zh-CN'));
   }, [profiles]);
-  const [activeProvince, setActiveProvince] = useState(provinces[0]?.province || '四川');
+  const [activeProvince, setActiveProvince] = useState('');
+  const pendingProvince = useRef('');
+  const hoverFrame = useRef<number | null>(null);
+  const defaultProvinceReady = useRef(false);
   const originKey = provinces.map((item) => `${item.province}:${item.count}`).join('|');
 
   useEffect(() => {
-    setActiveProvince(provinces[0]?.province || '四川');
+    if (!provinces.length) return;
+    setActiveProvince((current) => {
+      if (!defaultProvinceReady.current || !provinces.some((item) => item.province === current)) {
+        defaultProvinceReady.current = true;
+        return provinces[0].province;
+      }
+      return current;
+    });
   }, [originKey]);
+
+  useEffect(() => () => {
+    if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
+  }, []);
+
+  const activateProvince = useCallback((province: string, immediate = false) => {
+    if (immediate) {
+      if (hoverFrame.current !== null) {
+        cancelAnimationFrame(hoverFrame.current);
+        hoverFrame.current = null;
+      }
+      setActiveProvince((current) => current === province ? current : province);
+      return;
+    }
+    pendingProvince.current = province;
+    if (hoverFrame.current !== null) return;
+    hoverFrame.current = requestAnimationFrame(() => {
+      hoverFrame.current = null;
+      setActiveProvince((current) => current === pendingProvince.current ? current : pendingProvince.current);
+    });
+  }, []);
 
   const active = provinces.find((item) => item.province === activeProvince);
   const activeAthletes = (active?.athletes || []).slice().sort((left, right) =>
@@ -487,13 +518,13 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
                 tabIndex={0}
                 aria-label={`${province.name}，${count}名运动员`}
                 aria-pressed={activePath}
-                onMouseEnter={() => setActiveProvince(province.name)}
-                onFocus={() => setActiveProvince(province.name)}
-                onClick={() => setActiveProvince(province.name)}
+                onMouseEnter={() => activateProvince(province.name)}
+                onFocus={() => activateProvince(province.name, true)}
+                onClick={() => activateProvince(province.name, true)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    setActiveProvince(province.name);
+                    activateProvince(province.name, true);
                   }
                 }}
               />
@@ -563,47 +594,42 @@ type LevelPoint = {
   level: string;
   count: number;
   color: string;
+  share: number;
 };
 
-type CompletenessPoint = {
-  athleteId: number;
-  name: string;
-  completeness: number;
-  hasResult: boolean;
-  axisLabel: string;
-};
+const LEVEL_ORDER = ['国际级运动健将', '运动健将', '一级运动员', '二级运动员', '三级运动员', '未定级'] as const;
+type TechnicalLevel = (typeof LEVEL_ORDER)[number];
 
-const LEVEL_ORDER = ['国际健将', '运动健将', '一级', '二级', '三级'];
 const LEVEL_COLORS: Record<string, string> = {
-  '国际健将': '#c9a227',
+  '国际级运动健将': '#c9a227',
   '运动健将': '#2b7d8d',
-  '一级': '#3d82a5',
-  '二级': '#67a35c',
-  '三级': '#a37b5c',
-  '其他': '#9aa8ab',
-  '未录入': '#c4d0d2'
+  '一级运动员': '#3d82a5',
+  '二级运动员': '#67a35c',
+  '三级运动员': '#a37b5c',
+  '未定级': '#9aa8ab'
 };
 
-function normalizeTechnicalLevel(value: string): string {
-  if (!value) return '未录入';
-  const clean = value.trim();
-  if (LEVEL_ORDER.includes(clean)) return clean;
-  if (/健将/.test(clean) && /国际/.test(clean)) return '国际健将';
+function normalizeTechnicalLevel(value: string | null | undefined): TechnicalLevel {
+  if (!value?.trim()) return '未定级';
+  const clean = value.trim().replaceAll(' ', '');
+  const knownLevel = LEVEL_ORDER.find((level) => level === clean);
+  if (knownLevel) return knownLevel;
+  if (/国际.*健将/.test(clean)) return '国际级运动健将';
   if (/健将/.test(clean)) return '运动健将';
-  if (/一级/.test(clean)) return '一级';
-  if (/二级/.test(clean)) return '二级';
-  if (/三级/.test(clean)) return '三级';
-  return '其他';
+  if (/一级/.test(clean)) return '一级运动员';
+  if (/二级/.test(clean)) return '二级运动员';
+  if (/三级/.test(clean)) return '三级运动员';
+  return '未定级';
 }
 
-function CompetitiveLevelTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: CompletenessPoint }> }) {
+function TechnicalLevelTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: LevelPoint }> }) {
   const point = payload?.[0]?.payload;
   if (!active || !point) return null;
   return (
     <div className="team-profile-tooltip">
-      <strong>{point.name}</strong>
-      <span>档案完整度：{formatNumber(point.completeness, 0)} 分</span>
-      <span>最好成绩：{point.hasResult ? '已录入' : '暂无记录'}</span>
+      <strong>{point.level}</strong>
+      <span>运动员：{point.count} 名</span>
+      <span>队内占比：{formatNumber(point.share, 1)}%</span>
     </div>
   );
 }
@@ -618,75 +644,48 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
     );
   }
 
+  const gradedProfiles = profiles.filter((profile) => normalizeTechnicalLevel(profile.technicalLevel || '') !== '未定级');
+  const gradedCount = gradedProfiles.length;
+
+  if (!profiles.length || !gradedCount) {
+    return (
+      <section className="team-profile-chart-card team-competitive-card">
+        <header><div><h3>竞技水平</h3><p>成绩、技术等级与竞技档案完整度</p></div></header>
+        <div className="team-profile-chart-empty">暂无运动员数据</div>
+      </section>
+    );
+  }
+
   const levelCounts = new Map<string, number>();
-  for (const profile of profiles) {
+  for (const profile of gradedProfiles) {
     const level = normalizeTechnicalLevel(profile.technicalLevel || '');
     levelCounts.set(level, (levelCounts.get(level) || 0) + 1);
   }
-  const levelData: LevelPoint[] = [...LEVEL_ORDER, '其他', '未录入']
-    .filter((level) => (levelCounts.get(level) || 0) > 0)
-    .map((level) => ({ level, count: levelCounts.get(level) || 0, color: LEVEL_COLORS[level] }));
-
-  const completenessData: CompletenessPoint[] = profiles.map((profile, index) => {
-    const hasResult = Boolean(profile.bestResult && profile.bestResult.trim());
-    const hasLevel = Boolean(profile.technicalLevel && profile.technicalLevel.trim());
-    const hasEvent = Boolean(profile.currentEvent && profile.currentEvent.trim());
-    const hasPosition = Boolean(profile.athletePosition && profile.athletePosition.trim());
-    return {
-      athleteId: profile.athleteId,
-      name: profile.athleteName,
-      completeness: (hasResult ? 40 : 0) + (hasLevel ? 20 : 0) + (hasEvent ? 20 : 0) + (hasPosition ? 20 : 0),
-      hasResult,
-      axisLabel: String(index + 1)
-    };
-  }).sort((left, right) => right.completeness - left.completeness);
-
-  const completenessValues = completenessData.map((item) => item.completeness);
-  const averageCompleteness = completenessValues.length ? completenessValues.reduce((sum, value) => sum + value, 0) / completenessValues.length : 0;
-  const minCompleteness = completenessValues.length ? Math.min(...completenessValues) : 0;
-  const maxCompleteness = completenessValues.length ? Math.max(...completenessValues) : 0;
-  const withResultCount = completenessData.filter((item) => item.hasResult).length;
+  const levelData: LevelPoint[] = LEVEL_ORDER
+    .filter((level) => level !== '未定级')
+    .map((level) => {
+      const count = levelCounts.get(level) || 0;
+      return { level, count, color: LEVEL_COLORS[level], share: count / gradedCount * 100 };
+    })
+    .filter((point) => point.count > 0);
 
   return (
     <section className="team-profile-chart-card team-competitive-card">
-      <header><div><h3>竞技水平</h3><p>成绩、技术等级与竞技档案完整度</p></div><span>{profiles.length} 名运动员</span></header>
-      <div className="team-competitive-plot-heading"><strong>技术等级分布</strong><span>反映团队整体竞技等级结构</span></div>
+      <header><div><h3>竞技水平</h3><p>团队运动员技术等级结构</p></div><span>{profiles.length} 名运动员</span></header>
+      <div className="team-competitive-plot-heading"><strong>运动员技术等级分布</strong><span>已定级 {gradedCount} / {profiles.length} 名</span></div>
       <div className="team-profile-level-canvas">
-        {levelData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={levelData} margin={{ top: 12, right: 14, bottom: 8, left: -8 }}>
-          <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" vertical={false} />
-          <XAxis dataKey="level" tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} interval={0} />
-          <YAxis allowDecimals={false} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={false} tickLine={false} width={38} unit="人" />
-          <Tooltip formatter={(value, name, props) => [`${value}人`, (props as { payload?: LevelPoint }).payload?.level]} />
-          <Bar dataKey="count" name="人数" radius={[3, 3, 0, 0]}>
+        <ResponsiveContainer width="100%" height="100%"><BarChart data={levelData} layout="vertical" margin={{ top: 4, right: 28, bottom: 2, left: 4 }} barCategoryGap="18%">
+          <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" horizontal={false} />
+          <XAxis type="number" allowDecimals={false} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} unit="人" />
+          <YAxis type="category" dataKey="level" tick={{ fontSize: 8, fill: '#506c74', fontWeight: 700 }} axisLine={false} tickLine={false} width={75} />
+          <Tooltip content={<TechnicalLevelTooltip />} cursor={{ fill: 'rgba(17,139,131,.055)' }} />
+          <Bar dataKey="count" name="人数" radius={[0, 3, 3, 0]} minPointSize={2}>
             {levelData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} stroke="#fff" strokeWidth={1} />
             ))}
+            <LabelList dataKey="count" position="right" fill="#4c6870" fontSize={8} fontWeight={800} formatter={(value) => `${value ?? 0}人`} />
           </Bar>
-        </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无技术等级数据</div>}
-      </div>
-      <div className="team-competitive-plot-heading team-completeness-heading"><strong>竞技档案完整度</strong><span>最好成绩、技术等级、主项、位置越齐全，水平档案越完整</span></div>
-      <div className="team-profile-competitive-canvas team-completeness-canvas">
-        {completenessData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={completenessData} margin={{ top: 12, right: 14, bottom: 8, left: -8 }}>
-          <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" vertical={false} />
-          <XAxis dataKey="axisLabel" tick={{ fontSize: 8, fill: '#74888f' }} axisLine={{ stroke: '#cad9dc' }} tickLine={false} label={{ value: '运动员序号', position: 'insideBottomRight', offset: -4, fill: '#87979c', fontSize: 7 }} />
-          <YAxis domain={[0, 100]} tick={{ fontSize: 8, fill: '#74888f' }} axisLine={false} tickLine={false} width={38} unit="分" />
-          <ReferenceLine y={averageCompleteness} stroke="#e59a31" strokeDasharray="5 5" label={{ value: '平均完整度', position: 'insideTopLeft', fill: '#56808a', fontSize: 8 }} />
-          <Tooltip content={<CompetitiveLevelTooltip />} />
-          <Bar dataKey="completeness" name="档案完整度" radius={[2, 2, 0, 0]}>
-            {completenessData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.hasResult ? '#118b83' : '#9cc9c4'} stroke="#fff" strokeWidth={1} />
-            ))}
-          </Bar>
-        </BarChart></ResponsiveContainer> : <div className="team-profile-chart-empty">暂无数据</div>}
-      </div>
-      <div className="team-competitive-summary">
-        <span>档案完整度平均 <strong>{formatNumber(averageCompleteness, 1)} 分</strong></span>
-        <i>｜</i>
-        <span>最小 <strong>{formatNumber(minCompleteness, 0)} 分</strong></span>
-        <i>｜</i>
-        <span>最大 <strong>{formatNumber(maxCompleteness, 0)} 分</strong></span>
-        <i>｜</i>
-        <span>有最好成绩 <strong>{withResultCount}/{profiles.length}</strong></span>
+        </BarChart></ResponsiveContainer>
       </div>
     </section>
   );
