@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { api, getToken, setToken } from './api';
 import { AppShell, type PageKey, type SpecialPageKey, type StrengthPageKey } from './components/AppShell';
 import { BrandLogo } from './components/BrandLogo';
+import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
 import type { Athlete, Project, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
@@ -76,8 +77,7 @@ export default function App() {
     }
     setLoading(true);
     setGlobalError('');
-    const recordAthleteId = page === 'special-athletes' && user.role !== 'ATL' ? null : athleteId;
-    api.records(from, to, recordAthleteId, project)
+    api.records(from, to, athleteId, project)
       .then(({ records: nextRecords }) => setRecords(nextRecords))
       .catch((error) => setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。'))
       .finally(() => setLoading(false));
@@ -116,23 +116,6 @@ export default function App() {
     setRefreshKey((key) => key + 1);
   };
 
-  const renameAthlete = async (id: number, name: string) => {
-    await api.renameAthlete(id, name);
-    setAthletes((current) => current.map((athlete) => athlete.id === id ? { ...athlete, name } : athlete));
-    setRecords((current) => current.map((record) => record.athleteId === id ? { ...record, athleteName: name } : record));
-    setRefreshKey((key) => key + 1);
-  };
-
-  const renameVisibleUser = async (id: number, name: string) => {
-    await api.renameUser(id, name);
-    setAthletes((current) => current.map((athlete) => {
-      if (!athlete.coachUsers?.some((coach) => coach.id === id)) return athlete;
-      const coachUsers = athlete.coachUsers.map((coach) => coach.id === id ? { ...coach, displayName: name } : coach);
-      return { ...athlete, coachUsers, coaches: coachUsers.map((coach) => coach.displayName).join('、') };
-    }));
-    setRefreshKey((key) => key + 1);
-  };
-
   if (authLoading) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>正在恢复训练数据会话…</p></div>;
   if (!user) return <LoginPage onLogin={login} />;
   if (!athletesReady) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>正在加载项目信息…</p></div>;
@@ -151,14 +134,26 @@ export default function App() {
     onAthleteChange: setAthleteId,
     onProjectChange: (nextProject: Project) => { setProject(nextProject); setAthleteId(null); }
   };
+  const usesGlobalTrainingFilter = page === 'overview' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
+  const globalAthleteMode = user.role === 'ATL' ? 'self' : 'select';
+  const globalAthleteId = user.role === 'ATL' ? user.athleteId : athleteId;
 
   return (
     <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
       {globalError && <div className="global-error">{globalError}</div>}
+      {usesGlobalTrainingFilter && <div className="global-training-filter">
+        <DateToolbar
+          {...shared}
+          athleteId={globalAthleteId}
+          athleteMode={globalAthleteMode}
+          presetMode="period"
+          canRenameAthletes={false}
+        />
+      </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
-        {page === 'overview' && <OverviewPage {...shared} user={user} onAthleteNameChange={renameAthlete} onUserNameChange={renameVisibleUser} />}
+        {page === 'overview' && <OverviewPage {...shared} user={user} />}
         {page.startsWith('special-') && <SpecialTestsPage {...shared} user={user} section={page as SpecialPageKey} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
-        {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} onAthleteChange={setAthleteId} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}

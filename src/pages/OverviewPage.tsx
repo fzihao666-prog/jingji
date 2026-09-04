@@ -10,7 +10,6 @@ import { api } from '../api';
 import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
 import { addDays, aggregateRecords, average, formatNumber, groupByDate, percentage, worstStatus } from '../utils';
 import { ROLE_META } from '../../shared/access';
-import { DateToolbar } from '../components/DateToolbar';
 import {
   PerformanceRadarChart, RecoveryTrendChart
 } from '../components/LoadCharts';
@@ -38,8 +37,6 @@ type Props = {
   projects: Project[];
   onProjectChange: (project: Project) => void;
   user: User;
-  onAthleteNameChange: (id: number, name: string) => Promise<void>;
-  onUserNameChange: (id: number, name: string) => Promise<void>;
 };
 
 type CardSize = 'metric' | 'third' | 'half' | 'wide' | 'full';
@@ -138,8 +135,10 @@ export function OverviewPage(props: Props) {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
   const [rosterSearch, setRosterSearch] = useState('');
-  const isIndividualOverview = props.user.role === 'ATL';
-  const overviewAthleteId = isIndividualOverview ? props.user.athleteId : null;
+  const isSelfOverview = props.user.role === 'ATL';
+  const isIndividualOverview = isSelfOverview || props.athleteId !== null;
+  // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
+  const overviewAthleteId = isSelfOverview ? props.user.athleteId : props.athleteId;
   const overviewPeriod = useMemo(() => overviewPeriodFromRange(props.from, props.to), [props.from, props.to]);
 
   useEffect(() => {
@@ -660,9 +659,8 @@ export function OverviewPage(props: Props) {
     <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
       <header className="page-heading overview-page-heading">
         <div className="overview-title-block">
-          <h1>{isIndividualOverview ? '我的训练总览' : '训练总览'}</h1>
+          <h1>{isSelfOverview ? '我的训练总览' : isIndividualOverview ? '运动员训练总览' : '训练总览'}</h1>
         </div>
-        <DateToolbar {...props} athleteId={overviewAthleteId} athleteMode={isIndividualOverview ? 'self' : 'team'} presetMode="period" canRenameAthletes={false} onAthleteNameChange={props.onAthleteNameChange} />
         <div
           className="overview-principle"
           role="note"

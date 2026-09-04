@@ -348,8 +348,11 @@ h1, h2, h3, p { margin: 0; }
 .password-modal { width: min(420px, 100%); padding: 22px; border-radius: 14px; background: #fff; box-shadow: 0 24px 70px rgba(2, 25, 33, .28); }.modal-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }.modal-heading h2 { color: var(--ink); font-size: 20px; }.password-modal form { display: grid; gap: 14px; }.password-modal label span { display: block; margin-bottom: 7px; color: #405b65; font-size: 12px; font-weight: 700; }.password-modal input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid #ccdadd; border-radius: 8px; }.modal-message { padding: 9px 10px; border-radius: 7px; color: #526c75; background: #edf3f4; font-size: 12px; }
 .editable-name { max-width: 100%; display: inline-flex; align-items: center; gap: 5px; vertical-align: middle; }.editable-name-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; }.name-edit-trigger { flex: 0 0 auto; width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 6px; display: inline-grid; place-items: center; color: #789098; background: transparent; cursor: pointer; transition: color .15s ease, border-color .15s ease, background .15s ease; }.name-edit-trigger:hover { color: #117c76; border-color: #b7d9d5; background: #eaf7f4; }.name-edit-trigger:focus-visible { outline: 2px solid rgba(31,159,154,.32); outline-offset: 1px; }
 .name-editor-modal { position: relative; width: min(410px, 100%); padding: 24px; border-radius: 14px; background: #fff; box-shadow: 0 26px 80px rgba(2,25,33,.3); overflow: hidden; }.name-editor-modal::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: linear-gradient(180deg, var(--teal), var(--river)); }.name-editor-modal .modal-heading > div > span { display: block; margin-bottom: 4px; color: var(--teal); font-size: 9px; font-weight: 800; letter-spacing: .13em; }.name-editor-modal form { display: grid; gap: 15px; }.name-editor-modal label > span { display: block; margin-bottom: 7px; color: #405b65; font-size: 12px; font-weight: 700; }.name-editor-modal input { width: 100%; height: 46px; padding: 0 13px; border: 1px solid #c7d7da; border-radius: 8px; color: var(--ink); background: #fbfdfc; font-size: 15px; font-weight: 700; }.name-editor-modal input:focus { outline: 0; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(27,157,149,.12); }.name-editor-error { padding: 9px 11px; border-left: 3px solid var(--signal); color: #b84c39; background: #fff2ef; font-size: 11px; }.name-editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.main-area { min-width: 0; }
+.main-area { position: relative; min-width: 0; }
 .mobile-header, .sidebar-backdrop { display: none; }
+.global-training-filter { position: absolute; z-index: 20; top: 34px; right: 0; left: 0; padding: 0 clamp(24px, 3.3vw, 52px); display: flex; justify-content: flex-end; pointer-events: none; }
+.global-training-filter .date-toolbar { width: fit-content; max-width: 100%; }
+.global-training-filter .date-toolbar { pointer-events: auto; }
 .page-content { padding: 34px clamp(24px, 3.3vw, 52px) 56px; max-width: 1720px; margin: 0 auto; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 26px; }
 .page-heading h1 { color: var(--ink); margin-top: 5px; font-size: 31px; letter-spacing: -.04em; }
@@ -1157,7 +1160,13 @@ h1, h2, h3, p { margin: 0; }
   .plan-overview-grid { grid-template-columns: minmax(320px,.75fr) minmax(470px,1.25fr); }.plan-photo-panel { grid-template-columns: 70px minmax(0,1fr); padding: 15px; }.plan-photo-frame { width: 70px; height: 92px; }
   .plan-overview-left .plan-meta-form { padding: 16px; }.radar-body-figure { width: 126px; height: 218px; }
 }
+@media (max-width: 1180px) {
+  .global-training-filter { position: relative; top: auto; right: auto; left: auto; padding: 18px clamp(24px, 3.3vw, 52px) 0; }
+  .global-training-filter .date-toolbar { width: 100%; }
+}
 @media (max-width: 760px) {
+  .global-training-filter { padding: 14px 12px 0; }
+  .global-training-filter .date-toolbar { width: 100%; }
   .training-plan-heading,.plan-heading-actions { width: 100%; }.plan-heading-actions { justify-content: stretch; }.plan-athlete-select,.plan-history-select { flex: 1; min-width: 160px; }.plan-heading-actions button { flex: 1; }
   .plan-overview-grid { grid-template-columns: 1fr; }.plan-overview-left { border-right: 0; border-bottom: 1px solid #dce6e8; }.plan-photo-panel { border-right: 0; }.plan-overview-left .plan-meta-form { grid-template-columns: 1fr 1fr; padding: 14px; }.plan-meta-title,.plan-meta-schedule,.plan-meta-wide { grid-column: span 2; }
   .training-volume-radar { padding: 14px 7px 10px; }.radar-stage { min-height: 330px; height: 330px; }.radar-body-figure { width: 105px; height: 190px; }.training-volume-radar > footer { padding: 8px; flex-wrap: wrap; }.training-volume-radar > footer small { width: 100%; margin-left: 0; }

@@ -15,7 +15,6 @@ import {
   Scale,
   SlidersHorizontal,
   Trash2,
-  UserRound,
   X
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -56,12 +55,11 @@ type Props = {
   user: User;
   athletes: Athlete[];
   athleteId: number | null;
+  from: string;
+  to: string;
   initialPlanId?: number | null;
-  onAthleteChange: (athleteId: number | null) => void;
   onChanged: () => void;
 };
-
-type StrengthOverviewPeriod = 'day' | 'week' | 'month';
 
 const defaultWeekKeys = ['1', '2', '3', '4'];
 let itemSequence = 0;
@@ -133,13 +131,13 @@ function sourceLabel(source: string) {
 }
 
 export function TrainingPlanPage(props: Props) {
-  const selectedId = props.user.role === 'ATL' ? props.user.athleteId : props.athleteId || props.athletes[0]?.id || null;
+  // 体能页面不再自行选择运动员；唯一来源是应用顶部的全局筛选栏。
+  const selectedId = props.user.role === 'ATL' ? props.user.athleteId : props.athleteId;
   const athlete = useMemo(() => props.athletes.find((item) => item.id === selectedId) || null, [props.athletes, selectedId]);
   const canEdit = props.user.role !== 'ATL';
   const [activeCategory, setActiveCategory] = useState<StrengthTrainingCategory>('基础力量');
   const [categoryFilter, setCategoryFilter] = useState<'全部' | StrengthTrainingCategory>('全部');
   const [bodyPosition, setBodyPosition] = useState<'全部' | StrengthBodyPosition>('全部');
-  const [overviewPeriod, setOverviewPeriod] = useState<StrengthOverviewPeriod>('month');
   const [recordDate, setRecordDate] = useState('');
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [planId, setPlanId] = useState<number | null>(null);
@@ -155,10 +153,6 @@ export function TrainingPlanPage(props: Props) {
   const [importOpen, setImportOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const isAIPlan = Boolean(data.sourceType);
-
-  useEffect(() => {
-    if (!selectedId && props.user.role !== 'ATL' && props.athletes[0]) props.onAthleteChange(props.athletes[0].id);
-  }, [props.athletes, props.user.role, selectedId]);
 
   useEffect(() => {
     if (!athlete) {
@@ -265,17 +259,7 @@ export function TrainingPlanPage(props: Props) {
   };
 
   const allSets = useMemo(() => sessions.flatMap((session) => session.sets.map((set) => ({ ...set, session }))), [sessions]);
-  const latestTrainingDate = useMemo(() => sessions.reduce((latest, session) => session.trainingDate > latest ? session.trainingDate : latest, ''), [sessions]);
-  const overviewPeriodRange = useMemo(() => {
-    if (!latestTrainingDate) return { from: '', to: '', label: '暂无结果' };
-    const days = overviewPeriod === 'day' ? 0 : overviewPeriod === 'week' ? 6 : 29;
-    const from = addDays(latestTrainingDate, -days);
-    return { from, to: latestTrainingDate, label: overviewPeriod === 'day' ? latestTrainingDate : `${from} — ${latestTrainingDate}` };
-  }, [latestTrainingDate, overviewPeriod]);
-  const periodSessions = useMemo(() => {
-    if (props.section !== 'strength-overview' || !overviewPeriodRange.from) return sessions;
-    return sessions.filter((session) => session.trainingDate >= overviewPeriodRange.from && session.trainingDate <= overviewPeriodRange.to);
-  }, [overviewPeriodRange.from, overviewPeriodRange.to, props.section, sessions]);
+  const periodSessions = useMemo(() => sessions.filter((session) => session.trainingDate >= props.from && session.trainingDate <= props.to), [props.from, props.to, sessions]);
   const filteredSessions = useMemo(() => periodSessions.map((session) => ({
     ...session,
     sets: session.sets.filter((set) => {
@@ -303,17 +287,19 @@ export function TrainingPlanPage(props: Props) {
     'strength-analysis': ['训练分析', '分析训练量、强度结构、水陆比例与训练课构成。'],
     'strength-assessment': ['体能评估', '通过周期测试判断运动员能力是否进步。']
   }[props.section];
+  const showLocalFilters = ['strength-plan', 'strength-records', 'strength-analysis'].includes(props.section);
   const overviewStats = useMemo(() => {
-    const completed = allSets.filter((item) => item.completed).length;
-    const rpeValues = allSets.map((item) => item.rpe).filter((value): value is number => value !== null);
+    const periodSets = periodSessions.flatMap((session) => session.sets);
+    const completed = periodSets.filter((item) => item.completed).length;
+    const rpeValues = periodSets.map((item) => item.rpe).filter((value): value is number => value !== null);
     return {
-      sessions: sessions.length,
-      completion: allSets.length ? Math.round(completed / allSets.length * 100) : 0,
-      volume: Math.round(allSets.reduce((sum, item) => sum + item.actualReps * item.actualWeightKg, 0)),
+      sessions: periodSessions.length,
+      completion: periodSets.length ? Math.round(completed / periodSets.length * 100) : 0,
+      volume: Math.round(periodSets.reduce((sum, item) => sum + item.actualReps * item.actualWeightKg, 0)),
       rpe: rpeValues.length ? Math.round(rpeValues.reduce((sum, value) => sum + value, 0) / rpeValues.length * 10) / 10 : null,
-      latest: sessions[0]?.trainingDate || '暂无'
+      latest: periodSessions[0]?.trainingDate || '暂无'
     };
-  }, [allSets, sessions]);
+  }, [periodSessions]);
 
   const comparisons = useMemo(() => data.exercises.filter((exercise) => exercise.name.trim()).map((exercise) => {
     const plannedSets = weekKeys.reduce((sum, weekKey) => sum + exercise.lines.reduce((lineSum, line) => lineSum + prescriptionNumber(line.weeks[weekKey]?.sets), 0), 0);
@@ -334,7 +320,7 @@ export function TrainingPlanPage(props: Props) {
     };
   }), [activeWeek, allSets, data.endDate, data.exercises, data.startDate, weekKeys]);
 
-  if (!athlete) return <div className="page-content professional-overview strength-workbench"><section className="strength-empty"><Dumbbell size={34} /><strong>暂无可查看的运动员</strong></section></div>;
+  if (!athlete) return <div className="page-content professional-overview strength-workbench"><section className="strength-empty"><Dumbbell size={34} /><strong>请在全局筛选栏选择一名运动员</strong><span>体能训练会与训练总览、个人档案和专项训练使用同一个运动员筛选结果。</span></section></div>;
 
   return (
     <div className="page-content professional-overview strength-workbench">
@@ -352,22 +338,20 @@ export function TrainingPlanPage(props: Props) {
         </div>
       </header>
 
-      <section className="strength-filter-bar" aria-label="体能训练筛选条件">
+      {showLocalFilters && <section className="strength-filter-bar" aria-label="体能训练内容筛选">
         <div className="strength-filter-intro"><i><SlidersHorizontal size={18} /></i><div><strong>筛选条件</strong><small>切换后图表与记录同步更新</small></div></div>
         <div className="strength-command-controls">
-          {props.user.role !== 'ATL' && <label><span><UserRound size={13} />运动员</span><select aria-label="体能训练运动员" value={selectedId || ''} onChange={(event) => props.onAthleteChange(Number(event.target.value))}>{props.athletes.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.team}</option>)}</select></label>}
-          {props.section === 'strength-overview' && <div className="strength-period-options"><span><CalendarRange size={13} />训练周期</span><div>{([['day', '日'], ['week', '周'], ['month', '月']] as const).map(([key, label]) => <button key={key} type="button" className={overviewPeriod === key ? 'active' : ''} aria-pressed={overviewPeriod === key} onClick={() => setOverviewPeriod(key)}>{label}</button>)}</div></div>}
           {['strength-plan', 'strength-records'].includes(props.section) && <label className="period-filter"><span><CalendarRange size={13} />训练周期</span><select aria-label="训练周期" disabled={!plans.length} value={planId || ''} onChange={(event) => selectPlan(Number(event.target.value))}>{plans.length ? plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.data.startDate}—{plan.data.endDate} · {plan.data.title}</option>) : <option value="">暂无训练周期</option>}</select></label>}
           {['strength-overview', 'strength-analysis'].includes(props.section) && <label><span><Dumbbell size={13} />训练类型</span><select aria-label="训练类型" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as '全部' | StrengthTrainingCategory)}><option>全部</option>{STRENGTH_TRAINING_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>}
           {!['strength-overview', 'strength-assessment'].includes(props.section) && <label><span><Scale size={13} />身体位置</span><select aria-label="训练身体位置" value={bodyPosition} onChange={(event) => setBodyPosition(event.target.value as '全部' | StrengthBodyPosition)}><option>全部</option>{STRENGTH_BODY_POSITIONS.map((position) => <option key={position}>{position}</option>)}</select></label>}
         </div>
-        {props.section !== 'strength-assessment' && <button className="strength-filter-reset" onClick={() => { setCategoryFilter('全部'); setBodyPosition('全部'); }} title="重置训练类型和身体位置"><RotateCcw size={15} /><span>重置</span></button>}
-      </section>
+        <button className="strength-filter-reset" onClick={() => { setCategoryFilter('全部'); setBodyPosition('全部'); }} title="重置训练类型和身体位置"><RotateCcw size={15} /><span>重置</span></button>
+      </section>}
 
       <section className="strength-training-context">
         <div className="strength-training-avatar">{athlete.name.slice(0, 1)}</div>
         <div className="strength-training-athlete"><span>当前运动员</span><strong>{athlete.name}</strong><small>{athlete.project} · {athlete.team}</small></div>
-        <dl><div><dt>当前周期</dt><dd>{props.section === 'strength-overview' ? overviewPeriodRange.label : `${data.startDate} — ${data.endDate}`}</dd></div><div><dt>性别</dt><dd>{athlete.gender || '未填写'}</dd></div><div><dt>位置/号位</dt><dd>{athlete.athletePosition || '未填写'}</dd></div><div><dt>训练项目（小项）</dt><dd>{athlete.currentEvent || athlete.project}</dd></div><div><dt>训练安排</dt><dd>{props.section === 'strength-overview' ? ({ day: '日', week: '周', month: '月' }[overviewPeriod]) : data.scheduleLabel || '未设置'}</dd></div><div><dt>最近结果</dt><dd>{overviewStats.latest}</dd></div></dl>
+        <dl><div><dt>当前周期</dt><dd>{props.from} — {props.to}</dd></div><div><dt>性别</dt><dd>{athlete.gender || '未填写'}</dd></div><div><dt>位置/号位</dt><dd>{athlete.athletePosition || '未填写'}</dd></div><div><dt>训练项目（小项）</dt><dd>{athlete.currentEvent || athlete.project}</dd></div><div><dt>训练安排</dt><dd>{props.section === 'strength-overview' ? '由全局周期筛选' : data.scheduleLabel || '未设置'}</dd></div><div><dt>最近结果</dt><dd>{overviewStats.latest}</dd></div></dl>
       </section>
 
       {['strength-plan', 'strength-records'].includes(props.section) && <StrengthPlanCategoryTabs value={activeCategory} onChange={setActiveCategory} />}

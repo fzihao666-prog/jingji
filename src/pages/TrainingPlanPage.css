@@ -42,15 +42,9 @@
 .strength-command-controls { min-width: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 9px; }
 .strength-command-controls label { min-width: 0; }
 .strength-command-controls label.period-filter { min-width: 230px; }
-.strength-period-options { min-width: 190px; }
 .strength-command-controls label > span,
-.strength-period-options > span,
 .strength-plan-meta label > span,
 .strength-exercise-card label > span { display: flex; align-items: center; gap: 5px; margin: 0 0 6px 2px; color: #73878d; font-size: 8px; font-weight: 760; }
-.strength-period-options > div { height: 44px; padding: 4px; border: 1px solid #ccdadd; border-radius: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; background: #fff; }
-.strength-period-options button { min-width: 0; border: 0; border-radius: 7px; color: #647a82; background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; }
-.strength-period-options button:hover { color: #0d8078; background: #eff8f6; }
-.strength-period-options button.active { color: #fff; background: var(--strength-teal); box-shadow: 0 5px 12px rgba(13,148,136,.16); }
 .strength-command-controls select,
 .strength-plan-meta input,
 .strength-exercise-card input,
