@@ -2,13 +2,9 @@ import {
   Bot,
   CalendarRange,
   CheckCircle2,
-  Download,
   Dumbbell,
-  FilePlus2,
   History,
-  Import,
   LoaderCircle,
-  MoreHorizontal,
   Plus,
   RotateCcw,
   Save,
@@ -20,7 +16,6 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { AITrainingPlanGenerator } from '../components/AITrainingPlanGenerator';
-import { StrengthResultImportDialog } from '../components/StrengthResultImportDialog';
 import { StrengthTrainingLoadChart } from '../components/StrengthTrainingLoadChart';
 import {
   StrengthAnalysisPanel,
@@ -174,7 +169,6 @@ export function TrainingPlanPage(props: Props) {
   // 体能模块固定以当前项目的全部队员为统计口径，不继承全局个人筛选。
   const athlete = props.athletes[0] || null;
   const canEdit = false;
-  const canImport = props.user.role !== 'ATL';
   const teamKey = useMemo(() => props.athletes.map((item) => item.id).sort((left, right) => left - right).join(','), [props.athletes]);
   const [activeCategory, setActiveCategory] = useState<StrengthTrainingCategory>('基础力量');
   const [categoryFilter, setCategoryFilter] = useState<'全部' | StrengthTrainingCategory>('全部');
@@ -191,8 +185,6 @@ export function TrainingPlanPage(props: Props) {
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [aiOpen, setAiOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const isAIPlan = Boolean(data.sourceType);
 
   useEffect(() => {
@@ -303,23 +295,6 @@ export function TrainingPlanPage(props: Props) {
     } finally { setBusy(''); }
   };
 
-  const deletePlan = async () => {
-    if (!athlete || !planId) return;
-    if (!window.confirm(`确认删除${athlete.name}当前选择的体能训练？删除后无法恢复。`)) return;
-    setBusy('delete'); setMessage('');
-    try { const result = await api.deleteTrainingPlan(planId); await refresh(); setMessage(result.message); }
-    catch (error) { setMessage(error instanceof Error ? error.message : '删除失败。'); }
-    finally { setBusy(''); setMoreOpen(false); }
-  };
-
-  const download = async () => {
-    if (!athlete || !planId) return;
-    setBusy('download'); setMessage('');
-    try { await api.downloadTrainingPlan(planId, `${athlete.name}_${data.startDate}_体能训练.xlsx`); }
-    catch (error) { setMessage(error instanceof Error ? error.message : '导出失败。'); }
-    finally { setBusy(''); setMoreOpen(false); }
-  };
-
   const allSets = useMemo(() => sessions.flatMap((session) => session.sets.map((set) => ({ ...set, session }))), [sessions]);
   const periodSessions = useMemo(() => sessions.filter((session) => session.trainingDate >= props.from && session.trainingDate <= props.to), [props.from, props.to, sessions]);
   const filteredSessions = useMemo(() => periodSessions.map((session) => ({
@@ -345,7 +320,7 @@ export function TrainingPlanPage(props: Props) {
   const pageMeta = {
     'strength-overview': ['体能总览', '快速判断运动员最近练得怎么样，优先查看训练负荷与完成情况。'],
     'strength-plan': ['训练安排', '制定并管理五类体能训练处方，明确动作、负荷、强度与时间。'],
-    'strength-records': ['训练记录', '核对每次体能训练的实际完成情况，并导入教练记录。'],
+    'strength-records': ['训练记录', '核对每次体能训练的实际完成情况。'],
     'strength-analysis': ['训练分析', '分析训练量、强度结构、水陆比例与训练课构成。'],
     'strength-assessment': ['体能评估', '通过周期测试判断运动员能力是否进步。']
   }[props.section];
@@ -389,13 +364,7 @@ export function TrainingPlanPage(props: Props) {
       <header className="page-heading overview-page-heading strength-page-head">
         <div className="strength-title"><span>STRENGTH TRAINING</span><h1>{pageMeta[0]}</h1><p>{pageMeta[1]}</p></div>
         <div className="strength-command-actions">
-          {canImport && ['strength-overview', 'strength-records', 'strength-analysis'].includes(props.section) && <button className="strength-button import" onClick={() => setImportOpen(true)}><Import size={17} />导入训练结果</button>}
           {canEdit && props.section === 'strength-plan' && <button className="strength-button save" disabled={busy === 'save'} onClick={save}>{busy === 'save' ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}保存方案</button>}
-          {props.section === 'strength-plan' && <div className="strength-more"><button className="strength-icon-button" aria-label="更多操作" onClick={() => setMoreOpen((open) => !open)}><MoreHorizontal size={20} /></button>{moreOpen && <div className="strength-more-menu">
-            {canEdit && <button onClick={() => { setPlanId(null); setData(emptyPlan()); setActiveWeek('1'); setMoreOpen(false); }}><FilePlus2 size={15} />新建计划</button>}
-            <button disabled={!planId || busy === 'download'} onClick={download}><Download size={15} />导出计划</button>
-            {canEdit && planId && <button className="danger" disabled={busy === 'delete'} onClick={deletePlan}><Trash2 size={15} />删除计划</button>}
-          </div>}</div>}
         </div>
       </header>
 
@@ -479,11 +448,10 @@ export function TrainingPlanPage(props: Props) {
         </section>
       </> : <section className="strength-results-panel">
         <header><div><span>COMPLETED TRAINING</span><h2>已保存的训练结果</h2><p>默认展示最近 10 条，更早记录可通过日历按日期查看。</p></div></header>
-        {filteredSessions.length ? <><StrengthTrainingLoadChart sessions={filteredSessions} /><div className="strength-record-browser"><div><strong>{recordDate ? `${recordDate} 的训练记录` : '最近 10 条训练记录'}</strong><span>{recordDate ? `当天共 ${recordListSessions.length} 条` : `当前筛选共 ${filteredSessions.length} 条，明细展示 ${recordListSessions.length} 条`}</span></div><label><span><CalendarRange size={14} />按日期查看</span><input type="date" aria-label="按日期查看训练记录" value={recordDate} onChange={(event) => setRecordDate(event.target.value)} /></label>{recordDate && <button type="button" onClick={() => setRecordDate('')}><RotateCcw size={14} />返回最近 10 条</button>}</div>{recordListSessions.length ? <div className="strength-session-list">{recordListSessions.map((session) => <article className="strength-session-card" key={session.id}><header><div><time>{session.trainingDate}</time><strong>{session.sessionLabel}</strong><span>第{session.sessionOrder}场</span></div><div><span>{sourceLabel(session.source)}</span>{session.sourceFilename && <small title={session.sourceFilename}>{session.sourceFilename}</small>}<strong>{Math.round(session.volume).toLocaleString()} kg·reps</strong></div></header><div className="strength-result-table"><div className="result-head"><span>动作</span><span>计划</span><span>实际</span><span>强度</span><span>时间</span><span>RPE</span><span>完成</span></div>{session.sets.map((set) => <div className="result-row" key={set.id}><strong>{set.exerciseName}</strong><span>{set.targetReps ?? '—'}次 · {set.plannedWeightKg ?? '—'}kg</span><span>{set.actualReps}次 · {set.actualWeightKg}kg</span><span>{set.intensityPercent ?? '—'}%</span><span>{set.durationMin || '—'} min</span><span>{set.rpe ?? '—'}</span><span className={set.completed ? 'done' : 'missed'}>{set.completed ? <CheckCircle2 size={15} /> : <X size={15} />}{set.completed ? '完成' : '未完成'}</span></div>)}</div></article>)}</div> : <div className="strength-empty compact"><CalendarRange size={28} /><strong>该日期没有训练记录</strong><span>请选择日历中的其他日期，或返回最近 10 条。</span></div>}</> : <div className="strength-empty results"><Scale size={28} /><strong>当前分类还没有训练结果</strong><span>{canEdit ? '使用页面顶部“导入训练结果”，完成后将在这里生成训练分析。' : '教练导入训练结果后，数据会按训练场次显示在这里。'}</span></div>}
+        {filteredSessions.length ? <><StrengthTrainingLoadChart sessions={filteredSessions} /><div className="strength-record-browser"><div><strong>{recordDate ? `${recordDate} 的训练记录` : '最近 10 条训练记录'}</strong><span>{recordDate ? `当天共 ${recordListSessions.length} 条` : `当前筛选共 ${filteredSessions.length} 条，明细展示 ${recordListSessions.length} 条`}</span></div><label><span><CalendarRange size={14} />按日期查看</span><input type="date" aria-label="按日期查看训练记录" value={recordDate} onChange={(event) => setRecordDate(event.target.value)} /></label>{recordDate && <button type="button" onClick={() => setRecordDate('')}><RotateCcw size={14} />返回最近 10 条</button>}</div>{recordListSessions.length ? <div className="strength-session-list">{recordListSessions.map((session) => <article className="strength-session-card" key={session.id}><header><div><time>{session.trainingDate}</time><strong>{session.sessionLabel}</strong><span>第{session.sessionOrder}场</span></div><div><span>{sourceLabel(session.source)}</span>{session.sourceFilename && <small title={session.sourceFilename}>{session.sourceFilename}</small>}<strong>{Math.round(session.volume).toLocaleString()} kg·reps</strong></div></header><div className="strength-result-table"><div className="result-head"><span>动作</span><span>计划</span><span>实际</span><span>强度</span><span>时间</span><span>RPE</span><span>完成</span></div>{session.sets.map((set) => <div className="result-row" key={set.id}><strong>{set.exerciseName}</strong><span>{set.targetReps ?? '—'}次 · {set.plannedWeightKg ?? '—'}kg</span><span>{set.actualReps}次 · {set.actualWeightKg}kg</span><span>{set.intensityPercent ?? '—'}%</span><span>{set.durationMin || '—'} min</span><span>{set.rpe ?? '—'}</span><span className={set.completed ? 'done' : 'missed'}>{set.completed ? <CheckCircle2 size={15} /> : <X size={15} />}{set.completed ? '完成' : '未完成'}</span></div>)}</div></article>)}</div> : <div className="strength-empty compact"><CalendarRange size={28} /><strong>该日期没有训练记录</strong><span>请选择日历中的其他日期，或返回最近 10 条。</span></div>}</> : <div className="strength-empty results"><Scale size={28} /><strong>当前分类还没有训练结果</strong><span>当前周期暂未同步训练结果。</span></div>}
       </section>}
 
       {aiOpen && <div className="strength-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAiOpen(false); }}><section className="strength-ai-drawer" role="dialog" aria-modal="true" aria-label="AI生成体能训练"><header><div><span>PLAN DRAFT</span><h2>AI生成计划草稿</h2></div><button className="strength-icon-button" onClick={() => setAiOpen(false)} aria-label="关闭AI生成"><X size={19} /></button></header><div className="strength-ai-scroll"><AITrainingPlanGenerator athlete={athlete} onSaved={async (savedPlanId) => { await refresh(savedPlanId); props.onChanged(); setAiOpen(false); setMessage('AI计划草稿已确认并保存。'); }} /></div></section></div>}
-      {importOpen && <StrengthResultImportDialog athletes={props.athletes} onClose={() => setImportOpen(false)} onCommitted={async () => { await refresh(); props.onChanged(); setMessage('训练结果已保存并更新体能分析。'); }} />}
     </div>
   );
 }

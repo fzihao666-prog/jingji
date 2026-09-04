@@ -17,8 +17,6 @@ import type {
   Role,
   SpecialTestEvent,
   SpecialTestImportPreview,
-  StrengthImportPreview,
-  StrengthImportRow,
   StrengthTest,
   StrengthTrainingSession,
   TeamPermission,
@@ -329,49 +327,8 @@ export const api = {
       body
     });
   },
-  async downloadTrainingPlan(planId: number, filename: string) {
-    const response = await fetch(`/api/training-plans/${planId}/export`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.message || '体能训练导出失败。');
-    }
-    const blob = await response.blob();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  },
   async strengthTrainingResults(athleteId: number) {
     return request<{ sessions: StrengthTrainingSession[] }>(`/api/strength-training/results?athleteId=${athleteId}`);
-  },
-  async previewStrengthResults(file: File) {
-    const body = new FormData();
-    body.append('file', file);
-    return request<StrengthImportPreview>('/api/strength-training/import/preview', { method: 'POST', body });
-  },
-  async commitStrengthResults(token: string, rows: StrengthImportRow[], conflictPolicy: 'skip' | 'update' | 'new') {
-    return request<{ message: string; imported: number; updated: number; skipped: number; sessions: number }>('/api/strength-training/import/commit', {
-      method: 'POST',
-      body: JSON.stringify({ token, rows, conflictPolicy })
-    });
-  },
-  async downloadStrengthResultTemplate() {
-    const response = await fetch('/api/strength-training/import/template', {
-      headers: { Authorization: `Bearer ${getToken()}` }
-    });
-    if (!response.ok) throw new Error('体能训练结果模板下载失败。');
-    const blob = await response.blob();
-    const link = document.createElement('a');
-    const objectUrl = URL.createObjectURL(blob);
-    link.href = objectUrl;
-    link.download = '竞迹体能训练数据导入模板.xlsx';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
   async downloadDataImportTemplate() {
     const response = await fetch('/api/data-import/template', {
