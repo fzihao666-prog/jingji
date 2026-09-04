@@ -47,7 +47,7 @@ await page.getByRole('button', { name: '批量修改', exact: true }).click();
 await page.getByRole('heading', { name: /批量修改/ }).waitFor();
 await page.getByRole('button', { name: '关闭', exact: true }).click();
 await page.locator('.athlete-row-actions').first().getByRole('button', { name: '档案', exact: true }).click();
-await page.getByRole('heading', { name: '个人档案', exact: true }).waitFor();
+await page.getByRole('heading', { name: '运动员表现', exact: true }).waitFor();
 await page.getByRole('button', { name: '运动员管理', exact: true }).click();
 await page.getByRole('heading', { name: '运动员管理', exact: true }).waitFor();
 

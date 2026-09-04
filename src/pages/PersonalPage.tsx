@@ -1,4 +1,4 @@
-import { BrainCircuit, CalendarRange, CheckCircle2, Gauge, Route, Save, Trophy } from 'lucide-react';
+import { BrainCircuit, CalendarRange, CheckCircle2, Gauge, Route, Save, Search, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
@@ -39,10 +39,37 @@ function ageAtDate(birthDate: string | null, date: string) {
 }
 
 export function PersonalPage(props: Props) {
+  const [athleteQuery, setAthleteQuery] = useState('');
+  const canSwitchAthlete = props.user.role !== 'ATL';
   const selectedAthlete = useMemo(
-    () => props.athletes.find((athlete) => athlete.id === (props.athleteId || props.user.athleteId)) || null,
+    () => props.athletes.find((athlete) => athlete.id === (props.athleteId ?? props.user.athleteId)) || null,
     [props.athletes, props.athleteId, props.user.athleteId]
   );
+  const filteredAthletes = useMemo(() => {
+    const query = athleteQuery.trim().toLowerCase();
+    if (!query) return props.athletes;
+    return props.athletes.filter((athlete) => [
+      athlete.name,
+      athlete.team,
+      athlete.project,
+      athlete.province,
+      athlete.city,
+      athlete.county,
+      athlete.athletePosition,
+      athlete.coaches
+    ].some((value) => String(value || '').toLowerCase().includes(query)));
+  }, [props.athletes, athleteQuery]);
+
+  useEffect(() => {
+    if (!canSwitchAthlete || selectedAthlete || !props.athletes.length) return;
+    const randomIndex = Math.floor(Math.random() * props.athletes.length);
+    props.onAthleteChange(props.athletes[randomIndex].id);
+  }, [canSwitchAthlete, selectedAthlete, props.athletes, props.onAthleteChange]);
+
+  const switchAthlete = (athleteId: number) => {
+    props.onAthleteChange(athleteId);
+    setAthleteQuery('');
+  };
   const selectedRecords = useMemo(
     () => selectedAthlete ? props.records.filter((record) => record.athleteId === selectedAthlete.id) : [],
     [props.records, selectedAthlete]
@@ -163,16 +190,45 @@ export function PersonalPage(props: Props) {
     <div className="page-content personal-page">
       <header className="page-heading">
         <div>
-          <h1>个人档案</h1>
-          <p>查看运动员基础信息、训练表现、伤病恢复与体能测试档案</p>
+          <h1>运动员表现</h1>
+          <p>聚合运动员基础信息、训练表现、FMS、伤病恢复与冠军模型对标</p>
         </div>
       </header>
+
+      {canSwitchAthlete && (
+        <section className="performance-athlete-picker">
+          <div className="performance-picker-copy">
+            <span>ATHLETE SEARCH</span>
+            <strong>选择运动员</strong>
+            <small>{selectedAthlete ? `${selectedAthlete.project} · ${selectedAthlete.team} · ${selectedAthlete.name}` : `当前项目可查看 ${props.athletes.length} 人`}</small>
+          </div>
+          <label className="performance-athlete-search">
+            <Search size={16} />
+            <input
+              value={athleteQuery}
+              onChange={(event) => setAthleteQuery(event.target.value)}
+              placeholder="搜索姓名、队伍、地区、位置或教练"
+              aria-label="搜索运动员"
+            />
+          </label>
+          <select
+            className="performance-athlete-select"
+            value={selectedAthlete?.id || ''}
+            onChange={(event) => { if (event.target.value) switchAthlete(Number(event.target.value)); }}
+            aria-label="选择运动员"
+          >
+            <option value="">选择运动员</option>
+            {filteredAthletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name} · {athlete.team}</option>)}
+          </select>
+          {!filteredAthletes.length && <p className="performance-athlete-no-result">没有匹配的运动员</p>}
+        </section>
+      )}
 
       {!selectedAthlete ? (
         <section className="personal-empty">
           <CalendarRange size={34} />
-          <strong>先选择一名运动员</strong>
-          <p>在右上角选择运动员后，可查看完整个人档案。</p>
+          <strong>暂无可展示运动员</strong>
+          <p>请切换到有运动员数据的项目，或通过上方搜索选择运动员。</p>
         </section>
       ) : (
         <>

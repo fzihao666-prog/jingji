@@ -55,7 +55,7 @@ const navItems: Array<{
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
-  { key: 'personal', label: '个人档案', icon: UserRound },
+  { key: 'personal', label: '运动员表现', icon: UserRound },
   { key: 'athletes', label: '运动员管理', icon: UsersRound, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'coaches', label: '教练管理', icon: Network, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },

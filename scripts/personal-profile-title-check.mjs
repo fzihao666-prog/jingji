@@ -19,8 +19,8 @@ async function login(page, username) {
 }
 
 async function openPersonalArchive(page) {
-  await page.getByRole('button', { name: '个人档案', exact: true }).click();
-  await page.getByRole('heading', { name: '个人档案', exact: true }).waitFor();
+  await page.getByRole('button', { name: '运动员表现', exact: true }).click();
+  await page.getByRole('heading', { name: '运动员表现', exact: true }).waitFor();
   const picker = page.locator('.athlete-picker-trigger');
   if (await picker.count()) {
     await picker.click();
@@ -48,15 +48,15 @@ try {
   const importButtons = await coachPage.getByRole('button', { name: /导入数据|下载导入模板/ }).count();
   const newButtons = await coachPage.getByRole('button', { name: '录入新测试', exact: true }).count();
   const editButtons = await coachPage.getByRole('button', { name: '编辑本次数据', exact: true }).count();
-  if (moduleTitle !== '个人档案' || !posterTitle?.includes('个人档案信息表')) throw new Error(`档案标题错误：${moduleTitle} / ${posterTitle}`);
+  if (moduleTitle !== '运动员表现档案' || !posterTitle?.includes('运动员表现信息表')) throw new Error(`表现档案标题错误：${moduleTitle} / ${posterTitle}`);
   if (archiveRows !== 8 || radarCount !== 1 || legacyBodyMap !== 0) throw new Error(`档案结构错误：rows=${archiveRows}, radar=${radarCount}, legacy=${legacyBodyMap}`);
   if (importButtons !== 0 || newButtons !== 1 || editButtons !== 1) throw new Error(`教练操作入口错误：import=${importButtons}, new=${newButtons}, edit=${editButtons}`);
 
-  await coachPage.locator('.strength-module').screenshot({ path: `${outputDirectory}/个人档案.png` });
+  await coachPage.locator('.strength-module').screenshot({ path: `${outputDirectory}/运动员表现.png` });
   const pdfDownloadPromise = coachPage.waitForEvent('download', { timeout: 60000 });
-  await coachPage.getByRole('button', { name: '导出个人档案', exact: true }).click();
+  await coachPage.getByRole('button', { name: '导出运动员表现', exact: true }).click();
   const pdfDownload = await pdfDownloadPromise;
-  await pdfDownload.saveAs(`${outputDirectory}/个人档案.pdf`);
+  await pdfDownload.saveAs(`${outputDirectory}/运动员表现.pdf`);
 
   await coachPage.getByRole('button', { name: '录入新测试', exact: true }).click();
   await coachPage.locator('.archive-entry-modal').waitFor();
@@ -71,7 +71,7 @@ try {
   await coachPage.getByText('草稿已保存在本机，仅当前浏览器可见。', { exact: true }).waitFor();
   const previewScore = (await coachPage.locator('.archive-preview-stats > div').nth(1).textContent())?.trim();
   if (!previewScore || previewScore.includes('—')) throw new Error(`实时评分未更新：${previewScore}`);
-  await coachPage.screenshot({ path: `${outputDirectory}/个人档案数据录入.png`, fullPage: true });
+  await coachPage.screenshot({ path: `${outputDirectory}/运动员表现数据录入.png`, fullPage: true });
   await coachPage.locator('.archive-entry-modal').getByRole('button', { name: '关闭' }).click();
 
   await coachPage.getByRole('button', { name: '编辑本次数据', exact: true }).click();
@@ -82,8 +82,8 @@ try {
   await coachPage.setViewportSize({ width: 390, height: 844 });
   await coachPage.locator('.archive-sheet-scroll').scrollIntoViewIfNeeded();
   const mobileOverflow = await coachPage.locator('.archive-sheet-scroll').evaluate((element) => element.scrollWidth > element.clientWidth);
-  if (!mobileOverflow) throw new Error('移动端个人档案未启用横向查看。');
-  await coachPage.locator('.archive-sheet-scroll').screenshot({ path: `${outputDirectory}/个人档案移动端.png` });
+  if (!mobileOverflow) throw new Error('移动端运动员表现未启用横向查看。');
+  await coachPage.locator('.archive-sheet-scroll').screenshot({ path: `${outputDirectory}/运动员表现移动端.png` });
   if (coachErrors.length) throw new Error(coachErrors.join('\n'));
 
   const athleteContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
@@ -94,7 +94,7 @@ try {
   await login(athletePage, 'athlete01');
   await openPersonalArchive(athletePage);
   const athleteWriteButtons = await athletePage.getByRole('button', { name: /录入|编辑|保存草稿|沿用上次目标|导入/ }).count();
-  const athleteExportButtons = await athletePage.getByRole('button', { name: '导出个人档案', exact: true }).count();
+  const athleteExportButtons = await athletePage.getByRole('button', { name: '导出运动员表现', exact: true }).count();
   if (athleteWriteButtons !== 0 || athleteExportButtons !== 1) throw new Error(`运动员权限错误：write=${athleteWriteButtons}, export=${athleteExportButtons}`);
 
   const athleteLoginResponse = await athletePage.request.post(`${baseUrl}/api/auth/login`, { data: { username: 'athlete01', password: 'demo123' } });
@@ -104,7 +104,7 @@ try {
     data: { athleteId: athleteLogin.user.athleteId, testDate: '2026-08-22', metrics: { verticalJumpCm: 44 }, targets: {}, notes: 'permission-check' }
   });
   if (forbiddenWrite.status() !== 403) throw new Error(`运动员写入接口未拒绝：${forbiddenWrite.status()}`);
-  await athletePage.locator('.strength-module').screenshot({ path: `${outputDirectory}/运动员只读个人档案.png` });
+  await athletePage.locator('.strength-module').screenshot({ path: `${outputDirectory}/运动员只读表现档案.png` });
   if (athleteErrors.length) throw new Error(athleteErrors.join('\n'));
 
   console.log(JSON.stringify({

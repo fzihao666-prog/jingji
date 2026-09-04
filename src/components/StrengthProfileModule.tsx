@@ -60,7 +60,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
       setTests(result.tests);
       setSelectedId(preferredId && result.tests.some((test) => test.id === preferredId) ? preferredId : result.tests[0]?.id || null);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '个人档案数据加载失败。');
+      setLoadError(error instanceof Error ? error.message : '运动员表现数据加载失败。');
     } finally {
       setLoading(false);
     }
@@ -85,9 +85,9 @@ export function StrengthProfileModule({ athlete, user }: Props) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       if (cancelled || !pdfRef.current) return;
       try {
-        await exportPdfSheets(pdfRef.current, `${athlete.name}_个人档案_${selected.testDate}`, '齐总');
+        await exportPdfSheets(pdfRef.current, `${athlete.name}_运动员表现_${selected.testDate}`, '齐总');
       } catch (error) {
-        setPdfError(error instanceof Error ? error.message : '个人档案PDF生成失败。');
+        setPdfError(error instanceof Error ? error.message : '运动员表现PDF生成失败。');
       } finally {
         if (!cancelled) { setPdfOpen(false); setPdfBusy(false); }
       }
@@ -143,7 +143,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
       setDataNotice(editorMode === 'new' ? '测试数据已保存，档案和雷达图已更新。' : '本次测试数据已更新。');
       await loadTests(result.id);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : '个人档案数据保存失败。');
+      setSaveError(error instanceof Error ? error.message : '运动员表现数据保存失败。');
     } finally {
       setSaveBusy(false);
     }
@@ -162,22 +162,22 @@ export function StrengthProfileModule({ athlete, user }: Props) {
   return (
     <section className="strength-module archive-profile-module">
       <header className="strength-module-heading">
-        <div className="strength-module-title"><ClipboardList size={22} /><span><small>PHYSICAL FITNESS ARCHIVE</small><strong>个人档案</strong></span></div>
+        <div className="strength-module-title"><ClipboardList size={22} /><span><small>ATHLETE PERFORMANCE</small><strong>运动员表现档案</strong></span></div>
         <div className="strength-module-actions">
           {tests.length > 1 && <label className="strength-history-select"><History size={15} /><select aria-label="档案测试日期" value={selected?.id || ''} onChange={(event) => setSelectedId(Number(event.target.value))}>{tests.map((test) => <option key={test.id} value={test.id}>{test.testDate}</option>)}</select></label>}
           {canEdit && <button className="secondary-button archive-new-test-button" onClick={() => openEditor('new')}><Plus size={16} />录入新测试</button>}
           {canEdit && selected && <button className="secondary-button" onClick={() => openEditor('edit')}><PencilLine size={16} />编辑本次数据</button>}
-          <button className="primary-button" onClick={() => { if (selected) { setPdfBusy(true); setPdfError(''); setPdfOpen(true); } }} disabled={!selected || pdfBusy}>{pdfBusy ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}{pdfBusy ? '生成中…' : '导出个人档案'}</button>
+          <button className="primary-button" onClick={() => { if (selected) { setPdfBusy(true); setPdfError(''); setPdfOpen(true); } }} disabled={!selected || pdfBusy}>{pdfBusy ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}{pdfBusy ? '生成中…' : '导出运动员表现'}</button>
         </div>
       </header>
 
       {loadError && <div className="global-error">{loadError}</div>}
       {pdfError && <div className="global-error">{pdfError}</div>}
       {dataNotice && <div className="archive-import-notice"><Save size={16} />{dataNotice}</div>}
-      {loading ? <div className="strength-loading"><LoaderCircle className="spin" /><span>正在读取个人档案…</span></div> : selected ? <>
+      {loading ? <div className="strength-loading"><LoaderCircle className="spin" /><span>正在读取运动员表现…</span></div> : selected ? <>
         <div className="archive-sheet-scroll"><ArchiveSheet athlete={athlete} test={selected} previous={previous} variant="web" /></div>
         {athlete.project === '激流' && <SlalomChampionComparison athlete={athlete} test={selected} />}
-      </> : <div className="strength-empty"><ClipboardList size={34} /><strong>暂无个人档案数据</strong><p>{canEdit ? '录入第一次测试后，系统会生成评分表与雷达图。' : '教练录入测试后，你可以在这里查看和导出个人档案。'}</p>{canEdit && <div className="archive-empty-actions"><button className="primary-button" onClick={() => openEditor('new')}><Plus size={16} />录入第一次测试</button></div>}</div>}
+      </> : <div className="strength-empty"><ClipboardList size={34} /><strong>暂无运动员表现数据</strong><p>{canEdit ? '录入第一次测试后，系统会生成评分表与雷达图。' : '教练录入测试后，你可以在这里查看和导出运动员表现。'}</p>{canEdit && <div className="archive-empty-actions"><button className="primary-button" onClick={() => openEditor('new')}><Plus size={16} />录入第一次测试</button></div>}</div>}
 
       {editorOpen && <div className="modal-backdrop strength-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>
         <section className="strength-editor-modal archive-entry-modal" role="dialog" aria-modal="true" aria-labelledby="strength-editor-title">
@@ -233,7 +233,7 @@ function ArchiveSheet({ athlete, test, previous, variant }: { athlete: Athlete; 
   return <div className={`strength-poster strength-poster-${variant} archive-sheet archive-sheet-${variant}`}>
     <header className="archive-sheet-header">
       <div className="archive-institute"><strong>冠蒂本</strong><span>训练数据中心</span></div>
-      <h2><span>{year}年{athlete.project}体能训练营</span>个人档案信息表</h2>
+      <h2><span>{year}年{athlete.project}体能训练营</span>运动员表现信息表</h2>
       <div className="archive-brand"><BrandLogo variant="full" className="print" /><small>测试日期：{formatDate(test.testDate)}</small><small>地点：冠蒂本训练中心</small></div>
     </header>
     <h3 className="archive-section-title">基本信息</h3>

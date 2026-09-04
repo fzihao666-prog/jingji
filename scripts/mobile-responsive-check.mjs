@@ -47,14 +47,14 @@ async function go(label) {
 }
 
 await assertViewport('01-overview');
-await go('个人档案');
+await go('运动员表现');
 await page.locator('.athlete-picker-trigger').click();
 const personalOptions = page.locator('.athlete-picker-options button');
 if (await personalOptions.count() > 1) await personalOptions.nth(1).click();
 await page.locator('.personal-identity-card').waitFor();
 await assertViewport('02-personal');
 if (await page.locator('.model-standard-card, .personal-calendar-section').count()) {
-  throw new Error('个人档案仍显示已删除模块');
+  throw new Error('运动员表现仍显示已删除模块');
 }
 await go('体能训练');
 await page.locator('.strength-command-bar').waitFor();

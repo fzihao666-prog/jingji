@@ -73,8 +73,8 @@ const removedNavEntries = await page.getByRole('button', { name: /^(训练日历
   if (coachSelfCollaborationText !== 0) throw new Error('教练页面仍显示协作信息');
   await page.screenshot({ path: `${outputDirectory}/training-coach-self-service.png`, fullPage: true });
 
-  await page.getByRole('button', { name: /个人档案/ }).click();
-await page.getByRole('heading', { name: '个人档案', exact: true }).waitFor();
+  await page.getByRole('button', { name: /运动员表现/ }).click();
+await page.getByRole('heading', { name: '运动员表现', exact: true }).waitFor();
 await page.locator('.athlete-picker-trigger').click();
 const athleteOptions = page.locator('.athlete-picker-options button');
 if (await athleteOptions.count() > 1) await athleteOptions.nth(1).click();
@@ -83,8 +83,8 @@ await page.locator('.strength-poster-web').waitFor();
 await page.locator('.injury-recovery-module').waitFor();
 await page.waitForTimeout(600);
 const removedPersonalModules = await page.locator('.model-standard-card, .personal-calendar-section').count();
-if (removedPersonalModules !== 0) throw new Error('个人档案仍显示分析标准或训练记录与报告模块');
-if (await page.locator('.strength-advice-shell').count()) throw new Error('个人档案仍显示训练建议方案模块');
+if (removedPersonalModules !== 0) throw new Error('运动员表现仍显示分析标准或训练记录与报告模块');
+if (await page.locator('.strength-advice-shell').count()) throw new Error('运动员表现仍显示训练建议方案模块');
 await page.screenshot({ path: `${outputDirectory}/training-personal.png`, fullPage: true });
 await page.locator('.strength-module').screenshot({ path: `${outputDirectory}/training-strength-profile.png` });
 await page.locator('.injury-recovery-module').screenshot({ path: `${outputDirectory}/personal-injury-recovery.png` });
@@ -102,7 +102,7 @@ await page.screenshot({ path: `${outputDirectory}/training-strength-editor.png`,
 await page.locator('.strength-editor-modal').getByRole('button', { name: '关闭' }).click();
 
 const strengthDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-await page.getByRole('button', { name: '导出个人档案', exact: true }).click();
+await page.getByRole('button', { name: '导出运动员表现', exact: true }).click();
 const strengthDownload = await strengthDownloadPromise;
 await strengthDownload.saveAs(`${outputDirectory}/personal-strength-profile.pdf`);
 

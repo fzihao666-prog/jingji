@@ -1616,7 +1616,7 @@ export function AthleteManagementPage({
                     void saveAthlete(event as unknown as FormEvent, true)
                   }
                 >
-                  {saving ? "保存中…" : "保存并进入档案"}
+                  {saving ? "保存中…" : "保存并查看表现"}
                 </button>
               </footer>
             </form>
