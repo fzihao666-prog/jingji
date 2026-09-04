@@ -145,7 +145,7 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
       </div> : (
         <div className={`overview-scope-filter ${athleteMode}`} aria-label={athleteMode === 'team' ? '当前按权限范围汇总团队数据' : '当前仅展示本人数据'}>
           {athleteMode === 'team' ? <UsersRound size={16} /> : <UserRound size={16} />}
-          <span><strong>{athleteMode === 'team' ? '权限团队汇总' : selectedAthlete?.name || '本人数据'}</strong><small>{athleteMode === 'team' ? `${athletes.length}名${project}运动员` : '仅本人训练数据'}</small></span>
+          <span><strong>{athleteMode === 'team' ? '团队汇总' : selectedAthlete?.name || '本人数据'}</strong><small>{athleteMode === 'team' ? `${athletes.length}名${project}运动员` : '仅本人训练数据'}</small></span>
         </div>
       )}
       {athleteMode === 'select' && selectedAthlete && canRenameAthletes && onAthleteNameChange && (
