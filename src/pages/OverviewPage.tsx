@@ -1,7 +1,7 @@
 import {
   AlarmClock, ArrowRight, BarChart3, Database, Dumbbell,
   Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Search,
-  ShieldCheck, UsersRound
+  UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
@@ -79,7 +79,7 @@ const defaultOrder = [
   'athlete-profile', 'competitive-state', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'strength-analysis', 'injury-analysis',
   'training-load-analysis', 'training-volume', 'training-content', 'rpe-analysis',
-  'load-diagnostics', 'recovery', 'roster'
+  'recovery', 'roster'
 ];
 
 const cardMeta: Record<string, { title: string; size: CardSize }> = {
@@ -100,7 +100,6 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'training-volume': { title: '训练量统计', size: 'wide' },
   'training-content': { title: '训练内容统计', size: 'half' },
   'rpe-analysis': { title: 'RPE统计', size: 'half' },
-  'load-diagnostics': { title: '负荷诊断', size: 'third' },
   recovery: { title: '恢复与机能趋势', size: 'wide' },
   roster: { title: '运动员状态', size: 'full' }
 };
@@ -628,18 +627,6 @@ export function OverviewPage(props: Props) {
         <RpeStatisticsChart records={analysisRecords} />
       </article>
     ),
-    'load-diagnostics': (
-      <article className="panel professional-panel diagnostic-panel">
-        <PanelHeading title="负荷诊断" subtitle="Foster单调度 · 应变" />
-        <div className="diagnostic-metrics">
-          <Diagnostic label="急/慢负荷比" value={diagnostics.acuteChronicRatio?.toFixed(2) || '待计算'} note="近7日 ÷ 前21日周均" />
-          <Diagnostic label="训练单调度" value={diagnostics.monotony?.toFixed(2) || '待计算'} note="7日平均负荷 ÷ 标准差" />
-          <Diagnostic label="训练应变" value={diagnostics.strain === null ? '待计算' : formatNumber(diagnostics.strain)} note="7日负荷 × 单调度" />
-        </div>
-        <div className="diagnostic-brief"><ShieldCheck size={18} /><p>{loadBrief(diagnostics.acuteChronicRatio, diagnostics.monotony, summary.alerts, diagnostics.dataCoverage, isIndividualOverview ? 'individual' : 'team')}</p></div>
-        <p className="analysis-method-note">负荷比仅用于{isIndividualOverview ? '本人纵向' : '团队人均趋势'}监测，不作为伤病风险的单一判据。</p>
-      </article>
-    ),
     recovery: <article className="panel professional-panel"><PanelHeading title="恢复与机能趋势" subtitle={`${isIndividualOverview ? '个人' : '团队日均'} · 睡眠 · 晨脉 · 疲劳`} /><RecoveryTrendChart data={daily} /></article>,
     roster: (
       <article className="panel professional-panel roster-preview">
@@ -687,20 +674,6 @@ function PanelHeading({ title, subtitle, icon }: { title: string; subtitle: stri
 
 function Metric({ icon, label, value, unit, note, tone }: { icon: ReactNode; label: string; value: string; unit: string; note: string; tone: string }) {
   return <article className={`metric-card tone-${tone}`}><div className="metric-icon">{icon}</div><div className="metric-copy"><span>{label}</span><strong>{value}<small>{unit}</small></strong><p>{note}</p></div><div className="metric-waterline" aria-hidden="true" /></article>;
-}
-
-function Diagnostic({ label, value, note }: { label: string; value: string; note: string }) {
-  return <div><span>{label}</span><strong>{value}</strong><small>{note}</small></div>;
-}
-
-function loadBrief(ratio: number | null, monotony: number | null, alerts: number, coverage: number, scope: 'individual' | 'team') {
-  if (coverage < 60) return '监测数据完整率偏低，应先补齐RPE、晨脉、睡眠和疲劳记录，再判断训练适应。';
-  if (alerts) return `本周期存在${alerts}条异常标记，应结合专项课表、恢复状态和教练观察逐条复核。`;
-  if (ratio !== null && ratio > 1.5) return '近7日负荷相对前期周均增幅较大，建议结合恢复趋势确认是否继续递增。';
-  if (monotony !== null && monotony > 2) return '近7日负荷变化较小、单调度较高，建议检查高低负荷日是否形成有效波动。';
-  return scope === 'team'
-    ? '当前团队人均负荷与恢复记录未见明显冲突，仍需结合队员分布识别被均值掩盖的个体异常。'
-    : '当前负荷与恢复记录未见明显冲突，继续保持统一口径并观察个人纵向变化。';
 }
 
 function measurementValue(measurements: Map<string, OverviewMeasurement>, code: string) {
