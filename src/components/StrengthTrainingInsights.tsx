@@ -487,8 +487,25 @@ const assessmentMetrics: Array<{ key: StrengthMetricKey; label: string; domain: 
 ];
 
 export function StrengthAssessmentPanel({ tests }: { tests: StrengthTest[] }) {
-  const current = tests[0];
-  const previous = tests[1];
+  const teamTests = useMemo(() => {
+    const groups = new Map<string, StrengthTest[]>();
+    tests.forEach((test) => groups.set(test.testDate, [...(groups.get(test.testDate) || []), test]));
+    return [...groups.entries()]
+      .sort(([left], [right]) => right.localeCompare(left))
+      .map(([testDate, group]) => {
+        const metrics = Object.fromEntries(STRENGTH_METRICS.map((metric) => {
+          const values = group.map((test) => test.metrics[metric.key]).filter((value): value is number => typeof value === 'number');
+          return [metric.key, values.length ? round(values.reduce((sum, value) => sum + value, 0) / values.length, 1) : undefined];
+        }));
+        const targets = Object.fromEntries(STRENGTH_METRICS.map((metric) => {
+          const values = group.map((test) => test.targets[metric.key]).filter((value): value is number => typeof value === 'number');
+          return [metric.key, values.length ? round(values.reduce((sum, value) => sum + value, 0) / values.length, 1) : undefined];
+        }));
+        return { testDate, metrics, targets, athleteCount: group.length };
+      });
+  }, [tests]);
+  const current = teamTests[0];
+  const previous = teamTests[1];
   const cards = assessmentMetrics.map((item) => {
     const definition = STRENGTH_METRICS.find((metric) => metric.key === item.key);
     const value = current?.metrics[item.key];
@@ -496,7 +513,7 @@ export function StrengthAssessmentPanel({ tests }: { tests: StrengthTest[] }) {
     const change = typeof value === 'number' && typeof old === 'number' && old !== 0 ? round((value - old) / old * 100, 1) : null;
     return { ...item, unit: definition?.unit || '', value, old, change };
   });
-  const history = [...tests].reverse().map((test) => ({ date: test.testDate.slice(5), squat: test.metrics.squatKg, bench: test.metrics.benchPressKg, core: test.metrics.frontPlankSec }));
+  const history = [...teamTests].reverse().map((test) => ({ date: test.testDate.slice(5), squat: test.metrics.squatKg, bench: test.metrics.benchPressKg, core: test.metrics.frontPlankSec }));
   const radarData = cards.map((item) => {
     const target = current?.targets[item.key];
     const score = typeof item.value === 'number' && typeof target === 'number' && target > 0 ? Math.min(110, round(item.value / target * 100)) : typeof item.value === 'number' ? 80 : 0;
@@ -504,9 +521,9 @@ export function StrengthAssessmentPanel({ tests }: { tests: StrengthTest[] }) {
     return { domain: item.domain, current: score, previous: previousScore };
   });
 
-  if (!current) return <section className="strength-empty results"><Target size={30} /><strong>还没有体能测试记录</strong><span>请先在个人档案中录入体能测试，之后这里会显示当前能力与历史变化。</span></section>;
+  if (!current) return <section className="strength-empty results"><Target size={30} /><strong>还没有体能测试记录</strong><span>录入队员体能测试后，这里会展示全队平均能力与历史变化。</span></section>;
   return <>
-    <section className="strength-assessment-meta"><div><span>本次测试</span><strong>{current.testDate}</strong></div><div><span>对比周期</span><strong>{previous ? `${previous.testDate} → ${current.testDate}` : '暂无上次测试'}</strong></div><div><span>测试指标</span><strong>{Object.keys(current.metrics).length} 项</strong></div></section>
+    <section className="strength-assessment-meta"><div><span>最近测试</span><strong>{current.testDate}</strong></div><div><span>对比周期</span><strong>{previous ? `${previous.testDate} → ${current.testDate}` : '暂无上次测试'}</strong></div><div><span>本次覆盖</span><strong>{current.athleteCount} 人</strong></div></section>
     <section className="strength-assessment-cards">{cards.map((item, index) => <article key={item.key}><i><Dumbbell size={18} /></i><span>{item.label}</span><strong>{item.value ?? '—'} <small>{item.unit}</small></strong><em className={item.change !== null && item.change < 0 ? 'down' : ''}>{item.change === null ? '待形成对比' : `${item.change >= 0 ? '↑' : '↓'} ${Math.abs(item.change)}%`}</em></article>)}</section>
     <section className="strength-dashboard-grid assessment"><article className="strength-chart-card"><header><div><span>历史测试</span><h2>关键能力趋势</h2></div></header><div className="strength-chart-area">{history.length > 1 ? <ResponsiveContainer width="100%" height="100%"><LineChart data={history}><CartesianGrid stroke="#e8efef" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip /><Legend /><Line dataKey="squat" name="深蹲 kg" stroke="#0d9488" strokeWidth={2.5} connectNulls /><Line dataKey="bench" name="卧推 kg" stroke="#3b82f6" strokeWidth={2.5} connectNulls /><Line dataKey="core" name="核心 秒" stroke="#84cc16" strokeWidth={2.5} connectNulls /></LineChart></ResponsiveContainer> : <EmptyChart text="至少两次测试后显示历史趋势" />}</div></article><article className="strength-chart-card"><header><div><span>目标达成度</span><h2>能力提升对比</h2></div></header><div className="strength-radar-wrap"><svg className="strength-native-radar" viewBox="0 0 220 220" role="img" aria-label="本次测试与上次测试能力雷达图">{[22, 43, 65, 86].map((radius) => <polygon key={radius} points={radarPoints(radarData.map(() => 110), radius)} className="radar-ring" />)}{radarData.map((_, index) => { const angle = -Math.PI / 2 + index * Math.PI * 2 / radarData.length; return <line key={index} x1="110" y1="110" x2={110 + Math.cos(angle) * 86} y2={110 + Math.sin(angle) * 86} />; })}<polygon points={radarPoints(radarData.map((item) => item.previous))} className="radar-previous" /><polygon points={radarPoints(radarData.map((item) => item.current))} className="radar-current" />{radarData.map((item, index) => { const angle = -Math.PI / 2 + index * Math.PI * 2 / radarData.length; return <text key={`${item.domain}-${index}`} x={110 + Math.cos(angle) * 104} y={114 + Math.sin(angle) * 99} textAnchor={Math.cos(angle) > .2 ? 'start' : Math.cos(angle) < -.2 ? 'end' : 'middle'}>{item.domain}</text>; })}</svg><div className="strength-radar-legend"><span><i />上次测试</span><span><i />本次测试</span></div></div></article></section>
     <section className="strength-assessment-table"><header><div><span>评估结果</span><h2>五类能力摘要</h2></div></header><div className="assessment-head"><span>能力维度</span><span>指标</span><span>上次</span><span>本次</span><span>变化</span><span>结论</span></div>{cards.map((item) => <div className="assessment-row" key={item.key}><strong>{item.domain}</strong><span>{item.label}</span><span>{item.old ?? '—'} {item.old !== undefined ? item.unit : ''}</span><span>{item.value ?? '—'} {item.value !== undefined ? item.unit : ''}</span><span className={item.change !== null && item.change < 0 ? 'down' : 'up'}>{item.change === null ? '—' : `${item.change >= 0 ? '+' : ''}${item.change}%`}</span><em>{item.change === null ? '待对比' : item.change >= 0 ? '提升' : '关注'}</em></div>)}</section>

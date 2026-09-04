@@ -77,7 +77,7 @@ export default function App() {
     }
     setLoading(true);
     setGlobalError('');
-    api.records(from, to, athleteId, project)
+    api.records(from, to, null, project)
       .then(({ records: nextRecords }) => setRecords(nextRecords))
       .catch((error) => setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。'))
       .finally(() => setLoading(false));
@@ -135,8 +135,6 @@ export default function App() {
     onProjectChange: (nextProject: Project) => { setProject(nextProject); setAthleteId(null); }
   };
   const usesGlobalTrainingFilter = page === 'overview' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
-  const globalAthleteMode = user.role === 'ATL' ? 'self' : 'select';
-  const globalAthleteId = user.role === 'ATL' ? user.athleteId : athleteId;
 
   return (
     <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
@@ -144,10 +142,7 @@ export default function App() {
       {usesGlobalTrainingFilter && <div className="global-training-filter">
         <DateToolbar
           {...shared}
-          athleteId={globalAthleteId}
-          athleteMode={globalAthleteMode}
           presetMode="period"
-          canRenameAthletes={false}
         />
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>

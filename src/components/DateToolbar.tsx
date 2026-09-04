@@ -1,51 +1,31 @@
-import { CalendarRange, Check, ChevronDown, Search, UserRound, UsersRound, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Athlete, Project } from '../types';
+import { CalendarRange, Check, ChevronDown } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { Project } from '../types';
 import { addDays, toIsoDate } from '../utils';
 import { projectKey } from '../../shared/projects';
-import { EditableName } from './EditableName';
 import { ProjectMark } from './ProjectMark';
 
 type Props = {
   from: string;
   to: string;
-  athleteId: number | null;
-  athletes: Athlete[];
   onRangeChange: (from: string, to: string) => void;
-  onAthleteChange: (athleteId: number | null) => void;
   project: Project;
   projects: Project[];
   onProjectChange: (project: Project) => void;
-  canRenameAthletes?: boolean;
-  onAthleteNameChange?: (id: number, name: string) => Promise<void>;
-  athleteMode?: 'select' | 'team' | 'self';
   presetMode?: 'default' | 'period';
   projectControl?: 'select' | 'segments';
 };
 
-export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAthleteChange, project, projects, onProjectChange, canRenameAthletes, onAthleteNameChange, athleteMode = 'select', presetMode = 'default', projectControl = 'select' }: Props) {
-  const selectedAthlete = athletes.find((athlete) => athlete.id === athleteId);
-  const [athleteOpen, setAthleteOpen] = useState(false);
+export function DateToolbar({ from, to, onRangeChange, project, projects, onProjectChange, presetMode = 'default', projectControl = 'select' }: Props) {
   const [projectOpen, setProjectOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const pickerRef = useRef<HTMLDivElement>(null);
   const projectRef = useRef<HTMLDivElement>(null);
-  const filteredAthletes = useMemo(() => {
-    const keyword = query.trim().toLocaleLowerCase('zh-CN');
-    if (!keyword) return athletes;
-    return athletes.filter((athlete) => [athlete.name, athlete.region, athlete.city, athlete.county, athlete.team]
-      .some((value) => value?.toLocaleLowerCase('zh-CN').includes(keyword)));
-  }, [athletes, query]);
 
   useEffect(() => {
-    setQuery('');
-    setAthleteOpen(false);
     setProjectOpen(false);
   }, [project]);
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!pickerRef.current?.contains(event.target as Node)) setAthleteOpen(false);
       if (!projectRef.current?.contains(event.target as Node)) setProjectOpen(false);
     };
     document.addEventListener('mousedown', close);
@@ -119,45 +99,6 @@ export function DateToolbar({ from, to, athleteId, athletes, onRangeChange, onAt
         </div>
       )}
 
-      {athleteMode === 'select' ? <div className={`athlete-picker ${athleteOpen ? 'open' : ''}`} ref={pickerRef}>
-        <button className="athlete-picker-trigger" type="button" onClick={() => setAthleteOpen((value) => !value)} aria-expanded={athleteOpen}>
-          <Search size={15} />
-          <span>{selectedAthlete ? selectedAthlete.name : `全部${project}运动员`}</span>
-          <ChevronDown size={15} />
-        </button>
-        {athleteOpen && <div className="athlete-picker-menu">
-          <label className="athlete-search-box">
-            <Search size={15} />
-            <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`搜索${project}运动员、地区或队伍`} onKeyDown={(event) => { if (event.key === 'Escape') setAthleteOpen(false); }} />
-            {query && <button type="button" onClick={() => setQuery('')} aria-label="清空搜索"><X size={14} /></button>}
-          </label>
-          <div className={`athlete-picker-project ${project === '皮划艇' ? 'canoe' : project === '激流' ? 'slalom' : 'rowing'}`}><ProjectMark project={project} />{project}<span>{athletes.length}人</span></div>
-          <div className="athlete-picker-options">
-            <button type="button" className={athleteId === null ? 'selected' : ''} onClick={() => { onAthleteChange(null); setAthleteOpen(false); setQuery(''); }}>
-              <span><strong>全部{project}运动员</strong><small>查看当前项目汇总</small></span>{athleteId === null && <Check size={15} />}
-            </button>
-            {filteredAthletes.map((athlete) => <button type="button" key={athlete.id} className={athlete.id === athleteId ? 'selected' : ''} onClick={() => { onAthleteChange(athlete.id); setAthleteOpen(false); setQuery(''); }}>
-              <span><strong>{athlete.name}</strong><small>{athlete.region} · {athlete.team}</small></span>{athlete.id === athleteId && <Check size={15} />}
-            </button>)}
-            {!filteredAthletes.length && <div className="athlete-picker-empty">没有找到“{query}”</div>}
-          </div>
-        </div>}
-      </div> : (
-        <div className={`overview-scope-filter ${athleteMode}`} aria-label={athleteMode === 'team' ? '当前按权限范围汇总团队数据' : '当前仅展示本人数据'}>
-          {athleteMode === 'team' ? <UsersRound size={16} /> : <UserRound size={16} />}
-          <span><strong>{athleteMode === 'team' ? '团队汇总' : selectedAthlete?.name || '本人数据'}</strong><small>{athleteMode === 'team' ? `${athletes.length}名${project}运动员` : '仅本人训练数据'}</small></span>
-        </div>
-      )}
-      {athleteMode === 'select' && selectedAthlete && canRenameAthletes && onAthleteNameChange && (
-        <EditableName
-          value={selectedAthlete.name}
-          showValue={false}
-          canEdit
-          onSave={(name) => onAthleteNameChange(selectedAthlete.id, name)}
-          label="运动员姓名"
-          className="select-name-editor"
-        />
-      )}
     </div>
   );
 }
