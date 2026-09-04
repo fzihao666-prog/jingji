@@ -10,19 +10,14 @@ import { api } from '../api';
 import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
 import { addDays, aggregateRecords, average, formatNumber, groupByDate, percentage, worstStatus } from '../utils';
 import { ROLE_META } from '../../shared/access';
+import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
-  PerformanceRadarChart, RecoveryTrendChart
-} from '../components/LoadCharts';
-import {
-  BasicStrengthAnalysis, FmsTeamChart, InjuryAssessmentChart, RpeStatisticsChart,
+  FmsTeamChart, InjuryAssessmentChart,
   TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { StatusPill } from '../components/StatusPill';
 import { AthleteProfileOverview, BirthplaceMapOverview, CompetitiveStateOverview } from '../components/AthleteProfileCharts';
-import {
-  buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics,
-  relativeStrengthRows, strengthChangeRows
-} from '../overview-analytics';
+import { buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics } from '../overview-analytics';
 
 type Props = {
   records: TrainingRecord[];
@@ -77,8 +72,8 @@ function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
 const defaultOrder = [
   'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
   'athlete-profile', 'competitive-state', 'birthplace-map',
-  'fms-analysis', 'performance-radar', 'strength-analysis', 'injury-analysis',
-  'training-load-analysis', 'training-volume', 'training-content', 'rpe-analysis',
+  'fms-analysis', 'performance-radar', 'injury-analysis',
+  'training-load-analysis', 'training-volume', 'training-content',
   'recovery', 'roster'
 ];
 
@@ -94,13 +89,10 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
   'fms-analysis': { title: 'FMS测试全队分析', size: 'half' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
-  'strength-analysis': { title: '基础力量分析', size: 'full' },
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
   'training-load-analysis': { title: '体能与专项训练负荷分析', size: 'full' },
   'training-volume': { title: '训练量统计', size: 'wide' },
   'training-content': { title: '训练内容统计', size: 'half' },
-  'rpe-analysis': { title: 'RPE统计', size: 'half' },
-  recovery: { title: '恢复与机能趋势', size: 'wide' },
   roster: { title: '运动员状态', size: 'full' }
 };
 
@@ -221,8 +213,6 @@ export function OverviewPage(props: Props) {
   const latestStrength = strengthTests[0];
   const measurementSampleCount = Math.max(0, ...(overview?.measurements || []).map((item) => item.sampleCount));
   const radar = useMemo(() => buildPerformanceRadar(latestStrength, diagnostics), [latestStrength, diagnostics]);
-  const strengthChanges = useMemo(() => strengthChangeRows(strengthTests), [strengthTests]);
-  const relativeStrength = useMemo(() => relativeStrengthRows(strengthTests), [strengthTests]);
   const selectedAthlete = props.athletes.find((athlete) => athlete.id === overviewAthleteId);
 
   const athleteRows = useMemo(() => props.athletes.map((athlete) => {
@@ -588,13 +578,6 @@ export function OverviewPage(props: Props) {
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
       </article>
     ),
-    'strength-analysis': (
-      <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="基础力量分析" subtitle={`${isIndividualOverview ? '个人' : '全队均值'} · 前后测变化 · 相对力量`} />
-        <BasicStrengthAnalysis changes={strengthChanges} relative={relativeStrength} />
-        <p className="analysis-method-note">合并原“力量与爆发前后测”和“相对力量”，同时观察变化率与倍体重水平，悬浮可查看精确数值。</p>
-      </article>
-    ),
     'injury-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
         <PanelHeading title="运动损伤评估图" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
@@ -621,13 +604,6 @@ export function OverviewPage(props: Props) {
         <TrainingContentChart records={analysisRecords} />
       </article>
     ),
-    'rpe-analysis': (
-      <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="RPE统计图" subtitle="主观用力程度（日/周/月/阶段）" />
-        <RpeStatisticsChart records={analysisRecords} />
-      </article>
-    ),
-    recovery: <article className="panel professional-panel"><PanelHeading title="恢复与机能趋势" subtitle={`${isIndividualOverview ? '个人' : '团队日均'} · 睡眠 · 晨脉 · 疲劳`} /><RecoveryTrendChart data={daily} /></article>,
     roster: (
       <article className="panel professional-panel roster-preview">
         <div className="panel-heading roster-panel-heading"><div><h2><UsersRound size={18} />运动员状态</h2><small>稳定率 {stableRate}% · 正常 {statusCount.normal} · 关注 {statusCount.attention} · 异常 {statusCount.alert}</small></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>

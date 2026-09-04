@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
+  Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
-import { ArrowUpRight, Dumbbell, Scale, TrendingUp } from 'lucide-react';
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
 import { formatNumber, percentage } from '../utils';
 
@@ -158,17 +157,6 @@ export function TrainingContentChart({ records }: { records: TrainingRecord[] })
   return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按训练内容时长构成</span><PeriodTabs control={range}/></div><div className="content-chart-layout"><div className="content-pie"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2}>{data.map(row=><Cell key={row.name} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value))} min`,name]}/></PieChart></ResponsiveContainer><div><strong>{formatNumber(total/60,1)}</strong><span>小时</span></div></div><div className="content-legend">{data.map(row=><div key={row.name}><i style={{background:row.fill}}/><span>{row.name}</span><strong>{percentage(row.value,total)}%</strong></div>)}</div></div></div>;
 }
 
-export function RpeStatisticsChart({ records }: { records: TrainingRecord[] }) {
-  const range = usePeriodRecords(records);
-  const data = useMemo(() => aggregateByDate(range.filtered, range.period), [range.filtered, range.period]);
-  const zones = useMemo(() => [
-    { name: '低强度 1–3', value: range.filtered.filter(r => r.rpe !== null && r.rpe <= 3).length, fill: '#73c5ab' },
-    { name: '中强度 4–6', value: range.filtered.filter(r => r.rpe !== null && r.rpe >= 4 && r.rpe <= 6).length, fill: '#e5a72e' },
-    { name: '高强度 7–10', value: range.filtered.filter(r => r.rpe !== null && r.rpe >= 7).length, fill: '#df634d' }
-  ], [range.filtered]);
-  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">主观用力程度 0–10 分</span><PeriodTabs control={range}/></div><div className="rpe-chart-layout"><div><ResponsiveContainer width="100%" height="100%"><AreaChart data={data} margin={{top:8,right:8,left:-24,bottom:0}}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9}} axisLine={false} tickLine={false}/><YAxis domain={[0,10]} tick={{fontSize:9}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>[`${value} 分`,'平均RPE']}/><Area type="monotone" dataKey="rpe" stroke="#8064a8" strokeWidth={2.4} fill="#8b6eb0" fillOpacity={.18}/></AreaChart></ResponsiveContainer></div><div className="rpe-zone-list">{zones.map(row=><div key={row.name}><i style={{background:row.fill}}/><span>{row.name}</span><strong>{row.value}<small>堂</small></strong></div>)}</div></div></div>;
-}
-
 export function FmsTeamChart({ measurements }: { measurements: OverviewMeasurement[] }) {
   const keys = ['fms_deep_squat','fms_hurdle_step','fms_inline_lunge','fms_shoulder_mobility','fms_active_straight_leg_raise','fms_trunk_stability_pushup','fms_rotary_stability'];
   const data = keys.map((key) => {
@@ -215,20 +203,3 @@ export function InjuryAssessmentChart({ injuries, athleteCount }: { injuries: Ov
   return <div className="injury-analysis-layout"><div className="injury-donut"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data} dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={2}>{data.map(row=><Cell key={row.key} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${value} 人`,name]}/></PieChart></ResponsiveContainer><div><strong>{focus.length}</strong><span>重点关注</span></div></div><div className="injury-focus-list">{focus.length ? focus.map(row=><div key={row.athleteId}><span><strong>{row.athleteName}</strong><small>{row.bodyPart} · {row.injuryName}</small></span><b>{row.painScore}/10</b></div>) : <p>当前无活动性损伤记录</p>}</div></div>;
 }
 
-export function BasicStrengthAnalysis({ changes, relative }: { changes: Array<{ key:string;label:string;unit:string;current:number;previous:number|null;change:number|null }>; relative: Array<{label:string;current:number;previous:number|null}> }) {
-  const changeData = changes.filter(row=>row.change!==null).slice(0,6);
-  const comparable = changeData.filter((row) => row.change !== null);
-  const averageChange = comparable.length ? comparable.reduce((sum, row) => sum + (row.change || 0), 0) / comparable.length : 0;
-  const improvedCount = comparable.filter((row) => (row.change || 0) > 0).length;
-  const bestRelative = relative.reduce((best, row) => row.current > best.current ? row : best, { label: '暂无', current: 0, previous: null as number | null });
-  const largestGain = comparable.reduce((best, row) => (row.change || 0) > (best?.change || -Infinity) ? row : best, comparable[0]);
-  return <div className="strength-analysis-layout">
-    <div className="strength-summary-strip">
-      <article><span className="strength-summary-icon teal"><TrendingUp size={16}/></span><div><small>平均变化</small><strong className={averageChange >= 0 ? 'positive' : 'negative'}>{averageChange >= 0 ? '+' : ''}{formatNumber(averageChange,1)}%</strong><p>最近两次基础力量测试</p></div></article>
-      <article><span className="strength-summary-icon navy"><ArrowUpRight size={16}/></span><div><small>提升指标</small><strong>{improvedCount}<em> / {comparable.length || '—'}</em></strong><p>{largestGain ? `${largestGain.label}提升最明显` : '等待补充前后测数据'}</p></div></article>
-      <article><span className="strength-summary-icon gold"><Scale size={16}/></span><div><small>最高相对力量</small><strong>{formatNumber(bestRelative.current,2)}<em> 倍体重</em></strong><p>{bestRelative.label}</p></div></article>
-    </div>
-    <section className="strength-chart-card strength-change-card"><header><span><Dumbbell size={15}/></span><div><h3>基础力量前后测变化</h3><p>正值代表较前测提升</p></div><b>{comparable.length}项指标</b></header><div className="strength-chart-canvas"><ResponsiveContainer width="100%" height="100%"><BarChart data={changeData} margin={{top:16,right:8,left:-12,bottom:2}}><defs><linearGradient id="strengthGain" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#15a092"/><stop offset="1" stopColor="#65c4b4"/></linearGradient></defs><CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9,fill:'#526b73',fontWeight:700}} axisLine={false} tickLine={false}/><YAxis unit="%" tick={{fontSize:8,fill:'#82949a'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>`${formatNumber(Number(value),1)}%`} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Bar dataKey="change" name="变化率" radius={[6,6,1,1]} maxBarSize={36}>{changeData.map(row=><Cell key={row.key} fill={(row.change||0)>=0?'url(#strengthGain)':'#df634d'}/>)}</Bar></BarChart></ResponsiveContainer></div></section>
-    <section className="strength-chart-card relative-strength-card"><header><span><Scale size={15}/></span><div><h3>相对力量水平</h3><p>1RM ÷ 体重，观察力量效率</p></div><b>倍体重</b></header><div className="strength-chart-canvas"><ResponsiveContainer width="100%" height="100%"><BarChart data={relative} margin={{top:16,right:8,left:-12,bottom:2}}><defs><linearGradient id="relativeCurrent" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0c5968"/><stop offset="1" stopColor="#278b91"/></linearGradient></defs><CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{fontSize:9,fill:'#526b73',fontWeight:700}} axisLine={false} tickLine={false}/><YAxis tick={{fontSize:8,fill:'#82949a'}} axisLine={false} tickLine={false}/><Tooltip formatter={(value)=>`${formatNumber(Number(value),2)} 倍体重`} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:9}}/><Bar dataKey="previous" name="前测" fill="#cbd7d9" radius={[5,5,1,1]} maxBarSize={25}/><Bar dataKey="current" name="本次" fill="url(#relativeCurrent)" radius={[5,5,1,1]} maxBarSize={25}/></BarChart></ResponsiveContainer></div></section>
-  </div>;
-}

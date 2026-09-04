@@ -8,7 +8,6 @@ import {
   ComposedChart,
   Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   PolarAngleAxis,
@@ -283,27 +282,6 @@ export function ProfessionalLoadChart({ data, team = false }: { data: DailyPerfo
   );
 }
 
-export function RecoveryTrendChart({ data }: { data: DailyPerformancePoint[] }) {
-  const available = data.some((item) => item.sleep !== null || item.fatigue !== null || item.pulse !== null);
-  if (!available) return <ChartEmpty title="暂无恢复数据" detail="补充睡眠、晨脉和疲劳指数后生成趋势。" />;
-  return (
-    <div className="chart-wrap" aria-label="睡眠晨脉与疲劳恢复趋势图">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-          <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
-          <XAxis dataKey="label" tick={{ fill: '#6d8088', fontSize: 10 }} axisLine={false} tickLine={false} minTickGap={24} />
-          <YAxis yAxisId="recovery" domain={[0, 'auto']} tick={{ fill: '#6d8088', fontSize: 10 }} axisLine={false} tickLine={false} />
-          <YAxis yAxisId="pulse" orientation="right" domain={['auto', 'auto']} tick={{ fill: '#d45d46', fontSize: 10 }} axisLine={false} tickLine={false} />
-          <Tooltip />
-          <Legend wrapperStyle={{ fontSize: 10 }} />
-          <Line yAxisId="recovery" type="monotone" dataKey="sleep" name="睡眠(h)" stroke="#168f8a" strokeWidth={2.1} connectNulls dot={{ r: 2.4 }} />
-          <Line yAxisId="recovery" type="monotone" dataKey="fatigue" name="疲劳指数" stroke="#d69a24" strokeWidth={2.1} connectNulls dot={{ r: 2.4 }} />
-          <Line yAxisId="pulse" type="monotone" dataKey="pulse" name="晨脉(bpm)" stroke="#d95b45" strokeWidth={2.1} connectNulls dot={{ r: 2.4 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
 
 export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
   const rated = data.filter((item) => item.score !== null).length;
