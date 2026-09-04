@@ -14,13 +14,22 @@ function DefaultProjectMark({ project, className = '' }: ProjectMarkProps) {
 
 export function ProjectMark({ project, className = '' }: ProjectMarkProps) {
   const sourceByProject: Record<string, string> = {
-    赛艇: '/assets/project-rowing.png',
-    皮划艇: '/assets/project-canoe.png',
-    激流: '/assets/project-slalom.png',
+    赛艇: '/assets/olympic-sports/rowing.gif',
+    皮划艇: '/assets/olympic-sports/canoe sprint.gif',
+    激流: '/assets/olympic-sports/canoe slalom.gif',
   };
   const source = sourceByProject[project];
 
-  if (source) return <img className={`project-mark ${className}`.trim()} src={source} alt="" aria-hidden="true" />;
-
+  if (source) {
+    return (
+      <span className={`project-mark ${className}`.trim()}>
+        <img
+          src={source}
+          alt=""
+          aria-hidden="true"
+        />
+      </span>
+    );
+  } 
   return <DefaultProjectMark project={project} className={className} />;
 }
