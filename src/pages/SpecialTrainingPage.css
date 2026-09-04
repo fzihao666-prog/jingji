@@ -179,9 +179,7 @@
 .zone-bars header span { display: flex; align-items: center; gap: 6px; }
 .zone-bars header i { width: 7px; height: 7px; border-radius: 50%; }
 .zone-bars > div > b,
-.comparison-bars > div > b { height: 7px; margin-top: 6px; border-radius: 9px; display: block; overflow: hidden; background: #e7edef; }
 .zone-bars > div > b i,
-.comparison-bars > div > b i { height: 100%; border-radius: 9px; display: block; background: #12978f; }
 
 .week-schedule {
   min-width: 0;
@@ -228,30 +226,6 @@
 .progress-steps .done small,
 .progress-steps .current small { color: #168c7f; }
 
-.athlete-board-context { min-width: 0; min-height: 58px; padding: 10px 13px; border: 1px solid #dce8e9; border-radius: 11px; display: flex; align-items: center; gap: 10px; background: #f8fbfb; }
-.athlete-board-context > svg { width: 34px; height: 34px; padding: 8px; flex: 0 0 auto; border-radius: 10px; color: #178a82; background: #e5f4f2; }
-.athlete-board-context > div { min-width: 0; display: grid; gap: 3px; }
-.athlete-board-context strong { color: #163c47; font-size: 12px; }
-.athlete-board-context span { overflow: hidden; color: #839499; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
-.special-filter-empty { min-height: 280px; display: grid; place-content: center; justify-items: center; gap: 9px; color: #71878e; text-align: center; }
-.special-filter-empty svg { color: #168f88; }
-.special-filter-empty strong { color: #355963; font-size: 12px; }
-.special-filter-empty span { max-width: 340px; font-size: 9px; line-height: 1.6; }
-.athlete-profile-card { text-align: center; }
-.athlete-avatar { width: 62px; height: 62px; margin: 4px auto 7px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg,#0e5863,#1aa198); font-size: 23px; font-weight: 900; }
-.athlete-profile-card h3 { display: inline; color: #153d48; font-size: 15px; }
-.athlete-profile-card > b { margin-left: 7px; padding: 3px 6px; border: 1px solid #8ecfc8; border-radius: 99px; color: #16877f; font-size: 8px; }
-.athlete-profile-card dl { margin: 13px 0 0; text-align: left; }
-.athlete-profile-card dl div { min-height: 31px; border-bottom: 1px solid #e4ebed; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 8px; }
-.athlete-profile-card dt { color: #7b8f95; }
-.athlete-profile-card dd { margin: 0; color: #31545e; font-weight: 700; }
-.athlete-profile-card dd span { color: #27805d; }
-.athlete-profile-card > p { margin-top: 10px; padding: 9px; color: #536e75; background: #f1f6f6; font-size: 8px; line-height: 1.55; text-align: left; }
-.radar-chart { height: 255px; min-width: 0; }
-.comparison-bars { display: grid; gap: 14px; }
-.comparison-bars header { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: baseline; color: #5b737b; font-size: 9px; }
-.comparison-bars header strong { color: #17404a; font-size: 11px; }
-.comparison-bars header small { color: #8a9a9f; }
 
 .special-loading,
 .special-training-page > .special-empty { min-height: 280px; display: grid; place-content: center; justify-items: center; gap: 9px; color: #71878e; font-size: 10px; text-align: center; }
@@ -261,9 +235,6 @@
 @media (max-width: 1200px) {
   .special-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .span-3, .span-4, .span-5, .span-7, .span-8 { grid-column: span 6; }
-  .athlete-board-grid .span-3 { grid-column: span 4; }
-  .athlete-board-grid .span-4 { grid-column: span 8; }
-  .athlete-board-grid .span-5, .athlete-board-grid .span-7 { grid-column: span 6; }
 }
 
 @media (max-width: 760px) {
@@ -271,8 +242,6 @@
   .special-metrics { grid-template-columns: 1fr; }
   .special-grid { grid-template-columns: 1fr; }
   .span-3, .span-4, .span-5, .span-7, .span-8, .span-12,
-  .athlete-board-grid .span-3, .athlete-board-grid .span-4,
-  .athlete-board-grid .span-5, .athlete-board-grid .span-7 { grid-column: 1; }
   .week-schedule { grid-template-columns: repeat(7, 128px); }
   .today-sessions > div { padding: 8px 0; grid-template-columns: 76px 58px minmax(0, 1fr); }
   .today-sessions > div span { grid-column: 3; }

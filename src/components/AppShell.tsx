@@ -24,7 +24,7 @@ import { roleMeta } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
 
-export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule' | 'special-athletes';
+export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
 export type DataCollectionPageKey = 'bluetooth' | 'data-import';
 export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
@@ -32,8 +32,7 @@ export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes'
 const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
   { key: 'special-time', label: '专项分析', pages: ['special-time', 'special-distance', 'special-load'] },
   { key: 'special-rate', label: '专项指标', pages: ['special-rate', 'special-heart', 'special-power'] },
-  { key: 'special-schedule', label: '训练安排', pages: ['special-schedule'] },
-  { key: 'special-athletes', label: '运动员看板', pages: ['special-athletes'] }
+  { key: 'special-schedule', label: '训练安排', pages: ['special-schedule'] }
 ];
 
 const strengthGroups: Array<{ key: StrengthPageKey; label: string }> = [
