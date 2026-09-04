@@ -334,11 +334,11 @@ export function TrainingPlanPage(props: Props) {
     };
   }), [activeWeek, allSets, data.endDate, data.exercises, data.startDate, weekKeys]);
 
-  if (!athlete) return <div className="page-content strength-workbench"><section className="strength-empty"><Dumbbell size={34} /><strong>暂无可查看的运动员</strong></section></div>;
+  if (!athlete) return <div className="page-content professional-overview strength-workbench"><section className="strength-empty"><Dumbbell size={34} /><strong>暂无可查看的运动员</strong></section></div>;
 
   return (
-    <div className="page-content strength-workbench">
-      <header className="strength-page-head">
+    <div className="page-content professional-overview strength-workbench">
+      <header className="page-heading overview-page-heading strength-page-head">
         <div className="strength-title"><span>STRENGTH TRAINING</span><h1>{pageMeta[0]}</h1><p>{pageMeta[1]}</p></div>
         <div className="strength-command-actions">
           {canEdit && ['strength-overview', 'strength-plan'].includes(props.section) && <button className="strength-button ai" onClick={() => setAiOpen(true)}><Bot size={17} />AI生成计划</button>}
