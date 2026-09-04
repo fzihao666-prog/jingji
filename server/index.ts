@@ -3350,7 +3350,7 @@ const unifiedTemplatePath = () => [
 const unifiedExportHeaders: Array<[string, string[]]> = [
   ['运动员信息', ['姓名','运动项目','所属队伍','性别','出生日期','身份证号','省份','城市','区县','民族','手机号','血型','紧急联系人','紧急电话','学历','技术等级','位置号位','身体状态','最好成绩','籍贯','家庭住址','训练状态','开始运动日期','训练场地','备战赛事','备战阶段','集训时间','输送地','输送单位','输送教练','优势项','备注']],
   ['竞技水平评估', ['姓名','评估日期','技术等级','最好成绩','竞技总分','竞技状态','专项耐力','力量爆发','技术效率','负荷适应','恢复能力','比赛能力','备注']],
-  ['身体测量', ['姓名','测量日期','身高cm','体重kg','体脂率%','骨骼肌kg','肌肉量kg','上肢肌肉kg','下肢肌肉kg','躯干肌肉kg','内脏脂肪等级','基础代谢kcal','总水分kg','细胞外水比','相位角°','备注']],
+  ['身体测量', ['姓名','测量日期','身高cm','体重kg','体脂率%','骨骼肌kg','肌肉量kg','上肢肌肉kg','下肢肌肉kg','躯干肌肉kg','皮下脂肪mm','肱三头肌皮褶mm','腹部皮褶mm','大腿皮褶mm','小腿皮褶mm','内脏脂肪等级','基础代谢kcal','总水分kg','细胞外水比','相位角°','内脏脂肪面积cm²','左上肢瘦体重kg','右上肢瘦体重kg','躯干瘦体重kg','左下肢瘦体重kg','右下肢瘦体重kg','备注']],
   ['恢复状态', ['姓名','日期','睡眠小时','睡眠质量','晨脉','体重kg','疲劳','肌肉酸痛','情绪','状态','备注']],
   ['训练课次', ['姓名','日期','课次序号','开始时间','训练类型','训练内容','训练阶段','强度区间','时长分钟','距离千米','RPE','SRPE','SMVL','平均心率','最大心率','平均功率W','桨频SPM']],
   ['力量训练组次', ['姓名','日期','课次名称','动作','组序','计划次数','实际次数','计划重量kg','实际重量kg','强度百分比','RPE','完成状态','类别','身体部位','备注']],
@@ -3412,7 +3412,7 @@ async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
     row.specialties, row.notes
   ]));
   const bodyRows = db.prepare(`SELECT * FROM athlete_body_measurements WHERE athlete_id IN (${ids}) ORDER BY measurement_date, athlete_id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('身体测量'), bodyRows.map((row) => [nameById.get(Number(row.athlete_id)), row.measurement_date, row.height_cm, row.weight_kg, row.body_fat_pct, row.skeletal_muscle_kg, row.muscle_mass_kg, row.upper_limb_muscle_kg, row.lower_limb_muscle_kg, row.trunk_muscle_kg, row.visceral_fat_level, row.basal_metabolism_kcal, row.total_body_water_kg, row.ecw_tbw_ratio, row.phase_angle_deg, row.note]));
+  writeUnifiedExportRows(workbook.getWorksheet('身体测量'), bodyRows.map((row) => [nameById.get(Number(row.athlete_id)), row.measurement_date, row.height_cm, row.weight_kg, row.body_fat_pct, row.skeletal_muscle_kg, row.muscle_mass_kg, row.upper_limb_muscle_kg, row.lower_limb_muscle_kg, row.trunk_muscle_kg, row.subcutaneous_fat_mm, row.triceps_skinfold_mm, row.abdominal_skinfold_mm, row.thigh_skinfold_mm, row.calf_skinfold_mm, row.visceral_fat_level, row.basal_metabolism_kcal, row.total_body_water_kg, row.ecw_tbw_ratio, row.phase_angle_deg, row.visceral_fat_area_cm2, row.left_arm_lean_kg, row.right_arm_lean_kg, row.trunk_lean_kg, row.left_leg_lean_kg, row.right_leg_lean_kg, row.note]));
   const wellnessRows = db.prepare(`SELECT * FROM daily_wellness WHERE athlete_id IN (${ids}) ORDER BY wellness_date, athlete_id`).all(...profileIds) as Array<Record<string, unknown>>;
   writeUnifiedExportRows(workbook.getWorksheet('恢复状态'), wellnessRows.map((row) => [nameById.get(Number(row.athlete_id)), row.wellness_date, row.sleep_hours, row.sleep_quality, row.morning_pulse, row.weight_kg, row.fatigue_index, row.soreness_index, row.mood_index, row.status, '']));
   const sessionRows = db.prepare(`SELECT * FROM training_sessions WHERE athlete_id IN (${ids}) ORDER BY session_date, athlete_id, session_order`).all(...profileIds) as Array<Record<string, unknown>>;
