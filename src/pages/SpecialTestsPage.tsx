@@ -1,23 +1,19 @@
 import {
-  Activity, AlertTriangle, ArrowDownToLine, BarChart3, CalendarDays, CheckCircle2,
-  ChevronRight, ClipboardPenLine, Clock3, FileSpreadsheet, Gauge,
-  HeartPulse, MapPinned, Plus, RefreshCw, Route, Sparkles, Target, TimerReset,
-  TrendingUp, Upload, UserRound, Waves, X, Zap
+  Activity, AlertTriangle, BarChart3, CalendarDays, CheckCircle2, ChevronRight,
+  Clock3, FileSpreadsheet, Gauge, HeartPulse, MapPinned, RefreshCw, Route,
+  Sparkles, Target, TimerReset, TrendingUp, UserRound, Waves, Zap
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import {
   Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart, PolarAngleAxis,
   PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
 import type { SpecialPageKey } from '../components/AppShell';
-import { api } from '../api';
-import { SpecialDataImportDialog } from '../components/SpecialDataImportDialog';
 import { SpecialPerformancePanel } from '../components/SpecialPerformancePanel';
-import type { Athlete, Project, TrainingRecord, User } from '../types';
+import type { Athlete, Project, TrainingRecord } from '../types';
 import './SpecialTrainingPage.css';
 
 type Props = {
-  user: User;
   records: TrainingRecord[];
   athletes: Athlete[];
   project: Project;
@@ -27,7 +23,6 @@ type Props = {
   loading: boolean;
   section: SpecialPageKey;
   onSectionChange: (section: SpecialPageKey) => void;
-  onChanged: () => void;
 };
 
 type Session = {
@@ -35,11 +30,6 @@ type Session = {
   duration: number; distance: number; rpe: number; load: number; strokeRate: number | null;
   heartRate: number | null; maxHeartRate: number | null; power: number | null;
   sleepHours: number | null; fatigueIndex: number | null; source: 'system' | 'manual' | 'import';
-};
-type ManualForm = {
-  date: string; athleteId: number; athleteName: string; type: string; content: string;
-  duration: number; distance: number; rpe: number; strokeRate: number;
-  heartRate: number; maxHeartRate: number; power: number;
 };
 
 const SECTION_META: Record<SpecialPageKey, { group: string; title: string; english: string; description: string }> = {
@@ -54,7 +44,6 @@ const SECTION_META: Record<SpecialPageKey, { group: string; title: string; engli
 };
 
 const COLORS = ['#12978f', '#347fe5', '#78b83f', '#f69a33', '#8b65d4'];
-const fallbackAthleteNames = ['张子航', '李明远', '王思齐', '刘佳怡', '陈宇航'];
 const tooltipStyle = { border: '1px solid #d8e5e6', borderRadius: 10, boxShadow: '0 10px 28px rgba(8,45,56,.12)', fontSize: 11 };
 
 function dateOffset(iso: string, offset: number) {
@@ -193,32 +182,18 @@ function AthleteBoard({ sessions, athletes, athleteId, project }: Pick<Props, 'a
   return <><div className="athlete-board-context"><UserRound/><div><strong>{selectedName}</strong><span>{profile?.gender || '未设置'} · {profile?.currentEvent || project} · {profile?.team || '未配置队伍'}</span></div></div><div className="special-metrics athlete-metrics"><MetricCard icon={<CalendarDays/>} label="本周期训练次数" value={own.length} unit="次" change={`${new Set(own.map((item) => item.date)).size} 个有效训练日`}/><MetricCard icon={<Activity/>} label="本周期负荷" value={Math.round(totalLoad)} unit="AU" change={`ACWR ${round(ownAcwr, 2)}`} tone="blue"/><MetricCard icon={<Route/>} label="本周期距离" value={round(totalDistance)} unit="km" change={`训练时长 ${round(totalDuration / 60)} 小时`} tone="green"/><MetricCard icon={<HeartPulse/>} label="恢复评分" value={ownRecovery || '—'} unit={ownRecovery ? '分' : undefined} change={ownRecovery ? '由睡眠与疲劳记录计算' : '暂无恢复记录'} tone="orange"/></div><div className="special-grid athlete-board-grid"><SectionCard title="运动员信息" note="来自个人档案" className="span-3"><div className="athlete-profile-card"><div className="athlete-avatar">{selectedName.slice(0, 1)}</div><h3>{selectedName}</h3><b>{profile?.technicalLevel || '未定级'}</b><dl><div><dt>所属队伍</dt><dd>{profile?.team || '未配置'}</dd></div><div><dt>主项</dt><dd>{profile?.currentEvent || project}</dd></div><div><dt>教练</dt><dd>{profile?.coaches || '未配置'}</dd></div><div><dt>当前状态</dt><dd><span>{status}</span></dd></div></dl><p>{advice}</p></div></SectionCard><SectionCard title="能力维度评估" note="根据当前周期训练记录计算" className="span-4"><div className="radar-chart"><ResponsiveContainer width="100%" height="100%"><RadarChart data={radar}><PolarGrid stroke="#d7e4e5"/><PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fill: '#526b73' }}/><Radar dataKey="value" stroke="#12978f" fill="#22aaa0" fillOpacity={.28}/><Tooltip contentStyle={tooltipStyle}/></RadarChart></ResponsiveContainer></div></SectionCard><SectionCard title="近7天训练负荷趋势" note="AU" className="span-5"><TrendChart data={aggregateDays(own).slice(-7)} metric="load"/></SectionCard><SectionCard title="近期训练记录" note="与专项分析共用数据" className="span-7"><div className="special-table-wrap"><table><thead><tr><th>日期</th><th>训练内容</th><th>时长</th><th>距离 / 负荷</th><th>RPE</th></tr></thead><tbody>{own.slice(-5).reverse().map((item) => <tr key={item.id}><td>{item.date.slice(5)}</td><td><strong>{item.content}</strong><small>{item.type}</small></td><td>{item.duration} min</td><td>{item.distance} km / {item.load}</td><td>{item.rpe}</td></tr>)}</tbody></table></div></SectionCard><SectionCard title="本周期表现对比" note="与队内平均" className="span-5"><div className="comparison-bars">{comparisons.map(([label, value, avg]) => <div key={label}><header><span>{label}</span><strong>{round(value)}</strong><small>队均 {round(avg)}</small></header><b><i style={{ width: `${Math.min(100, value / Math.max(avg, 1) * 75)}%` }}/></b></div>)}</div></SectionCard></div></>;
 }
 
-export function SpecialTestsPage({ user, records, athletes, project, from, to, athleteId, loading, section, onSectionChange, onChanged }: Props) {
-  const [modalOpen, setModalOpen] = useState(false); const [importOpen, setImportOpen] = useState(false); const [specialDataVersion, setSpecialDataVersion] = useState(0); const [message, setMessage] = useState(''); const [entryError, setEntryError] = useState(''); const [saving, setSaving] = useState(false); const firstAthlete = athletes[0]; const metric = projectMetric(project, 0);
-  const [form, setForm] = useState<ManualForm>({ date: to, athleteId: firstAthlete?.id || -1, athleteName: firstAthlete?.name || fallbackAthleteNames[0], type: '技术训练', content: `${project}专项技术训练`, duration: 90, distance: project === '激流' ? 8 : 18, rpe: 6, strokeRate: metric.rate, heartRate: 148, maxHeartRate: 181, power: metric.power });
-  useEffect(() => {
-    const nextMetric = projectMetric(project, 0);
-    setForm((current) => ({ ...current, athleteId: athletes[0]?.id || -1, athleteName: athletes[0]?.name || fallbackAthleteNames[0], content: `${project}专项技术训练`, distance: project === '激流' ? 8 : 18, strokeRate: nextMetric.rate, power: nextMetric.power }));
-  }, [project, athletes]);
+export function SpecialTestsPage({ records, athletes, project, from, to, athleteId, loading, section, onSectionChange }: Props) {
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }); }, [section]);
   const systemSessions = useMemo(() => recordSessions(records, project), [records, project]);
-  const sessions = useMemo(() => systemSessions.filter((item) => item.date >= from && item.date <= to && (!athleteId || item.athleteId === athleteId)), [systemSessions, from, to, athleteId]);
+  const sessions = useMemo(() => systemSessions.filter((item) => item.date >= from && item.date <= to), [systemSessions, from, to]);
   const days = useMemo(() => aggregateDays(sessions), [sessions]); const meta = SECTION_META[section];
   const analysisTabs: Array<{ key: SpecialPageKey; label: string }> = [{ key: 'special-time', label: '时间' }, { key: 'special-distance', label: '距离' }, { key: 'special-load', label: '负荷' }];
   const metricTabs: Array<{ key: SpecialPageKey; label: string }> = [{ key: 'special-rate', label: project === '赛艇' ? '桨频' : '划频' }, { key: 'special-heart', label: '心率' }, { key: 'special-power', label: '功率' }];
   const pageTabs = analysisTabs.some((item) => item.key === section) ? analysisTabs : metricTabs.some((item) => item.key === section) ? metricTabs : [];
   const displayTitle = pageTabs.length ? meta.group : meta.title;
   const displayEnglish = meta.group === '综合分析' ? 'TRAINING ANALYSIS' : meta.group === '专项指标' ? 'SPECIAL METRICS' : meta.english;
-  const refresh = () => { onChanged(); setMessage(`已刷新：${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`); };
-  const updateForm = (key: keyof ManualForm, value: string | number) => setForm((current) => ({ ...current, [key]: value }));
-  const submitManual = async (event: FormEvent) => { event.preventDefault(); setEntryError(''); if (form.maxHeartRate < form.heartRate) { setEntryError('最大心率不能低于平均心率。'); return; } setSaving(true); try { await api.saveSpecialTrainingSessions([{ ...form, project, source: 'manual' }]); setModalOpen(false); setMessage('训练数据已写入数据库，并同步更新当前模块全部分析。'); onChanged(); } catch (error) { setEntryError(error instanceof Error ? error.message : '训练数据保存失败。'); } finally { setSaving(false); } };
-  const exportData = () => { const headers = ['日期','运动员','训练类型','训练内容','时长(分钟)','距离(km)','RPE',metric.label,'平均心率','最大心率','平均功率']; const rows = sessions.map((item) => [item.date,item.athleteName,item.type,item.content,item.duration,item.distance,item.rpe,item.strokeRate,item.heartRate,item.maxHeartRate,item.power]); const csv = '\ufeff' + [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replaceAll('"','""')}"`).join(',')).join('\n'); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `${project}-${meta.title}-${to}.csv`; link.click(); URL.revokeObjectURL(url); };
   return <div className="page-content professional-overview special-training-page"><header className="page-heading special-page-heading"><div className="special-title-block"><span>{displayEnglish}</span><h1>{displayTitle}</h1><p>{meta.description}</p><div className="special-breadcrumb"><b>专项训练</b><ChevronRight/><span>{displayTitle}</span>{pageTabs.length > 0 && <><ChevronRight/><strong>{meta.title.replace('分析','')}</strong></>}</div></div></header>
-    <div className="special-actions"><button type="button" onClick={refresh}><RefreshCw/>刷新数据</button><button type="button" onClick={exportData} disabled={!sessions.length}><ArrowDownToLine/>导出数据</button>{user.role !== 'ATL' && <><button type="button" onClick={() => setImportOpen(true)}><Upload/>导入数据</button><button type="button" className="primary" disabled={!athletes.length} onClick={() => { setEntryError(''); setModalOpen(true); }}><Plus/>手动录入</button></>}</div>
     {pageTabs.length > 0 && <nav className="special-page-tabs" aria-label={`${displayTitle}指标切换`}>{pageTabs.map((item) => <button key={item.key} className={section === item.key ? 'active' : ''} aria-current={section === item.key ? 'page' : undefined} onClick={() => onSectionChange(item.key)}><span>{item.label}</span></button>)}</nav>}
-    {message && <div className="special-toast"><CheckCircle2/>{message}</div>}
-    {loading ? <div className="special-loading"><RefreshCw className="spin"/>正在同步训练数据…</div> : !sessions.length && section !== 'special-schedule' ? <div className="special-empty"><FileSpreadsheet/><strong>当前日期范围内暂无训练记录</strong><span>可通过全局筛选栏调整日期、项目或运动员，或通过导入数据、手动录入补充数据。</span></div> : ['special-time','special-distance','special-load'].includes(section) ? <><AnalysisPage section={section} sessions={sessions} days={days} project={project}/>{section === 'special-distance' && <SpecialPerformancePanel project={project} from={from} to={to} refreshKey={specialDataVersion}/>}</> : ['special-rate','special-heart','special-power'].includes(section) ? <MetricPage section={section} sessions={sessions} days={days} project={project}/> : section === 'special-schedule' ? <SchedulePage sessions={sessions} to={to} project={project}/> : <AthleteBoard sessions={sessions} athletes={athletes} athleteId={athleteId} project={project}/>}
-    {modalOpen && <div className="modal-backdrop special-entry-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setModalOpen(false); }}><section className="special-entry-modal"><header><div><span>MANUAL ENTRY</span><h2>录入专项训练数据</h2><p>保存后将同步更新综合分析、专项指标和运动员看板。</p></div><button type="button" className="icon-button" disabled={saving} onClick={() => setModalOpen(false)}><X/></button></header><form onSubmit={submitManual}>{entryError && <div className="special-entry-error"><AlertTriangle/>{entryError}</div>}<div className="special-entry-grid"><label><span>训练日期</span><input type="date" value={form.date} onChange={(e) => updateForm('date', e.target.value)} required/></label><label><span>运动员</span><select value={form.athleteId} onChange={(e) => updateForm('athleteId', Number(e.target.value))}>{athletes.map((athlete) => <option value={athlete.id} key={athlete.id}>{athlete.name}</option>)}</select></label><label><span>训练类型</span><select value={form.type} onChange={(e) => updateForm('type', e.target.value)}><option>技术训练</option><option>耐力训练</option><option>专项力量</option><option>恢复训练</option></select></label><label className="wide"><span>训练内容</span><input value={form.content} maxLength={100} onChange={(e) => updateForm('content', e.target.value)} required/></label>{([['duration','时长（分钟）',1,1440],['distance','距离（km）',0,500],['rpe','RPE（1-10）',1,10],['strokeRate',`${metric.label}（${metric.unit}）`,1,250],['heartRate','平均心率（bpm）',30,240],['maxHeartRate','最大心率（bpm）',30,240],['power','平均功率（W）',0,3000]] as const).map(([key,label,min,max]) => <label key={key}><span>{label}</span><input type="number" min={min} max={max} step="0.1" value={form[key]} onChange={(e) => updateForm(key, Number(e.target.value))} required/></label>)}</div><footer><span><FileSpreadsheet/>也可通过“导入数据”批量写入</span><div><button type="button" className="secondary-button" disabled={saving} onClick={() => setModalOpen(false)}>取消</button><button className="primary-button" disabled={saving}><ClipboardPenLine/>{saving ? '写入中…' : '保存并分析'}</button></div></footer></form></section></div>}
-    {importOpen && <SpecialDataImportDialog project={project} onClose={() => setImportOpen(false)} onCommitted={() => { setSpecialDataVersion((version) => version + 1); onChanged(); setMessage('专项成绩已写入数据库，可在“距离”分析中查看排名与历史对比。'); }}/>} 
+    {loading ? <div className="special-loading"><RefreshCw className="spin"/>正在同步训练数据…</div> : !sessions.length && section !== 'special-schedule' ? <div className="special-empty"><FileSpreadsheet/><strong>当前日期范围内暂无训练记录</strong><span>可通过全局筛选栏调整日期或项目查看数据。</span></div> : ['special-time','special-distance','special-load'].includes(section) ? <><AnalysisPage section={section} sessions={sessions} days={days} project={project}/>{section === 'special-distance' && <SpecialPerformancePanel project={project} from={from} to={to}/>}</> : ['special-rate','special-heart','special-power'].includes(section) ? <MetricPage section={section} sessions={sessions} days={days} project={project}/> : section === 'special-schedule' ? <SchedulePage sessions={sessions} to={to} project={project}/> : <AthleteBoard sessions={sessions} athletes={athletes} athleteId={athleteId} project={project}/>}
   </div>;
 }

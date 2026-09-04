@@ -43,35 +43,6 @@
 .special-breadcrumb svg { width: 11px; }
 .special-breadcrumb strong { color: #167f79; }
 
-.special-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 7px;
-  flex-wrap: wrap;
-}
-
-.special-actions button {
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid #d5e2e4;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #45616a;
-  background: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.special-actions button:hover { color: #0e7771; border-color: #a9d6d1; background: #eef8f6; }
-.special-actions button:active { transform: translateY(1px); }
-.special-actions button:disabled { cursor: not-allowed; opacity: .5; }
-.special-actions button svg { width: 15px; }
-.special-actions .primary { border-color: #128d86; color: #fff; background: #128d86; }
-.special-actions .primary:hover { color: #fff; background: #0d7c76; }
-
 .special-page-tabs {
   min-width: 0;
   display: flex;
@@ -107,22 +78,6 @@
 .special-page-tabs button:hover,
 .special-page-tabs button.active { color: #117d76; }
 .special-page-tabs button.active::after { background: #15978d; }
-
-.special-toast {
-  min-height: 40px;
-  padding: 8px 12px;
-  border: 1px solid #cfe5df;
-  border-left: 4px solid #2ba47f;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #1b725f;
-  background: #edf9f5;
-  font-size: 10px;
-}
-
-.special-toast svg { width: 16px; }
 
 .special-metrics {
   min-width: 0;
@@ -303,25 +258,6 @@
 .special-loading svg { color: #168f88; }
 .special-training-page > .special-empty span { font-size: 10px; }
 
-.special-entry-backdrop { z-index: 120; }
-.special-entry-modal { width: min(820px, calc(100vw - 24px)); max-height: 94vh; border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 0 30px 90px rgba(3,29,38,.3); }
-.special-entry-modal > header { min-height: 105px; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; color: #fff; background: linear-gradient(110deg,#073946,#0c7776); }
-.special-entry-modal > header span { color: #72dccf; font: 800 8px "Bahnschrift", sans-serif; letter-spacing: .14em; }
-.special-entry-modal > header h2 { margin-top: 4px; font-size: 20px; }
-.special-entry-modal > header p { margin-top: 5px; color: rgba(231,248,245,.67); font-size: 9px; }
-.special-entry-modal > header button { color: #fff; }
-.special-entry-grid { max-height: calc(94vh - 190px); padding: 20px 22px; overflow-y: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.special-entry-grid label.wide { grid-column: span 2; }
-.special-entry-grid label > span { display: block; margin-bottom: 6px; color: #49656d; font-size: 9px; font-weight: 800; }
-.special-entry-grid input,
-.special-entry-grid select { width: 100%; height: 40px; padding: 0 10px; border: 1px solid #ccdade; border-radius: 7px; color: #153c47; background: #fff; font-size: 10px; }
-.special-entry-modal form > footer { min-height: 70px; padding: 12px 22px; border-top: 1px solid #dfe8e9; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.special-entry-modal form > footer > span { display: flex; align-items: center; gap: 6px; color: #758a91; font-size: 8px; }
-.special-entry-modal form > footer svg { width: 15px; }
-.special-entry-modal form > footer > div { display: flex; gap: 8px; }
-.special-entry-modal button:disabled { cursor: not-allowed; opacity: .55; }
-.special-entry-error { margin: 14px 22px 0; padding: 10px 12px; border: 1px solid #f0c7c0; border-radius: 8px; display: flex; align-items: center; gap: 8px; color: #a33d31; background: #fff3f1; font-size: 10px; }
-
 @media (max-width: 1200px) {
   .special-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .span-3, .span-4, .span-5, .span-7, .span-8 { grid-column: span 6; }
@@ -332,8 +268,6 @@
 
 @media (max-width: 760px) {
   .special-title-block h1 { font-size: 26px; }
-  .special-actions { justify-content: stretch; display: grid; grid-template-columns: 1fr 1fr; }
-  .special-actions button { justify-content: center; }
   .special-metrics { grid-template-columns: 1fr; }
   .special-grid { grid-template-columns: 1fr; }
   .span-3, .span-4, .span-5, .span-7, .span-8, .span-12,
@@ -342,8 +276,4 @@
   .week-schedule { grid-template-columns: repeat(7, 128px); }
   .today-sessions > div { padding: 8px 0; grid-template-columns: 76px 58px minmax(0, 1fr); }
   .today-sessions > div span { grid-column: 3; }
-  .special-entry-grid { grid-template-columns: 1fr; }
-  .special-entry-grid label.wide { grid-column: auto; }
-  .special-entry-modal form > footer { align-items: stretch; flex-direction: column; }
-  .special-entry-modal form > footer > div button { flex: 1; }
 }
