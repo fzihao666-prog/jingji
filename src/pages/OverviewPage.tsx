@@ -1,21 +1,19 @@
 import {
   AlarmClock, ArrowRight, BarChart3, Database, Dumbbell,
-  Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, Search,
-  UsersRound
+  Eye, EyeOff, Gauge, HeartPulse, Layers3, MoreHorizontal, Pin, UsersRound
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { api } from '../api';
 import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
-import { addDays, aggregateRecords, average, formatNumber, groupByDate, percentage, worstStatus } from '../utils';
+import { addDays, aggregateRecords, average, formatNumber, percentage } from '../utils';
 import { ROLE_META } from '../../shared/access';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
   FmsTeamChart, InjuryAssessmentChart,
   TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
-import { StatusPill } from '../components/StatusPill';
 import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
 import { buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics } from '../overview-analytics';
 
@@ -74,7 +72,7 @@ const defaultOrder = [
   'athlete-profile', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'injury-analysis',
   'training-load-analysis', 'training-volume', 'training-content',
-  'recovery', 'roster'
+  'recovery'
 ];
 
 const cardMeta: Record<string, { title: string; size: CardSize }> = {
@@ -91,8 +89,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
   'training-load-analysis': { title: '体能与专项训练负荷分析', size: 'full' },
   'training-volume': { title: '训练量统计', size: 'wide' },
-  'training-content': { title: '训练内容统计', size: 'half' },
-  roster: { title: '运动员状态', size: 'full' }
+  'training-content': { title: '训练内容统计', size: 'half' }
 };
 
 function normalizeOverviewLayout(stored: Partial<OverviewLayoutState> | null | undefined): OverviewLayoutState {
@@ -124,7 +121,6 @@ export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
-  const [rosterSearch, setRosterSearch] = useState('');
   const isSelfOverview = props.user.role === 'ATL';
   const isIndividualOverview = isSelfOverview || props.athleteId !== null;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
@@ -214,41 +210,6 @@ export function OverviewPage(props: Props) {
   const radar = useMemo(() => buildPerformanceRadar(latestStrength, diagnostics), [latestStrength, diagnostics]);
   const selectedAthlete = props.athletes.find((athlete) => athlete.id === overviewAthleteId);
 
-  const athleteRows = useMemo(() => props.athletes.map((athlete) => {
-    const own = analysisRecords.filter((record) => record.athleteId === athlete.id);
-    const latestDate = own.reduce((latest, record) => record.date > latest ? record.date : latest, '');
-    const latest = own.filter((record) => record.date === latestDate);
-    return {
-      athlete,
-      status: latest.length ? worstStatus(latest) : 'missing' as const,
-      load: own.reduce((sum, record) => sum + record.srpe, 0),
-      sleep: average(own.map((record) => record.sleepHours)),
-      fatigue: average(own.map((record) => record.fatigueIndex)),
-      latestDate
-    };
-  }), [props.athletes, analysisRecords]);
-  const visibleAthleteRows = useMemo(() => {
-    const query = rosterSearch.trim().toLowerCase();
-    const filtered = query ? athleteRows.filter(({ athlete }) => [
-      athlete.name, athlete.project, athlete.team, athlete.athletePosition, athlete.region, athlete.city, athlete.county,
-      athlete.coachUsers?.map((coach) => coach.displayName).join(' ')
-    ].filter(Boolean).join(' ').toLowerCase().includes(query)) : athleteRows;
-    return filtered.slice(0, 5);
-  }, [athleteRows, rosterSearch]);
-
-  const statusCount = useMemo(() => {
-    const count = { normal: 0, attention: 0, alert: 0, rest: 0, missing: 0 };
-    if (!isIndividualOverview) {
-      for (const row of athleteRows) count[row.status] += 1;
-      return count;
-    }
-    const byDate = groupByDate(analysisRecords);
-    for (const dayRecords of byDate.values()) count[worstStatus(dayRecords)] += 1;
-    return count;
-  }, [analysisRecords, athleteRows, isIndividualOverview]);
-
-  const statusTotal = Object.values(statusCount).reduce((sum, value) => sum + value, 0);
-  const stableRate = percentage(statusCount.normal + statusCount.rest, statusTotal);
   const scopeLabel = isIndividualOverview
     ? `${selectedAthlete?.name || '本人'} · 个人纵向`
     : `${ROLE_META[props.user.role].label}权限范围 · ${scopeAthleteCount}人`;
@@ -597,18 +558,6 @@ export function OverviewPage(props: Props) {
         <PanelHeading title="训练内容统计图" subtitle="内容结构（日/周/月/阶段）" />
         <TrainingContentChart records={analysisRecords} />
       </article>
-    ),
-    roster: (
-      <article className="panel professional-panel roster-preview">
-        <div className="panel-heading roster-panel-heading"><div><h2><UsersRound size={18} />运动员状态</h2><small>稳定率 {stableRate}% · 正常 {statusCount.normal} · 关注 {statusCount.attention} · 异常 {statusCount.alert}</small></div><div className="roster-panel-tools"><label><Search size={14} /><input value={rosterSearch} onChange={(event) => setRosterSearch(event.target.value)} placeholder="搜索成员、队伍或教练" aria-label="搜索运动员状态" /></label><span className="count-chip"><UsersRound size={14} /> {athleteRows.length}人</span></div></div>
-        <div className="table-scroll"><table className="data-table">
-          <thead><tr><th>运动员</th><th>所属地区</th><th>项目 / 组别</th><th>位置/号位</th><th>最新状态</th><th>周期SRPE</th><th>平均睡眠</th><th>疲劳指数</th></tr></thead>
-          <tbody>{visibleAthleteRows.map((row) => <tr key={row.athlete.id}>
-            <td><strong>{row.athlete.name}</strong>{row.athlete.coachUsers?.length ? <small className="athlete-coach-names">{row.athlete.coachUsers.map((coach) => coach.displayName).join('、')}</small> : <small>未绑定教练</small>}</td>
-            <td>{[row.athlete.region, row.athlete.city, row.athlete.county].filter(Boolean).join(' / ') || '未设置'}</td><td>{row.athlete.project}<small>{row.athlete.team}</small></td><td>{row.athlete.athletePosition || '未填写'}</td><td><StatusPill status={row.status} compact /></td><td>{formatNumber(row.load)}</td><td>{row.sleep ? `${row.sleep.toFixed(1)} h` : '—'}</td><td>{row.fatigue ? row.fatigue.toFixed(1) : '—'}</td>
-          </tr>)}{!visibleAthleteRows.length && <tr><td colSpan={8} className="roster-search-empty">未找到匹配成员</td></tr>}</tbody>
-        </table></div>
-      </article>
     )
   };
 
@@ -632,7 +581,7 @@ export function OverviewPage(props: Props) {
         </div>
       </header>
       {overviewError && <div className="overview-data-provenance error"><Database size={15} /><strong>统一指标接口暂不可用</strong><span>{overviewError}，当前显示兼容数据。</span></div>}
-      {props.loading || (overviewLoading && !overview) ? <PageSkeleton /> : <section className="professional-dashboard-grid">{layout.order.filter((id) => cardMeta[id] && !layout.hidden.includes(id) && (isIndividualOverview ? id !== 'roster' : true)).map((id) => renderShell(id, cards[id]))}</section>}
+      {props.loading || (overviewLoading && !overview) ? <PageSkeleton /> : <section className="professional-dashboard-grid">{layout.order.filter((id) => cardMeta[id] && !layout.hidden.includes(id)).map((id) => renderShell(id, cards[id]))}</section>}
       {layout.hidden.filter((id) => cardMeta[id]).length > 0 && <div className="hidden-card-restore" onClick={(event) => event.stopPropagation()}><Eye size={15} /><span>已隐藏 {layout.hidden.filter((id) => cardMeta[id]).length} 项</span>{layout.hidden.filter((id) => cardMeta[id]).map((id) => <button key={id} type="button" onClick={() => restoreCard(id)}>{cardMeta[id].title}</button>)}</div>}
     </div>
   );
