@@ -16,7 +16,7 @@ import {
   TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { StatusPill } from '../components/StatusPill';
-import { AthleteProfileOverview, BirthplaceMapOverview, CompetitiveStateOverview } from '../components/AthleteProfileCharts';
+import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
 import { buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics } from '../overview-analytics';
 
 type Props = {
@@ -71,7 +71,7 @@ function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
 
 const defaultOrder = [
   'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
-  'athlete-profile', 'competitive-state', 'birthplace-map',
+  'athlete-profile', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'injury-analysis',
   'training-load-analysis', 'training-volume', 'training-content',
   'recovery', 'roster'
@@ -85,7 +85,6 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'acute-load': { title: '训练负荷', size: 'metric' },
   'recovery-time': { title: '损伤情况', size: 'metric' },
   'athlete-profile': { title: '身体与年龄画像', size: 'full' },
-  'competitive-state': { title: '竞技状态评估', size: 'half' },
   'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
   'fms-analysis': { title: 'FMS测试全队分析', size: 'half' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
@@ -107,7 +106,7 @@ function normalizeOverviewLayout(stored: Partial<OverviewLayoutState> | null | u
     else mergedOrder.push(id);
   }
   if ((stored?.version || 0) < 3) {
-    const newProfileCards = ['athlete-profile', 'competitive-state', 'birthplace-map'];
+    const newProfileCards = ['athlete-profile', 'birthplace-map'];
     const withoutNewCards = mergedOrder.filter((id) => !newProfileCards.includes(id));
     const anchor = withoutNewCards.indexOf('recovery-time');
     withoutNewCards.splice(anchor >= 0 ? anchor + 1 : 0, 0, ...newProfileCards);
@@ -550,13 +549,6 @@ export function OverviewPage(props: Props) {
       <article className={`panel professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
         <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '基本信息'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
         <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} asOf={props.to} />
-      </article>
-    ),
-    'competitive-state': (
-      <article className="panel professional-panel competitive-state-panel">
-        <PanelHeading title="竞技状态六维分析" subtitle={`${isIndividualOverview ? '本人' : '团队均值与等级分布'} · 专项耐力 · 力量爆发 · 技术效率 · 负荷适应 · 恢复 · 比赛能力`} />
-        <CompetitiveStateOverview profiles={athleteProfiles} individual={isIndividualOverview} />
-        <p className="analysis-method-note">六维能力由专项耐力、力量爆发、技术效率、负荷适应、恢复和比赛能力综合形成；与上方「竞技水平」分数分布互为补充，不替代教练现场判断。</p>
       </article>
     ),
     'birthplace-map': (

@@ -1,6 +1,5 @@
 import {
-  Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis,
-  Radar, RadarChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip,
+  Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip,
   XAxis, YAxis
 } from 'recharts';
 import { geoMercator, geoPath } from 'd3-geo';
@@ -673,18 +672,6 @@ function competitiveStateLabel(level: CompetitiveStateLevel | null) {
   return '未知';
 }
 
-const stateMeta: Record<CompetitiveStateLevel, { label: string; color: string }> = {
-  peak: { label: '巅峰', color: '#118b83' },
-  good: { label: '良好', color: '#3d82a5' },
-  build: { label: '进阶', color: '#e2a323' },
-  adjust: { label: '调整', color: '#d95b45' }
-};
-
-const dimensionMeta = [
-  ['endurance', '专项耐力'], ['power', '力量爆发'], ['technique', '技术效率'],
-  ['loadAdaptation', '负荷适应'], ['recovery', '恢复能力'], ['competition', '比赛能力']
-] as const;
-
 type LevelPoint = {
   level: string;
   count: number;
@@ -783,53 +770,6 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
         </BarChart></ResponsiveContainer>
       </div>
     </section>
-  );
-}
-
-export function CompetitiveStateOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
-  const available = profiles.filter((profile) => profile.competitiveScore !== null);
-  if (!available.length) return <ProfileEmpty detail="完成竞技状态评估后生成总分、等级分布和六维能力画像。" />;
-  const score = average(available.map((profile) => profile.competitiveScore)) || 0;
-  const comparable = available.filter((profile) => profile.previousCompetitiveScore !== null);
-  const previousScore = average(comparable.map((profile) => profile.previousCompetitiveScore));
-  const change = previousScore === null ? null : score - previousScore;
-  const dimensions = dimensionMeta.map(([key, label]) => ({
-    key,
-    label,
-    score: average(available.map((profile) => profile.competitiveDimensions[key])) || 0
-  }));
-  const stateCounts = (Object.keys(stateMeta) as CompetitiveStateLevel[]).map((level) => ({
-    level,
-    ...stateMeta[level],
-    count: available.filter((profile) => profile.competitiveLevel === level).length
-  }));
-  const leadingDimension = dimensions.slice().sort((a, b) => b.score - a.score)[0];
-  const weakestDimension = dimensions.slice().sort((a, b) => a.score - b.score)[0];
-
-  return (
-    <div className="competitive-state-visual" aria-label={individual ? '个人竞技状态六维评估' : '团队竞技状态分布与六维均值'}>
-      <div className="competitive-radar">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={dimensions} outerRadius="67%">
-            <PolarGrid stroke="#cadadd" />
-            <PolarAngleAxis dataKey="label" tick={{ fill: '#405e68', fontSize: 8, fontWeight: 700 }} />
-            <PolarRadiusAxis domain={[0, 100]} tickCount={5} tick={{ fill: '#91a0a5', fontSize: 7 }} axisLine={false} />
-            <Tooltip formatter={(value) => `${formatNumber(Number(value), 1)}分`} />
-            <Radar dataKey="score" name={individual ? '本人评分' : '团队均值'} stroke="#118b83" strokeWidth={2.2} fill="#24a99a" fillOpacity={.28} />
-          </RadarChart>
-        </ResponsiveContainer>
-      </div>
-      <div className="competitive-summary">
-        <div className="competitive-score-ring" style={{ '--competitive-score': `${score * 3.6}deg` } as CSSProperties}>
-          <div><strong>{formatNumber(score, 1)}</strong><span>竞技状态</span></div>
-        </div>
-        <div className="competitive-change"><span>较前次</span><strong className={change !== null && change < 0 ? 'down' : ''}>{change === null ? '—' : `${change >= 0 ? '+' : ''}${formatNumber(change, 1)}`}</strong></div>
-      </div>
-      <div className="competitive-levels">
-        {stateCounts.map((item) => <div key={item.level}><i style={{ background: item.color }} /><span>{item.label}</span><strong>{item.count}{individual ? '' : '人'}</strong></div>)}
-      </div>
-      <p className="competitive-insight">{individual ? '本人' : '团队平均'}优势维度为<strong>{leadingDimension.label}</strong>（{formatNumber(leadingDimension.score, 1)}分），相对薄弱维度为<strong>{weakestDimension.label}</strong>（{formatNumber(weakestDimension.score, 1)}分）；结论仅用于训练周期监测。</p>
-    </div>
   );
 }
 
