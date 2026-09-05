@@ -3,9 +3,9 @@ import * as XLSX from '@e965/xlsx';
 import { db } from './db.ts';
 import { inferStrengthBodyPosition, inferStrengthCategory } from '../shared/strength-training.ts';
 
-// v4：统一 CJK 兼容字形，避免“张欣⾬ / 张欣雨”被拆成两名运动员。
+// v6：训练课次保留时长、距离的缺失语义，避免空单元格被写成真实 0。
 // 同一文件重新上传时会按新版本重新解析，而不是复用旧的待审核批次。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v5-competitive-level-template';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v6-training-volume-presence';
 
 export type ImportAthlete = {
   id: number;
@@ -642,9 +642,17 @@ function parseStandardSheet(matrix: Matrix, sheet: string, project: string, file
       const payload = { sleepHours: numberValue(standardValue(row, header.columns, '睡眠小时')), sleepQuality: numberValue(standardValue(row, header.columns, '睡眠质量')), morningPulse: numberValue(standardValue(row, header.columns, '晨脉')), weightKg: numberValue(standardValue(row, header.columns, '体重kg')), fatigueIndex: numberValue(standardValue(row, header.columns, '疲劳')), sorenessIndex: numberValue(standardValue(row, header.columns, '肌肉酸痛')), moodIndex: numberValue(standardValue(row, header.columns, '情绪')), status: standardText(row, header.columns, '状态') || 'normal', note: standardText(row, header.columns, '备注') };
       items.push(itemBase({ ...base, itemType: 'wellness', eventDate: rowDate, metricLabel: '每日恢复', valueNum: payload.sleepHours ?? 0, payload, rawValue: JSON.stringify(payload), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|wellness` }));
     } else if (sheet === '训练课次') {
-      const duration = numberValue(standardValue(row, header.columns, '时长分钟')) ?? 0;
+      const durationCell = standardValue(row, header.columns, '时长分钟');
+      const distanceCell = standardValue(row, header.columns, '距离千米');
+      const durationReported = text(durationCell) !== '';
+      const distanceReported = text(distanceCell) !== '';
+      const duration = numberValue(durationCell);
+      const distance = numberValue(distanceCell);
+      if (!durationReported && !distanceReported) messages.push('错误：时长分钟、距离千米至少填写一项；留空不等于 0。');
+      if (durationReported && (duration === null || duration < 0 || duration > 1440)) messages.push('错误：时长分钟须为 0—1440 的数字。');
+      if (distanceReported && (distance === null || distance < 0 || distance > 500)) messages.push('错误：距离千米须为 0—500 的数字。');
       const rpe = numberValue(standardValue(row, header.columns, 'RPE'));
-      const payload = { sessionOrder: numberValue(standardValue(row, header.columns, '课次序号')) ?? 1, startTime: standardText(row, header.columns, '开始时间'), trainingType: standardText(row, header.columns, '训练类型') || '专项训练', structureType: standardText(row, header.columns, '训练阶段') || '专项训练', intensityZone: standardText(row, header.columns, '强度区间') || 'AN', content: standardText(row, header.columns, '训练内容'), durationMin: duration, distanceKm: numberValue(standardValue(row, header.columns, '距离千米')) ?? 0, rpe, srpe: numberValue(standardValue(row, header.columns, 'SRPE')) ?? (rpe === null ? 0 : rpe * duration), smvl: numberValue(standardValue(row, header.columns, 'SMVL')) ?? 0, averageHeartRate: numberValue(standardValue(row, header.columns, '平均心率')), maxHeartRate: numberValue(standardValue(row, header.columns, '最大心率')), averagePowerW: numberValue(standardValue(row, header.columns, '平均功率W')), strokeRateSpm: numberValue(standardValue(row, header.columns, '桨频SPM')) };
+      const payload = { sessionOrder: numberValue(standardValue(row, header.columns, '课次序号')) ?? 1, startTime: standardText(row, header.columns, '开始时间'), trainingType: standardText(row, header.columns, '训练类型') || '专项训练', structureType: standardText(row, header.columns, '训练阶段') || '专项训练', intensityZone: standardText(row, header.columns, '强度区间') || 'AN', content: standardText(row, header.columns, '训练内容'), durationMin: duration, distanceKm: distance, durationReported, distanceReported, rpe, srpe: numberValue(standardValue(row, header.columns, 'SRPE')) ?? (rpe === null || duration === null ? 0 : rpe * duration), smvl: numberValue(standardValue(row, header.columns, 'SMVL')) ?? 0, averageHeartRate: numberValue(standardValue(row, header.columns, '平均心率')), maxHeartRate: numberValue(standardValue(row, header.columns, '最大心率')), averagePowerW: numberValue(standardValue(row, header.columns, '平均功率W')), strokeRateSpm: numberValue(standardValue(row, header.columns, '桨频SPM')) };
       items.push(itemBase({ ...base, itemType: 'training_session', eventDate: rowDate, sessionLabel: payload.content, valueNum: duration, unit: 'min', payload, rawValue: JSON.stringify(payload), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|session|${payload.sessionOrder}` }));
     } else if (sheet === '力量训练组次') {
       const exerciseName = standardText(row, header.columns, '动作');
@@ -1052,8 +1060,8 @@ function upsertTrainingItem(item: DataImportItemView, batchId: string, userId: n
       .get(item.athleteId, item.eventDate) as { value: number };
     const inserted = db.prepare(`INSERT INTO training_sessions (
       athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content,
-      duration_min, distance_km, rpe, srpe, smvl, source, quality, is_demo, created_by
-    ) VALUES (?, ?, ?, '力量训练', '体能训练', 'AN', ?, 0, 0, NULL, 0, 0, 'file_import', ?, 0, ?)`)
+      duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, source, quality, is_demo, created_by
+    ) VALUES (?, ?, ?, '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, 0, 0, 'file_import', ?, 0, ?)`)
       .run(item.athleteId, item.eventDate, Number(order.value) + 1, item.sessionLabel, item.quality === 'warning' ? 'partial' : 'valid', userId);
     sessionId = Number(inserted.lastInsertRowid);
   }
@@ -1172,8 +1180,8 @@ function upsertSessionItem(item: DataImportItemView, userId: number, policy: 'sk
   const p = item.payload; const order = Math.max(1, Math.round(numberValue(p.sessionOrder) || 1));
   const existing = db.prepare('SELECT id FROM training_sessions WHERE athlete_id=? AND session_date=? AND session_order=?').get(item.athleteId, item.eventDate, order) as { id: number } | undefined;
   if (existing && policy === 'skip') return { skipped: true, entityId: existing.id };
-  db.prepare(`INSERT INTO training_sessions (athlete_id, session_date, session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl, average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm, source, quality, is_demo, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, 0, ?) ON CONFLICT(athlete_id, session_date, session_order) DO UPDATE SET start_time=excluded.start_time, training_type=excluded.training_type, structure_type=excluded.structure_type, intensity_zone=excluded.intensity_zone, content=excluded.content, duration_min=excluded.duration_min, distance_km=excluded.distance_km, rpe=excluded.rpe, srpe=excluded.srpe, smvl=excluded.smvl, average_heart_rate=excluded.average_heart_rate, max_heart_rate=excluded.max_heart_rate, average_power_w=excluded.average_power_w, stroke_rate_spm=excluded.stroke_rate_spm, source='file_import', quality=excluded.quality, is_demo=0, updated_at=CURRENT_TIMESTAMP`)
-    .run(item.athleteId, item.eventDate, order, text(p.startTime), text(p.trainingType), text(p.structureType), text(p.intensityZone), text(p.content), numberValue(p.durationMin) || 0, numberValue(p.distanceKm) || 0, numberValue(p.rpe), numberValue(p.srpe) || 0, numberValue(p.smvl) || 0, numberValue(p.averageHeartRate), numberValue(p.maxHeartRate), numberValue(p.averagePowerW), numberValue(p.strokeRateSpm), item.quality === 'warning' ? 'partial' : 'valid', userId);
+  db.prepare(`INSERT INTO training_sessions (athlete_id, session_date, session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm, source, quality, is_demo, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, 0, ?) ON CONFLICT(athlete_id, session_date, session_order) DO UPDATE SET start_time=excluded.start_time, training_type=excluded.training_type, structure_type=excluded.structure_type, intensity_zone=excluded.intensity_zone, content=excluded.content, duration_min=excluded.duration_min, distance_km=excluded.distance_km, duration_reported=excluded.duration_reported, distance_reported=excluded.distance_reported, rpe=excluded.rpe, srpe=excluded.srpe, smvl=excluded.smvl, average_heart_rate=excluded.average_heart_rate, max_heart_rate=excluded.max_heart_rate, average_power_w=excluded.average_power_w, stroke_rate_spm=excluded.stroke_rate_spm, source='file_import', quality=excluded.quality, is_demo=0, updated_at=CURRENT_TIMESTAMP`)
+    .run(item.athleteId, item.eventDate, order, text(p.startTime), text(p.trainingType), text(p.structureType), text(p.intensityZone), text(p.content), numberValue(p.durationMin) ?? 0, numberValue(p.distanceKm) ?? 0, p.durationReported ? 1 : 0, p.distanceReported ? 1 : 0, numberValue(p.rpe), numberValue(p.srpe) || 0, numberValue(p.smvl) || 0, numberValue(p.averageHeartRate), numberValue(p.maxHeartRate), numberValue(p.averagePowerW), numberValue(p.strokeRateSpm), item.quality === 'warning' ? 'partial' : 'valid', userId);
   const saved = db.prepare('SELECT id FROM training_sessions WHERE athlete_id=? AND session_date=? AND session_order=?').get(item.athleteId, item.eventDate, order) as { id: number };
   return { skipped: false, entityId: saved.id };
 }

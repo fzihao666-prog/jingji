@@ -435,6 +435,8 @@ export type TrainingRecord = {
   content: string;
   durationMin: number;
   distanceKm: number;
+  durationReported: boolean;
+  distanceReported: boolean;
   rpe: number | null;
   srpe: number;
   smvl: number;

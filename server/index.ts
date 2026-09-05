@@ -3246,9 +3246,9 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           const inserted = db.prepare(`
             INSERT INTO training_sessions
               (athlete_id, session_date, session_order, start_time, training_type, structure_type,
-               intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl,
+               intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl,
                source, quality, is_demo, created_by)
-            VALUES (?, ?, ?, '', '力量训练', '体能训练', 'AN', ?, 0, 0, NULL, 0, 0, ?, ?, 0, ?)
+            VALUES (?, ?, ?, '', '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, 0, 0, ?, ?, 0, ?)
           `).run(row.athleteId, row.trainingDate, Number(orderRow.maxOrder) + 1, row.sessionLabel, source, row.confidence !== null && row.confidence < 0.7 ? 'partial' : 'valid', req.authUser!.id);
           sessionId = Number(inserted.lastInsertRowid);
         }
@@ -3291,9 +3291,11 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
         SELECT COALESCE(SUM(actual_reps * actual_weight_kg), 0) AS volume,
           AVG(CASE WHEN rpe IS NOT NULL THEN rpe END) AS averageRpe,
           COALESCE(SUM(duration_min), 0) AS durationMin,
-          COALESCE(SUM(distance_km), 0) AS distanceKm
+          COALESCE(SUM(distance_km), 0) AS distanceKm,
+          MAX(CASE WHEN duration_min > 0 THEN 1 ELSE 0 END) AS durationReported,
+          MAX(CASE WHEN distance_km > 0 THEN 1 ELSE 0 END) AS distanceReported
         FROM strength_result_sets WHERE training_session_id = ?
-      `).get(sessionId) as { volume: number; averageRpe: number | null; durationMin: number; distanceKm: number };
+      `).get(sessionId) as { volume: number; averageRpe: number | null; durationMin: number; distanceKm: number; durationReported: number; distanceReported: number };
       const dominant = db.prepare(`
         SELECT training_environment AS environment, intensity_zone AS zone
         FROM strength_result_sets WHERE training_session_id = ?
@@ -3301,10 +3303,10 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
       `).get(sessionId) as { environment: string; zone: string } | undefined;
       const duration = Math.round(Number(totals.durationMin || 0) * 10) / 10;
       const averageRpe = totals.averageRpe === null ? null : Math.round(Number(totals.averageRpe) * 10) / 10;
-      db.prepare(`UPDATE training_sessions SET rpe = ?, smvl = ?, duration_min = ?, distance_km = ?, srpe = ?,
+      db.prepare(`UPDATE training_sessions SET rpe = ?, smvl = ?, duration_min = ?, distance_km = ?, duration_reported = ?, distance_reported = ?, srpe = ?,
         structure_type = ?, intensity_zone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
         .run(averageRpe, Math.round(Number(totals.volume || 0) * 10) / 10, duration,
-          Math.round(Number(totals.distanceKm || 0) * 10) / 10, Math.round((averageRpe || 0) * duration * 10) / 10,
+          Math.round(Number(totals.distanceKm || 0) * 10) / 10, Number(totals.durationReported), Number(totals.distanceReported), Math.round((averageRpe || 0) * duration * 10) / 10,
           dominant?.environment || '陆上', isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN', sessionId);
     }
     db.prepare(`
@@ -3611,7 +3613,8 @@ app.get('/api/records', requireAuth, (req, res) => {
       a.project, a.team, a.region, a.region AS province, a.city, a.county,
       ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
-      ts.distance_km AS distanceKm, ts.rpe, ts.srpe, ts.smvl,
+      ts.distance_km AS distanceKm, ts.duration_reported AS durationReported,
+      ts.distance_reported AS distanceReported, ts.rpe, ts.srpe, ts.smvl,
       dw.morning_pulse AS morningPulse, dw.weight_kg AS weightKg,
       dw.sleep_hours AS sleepHours, dw.fatigue_index AS fatigueIndex,
       COALESCE(dw.status, 'normal') AS status, '' AS coachNote,
@@ -3628,6 +3631,8 @@ app.get('/api/records', requireAuth, (req, res) => {
   res.json({
     records: records.map((record) => ({
       ...record,
+      durationReported: Boolean(record.durationReported),
+      distanceReported: Boolean(record.distanceReported),
       trainingBreakdown: trainingSessionBreakdown(record)
     }))
   });

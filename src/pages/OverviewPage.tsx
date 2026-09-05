@@ -588,7 +588,7 @@ export function OverviewPage(props: Props) {
     ),
     'training-volume': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="训练量统计图" subtitle="训练时长 · SRPE（日/周/月/阶段）" />
+        <PanelHeading title="训练量统计" subtitle="训练时长 · 训练公里数（按天汇总；日/周/月/阶段）" />
         <TrainingVolumeChart records={analysisRecords} />
       </article>
     ),

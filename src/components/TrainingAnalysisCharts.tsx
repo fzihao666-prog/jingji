@@ -136,13 +136,27 @@ export function TrainingLoadComparisonChart({ records }: { records: TrainingReco
 
 export function TrainingVolumeChart({ records }: { records: TrainingRecord[] }) {
   const range = usePeriodRecords(records);
-  const data = useMemo(() => aggregateByDate(range.filtered, range.period), [range.filtered, range.period]);
-  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">训练时长柱 + SRPE负荷折线，悬浮查看单点训练量</span><PeriodTabs control={range} /></div>
+  const data = useMemo(() => {
+    const rows = new Map<string, { label: string; duration: number; distance: number; durationCount: number; distanceCount: number; sessions: number }>();
+    for (const record of range.filtered) {
+      const row = rows.get(record.date) || { label: record.date.slice(5).replace('-', '/'), duration: 0, distance: 0, durationCount: 0, distanceCount: 0, sessions: 0 };
+      row.sessions += 1;
+      if (record.durationReported) { row.duration += record.durationMin; row.durationCount += 1; }
+      if (record.distanceReported) { row.distance += record.distanceKm; row.distanceCount += 1; }
+      rows.set(record.date, row);
+    }
+    return [...rows.values()].map((row) => ({
+      ...row,
+      duration: row.durationCount ? row.duration : null,
+      distance: row.distanceCount ? Number(row.distance.toFixed(1)) : null
+    }));
+  }, [range.filtered]);
+  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按天累加训练时长与训练公里数；空白数据不按 0 统计</span><PeriodTabs control={range} /></div>
     <div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
-      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={20}/><YAxis yAxisId="time" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/><YAxis yAxisId="load" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/>
-      <Tooltip formatter={(value, name) => [`${formatNumber(Number(value))}${name === '训练时长' ? ' min' : ' AU'}`, name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:10}}/>
+      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={20}/><YAxis yAxisId="time" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/><YAxis yAxisId="distance" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/>
+      <Tooltip formatter={(value, name) => [`${formatNumber(Number(value), name === '训练公里数' ? 1 : 0)}${name === '训练时长' ? ' min' : ' km'}`, name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:10}}/>
       <Bar yAxisId="time" dataKey="duration" name="训练时长" fill="#79b9c1" fillOpacity={.82} radius={[5,5,0,0]} maxBarSize={28}/>
-      <Line yAxisId="load" type="monotone" dataKey="srpe" name="训练负荷" stroke="#0b4d59" strokeWidth={3} dot={{r:3,fill:'#fff',stroke:'#0b4d59',strokeWidth:2}} activeDot={{r:5,fill:'#18a092',stroke:'#fff',strokeWidth:2}} connectNulls />
+      <Line yAxisId="distance" type="monotone" dataKey="distance" name="训练公里数" stroke="#0b4d59" strokeWidth={3} dot={{r:3,fill:'#fff',stroke:'#0b4d59',strokeWidth:2}} activeDot={{r:5,fill:'#18a092',stroke:'#fff',strokeWidth:2}} connectNulls />
     </ComposedChart></ResponsiveContainer></div></div>;
 }
 

@@ -18,6 +18,8 @@ type SessionRow = {
   content: string;
   durationMin: number;
   distanceKm: number;
+  durationReported: number;
+  distanceReported: number;
   rpe: number | null;
   srpe: number;
   smvl: number;
@@ -181,7 +183,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       a.region AS province, a.city, a.county, ts.session_date AS date,
       ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
-      ts.distance_km AS distanceKm, ts.rpe, ts.srpe, ts.smvl,
+      ts.distance_km AS distanceKm, ts.duration_reported AS durationReported,
+      ts.distance_reported AS distanceReported, ts.rpe, ts.srpe, ts.smvl,
       ts.average_heart_rate AS averageHeartRate, ts.max_heart_rate AS maxHeartRate,
       ts.average_power_w AS averagePowerW, ts.stroke_rate_spm AS strokeRateSpm,
       ts.source AS sessionSource, ts.quality AS sessionQuality, ts.is_demo AS sessionDemo,
@@ -213,6 +216,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     content: row.content,
     durationMin: row.durationMin,
     distanceKm: row.distanceKm,
+    durationReported: Boolean(row.durationReported),
+    distanceReported: Boolean(row.distanceReported),
     rpe: row.rpe,
     srpe: row.srpe,
     smvl: row.smvl,

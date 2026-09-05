@@ -729,6 +729,8 @@ db.exec(`
     content TEXT NOT NULL DEFAULT '',
     duration_min REAL NOT NULL DEFAULT 0,
     distance_km REAL NOT NULL DEFAULT 0,
+    duration_reported INTEGER NOT NULL DEFAULT 1 CHECK(duration_reported IN (0, 1)),
+    distance_reported INTEGER NOT NULL DEFAULT 1 CHECK(distance_reported IN (0, 1)),
     rpe REAL,
     srpe REAL NOT NULL DEFAULT 0,
     smvl REAL NOT NULL DEFAULT 0,
@@ -1050,6 +1052,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_athletes_identity ON athletes (name, project, team);
 `);
+
+// 时长、距离数值沿用既有字段；单独保存是否填报，避免将导入空单元格误判为真实 0。
+// 老数据没有可靠的缺失来源，按历史已填报处理，后续导入会准确写入标记。
+for (const [column, definition] of [
+  ['duration_reported', 'INTEGER NOT NULL DEFAULT 1 CHECK(duration_reported IN (0, 1))'],
+  ['distance_reported', 'INTEGER NOT NULL DEFAULT 1 CHECK(distance_reported IN (0, 1))']
+] as const) {
+  if (!hasColumn('training_sessions', column)) db.exec(`ALTER TABLE training_sessions ADD COLUMN ${column} ${definition}`);
+}
 
 const athleteTableDefinition = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'athletes'")
   .get() as { sql: string } | undefined;
@@ -1860,6 +1871,55 @@ function seedProfessionalOverviewData() {
 }
 
 runInitializationOnce('professional_overview_seed_v2', seedProfessionalOverviewData);
+
+// 训练量统计专用补数：仅面向没有真实完整训练量的运动员，绝不覆盖手工或文件导入的课次。
+// 数据保留可识别来源与 estimated/demo 标记，方便后续以真实训练数据替换。
+function seedTrainingVolumeDemoData() {
+  const athletes = db.prepare('SELECT id, project FROM athletes WHERE active = 1 ORDER BY id')
+    .all() as Array<{ id: number; project: string }>;
+  const hasRealVolume = db.prepare(`
+    SELECT 1 FROM training_sessions
+    WHERE athlete_id = ?
+      AND duration_reported = 1 AND distance_reported = 1
+      AND is_demo = 0
+      AND source NOT IN ('initial_seed', 'demo_seed', 'strength_daily_seed', 'training_volume_demo')
+    LIMIT 1
+  `);
+  const nextOrder = db.prepare(`
+    SELECT COALESCE(MAX(session_order), 0) + 1 AS value
+    FROM training_sessions WHERE athlete_id = ? AND session_date = ?
+  `);
+  const insert = db.prepare(`
+    INSERT INTO training_sessions
+      (athlete_id, session_date, session_order, start_time, training_type, structure_type,
+       intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported,
+       rpe, srpe, smvl, source, quality, is_demo)
+    VALUES (?, ?, ?, '08:00', '专项训练', '专项训练', ?, ?, ?, ?, 1, 1, ?, ?, 0,
+      'training_volume_demo', 'estimated', 1)
+  `);
+  const today = new Date();
+  today.setUTCHours(12, 0, 0, 0);
+  const baseDistance: Record<string, number> = { 赛艇: 16.8, 皮划艇: 14.2, 激流: 6.6 };
+
+  for (const [athleteIndex, athlete] of athletes.entries()) {
+    if (hasRealVolume.get(athlete.id)) continue;
+    for (let daysAgo = 13; daysAgo >= 0; daysAgo -= 1) {
+      const date = new Date(today);
+      date.setUTCDate(date.getUTCDate() - daysAgo);
+      const sessionDate = date.toISOString().slice(0, 10);
+      if (date.getUTCDay() === 0) continue;
+      const sequence = 13 - daysAgo + athleteIndex;
+      const duration = 72 + (sequence % 4) * 9;
+      const distance = Number(((baseDistance[athlete.project] || 12) * duration / 90 * (1 + (sequence % 3 - 1) * 0.035)).toFixed(1));
+      const rpe = Number((5.2 + (sequence % 4) * 0.4).toFixed(1));
+      const zone = ['UT2', 'UT1', 'AT', 'UT2'][sequence % 4];
+      const order = nextOrder.get(athlete.id, sessionDate) as { value: number };
+      insert.run(athlete.id, sessionDate, order.value, zone, '训练量统计模拟课次（待真实数据替换）', duration, distance, rpe, Math.round(duration * rpe));
+    }
+  }
+}
+
+runInitializationOnce('training_volume_demo_seed_v1', seedTrainingVolumeDemoData);
 
 function seedChampionModelSupplementData() {
   const upsertMetric = db.prepare(`
