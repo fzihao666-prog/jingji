@@ -86,7 +86,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'recovery-time': { title: '损伤情况', size: 'metric' },
   'athlete-profile': { title: '身体与年龄画像', size: 'full' },
   'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
-  'fms-analysis': { title: 'FMS测试全队分析', size: 'half' },
+  'fms-analysis': { title: 'FMS测试分析', size: 'half' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
   'training-load-analysis': { title: '体能与专项训练负荷分析', size: 'full' },
@@ -560,14 +560,14 @@ export function OverviewPage(props: Props) {
     ),
       'fms-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="FMS测试全队分析" subtitle={`${isIndividualOverview ? '个人FMS' : `最近一次团队测试 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
+        <PanelHeading title="FMS测试分析" subtitle={`${isIndividualOverview ? '个人FMS' : `最近一次团队测试 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
         <FmsTeamChart measurements={overview?.measurements || []} />
         <p className="analysis-method-note">每个动作按0–3分计，团队柱为最近一次测试的单项平均分；2分表示动作模式基本达标，低于2分列入纠正训练。七项齐全时汇总为21分制队均，14分仅作复查参考，不单独用于判断损伤风险。</p>
       </article>
     ),
     'performance-radar': (
       <article className="panel professional-panel">
-        <PanelHeading title="全队多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
+        <PanelHeading title="多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
         {strengthLoading ? <div className="professional-chart-empty">正在读取力量测试…</div> : <PerformanceRadarChart data={radar} />}
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
       </article>
