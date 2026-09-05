@@ -2111,6 +2111,37 @@ function seedOverviewProfileData() {
 
 runInitializationOnce('overview_profile_seed_v2', seedOverviewProfileData);
 
+function seedOverviewExperienceAndCompositionData() {
+  const data: Record<string, { startSportDate: string; skeletalMuscleKg: number; muscleMassKg: number }> = {
+    林舟: { startSportDate: '2017-09-01', skeletalMuscleKg: 25.8, muscleMassKg: 42.6 },
+    沈澜: { startSportDate: '2014-09-01', skeletalMuscleKg: 27.2, muscleMassKg: 44.8 },
+    陈屿: { startSportDate: '2011-09-01', skeletalMuscleKg: 36.9, muscleMassKg: 59.7 },
+    周竞: { startSportDate: '2016-09-01', skeletalMuscleKg: 38.1, muscleMassKg: 61.4 },
+    许沐: { startSportDate: '2022-09-01', skeletalMuscleKg: 26.4, muscleMassKg: 43.5 },
+    顾川: { startSportDate: '2013-09-01', skeletalMuscleKg: 35.8, muscleMassKg: 58.3 },
+    宋岚: { startSportDate: '2019-09-01', skeletalMuscleKg: 24.7, muscleMassKg: 40.9 },
+    江跃: { startSportDate: '2015-09-01', skeletalMuscleKg: 35.2, muscleMassKg: 57.1 }
+  };
+  const athletes = db.prepare('SELECT id, name FROM athletes WHERE active = 1').all() as Array<{ id: number; name: string }>;
+  const profileDate = db.prepare(`INSERT INTO athlete_profiles (athlete_id, start_sport_date)
+    VALUES (?, ?) ON CONFLICT(athlete_id) DO UPDATE SET start_sport_date = COALESCE(NULLIF(athlete_profiles.start_sport_date, ''), excluded.start_sport_date), updated_at = CURRENT_TIMESTAMP`);
+  const bodyComposition = db.prepare(`UPDATE athlete_body_measurements
+    SET skeletal_muscle_kg = COALESCE(skeletal_muscle_kg, ?), muscle_mass_kg = COALESCE(muscle_mass_kg, ?)
+    WHERE athlete_id = ? AND measurement_date = (
+      SELECT MAX(inner_measurement.measurement_date)
+      FROM athlete_body_measurements inner_measurement
+      WHERE inner_measurement.athlete_id = ?
+    )`);
+  for (const athlete of athletes) {
+    const row = data[athlete.name];
+    if (!row) continue;
+    profileDate.run(athlete.id, row.startSportDate);
+    bodyComposition.run(row.skeletalMuscleKg, row.muscleMassKg, athlete.id, athlete.id);
+  }
+}
+
+runInitializationOnce('overview_experience_composition_seed_v2', seedOverviewExperienceAndCompositionData);
+
 function seedOverviewInjuryData() {
   const creator = db.prepare("SELECT id FROM users WHERE role IN ('DMD', 'TD', 'PRJ', 'SCC') ORDER BY id LIMIT 1")
     .get() as { id: number } | undefined;

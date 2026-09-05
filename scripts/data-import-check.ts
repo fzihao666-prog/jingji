@@ -104,6 +104,7 @@ assert.equal(db.prepare('SELECT COUNT(*) AS count FROM competitive_state_assessm
 const overviewAfterTemplateImport = buildOverviewPayload({ athleteIds: [templateAthlete.id], from: '2026-08-01', to: '2026-08-31', project: '赛艇', individual: false, period: 'month' });
 assert.equal(overviewAfterTemplateImport.profiles.length, 1, '总览应包含已导入运动员档案');
 assert.notEqual(overviewAfterTemplateImport.profiles[0]?.age, null, '总览年龄结构需要读取导入出生日期');
+assert.equal(overviewAfterTemplateImport.profiles[0]?.startSportDate, '2012-01-01', '运动经验结构需要读取导入开始运动日期');
 assert.notEqual(overviewAfterTemplateImport.profiles[0]?.competitiveScore, null, '总览竞技水平需要读取导入竞技状态');
 assert.equal(overviewAfterTemplateImport.measurements.filter((item) => item.domain === 'fms').length, 7, '个人FMS分析需要读取FMS测试工作表导入的七项数据');
 assert.equal(db.prepare("SELECT COUNT(*) AS count FROM test_measurements tm JOIN test_sessions ts ON ts.id=tm.test_session_id WHERE ts.athlete_id=? AND ts.test_type='冠军模型综合评估'").get(templateAthlete.id)?.count, 11, '冠军模型测试工作表需写入正式测试数据');

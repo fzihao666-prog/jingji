@@ -30,6 +30,40 @@ function chartDomain(values: number[], minimumPadding: number): [number, number]
 }
 
 type AgeBin = { group: string; male: number; female: number; start: number; end: number };
+type CompositionBand = '偏低' | '目标范围' | '偏高' | '未测试';
+
+function compositionBand(value: number | null, lower: number, upper: number): CompositionBand {
+  if (value === null || !Number.isFinite(value)) return '未测试';
+  if (value < lower) return '偏低';
+  if (value > upper) return '偏高';
+  return '目标范围';
+}
+
+function sportYears(startDate: string | null, asOf: string) {
+  if (!startDate) return null;
+  const start = new Date(`${startDate}T00:00:00`).getTime();
+  const end = new Date(`${asOf}T00:00:00`).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return (end - start) / 31_557_600_000;
+}
+
+function bodyCompositionStatus(profile: OverviewAthleteProfile) {
+  const heightM = profile.heightCm === null ? null : profile.heightCm / 100;
+  const bmi = heightM && profile.weightKg !== null ? profile.weightKg / (heightM ** 2) : null;
+  const fatMass = profile.weightKg !== null && profile.bodyFatPct !== null ? profile.weightKg * profile.bodyFatPct / 100 : null;
+  const fatFreeMass = profile.weightKg !== null && fatMass !== null ? profile.weightKg - fatMass : null;
+  const skeletalMuscleIndex = heightM && profile.skeletalMuscleKg !== null ? profile.skeletalMuscleKg / (heightM ** 2) : null;
+  const fatFreeMassIndex = heightM && fatFreeMass !== null ? fatFreeMass / (heightM ** 2) : null;
+  const female = profile.gender === '女';
+  return {
+    体重: compositionBand(bmi, female ? 18 : 19, female ? 24.5 : 25),
+    BMI: compositionBand(bmi, female ? 18 : 19, female ? 24.5 : 25),
+    体脂率: compositionBand(profile.bodyFatPct, female ? 14 : 6, female ? 24 : 18),
+    脂肪量: compositionBand(fatMass, female ? 8 : 5, female ? 18 : 15),
+    骨骼肌量: compositionBand(skeletalMuscleIndex, female ? 6.2 : 8.2, female ? 8.8 : 10.8),
+    去脂体重: compositionBand(fatFreeMassIndex, female ? 14 : 16, female ? 19.5 : 22)
+  };
+}
 
 function TeamProfileTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload?: TeamScatterPoint }> }) {
   const point = payload?.[0]?.payload;
@@ -51,7 +85,7 @@ function AgePyramidTooltip({ active, payload }: { active?: boolean; payload?: Ar
   );
 }
 
-export function AthleteProfileOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
+export function AthleteProfileOverview({ profiles, individual, asOf }: { profiles: OverviewAthleteProfile[]; individual: boolean; asOf: string }) {
   if (!profiles.length || !profiles.some((profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null)) {
     return <ProfileEmpty title={individual ? '暂无档案画像数据' : '暂无队伍身体数据'} detail="完善出生日期和身体测量后自动生成。" />;
   }
@@ -108,6 +142,26 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
   const maxHeight = heights.length ? Math.max(...heights) : null;
   const minWeight = weights.length ? Math.min(...weights) : null;
   const maxWeight = weights.length ? Math.max(...weights) : null;
+  const compositionRows = ['体重', 'BMI', '体脂率', '脂肪量', '骨骼肌量', '去脂体重'].map((label) => {
+    const counts: Record<CompositionBand, number> = { 偏低: 0, 目标范围: 0, 偏高: 0, 未测试: 0 };
+    for (const profile of profiles) {
+      const band = bodyCompositionStatus(profile)[label as keyof ReturnType<typeof bodyCompositionStatus>];
+      counts[band] += 1;
+    }
+    const sample = profiles.length;
+    return { label, ...counts, sample };
+  });
+  const experienceBands = [
+    { label: '≤2年', phase: '新秀期', matches: (years: number) => years <= 2 },
+    { label: '3～5年', phase: '成长期', matches: (years: number) => years > 2 && years < 6 },
+    { label: '6～8年', phase: '成熟期', matches: (years: number) => years >= 6 && years < 9 },
+    { label: '≥9年', phase: '资深期', matches: (years: number) => years >= 9 }
+  ].map((band) => ({ ...band, athletes: profiles.filter((profile) => {
+    const years = sportYears(profile.startSportDate, asOf);
+    return years !== null && band.matches(years);
+  }).length }));
+  const experienced = profiles.map((profile) => sportYears(profile.startSportDate, asOf)).filter((value): value is number => value !== null);
+  const experienceTotal = experienceBands.reduce((sum, item) => sum + item.athletes, 0);
 
   return (
     <div className="profile-overview-visual team-profile-visual" aria-label="队伍年龄、身体形态与竞技水平分布">
@@ -149,6 +203,29 @@ export function AthleteProfileOverview({ profiles, individual }: { profiles: Ove
         </section>
 
         <CompetitiveLevelChart profiles={profiles} />
+      </div>
+      <div className="team-profile-insight-grid">
+        <section className="team-profile-insight-card composition-status-card">
+          <header><div><h3>身体成分状态分布</h3><p>按运动训练参考区间统计 · 每行 100%</p></div><span>{profiles.length} 名运动员</span></header>
+          <div className="composition-status-list">
+            {compositionRows.map((row) => <div className="composition-status-row" key={row.label}>
+              <strong>{row.label}</strong><div className="composition-stack" role="img" aria-label={`${row.label}：偏低${row.偏低}人，目标范围${row.目标范围}人，偏高${row.偏高}人，未测试${row.未测试}人`}>
+                {(['偏低', '目标范围', '偏高', '未测试'] as CompositionBand[]).map((band) => row.sample ? <span key={band} className={`composition-band ${band}`} style={{ width: `${row[band] / row.sample * 100}%` }} /> : null)}
+              </div><small>{row.sample ? `${row.sample} 人` : '暂无数据'}</small>
+            </div>)}
+          </div>
+          <footer className="composition-legend"><span><i className="偏低" />偏低</span><span><i className="目标范围" />目标范围</span><span><i className="偏高" />偏高</span><span><i className="未测试" />未测试</span><em>体重按 BMI 区间判定</em></footer>
+        </section>
+        <section className="team-profile-insight-card experience-ladder-card">
+          <header><div><h3>运动经验结构</h3><p>依据开始运动日期自动计算</p></div><span>{experienceTotal} 名已建档</span></header>
+          <div className="experience-ladder">
+            <i className="experience-rail" aria-hidden="true" />
+            {experienceBands.map((band) => <article key={band.label}>
+              <i className="experience-node" aria-hidden="true" /><span>{band.label}</span><strong>{band.phase}</strong><b>{band.athletes}<small>人</small></b><em>{experienceTotal ? `${formatNumber(band.athletes / experienceTotal * 100, 1)}%` : '—'}</em>
+            </article>)}
+          </div>
+          <footer className="experience-summary"><span>平均运动年限 <strong>{experienced.length ? `${formatNumber(average(experienced) || 0, 1)}年` : '—'}</strong></span><i /><span>最长 <strong>{experienced.length ? `${formatNumber(Math.max(...experienced), 1)}年` : '—'}</strong></span><i /><span>最短 <strong>{experienced.length ? `${formatNumber(Math.min(...experienced), 1)}年` : '—'}</strong></span></footer>
+        </section>
       </div>
     </div>
   );

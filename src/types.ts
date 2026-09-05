@@ -651,6 +651,7 @@ export type OverviewAthleteProfile = {
   originSource: string;
   originIsDemo: boolean;
   birthDate: string | null;
+  startSportDate: string | null;
   age: number | null;
   bodyMeasurementDate: string | null;
   heightCm: number | null;

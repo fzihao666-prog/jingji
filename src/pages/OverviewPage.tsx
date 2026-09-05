@@ -549,7 +549,7 @@ export function OverviewPage(props: Props) {
     'athlete-profile': (
       <article className={`panel professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
         <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '基本信息'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
-        <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} />
+        <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} asOf={props.to} />
       </article>
     ),
     'competitive-state': (

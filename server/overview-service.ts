@@ -74,6 +74,7 @@ type ProfileRow = {
   originSource: string;
   originIsDemo: number;
   birthDate: string | null;
+  startSportDate: string;
 };
 
 type BodyRow = {
@@ -247,7 +248,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       COALESCE(ao.county, '') AS county,
       COALESCE(ao.source, 'missing') AS originSource,
       COALESCE(ao.is_demo, 0) AS originIsDemo,
-      a.birth_date AS birthDate
+      a.birth_date AS birthDate,
+      COALESCE(ap.start_sport_date, '') AS startSportDate
     FROM athletes a
     LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
@@ -292,6 +294,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     return {
       ...profile,
       age: ageAt(profile.birthDate, input.to),
+      startSportDate: profile.startSportDate || null,
       bodyMeasurementDate: body?.measurementDate || null,
       heightCm: body?.heightCm ?? null,
       weightKg: body?.weightKg ?? null,
