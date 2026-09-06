@@ -222,8 +222,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   };
   const placeholders = input.athleteIds.map(() => '?').join(',');
   const sessions = db.prepare(`
-    SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team,
-      a.region AS province, a.city, a.county, ts.session_date AS date,
+    SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team,
+      COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county, ts.session_date AS date,
       ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
       ts.distance_km AS distanceKm, ts.duration_reported AS durationReported,
@@ -237,6 +237,8 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       dw.quality AS wellnessQuality, dw.is_demo AS wellnessDemo, ts.updated_at AS updatedAt
     FROM training_sessions ts
     JOIN athletes a ON a.id = ts.athlete_id
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
+    LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
     ORDER BY ts.session_date, ts.session_order, a.name
@@ -314,7 +316,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   };
 
   const profileRows = db.prepare(`
-    SELECT a.id AS athleteId, a.name AS athleteName, a.project, a.team, a.gender,
+    SELECT a.id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team, a.gender,
       COALESCE(ap.position, '') AS athletePosition,
       COALESCE(ap.best_result, '') AS bestResult,
       COALESCE(ap.technical_level, '') AS technicalLevel,
@@ -328,10 +330,11 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       a.birth_date AS birthDate,
       COALESCE(ap.start_sport_date, '') AS startSportDate
     FROM athletes a
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
     LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     WHERE a.id IN (${placeholders}) AND a.active = 1
-    ORDER BY a.team, a.name
+    ORDER BY pt.name, a.name
   `).all(...input.athleteIds) as ProfileRow[];
   const bodyRows = db.prepare(`
     SELECT athlete_id AS athleteId, measurement_date AS measurementDate,

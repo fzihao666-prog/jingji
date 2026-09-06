@@ -410,7 +410,7 @@ export const api = {
     return request<{ message: string }>('/api/data-management/metric-aliases', { method: 'PUT', body: JSON.stringify(input) });
   },
   async dataManagementStandards() {
-    return request<{ athlete: string[]; training: { types: string[]; structures: string[]; zoneSystems: string[] }; testing: string[]; sources: string[]; qualities: string[]; deprecatedTables: string[] }>('/api/data-management/standards');
+    return request<{ athlete: string[]; training: { types: string[]; structures: string[]; zoneSystems: string[] }; testing: string[]; sources: string[]; qualities: string[]; retiredTables: string[] }>('/api/data-management/standards');
   },
   async specialTests(from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });

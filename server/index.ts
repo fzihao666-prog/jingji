@@ -568,13 +568,20 @@ function accessibleAthleteIds(user: AuthUser): number[] {
   const permissions = accountPermissions(user.id);
   const candidates = user.role === 'SCC'
     ? db.prepare(`
-      SELECT a.id, a.region, a.city, a.county, a.project, a.team
+      SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
+        a.project, COALESCE(pt.name, '') AS team
       FROM athletes a JOIN coach_athletes ca ON ca.athlete_id = a.id
+      LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+      LEFT JOIN project_teams pt ON pt.id = a.team_id
       WHERE ca.coach_user_id = ? AND a.active = 1
     `).all(user.id) as ScopeAthlete[]
     : db.prepare(`
-      SELECT id, region, city, county, project, team
-      FROM athletes WHERE active = 1
+      SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
+        a.project, COALESCE(pt.name, '') AS team
+      FROM athletes a
+      LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+      LEFT JOIN project_teams pt ON pt.id = a.team_id
+      WHERE a.active = 1
     `).all() as ScopeAthlete[];
   return candidates.filter((athlete) => permissionsAllowAthlete(permissions, athlete)).map((athlete) => athlete.id);
 }
@@ -1872,7 +1879,8 @@ app.post('/api/admin/athletes', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'T
   if (scopeError) errors.push(scopeError);
   if (createAccount && [payload.region, payload.city, payload.county].some((value) => value === '未设置')) errors.push('创建登录账号前请补全省、市、区县');
   if (createAccount && db.prepare('SELECT id FROM users WHERE username = ?').get(username)) errors.push('该登录账号已存在');
-  if (db.prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team = ?').get(payload.name, payload.project, payload.team)) errors.push('该队伍中已存在同名运动员');
+  const selectedTeam = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(payload.project, payload.team) as { id: number } | undefined;
+  if (selectedTeam && db.prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team_id = ?').get(payload.name, payload.project, selectedTeam.id)) errors.push('该队伍中已存在同名运动员');
   const coach = payload.coachId ? userById(payload.coachId) : null;
   if (currentUser.role !== 'SCC' && payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
   if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
@@ -1880,10 +1888,11 @@ app.post('/api/admin/athletes', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'T
   db.exec('BEGIN');
   try {
     const athleteResult = db.prepare(`
-      INSERT INTO athletes (name, project, team, gender, region, city, county, birth_date, profile_status, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
-    `).run(payload.name, payload.project, payload.team, payload.gender, payload.region, payload.city, payload.county, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete');
+      INSERT INTO athletes (name, project, team_id, gender, birth_date, profile_status, source)
+      VALUES (?, ?, ?, ?, ?, ?, 'manual')
+    `).run(payload.name, payload.project, selectedTeam!.id, payload.gender, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete');
     const athleteId = Number(athleteResult.lastInsertRowid);
+    upsertAthleteOrigin({ athleteId, province: payload.region, city: payload.city, county: payload.county });
     upsertAthleteProfile(athleteId, payload);
     let userId: number | null = null;
     if (createAccount) {
@@ -1925,8 +1934,10 @@ app.put('/api/admin/athletes/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG',
 
   db.exec('BEGIN');
   try {
-    db.prepare(`UPDATE athletes SET name = ?, project = ?, team = ?, gender = ?, region = ?, city = ?, county = ?, birth_date = ?, profile_status = ? WHERE id = ?`)
-      .run(payload.name, payload.project, payload.team, payload.gender, payload.region, payload.city, payload.county, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete', athleteId);
+    const selectedTeam = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(payload.project, payload.team) as { id: number } | undefined;
+    db.prepare(`UPDATE athletes SET name = ?, project = ?, team_id = ?, gender = ?, birth_date = ?, profile_status = ? WHERE id = ?`)
+      .run(payload.name, payload.project, selectedTeam!.id, payload.gender, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete', athleteId);
+    upsertAthleteOrigin({ athleteId, province: payload.region, city: payload.city, county: payload.county });
     upsertAthleteProfile(athleteId, payload);
     db.prepare("UPDATE users SET display_name = ? WHERE role = 'ATL' AND athlete_id = ?").run(payload.name, athleteId);
     const athleteUser = db.prepare("SELECT u.id, ap.parent_user_id AS parentUserId FROM users u LEFT JOIN account_profiles ap ON ap.user_id = u.id WHERE u.role = 'ATL' AND u.athlete_id = ?")
@@ -3602,7 +3613,7 @@ app.get('/api/data-management/standards', requireAuth, requireRole('SCC', 'PRJ',
     testing: ['test_sessions', 'test_measurements', 'metric_definitions', 'metric_aliases'],
     sources: ['manual', 'file_import', 'ai_import', 'legacy_migration'],
     qualities: ['valid', 'partial', 'insufficient', 'outlier', 'estimated'],
-    deprecatedTables: ['training_records', 'athlete_strength_tests', 'strength_training_sets', 'strength_import_batches']
+    retiredTables: ['training_records', 'athlete_strength_tests', 'strength_training_sets', 'strength_import_batches']
   });
 });
 

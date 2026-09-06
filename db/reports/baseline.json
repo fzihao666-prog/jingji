@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-09-06T09:52:51.808Z",
+  "schemaTableCount": 40,
+  "counts": {
+    "athletes": 78,
+    "training_sessions": 3713,
+    "daily_wellness": 3023,
+    "test_sessions": 4655,
+    "test_measurements": 11296,
+    "strength_result_sets": 435,
+    "athlete_body_measurements": 2485,
+    "injury_records": 12
+  },
+  "trainingSessionsTotals": {
+    "distance_km": 43408.8,
+    "duration_min": 294182
+  },
+  "legacyTablesPresent": [],
+  "foreignKeyViolations": 0,
+  "integrityCheck": ["ok"]
+}

@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-09-06T09:53:00Z",
+  "totalStrengthResultSets": 435,
+  "missingExerciseCodeCount": 435,
+  "items": [
+    { "exerciseName": "划船测功仪功能", "count": 50 },
+    { "exerciseName": "卧拉", "count": 65 },
+    { "exerciseName": "循环力量耐力", "count": 25 },
+    { "exerciseName": "拉伸再生组合", "count": 25 },
+    { "exerciseName": "水上专项划行", "count": 105 },
+    { "exerciseName": "深蹲", "count": 90 },
+    { "exerciseName": "综合协调训练", "count": 25 },
+    { "exerciseName": "跑步间歇", "count": 25 },
+    { "exerciseName": "高拉速度力量", "count": 25 }
+  ]
+}

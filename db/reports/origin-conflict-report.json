@@ -1,0 +1,12 @@
+{
+  "generatedAt": "2026-09-06T09:53:00Z",
+  "conflictCount": 4,
+  "resolution": "athlete_origins_authoritative",
+  "resolvedAt": "2026-09-06T10:00:00Z",
+  "items": [
+    { "athleteId": 6, "athleteOrigin": { "province": "广东", "city": "广州", "county": "天河区" }, "currentOrigin": { "province": "湖北", "city": "武汉", "county": "洪山区" } },
+    { "athleteId": 7, "athleteOrigin": { "province": "贵州", "city": "黔西南布依族苗族自治州", "county": "1" }, "currentOrigin": { "province": "江苏", "city": "南京", "county": "玄武区" } },
+    { "athleteId": 8, "athleteOrigin": { "province": "贵州", "city": "贵阳", "county": "观山湖区" }, "currentOrigin": { "province": "辽宁", "city": "大连", "county": "中山区" } },
+    { "athleteId": 9, "athleteOrigin": { "province": "山东", "city": "ddd", "county": "ddd" }, "currentOrigin": { "province": "吉林", "city": "吉林市", "county": "" } }
+  ]
+}

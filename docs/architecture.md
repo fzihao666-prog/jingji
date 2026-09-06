@@ -303,12 +303,11 @@ erDiagram
     ATHLETES ||--o{ TRAINING_PLANS : assigned
     ATHLETES ||--o{ TRAINING_SESSIONS : performs
     TRAINING_SESSIONS ||--o{ STRENGTH_RESULT_SETS : contains
-    STRENGTH_IMPORT_BATCHES ||--o{ STRENGTH_RESULT_SETS : imports
+    DATA_IMPORT_BATCHES ||--o{ STRENGTH_RESULT_SETS : imports
 
     ATHLETES ||--o{ TEST_SESSIONS : tested
     TEST_SESSIONS ||--o{ TEST_MEASUREMENTS : contains
-    ATHLETES ||--o{ ATHLETE_STRENGTH_TESTS : legacy_profile
-    ATHLETE_STRENGTH_TESTS ||--o{ STRENGTH_AI_ADVICE : generates
+    TEST_SESSIONS ||--o{ STRENGTH_AI_ADVICE : generates
 
     SPECIAL_TEST_EVENTS ||--o{ SPECIAL_TEST_RESULTS : contains
     ATHLETES }o--o{ SPECIAL_TEST_RESULTS : participates
@@ -327,7 +326,7 @@ erDiagram
 | 健康 | `injury_records` | 疼痛、限制、康复与复查 |
 | 导入与审计 | `data_import_batches`、`data_import_items`、`audit_logs` | 统一暂存、提交追踪和敏感操作审计 |
 
-### 8.4 数据库收敛与旧表兼容
+### 8.4 数据库收敛
 
 训练事实已收敛到以下权威模型：
 
@@ -335,9 +334,9 @@ erDiagram
 2. `daily_wellness`；
 3. `test_sessions` + `test_measurements` + `metric_definitions`。
 
-`training_records`、`athlete_strength_tests`、`strength_training_sets` 与 `strength_import_batches` 为 Deprecated 表：启动时会先备份 SQLite，再以幂等迁移补写权威表，并将基线、异常（未知指标、队伍或地区冲突）和迁移结果写入 `app_metadata`。旧表不再接受新的训练、测试或导入写入。
+`training_records`、`athlete_strength_tests`、`strength_training_sets` 与 `strength_import_batches` 已完成迁移并从正式数据库删除。恢复历史数据仅通过独立 SQLite 备份完成；应用启动不会重新创建这些表。
 
-迁移报告用于人工核对训练分钟、公里、测试指标及运动员维度；地区冲突不自动覆盖，无法匹配的队伍不自动创建。
+训练分钟、公里、测试指标及运动员维度的迁移基线和异常报告保存在 `app_metadata`，地区冲突不自动覆盖，无法匹配的队伍不自动创建。
 
 ### 8.5 JSON 与结构化列
 

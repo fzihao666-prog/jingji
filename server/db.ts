@@ -119,59 +119,9 @@ db.exec(`
     FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
   );
 
-  CREATE TABLE IF NOT EXISTS training_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    athlete_id INTEGER NOT NULL,
-    date TEXT NOT NULL,
-    training_type TEXT NOT NULL,
-    structure_type TEXT NOT NULL,
-    intensity_zone TEXT NOT NULL,
-    content TEXT,
-    duration_min REAL NOT NULL DEFAULT 0,
-    distance_km REAL NOT NULL DEFAULT 0,
-    rpe REAL,
-    srpe REAL NOT NULL DEFAULT 0,
-    smvl REAL NOT NULL DEFAULT 0,
-    morning_pulse REAL,
-    weight_kg REAL,
-    sleep_hours REAL,
-    fatigue_index REAL,
-    status TEXT NOT NULL CHECK(status IN ('normal', 'attention', 'alert', 'rest', 'missing')),
-    coach_note TEXT,
-    training_breakdown TEXT NOT NULL DEFAULT '{}',
-    province TEXT NOT NULL DEFAULT '',
-    city TEXT NOT NULL DEFAULT '',
-    county TEXT NOT NULL DEFAULT '',
-    project TEXT NOT NULL DEFAULT '',
-    team TEXT NOT NULL DEFAULT '',
-    created_by INTEGER NOT NULL,
-    updated_by INTEGER NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (athlete_id, date),
-    FOREIGN KEY (athlete_id) REFERENCES athletes(id),
-    FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (updated_by) REFERENCES users(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS athlete_strength_tests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    athlete_id INTEGER NOT NULL,
-    test_date TEXT NOT NULL,
-    metrics_json TEXT NOT NULL DEFAULT '{}',
-    targets_json TEXT NOT NULL DEFAULT '{}',
-    notes TEXT NOT NULL DEFAULT '',
-    created_by INTEGER NOT NULL,
-    updated_by INTEGER NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (athlete_id, test_date),
-    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE,
-    FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (updated_by) REFERENCES users(id)
-  );
-
   CREATE TABLE IF NOT EXISTS strength_ai_advice (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    strength_test_id INTEGER NOT NULL,
+    test_session_id INTEGER,
     version INTEGER NOT NULL,
     content_json TEXT NOT NULL,
     source TEXT NOT NULL CHECK(source IN ('ai', 'rules')),
@@ -182,8 +132,8 @@ db.exec(`
     generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reviewed_at TEXT,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (strength_test_id, version),
-    FOREIGN KEY (strength_test_id) REFERENCES athlete_strength_tests(id) ON DELETE CASCADE,
+    UNIQUE (test_session_id, version),
+    FOREIGN KEY (test_session_id) REFERENCES test_sessions(id) ON DELETE CASCADE,
     FOREIGN KEY (generated_by) REFERENCES users(id),
     FOREIGN KEY (reviewed_by) REFERENCES users(id)
   );
@@ -281,6 +231,77 @@ db.exec(`
 function hasColumn(table: string, column: string) {
   return (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((item) => item.name === column);
 }
+
+function tableExists(table: string) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
+}
+
+if (!hasColumn('data_import_batches', 'storage_path')) {
+  db.exec('ALTER TABLE data_import_batches ADD COLUMN storage_path TEXT');
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS intensity_zone_definitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    zone_system TEXT NOT NULL,
+    zone_code TEXT NOT NULL,
+    zone_name TEXT,
+    description TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(zone_system, zone_code)
+  );
+  CREATE TABLE IF NOT EXISTS exercise_definitions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exercise_code TEXT NOT NULL UNIQUE,
+    exercise_name TEXT NOT NULL,
+    category TEXT,
+    default_unit TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+const insertIntensityZone = db.prepare(`
+  INSERT OR IGNORE INTO intensity_zone_definitions (zone_system, zone_code, zone_name, description, sort_order)
+  VALUES (?, ?, ?, ?, ?)
+`);
+for (const [system, zones] of Object.entries({
+  ROWING_U: ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'],
+  ROWING_UT: ['UT2', 'UT1', 'TR', 'AT', 'AN', 'REC']
+})) {
+  zones.forEach((code, index) => insertIntensityZone.run(system, code, code, `${system} 强度分区`, index + 1));
+}
+const insertExercise = db.prepare(`
+  INSERT OR IGNORE INTO exercise_definitions (exercise_code, exercise_name, category, default_unit)
+  VALUES (?, ?, ?, 'kg')
+`);
+for (const [code, name] of [
+  ['SQUAT', '深蹲'], ['BENCH_PULL', '卧拉'], ['BENCH_PRESS', '卧推'], ['DEADLIFT', '硬拉'], ['LEG_PRESS', '腿举'], ['PULL_UP', '引体向上'],
+  ['ROWING_ERG_FUNCTION', '划船测功仪功能'], ['CIRCUIT_STRENGTH_ENDURANCE', '循环力量耐力'], ['RECOVERY_MOBILITY', '拉伸再生组合'],
+  ['WATER_SPECIAL_ROWING', '水上专项划行'], ['COORDINATION_TRAINING', '综合协调训练'], ['RUN_INTERVAL', '跑步间歇'], ['HIGH_PULL_SPEED', '高拉速度力量']
+]) {
+  insertExercise.run(code, name, '力量训练');
+}
+db.exec(`
+  UPDATE strength_result_sets
+  SET exercise_code = CASE exercise_name
+    WHEN '深蹲' THEN 'SQUAT'
+    WHEN '卧拉' THEN 'BENCH_PULL'
+    WHEN '划船测功仪功能' THEN 'ROWING_ERG_FUNCTION'
+    WHEN '循环力量耐力' THEN 'CIRCUIT_STRENGTH_ENDURANCE'
+    WHEN '拉伸再生组合' THEN 'RECOVERY_MOBILITY'
+    WHEN '水上专项划行' THEN 'WATER_SPECIAL_ROWING'
+    WHEN '综合协调训练' THEN 'COORDINATION_TRAINING'
+    WHEN '跑步间歇' THEN 'RUN_INTERVAL'
+    WHEN '高拉速度力量' THEN 'HIGH_PULL_SPEED'
+    ELSE exercise_code
+  END
+  WHERE NULLIF(trim(exercise_code), '') IS NULL;
+`);
 
 if (!hasColumn('special_test_events', 'project')) {
   const legacyEvents = db.prepare(`
@@ -463,14 +484,6 @@ if (!hasColumn('registration_requests', 'identity_number')) {
 }
 if (!hasColumn('registration_requests', 'native_place')) {
   db.exec('ALTER TABLE registration_requests ADD COLUMN native_place TEXT');
-}
-for (const column of ['province', 'city', 'county', 'project', 'team']) {
-  if (!hasColumn('training_records', column)) {
-    db.exec(`ALTER TABLE training_records ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
-  }
-}
-if (!hasColumn('training_records', 'training_breakdown')) {
-  db.exec("ALTER TABLE training_records ADD COLUMN training_breakdown TEXT NOT NULL DEFAULT '{}'");
 }
 if (!hasColumn('training_plans', 'start_date')) {
   db.exec("ALTER TABLE training_plans ADD COLUMN start_date TEXT NOT NULL DEFAULT ''");
@@ -700,8 +713,7 @@ if (!hasColumn('athlete_profiles', 'position')) {
   db.exec("ALTER TABLE athlete_profiles ADD COLUMN position TEXT NOT NULL DEFAULT ''");
 }
 
-// 新版训练总览采用“每日恢复—训练课次—测试批次—测试指标”的分层结构。
-// 旧 training_records 与 athlete_strength_tests 继续保留，供日历和既有接口兼容使用。
+// 训练总览采用“每日恢复—训练课次—测试批次—测试指标”的分层结构。
 db.exec(`
   CREATE TABLE IF NOT EXISTS daily_wellness (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -754,35 +766,28 @@ db.exec(`
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
 
-  CREATE TABLE IF NOT EXISTS strength_import_batches (
-    id TEXT PRIMARY KEY,
-    source_filename TEXT NOT NULL,
-    source_mimetype TEXT NOT NULL DEFAULT '',
-    source_type TEXT NOT NULL CHECK(source_type IN ('excel', 'csv', 'image', 'pdf', 'manual')),
-    model_used TEXT NOT NULL DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'preview' CHECK(status IN ('preview', 'committed', 'failed')),
-    row_count INTEGER NOT NULL DEFAULT 0,
-    imported_count INTEGER NOT NULL DEFAULT 0,
-    skipped_count INTEGER NOT NULL DEFAULT 0,
-    created_by INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    committed_at TEXT,
-    FOREIGN KEY (created_by) REFERENCES users(id)
-  );
-
   CREATE TABLE IF NOT EXISTS strength_result_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     training_session_id INTEGER NOT NULL,
+    exercise_code TEXT NOT NULL DEFAULT '',
     exercise_name TEXT NOT NULL,
     set_index INTEGER NOT NULL DEFAULT 1,
     target_reps REAL,
     actual_reps REAL NOT NULL,
     actual_weight_kg REAL NOT NULL,
+    planned_weight_kg REAL,
+    training_category TEXT NOT NULL DEFAULT '基础力量',
+    body_position TEXT NOT NULL DEFAULT '全身',
+    training_environment TEXT NOT NULL DEFAULT '陆上',
+    duration_min REAL NOT NULL DEFAULT 0,
+    distance_km REAL NOT NULL DEFAULT 0,
+    intensity_percent REAL,
+    intensity_zone TEXT NOT NULL DEFAULT 'AN',
     rpe REAL,
     completed INTEGER NOT NULL DEFAULT 1,
     note TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manual',
-    import_batch_id TEXT,
+    data_import_batch_id TEXT,
     source_row TEXT NOT NULL DEFAULT '',
     original_text TEXT NOT NULL DEFAULT '',
     ai_confidence REAL,
@@ -790,7 +795,6 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (training_session_id, exercise_name, set_index),
     FOREIGN KEY (training_session_id) REFERENCES training_sessions(id) ON DELETE CASCADE,
-    FOREIGN KEY (import_batch_id) REFERENCES strength_import_batches(id),
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
 
@@ -1205,14 +1209,12 @@ const bodyMeasurementColumns = [
   ['right_leg_lean_kg', 'REAL'],
   ['note', "TEXT NOT NULL DEFAULT ''"]
 ] as const;
+db.exec('BEGIN IMMEDIATE');
+try {
 for (const [column, definition] of bodyMeasurementColumns) {
   if (!hasColumn('athlete_body_measurements', column)) {
     db.exec(`ALTER TABLE athlete_body_measurements ADD COLUMN ${column} ${definition}`);
   }
-}
-
-if (!hasColumn('strength_import_batches', 'model_used')) {
-  db.exec("ALTER TABLE strength_import_batches ADD COLUMN model_used TEXT NOT NULL DEFAULT ''");
 }
 
 const strengthResultColumns = [
@@ -1263,41 +1265,10 @@ db.exec(`
     ) WHERE id = NEW.id;
   END;
 `);
-
-// strength_ai_advice 尚未成为权威测试模型的一部分。将其关联从旧 JSON 测试记录迁到 test_sessions；
-// 无法匹配的历史草案保留为 NULL，避免迁移时静默丢失。
-if (hasColumn('strength_ai_advice', 'strength_test_id') && !hasColumn('strength_ai_advice', 'test_session_id')) {
-  db.exec('PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE;');
-  try {
-    db.exec(`
-      ALTER TABLE strength_ai_advice RENAME TO strength_ai_advice_legacy;
-      CREATE TABLE strength_ai_advice (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        test_session_id INTEGER,
-        version INTEGER NOT NULL,
-        content_json TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('ai', 'rules')),
-        model TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'approved')),
-        generated_by INTEGER NOT NULL, reviewed_by INTEGER, generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        reviewed_at TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (test_session_id, version),
-        FOREIGN KEY (test_session_id) REFERENCES test_sessions(id) ON DELETE CASCADE,
-        FOREIGN KEY (generated_by) REFERENCES users(id), FOREIGN KEY (reviewed_by) REFERENCES users(id)
-      );
-      INSERT INTO strength_ai_advice (id, test_session_id, version, content_json, source, model, status, generated_by, reviewed_by, generated_at, reviewed_at, updated_at)
-      SELECT legacy.id, session.id, legacy.version, legacy.content_json, legacy.source, legacy.model, legacy.status, legacy.generated_by, legacy.reviewed_by, legacy.generated_at, legacy.reviewed_at, legacy.updated_at
-      FROM strength_ai_advice_legacy legacy
-      LEFT JOIN athlete_strength_tests old_test ON old_test.id = legacy.strength_test_id
-      LEFT JOIN test_sessions session ON session.athlete_id = old_test.athlete_id AND session.test_date = old_test.test_date AND session.test_type = '力量素质测试';
-      DROP TABLE strength_ai_advice_legacy;
-      CREATE INDEX IF NOT EXISTS idx_strength_ai_advice_test_session ON strength_ai_advice (test_session_id, version DESC);
-      COMMIT;
-    `);
-  } catch (error) {
-    if (db.isTransaction) db.exec('ROLLBACK');
-    throw error;
-  } finally {
-    db.exec('PRAGMA foreign_keys = ON;');
-  }
+  db.exec('COMMIT');
+} catch (error) {
+  if (db.isTransaction) db.exec('ROLLBACK');
+  throw error;
 }
 
 export function upsertAthleteOrigin(input: {
@@ -2454,6 +2425,10 @@ function reconstructionBaseline(): ReconstructionBaseline {
 function runReconstructionV1() {
   const migrationKey = 'reconstruction_v1_completed';
   if (db.prepare('SELECT 1 FROM app_metadata WHERE key = ?').get(migrationKey)) return;
+  if (!tableExists('training_records') && !tableExists('athlete_strength_tests')) {
+    db.prepare(`INSERT INTO app_metadata (key, value) VALUES (?, 'not_required')`).run(migrationKey);
+    return;
+  }
 
   const baseline = reconstructionBaseline();
   const report: Record<string, unknown> = {
@@ -2585,10 +2560,6 @@ function runReconstructionV1P1Repair() {
 }
 
 runReconstructionV1P1Repair();
-
-function tableExists(table: string) {
-  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
-}
 
 /**
  * V1 收尾：旧表已经迁移并经业务路径切换后才执行。

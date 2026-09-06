@@ -26,7 +26,7 @@ export function DataManagementPage({ user }: Props) {
     {message && <p className="data-import-message">{message}</p>}
     <div className="data-import-grid">
       <section className="data-import-upload-card"><div className="data-import-card-heading"><Database size={20}/><div><strong>数据标准</strong><span>训练、测试、来源与质量状态</span></div></div>
-        {standards && <div className="data-import-safety"><div><strong>权威对象</strong><span>{standards.athlete.join('、')}</span><strong>训练强度体系</strong><span>{standards.training.zoneSystems.join('；')}</span><strong>质量状态</strong><span>{standards.qualities.join('、')}</span><strong>Deprecated</strong><span>{standards.deprecatedTables.join('、')}</span></div></div>}
+        {standards && <div className="data-import-safety"><div><strong>权威对象</strong><span>{standards.athlete.join('、')}</span><strong>训练强度体系</strong><span>{standards.training.zoneSystems.join('；')}</span><strong>质量状态</strong><span>{standards.qualities.join('、')}</span><strong>已退役表</strong><span>{standards.retiredTables.join('、')}</span></div></div>}
       </section>
       <section className="data-import-upload-card"><div className="data-import-card-heading"><Tags size={20}/><div><strong>指标别名</strong><span>导入时统一映射到 metric_definitions</span></div></div>
         <label className="data-import-date"><span>别名</span><input value={alias} onChange={(event) => setAlias(event.target.value)} disabled={!editable} placeholder="例如：十桨最大功率"/></label>
