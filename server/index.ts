@@ -27,6 +27,7 @@ import {
 import { CANOE_MODEL_STANDARD, analyzeCanoePeriod } from '../shared/canoe-model.ts';
 import { SLALOM_CHAMPION_METRICS, SLALOM_MODEL_STANDARD, analyzeSlalomPeriod, slalomComparison } from '../shared/slalom-model.ts';
 import { PROJECTS, type Project } from '../shared/projects.ts';
+import { INTENSITY_ZONE_SYSTEMS, PRIMARY_INTENSITY_ZONE_CODES } from '../shared/training-intensity.ts';
 import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
 import {
   STRENGTH_METRICS,
@@ -76,7 +77,7 @@ type AuthUser = {
   athleteId: number | null;
 };
 
-const intensityZones = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'] as const;
+const intensityZones = PRIMARY_INTENSITY_ZONE_CODES;
 type IntensityZoneKey = typeof intensityZones[number];
 type TrainingBreakdown = {
   waterMinutes: number;
@@ -3222,8 +3223,23 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
       VALUES (?, ?, ?, ?, 0, ?, ?, 'reviewing', ?, ?, ?)
     `).run(batchId, `legacy-strength-import:${batchId}`, cached.filename, cached.mimetype, batchProject.project,
       `strength-result-${cached.modelUsed}`, rows.length, req.authUser!.id, JSON.stringify({ sourceType: cached.sourceType, channel: 'strength_training_import' }));
+    const createImportItem = db.prepare(`
+      INSERT INTO data_import_items
+        (batch_id, item_type, athlete_id, raw_athlete_name, event_date, session_label, exercise_name, set_index,
+         target_reps, actual_reps, actual_weight_kg, intensity_percent, payload_json, source_sheet, source_address,
+         raw_value, quality, messages_json, business_key)
+      VALUES (?, 'training_set', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '体能训练导入', ?, ?, 'valid', '[]', ?)
+    `);
+    const completeImportItem = db.prepare(`UPDATE data_import_items SET quality = ?, messages_json = ?, committed_entity_type = ?, committed_entity_id = ? WHERE id = ?`);
 
     for (const row of rows) {
+      const importItem = createImportItem.run(
+        batchId, row.athleteId, row.athleteName, row.trainingDate, row.sessionLabel, row.exerciseName, row.setIndex,
+        row.targetReps, row.actualReps, row.actualWeightKg, row.intensityPercent,
+        JSON.stringify({ trainingCategory: row.trainingCategory, bodyPosition: row.bodyPosition, trainingEnvironment: row.trainingEnvironment, durationMin: row.durationMin, distanceKm: row.distanceKm, intensityZone: row.intensityZone, rpe: row.rpe, note: row.note, confidence: row.confidence, originalText: row.originalText }),
+        String(row.rowNumber), row.originalText, `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}|${row.exerciseName}|${row.setIndex}`
+      );
+      const importItemId = Number(importItem.lastInsertRowid);
       const baseKey = `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}`;
       let sessionId = sessionMap.get(baseKey);
       if (!sessionId) {
@@ -3250,7 +3266,11 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
       sessionIds.add(sessionId);
       const existingSet = db.prepare('SELECT id FROM strength_result_sets WHERE training_session_id = ? AND exercise_name = ? AND set_index = ?')
         .get(sessionId, row.exerciseName, row.setIndex) as { id: number } | undefined;
-      if (existingSet && policy === 'skip') { skipped += 1; continue; }
+      if (existingSet && policy === 'skip') {
+        completeImportItem.run('skipped', JSON.stringify(['与现有力量训练组重复，按跳过策略处理。']), 'strength_result_set', existingSet.id, importItemId);
+        skipped += 1;
+        continue;
+      }
       if (existingSet) {
         db.prepare(`
           UPDATE strength_result_sets SET target_reps = ?, actual_reps = ?, actual_weight_kg = ?, planned_weight_kg = ?,
@@ -3263,9 +3283,10 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin, row.distanceKm,
           row.intensityPercent, row.intensityZone, row.rpe, row.completed ? 1 : 0, row.note, source,
           batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id, existingSet.id);
+        completeImportItem.run('valid', '[]', 'strength_result_set', existingSet.id, importItemId);
         updated += 1;
       } else {
-        db.prepare(`
+        const insertedSet = db.prepare(`
           INSERT INTO strength_result_sets
             (training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg,
              training_category, body_position, training_environment, duration_min, distance_km, intensity_percent,
@@ -3275,6 +3296,7 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           row.plannedWeightKg, row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin,
           row.distanceKm, row.intensityPercent, row.intensityZone, row.rpe, row.completed ? 1 : 0, row.note,
           source, batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id);
+        completeImportItem.run('valid', '[]', 'strength_result_set', Number(insertedSet.lastInsertRowid), importItemId);
         imported += 1;
       }
     }
@@ -3576,7 +3598,7 @@ app.put('/api/data-management/metric-aliases', requireAuth, requireRole('TD', 'D
 app.get('/api/data-management/standards', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
   res.json({
     athlete: ['athletes', 'athlete_profiles', 'athlete_origins', 'athlete_aliases'],
-    training: { types: ['专项训练', '体能训练', '恢复训练', '休息'], structures: ['水上训练', '陆上训练', '体能训练', '再生恢复'], zoneSystems: ['U3/U2/U1/AT/TPT/AN/ATP', 'UT2/UT1/TR/AT/AN/REC'] },
+    training: { types: ['专项训练', '体能训练', '恢复训练', '休息'], structures: ['水上训练', '陆上训练', '体能训练', '再生恢复'], zoneSystems: INTENSITY_ZONE_SYSTEMS.map((system) => system.label) },
     testing: ['test_sessions', 'test_measurements', 'metric_definitions', 'metric_aliases'],
     sources: ['manual', 'file_import', 'ai_import', 'legacy_migration'],
     qualities: ['valid', 'partial', 'insufficient', 'outlier', 'estimated'],
