@@ -19,6 +19,7 @@ const TeamsPage = lazy(() => import('./pages/TeamsPage').then((module) => ({ def
 const AccountsPage = lazy(() => import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage })));
 const RegionAccessPage = lazy(() => import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage })));
 const DataImportPage = lazy(() => import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage })));
+const DataManagementPage = lazy(() => import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage })));
 
 const today = toIsoDate(new Date());
 
@@ -33,7 +34,7 @@ export default function App() {
   const [page, setPage] = useState<PageKey>('overview');
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
-  const [from, setFrom] = useState(addDays(today, -29));
+  const [from, setFrom] = useState(addDays(today, -27));
   const [to, setTo] = useState(today);
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -73,6 +74,11 @@ export default function App() {
     const selected = athleteId ? athletes.find((athlete) => athlete.id === athleteId) : null;
     if (selected && selected.project !== project) {
       setAthleteId(user.role === 'ATL' ? user.athleteId : null);
+      return;
+    }
+    if (page === 'overview') {
+      setRecords([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -142,7 +148,7 @@ export default function App() {
       {usesGlobalTrainingFilter && <div className="global-training-filter">
         <DateToolbar
           {...shared}
-          presetMode="period"
+          presetMode={page === 'overview' ? 'analysis' : 'period'}
         />
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
@@ -151,6 +157,7 @@ export default function App() {
         {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage user={user} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}
         {page === 'personal' && <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'coaches' && user.role !== 'ATL' && <CoachManagementPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}

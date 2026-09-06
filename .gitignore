@@ -1,4 +1,5 @@
 node_modules/
+.npm-cache/
 dist/
 data/*.db
 data/*.db-shm

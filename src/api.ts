@@ -181,9 +181,8 @@ export const api = {
       method: 'POST', body: JSON.stringify({ sessions })
     });
   },
-  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project, period?: 'day' | 'week' | 'month') {
+  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project) {
     const params = new URLSearchParams({ from, to, project });
-    if (period) params.set('period', period);
     if (athleteId) params.set('athleteId', String(athleteId));
     return request<{ overview: OverviewPayload }>(`/api/overview?${params}`);
   },
@@ -400,6 +399,18 @@ export const api = {
     return request<{ message: string; imported: number; skipped: number; createdAthletes: number; batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/commit`, {
       method: 'POST', body: JSON.stringify({ conflictPolicy })
     });
+  },
+  async dataManagementMetrics() {
+    return request<{ metrics: Array<{ code: string; label: string; domain: string; unit: string; direction: string; frequency: string; active: number }>; aliases: Array<{ alias: string; normalizedAlias: string; metricCode: string; canonicalLabel: string; unit: string; side: string }> }>('/api/data-management/metrics');
+  },
+  async updateDataManagementMetric(code: string, input: { label: string; unit: string; active: boolean }) {
+    return request<{ message: string }>(`/api/data-management/metrics/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(input) });
+  },
+  async saveMetricAlias(input: { alias: string; metricCode: string; side?: string }) {
+    return request<{ message: string }>('/api/data-management/metric-aliases', { method: 'PUT', body: JSON.stringify(input) });
+  },
+  async dataManagementStandards() {
+    return request<{ athlete: string[]; training: { types: string[]; structures: string[]; zoneSystems: string[] }; testing: string[]; sources: string[]; qualities: string[]; deprecatedTables: string[] }>('/api/data-management/standards');
   },
   async specialTests(from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });

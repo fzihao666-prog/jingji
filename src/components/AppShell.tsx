@@ -26,7 +26,7 @@ import { EditableName } from './EditableName';
 
 export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
-export type DataCollectionPageKey = 'bluetooth' | 'data-import';
+export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-management';
 export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
 
 const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
@@ -45,7 +45,8 @@ const strengthGroups: Array<{ key: StrengthPageKey; label: string }> = [
 
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
   { key: 'bluetooth', label: '蓝牙连接' },
-  { key: 'data-import', label: '数据导入', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
+  { key: 'data-import', label: '数据导入', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'data-management', label: '指标与标准', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
 ];
 
 const navItems: Array<{
@@ -82,11 +83,11 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(() => page.startsWith('special-'));
   const [strengthOpen, setStrengthOpen] = useState(() => page.startsWith('strength-'));
-  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => page === 'bluetooth' || page === 'data-import');
+  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => page === 'bluetooth' || page === 'data-import' || page === 'data-management');
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
   const specialActive = page.startsWith('special-');
   const strengthActive = page.startsWith('strength-');
-  const dataCollectionActive = page === 'bluetooth' || page === 'data-import';
+  const dataCollectionActive = page === 'bluetooth' || page === 'data-import' || page === 'data-management';
   const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
   const strengthCurrent = strengthGroups.find((item) => item.key === page);
   const visibleDataCollectionGroups = dataCollectionGroups.filter((item) => !item.roles || item.roles.includes(user.role));
@@ -179,7 +180,7 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
           <div className={`special-nav data-collection-nav ${dataCollectionActive ? 'active' : ''} ${dataCollectionOpen ? 'open' : 'collapsed'}`}>
             <button className="special-nav-parent" onClick={() => setDataCollectionOpen((open) => !open)} aria-expanded={dataCollectionOpen}>
               <BluetoothConnected size={19} strokeWidth={1.8} />
-              <span><strong>数据采集</strong></span>
+              <span><strong>数据管理</strong></span>
               <ChevronDown className="special-nav-chevron" size={15} />
             </button>
             {dataCollectionOpen && <div className="special-nav-tree">
@@ -238,5 +239,5 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
 }
 
 function itemIcon(key: DataCollectionPageKey) {
-  return key === 'data-import' ? FileSpreadsheet : BluetoothConnected;
+  return key === 'bluetooth' ? BluetoothConnected : FileSpreadsheet;
 }

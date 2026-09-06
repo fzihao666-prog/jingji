@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import bcrypt from 'bcryptjs';
 import { PROVINCES } from '../shared/regions.ts';
@@ -7,6 +7,12 @@ import { PROJECT_META } from '../shared/projects.ts';
 import { OVERVIEW_METRICS } from '../shared/overview-metrics.ts';
 
 const databasePath = resolve(process.env.DATABASE_PATH || resolve(process.cwd(), 'data', 'training-monitor.db'));
+const databaseExistedBeforeStartup = existsSync(databasePath);
+// 收敛迁移可能会写入大量历史数据；第一次启动时必须保留可独立恢复的原始副本。
+// 备份发生在打开 SQLite 连接之前，避免把已迁移的数据误当作原始数据。
+if (databaseExistedBeforeStartup && !existsSync(`${databasePath}.before-reconstruction-v1`)) {
+  copyFileSync(databasePath, `${databasePath}.before-reconstruction-v1`);
+}
 mkdirSync(dirname(databasePath), { recursive: true });
 
 export const db = new DatabaseSync(databasePath);
@@ -935,6 +941,22 @@ db.exec(`
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS training_session_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    training_session_id INTEGER NOT NULL,
+    segment_order INTEGER NOT NULL DEFAULT 1,
+    training_type TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    intensity_zone TEXT NOT NULL DEFAULT '',
+    zone_system TEXT NOT NULL DEFAULT '',
+    duration_min REAL NOT NULL DEFAULT 0,
+    distance_km REAL NOT NULL DEFAULT 0,
+    rpe REAL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (training_session_id, segment_order),
+    FOREIGN KEY (training_session_id) REFERENCES training_sessions(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS data_import_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT NOT NULL,
@@ -1195,6 +1217,7 @@ if (!hasColumn('strength_import_batches', 'model_used')) {
 }
 
 const strengthResultColumns = [
+  ['exercise_code', "TEXT NOT NULL DEFAULT ''"],
   ['training_category', "TEXT NOT NULL DEFAULT '基础力量'"],
   ['body_position', "TEXT NOT NULL DEFAULT '全身'"],
   ['training_environment', "TEXT NOT NULL DEFAULT '陆上'"],
@@ -1212,12 +1235,56 @@ for (const [column, definition] of strengthResultColumns) {
 }
 
 for (const [table, column, definition] of [
+  ['athletes', 'team_id', 'INTEGER'],
+  ['training_session_segments', 'intensity_zone', "TEXT NOT NULL DEFAULT ''"],
+  ['training_session_segments', 'zone_system', "TEXT NOT NULL DEFAULT ''"],
   ['strength_result_sets', 'data_import_batch_id', 'TEXT'],
   ['test_measurements', 'data_import_batch_id', 'TEXT'],
   ['test_measurements', 'source_ref', "TEXT NOT NULL DEFAULT ''"],
   ['athlete_body_measurements', 'data_import_batch_id', 'TEXT']
 ] as const) {
   if (!hasColumn(table, column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_athletes_team_id ON athletes (team_id);
+  CREATE INDEX IF NOT EXISTS idx_strength_result_sets_data_batch ON strength_result_sets (data_import_batch_id);
+`);
+
+// strength_ai_advice 尚未成为权威测试模型的一部分。将其关联从旧 JSON 测试记录迁到 test_sessions；
+// 无法匹配的历史草案保留为 NULL，避免迁移时静默丢失。
+if (hasColumn('strength_ai_advice', 'strength_test_id') && !hasColumn('strength_ai_advice', 'test_session_id')) {
+  db.exec('PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE;');
+  try {
+    db.exec(`
+      ALTER TABLE strength_ai_advice RENAME TO strength_ai_advice_legacy;
+      CREATE TABLE strength_ai_advice (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        test_session_id INTEGER,
+        version INTEGER NOT NULL,
+        content_json TEXT NOT NULL, source TEXT NOT NULL CHECK(source IN ('ai', 'rules')),
+        model TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'approved')),
+        generated_by INTEGER NOT NULL, reviewed_by INTEGER, generated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (test_session_id, version),
+        FOREIGN KEY (test_session_id) REFERENCES test_sessions(id) ON DELETE CASCADE,
+        FOREIGN KEY (generated_by) REFERENCES users(id), FOREIGN KEY (reviewed_by) REFERENCES users(id)
+      );
+      INSERT INTO strength_ai_advice (id, test_session_id, version, content_json, source, model, status, generated_by, reviewed_by, generated_at, reviewed_at, updated_at)
+      SELECT legacy.id, session.id, legacy.version, legacy.content_json, legacy.source, legacy.model, legacy.status, legacy.generated_by, legacy.reviewed_by, legacy.generated_at, legacy.reviewed_at, legacy.updated_at
+      FROM strength_ai_advice_legacy legacy
+      LEFT JOIN athlete_strength_tests old_test ON old_test.id = legacy.strength_test_id
+      LEFT JOIN test_sessions session ON session.athlete_id = old_test.athlete_id AND session.test_date = old_test.test_date AND session.test_type = '力量素质测试';
+      DROP TABLE strength_ai_advice_legacy;
+      CREATE INDEX IF NOT EXISTS idx_strength_ai_advice_test_session ON strength_ai_advice (test_session_id, version DESC);
+      COMMIT;
+    `);
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
 }
 
 export function upsertAthleteOrigin(input: {
@@ -2451,6 +2518,138 @@ function seedStrengthDailyVolumeExample() {
 }
 
 runInitializationOnce('strength_daily_volume_seed_v4', seedStrengthDailyVolumeExample);
+
+type ReconstructionBaseline = {
+  athletes: number;
+  trainingRecords: number;
+  trainingSessions: number;
+  strengthTests: number;
+  testSessions: number;
+  testMeasurements: number;
+  wellness: number;
+  trainingMinutes: number;
+  trainingDistanceKm: number;
+};
+
+function reconstructionBaseline(): ReconstructionBaseline {
+  const count = (table: string) => Number((db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count);
+  const trainingTotals = db.prepare(`SELECT COALESCE(SUM(duration_min), 0) AS minutes, COALESCE(SUM(distance_km), 0) AS distance FROM training_records`).get() as { minutes: number; distance: number };
+  return {
+    athletes: count('athletes'), trainingRecords: count('training_records'), trainingSessions: count('training_sessions'),
+    strengthTests: count('athlete_strength_tests'), testSessions: count('test_sessions'), testMeasurements: count('test_measurements'),
+    wellness: count('daily_wellness'), trainingMinutes: Number(trainingTotals.minutes), trainingDistanceKm: Number(trainingTotals.distance)
+  };
+}
+
+/**
+ * V1 数据库收敛迁移。
+ * 旧表始终保留；本函数只向权威模型补写尚不存在的数据，并把无法安全判定的值写入报告。
+ */
+function runReconstructionV1() {
+  const migrationKey = 'reconstruction_v1_completed';
+  if (db.prepare('SELECT 1 FROM app_metadata WHERE key = ?').get(migrationKey)) return;
+
+  const baseline = reconstructionBaseline();
+  const report: Record<string, unknown> = {
+    version: 'V1', backupPath: databaseExistedBeforeStartup ? `${databasePath}.before-reconstruction-v1` : null,
+    baseline, migratedTrainingSessions: 0, migratedWellness: 0, migratedTestSessions: 0,
+    migratedMeasurements: 0, unknownMetricKeys: [] as string[], unmatchedTeams: [] as string[], originConflicts: [] as number[]
+  };
+  const legacyMetricMap: Record<string, { code: string; label: string; unit: string; side?: string }> = {
+    heightCm: { code: 'height_cm', label: '身高', unit: 'cm' }, weightKg: { code: 'weight_kg', label: '体重', unit: 'kg' },
+    trainingYears: { code: 'training_years', label: '训练年限', unit: '年' }, armSpanCm: { code: 'arm_span_cm', label: '臂展', unit: 'cm' },
+    sitReachCm: { code: 'sit_reach_cm', label: '坐位体前屈', unit: 'cm' }, verticalJumpCm: { code: 'vertical_jump_cm', label: '纵跳', unit: 'cm' },
+    pullUpsReps: { code: 'pull_ups_reps', label: '引体向上', unit: '次' }, benchPressKg: { code: 'bench_press_kg', label: '卧推', unit: 'kg' },
+    benchPullKg: { code: 'bench_pull_kg', label: '卧拉', unit: 'kg' }, frontPlankSec: { code: 'front_plank_sec', label: '俯卧支撑', unit: '秒' },
+    leftPlankSec: { code: 'side_plank_sec', label: '侧支撑', unit: '秒', side: 'left' }, rightPlankSec: { code: 'side_plank_sec', label: '侧支撑', unit: '秒', side: 'right' },
+    squatKg: { code: 'squat_kg', label: '深蹲', unit: 'kg' }, deadliftKg: { code: 'deadlift_kg', label: '硬拉', unit: 'kg' },
+    highPullKg: { code: 'clean_kg', label: '高翻', unit: 'kg' }, leftSingleLegSquatReps: { code: 'single_leg_squat_reps', label: '单腿蹲', unit: '次', side: 'left' },
+    rightSingleLegSquatReps: { code: 'single_leg_squat_reps', label: '单腿蹲', unit: '次', side: 'right' }
+  };
+  const unknownMetricKeys = report.unknownMetricKeys as string[];
+  const unmatchedTeams = report.unmatchedTeams as string[];
+  const originConflicts = report.originConflicts as number[];
+  const textValue = (value: unknown) => value === null || value === undefined ? '' : String(value);
+  const nullableNumber = (value: unknown) => value === null || value === undefined || value === '' ? null : Number(value);
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    // 先补齐别名，保证任何历史字段都经过指标字典映射，而不是直接变成新的 metric_code。
+    const addDefinition = db.prepare(`INSERT OR IGNORE INTO metric_definitions (code, label, domain, unit, direction, frequency) VALUES (?, ?, 'strength', ?, 'higher_better', 'phase')`);
+    const addAlias = db.prepare(`INSERT OR IGNORE INTO metric_aliases (alias, normalized_alias, metric_code, canonical_label, unit, side) VALUES (?, ?, ?, ?, ?, ?)`);
+    for (const [legacyKey, metric] of Object.entries(legacyMetricMap)) {
+      addDefinition.run(metric.code, metric.label, metric.unit);
+      for (const alias of [legacyKey, metric.label]) addAlias.run(alias, alias.toLowerCase().replace(/\s+/g, ''), metric.code, metric.label, metric.unit, metric.side || 'center');
+    }
+
+    const legacyTraining = db.prepare(`SELECT * FROM training_records ORDER BY athlete_id, date, id`).all() as Array<Record<string, unknown>>;
+    const insertSession = db.prepare(`INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl, source, quality, is_demo, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'legacy_migration', 'valid', 0, ?)`);
+    const findSession = db.prepare(`SELECT id FROM training_sessions WHERE athlete_id = ? AND session_date = ? AND training_type = ? AND structure_type = ? AND content = ? AND duration_min = ? AND distance_km = ? LIMIT 1`);
+    const nextOrder = db.prepare(`SELECT COALESCE(MAX(session_order), 0) AS value FROM training_sessions WHERE athlete_id = ? AND session_date = ?`);
+    const upsertWellness = db.prepare(`INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, morning_pulse, weight_kg, fatigue_index, status, source, quality, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, 'legacy_migration', 'valid', 0) ON CONFLICT(athlete_id, wellness_date) DO UPDATE SET sleep_hours = COALESCE(daily_wellness.sleep_hours, excluded.sleep_hours), morning_pulse = COALESCE(daily_wellness.morning_pulse, excluded.morning_pulse), weight_kg = COALESCE(daily_wellness.weight_kg, excluded.weight_kg), fatigue_index = COALESCE(daily_wellness.fatigue_index, excluded.fatigue_index), status = CASE WHEN daily_wellness.status = 'normal' THEN excluded.status ELSE daily_wellness.status END`);
+    for (const row of legacyTraining) {
+      const athleteId = Number(row.athlete_id); const date = String(row.date || '');
+      const trainingType = textValue(row.training_type); const structureType = textValue(row.structure_type);
+      const content = textValue(row.content); const duration = nullableNumber(row.duration_min) ?? 0; const distance = nullableNumber(row.distance_km) ?? 0;
+      const existing = findSession.get(athleteId, date, trainingType, structureType, content, duration, distance) as { id: number } | undefined;
+      if (!existing) {
+        const order = Number((nextOrder.get(athleteId, date) as { value: number }).value) + 1;
+        insertSession.run(athleteId, date, order, trainingType, structureType, textValue(row.intensity_zone), content, duration, distance, nullableNumber(row.rpe), nullableNumber(row.srpe) ?? 0, nullableNumber(row.smvl) ?? 0, nullableNumber(row.created_by));
+        report.migratedTrainingSessions = Number(report.migratedTrainingSessions) + 1;
+      }
+      if ([row.sleep_hours, row.morning_pulse, row.weight_kg, row.fatigue_index].some((value) => value !== null && value !== undefined)) {
+        upsertWellness.run(athleteId, date, nullableNumber(row.sleep_hours), nullableNumber(row.morning_pulse), nullableNumber(row.weight_kg), nullableNumber(row.fatigue_index), textValue(row.status) || 'normal');
+        report.migratedWellness = Number(report.migratedWellness) + 1;
+      }
+    }
+
+    const insertTestSession = db.prepare(`INSERT OR IGNORE INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by) VALUES (?, ?, '力量素质测试', 'legacy-athlete-strength-tests', 'legacy_migration', 'valid', 0, ?)`);
+    const findTestSession = db.prepare(`SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`);
+    const insertMeasurement = db.prepare(`INSERT OR IGNORE INTO test_measurements (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo, source_ref) VALUES (?, ?, ?, ?, ?, ?, 'valid', 'legacy_migration', 0, ?)`);
+    const legacyTests = db.prepare(`SELECT * FROM athlete_strength_tests ORDER BY athlete_id, test_date, id`).all() as Array<Record<string, unknown>>;
+    for (const row of legacyTests) {
+      let metrics: Record<string, unknown> = {}; let targets: Record<string, unknown> = {};
+      try { metrics = JSON.parse(String(row.metrics_json || '{}')); } catch { unknownMetricKeys.push(`test:${row.id}:metrics_json`); }
+      try { targets = JSON.parse(String(row.targets_json || '{}')); } catch { unknownMetricKeys.push(`test:${row.id}:targets_json`); }
+      const athleteId = Number(row.athlete_id); const testDate = textValue(row.test_date);
+      insertTestSession.run(athleteId, testDate, nullableNumber(row.created_by));
+      const testSession = findTestSession.get(athleteId, testDate) as { id: number } | undefined;
+      if (!testSession) continue;
+      report.migratedTestSessions = Number(report.migratedTestSessions) + 1;
+      for (const [key, rawValue] of Object.entries(metrics)) {
+        const metric = legacyMetricMap[key]; const value = Number(rawValue);
+        if (!metric || !Number.isFinite(value)) { unknownMetricKeys.push(`${row.id}:${key}`); continue; }
+        const targetRaw = Number(targets[key]);
+        insertMeasurement.run(testSession.id, metric.code, value, Number.isFinite(targetRaw) ? targetRaw : null, metric.unit, metric.side || 'center', `athlete_strength_tests:${row.id}`);
+        report.migratedMeasurements = Number(report.migratedMeasurements) + 1;
+      }
+    }
+
+    const athletes = db.prepare(`SELECT id, project, team, region, city, county FROM athletes`).all() as Array<{ id: number; project: string; team: string; region: string; city: string; county: string }>;
+    const teamFor = db.prepare(`SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1`);
+    const setTeam = db.prepare(`UPDATE athletes SET team_id = ? WHERE id = ?`);
+    const originFor = db.prepare(`SELECT province, city, county FROM athlete_origins WHERE athlete_id = ?`);
+    for (const athlete of athletes) {
+      const team = teamFor.get(athlete.project, athlete.team) as { id: number } | undefined;
+      if (team) setTeam.run(team.id, athlete.id); else if (athlete.team) unmatchedTeams.push(`${athlete.project}:${athlete.team}`);
+      const origin = originFor.get(athlete.id) as { province: string; city: string; county: string } | undefined;
+      if (origin && (origin.province !== athlete.region || origin.city !== athlete.city || origin.county !== athlete.county)) originConflicts.push(athlete.id);
+    }
+
+    report.after = reconstructionBaseline();
+    report.deprecatedTables = ['training_records', 'athlete_strength_tests', 'strength_training_sets', 'strength_import_batches'];
+    db.prepare(`INSERT INTO app_metadata (key, value) VALUES ('reconstruction_v1_baseline', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).run(JSON.stringify(baseline));
+    db.prepare(`INSERT INTO app_metadata (key, value) VALUES ('reconstruction_v1_report', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).run(JSON.stringify(report));
+    db.prepare(`INSERT INTO app_metadata (key, value) VALUES ('deprecated_tables', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`).run(JSON.stringify(report.deprecatedTables));
+    db.prepare(`INSERT INTO app_metadata (key, value) VALUES (?, 'completed')`).run(migrationKey);
+    db.exec('COMMIT');
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+runReconstructionV1();
 
 // 初始化训练量用于开箱即用的分析展示；来源字段仍明确保留，避免与人工录入混淆。
 db.prepare("UPDATE training_sessions SET is_demo = 0 WHERE source = 'strength_daily_seed'").run();

@@ -75,8 +75,13 @@ assert(tests.count >= 16);
 const body = db.prepare('SELECT height_cm AS heightCm, weight_kg AS weightKg FROM athlete_body_measurements WHERE athlete_id = ?').get(athleteId) as { heightCm: number; weightKg: number };
 assert.equal(body.heightCm, 190);
 assert.equal(body.weightKg, 90);
-const legacy = db.prepare('SELECT metrics_json AS metricsJson FROM athlete_strength_tests WHERE athlete_id = ?').get(athleteId) as { metricsJson: string };
-assert.equal(JSON.parse(legacy.metricsJson).squatKg, 170);
+const migratedSquat = db.prepare(`
+  SELECT tm.value_num AS valueNum
+  FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id
+  WHERE ts.athlete_id = ? AND tm.metric_code = 'squat_kg'
+  ORDER BY ts.test_date DESC LIMIT 1
+`).get(athleteId) as { valueNum: number };
+assert.equal(migratedSquat.valueNum, 170);
 
 // 统一模板端到端：每一种标准工作表都必须能解析并写入对应正式业务表。
 const templateAthleteName = `模板运动员${Date.now()}`;

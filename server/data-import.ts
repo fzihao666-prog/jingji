@@ -1228,34 +1228,6 @@ function upsertScoringRule(item: DataImportItemView, batchId: string, policy: 's
   return { skipped: false, entityId: Number(inserted.lastInsertRowid) };
 }
 
-function syncLegacyStrengthTests(athleteDates: Set<string>, userId: number) {
-  for (const key of athleteDates) {
-    const [athleteIdText, date] = key.split('|');
-    const athleteId = Number(athleteIdText);
-    const metrics: Record<string, number> = {};
-    const measurements = db.prepare(`SELECT tm.metric_code AS metricCode, tm.value_num AS valueNum, tm.side
-      FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id
-      WHERE ts.athlete_id = ? AND ts.test_date = ? AND ts.test_type = '力量素质测试'`).all(athleteId, date) as Array<{ metricCode: MetricCode; valueNum: number; side: string }>;
-    for (const measurement of measurements) {
-      const lookup = (measurement.side === 'center' ? measurement.metricCode : `${measurement.metricCode}:${measurement.side}`) as keyof typeof LEGACY_METRIC_KEYS;
-      const legacyKey = LEGACY_METRIC_KEYS[lookup];
-      if (legacyKey) metrics[legacyKey] = Number(measurement.valueNum);
-    }
-    const body = db.prepare('SELECT height_cm AS heightCm, weight_kg AS weightKg FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?')
-      .get(athleteId, date) as { heightCm: number | null; weightKg: number | null } | undefined;
-    if (body?.heightCm !== null && body?.heightCm !== undefined) metrics.heightCm = Number(body.heightCm);
-    if (body?.weightKg !== null && body?.weightKg !== undefined) metrics.weightKg = Number(body.weightKg);
-    const existing = db.prepare('SELECT metrics_json AS metricsJson, targets_json AS targetsJson, notes FROM athlete_strength_tests WHERE athlete_id = ? AND test_date = ?')
-      .get(athleteId, date) as { metricsJson: string; targetsJson: string; notes: string } | undefined;
-    const merged = { ...(existing ? JSON.parse(existing.metricsJson || '{}') : {}), ...metrics };
-    db.prepare(`INSERT INTO athlete_strength_tests (athlete_id, test_date, metrics_json, targets_json, notes, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(athlete_id, test_date) DO UPDATE SET metrics_json = excluded.metrics_json,
-        notes = excluded.notes, updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`)
-      .run(athleteId, date, JSON.stringify(merged), existing?.targetsJson || '{}', existing?.notes || '统一数据导入', userId, userId);
-  }
-}
-
 function resolvePendingAthletes(input: {
   batch: DataImportPreview;
   userId: number;
@@ -1398,7 +1370,6 @@ export function commitDataImport(input: {
         .run(entityType, result.entityId, item.id);
     }
     for (const sessionId of sessionIds) updateSessionTotals(sessionId);
-    syncLegacyStrengthTests(athleteDates, input.userId);
     db.prepare(`UPDATE data_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .run(imported, skipped, input.batchId);
     db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')

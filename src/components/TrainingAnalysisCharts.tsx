@@ -4,90 +4,11 @@ import {
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
-import { formatNumber, percentage } from '../utils';
+import { formatNumber, percentage, startOfWeek } from '../utils';
 import { TRAINING_CONTENT_CATEGORIES, trainingContentCategory } from '../../shared/training-content-category';
 import { STRENGTH_INTENSITY_ZONES, TRAINING_INTENSITY_META } from '../../shared/strength-training';
 
-type Period = 'day' | 'week' | 'month' | 'stage';
-const PERIODS: Array<{ key: Period; label: string }> = [
-  { key: 'day', label: '日' }, { key: 'week', label: '周' }, { key: 'month', label: '月' }, { key: 'stage', label: '阶段' }
-];
 const colors = ['#0b7f7a', '#25aa9d', '#73c5ab', '#edaa32', '#df634d', '#66758a', '#8b6eb0', '#3d7db7', '#9a7f66'];
-
-function dateMinus(date: string, days: number) {
-  const value = new Date(`${date}T12:00:00Z`);
-  value.setUTCDate(value.getUTCDate() - days);
-  return value.toISOString().slice(0, 10);
-}
-
-function usePeriodRecords(records: TrainingRecord[]) {
-  const [period, setPeriod] = useState<Period>('week');
-  const bounds = useMemo(() => {
-    if (!records.length) return { min: '', max: '' };
-    return records.reduce((result, item) => ({
-      min: item.date < result.min ? item.date : result.min,
-      max: item.date > result.max ? item.date : result.max
-    }), { min: records[0].date, max: records[0].date });
-  }, [records]);
-  const [stageOpen, setStageOpen] = useState(false);
-  const [stageStart, setStageStart] = useState('');
-  const [stageEnd, setStageEnd] = useState('');
-  const [draftStart, setDraftStart] = useState('');
-  const [draftEnd, setDraftEnd] = useState('');
-  const changePeriod = (next: Period) => {
-    if (next === 'stage') {
-      const start = stageStart || bounds.min;
-      const end = stageEnd || bounds.max;
-      setDraftStart(start);
-      setDraftEnd(end);
-      setStageOpen(true);
-      return;
-    }
-    setPeriod(next);
-    setStageOpen(false);
-  };
-  const applyStage = () => {
-    if (!draftStart || !draftEnd) return;
-    const [start, end] = draftStart <= draftEnd ? [draftStart, draftEnd] : [draftEnd, draftStart];
-    setStageStart(start);
-    setStageEnd(end);
-    setDraftStart(start);
-    setDraftEnd(end);
-    setPeriod('stage');
-    setStageOpen(false);
-  };
-  const filtered = useMemo(() => {
-    if (!records.length) return records;
-    if (period === 'stage') {
-      if (!stageStart || !stageEnd) return records;
-      return records.filter((item) => item.date >= stageStart && item.date <= stageEnd);
-    }
-    const end = records.reduce((latest, item) => item.date > latest ? item.date : latest, records[0].date);
-    const days = period === 'day' ? 0 : period === 'week' ? 6 : 29;
-    const start = dateMinus(end, days);
-    return records.filter((item) => item.date >= start && item.date <= end);
-  }, [period, records, stageEnd, stageStart]);
-  return {
-    period, filtered, bounds, stageOpen, stageStart, stageEnd, draftStart, draftEnd,
-    changePeriod, applyStage, cancelStage: () => setStageOpen(false), setDraftStart, setDraftEnd
-  };
-}
-
-type PeriodController = ReturnType<typeof usePeriodRecords>;
-
-export function PeriodTabs({ control }: { control: PeriodController }) {
-  return <div className="analysis-period-control">
-    <div className="analysis-period-tabs" aria-label="统计周期">{PERIODS.map((item) => (
-      <button type="button" key={item.key} className={control.period === item.key ? 'active' : ''} onClick={() => control.changePeriod(item.key)}>{item.label}</button>
-    ))}</div>
-    {control.period === 'stage' && control.stageStart && control.stageEnd && !control.stageOpen && <button type="button" className="analysis-stage-range" onClick={() => control.changePeriod('stage')} title="重新选择阶段">{control.stageStart.slice(5).replace('-', '/')}—{control.stageEnd.slice(5).replace('-', '/')}</button>}
-    {control.stageOpen && <div className="analysis-stage-calendar" role="dialog" aria-label="选择统计阶段">
-      <div><label><span>开始日期</span><input aria-label="阶段开始日期" type="date" min={control.bounds.min} max={control.draftEnd || control.bounds.max} value={control.draftStart} onInput={(event) => control.setDraftStart(event.currentTarget.value)} /></label><i>至</i><label><span>结束日期</span><input aria-label="阶段结束日期" type="date" min={control.draftStart || control.bounds.min} max={control.bounds.max} value={control.draftEnd} onInput={(event) => control.setDraftEnd(event.currentTarget.value)} /></label></div>
-      <p>可选范围：{control.bounds.min || '—'} 至 {control.bounds.max || '—'}</p>
-      <footer><button type="button" onClick={control.cancelStage}>取消</button><button type="button" className="confirm" disabled={!control.draftStart || !control.draftEnd} onClick={control.applyStage}>应用阶段</button></footer>
-    </div>}
-  </div>;
-}
 
 export function trainingLoadCategory(record: TrainingRecord) {
   const text = `${record.trainingType} ${record.structureType} ${record.content}`;
@@ -96,54 +17,29 @@ export function trainingLoadCategory(record: TrainingRecord) {
   return record.distanceKm > 0 ? 'special' : 'physical';
 }
 
-function groupLabel(date: string, period: Period) {
-  if (period === 'day') return date.slice(5).replace('-', '/');
-  if (period === 'week') return date.slice(5).replace('-', '/');
-  if (period === 'month') return date.slice(5, 7) + '月' + date.slice(8) + '日';
-  const value = new Date(`${date}T12:00:00Z`);
-  const week = Math.ceil((value.getUTCDate() + new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1)).getUTCDay()) / 7);
-  return `${date.slice(5, 7)}月W${week}`;
-}
-
-function aggregateByDate(records: TrainingRecord[], period: Period) {
-  const map = new Map<string, { label: string; physical: number; special: number; duration: number; srpe: number; rpeSum: number; rpeCount: number }>();
-  for (const record of records) {
-    const label = groupLabel(record.date, period);
-    const row = map.get(label) || { label, physical: 0, special: 0, duration: 0, srpe: 0, rpeSum: 0, rpeCount: 0 };
-    row[trainingLoadCategory(record)] += record.srpe;
-    row.duration += record.durationMin;
-    row.srpe += record.srpe;
-    if (record.rpe !== null) { row.rpeSum += record.rpe; row.rpeCount += 1; }
-    map.set(label, row);
-  }
-  return [...map.values()].map((row) => ({ ...row, rpe: row.rpeCount ? Number((row.rpeSum / row.rpeCount).toFixed(1)) : null }));
-}
-
-export function TrainingLoadComparisonChart({ records }: { records: TrainingRecord[] }) {
-  const range = usePeriodRecords(records);
-  const data = useMemo(() => aggregateByDate(range.filtered, range.period), [range.filtered, range.period]);
-  const physical = data.reduce((sum, row) => sum + row.physical, 0);
-  const special = data.reduce((sum, row) => sum + row.special, 0);
-  const total = physical + special;
-  return <div className="analysis-chart-module">
-    <div className="analysis-chart-toolbar"><div className="analysis-kpi-strip"><span>体能负荷<strong>{formatNumber(physical)} AU</strong></span><span>专项负荷<strong>{formatNumber(special)} AU</strong></span><span>专项占比<strong>{percentage(special, total)}%</strong></span></div><PeriodTabs control={range} /></div>
-    <div className="analysis-chart-large"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 12, right: 12, left: -8, bottom: 0 }}>
-      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} minTickGap={18} /><YAxis tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
-      <Tooltip formatter={(value, name) => [`${formatNumber(Number(value))} AU`, name]} /><Legend wrapperStyle={{ fontSize: 10 }} />
-      <Bar dataKey="physical" name="体能训练负荷" stackId="load" fill="#e5a72e" radius={[3, 3, 0, 0]} maxBarSize={34} /><Bar dataKey="special" name="专项训练负荷" stackId="load" fill="#168f8a" radius={[3, 3, 0, 0]} maxBarSize={34} />
-      <Line dataKey="srpe" name="总负荷趋势" stroke="#0a4252" strokeWidth={2.2} dot={{ r: 2.4 }} />
-    </ComposedChart></ResponsiveContainer></div>
-  </div>;
-}
-
 type TrainingVolume = OverviewPayload['trainingVolume'];
 
-export function TrainingVolumeChart({ data }: { data: TrainingVolume }) {
-  const chartData = data.days.map((row) => ({ ...row, label: row.date.slice(5).replace('-', '/') }));
+type TrendGranularity = 'auto' | 'day' | 'week' | 'month';
+
+export function TrainingVolumeChart({ data, from, to }: { data: TrainingVolume; from: string; to: string }) {
+  const [granularity, setGranularity] = useState<TrendGranularity>('auto');
+  const rangeDays = Math.max(1, Math.round((Date.parse(`${to}T12:00:00`) - Date.parse(`${from}T12:00:00`)) / 86_400_000) + 1);
+  const effectiveGranularity = granularity === 'auto' ? (rangeDays <= 31 ? 'day' : rangeDays <= 120 ? 'week' : 'month') : granularity;
+  const chartData = useMemo(() => {
+    const rows = new Map<string, { date: string; durationMin: number; distanceKm: number; durationCount: number; distanceCount: number }>();
+    for (const row of data.days) {
+      const date = effectiveGranularity === 'day' ? row.date : effectiveGranularity === 'week' ? startOfWeek(row.date) : `${row.date.slice(0, 7)}-01`;
+      const target = rows.get(date) || { date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0 };
+      if (row.durationMin !== null) { target.durationMin += row.durationMin; target.durationCount += 1; }
+      if (row.distanceKm !== null) { target.distanceKm += row.distanceKm; target.distanceCount += 1; }
+      rows.set(date, target);
+    }
+    return [...rows.values()].map((row) => ({ ...row, label: effectiveGranularity === 'month' ? row.date.slice(0, 7).replace('-', '/') : row.date.slice(5).replace('-', '/'), durationMin: row.durationCount ? row.durationMin : null, distanceKm: row.distanceCount ? row.distanceKm : null }));
+  }, [data.days, effectiveGranularity]);
   const value = (number: number | null, digits = 1) => number === null ? '—' : formatNumber(number, digits);
   const hasData = data.totalDurationMin !== null || data.totalDistanceKm !== null;
   return <div className="analysis-chart-module training-volume-module">
-    <div className="analysis-chart-toolbar"><span className="analysis-caption">按日期累计训练时长与公里数；统计范围沿用页面顶部筛选，空白数据不按 0 处理</span></div>
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按日期累计训练时长与公里数；空白数据不按 0 处理</span><label className="analysis-granularity">粒度<select aria-label="训练量趋势粒度" value={granularity} onChange={(event) => setGranularity(event.target.value as TrendGranularity)}><option value="auto">自动（{effectiveGranularity === 'day' ? '按天' : effectiveGranularity === 'week' ? '按周' : '按月'}）</option><option value="day">按天</option><option value="week">按周</option><option value="month">按月</option></select></label></div>
     <div className="training-volume-kpis">
       <article><span>累计训练时长</span><strong>{data.totalDurationMin === null ? '—' : value(data.totalDurationMin / 60)}<small>{data.totalDurationMin === null ? '' : ' h'}</small></strong></article>
       <article><span>累计公里数</span><strong>{value(data.totalDistanceKm)}<small>{data.totalDistanceKm === null ? '' : ' km'}</small></strong></article>
@@ -161,18 +57,17 @@ export function TrainingVolumeChart({ data }: { data: TrainingVolume }) {
 }
 
 export function TrainingContentChart({ records }: { records: TrainingRecord[] }) {
-  const range = usePeriodRecords(records);
   const data = useMemo(() => {
     const countByCategory = new Map(TRAINING_CONTENT_CATEGORIES.map((name) => [name, 0]));
-    for (const row of range.filtered) {
+    for (const row of records) {
       const category = trainingContentCategory(row);
       countByCategory.set(category, (countByCategory.get(category) || 0) + 1);
     }
     return TRAINING_CONTENT_CATEGORIES.map((name, index) => ({ name, value: countByCategory.get(name) || 0, fill: colors[index % colors.length] }));
-  }, [range.filtered]);
+  }, [records]);
   const total = data.reduce((sum,row)=>sum+row.value,0);
   const chartData = total ? data.filter((row) => row.value > 0) : [{ name: '暂无训练课次', value: 1, fill: '#dce7e9' }];
-  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按训练课次统计；每条课次仅归入一个类别</span><PeriodTabs control={range}/></div><div className="content-chart-layout training-ratio-layout"><div className="content-pie training-ratio-pie"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ value: 1 }]} dataKey="value" innerRadius={56} outerRadius={82} fill="#edf3f4" stroke="none"/><Pie data={chartData} dataKey="value" nameKey="name" innerRadius={57} outerRadius={78} paddingAngle={total ? 2 : 0} cornerRadius={5}>{chartData.map(row=><Cell key={row.name} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value))} 课 · ${percentage(Number(value), total)}%`,name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/></PieChart></ResponsiveContainer><div><strong>{formatNumber(total)}</strong><span>总课次</span></div></div><div className="content-legend training-ratio-legend">{data.map(row=><div key={row.name}><i style={{background:row.fill}}/><span>{row.name}</span><b>{formatNumber(row.value)}课</b><strong>{percentage(row.value,total)}%</strong></div>)}</div></div>{!total && <p className="analysis-empty-note">当前筛选条件下无训练记录</p>}</div>;
+  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按当前页面时间范围统计；每条课次仅归入一个类别</span></div><div className="content-chart-layout training-ratio-layout"><div className="content-pie training-ratio-pie"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ value: 1 }]} dataKey="value" innerRadius={56} outerRadius={82} fill="#edf3f4" stroke="none"/><Pie data={chartData} dataKey="value" nameKey="name" innerRadius={57} outerRadius={78} paddingAngle={total ? 2 : 0} cornerRadius={5}>{chartData.map(row=><Cell key={row.name} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value))} 课 · ${percentage(Number(value), total)}%`,name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/></PieChart></ResponsiveContainer><div><strong>{formatNumber(total)}</strong><span>总课次</span></div></div><div className="content-legend training-ratio-legend">{data.map(row=><div key={row.name}><i style={{background:row.fill}}/><span>{row.name}</span><b>{formatNumber(row.value)}课</b><strong>{percentage(row.value,total)}%</strong></div>)}</div></div>{!total && <p className="analysis-empty-note">当前筛选条件下无训练记录</p>}</div>;
 }
 
 type IntensityDistribution = OverviewPayload['intensityDistribution'];
@@ -284,6 +179,23 @@ export function InjuryAssessmentChart({ injuries, athleteCount }: { injuries: Ov
   const data = meta.map(item=>({...item,value:injuries.filter(row=>row.status===item.key).length}));
   const recorded = injuries.length; if (athleteCount > recorded) data[0].value += athleteCount-recorded;
   const focus = injuries.filter(row=>row.status!=='healthy').slice(0,4);
-  return <div className="injury-analysis-layout"><div className="injury-donut"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data} dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={2}>{data.map(row=><Cell key={row.key} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${value} 人`,name]}/></PieChart></ResponsiveContainer><div><strong>{focus.length}</strong><span>重点关注</span></div></div><div className="injury-focus-list">{focus.length ? focus.map(row=><div key={row.athleteId}><span><strong>{row.athleteName}</strong><small>{row.bodyPart} · {row.injuryName}</small></span><b>{row.painScore}/10</b></div>) : <p>当前无活动性损伤记录</p>}</div></div>;
+  const total = data.reduce((sum, row) => sum + row.value, 0);
+  const chartData = total ? data.filter((row) => row.value > 0) : [{ name: '暂无伤病记录', value: 1, fill: '#dce7e9' }];
+  return <div className="analysis-chart-module injury-analysis-module">
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按每名运动员最新伤病记录统计；未录入者计入健康</span></div>
+    <div className="content-chart-layout training-ratio-layout injury-ratio-layout">
+      <div className="content-pie training-ratio-pie">
+        <ResponsiveContainer width="100%" height="100%"><PieChart>
+          <Pie data={[{ value: 1 }]} dataKey="value" innerRadius={56} outerRadius={82} fill="#edf3f4" stroke="none" />
+          <Pie data={chartData} dataKey="value" nameKey="name" innerRadius={57} outerRadius={78} paddingAngle={total ? 2 : 0} cornerRadius={5}>{chartData.map((row) => <Cell key={row.name} fill={row.fill} />)}</Pie>
+          <Tooltip formatter={(value, name) => [`${formatNumber(Number(value))} 人 · ${percentage(Number(value), total)}%`, name]} contentStyle={{ border: '1px solid #d5e3e5', borderRadius: 10, boxShadow: '0 10px 24px rgba(9,54,65,.12)' }} />
+        </PieChart></ResponsiveContainer>
+        <div><strong>{formatNumber(focus.length)}</strong><span>重点关注</span></div>
+      </div>
+      <div className="content-legend training-ratio-legend">{data.map((row) => <div key={row.key}><i style={{ background: row.fill }} /><span>{row.name}</span><b>{formatNumber(row.value)}人</b><strong>{percentage(row.value, total)}%</strong></div>)}</div>
+    </div>
+    <div className="injury-focus-list injury-focus-list-inline">{focus.length ? focus.map((row) => <div key={row.athleteId}><span><strong>{row.athleteName}</strong><small>{row.bodyPart} · {row.injuryName}</small></span><b>{row.painScore}/10</b></div>) : <p>当前无活动性损伤记录</p>}</div>
+    {!total && <p className="analysis-empty-note">当前筛选范围内暂无运动员数据</p>}
+  </div>;
 }
 

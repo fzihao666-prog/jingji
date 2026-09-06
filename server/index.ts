@@ -586,33 +586,13 @@ function cleanString(value: unknown) {
   return String(value ?? '').trim();
 }
 
-type OverviewPeriod = 'day' | 'week' | 'month';
-
-function isOverviewPeriod(value: string): value is OverviewPeriod {
-  return value === 'day' || value === 'week' || value === 'month';
-}
-
 function toLocalIsoDate(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
 }
 
-function addIsoDays(date: string, amount: number) {
-  const target = new Date(`${date}T00:00:00`);
-  target.setDate(target.getDate() + amount);
-  return toLocalIsoDate(target);
-}
-
-function normalizeOverviewRange(input: { from: string; to: string; period: string }) {
-  if (!isOverviewPeriod(input.period)) return { from: input.from, to: input.to, period: null };
-  const anchor = /^\d{4}-\d{2}-\d{2}$/.test(input.to)
-    ? input.to
-    : /^\d{4}-\d{2}-\d{2}$/.test(input.from)
-      ? input.from
-      : toLocalIsoDate(new Date());
-  if (input.period === 'day') return { from: anchor, to: anchor, period: input.period };
-  if (input.period === 'week') return { from: addIsoDays(anchor, -6), to: anchor, period: input.period };
-  return { from: addIsoDays(anchor, -29), to: anchor, period: input.period };
+function normalizeOverviewRange(input: { from: string; to: string }) {
+  return { from: input.from, to: input.to, period: null };
 }
 
 function optionalNumber(value: unknown, min: number, max: number, label: string, errors: string[]) {
@@ -1170,14 +1150,21 @@ type AdviceTestRow = {
 };
 
 function adviceTestById(strengthTestId: number) {
-  return db.prepare(`
-    SELECT st.id AS strengthTestId, st.athlete_id AS athleteId, st.test_date AS testDate,
-      st.metrics_json AS metricsJson, st.targets_json AS targetsJson,
+  const session = db.prepare(`
+    SELECT ts.id AS strengthTestId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
       a.name AS athleteName, a.project, a.team, a.gender
-    FROM athlete_strength_tests st
-    JOIN athletes a ON a.id = st.athlete_id
-    WHERE st.id = ?
-  `).get(strengthTestId) as AdviceTestRow | undefined;
+    FROM test_sessions ts JOIN athletes a ON a.id = ts.athlete_id
+    WHERE ts.id = ? AND ts.test_type = '力量素质测试'
+  `).get(strengthTestId) as Omit<AdviceTestRow, 'metricsJson' | 'targetsJson'> | undefined;
+  if (!session) return undefined;
+  const metrics: StrengthMetricValues = {}; const targets: StrengthMetricValues = {};
+  const measurements = db.prepare(`SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`).all(strengthTestId) as Array<{ metricCode: string; valueNum: number; targetValue: number | null }>;
+  for (const measurement of measurements) {
+    const key = strengthMetricKeyByCode.get(measurement.metricCode); if (!key) continue;
+    metrics[key] = measurement.valueNum;
+    if (measurement.targetValue !== null) targets[key] = measurement.targetValue;
+  }
+  return { ...session, metricsJson: JSON.stringify(metrics), targetsJson: JSON.stringify(targets) };
 }
 
 function limitedText(value: unknown, fallback: string, max = 500) {
@@ -1263,11 +1250,12 @@ async function buildAiAdvice(test: AdviceTestRow) {
   const targets = JSON.parse(test.targetsJson || '{}') as StrengthMetricValues;
   const comparison = adviceComparisons(test, metrics, targets);
   const recentRecords = db.prepare(`
-    SELECT date, training_type AS trainingType, duration_min AS durationMin, rpe, srpe,
-      sleep_hours AS sleepHours, fatigue_index AS fatigueIndex, status
-    FROM training_records
-    WHERE athlete_id = ? AND date BETWEEN date(?, '-27 days') AND ?
-    ORDER BY date
+    SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.duration_min AS durationMin, ts.rpe, ts.srpe,
+      dw.sleep_hours AS sleepHours, dw.fatigue_index AS fatigueIndex, COALESCE(dw.status, 'missing') AS status
+    FROM training_sessions ts
+    LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
+    WHERE ts.athlete_id = ? AND ts.session_date BETWEEN date(?, '-27 days') AND ?
+    ORDER BY ts.session_date, ts.session_order
   `).all(test.athleteId, test.testDate, test.testDate);
   const endpoint = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
   try {
@@ -1367,14 +1355,14 @@ function mapAdviceRow(row: Record<string, unknown>) {
 
 function latestAdvice(strengthTestId: number, approvedOnly = false) {
   const row = db.prepare(`
-    SELECT sa.id, sa.strength_test_id AS strengthTestId, sa.version,
+    SELECT sa.id, sa.test_session_id AS strengthTestId, sa.version,
       sa.content_json AS contentJson, sa.source, sa.model, sa.status,
       sa.generated_at AS generatedAt, generator.display_name AS generatedBy,
       sa.reviewed_at AS reviewedAt, reviewer.display_name AS reviewedBy
     FROM strength_ai_advice sa
     JOIN users generator ON generator.id = sa.generated_by
     LEFT JOIN users reviewer ON reviewer.id = sa.reviewed_by
-    WHERE sa.strength_test_id = ? ${approvedOnly ? "AND sa.status = 'approved'" : ''}
+    WHERE sa.test_session_id = ? ${approvedOnly ? "AND sa.status = 'approved'" : ''}
     ORDER BY sa.version DESC LIMIT 1
   `).get(strengthTestId) as Record<string, unknown> | undefined;
   return row ? mapAdviceRow(row) : null;
@@ -1814,6 +1802,12 @@ function athletePayloadErrors(payload: ReturnType<typeof readAthleteAdminPayload
   if (!athleteTrainingStatuses.has(payload.athleteStatus)) errors.push('请选择有效的运动员状态');
   return errors;
 }
+
+function strengthMetricCode(key: string) {
+  return key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+const strengthMetricKeyByCode = new Map(STRENGTH_METRICS.map((metric) => [strengthMetricCode(metric.key), metric.key]));
 
 function athleteProfileComplete(payload: ReturnType<typeof readAthleteAdminPayload>) {
   return ['男', '女'].includes(payload.gender)
@@ -2639,12 +2633,14 @@ function getAthleteContext(athleteId: number): AthleteContext {
     }
   }).filter(Boolean);
 
-  // 获取最近28天训练记录
+  // 训练与恢复分别来自权威表，按训练课次返回；恢复状态按日期关联。
   const recentRecords = db.prepare(`
-    SELECT date, training_type as trainingType, duration_min as durationMin, rpe, fatigue_index as fatigueIndex, status
-    FROM training_records
-    WHERE athlete_id = ? AND date >= date('now', '-28 days')
-    ORDER BY date DESC
+    SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.duration_min AS durationMin, ts.rpe,
+      dw.fatigue_index AS fatigueIndex, COALESCE(dw.status, 'missing') AS status
+    FROM training_sessions ts
+    LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
+    WHERE ts.athlete_id = ? AND ts.session_date >= date('now', '-28 days')
+    ORDER BY ts.session_date DESC, ts.session_order DESC
   `).all(athleteId) as Array<{
     date: string;
     trainingType: string;
@@ -2654,25 +2650,19 @@ function getAthleteContext(athleteId: number): AthleteContext {
     status: string;
   }>;
 
-  // 获取最近3次力量测试
+  // 力量测试聚合自测试事件与指标明细，不再读取旧 JSON 宽字段。
   const strengthTests = db.prepare(`
-    SELECT test_date as date, metrics_json as metricsJson
-    FROM athlete_strength_tests
-    WHERE athlete_id = ?
-    ORDER BY test_date DESC
+    SELECT ts.id, ts.test_date AS date
+    FROM test_sessions ts
+    WHERE ts.athlete_id = ? AND ts.test_type = '力量素质测试'
+    ORDER BY ts.test_date DESC, ts.id DESC
     LIMIT 3
-  `).all(athleteId) as Array<{ date: string; metricsJson: string }>;
+  `).all(athleteId) as Array<{ id: number; date: string }>;
 
-  const parsedTests = strengthTests.map(test => {
-    try {
-      return {
-        date: test.date,
-        metrics: JSON.parse(test.metricsJson)
-      };
-    } catch {
-      return null;
-    }
-  }).filter(Boolean);
+  const parsedTests = strengthTests.map((test) => ({
+    date: test.date,
+    metrics: Object.fromEntries((db.prepare(`SELECT metric_code AS code, value_num AS value FROM test_measurements WHERE test_session_id = ?`).all(test.id) as Array<{ code: string; value: number }>).map((item) => [item.code, item.value]))
+  }));
 
   return {
     athlete,
@@ -3114,12 +3104,12 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
       srs.training_environment AS trainingEnvironment, srs.duration_min AS durationMin,
       srs.distance_km AS distanceKm, srs.intensity_percent AS intensityPercent,
       srs.intensity_zone AS setIntensityZone, srs.rpe, srs.completed,
-      srs.note, srs.import_batch_id AS importBatchId, srs.ai_confidence AS confidence,
-      sib.source_filename AS sourceFilename, sib.model_used AS modelUsed,
-      COALESCE(sib.committed_at, srs.updated_at) AS importedAt
+      srs.note, srs.data_import_batch_id AS importBatchId, srs.ai_confidence AS confidence,
+      dib.source_filename AS sourceFilename, dib.parser_version AS modelUsed,
+      COALESCE(dib.committed_at, srs.updated_at) AS importedAt
     FROM training_sessions ts
     JOIN strength_result_sets srs ON srs.training_session_id = ts.id
-    LEFT JOIN strength_import_batches sib ON sib.id = srs.import_batch_id
+    LEFT JOIN data_import_batches dib ON dib.id = srs.data_import_batch_id
     WHERE ts.athlete_id = ?
     ORDER BY ts.session_date DESC, ts.session_order DESC, srs.exercise_name, srs.set_index
   `).all(athleteId) as Array<Record<string, unknown> & { sessionId: number }>;
@@ -3219,16 +3209,19 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
   let updated = 0;
   let skipped = 0;
   const batchId = token;
+  const batchProject = db.prepare('SELECT project FROM athletes WHERE id = ?').get(rows[0]?.athleteId) as { project: Project } | undefined;
+  if (!batchProject) return res.status(400).json({ message: '导入记录缺少有效运动员。' });
   const sessionIds = new Set<number>();
   const sessionMap = new Map<string, number>();
   const source = cached.sourceType === 'image' || cached.sourceType === 'pdf' ? 'ai_import' : 'file_import';
   db.exec('BEGIN');
   try {
     db.prepare(`
-      INSERT INTO strength_import_batches
-        (id, source_filename, source_mimetype, source_type, model_used, status, row_count, created_by)
-      VALUES (?, ?, ?, ?, ?, 'preview', ?, ?)
-    `).run(batchId, cached.filename, cached.mimetype, cached.sourceType, cached.modelUsed, rows.length, req.authUser!.id);
+      INSERT INTO data_import_batches
+        (id, file_hash, source_filename, source_mimetype, file_size, project, parser_version, status, item_count, created_by, summary_json)
+      VALUES (?, ?, ?, ?, 0, ?, ?, 'reviewing', ?, ?, ?)
+    `).run(batchId, `legacy-strength-import:${batchId}`, cached.filename, cached.mimetype, batchProject.project,
+      `strength-result-${cached.modelUsed}`, rows.length, req.authUser!.id, JSON.stringify({ sourceType: cached.sourceType, channel: 'strength_training_import' }));
 
     for (const row of rows) {
       const baseKey = `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}`;
@@ -3263,7 +3256,7 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           UPDATE strength_result_sets SET target_reps = ?, actual_reps = ?, actual_weight_kg = ?, planned_weight_kg = ?,
             training_category = ?, body_position = ?, training_environment = ?, duration_min = ?, distance_km = ?,
             intensity_percent = ?, intensity_zone = ?, rpe = ?, completed = ?,
-            note = ?, source = ?, import_batch_id = ?, source_row = ?, original_text = ?, ai_confidence = ?,
+            note = ?, source = ?, data_import_batch_id = ?, source_row = ?, original_text = ?, ai_confidence = ?,
             created_by = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `).run(row.targetReps, row.actualReps, row.actualWeightKg, row.plannedWeightKg,
@@ -3276,7 +3269,7 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           INSERT INTO strength_result_sets
             (training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg,
              training_category, body_position, training_environment, duration_min, distance_km, intensity_percent,
-             intensity_zone, rpe, completed, note, source, import_batch_id, source_row, original_text, ai_confidence, created_by)
+             intensity_zone, rpe, completed, note, source, data_import_batch_id, source_row, original_text, ai_confidence, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(sessionId, row.exerciseName, row.setIndex, row.targetReps, row.actualReps, row.actualWeightKg,
           row.plannedWeightKg, row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin,
@@ -3310,11 +3303,11 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           dominant?.environment || '陆上', isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN', sessionId);
     }
     db.prepare(`
-      UPDATE strength_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP
+      UPDATE data_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(imported + updated, skipped, batchId);
     db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(req.authUser!.id, 'IMPORT_STRENGTH_RESULTS', 'strength_import_batch', null, JSON.stringify({ batchId, imported, updated, skipped, sourceType: cached.sourceType }));
+      .run(req.authUser!.id, 'IMPORT_STRENGTH_RESULTS', 'data_import_batch', null, JSON.stringify({ batchId, imported, updated, skipped, sourceType: cached.sourceType }));
     db.exec('COMMIT');
     strengthImportCache.delete(token);
     res.json({ message: `已保存${imported + updated}条体能训练结果。`, imported, updated, skipped, sessions: sessionIds.size });
@@ -3553,12 +3546,49 @@ app.post('/api/data-import/batches/:id/commit', requireAuth, requireRole('SCC', 
   }
 });
 
+app.get('/api/data-management/metrics', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
+  const metrics = db.prepare(`SELECT code, label, domain, unit, direction, frequency, active FROM metric_definitions ORDER BY active DESC, domain, label`).all();
+  const aliases = db.prepare(`SELECT alias, normalized_alias AS normalizedAlias, metric_code AS metricCode, canonical_label AS canonicalLabel, unit, side FROM metric_aliases ORDER BY metric_code, alias`).all();
+  res.json({ metrics, aliases });
+});
+
+app.put('/api/data-management/metrics/:code', requireAuth, requireRole('TD', 'DMD'), (req, res) => {
+  const code = cleanString(req.params.code);
+  const label = cleanString(req.body?.label);
+  const unit = cleanString(req.body?.unit);
+  const active = req.body?.active === false ? 0 : 1;
+  if (!/^[a-z][a-z0-9_]{1,80}$/.test(code) || !label || label.length > 80 || unit.length > 24) return res.status(400).json({ message: '指标编码、名称或单位不合法。' });
+  const result = db.prepare(`UPDATE metric_definitions SET label = ?, unit = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?`).run(label, unit, active, code);
+  if (!result.changes) return res.status(404).json({ message: '指标不存在；请先通过正式导入或迁移建立指标。' });
+  res.json({ message: '指标字典已更新。' });
+});
+
+app.put('/api/data-management/metric-aliases', requireAuth, requireRole('TD', 'DMD'), (req, res) => {
+  const alias = cleanString(req.body?.alias); const metricCode = cleanString(req.body?.metricCode);
+  const side = ['left', 'right', 'bilateral', 'center'].includes(cleanString(req.body?.side)) ? cleanString(req.body?.side) : 'center';
+  const metric = db.prepare(`SELECT label, unit FROM metric_definitions WHERE code = ? AND active = 1`).get(metricCode) as { label: string; unit: string } | undefined;
+  if (!alias || alias.length > 80 || !metric) return res.status(400).json({ message: '别名或指标编码无效。' });
+  db.prepare(`INSERT INTO metric_aliases (alias, normalized_alias, metric_code, canonical_label, unit, side) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(alias) DO UPDATE SET normalized_alias = excluded.normalized_alias, metric_code = excluded.metric_code, canonical_label = excluded.canonical_label, unit = excluded.unit, side = excluded.side, updated_at = CURRENT_TIMESTAMP`)
+    .run(alias, alias.normalize('NFKC').replace(/\s+/g, '').toLowerCase(), metricCode, metric.label, metric.unit, side);
+  res.json({ message: '指标别名已保存。' });
+});
+
+app.get('/api/data-management/standards', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
+  res.json({
+    athlete: ['athletes', 'athlete_profiles', 'athlete_origins', 'athlete_aliases'],
+    training: { types: ['专项训练', '体能训练', '恢复训练', '休息'], structures: ['水上训练', '陆上训练', '体能训练', '再生恢复'], zoneSystems: ['U3/U2/U1/AT/TPT/AN/ATP', 'UT2/UT1/TR/AT/AN/REC'] },
+    testing: ['test_sessions', 'test_measurements', 'metric_definitions', 'metric_aliases'],
+    sources: ['manual', 'file_import', 'ai_import', 'legacy_migration'],
+    qualities: ['valid', 'partial', 'insufficient', 'outlier', 'estimated'],
+    deprecatedTables: ['training_records', 'athlete_strength_tests', 'strength_training_sets', 'strength_import_batches']
+  });
+});
+
 app.get('/api/overview', requireAuth, (req, res) => {
   const user = req.authUser!;
   const range = normalizeOverviewRange({
     from: cleanString(req.query.from),
-    to: cleanString(req.query.to),
-    period: cleanString(req.query.period)
+    to: cleanString(req.query.to)
   });
   const { from, to } = range;
   const requestedId = Number(req.query.athleteId || 0);
@@ -3717,13 +3747,14 @@ app.get('/api/analysis/summary', requireAuth, (req, res) => {
   if (!athlete || athlete.project !== project) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
 
   const records = db.prepare(`
-    SELECT date, training_type AS trainingType, structure_type AS structureType,
-      intensity_zone AS intensityZone, duration_min AS durationMin, distance_km AS distanceKm,
-      rpe, srpe, smvl, morning_pulse AS morningPulse, weight_kg AS weightKg,
-      sleep_hours AS sleepHours, fatigue_index AS fatigueIndex, status
-    FROM training_records
-    WHERE athlete_id = ? AND date BETWEEN ? AND ?
-    ORDER BY date, id
+    SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
+      ts.intensity_zone AS intensityZone, ts.duration_min AS durationMin, ts.distance_km AS distanceKm,
+      ts.rpe, ts.srpe, ts.smvl, dw.morning_pulse AS morningPulse, dw.weight_kg AS weightKg,
+      dw.sleep_hours AS sleepHours, dw.fatigue_index AS fatigueIndex, COALESCE(dw.status, 'missing') AS status
+    FROM training_sessions ts
+    LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
+    WHERE ts.athlete_id = ? AND ts.session_date BETWEEN ? AND ?
+    ORDER BY ts.session_date, ts.session_order
   `).all(requestedId, from, to) as RowingAnalysisRecord[];
 
   const standard = analysisStandardForProject(project);
@@ -3742,8 +3773,7 @@ app.get('/api/athletes/:id/overview', requireAuth, (req, res) => {
   const athleteId = Number(req.params.id || 0);
   const range = normalizeOverviewRange({
     from: cleanString(req.query.from),
-    to: cleanString(req.query.to),
-    period: cleanString(req.query.period)
+    to: cleanString(req.query.to)
   });
   const project = cleanString(req.query.project);
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
@@ -3967,31 +3997,17 @@ app.get('/api/strength-tests', requireAuth, (req, res) => {
   const athleteId = Number(req.query.athleteId || user.athleteId || 0);
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
   if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员的力量测试档案。' });
-  const rows = db.prepare(`
-    SELECT st.id, st.athlete_id AS athleteId, st.test_date AS testDate,
-      st.metrics_json AS metricsJson, st.targets_json AS targetsJson, st.notes,
-      st.updated_at AS updatedAt, u.display_name AS updatedBy
-    FROM athlete_strength_tests st
-    JOIN users u ON u.id = st.updated_by
-    WHERE st.athlete_id = ?
-    ORDER BY st.test_date DESC, st.id DESC
-  `).all(athleteId) as Array<{
-    id: number;
-    athleteId: number;
-    testDate: string;
-    metricsJson: string;
-    targetsJson: string;
-    notes: string;
-    updatedAt: string;
-    updatedBy: string;
-  }>;
-  res.json({
-    tests: rows.map(({ metricsJson, targetsJson, ...row }) => ({
-      ...row,
-      metrics: JSON.parse(metricsJson || '{}'),
-      targets: JSON.parse(targetsJson || '{}')
-    }))
-  });
+  const sessions = db.prepare(`SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, created_at AS updatedAt FROM test_sessions WHERE athlete_id = ? AND test_type = '力量素质测试' ORDER BY test_date DESC, id DESC`).all(athleteId) as Array<{ id: number; athleteId: number; testDate: string; protocol: string; updatedAt: string }>;
+  const measurementQuery = db.prepare(`SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`);
+  res.json({ tests: sessions.map((session) => {
+    const metrics: StrengthMetricValues = {}; const targets: StrengthMetricValues = {};
+    for (const measurement of measurementQuery.all(session.id) as Array<{ metricCode: string; valueNum: number; targetValue: number | null }>) {
+      const key = strengthMetricKeyByCode.get(measurement.metricCode); if (!key) continue;
+      metrics[key] = Number(measurement.valueNum);
+      if (measurement.targetValue !== null) targets[key] = Number(measurement.targetValue);
+    }
+    return { ...session, notes: session.protocol, updatedBy: '', metrics, targets };
+  }) });
 });
 
 app.post('/api/strength-tests', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
@@ -4012,34 +4028,19 @@ app.post('/api/strength-tests', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'T
   if (!Object.keys(metricsResult.values).length) errors.push('至少填写一项实测数据');
   if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
-  const existing = db.prepare(`
-    SELECT id FROM athlete_strength_tests WHERE athlete_id = ? AND test_date = ?
-  `).get(athleteId, testDate) as { id: number } | undefined;
-  db.prepare(`
-    INSERT INTO athlete_strength_tests
-      (athlete_id, test_date, metrics_json, targets_json, notes, created_by, updated_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(athlete_id, test_date) DO UPDATE SET
-      metrics_json = excluded.metrics_json,
-      targets_json = excluded.targets_json,
-      notes = excluded.notes,
-      updated_by = excluded.updated_by,
-      updated_at = CURRENT_TIMESTAMP
-  `).run(
-    athleteId,
-    testDate,
-    JSON.stringify(metricsResult.values),
-    JSON.stringify(targetsResult.values),
-    notes,
-    user.id,
-    user.id
-  );
-  const saved = db.prepare(`
-    SELECT id FROM athlete_strength_tests WHERE athlete_id = ? AND test_date = ?
-  `).get(athleteId, testDate) as { id: number };
+  const existing = db.prepare(`SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`).get(athleteId, testDate) as { id: number } | undefined;
+  db.prepare(`INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by) VALUES (?, ?, '力量素质测试', ?, 'manual', 'valid', 0, ?) ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET protocol = excluded.protocol, source = 'manual', quality = 'valid'`).run(athleteId, testDate, notes, user.id);
+  const saved = db.prepare(`SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`).get(athleteId, testDate) as { id: number };
+  const definition = db.prepare(`INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, minimum, maximum) VALUES (?, ?, 'strength', ?, 'higher_better', 'phase', ?, ?) ON CONFLICT(code) DO NOTHING`);
+  const measurement = db.prepare(`INSERT INTO test_measurements (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo) VALUES (?, ?, ?, ?, ?, 'center', 'valid', 'manual', 0) ON CONFLICT(test_session_id, metric_code, side) DO UPDATE SET value_num = excluded.value_num, target_value = excluded.target_value, unit = excluded.unit, source = 'manual', quality = 'valid'`);
+  for (const metric of STRENGTH_METRICS) {
+    const value = metricsResult.values[metric.key]; if (value === undefined) continue;
+    const code = strengthMetricCode(metric.key); definition.run(code, metric.label, metric.unit, metric.min, metric.max);
+    measurement.run(saved.id, code, value, targetsResult.values[metric.key] ?? null, metric.unit);
+  }
   db.prepare(`
     INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
-    VALUES (?, ?, 'athlete_strength_test', ?, ?)
+    VALUES (?, ?, 'test_session', ?, ?)
   `).run(
     user.id,
     existing ? 'UPDATE_STRENGTH_TEST' : 'CREATE_STRENGTH_TEST',
@@ -4076,11 +4077,11 @@ app.post(
       const generated = await buildAiAdvice(test);
       const nextVersion = Number((db.prepare(`
         SELECT COALESCE(MAX(version), 0) + 1 AS version
-        FROM strength_ai_advice WHERE strength_test_id = ?
+        FROM strength_ai_advice WHERE test_session_id = ?
       `).get(strengthTestId) as { version: number }).version);
       const result = db.prepare(`
         INSERT INTO strength_ai_advice
-          (strength_test_id, version, content_json, source, model, status, generated_by)
+          (test_session_id, version, content_json, source, model, status, generated_by)
         VALUES (?, ?, ?, ?, ?, 'draft', ?)
       `).run(
         strengthTestId,
@@ -4128,7 +4129,7 @@ app.put(
       return res.status(403).json({ message: '无权编辑该运动员的训练建议。' });
     }
     const exists = db.prepare(`
-      SELECT id FROM strength_ai_advice WHERE id = ? AND strength_test_id = ?
+      SELECT id FROM strength_ai_advice WHERE id = ? AND test_session_id = ?
     `).get(adviceId, strengthTestId);
     if (!exists) return res.status(404).json({ message: '训练建议不存在。' });
     const content = normalizeAdviceContent(req.body?.content);
@@ -4136,7 +4137,7 @@ app.put(
       UPDATE strength_ai_advice
       SET content_json = ?, status = 'draft', reviewed_by = NULL, reviewed_at = NULL,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND strength_test_id = ?
+      WHERE id = ? AND test_session_id = ?
     `).run(JSON.stringify(content), adviceId, strengthTestId);
     db.prepare(`
       INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
@@ -4163,7 +4164,7 @@ app.post(
       UPDATE strength_ai_advice
       SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND strength_test_id = ?
+      WHERE id = ? AND test_session_id = ?
     `).run(user.id, adviceId, strengthTestId);
     if (!result.changes) return res.status(404).json({ message: '训练建议不存在。' });
     db.prepare(`
@@ -4736,9 +4737,6 @@ app.put('/api/admin/assignments/:athleteId', requireAuth, requireRole('PRJ', 'RE
   db.exec('BEGIN');
   try {
     db.prepare('UPDATE athletes SET region = ?, city = ?, county = ? WHERE id = ?').run(region, city, county, athleteId);
-    db.prepare(`
-      UPDATE training_records SET province = ?, city = ?, county = ? WHERE athlete_id = ?
-    `).run(region, city, county, athleteId);
     const athleteUser = db.prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'").get(athleteId) as { id: number } | undefined;
     if (athleteUser) {
       db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(athleteUser.id);
@@ -4974,9 +4972,6 @@ app.put('/api/access/accounts/:id', requireAuth, requireRole('PRJ', 'REG', 'TD',
       const team = permissions.teams[0].team;
       db.prepare(`
         UPDATE athletes SET region = ?, city = ?, county = ?, project = ?, team = ? WHERE id = ?
-      `).run(area.province, area.city, area.county, project, team, target.athleteId);
-      db.prepare(`
-        UPDATE training_records SET province = ?, city = ?, county = ?, project = ?, team = ? WHERE athlete_id = ?
       `).run(area.province, area.city, area.county, project, team, target.athleteId);
       db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(target.athleteId);
       if (parentResult.parent?.role === 'SCC') {

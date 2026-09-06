@@ -325,30 +325,19 @@ erDiagram
 | 测试评估 | `test_sessions`、`test_measurements`、身体测量、竞技状态 | 统一指标模型 |
 | 专项测试 | `special_test_events`、`special_test_results` | 事件与参与者成绩 |
 | 健康 | `injury_records` | 疼痛、限制、康复与复查 |
-| 导入与审计 | `strength_import_batches`、`audit_logs` | 数据来源和敏感操作追踪 |
+| 导入与审计 | `data_import_batches`、`data_import_items`、`audit_logs` | 统一暂存、提交追踪和敏感操作审计 |
 
-### 8.4 当前双轨训练数据
+### 8.4 数据库收敛与旧表兼容
 
-代码中同时存在两套训练事实模型：
+训练事实已收敛到以下权威模型：
 
-1. **新模型**：`training_sessions` + `daily_wellness` + `strength_result_sets`；
-2. **旧模型**：`training_records`，包含训练与恢复的扁平字段。
+1. `training_sessions` + `training_session_segments` + `strength_result_sets`；
+2. `daily_wellness`；
+3. `test_sessions` + `test_measurements` + `metric_definitions`。
 
-当前调用关系并未完全统一：
+`training_records`、`athlete_strength_tests`、`strength_training_sets` 与 `strength_import_batches` 为 Deprecated 表：启动时会先备份 SQLite，再以幂等迁移补写权威表，并将基线、异常（未知指标、队伍或地区冲突）和迁移结果写入 `app_metadata`。旧表不再接受新的训练、测试或导入写入。
 
-- `/api/records` 和 `/api/overview` 主要读取新模型；
-- 专项训练手工录入和体能结果导入写入新模型；
-- 部分 `/api/analysis/summary` 和 AI 训练上下文仍读取旧模型。
-
-这会造成同一运动员在不同页面或 AI 上下文中看到的数据不一致。架构演进的首要任务是确定 `training_sessions` 为唯一训练事实源，并完成以下迁移：
-
-1. 旧记录回填到新模型；
-2. 所有读路径切换到统一查询服务；
-3. 对照验证聚合结果；
-4. 停止写入和读取 `training_records`；
-5. 最后移除旧表及兼容类型。
-
-在迁移完成前，新增功能不得再直接依赖 `training_records`。
+迁移报告用于人工核对训练分钟、公里、测试指标及运动员维度；地区冲突不自动覆盖，无法匹配的队伍不自动创建。
 
 ### 8.5 JSON 与结构化列
 

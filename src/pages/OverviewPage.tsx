@@ -35,7 +35,6 @@ type Props = {
 type CardSize = 'metric' | 'third' | 'half' | 'wide' | 'full';
 type DropTarget = { id: string; position: 'before' | 'after' };
 type CardRect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
-type OverviewPeriod = 'day' | 'week' | 'month';
 type PointerDragSession = {
   id: string;
   pointerId: number;
@@ -47,17 +46,6 @@ type PointerDragSession = {
   preview: HTMLElement | null;
   cleanup: () => void;
 };
-
-function overviewPeriodFromRange(from: string, to: string): OverviewPeriod | undefined {
-  if (from === to) return 'day';
-  const start = new Date(`${from}T00:00:00`);
-  const end = new Date(`${to}T00:00:00`);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return undefined;
-  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
-  if (days === 7) return 'week';
-  if (days === 30) return 'month';
-  return undefined;
-}
 
 function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
   const left = gridRect.left + element.offsetLeft;
@@ -126,8 +114,6 @@ export function OverviewPage(props: Props) {
   const isIndividualOverview = isSelfOverview || props.athleteId !== null;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
   const overviewAthleteId = isSelfOverview ? props.user.athleteId : props.athleteId;
-  const overviewPeriod = useMemo(() => overviewPeriodFromRange(props.from, props.to), [props.from, props.to]);
-
   useEffect(() => {
     if (props.athleteId !== overviewAthleteId) props.onAthleteChange(overviewAthleteId);
   }, [overviewAthleteId, props.athleteId, props.onAthleteChange]);
@@ -136,8 +122,12 @@ export function OverviewPage(props: Props) {
     let active = true;
     setOverviewLoading(true);
     setOverviewError('');
-    api.overview(props.from, props.to, overviewAthleteId, props.project, overviewPeriod)
-      .then(({ overview: payload }) => { if (active) setOverview(payload); })
+    setOverview(null);
+    api.overview(props.from, props.to, overviewAthleteId, props.project)
+      .then((current) => {
+        if (!active) return;
+        setOverview(current.overview);
+      })
       .catch((error) => {
         if (!active) return;
         setOverview(null);
@@ -145,7 +135,7 @@ export function OverviewPage(props: Props) {
       })
       .finally(() => { if (active) setOverviewLoading(false); });
     return () => { active = false; };
-  }, [props.from, props.to, overviewAthleteId, props.project, overviewPeriod]);
+  }, [props.from, props.to, overviewAthleteId, props.project]);
 
   const analysisRecords = overview?.records ?? props.records;
   const athleteProfiles = overview?.profiles ?? [];
@@ -544,12 +534,12 @@ export function OverviewPage(props: Props) {
     'training-load-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
         <PanelHeading title="训练量统计" subtitle="训练时长 · 公里数（按日期汇总）" />
-        <TrainingVolumeChart data={overview?.trainingVolume || { days: [], totalDurationMin: null, totalDistanceKm: null, averageDurationMin: null, averageDistanceKm: null, durationDayCount: 0, distanceDayCount: 0 }} />
+        <TrainingVolumeChart data={overview?.trainingVolume || { days: [], totalDurationMin: null, totalDistanceKm: null, averageDurationMin: null, averageDistanceKm: null, durationDayCount: 0, distanceDayCount: 0 }} from={props.from} to={props.to} />
       </article>
     ),
     'training-content': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="训练课比值" subtitle="九类训练课次占比（日/周/月/阶段）" />
+        <PanelHeading title="训练课比值" subtitle="九类训练课次占比（当前页面时间范围）" />
         <TrainingContentChart records={analysisRecords} />
       </article>
     ),
