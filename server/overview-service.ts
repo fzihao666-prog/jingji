@@ -1,6 +1,8 @@
 import { db } from './db.ts';
+import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
+import { waterLandTrainingCategory } from '../shared/training-content-category.ts';
 
-const zones = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'] as const;
+const zones = STRENGTH_INTENSITY_ZONES;
 
 type SessionRow = {
   id: number;
@@ -160,6 +162,45 @@ function round(value: number | null, digits = 2) {
   return value === null ? null : Number(value.toFixed(digits));
 }
 
+function emptyTrainingVolume() {
+  return {
+    days: [], totalDurationMin: null, totalDistanceKm: null,
+    averageDurationMin: null, averageDistanceKm: null,
+    durationDayCount: 0, distanceDayCount: 0
+  };
+}
+
+function aggregateTrainingVolume(sessions: SessionRow[]) {
+  const byDate = new Map<string, { date: string; durationMin: number; distanceKm: number; durationCount: number; distanceCount: number; sessionCount: number }>();
+  for (const session of sessions) {
+    if (session.sessionDemo) continue;
+    const row = byDate.get(session.date) || { date: session.date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0, sessionCount: 0 };
+    row.sessionCount += 1;
+    if (session.durationReported) { row.durationMin += session.durationMin; row.durationCount += 1; }
+    if (session.distanceReported) { row.distanceKm += session.distanceKm; row.distanceCount += 1; }
+    byDate.set(session.date, row);
+  }
+  const days = [...byDate.values()].map((row) => ({
+    date: row.date,
+    durationMin: row.durationCount ? round(row.durationMin, 1) : null,
+    distanceKm: row.distanceCount ? round(row.distanceKm, 1) : null,
+    sessionCount: row.sessionCount
+  }));
+  const durationDays = days.filter((row) => row.durationMin !== null);
+  const distanceDays = days.filter((row) => row.distanceKm !== null);
+  const totalDurationMin = durationDays.length ? round(durationDays.reduce((sum, row) => sum + Number(row.durationMin), 0), 1) : null;
+  const totalDistanceKm = distanceDays.length ? round(distanceDays.reduce((sum, row) => sum + Number(row.distanceKm), 0), 1) : null;
+  return {
+    days,
+    totalDurationMin,
+    totalDistanceKm,
+    averageDurationMin: totalDurationMin === null ? null : round(totalDurationMin / durationDays.length, 1),
+    averageDistanceKm: totalDistanceKm === null ? null : round(totalDistanceKm / distanceDays.length, 1),
+    durationDayCount: durationDays.length,
+    distanceDayCount: distanceDays.length
+  };
+}
+
 function ageAt(birthDate: string | null, date: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T00:00:00Z`);
@@ -174,7 +215,9 @@ function ageAt(birthDate: string | null, date: string) {
 
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
-    records: [], strengthTests: [], measurements: [], profiles: [], injuries: [],
+    records: [], trainingVolume: emptyTrainingVolume(), intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
+    waterLandLoad: { waterLoad: 0, landLoad: 0, totalLoad: 0, waterPercentage: 0, landPercentage: 0, unclassifiedLoad: 0 },
+    strengthTests: [], measurements: [], profiles: [], injuries: [],
     meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
   const placeholders = input.athleteIds.map(() => '?').join(',');
@@ -240,6 +283,35 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       strokeRateSpm: row.strokeRateSpm
     }
   }));
+  const intensityTotalDuration = sessions
+    .filter((row) => zones.includes(row.intensityZone as typeof zones[number]) && Boolean(row.durationReported))
+    .reduce((sum, row) => sum + row.durationMin, 0);
+  const intensityDistribution = zones.map((zone) => {
+    const rows = sessions.filter((row) => row.intensityZone === zone && Boolean(row.durationReported));
+    const durationMin = rows.reduce((sum, row) => sum + row.durationMin, 0);
+    return {
+      zone,
+      durationMin: round(durationMin, 1),
+      sessionCount: rows.length,
+      percentage: intensityTotalDuration ? round(durationMin / intensityTotalDuration * 100, 2) : 0
+    };
+  });
+  const trainingVolume = aggregateTrainingVolume(sessions);
+  const waterLandLoads = sessions.reduce((totals, row) => {
+    const load = Number.isFinite(row.srpe) ? row.srpe : 0;
+    const category = waterLandTrainingCategory(row);
+    totals[category] += load;
+    return totals;
+  }, { water: 0, land: 0, unclassified: 0 });
+  const waterLandTotal = waterLandLoads.water + waterLandLoads.land;
+  const waterLandLoad = {
+    waterLoad: round(waterLandLoads.water, 1),
+    landLoad: round(waterLandLoads.land, 1),
+    totalLoad: round(waterLandTotal, 1),
+    waterPercentage: waterLandTotal ? round(waterLandLoads.water / waterLandTotal * 100, 2) : 0,
+    landPercentage: waterLandTotal ? round(waterLandLoads.land / waterLandTotal * 100, 2) : 0,
+    unclassifiedLoad: round(waterLandLoads.unclassified, 1)
+  };
 
   const profileRows = db.prepare(`
     SELECT a.id AS athleteId, a.name AS athleteName, a.project, a.team, a.gender,
@@ -469,6 +541,9 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
 
   return {
     records,
+    trainingVolume,
+    intensityDistribution,
+    waterLandLoad,
     strengthTests,
     measurements,
     profiles,

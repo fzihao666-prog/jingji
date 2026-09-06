@@ -12,7 +12,7 @@ import { ROLE_META } from '../../shared/access';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
   FmsTeamChart, InjuryAssessmentChart,
-  TrainingContentChart, TrainingLoadComparisonChart, TrainingVolumeChart, trainingLoadCategory
+  TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, WaterLandLoadRatioChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
 import { buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics } from '../overview-analytics';
@@ -71,7 +71,7 @@ const defaultOrder = [
   'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
   'athlete-profile', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'injury-analysis',
-  'training-load-analysis', 'training-volume', 'training-content',
+  'training-load-analysis', 'training-content', 'training-intensity', 'water-land-load',
   'recovery'
 ];
 
@@ -87,9 +87,10 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'fms-analysis': { title: 'FMS测试分析', size: 'half' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
-  'training-load-analysis': { title: '体能与专项训练负荷分析', size: 'full' },
-  'training-volume': { title: '训练量统计', size: 'wide' },
-  'training-content': { title: '训练内容统计', size: 'half' }
+  'training-load-analysis': { title: '训练量统计', size: 'full' },
+  'training-content': { title: '训练课比值', size: 'half' },
+  'training-intensity': { title: '训练强度百分比', size: 'half' },
+  'water-land-load': { title: '水陆训练负荷比值', size: 'half' }
 };
 
 function normalizeOverviewLayout(stored: Partial<OverviewLayoutState> | null | undefined): OverviewLayoutState {
@@ -542,21 +543,26 @@ export function OverviewPage(props: Props) {
     ),
     'training-load-analysis': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="体能与专项训练负荷分析" subtitle="体能负荷 · 专项负荷 · 对比分析（日/周/月/阶段）" />
-        <TrainingLoadComparisonChart records={analysisRecords} />
-        <p className="analysis-method-note">体能训练自动关联力量、功能、跑步、恢复和测功仪记录；专项训练关联水上、竞速及项目技术训练。</p>
-      </article>
-    ),
-    'training-volume': (
-      <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="训练量统计" subtitle="训练时长 · 训练公里数（按天汇总；日/周/月/阶段）" />
-        <TrainingVolumeChart records={analysisRecords} />
+        <PanelHeading title="训练量统计" subtitle="训练时长 · 公里数（按日期汇总）" />
+        <TrainingVolumeChart data={overview?.trainingVolume || { days: [], totalDurationMin: null, totalDistanceKm: null, averageDurationMin: null, averageDistanceKm: null, durationDayCount: 0, distanceDayCount: 0 }} />
       </article>
     ),
     'training-content': (
       <article className="panel professional-panel analysis-feature-panel">
-        <PanelHeading title="训练内容统计图" subtitle="内容结构（日/周/月/阶段）" />
+        <PanelHeading title="训练课比值" subtitle="九类训练课次占比（日/周/月/阶段）" />
         <TrainingContentChart records={analysisRecords} />
+      </article>
+    ),
+    'training-intensity': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading title="训练强度百分比" subtitle="U3 · U2 · U1 · AT · TPT · AN · ATP（训练时长占比）" />
+        <TrainingIntensityChart data={overview?.intensityDistribution || []} />
+      </article>
+    ),
+    'water-land-load': (
+      <article className="panel professional-panel analysis-feature-panel">
+        <PanelHeading title="水陆训练负荷比值" subtitle="水上训练 · 陆上训练（SRPE 训练负荷占比）" />
+        <WaterLandLoadRatioChart data={overview?.waterLandLoad || { waterLoad: 0, landLoad: 0, totalLoad: 0, waterPercentage: 0, landPercentage: 0, unclassifiedLoad: 0 }} />
       </article>
     )
   };

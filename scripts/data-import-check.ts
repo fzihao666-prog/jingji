@@ -5,12 +5,17 @@ import * as XLSX from '@e965/xlsx';
 import { db } from '../server/db.ts';
 import { analyzeDataImport, commitDataImport, updateDataImportAthleteCandidates } from '../server/data-import.ts';
 import { buildOverviewPayload } from '../server/overview-service.ts';
+import { waterLandTrainingCategory } from '../shared/training-content-category.ts';
 
 const databasePath = process.env.DATABASE_PATH;
 assert(databasePath, 'DATABASE_PATH is required');
 
 const owner = db.prepare("SELECT id FROM users WHERE username = 'coach01'").get() as { id: number } | undefined;
 assert(owner, 'seed user is required');
+assert.equal(waterLandTrainingCategory({ trainingType: '专项训练', content: '水上划行' }), 'water');
+assert.equal(waterLandTrainingCategory({ trainingType: '体能训练', structureType: '最大力量', content: '深蹲' }), 'land');
+assert.equal(waterLandTrainingCategory({ content: '其它' }), 'land');
+assert.equal(waterLandTrainingCategory({ trainingType: '技术课', structureType: '待确认', content: '未知训练' }), 'unclassified');
 const demoVolumeAthleteCount = db.prepare(`
   SELECT COUNT(DISTINCT athlete_id) AS count FROM training_sessions
   WHERE source = 'training_volume_demo' AND quality = 'estimated'
@@ -115,6 +120,14 @@ const overviewAfterTemplateImport = buildOverviewPayload({ athleteIds: [template
 assert.equal(overviewAfterTemplateImport.profiles.length, 1, '总览应包含已导入运动员档案');
 assert.notEqual(overviewAfterTemplateImport.profiles[0]?.age, null, '总览年龄结构需要读取导入出生日期');
 assert.equal(overviewAfterTemplateImport.profiles[0]?.startSportDate, '2012-01-01', '运动经验结构需要读取导入开始运动日期');
+assert.deepEqual(overviewAfterTemplateImport.trainingVolume.days, [
+  { date: '2026-08-01', durationMin: 150, distanceKm: 28, sessionCount: 2 },
+  { date: '2026-08-02', durationMin: 0, distanceKm: null, sessionCount: 1 }
+], '训练量统计应按日期累加时长和公里数，并保留缺失距离');
+assert.equal(overviewAfterTemplateImport.trainingVolume.totalDurationMin, 150, '累计训练时长应包含真实填报的 0');
+assert.equal(overviewAfterTemplateImport.trainingVolume.totalDistanceKm, 28, '累计公里数不应把空值按 0 处理');
+assert.equal(overviewAfterTemplateImport.trainingVolume.averageDurationMin, 75, '日均训练时长应按有时长填报的训练日计算');
+assert.equal(overviewAfterTemplateImport.trainingVolume.averageDistanceKm, 28, '日均公里数应按有公里数填报的训练日计算');
 const firstDaySessions = overviewAfterTemplateImport.records.filter((item) => item.date === '2026-08-01');
 assert.equal(firstDaySessions.reduce((sum, item) => sum + item.durationMin, 0), 150, '同日多课次训练时长应正确累加');
 assert.equal(firstDaySessions.reduce((sum, item) => sum + item.distanceKm, 0), 28, '同日多课次训练距离应正确累加');
@@ -128,6 +141,28 @@ assert.deepEqual(
   overviewAfterTemplateImport.records.map((item) => [item.date, item.durationMin, item.distanceKm, item.durationReported, item.distanceReported]),
   '重新读取数据库后训练量统计数据应保持一致'
 );
+const insertIntensitySession = db.prepare(`INSERT INTO training_sessions (
+  athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content,
+  duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, source, quality, is_demo, created_by
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, 0, 5, ?, 0, 'test', 'valid', 0, ?)`);
+insertIntensitySession.run(templateAthlete.id, '2026-08-10', 1, '专项训练', '专项训练', 'U3', '强度统计校验', 30, 0, owner.id);
+insertIntensitySession.run(templateAthlete.id, '2026-08-10', 2, '专项训练', '专项训练', 'U2', '强度统计校验', 60, 0, owner.id);
+insertIntensitySession.run(templateAthlete.id, '2026-08-10', 3, '专项训练', '专项训练', 'ATP', '强度统计校验', 10, 0, owner.id);
+const intensityOverview = buildOverviewPayload({ athleteIds: [templateAthlete.id], from: '2026-08-10', to: '2026-08-10', project: '赛艇', individual: false, period: 'day' });
+assert.deepEqual(intensityOverview.intensityDistribution.map((item) => item.zone), ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'], '训练强度统计必须固定返回七类原始强度区间');
+assert.deepEqual(intensityOverview.intensityDistribution.map((item) => item.durationMin), [30, 60, 0, 0, 0, 0, 10], '训练强度统计必须按已填报训练时长汇总');
+assert.equal(intensityOverview.intensityDistribution.reduce((sum, item) => sum + item.percentage, 0), 100, '有效训练强度占比之和应为 100%');
+insertIntensitySession.run(templateAthlete.id, '2026-08-11', 1, '专项训练', '专项训练', 'U2', '水上划行', 60, 300, owner.id);
+insertIntensitySession.run(templateAthlete.id, '2026-08-11', 2, '体能训练', '最大力量', 'AN', '深蹲', 50, 200, owner.id);
+insertIntensitySession.run(templateAthlete.id, '2026-08-11', 3, '技术课', '待确认', 'U1', '未知训练', 40, 50, owner.id);
+const waterLandOverview = buildOverviewPayload({ athleteIds: [templateAthlete.id], from: '2026-08-11', to: '2026-08-11', project: '赛艇', individual: false, period: 'day' });
+assert.deepEqual(waterLandOverview.waterLandLoad, { waterLoad: 300, landLoad: 200, totalLoad: 500, waterPercentage: 60, landPercentage: 40, unclassifiedLoad: 50 }, '水陆负荷应仅按 SRPE 汇总，未分类负荷不得计入比例');
+insertIntensitySession.run(templateAthlete.id, '2026-08-12', 1, '专项训练', '专项训练', 'U2', '水上划行', 60, 600, owner.id);
+const waterOnlyOverview = buildOverviewPayload({ athleteIds: [templateAthlete.id], from: '2026-08-12', to: '2026-08-12', project: '赛艇', individual: false, period: 'day' });
+assert.deepEqual(waterOnlyOverview.waterLandLoad, { waterLoad: 600, landLoad: 0, totalLoad: 600, waterPercentage: 100, landPercentage: 0, unclassifiedLoad: 0 }, '仅有水上负荷时应展示 100% / 0%');
+const emptyWaterLandOverview = buildOverviewPayload({ athleteIds: [templateAthlete.id], from: '2026-08-13', to: '2026-08-13', project: '赛艇', individual: false, period: 'day' });
+assert.deepEqual(emptyWaterLandOverview.waterLandLoad, { waterLoad: 0, landLoad: 0, totalLoad: 0, waterPercentage: 0, landPercentage: 0, unclassifiedLoad: 0 }, '无训练负荷时应返回完整零值结构');
+assert.deepEqual(emptyWaterLandOverview.trainingVolume, { days: [], totalDurationMin: null, totalDistanceKm: null, averageDurationMin: null, averageDistanceKm: null, durationDayCount: 0, distanceDayCount: 0 }, '无训练记录时训练量统计应返回空值而非虚假 0');
 assert.notEqual(overviewAfterTemplateImport.profiles[0]?.competitiveScore, null, '总览竞技水平需要读取导入竞技状态');
 assert.equal(overviewAfterTemplateImport.measurements.filter((item) => item.domain === 'fms').length, 7, '个人FMS分析需要读取FMS测试工作表导入的七项数据');
 assert.equal(db.prepare("SELECT COUNT(*) AS count FROM test_measurements tm JOIN test_sessions ts ON ts.id=tm.test_session_id WHERE ts.athlete_id=? AND ts.test_type='冠军模型综合评估'").get(templateAthlete.id)?.count, 11, '冠军模型测试工作表需写入正式测试数据');

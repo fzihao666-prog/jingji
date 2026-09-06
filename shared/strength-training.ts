@@ -10,6 +10,21 @@ export type StrengthTrainingEnvironment = typeof STRENGTH_TRAINING_ENVIRONMENTS[
 export const STRENGTH_INTENSITY_ZONES = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'] as const;
 export type StrengthIntensityZone = typeof STRENGTH_INTENSITY_ZONES[number];
 
+export const TRAINING_INTENSITY_META: Record<StrengthIntensityZone, {
+  label: string;
+  strokeRate: string;
+  lactate: string;
+  purpose: string;
+}> = {
+  U3: { label: '低强度有氧恢复', strokeRate: '<18 spm', lactate: '<2.0 mmol/L', purpose: '恢复放松' },
+  U2: { label: '中等强度有氧基础', strokeRate: '16–20 spm', lactate: '1.5–2.5 mmol/L', purpose: '有氧耐力' },
+  U1: { label: '高强度有氧', strokeRate: '20–24 spm', lactate: '2.0–4.0 mmol/L', purpose: '有氧功率' },
+  AT: { label: '无氧阈强度', strokeRate: '24–28 spm', lactate: '3.5–6.0 mmol/L', purpose: '提升乳酸阈' },
+  TPT: { label: '专项耐力', strokeRate: '28–32 spm', lactate: '6.0–12.0 mmol/L', purpose: '比赛节奏' },
+  AN: { label: '无氧爆发冲刺', strokeRate: '>32 spm', lactate: '>12.0 mmol/L', purpose: '起航冲刺' },
+  ATP: { label: 'ATP既有强度区', strokeRate: '待业务确认', lactate: '待业务确认', purpose: '沿用原始强度字段，不自动推导或合并' }
+};
+
 export function isStrengthTrainingCategory(value: unknown): value is StrengthTrainingCategory {
   return STRENGTH_TRAINING_CATEGORIES.includes(value as StrengthTrainingCategory);
 }

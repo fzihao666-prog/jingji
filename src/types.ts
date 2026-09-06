@@ -701,6 +701,34 @@ export type OverviewAthleteProfile = {
 
 export type OverviewPayload = {
   records: TrainingRecord[];
+  trainingVolume: {
+    days: Array<{
+      date: string;
+      durationMin: number | null;
+      distanceKm: number | null;
+      sessionCount: number;
+    }>;
+    totalDurationMin: number | null;
+    totalDistanceKm: number | null;
+    averageDurationMin: number | null;
+    averageDistanceKm: number | null;
+    durationDayCount: number;
+    distanceDayCount: number;
+  };
+  intensityDistribution: Array<{
+    zone: StrengthIntensityZone;
+    durationMin: number;
+    sessionCount: number;
+    percentage: number;
+  }>;
+  waterLandLoad: {
+    waterLoad: number;
+    landLoad: number;
+    totalLoad: number;
+    waterPercentage: number;
+    landPercentage: number;
+    unclassifiedLoad: number;
+  };
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];
   profiles: OverviewAthleteProfile[];

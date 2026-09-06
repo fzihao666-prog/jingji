@@ -5,12 +5,14 @@ import {
 } from 'recharts';
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
 import { formatNumber, percentage } from '../utils';
+import { TRAINING_CONTENT_CATEGORIES, trainingContentCategory } from '../../shared/training-content-category';
+import { STRENGTH_INTENSITY_ZONES, TRAINING_INTENSITY_META } from '../../shared/strength-training';
 
 type Period = 'day' | 'week' | 'month' | 'stage';
 const PERIODS: Array<{ key: Period; label: string }> = [
   { key: 'day', label: '日' }, { key: 'week', label: '周' }, { key: 'month', label: '月' }, { key: 'stage', label: '阶段' }
 ];
-const colors = ['#0b7f7a', '#25aa9d', '#73c5ab', '#edaa32', '#df634d', '#66758a', '#8b6eb0'];
+const colors = ['#0b7f7a', '#25aa9d', '#73c5ab', '#edaa32', '#df634d', '#66758a', '#8b6eb0', '#3d7db7', '#9a7f66'];
 
 function dateMinus(date: string, days: number) {
   const value = new Date(`${date}T12:00:00Z`);
@@ -134,41 +136,109 @@ export function TrainingLoadComparisonChart({ records }: { records: TrainingReco
   </div>;
 }
 
-export function TrainingVolumeChart({ records }: { records: TrainingRecord[] }) {
-  const range = usePeriodRecords(records);
-  const data = useMemo(() => {
-    const rows = new Map<string, { label: string; duration: number; distance: number; durationCount: number; distanceCount: number; sessions: number }>();
-    for (const record of range.filtered) {
-      const row = rows.get(record.date) || { label: record.date.slice(5).replace('-', '/'), duration: 0, distance: 0, durationCount: 0, distanceCount: 0, sessions: 0 };
-      row.sessions += 1;
-      if (record.durationReported) { row.duration += record.durationMin; row.durationCount += 1; }
-      if (record.distanceReported) { row.distance += record.distanceKm; row.distanceCount += 1; }
-      rows.set(record.date, row);
-    }
-    return [...rows.values()].map((row) => ({
-      ...row,
-      duration: row.durationCount ? row.duration : null,
-      distance: row.distanceCount ? Number(row.distance.toFixed(1)) : null
-    }));
-  }, [range.filtered]);
-  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按天累加训练时长与训练公里数；空白数据不按 0 统计</span><PeriodTabs control={range} /></div>
-    <div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 10, right: 10, left: -12, bottom: 0 }}>
-      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} minTickGap={20}/><YAxis yAxisId="time" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/><YAxis yAxisId="distance" orientation="right" tick={{ fontSize: 9 }} axisLine={false} tickLine={false}/>
-      <Tooltip formatter={(value, name) => [`${formatNumber(Number(value), name === '训练公里数' ? 1 : 0)}${name === '训练时长' ? ' min' : ' km'}`, name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:10}}/>
-      <Bar yAxisId="time" dataKey="duration" name="训练时长" fill="#79b9c1" fillOpacity={.82} radius={[5,5,0,0]} maxBarSize={28}/>
-      <Line yAxisId="distance" type="monotone" dataKey="distance" name="训练公里数" stroke="#0b4d59" strokeWidth={3} dot={{r:3,fill:'#fff',stroke:'#0b4d59',strokeWidth:2}} activeDot={{r:5,fill:'#18a092',stroke:'#fff',strokeWidth:2}} connectNulls />
-    </ComposedChart></ResponsiveContainer></div></div>;
+type TrainingVolume = OverviewPayload['trainingVolume'];
+
+export function TrainingVolumeChart({ data }: { data: TrainingVolume }) {
+  const chartData = data.days.map((row) => ({ ...row, label: row.date.slice(5).replace('-', '/') }));
+  const value = (number: number | null, digits = 1) => number === null ? '—' : formatNumber(number, digits);
+  const hasData = data.totalDurationMin !== null || data.totalDistanceKm !== null;
+  return <div className="analysis-chart-module training-volume-module">
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按日期累计训练时长与公里数；统计范围沿用页面顶部筛选，空白数据不按 0 处理</span></div>
+    <div className="training-volume-kpis">
+      <article><span>累计训练时长</span><strong>{data.totalDurationMin === null ? '—' : value(data.totalDurationMin / 60)}<small>{data.totalDurationMin === null ? '' : ' h'}</small></strong></article>
+      <article><span>累计公里数</span><strong>{value(data.totalDistanceKm)}<small>{data.totalDistanceKm === null ? '' : ' km'}</small></strong></article>
+      <article><span>日均训练时长</span><strong>{data.averageDurationMin === null ? '—' : value(data.averageDurationMin / 60)}<small>{data.averageDurationMin === null ? '' : ' h'}</small><em>{data.durationDayCount ? `${data.durationDayCount} 个有效训练日` : ''}</em></strong></article>
+      <article><span>日均公里数</span><strong>{value(data.averageDistanceKm)}<small>{data.averageDistanceKm === null ? '' : ' km'}</small><em>{data.distanceDayCount ? `${data.distanceDayCount} 个有效训练日` : ''}</em></strong></article>
+    </div>
+    <div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={chartData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
+      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} minTickGap={20}/><YAxis yAxisId="time" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="distance" orientation="right" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/>
+      <Tooltip formatter={(number, name) => [`${formatNumber(Number(number), name === '公里数' ? 1 : 0)} ${name === '公里数' ? 'km' : 'min'}`, name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:10}}/>
+      <Bar yAxisId="time" dataKey="durationMin" name="训练时长" fill="#69aebb" fillOpacity={.86} radius={[5,5,0,0]} maxBarSize={30}/>
+      <Line yAxisId="distance" type="monotone" dataKey="distanceKm" name="公里数" stroke="#0b4d59" strokeWidth={3} dot={{r:3,fill:'#fff',stroke:'#0b4d59',strokeWidth:2}} activeDot={{r:5,fill:'#18a092',stroke:'#fff',strokeWidth:2}} />
+    </ComposedChart></ResponsiveContainer></div>
+    {!hasData && <p className="analysis-empty-note">暂无训练量数据</p>}
+  </div>;
 }
 
 export function TrainingContentChart({ records }: { records: TrainingRecord[] }) {
   const range = usePeriodRecords(records);
   const data = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const row of range.filtered) { const name = row.structureType || row.trainingType || '其他'; map.set(name, (map.get(name) || 0) + row.durationMin); }
-    return [...map].map(([name, value], index) => ({ name, value, fill: colors[index % colors.length] })).sort((a,b)=>b.value-a.value).slice(0,7);
+    const countByCategory = new Map(TRAINING_CONTENT_CATEGORIES.map((name) => [name, 0]));
+    for (const row of range.filtered) {
+      const category = trainingContentCategory(row);
+      countByCategory.set(category, (countByCategory.get(category) || 0) + 1);
+    }
+    return TRAINING_CONTENT_CATEGORIES.map((name, index) => ({ name, value: countByCategory.get(name) || 0, fill: colors[index % colors.length] }));
   }, [range.filtered]);
   const total = data.reduce((sum,row)=>sum+row.value,0);
-  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按训练内容时长构成</span><PeriodTabs control={range}/></div><div className="content-chart-layout"><div className="content-pie"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2}>{data.map(row=><Cell key={row.name} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value))} min`,name]}/></PieChart></ResponsiveContainer><div><strong>{formatNumber(total/60,1)}</strong><span>小时</span></div></div><div className="content-legend">{data.map(row=><div key={row.name}><i style={{background:row.fill}}/><span>{row.name}</span><strong>{percentage(row.value,total)}%</strong></div>)}</div></div></div>;
+  const chartData = total ? data.filter((row) => row.value > 0) : [{ name: '暂无训练课次', value: 1, fill: '#dce7e9' }];
+  return <div className="analysis-chart-module"><div className="analysis-chart-toolbar"><span className="analysis-caption">按训练课次统计；每条课次仅归入一个类别</span><PeriodTabs control={range}/></div><div className="content-chart-layout training-ratio-layout"><div className="content-pie training-ratio-pie"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{ value: 1 }]} dataKey="value" innerRadius={56} outerRadius={82} fill="#edf3f4" stroke="none"/><Pie data={chartData} dataKey="value" nameKey="name" innerRadius={57} outerRadius={78} paddingAngle={total ? 2 : 0} cornerRadius={5}>{chartData.map(row=><Cell key={row.name} fill={row.fill}/>)}</Pie><Tooltip formatter={(value,name)=>[`${formatNumber(Number(value))} 课 · ${percentage(Number(value), total)}%`,name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/></PieChart></ResponsiveContainer><div><strong>{formatNumber(total)}</strong><span>总课次</span></div></div><div className="content-legend training-ratio-legend">{data.map(row=><div key={row.name}><i style={{background:row.fill}}/><span>{row.name}</span><b>{formatNumber(row.value)}课</b><strong>{percentage(row.value,total)}%</strong></div>)}</div></div>{!total && <p className="analysis-empty-note">当前筛选条件下无训练记录</p>}</div>;
+}
+
+type IntensityDistribution = OverviewPayload['intensityDistribution'];
+type WaterLandLoad = OverviewPayload['waterLandLoad'];
+
+export function TrainingIntensityChart({ data }: { data: IntensityDistribution }) {
+  const normalizedData = STRENGTH_INTENSITY_ZONES.map((zone) => data.find((row) => row.zone === zone) || ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 }));
+  const totalDuration = normalizedData.reduce((sum, row) => sum + row.durationMin, 0);
+  const chartData = totalDuration ? normalizedData.filter((row) => row.durationMin > 0) : [{ zone: '暂无训练强度数据', durationMin: 1, sessionCount: 0, percentage: 0 }];
+  return <div className="analysis-chart-module">
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按原始强度区间汇总训练时长；不根据桨频或乳酸重新推导</span></div>
+    <div className="content-chart-layout intensity-ratio-layout">
+      <div className="content-pie intensity-ratio-pie">
+        <ResponsiveContainer width="100%" height="100%"><PieChart>
+          <Pie data={[{ durationMin: 1 }]} dataKey="durationMin" innerRadius={56} outerRadius={82} fill="#edf3f4" stroke="none" />
+          <Pie data={chartData} dataKey="durationMin" nameKey="zone" innerRadius={57} outerRadius={78} paddingAngle={totalDuration ? 2 : 0} cornerRadius={5}>
+            {chartData.map((row, index) => <Cell key={row.zone} fill={colors[index % colors.length]} />)}
+          </Pie>
+          <Tooltip content={({ active, payload }) => {
+            const row = active ? payload?.[0]?.payload as IntensityDistribution[number] | undefined : undefined;
+            if (!row || !TRAINING_INTENSITY_META[row.zone]) return null;
+            const meta = TRAINING_INTENSITY_META[row.zone];
+            return <div className="intensity-tooltip"><strong>{row.zone} · {meta.label}</strong><span>训练量：{formatNumber(row.durationMin, 1)} 分钟</span><span>占比：{formatNumber(row.percentage, 1)}%</span><small>桨频：{meta.strokeRate} · 血乳酸：{meta.lactate}</small><em>{meta.purpose}</em></div>;
+          }} />
+        </PieChart></ResponsiveContainer>
+        <div><strong>{formatNumber(totalDuration / 60, 1)}</strong><span>总小时</span></div>
+      </div>
+      <div className="content-legend intensity-ratio-legend">{normalizedData.map((row, index) => {
+        const meta = TRAINING_INTENSITY_META[row.zone];
+        return <div key={row.zone} title={`${meta.label}｜桨频：${meta.strokeRate}｜血乳酸：${meta.lactate}｜目的：${meta.purpose}`}><i style={{ background: colors[index % colors.length] }} /><span><b>{row.zone}</b>{meta.label}</span><em>{formatNumber(row.durationMin, 1)} 分</em><strong>{formatNumber(row.percentage, 1)}%</strong></div>;
+      })}</div>
+    </div>
+    {!totalDuration && <p className="analysis-empty-note">当前筛选条件下无有效训练强度数据</p>}
+  </div>;
+}
+
+export function WaterLandLoadRatioChart({ data }: { data: WaterLandLoad }) {
+  const [active, setActive] = useState<'water' | 'land' | null>(null);
+  const hasLoad = data.totalLoad > 0;
+  const segments = [
+    { key: 'water' as const, label: '水上训练', load: data.waterLoad, percentage: data.waterPercentage },
+    { key: 'land' as const, label: '陆上训练', load: data.landLoad, percentage: data.landPercentage }
+  ];
+  const selected = segments.find((item) => item.key === active);
+  return <div className="analysis-chart-module water-land-ratio-module">
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按 SRPE 训练负荷汇总；水上与陆上负荷占比</span></div>
+    <div className={`water-land-ratio-bar${hasLoad ? '' : ' is-empty'}`} role="img" aria-label={`水上训练负荷 ${formatNumber(data.waterLoad)} AU，陆上训练负荷 ${formatNumber(data.landLoad)} AU`}>
+      {hasLoad ? segments.map((item) => item.percentage > 0 && <div
+        key={item.key}
+        className={`water-land-ratio-segment ${item.key}`}
+        style={{ flexBasis: `${item.percentage}%` }}
+        role="button"
+        tabIndex={0}
+        onMouseEnter={() => setActive(item.key)}
+        onMouseLeave={() => setActive(null)}
+        onFocus={() => setActive(item.key)}
+        onBlur={() => setActive(null)}
+      ><strong>{formatNumber(item.percentage, 1)}%</strong><span>{item.key === 'water' ? '水上' : '陆上'}</span></div>) : <span>暂无有效训练负荷数据</span>}
+    </div>
+    <div className="water-land-ratio-summary">{segments.map((item) => <article key={item.key} className={item.key}>
+      <span>{item.label}</span><strong>{formatNumber(item.percentage, 1)}<small>%</small></strong><em>{formatNumber(item.load, 1)} AU</em>
+    </article>)}<aside><span>总训练负荷</span><strong>{formatNumber(data.totalLoad, 1)}<small> AU</small></strong></aside></div>
+    {selected && <div className={`water-land-ratio-tooltip ${selected.key}`}><strong>{selected.label}</strong><span>训练负荷：{formatNumber(selected.load, 1)} AU</span><span>占比：{formatNumber(selected.percentage, 1)}%</span></div>}
+    {data.unclassifiedLoad > 0 && <p className="analysis-method-note">未分类训练负荷：{formatNumber(data.unclassifiedLoad, 1)} AU，未计入水陆比例。</p>}
+    {!hasLoad && <p className="analysis-empty-note">当前筛选条件下无有效训练负荷数据</p>}
+  </div>;
 }
 
 export function FmsTeamChart({ measurements }: { measurements: OverviewMeasurement[] }) {
