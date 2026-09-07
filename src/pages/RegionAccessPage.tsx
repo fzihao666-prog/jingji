@@ -17,6 +17,7 @@ import {
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { EditableName } from '../components/EditableName';
+import { PageContainer, PageHeader } from '../components/PageLayout';
 import type {
   AccessAccount,
   AccessPayload,
@@ -249,14 +250,8 @@ export function RegionAccessPage({ user }: { user: User }) {
   const areaCount = new Set(payload?.accounts.flatMap((account) => account.areas.map(areaLabel))).size;
 
   return (
-    <div className="page-content access-center-page">
-      <header className="page-heading compact-heading access-heading">
-        <div>
-          <p className="eyebrow">ACCOUNT AUTHORITY</p>
-          <h1>账号权限</h1>
-        </div>
-        <div className="authority-formula"><Fingerprint size={18} /><span>角色</span><i>×</i><span>行政区域</span><i>×</i><span>项目 / 队伍</span></div>
-      </header>
+    <PageContainer className="access-center-page">
+      <PageHeader variant="compact" className="access-heading" eyebrow="ACCOUNT AUTHORITY" title="账号权限" actions={<div className="authority-formula"><Fingerprint size={18} /><span>角色</span><i>×</i><span>行政区域</span><i>×</i><span>项目 / 队伍</span></div>}/>
 
       <section className="access-summary">
         <div><UsersRound /><span>可管理账号<strong>{payload?.accounts.length || 0}</strong></span></div>
@@ -406,6 +401,6 @@ export function RegionAccessPage({ user }: { user: User }) {
           </div>
         </section>
       )}
-    </div>
+    </PageContainer>
   );
 }

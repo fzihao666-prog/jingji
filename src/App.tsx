@@ -154,9 +154,10 @@ export default function App() {
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
         {page.startsWith('special-') && <SpecialTestsPage {...shared} section={page as SpecialPageKey} onSectionChange={setPage} />}
-        {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
-        {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="import" onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'data-import-history' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="history" onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage user={user} />}
         {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}
         {page === 'personal' && <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />}

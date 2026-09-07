@@ -1,8 +1,6 @@
 .data-import-page {
   min-height: 100%;
-  padding: 28px 30px 48px;
   color: #12303b;
-  background: #f4f7f7;
 }
 .data-import-hero {
   min-height: 142px;
@@ -23,16 +21,6 @@
     800 10px Bahnschrift,
     sans-serif;
   letter-spacing: 0.18em;
-}
-.data-import-hero h1 {
-  margin: 5px 0 7px;
-  font-size: 25px;
-}
-.data-import-hero p {
-  max-width: 720px;
-  color: #c5dddf;
-  font-size: 11px;
-  line-height: 1.8;
 }
 .data-import-safety {
   min-width: 255px;
@@ -68,6 +56,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(330px, 0.85fr);
   gap: 18px;
+}
+.data-import-grid.history-only {
+  grid-template-columns: minmax(0, 1fr);
 }
 .data-import-upload-card,
 .data-import-history-card,
@@ -625,9 +616,6 @@
   }
 }
 @media (max-width: 720px) {
-  .data-import-page {
-    padding: 14px 12px 34px;
-  }
   .data-import-hero {
     padding: 20px;
     align-items: flex-start;

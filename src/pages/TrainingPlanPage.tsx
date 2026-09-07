@@ -24,6 +24,7 @@ import {
   StrengthPlanCategoryTabs
 } from '../components/StrengthTrainingInsights';
 import type { StrengthPageKey } from '../components/AppShell';
+import { ContentState, FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
 import {
   STRENGTH_BODY_POSITIONS,
   STRENGTH_TRAINING_CATEGORIES,
@@ -53,6 +54,7 @@ type Props = {
   from: string;
   to: string;
   initialPlanId?: number | null;
+  onSectionChange: (section: StrengthPageKey) => void;
   onChanged: () => void;
 };
 
@@ -317,12 +319,12 @@ export function TrainingPlanPage(props: Props) {
     if (props.section !== 'strength-records') return sorted;
     return recordDate ? sorted.filter((session) => session.trainingDate === recordDate) : sorted.slice(0, 10);
   }, [filteredSessions, props.section, recordDate]);
-  const pageMeta = {
-    'strength-overview': ['体能总览', '快速判断运动员最近练得怎么样，优先查看训练负荷与完成情况。'],
-    'strength-plan': ['训练安排', '制定并管理五类体能训练处方，明确动作、负荷、强度与时间。'],
-    'strength-records': ['训练记录', '核对每次体能训练的实际完成情况。'],
-    'strength-analysis': ['训练分析', '分析训练量、强度结构、水陆比例与训练课构成。'],
-    'strength-assessment': ['体能评估', '通过周期测试判断运动员能力是否进步。']
+  const pageTitle = {
+    'strength-overview': '体能分析',
+    'strength-plan': '训练安排',
+    'strength-records': '训练记录',
+    'strength-analysis': '体能分析',
+    'strength-assessment': '体能分析'
   }[props.section];
   const showLocalFilters = ['strength-plan', 'strength-records', 'strength-analysis'].includes(props.section);
   const overviewStats = useMemo(() => {
@@ -357,26 +359,32 @@ export function TrainingPlanPage(props: Props) {
     };
   }), [activeWeek, allSets, data.endDate, data.exercises, data.startDate, weekKeys]);
 
-  if (!props.athletes.length) return <div className="page-content professional-overview strength-workbench"><section className="strength-empty"><Dumbbell size={34} /><strong>当前项目没有可统计的运动员</strong><span>添加运动员后，体能训练页面会自动汇总全队数据。</span></section></div>;
+  if (!props.athletes.length) return <PageContainer className="professional-overview strength-workbench"><ContentState kind="empty" className="strength-empty" icon={<Dumbbell size={34} />} title="当前项目没有可统计的运动员" description="添加运动员后，体能训练页面会自动汇总全队数据。"/></PageContainer>;
 
   return (
-    <div className="page-content professional-overview strength-workbench">
-      <header className="page-heading overview-page-heading strength-page-head">
-        <div className="strength-title"><span>STRENGTH TRAINING</span><h1>{pageMeta[0]}</h1><p>{pageMeta[1]}</p></div>
-        <div className="strength-command-actions">
+    <PageContainer className="professional-overview strength-workbench">
+      <PageHeader variant="dashboard" className="overview-page-heading strength-page-head" eyebrow="STRENGTH TRAINING" title={pageTitle} actions={<div className="strength-command-actions">
           {canEdit && props.section === 'strength-plan' && <button className="strength-button save" disabled={busy === 'save'} onClick={save}>{busy === 'save' ? <LoaderCircle className="spin" size={17} /> : <Save size={17} />}保存方案</button>}
-        </div>
-      </header>
+        </div>}/>
 
-      {showLocalFilters && <section className="strength-filter-bar" aria-label="体能训练内容筛选">
+      {['strength-overview', 'strength-analysis', 'strength-assessment'].includes(props.section) && <nav className="strength-category-tabs" aria-label="体能分析视图">
+        {([
+          ['strength-overview', '训练总览'],
+          ['strength-analysis', '训练分析'],
+          ['strength-assessment', '体能评估']
+        ] as Array<[StrengthPageKey, string]>).map(([key, label]) => <button key={key} className={props.section === key ? 'active' : ''} onClick={() => props.onSectionChange(key)}>{label}</button>)}
+      </nav>}
+
+      {showLocalFilters && <FilterBar className="strength-filter-bar" label="体能训练内容筛选" actions={
+        <button className="strength-filter-reset" onClick={() => { setCategoryFilter('全部'); setBodyPosition('全部'); }} title="重置训练类型和身体位置"><RotateCcw size={15} /><span>重置</span></button>
+      }>
         <div className="strength-filter-intro"><i><SlidersHorizontal size={18} /></i><div><strong>筛选条件</strong><small>切换后图表与记录同步更新</small></div></div>
         <div className="strength-command-controls">
           {props.section === 'strength-records' && <label className="period-filter"><span><CalendarRange size={13} />统计周期</span><strong>{props.from} — {props.to}</strong></label>}
           {['strength-overview', 'strength-analysis'].includes(props.section) && <label><span><Dumbbell size={13} />训练类型</span><select aria-label="训练类型" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as '全部' | StrengthTrainingCategory)}><option>全部</option>{STRENGTH_TRAINING_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>}
           {!['strength-overview', 'strength-assessment'].includes(props.section) && <label><span><Scale size={13} />身体位置</span><select aria-label="训练身体位置" value={bodyPosition} onChange={(event) => setBodyPosition(event.target.value as '全部' | StrengthBodyPosition)}><option>全部</option>{STRENGTH_BODY_POSITIONS.map((position) => <option key={position}>{position}</option>)}</select></label>}
         </div>
-        <button className="strength-filter-reset" onClick={() => { setCategoryFilter('全部'); setBodyPosition('全部'); }} title="重置训练类型和身体位置"><RotateCcw size={15} /><span>重置</span></button>
-      </section>}
+      </FilterBar>}
 
       <section className="strength-training-context">
         <div className="strength-training-avatar">队</div>
@@ -387,7 +395,7 @@ export function TrainingPlanPage(props: Props) {
       {['strength-plan', 'strength-records'].includes(props.section) && <StrengthPlanCategoryTabs value={activeCategory} onChange={setActiveCategory} />}
       {message && <div className={`strength-inline-message ${message.includes('失败') || message.includes('无权') ? 'error' : 'success'}`}>{message}</div>}
 
-      {loading ? <section className="strength-empty"><LoaderCircle className="spin" size={30} /><strong>正在读取体能训练</strong></section> : props.section === 'strength-overview' ? <StrengthOverviewPanel sessions={filteredSessions} /> : props.section === 'strength-analysis' ? <StrengthAnalysisPanel sessions={filteredSessions} /> : props.section === 'strength-assessment' ? <StrengthAssessmentPanel tests={tests} /> : props.section === 'strength-plan' ? <>
+      {loading ? <ContentState kind="loading" className="strength-empty" icon={<LoaderCircle className="spin" size={30} />} title="正在读取体能训练"/> : props.section === 'strength-overview' ? <StrengthOverviewPanel sessions={filteredSessions} /> : props.section === 'strength-analysis' ? <StrengthAnalysisPanel sessions={filteredSessions} /> : props.section === 'strength-assessment' ? <StrengthAssessmentPanel tests={tests} /> : props.section === 'strength-plan' ? <>
         <section className="strength-plan-meta"><label><span>开始日期</span><input type="date" disabled={!canEdit} value={data.startDate} onChange={(event) => { const startDate = event.target.value; setData((current) => ({ ...current, startDate, endDate: startDate ? addDays(startDate, 27) : '' })); }} /></label><label><span>结束日期</span><input type="date" disabled={!canEdit} min={data.startDate} value={data.endDate} onChange={(event) => updateField('endDate', event.target.value)} /></label><label className="wide"><span>训练名称</span><input disabled={!canEdit} value={data.title} onChange={(event) => updateField('title', event.target.value)} /></label><label className="wide"><span>训练日安排</span><input disabled={!canEdit} value={data.scheduleLabel} onChange={(event) => updateField('scheduleLabel', event.target.value)} /></label><label><span>体重 kg</span><input type="number" step="0.1" disabled={!canEdit} value={data.bodyWeight ?? ''} onChange={(event) => updateField('bodyWeight', nullableNumber(event.target.value))} /></label><label><span>年龄</span><input type="number" disabled={!canEdit} value={data.age ?? ''} onChange={(event) => updateField('age', nullableNumber(event.target.value))} /></label></section>
         <section className="plan-matrix-shell">
           {isAIPlan && <div className="matrix-ai-origin"><strong>{data.sourceType === 'ai_import' ? '历史文件训练' : 'AI 生成训练'}</strong><span>已写入统一训练矩阵，可继续修改并保存</span></div>}
@@ -452,6 +460,6 @@ export function TrainingPlanPage(props: Props) {
       </section>}
 
       {aiOpen && <div className="strength-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAiOpen(false); }}><section className="strength-ai-drawer" role="dialog" aria-modal="true" aria-label="AI生成体能训练"><header><div><span>PLAN DRAFT</span><h2>AI生成计划草稿</h2></div><button className="strength-icon-button" onClick={() => setAiOpen(false)} aria-label="关闭AI生成"><X size={19} /></button></header><div className="strength-ai-scroll"><AITrainingPlanGenerator athlete={athlete} onSaved={async (savedPlanId) => { await refresh(savedPlanId); props.onChanged(); setAiOpen(false); setMessage('AI计划草稿已确认并保存。'); }} /></div></section></div>}
-    </div>
+    </PageContainer>
   );
 }

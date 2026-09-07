@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { RegistrationRequest } from '../types';
 import { EditableName } from '../components/EditableName';
+import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 
@@ -51,11 +52,8 @@ export function AccountsPage() {
   };
 
   return (
-    <div className="page-content accounts-page">
-      <header className="page-heading compact-heading">
-        <h1>账户审核</h1>
-        <span className="pending-count"><Clock3 size={16} />{pending}项待处理</span>
-      </header>
+    <PageContainer className="accounts-page">
+      <PageHeader variant="compact" eyebrow="ACCOUNT REVIEW" title="账户审核" actions={<span className="pending-count"><Clock3 size={16} />{pending}项待处理</span>}/>
 
       <div className="account-filters">
         {(Object.keys(filterLabels) as Filter[]).map((item) => (
@@ -64,7 +62,7 @@ export function AccountsPage() {
       </div>
       {message && <div className="message-banner success">{message}</div>}
 
-      {loading ? <div className="simple-loading">正在加载…</div> : requests.length ? (
+      {loading ? <ContentState kind="loading" title="正在加载账户申请…"/> : requests.length ? (
         <section className="account-list">
           {requests.map((request) => (
             <article key={request.id}>
@@ -82,7 +80,9 @@ export function AccountsPage() {
             </article>
           ))}
         </section>
-      ) : <div className="empty-state account-empty"><UserCheck size={34} /><strong>没有{filterLabels[filter]}申请</strong></div>}
-    </div>
+      ) : (
+        <ContentState kind="empty" className="account-empty" icon={<UserCheck size={34} />} title={`没有${filterLabels[filter]}申请`}/>
+      )}
+    </PageContainer>
   );
 }

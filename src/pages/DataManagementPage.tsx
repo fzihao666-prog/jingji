@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Database, Plus, Save, Tags } from 'lucide-react';
 import { api } from '../api';
 import type { User } from '../types';
+import { PageContainer, PageHeader } from '../components/PageLayout';
+import './DataImportPage.css';
 
 type Props = { user: User };
 type Metric = { code: string; label: string; domain: string; unit: string; direction: string; frequency: string; active: number };
@@ -21,8 +23,8 @@ export function DataManagementPage({ user }: Props) {
     try { await api.saveMetricAlias({ alias, metricCode }); setAlias(''); setMessage('指标别名已保存。'); await load(); }
     catch (error) { setMessage(error instanceof Error ? error.message : '保存失败。'); }
   };
-  return <section className="data-import-page">
-    <header className="data-import-hero"><div><span>DATA MANAGEMENT</span><h1>数据管理</h1><p>统一维护导入暂存、指标字典、字段别名和数据质量标准；所有配置直接使用权威数据表。</p></div></header>
+  return <PageContainer className="data-import-page">
+    <PageHeader className="data-import-hero" eyebrow="DATA MANAGEMENT" title="数据管理"/>
     {message && <p className="data-import-message">{message}</p>}
     <div className="data-import-grid">
       <section className="data-import-upload-card"><div className="data-import-card-heading"><Database size={20}/><div><strong>数据标准</strong><span>训练、测试、来源与质量状态</span></div></div>
@@ -38,5 +40,5 @@ export function DataManagementPage({ user }: Props) {
       <div className="data-import-table-wrap"><table className="data-import-table"><thead><tr><th>编码</th><th>名称</th><th>领域</th><th>单位</th><th>方向</th><th>频率</th><th>状态</th></tr></thead><tbody>{metrics.map((item) => <tr key={item.code}><td>{item.code}</td><td>{item.label}</td><td>{item.domain}</td><td>{item.unit || '—'}</td><td>{item.direction}</td><td>{item.frequency}</td><td>{item.active ? '启用' : '停用'}</td></tr>)}</tbody></table></div>
       <h2>已维护别名</h2><div className="data-import-history-list">{aliases.slice(0, 80).map((item) => <button key={item.alias} type="button"><strong>{item.alias}</strong><small>{item.canonicalLabel} · {item.metricCode} · {item.unit}</small></button>)}</div>
     </section>
-  </section>;
+  </PageContainer>;
 }

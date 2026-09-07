@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import type { SpecialPageKey } from '../components/AppShell';
 import { SpecialPerformancePanel } from '../components/SpecialPerformancePanel';
+import { AppCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
 import type { Project, TrainingRecord } from '../types';
 import './SpecialTrainingPage.css';
 
@@ -37,6 +38,7 @@ const SECTION_META: Record<SpecialPageKey, { group: string; title: string; engli
   'special-rate': { group: '专项指标', title: '桨频分析', english: 'STROKE RATE', description: '观察不同训练区间的桨频效率、稳定性与专项节奏。' },
   'special-heart': { group: '专项指标', title: '心率分析', english: 'HEART RATE', description: '分析心率响应、训练区间与负荷后的恢复能力。' },
   'special-power': { group: '专项指标', title: '功率分析', english: 'POWER OUTPUT', description: '评估平均功率、峰值能力、功率体重比与持续输出。' },
+  'special-records': { group: '训练记录', title: '训练记录', english: 'TRAINING RECORDS', description: '按当前项目和日期范围查看专项训练历史记录。' },
   'special-schedule': { group: '训练执行', title: '训练安排', english: 'TRAINING SCHEDULE', description: '协调技术、战术、体能与恢复训练，形成清晰可执行的周计划。' }
 };
 
@@ -115,7 +117,7 @@ function loadRiskInsights(sessions: Session[]) {
 }
 
 function SectionCard({ title, note, children, className = '' }: { title: string; note?: string; children: ReactNode; className?: string }) {
-  return <section className={`panel professional-panel special-card ${className}`}><header className="panel-heading"><div><h2>{title}</h2></div>{note && <small>{note}</small>}</header>{children}</section>;
+  return <AppCard variant="chart" className={`professional-panel special-card ${className}`}><SectionHeader title={title} description={note}/>{children}</AppCard>;
 }
 function MetricCard({ icon, label, value, unit, change, tone = 'teal' }: { icon: ReactNode; label: string; value: string | number; unit?: string; change: string; tone?: string }) {
   return <div className="overview-card-shell card-size-metric special-metric-shell"><article className={`metric-card special-metric tone-${tone}`}><div className="metric-icon">{icon}</div><div className="metric-copy"><span>{label}</span><strong>{value}<small>{unit}</small></strong><p>{change}</p></div><div className="metric-waterline" aria-hidden="true"/></article></div>;
@@ -178,8 +180,13 @@ export function SpecialTestsPage({ records, project, from, to, loading, section,
   const analysisTabs: Array<{ key: SpecialPageKey; label: string }> = [{ key: 'special-time', label: '时间' }, { key: 'special-distance', label: '距离' }, { key: 'special-load', label: '负荷' }];
   const metricTabs: Array<{ key: SpecialPageKey; label: string }> = [{ key: 'special-rate', label: project === '赛艇' ? '桨频' : '划频' }, { key: 'special-heart', label: '心率' }, { key: 'special-power', label: '功率' }];
   const pageTabs = analysisTabs.some((item) => item.key === section) ? analysisTabs : metricTabs.some((item) => item.key === section) ? metricTabs : [];
-  return <div className="page-content professional-overview special-training-page"><header className="page-heading overview-page-heading special-page-heading"><div className="overview-title-block"><h1>专项训练</h1><p>{meta.description}</p></div></header>
+  return <PageContainer className="professional-overview special-training-page"><PageHeader variant="dashboard" className="overview-page-heading special-page-heading" eyebrow={meta.english} title="专项训练"/>
     {pageTabs.length > 0 && <nav className="special-page-tabs" aria-label={`${meta.group}指标切换`}>{pageTabs.map((item) => <button key={item.key} className={section === item.key ? 'active' : ''} aria-current={section === item.key ? 'page' : undefined} onClick={() => onSectionChange(item.key)}><span>{item.label}</span></button>)}</nav>}
-    {loading ? <div className="special-loading"><RefreshCw className="spin"/>正在同步训练数据…</div> : !sessions.length && section !== 'special-schedule' ? <div className="special-empty"><FileSpreadsheet/><strong>当前日期范围内暂无训练记录</strong><span>可通过全局筛选栏调整日期或项目查看数据。</span></div> : ['special-time','special-distance','special-load'].includes(section) ? <><AnalysisPage section={section} sessions={sessions} days={days} project={project}/>{section === 'special-distance' && <SpecialPerformancePanel project={project} from={from} to={to}/>}</> : ['special-rate','special-heart','special-power'].includes(section) ? <MetricPage section={section} sessions={sessions} days={days} project={project}/> : section === 'special-schedule' ? <SchedulePage sessions={sessions} to={to} project={project}/> : null}
-  </div>;
+    {loading ? <ContentState kind="loading" className="special-loading" icon={<RefreshCw className="spin"/>} title="正在同步训练数据…"/> : !sessions.length && section !== 'special-schedule' ? <ContentState kind="empty" className="special-empty" icon={<FileSpreadsheet/>} title="当前日期范围内暂无训练记录" description="可通过全局筛选栏调整日期或项目查看数据。"/> : ['special-time','special-distance','special-load'].includes(section) ? <><AnalysisPage section={section} sessions={sessions} days={days} project={project}/>{section === 'special-distance' && <SpecialPerformancePanel project={project} from={from} to={to}/>}</> : ['special-rate','special-heart','special-power'].includes(section) ? <MetricPage section={section} sessions={sessions} days={days} project={project}/> : section === 'special-records' ? <RecordPage sessions={sessions}/> : section === 'special-schedule' ? <SchedulePage sessions={sessions} to={to} project={project}/> : null}
+  </PageContainer>;
+}
+
+function RecordPage({ sessions }: { sessions: Session[] }) {
+  const records = [...sessions].sort((left, right) => right.date.localeCompare(left.date) || left.athleteName.localeCompare(right.athleteName));
+  return <div className="special-grid"><SectionCard title="专项训练记录" note={`当前筛选共 ${records.length} 条`} className="span-12"><div className="special-table-wrap"><table><thead><tr><th>日期</th><th>运动员</th><th>训练类型</th><th>训练内容</th><th>时长</th><th>距离</th><th>RPE</th><th>负荷</th></tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.date}</td><td><strong>{record.athleteName}</strong></td><td>{record.type}</td><td>{record.content}</td><td>{round(record.duration)} min</td><td>{round(record.distance)} km</td><td>{record.rpe}</td><td className="table-value">{round(record.load)} AU</td></tr>)}</tbody></table></div></SectionCard></div>;
 }

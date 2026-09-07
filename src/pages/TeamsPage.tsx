@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { PROJECTS, type Project } from '../../shared/projects';
 import { api } from '../api';
 import type { ProjectTeam } from '../types';
+import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 
 export function TeamsPage() {
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
@@ -56,11 +57,8 @@ export function TeamsPage() {
   };
 
   return (
-    <div className="page-content teams-page">
-      <header className="page-heading compact-heading">
-        <div><p className="eyebrow">PROJECT TEAM DIRECTORY</p><h1>队伍管理</h1><p>维护各项目可选队伍，注册申请将实时使用这里的队伍目录。</p></div>
-        <span className="count-chip large"><Layers3 size={17} />{teams.length}支队伍</span>
-      </header>
+    <PageContainer className="teams-page">
+      <PageHeader variant="compact" eyebrow="PROJECT TEAM DIRECTORY" title="队伍管理" actions={<span className="count-chip large"><Layers3 size={17} />{teams.length}支队伍</span>}/>
 
       {canCreateProjects.length > 0 && <form className="team-create-panel" onSubmit={create}>
         <label><span>所属项目</span><select value={project} onChange={(event) => setProject(event.target.value as Project)}>{canCreateProjects.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -69,7 +67,7 @@ export function TeamsPage() {
       </form>}
       {message && <div className="message-banner success">{message}</div>}
 
-      {loading ? <div className="simple-loading">正在加载…</div> : (
+      {loading ? <ContentState kind="loading" title="正在加载队伍目录…"/> : (
         <section className="team-project-grid">
           {PROJECTS.filter((item) => teams.some((team) => team.project === item) || canCreateProjects.includes(item)).map((item) => {
             const projectTeams = teams.filter((team) => team.project === item);
@@ -89,6 +87,6 @@ export function TeamsPage() {
           })}
         </section>
       )}
-    </div>
+    </PageContainer>
   );
 }

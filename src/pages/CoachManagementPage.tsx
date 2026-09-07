@@ -17,6 +17,7 @@ import { ROLE_META } from '../../shared/access';
 import { COACH_CATEGORIES, DEFAULT_COACH_CATEGORY, type CoachCategory } from '../../shared/coach-categories';
 import { api } from '../api';
 import { EditableName } from '../components/EditableName';
+import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
 import type { AccessAccount, Athlete, ProjectTeam, User } from '../types';
 
 type AssignmentAthlete = Athlete & { coachIds: string };
@@ -214,14 +215,11 @@ export function CoachManagementPage({ user, athletes: visibleAthletes, onChanged
   const resetFilters = () => { setSearchTerm(''); setProjectFilter(''); setCategoryFilter(''); setStatusFilter('all'); };
 
   return (
-    <div className="page-content coach-directory-page">
-      <header className="page-heading coach-directory-heading">
-        <div><p className="eyebrow">COACH DIRECTORY</p><h1>教练管理</h1><p>维护教练账号、执教范围以及与运动员的责任关系。</p></div>
-        <div className="coach-directory-summary" aria-label="教练管理概览"><div><span>在岗教练</span><strong>{activeCount}</strong></div><div><span>关联队伍</span><strong>{coveredTeams}</strong></div><div><span>覆盖运动员</span><strong>{coveredAthletes}</strong></div></div>
-      </header>
+    <PageContainer className="coach-directory-page">
+      <PageHeader className="coach-directory-heading" eyebrow="COACH DIRECTORY" title="教练管理" actions={<div className="coach-directory-summary" aria-label="教练管理概览"><div><span>在岗教练</span><strong>{activeCount}</strong></div><div><span>关联队伍</span><strong>{coveredTeams}</strong></div><div><span>覆盖运动员</span><strong>{coveredAthletes}</strong></div></div>}/>
       {message && <div className={`message-banner ${messageTone}`}>{messageTone === 'success' ? <Check /> : <AlertCircle />}{message}</div>}
 
-      <section className="coach-directory-toolbar" aria-label="教练筛选与操作">
+      <FilterBar className="coach-directory-toolbar" label="教练筛选与操作">
         <label className="coach-directory-search"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="搜索教练姓名、账号、项目或队伍" aria-label="搜索教练" />{searchTerm && <button onClick={() => setSearchTerm('')} aria-label="清除搜索"><X size={14} /></button>}</label>
         <label className="coach-directory-filter"><Filter size={15} /><select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} aria-label="筛选执教项目"><option value="">全部项目</option>{projects.map((project) => <option key={project}>{project}</option>)}</select></label>
         <label className="coach-directory-filter"><UserRoundCheck size={15} /><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="筛选教练类别"><option value="">全部类别</option>{COACH_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>
@@ -229,7 +227,7 @@ export function CoachManagementPage({ user, athletes: visibleAthletes, onChanged
         {(searchTerm || projectFilter || categoryFilter || statusFilter !== 'all') && <button className="coach-reset-button" onClick={resetFilters}>重置</button>}
         <button className="coach-refresh-button" onClick={() => void load()} disabled={loading} aria-label="刷新教练名册"><RefreshCw size={16} /></button>
         {canManage && <button className="coach-create-button" onClick={() => { setCoachForm(emptyCoachForm); setCreateOpen(true); }}><Plus size={17} />新增教练</button>}
-      </section>
+      </FilterBar>
 
       <section className="coach-directory-card">
         <header><div><strong>教练名册</strong><span>当前 {filteredCoaches.length} 条</span></div><small>点击“查看”打开完整责任档案</small></header>
@@ -268,6 +266,6 @@ export function CoachManagementPage({ user, athletes: visibleAthletes, onChanged
         <div className="coach-scope-list">{scopeAthletes.map((athlete) => { const checked = draftAthleteIds.has(athlete.id); return <label key={athlete.id} className={checked ? 'selected' : ''}><input type="checkbox" checked={checked} onChange={() => toggleDraftAthlete(athlete.id)} /><i>{checked && <Check size={13} />}</i><span className="coach-scope-avatar">{athlete.name.slice(0, 1)}</span><span className="coach-scope-person"><strong>{athlete.name}</strong><small>{athlete.project} · {athlete.team || '未分队'}</small></span><span className="coach-scope-region">{[athlete.region, athlete.city].filter(Boolean).join(' / ') || '地区未填'}</span></label>; })}</div>
         <footer><p>本次仅更新责任关系，不修改运动员的项目、队伍和地区。</p><button className="secondary-button" onClick={() => setScopeOpen(false)} disabled={saving}>取消</button><button className="primary-button" onClick={() => void saveScope()} disabled={saving}>{saving ? '正在同步…' : '保存责任范围'}</button></footer>
       </section></div>}
-    </div>
+    </PageContainer>
   );
 }

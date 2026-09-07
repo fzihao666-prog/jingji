@@ -5,6 +5,7 @@ import type { Athlete, User } from '../types';
 import { PROVINCES } from '../../shared/regions';
 import { ROLE_META } from '../../shared/access';
 import { EditableName } from '../components/EditableName';
+import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
 
 type AssignmentAthlete = Athlete & { coachIds: string };
 const ROSTER_PAGE_SIZE = 6;
@@ -131,10 +132,10 @@ export function RosterPage({ user, athletes: visibleAthletes, onChanged }: { use
   };
 
   return (
-    <div className="page-content roster-page">
-      <header className="page-heading compact-heading"><h1>人员关系</h1><span className="count-chip large"><UsersRound size={17} />{shown.length}名运动员</span></header>
+    <PageContainer className="roster-page">
+      <PageHeader variant="compact" eyebrow="ATHLETE RELATIONSHIPS" title="人员关系" actions={<span className="count-chip large"><UsersRound size={17} />{shown.length}名运动员</span>}/>
       {message && <div className="message-banner success"><Check />{message}</div>}
-      <section className="roster-control-bar" aria-label="人员筛选">
+      <FilterBar className="roster-control-bar" label="人员筛选">
         <label className="roster-search-field">
           <span>搜索人员</span>
           <div><Search size={17} /><input value={searchTerm} onChange={(event) => { setSearchTerm(event.target.value); setCurrentPage(1); }} placeholder="姓名、教练、地区…" /></div>
@@ -152,7 +153,7 @@ export function RosterPage({ user, athletes: visibleAthletes, onChanged }: { use
           <strong>{filteredAthletes.length}<span> 人</span></strong>
           {hasActiveFilters && <button type="button" onClick={resetFilters}><X size={14} />清除</button>}
         </div>
-      </section>
+      </FilterBar>
       <div className="roster-result-line">
         <span>{teamFilter ? <><strong>{teamFilter}</strong>队伍成员</> : projectFilter ? <><strong>{projectFilter}</strong>项目成员</> : '全部可管理人员'}</span>
         <small>显示 {rangeStart}–{rangeEnd}，共 {filteredAthletes.length} 人</small>
@@ -210,6 +211,6 @@ export function RosterPage({ user, athletes: visibleAthletes, onChanged }: { use
           <button type="button" aria-label="下一页" disabled={safePage === pageCount} onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}><ChevronRight size={16} /></button>
         </nav>
       )}
-    </div>
+    </PageContainer>
   );
 }

@@ -15,51 +15,69 @@ import {
   X,
   BluetoothConnected,
   FileSpreadsheet,
-  ChevronDown
+  ChevronDown,
+  Building2,
+  ClipboardList,
+  HardDrive
 } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api';
 import type { Role, User } from '../types';
 import { roleMeta } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
 
-export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-schedule';
+export type SpecialPageKey = 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-records' | 'special-schedule';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
-export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-management';
+export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-import-history' | 'data-management';
 export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
 
 const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
-  { key: 'special-time', label: '专项分析', pages: ['special-time', 'special-distance', 'special-load'] },
-  { key: 'special-rate', label: '专项指标', pages: ['special-rate', 'special-heart', 'special-power'] },
-  { key: 'special-schedule', label: '训练安排', pages: ['special-schedule'] }
+  { key: 'special-time', label: '专项分析', pages: ['special-time', 'special-distance', 'special-load', 'special-rate', 'special-heart', 'special-power'] },
+  { key: 'special-records', label: '训练记录', pages: ['special-records'] },
+  { key: 'special-schedule', label: '训练计划', pages: ['special-schedule'] }
 ];
 
-const strengthGroups: Array<{ key: StrengthPageKey; label: string }> = [
-  { key: 'strength-overview', label: '体能总览' },
-  { key: 'strength-plan', label: '训练安排' },
-  { key: 'strength-records', label: '训练记录' },
-  { key: 'strength-analysis', label: '训练分析' },
-  { key: 'strength-assessment', label: '体能评估' }
+const strengthGroups: Array<{ key: StrengthPageKey; label: string; pages: StrengthPageKey[] }> = [
+  { key: 'strength-overview', label: '体能分析', pages: ['strength-overview', 'strength-analysis', 'strength-assessment'] },
+  { key: 'strength-records', label: '训练记录', pages: ['strength-records'] },
+  { key: 'strength-plan', label: '训练计划', pages: ['strength-plan'] }
 ];
 
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
-  { key: 'bluetooth', label: '蓝牙连接' },
+  { key: 'bluetooth', label: '设备管理' },
   { key: 'data-import', label: '数据导入', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'data-import-history', label: '导入记录', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'data-management', label: '指标与标准', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
 ];
 
-const navItems: Array<{
+const directNavItems: Array<{
   key: PageKey;
   label: string;
   icon: typeof ChartNoAxesCombined;
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
-  { key: 'personal', label: '运动员表现', icon: UserRound },
+  { key: 'personal', label: '运动员表现', icon: UserRound }
+];
+
+const organizationGroups: Array<{
+  key: Extract<PageKey, 'athletes' | 'coaches' | 'teams'>;
+  label: string;
+  icon: typeof ChartNoAxesCombined;
+  roles: Role[];
+}> = [
   { key: 'athletes', label: '运动员管理', icon: UsersRound, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'coaches', label: '教练管理', icon: Network, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+];
+
+const systemGroups: Array<{
+  key: Extract<PageKey, 'regions' | 'accounts'>;
+  label: string;
+  icon: typeof ChartNoAxesCombined;
+  roles: Role[];
+}> = [
   { key: 'regions', label: '账号权限', icon: MapPinned, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
   { key: 'accounts', label: '账户审核', icon: UserCheck, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] }
 ];
@@ -83,16 +101,29 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(() => page.startsWith('special-'));
   const [strengthOpen, setStrengthOpen] = useState(() => page.startsWith('strength-'));
-  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => page === 'bluetooth' || page === 'data-import' || page === 'data-management');
-  const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
+  const [dataCollectionOpen, setDataCollectionOpen] = useState(() => isDataCollectionPage(page));
+  const [organizationOpen, setOrganizationOpen] = useState(() => isOrganizationPage(page));
+  const [systemOpen, setSystemOpen] = useState(() => isSystemPage(page));
   const specialActive = page.startsWith('special-');
   const strengthActive = page.startsWith('strength-');
-  const dataCollectionActive = page === 'bluetooth' || page === 'data-import' || page === 'data-management';
+  const dataCollectionActive = isDataCollectionPage(page);
+  const organizationActive = isOrganizationPage(page);
+  const systemActive = isSystemPage(page);
   const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
-  const strengthCurrent = strengthGroups.find((item) => item.key === page);
+  const strengthCurrent = strengthGroups.find((group) => group.pages.includes(page as StrengthPageKey));
   const visibleDataCollectionGroups = dataCollectionGroups.filter((item) => !item.roles || item.roles.includes(user.role));
   const dataCollectionCurrent = visibleDataCollectionGroups.find((item) => item.key === page);
-  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: itemIcon(dataCollectionCurrent.key) } : visibleItems.find((item) => item.key === page) || visibleItems[0];
+  const visibleOrganizationGroups = organizationGroups.filter((item) => item.roles.includes(user.role));
+  const visibleSystemGroups = systemGroups.filter((item) => item.roles.includes(user.role));
+  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: itemIcon(dataCollectionCurrent.key) } : directNavItems.find((item) => item.key === page) || visibleOrganizationGroups.find((item) => item.key === page) || visibleSystemGroups.find((item) => item.key === page) || directNavItems[0];
+
+  useEffect(() => {
+    if (specialActive) setSpecialOpen(true);
+    if (strengthActive) setStrengthOpen(true);
+    if (dataCollectionActive) setDataCollectionOpen(true);
+    if (organizationActive) setOrganizationOpen(true);
+    if (systemActive) setSystemOpen(true);
+  }, [dataCollectionActive, organizationActive, specialActive, strengthActive, systemActive]);
 
   const choosePage = (key: PageKey) => {
     onPageChange(key);
@@ -140,7 +171,7 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
         </div>
 
         <nav className="primary-nav" aria-label="主导航">
-          {visibleItems.slice(0, 1).map((item) => {
+          {directNavItems.slice(0, 1).map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -172,14 +203,18 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
               <ChevronDown className="special-nav-chevron" size={15} />
             </button>
             {strengthOpen && <div className="special-nav-tree">
-              {strengthGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}>
+              {strengthGroups.map((item) => <button key={item.key} className={item.pages.includes(page as StrengthPageKey) ? 'active' : ''} onClick={() => choosePage(item.key)}>
                 <i /> <span>{item.label}</span>
               </button>)}
             </div>}
           </div>
+          {directNavItems.slice(1).map((item) => {
+            const Icon = item.icon;
+            return <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}><Icon size={19} strokeWidth={1.8} /><span><strong>{item.label}</strong></span></button>;
+          })}
           <div className={`special-nav data-collection-nav ${dataCollectionActive ? 'active' : ''} ${dataCollectionOpen ? 'open' : 'collapsed'}`}>
             <button className="special-nav-parent" onClick={() => setDataCollectionOpen((open) => !open)} aria-expanded={dataCollectionOpen}>
-              <BluetoothConnected size={19} strokeWidth={1.8} />
+              <HardDrive size={19} strokeWidth={1.8} />
               <span><strong>数据管理</strong></span>
               <ChevronDown className="special-nav-chevron" size={15} />
             </button>
@@ -189,19 +224,18 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
               </button>)}
             </div>}
           </div>
-          {visibleItems.slice(1).map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                className={page === item.key ? 'active' : ''}
-                onClick={() => choosePage(item.key)}
-              >
-                <Icon size={19} strokeWidth={1.8} />
-                <span><strong>{item.label}</strong></span>
-              </button>
-            );
-          })}
+          {visibleOrganizationGroups.length > 0 && <div className={`special-nav ${organizationActive ? 'active' : ''} ${organizationOpen ? 'open' : 'collapsed'}`}>
+            <button className="special-nav-parent" onClick={() => setOrganizationOpen((open) => !open)} aria-expanded={organizationOpen}>
+              <Building2 size={19} strokeWidth={1.8} /><span><strong>组织管理</strong></span><ChevronDown className="special-nav-chevron" size={15} />
+            </button>
+            {organizationOpen && <div className="special-nav-tree">{visibleOrganizationGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}><i /><span>{item.label}</span></button>)}</div>}
+          </div>}
+          {visibleSystemGroups.length > 0 && <div className={`special-nav ${systemActive ? 'active' : ''} ${systemOpen ? 'open' : 'collapsed'}`}>
+            <button className="special-nav-parent" onClick={() => setSystemOpen((open) => !open)} aria-expanded={systemOpen}>
+              <ClipboardList size={19} strokeWidth={1.8} /><span><strong>系统管理</strong></span><ChevronDown className="special-nav-chevron" size={15} />
+            </button>
+            {systemOpen && <div className="special-nav-tree">{visibleSystemGroups.map((item) => <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}><i /><span>{item.label}</span></button>)}</div>}
+          </div>}
         </nav>
 
         <div className="sidebar-footer">
@@ -236,6 +270,18 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
       </main>
     </div>
   );
+}
+
+function isDataCollectionPage(page: PageKey) {
+  return page === 'bluetooth' || page === 'data-import' || page === 'data-import-history' || page === 'data-management';
+}
+
+function isOrganizationPage(page: PageKey) {
+  return page === 'athletes' || page === 'coaches' || page === 'teams';
+}
+
+function isSystemPage(page: PageKey) {
+  return page === 'regions' || page === 'accounts';
 }
 
 function itemIcon(key: DataCollectionPageKey) {

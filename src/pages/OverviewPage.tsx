@@ -15,6 +15,7 @@ import {
   TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, WaterLandLoadRatioChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
+import { AppCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
 import { buildDailyPerformance, buildPerformanceRadar, calculateLoadDiagnostics } from '../overview-analytics';
 
 type Props = {
@@ -498,72 +499,73 @@ export function OverviewPage(props: Props) {
       tone="green"
     />,
     'athlete-profile': (
-      <article className={`panel professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
+      <AppCard variant="chart" className={`professional-panel athlete-profile-panel${isIndividualOverview ? '' : ' team-profile-dashboard'}`}>
         <PanelHeading title={isIndividualOverview ? '个人身体与年龄画像' : '基本信息'} subtitle={isIndividualOverview ? `${scopeLabel} · 年龄 · 身高 · 体重` : `当前队伍 · ${athleteProfiles.length}名运动员 · 身体基础数据`} />
         <AthleteProfileOverview profiles={athleteProfiles} individual={isIndividualOverview} asOf={props.to} />
-      </article>
+      </AppCard>
     ),
     'birthplace-map': (
-      <article className="panel professional-panel birthplace-map-panel">
+      <AppCard variant="chart" className="professional-panel birthplace-map-panel">
         <PanelHeading title="代表单位/输送单位" subtitle={`${scopeLabel} · 省份分布 · 运动员成绩与竞技状态`} />
         <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} />
         <p className="analysis-method-note">生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。</p>
-      </article>
+      </AppCard>
     ),
       'fms-analysis': (
-      <article className="panel professional-panel analysis-feature-panel">
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="FMS测试分析" subtitle={`${isIndividualOverview ? '个人FMS' : `最近一次团队测试 · n=${measurementSampleCount || '—'}`} · 标准七项21分制`} />
         <FmsTeamChart measurements={overview?.measurements || []} />
         <p className="analysis-method-note">每个动作按0–3分计，团队柱为最近一次测试的单项平均分；2分表示动作模式基本达标，低于2分列入纠正训练。七项齐全时汇总为21分制队均，14分仅作复查参考，不单独用于判断损伤风险。</p>
-      </article>
+      </AppCard>
     ),
     'performance-radar': (
-      <article className="panel professional-panel">
+      <AppCard variant="chart" className="professional-panel">
         <PanelHeading title="多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
-        {strengthLoading ? <div className="professional-chart-empty">正在读取力量测试…</div> : <PerformanceRadarChart data={radar} />}
+        {strengthLoading ? <ContentState kind="loading" className="professional-chart-empty" title="正在读取力量测试…"/> : <PerformanceRadarChart data={radar} />}
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
-      </article>
+      </AppCard>
     ),
     'injury-analysis': (
-      <article className="panel professional-panel analysis-feature-panel">
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="运动损伤评估图" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
         <InjuryAssessmentChart injuries={overview?.injuries || []} athleteCount={scopeAthleteCount} />
         <p className="analysis-method-note">按每名运动员最新记录统计健康、观察、受限、康复和停训状态，不能替代医学诊断。</p>
-      </article>
+      </AppCard>
     ),
     'training-load-analysis': (
-      <article className="panel professional-panel analysis-feature-panel">
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="训练量统计" subtitle="训练时长 · 公里数（按日期汇总）" />
         <TrainingVolumeChart data={overview?.trainingVolume || { days: [], totalDurationMin: null, totalDistanceKm: null, averageDurationMin: null, averageDistanceKm: null, durationDayCount: 0, distanceDayCount: 0 }} from={props.from} to={props.to} />
-      </article>
+      </AppCard>
     ),
     'training-content': (
-      <article className="panel professional-panel analysis-feature-panel">
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="训练课比值" subtitle="九类训练课次占比（当前页面时间范围）" />
         <TrainingContentChart records={analysisRecords} />
-      </article>
+      </AppCard>
     ),
     'training-intensity': (
-      <article className="panel professional-panel analysis-feature-panel">
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="训练强度百分比" subtitle="U3 · U2 · U1 · AT · TPT · AN · ATP（训练时长占比）" />
         <TrainingIntensityChart data={overview?.intensityDistribution || []} />
-      </article>
+      </AppCard>
     ),
     'water-land-load': (
-      <article className="panel professional-panel analysis-feature-panel">
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="水陆训练负荷比值" subtitle="水上训练 · 陆上训练（SRPE 训练负荷占比）" />
         <WaterLandLoadRatioChart data={overview?.waterLandLoad || { waterLoad: 0, landLoad: 0, totalLoad: 0, waterPercentage: 0, landPercentage: 0, unclassifiedLoad: 0 }} />
-      </article>
+      </AppCard>
     )
   };
 
   return (
-    <div className="page-content professional-overview" onClick={() => setActiveMenu(null)}>
-      <header className="page-heading overview-page-heading">
-        <div className="overview-title-block">
-          <h1>{isSelfOverview ? '我的训练总览' : isIndividualOverview ? '运动员训练总览' : '训练总览'}</h1>
-        </div>
-        <div
+    <PageContainer className="professional-overview" onClick={() => setActiveMenu(null)}>
+      <PageHeader
+        variant="dashboard"
+        className="overview-page-heading"
+        eyebrow="TRAINING OVERVIEW"
+        title={isSelfOverview ? '我的训练总览' : isIndividualOverview ? '运动员训练总览' : '训练总览'}
+        supportingContent={<div
           className="overview-principle"
           role="note"
           aria-label="有训练就要有数据，有数据就要有统计，有统计就要有分析，有分析就要对标对表"
@@ -574,17 +576,17 @@ export function OverviewPage(props: Props) {
             <span>有统计就要有<strong>分析</strong></span><ArrowRight />
             <span>有分析就要<strong>对标对表</strong></span>
           </div>
-        </div>
-      </header>
+        </div>}
+      />
       {overviewError && <div className="overview-data-provenance error"><Database size={15} /><strong>统一指标接口暂不可用</strong><span>{overviewError}，当前显示兼容数据。</span></div>}
       {props.loading || (overviewLoading && !overview) ? <PageSkeleton /> : <section className="professional-dashboard-grid">{layout.order.filter((id) => cardMeta[id] && !layout.hidden.includes(id)).map((id) => renderShell(id, cards[id]))}</section>}
       {layout.hidden.filter((id) => cardMeta[id]).length > 0 && <div className="hidden-card-restore" onClick={(event) => event.stopPropagation()}><Eye size={15} /><span>已隐藏 {layout.hidden.filter((id) => cardMeta[id]).length} 项</span>{layout.hidden.filter((id) => cardMeta[id]).map((id) => <button key={id} type="button" onClick={() => restoreCard(id)}>{cardMeta[id].title}</button>)}</div>}
-    </div>
+    </PageContainer>
   );
 }
 
 function PanelHeading({ title, subtitle, icon }: { title: string; subtitle: string; icon?: ReactNode }) {
-  return <div className="panel-heading professional-heading"><div><h2>{icon && <span className="analysis-title-icon">{icon}</span>}{title}</h2></div><small>{subtitle}</small></div>;
+  return <SectionHeader className="professional-heading" title={title} description={subtitle} icon={icon && <span className="analysis-title-icon">{icon}</span>} />;
 }
 
 function Metric({ icon, label, value, unit, note, tone }: { icon: ReactNode; label: string; value: string; unit: string; note: string; tone: string }) {

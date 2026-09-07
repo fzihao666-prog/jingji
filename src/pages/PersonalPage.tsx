@@ -4,6 +4,7 @@ import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
+import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { BodyCompositionModelOverview, type BodyCompositionProfile } from '../components/AthleteProfileCharts';
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
@@ -187,13 +188,8 @@ export function PersonalPage(props: Props) {
   }, [props.from, props.to]);
 
   return (
-    <div className="page-content personal-page">
-      <header className="page-heading">
-        <div>
-          <h1>运动员表现</h1>
-          <p>聚合运动员基础信息、训练表现、FMS、伤病恢复与冠军模型对标</p>
-        </div>
-      </header>
+    <PageContainer className="personal-page">
+      <PageHeader eyebrow="ATHLETE PERFORMANCE" title="运动员表现"/>
 
       {canSwitchAthlete && (
         <section className="performance-athlete-picker">
@@ -225,11 +221,7 @@ export function PersonalPage(props: Props) {
       )}
 
       {!selectedAthlete ? (
-        <section className="personal-empty">
-          <CalendarRange size={34} />
-          <strong>暂无可展示运动员</strong>
-          <p>请切换到有运动员数据的项目，或通过上方搜索选择运动员。</p>
-        </section>
+        <ContentState kind="empty" className="personal-empty" icon={<CalendarRange size={34} />} title="暂无可展示运动员" description="请切换到有运动员数据的项目，或通过上方搜索选择运动员。"/>
       ) : (
         <>
           <section className="personal-identity-card">
@@ -262,38 +254,38 @@ export function PersonalPage(props: Props) {
             <PersonalMetric icon={CheckCircle2} label="数据完整率" value={formatNumber(rangeAnalysis.dataCoverage, 1)} unit="%" />
           </section>
 
-          <section className="panel professional-panel body-composition-card personal-body-assessment-card">
+          <AppCard variant="chart" className="professional-panel body-composition-card personal-body-assessment-card">
             <header className="personal-body-assessment-heading">
               <div><span>PHYSIQUE ASSESSMENT</span><h2>运动员身体成分评估</h2><p>节段去脂、肌脂平衡、水合状态与复测趋势</p></div>
               <small>{bodyHistoryLoading ? '正在读取身体成分历史…' : `已读取 ${bodyHistory.length} 次实测记录`}</small>
             </header>
             <BodyCompositionModelOverview profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []} records={selectedRecords} individual />
             <p className="analysis-method-note">身体成分用于训练适应、营养干预和控重阶段观察；模拟项仅用于展示，录入实测值后自动替换。</p>
-          </section>
+          </AppCard>
 
-          <section className="panel professional-panel analysis-feature-panel personal-fms-card">
+          <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-fms-card">
             <header className="personal-analysis-card-heading">
               <div><BrainCircuit size={17} /><span><small>FMS SCREENING</small><h2>个人FMS测试分析</h2><p>标准七项、21分制与纠正训练优先级</p></span></div>
               <strong>{profileAnalysisLoading ? '读取中' : `${profileMeasurements.filter((item) => item.domain === 'fms' && item.value !== null).length} 项有效`}</strong>
             </header>
             {profileAnalysisLoading ? <div className="professional-chart-empty">正在读取个人FMS测试…</div> : <FmsPersonalChart measurements={profileMeasurements} />}
             <p className="analysis-method-note">FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。</p>
-          </section>
+          </AppCard>
 
-          <section className="panel professional-panel analysis-feature-panel personal-champion-card">
+          <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-champion-card">
             <header className="personal-analysis-card-heading">
               <div><Trophy size={17} /><span><small>CHAMPION RADAR</small><h2>冠军模型八维雷达分析</h2><p>当前水平、冠军标准、维度差距与补强优先级</p></span></div>
               <strong>八维雷达</strong>
             </header>
             <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
             <p className="analysis-method-note">八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。</p>
-          </section>
+          </AppCard>
 
           <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />
           <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
         </>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

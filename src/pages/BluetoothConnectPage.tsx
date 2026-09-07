@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
+import { AppCard, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
 
 type Props = {
   user: User;
@@ -276,22 +277,15 @@ export function BluetoothConnectPage({ user }: Props) {
   const busy = status === 'requesting' || status === 'connecting';
 
   return (
-    <div className="page-content bluetooth-page">
-      <div className="page-heading bluetooth-heading">
-        <div>
-          <span className="eyebrow">BLUETOOTH LINK</span>
-          <h1>蓝牙连接</h1>
-          <p>连接训练设备、心率带或测功仪，读取设备状态与训练数据。</p>
-        </div>
-        <div className="bluetooth-actions">
+    <PageContainer className="bluetooth-page">
+      <PageHeader eyebrow="DEVICE MANAGEMENT" title="设备管理" className="bluetooth-heading" actions={<div className="bluetooth-actions">
           <button className="secondary-button" type="button" onClick={connectDevice} disabled={busy}>
             {busy ? <LoaderCircle size={16} className="spin" /> : <Bluetooth size={16} />}扫描并连接
           </button>
           <button className="ghost-button" type="button" onClick={disconnectDevice} disabled={!device && !server}>
             <Unplug size={16} />断开
           </button>
-        </div>
-      </div>
+        </div>}/>
 
       <section className="bluetooth-status-grid">
         <div className="bluetooth-status-card">
@@ -326,17 +320,11 @@ export function BluetoothConnectPage({ user }: Props) {
         </section>
       )}
 
-      <section className="panel bluetooth-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>设备数据通道</h2>
-            <small>登录用户：{user?.username || '当前用户'}</small>
-          </div>
-          <span className={'bluetooth-chip ' + (server?.connected ? 'connected' : '')}>
+      <AppCard className="bluetooth-panel">
+        <SectionHeader title="设备数据通道" description={`登录用户：${user?.username || '当前用户'}`} actions={<span className={'bluetooth-chip ' + (server?.connected ? 'connected' : '')}>
             {server?.connected ? <BluetoothConnected size={15} /> : <BluetoothOff size={15} />}
             {connectionLabel}
-          </span>
-        </div>
+          </span>}/>
 
         <div className="bluetooth-form-grid">
           <label>
@@ -385,15 +373,10 @@ export function BluetoothConnectPage({ user }: Props) {
             <Send size={16} />发送
           </button>
         </div>
-      </section>
+      </AppCard>
 
-      <section className="panel bluetooth-log-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>连接日志</h2>
-            <small>只记录本次页面操作，不影响其他训练数据。</small>
-          </div>
-        </div>
+      <AppCard className="bluetooth-log-panel">
+        <SectionHeader title="连接日志" description="只记录本次页面操作，不影响其他训练数据。"/>
         {logs.length ? (
           <div className="bluetooth-log-list">
             {logs.map((item, index) => <div key={index}>{item}</div>)}
@@ -401,7 +384,7 @@ export function BluetoothConnectPage({ user }: Props) {
         ) : (
           <div className="bluetooth-empty">等待扫描、连接或读取设备数据。</div>
         )}
-      </section>
-    </div>
+      </AppCard>
+    </PageContainer>
   );
 }

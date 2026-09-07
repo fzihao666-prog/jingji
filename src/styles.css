@@ -550,7 +550,7 @@ h1, h2, h3, p { margin: 0; }
 .overview-heading-note { margin-top: 7px; color: #668087; display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; }.overview-heading-note svg { color: #14938b; }
 .overview-page-heading { display: grid; grid-template-columns: minmax(180px,1fr) auto; align-items: end; row-gap: 12px; margin-bottom: 14px; }
 .overview-title-block { min-width: 0; }
-.overview-principle { grid-column: 1 / -1; min-width: 0; color: #587078; display: flex; align-items: center; }
+.overview-principle { min-width: 0; margin-top: 8px; color: #587078; display: flex; align-items: center; }
 .overview-principle-flow { min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; font-size: 11.5px; line-height: 1.55; font-weight: 700; }
 .overview-principle-flow > span { white-space: nowrap; }
 .overview-principle-flow > svg { width: 13px; height: 13px; flex: 0 0 auto; color: #8aa8a6; stroke-width: 1.8; }
@@ -691,6 +691,32 @@ h1, h2, h3, p { margin: 0; }
 .profile-visual-empty { min-height: 285px; padding: 24px; border: 1px dashed #cedbdd; color: #809197; background: #f7faf9; display: grid; place-content: center; gap: 7px; text-align: center; }.profile-visual-empty strong { color: #34545e; font-size: 12px; }.profile-visual-empty span { max-width: 260px; font-size: 8.5px; line-height: 1.6; }
 .professional-load-chart { height: 280px !important; }
 .professional-chart-empty { min-height: 245px; padding: 28px; color: #788b92; background: #f5f8f8; border: 1px dashed #ccdadd; display: grid; align-content: center; justify-items: center; text-align: center; gap: 8px; font-size: 10px; }.professional-chart-empty strong { color: #35545e; font-size: 13px; }.professional-chart-empty p { max-width: 280px; line-height: 1.6; }
+
+/* 公共页面层：页面只组合内容，基础视觉在此处统一维护。 */
+.app-page-header { min-height: 58px; }
+.app-page-header-copy { min-width: 0; }
+.app-page-header h1 { margin-top: 0; }
+.app-page-header-eyebrow { display: block; margin-bottom: 5px; color: var(--teal); font: 700 10px/1 "Bahnschrift", "Microsoft YaHei UI", sans-serif; letter-spacing: .14em; }
+.app-page-header-actions { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.app-page-header-dashboard { margin-bottom: 14px; }
+.app-page-header-compact { align-items: center; }
+.app-card { min-width: 0; border-radius: 13px; border-color: var(--line); background: var(--paper); box-shadow: 0 12px 35px rgba(14, 55, 68, .045); }
+.app-card-chart { overflow: hidden; }
+.app-card-compact { min-height: 0; padding: 16px; }
+.app-section-header { min-height: 30px; }
+.app-section-header > div:first-child { min-width: 0; }
+.app-section-header-icon { display: inline-grid; margin-right: 8px; color: var(--teal); vertical-align: middle; }
+.app-section-header-meta { min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.app-section-header-meta small { text-align: right; }
+.app-filter-bar { min-width: 0; padding: 14px 15px; border: 1px solid var(--line); border-radius: 14px; display: flex; align-items: end; justify-content: space-between; gap: 15px; background: var(--paper); box-shadow: var(--shadow); }
+.app-filter-bar-fields { min-width: 0; flex: 1; display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.app-filter-bar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.app-content-state { min-height: 280px; padding: 28px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #81949a; text-align: center; }
+.app-content-state strong { color: #365660; font-size: 13px; }
+.app-content-state span { max-width: 360px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.app-content-state-error { color: #b64b3b; border: 1px dashed #e5b8b0; border-radius: 13px; background: #fff8f6; }
+.app-content-state-error strong { color: #9e4033; }
+@media (max-width: 760px) { .app-page-header { align-items: start; }.app-page-header-actions { width: 100%; justify-content: flex-start; }.app-filter-bar { align-items: stretch; flex-direction: column; }.app-filter-bar-actions { width: 100%; }.app-filter-bar-actions > * { flex: 1; } }
 .performance-radar-layout { min-height: 275px; display: grid; grid-template-columns: minmax(250px,1.05fr) minmax(190px,.95fr); align-items: center; gap: 8px; }.performance-radar-chart { height: 270px; }.radar-dimension-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }.radar-dimension-list > div { min-width: 0; min-height: 69px; padding: 9px 10px; border: 1px solid #dce7e8; border-left: 3px solid #17968d; background: #f9fbfb; }.radar-dimension-list span,.radar-dimension-list strong,.radar-dimension-list small { display: block; }.radar-dimension-list span { color: #58717a; font-size: 8px; }.radar-dimension-list strong { margin-top: 3px; color: #0c746e; font: 800 14px "Bahnschrift",sans-serif; }.radar-dimension-list small { margin-top: 3px; color: #819198; font-size: 7px; line-height: 1.35; }
 .single-test-metrics { min-height: 260px; display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; align-content: center; }.single-test-metrics > div { min-height: 92px; padding: 13px; border: 1px solid #dce6e8; background: #f7faf9; }.single-test-metrics span,.single-test-metrics strong,.single-test-metrics p { display: block; }.single-test-metrics span { color: #60777f; font-size: 9px; }.single-test-metrics strong { margin-top: 7px; color: #0f5660; font: 800 18px "Bahnschrift",sans-serif; }.single-test-metrics strong small { margin-left: 3px; font-size: 8px; }.single-test-metrics p { margin-top: 5px; color: #839399; font-size: 7px; }
 .movement-matrix { min-height: 282px; display: grid; gap: 5px; }.movement-matrix > div { min-height: 36px; padding: 6px 10px; border: 1px solid #dde7e9; display: grid; grid-template-columns: 8px minmax(0,1fr) auto; align-items: center; gap: 9px; }.movement-matrix i { width: 7px; height: 7px; border-radius: 50%; background: #a9b8bb; }.movement-matrix .available i { background: #16968d; box-shadow: 0 0 0 4px rgba(22,150,141,.1); }.movement-matrix span strong,.movement-matrix span small { display: block; }.movement-matrix span strong { color: #244c57; font-size: 9px; }.movement-matrix span small { margin-top: 2px; color: #809096; font-size: 7px; }.movement-matrix b { color: #819197; font-size: 8px; }.movement-matrix .available b { color: #0d746d; }
@@ -724,7 +750,6 @@ h1, h2, h3, p { margin: 0; }
 .athlete-management-heading { margin-bottom: 18px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
 .athlete-management-heading > div > span { color: #0b9088; font: 800 9px "Bahnschrift",sans-serif; letter-spacing: .17em; }
 .athlete-management-heading h1 { margin: 5px 0 3px; color: #073744; font-size: 34px; line-height: 1; letter-spacing: -.045em; }
-.athlete-management-heading p { color: #6f858c; font-size: 11px; }
 .athlete-primary-action { height: 42px; padding: 0 16px; border: 0; border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; color: #fff; background: #08746f; box-shadow: 0 8px 18px rgba(8,116,111,.19); font-size: 11px; font-weight: 800; cursor: pointer; }
 .athlete-primary-action:hover { background: #075e5b; }
 
@@ -828,7 +853,7 @@ h1, h2, h3, p { margin: 0; }
   .app-frame { grid-template-columns: 220px minmax(0, 1fr); }
   .page-heading { align-items: flex-start; flex-direction: column; }
   .overview-page-heading { grid-template-columns: 1fr; align-items: stretch; }
-  .overview-page-heading .date-toolbar,.overview-page-heading .overview-principle { grid-column: 1; }
+  .overview-page-heading .date-toolbar { grid-column: 1; }
   .date-toolbar { width: 100%; }
   .select-input, .project-select { margin-left: auto; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1330,7 +1355,6 @@ h1, h2, h3, p { margin: 0; }
   .page-content { width: 100%; min-width: 0; padding: 17px 12px 36px; }
   .page-heading { width: 100%; min-width: 0; margin-bottom: 15px; gap: 11px; }
   .page-heading h1 { margin-top: 2px; font-size: 26px; line-height: 1.12; }
-  .page-heading > div > p:last-child { margin-top: 5px; font-size: 11px; line-height: 1.55; }
 
   .date-toolbar { width: 100%; min-width: 0; padding: 7px; display: grid; grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr); gap: 7px; border-radius: 14px; background: rgba(255,255,255,.94); }
   .range-presets { grid-column: 1 / -1; width: 100%; min-width: 0; }
@@ -1523,7 +1547,6 @@ h1, h2, h3, p { margin: 0; }
 .bluetooth-page { width: 100%; min-width: 0; display: grid; gap: 18px; overflow-x: hidden; }
 .bluetooth-heading { min-width: 0; align-items: flex-start; gap: 18px; }
 .bluetooth-heading > div:first-child { min-width: 0; }
-.bluetooth-heading p { margin-top: 8px; color: #627b83; }
 .bluetooth-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .bluetooth-actions button,.bluetooth-command-row button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
 .spin { animation: bluetooth-spin 1s linear infinite; }

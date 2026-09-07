@@ -24,11 +24,13 @@ import type {
   User,
 } from "../types";
 import "./DataImportPage.css";
+import { PageContainer, PageHeader } from '../components/PageLayout';
 
 type Props = {
   user: User;
   project: Project;
   athletes: Athlete[];
+  mode?: "import" | "history";
   onChanged: () => void;
 };
 
@@ -83,7 +85,7 @@ function displayValue(item: DataImportItem) {
   return `${item.valueNum ?? "—"} ${item.unit}`;
 }
 
-export function DataImportPage({ project, athletes, onChanged }: Props) {
+export function DataImportPage({ project, athletes, mode = "import", onChanged }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [defaultDate, setDefaultDate] = useState("");
@@ -383,17 +385,11 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       .slice(0, 500);
   }, [batch, filter, query]);
 
+  const historyOnly = mode === "history";
+
   return (
-    <section className="data-import-page">
-      <header className="data-import-hero">
-        <div>
-          <span>DATA INTAKE</span>
-          <h1>统一数据导入</h1>
-          <p>
-            确定性识别 Excel 中的运动员档案、恢复、训练、身体测量、测试、伤病和竞技状态，审核通过后再写入正式数据库。
-          </p>
-        </div>
-        <div className="data-import-hero-actions">
+    <PageContainer className="data-import-page">
+      <PageHeader className="data-import-hero" eyebrow={historyOnly ? "IMPORT HISTORY" : "DATA INTAKE"} title={historyOnly ? "导入记录" : "统一数据导入"} actions={!historyOnly && <div className="data-import-hero-actions">
           <button
             type="button"
             className="data-import-template"
@@ -425,11 +421,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <span>原值、工作表和单元格坐标全程保留</span>
             </div>
           </div>
-        </div>
-      </header>
+        </div>}/>
 
-      <div className="data-import-grid">
-        <section className="data-import-upload-card">
+      <div className={`data-import-grid ${historyOnly ? "history-only" : ""}`}>
+        {!historyOnly && <section className="data-import-upload-card">
           <div className="data-import-card-heading">
             <FileSpreadsheet size={20} />
             <div>
@@ -478,7 +473,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             )}
             解析并生成审核预览
           </button>
-        </section>
+        </section>}
 
         <section className="data-import-history-card">
           <div className="data-import-card-heading">
@@ -965,6 +960,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           </section>
         </>
       )}
-    </section>
+    </PageContainer>
   );
 }

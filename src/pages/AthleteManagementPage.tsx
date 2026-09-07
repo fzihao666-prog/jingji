@@ -30,6 +30,7 @@ import type {
   ProjectTeam,
   User,
 } from "../types";
+import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
 
 const PAGE_SIZE = 6;
 const HEALTH_OPTIONS = ["健康", "观察", "训练受限", "康复中"];
@@ -565,22 +566,13 @@ export function AthleteManagementPage({
     });
 
   return (
-    <div className="page-content athlete-management-page">
-      <header className="athlete-management-heading">
-        <div>
-          <span>ATHLETE OPERATIONS</span>
-          <h1>运动员管理</h1>
-          <p>
-            集中维护人员档案、队伍归属和训练状态；运动员档案可以不绑定登录账号。
-          </p>
-        </div>
-        {canEdit && (
+    <PageContainer className="athlete-management-page">
+      <PageHeader className="athlete-management-heading" eyebrow="ATHLETE OPERATIONS" title="运动员管理" actions={canEdit && (
           <button className="athlete-primary-action" onClick={openCreate}>
             <Plus size={17} />
             新增运动员
           </button>
-        )}
-      </header>
+        )}/>
       {message && (
         <div className={`message-banner ${messageTone}`}>
           <Check size={16} />
@@ -636,7 +628,7 @@ export function AthleteManagementPage({
         </button>
       </section>
 
-      <section className="athlete-directory-toolbar">
+      <FilterBar className="athlete-directory-toolbar" label="运动员筛选与操作">
         <label className="athlete-search">
           <Search size={17} />
           <input
@@ -728,7 +720,7 @@ export function AthleteManagementPage({
             重置
           </button>
         )}
-      </section>
+      </FilterBar>
 
       {canAdmin && (
         <section
@@ -1946,6 +1938,6 @@ export function AthleteManagementPage({
           </section>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
