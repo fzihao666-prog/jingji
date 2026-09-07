@@ -1,6 +1,32 @@
 export const STRENGTH_TRAINING_CATEGORIES = ['基础力量', '功能性体能', '核心力量', '专项力量', '代谢训练'] as const;
 export type StrengthTrainingCategory = typeof STRENGTH_TRAINING_CATEGORIES[number];
 
+export const STRENGTH_CONTENT_ANALYSIS_CATEGORIES = ['交叉训练', '功能训练', '拉伸再生', '循环训练', '最大力量', '爆发力', '核心力量', '动作准备'] as const;
+export type StrengthContentAnalysisCategory = typeof STRENGTH_CONTENT_ANALYSIS_CATEGORIES[number];
+
+export type StrengthContentAnalysisSource = {
+  sessionLabel?: string | null;
+  trainingType?: string | null;
+  structureType?: string | null;
+  exerciseName?: string | null;
+  trainingCategory?: string | null;
+};
+
+// 训练内容分析只读取既有训练事实字段，不改变原始训练分类或写入额外标签。
+export function inferStrengthContentAnalysisCategory(input: StrengthContentAnalysisSource): StrengthContentAnalysisCategory | null {
+  const text = `${input.sessionLabel || ''} ${input.trainingType || ''} ${input.structureType || ''} ${input.exerciseName || ''} ${input.trainingCategory || ''}`.trim();
+  if (!text) return null;
+  if (/动作准备|准备活动|热身|激活|动态拉伸|关节活动/.test(text)) return '动作准备';
+  if (/交叉训练|交叉体能|crossfit|cross-training/i.test(text)) return '交叉训练';
+  if (/拉伸|再生|恢复|放松|泡沫轴|理疗/.test(text)) return '拉伸再生';
+  if (/循环训练|循环力量|力量耐力|肌耐力|重复力量/.test(text)) return '循环训练';
+  if (/最大力量|大重量|深蹲|硬拉|卧推|卧拉/.test(text)) return '最大力量';
+  if (/爆发力|速度力量|高拉|抓举|挺举|跳箱|快速力量/.test(text)) return '爆发力';
+  if (/核心力量|核心稳定|平板|支撑|卷腹|抗旋|死虫|鸟狗/.test(text)) return '核心力量';
+  if (/功能训练|功能性|协调|灵敏|平衡|药球|壶铃/.test(text)) return '功能训练';
+  return null;
+}
+
 export const STRENGTH_BODY_POSITIONS = ['上肢', '下肢', '核心', '全身'] as const;
 export type StrengthBodyPosition = typeof STRENGTH_BODY_POSITIONS[number];
 

@@ -25,11 +25,14 @@ import { useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import {
   STRENGTH_BODY_POSITIONS,
+  STRENGTH_CONTENT_ANALYSIS_CATEGORIES,
   STRENGTH_INTENSITY_ZONES,
   STRENGTH_TRAINING_CATEGORIES,
   inferStrengthBodyPosition,
+  inferStrengthContentAnalysisCategory,
   inferStrengthCategory,
   type StrengthBodyPosition,
+  type StrengthContentAnalysisCategory,
   type StrengthTrainingCategory
 } from '../../shared/strength-training';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
@@ -37,13 +40,13 @@ import type { StrengthTest, StrengthTrainingSession, TrainingPlanData } from '..
 import './StrengthTrainingInsights.css';
 
 const palette = ['#0d9488', '#21b7aa', '#3b82f6', '#f59e0b', '#f97316', '#ef4444', '#6366f1'];
-const categoryPalette = ['#0d9488', '#2db7a8', '#55c7bb', '#83d6ca', '#b1e4dc'];
+const contentAnalysisPalette = ['#0d9488', '#0891b2', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#3b82f6', '#84cc16'];
 const loadRatioPalette = ['#0d9488', '#dc4f45'];
 const lessonPalette = ['#0d9488', '#3b82f6', '#84cc16', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#64748b'];
 const lessonTypes = ['水上', '测功仪功能', '拉伸再生', '力量耐力', '最大力量', '速度力量', '跑步', '其他'];
 type LoadBreakdownItem = { name: string; value: number; percent: number; sessions: number; duration: number; distance: number; rpe: number; color: string };
 type LessonBreakdownItem = LoadBreakdownItem & { sets: number; completion: number };
-type CategoryExecutionItem = { name: StrengthTrainingCategory; count: number; percent: number; completion: number; done: number; color: string };
+type ContentAnalysisItem = { name: StrengthContentAnalysisCategory; count: number; percent: number; completion: number; done: number; color: string };
 
 function round(value: number, digits = 0) {
   const factor = 10 ** digits;
@@ -231,27 +234,27 @@ function LessonCompositionPanel({ items }: { items: LessonBreakdownItem[] }) {
   </div>;
 }
 
-function CategoryExecutionPanel({ items }: { items: CategoryExecutionItem[] }) {
+function ContentAnalysisPanel({ items, unclassified }: { items: ContentAnalysisItem[]; unclassified: number }) {
   const total = items.reduce((sum, item) => sum + item.count, 0);
   const completed = items.reduce((sum, item) => sum + item.done, 0);
   const leading = items.reduce((best, item) => item.count > best.count ? item : best, items[0]);
-  if (!total) return <EmptyChart text="暂无训练类型与完成数据" />;
+  if (!total && !unclassified) return <EmptyChart text="暂无训练内容数据" />;
   return <div className="strength-category-execution">
     <div className="category-execution-summary">
       <article>
-        <span>训练项</span>
+        <span>已归类训练项</span>
         <strong>{total}</strong>
         <small>覆盖 {items.filter((item) => item.count > 0).length} 类</small>
       </article>
       <article>
         <span>总完成率</span>
-        <strong>{round(completed / total * 100)}<small>%</small></strong>
+        <strong>{total ? round(completed / total * 100) : '—'}<small>{total ? '%' : ''}</small></strong>
         <small>{completed} / {total} 项完成</small>
       </article>
       <article>
-        <span>主训练类</span>
-        <strong>{leading.name}</strong>
-        <small>{leading.percent}% · {leading.count} 项</small>
+        <span>{unclassified ? '范围外训练项' : '主训练内容'}</span>
+        <strong>{unclassified || leading.name}</strong>
+        <small>{unclassified ? '水上、跑步等不纳入八类分析' : `${leading.percent}% · ${leading.count} 项`}</small>
       </article>
     </div>
     <div className="category-execution-list">
@@ -320,7 +323,7 @@ function BodyPositionMapPanel({ items }: { items: Array<{ name: StrengthBodyPosi
 }
 
 export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTrainingSession[] }) {
-  const { daily21Weeks, loadRatio, lessonRatio, trend, categoryExecution, positions } = useMemo(() => {
+  const { daily21Weeks, loadRatio, lessonRatio, trend, contentAnalysis, unclassifiedContent, positions } = useMemo(() => {
     const ordered = [...sessions].sort((a, b) => a.trainingDate.localeCompare(b.trainingDate));
     const recent = ordered.slice(-7);
     const trend = recent.map((session) => ({ date: session.trainingDate.slice(5), load: round(sessionLoad(session)), rpe: session.rpe || 0 }));
@@ -345,9 +348,10 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
       distance: round(item.distance, 1),
       duration: round(item.duration)
     }));
-    const categoryMap = new Map(STRENGTH_TRAINING_CATEGORIES.map((name) => [name, 0]));
+    const contentAnalysisMap = new Map(STRENGTH_CONTENT_ANALYSIS_CATEGORIES.map((name) => [name, 0]));
     const positionMap = new Map(STRENGTH_BODY_POSITIONS.map((name) => [name, 0]));
-    const completionMap = new Map(STRENGTH_TRAINING_CATEGORIES.map((name) => [name, { total: 0, done: 0 }]));
+    const contentCompletionMap = new Map(STRENGTH_CONTENT_ANALYSIS_CATEGORIES.map((name) => [name, { total: 0, done: 0 }]));
+    let unclassifiedContent = 0;
     const loadRatioMap = new Map(['水上', '陆上'].map((name) => [name, { value: 0, sessions: 0, duration: 0, distance: 0, rpeSum: 0, rpeCount: 0 }]));
     const lessonRatioMap = new Map(lessonTypes.map((name) => [name, { value: 0, sessions: 0, duration: 0, distance: 0, rpeSum: 0, rpeCount: 0, sets: 0, done: 0 }]));
     ordered.forEach((session) => {
@@ -374,18 +378,28 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
         lessonItem.rpeCount += 1;
       }
     });
-    sessions.flatMap((session) => session.sets).forEach((set) => {
-      const category = categoryOf(set.exerciseName, set.trainingCategory);
+    sessions.forEach((session) => session.sets.forEach((set) => {
+      const contentCategory = inferStrengthContentAnalysisCategory({
+        sessionLabel: session.sessionLabel,
+        trainingType: session.trainingType,
+        structureType: session.structureType,
+        exerciseName: set.exerciseName,
+        trainingCategory: set.trainingCategory
+      });
       const bodyPosition = bodyPositionOf(set.exerciseName, set.bodyPosition);
-      categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
       positionMap.set(bodyPosition, (positionMap.get(bodyPosition) || 0) + 1);
-      const item = completionMap.get(category)!;
+      if (!contentCategory) {
+        unclassifiedContent += 1;
+        return;
+      }
+      contentAnalysisMap.set(contentCategory, (contentAnalysisMap.get(contentCategory) || 0) + 1);
+      const item = contentCompletionMap.get(contentCategory)!;
       item.total += 1;
       if (set.completed) item.done += 1;
-    });
+    }));
     const loadTotal = [...loadRatioMap.values()].reduce((sum, item) => sum + item.value, 0);
     const lessonTotal = [...lessonRatioMap.values()].reduce((sum, item) => sum + item.value, 0);
-    const categoryTotal = [...categoryMap.values()].reduce((sum, value) => sum + value, 0);
+    const contentTotal = [...contentAnalysisMap.values()].reduce((sum, value) => sum + value, 0);
     return {
       daily21Weeks,
       loadRatio: [...loadRatioMap].map(([name, item], index) => ({
@@ -411,17 +425,18 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
         color: lessonPalette[index]
       })).sort((a, b) => b.value - a.value),
       trend,
-      categoryExecution: [...categoryMap].map(([name, value], index) => {
-        const item = completionMap.get(name)!;
+      contentAnalysis: [...contentAnalysisMap].map(([name, value], index) => {
+        const item = contentCompletionMap.get(name)!;
         return {
           name,
           count: value,
-          percent: categoryTotal ? round(value / categoryTotal * 100, 1) : 0,
+          percent: contentTotal ? round(value / contentTotal * 100, 1) : 0,
           completion: item.total ? round(item.done / item.total * 100) : 0,
           done: item.done,
-          color: categoryPalette[index]
+          color: contentAnalysisPalette[index]
         };
       }),
+      unclassifiedContent,
       positions: [...positionMap].map(([name, value]) => ({ name, value })),
     };
   }, [sessions]);
@@ -440,7 +455,7 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
       <article className="strength-chart-card strength-load-split-card"><header><div><span>水陆训练负荷</span><h2>水上与陆上负荷</h2></div><small>{loadTotal ? `水上 ${waterPercent}% · 陆上 ${landPercent}%` : '按 sRPE 与训练时间汇总'}</small></header><WaterLandLoadPanel items={loadRatio} /></article>
       <article className="strength-chart-card strength-lesson-card"><header><div><span>训练环境与课型</span><h2>训练课类型构成</h2></div><small>按负荷、时间、动作项和完成率汇总</small></header><LessonCompositionPanel items={lessonRatio} /></article>
       <article className="strength-chart-card"><header><div><span>最近 7 日</span><h2>训练负荷趋势</h2></div><small>柱状：训练负荷 · 折线：RPE</small></header><div className="strength-chart-area">{trend.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={trend}><CartesianGrid stroke="#e8efef" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 10 }} /><YAxis yAxisId="load" tick={{ fontSize: 10 }} /><YAxis yAxisId="rpe" orientation="right" domain={[0, 10]} tick={{ fontSize: 10 }} /><Tooltip /><Bar yAxisId="load" dataKey="load" name="训练负荷 AU" fill="#0d9488" radius={[5, 5, 0, 0]} maxBarSize={30} /><Line yAxisId="rpe" dataKey="rpe" name="RPE" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} /></ComposedChart></ResponsiveContainer> : <EmptyChart text="导入训练记录后显示近 7 日趋势" />}</div></article>
-      <article className="strength-chart-card strength-category-execution-card"><header><div><span>训练内容与执行</span><h2>五类体能训练构成与完成</h2></div><small>训练项占比 · 分类完成率</small></header><CategoryExecutionPanel items={categoryExecution} /></article>
+      <article className="strength-chart-card strength-category-execution-card"><header><div><span>训练内容与执行</span><h2>训练内容分析</h2></div><small>训练项占比 · 分类完成率 · 范围外提示</small></header><ContentAnalysisPanel items={contentAnalysis} unclassified={unclassifiedContent} /></article>
       <article className="strength-chart-card strength-body-map-card"><header><div><span>动作覆盖</span><h2>身体位置训练分布</h2></div><small>人体部位热点 · 训练项占比</small></header><BodyPositionMapPanel items={positions} /></article>
     </section>
   </>;

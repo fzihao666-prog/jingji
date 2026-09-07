@@ -1805,6 +1805,177 @@ function seedProfessionalOverviewData() {
 
 runInitializationOnce('professional_overview_seed_v2', seedProfessionalOverviewData);
 
+// 统一总览的六维雷达依赖力量、爆发、核心、耐力、左右对称和恢复数据。
+// 真实导入通常只覆盖其中一部分；这次补数只填补空缺，不改写已有实测值，且完整保留可追溯来源。
+function seedMissingOverviewRadarData() {
+  const athletes = db.prepare(`
+    SELECT id, project, COALESCE(NULLIF(gender, ''), '男') AS gender
+    FROM athletes WHERE active = 1 ORDER BY id
+  `).all() as Array<{ id: number; project: string; gender: string }>;
+  if (!athletes.length) return;
+
+  const upsertMetric = db.prepare(`
+    INSERT INTO metric_definitions
+      (code, label, domain, unit, direction, frequency, projects_json, minimum, maximum)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      label = excluded.label, domain = excluded.domain, unit = excluded.unit,
+      direction = excluded.direction, frequency = excluded.frequency,
+      projects_json = excluded.projects_json, minimum = excluded.minimum,
+      maximum = excluded.maximum, active = 1, updated_at = CURRENT_TIMESTAMP
+  `);
+  for (const metric of OVERVIEW_METRICS) {
+    upsertMetric.run(metric.code, metric.label, metric.domain, metric.unit, metric.direction, metric.frequency,
+      JSON.stringify(metric.projects), metric.minimum, metric.maximum);
+  }
+  const activeMetrics = db.prepare(`
+    SELECT code, unit, direction, projects_json AS projectsJson
+    FROM metric_definitions WHERE active = 1
+  `).all() as Array<{ code: string; unit: string; direction: 'higher_better' | 'lower_better' | 'neutral'; projectsJson: string }>;
+
+  const findLatestRadarSession = db.prepare(`
+    SELECT ts.id
+    FROM test_sessions ts
+    WHERE ts.athlete_id = ?
+      AND (ts.test_type = '专业综合评估' OR EXISTS (
+        SELECT 1 FROM test_measurements tm
+        WHERE tm.test_session_id = ts.id
+          AND tm.metric_code IN ('benchPressKg', 'benchPullKg', 'squatKg', 'deadliftKg', 'verticalJumpCm')
+      ))
+    ORDER BY ts.test_date DESC, ts.id DESC LIMIT 1
+  `);
+  const insertSession = db.prepare(`
+    INSERT INTO test_sessions
+      (athlete_id, test_date, test_type, protocol, source, quality, is_demo)
+    VALUES (?, ?, '专业综合评估', '统一数据字典缺失指标补全（演示数据）', 'metric_gap_seed', 'estimated', 1)
+  `);
+  const findMeasurement = db.prepare(`
+    SELECT id, target_value AS targetValue, source, quality, is_demo AS isDemo
+    FROM test_measurements
+    WHERE test_session_id = ? AND metric_code = ? AND side = 'center'
+  `);
+  const insertMeasurement = db.prepare(`
+    INSERT INTO test_measurements
+      (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo)
+    VALUES (?, ?, ?, ?, ?, 'center', 'estimated', 'metric_gap_seed', 1)
+  `);
+  const fillMissingTarget = db.prepare(`
+    UPDATE test_measurements
+    SET target_value = COALESCE(target_value, ?),
+        quality = CASE WHEN target_value IS NULL THEN 'estimated' ELSE quality END,
+        source = CASE WHEN target_value IS NULL AND instr(source, 'metric_gap_seed') = 0
+          THEN source || '、metric_gap_seed' ELSE source END,
+        is_demo = CASE WHEN target_value IS NULL THEN 1 ELSE is_demo END
+    WHERE id = ?
+  `);
+  const insertWellness = db.prepare(`
+    INSERT OR IGNORE INTO daily_wellness
+      (athlete_id, wellness_date, sleep_hours, sleep_quality, morning_pulse, weight_kg,
+       fatigue_index, soreness_index, mood_index, status, source, quality, is_demo)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'metric_gap_seed', 'estimated', 1)
+  `);
+  const round = (value: number, digits = 1) => Number(value.toFixed(digits));
+  const today = new Date();
+  today.setUTCHours(12, 0, 0, 0);
+  const isoDaysAgo = (days: number) => {
+    const date = new Date(today);
+    date.setUTCDate(date.getUTCDate() - days);
+    return date.toISOString().slice(0, 10);
+  };
+  const valueFor = (athlete: { id: number; project: string; gender: string }, code: string): number | null => {
+    const female = athlete.gender === '女';
+    const variation = (athlete.id * 17 % 11) - 5;
+    const scale = 1 + variation / 100;
+    const mass = (female ? 63 : 80) + variation * .35;
+    const values: Record<string, number> = {
+      heightCm: (female ? 174 : 186) + variation * .35,
+      weightKg: mass, bodyFatPct: (female ? 17.5 : 12.2) + variation * .12,
+      trainingYears: (female ? 6.5 : 7.5) + Math.abs(variation) * .2,
+      armSpanCm: (female ? 177 : 190) + variation * .35,
+      sitReachCm: 23 + variation * .4, verticalJumpCm: (female ? 43 : 51) * scale,
+      pullUpsReps: (female ? 13 : 20) + variation * .25,
+      benchPressKg: (female ? 60 : 92) * scale, benchPullKg: (female ? 72 : 108) * scale,
+      frontPlankSec: 200 + variation * 4, leftPlankSec: 166 + variation * 3,
+      rightPlankSec: 172 + variation * 3, squatKg: (female ? 118 : 165) * scale,
+      deadliftKg: (female ? 138 : 192) * scale, highPullKg: (female ? 62 : 88) * scale,
+      leftSingleLegSquatReps: 22 + variation * .2, rightSingleLegSquatReps: 23 + variation * .2,
+      body_fat_pct: (female ? 17.5 : 12.2) + variation * .12,
+      skeletal_muscle_kg: (female ? 27.5 : 37.5) * scale,
+      cmj_peak_power_w: (female ? 3400 : 4550) * scale, imtp_peak_force_n: (female ? 2550 : 3550) * scale,
+      dsd_ratio: .72 - variation * .005, vo2max_ml_kg_min: (female ? 56.5 : 62.5) * scale,
+      general_endurance_score: 86 * scale, anaerobic_power_wkg: (female ? 8.8 : 10.2) * scale,
+      asymmetry_index_pct: 7.5 + Math.abs(variation) * .25, core_strength_score: 87 * scale,
+      lactate_threshold_mmol: 4.1 + variation * .02,
+      fms_deep_squat: variation >= 1 ? 3 : 2, fms_hurdle_step: 2, fms_inline_lunge: variation >= 3 ? 3 : 2,
+      fms_shoulder_mobility: 2, fms_active_straight_leg_raise: variation >= 0 ? 3 : 2,
+      fms_trunk_stability_pushup: female ? 2 : (variation >= 2 ? 3 : 2), fms_rotary_stability: 2
+    };
+    if (athlete.project === '赛艇') Object.assign(values, {
+      seven_stroke_power_w: (female ? 620 : 810) * scale, erg_2k_sec: (female ? 430 : 382) / scale,
+      erg_6k_sec: (female ? 1360 : 1210) / scale, boat_speed_mps: (female ? 5.12 : 5.68) * scale,
+      stroke_rate_spm: 31 + variation * .15, distance_per_stroke_m: (female ? 8.25 : 8.85) * scale
+    });
+    if (athlete.project === '皮划艇') Object.assign(values, {
+      sprint_200_sec: (female ? 45 : 40) / scale, sprint_500_sec: (female ? 125 : 111) / scale,
+      boat_speed_mps: (female ? 4.82 : 5.38) * scale, stroke_rate_spm: 82 + variation * .3,
+      distance_per_stroke_m: 2.85 * scale, left_paddle_power_w: (female ? 340 : 425) * scale,
+      right_paddle_power_w: (female ? 348 : 434) * scale
+    });
+    if (athlete.project === '激流') Object.assign(values, {
+      benchPressPeakPowerW: (female ? 440 : 620) * scale, benchPressRelativePowerWkg: (female ? 7.1 : 8.2) * scale,
+      benchPullPeakPowerW: (female ? 480 : 665) * scale, benchPullRelativePowerWkg: (female ? 7.8 : 8.6) * scale,
+      wingatePeakPowerWkg: (female ? 12.1 : 14.6) * scale, wingateWorkJkg: (female ? 282 : 332) * scale,
+      wingateLactateMmol: 13.4 * scale, benchPress2MinReps: (female ? 61 : 73) * scale,
+      benchPull2MinReps: (female ? 69 : 83) * scale, thresholdErgPowerW: (female ? 155 : 198) * scale,
+      anaerobicThresholdHr: 164 + variation * .2, sprint300Sec: (female ? 116 : 102) / scale,
+      leftGripKgf: (female ? 39 : 50) * scale, rightGripKgf: (female ? 40 : 51.5) * scale,
+      gate_technique_score: 86 * scale
+    });
+    const aliases: Record<string, string> = {
+      height_cm: 'heightCm', weight_kg: 'weightKg', arm_span_cm: 'armSpanCm', training_years: 'trainingYears',
+      sit_reach_cm: 'sitReachCm', vertical_jump_cm: 'verticalJumpCm', pull_ups_reps: 'pullUpsReps',
+      bench_press_kg: 'benchPressKg', bench_pull_kg: 'benchPullKg', squat_kg: 'squatKg', deadlift_kg: 'deadliftKg',
+      clean_kg: 'highPullKg', front_plank_sec: 'frontPlankSec', supine_support_sec: 'frontPlankSec',
+      side_plank_sec: 'leftPlankSec', single_leg_squat_reps: 'leftSingleLegSquatReps'
+    };
+    if (code === 'hip_thrust_kg') values[code] = (female ? 175 : 245) * scale;
+    if (code === 'movement_squat_score' || code === 'movement_heel_lift_score' || code === 'movement_pushup_score'
+      || code === 'movement_shoulder_score' || code === 'movement_trunk_score' || code === 'movement_cervical_score') {
+      values[code] = variation >= 1 ? 3 : 2;
+    }
+    const value = values[aliases[code] || code];
+    if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+    return round(value, code.includes('_sec') || code === 'dsd_ratio' || code === 'boat_speed_mps' || code === 'distance_per_stroke_m' ? 2 : 1);
+  };
+
+  for (const athlete of athletes) {
+    let session = findLatestRadarSession.get(athlete.id) as { id: number } | undefined;
+    if (!session) {
+      insertSession.run(athlete.id, isoDaysAgo(1));
+      session = findLatestRadarSession.get(athlete.id) as { id: number };
+    }
+    for (const metric of activeMetrics.filter((item) => item.projectsJson.includes(athlete.project))) {
+      const value = valueFor(athlete, metric.code);
+      if (value === null) continue;
+      const target = round(metric.direction === 'lower_better' ? value * .95 : metric.direction === 'higher_better' ? value * 1.05 : value, 2);
+      const existing = findMeasurement.get(session.id, metric.code) as { id: number; targetValue: number | null } | undefined;
+      if (existing) fillMissingTarget.run(target, existing.id);
+      else insertMeasurement.run(session.id, metric.code, value, target, metric.unit);
+    }
+    for (let daysAgo = 27; daysAgo >= 0; daysAgo -= 1) {
+      const day = 27 - daysAgo;
+      const wave = Math.sin((day + athlete.id) / 4);
+      const sleep = round(7.7 + wave * .4 - (day % 11 === 0 ? .6 : 0));
+      const fatigue = round(3.2 - wave * .6 + (day % 11 === 0 ? 1 : 0));
+      insertWellness.run(athlete.id, isoDaysAgo(daysAgo), sleep, round(sleep / 8 * 10), Math.round(51 - wave * 3),
+        round((valueFor(athlete, 'weightKg') || 70) + Math.sin(day / 7) * .3), fatigue, round(2.5 + Math.cos(day / 5) * .5),
+        round(7.4 + wave * .5), fatigue >= 5.5 ? 'attention' : 'normal');
+    }
+  }
+}
+
+runInitializationOnce('overview_radar_metric_gap_seed_v2', seedMissingOverviewRadarData);
+
 // 训练量统计专用补数：仅面向没有真实完整训练量的运动员，绝不覆盖手工或文件导入的课次。
 // 数据保留可识别来源与 estimated/demo 标记，方便后续以真实训练数据替换。
 function seedTrainingVolumeDemoData() {

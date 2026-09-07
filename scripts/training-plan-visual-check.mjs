@@ -64,7 +64,10 @@ if (await page.getByText('低中高强度占比').count()) throw new Error('体�
 if (await page.getByRole('heading', { name: '训练完成情况', exact: true }).count()) throw new Error('体能总览仍单独显示训练完成情况。');
 if (await page.locator('.strength-load-split-card').count() !== 1) throw new Error('体能总览缺少新版水陆负荷面板。');
 if (await page.locator('.strength-lesson-card').count() !== 1) throw new Error('体能总览缺少新版训练课类型构成面板。');
-if (await page.locator('.strength-category-execution-card').count() !== 1) throw new Error('体能总览缺少五类体能训练构成与完成合并面板。');
+if (await page.getByRole('heading', { name: '训练内容分析', exact: true }).count() !== 1) throw new Error('体能总览缺少训练内容分析面板。');
+for (const label of ['交叉训练', '功能训练', '拉伸再生', '循环训练', '最大力量', '爆发力', '核心力量', '动作准备']) {
+  if (await page.getByText(label, { exact: true }).count() < 1) throw new Error(`训练内容分析缺少${label}。`);
+}
 if (await page.locator('.strength-body-map-card .body-map-stage img').count() !== 1) throw new Error('体能总览缺少身体部位图。');
 await page.screenshot({ path: path.join(outputDirectory, '01体能总览.png'), fullPage: true });
 
@@ -79,7 +82,7 @@ await page.screenshot({ path: path.join(outputDirectory, '02训练安排.png'), 
 await openStrength('训练记录');
 await page.locator('.strength-results-panel').waitFor();
 if (await page.locator('.strength-session-card').count() < 1) throw new Error('训练记录未显示已导入场次。');
-if (await page.getByRole('button', { name: '导入训练结果', exact: true }).count() !== 1) throw new Error('训练记录导入入口数量异常。');
+if (await page.getByRole('button', { name: '导入训练结果', exact: true }).count() !== 0) throw new Error('训练记录仍显示导入入口。');
 await page.screenshot({ path: path.join(outputDirectory, '03训练记录.png'), fullPage: true });
 
 await openStrength('训练分析');
