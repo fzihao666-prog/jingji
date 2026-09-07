@@ -1,5 +1,5 @@
 import {
-  Activity, AlertTriangle, BarChart3, CalendarDays, CheckCircle2, ChevronRight,
+  Activity, AlertTriangle, BarChart3, CalendarDays, CheckCircle2,
   Clock3, FileSpreadsheet, Gauge, HeartPulse, MapPinned, RefreshCw, Route,
   Sparkles, Target, TimerReset, TrendingUp, Waves, Zap
 } from 'lucide-react';
@@ -118,7 +118,7 @@ function SectionCard({ title, note, children, className = '' }: { title: string;
   return <section className={`panel professional-panel special-card ${className}`}><header className="panel-heading"><div><h2>{title}</h2></div>{note && <small>{note}</small>}</header>{children}</section>;
 }
 function MetricCard({ icon, label, value, unit, change, tone = 'teal' }: { icon: ReactNode; label: string; value: string | number; unit?: string; change: string; tone?: string }) {
-  return <article className={`metric-card special-metric tone-${tone}`}><div className="metric-icon">{icon}</div><div className="metric-copy"><span>{label}</span><strong>{value}<small>{unit}</small></strong><p>{change}</p></div><div className="metric-waterline" aria-hidden="true"/></article>;
+  return <div className="overview-card-shell card-size-metric special-metric-shell"><article className={`metric-card special-metric tone-${tone}`}><div className="metric-icon">{icon}</div><div className="metric-copy"><span>{label}</span><strong>{value}<small>{unit}</small></strong><p>{change}</p></div><div className="metric-waterline" aria-hidden="true"/></article></div>;
 }
 
 function TrendChart({ data, metric, color = '#12978f', secondary }: { data: ReturnType<typeof aggregateDays>; metric: 'duration' | 'distance' | 'load' | 'rate' | 'heart' | 'power'; color?: string; secondary?: 'chronic' }) {
@@ -178,10 +178,8 @@ export function SpecialTestsPage({ records, project, from, to, loading, section,
   const analysisTabs: Array<{ key: SpecialPageKey; label: string }> = [{ key: 'special-time', label: '时间' }, { key: 'special-distance', label: '距离' }, { key: 'special-load', label: '负荷' }];
   const metricTabs: Array<{ key: SpecialPageKey; label: string }> = [{ key: 'special-rate', label: project === '赛艇' ? '桨频' : '划频' }, { key: 'special-heart', label: '心率' }, { key: 'special-power', label: '功率' }];
   const pageTabs = analysisTabs.some((item) => item.key === section) ? analysisTabs : metricTabs.some((item) => item.key === section) ? metricTabs : [];
-  const displayTitle = pageTabs.length ? meta.group : meta.title;
-  const displayEnglish = meta.group === '综合分析' ? 'TRAINING ANALYSIS' : meta.group === '专项指标' ? 'SPECIAL METRICS' : meta.english;
-  return <div className="page-content professional-overview special-training-page"><header className="page-heading special-page-heading"><div className="special-title-block"><span>{displayEnglish}</span><h1>{displayTitle}</h1><p>{meta.description}</p><div className="special-breadcrumb"><b>专项训练</b><ChevronRight/><span>{displayTitle}</span>{pageTabs.length > 0 && <><ChevronRight/><strong>{meta.title.replace('分析','')}</strong></>}</div></div></header>
-    {pageTabs.length > 0 && <nav className="special-page-tabs" aria-label={`${displayTitle}指标切换`}>{pageTabs.map((item) => <button key={item.key} className={section === item.key ? 'active' : ''} aria-current={section === item.key ? 'page' : undefined} onClick={() => onSectionChange(item.key)}><span>{item.label}</span></button>)}</nav>}
+  return <div className="page-content professional-overview special-training-page"><header className="page-heading overview-page-heading special-page-heading"><div className="overview-title-block"><h1>专项训练</h1><p>{meta.description}</p></div></header>
+    {pageTabs.length > 0 && <nav className="special-page-tabs" aria-label={`${meta.group}指标切换`}>{pageTabs.map((item) => <button key={item.key} className={section === item.key ? 'active' : ''} aria-current={section === item.key ? 'page' : undefined} onClick={() => onSectionChange(item.key)}><span>{item.label}</span></button>)}</nav>}
     {loading ? <div className="special-loading"><RefreshCw className="spin"/>正在同步训练数据…</div> : !sessions.length && section !== 'special-schedule' ? <div className="special-empty"><FileSpreadsheet/><strong>当前日期范围内暂无训练记录</strong><span>可通过全局筛选栏调整日期或项目查看数据。</span></div> : ['special-time','special-distance','special-load'].includes(section) ? <><AnalysisPage section={section} sessions={sessions} days={days} project={project}/>{section === 'special-distance' && <SpecialPerformancePanel project={project} from={from} to={to}/>}</> : ['special-rate','special-heart','special-power'].includes(section) ? <MetricPage section={section} sessions={sessions} days={days} project={project}/> : section === 'special-schedule' ? <SchedulePage sessions={sessions} to={to} project={project}/> : null}
   </div>;
 }

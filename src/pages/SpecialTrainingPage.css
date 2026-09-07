@@ -1,47 +1,12 @@
 .special-training-page {
-  --special-gap: 14px;
   display: grid;
-  gap: var(--special-gap);
+  gap: var(--overview-gap);
   padding-bottom: 36px;
 }
 
-/* 与训练总览使用相同的标题区、日期工具栏和指标卡结构。 */
 .special-page-heading {
   margin-bottom: 0;
 }
-
-.special-title-block > span {
-  color: #168f88;
-  font: 800 9px "Bahnschrift", sans-serif;
-  letter-spacing: .15em;
-}
-
-.special-title-block h1 {
-  color: var(--ink);
-  margin-top: 5px;
-  font-size: 31px;
-  letter-spacing: -.04em;
-}
-
-.special-title-block > p {
-  max-width: 560px;
-  margin-top: 7px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.special-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 9px;
-  color: #829399;
-  font-size: 9px;
-}
-
-.special-breadcrumb svg { width: 11px; }
-.special-breadcrumb strong { color: #167f79; }
 
 .special-page-tabs {
   min-width: 0;
@@ -82,11 +47,10 @@
 .special-metrics {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--special-gap);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: var(--overview-gap);
 }
 
-/* MetricCard 直接复用训练总览的 metric-card、metric-icon 与 metric-copy。 */
 .special-metric { min-width: 0; }
 .special-metric .metric-copy { min-width: 0; }
 .special-metric .metric-copy > strong { white-space: nowrap; }
@@ -100,7 +64,7 @@
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: var(--special-gap);
+  gap: var(--overview-gap);
 }
 
 .span-3 { grid-column: span 3; }
@@ -111,8 +75,7 @@
 .span-12 { grid-column: 1 / -1; }
 
 .special-card { min-width: 0; }
-.special-card > .panel-heading { padding: 0; }
-.special-chart { width: 100%; height: 250px; min-width: 0; }
+.special-chart { width: 100%; height: 275px; min-width: 0; }
 
 .special-donut-wrap {
   min-height: 230px;
@@ -233,13 +196,14 @@
 .special-training-page > .special-empty span { font-size: 10px; }
 
 @media (max-width: 1200px) {
-  .special-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .special-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .special-metrics .overview-card-shell.card-size-metric { grid-column: span 2; }
   .span-3, .span-4, .span-5, .span-7, .span-8 { grid-column: span 6; }
 }
 
 @media (max-width: 760px) {
-  .special-title-block h1 { font-size: 26px; }
   .special-metrics { grid-template-columns: 1fr; }
+  .special-metrics .overview-card-shell.card-size-metric { grid-column: 1; }
   .special-grid { grid-template-columns: 1fr; }
   .span-3, .span-4, .span-5, .span-7, .span-8, .span-12,
   .week-schedule { grid-template-columns: repeat(7, 128px); }

@@ -34,17 +34,15 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     project TEXT NOT NULL,
-    team TEXT NOT NULL,
+    team_id INTEGER,
     gender TEXT,
-    region TEXT NOT NULL DEFAULT '未设置',
-    city TEXT NOT NULL DEFAULT '未设置',
-    county TEXT NOT NULL DEFAULT '未设置',
     birth_date TEXT,
     photo_url TEXT NOT NULL DEFAULT '',
     profile_status TEXT NOT NULL DEFAULT 'complete' CHECK(profile_status IN ('incomplete', 'complete')),
     source TEXT NOT NULL DEFAULT 'manual',
     data_import_batch_id TEXT,
-    active INTEGER NOT NULL DEFAULT 1
+    active INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (team_id) REFERENCES project_teams(id)
   );
 
   CREATE TABLE IF NOT EXISTS athlete_origins (
@@ -455,15 +453,6 @@ if (hasColumn('special_test_events', 'project') && !specialTestSchema.includes("
   }
 }
 
-if (!hasColumn('athletes', 'region')) {
-  db.exec("ALTER TABLE athletes ADD COLUMN region TEXT NOT NULL DEFAULT '未设置'");
-}
-if (!hasColumn('athletes', 'city')) {
-  db.exec("ALTER TABLE athletes ADD COLUMN city TEXT NOT NULL DEFAULT '未设置'");
-}
-if (!hasColumn('athletes', 'county')) {
-  db.exec("ALTER TABLE athletes ADD COLUMN county TEXT NOT NULL DEFAULT '未设置'");
-}
 if (!hasColumn('athletes', 'photo_url')) {
   db.exec("ALTER TABLE athletes ADD COLUMN photo_url TEXT NOT NULL DEFAULT ''");
 }

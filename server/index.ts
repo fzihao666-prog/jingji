@@ -1160,8 +1160,9 @@ type AdviceTestRow = {
 function adviceTestById(strengthTestId: number) {
   const session = db.prepare(`
     SELECT ts.id AS strengthTestId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
-      a.name AS athleteName, a.project, a.team, a.gender
+      a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team, a.gender
     FROM test_sessions ts JOIN athletes a ON a.id = ts.athlete_id
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
     WHERE ts.id = ? AND ts.test_type = '力量素质测试'
   `).get(strengthTestId) as Omit<AdviceTestRow, 'metricsJson' | 'targetsJson'> | undefined;
   if (!session) return undefined;
@@ -1494,7 +1495,7 @@ function trainingSessionBreakdown(input: { trainingType: string; structureType: 
 app.get('/api/teams', (_req, res) => {
   const teams = db.prepare(`
     SELECT pt.id, pt.project, pt.name,
-      (SELECT COUNT(*) FROM athletes a WHERE a.project = pt.project AND a.team = pt.name AND a.active = 1) AS athleteCount
+      (SELECT COUNT(*) FROM athletes a WHERE a.team_id = pt.id AND a.active = 1) AS athleteCount
     FROM project_teams pt WHERE pt.active = 1 ORDER BY pt.project, pt.name
   `).all();
   res.json({ teams });
@@ -1508,7 +1509,7 @@ app.get('/api/admin/teams', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 
   `).all() as Array<{ id: number; project: string; name: string }>;
   const athleteIds = accessibleAthleteIds(currentUser);
   const visibleAthletes = athleteIds.length ? db.prepare(`
-    SELECT project, team FROM athletes WHERE id IN (${athleteIds.map(() => '?').join(',')}) AND active = 1
+    SELECT a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id IN (${athleteIds.map(() => '?').join(',')}) AND a.active = 1
   `).all(...athleteIds) as Array<{ project: string; team: string }> : [];
   const athleteCounts = new Map<string, number>();
   for (const athlete of visibleAthletes) {
@@ -1556,7 +1557,7 @@ app.delete('/api/admin/teams/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG',
   if (req.authUser!.role === 'SCC' || !permissionsAllowProjectTeam(accountPermissions(req.authUser!.id), team.project, team.name)) {
     return res.status(403).json({ message: '无权删除该队伍。' });
   }
-  const athleteCount = (db.prepare('SELECT COUNT(*) AS count FROM athletes WHERE project = ? AND team = ? AND active = 1').get(team.project, team.name) as { count: number }).count;
+  const athleteCount = (db.prepare('SELECT COUNT(*) AS count FROM athletes WHERE team_id = ? AND active = 1').get(team.id) as { count: number }).count;
   const pendingCount = (db.prepare("SELECT COUNT(*) AS count FROM registration_requests WHERE project = ? AND team = ? AND status = 'pending'").get(team.project, team.name) as { count: number }).count;
   if (athleteCount || pendingCount) return res.status(409).json({ message: '该队伍仍有运动员或待审核申请，不能删除。' });
   db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
@@ -2069,7 +2070,7 @@ app.get('/api/athletes', requireAuth, (req, res) => {
   if (!ids.length) return res.json({ athletes: [] });
   const placeholders = ids.map(() => '?').join(',');
   const athletes = db.prepare(`
-    SELECT a.id, a.name, a.project, a.team, a.gender, a.region, a.region AS province, a.city, a.county,
+    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       a.photo_url AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
       EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
       COALESCE(ap.identity_number, '') AS identityNumber,
@@ -2115,11 +2116,13 @@ app.get('/api/athletes', requireAuth, (req, res) => {
       COALESCE((SELECT bm.note FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1), '') AS bodyMeasurementNote,
       GROUP_CONCAT(u.display_name, '、') AS coaches
     FROM athletes a
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
+    LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
     LEFT JOIN coach_athletes ca ON ca.athlete_id = a.id
     LEFT JOIN users u ON u.id = ca.coach_user_id
     WHERE a.id IN (${placeholders}) AND a.active = 1
-    GROUP BY a.id ORDER BY a.project, a.team, a.name
+    GROUP BY a.id ORDER BY a.project, pt.name, a.name
   `).all(...ids) as Array<{
     id: number;
     name: string;
@@ -2472,11 +2475,12 @@ app.get('/api/training-plans', requireAuth, (req, res) => {
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
   if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员的体能训练。' });
   const rows = db.prepare(`
-    SELECT tp.id, tp.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team,
+    SELECT tp.id, tp.athlete_id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team,
       a.photo_url AS photoUrl, tp.plan_data AS dataJson, tp.updated_at AS updatedAt,
       u.display_name AS updatedBy
     FROM training_plans tp
     JOIN athletes a ON a.id = tp.athlete_id
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
     JOIN users u ON u.id = tp.updated_by
     WHERE tp.athlete_id = ?
     ORDER BY tp.start_date DESC, tp.id DESC
@@ -2849,10 +2853,11 @@ app.post(
 app.get('/api/training-plans/:id/export', requireAuth, async (req, res) => {
   const planId = Number(req.params.id);
   const row = db.prepare(`
-    SELECT tp.id, tp.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team,
+    SELECT tp.id, tp.athlete_id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team,
       a.photo_url AS photoUrl, tp.plan_data AS dataJson
     FROM training_plans tp
     JOIN athletes a ON a.id = tp.athlete_id
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
     WHERE tp.id = ?
   `).get(planId) as {
     id: number;
@@ -3420,13 +3425,14 @@ async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
   if (!athleteIds.length) return workbook;
   const placeholders = athleteIds.map(() => '?').join(',');
   const profileRows = db.prepare(`
-    SELECT a.id, a.name, a.project, a.team, a.gender, a.birth_date, a.region, a.city, a.county,
+    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, a.birth_date, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       ap.identity_number, ap.ethnicity, ap.phone, ap.blood_type, ap.emergency_contact, ap.emergency_phone,
       ap.education, ap.technical_level, ap.position, ap.health_status, ap.best_result, ap.native_place,
       ap.home_address, ap.athlete_status, ap.start_sport_date, ap.training_venue, ap.current_event,
       ap.training_phase, ap.camp_period, ap.origin_place, ap.origin_unit, ap.origin_coach, ap.specialties, ap.notes
     FROM athletes a LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
-    WHERE a.id IN (${placeholders}) AND a.project = ? AND a.active = 1 ORDER BY a.team, a.name
+    LEFT JOIN project_teams pt ON pt.id = a.team_id LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+    WHERE a.id IN (${placeholders}) AND a.project = ? AND a.active = 1 ORDER BY pt.name, a.name
   `).all(...athleteIds, project) as Array<Record<string, unknown>>;
   const profileIds = profileRows.map((row) => Number(row.id));
   if (!profileIds.length) return workbook;
@@ -3673,7 +3679,7 @@ app.get('/api/records', requireAuth, (req, res) => {
   const placeholders = ids.map(() => '?').join(',');
   const records = db.prepare(`
     SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName,
-      a.project, a.team, a.region, a.region AS province, a.city, a.county,
+      a.project, COALESCE(pt.name, '') AS team, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
       ts.distance_km AS distanceKm, ts.duration_reported AS durationReported,
@@ -3686,6 +3692,8 @@ app.get('/api/records', requireAuth, (req, res) => {
       ts.updated_at AS updatedAt, COALESCE(u.display_name, '系统') AS updatedBy
     FROM training_sessions ts
     JOIN athletes a ON a.id = ts.athlete_id
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
+    LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     LEFT JOIN users u ON u.id = ts.created_by
     WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
@@ -4580,7 +4588,7 @@ app.post('/api/admin/registrations/:id/approve', requireAuth, requireRole('SCC',
   try {
     let athleteId: number | null = null;
     if (request.requested_role === 'ATL') {
-      const athlete = db.prepare('SELECT id, project, team FROM athletes WHERE name = ?').get(request.display_name) as { id: number; project: string; team: string } | undefined;
+        const athlete = db.prepare(`SELECT a.id, a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.name = ?`).get(request.display_name) as { id: number; project: string; team: string } | undefined;
       if (athlete) {
         const linkedUser = db.prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'").get(athlete.id);
         if (linkedUser) throw new Error('该运动员已有登录账户。');
@@ -4589,19 +4597,10 @@ app.post('/api/admin/registrations/:id/approve', requireAuth, requireRole('SCC',
         }
         athleteId = athlete.id;
       } else {
-        const result = db.prepare(`
-          INSERT INTO athletes (name, project, team, gender, region, city, county)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `)
-          .run(
-            request.display_name,
-            request.project,
-            request.team,
-            request.gender,
-            '未设置',
-            '未设置',
-            '未设置'
-          );
+        const team = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(request.project, request.team) as { id: number } | undefined;
+        if (!team) throw new Error('申请所属队伍不存在或已停用。');
+        const result = db.prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
+          .run(request.display_name, request.project, team.id, request.gender);
         athleteId = Number(result.lastInsertRowid);
       }
       db.prepare(`
@@ -4690,14 +4689,16 @@ app.get('/api/admin/assignments', requireAuth, requireRole('SCC', 'PRJ', 'REG', 
   if (!ids.length) return res.json({ athletes: [], coaches: [] });
   const placeholders = ids.map(() => '?').join(',');
   const athletes = db.prepare(`
-    SELECT a.id, a.name, a.project, a.team, a.gender, a.region, a.region AS province, a.city, a.county,
+    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       COALESCE(GROUP_CONCAT(u.display_name, '、'), '') AS coaches,
       COALESCE(GROUP_CONCAT(u.id, ','), '') AS coachIds
     FROM athletes a
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
+    LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN coach_athletes ca ON ca.athlete_id = a.id
     LEFT JOIN users u ON u.id = ca.coach_user_id
     WHERE a.id IN (${placeholders}) AND a.active = 1
-    GROUP BY a.id ORDER BY a.project, a.team, a.name
+    GROUP BY a.id ORDER BY a.project, pt.name, a.name
   `).all(...ids);
   const allCoaches = db.prepare(`
     SELECT u.id, u.username, u.display_name AS displayName, u.role, u.athlete_id AS athleteId,
@@ -4769,7 +4770,7 @@ app.put('/api/admin/assignments/:athleteId', requireAuth, requireRole('PRJ', 'RE
   }
   db.exec('BEGIN');
   try {
-    db.prepare('UPDATE athletes SET region = ?, city = ?, county = ? WHERE id = ?').run(region, city, county, athleteId);
+    upsertAthleteOrigin({ athleteId, province: region, city, county, source: 'manual', quality: 'valid' });
     const athleteUser = db.prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'").get(athleteId) as { id: number } | undefined;
     if (athleteUser) {
       db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(athleteUser.id);
@@ -4924,11 +4925,12 @@ app.post('/api/access/accounts', requireAuth, requireRole('SCC', 'PRJ', 'REG', '
     const project = permissions.projects[0];
     const team = permissions.teams[0].team;
     if (role === 'ATL') {
-      const athleteResult = db.prepare(`
-        INSERT INTO athletes (name, project, team, gender, region, city, county)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(displayNameResult.name, project, team, gender, area.province, area.city, area.county);
+      const teamRow = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(project, team) as { id: number } | undefined;
+      if (!teamRow) throw new Error('所选队伍不存在或已停用。');
+      const athleteResult = db.prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
+        .run(displayNameResult.name, project, teamRow.id, gender);
       athleteId = Number(athleteResult.lastInsertRowid);
+      upsertAthleteOrigin({ athleteId, province: area.province, city: area.city, county: area.county, source: 'manual', quality: 'valid' });
       db.prepare(`
         INSERT INTO athlete_profiles (athlete_id, created_at)
         VALUES (?, CURRENT_TIMESTAMP)
@@ -5003,9 +5005,10 @@ app.put('/api/access/accounts/:id', requireAuth, requireRole('PRJ', 'REG', 'TD',
       const area = permissions.areas[0];
       const project = permissions.projects[0];
       const team = permissions.teams[0].team;
-      db.prepare(`
-        UPDATE athletes SET region = ?, city = ?, county = ?, project = ?, team = ? WHERE id = ?
-      `).run(area.province, area.city, area.county, project, team, target.athleteId);
+      const teamRow = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(project, team) as { id: number } | undefined;
+      if (!teamRow) throw new Error('所选队伍不存在或已停用。');
+      db.prepare(`UPDATE athletes SET project = ?, team_id = ? WHERE id = ?`).run(project, teamRow.id, target.athleteId);
+      upsertAthleteOrigin({ athleteId: target.athleteId, province: area.province, city: area.city, county: area.county, source: 'manual', quality: 'valid' });
       db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(target.athleteId);
       if (parentResult.parent?.role === 'SCC') {
         db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(parentUserId, target.athleteId);

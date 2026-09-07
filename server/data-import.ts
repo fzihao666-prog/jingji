@@ -214,8 +214,9 @@ function matchAthlete(name: string, project: string, athletes: ImportAthlete[]) 
   const direct = athletes.filter((athlete) => athlete.project === project && normalizedName(athlete.name) === normalized);
   if (direct.length === 1) return direct[0];
   const alias = db.prepare(`
-    SELECT a.id, a.name, a.project, a.team, a.gender
+    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender
     FROM athlete_aliases aa JOIN athletes a ON a.id = aa.athlete_id
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
     WHERE aa.normalized_alias = ? AND aa.project = ? AND a.active = 1
   `).all(normalized, project) as ImportAthlete[];
   return alias.length === 1 ? alias[0] : null;
@@ -1153,11 +1154,12 @@ function upsertBodyItem(item: DataImportItemView, batchId: string, policy: 'skip
 
 function upsertAthleteProfileItem(item: DataImportItemView, batchId: string) {
   const p = item.payload;
-  db.prepare(`UPDATE athletes SET gender = COALESCE(NULLIF(?, ''), gender), team = COALESCE(NULLIF(?, ''), team),
-    region = COALESCE(NULLIF(?, ''), region), city = COALESCE(NULLIF(?, ''), city), county = COALESCE(NULLIF(?, ''), county),
+  const team = text(p.team);
+  const teamId = team ? (db.prepare(`SELECT id FROM project_teams WHERE project = (SELECT project FROM athletes WHERE id = ?) AND name = ? AND active = 1`).get(item.athleteId, team) as { id: number } | undefined)?.id : null;
+  db.prepare(`UPDATE athletes SET gender = COALESCE(NULLIF(?, ''), gender), team_id = COALESCE(?, team_id),
     birth_date = COALESCE(NULLIF(?, ''), birth_date), profile_status = CASE WHEN NULLIF(?, '') IS NOT NULL AND NULLIF(?, '') IS NOT NULL AND NULLIF(?, '') IS NOT NULL AND NULLIF(?, '') IS NOT NULL THEN 'complete' ELSE profile_status END,
     source = 'file_import', data_import_batch_id = ? WHERE id = ?`)
-    .run(text(p.gender), text(p.team), text(p.region), text(p.city), text(p.county), text(p.birthDate), text(p.gender), text(p.region), text(p.city), text(p.county), batchId, item.athleteId);
+    .run(text(p.gender), teamId ?? null, text(p.birthDate), text(p.gender), text(p.region), text(p.city), text(p.county), batchId, item.athleteId);
   db.prepare(`INSERT INTO athlete_profiles (athlete_id, identity_number, ethnicity, phone, blood_type, emergency_contact, emergency_phone, education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status, start_sport_date, training_venue, current_event, training_phase, camp_period, origin_place, origin_unit, origin_coach, specialties, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(athlete_id) DO UPDATE SET identity_number=COALESCE(NULLIF(excluded.identity_number,''),athlete_profiles.identity_number), ethnicity=COALESCE(NULLIF(excluded.ethnicity,''),athlete_profiles.ethnicity), phone=COALESCE(NULLIF(excluded.phone,''),athlete_profiles.phone), blood_type=COALESCE(NULLIF(excluded.blood_type,''),athlete_profiles.blood_type), emergency_contact=COALESCE(NULLIF(excluded.emergency_contact,''),athlete_profiles.emergency_contact), emergency_phone=COALESCE(NULLIF(excluded.emergency_phone,''),athlete_profiles.emergency_phone), education=COALESCE(NULLIF(excluded.education,''),athlete_profiles.education), technical_level=COALESCE(NULLIF(excluded.technical_level,''),athlete_profiles.technical_level), position=COALESCE(NULLIF(excluded.position,''),athlete_profiles.position), health_status=COALESCE(NULLIF(excluded.health_status,''),athlete_profiles.health_status), best_result=COALESCE(NULLIF(excluded.best_result,''),athlete_profiles.best_result), native_place=COALESCE(NULLIF(excluded.native_place,''),athlete_profiles.native_place), home_address=COALESCE(NULLIF(excluded.home_address,''),athlete_profiles.home_address), athlete_status=COALESCE(NULLIF(excluded.athlete_status,''),athlete_profiles.athlete_status), start_sport_date=COALESCE(NULLIF(excluded.start_sport_date,''),athlete_profiles.start_sport_date), training_venue=COALESCE(NULLIF(excluded.training_venue,''),athlete_profiles.training_venue), current_event=COALESCE(NULLIF(excluded.current_event,''),athlete_profiles.current_event), training_phase=COALESCE(NULLIF(excluded.training_phase,''),athlete_profiles.training_phase), camp_period=COALESCE(NULLIF(excluded.camp_period,''),athlete_profiles.camp_period), origin_place=COALESCE(NULLIF(excluded.origin_place,''),athlete_profiles.origin_place), origin_unit=COALESCE(NULLIF(excluded.origin_unit,''),athlete_profiles.origin_unit), origin_coach=COALESCE(NULLIF(excluded.origin_coach,''),athlete_profiles.origin_coach), specialties=COALESCE(NULLIF(excluded.specialties,''),athlete_profiles.specialties), notes=COALESCE(NULLIF(excluded.notes,''),athlete_profiles.notes), updated_at=CURRENT_TIMESTAMP`)
@@ -1241,16 +1243,19 @@ function resolvePendingAthletes(input: {
   let createdCount = 0;
   for (const candidate of input.batch.athleteCandidates) {
     if (!requiredNames.has(candidate.normalizedName)) continue;
-    let athlete = db.prepare(`SELECT id FROM athletes WHERE name = ? AND project = ? AND team = ?`)
-      .get(candidate.name, candidate.project, candidate.team) as { id: number } | undefined;
+    const team = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(candidate.project, candidate.team) as { id: number } | undefined;
+    if (!team) throw new Error(`导入候选运动员所属队伍不存在：${candidate.project}/${candidate.team}`);
+    let athlete = db.prepare(`SELECT id FROM athletes WHERE name = ? AND project = ? AND team_id = ?`)
+      .get(candidate.name, candidate.project, team.id) as { id: number } | undefined;
     const wasCreated = !athlete;
     if (!athlete) {
       const result = db.prepare(`INSERT INTO athletes (
-        name, project, team, gender, region, city, county, profile_status, source, data_import_batch_id, active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`)
-        .run(candidate.name, candidate.project, candidate.team, candidate.gender, candidate.region, candidate.city,
-          candidate.county, input.batch.id);
+        name, project, team_id, gender, profile_status, source, data_import_batch_id, active
+      ) VALUES (?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`)
+        .run(candidate.name, candidate.project, team.id, candidate.gender, input.batch.id);
       athlete = { id: Number(result.lastInsertRowid) };
+      db.prepare(`INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo)
+        VALUES (?, ?, ?, ?, 'file_import', 'valid', 0)`).run(athlete.id, candidate.region, candidate.city, candidate.county);
       db.prepare(`INSERT INTO athlete_profiles (athlete_id, notes) VALUES (?, ?)`)
         .run(athlete.id, '由统一数据导入自动创建，无登录账号，基本资料待补充。');
       createdCount += 1;
