@@ -7,7 +7,7 @@ import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
 import type { Athlete, Project, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
-import { isProject, PROJECTS } from '../shared/projects';
+import { DEFAULT_PROJECT, isProject, normalizeProject, PROJECTS } from '../shared/projects';
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage })));
 const SpecialTestsPage = lazy(() => import('./pages/SpecialTestsPage').then((module) => ({ default: module.SpecialTestsPage })));
@@ -56,15 +56,16 @@ export default function App() {
         setAthletes(nextAthletes);
         const ownProject = user.athleteId ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project : '';
         const available = orderedProjects(nextAthletes.map((athlete) => athlete.project));
-        const fallback = user.role === 'DMD' || user.role === 'TD' ? PROJECTS[0] : null;
-        if (isProject(ownProject)) setProject(ownProject);
+        const fallback = user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null;
+        const normalizedOwnProject = normalizeProject(ownProject);
+        if (normalizedOwnProject) setProject(normalizedOwnProject);
         else if (available[0]) setProject(available[0]);
         else setProject(fallback);
         if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
       })
       .catch((error) => {
         setGlobalError(error instanceof Error ? error.message : '运动员数据加载失败。');
-        setProject(user.role === 'DMD' || user.role === 'TD' ? PROJECTS[0] : null);
+        setProject(user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null);
       })
       .finally(() => setAthletesReady(true));
   }, [user, refreshKey]);

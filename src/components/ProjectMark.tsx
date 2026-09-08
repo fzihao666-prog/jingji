@@ -14,9 +14,9 @@ function DefaultProjectMark({ project, className = '' }: ProjectMarkProps) {
 
 export function ProjectMark({ project, className = '' }: ProjectMarkProps) {
   const sourceByProject: Record<string, string> = {
-    赛艇: '/assets/olympic-sports/rowing.gif',
-    皮划艇: '/assets/olympic-sports/canoe sprint.gif',
-    激流: '/assets/olympic-sports/canoe slalom.gif',
+    ROWING: '/assets/olympic-sports/rowing.gif',
+    CANOE_SPRINT: '/assets/olympic-sports/canoe sprint.gif',
+    CANOE_SLALOM: '/assets/olympic-sports/canoe slalom.gif',
   };
   const source = sourceByProject[project];
 

@@ -2,7 +2,7 @@ import { CalendarRange, Check, ChevronDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Project } from '../types';
 import { addDays, toIsoDate } from '../utils';
-import { projectKey } from '../../shared/projects';
+import { projectEnglish, projectKey, projectLabel } from '../../shared/projects';
 import { ProjectMark } from './ProjectMark';
 
 type Props = {
@@ -18,10 +18,12 @@ type Props = {
 
 export function DateToolbar({ from, to, onRangeChange, project, projects, onProjectChange, presetMode = 'default', projectControl = 'select' }: Props) {
   const [projectOpen, setProjectOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState('');
   const projectRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setProjectOpen(false);
+    setProjectSearch('');
   }, [project]);
 
   useEffect(() => {
@@ -48,6 +50,10 @@ export function DateToolbar({ from, to, onRangeChange, project, projects, onProj
     const range = presetRanges[preset]!;
     onRangeChange(range.from, range.to);
   };
+  const visibleProjects = projects.filter((item) => {
+    const keyword = projectSearch.trim().toLocaleLowerCase();
+    return !keyword || projectLabel(item).includes(projectSearch.trim()) || projectEnglish(item).toLocaleLowerCase().includes(keyword);
+  });
   return (
     <div className="date-toolbar">
       <div className="range-presets" aria-label="快速选择时间范围">
@@ -67,20 +73,21 @@ export function DateToolbar({ from, to, onRangeChange, project, projects, onProj
 
       {projectControl === 'segments' ? (
         <div className="toolbar-project-segments" aria-label="选择运动种类">
-          {projects.map((item) => <button key={item} type="button" className={`${item === project ? 'active' : ''} ${item === '皮划艇' ? 'canoe' : item === '激流' ? 'slalom' : 'rowing'}`} aria-pressed={item === project} onClick={() => onProjectChange(item)}>
+          {projects.map((item) => <button key={item} type="button" className={`${item === project ? 'active' : ''} ${projectKey(item)}`} aria-pressed={item === project} onClick={() => onProjectChange(item)}>
             <ProjectMark project={item} />
-            <span>{item}</span>
+            <span>{projectLabel(item)}</span>
           </button>)}
         </div>
       ) : (
         <div className={`project-select project-select-${projectKey(project)} ${projectOpen ? 'open' : ''}`} ref={projectRef}>
           <button type="button" className="project-select-trigger" onClick={() => setProjectOpen((value) => !value)} aria-expanded={projectOpen} aria-haspopup="listbox" aria-label="选择项目大类">
             <ProjectMark project={project} />
-            <span>{project}</span>
+            <span>{projectLabel(project)}</span>
             <ChevronDown size={14} className="project-select-chevron" />
           </button>
           <div className="project-select-menu" role="listbox" aria-label="项目大类">
-            {projects.map((item) => (
+            <input className="project-select-search" aria-label="搜索运动项目" value={projectSearch} onChange={(event) => setProjectSearch(event.target.value)} placeholder="搜索项目 / English" />
+            {visibleProjects.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -90,7 +97,7 @@ export function DateToolbar({ from, to, onRangeChange, project, projects, onProj
                 onClick={() => { onProjectChange(item); setProjectOpen(false); }}
               >
                 <ProjectMark project={item} />
-                <span>{item}</span>
+                <span><strong>{projectLabel(item)}</strong><small>{projectEnglish(item)}</small></span>
                 {item === project && <Check size={14} />}
               </button>
             ))}

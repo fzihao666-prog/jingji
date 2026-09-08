@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import bcrypt from 'bcryptjs';
 import { PROVINCES } from '../shared/regions.ts';
-import { PROJECT_META } from '../shared/projects.ts';
+import { PROJECT_META, normalizeProject } from '../shared/projects.ts';
 import { OVERVIEW_METRICS } from '../shared/overview-metrics.ts';
 
 const databasePath = resolve(process.env.DATABASE_PATH || resolve(process.cwd(), 'data', 'training-monitor.db'));
@@ -1074,6 +1074,29 @@ for (const [column, definition] of [
   ['distance_reported', 'INTEGER NOT NULL DEFAULT 1 CHECK(distance_reported IN (0, 1))']
 ] as const) {
   if (!hasColumn('training_sessions', column)) db.exec(`ALTER TABLE training_sessions ADD COLUMN ${column} ${definition}`);
+}
+
+// 项目名称曾作为数据库关联值保存。此迁移只转换已有三项目，保留所有业务记录主键与关系；
+// 后续新增项目统一写入稳定 Code，不再以中文展示名作为关联键。
+function migrateLegacyProjectCodes() {
+  const pairs = [['赛艇', 'ROWING'], ['皮划艇', 'CANOE_SPRINT'], ['激流', 'CANOE_SLALOM']] as const;
+  const projectTables = ['athletes', 'user_dashboard_preferences', 'registration_requests', 'project_teams', 'user_project_permissions', 'user_team_permissions'];
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const table of projectTables) for (const [legacy, code] of pairs) db.prepare(`UPDATE ${table} SET project = ? WHERE project = ?`).run(code, legacy);
+    const metrics = db.prepare('SELECT code, projects_json AS projectsJson FROM metric_definitions').all() as Array<{ code: string; projectsJson: string }>;
+    for (const metric of metrics) {
+      try {
+        const values = JSON.parse(metric.projectsJson) as unknown[];
+        const next = values.map((value) => normalizeProject(value) || value);
+        db.prepare('UPDATE metric_definitions SET projects_json = ? WHERE code = ?').run(JSON.stringify(next), metric.code);
+      } catch { /* 保留无法解析的历史自定义指标配置 */ }
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try { db.exec('ROLLBACK'); } catch { /* no-op */ }
+    throw error;
+  }
 }
 
 const athleteTableDefinition = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'athletes'")
@@ -2811,6 +2834,9 @@ db.prepare(`
   SET title = ?, plan_data = replace(plan_data, ?, ?)
   WHERE title = ?
 `).run('皮划艇夏训体能训练', '皮划艇夏训体能计划', '皮划艇夏训体能训练', '皮划艇夏训体能计划');
+
+// 初始化示例与历史迁移完成后再执行一次，确保新库同样写入项目 Code。
+migrateLegacyProjectCodes();
 
 const validRegions = new Set<string>(PROVINCES);
 const invalidRegions = (db.prepare("SELECT DISTINCT region FROM athletes WHERE region <> '未设置'").all() as { region: string }[])

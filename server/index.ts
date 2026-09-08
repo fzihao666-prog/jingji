@@ -26,7 +26,7 @@ import {
 } from '../shared/rowing-model.ts';
 import { CANOE_MODEL_STANDARD, analyzeCanoePeriod } from '../shared/canoe-model.ts';
 import { SLALOM_CHAMPION_METRICS, SLALOM_MODEL_STANDARD, analyzeSlalomPeriod, slalomComparison } from '../shared/slalom-model.ts';
-import { PROJECTS, type Project } from '../shared/projects.ts';
+import { hasSpecialAnalysis, projectCapability, PROJECTS, type Project } from '../shared/projects.ts';
 import { INTENSITY_ZONE_SYSTEMS, PRIMARY_INTENSITY_ZONE_CODES } from '../shared/training-intensity.ts';
 import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
 import {
@@ -256,11 +256,11 @@ const provinceSet = new Set<string>(PROVINCES);
 const projectSet = new Set<string>(PROJECTS);
 
 function analysisStandardForProject(project: string) {
-  return project === '激流' ? SLALOM_MODEL_STANDARD : project === '皮划艇' ? CANOE_MODEL_STANDARD : ROWING_MODEL_STANDARD;
+  return projectCapability(project) === 'slalom' ? SLALOM_MODEL_STANDARD : projectCapability(project) === 'canoe' ? CANOE_MODEL_STANDARD : ROWING_MODEL_STANDARD;
 }
 
 function analyzePeriodForProject(project: string, records: RowingAnalysisRecord[]) {
-  return project === '激流' ? analyzeSlalomPeriod(records) : project === '皮划艇' ? analyzeCanoePeriod(records) : analyzeRowingPeriod(records);
+  return projectCapability(project) === 'slalom' ? analyzeSlalomPeriod(records) : projectCapability(project) === 'canoe' ? analyzeCanoePeriod(records) : analyzeRowingPeriod(records);
 }
 
 app.disable('x-powered-by');
@@ -3769,6 +3769,7 @@ app.post('/api/special-training/sessions', requireAuth, requireRole('SCC', 'PRJ'
 app.get('/api/analysis/model', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!hasSpecialAnalysis(project)) return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
   res.json({ standard: analysisStandardForProject(project) });
 });
 
@@ -3779,6 +3780,7 @@ app.get('/api/analysis/summary', requireAuth, (req, res) => {
   const requestedId = Number(req.query.athleteId || user.athleteId || 0);
   const project = cleanString(req.query.project);
   if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!hasSpecialAnalysis(project)) return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
     return res.status(400).json({ message: '请选择有效的分析日期范围。' });
   }
