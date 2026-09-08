@@ -77,8 +77,8 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
   'training-load-analysis': { title: '训练量统计', size: 'full' },
-  'training-content': { title: '训练课比值', size: 'half' },
-  'training-intensity': { title: '训练强度百分比', size: 'half' },
+  'training-content': { title: '训练课占比', size: 'half' },
+  'training-intensity': { title: '训练强度占比', size: 'half' },
   'water-land-load': { title: '水陆训练负荷比值', size: 'half' }
 };
 
@@ -520,14 +520,14 @@ export function OverviewPage(props: Props) {
     ),
     'performance-radar': (
       <AppCard variant="chart" className="professional-panel">
-        <PanelHeading title="多要素分析雷达图" subtitle={`${scopeLabel} · 目标达成制`} />
+        <PanelHeading title="多要素分析" subtitle={`${scopeLabel} · 目标达成制`} />
         {strengthLoading ? <ContentState kind="loading" className="professional-chart-empty" title="正在读取力量测试…"/> : <PerformanceRadarChart data={radar} />}
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
       </AppCard>
     ),
     'injury-analysis': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="运动损伤评估图" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
+        <PanelHeading title="运动损伤评估" subtitle={`${scopeLabel} · 最新伤病记录 · 训练可用性`} />
         <InjuryAssessmentChart injuries={overview?.injuries || []} athleteCount={scopeAthleteCount} />
         <p className="analysis-method-note">按每名运动员最新记录统计健康、观察、受限、康复和停训状态，不能替代医学诊断。</p>
       </AppCard>
@@ -540,13 +540,13 @@ export function OverviewPage(props: Props) {
     ),
     'training-content': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="训练课比值" subtitle="九类训练课次占比（当前页面时间范围）" />
+        <PanelHeading title="训练课占比" subtitle="九类训练课次占比（当前页面时间范围）" />
         <TrainingContentChart records={analysisRecords} />
       </AppCard>
     ),
     'training-intensity': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="训练强度百分比" subtitle="U3 · U2 · U1 · AT · TPT · AN · ATP（训练时长占比）" />
+        <PanelHeading title="训练强度占比" subtitle="U3 · U2 · U1 · AT · TPT · AN · ATP（训练时长占比）" />
         <TrainingIntensityChart data={overview?.intensityDistribution || []} />
       </AppCard>
     ),

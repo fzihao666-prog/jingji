@@ -85,6 +85,7 @@ function AgePyramidTooltip({ active, payload }: { active?: boolean; payload?: Ar
 }
 
 export function AthleteProfileOverview({ profiles, individual, asOf }: { profiles: OverviewAthleteProfile[]; individual: boolean; asOf: string }) {
+  const [activeTrainingYearsBand, setActiveTrainingYearsBand] = useState<TrainingYearsBand | null>(null);
   if (!profiles.length || !profiles.some((profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null)) {
     return <ProfileEmpty title={individual ? '暂无档案画像数据' : '暂无队伍身体数据'} detail="完善出生日期和身体测量后自动生成。" />;
   }
@@ -150,7 +151,7 @@ export function AthleteProfileOverview({ profiles, individual, asOf }: { profile
     const sample = profiles.length;
     return { label, ...counts, sample };
   });
-  const experienceBands = [
+  const trainingYearsBands = [
     { label: '≤2年', phase: '新秀期', matches: (years: number) => years <= 2 },
     { label: '3～5年', phase: '成长期', matches: (years: number) => years > 2 && years < 6 },
     { label: '6～8年', phase: '成熟期', matches: (years: number) => years >= 6 && years < 9 },
@@ -159,9 +160,17 @@ export function AthleteProfileOverview({ profiles, individual, asOf }: { profile
     const years = sportYears(profile.startSportDate, asOf);
     return years !== null && band.matches(years);
   }).length }));
-  const experienced = profiles.map((profile) => sportYears(profile.startSportDate, asOf)).filter((value): value is number => value !== null);
-  const experienceTotal = experienceBands.reduce((sum, item) => sum + item.athletes, 0);
-
+  const trainedAthletes = profiles.map((profile) => sportYears(profile.startSportDate, asOf)).filter((value): value is number => value !== null);
+  const trainingYearsTotal = trainingYearsBands.reduce((sum, item) => sum + item.athletes, 0);
+  const trainingYearsData: TrainingYearsBand[] = trainingYearsBands.map((band, index) => ({
+    ...band,
+    percentage: trainingYearsTotal ? band.athletes / trainingYearsTotal * 100 : 0,
+    fill: ['#0d8c84', '#2e9bba', '#d49a2e', '#556d83'][index]
+  }));
+  const leadingTrainingYearsBand = trainingYearsTotal
+    ? trainingYearsData.reduce((leading, band) => band.athletes > leading.athletes ? band : leading)
+    : null;
+  const missingTrainingYearsCount = Math.max(0, profiles.length - trainingYearsTotal);
   return (
     <div className="profile-overview-visual team-profile-visual" aria-label="队伍年龄、身体形态与竞技水平分布">
       <div className="team-profile-chart-grid three-columns">
@@ -223,12 +232,14 @@ export function AthleteProfileOverview({ profiles, individual, asOf }: { profile
               <i className="experience-node" aria-hidden="true" /><span>{band.label}</span><strong>{band.phase}</strong><b>{band.athletes}<small>人</small></b><em>{experienceTotal ? `${formatNumber(band.athletes / experienceTotal * 100, 1)}%` : '—'}</em>
             </article>)}
           </div>
-          <footer className="experience-summary"><span>平均运动年限 <strong>{experienced.length ? `${formatNumber(average(experienced) || 0, 1)}年` : '—'}</strong></span><i /><span>最长 <strong>{experienced.length ? `${formatNumber(Math.max(...experienced), 1)}年` : '—'}</strong></span><i /><span>最短 <strong>{experienced.length ? `${formatNumber(Math.min(...experienced), 1)}年` : '—'}</strong></span></footer>
+          <footer className="training-years-summary"><span>平均训练年限 <strong>{trainedAthletes.length ? `${formatNumber(average(trainedAthletes) || 0, 1)}年` : '—'}</strong></span><i /><span>最长 <strong>{trainedAthletes.length ? `${formatNumber(Math.max(...trainedAthletes), 1)}年` : '—'}</strong></span><i /><span>最短 <strong>{trainedAthletes.length ? `${formatNumber(Math.min(...trainedAthletes), 1)}年` : '—'}</strong></span>{missingTrainingYearsCount > 0 && <><i /><span>待补 <strong>{missingTrainingYearsCount} 人</strong></span></>}</footer>
         </section>
       </div>
     </div>
   );
 }
+
+type TrainingYearsBand = { label: string; phase: string; athletes: number; percentage: number; fill: string };
 
 type BodyPartKey = 'leftArm' | 'rightArm' | 'trunk' | 'abdomen' | 'leftLeg' | 'rightLeg';
 export type BodyCompositionProfile = {

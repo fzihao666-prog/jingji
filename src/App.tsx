@@ -34,7 +34,7 @@ export default function App() {
   const [page, setPage] = useState<PageKey>('overview');
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
-  const [from, setFrom] = useState(addDays(today, -27));
+  const [from, setFrom] = useState(addDays(today, -6));
   const [to, setTo] = useState(today);
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project | null>(null);
@@ -148,7 +148,7 @@ export default function App() {
       {usesGlobalTrainingFilter && <div className="global-training-filter">
         <DateToolbar
           {...shared}
-          presetMode={page === 'overview' ? 'analysis' : 'period'}
+          presetMode="period"
         />
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
