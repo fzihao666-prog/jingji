@@ -23,6 +23,7 @@ type TrendGranularity = 'auto' | 'day' | 'week' | 'month';
 
 export function TrainingVolumeChart({ data, from, to }: { data: TrainingVolume; from: string; to: string }) {
   const [granularity, setGranularity] = useState<TrendGranularity>('auto');
+  const [chartWidth, setChartWidth] = useState(0);
   const rangeDays = Math.max(1, Math.round((Date.parse(`${to}T12:00:00`) - Date.parse(`${from}T12:00:00`)) / 86_400_000) + 1);
   const effectiveGranularity = granularity === 'auto' ? (rangeDays <= 31 ? 'day' : rangeDays <= 120 ? 'week' : 'month') : granularity;
   const chartData = useMemo(() => {
@@ -36,6 +37,13 @@ export function TrainingVolumeChart({ data, from, to }: { data: TrainingVolume; 
     }
     return [...rows.values()].map((row) => ({ ...row, label: effectiveGranularity === 'month' ? row.date.slice(0, 7).replace('-', '/') : row.date.slice(5).replace('-', '/'), durationMin: row.durationCount ? row.durationMin : null, distanceKm: row.distanceCount ? row.distanceKm : null }));
   }, [data.days, effectiveGranularity]);
+  const xAxisTicks = useMemo(() => {
+    const labels = chartData.map((row) => row.label);
+    const maxTicks = chartWidth > 0 ? Math.max(2, Math.floor(chartWidth / 50)) : 7;
+    if (labels.length <= maxTicks) return labels;
+    const step = Math.ceil((labels.length - 1) / (maxTicks - 1));
+    return labels.filter((_, index) => index === 0 || index === labels.length - 1 || index % step === 0);
+  }, [chartData, chartWidth]);
   const value = (number: number | null, digits = 1) => number === null ? '—' : formatNumber(number, digits);
   const hasData = data.totalDurationMin !== null || data.totalDistanceKm !== null;
   return <div className="analysis-chart-module training-volume-module">
@@ -46,8 +54,8 @@ export function TrainingVolumeChart({ data, from, to }: { data: TrainingVolume; 
       <article><span>日均训练时长</span><strong>{data.averageDurationMin === null ? '—' : value(data.averageDurationMin / 60)}<small>{data.averageDurationMin === null ? '' : ' h'}</small><em>{data.durationDayCount ? `${data.durationDayCount} 个有效训练日` : ''}</em></strong></article>
       <article><span>日均公里数</span><strong>{value(data.averageDistanceKm)}<small>{data.averageDistanceKm === null ? '' : ' km'}</small><em>{data.distanceDayCount ? `${data.distanceDayCount} 个有效训练日` : ''}</em></strong></article>
     </div>
-    <div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={chartData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
-      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} minTickGap={20}/><YAxis yAxisId="time" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="distance" orientation="right" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/>
+    <div className="analysis-chart-medium"><ResponsiveContainer width="100%" height="100%" onResize={(width) => setChartWidth((current) => current === width ? current : width)}><ComposedChart data={chartData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
+      <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="label" ticks={xAxisTicks} interval={0} tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="time" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="distance" orientation="right" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/>
       <Tooltip formatter={(number, name) => [`${formatNumber(Number(number), name === '公里数' ? 1 : 0)} ${name === '公里数' ? 'km' : 'min'}`, name]} contentStyle={{border:'1px solid #d5e3e5',borderRadius:10,boxShadow:'0 10px 24px rgba(9,54,65,.12)'}}/><Legend wrapperStyle={{fontSize:10}}/>
       <Bar yAxisId="time" dataKey="durationMin" name="训练时长" fill="#69aebb" fillOpacity={.86} radius={[5,5,0,0]} maxBarSize={30}/>
       <Line yAxisId="distance" type="monotone" dataKey="distanceKm" name="公里数" stroke="#0b4d59" strokeWidth={3} dot={{r:3,fill:'#fff',stroke:'#0b4d59',strokeWidth:2}} activeDot={{r:5,fill:'#18a092',stroke:'#fff',strokeWidth:2}} />

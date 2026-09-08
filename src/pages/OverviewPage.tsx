@@ -72,7 +72,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'acute-load': { title: '训练负荷', size: 'metric' },
   'recovery-time': { title: '损伤情况', size: 'metric' },
   'athlete-profile': { title: '身体与年龄画像', size: 'full' },
-  'birthplace-map': { title: '代表单位/输送单位', size: 'full' },
+  'birthplace-map': { title: '输送单位', size: 'full' },
   'fms-analysis': { title: 'FMS测试分析', size: 'half' },
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
@@ -506,7 +506,7 @@ export function OverviewPage(props: Props) {
     ),
     'birthplace-map': (
       <AppCard variant="chart" className="professional-panel birthplace-map-panel">
-        <PanelHeading title="代表单位/输送单位" subtitle={`${scopeLabel} · 省份分布 · 运动员成绩与竞技状态`} />
+        <PanelHeading title="输送单位" subtitle={`${scopeLabel} · 省份分布 · 运动员成绩与竞技状态`} />
         <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} />
         <p className="analysis-method-note">生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。</p>
       </AppCard>
@@ -520,7 +520,7 @@ export function OverviewPage(props: Props) {
     ),
     'performance-radar': (
       <AppCard variant="chart" className="professional-panel">
-        <PanelHeading title="多要素分析" subtitle={`${scopeLabel} · 目标达成制`} />
+        <PanelHeading title="制胜要素分析" subtitle={`${scopeLabel} · 目标达成制`} />
         {strengthLoading ? <ContentState kind="loading" className="professional-chart-empty" title="正在读取力量测试…"/> : <PerformanceRadarChart data={radar} />}
         <p className="analysis-method-note">评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。</p>
       </AppCard>

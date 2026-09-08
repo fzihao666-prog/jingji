@@ -214,7 +214,7 @@ export function AthleteProfileOverview({ profiles, individual, asOf }: { profile
       </div>
       <div className="team-profile-insight-grid">
         <section className="team-profile-insight-card composition-status-card">
-          <header><div><h3>身体成分状态分布</h3><p>按运动训练参考区间统计 · 每行 100%</p></div><span>{profiles.length} 名运动员</span></header>
+          <header><div><h3>身体成分</h3><p>按运动训练参考区间统计 · 每行 100%</p></div><span>{profiles.length} 名运动员</span></header>
           <div className="composition-status-list">
             {compositionRows.map((row) => <div className="composition-status-row" key={row.label}>
               <strong>{row.label}</strong><div className="composition-stack" role="img" aria-label={`${row.label}：偏低${row.偏低}人，目标范围${row.目标范围}人，偏高${row.偏高}人，未测试${row.未测试}人`}>
@@ -224,12 +224,12 @@ export function AthleteProfileOverview({ profiles, individual, asOf }: { profile
           </div>
           <footer className="composition-legend"><span><i className="偏低" />偏低</span><span><i className="目标范围" />目标范围</span><span><i className="偏高" />偏高</span><span><i className="未测试" />未测试</span><em>体重按 BMI 区间判定</em></footer>
         </section>
-        <section className="team-profile-insight-card experience-ladder-card">
-          <header><div><h3>运动经验结构</h3><p>依据开始运动日期自动计算</p></div><span>{experienceTotal} 名已建档</span></header>
-          <div className="experience-ladder">
-            <i className="experience-rail" aria-hidden="true" />
-            {experienceBands.map((band) => <article key={band.label}>
-              <i className="experience-node" aria-hidden="true" /><span>{band.label}</span><strong>{band.phase}</strong><b>{band.athletes}<small>人</small></b><em>{experienceTotal ? `${formatNumber(band.athletes / experienceTotal * 100, 1)}%` : '—'}</em>
+        <section className="team-profile-insight-card training-years-swarm-card">
+          <header><div><h3>训练年限</h3><p>{leadingTrainingYearsBand ? `${leadingTrainingYearsBand.phase}为主力阶段 · 每个圆点代表 1 名运动员` : '生涯阶段蜂群图 · 按开始运动日期计算'}</p></div><span>{activeTrainingYearsBand ? `${activeTrainingYearsBand.phase} ${activeTrainingYearsBand.athletes} 人` : `${trainingYearsTotal} 名已建档`}</span></header>
+          <div className={`training-years-swarm ${activeTrainingYearsBand ? 'has-active-stage' : ''}`} role="group" aria-label={`训练年限生涯阶段蜂群图：${trainingYearsData.map((band) => `${band.phase}${band.athletes}人，占比${formatNumber(band.percentage, 1)}%`).join('；')}`}>
+            <i className="training-years-swarm-path" aria-hidden="true" />
+            {trainingYearsData.map((band) => <article key={band.label} className={`${leadingTrainingYearsBand?.label === band.label ? 'is-leading' : ''} ${activeTrainingYearsBand?.label === band.label ? 'is-active' : ''}`} style={{ '--stage-color': band.fill } as CSSProperties} tabIndex={0} aria-label={`${band.label}${band.phase}，${band.athletes}人，占比${formatNumber(band.percentage, 1)}%`} onMouseEnter={() => setActiveTrainingYearsBand(band)} onMouseLeave={() => setActiveTrainingYearsBand(null)} onFocus={() => setActiveTrainingYearsBand(band)} onBlur={() => setActiveTrainingYearsBand(null)}>
+              <span>{band.label}</span><strong>{band.phase}</strong><div className="training-years-dot-cluster" aria-hidden="true">{Array.from({ length: Math.min(band.athletes, 24) }, (_, index) => <i key={index} />)}{band.athletes > 24 && <em>+{band.athletes - 24}</em>}</div><b>{band.athletes}<small>人</small></b><em>{formatNumber(band.percentage, 1)}%</em>
             </article>)}
           </div>
           <footer className="training-years-summary"><span>平均训练年限 <strong>{trainedAthletes.length ? `${formatNumber(average(trainedAthletes) || 0, 1)}年` : '—'}</strong></span><i /><span>最长 <strong>{trainedAthletes.length ? `${formatNumber(Math.max(...trainedAthletes), 1)}年` : '—'}</strong></span><i /><span>最短 <strong>{trainedAthletes.length ? `${formatNumber(Math.min(...trainedAthletes), 1)}年` : '—'}</strong></span>{missingTrainingYearsCount > 0 && <><i /><span>待补 <strong>{missingTrainingYearsCount} 人</strong></span></>}</footer>
