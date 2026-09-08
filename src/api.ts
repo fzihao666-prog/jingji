@@ -329,6 +329,12 @@ export const api = {
   async strengthTrainingResults(athleteId: number) {
     return request<{ sessions: StrengthTrainingSession[] }>(`/api/strength-training/results?athleteId=${athleteId}`);
   },
+  async currentProject() {
+    return request<{ project: Project | null; projects: Project[] }>('/api/preferences/current-project');
+  },
+  async saveCurrentProject(project: Project) {
+    return request<{ project: Project }>('/api/preferences/current-project', { method: 'PUT', body: JSON.stringify({ project }) });
+  },
   async downloadDataImportTemplate() {
     const response = await fetch('/api/data-import/template', {
       headers: { Authorization: `Bearer ${getToken()}` }

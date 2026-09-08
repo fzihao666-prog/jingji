@@ -51,14 +51,16 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     setAthletesReady(false);
-    api.athletes()
-      .then(({ athletes: nextAthletes }) => {
+    Promise.all([api.athletes(), api.currentProject()])
+      .then(([{ athletes: nextAthletes }, saved]) => {
         setAthletes(nextAthletes);
         const ownProject = user.athleteId ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project : '';
-        const available = orderedProjects(nextAthletes.map((athlete) => athlete.project));
+        const available = saved.projects.length ? saved.projects : orderedProjects(nextAthletes.map((athlete) => athlete.project));
         const fallback = user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null;
         const normalizedOwnProject = normalizeProject(ownProject);
-        if (normalizedOwnProject) setProject(normalizedOwnProject);
+        if (saved.project && available.includes(saved.project)) setProject(saved.project);
+        else if (available.length === 1) setProject(available[0]);
+        else if (normalizedOwnProject && available.includes(normalizedOwnProject)) setProject(normalizedOwnProject);
         else if (available[0]) setProject(available[0]);
         else setProject(fallback);
         if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
@@ -139,7 +141,7 @@ export default function App() {
     loading,
     onRangeChange: (nextFrom: string, nextTo: string) => { setFrom(nextFrom); setTo(nextTo); },
     onAthleteChange: setAthleteId,
-    onProjectChange: (nextProject: Project) => { setProject(nextProject); setAthleteId(null); }
+    onProjectChange: (nextProject: Project) => { setProject(nextProject); setAthleteId(null); void api.saveCurrentProject(nextProject).catch(() => undefined); }
   };
   const usesGlobalTrainingFilter = page === 'overview' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
 

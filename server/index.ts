@@ -1678,6 +1678,42 @@ app.get('/api/preferences/overview-layout', requireAuth, (req, res) => {
   }
 });
 
+function selectableProjects(user: AuthUser): Project[] {
+  if (user.role === 'ATL') {
+    const athlete = user.athleteId ? db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(user.athleteId) as { project: string } | undefined : undefined;
+    return athlete && projectSet.has(athlete.project) ? [athlete.project] : [];
+  }
+  const permissions = accountPermissions(user.id);
+  return PROJECTS.filter((project) => permissions.projects.includes('*') || permissions.projects.includes(project));
+}
+
+app.get('/api/preferences/current-project', requireAuth, (req, res) => {
+  const projects = selectableProjects(req.authUser!);
+  const row = db.prepare(`
+    SELECT layout_json AS value FROM user_dashboard_preferences
+    WHERE user_id = ? AND dashboard = 'app-context' AND project = '*' AND scope = 'current-project'
+  `).get(req.authUser!.id) as { value: string } | undefined;
+  let project: Project | null = null;
+  try {
+    const saved = JSON.parse(row?.value || '{}') as { project?: unknown };
+    if (typeof saved.project === 'string' && projects.includes(saved.project)) project = saved.project;
+  } catch { /* 损坏偏好不影响进入系统 */ }
+  res.json({ project, projects });
+});
+
+app.put('/api/preferences/current-project', requireAuth, (req, res) => {
+  const project = cleanString(req.body?.project);
+  const projects = selectableProjects(req.authUser!);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
+  if (!projects.includes(project)) return res.status(403).json({ message: '无权选择该项目。' });
+  db.prepare(`
+    INSERT INTO user_dashboard_preferences (user_id, dashboard, project, scope, layout_json, updated_at)
+    VALUES (?, 'app-context', '*', 'current-project', ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(user_id, dashboard, project, scope) DO UPDATE SET layout_json = excluded.layout_json, updated_at = CURRENT_TIMESTAMP
+  `).run(req.authUser!.id, JSON.stringify({ project }));
+  res.json({ project });
+});
+
 app.put('/api/preferences/overview-layout', requireAuth, (req, res) => {
   const project = cleanString(req.body?.project);
   const scope = cleanString(req.body?.scope);
