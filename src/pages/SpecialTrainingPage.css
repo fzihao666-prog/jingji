@@ -14,22 +14,14 @@
 .training-dashboard-metric strong { color: #163e48; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
 .training-dashboard-metric strong small { margin-left: 4px; color: #668087; font-size: 11px; }
 .training-dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--overview-gap); align-items: start; }
-.training-dashboard-action-row { display: flex; justify-content: flex-end; min-height: 34px; }
 .training-dashboard-grid > .app-card, .training-dashboard-grid > .app-section-header { min-width: 0; }
 .dashboard-span-4 { grid-column: span 4; }
 .dashboard-span-5 { grid-column: span 5; }
 .dashboard-span-7 { grid-column: span 7; }
 .dashboard-span-8 { grid-column: span 8; }
 .dashboard-span-12 { grid-column: 1 / -1; min-width: 0; }
-.dashboard-action-button, .dashboard-link-button { display: inline-flex; align-items: center; gap: 5px; border: 0; color: #117d76; background: transparent; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.dashboard-action-button { display: inline-flex; align-items: center; gap: 5px; border: 0; color: #117d76; background: transparent; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .dashboard-action-button { padding: 9px 12px; border: 1px solid #bfdfdc; border-radius: 8px; background: #f3faf9; }
-.dashboard-record-list { display: grid; }
-.dashboard-record-list article { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 2px; border-bottom: 1px solid #e6edef; }
-.dashboard-record-list article:last-child { border-bottom: 0; }
-.dashboard-record-list time, .dashboard-record-list span { color: #71878e; font-size: 10px; }
-.dashboard-record-list div { display: grid; gap: 3px; }
-.dashboard-record-list strong { color: #234b55; font-size: 11px; }
-.dashboard-record-list b { color: #117d76; font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .strength-dashboard-page .strength-dashboard-grid { margin: 0; }
 
 @media (max-width: 1200px) {
@@ -39,11 +31,7 @@
 
 @media (max-width: 760px) {
   .training-dashboard-metrics, .training-dashboard-grid { grid-template-columns: 1fr; }
-  .training-dashboard-action-row { justify-content: stretch; }
-  .training-dashboard-action-row .dashboard-action-button { width: 100%; justify-content: center; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }
-  .dashboard-record-list article { grid-template-columns: 1fr auto; gap: 6px; }
-  .dashboard-record-list time { grid-column: 1 / -1; }
 }
 
 .special-page-heading {
