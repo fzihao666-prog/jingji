@@ -20,6 +20,10 @@ function ChampionModelPlaceholder({ project, kind }: { project: Project; kind: '
   </ChartCard>;
 }
 
+function TrainingPlanEntry({ onClick }: { onClick: () => void }) {
+  return <section className="training-dashboard-action-row" aria-label="训练管理操作"><button className="dashboard-action-button" onClick={onClick}>查看训练计划 <ArrowRight size={15} /></button></section>;
+}
+
 function volumePayload(records: TrainingRecord[]): OverviewPayload['trainingVolume'] {
   const days = [...new Map(records.map((record) => [record.date, record.date])).keys()].sort().map((date) => {
     const items = records.filter((item) => item.date === date);
@@ -61,8 +65,9 @@ export function SpecialTrainingDashboard({ records, project, from, to, loading, 
     ['有效强度记录', intensity.reduce((sum, item) => sum + item.sessionCount, 0), '条']
   ];
   return <PageContainer className="professional-overview training-dashboard-page">
-    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="SPECIAL TRAINING" title="专项训练" actions={<button className="dashboard-action-button" onClick={() => onNavigate('special-schedule')}>查看训练计划 <ArrowRight size={15} /></button>} />
+    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="SPECIAL TRAINING" title="专项训练" />
     <ChampionModelPlaceholder project={project} kind="专项" />
+    <TrainingPlanEntry onClick={() => onNavigate('special-schedule')} />
     {loading ? <ContentState kind="loading" title="正在同步专项训练数据" icon={<Activity className="spin" />} /> : <>
       <section className="training-dashboard-metrics">{metrics.map(([label, value, unit]) => <AppCard key={String(label)} variant="compact" className="training-dashboard-metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong><em>{project} · {from} 至 {to}</em></AppCard>)}</section>
       <section className="training-dashboard-grid"><ChartCard title="专项训练量趋势" description="按真实训练时长与距离汇总" className="dashboard-span-8"><TrainingVolumeChart data={volume} from={from} to={to} /></ChartCard><ChartCard title="专项训练强度结构" description="仅展示当前项目已记录的强度分区" className="dashboard-span-4"><TrainingIntensityChart data={intensity} /></ChartCard><ChartCard title="专项训练内容结构" description="按统一训练内容分类统计" className="dashboard-span-5"><TrainingContentChart records={specialRecords} /></ChartCard><ChartCard title="专项成绩趋势" description="该项目暂未配置可用于趋势分析的专项成绩指标" className="dashboard-span-7"><ContentState kind="empty" title="暂无专项指标配置" icon={<Target size={25} />} description="配置当前项目的真实测试或比赛成绩字段后，将按日期展示趋势和最佳表现。" /></ChartCard></section>
@@ -99,8 +104,9 @@ export function StrengthTrainingDashboard({ athletes, athleteId, project, from, 
   const totalVolume = periodSessions.reduce((sum, item) => sum + (item.volume || 0), 0);
   const metrics = [['体能训练场次', periodSessions.length, '场'], ['累计训练时长', totalDuration || '—', totalDuration ? 'min' : ''], ['训练总量', totalVolume || '—', totalVolume ? 'kg·reps' : ''], ['有效体能测试', tests.length, '次']];
   return <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
-    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="PHYSICAL TRAINING" title="体能训练" actions={<button className="dashboard-action-button" onClick={() => onNavigate('strength-plan')}>查看训练计划 <ArrowRight size={15} /></button>} />
+    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="PHYSICAL TRAINING" title="体能训练" />
     <ChampionModelPlaceholder project={project} kind="体能" />
+    <TrainingPlanEntry onClick={() => onNavigate('strength-plan')} />
     {loading ? <ContentState kind="loading" title="正在同步体能训练数据" icon={<Activity className="spin" />} /> : <>
       <section className="training-dashboard-metrics">{metrics.map(([label, value, unit]) => <AppCard key={String(label)} variant="compact" className="training-dashboard-metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong><em>{athleteId ? '当前运动员' : `全队 ${scopedAthletes.length} 人`} · {from} 至 {to}</em></AppCard>)}</section>
       <section className="training-dashboard-grid"><ChartCard title="体能能力画像" description="仅在存在统一标准化配置时展示跨单位雷达对比" className="dashboard-span-5"><ContentState kind="empty" title="暂无可用于统一标准化的体能指标" icon={<Target size={25} />} description="不会把 kg、秒、W 等不同单位的原始数值直接放入同一雷达图。" /></ChartCard><ChartCard title="体能指标趋势" description="已有体能测试结果按日期变化" className="dashboard-span-7"><StrengthAssessmentPanel tests={tests} /></ChartCard><div className="dashboard-span-12"><SectionHeader title="体能训练量与内容结构" description="基于当前筛选范围内的真实训练结果" /><StrengthOverviewPanel sessions={periodSessions} /></div><RecentStrengthRecords sessions={periodSessions} onNavigate={onNavigate} /></section>

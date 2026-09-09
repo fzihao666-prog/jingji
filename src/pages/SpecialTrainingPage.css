@@ -14,6 +14,7 @@
 .training-dashboard-metric strong { color: #163e48; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
 .training-dashboard-metric strong small { margin-left: 4px; color: #668087; font-size: 11px; }
 .training-dashboard-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--overview-gap); align-items: start; }
+.training-dashboard-action-row { display: flex; justify-content: flex-end; min-height: 34px; }
 .training-dashboard-grid > .app-card, .training-dashboard-grid > .app-section-header { min-width: 0; }
 .dashboard-span-4 { grid-column: span 4; }
 .dashboard-span-5 { grid-column: span 5; }
@@ -38,6 +39,8 @@
 
 @media (max-width: 760px) {
   .training-dashboard-metrics, .training-dashboard-grid { grid-template-columns: 1fr; }
+  .training-dashboard-action-row { justify-content: stretch; }
+  .training-dashboard-action-row .dashboard-action-button { width: 100%; justify-content: center; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }
   .dashboard-record-list article { grid-template-columns: 1fr auto; gap: 6px; }
   .dashboard-record-list time { grid-column: 1 / -1; }
