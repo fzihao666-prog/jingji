@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, CalendarDays, Dumbbell, FileSpreadsheet, Target, Trophy } from 'lucide-react';
+import { Activity, ArrowRight, Dumbbell, Target, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { StrengthAssessmentPanel, StrengthOverviewPanel } from '../components/StrengthTrainingInsights';
@@ -8,7 +8,7 @@ import type { Athlete, OverviewPayload, Project, StrengthTest, StrengthTrainingS
 import { formatNumber } from '../utils';
 import '../pages/SpecialTrainingPage.css';
 
-type Navigation = (page: 'special-records' | 'special-schedule' | 'strength-records' | 'strength-plan') => void;
+type Navigation = (page: 'special-schedule' | 'strength-records' | 'strength-plan') => void;
 
 type SpecialProps = {
   records: TrainingRecord[]; project: Project; from: string; to: string; loading: boolean; onNavigate: Navigation;
@@ -50,13 +50,6 @@ function intensityPayload(records: TrainingRecord[]): OverviewPayload['intensity
   });
 }
 
-function RecentSpecialRecords({ records, onNavigate }: { records: TrainingRecord[]; onNavigate: Navigation }) {
-  const recent = [...records].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 6);
-  return <ChartCard title="最近专项训练记录" description={`当前筛选范围内 ${records.length} 条`} actions={<button className="dashboard-link-button" onClick={() => onNavigate('special-records')}>查看全部 <ArrowRight size={14} /></button>}>
-    {recent.length ? <div className="dashboard-record-list">{recent.map((item) => <article key={item.id}><time>{item.date}</time><div><strong>{item.content || item.trainingType}</strong><span>{item.athleteName} · {item.intensityZone || '未标注强度'}</span></div><b>{item.durationReported ? `${formatNumber(item.durationMin)} min` : '—'}{item.distanceReported ? ` · ${formatNumber(item.distanceKm, 1)} km` : ''}</b></article>)}</div> : <ContentState kind="empty" title="暂无数据" icon={<FileSpreadsheet size={24} />} />}
-  </ChartCard>;
-}
-
 export function SpecialTrainingDashboard({ records, project, from, to, loading, onNavigate }: SpecialProps) {
   const specialRecords = useMemo(() => records.filter((item) => trainingLoadCategory(item) === 'special'), [records]);
   const volume = useMemo(() => volumePayload(specialRecords), [specialRecords]);
@@ -72,7 +65,7 @@ export function SpecialTrainingDashboard({ records, project, from, to, loading, 
     <ChampionModelPlaceholder project={project} kind="专项" />
     {loading ? <ContentState kind="loading" title="正在同步专项训练数据" icon={<Activity className="spin" />} /> : <>
       <section className="training-dashboard-metrics">{metrics.map(([label, value, unit]) => <AppCard key={String(label)} variant="compact" className="training-dashboard-metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong><em>{project} · {from} 至 {to}</em></AppCard>)}</section>
-      <section className="training-dashboard-grid"><ChartCard title="专项训练量趋势" description="按真实训练时长与距离汇总" className="dashboard-span-8"><TrainingVolumeChart data={volume} from={from} to={to} /></ChartCard><ChartCard title="专项训练强度结构" description="仅展示当前项目已记录的强度分区" className="dashboard-span-4"><TrainingIntensityChart data={intensity} /></ChartCard><ChartCard title="专项训练内容结构" description="按统一训练内容分类统计" className="dashboard-span-5"><TrainingContentChart records={specialRecords} /></ChartCard><ChartCard title="专项成绩趋势" description="该项目暂未配置可用于趋势分析的专项成绩指标" className="dashboard-span-7"><ContentState kind="empty" title="暂无专项指标配置" icon={<Target size={25} />} description="配置当前项目的真实测试或比赛成绩字段后，将按日期展示趋势和最佳表现。" /></ChartCard><RecentSpecialRecords records={specialRecords} onNavigate={onNavigate} /></section>
+      <section className="training-dashboard-grid"><ChartCard title="专项训练量趋势" description="按真实训练时长与距离汇总" className="dashboard-span-8"><TrainingVolumeChart data={volume} from={from} to={to} /></ChartCard><ChartCard title="专项训练强度结构" description="仅展示当前项目已记录的强度分区" className="dashboard-span-4"><TrainingIntensityChart data={intensity} /></ChartCard><ChartCard title="专项训练内容结构" description="按统一训练内容分类统计" className="dashboard-span-5"><TrainingContentChart records={specialRecords} /></ChartCard><ChartCard title="专项成绩趋势" description="该项目暂未配置可用于趋势分析的专项成绩指标" className="dashboard-span-7"><ContentState kind="empty" title="暂无专项指标配置" icon={<Target size={25} />} description="配置当前项目的真实测试或比赛成绩字段后，将按日期展示趋势和最佳表现。" /></ChartCard></section>
     </>}
   </PageContainer>;
 }
