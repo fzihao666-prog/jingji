@@ -18,7 +18,8 @@ import {
   ChevronDown,
   Building2,
   ClipboardList,
-  HardDrive
+  HardDrive,
+  FlaskConical
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '../api';
@@ -30,7 +31,7 @@ import { EditableName } from './EditableName';
 export type SpecialPageKey = 'special-overview' | 'special-volume' | 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-records' | 'special-schedule';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
 export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-import-history' | 'data-management';
-export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
+export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'physiology-biochemistry' | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
 
 
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
@@ -47,6 +48,7 @@ const directNavItems: Array<{
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
+  { key: 'physiology-biochemistry', label: '生理生化', icon: FlaskConical },
   { key: 'personal', label: '运动员表现', icon: UserRound }
 ];
 

@@ -5,6 +5,7 @@ import { AppShell, type PageKey, type SpecialPageKey, type StrengthPageKey } fro
 import { BrandLogo } from './components/BrandLogo';
 import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
+import { PhysiologyBiochemistryPage } from './pages/PhysiologyBiochemistryPage';
 import { SpecialTrainingDashboard, StrengthTrainingDashboard } from './pages/TrainingDashboards';
 import type { Athlete, Project, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
@@ -144,7 +145,7 @@ export default function App() {
     onAthleteChange: setAthleteId,
     onProjectChange: (nextProject: Project) => { setProject(nextProject); setAthleteId(null); void api.saveCurrentProject(nextProject).catch(() => undefined); }
   };
-  const usesGlobalTrainingFilter = page === 'overview' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
+  const usesGlobalTrainingFilter = page === 'overview' || page === 'physiology-biochemistry' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
 
   return (
     <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
@@ -161,6 +162,7 @@ export default function App() {
         {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={setPage} />}
         {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} onAthleteChange={setAthleteId} />}
         {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'physiology-biochemistry' && <PhysiologyBiochemistryPage project={project} from={from} to={to} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="import" onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'data-import-history' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="history" onChanged={() => setRefreshKey((key) => key + 1)} />}
