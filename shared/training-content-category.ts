@@ -4,7 +4,7 @@ export const TRAINING_CONTENT_CATEGORIES = [
 ] as const;
 
 export type TrainingContentCategory = typeof TRAINING_CONTENT_CATEGORIES[number];
-export type WaterLandTrainingCategory = 'water' | 'land' | 'unclassified';
+export type TrainingLoadCategory = 'special' | 'physical';
 
 export type TrainingContentSource = {
   trainingType?: string | null;
@@ -27,13 +27,10 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
   return '其它';
 }
 
-// 水陆训练负荷统计复用训练课分类：明确的“其它”按当前业务约定归入陆上；
-// 未出现任何可识别训练线索的记录保持未分类，避免为了凑比例而误归属。
-export function waterLandTrainingCategory(input: TrainingContentSource): WaterLandTrainingCategory {
-  const category = trainingContentCategory(input);
-  if (category === '水上') return 'water';
-  if (category !== '其它') return 'land';
+// 专项与体能训练模块共用这一口径。无法识别的记录不强行推断，供统计模块排除。
+export function trainingLoadCategory(input: TrainingContentSource): TrainingLoadCategory | null {
   const text = `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
-  if (/其它|其他|力量训练|体能训练|恢复训练|陆上训练/.test(text)) return 'land';
-  return 'unclassified';
+  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || '')) return 'special';
+  if (/力量|体能|跑步|功能|核心|恢复|陆上|测功仪/.test(text)) return 'physical';
+  return null;
 }

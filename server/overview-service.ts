@@ -1,6 +1,6 @@
 import { db } from './db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
-import { waterLandTrainingCategory } from '../shared/training-content-category.ts';
+import { trainingLoadCategory } from '../shared/training-content-category.ts';
 
 const zones = STRENGTH_INTENSITY_ZONES;
 
@@ -216,7 +216,7 @@ function ageAt(birthDate: string | null, date: string) {
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
     records: [], trainingVolume: emptyTrainingVolume(), intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
-    waterLandLoad: { waterLoad: 0, landLoad: 0, totalLoad: 0, waterPercentage: 0, landPercentage: 0, unclassifiedLoad: 0 },
+    trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0 },
     strengthTests: [], measurements: [], profiles: [], injuries: [],
     meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
@@ -299,20 +299,19 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     };
   });
   const trainingVolume = aggregateTrainingVolume(sessions);
-  const waterLandLoads = sessions.reduce((totals, row) => {
-    const load = Number.isFinite(row.srpe) ? row.srpe : 0;
-    const category = waterLandTrainingCategory(row);
-    totals[category] += load;
+  const trainingLoads = sessions.reduce((totals, row) => {
+    const load = Number(row.srpe);
+    const category = trainingLoadCategory(row);
+    if (category && Number.isFinite(load) && load > 0) totals[category] += load;
     return totals;
-  }, { water: 0, land: 0, unclassified: 0 });
-  const waterLandTotal = waterLandLoads.water + waterLandLoads.land;
-  const waterLandLoad = {
-    waterLoad: round(waterLandLoads.water, 1),
-    landLoad: round(waterLandLoads.land, 1),
-    totalLoad: round(waterLandTotal, 1),
-    waterPercentage: waterLandTotal ? round(waterLandLoads.water / waterLandTotal * 100, 2) : 0,
-    landPercentage: waterLandTotal ? round(waterLandLoads.land / waterLandTotal * 100, 2) : 0,
-    unclassifiedLoad: round(waterLandLoads.unclassified, 1)
+  }, { special: 0, physical: 0 });
+  const trainingLoadTotal = trainingLoads.special + trainingLoads.physical;
+  const trainingLoadRatio = {
+    specialLoad: round(trainingLoads.special, 1),
+    physicalLoad: round(trainingLoads.physical, 1),
+    totalLoad: round(trainingLoadTotal, 1),
+    specialPercentage: trainingLoadTotal ? round(trainingLoads.special / trainingLoadTotal * 100, 2) : 0,
+    physicalPercentage: trainingLoadTotal ? round(trainingLoads.physical / trainingLoadTotal * 100, 2) : 0
   };
 
   const profileRows = db.prepare(`
@@ -546,7 +545,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     records,
     trainingVolume,
     intensityDistribution,
-    waterLandLoad,
+    trainingLoadRatio,
     strengthTests,
     measurements,
     profiles,

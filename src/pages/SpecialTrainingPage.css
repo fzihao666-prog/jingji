@@ -23,14 +23,29 @@
 .dashboard-action-button { display: inline-flex; align-items: center; gap: 5px; border: 0; color: #117d76; background: transparent; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .dashboard-action-button { padding: 9px 12px; border: 1px solid #bfdfdc; border-radius: 8px; background: #f3faf9; }
 .strength-dashboard-page .strength-dashboard-grid { margin: 0; }
+.champion-current-comparison { padding: 8px 18px 14px; }
+.champion-comparison-head, .champion-current-comparison > div:not(.champion-comparison-head) { display: grid; grid-template-columns: minmax(120px, 1.3fr) repeat(3, minmax(100px, 1fr)); gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid #e7eeee; font-size: 10px; }
+.champion-comparison-head { color: #7a9096; font-size: 9px; font-weight: 800; }
+.champion-current-comparison strong { color: #234b55; }.champion-current-comparison b { color: #117d76; font-variant-numeric: tabular-nums; }.champion-current-comparison > div span { color: #8a9aa0; }.champion-current-comparison > small { display: block; margin-top: 10px; color: #83959a; font-size: 9px; }
+.physical-core-metrics { margin-top: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.physical-dashboard-grid .app-content-state { min-height: 246px; }
+.physical-ability-profile { min-height: 246px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) 142px; gap: 18px; align-items: center; }
+.physical-radar { display: grid; gap: 11px; }.physical-radar > div { display: grid; grid-template-columns: 72px minmax(0, 1fr) 34px; align-items: center; gap: 8px; color: #4d6870; font-size: 10px; }.physical-radar i { height: 8px; border-radius: 99px; overflow: hidden; background: #e8efef; }.physical-radar i b { display: block; width: var(--profile-score); height: 100%; border-radius: inherit; background: var(--profile-color); }.physical-radar strong { color: #234b55; font-size: 10px; font-variant-numeric: tabular-nums; }
+.physical-ability-profile aside { padding-left: 15px; border-left: 1px solid #e3ecec; }.physical-ability-profile aside > span { color: #83969b; font-size: 8px; }.physical-ability-profile h3 { margin: 4px 0 12px; color: #234b55; font-size: 13px; }.physical-ability-profile p { display: grid; gap: 4px; margin: 0 0 11px; }.physical-ability-profile p b { color: #687f86; font-size: 9px; }.physical-ability-profile p em { color: #117d76; font-size: 9px; font-style: normal; }
+.physical-trend { min-height: 246px; display: grid; grid-template-rows: auto 1fr; }.physical-trend > label { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 9px 14px 0; color: #71878e; font-size: 9px; }.physical-trend select { height: 27px; border: 1px solid #d5e3e5; border-radius: 6px; color: #34545d; background: #fff; font-size: 10px; }.physical-chart-canvas { height: 220px; padding: 10px 12px 8px; }
+.physical-structure { min-height: 246px; padding: 30px 18px 16px; }.physical-structure-bar { height: 26px; margin-bottom: 20px; border-radius: 7px; overflow: hidden; display: flex; background: #eef3f3; }.physical-structure-bar i { min-width: 2px; height: 100%; }.physical-structure > div:not(.physical-structure-bar) { display: grid; grid-template-columns: minmax(0, 1fr) auto 48px; gap: 10px; padding: 6px 0; border-bottom: 1px solid #edf1f1; color: #60777e; font-size: 10px; }.physical-structure b { color: #35545d; font-weight: 700; }.physical-structure strong { color: #117d76; text-align: right; font-variant-numeric: tabular-nums; }.physical-structure small { display: block; margin-top: 12px; color: #87989d; font-size: 9px; }
 
 @media (max-width: 1200px) {
   .training-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .physical-core-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8 { grid-column: span 6; }
 }
 
 @media (max-width: 760px) {
   .training-dashboard-metrics, .training-dashboard-grid { grid-template-columns: 1fr; }
+  .physical-core-metrics { grid-template-columns: 1fr 1fr; }
+  .champion-comparison-head, .champion-current-comparison > div:not(.champion-comparison-head) { grid-template-columns: minmax(80px, 1.2fr) repeat(3, minmax(56px, 1fr)); gap: 6px; font-size: 8px; }
+  .physical-ability-profile { grid-template-columns: 1fr; }.physical-ability-profile aside { padding: 12px 0 0; border-top: 1px solid #e3ecec; border-left: 0; }.physical-chart-canvas { height: 220px; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }
 }
 

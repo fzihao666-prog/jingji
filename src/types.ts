@@ -721,13 +721,12 @@ export type OverviewPayload = {
     sessionCount: number;
     percentage: number;
   }>;
-  waterLandLoad: {
-    waterLoad: number;
-    landLoad: number;
+  trainingLoadRatio: {
+    specialLoad: number;
+    physicalLoad: number;
     totalLoad: number;
-    waterPercentage: number;
-    landPercentage: number;
-    unclassifiedLoad: number;
+    specialPercentage: number;
+    physicalPercentage: number;
   };
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];

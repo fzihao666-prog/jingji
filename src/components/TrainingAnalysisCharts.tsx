@@ -5,17 +5,12 @@ import {
 } from 'recharts';
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
 import { formatNumber, percentage, startOfWeek } from '../utils';
-import { TRAINING_CONTENT_CATEGORIES, trainingContentCategory } from '../../shared/training-content-category';
+import { TRAINING_CONTENT_CATEGORIES, trainingContentCategory, trainingLoadCategory as classifyTrainingLoad } from '../../shared/training-content-category';
 import { STRENGTH_INTENSITY_ZONES, TRAINING_INTENSITY_META } from '../../shared/strength-training';
 
 const colors = ['#0b7f7a', '#25aa9d', '#73c5ab', '#edaa32', '#df634d', '#66758a', '#8b6eb0', '#3d7db7', '#9a7f66'];
 
-export function trainingLoadCategory(record: TrainingRecord) {
-  const text = `${record.trainingType} ${record.structureType} ${record.content}`;
-  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(record.trainingType)) return 'special';
-  if (/力量|体能|跑步|功能|核心|恢复|陆上|测功仪/.test(text)) return 'physical';
-  return record.distanceKm > 0 ? 'special' : 'physical';
-}
+export const trainingLoadCategory = classifyTrainingLoad;
 
 type TrainingVolume = OverviewPayload['trainingVolume'];
 
@@ -79,7 +74,7 @@ export function TrainingContentChart({ records }: { records: TrainingRecord[] })
 }
 
 type IntensityDistribution = OverviewPayload['intensityDistribution'];
-type WaterLandLoad = OverviewPayload['waterLandLoad'];
+type TrainingLoadRatio = OverviewPayload['trainingLoadRatio'];
 
 export function TrainingIntensityChart({ data }: { data: IntensityDistribution }) {
   const normalizedData = STRENGTH_INTENSITY_ZONES.map((zone) => data.find((row) => row.zone === zone) || ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 }));
@@ -112,20 +107,20 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
   </div>;
 }
 
-export function WaterLandLoadRatioChart({ data }: { data: WaterLandLoad }) {
-  const [active, setActive] = useState<'water' | 'land' | null>(null);
+export function SpecialPhysicalLoadRatioChart({ data }: { data: TrainingLoadRatio }) {
+  const [active, setActive] = useState<'special' | 'physical' | null>(null);
   const hasLoad = data.totalLoad > 0;
   const segments = [
-    { key: 'water' as const, label: '水上训练', load: data.waterLoad, percentage: data.waterPercentage },
-    { key: 'land' as const, label: '陆上训练', load: data.landLoad, percentage: data.landPercentage }
+    { key: 'special' as const, label: '专项训练', load: data.specialLoad, percentage: data.specialPercentage },
+    { key: 'physical' as const, label: '体能训练', load: data.physicalLoad, percentage: data.physicalPercentage }
   ];
   const selected = segments.find((item) => item.key === active);
-  return <div className="analysis-chart-module water-land-ratio-module">
-    <div className="analysis-chart-toolbar"><span className="analysis-caption">按 SRPE 训练负荷汇总；水上与陆上负荷占比</span></div>
-    <div className={`water-land-ratio-bar${hasLoad ? '' : ' is-empty'}`} role="img" aria-label={`水上训练负荷 ${formatNumber(data.waterLoad)} AU，陆上训练负荷 ${formatNumber(data.landLoad)} AU`}>
+  return <div className="analysis-chart-module training-load-ratio-module">
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按 SRPE 训练负荷汇总；仅统计已归类的专项与体能训练</span></div>
+    <div className={`training-load-ratio-bar${hasLoad ? '' : ' is-empty'}`} role="img" aria-label={`专项训练负荷 ${formatNumber(data.specialLoad)} AU，体能训练负荷 ${formatNumber(data.physicalLoad)} AU`}>
       {hasLoad ? segments.map((item) => item.percentage > 0 && <div
         key={item.key}
-        className={`water-land-ratio-segment ${item.key}`}
+        className={`training-load-ratio-segment ${item.key}`}
         style={{ flexBasis: `${item.percentage}%` }}
         role="button"
         tabIndex={0}
@@ -133,14 +128,13 @@ export function WaterLandLoadRatioChart({ data }: { data: WaterLandLoad }) {
         onMouseLeave={() => setActive(null)}
         onFocus={() => setActive(item.key)}
         onBlur={() => setActive(null)}
-      ><strong>{formatNumber(item.percentage, 1)}%</strong><span>{item.key === 'water' ? '水上' : '陆上'}</span></div>) : <span>暂无有效训练负荷数据</span>}
+      ><strong>{formatNumber(item.percentage, 1)}%</strong><span>{item.label}</span></div>) : <span>暂无训练负荷数据</span>}
     </div>
-    <div className="water-land-ratio-summary">{segments.map((item) => <article key={item.key} className={item.key}>
+    <div className="training-load-ratio-summary">{segments.map((item) => <article key={item.key} className={item.key}>
       <span>{item.label}</span><strong>{formatNumber(item.percentage, 1)}<small>%</small></strong><em>{formatNumber(item.load, 1)} AU</em>
-    </article>)}<aside><span>总训练负荷</span><strong>{formatNumber(data.totalLoad, 1)}<small> AU</small></strong></aside></div>
-    {selected && <div className={`water-land-ratio-tooltip ${selected.key}`}><strong>{selected.label}</strong><span>训练负荷：{formatNumber(selected.load, 1)} AU</span><span>占比：{formatNumber(selected.percentage, 1)}%</span></div>}
-    {data.unclassifiedLoad > 0 && <p className="analysis-method-note">未分类训练负荷：{formatNumber(data.unclassifiedLoad, 1)} AU，未计入水陆比例。</p>}
-    {!hasLoad && <p className="analysis-empty-note">当前筛选条件下无有效训练负荷数据</p>}
+    </article>)}<aside><span>有效总训练负荷</span><strong>{formatNumber(data.totalLoad, 1)}<small> AU</small></strong></aside></div>
+    {selected && <div className={`training-load-ratio-tooltip ${selected.key}`}><strong>{selected.label}</strong><span>训练负荷：{formatNumber(selected.load, 1)} AU</span><span>占比：{formatNumber(selected.percentage, 1)}%</span></div>}
+    {!hasLoad && <p className="analysis-empty-note">暂无训练负荷数据</p>}
   </div>;
 }
 
