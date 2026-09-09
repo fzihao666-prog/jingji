@@ -12,7 +12,7 @@ import { ROLE_META } from '../../shared/access';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
   FmsTeamChart, InjuryAssessmentChart,
-  TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, SpecialPhysicalLoadRatioChart, trainingLoadCategory
+  TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, TrainingLoadEnergyChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
 import { AppCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
@@ -79,7 +79,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'training-load-analysis': { title: '训练量统计', size: 'full' },
   'training-content': { title: '训练课占比', size: 'half' },
   'training-intensity': { title: '训练强度占比', size: 'half' },
-  'water-land-load': { title: '专项与体能训练占比', size: 'half' }
+  'water-land-load': { title: '训练负荷占比', size: 'half' }
 };
 
 function normalizeOverviewLayout(stored: Partial<OverviewLayoutState> | null | undefined): OverviewLayoutState {
@@ -150,7 +150,7 @@ export function OverviewPage(props: Props) {
       const category = trainingLoadCategory(record);
       if (category) totals[category] += record.durationMin;
       return totals;
-    }, { physical: 0, special: 0 }), [analysisRecords]);
+    }, { physical: 0, special: 0, recovery: 0 }), [analysisRecords]);
   const recentLoadBreakdown = useMemo(() => {
     const from = addDays(props.to, -6);
     return analysisRecords
@@ -159,16 +159,16 @@ export function OverviewPage(props: Props) {
         const category = trainingLoadCategory(record);
         if (category) totals[category] += record.srpe;
         return totals;
-      }, { physical: 0, special: 0 });
+      }, { physical: 0, special: 0, recovery: 0 });
   }, [analysisRecords, props.to]);
-  const recentTrainingLoad = recentLoadBreakdown.physical + recentLoadBreakdown.special;
+  const recentTrainingLoad = recentLoadBreakdown.physical + recentLoadBreakdown.special + recentLoadBreakdown.recovery;
   const averageLoadBreakdown = useMemo(() => analysisRecords
     .filter((record) => record.status !== 'rest')
     .reduce((totals, record) => {
       const category = trainingLoadCategory(record);
       if (category) totals[category] += record.srpe;
       return totals;
-    }, { physical: 0, special: 0 }), [analysisRecords]);
+    }, { physical: 0, special: 0, recovery: 0 }), [analysisRecords]);
   const fatigueSummary = useMemo(() => {
     const athleteDays = new Map<string, number>();
     for (const record of analysisRecords) {
@@ -555,8 +555,8 @@ export function OverviewPage(props: Props) {
     ),
     'water-land-load': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="专项与体能训练占比" subtitle="专项训练 · 体能训练（SRPE 训练负荷占比）" />
-        <SpecialPhysicalLoadRatioChart data={overview?.trainingLoadRatio || { specialLoad: 0, physicalLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0 }} />
+        <PanelHeading title="训练负荷占比" subtitle="专项 · 体能 · 恢复（SRPE 训练负荷）" />
+        <TrainingLoadEnergyChart data={overview?.trainingLoadRatio || { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 }} />
       </AppCard>
     )
   };

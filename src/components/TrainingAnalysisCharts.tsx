@@ -107,33 +107,35 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
   </div>;
 }
 
-export function SpecialPhysicalLoadRatioChart({ data }: { data: TrainingLoadRatio }) {
-  const [active, setActive] = useState<'special' | 'physical' | null>(null);
+export function TrainingLoadEnergyChart({ data }: { data: TrainingLoadRatio }) {
+  const [active, setActive] = useState<'special' | 'physical' | 'recovery' | null>(null);
   const hasLoad = data.totalLoad > 0;
   const segments = [
-    { key: 'special' as const, label: '专项训练', load: data.specialLoad, percentage: data.specialPercentage },
-    { key: 'physical' as const, label: '体能训练', load: data.physicalLoad, percentage: data.physicalPercentage }
+    { key: 'special' as const, label: '专项', load: data.specialLoad, percentage: data.specialPercentage },
+    { key: 'physical' as const, label: '体能', load: data.physicalLoad, percentage: data.physicalPercentage },
+    { key: 'recovery' as const, label: '恢复', load: data.recoveryLoad, percentage: data.recoveryPercentage }
   ];
   const selected = segments.find((item) => item.key === active);
-  return <div className="analysis-chart-module training-load-ratio-module">
-    <div className="analysis-chart-toolbar"><span className="analysis-caption">按 SRPE 训练负荷汇总；仅统计已归类的专项与体能训练</span></div>
-    <div className={`training-load-ratio-bar${hasLoad ? '' : ' is-empty'}`} role="img" aria-label={`专项训练负荷 ${formatNumber(data.specialLoad)} AU，体能训练负荷 ${formatNumber(data.physicalLoad)} AU`}>
-      {hasLoad ? segments.map((item) => item.percentage > 0 && <div
+  return <div className="analysis-chart-module training-load-energy-module">
+    <div className="analysis-chart-toolbar"><span className="analysis-caption">按 SRPE 训练负荷汇总；仅统计已明确归类的训练记录</span><span className="training-load-total"><b>有效总训练负荷</b><strong>{formatNumber(data.totalLoad, 1)} <small>AU</small></strong></span></div>
+    <div className="training-load-energy-grid" aria-label={`专项负荷 ${formatNumber(data.specialLoad)} AU，体能负荷 ${formatNumber(data.physicalLoad)} AU，恢复负荷 ${formatNumber(data.recoveryLoad)} AU`}>
+      {segments.map((item) => <div
         key={item.key}
-        className={`training-load-ratio-segment ${item.key}`}
-        style={{ flexBasis: `${item.percentage}%` }}
-        role="button"
         tabIndex={0}
+        className={`training-load-energy-column ${item.key}`}
+        aria-label={`${item.label}训练负荷 ${formatNumber(item.load, 1)} AU，占比 ${formatNumber(item.percentage, 1)}%`}
         onMouseEnter={() => setActive(item.key)}
         onMouseLeave={() => setActive(null)}
         onFocus={() => setActive(item.key)}
         onBlur={() => setActive(null)}
-      ><strong>{formatNumber(item.percentage, 1)}%</strong><span>{item.label}</span></div>) : <span>暂无训练负荷数据</span>}
+      >
+        <span className="training-load-energy-label">{item.label}</span>
+        <strong className="training-load-energy-percentage">{formatNumber(item.percentage, 1)}<small>%</small></strong>
+        <span className="training-load-energy-tank" aria-hidden="true"><i style={{ height: `${Math.max(0, Math.min(100, item.percentage))}%` }} /></span>
+        <span className="training-load-energy-value">{formatNumber(item.load, 1)}<small>训练负荷 · AU</small></span>
+      </div>)}
     </div>
-    <div className="training-load-ratio-summary">{segments.map((item) => <article key={item.key} className={item.key}>
-      <span>{item.label}</span><strong>{formatNumber(item.percentage, 1)}<small>%</small></strong><em>{formatNumber(item.load, 1)} AU</em>
-    </article>)}<aside><span>有效总训练负荷</span><strong>{formatNumber(data.totalLoad, 1)}<small> AU</small></strong></aside></div>
-    {selected && <div className={`training-load-ratio-tooltip ${selected.key}`}><strong>{selected.label}</strong><span>训练负荷：{formatNumber(selected.load, 1)} AU</span><span>占比：{formatNumber(selected.percentage, 1)}%</span></div>}
+    {selected && <div className={`training-load-energy-tooltip ${selected.key}`}><strong>{selected.label}</strong><span>训练负荷：{formatNumber(selected.load, 1)} AU</span><span>占比：{formatNumber(selected.percentage, 1)}%</span></div>}
     {!hasLoad && <p className="analysis-empty-note">暂无训练负荷数据</p>}
   </div>;
 }

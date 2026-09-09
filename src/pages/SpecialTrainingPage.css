@@ -28,6 +28,8 @@
 .champion-comparison-head { color: #7a9096; font-size: 9px; font-weight: 800; }
 .champion-current-comparison strong { color: #234b55; }.champion-current-comparison b { color: #117d76; font-variant-numeric: tabular-nums; }.champion-current-comparison > div span { color: #8a9aa0; }.champion-current-comparison > small { display: block; margin-top: 10px; color: #83959a; font-size: 9px; }
 .physical-core-metrics { margin-top: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.physical-athlete-filter { display: inline-flex; align-items: center; gap: 7px; color: #71878e; font-size: 10px; font-weight: 700; }
+.physical-athlete-filter select { height: 32px; min-width: 164px; padding: 0 28px 0 10px; border: 1px solid #cfe0e1; border-radius: 8px; color: #274c55; background: #fff; font: inherit; font-weight: 600; }
 .physical-dashboard-grid .app-content-state { min-height: 246px; }
 .physical-ability-profile { min-height: 246px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) 142px; gap: 18px; align-items: center; }
 .physical-radar { display: grid; gap: 11px; }.physical-radar > div { display: grid; grid-template-columns: 72px minmax(0, 1fr) 34px; align-items: center; gap: 8px; color: #4d6870; font-size: 10px; }.physical-radar i { height: 8px; border-radius: 99px; overflow: hidden; background: #e8efef; }.physical-radar i b { display: block; width: var(--profile-score); height: 100%; border-radius: inherit; background: var(--profile-color); }.physical-radar strong { color: #234b55; font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -44,6 +46,7 @@
 @media (max-width: 760px) {
   .training-dashboard-metrics, .training-dashboard-grid { grid-template-columns: 1fr; }
   .physical-core-metrics { grid-template-columns: 1fr 1fr; }
+  .physical-athlete-filter { width: 100%; justify-content: space-between; }.physical-athlete-filter select { min-width: 0; flex: 1; }
   .champion-comparison-head, .champion-current-comparison > div:not(.champion-comparison-head) { grid-template-columns: minmax(80px, 1.2fr) repeat(3, minmax(56px, 1fr)); gap: 6px; font-size: 8px; }
   .physical-ability-profile { grid-template-columns: 1fr; }.physical-ability-profile aside { padding: 12px 0 0; border-top: 1px solid #e3ecec; border-left: 0; }.physical-chart-canvas { height: 220px; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }

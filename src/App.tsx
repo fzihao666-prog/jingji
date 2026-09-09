@@ -159,7 +159,7 @@ export default function App() {
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
         {page === 'special-overview' && <SpecialTrainingDashboard records={records} project={project} from={from} to={to} loading={loading} onNavigate={setPage} />}
         {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={setPage} />}
-        {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} />}
+        {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} onAthleteChange={setAthleteId} />}
         {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="import" onChanged={() => setRefreshKey((key) => key + 1)} />}

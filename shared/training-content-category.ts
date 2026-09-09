@@ -4,7 +4,7 @@ export const TRAINING_CONTENT_CATEGORIES = [
 ] as const;
 
 export type TrainingContentCategory = typeof TRAINING_CONTENT_CATEGORIES[number];
-export type TrainingLoadCategory = 'special' | 'physical';
+export type TrainingLoadCategory = 'special' | 'physical' | 'recovery';
 
 export type TrainingContentSource = {
   trainingType?: string | null;
@@ -27,10 +27,11 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
   return '其它';
 }
 
-// 专项与体能训练模块共用这一口径。无法识别的记录不强行推断，供统计模块排除。
+// 专项、体能与恢复训练模块共用这一口径。优先识别明确恢复内容，无法识别的记录不强行推断。
 export function trainingLoadCategory(input: TrainingContentSource): TrainingLoadCategory | null {
   const text = `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
+  if (/拉伸|再生|恢复|放松|泡沫轴|理疗/.test(text)) return 'recovery';
   if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || '')) return 'special';
-  if (/力量|体能|跑步|功能|核心|恢复|陆上|测功仪/.test(text)) return 'physical';
+  if (/力量|体能|跑步|功能|核心|陆上|测功仪/.test(text)) return 'physical';
   return null;
 }

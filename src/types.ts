@@ -724,9 +724,11 @@ export type OverviewPayload = {
   trainingLoadRatio: {
     specialLoad: number;
     physicalLoad: number;
+    recoveryLoad: number;
     totalLoad: number;
     specialPercentage: number;
     physicalPercentage: number;
+    recoveryPercentage: number;
   };
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];

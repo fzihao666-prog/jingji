@@ -216,7 +216,7 @@ function ageAt(birthDate: string | null, date: string) {
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
     records: [], trainingVolume: emptyTrainingVolume(), intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
-    trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0 },
+    trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 },
     strengthTests: [], measurements: [], profiles: [], injuries: [],
     meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
@@ -304,14 +304,16 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     const category = trainingLoadCategory(row);
     if (category && Number.isFinite(load) && load > 0) totals[category] += load;
     return totals;
-  }, { special: 0, physical: 0 });
-  const trainingLoadTotal = trainingLoads.special + trainingLoads.physical;
+  }, { special: 0, physical: 0, recovery: 0 });
+  const trainingLoadTotal = trainingLoads.special + trainingLoads.physical + trainingLoads.recovery;
   const trainingLoadRatio = {
     specialLoad: round(trainingLoads.special, 1),
     physicalLoad: round(trainingLoads.physical, 1),
+    recoveryLoad: round(trainingLoads.recovery, 1),
     totalLoad: round(trainingLoadTotal, 1),
     specialPercentage: trainingLoadTotal ? round(trainingLoads.special / trainingLoadTotal * 100, 2) : 0,
-    physicalPercentage: trainingLoadTotal ? round(trainingLoads.physical / trainingLoadTotal * 100, 2) : 0
+    physicalPercentage: trainingLoadTotal ? round(trainingLoads.physical / trainingLoadTotal * 100, 2) : 0,
+    recoveryPercentage: trainingLoadTotal ? round(trainingLoads.recovery / trainingLoadTotal * 100, 2) : 0
   };
 
   const profileRows = db.prepare(`
