@@ -2119,7 +2119,7 @@ function seedChampionModelSupplementData() {
   db.prepare("UPDATE test_measurements SET target_value = 2 WHERE metric_code LIKE 'fms_%'").run();
 }
 
-runInitializationOnce('champion_model_supplement_seed_v3', seedChampionModelSupplementData);
+// 冠军模型必须由已确认的真实样本配置；不再写入演示补充数据。
 
 function seedChampionModelStandards() {
   const upsert = db.prepare(`
@@ -2210,7 +2210,7 @@ function seedChampionModelStandards() {
   for (const row of rows) upsert.run(...row);
 }
 
-runInitializationOnce('champion_model_seed_v3', seedChampionModelStandards);
+// 保留表结构供后续项目化冠军模型配置使用，不初始化任何冠军模型基线。
 
 function seedOverviewProfileData() {
   const profiles: Record<string, { birthDate: string; heightCm: number; weightKg: number; bodyFatPct: number; score: number; origin: [string, string, string] }> = {

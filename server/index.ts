@@ -3875,6 +3875,28 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
   `).get(athleteId) as { id: number; name: string; project: Project; gender: string } | undefined;
   if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
   const gender = athlete.gender?.includes('女') ? '女' : '男';
+  // 冠军模型尚未完成真实数据配置，任何历史初始化基线均不得用于正式对标或评分。
+  const hasConfiguredChampionModel = false;
+  if (!hasConfiguredChampionModel) return res.json({
+    benchmark: {
+      athleteId: athlete.id,
+      athleteName: athlete.name,
+      project: athlete.project,
+      gender,
+      modelVersion: 'UNCONFIGURED',
+      rows: [],
+      dimensions: [],
+      summary: {
+        score: null,
+        averageStandardDistance: null,
+        topPriorityIndex: null,
+        achieved: 0,
+        comparable: 0,
+        primaryGap: '模型数据待配置。',
+        source: '暂无正式冠军模型数据'
+      }
+    }
+  });
   const standards = db.prepare(`
     SELECT cms.metric_code AS code, cms.model_version AS modelVersion,
       cms.target_min AS targetMin, cms.target_max AS targetMax, cms.elite_mean AS eliteMean,

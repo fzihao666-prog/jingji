@@ -38,7 +38,7 @@ export function ChampionModelBenchmark({ benchmark, loading }: { benchmark: Cham
     comparable: dimension.comparable
   }));
   if (loading) return <div className="champion-benchmark-empty">正在读取冠军模型标准与个人测试数据…</div>;
-  if (!benchmark || !rows.length || !radarData.length) return <div className="champion-benchmark-empty">暂无冠军模型标准。请先初始化或录入该项目模型。</div>;
+  if (!benchmark || !rows.length || !radarData.length) return <div className="champion-benchmark-empty">模型数据待配置</div>;
   const validDimensions = dimensions.filter((dimension) => dimension.current !== null);
   const weakDimensions = [...validDimensions]
     .sort((left, right) => (right.priorityIndex || 0) - (left.priorityIndex || 0))

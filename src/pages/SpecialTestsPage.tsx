@@ -20,7 +20,7 @@ type Props = {
   from: string;
   to: string;
   loading: boolean;
-  section: SpecialPageKey;
+  section: Exclude<SpecialPageKey, 'special-overview'>;
   onSectionChange: (section: SpecialPageKey) => void;
 };
 
@@ -31,7 +31,7 @@ type Session = {
   sleepHours: number | null; fatigueIndex: number | null; source: 'system' | 'manual' | 'import';
 };
 
-const SECTION_META: Record<SpecialPageKey, { group: string; title: string; english: string; description: string }> = {
+const SECTION_META: Record<Exclude<SpecialPageKey, 'special-overview'>, { group: string; title: string; english: string; description: string }> = {
   'special-volume': { group: '综合分析', title: '训练量分析', english: 'TRAINING VOLUME', description: '汇总专项训练次数、训练距离与训练时间，观察周期训练量变化。' },
   'special-time': { group: '综合分析', title: '时间分析', english: 'TRAINING TIME', description: '按周期、训练类型和运动员拆解专项训练时长与完成质量。' },
   'special-distance': { group: '综合分析', title: '距离分析', english: 'TRAINING DISTANCE', description: '监测专项里程、强度分布与运动员距离完成情况。' },

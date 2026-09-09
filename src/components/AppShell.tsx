@@ -27,22 +27,11 @@ import { roleMeta } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
 
-export type SpecialPageKey = 'special-volume' | 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-records' | 'special-schedule';
+export type SpecialPageKey = 'special-overview' | 'special-volume' | 'special-time' | 'special-distance' | 'special-load' | 'special-rate' | 'special-heart' | 'special-power' | 'special-records' | 'special-schedule';
 export type StrengthPageKey = 'strength-overview' | 'strength-plan' | 'strength-records' | 'strength-analysis' | 'strength-assessment';
 export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-import-history' | 'data-management';
 export type PageKey = 'overview' | SpecialPageKey | StrengthPageKey | 'athletes' | 'personal' | 'coaches' | 'teams' | 'regions' | 'accounts' | DataCollectionPageKey;
 
-const specialGroups: Array<{ key: SpecialPageKey; label: string; pages: SpecialPageKey[] }> = [
-  { key: 'special-volume', label: '专项分析', pages: ['special-volume', 'special-time', 'special-distance', 'special-load', 'special-rate', 'special-heart', 'special-power'] },
-  { key: 'special-records', label: '训练记录', pages: ['special-records'] },
-  { key: 'special-schedule', label: '训练计划', pages: ['special-schedule'] }
-];
-
-const strengthGroups: Array<{ key: StrengthPageKey; label: string; pages: StrengthPageKey[] }> = [
-  { key: 'strength-overview', label: '体能分析', pages: ['strength-overview', 'strength-analysis', 'strength-assessment'] },
-  { key: 'strength-records', label: '训练记录', pages: ['strength-records'] },
-  { key: 'strength-plan', label: '训练计划', pages: ['strength-plan'] }
-];
 
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
   { key: 'bluetooth', label: '设备管理' },
@@ -99,31 +88,23 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
-  const [specialOpen, setSpecialOpen] = useState(() => page.startsWith('special-'));
-  const [strengthOpen, setStrengthOpen] = useState(() => page.startsWith('strength-'));
   const [dataCollectionOpen, setDataCollectionOpen] = useState(() => isDataCollectionPage(page));
   const [organizationOpen, setOrganizationOpen] = useState(() => isOrganizationPage(page));
   const [systemOpen, setSystemOpen] = useState(() => isSystemPage(page));
-  const specialActive = page.startsWith('special-');
-  const strengthActive = page.startsWith('strength-');
   const dataCollectionActive = isDataCollectionPage(page);
   const organizationActive = isOrganizationPage(page);
   const systemActive = isSystemPage(page);
-  const specialCurrent = specialGroups.find((group) => group.pages.includes(page as SpecialPageKey));
-  const strengthCurrent = strengthGroups.find((group) => group.pages.includes(page as StrengthPageKey));
   const visibleDataCollectionGroups = dataCollectionGroups.filter((item) => !item.roles || item.roles.includes(user.role));
   const dataCollectionCurrent = visibleDataCollectionGroups.find((item) => item.key === page);
   const visibleOrganizationGroups = organizationGroups.filter((item) => item.roles.includes(user.role));
   const visibleSystemGroups = systemGroups.filter((item) => item.roles.includes(user.role));
-  const current = specialCurrent ? { ...specialCurrent, icon: TimerReset } : strengthCurrent ? { ...strengthCurrent, icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: itemIcon(dataCollectionCurrent.key) } : directNavItems.find((item) => item.key === page) || visibleOrganizationGroups.find((item) => item.key === page) || visibleSystemGroups.find((item) => item.key === page) || directNavItems[0];
+  const current = page.startsWith('special-') ? { label: '专项训练', icon: TimerReset } : page.startsWith('strength-') ? { label: '体能训练', icon: Dumbbell } : dataCollectionCurrent ? { ...dataCollectionCurrent, icon: itemIcon(dataCollectionCurrent.key) } : directNavItems.find((item) => item.key === page) || visibleOrganizationGroups.find((item) => item.key === page) || visibleSystemGroups.find((item) => item.key === page) || directNavItems[0];
 
   useEffect(() => {
-    if (specialActive) setSpecialOpen(true);
-    if (strengthActive) setStrengthOpen(true);
     if (dataCollectionActive) setDataCollectionOpen(true);
     if (organizationActive) setOrganizationOpen(true);
     if (systemActive) setSystemOpen(true);
-  }, [dataCollectionActive, organizationActive, specialActive, strengthActive, systemActive]);
+  }, [dataCollectionActive, organizationActive, systemActive]);
 
   const choosePage = (key: PageKey) => {
     onPageChange(key);
@@ -184,30 +165,8 @@ export function AppShell({ user, page, onPageChange, onLogout, onProfileNameChan
               </button>
             );
           })}
-          <div className={`special-nav ${specialActive ? 'active' : ''} ${specialOpen ? 'open' : 'collapsed'}`}>
-            <button className="special-nav-parent" onClick={() => setSpecialOpen((open) => !open)} aria-expanded={specialOpen}>
-              <TimerReset size={19} strokeWidth={1.8} />
-              <span><strong>专项训练</strong></span>
-              <ChevronDown className="special-nav-chevron" size={15} />
-            </button>
-            {specialOpen && <div className="special-nav-tree">
-              {specialGroups.map((group) => <button key={group.key} className={group.pages.includes(page as SpecialPageKey) ? 'active' : ''} onClick={() => choosePage(group.key)}>
-                <i /> <span>{group.label}</span>
-              </button>)}
-            </div>}
-          </div>
-          <div className={`special-nav strength-nav ${strengthActive ? 'active' : ''} ${strengthOpen ? 'open' : 'collapsed'}`}>
-            <button className="special-nav-parent" onClick={() => setStrengthOpen((open) => !open)} aria-expanded={strengthOpen}>
-              <Dumbbell size={19} strokeWidth={1.8} />
-              <span><strong>体能训练</strong></span>
-              <ChevronDown className="special-nav-chevron" size={15} />
-            </button>
-            {strengthOpen && <div className="special-nav-tree">
-              {strengthGroups.map((item) => <button key={item.key} className={item.pages.includes(page as StrengthPageKey) ? 'active' : ''} onClick={() => choosePage(item.key)}>
-                <i /> <span>{item.label}</span>
-              </button>)}
-            </div>}
-          </div>
+          <button className={page.startsWith('special-') ? 'active' : ''} onClick={() => choosePage('special-overview')}><TimerReset size={19} strokeWidth={1.8} /><span><strong>专项训练</strong></span></button>
+          <button className={page.startsWith('strength-') ? 'active' : ''} onClick={() => choosePage('strength-overview')}><Dumbbell size={19} strokeWidth={1.8} /><span><strong>体能训练</strong></span></button>
           {directNavItems.slice(1).map((item) => {
             const Icon = item.icon;
             return <button key={item.key} className={page === item.key ? 'active' : ''} onClick={() => choosePage(item.key)}><Icon size={19} strokeWidth={1.8} /><span><strong>{item.label}</strong></span></button>;

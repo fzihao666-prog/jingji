@@ -5,6 +5,7 @@ import { AppShell, type PageKey, type SpecialPageKey, type StrengthPageKey } fro
 import { BrandLogo } from './components/BrandLogo';
 import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
+import { SpecialTrainingDashboard, StrengthTrainingDashboard } from './pages/TrainingDashboards';
 import type { Athlete, Project, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
 import { DEFAULT_PROJECT, isProject, normalizeProject, PROJECTS } from '../shared/projects';
@@ -156,8 +157,10 @@ export default function App() {
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
-        {page.startsWith('special-') && <SpecialTestsPage {...shared} section={page as SpecialPageKey} onSectionChange={setPage} />}
-        {page.startsWith('strength-') && <TrainingPlanPage section={page as StrengthPageKey} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'special-overview' && <SpecialTrainingDashboard records={records} project={project} from={from} to={to} loading={loading} onNavigate={setPage} />}
+        {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={setPage} />}
+        {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} />}
+        {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="import" onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'data-import-history' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="history" onChanged={() => setRefreshKey((key) => key + 1)} />}
