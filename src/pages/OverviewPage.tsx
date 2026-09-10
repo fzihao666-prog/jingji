@@ -587,7 +587,7 @@ export function OverviewPage(props: Props) {
     'training-load-analysis': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <div className="training-analytics-heading-row">
-          <PanelHeading title="训练量统计" subtitle={selectedTrainingTeam ? `${selectedTrainingTeam.name} · 整体投入 · 专项 · 体能 · 强度 · 生理 · RPE` : '整体投入 · 专项 · 体能 · 强度 · 生理 · RPE'} />
+          <PanelHeading title="训练量统计" subtitle={selectedTrainingTeam ? `${selectedTrainingTeam.name} · 整体投入 · 专项 · 体能 · 生理生化 · RPE` : '整体投入 · 专项 · 体能 · 生理生化 · RPE'} />
           {!isIndividualOverview && <label className="training-analytics-team-filter">
             <span>队伍</span>
             <select value={trainingTeamId ?? ''} onChange={(event) => setTrainingTeamId(event.target.value ? Number(event.target.value) : null)}>
@@ -598,7 +598,7 @@ export function OverviewPage(props: Props) {
         </div>
         {teamTrainingLoading
           ? <ContentState kind="loading" className="professional-chart-empty" title="正在按队伍汇总训练量…" />
-          : <TrainingVolumeDashboard data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} />}
+          : <TrainingVolumeDashboard data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} physiology={trainingOverview?.physiologyHeatmap || { metrics: [] }} />}
       </AppCard>
     ),
     'training-intensity': (

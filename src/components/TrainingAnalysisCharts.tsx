@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import {
   Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line,
   Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis
@@ -60,19 +61,44 @@ export function TrainingVolumeChart({ data, from, to }: { data: TrainingVolume; 
 }
 
 type TrainingAnalytics = OverviewPayload['trainingAnalytics'];
+type PhysiologyHeatmap = OverviewPayload['physiologyHeatmap'];
 const chartTooltipStyle = { border: '1px solid #d5e3e5', borderRadius: 10, boxShadow: '0 10px 24px rgba(9,54,65,.12)', fontSize: 10 };
 
 function TrainingAnalyticsEmpty({ text }: { text: string }) {
   return <p className="analysis-empty-note training-analytics-empty">{text}</p>;
 }
 
-export function TrainingVolumeDashboard({ data }: { data: TrainingAnalytics }) {
+const physiologyStatusMeta = {
+  NORMAL: { label: '正常', color: '#7cb9a9' },
+  FLUCTUATION: { label: '波动', color: '#d8ad59' },
+  ATTENTION: { label: '关注', color: '#d47d4f' },
+  ABNORMAL: { label: '异常', color: '#b74e4e' },
+  MISSING: { label: '未监测', color: '#e7edef' }
+} as const;
+
+function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
+  const [range, setRange] = useState<7 | 14 | 30>(7);
+  const [active, setActive] = useState<{ metricIndex: number; dayIndex: number } | null>(null);
+  const days = data.metrics[0]?.days.slice(-range) || [];
+  const cell = active ? data.metrics[active.metricIndex]?.days.slice(-range)[active.dayIndex] : null;
+  const metric = active ? data.metrics[active.metricIndex] : null;
+  return <div className="physiology-heatmap">
+    <div className="physiology-heatmap-toolbar"><span>团队状态趋势</span><label>周期<select value={range} onChange={(event) => setRange(Number(event.target.value) as 7 | 14 | 30)}><option value={7}>近7天</option><option value={14}>近14天</option><option value={30}>近30天</option></select></label></div>
+    {data.metrics.length ? <div className="physiology-heatmap-table" style={{ '--physiology-days': days.length } as CSSProperties}>
+      <div className="physiology-heatmap-head"><span>指标</span>{days.map((day) => <span key={day.date}>{day.date.slice(5).replace('-', '/')}</span>)}</div>
+      {data.metrics.map((item, metricIndex) => <div className="physiology-heatmap-row" key={item.code}><span>{item.label}</span>{item.days.slice(-range).map((itemDay, dayIndex) => <button key={itemDay.date} type="button" className={`physiology-cell ${itemDay.status.toLowerCase()}`} aria-label={`${item.label} ${itemDay.date} ${physiologyStatusMeta[itemDay.status].label}`} onMouseEnter={() => setActive({ metricIndex, dayIndex })} onFocus={() => setActive({ metricIndex, dayIndex })} onClick={() => setActive({ metricIndex, dayIndex })}><i /></button>)}</div>)}
+    </div> : <TrainingAnalyticsEmpty text="暂无生理生化数据" />}
+    <div className="physiology-heatmap-legend">{Object.entries(physiologyStatusMeta).slice(0, 4).map(([key, item]) => <span key={key}><i style={{ background: item.color }} />{item.label}</span>)}</div>
+    {cell && metric && <div className="physiology-heatmap-detail"><strong>{metric.label} · {cell.date}</strong><span>{cell.isEstimated ? 'V1 模拟状态（等待实测导入）' : `团队中位数：${formatNumber(cell.median || 0, 1)} ${metric.unit}`} · 监测人数：{cell.sampleCount} 人</span><span>正常 {cell.normal} · 波动 {cell.fluctuation} · 关注 {cell.attention} · 异常 {cell.abnormal}{cell.abnormalRateChange === null ? '' : ` · 较前日异常率 ${cell.abnormalRateChange >= 0 ? '↑' : '↓'} ${formatNumber(Math.abs(cell.abnormalRateChange), 1)}%`}</span></div>}
+  </div>;
+}
+
+export function TrainingVolumeDashboard({ data, physiology }: { data: TrainingAnalytics; physiology: PhysiologyHeatmap }) {
   const { summary, days } = data;
   const value = (number: number | null, digits = 1) => number === null ? '—' : formatNumber(number, digits);
   const physicalDays = days.filter((row) => row.physicalDurationMin !== null || row.physicalLoad !== null);
   const specialDays = days.filter((row) => row.specialDurationMin !== null || row.specialDistanceKm !== null);
   const rpeDays = days.filter((row) => row.averageRpe !== null);
-  const physiologyDays = days.filter((row) => row.morningPulse !== null || row.averageHeartRate !== null);
   return <div className="training-analytics-dashboard">
     <section className="training-analytics-summary" aria-label="训练量统计核心摘要">
       <article><span>累计训练量</span><strong>{value(summary.totalDurationMin === null ? null : summary.totalDurationMin / 60)}<small>{summary.totalDurationMin === null ? '' : ' h'}</small></strong><em>训练时长</em></article>
@@ -84,7 +110,7 @@ export function TrainingVolumeDashboard({ data }: { data: TrainingAnalytics }) {
     <section className="training-analytics-grid" aria-label="训练量统计分析图表">
       <article className="training-analytics-chart"><header><div><span>PHYSICAL TRAINING</span><h3>体能训练量</h3></div><small>时长 · 负荷</small></header><div className="training-analytics-canvas">{physicalDays.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={physicalDays} margin={{ top: 12, right: 10, left: -12, bottom: 0 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="date" tickFormatter={(date) => String(date).slice(5).replace('-', '/')} tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="duration" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="load" orientation="right" tick={{ fontSize: 9, fill: '#b87822' }} axisLine={false} tickLine={false}/><Tooltip labelFormatter={(date) => String(date)} formatter={(number, name) => [`${formatNumber(Number(number), 1)} ${name === '训练负荷' ? 'AU' : 'min'}`, name]} contentStyle={chartTooltipStyle}/><Bar yAxisId="duration" dataKey="physicalDurationMin" name="训练时长" fill="#64aeb3" radius={[4, 4, 0, 0]} maxBarSize={28}/><Line yAxisId="load" type="monotone" dataKey="physicalLoad" name="训练负荷" stroke="#d59125" strokeWidth={2.4} dot={{ r: 2.5, fill: '#fff', stroke: '#d59125', strokeWidth: 2 }}/></ComposedChart></ResponsiveContainer> : <TrainingAnalyticsEmpty text="暂无体能训练量数据" />}</div></article>
       <article className="training-analytics-chart"><header><div><span>SPECIAL TRAINING</span><h3>专项训练量</h3></div><small>时长 · 距离</small></header><div className="training-analytics-canvas">{specialDays.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={specialDays} margin={{ top: 12, right: 10, left: -12, bottom: 0 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="date" tickFormatter={(date) => String(date).slice(5).replace('-', '/')} tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="duration" tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="distance" orientation="right" tick={{ fontSize: 9, fill: '#14746f' }} axisLine={false} tickLine={false}/><Tooltip labelFormatter={(date) => String(date)} formatter={(number, name) => [`${formatNumber(Number(number), 1)} ${name === '专项距离' ? 'km' : 'min'}`, name]} contentStyle={chartTooltipStyle}/><Bar yAxisId="duration" dataKey="specialDurationMin" name="专项时长" fill="#178e87" radius={[4, 4, 0, 0]} maxBarSize={28}/><Line yAxisId="distance" type="monotone" dataKey="specialDistanceKm" name="专项距离" stroke="#0b4d59" strokeWidth={2.4} dot={{ r: 2.5, fill: '#fff', stroke: '#0b4d59', strokeWidth: 2 }}/></ComposedChart></ResponsiveContainer> : <TrainingAnalyticsEmpty text="暂无专项训练量数据" />}</div></article>
-      <article className="training-analytics-chart"><header><div><span>PHYSIOLOGY</span><h3>生理生化</h3></div><small>晨脉 · 平均心率</small></header><div className="training-analytics-canvas">{physiologyDays.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={physiologyDays} margin={{ top: 12, right: 8, left: -12, bottom: 0 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="date" tickFormatter={(date) => String(date).slice(5).replace('-', '/')} tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} unit=" bpm"/><Tooltip labelFormatter={(date) => String(date)} formatter={(number, name) => [`${formatNumber(Number(number), 1)} bpm`, name]} contentStyle={chartTooltipStyle}/><Line type="monotone" dataKey="morningPulse" name="晨脉" stroke="#6179b8" strokeWidth={2.4} dot={{ r: 2.5, fill: '#fff', stroke: '#6179b8', strokeWidth: 2 }}/><Line type="monotone" dataKey="averageHeartRate" name="平均心率" stroke="#d59125" strokeWidth={2.4} dot={{ r: 2.5, fill: '#fff', stroke: '#d59125', strokeWidth: 2 }}/></ComposedChart></ResponsiveContainer> : <TrainingAnalyticsEmpty text="暂无已记录生理数据" />}</div><p>当前仅接入晨脉与平均心率；生化指标待正式检测数据接入。</p></article>
+      <article className="training-analytics-chart physiology-heatmap-card"><header><div><span>PHYSIOLOGY & BIOCHEMISTRY</span><h3>生理生化</h3></div><small>团队风险状态热力图</small></header><PhysiologyBiochemistryHeatmap data={physiology} /></article>
       <article className="training-analytics-chart training-analytics-rpe"><header><div><span>SUBJECTIVE EXERTION</span><h3>RPE</h3></div><div className="training-analytics-rpe-stats" aria-label="当前筛选范围内的RPE统计"><span>平均<b>{value(summary.rpeAverage)}<small>分</small></b></span><span>最高<b>{value(summary.rpeHighest)}<small>分</small></b></span><span>最低<b>{value(summary.rpeLowest)}<small>分</small></b></span></div></header><div className="training-analytics-canvas">{rpeDays.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={rpeDays} margin={{ top: 12, right: 10, left: -12, bottom: 0 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="date" tickFormatter={(date) => String(date).slice(5).replace('-', '/')} tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false}/><Tooltip labelFormatter={(date) => String(date)} formatter={(number) => [`${formatNumber(Number(number), 1)} 分`, '平均 RPE']} contentStyle={chartTooltipStyle}/><ReferenceLine y={7} stroke="#d59125" strokeDasharray="4 3"/><Line type="monotone" dataKey="averageRpe" name="平均 RPE" stroke="#b86447" strokeWidth={2.8} dot={{ r: 3, fill: '#fff', stroke: '#b86447', strokeWidth: 2 }} activeDot={{ r: 5 }}/></ComposedChart></ResponsiveContainer> : <TrainingAnalyticsEmpty text="暂无 RPE 数据" />}</div></article>
     </section>
   </div>;

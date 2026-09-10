@@ -720,6 +720,25 @@ export type OverviewAthleteProfile = {
 
 export type OverviewPayload = {
   records: TrainingRecord[];
+  physiologyHeatmap: {
+    metrics: Array<{
+      code: string;
+      label: string;
+      unit: string;
+      days: Array<{
+        date: string;
+        status: 'NORMAL' | 'FLUCTUATION' | 'ATTENTION' | 'ABNORMAL' | 'MISSING';
+        median: number | null;
+        sampleCount: number;
+        normal: number;
+        fluctuation: number;
+        attention: number;
+        abnormal: number;
+        abnormalRateChange: number | null;
+        isEstimated: boolean;
+      }>;
+    }>;
+  };
   trainingVolume: {
     days: Array<{
       date: string;

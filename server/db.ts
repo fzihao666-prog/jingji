@@ -2075,6 +2075,24 @@ function seedTrainingVolumeDemoData() {
 
 runInitializationOnce('training_volume_demo_seed_v1', seedTrainingVolumeDemoData);
 
+function seedPhysiologyMetricDefinitions() {
+  const upsertMetric = db.prepare(`
+    INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, minimum, maximum)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      label = excluded.label, domain = excluded.domain, unit = excluded.unit,
+      direction = excluded.direction, frequency = excluded.frequency,
+      projects_json = excluded.projects_json, minimum = excluded.minimum,
+      maximum = excluded.maximum, active = 1, updated_at = CURRENT_TIMESTAMP
+  `);
+  for (const metric of OVERVIEW_METRICS.filter((metric) => ['physiology', 'biochemistry'].includes(metric.domain))) {
+    upsertMetric.run(metric.code, metric.label, metric.domain, metric.unit, metric.direction, metric.frequency,
+      JSON.stringify(metric.projects), metric.minimum, metric.maximum);
+  }
+}
+
+runInitializationOnce('physiology_metric_definitions_v1', seedPhysiologyMetricDefinitions);
+
 function seedChampionModelSupplementData() {
   const upsertMetric = db.prepare(`
     INSERT INTO metric_definitions

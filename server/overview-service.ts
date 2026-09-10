@@ -388,9 +388,120 @@ function ageAt(birthDate: string | null, date: string) {
   return age >= 0 ? age : null;
 }
 
+type PhysiologyMetricCode = 'blood_lactate_mmol' | 'creatine_kinase_u_l' | 'blood_urea_n_mmol_l' | 'hemoglobin_g_l' | 'hrv_rmssd_ms' | 'resting_heart_rate_bpm';
+type PhysiologyStatus = 'NORMAL' | 'FLUCTUATION' | 'ATTENTION' | 'ABNORMAL' | 'MISSING';
+
+const physiologyMetricDefinitions: Array<{ code: PhysiologyMetricCode; label: string; unit: string; direction: 'higher' | 'lower'; thresholds: [number, number, number]; baseline: number }> = [
+  { code: 'blood_lactate_mmol', label: '血乳酸 Lactate', unit: 'mmol/L', direction: 'higher', thresholds: [2.5, 4, 6], baseline: 1.9 },
+  { code: 'creatine_kinase_u_l', label: '肌酸激酶 CK', unit: 'U/L', direction: 'higher', thresholds: [300, 500, 700], baseline: 240 },
+  { code: 'blood_urea_n_mmol_l', label: '血尿素 BUN', unit: 'mmol/L', direction: 'higher', thresholds: [6, 8, 10], baseline: 4.9 },
+  { code: 'hemoglobin_g_l', label: '血红蛋白 Hb', unit: 'g/L', direction: 'lower', thresholds: [130, 120, 110], baseline: 145 },
+  { code: 'hrv_rmssd_ms', label: '心率变异性 HRV', unit: 'ms', direction: 'lower', thresholds: [55, 40, 30], baseline: 66 },
+  { code: 'resting_heart_rate_bpm', label: '静息心率 RHR', unit: 'bpm', direction: 'higher', thresholds: [60, 70, 80], baseline: 53 }
+];
+
+function calendarDays(to: string, count: number) {
+  const cursor = new Date(`${to}T12:00:00Z`);
+  return Array.from({ length: count }, (_, index) => {
+    const current = new Date(cursor);
+    current.setUTCDate(cursor.getUTCDate() - (count - 1 - index));
+    return current.toISOString().slice(0, 10);
+  });
+}
+
+function physiologyStatus(definition: typeof physiologyMetricDefinitions[number], value: number): Exclude<PhysiologyStatus, 'MISSING'> {
+  const [fluctuation, attention, abnormal] = definition.thresholds;
+  if (definition.direction === 'higher') return value >= abnormal ? 'ABNORMAL' : value >= attention ? 'ATTENTION' : value >= fluctuation ? 'FLUCTUATION' : 'NORMAL';
+  return value <= abnormal ? 'ABNORMAL' : value <= attention ? 'ATTENTION' : value <= fluctuation ? 'FLUCTUATION' : 'NORMAL';
+}
+
+function median(values: number[]) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function buildPhysiologyHeatmap(athleteIds: number[], to: string) {
+  const dates = calendarDays(to, 30);
+  const from = dates[0];
+  const placeholders = athleteIds.map(() => '?').join(',');
+  const metricCodes = physiologyMetricDefinitions.filter((item) => item.code !== 'resting_heart_rate_bpm').map((item) => item.code);
+  const metricPlaceholders = metricCodes.map(() => '?').join(',');
+  const measurements = db.prepare(`
+    SELECT ts.test_date AS date, tm.metric_code AS code, tm.value_num AS value, tm.is_demo AS isDemo, tm.source
+    FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id
+    WHERE ts.athlete_id IN (${placeholders}) AND ts.test_date BETWEEN ? AND ? AND tm.metric_code IN (${metricPlaceholders})
+  `).all(...athleteIds, from, to, ...metricCodes) as Array<{ date: string; code: PhysiologyMetricCode; value: number; isDemo: number; source: string }>;
+  const restingHeartRates = db.prepare(`
+    SELECT wellness_date AS date, morning_pulse AS value, is_demo AS isDemo, source
+    FROM daily_wellness
+    WHERE athlete_id IN (${placeholders}) AND wellness_date BETWEEN ? AND ? AND morning_pulse IS NOT NULL
+  `).all(...athleteIds, from, to) as Array<{ date: string; value: number; isDemo: number; source: string }>;
+  for (const row of restingHeartRates) measurements.push({ ...row, code: 'resting_heart_rate_bpm' });
+  const demoScope = measurements.some((row) => row.isDemo || /seed|demo|estimated/i.test(row.source));
+  const valuesByCell = new Map<string, Array<{ value: number; isDemo: number; source: string }>>();
+  for (const row of measurements) {
+    const key = `${row.code}|${row.date}`;
+    const rows = valuesByCell.get(key) || [];
+    rows.push(row);
+    valuesByCell.set(key, rows);
+  }
+  const simulatedCounts = (seed: number) => {
+    const sampleCount = Math.max(1, athleteIds.length);
+    const abnormal = seed % 9 === 0 ? Math.max(1, Math.round(sampleCount * .12)) : 0;
+    const attention = seed % 5 === 0 ? Math.max(1, Math.round(sampleCount * .16)) : 0;
+    const fluctuation = Math.max(1, Math.round(sampleCount * (.12 + (seed % 3) * .05)));
+    const normal = Math.max(0, sampleCount - abnormal - attention - fluctuation);
+    return { sampleCount, normal, fluctuation, attention, abnormal };
+  };
+  return {
+    metrics: physiologyMetricDefinitions.map((definition, metricIndex) => {
+      let previousAbnormalRate: number | null = null;
+      return {
+        code: definition.code,
+        label: definition.label,
+        unit: definition.unit,
+        days: dates.map((date, dayIndex) => {
+          const rows = valuesByCell.get(`${definition.code}|${date}`) || [];
+          let normal = 0; let fluctuation = 0; let attention = 0; let abnormal = 0;
+          let valueMedian: number | null = null; let isEstimated = false;
+          if (rows.length) {
+            valueMedian = median(rows.map((row) => row.value));
+            for (const row of rows) {
+              const status = physiologyStatus(definition, row.value);
+              if (status === 'NORMAL') normal += 1;
+              else if (status === 'FLUCTUATION') fluctuation += 1;
+              else if (status === 'ATTENTION') attention += 1;
+              else abnormal += 1;
+            }
+            isEstimated = rows.every((row) => row.isDemo || /seed|demo|estimated/i.test(row.source));
+          } else if (demoScope) {
+            const seed = [...`${definition.code}${date}`].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+            ({ normal, fluctuation, attention, abnormal } = simulatedCounts(seed));
+            const shift = (seed % 7 - 3) / 10;
+            valueMedian = round(definition.baseline * (1 + shift), definition.unit === 'U/L' ? 0 : 1);
+            isEstimated = true;
+          }
+          const sampleCount = normal + fluctuation + attention + abnormal;
+          const abnormalRate = sampleCount ? abnormal / sampleCount : null;
+          const attentionRate = sampleCount ? (attention + abnormal) / sampleCount : null;
+          const status: PhysiologyStatus = !sampleCount ? 'MISSING'
+            : abnormalRate! >= .15 ? 'ABNORMAL'
+              : attentionRate! >= .25 ? 'ATTENTION'
+                : (fluctuation + attention + abnormal) / sampleCount >= .25 ? 'FLUCTUATION' : 'NORMAL';
+          const abnormalRateChange = abnormalRate === null || previousAbnormalRate === null ? null : round((abnormalRate - previousAbnormalRate) * 100, 1);
+          if (abnormalRate !== null) previousAbnormalRate = abnormalRate;
+          return { date, status, median: valueMedian, sampleCount, normal, fluctuation, attention, abnormal, abnormalRateChange, isEstimated };
+        })
+      };
+    })
+  };
+}
+
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
-    records: [], trainingVolume: emptyTrainingVolume(), trainingAnalytics: emptyTrainingAnalytics(), intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
+    records: [], trainingVolume: emptyTrainingVolume(), trainingAnalytics: emptyTrainingAnalytics(), physiologyHeatmap: { metrics: [] }, intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
     trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 },
     strengthTests: [], measurements: [], profiles: [], injuries: [],
     meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
@@ -476,6 +587,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   });
   const trainingVolume = aggregateTrainingVolume(sessions, input.individual);
   const trainingAnalytics = aggregateTrainingAnalytics(sessions, input.individual);
+  const physiologyHeatmap = buildPhysiologyHeatmap(input.athleteIds, input.to);
   const trainingLoads = teamDurationSessions(actualSessions, input.individual).reduce((totals, row) => {
     const load = Number(row.srpe);
     const category = trainingLoadCategory(row);
@@ -729,6 +841,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     records,
     trainingVolume,
     trainingAnalytics,
+    physiologyHeatmap,
     intensityDistribution,
     trainingLoadRatio,
     strengthTests,
