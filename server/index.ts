@@ -3659,6 +3659,24 @@ app.get('/api/data-management/standards', requireAuth, requireRole('SCC', 'PRJ',
   });
 });
 
+app.get('/api/overview/teams', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const project = cleanString(req.query.project);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效项目。' });
+  const ids = accessibleAthleteIds(user);
+  if (!ids.length) return res.json({ teams: [] });
+  const placeholders = ids.map(() => '?').join(',');
+  const teams = db.prepare(`
+    SELECT pt.id, pt.project, pt.name, COUNT(a.id) AS athleteCount
+    FROM project_teams pt
+    JOIN athletes a ON a.team_id = pt.id AND a.active = 1
+    WHERE pt.active = 1 AND pt.project = ? AND a.id IN (${placeholders})
+    GROUP BY pt.id, pt.project, pt.name
+    ORDER BY pt.name
+  `).all(project, ...ids);
+  res.json({ teams });
+});
+
 app.get('/api/overview', requireAuth, (req, res) => {
   const user = req.authUser!;
   const range = normalizeOverviewRange({
@@ -3667,6 +3685,7 @@ app.get('/api/overview', requireAuth, (req, res) => {
   });
   const { from, to } = range;
   const requestedId = Number(req.query.athleteId || 0);
+  const requestedTeamId = Number(req.query.teamId || 0);
   const project = cleanString(req.query.project);
   if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
@@ -3678,11 +3697,29 @@ app.get('/api/overview', requireAuth, (req, res) => {
   if (user.role === 'ATL' && requestedId && requestedId !== user.athleteId) {
     return res.status(403).json({ message: '运动员账号只能查看本人的训练总览。' });
   }
+  if (!Number.isInteger(requestedTeamId) || requestedTeamId < 0) {
+    return res.status(400).json({ message: '队伍筛选参数无效。' });
+  }
+  if (user.role === 'ATL' && requestedTeamId) {
+    return res.status(400).json({ message: '个人训练总览不支持队伍筛选。' });
+  }
   let ids = accessibleAthleteIds(user);
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
     ids = (db.prepare(`SELECT id FROM athletes WHERE id IN (${placeholders}) AND project = ? AND active = 1`)
       .all(...ids, project) as Array<{ id: number }>).map((row) => row.id);
+  }
+  if (requestedTeamId) {
+    if (!ids.length) return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+    const selectedTeam = db.prepare(`
+      SELECT pt.id FROM project_teams pt
+      JOIN athletes a ON a.team_id = pt.id AND a.active = 1
+      WHERE pt.id = ? AND pt.project = ? AND pt.active = 1 AND a.id IN (${ids.map(() => '?').join(',')})
+      LIMIT 1
+    `).get(requestedTeamId, project, ...ids) as { id: number } | undefined;
+    if (!selectedTeam) return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+    ids = (db.prepare(`SELECT id FROM athletes WHERE id IN (${ids.map(() => '?').join(',')}) AND team_id = ?`)
+      .all(...ids, requestedTeamId) as Array<{ id: number }>).map((row) => row.id);
   }
   if (user.role === 'ATL') {
     if (!user.athleteId) return res.status(403).json({ message: '当前运动员账号未绑定人员档案。' });

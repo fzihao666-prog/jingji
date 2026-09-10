@@ -181,10 +181,15 @@ export const api = {
       method: 'POST', body: JSON.stringify({ sessions })
     });
   },
-  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project) {
+  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project, teamId?: number | null) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
+    if (teamId) params.set('teamId', String(teamId));
     return request<{ overview: OverviewPayload }>(`/api/overview?${params}`);
+  },
+  async overviewTeams(project: Project) {
+    const params = new URLSearchParams({ project });
+    return request<{ teams: ProjectTeam[] }>(`/api/overview/teams?${params}`);
   },
   async getOverviewLayout(project: Project, scope: 'self' | 'team') {
     const params = new URLSearchParams({ project, scope });

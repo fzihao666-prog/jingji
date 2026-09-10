@@ -238,7 +238,10 @@ function emptyTrainingAnalytics() {
       specialDurationMin: null as number | null,
       specialDistanceKm: null as number | null,
       physicalDurationMin: null as number | null,
-      physicalLoad: null as number | null
+      physicalLoad: null as number | null,
+      rpeAverage: null as number | null,
+      rpeHighest: null as number | null,
+      rpeLowest: null as number | null
     },
     days: [] as Array<{
       date: string;
@@ -271,7 +274,8 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     specialDurationMin: 0, specialDurationCount: 0,
     specialDistanceKm: 0, specialDistanceCount: 0,
     physicalDurationMin: 0, physicalDurationCount: 0,
-    physicalLoad: 0, physicalLoadCount: 0
+    physicalLoad: 0, physicalLoadCount: 0,
+    rpe: [] as number[]
   };
   const getDay = (row: SessionRow) => days.get(row.date) || {
     date: row.date,
@@ -296,7 +300,10 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       totals.specialDistanceKm += row.distanceKm;
       totals.specialDistanceCount += 1;
     }
-    if (row.rpe !== null && Number.isFinite(row.rpe)) day.rpe.push(row.rpe);
+    if (row.rpe !== null && Number.isFinite(row.rpe)) {
+      day.rpe.push(row.rpe);
+      totals.rpe.push(row.rpe);
+    }
     if (row.averageHeartRate !== null && Number.isFinite(row.averageHeartRate)) day.averageHeartRate.push(row.averageHeartRate);
     const wellnessKey = `${row.athleteId}:${row.date}`;
     if (!row.wellnessDemo && !day.wellnessKeys.has(wellnessKey) && row.morningPulse !== null && Number.isFinite(row.morningPulse)) {
@@ -347,7 +354,10 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       specialDurationMin: value(totals.specialDurationMin, totals.specialDurationCount),
       specialDistanceKm: value(totals.specialDistanceKm, totals.specialDistanceCount),
       physicalDurationMin: value(totals.physicalDurationMin, totals.physicalDurationCount),
-      physicalLoad: value(totals.physicalLoad, totals.physicalLoadCount)
+      physicalLoad: value(totals.physicalLoad, totals.physicalLoadCount),
+      rpeAverage: average(totals.rpe) === null ? null : round(average(totals.rpe), 1),
+      rpeHighest: totals.rpe.length ? round(Math.max(...totals.rpe), 1) : null,
+      rpeLowest: totals.rpe.length ? round(Math.min(...totals.rpe), 1) : null
     },
     days: [...days.values()].map((day) => ({
       date: day.date,

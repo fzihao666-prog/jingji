@@ -6,13 +6,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { api } from '../api';
-import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, StrengthTest, TrainingRecord, User } from '../types';
+import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, ProjectTeam, StrengthTest, TrainingRecord, User } from '../types';
 import { addDays, aggregateRecords, average, formatNumber, percentage } from '../utils';
 import { ROLE_META } from '../../shared/access';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
   FmsTeamChart, InjuryAssessmentChart,
-  TrainingContentChart, TrainingVolumeDashboard, TrainingLoadEnergyChart, trainingLoadCategory
+  TrainingContentChart, TrainingIntensityChart, TrainingVolumeDashboard, TrainingLoadEnergyChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
 import { AppCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
@@ -60,7 +60,7 @@ const defaultOrder = [
   'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
   'athlete-profile', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'injury-analysis',
-  'training-load-analysis', 'training-content', 'water-land-load',
+  'training-load-analysis', 'training-intensity', 'training-content', 'water-land-load',
   'recovery'
 ];
 
@@ -77,6 +77,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'performance-radar': { title: '六维运动表现画像', size: 'half' },
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
   'training-load-analysis': { title: '训练量统计', size: 'full' },
+  'training-intensity': { title: '训练强度占比', size: 'half' },
   'training-content': { title: '训练课占比', size: 'half' },
   'water-land-load': { title: '训练负荷占比', size: 'half' }
 };
@@ -110,6 +111,10 @@ export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
+  const [trainingTeams, setTrainingTeams] = useState<ProjectTeam[]>([]);
+  const [trainingTeamId, setTrainingTeamId] = useState<number | null>(null);
+  const [teamTrainingOverview, setTeamTrainingOverview] = useState<OverviewPayload | null>(null);
+  const [teamTrainingLoading, setTeamTrainingLoading] = useState(false);
   const isSelfOverview = props.user.role === 'ATL';
   const isIndividualOverview = isSelfOverview || props.athleteId !== null;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
@@ -137,7 +142,48 @@ export function OverviewPage(props: Props) {
     return () => { active = false; };
   }, [props.from, props.to, overviewAthleteId, props.project]);
 
+  useEffect(() => {
+    let active = true;
+    if (isIndividualOverview) {
+      setTrainingTeams([]);
+      setTrainingTeamId(null);
+      return () => { active = false; };
+    }
+    api.overviewTeams(props.project)
+      .then((current) => {
+        if (!active) return;
+        setTrainingTeams(current.teams);
+        setTrainingTeamId((selected) => current.teams.some((team) => team.id === selected)
+          ? selected
+          : current.teams[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setTrainingTeams([]);
+        setTrainingTeamId(null);
+      });
+    return () => { active = false; };
+  }, [isIndividualOverview, props.project]);
+
+  useEffect(() => {
+    let active = true;
+    if (isIndividualOverview || !trainingTeamId) {
+      setTeamTrainingOverview(null);
+      setTeamTrainingLoading(false);
+      return () => { active = false; };
+    }
+    setTeamTrainingLoading(true);
+    setTeamTrainingOverview(null);
+    api.overview(props.from, props.to, null, props.project, trainingTeamId)
+      .then((current) => { if (active) setTeamTrainingOverview(current.overview); })
+      .catch(() => { if (active) setTeamTrainingOverview(null); })
+      .finally(() => { if (active) setTeamTrainingLoading(false); });
+    return () => { active = false; };
+  }, [isIndividualOverview, props.from, props.project, props.to, trainingTeamId]);
+
   const analysisRecords = overview?.records ?? props.records;
+  const trainingOverview = teamTrainingOverview ?? overview;
+  const selectedTrainingTeam = trainingTeams.find((team) => team.id === trainingTeamId) ?? null;
   const athleteProfiles = overview?.profiles ?? [];
   const strengthTests = overview?.strengthTests ?? [];
   const strengthLoading = overviewLoading;
@@ -540,8 +586,25 @@ export function OverviewPage(props: Props) {
     ),
     'training-load-analysis': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="训练量统计" subtitle="整体投入 · 专项 · 体能 · 强度 · 生理 · RPE" />
-        <TrainingVolumeDashboard data={overview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null }, days: [] }} intensity={overview?.intensityDistribution || []} />
+        <div className="training-analytics-heading-row">
+          <PanelHeading title="训练量统计" subtitle={selectedTrainingTeam ? `${selectedTrainingTeam.name} · 整体投入 · 专项 · 体能 · 强度 · 生理 · RPE` : '整体投入 · 专项 · 体能 · 强度 · 生理 · RPE'} />
+          {!isIndividualOverview && <label className="training-analytics-team-filter">
+            <span>队伍</span>
+            <select value={trainingTeamId ?? ''} onChange={(event) => setTrainingTeamId(event.target.value ? Number(event.target.value) : null)}>
+              <option value="">全部可访问队伍</option>
+              {trainingTeams.map((team) => <option key={team.id} value={team.id}>{team.name}（{team.athleteCount}人）</option>)}
+            </select>
+          </label>}
+        </div>
+        {teamTrainingLoading
+          ? <ContentState kind="loading" className="professional-chart-empty" title="正在按队伍汇总训练量…" />
+          : <TrainingVolumeDashboard data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} />}
+      </AppCard>
+    ),
+    'training-intensity': (
+      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
+        <PanelHeading title="训练强度占比" subtitle="按原始强度区间统计训练时长" />
+        <TrainingIntensityChart data={overview?.intensityDistribution || []} />
       </AppCard>
     ),
     'training-content': (

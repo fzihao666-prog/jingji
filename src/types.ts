@@ -725,6 +725,9 @@ export type OverviewPayload = {
       specialDistanceKm: number | null;
       physicalDurationMin: number | null;
       physicalLoad: number | null;
+      rpeAverage: number | null;
+      rpeHighest: number | null;
+      rpeLowest: number | null;
     };
     days: Array<{
       date: string;
