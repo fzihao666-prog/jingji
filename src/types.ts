@@ -715,6 +715,28 @@ export type OverviewPayload = {
     durationDayCount: number;
     distanceDayCount: number;
   };
+  trainingAnalytics: {
+    summary: {
+      totalDurationMin: number | null;
+      testSessionCount: number;
+      testedAthleteCount: number;
+      recoveryDurationMin: number | null;
+      specialDurationMin: number | null;
+      specialDistanceKm: number | null;
+      physicalDurationMin: number | null;
+      physicalLoad: number | null;
+    };
+    days: Array<{
+      date: string;
+      physicalDurationMin: number | null;
+      physicalLoad: number | null;
+      specialDurationMin: number | null;
+      specialDistanceKm: number | null;
+      averageRpe: number | null;
+      morningPulse: number | null;
+      averageHeartRate: number | null;
+    }>;
+  };
   intensityDistribution: Array<{
     zone: StrengthIntensityZone;
     durationMin: number;

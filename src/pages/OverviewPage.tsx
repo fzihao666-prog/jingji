@@ -12,7 +12,7 @@ import { ROLE_META } from '../../shared/access';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
   FmsTeamChart, InjuryAssessmentChart,
-  TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, TrainingLoadEnergyChart, trainingLoadCategory
+  TrainingContentChart, TrainingVolumeDashboard, TrainingLoadEnergyChart, trainingLoadCategory
 } from '../components/TrainingAnalysisCharts';
 import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
 import { AppCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
@@ -60,7 +60,7 @@ const defaultOrder = [
   'duration', 'distance', 'srpe', 'rpe', 'acute-load', 'recovery-time',
   'athlete-profile', 'birthplace-map',
   'fms-analysis', 'performance-radar', 'injury-analysis',
-  'training-load-analysis', 'training-content', 'training-intensity', 'water-land-load',
+  'training-load-analysis', 'training-content', 'water-land-load',
   'recovery'
 ];
 
@@ -78,7 +78,6 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'injury-analysis': { title: '运动损伤评估', size: 'half' },
   'training-load-analysis': { title: '训练量统计', size: 'full' },
   'training-content': { title: '训练课占比', size: 'half' },
-  'training-intensity': { title: '训练强度占比', size: 'half' },
   'water-land-load': { title: '训练负荷占比', size: 'half' }
 };
 
@@ -151,6 +150,10 @@ export function OverviewPage(props: Props) {
       if (category) totals[category] += record.durationMin;
       return totals;
     }, { physical: 0, special: 0, recovery: 0 }), [analysisRecords]);
+  const durationSummary = overview?.trainingAnalytics?.summary;
+  const displayTrainingDuration = durationSummary ? durationSummary.totalDurationMin : summary.totalDuration;
+  const displayPhysicalDuration = durationSummary ? durationSummary.physicalDurationMin : durationBreakdown.physical;
+  const displaySpecialDuration = durationSummary ? durationSummary.specialDurationMin : durationBreakdown.special;
   const recentLoadBreakdown = useMemo(() => {
     const from = addDays(props.to, -6);
     return analysisRecords
@@ -461,9 +464,9 @@ export function OverviewPage(props: Props) {
     duration: <Metric
       icon={<AlarmClock />}
       label="训练时长"
-      value={formatNumber(summary.totalDuration / 60, 1)}
-      unit="小时"
-      note={`体能 ${formatNumber(durationBreakdown.physical / 60, 1)}h · 专项 ${formatNumber(durationBreakdown.special / 60, 1)}h`}
+      value={displayTrainingDuration === null ? '—' : formatNumber(displayTrainingDuration / 60, 1)}
+      unit={displayTrainingDuration === null ? '' : '小时'}
+      note={`体能 ${displayPhysicalDuration === null ? '—' : formatNumber(displayPhysicalDuration / 60, 1)}h · 专项 ${displaySpecialDuration === null ? '—' : formatNumber(displaySpecialDuration / 60, 1)}h`}
       tone="navy"
     />,
     distance: <Metric
@@ -537,20 +540,14 @@ export function OverviewPage(props: Props) {
     ),
     'training-load-analysis': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="训练量统计" subtitle="训练时长 · 公里数（按日期汇总）" />
-        <TrainingVolumeChart data={overview?.trainingVolume || { days: [], totalDurationMin: null, totalDistanceKm: null, averageDurationMin: null, averageDistanceKm: null, durationDayCount: 0, distanceDayCount: 0 }} from={props.from} to={props.to} />
+        <PanelHeading title="训练量统计" subtitle="整体投入 · 专项 · 体能 · 强度 · 生理 · RPE" />
+        <TrainingVolumeDashboard data={overview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null }, days: [] }} intensity={overview?.intensityDistribution || []} />
       </AppCard>
     ),
     'training-content': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
         <PanelHeading title="训练课占比" subtitle="九类训练课次占比（当前页面时间范围）" />
         <TrainingContentChart records={analysisRecords} />
-      </AppCard>
-    ),
-    'training-intensity': (
-      <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="训练强度占比" subtitle="U3 · U2 · U1 · AT · TPT · AN · ATP（训练时长占比）" />
-        <TrainingIntensityChart data={overview?.intensityDistribution || []} />
       </AppCard>
     ),
     'water-land-load': (

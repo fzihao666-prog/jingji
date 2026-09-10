@@ -9,11 +9,14 @@ type SessionRow = {
   athleteId: number;
   athleteName: string;
   project: string;
+  teamId: number | null;
   team: string;
   province: string;
   city: string;
   county: string;
   date: string;
+  sessionOrder: number;
+  startTime: string;
   trainingType: string;
   structureType: string;
   intensityZone: string;
@@ -170,13 +173,37 @@ function emptyTrainingVolume() {
   };
 }
 
-function aggregateTrainingVolume(sessions: SessionRow[]) {
+function teamDurationSessions(sessions: SessionRow[], individual: boolean) {
+  if (individual) return sessions;
+  const grouped = new Map<string, SessionRow>();
+  for (const row of sessions) {
+    if (row.sessionDemo) continue;
+    // 以同队同日同一开训时段识别共同训练；没有开训时间时使用导入场次信息作为兼容回退。
+    const scope = row.teamId === null ? `athlete:${row.athleteId}` : `team:${row.teamId}`;
+    const activity = `${row.trainingType}|${row.structureType}|${row.content}`.trim();
+    const slot = row.startTime.trim()
+      ? `start:${row.startTime.trim()}`
+      : row.content.trim() ? `activity:${activity}` : `order:${row.sessionOrder}|${activity}`;
+    const key = `${scope}|${row.date}|${slot}`;
+    const current = grouped.get(key);
+    if (!current || (row.durationReported && (!current.durationReported || row.durationMin > current.durationMin))) grouped.set(key, row);
+  }
+  return [...grouped.values()];
+}
+
+function aggregateTrainingVolume(sessions: SessionRow[], individual: boolean) {
   const byDate = new Map<string, { date: string; durationMin: number; distanceKm: number; durationCount: number; distanceCount: number; sessionCount: number }>();
-  for (const session of sessions) {
+  const durationSessions = teamDurationSessions(sessions, individual);
+  for (const session of durationSessions) {
     if (session.sessionDemo) continue;
     const row = byDate.get(session.date) || { date: session.date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0, sessionCount: 0 };
     row.sessionCount += 1;
     if (session.durationReported) { row.durationMin += session.durationMin; row.durationCount += 1; }
+    byDate.set(session.date, row);
+  }
+  for (const session of sessions) {
+    if (session.sessionDemo) continue;
+    const row = byDate.get(session.date) || { date: session.date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0, sessionCount: 0 };
     if (session.distanceReported) { row.distanceKm += session.distanceKm; row.distanceCount += 1; }
     byDate.set(session.date, row);
   }
@@ -201,6 +228,140 @@ function aggregateTrainingVolume(sessions: SessionRow[]) {
   };
 }
 
+function emptyTrainingAnalytics() {
+  return {
+    summary: {
+      totalDurationMin: null as number | null,
+      testSessionCount: 0,
+      testedAthleteCount: 0,
+      recoveryDurationMin: null as number | null,
+      specialDurationMin: null as number | null,
+      specialDistanceKm: null as number | null,
+      physicalDurationMin: null as number | null,
+      physicalLoad: null as number | null
+    },
+    days: [] as Array<{
+      date: string;
+      physicalDurationMin: number | null;
+      physicalLoad: number | null;
+      specialDurationMin: number | null;
+      specialDistanceKm: number | null;
+      averageRpe: number | null;
+      morningPulse: number | null;
+      averageHeartRate: number | null;
+    }>
+  };
+}
+
+function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean) {
+  const actualSessions = sessions.filter((row) => !row.sessionDemo);
+  const durationSessions = teamDurationSessions(actualSessions, individual);
+  const days = new Map<string, {
+    date: string;
+    physicalDurationMin: number; physicalDurationCount: number;
+    physicalLoad: number; physicalLoadCount: number;
+    specialDurationMin: number; specialDurationCount: number;
+    specialDistanceKm: number; specialDistanceCount: number;
+    rpe: number[]; morningPulse: number[]; averageHeartRate: number[];
+    wellnessKeys: Set<string>;
+  }>();
+  const totals = {
+    totalDurationMin: 0, totalDurationCount: 0,
+    recoveryDurationMin: 0, recoveryDurationCount: 0,
+    specialDurationMin: 0, specialDurationCount: 0,
+    specialDistanceKm: 0, specialDistanceCount: 0,
+    physicalDurationMin: 0, physicalDurationCount: 0,
+    physicalLoad: 0, physicalLoadCount: 0
+  };
+  const getDay = (row: SessionRow) => days.get(row.date) || {
+    date: row.date,
+    physicalDurationMin: 0, physicalDurationCount: 0,
+    physicalLoad: 0, physicalLoadCount: 0,
+    specialDurationMin: 0, specialDurationCount: 0,
+    specialDistanceKm: 0, specialDistanceCount: 0,
+    rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
+  };
+  for (const row of actualSessions) {
+    const day = getDay(row);
+    const category = trainingLoadCategory(row);
+    if (category === 'physical' && Number.isFinite(row.srpe)) {
+      day.physicalLoad += row.srpe;
+      day.physicalLoadCount += 1;
+      totals.physicalLoad += row.srpe;
+      totals.physicalLoadCount += 1;
+    }
+    if (category === 'special' && row.distanceReported) {
+      day.specialDistanceKm += row.distanceKm;
+      day.specialDistanceCount += 1;
+      totals.specialDistanceKm += row.distanceKm;
+      totals.specialDistanceCount += 1;
+    }
+    if (row.rpe !== null && Number.isFinite(row.rpe)) day.rpe.push(row.rpe);
+    if (row.averageHeartRate !== null && Number.isFinite(row.averageHeartRate)) day.averageHeartRate.push(row.averageHeartRate);
+    const wellnessKey = `${row.athleteId}:${row.date}`;
+    if (!row.wellnessDemo && !day.wellnessKeys.has(wellnessKey) && row.morningPulse !== null && Number.isFinite(row.morningPulse)) {
+      day.morningPulse.push(row.morningPulse);
+      day.wellnessKeys.add(wellnessKey);
+    }
+    days.set(row.date, day);
+  }
+  for (const row of durationSessions) {
+    const day = days.get(row.date) || {
+      date: row.date,
+      physicalDurationMin: 0, physicalDurationCount: 0,
+      physicalLoad: 0, physicalLoadCount: 0,
+      specialDurationMin: 0, specialDurationCount: 0,
+      specialDistanceKm: 0, specialDistanceCount: 0,
+      rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
+    };
+    if (row.durationReported) {
+      totals.totalDurationMin += row.durationMin;
+      totals.totalDurationCount += 1;
+    }
+    const category = trainingLoadCategory(row);
+    if (category === 'physical' && row.durationReported) {
+      day.physicalDurationMin += row.durationMin;
+      day.physicalDurationCount += 1;
+      totals.physicalDurationMin += row.durationMin;
+      totals.physicalDurationCount += 1;
+    }
+    if (category === 'special' && row.durationReported) {
+      day.specialDurationMin += row.durationMin;
+      day.specialDurationCount += 1;
+      totals.specialDurationMin += row.durationMin;
+      totals.specialDurationCount += 1;
+    }
+    if (category === 'recovery' && row.durationReported) {
+      totals.recoveryDurationMin += row.durationMin;
+      totals.recoveryDurationCount += 1;
+    }
+    days.set(row.date, day);
+  }
+  const value = (sum: number, count: number) => count ? round(sum, 1) : null;
+  return {
+    summary: {
+      totalDurationMin: value(totals.totalDurationMin, totals.totalDurationCount),
+      testSessionCount: 0,
+      testedAthleteCount: 0,
+      recoveryDurationMin: value(totals.recoveryDurationMin, totals.recoveryDurationCount),
+      specialDurationMin: value(totals.specialDurationMin, totals.specialDurationCount),
+      specialDistanceKm: value(totals.specialDistanceKm, totals.specialDistanceCount),
+      physicalDurationMin: value(totals.physicalDurationMin, totals.physicalDurationCount),
+      physicalLoad: value(totals.physicalLoad, totals.physicalLoadCount)
+    },
+    days: [...days.values()].map((day) => ({
+      date: day.date,
+      physicalDurationMin: value(day.physicalDurationMin, day.physicalDurationCount),
+      physicalLoad: value(day.physicalLoad, day.physicalLoadCount),
+      specialDurationMin: value(day.specialDurationMin, day.specialDurationCount),
+      specialDistanceKm: value(day.specialDistanceKm, day.specialDistanceCount),
+      averageRpe: average(day.rpe) === null ? null : round(average(day.rpe), 1),
+      morningPulse: average(day.morningPulse) === null ? null : round(average(day.morningPulse), 1),
+      averageHeartRate: average(day.averageHeartRate) === null ? null : round(average(day.averageHeartRate), 1)
+    }))
+  };
+}
+
 function ageAt(birthDate: string | null, date: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T00:00:00Z`);
@@ -215,15 +376,15 @@ function ageAt(birthDate: string | null, date: string) {
 
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
   if (!input.athleteIds.length) return {
-    records: [], trainingVolume: emptyTrainingVolume(), intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
+    records: [], trainingVolume: emptyTrainingVolume(), trainingAnalytics: emptyTrainingAnalytics(), intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
     trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 },
     strengthTests: [], measurements: [], profiles: [], injuries: [],
     meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
   };
   const placeholders = input.athleteIds.map(() => '?').join(',');
   const sessions = db.prepare(`
-    SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team,
-      COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county, ts.session_date AS date,
+    SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team_id AS teamId, COALESCE(pt.name, '') AS team,
+      COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county, ts.session_date AS date, ts.session_order AS sessionOrder, COALESCE(ts.start_time, '') AS startTime,
       ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
       ts.distance_km AS distanceKm, ts.duration_reported AS durationReported,
@@ -285,11 +446,12 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       strokeRateSpm: row.strokeRateSpm
     }
   }));
-  const intensityTotalDuration = sessions
+  const actualSessions = sessions.filter((row) => !row.sessionDemo);
+  const intensityTotalDuration = actualSessions
     .filter((row) => zones.includes(row.intensityZone as typeof zones[number]) && Boolean(row.durationReported))
     .reduce((sum, row) => sum + row.durationMin, 0);
   const intensityDistribution = zones.map((zone) => {
-    const rows = sessions.filter((row) => row.intensityZone === zone && Boolean(row.durationReported));
+    const rows = actualSessions.filter((row) => row.intensityZone === zone && Boolean(row.durationReported));
     const durationMin = rows.reduce((sum, row) => sum + row.durationMin, 0);
     return {
       zone,
@@ -298,8 +460,9 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       percentage: intensityTotalDuration ? round(durationMin / intensityTotalDuration * 100, 2) : 0
     };
   });
-  const trainingVolume = aggregateTrainingVolume(sessions);
-  const trainingLoads = sessions.reduce((totals, row) => {
+  const trainingVolume = aggregateTrainingVolume(sessions, input.individual);
+  const trainingAnalytics = aggregateTrainingAnalytics(sessions, input.individual);
+  const trainingLoads = actualSessions.reduce((totals, row) => {
     const load = Number(row.srpe);
     const category = trainingLoadCategory(row);
     if (category && Number.isFinite(load) && load > 0) totals[category] += load;
@@ -540,12 +703,18 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     SELECT COUNT(*) AS count FROM daily_wellness
     WHERE athlete_id IN (${placeholders}) AND wellness_date BETWEEN ? AND ?
   `).get(...input.athleteIds, input.from, input.to) as { count: number };
-  const testCount = db.prepare(`SELECT COUNT(*) AS count FROM test_sessions WHERE athlete_id IN (${placeholders})`)
-    .get(...input.athleteIds) as { count: number };
+  const testSummary = db.prepare(`
+    SELECT COUNT(*) AS count, COUNT(DISTINCT athlete_id) AS athleteCount
+    FROM test_sessions
+    WHERE athlete_id IN (${placeholders}) AND test_date BETWEEN ? AND ? AND is_demo = 0
+  `).get(...input.athleteIds, input.from, input.to) as { count: number; athleteCount: number };
+  trainingAnalytics.summary.testSessionCount = testSummary.count;
+  trainingAnalytics.summary.testedAthleteCount = testSummary.athleteCount;
 
   return {
     records,
     trainingVolume,
+    trainingAnalytics,
     intensityDistribution,
     trainingLoadRatio,
     strengthTests,
@@ -560,7 +729,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       athleteCount: input.athleteIds.length,
       sessionCount: sessions.length,
       wellnessDays: wellnessDays.count,
-      testCount: testCount.count,
+      testCount: testSummary.count,
       coverage: wellnessCells.length ? round(availableCells / wellnessCells.length * 100, 1) : 0,
       containsDemoData: sessions.some((row) => Boolean(row.sessionDemo)) || measurementRows.some((row) => Boolean(row.isDemo))
         || profiles.some((profile) => profile.isDemo),
