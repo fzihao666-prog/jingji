@@ -17,6 +17,7 @@ const journalMode = db.prepare('PRAGMA journal_mode').get() as { journal_mode: s
 if (journalMode.journal_mode.toLowerCase() !== 'wal') db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA synchronous = NORMAL;');
 
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS app_metadata (
     key TEXT PRIMARY KEY,
