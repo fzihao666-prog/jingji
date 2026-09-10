@@ -178,7 +178,7 @@ function teamDurationSessions(sessions: SessionRow[], individual: boolean) {
   const grouped = new Map<string, SessionRow>();
   for (const row of sessions) {
     if (row.sessionDemo) continue;
-    // 以同队同日同一开训时段识别共同训练；没有开训时间时使用导入场次信息作为兼容回退。
+    // 以同队同日同一开训时段识别共同训练；团队时长、距离和训练负荷均只保留一条代表记录。
     const scope = row.teamId === null ? `athlete:${row.athleteId}` : `team:${row.teamId}`;
     const activity = `${row.trainingType}|${row.structureType}|${row.content}`.trim();
     const slot = row.startTime.trim()
@@ -201,7 +201,7 @@ function aggregateTrainingVolume(sessions: SessionRow[], individual: boolean) {
     if (session.durationReported) { row.durationMin += session.durationMin; row.durationCount += 1; }
     byDate.set(session.date, row);
   }
-  for (const session of sessions) {
+  for (const session of durationSessions) {
     if (session.sessionDemo) continue;
     const row = byDate.get(session.date) || { date: session.date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0, sessionCount: 0 };
     if (session.distanceReported) { row.distanceKm += session.distanceKm; row.distanceCount += 1; }
@@ -285,7 +285,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     specialDistanceKm: 0, specialDistanceCount: 0,
     rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
   };
-  for (const row of actualSessions) {
+  for (const row of durationSessions) {
     const day = getDay(row);
     const category = trainingLoadCategory(row);
     if (category === 'physical' && Number.isFinite(row.srpe)) {
@@ -300,6 +300,10 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       totals.specialDistanceKm += row.distanceKm;
       totals.specialDistanceCount += 1;
     }
+    days.set(row.date, day);
+  }
+  for (const row of actualSessions) {
+    const day = getDay(row);
     if (row.rpe !== null && Number.isFinite(row.rpe)) {
       day.rpe.push(row.rpe);
       totals.rpe.push(row.rpe);
@@ -472,7 +476,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   });
   const trainingVolume = aggregateTrainingVolume(sessions, input.individual);
   const trainingAnalytics = aggregateTrainingAnalytics(sessions, input.individual);
-  const trainingLoads = actualSessions.reduce((totals, row) => {
+  const trainingLoads = teamDurationSessions(actualSessions, input.individual).reduce((totals, row) => {
     const load = Number(row.srpe);
     const category = trainingLoadCategory(row);
     if (category && Number.isFinite(load) && load > 0) totals[category] += load;
