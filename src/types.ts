@@ -2,9 +2,11 @@ import type { AreaLevel, Role } from '../shared/access';
 import type { StrengthMetricValues } from '../shared/strength-model';
 import type { StrengthBodyPosition, StrengthIntensityZone, StrengthTrainingCategory, StrengthTrainingEnvironment } from '../shared/strength-training';
 import type { Project } from '../shared/projects';
+import type { ChampionModelStandardType } from '../shared/champion-model';
 
 export type { AreaLevel, Role };
 export type { Project };
+export type { ChampionModelStandardType };
 export type TrainingStatus = 'normal' | 'attention' | 'alert' | 'rest' | 'missing';
 
 export type User = {
@@ -603,6 +605,23 @@ export type ChampionBenchmarkPayload = {
     primaryGap: string;
     source: string;
   };
+};
+
+export type SpecialChampionModelEvent = {
+  standardType: ChampionModelStandardType;
+  eventCode: string;
+  eventName: string;
+  eventGroup: string;
+  country: string | null;
+  bestPerformance: string | null;
+  competition: string | null;
+  location: string | null;
+  competitionDate: string | null;
+};
+
+export type SpecialChampionModelPayload = {
+  project: Project;
+  events: SpecialChampionModelEvent[];
 };
 
 export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';

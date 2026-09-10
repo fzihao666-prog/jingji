@@ -1033,6 +1033,25 @@ db.exec(`
     FOREIGN KEY (metric_code) REFERENCES metric_definitions(code)
   );
 
+  CREATE TABLE IF NOT EXISTS special_champion_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    standard_type TEXT NOT NULL CHECK(standard_type IN ('ASIA', 'INTERNATIONAL', 'GOLD')),
+    event_code TEXT NOT NULL,
+    event_name TEXT NOT NULL,
+    event_group TEXT NOT NULL DEFAULT '其他项目',
+    country TEXT,
+    best_performance TEXT,
+    competition TEXT,
+    location TEXT,
+    competition_date TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, standard_type, event_code)
+  );
+
   CREATE TABLE IF NOT EXISTS metric_scoring_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
@@ -1057,6 +1076,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_test_measurements_session ON test_measurements (test_session_id, metric_code);
   CREATE INDEX IF NOT EXISTS idx_body_measurements_athlete_date ON athlete_body_measurements (athlete_id, measurement_date DESC);
   CREATE INDEX IF NOT EXISTS idx_champion_standards_lookup ON champion_model_standards (project, gender, active, metric_code);
+  CREATE INDEX IF NOT EXISTS idx_special_champion_models_lookup ON special_champion_models (project, standard_type, active, sort_order);
   CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
   CREATE INDEX IF NOT EXISTS idx_data_import_batches_created ON data_import_batches (created_at DESC, project, status);
   CREATE INDEX IF NOT EXISTS idx_data_import_items_batch_quality ON data_import_items (batch_id, quality, item_type);
@@ -1074,6 +1094,13 @@ for (const [column, definition] of [
   ['distance_reported', 'INTEGER NOT NULL DEFAULT 1 CHECK(distance_reported IN (0, 1))']
 ] as const) {
   if (!hasColumn('training_sessions', column)) db.exec(`ALTER TABLE training_sessions ADD COLUMN ${column} ${definition}`);
+}
+
+if (tableExists('special_champion_models') && !hasColumn('special_champion_models', 'event_group')) {
+  db.exec("ALTER TABLE special_champion_models ADD COLUMN event_group TEXT NOT NULL DEFAULT '其他项目'");
+}
+if (tableExists('special_champion_models') && !hasColumn('special_champion_models', 'competition_date')) {
+  db.exec('ALTER TABLE special_champion_models ADD COLUMN competition_date TEXT');
 }
 
 // 项目名称曾作为数据库关联值保存。此迁移只转换已有三项目，保留所有业务记录主键与关系；
@@ -2837,6 +2864,85 @@ db.prepare(`
 
 // 初始化示例与历史迁移完成后再执行一次，确保新库同样写入项目 Code。
 migrateLegacyProjectCodes();
+
+function seedRowingSpecialChampionModels() {
+  const insert = db.prepare(`
+    INSERT INTO special_champion_models (
+      project, standard_type, event_code, event_name, country,
+      best_performance, competition, location, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project, standard_type, event_code) DO NOTHING
+  `);
+  const rows = [
+    ['ROWING', 'ASIA', 'M1X_2000', '男子单人双桨（2000米）', '中国', '6:57.06', '杭州第19届亚运会', '富阳水上运动中心，中国杭州', 10],
+    ['ROWING', 'ASIA', 'W1X_2000', '女子单人双桨（2000米）', '乌兹别克斯坦', '7:39.05', '杭州第19届亚运会', '富阳水上运动中心，中国杭州', 20],
+    ['ROWING', 'INTERNATIONAL', 'M1X_2000', '男子单人双桨（2000米）', '新西兰', '6:30.74', '2017年世界赛艇世界杯第二站', '马耳他湖，波兹南，波兰', 10],
+    ['ROWING', 'INTERNATIONAL', 'W1X_2000', '女子单人双桨（2000米）', '保加利亚', '7:07.71', '2002年世界赛艇锦标赛', '瓜达尔基维尔河，塞维利亚，西班牙', 20],
+    ['ROWING', 'GOLD', 'M1X_2000', '男子单人双桨（2000米）', '德国', '6:37.57', '巴黎2024奥运会赛艇男子单人双桨决赛', 'Vaires-sur-Marne 奥林匹克水上中心，法国', 10],
+    ['ROWING', 'GOLD', 'W1X_2000', '女子单人双桨（2000米）', '荷兰', '7:17.28', '巴黎2024奥运会赛艇女子单人双桨决赛', 'Vaires-sur-Marne 奥林匹克水上中心，法国', 20]
+  ] as const;
+
+  // runInitializationOnce 已持有 BEGIN IMMEDIATE；在同一事务内插入，避免 SQLite 嵌套事务。
+  for (const row of rows) insert.run(...row);
+}
+
+// 仅写入已核验的官方赛事成绩；唯一约束与初始化标记保证不会覆盖后续人工配置。
+runInitializationOnce('rowing_special_champion_models_v1', seedRowingSpecialChampionModels);
+
+function seedRowingChampionModelCatalogV2() {
+  const verified: Record<string, { country: string; performance: string; competition: string; location: string; date: string }> = {
+    'M1X_2000:ASIA': { country: '中国', performance: '6:57.06', competition: '杭州第19届亚运会', location: '富阳水上运动中心，中国杭州', date: '2023-09-25' },
+    'W1X_2000:ASIA': { country: '乌兹别克斯坦', performance: '7:39.05', competition: '杭州第19届亚运会', location: '富阳水上运动中心，中国杭州', date: '2023-09-25' },
+    'M1X_2000:INTERNATIONAL': { country: '新西兰', performance: '6:30.74', competition: '2017年世界赛艇世界杯第二站', location: '马耳他湖，波兹南，波兰', date: '2017-06-18' },
+    'W1X_2000:INTERNATIONAL': { country: '保加利亚', performance: '7:07.71', competition: '2002年世界赛艇锦标赛', location: '瓜达尔基维尔河，塞维利亚，西班牙', date: '2002-09-21' },
+    'M1X_2000:GOLD': { country: '德国', performance: '6:37.57', competition: '巴黎2024奥运会赛艇男子单人双桨决赛', location: 'Vaires-sur-Marne 奥林匹克水上中心，法国', date: '2024-08-03' },
+    'W1X_2000:GOLD': { country: '荷兰', performance: '7:17.28', competition: '巴黎2024奥运会赛艇女子单人双桨决赛', location: 'Vaires-sur-Marne 奥林匹克水上中心，法国', date: '2024-08-03' }
+  };
+  const events = [
+    ['M1X_2000', '男子单人双桨（2000米）', '男子项目', 10],
+    ['M2X_2000', '男子双人双桨（2000米）', '男子项目', 20],
+    ['M4X_2000', '男子四人双桨（2000米）', '男子项目', 30],
+    ['M2_MINUS_2000', '男子双人单桨无舵手（2000米）', '男子项目', 40],
+    ['M4_MINUS_2000', '男子四人单桨无舵手（2000米）', '男子项目', 50],
+    ['M8_PLUS_2000', '男子八人单桨有舵手（2000米）', '男子项目', 60],
+    ['LM2X_2000', '男子轻量级双人双桨（2000米）', '男子项目', 70],
+    ['W1X_2000', '女子单人双桨（2000米）', '女子项目', 110],
+    ['W2X_2000', '女子双人双桨（2000米）', '女子项目', 120],
+    ['W4X_2000', '女子四人双桨（2000米）', '女子项目', 130],
+    ['W2_MINUS_2000', '女子双人单桨无舵手（2000米）', '女子项目', 140],
+    ['W4_MINUS_2000', '女子四人单桨无舵手（2000米）', '女子项目', 150],
+    ['W8_PLUS_2000', '女子八人单桨有舵手（2000米）', '女子项目', 160],
+    ['LW2X_2000', '女子轻量级双人双桨（2000米）', '女子项目', 170]
+  ] as const;
+  const insert = db.prepare(`
+    INSERT INTO special_champion_models (
+      project, standard_type, event_code, event_name, event_group, country,
+      best_performance, competition, location, competition_date, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project, standard_type, event_code) DO UPDATE SET
+      event_name = excluded.event_name,
+      event_group = excluded.event_group,
+      sort_order = excluded.sort_order,
+      competition_date = COALESCE(special_champion_models.competition_date, excluded.competition_date)
+  `);
+  for (const [eventCode, eventName, eventGroup, sortOrder] of events) {
+    for (const standardType of ['ASIA', 'INTERNATIONAL', 'GOLD'] as const) {
+      const record = verified[`${eventCode}:${standardType}`];
+      insert.run('ROWING', standardType, eventCode, eventName, eventGroup,
+        record?.country ?? null, record?.performance ?? null, record?.competition ?? null,
+        record?.location ?? null, record?.date ?? null, sortOrder);
+    }
+  }
+}
+
+// 赛艇小项目录独立于页面；未有官方可核验成绩的单元格保留为空，由界面展示“待核实”。
+runInitializationOnce('rowing_champion_model_catalog_v2', seedRowingChampionModelCatalogV2);
+
+runInitializationOnce('champion_model_remove_source_v1', () => {
+  if (hasColumn('special_champion_models', 'source_url')) {
+    db.prepare('UPDATE special_champion_models SET source_url = NULL').run();
+  }
+});
 
 const validRegions = new Set<string>(PROVINCES);
 const invalidRegions = (db.prepare("SELECT DISTINCT region FROM athletes WHERE region <> '未设置'").all() as { region: string }[])

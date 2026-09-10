@@ -313,6 +313,11 @@ erDiagram
 
     SPECIAL_TEST_EVENTS ||--o{ SPECIAL_TEST_RESULTS : contains
     ATHLETES }o--o{ SPECIAL_TEST_RESULTS : participates
+    SPECIAL_CHAMPION_MODELS {
+        string project
+        string standard_type
+        string event_code
+    }
 ```
 
 ### 8.3 数据域
@@ -325,6 +330,7 @@ erDiagram
 | 训练计划 | `training_plans` | 结构化列与 `plan_data` JSON 并存 |
 | 测试评估 | `test_sessions`、`test_measurements`、身体测量、竞技状态 | 统一指标模型 |
 | 专项测试 | `special_test_events`、`special_test_results` | 事件与参与者成绩 |
+| 专项冠军模型 | `special_champion_models` | 按项目、分组、标准代码与细分项目维护的赛事标杆配置；成绩与比赛日期作为同一条正式配置保存，不写入模拟成绩 |
 | 健康 | `injury_records` | 疼痛、限制、康复与复查 |
 | 导入与审计 | `data_import_batches`、`data_import_items`、`audit_logs` | 统一暂存、提交追踪和敏感操作审计 |
 
@@ -412,6 +418,17 @@ erDiagram
 ```
 
 专项测试采用事件—结果模型；专项日常训练采用训练场次模型，两者不能混作同一实体。
+
+### 10.2.1 专项冠军模型读取
+
+```text
+当前项目
+→ 服务端校验项目访问权限
+→ special_champion_models
+→ 按 event_group 分块的三标准并列表格 / 空状态
+```
+
+冠军模型是项目级参考配置，不属于任何单个运动员，也不从训练记录、个人测试或体能冠军模型推导。每条已确认成绩保留 `competition_date`；当前无已确认配置时，接口返回空事件列表，页面显示“模型数据待配置”。
 
 ### 10.3 体能计划生成
 

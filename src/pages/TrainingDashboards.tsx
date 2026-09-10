@@ -5,6 +5,7 @@ import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveConta
 import { api } from '../api';
 import { TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, trainingLoadCategory } from '../components/TrainingAnalysisCharts';
 import { AppCard, ChartCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
+import { SpecialChampionModel } from '../components/SpecialChampionModel';
 import type { Athlete, OverviewPayload, Project, StrengthTest, StrengthTrainingSession, TrainingRecord } from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
@@ -14,14 +15,14 @@ import '../pages/SpecialTrainingPage.css';
 type Navigation = (page: 'special-schedule' | 'strength-plan') => void;
 
 type SpecialProps = {
-  records: TrainingRecord[]; project: Project; from: string; to: string; loading: boolean; onNavigate: Navigation;
+  records: TrainingRecord[]; project: Project; from: string; to: string; loading: boolean;
 };
 
 type CurrentMetric = { key: StrengthMetricKey; label: string; unit: string; value: number; testDate: string; target?: number; sampleCount?: number; median?: number };
 type ScopedStrengthSession = StrengthTrainingSession & { athleteId: number };
 
-function ChampionModelPlaceholder({ project, kind, onPlanOpen, currentMetrics = [], scopeLabel = '当前运动员' }: { project: Project; kind: '专项' | '体能'; onPlanOpen: () => void; currentMetrics?: CurrentMetric[]; scopeLabel?: string }) {
-  return <ChartCard title="冠军模型" description={`${project} · ${kind}能力参考模型`} actions={<button className="dashboard-action-button" onClick={onPlanOpen}>查看训练计划 <ArrowRight size={15} /></button>} className="training-dashboard-champion">
+function PhysicalChampionModelPlaceholder({ project, onPlanOpen, currentMetrics = [], scopeLabel = '当前运动员' }: { project: Project; onPlanOpen: () => void; currentMetrics?: CurrentMetric[]; scopeLabel?: string }) {
+  return <ChartCard title="冠军模型" description={`${project} · 体能能力参考模型`} actions={<button className="dashboard-action-button" onClick={onPlanOpen}>查看训练计划 <ArrowRight size={15} /></button>} className="training-dashboard-champion">
     {currentMetrics.length ? <div className="champion-current-comparison"><div className="champion-comparison-head"><span>指标</span><span>冠军模型</span><span>{scopeLabel}</span><span>达成率</span></div>{currentMetrics.slice(0, 4).map((metric) => <div key={metric.key}><strong>{metric.label}</strong><span>--</span><b>{formatNumber(metric.value, 1)} {metric.unit}</b><span>--</span></div>)}<small>模型数据待配置；当前仅展示已录入的真实{scopeLabel === '当前队伍均值' ? '群体均值' : '测试值'}。</small></div> : <ContentState kind="empty" title="模型数据待配置" icon={<Trophy size={26} />} description="将按当前项目配置真实冠军表现与能力指标；模型启用后可在此对比当前范围、模型值、差距和达成率。" />}
   </ChartCard>;
 }
@@ -56,7 +57,7 @@ function intensityPayload(records: TrainingRecord[]): OverviewPayload['intensity
   });
 }
 
-export function SpecialTrainingDashboard({ records, project, from, to, loading, onNavigate }: SpecialProps) {
+export function SpecialTrainingDashboard({ records, project, from, to, loading }: SpecialProps) {
   const specialRecords = useMemo(() => records.filter((item) => trainingLoadCategory(item) === 'special'), [records]);
   const volume = useMemo(() => volumePayload(specialRecords), [specialRecords]);
   const intensity = useMemo(() => intensityPayload(specialRecords), [specialRecords]);
@@ -68,7 +69,7 @@ export function SpecialTrainingDashboard({ records, project, from, to, loading, 
   ];
   return <PageContainer className="professional-overview training-dashboard-page">
     <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="SPECIAL TRAINING" title="专项训练" />
-    <ChampionModelPlaceholder project={project} kind="专项" onPlanOpen={() => onNavigate('special-schedule')} />
+    <SpecialChampionModel project={project} />
     {loading ? <ContentState kind="loading" title="正在同步专项训练数据" icon={<Activity className="spin" />} /> : <>
       <section className="training-dashboard-metrics">{metrics.map(([label, value, unit]) => <AppCard key={String(label)} variant="compact" className="training-dashboard-metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong><em>{project} · {from} 至 {to}</em></AppCard>)}</section>
       <section className="training-dashboard-grid"><ChartCard title="专项训练量趋势" description="按真实训练时长与距离汇总" className="dashboard-span-8"><TrainingVolumeChart data={volume} from={from} to={to} /></ChartCard><ChartCard title="专项训练强度结构" description="仅展示当前项目已记录的强度分区" className="dashboard-span-4"><TrainingIntensityChart data={intensity} /></ChartCard><ChartCard title="专项训练内容结构" description="按统一训练内容分类统计" className="dashboard-span-5"><TrainingContentChart records={specialRecords} /></ChartCard><ChartCard title="专项成绩趋势" description="该项目暂未配置可用于趋势分析的专项成绩指标" className="dashboard-span-7"><ContentState kind="empty" title="暂无专项指标配置" icon={<Target size={25} />} description="配置当前项目的真实测试或比赛成绩字段后，将按日期展示趋势和最佳表现。" /></ChartCard></section>
@@ -183,7 +184,7 @@ export function StrengthTrainingDashboard({ athletes, athleteId, project, from, 
   const displayMetrics = athleteId ? currentMetrics : teamMetrics;
   return <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
     <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="PHYSICAL TRAINING" title="体能训练" actions={<label className="physical-athlete-filter">运动员<select aria-label="体能训练运动员筛选" value={athleteId ?? ''} onChange={(event) => onAthleteChange(event.target.value ? Number(event.target.value) : null)}><option value="">全部运动员（整体分析）</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name}</option>)}</select></label>} />
-    <ChampionModelPlaceholder project={project} kind="体能" onPlanOpen={() => onNavigate('strength-plan')} currentMetrics={displayMetrics} scopeLabel={athleteId ? '当前运动员' : '当前队伍均值'} />
+    <PhysicalChampionModelPlaceholder project={project} onPlanOpen={() => onNavigate('strength-plan')} currentMetrics={displayMetrics} scopeLabel={athleteId ? '当前运动员' : '当前队伍均值'} />
     {loading ? <ContentState kind="loading" title="正在同步体能训练数据" icon={<Activity className="spin" />} /> : <>
       <section aria-label="整体体能指标"><SectionHeader title={athleteId ? '体能核心指标概览' : '整体体能指标概览'} description={athleteId ? '当前运动员本时间范围内最近一次真实测试' : '当前项目、权限与组织范围内的整体体能训练数据'} /><PhysicalCoreMetrics metrics={displayMetrics} sessions={periodSessions} athleteId={athleteId} /></section>
       <section className="training-dashboard-grid physical-dashboard-grid"><ChartCard title={athleteId ? '体能能力画像' : '团队体能能力画像'} description={athleteId ? '仅使用已配置的个人目标进行标准化' : '仅使用真实目标标准化后的团队均值'} className="dashboard-span-5"><AbilityProfile metrics={displayMetrics} athleteId={athleteId} /></ChartCard><ChartCard title={athleteId ? '关键体能指标趋势' : '关键体能指标整体趋势'} description={athleteId ? '单指标展示，标记个人历史最佳值' : '单指标展示，按测试日期汇总团队均值'} className="dashboard-span-7"><MetricTrend tests={selectedTests} metrics={displayMetrics} athleteId={athleteId} /></ChartCard><ChartCard title="体能训练结构" description="100% 堆叠比例 · 按当前范围内已记录训练项次数" className="dashboard-span-5"><TrainingStructure sessions={periodSessions} /></ChartCard><ChartCard title="体能训练量趋势" description="柱状为总训练时长；折线为已有 SRPE 训练负荷" className="dashboard-span-7"><TrainingLoadTrend sessions={periodSessions} /></ChartCard></section>

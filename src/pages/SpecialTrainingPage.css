@@ -5,6 +5,25 @@
 }
 
 .training-dashboard-page { display: grid; gap: var(--overview-gap); padding-bottom: 36px; }
+.special-champion-model { min-width: 0; }
+.special-champion-model .app-section-header { align-items: flex-start; }
+.special-champion-model .app-content-state { min-height: 126px; }
+.champion-model-groups { display: grid; gap: 14px; }
+.champion-model-group { min-width: 0; overflow: hidden; border: 1px solid #dce7e9; border-radius: 10px; background: #fbfdfd; }
+.champion-model-group > h3 { margin: 0; padding: 9px 13px; border-bottom: 1px solid #dce7e9; color: #234b55; background: #f3f8f8; font-size: 11px; }
+.champion-table-scroll { overflow: auto; }
+.champion-model-table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
+.champion-model-table th, .champion-model-table td { padding: 9px 12px; border-bottom: 1px solid #e7eeee; text-align: left; vertical-align: top; }
+.champion-model-table thead th { position: sticky; top: 0; z-index: 1; color: #617b82; background: #f8fbfb; font-size: 9px; font-weight: 800; }
+.champion-model-table thead th:first-child { width: 150px; }
+.champion-model-table tbody tr:last-child > * { border-bottom: 0; }
+.champion-model-table tbody tr:hover > * { background: #f5fbfa; }
+.champion-model-table tbody > tr > th { color: #31555e; font-size: 10px; font-weight: 800; }
+.champion-standard-cell { min-width: 0; display: grid; gap: 3px; }
+.champion-standard-cell strong { color: #087b74; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.champion-standard-cell b { color: #405d65; font-size: 9px; font-weight: 700; }
+.champion-standard-cell span { overflow: hidden; color: #7b9096; font-size: 8px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.champion-pending { color: #9aa9ad; font-size: 10px; }
 .training-dashboard-champion .app-content-state { min-height: 118px; grid-template-columns: auto minmax(0, 1fr); text-align: left; justify-content: start; }
 .training-dashboard-champion .app-content-state strong { grid-column: 2; }
 .training-dashboard-champion .app-content-state span { grid-column: 2; max-width: 720px; }
@@ -50,6 +69,7 @@
   .champion-comparison-head, .champion-current-comparison > div:not(.champion-comparison-head) { grid-template-columns: minmax(80px, 1.2fr) repeat(3, minmax(56px, 1fr)); gap: 6px; font-size: 8px; }
   .physical-ability-profile { grid-template-columns: 1fr; }.physical-ability-profile aside { padding: 12px 0 0; border-top: 1px solid #e3ecec; border-left: 0; }.physical-chart-canvas { height: 220px; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }
+  .special-champion-model .app-section-header { gap: 9px; }.champion-model-table { min-width: 670px; }.champion-model-table th, .champion-model-table td { padding: 8px 9px; }
 }
 
 .special-page-heading {

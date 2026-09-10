@@ -3846,6 +3846,31 @@ app.get('/api/analysis/model', requireAuth, (req, res) => {
   res.json({ standard: analysisStandardForProject(project) });
 });
 
+app.get('/api/special-champion-models', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const project = cleanString(req.query.project);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
+
+  const projectAllowed = user.role === 'ATL'
+    ? (db.prepare('SELECT 1 FROM athletes WHERE id = ? AND project = ? AND active = 1').get(user.athleteId, project) !== undefined)
+    : (() => {
+      const permissions = accountPermissions(user.id);
+      return permissions.projects.includes('*') || permissions.projects.includes(project);
+    })();
+  if (!projectAllowed) return res.status(403).json({ message: '无权查看当前项目的冠军模型。' });
+
+  const events = db.prepare(`
+    SELECT standard_type AS standardType, event_code AS eventCode, event_name AS eventName,
+      event_group AS eventGroup, country, best_performance AS bestPerformance,
+      competition, location, competition_date AS competitionDate
+    FROM special_champion_models
+    WHERE project = ? AND active = 1
+    ORDER BY sort_order, event_group, event_code,
+      CASE standard_type WHEN 'ASIA' THEN 1 WHEN 'INTERNATIONAL' THEN 2 ELSE 3 END
+  `).all(project);
+  res.json({ project, events });
+});
+
 app.get('/api/analysis/summary', requireAuth, (req, res) => {
   const user = req.authUser!;
   const from = cleanString(req.query.from);

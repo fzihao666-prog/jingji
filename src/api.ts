@@ -14,6 +14,7 @@ import type {
   Project,
   ProjectTeam,
   RegistrationRequest,
+  SpecialChampionModelPayload,
   Role,
   SpecialTestEvent,
   SpecialTestImportPreview,
@@ -151,6 +152,10 @@ export const api = {
   },
   async championBenchmark(id: number) {
     return request<{ benchmark: ChampionBenchmarkPayload }>(`/api/athletes/${id}/champion-model`);
+  },
+  async specialChampionModels(project: Project) {
+    const params = new URLSearchParams({ project });
+    return request<SpecialChampionModelPayload>(`/api/special-champion-models?${params}`);
   },
   async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
     return request<{ message: string }>('/api/admin/athletes/bulk/profile', {
