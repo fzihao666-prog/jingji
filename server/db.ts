@@ -35,8 +35,12 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     project TEXT NOT NULL,
+    team TEXT NOT NULL DEFAULT '',
     team_id INTEGER,
     gender TEXT,
+    region TEXT NOT NULL DEFAULT '未设置',
+    city TEXT NOT NULL DEFAULT '未设置',
+    county TEXT NOT NULL DEFAULT '未设置',
     birth_date TEXT,
     photo_url TEXT NOT NULL DEFAULT '',
     profile_status TEXT NOT NULL DEFAULT 'complete' CHECK(profile_status IN ('incomplete', 'complete')),
@@ -225,6 +229,47 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS specialty_catalog (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    template_key TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS special_training_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    week_start TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('draft', 'active', 'completed')),
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project, week_start),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS special_training_plan_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    specialty_id INTEGER NOT NULL,
+    session_date TEXT NOT NULL,
+    start_time TEXT NOT NULL DEFAULT '',
+    end_time TEXT NOT NULL DEFAULT '',
+    training_type TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    venue TEXT NOT NULL DEFAULT '',
+    target_json TEXT NOT NULL DEFAULT '{}',
+    session_order INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(plan_id, session_date, session_order),
+    FOREIGN KEY (plan_id) REFERENCES special_training_plans(id) ON DELETE CASCADE,
+    FOREIGN KEY (specialty_id) REFERENCES specialty_catalog(id)
+  );
 `);
 
 function hasColumn(table: string, column: string) {
@@ -235,7 +280,8 @@ function tableExists(table: string) {
   return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
 }
 
-if (!hasColumn('data_import_batches', 'storage_path')) {
+// 空数据库首次启动时 data_import_batches 尚未创建；已有库才执行该兼容列迁移。
+if (tableExists('data_import_batches') && !hasColumn('data_import_batches', 'storage_path')) {
   db.exec('ALTER TABLE data_import_batches ADD COLUMN storage_path TEXT');
 }
 
@@ -285,22 +331,25 @@ for (const [code, name] of [
 ]) {
   insertExercise.run(code, name, '力量训练');
 }
-db.exec(`
-  UPDATE strength_result_sets
-  SET exercise_code = CASE exercise_name
-    WHEN '深蹲' THEN 'SQUAT'
-    WHEN '卧拉' THEN 'BENCH_PULL'
-    WHEN '划船测功仪功能' THEN 'ROWING_ERG_FUNCTION'
-    WHEN '循环力量耐力' THEN 'CIRCUIT_STRENGTH_ENDURANCE'
-    WHEN '拉伸再生组合' THEN 'RECOVERY_MOBILITY'
-    WHEN '水上专项划行' THEN 'WATER_SPECIAL_ROWING'
-    WHEN '综合协调训练' THEN 'COORDINATION_TRAINING'
-    WHEN '跑步间歇' THEN 'RUN_INTERVAL'
-    WHEN '高拉速度力量' THEN 'HIGH_PULL_SPEED'
-    ELSE exercise_code
-  END
-  WHERE NULLIF(trim(exercise_code), '') IS NULL;
-`);
+// strength_result_sets 在后续统一建表块创建；仅对已有数据库执行历史编码回填。
+if (tableExists('strength_result_sets')) {
+  db.exec(`
+    UPDATE strength_result_sets
+    SET exercise_code = CASE exercise_name
+      WHEN '深蹲' THEN 'SQUAT'
+      WHEN '卧拉' THEN 'BENCH_PULL'
+      WHEN '划船测功仪功能' THEN 'ROWING_ERG_FUNCTION'
+      WHEN '循环力量耐力' THEN 'CIRCUIT_STRENGTH_ENDURANCE'
+      WHEN '拉伸再生组合' THEN 'RECOVERY_MOBILITY'
+      WHEN '水上专项划行' THEN 'WATER_SPECIAL_ROWING'
+      WHEN '综合协调训练' THEN 'COORDINATION_TRAINING'
+      WHEN '跑步间歇' THEN 'RUN_INTERVAL'
+      WHEN '高拉速度力量' THEN 'HIGH_PULL_SPEED'
+      ELSE exercise_code
+    END
+    WHERE NULLIF(trim(exercise_code), '') IS NULL;
+  `);
+}
 
 if (!hasColumn('special_test_events', 'project')) {
   const legacyEvents = db.prepare(`
@@ -1085,6 +1134,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_data_import_candidates_batch ON data_import_athlete_candidates (batch_id, status, normalized_name);
   CREATE INDEX IF NOT EXISTS idx_athlete_aliases_lookup ON athlete_aliases (normalized_alias, project);
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
+  CREATE INDEX IF NOT EXISTS idx_special_plan_sessions_date ON special_training_plan_sessions (session_date, specialty_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_athletes_identity ON athletes (name, project, team);
 `);
 
@@ -1295,7 +1345,7 @@ db.exec(`
   BEGIN
     UPDATE athletes SET team_id = (
       SELECT id FROM project_teams WHERE project = NEW.project AND name = NEW.team AND active = 1
-    ) WHERE id = NEW.id;
+    ) WHERE id = NEW.id AND NULLIF(NEW.team, '') IS NOT NULL;
   END;
   CREATE TRIGGER IF NOT EXISTS sync_athlete_team_id_after_team_change
   AFTER UPDATE OF project, team ON athletes

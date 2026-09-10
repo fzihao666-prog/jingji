@@ -279,7 +279,7 @@ PRJ 与 REG 处于同一级，不能互相管理。上下级管理要求管理�
 - WAL 日志模式；
 - `synchronous = NORMAL`。
 
-表结构、兼容迁移和初始化数据都在 `server/db.ts` 中执行。`app_metadata` 配合 `BEGIN IMMEDIATE` 保证带版本的初始化任务只运行一次。
+表结构、兼容迁移和初始化数据都在 `server/db.ts` 中执行。所有当前业务表（含专项目录、专项周计划和专项课次）均在首次建表流程中声明；旧库兼容用的 `ALTER TABLE`、重建表和历史数据回填则与建表定义分开保留，避免新库启动依赖旧备份文件。`app_metadata` 配合 `BEGIN IMMEDIATE` 保证带版本的初始化任务只运行一次。
 
 为保证训练总览的六维多要素雷达可展示，初始化会按 `metric_definitions` 中的项目适用范围补齐空缺指标，并为缺少日报的运动员补齐近 28 天恢复监测。补入记录统一标记为 `source=metric_gap_seed`、`quality=estimated`、`is_demo=1`；已有实测值不会被覆盖，后续导入或手工录入的真实数据应作为替换依据。
 
