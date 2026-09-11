@@ -248,6 +248,7 @@ function emptyTrainingAnalytics() {
       date: string;
       physicalDurationMin: number | null;
       physicalLoad: number | null;
+      specialLoad: number | null;
       specialDurationMin: number | null;
       specialDistanceKm: number | null;
       averageRpe: number | null;
@@ -268,6 +269,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     date: string;
     physicalDurationMin: number; physicalDurationCount: number;
     physicalLoad: number; physicalLoadCount: number;
+    specialLoad: number; specialLoadCount: number;
     specialDurationMin: number; specialDurationCount: number;
     specialDistanceKm: number; specialDistanceCount: number;
     rpe: Array<{ athleteId: number; rpe: number }>; morningPulse: number[]; averageHeartRate: number[];
@@ -286,6 +288,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     date: row.date,
     physicalDurationMin: 0, physicalDurationCount: 0,
     physicalLoad: 0, physicalLoadCount: 0,
+    specialLoad: 0, specialLoadCount: 0,
     specialDurationMin: 0, specialDurationCount: 0,
     specialDistanceKm: 0, specialDistanceCount: 0,
     rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
@@ -298,6 +301,10 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       day.physicalLoadCount += 1;
       totals.physicalLoad += row.srpe;
       totals.physicalLoadCount += 1;
+    }
+    if (category === 'special' && Number.isFinite(row.srpe)) {
+      day.specialLoad += row.srpe;
+      day.specialLoadCount += 1;
     }
     if (category === 'special' && row.distanceReported) {
       day.specialDistanceKm += row.distanceKm;
@@ -326,6 +333,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       date: row.date,
       physicalDurationMin: 0, physicalDurationCount: 0,
       physicalLoad: 0, physicalLoadCount: 0,
+      specialLoad: 0, specialLoadCount: 0,
       specialDurationMin: 0, specialDurationCount: 0,
       specialDistanceKm: 0, specialDistanceCount: 0,
       rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
@@ -371,6 +379,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       date: day.date,
       physicalDurationMin: value(day.physicalDurationMin, day.physicalDurationCount),
       physicalLoad: value(day.physicalLoad, day.physicalLoadCount),
+      specialLoad: value(day.specialLoad, day.specialLoadCount),
       specialDurationMin: value(day.specialDurationMin, day.specialDurationCount),
       specialDistanceKm: value(day.specialDistanceKm, day.specialDistanceCount),
       ...summarizeDailyRpe(day.rpe),

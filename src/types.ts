@@ -770,6 +770,7 @@ export type OverviewPayload = {
       date: string;
       physicalDurationMin: number | null;
       physicalLoad: number | null;
+      specialLoad: number | null;
       specialDurationMin: number | null;
       specialDistanceKm: number | null;
       averageRpe: number | null;
