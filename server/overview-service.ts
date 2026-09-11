@@ -1,3 +1,4 @@
+import { aggregateSpecialTraining } from '../shared/special-training.ts';
 import { summarizeDailyRpe } from './rpe-statistics.ts';
 import { db } from './db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
@@ -504,15 +505,10 @@ function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) 
   };
 }
 
-export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
-  if (!input.athleteIds.length) return {
-    records: [], trainingVolume: emptyTrainingVolume(), trainingAnalytics: emptyTrainingAnalytics(), physiologyHeatmap: { metrics: [] }, intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
-    trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 },
-    strengthTests: [], measurements: [], profiles: [], injuries: [],
-    meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
-  };
+function readOverviewSessions(input: { athleteIds: number[]; from: string; to: string }) {
+  if (!input.athleteIds.length) return [];
   const placeholders = input.athleteIds.map(() => '?').join(',');
-  const sessions = db.prepare(`
+  return db.prepare(`
     SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team_id AS teamId, COALESCE(pt.name, '') AS team,
       COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county, ts.session_date AS date, ts.session_order AS sessionOrder, COALESCE(ts.start_time, '') AS startTime,
       ts.training_type AS trainingType, ts.structure_type AS structureType,
@@ -534,6 +530,22 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
     ORDER BY ts.session_date, ts.session_order, a.name
   `).all(...input.athleteIds, input.from, input.to) as SessionRow[];
+}
+
+export function buildSpecialTrainingPayload(input: { athleteIds: number[]; from: string; to: string; individual: boolean }) {
+  const sessions = readOverviewSessions(input).filter((row) => !row.sessionDemo && !/seed|demo|estimated/i.test(row.sessionSource) && row.sessionQuality !== 'estimated' && trainingLoadCategory(row) === 'special');
+  return aggregateSpecialTraining(teamDurationSessions(sessions, input.individual));
+}
+
+export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
+  if (!input.athleteIds.length) return {
+    records: [], trainingVolume: emptyTrainingVolume(), trainingAnalytics: emptyTrainingAnalytics(), physiologyHeatmap: { metrics: [] }, intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
+    trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 },
+    strengthTests: [], measurements: [], profiles: [], injuries: [],
+    meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
+  };
+  const placeholders = input.athleteIds.map(() => '?').join(',');
+  const sessions = readOverviewSessions(input);
 
   const records = sessions.map((row) => ({
     id: row.id,

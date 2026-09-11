@@ -3,20 +3,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '../api';
-import { TrainingContentChart, TrainingIntensityChart, TrainingVolumeChart, trainingLoadCategory } from '../components/TrainingAnalysisCharts';
 import { AppCard, ChartCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
-import { SpecialChampionModel } from '../components/SpecialChampionModel';
-import type { Athlete, OverviewPayload, Project, StrengthTest, StrengthTrainingSession, TrainingRecord } from '../types';
+import type { Athlete, Project, StrengthTest, StrengthTrainingSession } from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
 import { STRENGTH_CONTENT_ANALYSIS_CATEGORIES, inferStrengthContentAnalysisCategory } from '../../shared/strength-training';
 import '../pages/SpecialTrainingPage.css';
 
 type Navigation = (page: 'special-schedule' | 'strength-plan') => void;
-
-type SpecialProps = {
-  records: TrainingRecord[]; project: Project; from: string; to: string; loading: boolean;
-};
 
 type CurrentMetric = { key: StrengthMetricKey; label: string; unit: string; value: number; testDate: string; target?: number; sampleCount?: number; median?: number };
 type ScopedStrengthSession = StrengthTrainingSession & { athleteId: number };
@@ -25,56 +19,6 @@ function PhysicalChampionModelPlaceholder({ project, onPlanOpen, currentMetrics 
   return <ChartCard title="冠军模型" description={`${project} · 体能能力参考模型`} actions={<button className="dashboard-action-button" onClick={onPlanOpen}>查看训练计划 <ArrowRight size={15} /></button>} className="training-dashboard-champion">
     {currentMetrics.length ? <div className="champion-current-comparison"><div className="champion-comparison-head"><span>指标</span><span>冠军模型</span><span>{scopeLabel}</span><span>达成率</span></div>{currentMetrics.slice(0, 4).map((metric) => <div key={metric.key}><strong>{metric.label}</strong><span>--</span><b>{formatNumber(metric.value, 1)} {metric.unit}</b><span>--</span></div>)}<small>模型数据待配置；当前仅展示已录入的真实{scopeLabel === '当前队伍均值' ? '群体均值' : '测试值'}。</small></div> : <ContentState kind="empty" title="模型数据待配置" icon={<Trophy size={26} />} description="将按当前项目配置真实冠军表现与能力指标；模型启用后可在此对比当前范围、模型值、差距和达成率。" />}
   </ChartCard>;
-}
-
-function volumePayload(records: TrainingRecord[]): OverviewPayload['trainingVolume'] {
-  const days = [...new Map(records.map((record) => [record.date, record.date])).keys()].sort().map((date) => {
-    const items = records.filter((item) => item.date === date);
-    const reportedDuration = items.filter((item) => item.durationReported);
-    const reportedDistance = items.filter((item) => item.distanceReported);
-    return {
-      date,
-      durationMin: reportedDuration.length ? reportedDuration.reduce((sum, item) => sum + item.durationMin, 0) : null,
-      distanceKm: reportedDistance.length ? reportedDistance.reduce((sum, item) => sum + item.distanceKm, 0) : null,
-      sessionCount: items.length
-    };
-  });
-  const durationDays = days.filter((item) => item.durationMin !== null);
-  const distanceDays = days.filter((item) => item.distanceKm !== null);
-  const totalDurationMin = durationDays.length ? durationDays.reduce((sum, item) => sum + (item.durationMin || 0), 0) : null;
-  const totalDistanceKm = distanceDays.length ? distanceDays.reduce((sum, item) => sum + (item.distanceKm || 0), 0) : null;
-  return { days, totalDurationMin, totalDistanceKm, averageDurationMin: totalDurationMin === null ? null : totalDurationMin / durationDays.length, averageDistanceKm: totalDistanceKm === null ? null : totalDistanceKm / distanceDays.length, durationDayCount: durationDays.length, distanceDayCount: distanceDays.length };
-}
-
-function intensityPayload(records: TrainingRecord[]): OverviewPayload['intensityDistribution'] {
-  const zones = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'] as const;
-  const valid = records.filter((item) => zones.includes(item.intensityZone as typeof zones[number]) && item.durationReported);
-  const total = valid.reduce((sum, item) => sum + item.durationMin, 0);
-  return zones.map((zone) => {
-    const items = valid.filter((item) => item.intensityZone === zone);
-    const durationMin = items.reduce((sum, item) => sum + item.durationMin, 0);
-    return { zone, durationMin, sessionCount: items.length, percentage: total ? durationMin / total * 100 : 0 };
-  });
-}
-
-export function SpecialTrainingDashboard({ records, project, from, to, loading }: SpecialProps) {
-  const specialRecords = useMemo(() => records.filter((item) => trainingLoadCategory(item) === 'special'), [records]);
-  const volume = useMemo(() => volumePayload(specialRecords), [specialRecords]);
-  const intensity = useMemo(() => intensityPayload(specialRecords), [specialRecords]);
-  const metrics = [
-    ['专项训练场次', specialRecords.length, '场'],
-    ['累计训练时长', volume.totalDurationMin === null ? '—' : formatNumber(volume.totalDurationMin / 60, 1), volume.totalDurationMin === null ? '' : 'h'],
-    ['累计训练距离', volume.totalDistanceKm === null ? '—' : formatNumber(volume.totalDistanceKm, 1), volume.totalDistanceKm === null ? '' : 'km'],
-    ['有效强度记录', intensity.reduce((sum, item) => sum + item.sessionCount, 0), '条']
-  ];
-  return <PageContainer className="professional-overview training-dashboard-page">
-    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="SPECIAL TRAINING" title="专项训练" />
-    <SpecialChampionModel project={project} />
-    {loading ? <ContentState kind="loading" title="正在同步专项训练数据" icon={<Activity className="spin" />} /> : <>
-      <section className="training-dashboard-metrics">{metrics.map(([label, value, unit]) => <AppCard key={String(label)} variant="compact" className="training-dashboard-metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong><em>{project} · {from} 至 {to}</em></AppCard>)}</section>
-      <section className="training-dashboard-grid"><ChartCard title="专项训练量趋势" description="按真实训练时长与距离汇总" className="dashboard-span-8"><TrainingVolumeChart data={volume} from={from} to={to} /></ChartCard><ChartCard title="专项训练强度结构" description="仅展示当前项目已记录的强度分区" className="dashboard-span-4"><TrainingIntensityChart data={intensity} /></ChartCard><ChartCard title="专项训练内容结构" description="按统一训练内容分类统计" className="dashboard-span-5"><TrainingContentChart records={specialRecords} /></ChartCard><ChartCard title="专项成绩趋势" description="该项目暂未配置可用于趋势分析的专项成绩指标" className="dashboard-span-7"><ContentState kind="empty" title="暂无专项指标配置" icon={<Target size={25} />} description="配置当前项目的真实测试或比赛成绩字段后，将按日期展示趋势和最佳表现。" /></ChartCard></section>
-    </>}
-  </PageContainer>;
 }
 
 type StrengthProps = { athletes: Athlete[]; athleteId: number | null; project: Project; from: string; to: string; onNavigate: Navigation; onAthleteChange: (athleteId: number | null) => void };

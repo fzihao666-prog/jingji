@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { aggregateSpecialTraining, type SpecialSession } from '../shared/special-training.ts';
+import { performanceGroups } from '../src/components/special-chart-options.ts';
+import type { SpecialTestEvent } from '../src/types.ts';
+
+const row: SpecialSession = { id: 1, date: '2026-09-01', athleteId: 1, athleteName: '回归运动员', project: 'ROWING', team: '回归队伍', trainingType: '专项训练', structureType: '', content: '水上技术', intensityZone: 'UT2', durationMin: 60, distanceKm: 12, durationReported: true, distanceReported: true, srpe: 360, rpe: 6, sessionDemo: 0, sessionSource: 'manual' };
+const result = aggregateSpecialTraining([row, { ...row, id: 2, content: '恢复拉伸' }, { ...row, id: 3, sessionDemo: 1 }, { ...row, id: 4, sessionSource: 'initial_seed' }]);
+assert.equal(result.summary.sessionCount, 1);
+assert.equal(result.summary.load, 360);
+assert.equal(result.intensity[0].name, 'UT2', '原始强度不能转换为其他体系');
+assert.equal(result.intensity[0].percentage, 100);
+assert.deepEqual(result.content, [{ name: '水上', count: 1, percentage: 100 }]);
+const missing = aggregateSpecialTraining([{ ...row, durationReported: false, distanceReported: false, rpe: null, srpe: 0 }]);
+assert.equal(missing.summary.durationMin, null);
+assert.equal(missing.summary.distanceKm, null);
+assert.equal(missing.summary.load, null);
+assert.equal(aggregateSpecialTraining([{ ...row, durationMin: 0, distanceKm: 0 }]).summary.durationMin, 0);
+assert.deepEqual(aggregateSpecialTraining([]).days, []);
+const event = { id: 1, project: 'ROWING', testDate: '2026-09-01', distanceM: 2000, boatClass: '单人', genderGroup: '男子', results: [{ averageMs: 420000, bestMs: 419000 }] } as SpecialTestEvent;
+const groups = performanceGroups([event, { ...event, id: 2, distanceM: 500 }, { ...event, id: 3, genderGroup: '女子' }]);
+assert.equal(groups.length, 3, '不同距离或性别不能混合成绩');
+assert.equal(groups[0].results[0].mean, 420);
+console.log('专项聚合检查通过：演示排除、专项隔离、原始强度、既有负荷、缺失/真实0值、成绩规格分组。');

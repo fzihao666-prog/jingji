@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db, upsertAthleteOrigin } from './db.ts';
-import { buildOverviewPayload } from './overview-service.ts';
+import { buildOverviewPayload, buildSpecialTrainingPayload } from './overview-service.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import {
   AREA_LEVEL_META,
@@ -26,7 +26,7 @@ import {
 } from '../shared/rowing-model.ts';
 import { CANOE_MODEL_STANDARD, analyzeCanoePeriod } from '../shared/canoe-model.ts';
 import { SLALOM_CHAMPION_METRICS, SLALOM_MODEL_STANDARD, analyzeSlalomPeriod, slalomComparison } from '../shared/slalom-model.ts';
-import { hasSpecialAnalysis, projectCapability, PROJECTS, type Project } from '../shared/projects.ts';
+import { hasSpecialAnalysis, projectCapability, projectLabel, PROJECTS, type Project } from '../shared/projects.ts';
 import { INTENSITY_ZONE_SYSTEMS, PRIMARY_INTENSITY_ZONE_CODES } from '../shared/training-intensity.ts';
 import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
 import {
@@ -4459,18 +4459,14 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
   return rows;
 }
 
-app.get('/api/special-tests', requireAuth, (req, res) => {
-  const user = req.authUser!;
-  const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
-  const from = parseDate(req.query.from) || '1900-01-01';
-  const to = parseDate(req.query.to) || '2999-12-31';
+function readSpecialTestEvents(user: AuthUser, project: string, from: string, to: string, selectedIds?: Set<number>) {
+  const allowed = new Set(accessibleAthleteIds(user));
   const events = db.prepare(`
     SELECT id, project, test_date AS testDate, distance_m AS distanceM, boat_class AS boatClass,
       gender_group AS genderGroup, session, wind_conditions AS windConditions, location, note
-    FROM special_test_events WHERE project = ? AND test_date BETWEEN ? AND ? ORDER BY test_date DESC, distance_m ASC
-  `).all(project, from, to) as Array<{ id: number; project: Project; testDate: string; distanceM: number; boatClass: string; genderGroup: string; session: string; windConditions: string; location: string; note: string }>;
-  const allowed = new Set(accessibleAthleteIds(user));
+    FROM special_test_events WHERE project IN (?, ?) AND test_date BETWEEN ? AND ? ORDER BY test_date DESC, distance_m ASC
+  `).all(project, projectLabel(project), from, to) as Array<{ id: number; project: Project; testDate: string; distanceM: number; boatClass: string; genderGroup: string; session: string; windConditions: string; location: string; note: string }>;
+
   const selectResults = db.prepare(`
     SELECT id, crew_name AS crewName, member_athlete_ids AS memberAthleteIds,
       member_names AS memberNames, previous_best_ms AS previousBestMs,
@@ -4485,12 +4481,13 @@ app.get('/api/special-tests', requireAuth, (req, res) => {
       memberNames: JSON.parse(row.memberNames || '[]') as string[],
       attemptsMs: JSON.parse(row.attemptsMs || '[]') as number[]
     }));
-    const visible = all.filter((row) => user.role === 'ATL'
+    const visible = all.filter((row) => row.memberAthleteIds.length > 0 && (!selectedIds || row.memberAthleteIds.some((id) => selectedIds.has(id)))).filter((row) => user.role === 'ATL'
       ? row.memberAthleteIds.some((id) => allowed.has(id))
       : row.memberAthleteIds.every((id) => allowed.has(id)));
     const leaderMs = all[0]?.bestMs || 0;
     return {
       ...event,
+      project,
       results: visible.map((row) => ({
         ...row,
         crewName: user.role === 'ATL' ? user.displayName : row.crewName,
@@ -4501,7 +4498,42 @@ app.get('/api/special-tests', requireAuth, (req, res) => {
       }))
     };
   }).filter((event) => event.results.length > 0);
-  res.json({ events: output });
+  return output;
+}
+
+app.get('/api/special-training/overview', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const project = cleanString(req.query.project);
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  const athleteId = Number(req.query.athleteId || 0);
+  const teamId = Number(req.query.teamId || 0);
+  if (!projectSet.has(project) || !from || !to || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  if (![athleteId, teamId].every((id) => Number.isInteger(id) && id >= 0)) return res.status(400).json({ message: '运动员或队伍筛选参数无效。' });
+  const accessible = accessibleAthleteIds(user);
+  let scoped = accessible.length ? db.prepare(`SELECT a.id, a.team_id AS teamId FROM athletes a WHERE a.id IN (${accessible.map(() => '?').join(',')}) AND a.project = ? AND a.active = 1`).all(...accessible, project) as Array<{ id: number; teamId: number | null }> : [];
+  if (teamId) {
+    if (!scoped.some((row) => row.teamId === teamId)) return res.status(403).json({ message: '无权查看该队伍或该队伍不属于当前项目。' });
+    scoped = scoped.filter((row) => row.teamId === teamId);
+  }
+  if (athleteId) {
+    if (!hasAthleteAccess(user, athleteId) || !scoped.some((row) => row.id === athleteId)) return res.status(403).json({ message: '所选运动员不在当前项目和队伍的可访问范围内。' });
+    scoped = scoped.filter((row) => row.id === athleteId);
+  }
+  const athleteIds = scoped.map((row) => row.id);
+  res.json({
+    training: buildSpecialTrainingPayload({ athleteIds, from, to, individual: Boolean(athleteId) || user.role === 'ATL' }),
+    events: athleteIds.length ? readSpecialTestEvents(user, project, from, to, new Set(athleteIds)) : []
+  });
+});
+
+app.get('/api/special-tests', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const project = cleanString(req.query.project);
+  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  const from = parseDate(req.query.from) || '1900-01-01';
+  const to = parseDate(req.query.to) || '2999-12-31';
+  res.json({ events: readSpecialTestEvents(user, project, from, to) });
 });
 
 app.post('/api/special-tests/import/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), upload.single('file'), async (req, res) => {

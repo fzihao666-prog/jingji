@@ -6,12 +6,13 @@ import { BrandLogo } from './components/BrandLogo';
 import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
 import { PhysiologyBiochemistryPage } from './pages/PhysiologyBiochemistryPage';
-import { SpecialTrainingDashboard, StrengthTrainingDashboard } from './pages/TrainingDashboards';
+import { StrengthTrainingDashboard } from './pages/TrainingDashboards';
 import type { Athlete, Project, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
 import { DEFAULT_PROJECT, isProject, normalizeProject, PROJECTS } from '../shared/projects';
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage })));
+const SpecialTrainingDashboard = lazy(() => import('./pages/SpecialTrainingDashboard').then((module) => ({ default: module.SpecialTrainingDashboard })));
 const SpecialTestsPage = lazy(() => import('./pages/SpecialTestsPage').then((module) => ({ default: module.SpecialTestsPage })));
 const TrainingPlanPage = lazy(() => import('./pages/TrainingPlanPage').then((module) => ({ default: module.TrainingPlanPage })));
 const PersonalPage = lazy(() => import('./pages/PersonalPage').then((module) => ({ default: module.PersonalPage })));
@@ -81,7 +82,7 @@ export default function App() {
       setAthleteId(user.role === 'ATL' ? user.athleteId : null);
       return;
     }
-    if (page === 'overview') {
+    if (page === 'overview' || page === 'special-overview') {
       setRecords([]);
       setLoading(false);
       return;
@@ -158,7 +159,7 @@ export default function App() {
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
-        {page === 'special-overview' && <SpecialTrainingDashboard records={records} project={project} from={from} to={to} loading={loading} />}
+        {page === 'special-overview' && <SpecialTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onAthleteChange={setAthleteId} onRecordsOpen={() => setPage('special-records')} />}
         {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={setPage} />}
         {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} onAthleteChange={setAthleteId} />}
         {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}

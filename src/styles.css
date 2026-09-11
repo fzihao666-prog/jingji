@@ -711,7 +711,7 @@ h1, h2, h3, p { margin: 0; }
 .app-page-header-compact { align-items: center; }
 .app-card { min-width: 0; border-radius: 13px; border-color: var(--line); background: var(--paper); box-shadow: 0 12px 35px rgba(14, 55, 68, .045); }
 .app-card-chart { overflow: hidden; }
-.app-card-compact { min-height: 0; padding: 16px; }
+.app-card.app-card-compact { min-height: 0; padding: 16px; }
 .app-section-header { min-height: 30px; }
 .app-section-header > div:first-child { min-width: 0; }
 .app-section-header-icon { display: inline-grid; margin-right: 8px; color: var(--teal); vertical-align: middle; }
