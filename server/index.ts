@@ -4459,7 +4459,7 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
   return rows;
 }
 
-function readSpecialTestEvents(user: AuthUser, project: string, from: string, to: string, selectedIds?: Set<number>) {
+function readSpecialTestEvents(user: AuthUser, project: string, from: string, to: string) {
   const allowed = new Set(accessibleAthleteIds(user));
   const events = db.prepare(`
     SELECT id, project, test_date AS testDate, distance_m AS distanceM, boat_class AS boatClass,
@@ -4481,7 +4481,7 @@ function readSpecialTestEvents(user: AuthUser, project: string, from: string, to
       memberNames: JSON.parse(row.memberNames || '[]') as string[],
       attemptsMs: JSON.parse(row.attemptsMs || '[]') as number[]
     }));
-    const visible = all.filter((row) => row.memberAthleteIds.length > 0 && (!selectedIds || row.memberAthleteIds.some((id) => selectedIds.has(id)))).filter((row) => user.role === 'ATL'
+    const visible = all.filter((row) => row.memberAthleteIds.length > 0).filter((row) => user.role === 'ATL'
       ? row.memberAthleteIds.some((id) => allowed.has(id))
       : row.memberAthleteIds.every((id) => allowed.has(id)));
     const leaderMs = all[0]?.bestMs || 0;
@@ -4506,24 +4506,19 @@ app.get('/api/special-training/overview', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   const from = parseDate(req.query.from);
   const to = parseDate(req.query.to);
-  const athleteId = Number(req.query.athleteId || 0);
+  if (req.query.athleteId !== undefined) return res.status(400).json({ message: '专项首页不支持运动员筛选。' });
   const teamId = Number(req.query.teamId || 0);
   if (!projectSet.has(project) || !from || !to || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
-  if (![athleteId, teamId].every((id) => Number.isInteger(id) && id >= 0)) return res.status(400).json({ message: '运动员或队伍筛选参数无效。' });
+  if (!Number.isInteger(teamId) || teamId < 0) return res.status(400).json({ message: '队伍筛选参数无效。' });
   const accessible = accessibleAthleteIds(user);
   let scoped = accessible.length ? db.prepare(`SELECT a.id, a.team_id AS teamId FROM athletes a WHERE a.id IN (${accessible.map(() => '?').join(',')}) AND a.project = ? AND a.active = 1`).all(...accessible, project) as Array<{ id: number; teamId: number | null }> : [];
   if (teamId) {
     if (!scoped.some((row) => row.teamId === teamId)) return res.status(403).json({ message: '无权查看该队伍或该队伍不属于当前项目。' });
     scoped = scoped.filter((row) => row.teamId === teamId);
   }
-  if (athleteId) {
-    if (!hasAthleteAccess(user, athleteId) || !scoped.some((row) => row.id === athleteId)) return res.status(403).json({ message: '所选运动员不在当前项目和队伍的可访问范围内。' });
-    scoped = scoped.filter((row) => row.id === athleteId);
-  }
   const athleteIds = scoped.map((row) => row.id);
   res.json({
-    training: buildSpecialTrainingPayload({ athleteIds, from, to, individual: Boolean(athleteId) || user.role === 'ATL' }),
-    events: athleteIds.length ? readSpecialTestEvents(user, project, from, to, new Set(athleteIds)) : []
+    training: buildSpecialTrainingPayload({ athleteIds, from, to, individual: user.role === 'ATL' })
   });
 });
 

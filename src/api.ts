@@ -429,11 +429,10 @@ export const api = {
   async dataManagementStandards() {
     return request<{ athlete: string[]; training: { types: string[]; structures: string[]; zoneSystems: string[] }; testing: string[]; sources: string[]; qualities: string[]; retiredTables: string[] }>('/api/data-management/standards');
   },
-  async specialTrainingOverview(from: string, to: string, project: Project, athleteId: number | null, teamId: number | null) {
+  async specialTrainingOverview(from: string, to: string, project: Project, teamId: number | null) {
     const params = new URLSearchParams({ from, to, project });
-    if (athleteId) params.set('athleteId', String(athleteId));
     if (teamId) params.set('teamId', String(teamId));
-    return request<{ training: SpecialTrainingAnalytics; events: SpecialTestEvent[] }>(`/api/special-training/overview?${params}`);
+    return request<{ training: SpecialTrainingAnalytics }>(`/api/special-training/overview?${params}`);
   },
   async specialTests(from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });

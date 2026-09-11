@@ -73,8 +73,8 @@ try {
   assert(record?.averageHeartRate === 147 && record?.maxHeartRate === 182 && record?.averagePowerW === 366 && record?.strokeRateSpm === 31, '专项指标没有按原值持久化');
 
   const dashboardUrl = `/api/special-training/overview?from=2026-08-27&to=2026-08-27&project=${encodeURIComponent(athlete.project)}`;
-  const dashboard = await request(`${dashboardUrl}&athleteId=${athlete.id}`, {}, token);
-  assert(dashboard.status === 200 && dashboard.payload.training.summary.sessionCount === 1, `专项首页未排除演示课次或未正确下钻个人：${dashboard.status} ${JSON.stringify(dashboard.payload.training?.summary || dashboard.payload.message)}`);
+  const dashboard = await request(dashboardUrl, {}, token);
+  assert(dashboard.status === 200 && dashboard.payload.training.summary.sessionCount === 1, `专项首页未排除演示课次：${dashboard.status} ${JSON.stringify(dashboard.payload.training?.summary || dashboard.payload.message)}`);
   assert(dashboard.payload.training.summary.durationMin === 88 && dashboard.payload.training.summary.distanceKm === 17.4, '专项首页训练时长/距离与真实记录不一致');
   assert(dashboard.payload.training.summary.load === 528, '专项首页没有沿用已有SRPE');
   assert(dashboard.payload.training.content.reduce((sum, row) => sum + row.count, 0) === 1, '专项内容课次统计错误');
@@ -93,8 +93,11 @@ try {
   assert(teamDashboard.payload.training.summary.durationMin === 88 && teamDashboard.payload.training.summary.load === 528, '团队时长或既有负荷去重错误');
   const missing = await request(`/api/special-training/overview?from=2099-01-01&to=2099-01-02&project=${encodeURIComponent(athlete.project)}`, {}, token);
   assert(missing.payload.training.summary.durationMin === null && missing.payload.training.days.length === 0, '空周期生成了模拟数据');
-  const wrongProject = await request(`/api/special-training/overview?from=2026-08-27&to=2026-08-27&project=${encodeURIComponent('CANOE_SLALOM')}&athleteId=${athlete.id}`, {}, token);
-  assert(wrongProject.status === 403, '专项首页未隔离不同项目运动员');
+  const wrongProject = await request(`/api/special-training/overview?from=2026-08-27&to=2026-08-27&project=${encodeURIComponent('CANOE_SLALOM')}&teamId=${team.id}`, {}, token);
+  assert(wrongProject.status === 403, '专项首页未隔离不同项目队伍');
+  const removedFilter = await request(`${dashboardUrl}&athleteId=${athlete.id}`, {}, token);
+  assert(removedFilter.status === 400, '专项首页仍支持运动员筛选');
+  assert(!('events' in dashboard.payload), '专项首页仍读取专项成绩');
   const unknownTeam = await request(`${dashboardUrl}&teamId=99999999`, {}, token);
   assert(unknownTeam.status === 403, '专项首页未拒绝无权队伍');
   const anonymous = await request(dashboardUrl);
