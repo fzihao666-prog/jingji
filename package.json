@@ -27,6 +27,7 @@
     "bcryptjs": "latest",
     "china-map-geojson": "^1.0.4",
     "d3-geo": "^3.1.1",
+    "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
     "express": "latest",
     "html2canvas": "latest",
