@@ -77,16 +77,15 @@ const physiologyStatusMeta = {
 } as const;
 
 function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
-  const [range, setRange] = useState<7 | 14 | 30>(7);
   const [active, setActive] = useState<{ metricIndex: number; dayIndex: number } | null>(null);
-  const days = data.metrics[0]?.days.slice(-range) || [];
-  const cell = active ? data.metrics[active.metricIndex]?.days.slice(-range)[active.dayIndex] : null;
+  const days = data.metrics[0]?.days || [];
+  const cell = active ? data.metrics[active.metricIndex]?.days[active.dayIndex] : null;
   const metric = active ? data.metrics[active.metricIndex] : null;
   return <div className="physiology-heatmap">
-    <div className="physiology-heatmap-toolbar"><span>团队状态趋势</span><label>周期<select value={range} onChange={(event) => setRange(Number(event.target.value) as 7 | 14 | 30)}><option value={7}>近7天</option><option value={14}>近14天</option><option value={30}>近30天</option></select></label></div>
+    <div className="physiology-heatmap-toolbar"><span>团队状态趋势</span></div>
     {data.metrics.length ? <div className="physiology-heatmap-table" style={{ '--physiology-days': days.length } as CSSProperties}>
       <div className="physiology-heatmap-head"><span>指标</span>{days.map((day) => <span key={day.date}>{day.date.slice(5).replace('-', '/')}</span>)}</div>
-      {data.metrics.map((item, metricIndex) => <div className="physiology-heatmap-row" key={item.code}><span>{item.label}</span>{item.days.slice(-range).map((itemDay, dayIndex) => <button key={itemDay.date} type="button" className={`physiology-cell ${itemDay.status.toLowerCase()}`} aria-label={`${item.label} ${itemDay.date} ${physiologyStatusMeta[itemDay.status].label}`} onMouseEnter={() => setActive({ metricIndex, dayIndex })} onFocus={() => setActive({ metricIndex, dayIndex })} onClick={() => setActive({ metricIndex, dayIndex })}><i /></button>)}</div>)}
+      {data.metrics.map((item, metricIndex) => <div className="physiology-heatmap-row" key={item.code}><span>{item.label}</span>{item.days.map((itemDay, dayIndex) => <button key={itemDay.date} type="button" className={`physiology-cell ${itemDay.status.toLowerCase()}`} aria-label={`${item.label} ${itemDay.date} ${physiologyStatusMeta[itemDay.status].label}`} onMouseEnter={() => setActive({ metricIndex, dayIndex })} onFocus={() => setActive({ metricIndex, dayIndex })} onClick={() => setActive({ metricIndex, dayIndex })}><i /></button>)}</div>)}
     </div> : <TrainingAnalyticsEmpty text="暂无生理生化数据" />}
     <div className="physiology-heatmap-legend">{Object.entries(physiologyStatusMeta).slice(0, 4).map(([key, item]) => <span key={key}><i style={{ background: item.color }} />{item.label}</span>)}</div>
     {cell && metric && <div className="physiology-heatmap-detail"><strong>{metric.label} · {cell.date}</strong><span>{cell.isEstimated ? 'V1 模拟状态（等待实测导入）' : `团队中位数：${formatNumber(cell.median || 0, 1)} ${metric.unit}`} · 监测人数：{cell.sampleCount} 人</span><span>正常 {cell.normal} · 波动 {cell.fluctuation} · 关注 {cell.attention} · 异常 {cell.abnormal}{cell.abnormalRateChange === null ? '' : ` · 较前日异常率 ${cell.abnormalRateChange >= 0 ? '↑' : '↓'} ${formatNumber(Math.abs(cell.abnormalRateChange), 1)}%`}</span></div>}

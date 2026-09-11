@@ -400,7 +400,8 @@ const physiologyMetricDefinitions: Array<{ code: PhysiologyMetricCode; label: st
   { code: 'resting_heart_rate_bpm', label: '静息心率 RHR', unit: 'bpm', direction: 'higher', thresholds: [60, 70, 80], baseline: 53 }
 ];
 
-function calendarDays(to: string, count: number) {
+function calendarDays(from: string, to: string) {
+  const count = Math.floor((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86400000) + 1;
   const cursor = new Date(`${to}T12:00:00Z`);
   return Array.from({ length: count }, (_, index) => {
     const current = new Date(cursor);
@@ -422,9 +423,8 @@ function median(values: number[]) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function buildPhysiologyHeatmap(athleteIds: number[], to: string) {
-  const dates = calendarDays(to, 30);
-  const from = dates[0];
+function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) {
+  const dates = calendarDays(from, to);
   const placeholders = athleteIds.map(() => '?').join(',');
   const metricCodes = physiologyMetricDefinitions.filter((item) => item.code !== 'resting_heart_rate_bpm').map((item) => item.code);
   const metricPlaceholders = metricCodes.map(() => '?').join(',');
@@ -587,7 +587,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
   });
   const trainingVolume = aggregateTrainingVolume(sessions, input.individual);
   const trainingAnalytics = aggregateTrainingAnalytics(sessions, input.individual);
-  const physiologyHeatmap = buildPhysiologyHeatmap(input.athleteIds, input.to);
+  const physiologyHeatmap = buildPhysiologyHeatmap(input.athleteIds, input.from, input.to);
   const trainingLoads = teamDurationSessions(actualSessions, input.individual).reduce((totals, row) => {
     const load = Number(row.srpe);
     const category = trainingLoadCategory(row);
