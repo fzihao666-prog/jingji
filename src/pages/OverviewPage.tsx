@@ -598,7 +598,7 @@ export function OverviewPage(props: Props) {
         </div>
         {teamTrainingLoading
           ? <ContentState kind="loading" className="professional-chart-empty" title="正在按队伍汇总训练量…" />
-          : <TrainingVolumeDashboard data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} physiology={trainingOverview?.physiologyHeatmap || { metrics: [] }} />}
+          : <TrainingVolumeDashboard from={props.from} to={props.to} data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} physiology={trainingOverview?.physiologyHeatmap || { metrics: [] }} />}
       </AppCard>
     ),
     'training-intensity': (

@@ -1,3 +1,4 @@
+import { summarizeDailyRpe } from './rpe-statistics.ts';
 import { db } from './db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
 import { trainingLoadCategory } from '../shared/training-content-category.ts';
@@ -250,6 +251,10 @@ function emptyTrainingAnalytics() {
       specialDurationMin: number | null;
       specialDistanceKm: number | null;
       averageRpe: number | null;
+      stdRpe: number | null;
+      lowerRpe: number | null;
+      upperRpe: number | null;
+      rpeCount: number;
       morningPulse: number | null;
       averageHeartRate: number | null;
     }>
@@ -265,7 +270,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     physicalLoad: number; physicalLoadCount: number;
     specialDurationMin: number; specialDurationCount: number;
     specialDistanceKm: number; specialDistanceCount: number;
-    rpe: number[]; morningPulse: number[]; averageHeartRate: number[];
+    rpe: Array<{ athleteId: number; rpe: number }>; morningPulse: number[]; averageHeartRate: number[];
     wellnessKeys: Set<string>;
   }>();
   const totals = {
@@ -305,7 +310,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
   for (const row of actualSessions) {
     const day = getDay(row);
     if (row.rpe !== null && Number.isFinite(row.rpe)) {
-      day.rpe.push(row.rpe);
+      day.rpe.push({ athleteId: row.athleteId, rpe: row.rpe });
       totals.rpe.push(row.rpe);
     }
     if (row.averageHeartRate !== null && Number.isFinite(row.averageHeartRate)) day.averageHeartRate.push(row.averageHeartRate);
@@ -369,7 +374,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       physicalLoad: value(day.physicalLoad, day.physicalLoadCount),
       specialDurationMin: value(day.specialDurationMin, day.specialDurationCount),
       specialDistanceKm: value(day.specialDistanceKm, day.specialDistanceCount),
-      averageRpe: average(day.rpe) === null ? null : round(average(day.rpe), 1),
+      ...summarizeDailyRpe(day.rpe),
       morningPulse: average(day.morningPulse) === null ? null : round(average(day.morningPulse), 1),
       averageHeartRate: average(day.averageHeartRate) === null ? null : round(average(day.averageHeartRate), 1)
     }))

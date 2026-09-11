@@ -774,6 +774,10 @@ export type OverviewPayload = {
       specialDurationMin: number | null;
       specialDistanceKm: number | null;
       averageRpe: number | null;
+      stdRpe: number | null;
+      lowerRpe: number | null;
+      upperRpe: number | null;
+      rpeCount: number;
       morningPulse: number | null;
       averageHeartRate: number | null;
     }>;
