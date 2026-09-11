@@ -234,8 +234,7 @@ function emptyTrainingAnalytics() {
   return {
     summary: {
       totalDurationMin: null as number | null,
-      testSessionCount: 0,
-      testedAthleteCount: 0,
+      testDurationMin: null as number | null,
       recoveryDurationMin: null as number | null,
       specialDurationMin: null as number | null,
       specialDistanceKm: null as number | null,
@@ -358,8 +357,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
   return {
     summary: {
       totalDurationMin: value(totals.totalDurationMin, totals.totalDurationCount),
-      testSessionCount: 0,
-      testedAthleteCount: 0,
+      testDurationMin: null as number | null,
       recoveryDurationMin: value(totals.recoveryDurationMin, totals.recoveryDurationCount),
       specialDurationMin: value(totals.specialDurationMin, totals.specialDurationCount),
       specialDistanceKm: value(totals.specialDistanceKm, totals.specialDistanceCount),
@@ -846,13 +844,23 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     SELECT COUNT(*) AS count FROM daily_wellness
     WHERE athlete_id IN (${placeholders}) AND wellness_date BETWEEN ? AND ?
   `).get(...input.athleteIds, input.from, input.to) as { count: number };
+  // 同队同日同测试类型的测试时长会为每名参与者各存一条；团队汇总时只取一份，
+  // 避免把同一批测试按参与人数重复累计。不同测试类型仍会分别累加到当天测试时长。
   const testSummary = db.prepare(`
-    SELECT COUNT(*) AS count, COUNT(DISTINCT athlete_id) AS athleteCount
-    FROM test_sessions
-    WHERE athlete_id IN (${placeholders}) AND test_date BETWEEN ? AND ? AND is_demo = 0
-  `).get(...input.athleteIds, input.from, input.to) as { count: number; athleteCount: number };
-  trainingAnalytics.summary.testSessionCount = testSummary.count;
-  trainingAnalytics.summary.testedAthleteCount = testSummary.athleteCount;
+    SELECT SUM(duration_min) AS totalDurationMin, COUNT(*) AS count
+    FROM (
+      SELECT test_date, test_type, MAX(duration_min) AS duration_min
+      FROM test_sessions
+      WHERE athlete_id IN (${placeholders})
+        AND test_date BETWEEN ? AND ?
+        AND is_demo = 0
+        AND duration_min IS NOT NULL
+      GROUP BY test_date, test_type
+    )
+  `).get(...input.athleteIds, input.from, input.to) as { totalDurationMin: number | null; count: number };
+  trainingAnalytics.summary.testDurationMin = testSummary.totalDurationMin === null
+    ? null
+    : round(Number(testSummary.totalDurationMin), 1);
 
   return {
     records,

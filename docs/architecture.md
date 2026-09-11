@@ -328,7 +328,7 @@ erDiagram
 | 运动员主数据 | `athletes`、`athlete_profiles`、`athlete_origins` | 稳定身份和扩展档案 |
 | 训练事实 | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源 |
 | 训练计划 | `training_plans` | 结构化列与 `plan_data` JSON 并存 |
-| 测试评估 | `test_sessions`、`test_measurements`、身体测量、竞技状态 | 统一指标模型 |
+| 测试评估 | `test_sessions`、`test_measurements`、身体测量、竞技状态 | 统一指标模型；`test_sessions.duration_min` 保存测试批次时长，团队汇总按测试日期与类型去重 |
 | 专项测试 | `special_test_events`、`special_test_results` | 事件与参与者成绩 |
 | 专项冠军模型 | `special_champion_models` | 按项目、分组、标准代码与细分项目维护的赛事标杆配置；成绩与比赛日期作为同一条正式配置保存，不写入模拟成绩 |
 | 健康 | `injury_records` | 疼痛、限制、康复与复查 |

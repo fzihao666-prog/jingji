@@ -3423,7 +3423,7 @@ const unifiedExportHeaders: Array<[string, string[]]> = [
   ['恢复状态', ['姓名','日期','睡眠小时','睡眠质量','晨脉','体重kg','疲劳','肌肉酸痛','情绪','状态','备注']],
   ['训练课次', ['姓名','日期','课次序号','开始时间','训练类型','训练内容','训练阶段','强度区间','时长分钟','距离千米','RPE','SRPE','SMVL','平均心率','最大心率','平均功率W','桨频SPM']],
   ['力量训练组次', ['姓名','日期','课次名称','动作','组序','计划次数','实际次数','计划重量kg','实际重量kg','强度百分比','RPE','完成状态','类别','身体部位','备注']],
-  ['测试指标', ['姓名','测试日期','测试类型','指标代码','指标名称','数值','单位','侧别','协议','备注']],
+  ['测试指标', ['姓名','测试日期','测试类型','指标代码','指标名称','数值','单位','侧别','协议','备注','测试时长分钟']],
   ['FMS测试', ['姓名','测试日期','深蹲','跨栏步','直线弓步蹲','肩部灵活性','主动直腿上抬','躯干稳定俯卧撑','旋转稳定性','备注']],
   ['冠军模型测试', ['姓名','测试日期','身高cm','臂展cm','体脂率%','骨骼肌kg','一般耐力评分','VO2Max','不对称指数%','CMJ峰值功率W','无氧功率W/kg','IMTP峰值力量N','核心力量评分','测试协议','备注']],
   ['伤病记录', ['姓名','发生日期','伤病名称','部位','侧别','状态','疼痛评分','训练限制','康复计划','复查日期','备注']],
@@ -3489,8 +3489,8 @@ async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
   writeUnifiedExportRows(workbook.getWorksheet('训练课次'), sessionRows.map((row) => [nameById.get(Number(row.athlete_id)), row.session_date, row.session_order, row.start_time, row.training_type, row.content, row.structure_type, row.intensity_zone, row.duration_min, row.distance_km, row.rpe, row.srpe, row.smvl, row.average_heart_rate, row.max_heart_rate, row.average_power_w, row.stroke_rate_spm]));
   const setRows = db.prepare(`SELECT srs.*, ts.athlete_id, ts.session_date, ts.content FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id WHERE ts.athlete_id IN (${ids}) ORDER BY ts.session_date, ts.athlete_id, srs.id`).all(...profileIds) as Array<Record<string, unknown>>;
   writeUnifiedExportRows(workbook.getWorksheet('力量训练组次'), setRows.map((row) => [nameById.get(Number(row.athlete_id)), row.session_date, row.content, row.exercise_name, row.set_index, row.target_reps, row.actual_reps, null, row.actual_weight_kg, row.intensity_percent, row.rpe, Number(row.completed) ? '完成' : '未完成', row.training_category, row.body_position, row.note]));
-  const testRows = db.prepare(`SELECT ts.athlete_id, ts.test_date, ts.test_type, ts.protocol, tm.metric_code, tm.value_num, tm.unit, tm.side, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) ORDER BY ts.test_date, ts.athlete_id, tm.id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('测试指标'), testRows.map((row) => [nameById.get(Number(row.athlete_id)), row.test_date, row.test_type, row.metric_code, row.label || row.metric_code, row.value_num, row.unit, row.side, row.protocol, '']));
+  const testRows = db.prepare(`SELECT ts.athlete_id, ts.test_date, ts.test_type, ts.duration_min, ts.protocol, tm.metric_code, tm.value_num, tm.unit, tm.side, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) ORDER BY ts.test_date, ts.athlete_id, tm.id`).all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(workbook.getWorksheet('测试指标'), testRows.map((row) => [nameById.get(Number(row.athlete_id)), row.test_date, row.test_type, row.metric_code, row.label || row.metric_code, row.value_num, row.unit, row.side, row.protocol, '', row.duration_min]));
   const sideLabel: Record<string, string> = { left: '左', right: '右', bilateral: '双侧', center: '中央', unspecified: '未指定' };
   const statusLabel: Record<string, string> = { healthy: '健康', observation: '观察', restricted: '限训', rehab: '康复', suspended: '停训' };
   const injuryRows = db.prepare(`SELECT * FROM injury_records WHERE athlete_id IN (${ids}) ORDER BY onset_date, athlete_id, id`).all(...profileIds) as Array<Record<string, unknown>>;

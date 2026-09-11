@@ -1,5 +1,5 @@
 import { trainingContentCategory, trainingLoadCategory, TRAINING_CONTENT_CATEGORIES } from './training-content-category';
-import { PRIMARY_INTENSITY_ZONE_CODES } from './training-intensity';
+import { SPECIAL_TRAINING_INTENSITY_ZONE_ORDER, SPECIAL_TRAINING_PINNED_INTENSITY_ZONES } from './training-intensity';
 
 export type SpecialSession = {
   id: number; date: string; athleteId: number; athleteName: string; project: string; team: string;
@@ -25,9 +25,10 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
     return { date, durationMin: total(rows.map(duration)), distanceKm: total(rows.map(distance)), load: total(rows.map(load)), sessionCount: rows.length };
   });
   // 当前系统各项目均保存原始分区；未知分区原样展示，不套用其他项目阈值。
-  const zoneNames = [...new Set(records.map((row) => row.intensityZone).filter(Boolean))].sort((a, b) => {
-    const left = PRIMARY_INTENSITY_ZONE_CODES.indexOf(a as typeof PRIMARY_INTENSITY_ZONE_CODES[number]);
-    const right = PRIMARY_INTENSITY_ZONE_CODES.indexOf(b as typeof PRIMARY_INTENSITY_ZONE_CODES[number]);
+  // UT3 与 AN 固定展示；其他分区仅在原始训练记录实际出现时展示。
+  const zoneNames = [...new Set([...SPECIAL_TRAINING_PINNED_INTENSITY_ZONES, ...records.map((row) => row.intensityZone).filter(Boolean)])].sort((a, b) => {
+    const left = SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.indexOf(a as typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER[number]);
+    const right = SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.indexOf(b as typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER[number]);
     return (left < 0 ? 99 : left) - (right < 0 ? 99 : right) || a.localeCompare(b);
   });
   const zones = zoneNames.map((name) => ({ name, durationMin: total(records.filter((row) => row.intensityZone === name).map(duration)) }));

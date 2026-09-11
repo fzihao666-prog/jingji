@@ -7,7 +7,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { api } from '../api';
 import type { Athlete, OverviewLayoutState, OverviewMeasurement, OverviewPayload, Project, ProjectTeam, StrengthTest, TrainingRecord, User } from '../types';
-import { addDays, aggregateRecords, average, formatNumber, percentage } from '../utils';
+import { aggregateRecords, average, formatNumber, percentage } from '../utils';
 import { ROLE_META } from '../../shared/access';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
@@ -200,24 +200,16 @@ export function OverviewPage(props: Props) {
   const displayTrainingDuration = durationSummary ? durationSummary.totalDurationMin : summary.totalDuration;
   const displayPhysicalDuration = durationSummary ? durationSummary.physicalDurationMin : durationBreakdown.physical;
   const displaySpecialDuration = durationSummary ? durationSummary.specialDurationMin : durationBreakdown.special;
-  const recentLoadBreakdown = useMemo(() => {
-    const from = addDays(props.to, -6);
+  const trainingLoadBreakdown = useMemo(() => {
     return analysisRecords
-      .filter((record) => record.status !== 'rest' && record.date >= from && record.date <= props.to)
+      .filter((record) => record.status !== 'rest' && record.date >= props.from && record.date <= props.to)
       .reduce((totals, record) => {
         const category = trainingLoadCategory(record);
         if (category) totals[category] += record.srpe;
         return totals;
       }, { physical: 0, special: 0, recovery: 0 });
-  }, [analysisRecords, props.to]);
-  const recentTrainingLoad = recentLoadBreakdown.physical + recentLoadBreakdown.special + recentLoadBreakdown.recovery;
-  const averageLoadBreakdown = useMemo(() => analysisRecords
-    .filter((record) => record.status !== 'rest')
-    .reduce((totals, record) => {
-      const category = trainingLoadCategory(record);
-      if (category) totals[category] += record.srpe;
-      return totals;
-    }, { physical: 0, special: 0, recovery: 0 }), [analysisRecords]);
+  }, [analysisRecords, props.from, props.to]);
+  const trainingLoad = trainingLoadBreakdown.physical + trainingLoadBreakdown.special + trainingLoadBreakdown.recovery;
   const fatigueSummary = useMemo(() => {
     const athleteDays = new Map<string, number>();
     for (const record of analysisRecords) {
@@ -528,16 +520,16 @@ export function OverviewPage(props: Props) {
       label="平均负荷"
       value={formatNumber(perAthlete(summary.totalSrpe))}
       unit="AU"
-      note={`体能 ${formatNumber(perAthlete(averageLoadBreakdown.physical))}AU · 专项 ${formatNumber(perAthlete(averageLoadBreakdown.special))}AU`}
+      note={`体能 ${formatNumber(perAthlete(trainingLoadBreakdown.physical))}AU · 专项 ${formatNumber(perAthlete(trainingLoadBreakdown.special))}AU`}
       tone="orange"
     />,
     rpe: <Metric icon={<UsersRound />} label={isIndividualOverview ? '当前运动员' : '运动员总数'} value={formatNumber(scopeAthleteCount)} unit="人" note={isIndividualOverview ? '个人视图 · 本人数据' : `${props.project} · 权限范围内全部运动员`} tone="blue" />,
     'acute-load': <Metric
       icon={<BarChart3 />}
       label="训练负荷"
-      value={formatNumber(recentTrainingLoad)}
+      value={formatNumber(trainingLoad)}
       unit="AU"
-      note={`体能 ${formatNumber(recentLoadBreakdown.physical)}AU · 专项 ${formatNumber(recentLoadBreakdown.special)}AU`}
+      note={`体能 ${formatNumber(trainingLoadBreakdown.physical)}AU · 专项 ${formatNumber(trainingLoadBreakdown.special)}AU`}
       tone="purple"
     />,
     'recovery-time': <Metric
@@ -598,7 +590,7 @@ export function OverviewPage(props: Props) {
         </div>
         {teamTrainingLoading
           ? <ContentState kind="loading" className="professional-chart-empty" title="正在按队伍汇总训练量…" />
-          : <TrainingVolumeDashboard from={props.from} to={props.to} data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testSessionCount: 0, testedAthleteCount: 0, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} physiology={trainingOverview?.physiologyHeatmap || { metrics: [] }} />}
+          : <TrainingVolumeDashboard from={props.from} to={props.to} data={trainingOverview?.trainingAnalytics || { summary: { totalDurationMin: null, testDurationMin: null, recoveryDurationMin: null, specialDurationMin: null, specialDistanceKm: null, physicalDurationMin: null, physicalLoad: null, rpeAverage: null, rpeHighest: null, rpeLowest: null }, days: [] }} physiology={trainingOverview?.physiologyHeatmap || { metrics: [] }} />}
       </AppCard>
     ),
     'training-intensity': (

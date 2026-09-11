@@ -316,7 +316,7 @@ const insertIntensityZone = db.prepare(`
 `);
 for (const [system, zones] of Object.entries({
   ROWING_U: ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'],
-  ROWING_UT: ['UT2', 'UT1', 'TR', 'AT', 'AN', 'REC']
+  ROWING_UT: ['UT3', 'UT2', 'UT1', 'TR', 'AT', 'AN', 'REC']
 })) {
   zones.forEach((code, index) => insertIntensityZone.run(system, code, code, `${system} 强度分区`, index + 1));
 }
@@ -874,6 +874,7 @@ db.exec(`
     athlete_id INTEGER NOT NULL,
     test_date TEXT NOT NULL,
     test_type TEXT NOT NULL,
+    duration_min REAL,
     protocol TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manual',
     quality TEXT NOT NULL DEFAULT 'valid' CHECK(quality IN ('valid', 'partial', 'insufficient', 'outlier', 'estimated')),
@@ -1145,6 +1146,11 @@ for (const [column, definition] of [
   ['distance_reported', 'INTEGER NOT NULL DEFAULT 1 CHECK(distance_reported IN (0, 1))']
 ] as const) {
   if (!hasColumn('training_sessions', column)) db.exec(`ALTER TABLE training_sessions ADD COLUMN ${column} ${definition}`);
+}
+
+// 测试时长属于测试批次本身，不能由每名运动员的指标记录相加推导。
+if (!hasColumn('test_sessions', 'duration_min')) {
+  db.exec('ALTER TABLE test_sessions ADD COLUMN duration_min REAL');
 }
 
 if (tableExists('special_champion_models') && !hasColumn('special_champion_models', 'event_group')) {

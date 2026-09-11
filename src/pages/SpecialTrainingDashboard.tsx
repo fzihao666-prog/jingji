@@ -7,7 +7,6 @@ import { EChart } from '../components/EChart';
 import { contentOption, intensityOption, loadOption, volumeOption } from '../components/special-chart-options';
 import type { Project, ProjectTeam } from '../types';
 import { formatNumber } from '../utils';
-import './SpecialTrainingPage.css';
 
 type Props = {
   project: Project; from: string; to: string;
@@ -57,7 +56,7 @@ export function SpecialTrainingDashboard({ project, from, to, onRecordsOpen }: P
     </FilterBar>
     <SpecialChampionModel project={project} />
     {!current ? <ContentState kind="loading" title="正在同步专项训练数据" icon={<Activity className="spin" />} /> : current.error ? <ContentState kind="error" title="专项训练数据加载失败" description={current.error} action={<button className="secondary-button" onClick={() => setRetry((count) => count + 1)}>重试</button>} /> : training && <>
-      <SectionHeader title="专项重要数据概览" description={`${scope} · ${from} 至 ${to}`} />
+      <SectionHeader title="专项数据概览" description={`${scope} · ${from} 至 ${to}`} />
       <section className="training-dashboard-metrics" aria-label="专项重要数据">{metricItems.map((item) => <AppCard key={item.label} variant="compact" className="training-dashboard-metric"><span>{item.label}</span><strong>{item.amount}<small>{item.unit}</small></strong><em>同队共同课次去重</em></AppCard>)}</section>
       <ChartCard title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
         {training.days.some((day) => day.durationMin !== null || day.distanceKm !== null) ? <EChart option={volumeOption(training, from, to)} label="专项训练时长与距离趋势" /> : empty('暂无专项训练量数据')}

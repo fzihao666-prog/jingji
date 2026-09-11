@@ -692,12 +692,14 @@ function parseStandardSheet(matrix: Matrix, sheet: string, project: string, file
     } else if (sheet === '测试指标') {
       const metricCode = standardText(row, header.columns, '指标代码');
       const valueNum = numberValue(standardValue(row, header.columns, '数值'));
+      const durationMin = numberValue(standardValue(row, header.columns, '测试时长分钟'));
       if (!metricCode) messages.push('错误：指标代码不能为空');
       if (valueNum === null) messages.push('错误：测试数值不能为空');
+      if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
       const sideText = standardText(row, header.columns, '侧别');
       const side = ({ 左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center' }[sideText] || sideText || 'center') as ParsedImportItem['side'];
       if (!['left', 'right', 'bilateral', 'center'].includes(side)) messages.push('错误：测试侧别只能使用center、left、right或bilateral');
-      items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: standardText(row, header.columns, '测试类型') || '专项测试', metricCode, metricLabel: standardText(row, header.columns, '指标名称') || metricCode, valueNum, unit: standardText(row, header.columns, '单位'), side, payload: { protocol: standardText(row, header.columns, '协议'), note: standardText(row, header.columns, '备注') }, rawValue: String(valueNum ?? ''), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|${metricCode}|${side}` }));
+      items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate, testType: standardText(row, header.columns, '测试类型') || '专项测试', metricCode, metricLabel: standardText(row, header.columns, '指标名称') || metricCode, valueNum, unit: standardText(row, header.columns, '单位'), side, payload: { protocol: standardText(row, header.columns, '协议'), durationMin, note: standardText(row, header.columns, '备注') }, rawValue: String(valueNum ?? ''), quality: makeQuality(messages), messages, businessKey: `${athlete?.id || 0}|${rowDate}|${metricCode}|${side}` }));
     } else if (sheet === '伤病记录') {
       const payload = { injuryName: standardText(row, header.columns, '伤病名称'), bodyPart: standardText(row, header.columns, '部位'), side: standardText(row, header.columns, '侧别') || 'unspecified', status: standardText(row, header.columns, '状态') || 'observation', painScore: numberValue(standardValue(row, header.columns, '疼痛评分')) ?? 0, restrictions: standardText(row, header.columns, '训练限制'), rehabPlan: standardText(row, header.columns, '康复计划'), reviewDate: parseDate(standardValue(row, header.columns, '复查日期'), year), note: standardText(row, header.columns, '备注') };
       if (!payload.injuryName || !payload.bodyPart) messages.push('错误：伤病名称和部位不能为空');
@@ -1101,10 +1103,14 @@ function upsertTestItem(item: DataImportItemView, batchId: string, userId: numbe
     VALUES (?, ?, 'custom', ?, 'neutral', 'phase', '["赛艇","皮划艇","激流"]', 1)
     ON CONFLICT(code) DO UPDATE SET label=excluded.label, unit=excluded.unit, active=1, updated_at=CURRENT_TIMESTAMP`)
     .run(item.metricCode, item.metricLabel || item.metricCode, item.unit);
-  db.prepare(`INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by)
-    VALUES (?, ?, ?, '国家队力量素质测试', 'file_import', ?, 0, ?)
-    ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET quality = CASE WHEN excluded.quality = 'partial' THEN 'partial' ELSE test_sessions.quality END`)
-    .run(item.athleteId, item.eventDate, item.testType || '力量素质测试', item.quality === 'warning' ? 'partial' : 'valid', userId);
+  const durationMin = Number(item.payload.durationMin);
+  const validDurationMin = Number.isFinite(durationMin) && durationMin > 0 ? durationMin : null;
+  db.prepare(`INSERT INTO test_sessions (athlete_id, test_date, test_type, duration_min, protocol, source, quality, is_demo, created_by)
+    VALUES (?, ?, ?, ?, '国家队力量素质测试', 'file_import', ?, 0, ?)
+    ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET
+      duration_min = COALESCE(excluded.duration_min, test_sessions.duration_min),
+      quality = CASE WHEN excluded.quality = 'partial' THEN 'partial' ELSE test_sessions.quality END`)
+    .run(item.athleteId, item.eventDate, item.testType || '力量素质测试', validDurationMin, item.quality === 'warning' ? 'partial' : 'valid', userId);
   const session = db.prepare('SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
     .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { id: number };
   const existing = db.prepare('SELECT id FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?')

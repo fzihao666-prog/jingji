@@ -756,8 +756,7 @@ export type OverviewPayload = {
   trainingAnalytics: {
     summary: {
       totalDurationMin: number | null;
-      testSessionCount: number;
-      testedAthleteCount: number;
+      testDurationMin: number | null;
       recoveryDurationMin: number | null;
       specialDurationMin: number | null;
       specialDistanceKm: number | null;

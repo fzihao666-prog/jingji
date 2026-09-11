@@ -5,8 +5,8 @@ const row: SpecialSession = { id: 1, date: '2026-09-01', athleteId: 1, athleteNa
 const result = aggregateSpecialTraining([row, { ...row, id: 2, content: '恢复拉伸' }, { ...row, id: 3, sessionDemo: 1 }, { ...row, id: 4, sessionSource: 'initial_seed' }]);
 assert.equal(result.summary.sessionCount, 1);
 assert.equal(result.summary.load, 360);
-assert.equal(result.intensity[0].name, 'UT2', '原始强度不能转换为其他体系');
-assert.equal(result.intensity[0].percentage, 100);
+assert.deepEqual(result.intensity.map((item) => item.name), ['UT3', 'UT2', 'AN'], '专项强度表必须固定展示UT3与AN，并保留原始强度');
+assert.deepEqual(result.intensity.map((item) => item.percentage), [0, 100, 0]);
 assert.deepEqual(result.content, [{ name: '水上', count: 1, percentage: 100 }]);
 const missing = aggregateSpecialTraining([{ ...row, durationReported: false, distanceReported: false, rpe: null, srpe: 0 }]);
 assert.equal(missing.summary.durationMin, null);
