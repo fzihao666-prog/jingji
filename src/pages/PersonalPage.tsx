@@ -1,10 +1,10 @@
 import { BrainCircuit, CalendarRange, CheckCircle2, Gauge, Route, Save, Search, Trophy } from 'lucide-react';
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
-import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import { AppCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { BodyCompositionModelOverview, type BodyCompositionProfile } from '../components/AthleteProfileCharts';
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
@@ -157,6 +157,22 @@ export function PersonalPage(props: Props) {
     };
   }, [selectedAthlete, bodyHistory, props.to]);
 
+  // 身体成分专业报告的旧组件会为缺失字段生成展示值；档案页只在资料完整时复用，避免把模拟值带入正式档案。
+  const hasCompleteBodyComposition = useMemo(() => {
+    if (!bodyCompositionProfile) return false;
+    return [
+      bodyCompositionProfile.heightCm, bodyCompositionProfile.weightKg, bodyCompositionProfile.bodyFatPct,
+      bodyCompositionProfile.skeletalMuscleKg, bodyCompositionProfile.totalBodyWaterKg,
+      bodyCompositionProfile.basalMetabolismKcal, bodyCompositionProfile.phaseAngleDeg,
+      bodyCompositionProfile.ecwTbwRatio, bodyCompositionProfile.visceralFatLevel,
+      bodyCompositionProfile.visceralFatAreaCm2, bodyCompositionProfile.leftArmLeanKg,
+      bodyCompositionProfile.rightArmLeanKg, bodyCompositionProfile.trunkLeanKg,
+      bodyCompositionProfile.leftLegLeanKg, bodyCompositionProfile.rightLegLeanKg,
+      bodyCompositionProfile.tricepsSkinfoldMm, bodyCompositionProfile.abdominalSkinfoldMm,
+      bodyCompositionProfile.thighSkinfoldMm, bodyCompositionProfile.calfSkinfoldMm
+    ].every((value) => value !== null);
+  }, [bodyCompositionProfile]);
+
   useEffect(() => {
     setPositionDraft(selectedAthlete?.athletePosition || '');
     setPositionMessage('');
@@ -186,10 +202,11 @@ export function PersonalPage(props: Props) {
     if (props.from === addDays(props.to, -29)) return { label: '月' } as const;
     return { label: '所选周期' } as const;
   }, [props.from, props.to]);
+  const trainingYears = ageAtDate(selectedAthlete?.startSportDate || null, props.to);
 
   return (
     <PageContainer className="personal-page">
-      <PageHeader eyebrow="ATHLETE PERFORMANCE" title="运动员表现"/>
+      <PageHeader eyebrow="ATHLETE PROFILE" title="运动员档案"/>
 
       {canSwitchAthlete && (
         <section className="performance-athlete-picker">
@@ -224,65 +241,114 @@ export function PersonalPage(props: Props) {
         <ContentState kind="empty" className="personal-empty" icon={<CalendarRange size={34} />} title="暂无可展示运动员" description="请切换到有运动员数据的项目，或通过上方搜索选择运动员。"/>
       ) : (
         <>
-          <section className="personal-identity-card">
-            <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
-              {selectedAthlete.photoUrl
-                ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
-                : selectedAthlete.name.slice(0, 1)}
-            </div>
-            <div className="personal-identity-copy">
-              <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
-              <h2>{selectedAthlete.name}</h2>
-              <p>{selectedAthlete.province}{selectedAthlete.city}{selectedAthlete.county} · 位置/号位 {selectedAthlete.athletePosition || '未填写'} · 教练 {selectedAthlete.coaches || '未绑定'}</p>
-              {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
-                <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
-                <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
-                {positionMessage && <small>{positionMessage}</small>}
-              </form>}
-            </div>
-            <div className="personal-grade" style={{ '--grade-color': rangeAnalysis.status.color } as CSSProperties}>
-              <span>{rangeMode.label}分级</span>
-              <strong>{rangeAnalysis.status.label}</strong>
-              <small>{rangeAnalysis.status.basis}</small>
-            </div>
+          <section className="personal-profile-section" aria-label="个人信息">
+            <SectionHeader title="个人信息" description="运动员基础档案" />
+            <section className="personal-identity-card">
+              <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
+                {selectedAthlete.photoUrl
+                  ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
+                  : selectedAthlete.name.slice(0, 1)}
+              </div>
+              <div className="personal-identity-copy">
+                <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
+                <h2>{selectedAthlete.name}</h2>
+                <p>{selectedAthlete.province}{selectedAthlete.city}{selectedAthlete.county}</p>
+                {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
+                  <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
+                  <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
+                  {positionMessage && <small>{positionMessage}</small>}
+                </form>}
+              </div>
+              <dl className="personal-detail-grid">
+                <ProfileDetail label="姓名" value={selectedAthlete.name} />
+                <ProfileDetail label="性别" value={selectedAthlete.gender} />
+                <ProfileDetail label="年龄 / 出生日期" value={selectedAthlete.birthDate ? `${ageAtDate(selectedAthlete.birthDate, props.to) ?? '—'} 岁 · ${selectedAthlete.birthDate}` : ''} />
+                <ProfileDetail label="身高" value={bodyCompositionProfile?.heightCm === null || bodyCompositionProfile?.heightCm === undefined ? '' : `${formatNumber(bodyCompositionProfile.heightCm, 1)} cm`} />
+                <ProfileDetail label="体重" value={bodyCompositionProfile?.weightKg === null || bodyCompositionProfile?.weightKg === undefined ? '' : `${formatNumber(bodyCompositionProfile.weightKg, 1)} kg`} />
+                <ProfileDetail label="项目" value={selectedAthlete.project} />
+                <ProfileDetail label="小项" value={selectedAthlete.currentEvent} />
+                <ProfileDetail label="队伍" value={selectedAthlete.team} />
+                <ProfileDetail label="运动等级" value={selectedAthlete.technicalLevel} />
+                <ProfileDetail label="训练年限" value={trainingYears === null ? '' : `${trainingYears} 年`} note={selectedAthlete.startSportDate ? `起训：${selectedAthlete.startSportDate}` : undefined} />
+                <ProfileDetail label="教练" value={selectedAthlete.coaches} />
+                <ProfileDetail label="最好成绩" value={selectedAthlete.bestResult} />
+              </dl>
+            </section>
           </section>
 
-          <section className="personal-metric-grid">
-            <PersonalMetric icon={Gauge} label={`${rangeMode.label}负荷`} value={formatNumber(rangeAnalysis.totalSrpe)} unit="SRPE" />
-            <PersonalMetric icon={Route} label="专项距离" value={formatNumber(rangeAnalysis.totalDistanceKm, 1)} unit="km" />
-            <PersonalMetric icon={CalendarRange} label="训练课次" value={String(rangeAnalysis.sessions)} unit="课" />
-            <PersonalMetric icon={CheckCircle2} label="数据完整率" value={formatNumber(rangeAnalysis.dataCoverage, 1)} unit="%" />
-          </section>
-
-          <AppCard variant="chart" className="professional-panel body-composition-card personal-body-assessment-card">
+          <section className="personal-profile-section" aria-label="制胜要素分析">
+            <SectionHeader title="身体成分" description="已录入的实测身体成分资料" />
+            <AppCard variant="chart" className="professional-panel body-composition-card personal-body-assessment-card">
             <header className="personal-body-assessment-heading">
               <div><span>PHYSIQUE ASSESSMENT</span><h2>运动员身体成分评估</h2><p>节段去脂、肌脂平衡、水合状态与复测趋势</p></div>
               <small>{bodyHistoryLoading ? '正在读取身体成分历史…' : `已读取 ${bodyHistory.length} 次实测记录`}</small>
             </header>
-            <BodyCompositionModelOverview profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []} records={selectedRecords} individual />
-            <p className="analysis-method-note">身体成分用于训练适应、营养干预和控重阶段观察；模拟项仅用于展示，录入实测值后自动替换。</p>
-          </AppCard>
+            {hasCompleteBodyComposition
+              ? <BodyCompositionModelOverview profiles={[bodyCompositionProfile!]} records={selectedRecords} individual />
+              : <ContentState kind="empty" title="身体成分资料尚未完整" description="补齐已录入的实测身体成分字段后，将在此展示现有身体成分评估。" />}
+              <p className="analysis-method-note">身体成分用于训练适应、营养干预和控重阶段观察；以已录入的实测资料为准。</p>
+            </AppCard>
 
-          <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-fms-card">
+            <SectionHeader title="FMS 功能动作筛查" description="标准七项测试与纠正训练优先级" />
+            <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-fms-card">
             <header className="personal-analysis-card-heading">
               <div><BrainCircuit size={17} /><span><small>FMS SCREENING</small><h2>个人FMS测试分析</h2><p>标准七项、21分制与纠正训练优先级</p></span></div>
               <strong>{profileAnalysisLoading ? '读取中' : `${profileMeasurements.filter((item) => item.domain === 'fms' && item.value !== null).length} 项有效`}</strong>
             </header>
             {profileAnalysisLoading ? <div className="professional-chart-empty">正在读取个人FMS测试…</div> : <FmsPersonalChart measurements={profileMeasurements} />}
             <p className="analysis-method-note">FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。</p>
-          </AppCard>
+            </AppCard>
 
-          <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-champion-card">
+            <SectionHeader title="运动损伤" description="当前伤病状态与恢复记录" />
+            <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />
+
+            <ArchivePlaceholder title="专项测试" description="暂无可直接复用且已按个人范围筛选的专项测试模块。" />
+
+            <ArchivePlaceholder title="体能测试" description="个人力量测试档案统一置于页面底部展示。" />
+
+            <ArchivePlaceholder title="有氧耐力" description="暂无可直接复用的个人有氧耐力模块。" />
+
+            <SectionHeader title="综合能力参考" description="现有冠军模型参考资料" />
+            <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-champion-card">
             <header className="personal-analysis-card-heading">
-              <div><Trophy size={17} /><span><small>CHAMPION RADAR</small><h2>冠军模型八维雷达分析</h2><p>当前水平、冠军标准、维度差距与补强优先级</p></span></div>
+              <div><Trophy size={17} /><span><small>WINNING FACTORS</small><h2>制胜要素分析</h2><p>当前水平、冠军标准、维度差距与补强优先级</p></span></div>
               <strong>八维雷达</strong>
             </header>
             <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
             <p className="analysis-method-note">八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。</p>
-          </AppCard>
+            </AppCard>
+          </section>
 
-          <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />
-          <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
+          <section className="personal-profile-section" aria-label="训练情况">
+            <SectionHeader title="训练情况" description={`${props.from} 至 ${props.to} · 按既有个人训练记录汇总`} />
+            <ArchivePlaceholder title="专项训练" description="暂无可直接复用且已按个人范围筛选的专项训练模块。" />
+            <ArchivePlaceholder title="体能训练" description="暂无可直接复用的个人体能训练看板。" />
+            <SectionHeader title="个人训练汇总" description="当前周期全部个人训练记录的既有汇总" />
+            <section className="personal-metric-grid">
+              <PersonalMetric icon={Gauge} label={`${rangeMode.label}负荷`} value={formatNumber(rangeAnalysis.totalSrpe)} unit="SRPE" />
+              <PersonalMetric icon={Route} label="专项距离" value={formatNumber(rangeAnalysis.totalDistanceKm, 1)} unit="km" />
+              <PersonalMetric icon={CalendarRange} label="训练课次" value={String(rangeAnalysis.sessions)} unit="课" />
+              <PersonalMetric icon={CheckCircle2} label="数据完整率" value={formatNumber(rangeAnalysis.dataCoverage, 1)} unit="%" />
+            </section>
+          </section>
+
+          <section className="personal-profile-section" aria-label="生理生化与恢复">
+            <SectionHeader title="生理生化与恢复" description="按生理指标与日常恢复指标顺序预留" />
+            <ArchivePlaceholder title="生理生化" description="暂无可直接复用的个人生理生化模块。" />
+            <ArchivePlaceholder title="RPE" description="暂无可直接复用的个人 RPE 趋势模块。" />
+            <ArchivePlaceholder title="睡眠时长" description="暂无可直接复用的个人睡眠时长模块。" />
+            <ArchivePlaceholder title="晨脉" description="暂无可直接复用的个人晨脉模块。" />
+            <ArchivePlaceholder title="体重" description="暂无可直接复用的个人体重模块。" />
+          </section>
+
+          <section className="personal-profile-section" aria-label="个人与团队对比">
+            <SectionHeader title="个人与团队对比" description="预留个人与团队均值、排名等对比能力" />
+            <AppCard variant="compact"><ContentState kind="empty" title="暂无可直接复用的个人与团队对比模块" description="本页暂不新增团队均值、排名或对比计算逻辑。" /></AppCard>
+          </section>
+
+          <section className="personal-profile-section" aria-label="运动员表现档案">
+            <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
+          </section>
         </>
       )}
     </PageContainer>
@@ -291,6 +357,17 @@ export function PersonalPage(props: Props) {
 
 function PersonalMetric({ icon: Icon, label, value, unit }: { icon: typeof Gauge; label: string; value: string; unit: string }) {
   return <article><Icon size={19} /><span>{label}</span><strong>{value}<small>{unit}</small></strong></article>;
+}
+
+function ProfileDetail({ label, value, note }: { label: string; value: string; note?: string }) {
+  return <div><dt>{label}</dt><dd>{value || '未填写'}</dd>{note && <small>{note}</small>}</div>;
+}
+
+function ArchivePlaceholder({ title, description }: { title: string; description: string }) {
+  return <section className="personal-profile-subsection">
+    <SectionHeader title={title} />
+    <AppCard variant="compact"><ContentState className="personal-profile-placeholder" kind="empty" title="暂未接入" description={description} /></AppCard>
+  </section>;
 }
 
 function analyzerForProject(project: string) {
