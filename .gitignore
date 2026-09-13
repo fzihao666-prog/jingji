@@ -9,3 +9,4 @@ data/.jwt-secret
 *.log
 tmp/
 .idea/
+**/.DS_Store
