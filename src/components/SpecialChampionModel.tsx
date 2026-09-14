@@ -12,29 +12,6 @@ type EventRow = {
   standards: Partial<Record<ChampionModelStandardType, SpecialChampionModelEvent>>;
 };
 
-function eventGroups(events: SpecialChampionModelEvent[]) {
-  const groups = new Map<string, Map<string, EventRow>>();
-  for (const event of events) {
-    const group = groups.get(event.eventGroup) || new Map<string, EventRow>();
-    const row = group.get(event.eventCode) || { eventCode: event.eventCode, eventName: event.eventName, standards: {} };
-    row.standards[event.standardType] = event;
-    group.set(event.eventCode, row);
-    groups.set(event.eventGroup, group);
-  }
-  return [...groups.entries()].map(([name, rows]) => ({ name, rows: [...rows.values()] }));
-}
-
-function StandardCell({ event }: { event?: SpecialChampionModelEvent }) {
-  if (!event?.bestPerformance) return <span className="champion-pending">待核实</span>;
-  const summary = [event.competition, event.location].filter(Boolean).join(' · ');
-  const detail = [event.competition, event.location, event.competitionDate].filter(Boolean).join('\n');
-  return <div className="champion-standard-cell">
-    <strong>{event.bestPerformance}</strong>
-    <b>{event.country || '待核实'}</b>
-    {summary ? <span title={detail}>{summary}</span> : null}
-  </div>;
-}
-
 export function SpecialChampionModel({ project }: { project: Project }) {
   const [model, setModel] = useState<SpecialChampionModelPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,34 +29,40 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     return () => { ignored = true; };
   }, [project]);
 
-  const groups = useMemo(() => eventGroups(model?.events || []), [model]);
+  const events = model?.events || [];
   const content = loading
     ? <ContentState kind="loading" title="正在读取冠军模型配置" />
     : error
       ? <ContentState kind="error" title="冠军模型暂不可用" description={error} />
-      : !groups.length
+      : !events.length
         ? <ContentState kind="empty" title="模型数据待配置" description={`尚未配置${projectLabel(project)}的专项细分项目与标杆成绩。`} />
-        : <div className="champion-model-groups">
-          {groups.map((group) => <section key={group.name} className="champion-model-group">
-            <h3>{group.name}</h3>
-            <div className="champion-table-scroll">
-              <table className="champion-model-table">
-                <thead>
-                  <tr>
-                    <th scope="col">小项</th>
-                    {CHAMPION_MODEL_STANDARD_TYPES.map((type) => <th key={type} scope="col">{CHAMPION_MODEL_STANDARD_LABELS[type]}</th>)}
+        : <div className="champion-table-scroll">
+            <table className="champion-model-table">
+              <thead>
+                <tr>
+                  <th scope="col">项目</th>
+                  <th scope="col">国家</th>
+                  <th scope="col">最好成绩</th>
+                  <th scope="col">配速</th>
+                  <th scope="col">赛事</th>
+                  <th scope="col">比赛地点</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {events.map((event) => (
+                  <tr key={event.eventCode}>
+                    <th scope="row">{event.eventName}</th>
+                    <td>{event.country || '待核实'}</td>
+                    <td>{event.bestPerformance || '待核实'}</td>
+                    <td>{event.pace || '待核实'}</td>
+                    <td>{event.competition || '待核实'}</td>
+                    <td>{event.location || '待核实'}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {group.rows.map((row) => <tr key={row.eventCode}>
-                    <th scope="row">{row.eventName}</th>
-                    {CHAMPION_MODEL_STANDARD_TYPES.map((type) => <td key={type}><StandardCell event={row.standards[type]} /></td>)}
-                  </tr>)}
-                </tbody>
-              </table>
-            </div>
-          </section>)}
-        </div>;
+                ))}
+              </tbody>
+            </table>
+          </div>;
 
   return <AppCard variant="chart" className="professional-panel special-champion-model">
     <SectionHeader

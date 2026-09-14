@@ -608,15 +608,13 @@ export type ChampionBenchmarkPayload = {
 };
 
 export type SpecialChampionModelEvent = {
-  standardType: ChampionModelStandardType;
   eventCode: string;
   eventName: string;
-  eventGroup: string;
   country: string | null;
   bestPerformance: string | null;
+  pace: string | null;
   competition: string | null;
   location: string | null;
-  competitionDate: string | null;
 };
 
 export type SpecialChampionModelPayload = {

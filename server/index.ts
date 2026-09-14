@@ -3860,13 +3860,17 @@ app.get('/api/special-champion-models', requireAuth, (req, res) => {
   if (!projectAllowed) return res.status(403).json({ message: '无权查看当前项目的冠军模型。' });
 
   const events = db.prepare(`
-    SELECT standard_type AS standardType, event_code AS eventCode, event_name AS eventName,
-      event_group AS eventGroup, country, best_performance AS bestPerformance,
-      competition, location, competition_date AS competitionDate
+    SELECT 
+      event_code AS eventCode, 
+      event_name AS eventName,
+      country, 
+      best_performance AS bestPerformance,
+      pace,
+      competition, 
+      location
     FROM special_champion_models
     WHERE project = ? AND active = 1
-    ORDER BY sort_order, event_group, event_code,
-      CASE standard_type WHEN 'ASIA' THEN 1 WHEN 'INTERNATIONAL' THEN 2 ELSE 3 END
+    ORDER BY sort_order, event_code
   `).all(project);
   res.json({ project, events });
 });

@@ -25,6 +25,23 @@ const DataImportPage = lazy(() => import('./pages/DataImportPage').then((module)
 const DataManagementPage = lazy(() => import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage })));
 
 const today = toIsoDate(new Date());
+const pageKeys: PageKey[] = [
+  'overview',
+  'special-overview', 'special-volume', 'special-time', 'special-distance', 'special-load', 'special-rate', 'special-heart', 'special-power', 'special-records', 'special-schedule',
+  'strength-overview', 'strength-plan', 'strength-records', 'strength-analysis', 'strength-assessment',
+  'physiology-biochemistry', 'athletes', 'personal', 'coaches', 'teams', 'regions', 'accounts',
+  'bluetooth', 'data-import', 'data-import-history', 'data-management'
+];
+
+function pageFromHash(): PageKey {
+  const key = window.location.hash.replace(/^#\/?/, '');
+  return pageKeys.includes(key as PageKey) ? key as PageKey : 'overview';
+}
+
+function writePageHash(page: PageKey) {
+  const nextHash = `#/${page}`;
+  if (window.location.hash !== nextHash) window.history.pushState(null, '', nextHash);
+}
 
 function orderedProjects(values: string[]) {
   const available = new Set(values.filter(isProject));
@@ -34,7 +51,7 @@ function orderedProjects(values: string[]) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
-  const [page, setPage] = useState<PageKey>('overview');
+  const [page, setPage] = useState<PageKey>(() => pageFromHash());
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
   const [from, setFrom] = useState(addDays(today, -29));
@@ -45,6 +62,17 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [globalError, setGlobalError] = useState('');
+
+  useEffect(() => {
+    const syncPageFromHash = () => setPage(pageFromHash());
+    window.addEventListener('hashchange', syncPageFromHash);
+    return () => window.removeEventListener('hashchange', syncPageFromHash);
+  }, []);
+
+  const changePage = (nextPage: PageKey) => {
+    setPage(nextPage);
+    writePageHash(nextPage);
+  };
 
   useEffect(() => {
     if (!getToken()) return;
@@ -105,7 +133,7 @@ export default function App() {
     setToken(token);
     setUser(current);
     setAthleteId(current.role === 'ATL' ? current.athleteId : null);
-    setPage('overview');
+    changePage('overview');
   };
 
   const logout = () => {
@@ -149,7 +177,7 @@ export default function App() {
   const usesGlobalTrainingFilter = page === 'overview' || page === 'physiology-biochemistry' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
 
   return (
-    <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
+    <AppShell user={user} page={page} onPageChange={changePage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
       {globalError && <div className="global-error">{globalError}</div>}
       {usesGlobalTrainingFilter && <div className="global-training-filter">
         <DateToolbar
@@ -159,16 +187,16 @@ export default function App() {
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
-        {page === 'special-overview' && <SpecialTrainingDashboard project={project} from={from} to={to} onRecordsOpen={() => setPage('special-records')} />}
-        {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={setPage} />}
-        {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} onAthleteChange={setAthleteId} />}
-        {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'special-overview' && <SpecialTrainingDashboard project={project} from={from} to={to} onRecordsOpen={() => changePage('special-records')} />}
+        {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={changePage} />}
+        {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={changePage} onAthleteChange={setAthleteId} />}
+        {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={changePage} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'physiology-biochemistry' && <PhysiologyBiochemistryPage project={project} from={from} to={to} />}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="import" onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'data-import-history' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="history" onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage user={user} />}
-        {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}
+        {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); changePage('personal'); }} />}
         {page === 'personal' && <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'coaches' && user.role !== 'ATL' && <CoachManagementPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
