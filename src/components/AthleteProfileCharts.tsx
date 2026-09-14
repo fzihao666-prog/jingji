@@ -543,6 +543,8 @@ const chinaProvincePaths = ChinaData.features.map((feature) => ({
   path: chinaPath(feature) || ''
 }));
 
+//输送单位
+
 export function BirthplaceMapOverview({ profiles, individual }: { profiles: OverviewAthleteProfile[]; individual: boolean }) {
   const available = profiles.filter((profile) => profile.province && profile.province !== '未设置');
   const provinces = useMemo(() => {
@@ -553,8 +555,6 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
       .sort((a, b) => b.count - a.count || a.province.localeCompare(b.province, 'zh-CN'));
   }, [profiles]);
   const [activeProvince, setActiveProvince] = useState('');
-  const pendingProvince = useRef('');
-  const hoverFrame = useRef<number | null>(null);
   const defaultProvinceReady = useRef(false);
   const originKey = provinces.map((item) => `${item.province}:${item.count}`).join('|');
 
@@ -569,25 +569,10 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
     });
   }, [originKey]);
 
-  useEffect(() => () => {
-    if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
-  }, []);
-
-  const activateProvince = useCallback((province: string, immediate = false) => {
-    if (immediate) {
-      if (hoverFrame.current !== null) {
-        cancelAnimationFrame(hoverFrame.current);
-        hoverFrame.current = null;
-      }
-      setActiveProvince((current) => current === province ? current : province);
-      return;
-    }
-    pendingProvince.current = province;
-    if (hoverFrame.current !== null) return;
-    hoverFrame.current = requestAnimationFrame(() => {
-      hoverFrame.current = null;
-      setActiveProvince((current) => current === pendingProvince.current ? current : pendingProvince.current);
-    });
+  const selectProvince = useCallback((province: string) => {
+    setActiveProvince((current) => 
+      current === province ? current : province
+    );
   }, []);
 
   const active = provinces.find((item) => item.province === activeProvince);
@@ -623,20 +608,18 @@ export function BirthplaceMapOverview({ profiles, individual }: { profiles: Over
                 tabIndex={0}
                 aria-label={`${province.name}，${count}名运动员`}
                 aria-pressed={activePath}
-                onMouseEnter={() => activateProvince(province.name)}
-                onFocus={() => activateProvince(province.name, true)}
-                onClick={() => activateProvince(province.name, true)}
+                onClick={() => selectProvince(province.name)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    activateProvince(province.name, true);
+                    selectProvince(province.name);
                   }
                 }}
               />
             );
           })}
         </svg>
-        <div className="birthplace-map-legend"><span>少</span><i /><span>多</span><em>滑过省份查看详情</em></div>
+        {/* <div className="birthplace-map-legend"><span>少</span><i /><span>多</span><em>滑过省份查看详情</em></div> */}
       </div>
 
       <aside className="birthplace-detail" aria-live="polite">
