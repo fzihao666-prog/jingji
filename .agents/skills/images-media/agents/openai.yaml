@@ -1,0 +1,4 @@
+interface:
+  display_name: "Images and Media"
+  short_description: "Optimize images, fonts, and video delivery"
+  default_prompt: "Use $images-media to optimize these media assets and their delivery."

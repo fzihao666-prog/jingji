@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tooling Enforcement"
+  short_description: "Automate conventions with lint and config"
+  default_prompt: "Use $tooling to enforce this convention automatically."

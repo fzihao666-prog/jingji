@@ -1,0 +1,4 @@
+interface:
+  display_name: "Motion"
+  short_description: "Add performant accessible interface motion"
+  default_prompt: "Use $motion to add an appropriate accessible transition to this interface."

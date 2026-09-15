@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Visualization"
+  short_description: "Build accessible charts and data tables"
+  default_prompt: "Use $data-viz to build an accessible visualization for this data."

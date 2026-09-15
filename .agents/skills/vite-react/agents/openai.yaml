@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vite React SPA"
+  short_description: "Build standalone Vite and React applications"
+  default_prompt: "Use $vite-react to implement this standalone React SPA change."

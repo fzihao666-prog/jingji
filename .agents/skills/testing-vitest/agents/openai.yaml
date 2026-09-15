@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vitest Testing"
+  short_description: "Write focused unit tests for pure logic"
+  default_prompt: "Use $testing-vitest to add focused unit coverage for this logic."

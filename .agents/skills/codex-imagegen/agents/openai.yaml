@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Image Generation"
+  short_description: "Generate and edit raster image assets"
+  default_prompt: "Use $codex-imagegen to create the image asset described here."

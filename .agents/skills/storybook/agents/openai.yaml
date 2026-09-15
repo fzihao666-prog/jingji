@@ -1,0 +1,4 @@
+interface:
+  display_name: "Storybook"
+  short_description: "Write stories and component behavior tests"
+  default_prompt: "Use $storybook to add the story and play coverage for this component."

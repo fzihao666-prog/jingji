@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accessibility"
+  short_description: "Build and review accessible interfaces"
+  default_prompt: "Use $a11y to review this interface and fix accessibility issues."

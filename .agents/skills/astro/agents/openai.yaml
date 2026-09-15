@@ -1,0 +1,4 @@
+interface:
+  display_name: "Astro"
+  short_description: "Build with Astro conventions"
+  default_prompt: "Use $astro to implement this change with the project's Astro conventions."

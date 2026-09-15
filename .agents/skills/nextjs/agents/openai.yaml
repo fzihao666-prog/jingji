@@ -1,0 +1,4 @@
+interface:
+  display_name: "Next.js"
+  short_description: "Build with Next.js App Router conventions"
+  default_prompt: "Use $nextjs to implement this App Router change correctly."

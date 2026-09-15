@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright Testing"
+  short_description: "Write reliable browser journey tests"
+  default_prompt: "Use $testing-playwright to cover this critical browser journey."

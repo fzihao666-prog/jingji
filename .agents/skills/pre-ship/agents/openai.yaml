@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pre-ship Verification"
+  short_description: "Run the complete pre-merge verification"
+  default_prompt: "Use $pre-ship to verify the current change before it ships."

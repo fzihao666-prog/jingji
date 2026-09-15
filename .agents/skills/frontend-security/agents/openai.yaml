@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Security"
+  short_description: "Secure frontend and BFF boundaries"
+  default_prompt: "Use $frontend-security to review and secure the boundaries in this change."

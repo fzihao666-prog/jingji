@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Codex Frontend Skills pre-ship evidence v1",
+  "type": "object",
+  "required": ["protocol", "generated_at", "scope", "checks", "verdict", "blockers"],
+  "properties": {
+    "protocol": { "const": "codex-frontend-skills-pre-ship-evidence-v1" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "scope": {
+      "type": "object",
+      "required": ["revision", "files"],
+      "properties": {
+        "revision": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "files": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "status", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "maxLength": 80 },
+          "kind": { "enum": ["command", "browser_journey", "visual", "audit", "review", "human"] },
+          "status": { "enum": ["PASS", "FAIL", "NOT_CONFIGURED", "NOT_APPLICABLE", "SKIPPED", "DEGRADED", "HUMAN_VERIFICATION_REQUIRED"] },
+          "command": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "exit_code": { "type": "integer", "minimum": 0, "maximum": 255 },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "artifact": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "evidence": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "verdict": { "enum": ["READY", "NOT_READY"] },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+    }
+  },
+  "additionalProperties": false
+}

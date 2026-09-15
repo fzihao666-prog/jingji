@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design System"
+  short_description: "Create consistent reusable UI primitives"
+  default_prompt: "Use $design-system to implement this reusable interface consistently."

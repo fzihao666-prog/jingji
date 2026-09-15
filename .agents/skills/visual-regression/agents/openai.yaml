@@ -1,0 +1,4 @@
+interface:
+  display_name: "Visual Regression"
+  short_description: "Create deterministic visual regression tests"
+  default_prompt: "Use $visual-regression to add stable screenshot coverage for this UI."

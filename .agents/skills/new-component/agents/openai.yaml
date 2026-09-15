@@ -1,0 +1,4 @@
+interface:
+  display_name: "New Component"
+  short_description: "Scaffold a complete repo-standard component"
+  default_prompt: "Use $new-component to create this component with its styles and story."

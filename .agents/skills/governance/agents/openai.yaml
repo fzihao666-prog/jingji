@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repository Governance"
+  short_description: "Define CI, release, and dependency policy"
+  default_prompt: "Use $governance to design the repository policy for this change."

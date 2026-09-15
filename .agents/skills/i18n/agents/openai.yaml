@@ -1,0 +1,4 @@
+interface:
+  display_name: "Internationalization"
+  short_description: "Implement locale-aware interfaces"
+  default_prompt: "Use $i18n to make this interface locale-aware and translatable."

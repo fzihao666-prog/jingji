@@ -1,0 +1,4 @@
+interface:
+  display_name: "React Patterns"
+  short_description: "Build predictable React components and hooks"
+  default_prompt: "Use $react-patterns to implement or improve this React code."
