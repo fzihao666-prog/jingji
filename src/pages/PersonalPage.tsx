@@ -29,6 +29,23 @@ type Props = {
   onChanged: () => void;
 };
 
+type ProfileDetail = { label: string; value: string | number | null | undefined; wide?: boolean };
+
+function profileValue(value: ProfileDetail['value']) {
+  return value === null || value === undefined || String(value).trim() === '' ? '未填写' : String(value);
+}
+
+function ProfileDetailGroup({ title, fields }: { title: string; fields: ProfileDetail[] }) {
+  return (
+    <section className="personal-detail-group">
+      <h3>{title}</h3>
+      <dl className="personal-detail-list">
+        {fields.map((field) => <div key={field.label} className={field.wide ? 'wide' : ''}><dt>{field.label}</dt><dd>{profileValue(field.value)}</dd></div>)}
+      </dl>
+    </section>
+  );
+}
+
 function ageAtDate(birthDate: string | null, date: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T12:00:00`);
@@ -37,6 +54,17 @@ function ageAtDate(birthDate: string | null, date: string) {
   let age = target.getFullYear() - birth.getFullYear();
   if (target.getMonth() < birth.getMonth() || (target.getMonth() === birth.getMonth() && target.getDate() < birth.getDate())) age -= 1;
   return age >= 0 ? age : null;
+}
+
+function trainingExperience(startDate: string, date: string) {
+  const start = new Date(`${startDate}T12:00:00`);
+  const target = new Date(`${date}T12:00:00`);
+  if (!startDate || !Number.isFinite(start.getTime()) || !Number.isFinite(target.getTime()) || start > target) return null;
+  let months = (target.getFullYear() - start.getFullYear()) * 12 + target.getMonth() - start.getMonth();
+  if (target.getDate() < start.getDate()) months -= 1;
+  const years = Math.floor(Math.max(months, 0) / 12);
+  const remainingMonths = Math.max(months, 0) % 12;
+  return remainingMonths ? `${years}年${remainingMonths}个月` : `${years}年`;
 }
 
 export function PersonalPage(props: Props) {
@@ -193,6 +221,44 @@ export function PersonalPage(props: Props) {
     if (props.from === addDays(props.to, -29)) return { label: '月' } as const;
     return { label: '所选周期' } as const;
   }, [props.from, props.to]);
+  const profileGroups = selectedAthlete ? [
+    {
+      title: '基本资料',
+      fields: [
+        { label: '性别', value: selectedAthlete.gender },
+        { label: '出生日期', value: selectedAthlete.birthDate },
+        { label: '年龄', value: ageAtDate(selectedAthlete.birthDate, props.to) === null ? null : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁` },
+        { label: '民族', value: selectedAthlete.ethnicity },
+        { label: '血型', value: selectedAthlete.bloodType },
+        { label: '身份证号', value: selectedAthlete.identityNumber },
+        { label: '学历', value: selectedAthlete.education },
+        { label: '籍贯', value: selectedAthlete.nativePlace },
+        { label: '所属区域', value: [selectedAthlete.region, selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join(' · ') },
+        { label: '家庭住址', value: selectedAthlete.homeAddress, wide: true }
+      ]
+    },
+    {
+      title: '竞技与训练信息',
+      fields: [
+        { label: '运动项目', value: selectedAthlete.project },
+        { label: '所属队伍', value: selectedAthlete.team },
+        { label: '当前小项', value: selectedAthlete.currentEvent },
+        { label: '位置/号位', value: selectedAthlete.athletePosition },
+        { label: '技术等级', value: selectedAthlete.technicalLevel },
+        { label: '运动员状态', value: selectedAthlete.athleteStatus },
+        { label: '专项特长', value: selectedAthlete.specialties },
+        { label: '主管教练', value: selectedAthlete.coaches },
+        { label: '训练年限', value: trainingExperience(selectedAthlete.startSportDate, props.to) },
+        { label: '最佳成绩', value: selectedAthlete.bestResult, wide: true }
+      ]
+    },
+    {
+      title: '健康与联络',
+      fields: [
+        { label: '健康状态', value: selectedAthlete.healthStatus }
+      ]
+    }
+  ] : [];
 
   return (
     <PageContainer className="personal-page">
@@ -241,25 +307,30 @@ export function PersonalPage(props: Props) {
       ) : (
         <>
           <section className="personal-identity-card">
-            <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
-              {selectedAthlete.photoUrl
-                ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
-                : selectedAthlete.name.slice(0, 1)}
-            </div>
-            <div className="personal-identity-copy">
-              <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
-              <h2>{selectedAthlete.name}</h2>
-              <p>{selectedAthlete.province}{selectedAthlete.city}{selectedAthlete.county} · 位置/号位 {selectedAthlete.athletePosition || '未填写'} · 教练 {selectedAthlete.coaches || '未绑定'}</p>
-              {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
-                <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
-                <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
-                {positionMessage && <small>{positionMessage}</small>}
-              </form>}
-            </div>
-            <div className="personal-grade" style={{ '--grade-color': rangeAnalysis.status.color } as CSSProperties}>
-              <span>{rangeMode.label}分级</span>
-              <strong>{rangeAnalysis.status.label}</strong>
-              <small>{rangeAnalysis.status.basis}</small>
+            <header className="personal-profile-summary">
+              <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
+                {selectedAthlete.photoUrl
+                  ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
+                  : selectedAthlete.name.slice(0, 1)}
+              </div>
+              <div className="personal-identity-copy">
+                <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
+                <h2>{selectedAthlete.name}</h2>
+                <p>{[selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join('')} · {selectedAthlete.currentEvent || '未填写小项'} · {selectedAthlete.coaches || '未绑定教练'}</p>
+                {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
+                  <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
+                  <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
+                  {positionMessage && <small>{positionMessage}</small>}
+                </form>}
+              </div>
+              <div className="personal-grade" style={{ '--grade-color': rangeAnalysis.status.color } as CSSProperties}>
+                <span>{rangeMode.label}分级</span>
+                <strong>{rangeAnalysis.status.label}</strong>
+                <small>{rangeAnalysis.status.basis}</small>
+              </div>
+            </header>
+            <div className="personal-detail-grid">
+              {profileGroups.map((group) => <ProfileDetailGroup key={group.title} {...group} />)}
             </div>
           </section>
 
