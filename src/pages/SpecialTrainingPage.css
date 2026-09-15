@@ -5,10 +5,12 @@
 }
 
 .training-dashboard-page { display: grid; gap: var(--overview-gap); padding-bottom: 36px; }
-.special-champion-model { min-width: 0; display: grid; gap: 16px; }
+.special-champion-model { min-width: 0; display: grid; gap: 10px; }
 .special-champion-model .app-section-header { align-items: flex-start; }
 .special-champion-model .app-content-state { min-height: 126px; }
-.champion-model-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.champion-model-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.champion-model-head .panel-heading { min-height: 24px; margin-bottom: 0; padding-left: 0; }
+.champion-model-head .panel-heading h2 { line-height: 1.1; }
 .champion-model-section { min-width: 0; overflow: hidden; border: 1px solid #dce7e9; border-radius: 10px; background: linear-gradient(180deg, #fbfdfd 0%, #f7fbfb 100%); }
 .champion-model-section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #e1ebec; background: #f5faf9; }
 .champion-model-section-title strong { color: #203f48; font-size: 12px; font-weight: 900; }
@@ -25,6 +27,16 @@
 .champion-model-table tbody tr:hover > * { background: #f5fbfa; }
 .champion-model-table tbody > tr > th { color: #234b55; font-size: 10px; font-weight: 900; }
 .champion-model-table tbody td { font-variant-numeric: tabular-nums; }
+.rowing-world-best-table { min-width: 940px; table-layout: fixed; }
+.rowing-world-best-event { width: 210px; }
+.rowing-world-best-country { width: 88px; }
+.rowing-world-best-result { width: 112px; }
+.rowing-world-best-pace { width: 96px; }
+.rowing-world-best-competition { width: 250px; }
+.rowing-world-best-location { width: 184px; }
+.rowing-world-best-table th, .rowing-world-best-table td { padding: 10px 14px; }
+.rowing-world-best-table tbody > tr > th { white-space: normal; word-break: keep-all; line-height: 1.45; }
+.rowing-world-best-table tbody td:nth-child(3), .rowing-world-best-table tbody td:nth-child(4) { color: #0f756f; font-weight: 850; }
 .champion-standard-cell { min-width: 0; display: grid; gap: 3px; }
 .champion-standard-cell strong { color: #087b74; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.05; }
 .champion-standard-cell b { color: #405d65; font-size: 9px; font-weight: 700; }
@@ -39,6 +51,7 @@
 .ergometer-model-tabs button { height: 26px; padding: 0 8px; border: 0; border-radius: 6px; color: #607980; background: transparent; font: inherit; font-size: 9px; font-weight: 850; white-space: nowrap; cursor: pointer; }
 .ergometer-model-tabs button.active { color: #fff; background: #117d76; box-shadow: 0 4px 12px rgba(17,125,118,.18); }
 .ergometer-model-card .champion-model-table { min-width: 690px; }
+.ergometer-model-card .champion-table-scroll { max-height: 430px; scrollbar-gutter: stable; }
 .ergometer-model-card .champion-model-table th, .ergometer-model-card .champion-model-table td { padding: 7px 8px; text-align: center; }
 .ergometer-model-card .champion-model-table th:first-child { text-align: left; }
 .training-dashboard-champion .app-content-state { min-height: 118px; grid-template-columns: auto minmax(0, 1fr); text-align: left; justify-content: start; }

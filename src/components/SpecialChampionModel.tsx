@@ -131,7 +131,15 @@ export function SpecialChampionModel({ project }: { project: Project }) {
       : !events.length
         ? <ContentState kind="empty" title="模型数据待配置" description={`尚未配置${projectLabel(project)}的专项细分项目与标杆成绩。`} />
         : <div className="champion-table-scroll">
-          <table className="champion-model-table">
+          <table className="champion-model-table rowing-world-best-table">
+            <colgroup>
+              <col className="rowing-world-best-event" />
+              <col className="rowing-world-best-country" />
+              <col className="rowing-world-best-result" />
+              <col className="rowing-world-best-pace" />
+              <col className="rowing-world-best-competition" />
+              <col className="rowing-world-best-location" />
+            </colgroup>
             <thead>
               <tr>
                 <th scope="col">项目</th>
@@ -237,13 +245,12 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     <div className="champion-model-head">
       <SectionHeader
         title="冠军模型"
-        description={`${projectLabel(project)}专项标杆、测功仪分级与配速口径统一展示`}
         icon={<Trophy size={17} />}
       />
     </div>
     <div className="champion-model-section">
       <div className="champion-model-section-title">
-        <strong>专项小项标杆</strong>
+        <strong>世界最好成绩</strong>
         <span>最好成绩、配速与赛事来源</span>
       </div>
       {content}
@@ -252,7 +259,7 @@ export function SpecialChampionModel({ project }: { project: Project }) {
       <section className="ergometer-model-card">
         <div className="ergometer-model-head">
           <div>
-            <strong>男子测功仪模型</strong>
+            <strong>男子陆上赛艇冠军模型</strong>
             <span>{ergometerValueLabel(maleTestType)}</span>
           </div>
           <ErgometerTabs
@@ -265,7 +272,7 @@ export function SpecialChampionModel({ project }: { project: Project }) {
       <section className="ergometer-model-card">
         <div className="ergometer-model-head">
           <div>
-            <strong>女子测功仪模型</strong>
+            <strong>女子陆上赛艇冠军模型</strong>
             <span>{ergometerValueLabel(femaleTestType)}</span>
           </div>
           <ErgometerTabs
