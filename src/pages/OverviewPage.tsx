@@ -116,9 +116,9 @@ export function OverviewPage(props: Props) {
   const [teamTrainingOverview, setTeamTrainingOverview] = useState<OverviewPayload | null>(null);
   const [teamTrainingLoading, setTeamTrainingLoading] = useState(false);
   const isSelfOverview = props.user.role === 'ATL';
-  const isIndividualOverview = isSelfOverview || props.athleteId !== null;
+  const isIndividualOverview = isSelfOverview;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
-  const overviewAthleteId = isSelfOverview ? props.user.athleteId : props.athleteId;
+  const overviewAthleteId = isSelfOverview ? props.user.athleteId : null;
   useEffect(() => {
     if (props.athleteId !== overviewAthleteId) props.onAthleteChange(overviewAthleteId);
   }, [overviewAthleteId, props.athleteId, props.onAthleteChange]);

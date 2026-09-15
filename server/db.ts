@@ -3220,6 +3220,15 @@ runInitializationOnce(
   seedCurrentOlympicRowingWorldBestSortOrder
 );
 
+runInitializationOnce(
+  'rowing_world_best_records_schema_reset_repair_v1',
+  () => {
+    seedRowingWorldBestRecords();
+    seedCurrentOlympicRowingWorldBestRecords();
+    seedCurrentOlympicRowingWorldBestSortOrder();
+  }
+);
+
 //冠军测功仪数据
 function seedMale2000mErgometerChampionModel() {
   const insert = db.prepare(`
