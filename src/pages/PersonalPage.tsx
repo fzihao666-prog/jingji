@@ -1,5 +1,5 @@
 import { BrainCircuit, CalendarRange, CheckCircle2, Gauge, Route, Save, Search, Trophy } from 'lucide-react';
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
@@ -35,9 +35,10 @@ function profileValue(value: ProfileDetail['value']) {
   return value === null || value === undefined || String(value).trim() === '' ? '未填写' : String(value);
 }
 
-function ProfileDetailGroup({ title, fields }: { title: string; fields: ProfileDetail[] }) {
+function ProfileDetailGroup({ title, fields, summary, wide = false }: { title: string; fields: ProfileDetail[]; summary?: ReactNode; wide?: boolean }) {
   return (
-    <section className="personal-detail-group">
+    <section className={`panel personal-detail-group ${wide ? 'wide' : ''}`.trim()}>
+      {summary}
       <h3>{title}</h3>
       <dl className="personal-detail-list">
         {fields.map((field) => <div key={field.label} className={field.wide ? 'wide' : ''}><dt>{field.label}</dt><dd>{profileValue(field.value)}</dd></div>)}
@@ -224,6 +225,24 @@ export function PersonalPage(props: Props) {
   const profileGroups = selectedAthlete ? [
     {
       title: '基本资料',
+      wide: true,
+      summary: <header className="personal-detail-identity">
+        <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
+          {selectedAthlete.photoUrl
+            ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
+            : selectedAthlete.name.slice(0, 1)}
+        </div>
+        <div className="personal-identity-copy">
+          <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
+          <h2>{selectedAthlete.name}</h2>
+          <p>{[selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join('')} · {selectedAthlete.currentEvent || '未填写小项'} · {selectedAthlete.coaches || '未绑定教练'}</p>
+          {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
+            <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
+            <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
+            {positionMessage && <small>{positionMessage}</small>}
+          </form>}
+        </div>
+      </header>,
       fields: [
         { label: '性别', value: selectedAthlete.gender },
         { label: '出生日期', value: selectedAthlete.birthDate },
@@ -307,28 +326,6 @@ export function PersonalPage(props: Props) {
       ) : (
         <>
           <section className="personal-identity-card">
-            <header className="personal-profile-summary">
-              <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
-                {selectedAthlete.photoUrl
-                  ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
-                  : selectedAthlete.name.slice(0, 1)}
-              </div>
-              <div className="personal-identity-copy">
-                <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
-                <h2>{selectedAthlete.name}</h2>
-                <p>{[selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join('')} · {selectedAthlete.currentEvent || '未填写小项'} · {selectedAthlete.coaches || '未绑定教练'}</p>
-                {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
-                  <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：舵手、1号位、左桨" /></label>
-                  <button disabled={positionSaving || positionDraft === (selectedAthlete.athletePosition || '')}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
-                  {positionMessage && <small>{positionMessage}</small>}
-                </form>}
-              </div>
-              <div className="personal-grade" style={{ '--grade-color': rangeAnalysis.status.color } as CSSProperties}>
-                <span>{rangeMode.label}分级</span>
-                <strong>{rangeAnalysis.status.label}</strong>
-                <small>{rangeAnalysis.status.basis}</small>
-              </div>
-            </header>
             <div className="personal-detail-grid">
               {profileGroups.map((group) => <ProfileDetailGroup key={group.title} {...group} />)}
             </div>
