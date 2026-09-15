@@ -215,36 +215,35 @@ export function PersonalPage(props: Props) {
     if (props.from === addDays(props.to, -29)) return { label: '月' } as const;
     return { label: '所选周期' } as const;
   }, [props.from, props.to]);
-  const profileDetails: ProfileDetail[] = selectedAthlete ? [
-    { label: '性别', value: selectedAthlete.gender },
-    { label: '年龄', value: ageAtDate(selectedAthlete.birthDate, props.to) === null ? null : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁` },
-    { label: '血型', value: selectedAthlete.bloodType },
-    { label: '籍贯', value: selectedAthlete.nativePlace },
-    { label: '所属区域', value: [selectedAthlete.region, selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join(' · ') },
-    { label: '运动项目', value: selectedAthlete.project },
-    { label: '所属队伍', value: selectedAthlete.team },
-    { label: '位置/号位', value: rowingSeatValue(selectedAthlete.athletePosition) },
-    { label: '技术等级', value: selectedAthlete.technicalLevel },
-    { label: '运动员状态', value: selectedAthlete.athleteStatus },
-    { label: '专项特长', value: selectedAthlete.specialties },
-    { label: '主管教练', value: selectedAthlete.coaches },
-    { label: '训练年限', value: trainingExperience(selectedAthlete.startSportDate, props.to) },
-    { label: '健康状态', value: selectedAthlete.healthStatus },
-    { label: '最佳成绩', value: selectedAthlete.bestResult }
+  const athleteLocation = selectedAthlete
+    ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join('')
+    : '';
+  const athleteAffiliationLocation = selectedAthlete
+    ? [...new Set([selectedAthlete.region, selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean))].join(' · ')
+    : '';
+  const dossierGroups = selectedAthlete ? [
+    {
+      title: '个人信息',
+      tone: 'personal',
+      fields: [
+        { label: '运动项目', value: selectedAthlete.project },
+        { label: '所属队伍', value: selectedAthlete.team },
+        { label: '主管教练', value: selectedAthlete.coaches },
+        { label: '训练年限', value: trainingExperience(selectedAthlete.startSportDate, props.to) },
+        { label: '技术等级', value: selectedAthlete.technicalLevel },
+        { label: '最佳成绩', value: selectedAthlete.bestResult },
+        { label: '位置/号位', value: rowingSeatValue(selectedAthlete.athletePosition) },
+        { label: '运动员状态', value: selectedAthlete.athleteStatus },
+        { label: '健康状态', value: selectedAthlete.healthStatus },
+        { label: '身高 / 体重', value: selectedAthlete.heightCm === null && selectedAthlete.weightKg === null ? null : `${selectedAthlete.heightCm ?? '—'} cm / ${selectedAthlete.weightKg ?? '—'} kg` },
+        { label: '年龄 / 性别', value: ageAtDate(selectedAthlete.birthDate, props.to) === null ? selectedAthlete.gender : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}` },
+        { label: '血型', value: selectedAthlete.bloodType },
+        { label: '籍贯', value: selectedAthlete.nativePlace },
+        { label: '所属区域', value: athleteAffiliationLocation },
+        { label: '专项特长', value: selectedAthlete.specialties }
+      ] satisfies ProfileDetail[]
+    }
   ] : [];
-  const heroDetails: ProfileDetail[] = selectedAthlete ? [
-    { label: '训练年限', value: trainingExperience(selectedAthlete.startSportDate, props.to) },
-    { label: '技术等级', value: selectedAthlete.technicalLevel },
-    { label: '主管教练', value: selectedAthlete.coaches },
-    { label: '最佳成绩', value: selectedAthlete.bestResult },
-    { label: '身高 / 体重', value: selectedAthlete.heightCm === null && selectedAthlete.weightKg === null ? null : `${selectedAthlete.heightCm ?? '—'} cm / ${selectedAthlete.weightKg ?? '—'} kg` },
-    { label: '年龄 / 性别', value: ageAtDate(selectedAthlete.birthDate, props.to) === null ? selectedAthlete.gender : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}` },
-    { label: '位置/号位', value: rowingSeatValue(selectedAthlete.athletePosition) }
-  ] : [];
-  const dossierDetails = [
-    ...heroDetails,
-    ...profileDetails.filter((field) => !['训练年限', '技术等级', '主管教练', '最佳成绩', '年龄', '性别', '位置/号位'].includes(field.label))
-  ];
   const fmsMeasurementCount = profileMeasurements.filter((item) => item.domain === 'fms' && item.value !== null).length;
 
   return (
@@ -255,7 +254,7 @@ export function PersonalPage(props: Props) {
         <section className="performance-athlete-picker">
           <div className="performance-picker-copy">
             <span>ATHLETE PROFILE</span>
-            <strong>筛选运动员</strong>
+            <strong>选择运动员</strong>
             {selectedAthlete && <small>{selectedAthlete.project} · {selectedAthlete.team} · {selectedAthlete.name}</small>}
           </div>
           <form className="performance-athlete-search" onSubmit={submitAthleteSearch}>
@@ -294,7 +293,7 @@ export function PersonalPage(props: Props) {
       ) : (
         <>
           <section className="personal-dossier">
-            <header className="personal-detail-identity">
+            <header className="personal-dossier-identity">
               <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
                 {selectedAthlete.photoUrl
                   ? <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
@@ -303,17 +302,21 @@ export function PersonalPage(props: Props) {
               <div className="personal-identity-copy">
                 <span>{selectedAthlete.project} · {selectedAthlete.team}</span>
                 <h2>{selectedAthlete.name}</h2>
-                <p>{[selectedAthlete.province, selectedAthlete.city, selectedAthlete.county].filter(Boolean).join('')} · {selectedAthlete.coaches || '未绑定教练'}</p>
+                <p>{athleteLocation || '地区待补充'} · {selectedAthlete.coaches || '未绑定教练'}</p>
                 {canEditOwnPosition && <form className="personal-position-editor" onSubmit={savePosition}>
                   <label><span>位置/号位</span><input value={positionDraft} onChange={(event) => setPositionDraft(event.target.value)} maxLength={40} placeholder="例如：1号位、2号位、舵手" aria-invalid={positionMessage.includes('失败')} aria-describedby={positionMessage ? 'position-message' : undefined} /></label>
                   <button disabled={positionSaving || positionDraft === rowingSeatValue(selectedAthlete.athletePosition)}><Save size={14} />{positionSaving ? '保存中' : '保存'}</button>
                   <small id="position-message" aria-live="polite" role={positionMessage.includes('失败') ? 'alert' : undefined}>{positionMessage}</small>
                 </form>}
               </div>
-              <dl className="personal-inline-details" aria-label="运动员完整档案信息">
-                {dossierDetails.map((field) => <div key={field.label} className={['所属区域', '专项特长'].includes(field.label) ? 'wide' : ''}><dt>{field.label}</dt><dd>{field.label === '位置/号位' && !field.value ? '—' : profileValue(field.value)}</dd></div>)}
-              </dl>
             </header>
+            <section className="personal-dossier-groups" aria-label="运动员完整档案信息">
+              {dossierGroups.map((group) => <section key={group.title} className={`personal-dossier-group ${group.tone}`} aria-label={group.title}>
+                <dl>
+                  {group.fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.label === '位置/号位' && !field.value ? '—' : profileValue(field.value)}</dd></div>)}
+                </dl>
+              </section>)}
+            </section>
           </section>
 
           <div>
