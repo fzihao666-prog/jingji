@@ -79,6 +79,8 @@
 .physical-core-metrics { margin-top: 10px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .physical-athlete-filter { display: inline-flex; align-items: center; gap: 7px; color: #71878e; font-size: 10px; font-weight: 700; }
 .physical-athlete-filter select { height: 32px; min-width: 164px; padding: 0 28px 0 10px; border: 1px solid #cfe0e1; border-radius: 8px; color: #274c55; background: #fff; font: inherit; font-weight: 600; }
+.special-team-filter { width: auto; gap: 6px; font-size: 9px; white-space: nowrap; }
+.special-team-filter select { height: 28px; min-width: 142px; max-width: 210px; padding-left: 9px; font-size: 10px; }
 .physical-dashboard-grid .app-content-state { min-height: 246px; }
 .physical-ability-profile { min-height: 246px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) 142px; gap: 18px; align-items: center; }
 .physical-radar { display: grid; gap: 11px; }.physical-radar > div { display: grid; grid-template-columns: 72px minmax(0, 1fr) 34px; align-items: center; gap: 8px; color: #4d6870; font-size: 10px; }.physical-radar i { height: 8px; border-radius: 99px; overflow: hidden; background: #e8efef; }.physical-radar i b { display: block; width: var(--profile-score); height: 100%; border-radius: inherit; background: var(--profile-color); }.physical-radar strong { color: #234b55; font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -96,7 +98,7 @@
 @media (max-width: 760px) {
   .training-dashboard-metrics, .training-dashboard-grid { grid-template-columns: 1fr; }
   .physical-core-metrics { grid-template-columns: 1fr 1fr; }
-  .physical-athlete-filter { width: 100%; justify-content: space-between; }.physical-athlete-filter select { min-width: 0; flex: 1; }
+  .physical-athlete-filter { width: 100%; justify-content: space-between; }.physical-athlete-filter select { min-width: 0; flex: 1; }.special-team-filter { width: auto; max-width: 100%; justify-content: flex-start; }.special-team-filter select { flex: 0 1 190px; min-width: 128px; }
   .champion-comparison-head, .champion-current-comparison > div:not(.champion-comparison-head) { grid-template-columns: minmax(80px, 1.2fr) repeat(3, minmax(56px, 1fr)); gap: 6px; font-size: 8px; }
   .physical-ability-profile { grid-template-columns: 1fr; }.physical-ability-profile aside { padding: 12px 0 0; border-top: 1px solid #e3ecec; border-left: 0; }.physical-chart-canvas { height: 220px; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }

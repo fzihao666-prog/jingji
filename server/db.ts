@@ -3115,6 +3115,111 @@ runInitializationOnce(
   seedRowingWorldBestRecords
 );
 
+function seedCurrentOlympicRowingWorldBestRecords() {
+  const insert = db.prepare(`
+    INSERT INTO special_champion_models (
+      project,
+      event_code,
+      event_name,
+      country,
+      best_performance,
+      pace,
+      competition,
+      location,
+      sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project, event_code)
+    DO UPDATE SET
+      event_name = excluded.event_name,
+      country = excluded.country,
+      best_performance = excluded.best_performance,
+      pace = excluded.pace,
+      competition = excluded.competition,
+      location = excluded.location,
+      sort_order = excluded.sort_order,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const rows = [
+    [
+      'ROWING',
+      'LM2X_2000',
+      '男子轻量级双人双桨（2000米）',
+      '爱尔兰',
+      '6:05.33',
+      '1:31.33',
+      '东京奥运会赛艇比赛',
+      '东京，日本',
+      25
+    ],
+    [
+      'ROWING',
+      'W2_MINUS_2000',
+      '女子双人单桨无舵手（2000米）',
+      '澳大利亚',
+      '6:47.11',
+      '1:41.78',
+      '2023年荷兰贝克杯赛艇比赛',
+      '阿姆斯特丹，荷兰',
+      140
+    ],
+    [
+      'ROWING',
+      'LW2X_2000',
+      '女子轻量级双人双桨（2000米）',
+      '英国',
+      '6:40.47',
+      '1:40.12',
+      '2023年世界赛艇世界杯第二站',
+      '瓦雷泽，意大利',
+      125
+    ]
+  ] as const;
+
+  for (const row of rows) {
+    insert.run(...row);
+  }
+}
+
+runInitializationOnce(
+  'current_olympic_rowing_world_best_records_v1',
+  seedCurrentOlympicRowingWorldBestRecords
+);
+
+function seedCurrentOlympicRowingWorldBestSortOrder() {
+  const update = db.prepare(`
+    UPDATE special_champion_models
+    SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE project = 'ROWING' AND event_code = ?
+  `);
+
+  const rows = [
+    ['M1X_2000', 10],
+    ['M2X_2000', 20],
+    ['LM2X_2000', 30],
+    ['M4X_2000', 40],
+    ['M2_MINUS_2000', 50],
+    ['M4_MINUS_2000', 60],
+    ['M8_PLUS_2000', 70],
+    ['W1X_2000', 110],
+    ['W2X_2000', 120],
+    ['LW2X_2000', 130],
+    ['W4X_2000', 140],
+    ['W2_MINUS_2000', 150],
+    ['W4_MINUS_2000', 160],
+    ['W8_PLUS_2000', 170]
+  ] as const;
+
+  for (const [eventCode, sortOrder] of rows) {
+    update.run(sortOrder, eventCode);
+  }
+}
+
+runInitializationOnce(
+  'current_olympic_rowing_world_best_sort_order_v1',
+  seedCurrentOlympicRowingWorldBestSortOrder
+);
+
 //冠军测功仪数据
 function seedMale2000mErgometerChampionModel() {
   const insert = db.prepare(`

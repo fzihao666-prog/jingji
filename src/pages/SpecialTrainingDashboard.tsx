@@ -50,7 +50,7 @@ export function SpecialTrainingDashboard({ project, from, to, onRecordsOpen }: P
   return <PageContainer className="professional-overview training-dashboard-page">
     <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="SPECIAL TRAINING" title="专项训练" />
     <FilterBar label="专项训练页面筛选">
-      <label className="physical-athlete-filter">组织 / 队伍<select aria-label="专项训练队伍筛选" value={teamId ?? ''} onChange={(event) => { setSelection({ project, teamId: event.target.value ? Number(event.target.value) : null }); }}>
+      <label className="physical-athlete-filter special-team-filter">队伍<select aria-label="专项训练队伍筛选" value={teamId ?? ''} onChange={(event) => { setSelection({ project, teamId: event.target.value ? Number(event.target.value) : null }); }}>
         <option value="">当前权限范围全部队伍</option>{currentTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
       </select></label>
     </FilterBar>

@@ -250,7 +250,7 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     </div>
     <div className="champion-model-section">
       <div className="champion-model-section-title">
-        <strong>世界最好成绩</strong>
+        <strong>赛艇世界最好成绩</strong>
         <span>最好成绩、配速与赛事来源</span>
       </div>
       {content}
