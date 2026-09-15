@@ -616,10 +616,71 @@ export type SpecialChampionModelEvent = {
   competition: string | null;
   location: string | null;
 };
+//冠军模型
+
+export const ERGOMETER_LEVELS = [
+  'BASIC',
+  'YOUTH_3',
+  'YOUTH_2',
+  'YOUTH_1',
+  'PROVINCIAL',
+  'PROVINCIAL_EXCELLENT',
+  'NATIONAL_EXCELLENT',
+  'U23_INTERNATIONAL',
+  'INTERNATIONAL_EXCELLENT'
+] as const;
+
+export const ERGOMETER_LEVEL_LABELS = {
+  BASIC: '基础入门',
+  YOUTH_3: '青少年三级',
+  YOUTH_2: '青少年二级',
+  YOUTH_1: '青少年一级',
+  PROVINCIAL: '省市标准',
+  PROVINCIAL_EXCELLENT: '省市优秀',
+  NATIONAL_EXCELLENT: '全国优秀',
+  U23_INTERNATIONAL: 'U23国际',
+  INTERNATIONAL_EXCELLENT: '国际优秀'
+} as const;
+
+export const ERGOMETER_GENDERS = [
+  'MALE',
+  'FEMALE'
+] as const;
+
+export const ERGOMETER_TEST_TYPES = [
+  '2000M',
+  '5000M',
+  '30MIN_20SPM'
+] as const;
+
+export const ERGOMETER_GENDER_LABELS = {
+  MALE: '男子',
+  FEMALE: '女子'
+} as const;
+
+export const ERGOMETER_TEST_TYPE_LABELS = {
+  '2000M': '2000m',
+  '5000M': '5000m',
+  '30MIN_20SPM': '30分钟（20桨）'
+} as const;
 
 export type SpecialChampionModelPayload = {
   project: Project;
   events: SpecialChampionModelEvent[];
+};
+
+export type ErgometerChampionModelRow = {
+  bodyWeightKg: number;
+  levelCode: string;
+  standardValue: string;
+  sortOrder: number;
+};
+
+export type ErgometerChampionModelPayload = {
+  project: Project;
+  gender: 'MALE' | 'FEMALE';
+  testType: '2000M' | '5000M' | '30MIN_20SPM';
+  rows: ErgometerChampionModelRow[];
 };
 
 export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';

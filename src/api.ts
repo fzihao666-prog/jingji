@@ -25,7 +25,8 @@ import type {
   TrainingPlan,
   TrainingPlanData,
   TrainingRecord,
-  User
+  User,
+  ErgometerChampionModelPayload
 } from './types';
 import type { RowingPeriodAnalysis } from '../shared/rowing-model';
 import type { CoachCategory } from '../shared/coach-categories';
@@ -158,6 +159,21 @@ export const api = {
     const params = new URLSearchParams({ project });
     return request<SpecialChampionModelPayload>(`/api/special-champion-models?${params}`);
   },
+  async ergometerChampionModels(
+  project: Project,
+  gender: 'MALE' | 'FEMALE',
+  testType: '2000M' | '5000M' | '30MIN_20SPM'
+) {
+  const params = new URLSearchParams({
+    project,
+    gender,
+    testType
+  });
+
+  return request<ErgometerChampionModelPayload>(
+    `/api/special-champion-models/ergometer?${params}`
+  );
+},
   async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
     return request<{ message: string }>('/api/admin/athletes/bulk/profile', {
       method: 'PUT',

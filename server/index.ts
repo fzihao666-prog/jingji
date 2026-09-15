@@ -3874,6 +3874,33 @@ app.get('/api/special-champion-models', requireAuth, (req, res) => {
   `).all(project);
   res.json({ project, events });
 });
+//冠军模型接口
+app.get('/api/special-champion-models/ergometer', (req, res) => {
+  const project = String(req.query.project || 'ROWING');
+  const gender = String(req.query.gender || 'MALE');
+  const testType = String(req.query.testType || '2000M');
+
+  const rows = db.prepare(`
+    SELECT
+      body_weight_kg AS bodyWeightKg,
+      level_code AS levelCode,
+      standard_value AS standardValue,
+      sort_order AS sortOrder
+    FROM ergometer_champion_models
+    WHERE project = ?
+      AND gender = ?
+      AND test_type = ?
+      AND active = 1
+    ORDER BY body_weight_kg, sort_order
+  `).all(project, gender, testType);
+
+  res.json({
+    project,
+    gender,
+    testType,
+    rows
+  });
+});
 
 app.get('/api/analysis/summary', requireAuth, (req, res) => {
   const user = req.authUser!;

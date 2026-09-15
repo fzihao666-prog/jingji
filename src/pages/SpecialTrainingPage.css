@@ -5,25 +5,42 @@
 }
 
 .training-dashboard-page { display: grid; gap: var(--overview-gap); padding-bottom: 36px; }
-.special-champion-model { min-width: 0; }
+.special-champion-model { min-width: 0; display: grid; gap: 16px; }
 .special-champion-model .app-section-header { align-items: flex-start; }
 .special-champion-model .app-content-state { min-height: 126px; }
+.champion-model-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.champion-model-section { min-width: 0; overflow: hidden; border: 1px solid #dce7e9; border-radius: 10px; background: linear-gradient(180deg, #fbfdfd 0%, #f7fbfb 100%); }
+.champion-model-section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: 1px solid #e1ebec; background: #f5faf9; }
+.champion-model-section-title strong { color: #203f48; font-size: 12px; font-weight: 900; }
+.champion-model-section-title span { color: #7b9096; font-size: 9px; font-weight: 700; }
 .champion-model-groups { display: grid; gap: 14px; }
 .champion-model-group { min-width: 0; overflow: hidden; border: 1px solid #dce7e9; border-radius: 10px; background: #fbfdfd; }
 .champion-model-group > h3 { margin: 0; padding: 9px 13px; border-bottom: 1px solid #dce7e9; color: #234b55; background: #f3f8f8; font-size: 11px; }
-.champion-table-scroll { overflow: auto; }
+.champion-table-scroll { min-width: 0; overflow: auto; }
 .champion-model-table { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; }
-.champion-model-table th, .champion-model-table td { padding: 9px 12px; border-bottom: 1px solid #e7eeee; text-align: left; vertical-align: top; }
-.champion-model-table thead th { position: sticky; top: 0; z-index: 1; color: #617b82; background: #f8fbfb; font-size: 9px; font-weight: 800; }
-.champion-model-table thead th:first-child { width: 150px; }
+.champion-model-table th, .champion-model-table td { padding: 8px 10px; border-bottom: 1px solid #e7eeee; color: #45656d; text-align: left; vertical-align: middle; font-size: 10px; line-height: 1.35; }
+.champion-model-table thead th { position: sticky; top: 0; z-index: 1; color: #607980; background: #f8fbfb; font-size: 8px; font-weight: 900; white-space: nowrap; }
+.champion-model-table thead th:first-child { width: 96px; }
 .champion-model-table tbody tr:last-child > * { border-bottom: 0; }
 .champion-model-table tbody tr:hover > * { background: #f5fbfa; }
-.champion-model-table tbody > tr > th { color: #31555e; font-size: 10px; font-weight: 800; }
+.champion-model-table tbody > tr > th { color: #234b55; font-size: 10px; font-weight: 900; }
+.champion-model-table tbody td { font-variant-numeric: tabular-nums; }
 .champion-standard-cell { min-width: 0; display: grid; gap: 3px; }
 .champion-standard-cell strong { color: #087b74; font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.05; }
 .champion-standard-cell b { color: #405d65; font-size: 9px; font-weight: 700; }
 .champion-standard-cell span { overflow: hidden; color: #7b9096; font-size: 8px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .champion-pending { color: #9aa9ad; font-size: 10px; }
+.ergometer-model-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ergometer-model-card { min-width: 0; overflow: hidden; border: 1px solid #d7e5e7; border-radius: 10px; background: #fbfdfd; box-shadow: inset 0 1px 0 rgba(255,255,255,.78); }
+.ergometer-model-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid #e3ecec; background: linear-gradient(135deg, #f7fbfb 0%, #eef7f6 100%); }
+.ergometer-model-head strong { display: block; color: #173f49; font-size: 12px; font-weight: 900; }
+.ergometer-model-head span { display: block; margin-top: 3px; color: #71878e; font-size: 9px; font-weight: 750; }
+.ergometer-model-tabs { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #d1e2e3; border-radius: 8px; background: #fff; }
+.ergometer-model-tabs button { height: 26px; padding: 0 8px; border: 0; border-radius: 6px; color: #607980; background: transparent; font: inherit; font-size: 9px; font-weight: 850; white-space: nowrap; cursor: pointer; }
+.ergometer-model-tabs button.active { color: #fff; background: #117d76; box-shadow: 0 4px 12px rgba(17,125,118,.18); }
+.ergometer-model-card .champion-model-table { min-width: 690px; }
+.ergometer-model-card .champion-model-table th, .ergometer-model-card .champion-model-table td { padding: 7px 8px; text-align: center; }
+.ergometer-model-card .champion-model-table th:first-child { text-align: left; }
 .training-dashboard-champion .app-content-state { min-height: 118px; grid-template-columns: auto minmax(0, 1fr); text-align: left; justify-content: start; }
 .training-dashboard-champion .app-content-state strong { grid-column: 2; }
 .training-dashboard-champion .app-content-state span { grid-column: 2; max-width: 720px; }
@@ -60,6 +77,7 @@
   .training-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .physical-core-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8 { grid-column: span 6; }
+  .ergometer-model-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -69,7 +87,7 @@
   .champion-comparison-head, .champion-current-comparison > div:not(.champion-comparison-head) { grid-template-columns: minmax(80px, 1.2fr) repeat(3, minmax(56px, 1fr)); gap: 6px; font-size: 8px; }
   .physical-ability-profile { grid-template-columns: 1fr; }.physical-ability-profile aside { padding: 12px 0 0; border-top: 1px solid #e3ecec; border-left: 0; }.physical-chart-canvas { height: 220px; }
   .dashboard-span-4, .dashboard-span-5, .dashboard-span-7, .dashboard-span-8, .dashboard-span-12 { grid-column: 1; }
-  .special-champion-model .app-section-header { gap: 9px; }.champion-model-table { min-width: 670px; }.champion-model-table th, .champion-model-table td { padding: 8px 9px; }
+  .special-champion-model .app-section-header { gap: 9px; }.champion-model-head, .champion-model-section-title, .ergometer-model-head { display: grid; grid-template-columns: 1fr; }.champion-model-table { min-width: 670px; }.champion-model-table th, .champion-model-table td { padding: 8px 9px; }.ergometer-model-card .champion-model-table { min-width: 640px; }
 }
 
 .special-page-heading {

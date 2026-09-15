@@ -141,6 +141,21 @@ db.exec(`
     FOREIGN KEY (reviewed_by) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS ergometer_champion_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    gender TEXT NOT NULL,
+    test_type TEXT NOT NULL,
+    body_weight_kg REAL NOT NULL,
+    level_code TEXT NOT NULL,
+    standard_value TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, gender, test_type, body_weight_kg, level_code)
+  );
+
   CREATE TABLE IF NOT EXISTS training_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     athlete_id INTEGER NOT NULL,
@@ -3099,6 +3114,258 @@ runInitializationOnce(
   'rowing_world_best_records_v3',
   seedRowingWorldBestRecords
 );
+
+//冠军测功仪数据
+function seedMale2000mErgometerChampionModel() {
+  const insert = db.prepare(`
+    INSERT INTO ergometer_champion_models (
+      project,
+      gender,
+      test_type,
+      body_weight_kg,
+      level_code,
+      standard_value,
+      sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project, gender, test_type, body_weight_kg, level_code)
+    DO NOTHING
+  `);
+
+  const rows = [
+  // 60kg
+  ['ROWING', 'MALE', '2000M', 60, 'BASIC', '8:27.0', 10],
+  ['ROWING', 'MALE', '2000M', 60, 'YOUTH_3', '8:01.0', 20],
+  ['ROWING', 'MALE', '2000M', 60, 'YOUTH_2', '7:40.5', 30],
+  ['ROWING', 'MALE', '2000M', 60, 'YOUTH_1', '7:23.0', 40],
+  ['ROWING', 'MALE', '2000M', 60, 'PROVINCIAL', '7:09.5', 50],
+  ['ROWING', 'MALE', '2000M', 60, 'PROVINCIAL_EXCELLENT', '6:56.0', 60],
+  ['ROWING', 'MALE', '2000M', 60, 'NATIONAL_EXCELLENT', '6:43.5', 70],
+  ['ROWING', 'MALE', '2000M', 60, 'U23_INTERNATIONAL', '6:33.0', 80],
+  ['ROWING', 'MALE', '2000M', 60, 'INTERNATIONAL_EXCELLENT', '6:23.0', 90],
+
+  // 65kg
+  ['ROWING', 'MALE', '2000M', 65, 'BASIC', '8:18.0', 10],
+  ['ROWING', 'MALE', '2000M', 65, 'YOUTH_3', '7:52.5', 20],
+  ['ROWING', 'MALE', '2000M', 65, 'YOUTH_2', '7:32.5', 30],
+  ['ROWING', 'MALE', '2000M', 65, 'YOUTH_1', '7:15.0', 40],
+  ['ROWING', 'MALE', '2000M', 65, 'PROVINCIAL', '7:02.0', 50],
+  ['ROWING', 'MALE', '2000M', 65, 'PROVINCIAL_EXCELLENT', '6:48.5', 60],
+  ['ROWING', 'MALE', '2000M', 65, 'NATIONAL_EXCELLENT', '6:36.5', 70],
+  ['ROWING', 'MALE', '2000M', 65, 'U23_INTERNATIONAL', '6:26.5', 80],
+  ['ROWING', 'MALE', '2000M', 65, 'INTERNATIONAL_EXCELLENT', '6:16.0', 90],
+
+  // 70kg
+  ['ROWING', 'MALE', '2000M', 70, 'BASIC', '8:10.0', 10],
+  ['ROWING', 'MALE', '2000M', 70, 'YOUTH_3', '7:45.0', 20],
+  ['ROWING', 'MALE', '2000M', 70, 'YOUTH_2', '7:25.0', 30],
+  ['ROWING', 'MALE', '2000M', 70, 'YOUTH_1', '7:08.0', 40],
+  ['ROWING', 'MALE', '2000M', 70, 'PROVINCIAL', '6:55.0', 50],
+  ['ROWING', 'MALE', '2000M', 70, 'PROVINCIAL_EXCELLENT', '6:42.0', 60],
+  ['ROWING', 'MALE', '2000M', 70, 'NATIONAL_EXCELLENT', '6:30.0', 70],
+  ['ROWING', 'MALE', '2000M', 70, 'U23_INTERNATIONAL', '6:20.0', 80],
+  ['ROWING', 'MALE', '2000M', 70, 'INTERNATIONAL_EXCELLENT', '6:10.0', 90],
+
+  // 75kg
+  ['ROWING', 'MALE', '2000M', 75, 'BASIC', '8:02.5', 10],
+  ['ROWING', 'MALE', '2000M', 75, 'YOUTH_3', '7:38.0', 20],
+  ['ROWING', 'MALE', '2000M', 75, 'YOUTH_2', '7:18.0', 30],
+  ['ROWING', 'MALE', '2000M', 75, 'YOUTH_1', '7:01.5', 40],
+  ['ROWING', 'MALE', '2000M', 75, 'PROVINCIAL', '6:48.5', 50],
+  ['ROWING', 'MALE', '2000M', 75, 'PROVINCIAL_EXCELLENT', '6:36.0', 60],
+  ['ROWING', 'MALE', '2000M', 75, 'NATIONAL_EXCELLENT', '6:24.0', 70],
+  ['ROWING', 'MALE', '2000M', 75, 'U23_INTERNATIONAL', '6:14.0', 80],
+  ['ROWING', 'MALE', '2000M', 75, 'INTERNATIONAL_EXCELLENT', '6:04.5', 90],
+
+  // 80kg
+  ['ROWING', 'MALE', '2000M', 80, 'BASIC', '7:55.5', 10],
+  ['ROWING', 'MALE', '2000M', 80, 'YOUTH_3', '7:31.5', 20],
+  ['ROWING', 'MALE', '2000M', 80, 'YOUTH_2', '7:12.0', 30],
+  ['ROWING', 'MALE', '2000M', 80, 'YOUTH_1', '6:55.5', 40],
+  ['ROWING', 'MALE', '2000M', 80, 'PROVINCIAL', '6:43.0', 50],
+  ['ROWING', 'MALE', '2000M', 80, 'PROVINCIAL_EXCELLENT', '6:30.5', 60],
+  ['ROWING', 'MALE', '2000M', 80, 'NATIONAL_EXCELLENT', '6:18.5', 70],
+  ['ROWING', 'MALE', '2000M', 80, 'U23_INTERNATIONAL', '6:09.0', 80],
+  ['ROWING', 'MALE', '2000M', 80, 'INTERNATIONAL_EXCELLENT', '5:59.0', 90],
+
+  // 85kg
+  ['ROWING', 'MALE', '2000M', 85, 'BASIC', '7:49.5', 10],
+  ['ROWING', 'MALE', '2000M', 85, 'YOUTH_3', '7:25.5', 20],
+  ['ROWING', 'MALE', '2000M', 85, 'YOUTH_2', '7:06.0', 30],
+  ['ROWING', 'MALE', '2000M', 85, 'YOUTH_1', '6:50.0', 40],
+  ['ROWING', 'MALE', '2000M', 85, 'PROVINCIAL', '6:37.5', 50],
+  ['ROWING', 'MALE', '2000M', 85, 'PROVINCIAL_EXCELLENT', '6:25.0', 60],
+  ['ROWING', 'MALE', '2000M', 85, 'NATIONAL_EXCELLENT', '6:13.5', 70],
+  ['ROWING', 'MALE', '2000M', 85, 'U23_INTERNATIONAL', '6:04.0', 80],
+  ['ROWING', 'MALE', '2000M', 85, 'INTERNATIONAL_EXCELLENT', '5:54.5', 90],
+
+  // 90kg
+  ['ROWING', 'MALE', '2000M', 90, 'BASIC', '7:43.5', 10],
+  ['ROWING', 'MALE', '2000M', 90, 'YOUTH_3', '7:20.0', 20],
+  ['ROWING', 'MALE', '2000M', 90, 'YOUTH_2', '7:01.0', 30],
+  ['ROWING', 'MALE', '2000M', 90, 'YOUTH_1', '6:45.0', 40],
+  ['ROWING', 'MALE', '2000M', 90, 'PROVINCIAL', '6:32.5', 50],
+  ['ROWING', 'MALE', '2000M', 90, 'PROVINCIAL_EXCELLENT', '6:20.0', 60],
+  ['ROWING', 'MALE', '2000M', 90, 'NATIONAL_EXCELLENT', '6:09.0', 70],
+  ['ROWING', 'MALE', '2000M', 90, 'U23_INTERNATIONAL', '5:59.5', 80],
+  ['ROWING', 'MALE', '2000M', 90, 'INTERNATIONAL_EXCELLENT', '5:50.0', 90],
+
+  // 95kg
+  ['ROWING', 'MALE', '2000M', 95, 'BASIC', '7:38.0', 10],
+  ['ROWING', 'MALE', '2000M', 95, 'YOUTH_3', '7:14.5', 20],
+  ['ROWING', 'MALE', '2000M', 95, 'YOUTH_2', '6:56.0', 30],
+  ['ROWING', 'MALE', '2000M', 95, 'YOUTH_1', '6:40.0', 40],
+  ['ROWING', 'MALE', '2000M', 95, 'PROVINCIAL', '6:28.0', 50],
+  ['ROWING', 'MALE', '2000M', 95, 'PROVINCIAL_EXCELLENT', '6:15.5', 60],
+  ['ROWING', 'MALE', '2000M', 95, 'NATIONAL_EXCELLENT', '6:04.5', 70],
+  ['ROWING', 'MALE', '2000M', 95, 'U23_INTERNATIONAL', '5:55.0', 80],
+  ['ROWING', 'MALE', '2000M', 95, 'INTERNATIONAL_EXCELLENT', '5:45.5', 90],
+
+  // 100kg
+  ['ROWING', 'MALE', '2000M', 100, 'BASIC', '7:32.5', 10],
+  ['ROWING', 'MALE', '2000M', 100, 'YOUTH_3', '7:09.5', 20],
+  ['ROWING', 'MALE', '2000M', 100, 'YOUTH_2', '6:51.0', 30],
+  ['ROWING', 'MALE', '2000M', 100, 'YOUTH_1', '6:35.5', 40],
+  ['ROWING', 'MALE', '2000M', 100, 'PROVINCIAL', '6:23.5', 50],
+  ['ROWING', 'MALE', '2000M', 100, 'PROVINCIAL_EXCELLENT', '6:11.5', 60],
+  ['ROWING', 'MALE', '2000M', 100, 'NATIONAL_EXCELLENT', '6:00.5', 70],
+  ['ROWING', 'MALE', '2000M', 100, 'U23_INTERNATIONAL', '5:51.0', 80],
+  ['ROWING', 'MALE', '2000M', 100, 'INTERNATIONAL_EXCELLENT', '5:42.0', 90]
+] as const;
+
+  for (const row of rows) {
+    insert.run(...row);
+  }
+}
+runInitializationOnce(
+  'male_2000m_ergometer_champion_model_v2',
+  seedMale2000mErgometerChampionModel
+);
+
+function seedMale5000mErgometerChampionModel() {
+  const insert = db.prepare(`
+    INSERT INTO ergometer_champion_models (
+      project,
+      gender,
+      test_type,
+      body_weight_kg,
+      level_code,
+      standard_value,
+      sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project, gender, test_type, body_weight_kg, level_code)
+    DO UPDATE SET
+      standard_value = excluded.standard_value,
+      sort_order = excluded.sort_order,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const levels = [
+    'BASIC',
+    'YOUTH_3',
+    'YOUTH_2',
+    'YOUTH_1',
+    'PROVINCIAL',
+    'PROVINCIAL_EXCELLENT',
+    'NATIONAL_EXCELLENT',
+    'U23_INTERNATIONAL',
+    'INTERNATIONAL_EXCELLENT'
+  ] as const;
+
+  const data = [
+    [60, ['21:55.6', '21:00.8', '20:15.4', '19:35.7', '19:00.3', '18:25.9', '17:55.5', '17:25.8', '16:55.4']],
+    [65, ['21:30.4', '20:40.7', '19:55.3', '19:15.6', '18:40.2', '18:10.8', '17:35.4', '17:05.7', '16:35.3']],
+    [70, ['21:10.2', '20:20.6', '19:35.1', '18:55.5', '18:20.7', '17:50.3', '17:20.8', '16:50.4', '16:20.6']],
+    [75, ['20:50.5', '20:00.3', '19:15.8', '18:40.4', '18:05.6', '17:35.2', '17:05.9', '16:35.5', '16:05.7']],
+    [80, ['20:35.3', '19:45.7', '19:00.4', '18:20.8', '17:50.2', '17:20.6', '16:50.3', '16:20.9', '15:50.5']],
+    [85, ['20:15.8', '19:30.4', '18:45.6', '18:05.3', '17:35.7', '17:05.5', '16:35.1', '16:05.8', '15:40.4']],
+    [90, ['20:00.4', '19:15.9', '18:30.5', '17:55.2', '17:20.7', '16:50.4', '16:25.8', '15:55.3', '15:25.6']],
+    [95, ['19:45.6', '19:00.2', '18:20.7', '17:40.5', '17:10.3', '16:40.8', '16:10.4', '15:45.7', '15:15.2']],
+    [100, ['19:35.2', '18:45.5', '18:05.8', '17:30.4', '16:55.6', '16:30.3', '16:00.7', '15:35.4', '15:05.8']]
+  ] as const;
+
+  for (const [weight, values] of data) {
+    values.forEach((value, index) => {
+      insert.run(
+        'ROWING',
+        'MALE',
+        '5000M',
+        weight,
+        levels[index],
+        value,
+        (index + 1) * 10
+      );
+    });
+  }
+}
+
+runInitializationOnce(
+  'male_5000m_ergometer_champion_model_v2',
+  seedMale5000mErgometerChampionModel
+);
+
+function seedMale30Min20SpmErgometerChampionModel() {
+  const insert = db.prepare(`
+    INSERT INTO ergometer_champion_models (
+      project,
+      gender,
+      test_type,
+      body_weight_kg,
+      level_code,
+      standard_value,
+      sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project, gender, test_type, body_weight_kg, level_code)
+    DO UPDATE SET
+      standard_value = excluded.standard_value,
+      sort_order = excluded.sort_order,
+      updated_at = CURRENT_TIMESTAMP
+  `);
+
+  const levels = [
+    'BASIC',
+    'YOUTH_3',
+    'YOUTH_2',
+    'YOUTH_1',
+    'PROVINCIAL',
+    'PROVINCIAL_EXCELLENT',
+    'NATIONAL_EXCELLENT',
+    'U23_INTERNATIONAL',
+    'INTERNATIONAL_EXCELLENT'
+  ] as const;
+
+const data = [
+  [60, ['2:20.6', '2:15.3', '2:10.4', '2:05.9', '2:01.6', '1:58.4', '1:55.4', '1:52.5', '1:49.8']],
+  [65, ['2:18.5', '2:13.3', '2:08.6', '2:04.1', '2:00.0', '1:56.9', '1:53.9', '1:51.1', '1:48.4']],
+  [70, ['2:16.4', '2:11.4', '2:06.8', '2:02.4', '1:58.4', '1:55.4', '1:52.5', '1:49.8', '1:47.1']],
+  [75, ['2:14.3', '2:09.5', '2:05.0', '2:00.8', '1:56.9', '1:53.9', '1:51.1', '1:48.4', '1:45.9']],
+  [80, ['2:12.4', '2:07.7', '2:03.3', '1:59.2', '1:55.4', '1:52.5', '1:49.8', '1:47.1', '1:44.7']],
+  [85, ['2:10.4', '2:05.9', '2:01.6', '1:57.6', '1:53.9', '1:51.1', '1:48.4', '1:45.9', '1:43.4']],
+  [90, ['2:08.6', '2:04.1', '2:00.0', '1:56.1', '1:52.5', '1:49.8', '1:47.1', '1:44.7', '1:42.3']],
+  [95, ['2:06.8', '2:02.4', '1:58.4', '1:54.6', '1:51.1', '1:48.4', '1:45.9', '1:43.4', '1:41.1']],
+  [100, ['2:05.0', '2:00.8', '1:56.9', '1:53.2', '1:49.8', '1:47.1', '1:44.7', '1:42.3', '1:40.0']]
+] as const;
+
+  for (const [weight, values] of data) {
+    values.forEach((value, index) => {
+      insert.run(
+        'ROWING',
+        'MALE',
+        '30MIN_20SPM',
+        weight,
+        levels[index],
+        value,
+        (index + 1) * 10
+      );
+    });
+  }
+}
+
+runInitializationOnce(
+  'male_30min_20spm_ergometer_champion_model_v5',
+  seedMale30Min20SpmErgometerChampionModel
+);
+
+
 
 
 
