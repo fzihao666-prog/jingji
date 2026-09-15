@@ -40,11 +40,17 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
   }).filter((row) => row.count);
   return {
     summary: { durationMin: total(records.map(duration)), distanceKm: total(records.map(distance)), load: total(records.map(load)), sessionCount: records.length },
-    days, intensity, content,
-    recent: [...records].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id).slice(0, 10).map((row) => ({
-      id: row.id, date: row.date, content: row.content || row.structureType || row.trainingType, intensityZone: row.intensityZone,
-      durationMin: duration(row), distanceKm: distance(row), load: load(row)
-    }))
+    days, intensity, content
   };
 }
 export type SpecialTrainingAnalytics = ReturnType<typeof aggregateSpecialTraining>;
+
+export type SpecialTrainingAthlete = {
+  id: number;
+  name: string;
+  team: string;
+  gender: string;
+  birthDate: string | null;
+  weightKg: number | null;
+  summary: SpecialTrainingAnalytics['summary'];
+};

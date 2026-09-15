@@ -1,4 +1,4 @@
-import type { SpecialTrainingAnalytics } from '../shared/special-training';
+import type { SpecialTrainingAnalytics, SpecialTrainingAthlete } from '../shared/special-training';
 import type {
   AccessPayload,
   AreaPermission,
@@ -448,7 +448,7 @@ export const api = {
   async specialTrainingOverview(from: string, to: string, project: Project, teamId: number | null) {
     const params = new URLSearchParams({ from, to, project });
     if (teamId) params.set('teamId', String(teamId));
-    return request<{ training: SpecialTrainingAnalytics }>(`/api/special-training/overview?${params}`);
+    return request<{ training: SpecialTrainingAnalytics; athletes: SpecialTrainingAthlete[] }>(`/api/special-training/overview?${params}`);
   },
   async specialTests(from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });

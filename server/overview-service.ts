@@ -1,4 +1,4 @@
-import { aggregateSpecialTraining } from '../shared/special-training.ts';
+import { aggregateSpecialTraining, type SpecialTrainingAthlete } from '../shared/special-training.ts';
 import { summarizeDailyRpe } from './rpe-statistics.ts';
 import { db } from './db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
@@ -540,8 +540,28 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
 }
 
 export function buildSpecialTrainingPayload(input: { athleteIds: number[]; from: string; to: string; individual: boolean }) {
+  if (!input.athleteIds.length) return { training: aggregateSpecialTraining([]), athletes: [] as SpecialTrainingAthlete[] };
   const sessions = readOverviewSessions(input).filter((row) => !row.sessionDemo && !/seed|demo|estimated/i.test(row.sessionSource) && row.sessionQuality !== 'estimated' && trainingLoadCategory(row) === 'special');
-  return aggregateSpecialTraining(teamDurationSessions(sessions, input.individual));
+  const placeholders = input.athleteIds.map(() => '?').join(',');
+  const athletes = db.prepare(`
+    SELECT a.id, a.name, COALESCE(NULLIF(pt.name, ''), a.team, '') AS team, COALESCE(a.gender, '') AS gender,
+      a.birth_date AS birthDate,
+      (SELECT bm.weight_kg FROM athlete_body_measurements bm
+        WHERE bm.athlete_id = a.id AND bm.measurement_date <= ?
+        ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS weightKg
+    FROM athletes a
+    LEFT JOIN project_teams pt ON pt.id = a.team_id
+    WHERE a.id IN (${placeholders}) AND a.active = 1
+    ORDER BY team, a.name, a.id
+  `).all(input.to, ...input.athleteIds) as Array<Omit<SpecialTrainingAthlete, 'summary'>>;
+
+  return {
+    training: aggregateSpecialTraining(teamDurationSessions(sessions, input.individual)),
+    athletes: athletes.map((athlete) => ({
+      ...athlete,
+      summary: aggregateSpecialTraining(sessions.filter((session) => session.athleteId === athlete.id)).summary
+    }))
+  };
 }
 
 export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {

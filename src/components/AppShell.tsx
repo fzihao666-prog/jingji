@@ -49,7 +49,7 @@ const directNavItems: Array<{
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
   { key: 'physiology-biochemistry', label: '生理生化', icon: FlaskConical },
-  { key: 'personal', label: '运动员表现', icon: UserRound }
+  { key: 'personal', label: '运动员档案', icon: UserRound }
 ];
 
 const organizationGroups: Array<{

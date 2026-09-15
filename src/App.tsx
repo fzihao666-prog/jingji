@@ -187,7 +187,7 @@ export default function App() {
       </div>}
       <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
-        {page === 'special-overview' && <SpecialTrainingDashboard project={project} from={from} to={to} onRecordsOpen={() => changePage('special-records')} />}
+        {page === 'special-overview' && <SpecialTrainingDashboard project={project} from={from} to={to} />}
         {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={changePage} />}
         {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={changePage} onAthleteChange={setAthleteId} />}
         {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={changePage} onChanged={() => setRefreshKey((key) => key + 1)} />}

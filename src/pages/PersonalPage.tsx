@@ -40,36 +40,43 @@ function ageAtDate(birthDate: string | null, date: string) {
 }
 
 export function PersonalPage(props: Props) {
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [athleteQuery, setAthleteQuery] = useState('');
   const canSwitchAthlete = props.user.role !== 'ATL';
-  const selectedAthlete = useMemo(
-    () => props.athletes.find((athlete) => athlete.id === (props.athleteId ?? props.user.athleteId)) || null,
-    [props.athletes, props.athleteId, props.user.athleteId]
+  const teams = useMemo(
+    () => [...new Set(props.athletes.map((athlete) => athlete.team).filter(Boolean))].sort((left, right) => left.localeCompare(right, 'zh-CN')),
+    [props.athletes]
+  );
+  const visibleAthletes = useMemo(
+    () => selectedTeam ? props.athletes.filter((athlete) => athlete.team === selectedTeam) : props.athletes,
+    [props.athletes, selectedTeam]
   );
   const filteredAthletes = useMemo(() => {
-    const query = athleteQuery.trim().toLowerCase();
-    if (!query) return props.athletes;
-    return props.athletes.filter((athlete) => [
-      athlete.name,
-      athlete.team,
-      athlete.project,
-      athlete.province,
-      athlete.city,
-      athlete.county,
-      athlete.athletePosition,
-      athlete.coaches
-    ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [props.athletes, athleteQuery]);
+    const query = athleteQuery.trim().toLocaleLowerCase();
+    return query ? visibleAthletes.filter((athlete) => athlete.name.toLocaleLowerCase().includes(query)) : visibleAthletes;
+  }, [athleteQuery, visibleAthletes]);
+  const selectedAthlete = useMemo(
+    () => props.athletes.find((athlete) => athlete.id === (canSwitchAthlete ? props.athleteId : props.user.athleteId)) || null,
+    [canSwitchAthlete, props.athletes, props.athleteId, props.user.athleteId]
+  );
 
   useEffect(() => {
-    if (!canSwitchAthlete || selectedAthlete || !props.athletes.length) return;
-    const randomIndex = Math.floor(Math.random() * props.athletes.length);
-    props.onAthleteChange(props.athletes[randomIndex].id);
-  }, [canSwitchAthlete, selectedAthlete, props.athletes, props.onAthleteChange]);
+    setSelectedTeam(null);
+    setAthleteQuery('');
+  }, [props.project]);
+
+  useEffect(() => {
+    if (canSwitchAthlete && !props.athleteId && props.athletes.length) props.onAthleteChange(props.athletes[0].id);
+  }, [canSwitchAthlete, props.athleteId, props.athletes]);
 
   const switchAthlete = (athleteId: number) => {
     props.onAthleteChange(athleteId);
-    setAthleteQuery('');
+  };
+  const submitAthleteSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = athleteQuery.trim().toLocaleLowerCase();
+    const athlete = filteredAthletes.find((item) => item.name.toLocaleLowerCase() === query) || filteredAthletes[0];
+    if (athlete) switchAthlete(athlete.id);
   };
   const selectedRecords = useMemo(
     () => selectedAthlete ? props.records.filter((record) => record.athleteId === selectedAthlete.id) : [],
@@ -189,24 +196,33 @@ export function PersonalPage(props: Props) {
 
   return (
     <PageContainer className="personal-page">
-      <PageHeader eyebrow="ATHLETE PERFORMANCE" title="运动员表现"/>
+      <PageHeader eyebrow="ATHLETE PROFILE" title="运动员档案"/>
 
       {canSwitchAthlete && (
         <section className="performance-athlete-picker">
           <div className="performance-picker-copy">
-            <span>ATHLETE SEARCH</span>
-            <strong>选择运动员</strong>
-            <small>{selectedAthlete ? `${selectedAthlete.project} · ${selectedAthlete.team} · ${selectedAthlete.name}` : `当前项目可查看 ${props.athletes.length} 人`}</small>
+            <span>ATHLETE PROFILE</span>
+            <strong>筛选运动员</strong>
+            {selectedAthlete && <small>{selectedAthlete.project} · {selectedAthlete.team} · {selectedAthlete.name}</small>}
           </div>
-          <label className="performance-athlete-search">
+          <form className="performance-athlete-search" onSubmit={submitAthleteSearch}>
             <Search size={16} />
             <input
               value={athleteQuery}
               onChange={(event) => setAthleteQuery(event.target.value)}
-              placeholder="搜索姓名、队伍、地区、位置或教练"
+              placeholder="搜索姓名，回车查看"
               aria-label="搜索运动员"
             />
-          </label>
+          </form>
+          <select
+            className="performance-athlete-select"
+            value={selectedTeam || ''}
+            onChange={(event) => setSelectedTeam(event.target.value || null)}
+            aria-label="筛选队伍"
+          >
+            <option value="">全部队伍</option>
+            {teams.map((team) => <option key={team} value={team}>{team}</option>)}
+          </select>
           <select
             className="performance-athlete-select"
             value={selectedAthlete?.id || ''}
@@ -221,7 +237,7 @@ export function PersonalPage(props: Props) {
       )}
 
       {!selectedAthlete ? (
-        <ContentState kind="empty" className="personal-empty" icon={<CalendarRange size={34} />} title="暂无可展示运动员" description="请切换到有运动员数据的项目，或通过上方搜索选择运动员。"/>
+        <ContentState kind="empty" className="personal-empty" icon={<CalendarRange size={34} />} title="请选择运动员" description={canSwitchAthlete ? '请从队伍中选择需要查看的运动员。' : '当前账号暂无可展示的运动员档案。'}/>
       ) : (
         <>
           <section className="personal-identity-card">

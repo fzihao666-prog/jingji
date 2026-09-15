@@ -4548,9 +4548,7 @@ app.get('/api/special-training/overview', requireAuth, (req, res) => {
     scoped = scoped.filter((row) => row.teamId === teamId);
   }
   const athleteIds = scoped.map((row) => row.id);
-  res.json({
-    training: buildSpecialTrainingPayload({ athleteIds, from, to, individual: user.role === 'ATL' })
-  });
+  res.json(buildSpecialTrainingPayload({ athleteIds, from, to, individual: user.role === 'ATL' }));
 });
 
 app.get('/api/special-tests', requireAuth, (req, res) => {

@@ -1,4 +1,4 @@
-import { Activity, ArrowRight } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { SpecialChampionModel } from '../components/SpecialChampionModel';
@@ -10,13 +10,21 @@ import { formatNumber } from '../utils';
 
 type Props = {
   project: Project; from: string; to: string;
-  onRecordsOpen: () => void;
 };
 type Payload = Awaited<ReturnType<typeof api.specialTrainingOverview>>;
 const value = (number: number | null, digits = 1) => number === null ? '—' : formatNumber(number, digits);
 const empty = (title: string) => <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />;
 
-export function SpecialTrainingDashboard({ project, from, to, onRecordsOpen }: Props) {
+function ageAtDate(birthDate: string | null, date: string) {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T12:00:00`);
+  const target = new Date(`${date}T12:00:00`);
+  if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime())) return null;
+  const age = target.getFullYear() - birth.getFullYear() - (target.getMonth() < birth.getMonth() || (target.getMonth() === birth.getMonth() && target.getDate() < birth.getDate()) ? 1 : 0);
+  return age >= 0 ? age : null;
+}
+
+export function SpecialTrainingDashboard({ project, from, to }: Props) {
   const [teams, setTeams] = useState<{ project: Project; items: ProjectTeam[] } | null>(null);
   const [selection, setSelection] = useState<{ project: Project; teamId: number | null }>({ project, teamId: null });
   const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(null);
@@ -40,6 +48,7 @@ export function SpecialTrainingDashboard({ project, from, to, onRecordsOpen }: P
   const current = result?.key === requestKey ? result : null;
   const payload = current?.payload;
   const training = payload?.training;
+  const athletes = payload?.athletes || [];
   const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
   const metricItems = training ? [
     { label: '专项训练时长', amount: training.summary.durationMin === null ? '—' : value(training.summary.durationMin / 60), unit: 'h' },
@@ -73,8 +82,22 @@ export function SpecialTrainingDashboard({ project, from, to, onRecordsOpen }: P
       <ChartCard title="专项训练负荷分析" description={`累计专项负荷 ${value(training.summary.load)} AU · 每日既有 SRPE`}>
         {training.days.some((day) => day.load !== null) ? <EChart option={loadOption(training, from, to)} label="每日专项SRPE负荷趋势" /> : empty('暂无有效专项训练负荷')}
       </ChartCard>
-      <ChartCard title="最近专项训练" description="当前筛选范围内最近10个专项课次" actions={<button className="dashboard-action-button" onClick={onRecordsOpen}>完整训练记录 <ArrowRight size={15} /></button>}>
-        {training.recent.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>日期</th><th>训练内容</th><th>时长（min）</th><th>距离（km）</th><th>强度</th><th>负荷（AU）</th></tr></thead><tbody>{training.recent.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.content}</td><td>{value(row.durationMin)}</td><td>{value(row.distanceKm)}</td><td>{row.intensityZone || '—'}</td><td>{value(row.load)}</td></tr>)}</tbody></table></div> : empty('暂无专项训练记录')}
+      <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 滚动查看全部名单`}>
+        {athletes.length ? <div className="special-athlete-list" aria-label="专项训练运动员概览">
+          {athletes.map((athlete) => {
+            const age = ageAtDate(athlete.birthDate, to);
+            return <article key={athlete.id} className="special-athlete-row">
+              <div className="special-athlete-identity"><strong>{athlete.name}</strong><span>{athlete.gender || '性别未录入'} · {age === null ? '年龄未录入' : `${age}岁`}</span></div>
+              <div className="special-athlete-meta"><span>{athlete.team || '未分队'}</span><span>{athlete.weightKg === null ? '体重未录入' : `${value(athlete.weightKg)} kg`}</span></div>
+              <dl className="special-athlete-summary">
+                <div><dt>课次</dt><dd>{athlete.summary.sessionCount}</dd></div>
+                <div><dt>时长</dt><dd>{athlete.summary.durationMin === null ? '—' : `${value(athlete.summary.durationMin / 60)} h`}</dd></div>
+                <div><dt>距离</dt><dd>{athlete.summary.distanceKm === null ? '—' : `${value(athlete.summary.distanceKm)} km`}</dd></div>
+                <div><dt>负荷</dt><dd>{athlete.summary.load === null ? '—' : `${value(athlete.summary.load)} AU`}</dd></div>
+              </dl>
+            </article>;
+          })}
+        </div> : empty('暂无可查看运动员')}
       </ChartCard>
     </>}
   </PageContainer>;
