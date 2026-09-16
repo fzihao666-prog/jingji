@@ -1,13 +1,4 @@
-import {
-  BrainCircuit,
-  CalendarRange,
-  CheckCircle2,
-  Gauge,
-  Route,
-  Save,
-  Search,
-  Trophy,
-} from 'lucide-react';
+import { Activity, BrainCircuit, CalendarRange, Save, Search, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
@@ -19,9 +10,11 @@ import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import { EChart } from '../components/EChart';
 import { api } from '../api';
+import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
 import type { EChartsOption } from 'echarts';
 import type {
   Athlete,
+  BodyCompositionRecord,
   ChampionBenchmarkPayload,
   OverviewMeasurement,
   Project,
@@ -30,7 +23,7 @@ import type {
   User,
   WellnessTrend,
 } from '../types';
-import { addDays, formatNumber } from '../utils';
+import { formatNumber } from '../utils';
 
 type Props = {
   user: User;
@@ -167,6 +160,9 @@ export function PersonalPage(props: Props) {
   const [championLoading, setChampionLoading] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
   const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
+  const [bodyCompositionHistory, setBodyCompositionHistory] = useState<BodyCompositionRecord[]>([]);
+  const [bodyCompositionLoading, setBodyCompositionLoading] = useState(false);
+  const [bodyCompositionError, setBodyCompositionError] = useState(false);
   const [dossierDataLoading, setDossierDataLoading] = useState(false);
 
   useEffect(() => {
@@ -209,6 +205,41 @@ export function PersonalPage(props: Props) {
       ignored = true;
     };
   }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setBodyCompositionHistory([]);
+      setBodyCompositionLoading(false);
+      setBodyCompositionError(false);
+      return;
+    }
+
+    setBodyCompositionHistory([]);
+    setBodyCompositionLoading(true);
+    setBodyCompositionError(false);
+    api
+      .getBodyCompositionHistory(selectedAthlete.id)
+      .then((result) => {
+        if (!ignored) {
+          setBodyCompositionHistory(result.history);
+          setBodyCompositionError(false);
+        }
+      })
+      .catch(() => {
+        if (!ignored) {
+          setBodyCompositionHistory([]);
+          setBodyCompositionError(true);
+        }
+      })
+      .finally(() => {
+        if (!ignored) setBodyCompositionLoading(false);
+      });
+
+    return () => {
+      ignored = true;
+    };
+  }, [selectedAthlete?.id]);
 
   useEffect(() => {
     let ignored = false;
@@ -277,12 +308,6 @@ export function PersonalPage(props: Props) {
     () => analyzePeriod(selectedRecords),
     [selectedRecords, analyzePeriod]
   );
-  const rangeMode = useMemo(() => {
-    if (props.from === props.to) return { label: '日' } as const;
-    if (props.from === addDays(props.to, -6)) return { label: '周' } as const;
-    if (props.from === addDays(props.to, -29)) return { label: '月' } as const;
-    return { label: '所选周期' } as const;
-  }, [props.from, props.to]);
   const athleteLocation = selectedAthlete
     ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county]
         .filter(Boolean)
@@ -346,6 +371,62 @@ export function PersonalPage(props: Props) {
   const fmsMeasurementCount = profileMeasurements.filter(
     (item) => item.domain === 'fms' && item.value !== null
   ).length;
+  const bodyCompositionProfiles = useMemo(() => {
+    if (!selectedAthlete || !bodyCompositionHistory.length) return [];
+
+    const measurementTimestamp = (measurementDate: string) => {
+      const timestamp = new Date(`${measurementDate}T12:00:00`).getTime();
+      return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+    };
+    const latestRecord = [...bodyCompositionHistory].sort(
+      (left, right) => measurementTimestamp(right.measurementDate) - measurementTimestamp(left.measurementDate)
+    )[0];
+
+    return [
+      {
+        athleteId: selectedAthlete.id,
+        athleteName: selectedAthlete.name,
+        project: selectedAthlete.project,
+        team: selectedAthlete.team,
+        gender: selectedAthlete.gender,
+        age: ageAtDate(selectedAthlete.birthDate, latestRecord.measurementDate),
+        bodyMeasurementDate: latestRecord.measurementDate,
+        heightCm: latestRecord.heightCm,
+        weightKg: latestRecord.weightKg,
+        bodyFatPct: latestRecord.bodyFatPct,
+        skeletalMuscleKg: latestRecord.skeletalMuscleKg,
+        muscleMassKg: latestRecord.muscleMassKg,
+        upperLimbMuscleKg: latestRecord.upperLimbMuscleKg,
+        lowerLimbMuscleKg: latestRecord.lowerLimbMuscleKg,
+        trunkMuscleKg: latestRecord.trunkMuscleKg,
+        tricepsSkinfoldMm: latestRecord.tricepsSkinfoldMm,
+        abdominalSkinfoldMm: latestRecord.abdominalSkinfoldMm,
+        thighSkinfoldMm: latestRecord.thighSkinfoldMm,
+        calfSkinfoldMm: latestRecord.calfSkinfoldMm,
+        visceralFatLevel: latestRecord.visceralFatLevel,
+        basalMetabolismKcal: latestRecord.basalMetabolismKcal,
+        totalBodyWaterKg: latestRecord.totalBodyWaterKg,
+        ecwTbwRatio: latestRecord.ecwTbwRatio,
+        phaseAngleDeg: latestRecord.phaseAngleDeg,
+        visceralFatAreaCm2: latestRecord.visceralFatAreaCm2,
+        leftArmLeanKg: latestRecord.leftArmLeanKg,
+        rightArmLeanKg: latestRecord.rightArmLeanKg,
+        trunkLeanKg: latestRecord.trunkLeanKg,
+        leftLegLeanKg: latestRecord.leftLegLeanKg,
+        rightLegLeanKg: latestRecord.rightLegLeanKg,
+        bodyCompositionHistory,
+      },
+    ];
+  }, [bodyCompositionHistory, selectedAthlete]);
+  const bodyCompositionStatus = !selectedAthlete
+    ? '未选择运动员。'
+    : bodyCompositionLoading
+      ? '正在读取身体成分。'
+      : bodyCompositionError
+        ? '身体成分读取失败，当前显示空状态。'
+        : bodyCompositionHistory.length
+          ? '身体成分已更新。'
+          : '暂无身体成分记录。';
 
   return (
     <PageContainer className="personal-page">
@@ -468,6 +549,29 @@ export function PersonalPage(props: Props) {
                   </form>
                 )}
               </div>
+              <section className="personal-header-metrics" aria-label="当前周期训练指标">
+                <article>
+                  <span>月负荷</span>
+                  <strong>
+                    {formatNumber(rangeAnalysis.totalSrpe)}
+                    <small>SRPE</small>
+                  </strong>
+                </article>
+                <article>
+                  <span>专项距离</span>
+                  <strong>
+                    {formatNumber(rangeAnalysis.totalDistanceKm, 1)}
+                    <small>km</small>
+                  </strong>
+                </article>
+                <article>
+                  <span>训练课次</span>
+                  <strong>
+                    {rangeAnalysis.sessions}
+                    <small>课</small>
+                  </strong>
+                </article>
+              </section>
             </header>
             <section className="personal-dossier-groups" aria-label="运动员完整档案信息">
               {dossierGroups.map((group) => (
@@ -494,62 +598,41 @@ export function PersonalPage(props: Props) {
           </section>
 
           <ProfileSection
-            title="训练情况"
-            subtitle={`${props.from} 至 ${props.to}，仅统计当前运动员的有效训练课次。`}
-          >
-            <section
-              className="personal-training-overview"
-              aria-labelledby="training-overview-title"
-            >
-              <header>
-                <div>
-                  <span>PERIOD OVERVIEW</span>
-                  <h2 id="training-overview-title">当前周期训练摘要</h2>
-                </div>
-                <small>
-                  {props.from} 至 {props.to}
-                </small>
-              </header>
-              <div className="personal-period-layout">
-                <div className="personal-period-copy">
-                  <strong>体能训练与专项训练</strong>
-                  <p>训练负荷、专项距离与课次随当前日期周期变化。</p>
-                </div>
-                <section className="personal-metric-grid" aria-label="当前周期关键指标">
-                  <PersonalMetric
-                    icon={Gauge}
-                    label={`${rangeMode.label}负荷`}
-                    value={formatNumber(rangeAnalysis.totalSrpe)}
-                    unit="SRPE"
-                  />
-                  <PersonalMetric
-                    icon={Route}
-                    label="专项距离"
-                    value={formatNumber(rangeAnalysis.totalDistanceKm, 1)}
-                    unit="km"
-                  />
-                  <PersonalMetric
-                    icon={CalendarRange}
-                    label="训练课次"
-                    value={String(rangeAnalysis.sessions)}
-                    unit="课"
-                  />
-                  <PersonalMetric
-                    icon={CheckCircle2}
-                    label="数据完整率"
-                    value={formatNumber(rangeAnalysis.dataCoverage, 1)}
-                    unit="%"
-                  />
-                </section>
-              </div>
-            </section>
-          </ProfileSection>
-
-          <ProfileSection
             title="功能与专项测试"
             subtitle="功能动作筛查、专项测试、体能测试档案与有氧指标。"
           >
             <div className="functional-test-grid">
+              <AppCard variant="chart" className="professional-panel body-composition-profile-card">
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <Activity size={17} />
+                    <span>
+                      <small>BODY COMPOSITION</small>
+                      <h3>身体成分</h3>
+                      <p>身体组成、肌肉量与节段分布</p>
+                    </span>
+                  </div>
+                </header>
+                <section aria-busy={bodyCompositionLoading} aria-label="身体成分">
+                  <p className="visually-hidden" aria-live="polite">
+                    {bodyCompositionStatus}
+                  </p>
+                  {bodyCompositionLoading ? (
+                    <div className="professional-chart-empty">正在读取身体成分…</div>
+                  ) : bodyCompositionError ? (
+                    <ContentState
+                      kind="empty"
+                      title="身体成分暂不可用"
+                      description="读取身体成分记录失败，请稍后重试。"
+                    />
+                  ) : (
+                    <BodyCompositionModelOverview
+                      profiles={bodyCompositionProfiles}
+                      individual
+                    />
+                  )}
+                </section>
+              </AppCard>
               <AppCard
                 variant="chart"
                 className="professional-panel analysis-feature-panel personal-fms-card"
@@ -559,7 +642,7 @@ export function PersonalPage(props: Props) {
                     <BrainCircuit size={17} />
                     <span>
                       <small>FMS SCREENING</small>
-                      <h2>（FMS）功能动作筛查</h2>
+                      <h3>（FMS）功能动作筛查</h3>
                       <p>标准七项、21分制与纠正训练优先级</p>
                     </span>
                   </div>
@@ -648,33 +731,55 @@ function ProfileSection({
 }
 
 function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; loading: boolean }) {
-  const hasData = trends.some((trend) => trend.points.some((point) => point.personalValue !== null));
-  const statusMessage = loading ? '正在读取恢复趋势。' : hasData ? '恢复趋势已更新。' : '暂无恢复趋势数据。';
+  const hasData = trends.some((trend) =>
+    trend.points.some((point) => point.personalValue !== null)
+  );
+  const statusMessage = loading
+    ? '正在读取恢复趋势。'
+    : hasData
+      ? '恢复趋势已更新。'
+      : '暂无恢复趋势数据。';
   return (
     <div className="personal-wellness-status">
-      <p className="visually-hidden" aria-live="polite">{statusMessage}</p>
-      {loading ? <AppCard variant="chart" className="professional-panel"><div className="professional-chart-empty">正在读取恢复趋势…</div></AppCard> : !hasData ? <AppCard variant="chart" className="professional-panel"><ContentState kind="empty" title="暂无恢复趋势数据" description="当前周期未找到有效的日报或训练 RPE 记录。" /></AppCard> : <section className="personal-wellness-grid" aria-label="恢复趋势">
-      {trends.map((trend) => (
-        <AppCard
-          key={trend.key}
-          variant="chart"
-          className="professional-panel personal-wellness-card"
-        >
-          <header>
-            <h3>{trend.label}</h3>
-            <small>{trend.unit || '主观评分'}</small>
-          </header>
-          {trend.points.some((point) => point.personalValue !== null) ? (
-            <EChart
-              option={wellnessTrendOption(trend)}
-              label={`${trend.label}个人变化趋势，共 ${trend.points.filter((point) => point.personalValue !== null).length} 个有效记录；缺失日期不连线、不以零补齐。`}
-            />
-          ) : (
-            <p>暂无数据</p>
-          )}
+      <p className="visually-hidden" aria-live="polite">
+        {statusMessage}
+      </p>
+      {loading ? (
+        <AppCard variant="chart" className="professional-panel">
+          <div className="professional-chart-empty">正在读取恢复趋势…</div>
         </AppCard>
-      ))}
-      </section>}
+      ) : !hasData ? (
+        <AppCard variant="chart" className="professional-panel">
+          <ContentState
+            kind="empty"
+            title="暂无恢复趋势数据"
+            description="当前周期未找到有效的日报或训练 RPE 记录。"
+          />
+        </AppCard>
+      ) : (
+        <section className="personal-wellness-grid" aria-label="恢复趋势">
+          {trends.map((trend) => (
+            <AppCard
+              key={trend.key}
+              variant="chart"
+              className="professional-panel personal-wellness-card"
+            >
+              <header>
+                <h3>{trend.label}</h3>
+                <small>{trend.unit || '主观评分'}</small>
+              </header>
+              {trend.points.some((point) => point.personalValue !== null) ? (
+                <EChart
+                  option={wellnessTrendOption(trend)}
+                  label={`${trend.label}个人变化趋势，共 ${trend.points.filter((point) => point.personalValue !== null).length} 个有效记录；缺失日期不连线、不以零补齐。`}
+                />
+              ) : (
+                <p>暂无数据</p>
+              )}
+            </AppCard>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
@@ -829,29 +934,6 @@ function AerobicEndurance({
         />
       )}
     </AppCard>
-  );
-}
-
-function PersonalMetric({
-  icon: Icon,
-  label,
-  value,
-  unit,
-}: {
-  icon: typeof Gauge;
-  label: string;
-  value: string;
-  unit: string;
-}) {
-  return (
-    <article>
-      <Icon size={19} />
-      <span>{label}</span>
-      <strong>
-        {value}
-        <small>{unit}</small>
-      </strong>
-    </article>
   );
 }
 

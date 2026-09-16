@@ -787,7 +787,7 @@ export function BodyCompositionModelOverview({
           </label>
         )}
         <div>
-          <span>BODY COMPOSITION / SNAPSHOT</span>
+          <span>DATA SNAPSHOT</span>
           <strong>{activeProfile.athleteName}</strong>
           <small>
             {activeProfile.project} · {activeProfile.team}
@@ -819,7 +819,7 @@ export function BodyCompositionModelOverview({
           <header>
             <div>
               <span>01 / COMPOSITION SIMULATION</span>
-              <h3>身体成分模拟图</h3>
+              <h4>身体成分模拟图</h4>
             </div>
             <small>数据卡为真实采集或明确计算值</small>
           </header>
@@ -855,7 +855,7 @@ export function BodyCompositionModelOverview({
           <header>
             <div>
               <span>02 / SEGMENTAL LEAN</span>
-              <h3>节段去脂量</h3>
+              <h4>节段去脂量</h4>
             </div>
             <small>仅展示已采集的节段实测</small>
           </header>

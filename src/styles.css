@@ -3153,17 +3153,18 @@ p {
   gap: 3px;
 }
 .personal-analysis-card-heading small {
-  color: #7c9096;
+  color: #536a71;
   font-size: 8px;
   font-weight: 900;
   letter-spacing: 0.1em;
 }
-.personal-analysis-card-heading h2 {
+.personal-analysis-card-heading h2,
+.personal-analysis-card-heading h3 {
   color: var(--ink);
   font-size: 15px;
 }
 .personal-analysis-card-heading p {
-  color: #738890;
+  color: #536a71;
   font-size: 9px;
 }
 .personal-analysis-card-heading > strong {
@@ -3187,6 +3188,44 @@ p {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
+}
+.body-composition-profile-card .body-composition-atlas {
+  gap: 10px;
+}
+.body-composition-profile-card .body-atlas-toolbar {
+  min-height: 66px;
+  padding: 11px 13px;
+  gap: 10px;
+}
+.body-composition-profile-card .body-atlas-toolbar strong {
+  font-size: 16px;
+}
+.body-composition-profile-card .body-atlas-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.body-composition-profile-card .body-atlas-summary article:nth-child(2) {
+  border-right: 0;
+}
+.body-composition-profile-card .body-atlas-summary article:nth-child(-n + 2) {
+  border-bottom: 1px solid #e4eeee;
+}
+.body-composition-profile-card .body-atlas-summary article {
+  min-height: 76px;
+  padding: 10px 12px;
+}
+.body-composition-profile-card .body-atlas-summary strong {
+  font-size: 22px;
+}
+.body-composition-profile-card .body-atlas-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.body-composition-profile-card .body-atlas-panel {
+  min-height: 0;
+  padding: 12px;
+}
+.body-composition-profile-card .body-simulation-panel {
+  min-height: 326px;
 }
 
 @media (max-width: 900px) {
@@ -7629,7 +7668,7 @@ p {
   justify-content: space-between;
   gap: 12px;
 }
-.body-atlas-panel h3 {
+.body-atlas-panel h4 {
   margin-top: 3px;
   color: #193f49;
   font-size: 14px;
@@ -11487,6 +11526,23 @@ p {
   min-width: 0;
   flex: 1;
 }
+.personal-header-metrics {
+  min-width: 360px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-left: 1px solid var(--dossier-divider);
+}
+.personal-header-metrics article {
+  min-width: 0;
+  padding: 5px 13px 5px 16px;
+  border-right: 1px solid var(--dossier-divider);
+  display: grid;
+  gap: 6px;
+}
+.personal-header-metrics article:last-child { border-right: 0; }
+.personal-header-metrics span { color: var(--dossier-label); font-size: 9px; font-weight: 750; white-space: nowrap; }
+.personal-header-metrics strong { color: var(--dossier-value); font: 900 22px/1 "Bahnschrift", "Microsoft YaHei UI", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.personal-header-metrics strong small { margin-left: 4px; color: #b9ded7; font: 700 9px "Microsoft YaHei UI", sans-serif; }
 .personal-dossier-groups {
   margin-top: 16px;
   display: grid;
@@ -13416,6 +13472,7 @@ p {
   .personal-dossier-identity {
     min-height: 0;
   }
+  .personal-header-metrics { min-width: 0; width: min(420px, 46%); }
   .personal-dossier-groups {
     grid-template-columns: 1fr;
   }
@@ -13533,7 +13590,13 @@ p {
   .personal-dossier-identity {
     align-items: flex-start;
     gap: 12px;
+    flex-wrap: wrap;
   }
+  .personal-header-metrics { width: 100%; min-width: 0; grid-template-columns: 1fr; border-top: 1px solid var(--dossier-divider); border-left: 0; }
+  .personal-header-metrics article { padding: 11px 0; border-right: 0; border-bottom: 1px solid var(--dossier-divider); }
+  .personal-header-metrics article:last-child { border-bottom: 0; }
+  .personal-header-metrics article:first-child { padding-left: 0; }
+  .personal-header-metrics strong { font-size: 19px; }
   .personal-dossier-groups {
     margin-top: 14px;
     gap: 10px;
