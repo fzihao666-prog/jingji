@@ -386,6 +386,8 @@ export type SpecialTestEvent = {
   windConditions: string;
   location: string;
   note: string;
+  dataSource?: string;
+  dataQuality?: 'valid' | 'unverified';
   results: SpecialTestResult[];
 };
 
@@ -712,6 +714,35 @@ export type BodyCompositionRecord = {
   leftLegLeanKg: number | null;
   rightLegLeanKg: number | null;
   note: string;
+};
+
+export type WellnessTrendPoint = {
+  date: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  teamSampleCount: number | null;
+  hasPersonalValue: boolean;
+};
+
+export type WellnessTrend = { key: 'rpe' | 'sleepHours' | 'morningPulse' | 'weightKg'; label: string; unit: string; points: WellnessTrendPoint[] };
+export type WellnessTrendsPayload = { trends: WellnessTrend[] };
+
+export type ProfileComparisonItem = {
+  key: string;
+  label: string;
+  unit: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  difference: number | null;
+  teamSampleCount: number | null;
+  dateLabel: string | null;
+  unavailableReason: string | null;
+};
+
+export type ProfileComparisonPayload = {
+  scope: { athleteId: number; teamId: number | null; project: string; from: string; to: string; athleteCount: number };
+  items: ProfileComparisonItem[];
+  teamSessionCount: number;
 };
 
 export type OverviewAthleteProfile = {

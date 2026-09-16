@@ -13,7 +13,7 @@ import { api } from '../api';
 import type { Athlete, InjuryRecord, InjuryStatus, User } from '../types';
 import { formatDate, toIsoDate } from '../utils';
 
-type Props = { athlete: Athlete; user: User };
+type Props = { athlete: Athlete; user: User; asOfDate?: string };
 
 const statusMeta: Record<InjuryStatus, { label: string; color: string; description: string }> = {
   healthy: { label: '健康', color: '#16978d', description: '当前没有训练限制' },
@@ -40,7 +40,7 @@ const emptyForm = () => ({
   note: ''
 });
 
-export function InjuryRecoveryModule({ athlete, user }: Props) {
+export function InjuryRecoveryModule({ athlete, user, asOfDate }: Props) {
   const [records, setRecords] = useState<InjuryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -49,7 +49,7 @@ export function InjuryRecoveryModule({ athlete, user }: Props) {
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(emptyForm);
   const isAthlete = user.role === 'ATL';
-  const current = records[0] || null;
+  const current = records.find((record) => !asOfDate || record.onsetDate <= asOfDate) || null;
   const currentMeta = statusMeta[current?.status || 'healthy'];
   const visibleRecords = expanded ? records : records.slice(0, 4);
 
@@ -142,7 +142,7 @@ export function InjuryRecoveryModule({ athlete, user }: Props) {
           )}
 
           <div className="injury-history-panel">
-            <div className="injury-history-heading"><div><Activity size={16} /><strong>历史记录</strong></div><small>新增记录不会覆盖以前的内容</small></div>
+            <div className="injury-history-heading"><div><Activity size={16} /><strong>历史记录</strong></div><small>全量病史，不受当前周期截断</small></div>
             {visibleRecords.length ? (
               <div className="injury-timeline">
                 {visibleRecords.map((record) => {

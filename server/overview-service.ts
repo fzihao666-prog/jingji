@@ -535,6 +535,11 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
+      AND ts.is_demo = 0
+      AND ts.quality NOT IN ('insufficient', 'outlier', 'estimated')
+      AND lower(ts.source) NOT LIKE '%demo%'
+      AND lower(ts.source) NOT LIKE '%seed%'
+      AND lower(ts.source) NOT LIKE '%estimated%'
     ORDER BY ts.session_date, ts.session_order, a.name
   `).all(...input.athleteIds, input.from, input.to) as SessionRow[];
 }

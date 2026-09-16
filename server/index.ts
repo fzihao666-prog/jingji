@@ -8,6 +8,7 @@ import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db, upsertAthleteOrigin } from './db.ts';
 import { buildOverviewPayload, buildSpecialTrainingPayload } from './overview-service.ts';
+import { buildProfileComparison, buildWellnessTrends, resolveProfileScope } from './athlete-profile-service.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import {
   AREA_LEVEL_META,
@@ -3956,6 +3957,33 @@ app.get('/api/athletes/:id/overview', requireAuth, (req, res) => {
   res.json({ overview: buildOverviewPayload({ athleteIds: [athleteId], from: range.from, to: range.to, project, individual: true, period: range.period }) });
 });
 
+function athleteProfileScope(user: AuthUser, athleteId: number, from: string, to: string, project: string) {
+  if (!athleteId || !hasAthleteAccess(user, athleteId)) return null;
+  return resolveProfileScope({ athleteId, accessibleAthleteIds: accessibleAthleteIds(user), from, to, project });
+}
+
+app.get('/api/athletes/:id/wellness-trends', requireAuth, (req, res) => {
+  const athleteId = Number(req.params.id || 0);
+  const project = cleanString(req.query.project);
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  if (!projectSet.has(project) || !from || !to || !isValidIsoDate(from) || !isValidIsoDate(to) || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
+  if (!scope) return res.status(403).json({ message: '无权查看该运动员恢复趋势。' });
+  res.json(buildWellnessTrends(scope));
+});
+
+app.get('/api/athletes/:id/profile-comparison', requireAuth, (req, res) => {
+  const athleteId = Number(req.params.id || 0);
+  const project = cleanString(req.query.project);
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  if (!projectSet.has(project) || !from || !to || !isValidIsoDate(from) || !isValidIsoDate(to) || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
+  if (!scope) return res.status(403).json({ message: '无权查看该运动员团队比较。' });
+  res.json(buildProfileComparison(scope));
+});
+
 app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
   const user = req.authUser!;
   const athleteId = Number(req.params.id || 0);
@@ -4519,6 +4547,8 @@ function readSpecialTestEvents(user: AuthUser, project: string, from: string, to
     return {
       ...event,
       project,
+      dataSource: 'legacy_special_test',
+      dataQuality: 'unverified' as const,
       results: visible.map((row) => ({
         ...row,
         crewName: user.role === 'ATL' ? user.displayName : row.crewName,
@@ -4557,7 +4587,12 @@ app.get('/api/special-tests', requireAuth, (req, res) => {
   if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
   const from = parseDate(req.query.from) || '1900-01-01';
   const to = parseDate(req.query.to) || '2999-12-31';
-  res.json({ events: readSpecialTestEvents(user, project, from, to) });
+  const athleteId = req.query.athleteId === undefined ? null : Number(req.query.athleteId);
+  if (athleteId !== null && (!Number.isInteger(athleteId) || athleteId <= 0 || !hasAthleteAccess(user, athleteId))) return res.status(403).json({ message: '无权查看该运动员专项测试。' });
+  const athlete = athleteId === null ? null : db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as { project: string } | undefined;
+  if (athleteId !== null && (!athlete || athlete.project !== project)) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+  const events = readSpecialTestEvents(user, project, from, to);
+  res.json({ events: athleteId === null ? events : events.map((event) => ({ ...event, results: event.results.filter((result) => result.memberAthleteIds.includes(athleteId)) })).filter((event) => event.results.length) });
 });
 
 app.post('/api/special-tests/import/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), upload.single('file'), async (req, res) => {
@@ -4613,7 +4648,7 @@ app.post('/api/special-tests/import/commit', requireAuth, requireRole('SCC', 'PR
   try {
     for (const eventRows of grouped.values()) {
       const first = eventRows[0];
-      const saved = upsertEvent.get(first.project, first.testDate, first.distanceM, first.boatClass, first.genderGroup, first.session, first.windConditions, first.location, first.note, req.authUser!.id) as { id: number };
+      const saved = upsertEvent.get(projectLabel(first.project), first.testDate, first.distanceM, first.boatClass, first.genderGroup, first.session, first.windConditions, first.location, first.note, req.authUser!.id) as { id: number };
       db.prepare('DELETE FROM special_test_results WHERE event_id = ?').run(saved.id);
       for (const row of eventRows) {
         insertResult.run(saved.id, row.crewName, JSON.stringify(row.memberAthleteIds), JSON.stringify(row.memberNames), row.previousBestMs, JSON.stringify(row.attemptsMs), row.averageMs, row.bestMs);

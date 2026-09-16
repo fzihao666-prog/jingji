@@ -204,6 +204,7 @@ sequenceDiagram
 - `server/index.ts`：HTTP 适配、认证、权限、输入校验、事务用例、导入缓存、Excel 输出；
 - `server/db.ts`：连接参数、表结构、兼容迁移、初始化锁和初始化数据；
 - `server/overview-service.ts`：以训练场次为中心构建总览结果；
+- `server/athlete-profile-service.ts`：构建个人恢复趋势、专项成员筛选所需数据和同队档案比较；仅输出已授权范围内的有效非演示数据；
 - `server/ai-service.ts`：收集运动员上下文、按优先级调用模型并解析训练计划；
 - `server/strength-import-ai.ts`：把图片/PDF识别为逐组体能训练结果。
 

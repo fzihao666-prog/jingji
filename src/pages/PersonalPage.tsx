@@ -10,7 +10,7 @@ import { BodyCompositionModelOverview, type BodyCompositionProfile } from '../co
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import { api } from '../api';
-import type { Athlete, BodyCompositionRecord, ChampionBenchmarkPayload, OverviewMeasurement, Project, TrainingRecord, User } from '../types';
+import type { Athlete, BodyCompositionRecord, ChampionBenchmarkPayload, OverviewMeasurement, ProfileComparisonPayload, Project, SpecialTestEvent, TrainingRecord, User, WellnessTrend } from '../types';
 import { addDays, formatNumber } from '../utils';
 
 type Props = {
@@ -114,6 +114,10 @@ export function PersonalPage(props: Props) {
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
   const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
   const [championLoading, setChampionLoading] = useState(false);
+  const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
+  const [profileComparison, setProfileComparison] = useState<ProfileComparisonPayload | null>(null);
+  const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
+  const [dossierDataLoading, setDossierDataLoading] = useState(false);
 
   useEffect(() => {
     let ignored = false;
@@ -149,9 +153,34 @@ export function PersonalPage(props: Props) {
     return () => { ignored = true; };
   }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
 
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setWellnessTrends([]);
+      setProfileComparison(null);
+      setSpecialTests([]);
+      return;
+    }
+    setDossierDataLoading(true);
+    Promise.all([
+      api.wellnessTrends(selectedAthlete.id, props.from, props.to, selectedAthlete.project as Project),
+      api.profileComparison(selectedAthlete.id, props.from, props.to, selectedAthlete.project as Project),
+      api.specialTests(props.from, props.to, selectedAthlete.project as Project, selectedAthlete.id)
+    ]).then(([wellness, comparison, tests]) => {
+      if (ignored) return;
+      setWellnessTrends(wellness.trends);
+      setProfileComparison(comparison.comparison);
+      setSpecialTests(tests.events);
+    }).catch(() => {
+      if (!ignored) { setWellnessTrends([]); setProfileComparison(null); setSpecialTests([]); }
+    }).finally(() => { if (!ignored) setDossierDataLoading(false); });
+    return () => { ignored = true; };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+
   const bodyCompositionProfile = useMemo<BodyCompositionProfile | null>(() => {
     if (!selectedAthlete) return null;
-    const latest = bodyHistory[0];
+    const historyBeforeEnd = bodyHistory.filter((record) => record.measurementDate <= props.to);
+    const latest = historyBeforeEnd[0];
     return {
       athleteId: selectedAthlete.id,
       athleteName: selectedAthlete.name,
@@ -164,6 +193,7 @@ export function PersonalPage(props: Props) {
       weightKg: latest?.weightKg ?? selectedAthlete.weightKg,
       bodyFatPct: latest?.bodyFatPct ?? selectedAthlete.bodyFatPct,
       skeletalMuscleKg: latest?.skeletalMuscleKg ?? selectedAthlete.skeletalMuscleKg,
+      muscleMassKg: latest?.muscleMassKg ?? selectedAthlete.muscleMassKg,
       upperLimbMuscleKg: latest?.upperLimbMuscleKg ?? selectedAthlete.upperLimbMuscleKg,
       lowerLimbMuscleKg: latest?.lowerLimbMuscleKg ?? selectedAthlete.lowerLimbMuscleKg,
       trunkMuscleKg: latest?.trunkMuscleKg ?? selectedAthlete.trunkMuscleKg,
@@ -182,9 +212,9 @@ export function PersonalPage(props: Props) {
       trunkLeanKg: latest?.trunkLeanKg ?? selectedAthlete.trunkLeanKg,
       leftLegLeanKg: latest?.leftLegLeanKg ?? selectedAthlete.leftLegLeanKg,
       rightLegLeanKg: latest?.rightLegLeanKg ?? selectedAthlete.rightLegLeanKg,
-      bodyCompositionHistory: bodyHistory
+      bodyCompositionHistory: historyBeforeEnd.filter((record) => record.measurementDate >= props.from)
     };
-  }, [selectedAthlete, bodyHistory, props.to]);
+  }, [selectedAthlete, bodyHistory, props.from, props.to]);
 
   useEffect(() => {
     setPositionDraft(rowingSeatValue(selectedAthlete?.athletePosition));
@@ -319,24 +349,24 @@ export function PersonalPage(props: Props) {
             </section>
           </section>
 
-          <div>
+          <ProfileSection title="制胜要素分析" subtitle="身体形态、功能动作、专项与体能测试均遵循当前项目和日期范围。">
             <AppCard variant="chart" className="professional-panel body-composition-card personal-body-assessment-card">
               <header className="personal-body-assessment-heading">
-                <div><span>PHYSIQUE ASSESSMENT</span><h2>运动员身体成分评估</h2><p>节段去脂、肌脂平衡、水合状态与复测趋势</p></div>
-                <small>{bodyHistoryLoading ? '正在读取身体成分历史…' : `已读取 ${bodyHistory.length} 次实测记录`}</small>
+                <div><span>BODY COMPOSITION</span><h2>身体成分</h2></div>
+                <small>{bodyHistoryLoading ? '读取中…' : bodyCompositionProfile?.bodyMeasurementDate || '暂无实测'}</small>
               </header>
-              <BodyCompositionModelOverview profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []} records={selectedRecords} individual />
-              <p className="analysis-method-note">身体成分用于训练适应、营养干预和控重阶段观察；模拟项仅用于展示，录入实测值后自动替换。</p>
+              <BodyCompositionModelOverview profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []} individual />
             </AppCard>
-          </div>
+          </ProfileSection>
 
+          <ProfileSection title="训练情况" subtitle={`${props.from} 至 ${props.to}，仅统计当前运动员的有效训练课次。`}>
           <section className="personal-training-overview" aria-labelledby="training-overview-title">
             <header>
               <div><span>PERIOD OVERVIEW</span><h2 id="training-overview-title">当前周期训练摘要</h2></div>
               <small>{props.from} 至 {props.to}</small>
             </header>
             <div className="personal-period-layout">
-              <div className="personal-period-copy"><strong>{rangeMode.label}训练概览</strong><p>训练负荷、专项距离与课次随当前日期周期变化。</p></div>
+              <div className="personal-period-copy"><strong>体能训练与专项训练</strong><p>训练负荷、专项距离与课次随当前日期周期变化。</p></div>
               <section className="personal-metric-grid" aria-label="当前周期关键指标">
                 <PersonalMetric icon={Gauge} label={`${rangeMode.label}负荷`} value={formatNumber(rangeAnalysis.totalSrpe)} unit="SRPE" />
                 <PersonalMetric icon={Route} label="专项距离" value={formatNumber(rangeAnalysis.totalDistanceKm, 1)} unit="km" />
@@ -345,8 +375,9 @@ export function PersonalPage(props: Props) {
               </section>
             </div>
           </section>
+          </ProfileSection>
 
-          <div>
+          <ProfileSection title="功能与专项测试" subtitle="功能动作筛查、专项测试、体能测试档案与有氧指标。">
             <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-fms-card">
               <header className="personal-analysis-card-heading">
                 <div><BrainCircuit size={17} /><span><small>FMS SCREENING</small><h2>个人FMS测试分析</h2><p>标准七项、21分制与纠正训练优先级</p></span></div>
@@ -355,25 +386,77 @@ export function PersonalPage(props: Props) {
               {profileAnalysisLoading ? <div className="professional-chart-empty">正在读取个人FMS测试…</div> : <FmsPersonalChart measurements={profileMeasurements} />}
               <p className="analysis-method-note">FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。</p>
             </AppCard>
-          </div>
+            <SpecialTestSummary events={specialTests} loading={dossierDataLoading} />
 
-          <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-champion-card">
+            <AppCard variant="chart" className="professional-panel analysis-feature-panel personal-champion-card">
             <header className="personal-analysis-card-heading">
               <div><Trophy size={17} /><span><small>CHAMPION RADAR</small><h2>冠军模型八维雷达分析</h2><p>当前水平、冠军标准、维度差距与补强优先级</p></span></div>
               <strong>八维雷达</strong>
             </header>
             <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
             <p className="analysis-method-note">八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。</p>
-          </AppCard>
+            </AppCard>
+            <AerobicEndurance measurements={profileMeasurements} loading={profileAnalysisLoading} />
+            <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
+          </ProfileSection>
 
-          <div>
-            <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} />
-          </div>
-          <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
+          <ProfileSection title="生理生化与恢复状态" subtitle="恢复趋势包含真实日报；生理生化尚未接入正式数据模型。">
+            <AppCard variant="chart" className="professional-panel"><ContentState kind="empty" title="生理生化数据暂未接入" description="等待正式数据模型接入后展示，不使用模拟结果。" /></AppCard>
+            <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} />
+            <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
+          </ProfileSection>
+          <ProfileSection title="个人 vs 团队对比" subtitle="同项目、同队伍、同周期且至少两名可比运动员；缺失数据不补零。">
+            <ComparisonSummary comparison={profileComparison} loading={dossierDataLoading} />
+          </ProfileSection>
         </>
       )}
     </PageContainer>
   );
+}
+
+function ProfileSection({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return <section className="personal-profile-section" aria-label={title}>
+    <header className="personal-profile-section-heading"><div><span>ATHLETE DOSSIER</span><h2>{title}</h2><p>{subtitle}</p></div></header>
+    {children}
+  </section>;
+}
+
+function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; loading: boolean }) {
+  if (loading) return <AppCard variant="chart" className="professional-panel"><div className="professional-chart-empty">正在读取恢复趋势…</div></AppCard>;
+  if (!trends.some((trend) => trend.points.length)) return <AppCard variant="chart" className="professional-panel"><ContentState kind="empty" title="暂无恢复趋势数据" description="当前周期未找到有效的日报或训练 RPE 记录。" /></AppCard>;
+  return <section className="personal-wellness-grid" aria-label="恢复趋势">
+    {trends.map((trend) => <AppCard key={trend.key} variant="chart" className="professional-panel personal-wellness-card">
+      <header><h3>{trend.label}</h3><small>{trend.unit || '主观评分'}</small></header>
+      {trend.points.length ? <>
+        <div className="personal-trend-points">{trend.points.slice(-7).map((point) => <div key={point.date}><span>{point.date.slice(5)}</span><strong>{point.personalValue ?? '—'}</strong><small>{point.teamMean === null ? '暂无团队均值' : `团队 ${point.teamMean} · n=${point.teamSampleCount}`}</small></div>)}</div>
+        <details><summary>查看趋势数据表</summary><table><caption>{trend.label}个人值与团队日均</caption><thead><tr><th>日期</th><th>个人</th><th>团队均值</th><th>样本数</th></tr></thead><tbody>{trend.points.map((point) => <tr key={point.date}><td>{point.date}</td><td>{point.personalValue ?? '—'}</td><td>{point.teamMean ?? '—'}</td><td>{point.teamSampleCount ?? '—'}</td></tr>)}</tbody></table></details>
+      </> : <p>暂无数据</p>}
+    </AppCard>)}
+  </section>;
+}
+
+function SpecialTestSummary({ events, loading }: { events: SpecialTestEvent[]; loading: boolean }) {
+  return <AppCard variant="chart" className="professional-panel personal-special-test-card">
+    <header className="personal-analysis-card-heading"><div><span><small>SPECIAL TEST</small><h2>专项测试</h2><p>仅展示当前运动员作为成员参与的艇组结果。</p></span></div></header>
+    {loading ? <div className="professional-chart-empty">正在读取专项测试…</div> : events.length ? <div className="personal-special-test-list">{events.slice(0, 3).map((event) => event.results.map((result) => <article key={result.id}><strong>{event.testDate} · {event.boatClass}</strong><span>{result.crewName} · 第 {result.rank} 名</span><b>{(result.bestMs / 1000).toFixed(2)} 秒</b><small>{result.previousBestMs === null ? '暂无个人历史最佳' : `较历史最佳 ${result.deltaPreviousMs === null ? '—' : `${result.deltaPreviousMs > 0 ? '+' : ''}${(result.deltaPreviousMs / 1000).toFixed(2)} 秒`}`}</small>{event.dataQuality === 'unverified' && <small>来源：历史专项测试，质量待确认</small>}</article>))}</div> : <ContentState kind="empty" title="暂无专项测试结果" description="当前周期内没有包含该运动员的有效专项测试。" />}
+  </AppCard>;
+}
+
+function AerobicEndurance({ measurements, loading }: { measurements: OverviewMeasurement[]; loading: boolean }) {
+  const aerobic = measurements.filter((measurement) => /vo2|aerobic|endurance|耐力|heart|心率/i.test(`${measurement.code} ${measurement.label}`) && measurement.value !== null && !measurement.isDemo && measurement.quality === 'valid');
+  return <AppCard variant="chart" className="professional-panel">
+    <header className="personal-analysis-card-heading"><div><span><small>AEROBIC ENDURANCE</small><h2>有氧耐力</h2><p>仅展示指标字典中已有的有效有氧或心率类测试。</p></span></div></header>
+    {loading ? <div className="professional-chart-empty">正在读取有氧指标…</div> : aerobic.length ? <div className="personal-comparison-grid">{aerobic.map((measurement) => <article key={measurement.code}><span>{measurement.label}</span><strong>{measurement.value} {measurement.unit}</strong><small>{measurement.previous === null ? '暂无前次对照' : `较前次 ${measurement.changePct === null ? '—' : `${measurement.changePct > 0 ? '+' : ''}${measurement.changePct}%`}`}</small></article>)}</div> : <ContentState kind="empty" title="暂无有效有氧耐力指标" description="当前数据字典和测试记录中没有可展示的有效指标。" />}
+  </AppCard>;
+}
+
+function ComparisonSummary({ comparison, loading }: { comparison: ProfileComparisonPayload | null; loading: boolean }) {
+  if (loading) return <AppCard variant="chart" className="professional-panel"><div className="professional-chart-empty">正在计算可比团队数据…</div></AppCard>;
+  if (!comparison) return <AppCard variant="chart" className="professional-panel"><ContentState kind="empty" title="暂无可比团队数据" description="当前范围内没有足够的同队有效数据。" /></AppCard>;
+  return <AppCard variant="chart" className="professional-panel personal-comparison-card">
+    <p className="analysis-method-note">范围：{comparison.scope.project} · 当前队伍 · {comparison.scope.from} 至 {comparison.scope.to} · 可访问运动员 {comparison.scope.athleteCount} 人。</p>
+    <div className="personal-comparison-grid">{comparison.items.map((item) => <article key={item.key}><span>{item.label}{item.unit ? ` (${item.unit})` : ''}</span><strong>{item.personalValue ?? '—'}</strong><small>{item.teamMean === null ? item.unavailableReason : `团队均值 ${item.teamMean} · 差异 ${item.difference === null ? '—' : item.difference > 0 ? `+${item.difference}` : item.difference} · n=${item.teamSampleCount}`}</small><em>{item.dateLabel || '暂无数据日期'}</em></article>)}</div>
+  </AppCard>;
 }
 
 function PersonalMetric({ icon: Icon, label, value, unit }: { icon: typeof Gauge; label: string; value: string; unit: string }) {

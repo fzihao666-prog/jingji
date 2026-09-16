@@ -5,6 +5,8 @@ import type {
   Athlete,
   AuditLog,
   BodyCompositionRecord,
+  WellnessTrendsPayload,
+  ProfileComparisonPayload,
   ChampionBenchmarkPayload,
   DataImportBatch,
   DataImportBatchSummary,
@@ -151,6 +153,12 @@ export const api = {
   async personalOverview(id: number, from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });
     return request<{ overview: OverviewPayload }>(`/api/athletes/${id}/overview?${params}`);
+  },
+  async wellnessTrends(id: number, from: string, to: string, project: Project) {
+    return request<WellnessTrendsPayload>(`/api/athletes/${id}/wellness-trends?${new URLSearchParams({ from, to, project })}`);
+  },
+  async profileComparison(id: number, from: string, to: string, project: Project) {
+    return request<{ comparison: ProfileComparisonPayload }>(`/api/athletes/${id}/profile-comparison?${new URLSearchParams({ from, to, project })}`);
   },
   async championBenchmark(id: number) {
     return request<{ benchmark: ChampionBenchmarkPayload }>(`/api/athletes/${id}/champion-model`);
@@ -450,8 +458,9 @@ export const api = {
     if (teamId) params.set('teamId', String(teamId));
     return request<{ training: SpecialTrainingAnalytics; athletes: SpecialTrainingAthlete[] }>(`/api/special-training/overview?${params}`);
   },
-  async specialTests(from: string, to: string, project: Project) {
+  async specialTests(from: string, to: string, project: Project, athleteId?: number) {
     const params = new URLSearchParams({ from, to, project });
+    if (athleteId) params.set('athleteId', String(athleteId));
     return request<{ events: SpecialTestEvent[] }>(`/api/special-tests?${params}`);
   },
   async previewSpecialTests(file: File, project: Project) {
