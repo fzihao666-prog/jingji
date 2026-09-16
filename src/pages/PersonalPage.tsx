@@ -646,32 +646,35 @@ export function PersonalPage(props: Props) {
             title="功能与专项测试"
             subtitle="功能动作筛查、专项测试、体能测试档案与有氧指标。"
           >
-            <AppCard
-              variant="chart"
-              className="professional-panel analysis-feature-panel personal-fms-card"
-            >
-              <header className="personal-analysis-card-heading">
-                <div>
-                  <BrainCircuit size={17} />
-                  <span>
-                    <small>FMS SCREENING</small>
-                    <h2>（FMS）功能动作筛查</h2>
-                    <p>标准七项、21分制与纠正训练优先级</p>
-                  </span>
-                </div>
-                <strong>
-                  {profileAnalysisLoading ? '读取中' : `${fmsMeasurementCount} 项有效`}
-                </strong>
-              </header>
-              {profileAnalysisLoading ? (
-                <div className="professional-chart-empty">正在读取个人FMS测试…</div>
-              ) : (
-                <FmsPersonalChart measurements={profileMeasurements} />
-              )}
-              <p className="analysis-method-note">
-                FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
-              </p>
-            </AppCard>
+            <div className="functional-test-grid">
+              <AppCard
+                variant="chart"
+                className="professional-panel analysis-feature-panel personal-fms-card"
+              >
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <BrainCircuit size={17} />
+                    <span>
+                      <small>FMS SCREENING</small>
+                      <h2>（FMS）功能动作筛查</h2>
+                      <p>标准七项、21分制与纠正训练优先级</p>
+                    </span>
+                  </div>
+                  <strong>
+                    {profileAnalysisLoading ? '读取中' : `${fmsMeasurementCount} 项有效`}
+                  </strong>
+                </header>
+                {profileAnalysisLoading ? (
+                  <div className="professional-chart-empty">正在读取个人FMS测试…</div>
+                ) : (
+                  <FmsPersonalChart measurements={profileMeasurements} />
+                )}
+                <p className="analysis-method-note">
+                  FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
+                </p>
+              </AppCard>
+            </div>
+
             <SpecialTestSummary events={specialTests} loading={dossierDataLoading} />
 
             <AppCard

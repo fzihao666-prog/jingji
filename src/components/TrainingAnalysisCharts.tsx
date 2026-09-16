@@ -1229,12 +1229,21 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
     'fms_trunk_stability_pushup',
     'fms_rotary_stability',
   ];
+  const labels: Record<string, string> = {
+    fms_deep_squat: '深蹲',
+    fms_hurdle_step: '跨栏步',
+    fms_inline_lunge: '弓箭步',
+    fms_shoulder_mobility: '肩灵活',
+    fms_active_straight_leg_raise: '直腿抬高',
+    fms_trunk_stability_pushup: '躯干俯卧撑',
+    fms_rotary_stability: '旋转稳定',
+  };
   const data = keys.map((key, index) => {
     const row = measurements.find((item) => item.code === key);
     const score = row?.value ?? null;
     const target = row?.target ?? 2;
     return {
-      name: row?.label || key,
+      name: labels[key] || row?.label || key,
       score,
       target,
       gap: score === null ? null : score - target,
@@ -1246,51 +1255,100 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   const weakest = [...available]
     .sort((left, right) => (left.gap || 0) - (right.gap || 0))
     .slice(0, 2);
-  function Test() {
-    return (
-      <div>
-        <span>你好</span>
-        <img src="/test.png" />
-      </div>
-    );
-  }
+  const lowScoreCount = available.filter((row) => (row.score ?? 0) < 2).length;
+
+  const status =
+    total === null
+      ? { label: '待评估', className: 'pending' }
+      : lowScoreCount >= 2
+        ? { label: '优先纠正', className: 'attention' }
+        : lowScoreCount === 1 || total < 14
+          ? { label: '需关注', className: 'watch' }
+          : { label: '整体良好', className: 'good' };
   return (
     <div className="fms-personal-layout">
       <div className="fms-personal-chart">
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={data} margin={{ top: 18, right: 28, bottom: 18, left: 28 }}>
-            <PolarGrid />
+          <RadarChart
+            data={data}
+            outerRadius="72%"
+            margin={{ top: 28, right: 42, bottom: 28, left: 42 }}
+          >
+            <PolarGrid stroke="#d9e5e7" strokeWidth={1} />
 
-            <PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fill: '#4d666e' }} />
+            <PolarAngleAxis
+              dataKey="name"
+              tick={{
+                fontSize: 11,
+                fill: '#36545d',
+                fontWeight: 600,
+              }}
+            />
 
             <PolarRadiusAxis
               domain={[0, 3]}
               tickCount={4}
-              tick={{ fontSize: 9, fill: '#789098' }}
+              axisLine={false}
+              tick={{
+                fontSize: 9,
+                fill: '#8aa0a6',
+              }}
             />
 
             <Tooltip formatter={(value, name) => [`${formatNumber(Number(value), 1)} 分`, name]} />
-
-            <Legend wrapperStyle={{ fontSize: 10 }} />
-
-            <Radar
-              dataKey="target"
-              name="单项目标"
-              stroke="#9fb4b8"
-              fill="#dce7e8"
-              fillOpacity={0.22}
-            />
-
             <Radar
               dataKey="score"
               name="个人得分"
               stroke="#178e87"
+              strokeWidth={2.4}
               fill="#178e87"
-              fillOpacity={0.32}
+              fillOpacity={0.18}
+              dot={{
+                r: 3.5,
+                fill: '#ffffff',
+                stroke: '#178e87',
+                strokeWidth: 2,
+              }}
             />
           </RadarChart>
         </ResponsiveContainer>
       </div>
+      <aside className="fms-personal-summary">
+        <article>
+          <div className="fms-summary-top">
+            <span>综合评分</span>
+
+            <i className={`fms-status ${status.className}`}>{status.label}</i>
+          </div>
+
+          <strong>
+            {total === null ? '—' : formatNumber(total, 1)}
+            <small>/21</small>
+          </strong>
+
+          <em>已完成 {available.length}/7 项筛查</em>
+        </article>
+
+        <div>
+          {weakest.length ? (
+            weakest.map((row) => (
+              <p key={row.name}>
+                <b>{row.name}</b>
+                <span>
+                  {(row.score || 0) >= 2
+                    ? '动作质量达标'
+                    : `${formatNumber(row.score || 0, 1)} 分，建议优先纠正`}
+                </span>
+              </p>
+            ))
+          ) : (
+            <p>
+              <b>暂无测试</b>
+              <span>录入标准FMS七项后生成动作短板</span>
+            </p>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }

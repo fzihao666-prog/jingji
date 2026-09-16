@@ -3175,23 +3175,38 @@ p {
   white-space: nowrap;
 }
 .fms-personal-layout {
-  min-height: 302px;
-  padding: 18px 20px 6px;
+  min-height: 360px;
+  padding: 16px 18px 14px;
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(180px, 0.7fr);
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(250px, 1fr) auto;
+  gap: 12px;
+}
+.functional-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .functional-test-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .fms-personal-chart {
   min-height: 260px;
+  width: 100%;
 }
 .fms-personal-summary {
   display: grid;
-  gap: 11px;
-  align-content: stretch;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.6fr);
+  gap: 10px;
+  align-items: stretch;
 }
 .fms-personal-summary article {
-  padding: 18px;
-  border-radius: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
   color: #e1f1ef;
   background: linear-gradient(145deg, #083f4b, #136c68);
 }
@@ -3208,7 +3223,7 @@ p {
   margin-top: 5px;
   color: #fff;
   font:
-    900 36px 'Bahnschrift',
+    900 30px 'Bahnschrift',
     sans-serif;
 }
 .fms-personal-summary article small {
@@ -3217,6 +3232,7 @@ p {
 }
 .fms-personal-summary > div {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .fms-personal-summary p {
@@ -3235,6 +3251,41 @@ p {
 .fms-personal-summary p span {
   color: #6f858c;
   font-size: 9px;
+}
+.fms-summary-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fms-status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fms-status.good {
+  color: #b9f1df;
+  background: rgba(39, 181, 132, 0.18);
+}
+
+.fms-status.watch {
+  color: #ffe3a8;
+  background: rgba(238, 172, 61, 0.18);
+}
+
+.fms-status.attention {
+  color: #ffc7c1;
+  background: rgba(220, 87, 73, 0.2);
+}
+
+.fms-status.pending {
+  color: #c4d5d8;
+  background: rgba(255, 255, 255, 0.08);
 }
 .champion-benchmark-empty {
   min-height: 260px;
