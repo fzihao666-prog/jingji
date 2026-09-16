@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 const page = await readFile('src/pages/PersonalPage.tsx', 'utf8');
 const model = await readFile('src/components/AthleteProfileCharts.tsx', 'utf8');
 const styles = await readFile('src/styles.css', 'utf8');
-const assert = (value, message) => { if (!value) throw new Error(message); };
+const assert = (value, message) => {
+  if (!value) throw new Error(message);
+};
 
 assert(page.includes('<h2>身体成分</h2>'), '页面标题必须为“身体成分”');
 assert(!page.includes('运动员身体成分评估'), '页面不应保留旧标题');

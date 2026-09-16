@@ -1,8 +1,23 @@
-export const STRENGTH_TRAINING_CATEGORIES = ['基础力量', '功能性体能', '核心力量', '专项力量', '代谢训练'] as const;
-export type StrengthTrainingCategory = typeof STRENGTH_TRAINING_CATEGORIES[number];
+export const STRENGTH_TRAINING_CATEGORIES = [
+  '基础力量',
+  '功能性体能',
+  '核心力量',
+  '专项力量',
+  '代谢训练',
+] as const;
+export type StrengthTrainingCategory = (typeof STRENGTH_TRAINING_CATEGORIES)[number];
 
-export const STRENGTH_CONTENT_ANALYSIS_CATEGORIES = ['交叉训练', '功能训练', '拉伸再生', '循环训练', '最大力量', '爆发力', '核心力量', '动作准备'] as const;
-export type StrengthContentAnalysisCategory = typeof STRENGTH_CONTENT_ANALYSIS_CATEGORIES[number];
+export const STRENGTH_CONTENT_ANALYSIS_CATEGORIES = [
+  '交叉训练',
+  '功能训练',
+  '拉伸再生',
+  '循环训练',
+  '最大力量',
+  '爆发力',
+  '核心力量',
+  '动作准备',
+] as const;
+export type StrengthContentAnalysisCategory = (typeof STRENGTH_CONTENT_ANALYSIS_CATEGORIES)[number];
 
 export type StrengthContentAnalysisSource = {
   sessionLabel?: string | null;
@@ -13,8 +28,11 @@ export type StrengthContentAnalysisSource = {
 };
 
 // 训练内容分析只读取既有训练事实字段，不改变原始训练分类或写入额外标签。
-export function inferStrengthContentAnalysisCategory(input: StrengthContentAnalysisSource): StrengthContentAnalysisCategory | null {
-  const text = `${input.sessionLabel || ''} ${input.trainingType || ''} ${input.structureType || ''} ${input.exerciseName || ''} ${input.trainingCategory || ''}`.trim();
+export function inferStrengthContentAnalysisCategory(
+  input: StrengthContentAnalysisSource
+): StrengthContentAnalysisCategory | null {
+  const text =
+    `${input.sessionLabel || ''} ${input.trainingType || ''} ${input.structureType || ''} ${input.exerciseName || ''} ${input.trainingCategory || ''}`.trim();
   if (!text) return null;
   if (/动作准备|准备活动|热身|激活|动态拉伸|关节活动/.test(text)) return '动作准备';
   if (/交叉训练|交叉体能|crossfit|cross-training/i.test(text)) return '交叉训练';
@@ -28,27 +46,72 @@ export function inferStrengthContentAnalysisCategory(input: StrengthContentAnaly
 }
 
 export const STRENGTH_BODY_POSITIONS = ['上肢', '下肢', '核心', '全身'] as const;
-export type StrengthBodyPosition = typeof STRENGTH_BODY_POSITIONS[number];
+export type StrengthBodyPosition = (typeof STRENGTH_BODY_POSITIONS)[number];
 
-export const STRENGTH_TRAINING_ENVIRONMENTS = ['水上', '陆上', '测功仪', '泳池', '场馆', '其他'] as const;
-export type StrengthTrainingEnvironment = typeof STRENGTH_TRAINING_ENVIRONMENTS[number];
+export const STRENGTH_TRAINING_ENVIRONMENTS = [
+  '水上',
+  '陆上',
+  '测功仪',
+  '泳池',
+  '场馆',
+  '其他',
+] as const;
+export type StrengthTrainingEnvironment = (typeof STRENGTH_TRAINING_ENVIRONMENTS)[number];
 
 export const STRENGTH_INTENSITY_ZONES = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'] as const;
-export type StrengthIntensityZone = typeof STRENGTH_INTENSITY_ZONES[number];
+export type StrengthIntensityZone = (typeof STRENGTH_INTENSITY_ZONES)[number];
 
-export const TRAINING_INTENSITY_META: Record<StrengthIntensityZone, {
-  label: string;
-  strokeRate: string;
-  lactate: string;
-  purpose: string;
-}> = {
-  U3: { label: '低强度有氧恢复', strokeRate: '<18 spm', lactate: '<2.0 mmol/L', purpose: '恢复放松' },
-  U2: { label: '中等强度有氧基础', strokeRate: '16–20 spm', lactate: '1.5–2.5 mmol/L', purpose: '有氧耐力' },
-  U1: { label: '高强度有氧', strokeRate: '20–24 spm', lactate: '2.0–4.0 mmol/L', purpose: '有氧功率' },
-  AT: { label: '无氧阈强度', strokeRate: '24–28 spm', lactate: '3.5–6.0 mmol/L', purpose: '提升乳酸阈' },
-  TPT: { label: '专项耐力', strokeRate: '28–32 spm', lactate: '6.0–12.0 mmol/L', purpose: '比赛节奏' },
-  AN: { label: '无氧爆发冲刺', strokeRate: '>32 spm', lactate: '>12.0 mmol/L', purpose: '起航冲刺' },
-  ATP: { label: 'ATP既有强度区', strokeRate: '待业务确认', lactate: '待业务确认', purpose: '沿用原始强度字段，不自动推导或合并' }
+export const TRAINING_INTENSITY_META: Record<
+  StrengthIntensityZone,
+  {
+    label: string;
+    strokeRate: string;
+    lactate: string;
+    purpose: string;
+  }
+> = {
+  U3: {
+    label: '低强度有氧恢复',
+    strokeRate: '<18 spm',
+    lactate: '<2.0 mmol/L',
+    purpose: '恢复放松',
+  },
+  U2: {
+    label: '中等强度有氧基础',
+    strokeRate: '16–20 spm',
+    lactate: '1.5–2.5 mmol/L',
+    purpose: '有氧耐力',
+  },
+  U1: {
+    label: '高强度有氧',
+    strokeRate: '20–24 spm',
+    lactate: '2.0–4.0 mmol/L',
+    purpose: '有氧功率',
+  },
+  AT: {
+    label: '无氧阈强度',
+    strokeRate: '24–28 spm',
+    lactate: '3.5–6.0 mmol/L',
+    purpose: '提升乳酸阈',
+  },
+  TPT: {
+    label: '专项耐力',
+    strokeRate: '28–32 spm',
+    lactate: '6.0–12.0 mmol/L',
+    purpose: '比赛节奏',
+  },
+  AN: {
+    label: '无氧爆发冲刺',
+    strokeRate: '>32 spm',
+    lactate: '>12.0 mmol/L',
+    purpose: '起航冲刺',
+  },
+  ATP: {
+    label: 'ATP既有强度区',
+    strokeRate: '待业务确认',
+    lactate: '待业务确认',
+    purpose: '沿用原始强度字段，不自动推导或合并',
+  },
 };
 
 export function isStrengthTrainingCategory(value: unknown): value is StrengthTrainingCategory {
@@ -59,7 +122,9 @@ export function isStrengthBodyPosition(value: unknown): value is StrengthBodyPos
   return STRENGTH_BODY_POSITIONS.includes(value as StrengthBodyPosition);
 }
 
-export function isStrengthTrainingEnvironment(value: unknown): value is StrengthTrainingEnvironment {
+export function isStrengthTrainingEnvironment(
+  value: unknown
+): value is StrengthTrainingEnvironment {
   return STRENGTH_TRAINING_ENVIRONMENTS.includes(value as StrengthTrainingEnvironment);
 }
 

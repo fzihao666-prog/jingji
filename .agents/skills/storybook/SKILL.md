@@ -1,6 +1,6 @@
 ---
 name: storybook
-description: "Storybook CSF3 stories, play functions, decorators, and component behavior tests. Use for stories or component-test requests. 日本語の依頼例:「Storybook」「ストーリーを書く」「コンポーネントテスト」「play関数」。"
+description: 'Storybook CSF3 stories, play functions, decorators, and component behavior tests. Use for stories or component-test requests. 日本語の依頼例:「Storybook」「ストーリーを書く」「コンポーネントテスト」「play関数」。'
 ---
 
 # Storybook
@@ -16,7 +16,7 @@ import { LoginForm } from './LoginForm';
 
 const meta = {
   component: LoginForm,
-  args: { onSubmit: fn() },          // fn() for every callback prop — assertable, visible in Actions panel
+  args: { onSubmit: fn() }, // fn() for every callback prop — assertable, visible in Actions panel
 } satisfies Meta<typeof LoginForm>;
 export default meta;
 

@@ -7,7 +7,11 @@ import { ContentState, PageContainer, PageHeader } from '../components/PageLayou
 
 type Filter = 'pending' | 'approved' | 'rejected';
 
-const filterLabels: Record<Filter, string> = { pending: '待审核', approved: '已通过', rejected: '已拒绝' };
+const filterLabels: Record<Filter, string> = {
+  pending: '待审核',
+  approved: '已通过',
+  rejected: '已拒绝',
+};
 
 export function AccountsPage() {
   const [filter, setFilter] = useState<Filter>('pending');
@@ -28,10 +32,13 @@ export function AccountsPage() {
     }
   };
 
-  useEffect(() => { void load(filter); }, [filter]);
+  useEffect(() => {
+    void load(filter);
+  }, [filter]);
 
   const review = async (request: RegistrationRequest, action: 'approve' | 'reject') => {
-    if (action === 'reject' && !window.confirm(`确认拒绝 ${request.displayName} 的注册申请？`)) return;
+    if (action === 'reject' && !window.confirm(`确认拒绝 ${request.displayName} 的注册申请？`))
+      return;
     setWorkingId(request.id);
     setMessage('');
     try {
@@ -47,41 +54,103 @@ export function AccountsPage() {
 
   const renameRequest = async (requestId: number, name: string) => {
     const result = await api.renameRegistration(requestId, name);
-    setRequests((current) => current.map((request) => request.id === requestId ? { ...request, displayName: name } : request));
+    setRequests((current) =>
+      current.map((request) =>
+        request.id === requestId ? { ...request, displayName: name } : request
+      )
+    );
     setMessage(result.message);
   };
 
   return (
     <PageContainer className="accounts-page">
-      <PageHeader variant="compact" eyebrow="ACCOUNT REVIEW" title="账户审核" actions={<span className="pending-count"><Clock3 size={16} />{pending}项待处理</span>}/>
+      <PageHeader
+        variant="compact"
+        eyebrow="ACCOUNT REVIEW"
+        title="账户审核"
+        actions={
+          <span className="pending-count">
+            <Clock3 size={16} />
+            {pending}项待处理
+          </span>
+        }
+      />
 
       <div className="account-filters">
         {(Object.keys(filterLabels) as Filter[]).map((item) => (
-          <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{filterLabels[item]}</button>
+          <button
+            key={item}
+            className={filter === item ? 'active' : ''}
+            onClick={() => setFilter(item)}
+          >
+            {filterLabels[item]}
+          </button>
         ))}
       </div>
       {message && <div className="message-banner success">{message}</div>}
 
-      {loading ? <ContentState kind="loading" title="正在加载账户申请…"/> : requests.length ? (
+      {loading ? (
+        <ContentState kind="loading" title="正在加载账户申请…" />
+      ) : requests.length ? (
         <section className="account-list">
           {requests.map((request) => (
             <article key={request.id}>
-              <div className="request-avatar">{request.requestedRole === 'SCC' ? <UserCheck /> : <UserRound />}</div>
-              <div className="request-main">
-                <div><h2><EditableName value={request.displayName} canEdit onSave={(name) => renameRequest(request.id, name)} label="申请人姓名" /></h2><span>{request.requestedRole === 'SCC' ? '队伍体能教练' : '运动员'}</span></div>
-                <p>@{request.username} · {request.gender} · 籍贯：{request.nativePlace} · 身份证：{request.identityNumber} · {request.project} · {request.team}</p>
+              <div className="request-avatar">
+                {request.requestedRole === 'SCC' ? <UserCheck /> : <UserRound />}
               </div>
-              <time>{new Date(request.createdAt.replace(' ', 'T') + 'Z').toLocaleDateString('zh-CN')}</time>
-              {filter === 'pending' && <div className="review-actions">
-                <button className="reject-button" disabled={workingId === request.id} onClick={() => review(request, 'reject')}><X size={16} />拒绝</button>
-                <button className="approve-button" disabled={workingId === request.id} onClick={() => review(request, 'approve')}><Check size={16} />通过</button>
-              </div>}
-              {filter !== 'pending' && <span className={`review-result ${filter}`}>{filterLabels[filter]}</span>}
+              <div className="request-main">
+                <div>
+                  <h2>
+                    <EditableName
+                      value={request.displayName}
+                      canEdit
+                      onSave={(name) => renameRequest(request.id, name)}
+                      label="申请人姓名"
+                    />
+                  </h2>
+                  <span>{request.requestedRole === 'SCC' ? '队伍体能教练' : '运动员'}</span>
+                </div>
+                <p>
+                  @{request.username} · {request.gender} · 籍贯：{request.nativePlace} · 身份证：
+                  {request.identityNumber} · {request.project} · {request.team}
+                </p>
+              </div>
+              <time>
+                {new Date(request.createdAt.replace(' ', 'T') + 'Z').toLocaleDateString('zh-CN')}
+              </time>
+              {filter === 'pending' && (
+                <div className="review-actions">
+                  <button
+                    className="reject-button"
+                    disabled={workingId === request.id}
+                    onClick={() => review(request, 'reject')}
+                  >
+                    <X size={16} />
+                    拒绝
+                  </button>
+                  <button
+                    className="approve-button"
+                    disabled={workingId === request.id}
+                    onClick={() => review(request, 'approve')}
+                  >
+                    <Check size={16} />
+                    通过
+                  </button>
+                </div>
+              )}
+              {filter !== 'pending' && (
+                <span className={`review-result ${filter}`}>{filterLabels[filter]}</span>
+              )}
             </article>
           ))}
         </section>
       ) : (
-        <ContentState kind="empty" className="account-empty" icon={<UserCheck size={34} />} title={`没有${filterLabels[filter]}申请`}/>
+        <ContentState
+          kind="empty"
+          className="account-empty"
+          icon={<UserCheck size={34} />}
+          title={`没有${filterLabels[filter]}申请`}
+        />
       )}
     </PageContainer>
   );

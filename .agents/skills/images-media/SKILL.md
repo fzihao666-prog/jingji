@@ -1,6 +1,6 @@
 ---
 name: images-media
-description: "Images, SVG, icons, fonts, video, favicons, responsive delivery, lazy loading, and LCP or CLS optimization. 日本語の依頼例:「画像最適化」「フォント読み込み」「動画埋め込み」「LCP改善」「ファビコン」。"
+description: 'Images, SVG, icons, fonts, video, favicons, responsive delivery, lazy loading, and LCP or CLS optimization. 日本語の依頼例:「画像最適化」「フォント読み込み」「動画埋め込み」「LCP改善」「ファビコン」。'
 ---
 
 # Images & Media

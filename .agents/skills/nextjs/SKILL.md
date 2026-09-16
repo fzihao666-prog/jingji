@@ -1,6 +1,6 @@
 ---
 name: nextjs
-description: "Next.js-specific App Router work: Server/Client Components, data fetching, caching, Server Actions, route handlers, metadata, and env vars. Not for framework-neutral styling or tests. 日本語の依頼例:「Next.jsで実装」「Server Action」「RSC」「ルートハンドラ」「キャッシュ」。"
+description: 'Next.js-specific App Router work: Server/Client Components, data fetching, caching, Server Actions, route handlers, metadata, and env vars. Not for framework-neutral styling or tests. 日本語の依頼例:「Next.jsで実装」「Server Action」「RSC」「ルートハンドラ」「キャッシュ」。'
 ---
 
 # Next.js (App Router)
@@ -32,7 +32,7 @@ When the repository uses Vinext, Cloudflare Workers/Sites, D1, or a Storybook gr
 Every action, no exceptions:
 
 1. **Authenticate**: verify the session inside the action (middleware is not sufficient — actions are directly invokable).
-2. **Authorize**: check the user may act on *this* resource (IDOR check on every ID argument).
+2. **Authorize**: check the user may act on _this_ resource (IDOR check on every ID argument).
 3. **Validate**: parse all arguments with zod before use. `FormData` fields are `unknown`, not `string`.
 4. Return typed results (`{ ok: true, data } | { ok: false, error }`); never throw raw DB/internal errors to the client.
 5. After mutation: `revalidateTag`/`revalidatePath`, then `redirect()` if needed (note: `redirect` throws — call it outside try/catch).

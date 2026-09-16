@@ -1,6 +1,6 @@
 ---
 name: i18n
-description: "Internationalization for catalogs, ICU messages, Intl formatting, locale routing, language switching, localized validation, and RTL. 日本語の依頼例:「多言語対応」「翻訳」「ロケール切替」「日付や通貨表示」「RTL対応」。"
+description: 'Internationalization for catalogs, ICU messages, Intl formatting, locale routing, language switching, localized validation, and RTL. 日本語の依頼例:「多言語対応」「翻訳」「ロケール切替」「日付や通貨表示」「RTL対応」。'
 ---
 
 # Internationalization

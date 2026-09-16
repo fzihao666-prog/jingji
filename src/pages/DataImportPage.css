@@ -173,7 +173,10 @@
   color: #174ea6;
   background: #f4f8ff;
   text-decoration: none;
-  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
 }
 
 .data-import-template:hover {
@@ -188,8 +191,14 @@
   transform: none;
 }
 
-.data-import-template div { display: grid; gap: 3px; }
-.data-import-template span { color: #60708a; font-size: 12px; }
+.data-import-template div {
+  display: grid;
+  gap: 3px;
+}
+.data-import-template span {
+  color: #60708a;
+  font-size: 12px;
+}
 .data-import-upload-card > .data-import-primary {
   width: 100%;
   margin-top: 13px;
@@ -716,9 +725,14 @@
   font-size: 8px;
   font-weight: 800;
 }
-.data-import-candidate-bulk button { cursor: pointer; }
+.data-import-candidate-bulk button {
+  cursor: pointer;
+}
 .data-import-candidate-bulk button:disabled,
-.data-import-candidate-bulk select:disabled { cursor: not-allowed; opacity: 0.5; }
+.data-import-candidate-bulk select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .data-import-candidate-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -788,8 +802,12 @@
     align-items: stretch;
     flex-direction: column;
   }
-  .data-import-candidate-bulk { width: 100%; }
-  .data-import-candidate-bulk select { flex: 1; }
+  .data-import-candidate-bulk {
+    width: 100%;
+  }
+  .data-import-candidate-bulk select {
+    flex: 1;
+  }
   .data-import-candidate-grid {
     grid-template-columns: 1fr;
   }

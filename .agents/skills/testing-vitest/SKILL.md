@@ -1,6 +1,6 @@
 ---
 name: testing-vitest
-description: "Vitest tests for pure logic and headless hooks/providers, plus config, MSW, mocks, and timers. Not for Storybook-owned visible behavior or Playwright journeys. 日本語の依頼例:「ユニットテスト」「Vitest」「モック」「ロジックのテスト」。"
+description: 'Vitest tests for pure logic and headless hooks/providers, plus config, MSW, mocks, and timers. Not for Storybook-owned visible behavior or Playwright journeys. 日本語の依頼例:「ユニットテスト」「Vitest」「モック」「ロジックのテスト」。'
 ---
 
 # Vitest
@@ -12,10 +12,11 @@ description: "Vitest tests for pure logic and headless hooks/providers, plus con
 - Full user flows → Playwright (see `testing-playwright`). Don't simulate routing/auth flows in jsdom.
 
 Worked examples (the layer decision people get wrong most):
+
 - "Test that the Button shows a spinner while submitting" → Storybook play function — a visible state + interaction the catalog should own; not a Vitest component test.
 - "Test that `formatCurrency` rounds half-up and handles -0" → Vitest unit test — pure logic, no DOM, no story.
 - "Test the `useDebounce` hook's timing" → Vitest unit test with fake timers — headless hook, no visual state.
-- "Test the checkout form across 8 field-validation combinations" → Vitest for the exhaustive matrix, plus one story per *meaningful* visual state (empty / error / submitting) — don't make 8 stories.
+- "Test the checkout form across 8 field-validation combinations" → Vitest for the exhaustive matrix, plus one story per _meaningful_ visual state (empty / error / submitting) — don't make 8 stories.
 - Test behavior users observe, not implementation: no asserting on state internals, no `container.querySelector('.styles_button_x')`, no spying on internal functions of the unit under test.
 
 ## Structure

@@ -1,6 +1,6 @@
 ---
 name: pre-ship
-description: "Pre-merge verification covering scope, typecheck, lint, affected tests, security, accessibility, and a single pass or fail report. 日本語の依頼例:「出荷前チェック」「マージ前確認」「完成か確認」「PR前チェック」。"
+description: 'Pre-merge verification covering scope, typecheck, lint, affected tests, security, accessibility, and a single pass or fail report. 日本語の依頼例:「出荷前チェック」「マージ前確認」「完成か確認」「PR前チェック」。'
 ---
 
 # Pre-ship pipeline

@@ -1,6 +1,6 @@
 ---
 name: codex-imagegen
-description: "Generate or AI-edit raster images with Codex for banners, heroes, demo assets, photo edits, and cutouts. Not for compression or resizing. 日本語の依頼例:「画像を生成」「写真を加工」「バナー画像」「ヒーロー画像」。"
+description: 'Generate or AI-edit raster images with Codex for banners, heroes, demo assets, photo edits, and cutouts. Not for compression or resizing. 日本語の依頼例:「画像を生成」「写真を加工」「バナー画像」「ヒーロー画像」。'
 ---
 
 # Generate images directly in Codex

@@ -1,6 +1,6 @@
 ---
 name: react-patterns
-description: "React component, hook, state, effect, and rendering conventions. Use for React implementation or re-render and useEffect debugging. 日本語の依頼例:「Reactコンポーネント」「カスタムフック」「状態管理」「再レンダリング」「useEffect修正」。"
+description: 'React component, hook, state, effect, and rendering conventions. Use for React implementation or re-render and useEffect debugging. 日本語の依頼例:「Reactコンポーネント」「カスタムフック」「状態管理」「再レンダリング」「useEffect修正」。'
 ---
 
 # React Patterns

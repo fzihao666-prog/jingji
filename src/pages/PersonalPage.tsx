@@ -7,28 +7,23 @@ import {
   Save,
   Search,
   Trophy,
-} from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { analyzeRowingPeriod } from "../../shared/rowing-model";
-import { analyzeCanoePeriod } from "../../shared/canoe-model";
-import { analyzeSlalomPeriod } from "../../shared/slalom-model";
-import { InjuryRecoveryModule } from "../components/InjuryRecoveryModule";
-import {
-  AppCard,
-  ContentState,
-  PageContainer,
-  PageHeader,
-} from "../components/PageLayout";
-import { StrengthProfileModule } from "../components/StrengthProfileModule";
+} from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { analyzeRowingPeriod } from '../../shared/rowing-model';
+import { analyzeCanoePeriod } from '../../shared/canoe-model';
+import { analyzeSlalomPeriod } from '../../shared/slalom-model';
+import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
+import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import {
   BodyCompositionModelOverview,
   type BodyCompositionProfile,
-} from "../components/AthleteProfileCharts";
-import { ChampionModelBenchmark } from "../components/ChampionModelBenchmark";
-import { FmsPersonalChart } from "../components/TrainingAnalysisCharts";
-import { EChart } from "../components/EChart";
-import { api } from "../api";
-import type { EChartsOption } from "echarts";
+} from '../components/AthleteProfileCharts';
+import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
+import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
+import { EChart } from '../components/EChart';
+import { api } from '../api';
+import type { EChartsOption } from 'echarts';
 import type {
   Athlete,
   BodyCompositionRecord,
@@ -39,8 +34,8 @@ import type {
   TrainingRecord,
   User,
   WellnessTrend,
-} from "../types";
-import { addDays, formatNumber } from "../utils";
+} from '../types';
+import { addDays, formatNumber } from '../utils';
 
 type Props = {
   user: User;
@@ -63,28 +58,26 @@ type ProfileDetail = {
   value: string | number | null | undefined;
 };
 
-function profileValue(value: ProfileDetail["value"]) {
-  return value === null || value === undefined || String(value).trim() === ""
-    ? "未填写"
+function profileValue(value: ProfileDetail['value']) {
+  return value === null || value === undefined || String(value).trim() === ''
+    ? '未填写'
     : String(value);
 }
 
 function rowingSeatValue(value: string | null | undefined) {
-  const seat = value?.trim() || "";
-  return /^(?:[1-8]|[一二三四五六七八])号位$|^舵手$/.test(seat) ? seat : "";
+  const seat = value?.trim() || '';
+  return /^(?:[1-8]|[一二三四五六七八])号位$|^舵手$/.test(seat) ? seat : '';
 }
 
 function ageAtDate(birthDate: string | null, date: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T12:00:00`);
   const target = new Date(`${date}T12:00:00`);
-  if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime()))
-    return null;
+  if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime())) return null;
   let age = target.getFullYear() - birth.getFullYear();
   if (
     target.getMonth() < birth.getMonth() ||
-    (target.getMonth() === birth.getMonth() &&
-      target.getDate() < birth.getDate())
+    (target.getMonth() === birth.getMonth() && target.getDate() < birth.getDate())
   )
     age -= 1;
   return age >= 0 ? age : null;
@@ -101,9 +94,7 @@ function trainingExperience(startDate: string, date: string) {
   )
     return null;
   let months =
-    (target.getFullYear() - start.getFullYear()) * 12 +
-    target.getMonth() -
-    start.getMonth();
+    (target.getFullYear() - start.getFullYear()) * 12 + target.getMonth() - start.getMonth();
   if (target.getDate() < start.getDate()) months -= 1;
   const years = Math.floor(Math.max(months, 0) / 12);
   const remainingMonths = Math.max(months, 0) % 12;
@@ -112,45 +103,39 @@ function trainingExperience(startDate: string, date: string) {
 
 export function PersonalPage(props: Props) {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [athleteQuery, setAthleteQuery] = useState("");
-  const canSwitchAthlete = props.user.role !== "ATL";
+  const [athleteQuery, setAthleteQuery] = useState('');
+  const canSwitchAthlete = props.user.role !== 'ATL';
   const teams = useMemo(
     () =>
-      [
-        ...new Set(
-          props.athletes.map((athlete) => athlete.team).filter(Boolean),
-        ),
-      ].sort((left, right) => left.localeCompare(right, "zh-CN")),
-    [props.athletes],
+      [...new Set(props.athletes.map((athlete) => athlete.team).filter(Boolean))].sort(
+        (left, right) => left.localeCompare(right, 'zh-CN')
+      ),
+    [props.athletes]
   );
   const visibleAthletes = useMemo(
     () =>
       selectedTeam
         ? props.athletes.filter((athlete) => athlete.team === selectedTeam)
         : props.athletes,
-    [props.athletes, selectedTeam],
+    [props.athletes, selectedTeam]
   );
   const filteredAthletes = useMemo(() => {
     const query = athleteQuery.trim().toLocaleLowerCase();
     return query
-      ? visibleAthletes.filter((athlete) =>
-          athlete.name.toLocaleLowerCase().includes(query),
-        )
+      ? visibleAthletes.filter((athlete) => athlete.name.toLocaleLowerCase().includes(query))
       : visibleAthletes;
   }, [athleteQuery, visibleAthletes]);
   const selectedAthlete = useMemo(
     () =>
       props.athletes.find(
-        (athlete) =>
-          athlete.id ===
-          (canSwitchAthlete ? props.athleteId : props.user.athleteId),
+        (athlete) => athlete.id === (canSwitchAthlete ? props.athleteId : props.user.athleteId)
       ) || null,
-    [canSwitchAthlete, props.athletes, props.athleteId, props.user.athleteId],
+    [canSwitchAthlete, props.athletes, props.athleteId, props.user.athleteId]
   );
 
   useEffect(() => {
     setSelectedTeam(null);
-    setAthleteQuery("");
+    setAthleteQuery('');
   }, [props.project]);
 
   useEffect(() => {
@@ -165,33 +150,27 @@ export function PersonalPage(props: Props) {
     event.preventDefault();
     const query = athleteQuery.trim().toLocaleLowerCase();
     const athlete =
-      filteredAthletes.find(
-        (item) => item.name.toLocaleLowerCase() === query,
-      ) || filteredAthletes[0];
+      filteredAthletes.find((item) => item.name.toLocaleLowerCase() === query) ||
+      filteredAthletes[0];
     if (athlete) switchAthlete(athlete.id);
   };
   const selectedRecords = useMemo(
     () =>
       selectedAthlete
-        ? props.records.filter(
-            (record) => record.athleteId === selectedAthlete.id,
-          )
+        ? props.records.filter((record) => record.athleteId === selectedAthlete.id)
         : [],
-    [props.records, selectedAthlete],
+    [props.records, selectedAthlete]
   );
-  const [positionDraft, setPositionDraft] = useState("");
+  const [positionDraft, setPositionDraft] = useState('');
   const [positionSaving, setPositionSaving] = useState(false);
-  const [positionMessage, setPositionMessage] = useState("");
+  const [positionMessage, setPositionMessage] = useState('');
   const canEditOwnPosition =
-    props.user.role === "ATL" && selectedAthlete?.id === props.user.athleteId;
+    props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
   const [bodyHistory, setBodyHistory] = useState<BodyCompositionRecord[]>([]);
   const [bodyHistoryLoading, setBodyHistoryLoading] = useState(false);
-  const [profileMeasurements, setProfileMeasurements] = useState<
-    OverviewMeasurement[]
-  >([]);
+  const [profileMeasurements, setProfileMeasurements] = useState<OverviewMeasurement[]>([]);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
-  const [championBenchmark, setChampionBenchmark] =
-    useState<ChampionBenchmarkPayload | null>(null);
+  const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
   const [championLoading, setChampionLoading] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
   const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
@@ -233,7 +212,7 @@ export function PersonalPage(props: Props) {
         selectedAthlete.id,
         props.from,
         props.to,
-        selectedAthlete.project as Project,
+        selectedAthlete.project as Project
       )
       .then((result) => {
         if (!ignored) setProfileMeasurements(result.overview.measurements);
@@ -274,13 +253,13 @@ export function PersonalPage(props: Props) {
         selectedAthlete.id,
         props.from,
         props.to,
-        selectedAthlete.project as Project,
+        selectedAthlete.project as Project
       ),
       api.specialTests(
         props.from,
         props.to,
         selectedAthlete.project as Project,
-        selectedAthlete.id,
+        selectedAthlete.id
       ),
     ])
       .then(([wellness, tests]) => {
@@ -304,9 +283,7 @@ export function PersonalPage(props: Props) {
 
   const bodyCompositionProfile = useMemo<BodyCompositionProfile | null>(() => {
     if (!selectedAthlete) return null;
-    const historyBeforeEnd = bodyHistory.filter(
-      (record) => record.measurementDate <= props.to,
-    );
+    const historyBeforeEnd = bodyHistory.filter((record) => record.measurementDate <= props.to);
     const latest = historyBeforeEnd[0];
     return {
       athleteId: selectedAthlete.id,
@@ -315,88 +292,73 @@ export function PersonalPage(props: Props) {
       team: selectedAthlete.team,
       gender: selectedAthlete.gender,
       age: ageAtDate(selectedAthlete.birthDate, props.to),
-      bodyMeasurementDate:
-        latest?.measurementDate || selectedAthlete.bodyMeasurementDate,
+      bodyMeasurementDate: latest?.measurementDate || selectedAthlete.bodyMeasurementDate,
       heightCm: latest?.heightCm ?? selectedAthlete.heightCm,
       weightKg: latest?.weightKg ?? selectedAthlete.weightKg,
       bodyFatPct: latest?.bodyFatPct ?? selectedAthlete.bodyFatPct,
-      skeletalMuscleKg:
-        latest?.skeletalMuscleKg ?? selectedAthlete.skeletalMuscleKg,
+      skeletalMuscleKg: latest?.skeletalMuscleKg ?? selectedAthlete.skeletalMuscleKg,
       muscleMassKg: latest?.muscleMassKg ?? selectedAthlete.muscleMassKg,
-      upperLimbMuscleKg:
-        latest?.upperLimbMuscleKg ?? selectedAthlete.upperLimbMuscleKg,
-      lowerLimbMuscleKg:
-        latest?.lowerLimbMuscleKg ?? selectedAthlete.lowerLimbMuscleKg,
+      upperLimbMuscleKg: latest?.upperLimbMuscleKg ?? selectedAthlete.upperLimbMuscleKg,
+      lowerLimbMuscleKg: latest?.lowerLimbMuscleKg ?? selectedAthlete.lowerLimbMuscleKg,
       trunkMuscleKg: latest?.trunkMuscleKg ?? selectedAthlete.trunkMuscleKg,
-      tricepsSkinfoldMm:
-        latest?.tricepsSkinfoldMm ?? selectedAthlete.tricepsSkinfoldMm,
-      abdominalSkinfoldMm:
-        latest?.abdominalSkinfoldMm ?? selectedAthlete.abdominalSkinfoldMm,
-      thighSkinfoldMm:
-        latest?.thighSkinfoldMm ?? selectedAthlete.thighSkinfoldMm,
+      tricepsSkinfoldMm: latest?.tricepsSkinfoldMm ?? selectedAthlete.tricepsSkinfoldMm,
+      abdominalSkinfoldMm: latest?.abdominalSkinfoldMm ?? selectedAthlete.abdominalSkinfoldMm,
+      thighSkinfoldMm: latest?.thighSkinfoldMm ?? selectedAthlete.thighSkinfoldMm,
       calfSkinfoldMm: latest?.calfSkinfoldMm ?? selectedAthlete.calfSkinfoldMm,
-      visceralFatLevel:
-        latest?.visceralFatLevel ?? selectedAthlete.visceralFatLevel,
-      basalMetabolismKcal:
-        latest?.basalMetabolismKcal ?? selectedAthlete.basalMetabolismKcal,
-      totalBodyWaterKg:
-        latest?.totalBodyWaterKg ?? selectedAthlete.totalBodyWaterKg,
+      visceralFatLevel: latest?.visceralFatLevel ?? selectedAthlete.visceralFatLevel,
+      basalMetabolismKcal: latest?.basalMetabolismKcal ?? selectedAthlete.basalMetabolismKcal,
+      totalBodyWaterKg: latest?.totalBodyWaterKg ?? selectedAthlete.totalBodyWaterKg,
       ecwTbwRatio: latest?.ecwTbwRatio ?? selectedAthlete.ecwTbwRatio,
       phaseAngleDeg: latest?.phaseAngleDeg ?? selectedAthlete.phaseAngleDeg,
-      visceralFatAreaCm2:
-        latest?.visceralFatAreaCm2 ?? selectedAthlete.visceralFatAreaCm2,
+      visceralFatAreaCm2: latest?.visceralFatAreaCm2 ?? selectedAthlete.visceralFatAreaCm2,
       leftArmLeanKg: latest?.leftArmLeanKg ?? selectedAthlete.leftArmLeanKg,
       rightArmLeanKg: latest?.rightArmLeanKg ?? selectedAthlete.rightArmLeanKg,
       trunkLeanKg: latest?.trunkLeanKg ?? selectedAthlete.trunkLeanKg,
       leftLegLeanKg: latest?.leftLegLeanKg ?? selectedAthlete.leftLegLeanKg,
       rightLegLeanKg: latest?.rightLegLeanKg ?? selectedAthlete.rightLegLeanKg,
       bodyCompositionHistory: historyBeforeEnd.filter(
-        (record) => record.measurementDate >= props.from,
+        (record) => record.measurementDate >= props.from
       ),
     };
   }, [selectedAthlete, bodyHistory, props.from, props.to]);
 
   useEffect(() => {
     setPositionDraft(rowingSeatValue(selectedAthlete?.athletePosition));
-    setPositionMessage("");
+    setPositionMessage('');
   }, [selectedAthlete?.id, selectedAthlete?.athletePosition]);
 
   const savePosition = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedAthlete || !canEditOwnPosition) return;
     setPositionSaving(true);
-    setPositionMessage("");
+    setPositionMessage('');
     try {
       await api.updateAthletePosition(selectedAthlete.id, positionDraft);
       props.onChanged();
-      setPositionMessage("位置/号位已保存。");
+      setPositionMessage('位置/号位已保存。');
     } catch (error) {
-      setPositionMessage(
-        error instanceof Error ? error.message : "位置/号位保存失败。",
-      );
+      setPositionMessage(error instanceof Error ? error.message : '位置/号位保存失败。');
     } finally {
       setPositionSaving(false);
     }
   };
 
-  const analyzePeriod = analyzerForProject(
-    selectedAthlete?.project || props.project,
-  );
+  const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(
     () => analyzePeriod(selectedRecords),
-    [selectedRecords, analyzePeriod],
+    [selectedRecords, analyzePeriod]
   );
   const rangeMode = useMemo(() => {
-    if (props.from === props.to) return { label: "日" } as const;
-    if (props.from === addDays(props.to, -6)) return { label: "周" } as const;
-    if (props.from === addDays(props.to, -29)) return { label: "月" } as const;
-    return { label: "所选周期" } as const;
+    if (props.from === props.to) return { label: '日' } as const;
+    if (props.from === addDays(props.to, -6)) return { label: '周' } as const;
+    if (props.from === addDays(props.to, -29)) return { label: '月' } as const;
+    return { label: '所选周期' } as const;
   }, [props.from, props.to]);
   const athleteLocation = selectedAthlete
     ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county]
         .filter(Boolean)
-        .join("")
-    : "";
+        .join('')
+    : '';
   const athleteAffiliationLocation = selectedAthlete
     ? [
         ...new Set(
@@ -405,59 +367,55 @@ export function PersonalPage(props: Props) {
             selectedAthlete.province,
             selectedAthlete.city,
             selectedAthlete.county,
-          ].filter(Boolean),
+          ].filter(Boolean)
         ),
-      ].join(" · ")
-    : "";
+      ].join(' · ')
+    : '';
   const dossierGroups = selectedAthlete
     ? [
         {
-          title: "个人信息",
-          tone: "personal",
+          title: '个人信息',
+          tone: 'personal',
           fields: [
-            { label: "运动项目", value: selectedAthlete.project },
-            { label: "所属队伍", value: selectedAthlete.team },
-            { label: "主管教练", value: selectedAthlete.coaches },
+            { label: '运动项目', value: selectedAthlete.project },
+            { label: '所属队伍', value: selectedAthlete.team },
+            { label: '主管教练', value: selectedAthlete.coaches },
             {
-              label: "训练年限",
-              value: trainingExperience(
-                selectedAthlete.startSportDate,
-                props.to,
-              ),
+              label: '训练年限',
+              value: trainingExperience(selectedAthlete.startSportDate, props.to),
             },
-            { label: "技术等级", value: selectedAthlete.technicalLevel },
-            { label: "最佳成绩", value: selectedAthlete.bestResult },
+            { label: '技术等级', value: selectedAthlete.technicalLevel },
+            { label: '最佳成绩', value: selectedAthlete.bestResult },
             {
-              label: "位置/号位",
+              label: '位置/号位',
               value: rowingSeatValue(selectedAthlete.athletePosition),
             },
-            { label: "运动员状态", value: selectedAthlete.athleteStatus },
-            { label: "健康状态", value: selectedAthlete.healthStatus },
+            { label: '运动员状态', value: selectedAthlete.athleteStatus },
+            { label: '健康状态', value: selectedAthlete.healthStatus },
             {
-              label: "身高 / 体重",
+              label: '身高 / 体重',
               value:
-                selectedAthlete.heightCm === null &&
-                selectedAthlete.weightKg === null
+                selectedAthlete.heightCm === null && selectedAthlete.weightKg === null
                   ? null
-                  : `${selectedAthlete.heightCm ?? "—"} cm / ${selectedAthlete.weightKg ?? "—"} kg`,
+                  : `${selectedAthlete.heightCm ?? '—'} cm / ${selectedAthlete.weightKg ?? '—'} kg`,
             },
             {
-              label: "年龄 / 性别",
+              label: '年龄 / 性别',
               value:
                 ageAtDate(selectedAthlete.birthDate, props.to) === null
                   ? selectedAthlete.gender
-                  : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || "未填写"}`,
+                  : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}`,
             },
-            { label: "血型", value: selectedAthlete.bloodType },
-            { label: "籍贯", value: selectedAthlete.nativePlace },
-            { label: "所属区域", value: athleteAffiliationLocation },
-            { label: "专项特长", value: selectedAthlete.specialties },
+            { label: '血型', value: selectedAthlete.bloodType },
+            { label: '籍贯', value: selectedAthlete.nativePlace },
+            { label: '所属区域', value: athleteAffiliationLocation },
+            { label: '专项特长', value: selectedAthlete.specialties },
           ] satisfies ProfileDetail[],
         },
       ]
     : [];
   const fmsMeasurementCount = profileMeasurements.filter(
-    (item) => item.domain === "fms" && item.value !== null,
+    (item) => item.domain === 'fms' && item.value !== null
   ).length;
 
   return (
@@ -471,15 +429,11 @@ export function PersonalPage(props: Props) {
             <strong>选择运动员</strong>
             {selectedAthlete && (
               <small>
-                {selectedAthlete.project} · {selectedAthlete.team} ·{" "}
-                {selectedAthlete.name}
+                {selectedAthlete.project} · {selectedAthlete.team} · {selectedAthlete.name}
               </small>
             )}
           </div>
-          <form
-            className="performance-athlete-search"
-            onSubmit={submitAthleteSearch}
-          >
+          <form className="performance-athlete-search" onSubmit={submitAthleteSearch}>
             <Search size={16} />
             <input
               value={athleteQuery}
@@ -490,7 +444,7 @@ export function PersonalPage(props: Props) {
           </form>
           <select
             className="performance-athlete-select"
-            value={selectedTeam || ""}
+            value={selectedTeam || ''}
             onChange={(event) => setSelectedTeam(event.target.value || null)}
             aria-label="筛选队伍"
           >
@@ -503,7 +457,7 @@ export function PersonalPage(props: Props) {
           </select>
           <select
             className="performance-athlete-select"
-            value={selectedAthlete?.id || ""}
+            value={selectedAthlete?.id || ''}
             onChange={(event) => {
               if (event.target.value) switchAthlete(Number(event.target.value));
             }}
@@ -530,22 +484,17 @@ export function PersonalPage(props: Props) {
           title="请选择运动员"
           description={
             canSwitchAthlete
-              ? "请从队伍中选择需要查看的运动员。"
-              : "当前账号暂无可展示的运动员档案。"
+              ? '请从队伍中选择需要查看的运动员。'
+              : '当前账号暂无可展示的运动员档案。'
           }
         />
       ) : (
         <>
           <section className="personal-dossier">
             <header className="personal-dossier-identity">
-              <div
-                className={`personal-avatar ${selectedAthlete.photoUrl ? "has-photo" : ""}`}
-              >
+              <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
                 {selectedAthlete.photoUrl ? (
-                  <img
-                    src={selectedAthlete.photoUrl}
-                    alt={`${selectedAthlete.name}证件照`}
-                  />
+                  <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
                 ) : (
                   selectedAthlete.name.slice(0, 1)
                 )}
@@ -556,45 +505,34 @@ export function PersonalPage(props: Props) {
                 </span>
                 <h2>{selectedAthlete.name}</h2>
                 <p>
-                  {athleteLocation || "地区待补充"} ·{" "}
-                  {selectedAthlete.coaches || "未绑定教练"}
+                  {athleteLocation || '地区待补充'} · {selectedAthlete.coaches || '未绑定教练'}
                 </p>
                 {canEditOwnPosition && (
-                  <form
-                    className="personal-position-editor"
-                    onSubmit={savePosition}
-                  >
+                  <form className="personal-position-editor" onSubmit={savePosition}>
                     <label>
                       <span>位置/号位</span>
                       <input
                         value={positionDraft}
-                        onChange={(event) =>
-                          setPositionDraft(event.target.value)
-                        }
+                        onChange={(event) => setPositionDraft(event.target.value)}
                         maxLength={40}
                         placeholder="例如：1号位、2号位、舵手"
-                        aria-invalid={positionMessage.includes("失败")}
-                        aria-describedby={
-                          positionMessage ? "position-message" : undefined
-                        }
+                        aria-invalid={positionMessage.includes('失败')}
+                        aria-describedby={positionMessage ? 'position-message' : undefined}
                       />
                     </label>
                     <button
                       disabled={
                         positionSaving ||
-                        positionDraft ===
-                          rowingSeatValue(selectedAthlete.athletePosition)
+                        positionDraft === rowingSeatValue(selectedAthlete.athletePosition)
                       }
                     >
                       <Save size={14} />
-                      {positionSaving ? "保存中" : "保存"}
+                      {positionSaving ? '保存中' : '保存'}
                     </button>
                     <small
                       id="position-message"
                       aria-live="polite"
-                      role={
-                        positionMessage.includes("失败") ? "alert" : undefined
-                      }
+                      role={positionMessage.includes('失败') ? 'alert' : undefined}
                     >
                       {positionMessage}
                     </small>
@@ -602,10 +540,7 @@ export function PersonalPage(props: Props) {
                 )}
               </div>
             </header>
-            <section
-              className="personal-dossier-groups"
-              aria-label="运动员完整档案信息"
-            >
+            <section className="personal-dossier-groups" aria-label="运动员完整档案信息">
               {dossierGroups.map((group) => (
                 <section
                   key={group.title}
@@ -617,8 +552,8 @@ export function PersonalPage(props: Props) {
                       <div key={field.label}>
                         <dt>{field.label}</dt>
                         <dd>
-                          {field.label === "位置/号位" && !field.value
-                            ? "—"
+                          {field.label === '位置/号位' && !field.value
+                            ? '—'
                             : profileValue(field.value)}
                         </dd>
                       </div>
@@ -644,14 +579,12 @@ export function PersonalPage(props: Props) {
                 </div>
                 <small>
                   {bodyHistoryLoading
-                    ? "读取中…"
-                    : bodyCompositionProfile?.bodyMeasurementDate || "暂无实测"}
+                    ? '读取中…'
+                    : bodyCompositionProfile?.bodyMeasurementDate || '暂无实测'}
                 </small>
               </header>
               <BodyCompositionModelOverview
-                profiles={
-                  bodyCompositionProfile ? [bodyCompositionProfile] : []
-                }
+                profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []}
                 individual
               />
             </AppCard>
@@ -679,10 +612,7 @@ export function PersonalPage(props: Props) {
                   <strong>体能训练与专项训练</strong>
                   <p>训练负荷、专项距离与课次随当前日期周期变化。</p>
                 </div>
-                <section
-                  className="personal-metric-grid"
-                  aria-label="当前周期关键指标"
-                >
+                <section className="personal-metric-grid" aria-label="当前周期关键指标">
                   <PersonalMetric
                     icon={Gauge}
                     label={`${rangeMode.label}负荷`}
@@ -730,15 +660,11 @@ export function PersonalPage(props: Props) {
                   </span>
                 </div>
                 <strong>
-                  {profileAnalysisLoading
-                    ? "读取中"
-                    : `${fmsMeasurementCount} 项有效`}
+                  {profileAnalysisLoading ? '读取中' : `${fmsMeasurementCount} 项有效`}
                 </strong>
               </header>
               {profileAnalysisLoading ? (
-                <div className="professional-chart-empty">
-                  正在读取个人FMS测试…
-                </div>
+                <div className="professional-chart-empty">正在读取个人FMS测试…</div>
               ) : (
                 <FmsPersonalChart measurements={profileMeasurements} />
               )}
@@ -746,10 +672,7 @@ export function PersonalPage(props: Props) {
                 FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
               </p>
             </AppCard>
-            <SpecialTestSummary
-              events={specialTests}
-              loading={dossierDataLoading}
-            />
+            <SpecialTestSummary events={specialTests} loading={dossierDataLoading} />
 
             <AppCard
               variant="chart"
@@ -766,18 +689,12 @@ export function PersonalPage(props: Props) {
                 </div>
                 <strong>八维雷达</strong>
               </header>
-              <ChampionModelBenchmark
-                benchmark={championBenchmark}
-                loading={championLoading}
-              />
+              <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
               <p className="analysis-method-note">
                 八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。
               </p>
             </AppCard>
-            <AerobicEndurance
-              measurements={profileMeasurements}
-              loading={profileAnalysisLoading}
-            />
+            <AerobicEndurance measurements={profileMeasurements} loading={profileAnalysisLoading} />
           </ProfileSection>
 
           <ProfileSection
@@ -791,19 +708,9 @@ export function PersonalPage(props: Props) {
                 description="等待正式数据模型接入后展示，不使用模拟结果。"
               />
             </AppCard>
-            <WellnessTrendCards
-              trends={wellnessTrends}
-              loading={dossierDataLoading}
-            />
-            <InjuryRecoveryModule
-              athlete={selectedAthlete}
-              user={props.user}
-              asOfDate={props.to}
-            />
-            <StrengthProfileModule
-              athlete={selectedAthlete}
-              user={props.user}
-            />
+            <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} />
+            <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
+            <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
           </ProfileSection>
         </>
       )}
@@ -834,24 +741,14 @@ function ProfileSection({
   );
 }
 
-function WellnessTrendCards({
-  trends,
-  loading,
-}: {
-  trends: WellnessTrend[];
-  loading: boolean;
-}) {
+function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; loading: boolean }) {
   if (loading)
     return (
       <AppCard variant="chart" className="professional-panel">
         <div className="professional-chart-empty">正在读取恢复趋势…</div>
       </AppCard>
     );
-  if (
-    !trends.some((trend) =>
-      trend.points.some((point) => point.personalValue !== null),
-    )
-  )
+  if (!trends.some((trend) => trend.points.some((point) => point.personalValue !== null)))
     return (
       <AppCard variant="chart" className="professional-panel">
         <ContentState
@@ -871,7 +768,7 @@ function WellnessTrendCards({
         >
           <header>
             <h3>{trend.label}</h3>
-            <small>{trend.unit || "主观评分"}</small>
+            <small>{trend.unit || '主观评分'}</small>
           </header>
           {trend.points.some((point) => point.personalValue !== null) ? (
             <>
@@ -888,7 +785,7 @@ function WellnessTrendCards({
                       <th>日期</th>
                       <th>
                         {trend.label}
-                        {trend.unit ? ` (${trend.unit})` : ""}
+                        {trend.unit ? ` (${trend.unit})` : ''}
                       </th>
                     </tr>
                   </thead>
@@ -898,7 +795,7 @@ function WellnessTrendCards({
                         <td>{point.date}</td>
                         <td>
                           {point.personalValue === null
-                            ? "—"
+                            ? '—'
                             : formatNumber(point.personalValue, 1)}
                         </td>
                       </tr>
@@ -917,46 +814,44 @@ function WellnessTrendCards({
 }
 
 function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
-  const dates = trend.points.map((point) =>
-    Date.parse(`${point.date}T00:00:00Z`),
-  );
+  const dates = trend.points.map((point) => Date.parse(`${point.date}T00:00:00Z`));
   return {
     animation: false,
     useUTC: true,
     tooltip: {
-      trigger: "axis",
-      renderMode: "richText",
+      trigger: 'axis',
+      renderMode: 'richText',
       confine: true,
       valueFormatter: (value) =>
-        `${formatNumber(Number(value), 1)}${trend.unit ? ` ${trend.unit}` : ""}`,
+        `${formatNumber(Number(value), 1)}${trend.unit ? ` ${trend.unit}` : ''}`,
     },
     grid: {
       top: 24,
       right: 20,
       bottom: 34,
       left: 46,
-      outerBoundsMode: "same",
-      outerBoundsContain: "axisLabel",
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
     },
     xAxis: {
-      type: "time",
+      type: 'time',
       min: dates[0],
       max: dates.at(-1),
-      axisLabel: { formatter: "{MM}/{dd}", hideOverlap: true },
+      axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true },
     },
     yAxis: {
-      type: "value",
+      type: 'value',
       name: trend.unit,
       scale: true,
-      splitLine: { lineStyle: { color: "#e0e9e9" } },
+      splitLine: { lineStyle: { color: '#e0e9e9' } },
     },
     series: [
       {
         id: trend.key,
         name: trend.label,
-        type: "line",
+        type: 'line',
         connectNulls: false,
-        symbol: "circle",
+        symbol: 'circle',
         symbolSize: 7,
         lineStyle: { width: 2 },
         data: trend.points.map((point) => [
@@ -968,18 +863,9 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
   };
 }
 
-function SpecialTestSummary({
-  events,
-  loading,
-}: {
-  events: SpecialTestEvent[];
-  loading: boolean;
-}) {
+function SpecialTestSummary({ events, loading }: { events: SpecialTestEvent[]; loading: boolean }) {
   return (
-    <AppCard
-      variant="chart"
-      className="professional-panel personal-special-test-card"
-    >
+    <AppCard variant="chart" className="professional-panel personal-special-test-card">
       <header className="personal-analysis-card-heading">
         <div>
           <span>
@@ -1005,14 +891,14 @@ function SpecialTestSummary({
                 <b>{(result.bestMs / 1000).toFixed(2)} 秒</b>
                 <small>
                   {result.previousBestMs === null
-                    ? "暂无个人历史最佳"
-                    : `较历史最佳 ${result.deltaPreviousMs === null ? "—" : `${result.deltaPreviousMs > 0 ? "+" : ""}${(result.deltaPreviousMs / 1000).toFixed(2)} 秒`}`}
+                    ? '暂无个人历史最佳'
+                    : `较历史最佳 ${result.deltaPreviousMs === null ? '—' : `${result.deltaPreviousMs > 0 ? '+' : ''}${(result.deltaPreviousMs / 1000).toFixed(2)} 秒`}`}
                 </small>
-                {event.dataQuality === "unverified" && (
+                {event.dataQuality === 'unverified' && (
                   <small>来源：历史专项测试，质量待确认</small>
                 )}
               </article>
-            )),
+            ))
           )}
         </div>
       ) : (
@@ -1035,12 +921,10 @@ function AerobicEndurance({
 }) {
   const aerobic = measurements.filter(
     (measurement) =>
-      /vo2|aerobic|endurance|耐力|heart|心率/i.test(
-        `${measurement.code} ${measurement.label}`,
-      ) &&
+      /vo2|aerobic|endurance|耐力|heart|心率/i.test(`${measurement.code} ${measurement.label}`) &&
       measurement.value !== null &&
       !measurement.isDemo &&
-      measurement.quality === "valid",
+      measurement.quality === 'valid'
   );
   return (
     <AppCard variant="chart" className="professional-panel">
@@ -1065,8 +949,8 @@ function AerobicEndurance({
               </strong>
               <small>
                 {measurement.previous === null
-                  ? "暂无前次对照"
-                  : `较前次 ${measurement.changePct === null ? "—" : `${measurement.changePct > 0 ? "+" : ""}${measurement.changePct}%`}`}
+                  ? '暂无前次对照'
+                  : `较前次 ${measurement.changePct === null ? '—' : `${measurement.changePct > 0 ? '+' : ''}${measurement.changePct}%`}`}
               </small>
             </article>
           ))}
@@ -1106,9 +990,9 @@ function PersonalMetric({
 }
 
 function analyzerForProject(project: string) {
-  return project === "激流"
+  return project === '激流'
     ? analyzeSlalomPeriod
-    : project === "皮划艇"
+    : project === '皮划艇'
       ? analyzeCanoePeriod
       : analyzeRowingPeriod;
 }

@@ -1,6 +1,6 @@
 ---
 name: new-component
-description: "Scaffold a new UI component with the active styling approach, Storybook play coverage, tokens, and accessibility. Not for small edits to existing components. 日本語の依頼例:「新しいコンポーネント」「コンポーネント追加」「Figmaから実装」。"
+description: 'Scaffold a new UI component with the active styling approach, Storybook play coverage, tokens, and accessibility. Not for small edits to existing components. 日本語の依頼例:「新しいコンポーネント」「コンポーネント追加」「Figmaから実装」。'
 ---
 
 # New component pipeline

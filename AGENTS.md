@@ -51,6 +51,7 @@
 - 交付时列出改动文件、验证结果，以及仍存在的风险或待确认项。
 
 <!-- codex-frontend-skills:start — managed by install-codex.sh -->
+
 # Project Guide
 
 Frontend project. Detailed conventions live in `.agents/skills/` and load on demand — do not duplicate them here. Sole exception: the security/a11y invariants below are duplicated deliberately so they hold even when no skill loads; do not "clean them up".
@@ -115,12 +116,12 @@ Use the scripts defined in `package.json` (`dev`, `build`, `typecheck`, `lint`, 
 This table is a human-readable index. The authoritative load triggers are each skill's
 frontmatter `description` — when a skill fails to fire, widen its `description`, not this table.
 
-| When working on… | Skill |
-|---|---|
-| React components / hooks | `react-patterns` |
-| Next.js routing, RSC, Server Actions, caching | `nextjs` |
-| Standalone Vite SPA setup / config | `vite-react` |
-| Astro pages, islands, content collections | `astro` |
+| When working on…                              | Skill            |
+| --------------------------------------------- | ---------------- |
+| React components / hooks                      | `react-patterns` |
+| Next.js routing, RSC, Server Actions, caching | `nextjs`         |
+| Standalone Vite SPA setup / config            | `vite-react`     |
+| Astro pages, islands, content collections     | `astro`          |
 
 | Shared UI components, tokens/typography/icons, Figma implementation | `design-system` |
 | Animations, transitions, motion | `motion` |

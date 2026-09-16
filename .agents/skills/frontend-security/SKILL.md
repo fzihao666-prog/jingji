@@ -1,6 +1,6 @@
 ---
 name: frontend-security
-description: "Frontend/BFF security for forms and external input, auth, cookies, HTML, URLs, fetch, CORS, webhooks, uploads, secrets, logging, dependencies, and LLM-bound content. 日本語の依頼例:「認証実装」「問い合わせフォーム」「外部API」「webhook」「ログ」「LLMに渡す」「依存追加」。"
+description: 'Frontend/BFF security for forms and external input, auth, cookies, HTML, URLs, fetch, CORS, webhooks, uploads, secrets, logging, dependencies, and LLM-bound content. 日本語の依頼例:「認証実装」「問い合わせフォーム」「外部API」「webhook」「ログ」「LLMに渡す」「依存追加」。'
 ---
 
 # Frontend Security
@@ -109,7 +109,7 @@ These are the controls lint can't fully prove (only Semgrep-backstopped in `temp
 - External input (body / params / cookies / API response / webhook) parsed with a zod schema at the boundary?
 - Semantic text normalized before its minimum-length check, with a whitespace-only negative test (unless preserving whitespace is intentional)?
 - Webhook payload signature verified (constant-time) BEFORE it's trusted?
-- Every client-supplied ID authorized for *this* user, per resource (IDOR)?
+- Every client-supplied ID authorized for _this_ user, per resource (IDOR)?
 - Authorization enforced server-side in the one policy helper, deny-by-default — not scattered role checks?
 - Outbound fetch to a user-influenced URL: avoided where possible; otherwise host allow-listed, every resolved/redirect IP screened, connection pinned without breaking TLS SNI/Host validation, and implemented through a reviewed client/egress layer (DNS rebinding)?
 - No secret / PII / token in the client bundle, logs, analytics, error payloads, or URLs?

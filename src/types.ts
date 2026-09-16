@@ -1,6 +1,11 @@
 import type { AreaLevel, Role } from '../shared/access';
 import type { StrengthMetricValues } from '../shared/strength-model';
-import type { StrengthBodyPosition, StrengthIntensityZone, StrengthTrainingCategory, StrengthTrainingEnvironment } from '../shared/strength-training';
+import type {
+  StrengthBodyPosition,
+  StrengthIntensityZone,
+  StrengthTrainingCategory,
+  StrengthTrainingEnvironment,
+} from '../shared/strength-training';
 import type { Project } from '../shared/projects';
 import type { ChampionModelStandardType } from '../shared/champion-model';
 
@@ -260,7 +265,16 @@ export type StrengthImportPreview = {
 };
 
 export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
-export type DataImportItemType = 'athlete_profile' | 'wellness' | 'training_session' | 'training_set' | 'test_measurement' | 'body_measurement' | 'injury_record' | 'competitive_state' | 'scoring_rule';
+export type DataImportItemType =
+  | 'athlete_profile'
+  | 'wellness'
+  | 'training_session'
+  | 'training_set'
+  | 'test_measurement'
+  | 'body_measurement'
+  | 'injury_record'
+  | 'competitive_state'
+  | 'scoring_rule';
 
 export type DataImportItem = {
   id: number;
@@ -629,7 +643,7 @@ export const ERGOMETER_LEVELS = [
   'PROVINCIAL_EXCELLENT',
   'NATIONAL_EXCELLENT',
   'U23_INTERNATIONAL',
-  'INTERNATIONAL_EXCELLENT'
+  'INTERNATIONAL_EXCELLENT',
 ] as const;
 
 export const ERGOMETER_LEVEL_LABELS = {
@@ -641,29 +655,22 @@ export const ERGOMETER_LEVEL_LABELS = {
   PROVINCIAL_EXCELLENT: '省市优秀',
   NATIONAL_EXCELLENT: '全国优秀',
   U23_INTERNATIONAL: 'U23国际',
-  INTERNATIONAL_EXCELLENT: '国际优秀'
+  INTERNATIONAL_EXCELLENT: '国际优秀',
 } as const;
 
-export const ERGOMETER_GENDERS = [
-  'MALE',
-  'FEMALE'
-] as const;
+export const ERGOMETER_GENDERS = ['MALE', 'FEMALE'] as const;
 
-export const ERGOMETER_TEST_TYPES = [
-  '2000M',
-  '5000M',
-  '30MIN_20SPM'
-] as const;
+export const ERGOMETER_TEST_TYPES = ['2000M', '5000M', '30MIN_20SPM'] as const;
 
 export const ERGOMETER_GENDER_LABELS = {
   MALE: '男子',
-  FEMALE: '女子'
+  FEMALE: '女子',
 } as const;
 
 export const ERGOMETER_TEST_TYPE_LABELS = {
   '2000M': '2000m',
   '5000M': '5000m',
-  '30MIN_20SPM': '30分钟（20桨）'
+  '30MIN_20SPM': '30分钟（20桨）',
 } as const;
 
 export type SpecialChampionModelPayload = {
@@ -724,7 +731,12 @@ export type WellnessTrendPoint = {
   hasPersonalValue: boolean;
 };
 
-export type WellnessTrend = { key: 'rpe' | 'sleepHours' | 'morningPulse' | 'weightKg'; label: string; unit: string; points: WellnessTrendPoint[] };
+export type WellnessTrend = {
+  key: 'rpe' | 'sleepHours' | 'morningPulse' | 'weightKg';
+  label: string;
+  unit: string;
+  points: WellnessTrendPoint[];
+};
 export type WellnessTrendsPayload = { trends: WellnessTrend[] };
 
 export type ProfileComparisonItem = {
@@ -740,7 +752,14 @@ export type ProfileComparisonItem = {
 };
 
 export type ProfileComparisonPayload = {
-  scope: { athleteId: number; teamId: number | null; project: string; from: string; to: string; athleteCount: number };
+  scope: {
+    athleteId: number;
+    teamId: number | null;
+    project: string;
+    from: string;
+    to: string;
+    athleteCount: number;
+  };
   items: ProfileComparisonItem[];
   teamSessionCount: number;
 };

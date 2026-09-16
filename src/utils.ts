@@ -6,7 +6,7 @@ export const statusMeta: Record<TrainingStatus, { label: string; short: string; 
   attention: { label: '需要关注', short: '关注', color: '#e2a323' },
   alert: { label: '指标异常', short: '异常', color: '#e4533f' },
   rest: { label: '休息恢复', short: '休息', color: '#7c8e97' },
-  missing: { label: '数据缺失', short: '缺失', color: '#8d70b8' }
+  missing: { label: '数据缺失', short: '缺失', color: '#8d70b8' },
 };
 
 export const roleMeta = ROLE_META;
@@ -50,11 +50,23 @@ export function aggregateRecords(records: TrainingRecord[]) {
   const avgSleep = average(records.map((record) => record.sleepHours));
   const avgFatigue = average(records.map((record) => record.fatigueIndex));
 
-  return { totalDuration, totalDistance, totalSrpe, totalSmvl, alerts, attention, avgSleep, avgFatigue, days: days.size };
+  return {
+    totalDuration,
+    totalDistance,
+    totalSrpe,
+    totalSmvl,
+    alerts,
+    attention,
+    avgSleep,
+    avgFatigue,
+    days: days.size,
+  };
 }
 
 export function average(values: Array<number | null>) {
-  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const valid = values.filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value)
+  );
   return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : 0;
 }
 
@@ -63,8 +75,11 @@ export function statusPriority(status: TrainingStatus) {
 }
 
 export function worstStatus(records: TrainingRecord[]): TrainingStatus {
-  return records.reduce<TrainingStatus>((worst, record) =>
-    statusPriority(record.status) > statusPriority(worst) ? record.status : worst, 'rest');
+  return records.reduce<TrainingStatus>(
+    (worst, record) =>
+      statusPriority(record.status) > statusPriority(worst) ? record.status : worst,
+    'rest'
+  );
 }
 
 export function groupByDate(records: TrainingRecord[]) {

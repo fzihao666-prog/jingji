@@ -1,9 +1,16 @@
 export const TRAINING_CONTENT_CATEGORIES = [
-  '水上', '测功仪', '功能', '拉伸再生', '力量耐力',
-  '最大力量', '速度力量', '跑步', '其它'
+  '水上',
+  '测功仪',
+  '功能',
+  '拉伸再生',
+  '力量耐力',
+  '最大力量',
+  '速度力量',
+  '跑步',
+  '其它',
 ] as const;
 
-export type TrainingContentCategory = typeof TRAINING_CONTENT_CATEGORIES[number];
+export type TrainingContentCategory = (typeof TRAINING_CONTENT_CATEGORIES)[number];
 export type TrainingLoadCategory = 'special' | 'physical' | 'recovery';
 
 export type TrainingContentSource = {
@@ -14,7 +21,8 @@ export type TrainingContentSource = {
 
 // 这是统计展示口径：每个训练课次只归入一个固定类别，不改写原始训练字段。
 export function trainingContentCategory(input: TrainingContentSource): TrainingContentCategory {
-  const text = `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
+  const text =
+    `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (!text) return '其它';
   if (/测功仪|划船机|ergometer|\berg\b/i.test(text)) return '测功仪';
   if (/跑步|慢跑|冲刺跑|折返跑|越野跑/.test(text)) return '跑步';
@@ -29,9 +37,11 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
 
 // 专项、体能与恢复训练模块共用这一口径。优先识别明确恢复内容，无法识别的记录不强行推断。
 export function trainingLoadCategory(input: TrainingContentSource): TrainingLoadCategory | null {
-  const text = `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
+  const text =
+    `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (/拉伸|再生|恢复|放松|泡沫轴|理疗/.test(text)) return 'recovery';
-  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || '')) return 'special';
+  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || ''))
+    return 'special';
   if (/力量|体能|跑步|功能|核心|陆上|测功仪/.test(text)) return 'physical';
   return null;
 }

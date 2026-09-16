@@ -36,15 +36,13 @@ export type LocalizedErrors = Partial<Record<Field | 'form', string[]>>;
 
 export function localizeIssues(
   issues: readonly z.core.$ZodIssue[],
-  translate: (key: MessageKey) => string,
+  translate: (key: MessageKey) => string
 ): LocalizedErrors {
   const errors: LocalizedErrors = {};
   for (const issue of issues) {
     const candidate = issue.path[0];
     const field: Field | 'form' =
-      candidate === 'name' || candidate === 'email' || candidate === 'message'
-        ? candidate
-        : 'form';
+      candidate === 'name' || candidate === 'email' || candidate === 'message' ? candidate : 'form';
     (errors[field] ??= []).push(translate(keyForIssue(issue)));
   }
   return errors;
@@ -66,11 +64,15 @@ const catalogs = {
 
 describe.each(['ja', 'ar'] as const)('%s validation', (locale) => {
   it('localizes whitespace-only input without leaking Zod text', () => {
-    const result = contactSchema.safeParse({ name: ' ', email: 'person@example.com', message: 'Hello' });
+    const result = contactSchema.safeParse({
+      name: ' ',
+      email: 'person@example.com',
+      message: 'Hello',
+    });
     expect(result.success).toBe(false);
     if (result.success) return;
     const errors = localizeIssues(result.error.issues, (key) =>
-      key === 'validation.name.required' ? catalogs[locale][key] : `missing:${key}`,
+      key === 'validation.name.required' ? catalogs[locale][key] : `missing:${key}`
     );
     expect(errors.name).toEqual([catalogs[locale]['validation.name.required']]);
     expect(JSON.stringify(errors)).not.toMatch(/too_small|invalid_type|zod/i);

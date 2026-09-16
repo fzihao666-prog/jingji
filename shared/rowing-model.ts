@@ -56,19 +56,22 @@ export const ROWING_MODEL_STANDARD = {
     { key: 'target', label: '目标区', color: '#1a9b83', automation: '现有正常状态可自动归入' },
     { key: 'improve', label: '可改善区', color: '#d9a326', automation: '现有关注状态可自动归入' },
     { key: 'practice', label: '重点练习区', color: '#e87a35', automation: '等待专家确认数值边界' },
-    { key: 'alert', label: '预警区', color: '#d94a3d', automation: '现有异常状态可自动归入' }
+    { key: 'alert', label: '预警区', color: '#d94a3d', automation: '现有异常状态可自动归入' },
   ],
   scoreScales: [
     { label: '一般体能', maximum: 100 },
     { label: '重要基础体能', maximum: 160 },
     { label: '专项基础', maximum: 200 },
-    { label: '专项成绩', maximum: 250 }
+    { label: '专项成绩', maximum: 250 },
   ],
   confirmedRules: [
-    { label: '力量缺陷 DSD', rule: '<0.60 爆发力/快速力量偏弱；0.60–0.81 相对均衡；>0.81 最大力量偏弱' },
+    {
+      label: '力量缺陷 DSD',
+      rule: '<0.60 爆发力/快速力量偏弱；0.60–0.81 相对均衡；>0.81 最大力量偏弱',
+    },
     { label: '相对力量', rule: '绝对力量 ÷ 体重' },
     { label: '力量训练量', rule: '组数 × 次数 × 负重' },
-    { label: '训练完成率', rule: '实际完成量 ÷ 计划训练量 × 100%' }
+    { label: '训练完成率', rule: '实际完成量 ÷ 计划训练量 × 100%' },
   ],
   latestAdditions: [
     {
@@ -76,34 +79,36 @@ export const ROWING_MODEL_STANDARD = {
       shortLabel: '6km PO/HR',
       status: '建议新增',
       evidence: '2026同行评议研究',
-      usage: '用于个人纵向监测，不作为全国统一等级阈值'
+      usage: '用于个人纵向监测，不作为全国统一等级阈值',
     },
     {
       label: '血氧状态',
       shortLabel: '血氧',
       status: '建议预留',
       evidence: 'World Rowing 2026规则更新',
-      usage: '作为比赛期可采集数据字段，不直接参与评分'
+      usage: '作为比赛期可采集数据字段，不直接参与评分',
     },
     {
       label: '船速、桨频、单桨距离与舟桨效率',
       shortLabel: '艇上效率',
       status: '建议新增',
       evidence: 'World Rowing数据规范与2026国家队研究',
-      usage: '用于技术表现分析，建立本队个人基线后再分级'
-    }
+      usage: '用于技术表现分析，建立本队个人基线后再分级',
+    },
   ],
   expertPending: [
     'Wingate分级区间',
     '左右侧不对称阈值',
     '生理生化风险星级阈值',
     'Z-Score参考人群、均值与标准差',
-    '综合冠军模型权重'
-  ]
+    '综合冠军模型权重',
+  ],
 } as const;
 
 function nullableAverage(values: Array<number | null>) {
-  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const valid = values.filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value)
+  );
   return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
 }
 
@@ -121,7 +126,7 @@ function distribution(
     .map(([label, minutes]) => ({
       label,
       minutes,
-      ratio: total ? Math.round(minutes / total * 1000) / 10 : 0
+      ratio: total ? Math.round((minutes / total) * 1000) / 10 : 0,
     }))
     .sort((a, b) => b.minutes - a.minutes);
 }
@@ -136,25 +141,48 @@ export function analyzeRowingPeriod(records: RowingAnalysisRecord[]): RowingPeri
     record.morningPulse,
     record.weightKg,
     record.sleepHours,
-    record.fatigueIndex
+    record.fatigueIndex,
   ]);
-  const availableValues = trackedValues.filter((value) => typeof value === 'number' && Number.isFinite(value)).length;
-  const dataCoverage = trackedValues.length ? Math.round(availableValues / trackedValues.length * 1000) / 10 : 0;
+  const availableValues = trackedValues.filter(
+    (value) => typeof value === 'number' && Number.isFinite(value)
+  ).length;
+  const dataCoverage = trackedValues.length
+    ? Math.round((availableValues / trackedValues.length) * 1000) / 10
+    : 0;
 
   const status = alertCount
     ? { key: 'alert' as const, label: '预警区', color: '#d94a3d', basis: '本期存在已标记异常记录' }
     : attentionCount
-      ? { key: 'improve' as const, label: '可改善区', color: '#d9a326', basis: '本期存在已标记关注记录' }
+      ? {
+          key: 'improve' as const,
+          label: '可改善区',
+          color: '#d9a326',
+          basis: '本期存在已标记关注记录',
+        }
       : normalCount
-        ? { key: 'target' as const, label: '目标区', color: '#1a9b83', basis: '本期记录均为正常或恢复状态' }
-        : { key: 'unrated' as const, label: '未评级', color: '#7f9098', basis: '缺少可用于分级的训练状态数据' };
+        ? {
+            key: 'target' as const,
+            label: '目标区',
+            color: '#1a9b83',
+            basis: '本期记录均为正常或恢复状态',
+          }
+        : {
+            key: 'unrated' as const,
+            label: '未评级',
+            color: '#7f9098',
+            basis: '缺少可用于分级的训练状态数据',
+          };
 
   const recommendations: string[] = [];
   if (!records.length) recommendations.push('本期没有训练记录，请先补充数据。');
-  if (alertCount) recommendations.push(`复核${alertCount}条异常记录，由教练确认训练调整与恢复安排。`);
-  if (!alertCount && attentionCount) recommendations.push(`持续跟踪${attentionCount}条关注记录，下一训练日前完成教练复核。`);
-  if (training.length && dataCoverage < 80) recommendations.push('晨脉、体重、睡眠、疲劳和RPE数据完整率不足80%，建议先补齐再做趋势判断。');
-  if (training.length && !alertCount && !attentionCount) recommendations.push('维持当前训练节奏，继续用相同口径记录负荷与恢复指标。');
+  if (alertCount)
+    recommendations.push(`复核${alertCount}条异常记录，由教练确认训练调整与恢复安排。`);
+  if (!alertCount && attentionCount)
+    recommendations.push(`持续跟踪${attentionCount}条关注记录，下一训练日前完成教练复核。`);
+  if (training.length && dataCoverage < 80)
+    recommendations.push('晨脉、体重、睡眠、疲劳和RPE数据完整率不足80%，建议先补齐再做趋势判断。');
+  if (training.length && !alertCount && !attentionCount)
+    recommendations.push('维持当前训练节奏，继续用相同口径记录负荷与恢复指标。');
 
   return {
     status,
@@ -173,10 +201,21 @@ export function analyzeRowingPeriod(records: RowingAnalysisRecord[]): RowingPeri
     alertCount,
     attentionCount,
     distributions: {
-      trainingTypes: distribution(training, (record) => record.structureType || record.trainingType),
-      intensityZones: distribution(training, (record) => record.intensityZone === '-' ? '未分区' : record.intensityZone)
+      trainingTypes: distribution(
+        training,
+        (record) => record.structureType || record.trainingType
+      ),
+      intensityZones: distribution(training, (record) =>
+        record.intensityZone === '-' ? '未分区' : record.intensityZone
+      ),
     },
     recommendations,
-    unavailableMetrics: ['2km/5km/6km测功仪成绩', 'VO₂max与乳酸阈', '7桨功率', 'CMJ与DSD', '艇上效率指标']
+    unavailableMetrics: [
+      '2km/5km/6km测功仪成绩',
+      'VO₂max与乳酸阈',
+      '7桨功率',
+      'CMJ与DSD',
+      '艇上效率指标',
+    ],
   };
 }

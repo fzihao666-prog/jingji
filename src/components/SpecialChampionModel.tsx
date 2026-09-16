@@ -2,8 +2,17 @@ import { Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { AppCard, ContentState, SectionHeader } from './PageLayout';
-import type { ErgometerChampionModelPayload, Project, SpecialChampionModelEvent, SpecialChampionModelPayload } from '../types';
-import { CHAMPION_MODEL_STANDARD_LABELS, CHAMPION_MODEL_STANDARD_TYPES, type ChampionModelStandardType } from '../../shared/champion-model';
+import type {
+  ErgometerChampionModelPayload,
+  Project,
+  SpecialChampionModelEvent,
+  SpecialChampionModelPayload,
+} from '../types';
+import {
+  CHAMPION_MODEL_STANDARD_LABELS,
+  CHAMPION_MODEL_STANDARD_TYPES,
+  type ChampionModelStandardType,
+} from '../../shared/champion-model';
 import { projectLabel } from '../../shared/projects';
 
 type EventRow = {
@@ -23,7 +32,7 @@ const ERGOMETER_LEVELS = [
   { code: 'PROVINCIAL_EXCELLENT', label: '省优' },
   { code: 'NATIONAL_EXCELLENT', label: '国优' },
   { code: 'U23_INTERNATIONAL', label: 'U23' },
-  { code: 'INTERNATIONAL_EXCELLENT', label: '国际' }
+  { code: 'INTERNATIONAL_EXCELLENT', label: '国际' },
 ] as const;
 
 function normalizeErgometerValue(value: string | undefined, testType: ErgometerTestType) {
@@ -34,7 +43,7 @@ function normalizeErgometerValue(value: string | undefined, testType: ErgometerT
 
 function ErgometerTabs({
   value,
-  onChange
+  onChange,
 }: {
   value: ErgometerTestType;
   onChange: (value: ErgometerTestType) => void;
@@ -73,45 +82,40 @@ export function SpecialChampionModel({ project }: { project: Project }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [maleTestType, setMaleTestType] = useState<
-    '2000M' | '5000M' | '30MIN_20SPM'
-  >('2000M');
+  const [maleTestType, setMaleTestType] = useState<'2000M' | '5000M' | '30MIN_20SPM'>('2000M');
 
-  const [maleModel, setMaleModel] =
-    useState<ErgometerChampionModelPayload | null>(null);
+  const [maleModel, setMaleModel] = useState<ErgometerChampionModelPayload | null>(null);
 
-  const [femaleTestType, setFemaleTestType] = useState<
-    '2000M' | '5000M' | '30MIN_20SPM'
-  >('2000M');
+  const [femaleTestType, setFemaleTestType] = useState<'2000M' | '5000M' | '30MIN_20SPM'>('2000M');
 
-  const [femaleModel, setFemaleModel] =
-    useState<ErgometerChampionModelPayload | null>(null);
+  const [femaleModel, setFemaleModel] = useState<ErgometerChampionModelPayload | null>(null);
 
   useEffect(() => {
     let ignored = false;
     setLoading(true);
     setError('');
     setModel(null);
-    api.specialChampionModels(project)
-      .then((payload) => { if (!ignored) setModel(payload); })
-      .catch((reason: unknown) => { if (!ignored) setError(reason instanceof Error ? reason.message : '冠军模型读取失败。'); })
-      .finally(() => { if (!ignored) setLoading(false); });
-    return () => { ignored = true; };
+    api
+      .specialChampionModels(project)
+      .then((payload) => {
+        if (!ignored) setModel(payload);
+      })
+      .catch((reason: unknown) => {
+        if (!ignored) setError(reason instanceof Error ? reason.message : '冠军模型读取失败。');
+      })
+      .finally(() => {
+        if (!ignored) setLoading(false);
+      });
+    return () => {
+      ignored = true;
+    };
   }, [project]);
 
   useEffect(() => {
-    api.ergometerChampionModels(
-      project,
-      'MALE',
-      maleTestType
-    ).then(setMaleModel);
+    api.ergometerChampionModels(project, 'MALE', maleTestType).then(setMaleModel);
   }, [project, maleTestType]);
   useEffect(() => {
-    api.ergometerChampionModels(
-      project,
-      'FEMALE',
-      femaleTestType
-    ).then(setFemaleModel);
+    api.ergometerChampionModels(project, 'FEMALE', femaleTestType).then(setFemaleModel);
   }, [project, femaleTestType]);
 
   function ergometerValueLabel(testType: ErgometerTestType) {
@@ -122,49 +126,54 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     return '完成时间';
   }
 
-
   const events = model?.events || [];
-  const content = loading
-    ? <ContentState kind="loading" title="正在读取冠军模型配置" />
-    : error
-      ? <ContentState kind="error" title="冠军模型暂不可用" description={error} />
-      : !events.length
-        ? <ContentState kind="empty" title="模型数据待配置" description={`尚未配置${projectLabel(project)}的专项细分项目与标杆成绩。`} />
-        : <div className="champion-table-scroll">
-          <table className="champion-model-table rowing-world-best-table">
-            <colgroup>
-              <col className="rowing-world-best-event" />
-              <col className="rowing-world-best-country" />
-              <col className="rowing-world-best-result" />
-              <col className="rowing-world-best-pace" />
-              <col className="rowing-world-best-competition" />
-              <col className="rowing-world-best-location" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th scope="col">项目</th>
-                <th scope="col">国家</th>
-                <th scope="col">最好成绩</th>
-                <th scope="col">配速</th>
-                <th scope="col">赛事</th>
-                <th scope="col">比赛地点</th>
-              </tr>
-            </thead>
+  const content = loading ? (
+    <ContentState kind="loading" title="正在读取冠军模型配置" />
+  ) : error ? (
+    <ContentState kind="error" title="冠军模型暂不可用" description={error} />
+  ) : !events.length ? (
+    <ContentState
+      kind="empty"
+      title="模型数据待配置"
+      description={`尚未配置${projectLabel(project)}的专项细分项目与标杆成绩。`}
+    />
+  ) : (
+    <div className="champion-table-scroll">
+      <table className="champion-model-table rowing-world-best-table">
+        <colgroup>
+          <col className="rowing-world-best-event" />
+          <col className="rowing-world-best-country" />
+          <col className="rowing-world-best-result" />
+          <col className="rowing-world-best-pace" />
+          <col className="rowing-world-best-competition" />
+          <col className="rowing-world-best-location" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">项目</th>
+            <th scope="col">国家</th>
+            <th scope="col">最好成绩</th>
+            <th scope="col">配速</th>
+            <th scope="col">赛事</th>
+            <th scope="col">比赛地点</th>
+          </tr>
+        </thead>
 
-            <tbody>
-              {events.map((event) => (
-                <tr key={event.eventCode}>
-                  <th scope="row">{event.eventName}</th>
-                  <td>{event.country || '待核实'}</td>
-                  <td>{event.bestPerformance || '待核实'}</td>
-                  <td>{event.pace || '待核实'}</td>
-                  <td>{event.competition || '待核实'}</td>
-                  <td>{event.location || '待核实'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>;
+        <tbody>
+          {events.map((event) => (
+            <tr key={event.eventCode}>
+              <th scope="row">{event.eventName}</th>
+              <td>{event.country || '待核实'}</td>
+              <td>{event.bestPerformance || '待核实'}</td>
+              <td>{event.pace || '待核实'}</td>
+              <td>{event.competition || '待核实'}</td>
+              <td>{event.location || '待核实'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
   const maleTableRows = useMemo(() => {
     if (!maleModel) return [];
 
@@ -180,7 +189,7 @@ export function SpecialChampionModel({ project }: { project: Project }) {
 
     return [...grouped.entries()].map(([bodyWeightKg, values]) => ({
       bodyWeightKg,
-      values
+      values,
     }));
   }, [maleModel]);
   const femaleTableRows = useMemo(() => {
@@ -198,13 +207,13 @@ export function SpecialChampionModel({ project }: { project: Project }) {
 
     return [...grouped.entries()].map(([bodyWeightKg, values]) => ({
       bodyWeightKg,
-      values
+      values,
     }));
   }, [femaleModel]);
 
   function ErgometerChampionTable({
     rows,
-    testType
+    testType,
   }: {
     rows: {
       bodyWeightKg: number;
@@ -219,7 +228,9 @@ export function SpecialChampionModel({ project }: { project: Project }) {
             <tr>
               <th scope="col">体重</th>
               {ERGOMETER_LEVELS.map((level) => (
-                <th scope="col" key={level.code}>{level.label}</th>
+                <th scope="col" key={level.code}>
+                  {level.label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -229,7 +240,9 @@ export function SpecialChampionModel({ project }: { project: Project }) {
               <tr key={row.bodyWeightKg}>
                 <th scope="row">{row.bodyWeightKg}kg</th>
                 {ERGOMETER_LEVELS.map((level) => (
-                  <td key={level.code}>{normalizeErgometerValue(row.values[level.code], testType)}</td>
+                  <td key={level.code}>
+                    {normalizeErgometerValue(row.values[level.code], testType)}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -239,50 +252,40 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     );
   }
 
-
-
-  return <AppCard variant="chart" className="professional-panel special-champion-model">
-    <div className="champion-model-head">
-      <SectionHeader
-        title="冠军模型"
-        icon={<Trophy size={17} />}
-      />
-    </div>
-    <div className="champion-model-section">
-      <div className="champion-model-section-title">
-        <strong>赛艇世界最好成绩</strong>
-        <span>最好成绩、配速与赛事来源</span>
+  return (
+    <AppCard variant="chart" className="professional-panel special-champion-model">
+      <div className="champion-model-head">
+        <SectionHeader title="冠军模型" icon={<Trophy size={17} />} />
       </div>
-      {content}
-    </div>
-    <div className="ergometer-model-grid">
-      <section className="ergometer-model-card">
-        <div className="ergometer-model-head">
-          <div>
-            <strong>男子陆上赛艇冠军模型</strong>
-            <span>{ergometerValueLabel(maleTestType)}</span>
-          </div>
-          <ErgometerTabs
-            value={maleTestType}
-            onChange={setMaleTestType}
-          />
+      <div className="champion-model-section">
+        <div className="champion-model-section-title">
+          <strong>赛艇世界最好成绩</strong>
+          <span>最好成绩、配速与赛事来源</span>
         </div>
-        <ErgometerChampionTable rows={maleTableRows} testType={maleTestType} />
-      </section>
-      <section className="ergometer-model-card">
-        <div className="ergometer-model-head">
-          <div>
-            <strong>女子陆上赛艇冠军模型</strong>
-            <span>{ergometerValueLabel(femaleTestType)}</span>
+        {content}
+      </div>
+      <div className="ergometer-model-grid">
+        <section className="ergometer-model-card">
+          <div className="ergometer-model-head">
+            <div>
+              <strong>男子陆上赛艇冠军模型</strong>
+              <span>{ergometerValueLabel(maleTestType)}</span>
+            </div>
+            <ErgometerTabs value={maleTestType} onChange={setMaleTestType} />
           </div>
-          <ErgometerTabs
-            value={femaleTestType}
-            onChange={setFemaleTestType}
-          />
-        </div>
-        <ErgometerChampionTable rows={femaleTableRows} testType={femaleTestType} />
-      </section>
-    </div>
-
-  </AppCard>;
+          <ErgometerChampionTable rows={maleTableRows} testType={maleTestType} />
+        </section>
+        <section className="ergometer-model-card">
+          <div className="ergometer-model-head">
+            <div>
+              <strong>女子陆上赛艇冠军模型</strong>
+              <span>{ergometerValueLabel(femaleTestType)}</span>
+            </div>
+            <ErgometerTabs value={femaleTestType} onChange={setFemaleTestType} />
+          </div>
+          <ErgometerChampionTable rows={femaleTableRows} testType={femaleTestType} />
+        </section>
+      </div>
+    </AppCard>
+  );
 }

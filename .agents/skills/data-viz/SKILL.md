@@ -1,6 +1,6 @@
 ---
 name: data-viz
-description: "Charts, dashboards, KPI displays, and any sortable, filterable, or paginated records table, including accessibility and SSR concerns. 日本語の依頼例:「グラフ追加」「ダッシュボード」「一覧・データテーブル」「KPI表示」。"
+description: 'Charts, dashboards, KPI displays, and any sortable, filterable, or paginated records table, including accessibility and SSR concerns. 日本語の依頼例:「グラフ追加」「ダッシュボード」「一覧・データテーブル」「KPI表示」。'
 ---
 
 # Data Visualization

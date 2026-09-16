@@ -1,6 +1,6 @@
 ---
 name: a11y
-description: "Accessibility implementation and review for semantic HTML, keyboard use, focus, ARIA, contrast, forms, and screen readers. Use for UI components or accessibility fixes. 日本語の依頼例:「アクセシビリティ対応」「キーボード操作」「フォーカス管理」「スクリーンリーダー対応」。"
+description: 'Accessibility implementation and review for semantic HTML, keyboard use, focus, ARIA, contrast, forms, and screen readers. Use for UI components or accessibility fixes. 日本語の依頼例:「アクセシビリティ対応」「キーボード操作」「フォーカス管理」「スクリーンリーダー対応」。'
 ---
 
 # Accessibility

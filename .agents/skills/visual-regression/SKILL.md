@@ -1,11 +1,11 @@
 ---
 name: visual-regression
-description: "Visual regression testing with Storybook or Playwright screenshots, deterministic baselines, and diff review. 日本語の依頼例:「スクショテスト」「ビジュアルリグレッション」「見た目の差分」「Chromatic」。"
+description: 'Visual regression testing with Storybook or Playwright screenshots, deterministic baselines, and diff review. 日本語の依頼例:「スクショテスト」「ビジュアルリグレッション」「見た目の差分」「Chromatic」。'
 ---
 
 # Visual Regression Testing
 
-VRT catches what DOM assertions can't: layout breaks, token regressions, theme bugs, overflow. It complements — never replaces — behavioral tests. If a DOM assertion can express the check (text content, element presence), use that; VRT is for how things *look*.
+VRT catches what DOM assertions can't: layout breaks, token regressions, theme bugs, overflow. It complements — never replaces — behavioral tests. If a DOM assertion can express the check (text content, element presence), use that; VRT is for how things _look_.
 
 ## Stories are the VRT surface
 

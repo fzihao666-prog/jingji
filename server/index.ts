@@ -8,7 +8,11 @@ import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { db, upsertAthleteOrigin } from './db.ts';
 import { buildOverviewPayload, buildSpecialTrainingPayload } from './overview-service.ts';
-import { buildProfileComparison, buildWellnessTrends, resolveProfileScope } from './athlete-profile-service.ts';
+import {
+  buildProfileComparison,
+  buildWellnessTrends,
+  resolveProfileScope,
+} from './athlete-profile-service.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import {
   AREA_LEVEL_META,
@@ -18,22 +22,33 @@ import {
   ROLES,
   canManageRole,
   type AreaLevel,
-  type Role
+  type Role,
 } from '../shared/access.ts';
 import {
   ROWING_MODEL_STANDARD,
   analyzeRowingPeriod,
-  type RowingAnalysisRecord
+  type RowingAnalysisRecord,
 } from '../shared/rowing-model.ts';
 import { CANOE_MODEL_STANDARD, analyzeCanoePeriod } from '../shared/canoe-model.ts';
-import { SLALOM_CHAMPION_METRICS, SLALOM_MODEL_STANDARD, analyzeSlalomPeriod, slalomComparison } from '../shared/slalom-model.ts';
-import { hasSpecialAnalysis, projectCapability, projectLabel, PROJECTS, type Project } from '../shared/projects.ts';
-import { INTENSITY_ZONE_SYSTEMS, PRIMARY_INTENSITY_ZONE_CODES } from '../shared/training-intensity.ts';
-import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
 import {
-  STRENGTH_METRICS,
-  type StrengthMetricValues
-} from '../shared/strength-model.ts';
+  SLALOM_CHAMPION_METRICS,
+  SLALOM_MODEL_STANDARD,
+  analyzeSlalomPeriod,
+  slalomComparison,
+} from '../shared/slalom-model.ts';
+import {
+  hasSpecialAnalysis,
+  projectCapability,
+  projectLabel,
+  PROJECTS,
+  type Project,
+} from '../shared/projects.ts';
+import {
+  INTENSITY_ZONE_SYSTEMS,
+  PRIMARY_INTENSITY_ZONE_CODES,
+} from '../shared/training-intensity.ts';
+import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
+import { STRENGTH_METRICS, type StrengthMetricValues } from '../shared/strength-model.ts';
 import {
   STRENGTH_BODY_POSITIONS,
   STRENGTH_INTENSITY_ZONES,
@@ -48,12 +63,9 @@ import {
   type StrengthBodyPosition,
   type StrengthIntensityZone,
   type StrengthTrainingCategory,
-  type StrengthTrainingEnvironment
+  type StrengthTrainingEnvironment,
 } from '../shared/strength-training.ts';
-import {
-  TrainingPlanAIService,
-  type AthleteContext
-} from './ai-service.ts';
+import { TrainingPlanAIService, type AthleteContext } from './ai-service.ts';
 import { recognizeStrengthImport, type RecognizedStrengthRow } from './strength-import-ai.ts';
 import {
   analyzeDataImport,
@@ -61,7 +73,7 @@ import {
   getDataImportBatch,
   listDataImportBatches,
   updateDataImportAthleteCandidates,
-  updateDataImportItems
+  updateDataImportItems,
 } from './data-import.ts';
 
 try {
@@ -79,7 +91,7 @@ type AuthUser = {
 };
 
 const intensityZones = PRIMARY_INTENSITY_ZONE_CODES;
-type IntensityZoneKey = typeof intensityZones[number];
+type IntensityZoneKey = (typeof intensityZones)[number];
 type TrainingBreakdown = {
   waterMinutes: number;
   ergMinutes: number;
@@ -215,11 +227,14 @@ const dataImportUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 80 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
-    if (!/\.(xls|xlsx)$/i.test(file.originalname)) return callback(new Error('统一数据导入当前仅支持 XLS 和 XLSX 文件。'));
+    if (!/\.(xls|xlsx)$/i.test(file.originalname))
+      return callback(new Error('统一数据导入当前仅支持 XLS 和 XLSX 文件。'));
     callback(null, true);
-  }
+  },
 });
-const athletePhotoRoot = resolve(process.env.ATHLETE_PHOTO_ROOT || resolve(process.cwd(), 'data', 'uploads', 'athlete-photos'));
+const athletePhotoRoot = resolve(
+  process.env.ATHLETE_PHOTO_ROOT || resolve(process.cwd(), 'data', 'uploads', 'athlete-photos')
+);
 mkdirSync(athletePhotoRoot, { recursive: true });
 const photoUpload = multer({
   storage: multer.memoryStorage(),
@@ -230,7 +245,7 @@ const photoUpload = multer({
       return;
     }
     callback(null, true);
-  }
+  },
 });
 
 const port = Number(process.env.PORT || 8787);
@@ -242,26 +257,40 @@ const jwtSecret = (() => {
   writeFileSync(jwtSecretPath, generated, { encoding: 'utf8', flag: 'wx' });
   return generated;
 })();
-const specialTestImportCache = new Map<string, { ownerId: number; rows: SpecialTestImportRow[]; expiresAt: number }>();
-const strengthImportCache = new Map<string, {
-  ownerId: number;
-  filename: string;
-  mimetype: string;
-  sourceType: 'excel' | 'csv' | 'image' | 'pdf';
-  rows: StrengthImportRow[];
-  modelUsed: string;
-  expiresAt: number;
-}>();
+const specialTestImportCache = new Map<
+  string,
+  { ownerId: number; rows: SpecialTestImportRow[]; expiresAt: number }
+>();
+const strengthImportCache = new Map<
+  string,
+  {
+    ownerId: number;
+    filename: string;
+    mimetype: string;
+    sourceType: 'excel' | 'csv' | 'image' | 'pdf';
+    rows: StrengthImportRow[];
+    modelUsed: string;
+    expiresAt: number;
+  }
+>();
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 const provinceSet = new Set<string>(PROVINCES);
 const projectSet = new Set<string>(PROJECTS);
 
 function analysisStandardForProject(project: string) {
-  return projectCapability(project) === 'slalom' ? SLALOM_MODEL_STANDARD : projectCapability(project) === 'canoe' ? CANOE_MODEL_STANDARD : ROWING_MODEL_STANDARD;
+  return projectCapability(project) === 'slalom'
+    ? SLALOM_MODEL_STANDARD
+    : projectCapability(project) === 'canoe'
+      ? CANOE_MODEL_STANDARD
+      : ROWING_MODEL_STANDARD;
 }
 
 function analyzePeriodForProject(project: string, records: RowingAnalysisRecord[]) {
-  return projectCapability(project) === 'slalom' ? analyzeSlalomPeriod(records) : projectCapability(project) === 'canoe' ? analyzeCanoePeriod(records) : analyzeRowingPeriod(records);
+  return projectCapability(project) === 'slalom'
+    ? analyzeSlalomPeriod(records)
+    : projectCapability(project) === 'canoe'
+      ? analyzeCanoePeriod(records)
+      : analyzeRowingPeriod(records);
 }
 
 app.disable('x-powered-by');
@@ -270,15 +299,21 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+  );
   next();
 });
 app.use(express.json({ limit: '2mb' }));
-app.use('/uploads/athlete-photos', express.static(athletePhotoRoot, {
-  fallthrough: false,
-  immutable: true,
-  maxAge: '30d'
-}));
+app.use(
+  '/uploads/athlete-photos',
+  express.static(athletePhotoRoot, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '30d',
+  })
+);
 
 function consumeRateLimit(req: Request, scope: string, maxAttempts: number, windowMs: number) {
   const key = `${scope}:${req.ip || req.socket.remoteAddress || 'unknown'}`;
@@ -302,10 +337,14 @@ function getAuthUser(req: Request): AuthUser | null {
   if (!header?.startsWith('Bearer ')) return null;
   try {
     const tokenUser = jwt.verify(header.slice(7), jwtSecret) as AuthUser;
-    const current = db.prepare(`
+    const current = db
+      .prepare(
+        `
       SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId
       FROM users WHERE id = ? AND active = 1
-    `).get(tokenUser.id) as AuthUser | undefined;
+    `
+      )
+      .get(tokenUser.id) as AuthUser | undefined;
     return current || null;
   } catch {
     return null;
@@ -332,12 +371,16 @@ function requireRole(...roles: Role[]) {
 function isOverviewLayoutState(value: unknown): value is OverviewLayoutState {
   if (!value || typeof value !== 'object') return false;
   const layout = value as Record<string, unknown>;
-  return typeof layout.version === 'number'
-    && Number.isFinite(layout.version)
-    && Array.isArray(layout.order)
-    && Array.isArray(layout.hidden)
-    && Array.isArray(layout.pinned)
-    && [layout.order, layout.hidden, layout.pinned].every((items) => items.every((item) => typeof item === 'string'));
+  return (
+    typeof layout.version === 'number' &&
+    Number.isFinite(layout.version) &&
+    Array.isArray(layout.order) &&
+    Array.isArray(layout.hidden) &&
+    Array.isArray(layout.pinned) &&
+    [layout.order, layout.hidden, layout.pinned].every((items) =>
+      items.every((item) => typeof item === 'string')
+    )
+  );
 }
 
 type AreaPermission = {
@@ -357,15 +400,26 @@ type ScopeAthlete = {
 };
 
 function accountPermissions(userId: number) {
-  const areas = db.prepare(`
+  const areas = db
+    .prepare(
+      `
     SELECT area_level AS areaLevel, province, city, county
     FROM user_area_permissions WHERE user_id = ?
-  `).all(userId) as AreaPermission[];
-  const projects = (db.prepare('SELECT project FROM user_project_permissions WHERE user_id = ?').all(userId) as { project: string }[])
-    .map((item) => item.project);
-  const teams = db.prepare(`
+  `
+    )
+    .all(userId) as AreaPermission[];
+  const projects = (
+    db.prepare('SELECT project FROM user_project_permissions WHERE user_id = ?').all(userId) as {
+      project: string;
+    }[]
+  ).map((item) => item.project);
+  const teams = db
+    .prepare(
+      `
     SELECT project, team FROM user_team_permissions WHERE user_id = ?
-  `).all(userId) as Array<{ project: string; team: string }>;
+  `
+    )
+    .all(userId) as Array<{ project: string; team: string }>;
   return { areas, projects, teams };
 }
 
@@ -383,19 +437,29 @@ function permissionsAllowAthlete(
   athlete: ScopeAthlete
 ) {
   const areaAllowed = permissions.areas.some((area) => areaAllowsAthlete(area, athlete));
-  const projectAllowed = permissions.projects.includes('*') || permissions.projects.includes(athlete.project);
-  const teamAllowed = permissions.teams.some((item) =>
-    (item.project === '*' || item.project === athlete.project)
-      && (item.team === '*' || item.team === athlete.team)
+  const projectAllowed =
+    permissions.projects.includes('*') || permissions.projects.includes(athlete.project);
+  const teamAllowed = permissions.teams.some(
+    (item) =>
+      (item.project === '*' || item.project === athlete.project) &&
+      (item.team === '*' || item.team === athlete.team)
   );
   return areaAllowed && projectAllowed && teamAllowed;
 }
 
-function permissionsAllowProjectTeam(permissions: ReturnType<typeof accountPermissions>, project: string, team: string) {
-  return (permissions.projects.includes('*') || permissions.projects.includes(project))
-    && permissions.teams.some((item) =>
-      (item.project === '*' || item.project === project) && (item.team === '*' || item.team === team)
-    );
+function permissionsAllowProjectTeam(
+  permissions: ReturnType<typeof accountPermissions>,
+  project: string,
+  team: string
+) {
+  return (
+    (permissions.projects.includes('*') || permissions.projects.includes(project)) &&
+    permissions.teams.some(
+      (item) =>
+        (item.project === '*' || item.project === project) &&
+        (item.team === '*' || item.team === team)
+    )
+  );
 }
 
 function areaContains(manager: AreaPermission, target: AreaPermission) {
@@ -418,17 +482,25 @@ function permissionsContain(
   managerPermissions: ReturnType<typeof accountPermissions>,
   targetPermissions: ReturnType<typeof accountPermissions>
 ) {
-  if (!targetPermissions.areas.length || !targetPermissions.projects.length || !targetPermissions.teams.length) return false;
+  if (
+    !targetPermissions.areas.length ||
+    !targetPermissions.projects.length ||
+    !targetPermissions.teams.length
+  )
+    return false;
   const areasContained = targetPermissions.areas.every((targetArea) =>
     managerPermissions.areas.some((managerArea) => areaContains(managerArea, targetArea))
   );
-  const projectsContained = managerPermissions.projects.includes('*')
-    || targetPermissions.projects.every((project) => managerPermissions.projects.includes(project));
-  const teamsContained = managerPermissions.teams.some((team) => team.project === '*' && team.team === '*')
-    || targetPermissions.teams.every((targetTeam) =>
-      managerPermissions.teams.some((managerTeam) =>
-        (managerTeam.project === '*' || managerTeam.project === targetTeam.project)
-          && (managerTeam.team === '*' || managerTeam.team === targetTeam.team)
+  const projectsContained =
+    managerPermissions.projects.includes('*') ||
+    targetPermissions.projects.every((project) => managerPermissions.projects.includes(project));
+  const teamsContained =
+    managerPermissions.teams.some((team) => team.project === '*' && team.team === '*') ||
+    targetPermissions.teams.every((targetTeam) =>
+      managerPermissions.teams.some(
+        (managerTeam) =>
+          (managerTeam.project === '*' || managerTeam.project === targetTeam.project) &&
+          (managerTeam.team === '*' || managerTeam.team === targetTeam.team)
       )
     );
   return areasContained && projectsContained && teamsContained;
@@ -452,44 +524,62 @@ function initializeAccountScope(input: {
   grantedBy: number;
   areaLevel?: AreaLevel;
 }) {
-  const areaLevel = input.areaLevel || (input.province ? (input.county ? 'county' : input.city ? 'city' : 'province') : 'national');
-  db.prepare(`
+  const areaLevel =
+    input.areaLevel ||
+    (input.province ? (input.county ? 'county' : input.city ? 'city' : 'province') : 'national');
+  db.prepare(
+    `
     INSERT INTO account_profiles (user_id, parent_user_id, account_code)
     VALUES (?, ?, ?)
-  `).run(
+  `
+  ).run(
     input.userId,
     input.parentUserId,
     accountCodeFor(input.userId, input.role, input.province, input.project)
   );
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(input.userId, areaLevel, input.province, input.city, input.county, input.grantedBy);
-  db.prepare(`
+  `
+  ).run(input.userId, areaLevel, input.province, input.city, input.county, input.grantedBy);
+  db.prepare(
+    `
     INSERT INTO user_project_permissions (user_id, project, granted_by)
     VALUES (?, ?, ?)
-  `).run(input.userId, input.project || '*', input.grantedBy);
-  db.prepare(`
+  `
+  ).run(input.userId, input.project || '*', input.grantedBy);
+  db.prepare(
+    `
     INSERT INTO user_team_permissions (user_id, project, team, granted_by)
     VALUES (?, ?, ?, ?)
-  `).run(input.userId, input.project || '*', input.team || '*', input.grantedBy);
+  `
+  ).run(input.userId, input.project || '*', input.team || '*', input.grantedBy);
 }
 
 function parseScopePayload(body: any) {
   const areas: AreaPermission[] = Array.isArray(body?.areas)
     ? body.areas.map((area: any) => ({
-      areaLevel: cleanString(area?.areaLevel) as AreaLevel,
-      province: cleanString(area?.province),
-      city: cleanString(area?.city),
-      county: cleanString(area?.county)
-    }))
+        areaLevel: cleanString(area?.areaLevel) as AreaLevel,
+        province: cleanString(area?.province),
+        city: cleanString(area?.city),
+        county: cleanString(area?.county),
+      }))
     : [];
   const projects = Array.isArray(body?.projects)
-    ? [...new Set<string>(body.projects.map((project: unknown) => cleanString(project)).filter(Boolean))]
+    ? [
+        ...new Set<string>(
+          body.projects.map((project: unknown) => cleanString(project)).filter(Boolean)
+        ),
+      ]
     : [];
   const teams = Array.isArray(body?.teams)
-    ? body.teams.map((team: any) => ({ project: cleanString(team?.project), team: cleanString(team?.team) }))
-      .filter((team: { project: string; team: string }) => team.project && team.team)
+    ? body.teams
+        .map((team: any) => ({
+          project: cleanString(team?.project),
+          team: cleanString(team?.team),
+        }))
+        .filter((team: { project: string; team: string }) => team.project && team.team)
     : [];
   return { areas, projects, teams };
 }
@@ -502,7 +592,8 @@ function validateScopePayload(permissions: ReturnType<typeof parseScopePayload>)
     if (!AREA_LEVELS.includes(area.areaLevel)) return '行政区域级别无效。';
     if (area.areaLevel === 'national') continue;
     if (!provinceSet.has(area.province)) return '省份信息无效。';
-    if ((area.areaLevel === 'city' || area.areaLevel === 'county') && area.city.length < 2) return '请填写所属城市。';
+    if ((area.areaLevel === 'city' || area.areaLevel === 'county') && area.city.length < 2)
+      return '请填写所属城市。';
     if (area.areaLevel === 'county' && area.county.length < 2) return '请填写所属区县。';
   }
   if (permissions.projects.some((project) => project !== '*' && !projectSet.has(project))) {
@@ -526,22 +617,33 @@ function replaceAccountScope(input: {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   for (const area of input.permissions.areas) {
-    areaInsert.run(input.userId, area.areaLevel, area.province, area.city, area.county, input.grantedBy);
+    areaInsert.run(
+      input.userId,
+      area.areaLevel,
+      area.province,
+      area.city,
+      area.county,
+      input.grantedBy
+    );
   }
   const projectInsert = db.prepare(`
     INSERT INTO user_project_permissions (user_id, project, granted_by) VALUES (?, ?, ?)
   `);
-  for (const project of input.permissions.projects) projectInsert.run(input.userId, project, input.grantedBy);
+  for (const project of input.permissions.projects)
+    projectInsert.run(input.userId, project, input.grantedBy);
   const teamInsert = db.prepare(`
     INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (?, ?, ?, ?)
   `);
-  for (const team of input.permissions.teams) teamInsert.run(input.userId, team.project, team.team, input.grantedBy);
+  for (const team of input.permissions.teams)
+    teamInsert.run(input.userId, team.project, team.team, input.grantedBy);
   const firstArea = input.permissions.areas[0];
   const firstProject = input.permissions.projects[0];
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE account_profiles SET parent_user_id = ?, account_code = ?, updated_at = CURRENT_TIMESTAMP
     WHERE user_id = ?
-  `).run(
+  `
+  ).run(
     input.parentUserId,
     accountCodeFor(input.userId, input.role, firstArea?.province || '', firstProject || '*'),
     input.userId
@@ -556,35 +658,49 @@ function standardAccountName(input: {
   teams: Array<{ project: string; team: string }>;
 }) {
   const area = input.areas[0];
-  const areaLabel = area?.areaLevel === 'national'
-    ? '全国'
-    : [area?.province, area?.city, area?.county].filter(Boolean).join('·') || '未设置区域';
+  const areaLabel =
+    area?.areaLevel === 'national'
+      ? '全国'
+      : [area?.province, area?.city, area?.county].filter(Boolean).join('·') || '未设置区域';
   const projectLabel = input.projects.includes('*') ? '全部项目' : input.projects.join('、');
-  const teamLabel = input.teams.some((team) => team.team === '*') ? '' : `·${input.teams.map((team) => team.team).join('、')}`;
+  const teamLabel = input.teams.some((team) => team.team === '*')
+    ? ''
+    : `·${input.teams.map((team) => team.team).join('、')}`;
   return `${areaLabel}·${projectLabel}${teamLabel}·${ROLE_META[input.role].label}·${input.displayName}`;
 }
 
 function accessibleAthleteIds(user: AuthUser): number[] {
   if (user.role === 'ATL') return user.athleteId ? [user.athleteId] : [];
   const permissions = accountPermissions(user.id);
-  const candidates = user.role === 'SCC'
-    ? db.prepare(`
+  const candidates =
+    user.role === 'SCC'
+      ? (db
+          .prepare(
+            `
       SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
         a.project, COALESCE(pt.name, '') AS team
       FROM athletes a JOIN coach_athletes ca ON ca.athlete_id = a.id
       LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
       LEFT JOIN project_teams pt ON pt.id = a.team_id
       WHERE ca.coach_user_id = ? AND a.active = 1
-    `).all(user.id) as ScopeAthlete[]
-    : db.prepare(`
+    `
+          )
+          .all(user.id) as ScopeAthlete[])
+      : (db
+          .prepare(
+            `
       SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
         a.project, COALESCE(pt.name, '') AS team
       FROM athletes a
       LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
       LEFT JOIN project_teams pt ON pt.id = a.team_id
       WHERE a.active = 1
-    `).all() as ScopeAthlete[];
-  return candidates.filter((athlete) => permissionsAllowAthlete(permissions, athlete)).map((athlete) => athlete.id);
+    `
+          )
+          .all() as ScopeAthlete[]);
+  return candidates
+    .filter((athlete) => permissionsAllowAthlete(permissions, athlete))
+    .map((athlete) => athlete.id);
 }
 
 function hasAthleteAccess(user: AuthUser, athleteId: number) {
@@ -621,47 +737,77 @@ function trainingPlanWeekKeys(source: Record<string, unknown>) {
     ? source.weekKeys.map(cleanString).filter(Boolean)
     : [];
   const exercises = Array.isArray(source.exercises) ? source.exercises : [];
-  const firstExercise = exercises.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
+  const firstExercise = exercises.find(
+    (value) => value && typeof value === 'object' && !Array.isArray(value)
+  ) as Record<string, unknown> | undefined;
   const lines = Array.isArray(firstExercise?.lines) ? firstExercise.lines : [];
-  const firstLine = lines.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
-  const weeks = firstLine?.weeks && typeof firstLine.weeks === 'object' && !Array.isArray(firstLine.weeks)
-    ? Object.keys(firstLine.weeks as Record<string, unknown>)
-    : [];
-  const sourceKeys = explicit.length ? explicit : weeks.length ? weeks : defaultTrainingPlanWeekKeys;
+  const firstLine = lines.find(
+    (value) => value && typeof value === 'object' && !Array.isArray(value)
+  ) as Record<string, unknown> | undefined;
+  const weeks =
+    firstLine?.weeks && typeof firstLine.weeks === 'object' && !Array.isArray(firstLine.weeks)
+      ? Object.keys(firstLine.weeks as Record<string, unknown>)
+      : [];
+  const sourceKeys = explicit.length
+    ? explicit
+    : weeks.length
+      ? weeks
+      : defaultTrainingPlanWeekKeys;
   return [...new Set(sourceKeys.map((key) => key.slice(0, 20)))].slice(0, 52);
 }
 
 function parseTrainingPlanData(input: unknown) {
-  const source = input && typeof input === 'object' && !Array.isArray(input)
-    ? input as Record<string, unknown>
-    : {};
+  const source =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
   const errors: string[] = [];
   const startDate = cleanString(source.startDate || source.planDate);
-  const endDate = cleanString(source.endDate) || (() => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return '';
-    const date = new Date(`${startDate}T12:00:00Z`);
-    date.setUTCDate(date.getUTCDate() + 30);
-    return date.toISOString().slice(0, 10);
-  })();
+  const endDate =
+    cleanString(source.endDate) ||
+    (() => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return '';
+      const date = new Date(`${startDate}T12:00:00Z`);
+      date.setUTCDate(date.getUTCDate() + 30);
+      return date.toISOString().slice(0, 10);
+    })();
   const title = cleanString(source.title);
   const scheduleLabel = cleanString(source.scheduleLabel);
-  const sourceType = source.sourceType === 'ai_import' || source.sourceType === 'ai_generated' ? source.sourceType : undefined;
+  const sourceType =
+    source.sourceType === 'ai_import' || source.sourceType === 'ai_generated'
+      ? source.sourceType
+      : undefined;
   const isAIPlan = Boolean(sourceType);
   const weekKeys = trainingPlanWeekKeys(source);
-  const rawWeekLabels = source.weekLabels && typeof source.weekLabels === 'object' && !Array.isArray(source.weekLabels)
-    ? source.weekLabels as Record<string, unknown>
-    : {};
-  const weekLabels = Object.fromEntries(weekKeys.map((key, index) => [key, cleanString(rawWeekLabels[key]).slice(0, 60) || `WEEK ${index + 1}`]));
+  const rawWeekLabels =
+    source.weekLabels && typeof source.weekLabels === 'object' && !Array.isArray(source.weekLabels)
+      ? (source.weekLabels as Record<string, unknown>)
+      : {};
+  const weekLabels = Object.fromEntries(
+    weekKeys.map((key, index) => [
+      key,
+      cleanString(rawWeekLabels[key]).slice(0, 60) || `WEEK ${index + 1}`,
+    ])
+  );
   if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
     errors.push('请选择有效的开始日期和结束日期');
   } else {
-    const days = Math.round((Date.parse(`${endDate}T12:00:00Z`) - Date.parse(`${startDate}T12:00:00Z`)) / 86400000) + 1;
-    if (isAIPlan ? (days < 1 || days > 730) : (days < 28 || days > 31)) {
-      errors.push(isAIPlan ? 'AI体能训练起止日期应覆盖1至730天' : '体能训练须按一个月设置，起止日期应覆盖28至31天');
+    const days =
+      Math.round(
+        (Date.parse(`${endDate}T12:00:00Z`) - Date.parse(`${startDate}T12:00:00Z`)) / 86400000
+      ) + 1;
+    if (isAIPlan ? days < 1 || days > 730 : days < 28 || days > 31) {
+      errors.push(
+        isAIPlan
+          ? 'AI体能训练起止日期应覆盖1至730天'
+          : '体能训练须按一个月设置，起止日期应覆盖28至31天'
+      );
     }
   }
-  if (!title || title.length > (isAIPlan ? 80 : 60)) errors.push(`训练名称应为1至${isAIPlan ? 80 : 60}个字符`);
-  if ((!scheduleLabel && !isAIPlan) || scheduleLabel.length > 80) errors.push(`训练日安排应为${isAIPlan ? '0至80' : '1至80'}个字符`);
+  if (!title || title.length > (isAIPlan ? 80 : 60))
+    errors.push(`训练名称应为1至${isAIPlan ? 80 : 60}个字符`);
+  if ((!scheduleLabel && !isAIPlan) || scheduleLabel.length > 80)
+    errors.push(`训练日安排应为${isAIPlan ? '0至80' : '1至80'}个字符`);
   if (!weekKeys.length) errors.push('至少需要一个训练阶段');
 
   const rawExercises = Array.isArray(source.exercises) ? source.exercises : [];
@@ -669,69 +815,86 @@ function parseTrainingPlanData(input: unknown) {
   const exerciseLimit = isAIPlan ? 40 : 20;
   if (rawExercises.length > exerciseLimit) errors.push(`训练项目最多${exerciseLimit}项`);
   let totalLines = 0;
-  const exercises: TrainingPlanExercise[] = rawExercises.slice(0, exerciseLimit).map((rawExercise, exerciseIndex) => {
-    const exercise = rawExercise && typeof rawExercise === 'object' && !Array.isArray(rawExercise)
-      ? rawExercise as Record<string, unknown>
-      : {};
-    const name = cleanString(exercise.name);
-    const unitNote = cleanString(exercise.unitNote);
-    const category = isStrengthTrainingCategory(exercise.category) ? exercise.category : inferStrengthCategory(name);
-    const bodyPosition = isStrengthBodyPosition(exercise.bodyPosition) ? exercise.bodyPosition : inferStrengthBodyPosition(name);
-    if (name.length > 60) errors.push(`第${exerciseIndex + 1}项训练名称不能超过60个字符`);
-    if (unitNote.length > 20) errors.push(`第${exerciseIndex + 1}项备注不能超过20个字符`);
-    const rawLines = Array.isArray(exercise.lines) ? exercise.lines : [];
-    if (!rawLines.length) errors.push(`第${exerciseIndex + 1}项至少需要一行处方`);
-    const lineLimit = isAIPlan ? 20 : 8;
-    if (rawLines.length > lineLimit) errors.push(`第${exerciseIndex + 1}项处方最多${lineLimit}行`);
-    totalLines += rawLines.length;
-    const lines: TrainingPlanLine[] = rawLines.slice(0, lineLimit).map((rawLine, lineIndex) => {
-      const line = rawLine && typeof rawLine === 'object' && !Array.isArray(rawLine)
-        ? rawLine as Record<string, unknown>
-        : {};
-      const rawWeeks = line.weeks && typeof line.weeks === 'object' && !Array.isArray(line.weeks)
-        ? line.weeks as Record<string, unknown>
-        : {};
-      const weeks = {} as TrainingPlanLine['weeks'];
-      for (const weekKey of weekKeys) {
-        const rawWeek = rawWeeks[weekKey] && typeof rawWeeks[weekKey] === 'object' && !Array.isArray(rawWeeks[weekKey])
-          ? rawWeeks[weekKey] as Record<string, unknown>
+  const exercises: TrainingPlanExercise[] = rawExercises
+    .slice(0, exerciseLimit)
+    .map((rawExercise, exerciseIndex) => {
+      const exercise =
+        rawExercise && typeof rawExercise === 'object' && !Array.isArray(rawExercise)
+          ? (rawExercise as Record<string, unknown>)
           : {};
-        const sets = cleanString(rawWeek.sets);
-        const reps = cleanString(rawWeek.reps);
-        const actualCompleted = cleanString(rawWeek.actualCompleted);
-        const arrangement = cleanString(rawWeek.arrangement);
-        if (sets.length > 12 || reps.length > 20 || actualCompleted.length > 30) {
-          errors.push(`第${exerciseIndex + 1}项第${lineIndex + 1}行第${weekKey}周输入过长`);
+      const name = cleanString(exercise.name);
+      const unitNote = cleanString(exercise.unitNote);
+      const category = isStrengthTrainingCategory(exercise.category)
+        ? exercise.category
+        : inferStrengthCategory(name);
+      const bodyPosition = isStrengthBodyPosition(exercise.bodyPosition)
+        ? exercise.bodyPosition
+        : inferStrengthBodyPosition(name);
+      if (name.length > 60) errors.push(`第${exerciseIndex + 1}项训练名称不能超过60个字符`);
+      if (unitNote.length > 20) errors.push(`第${exerciseIndex + 1}项备注不能超过20个字符`);
+      const rawLines = Array.isArray(exercise.lines) ? exercise.lines : [];
+      if (!rawLines.length) errors.push(`第${exerciseIndex + 1}项至少需要一行处方`);
+      const lineLimit = isAIPlan ? 20 : 8;
+      if (rawLines.length > lineLimit)
+        errors.push(`第${exerciseIndex + 1}项处方最多${lineLimit}行`);
+      totalLines += rawLines.length;
+      const lines: TrainingPlanLine[] = rawLines.slice(0, lineLimit).map((rawLine, lineIndex) => {
+        const line =
+          rawLine && typeof rawLine === 'object' && !Array.isArray(rawLine)
+            ? (rawLine as Record<string, unknown>)
+            : {};
+        const rawWeeks =
+          line.weeks && typeof line.weeks === 'object' && !Array.isArray(line.weeks)
+            ? (line.weeks as Record<string, unknown>)
+            : {};
+        const weeks = {} as TrainingPlanLine['weeks'];
+        for (const weekKey of weekKeys) {
+          const rawWeek =
+            rawWeeks[weekKey] &&
+            typeof rawWeeks[weekKey] === 'object' &&
+            !Array.isArray(rawWeeks[weekKey])
+              ? (rawWeeks[weekKey] as Record<string, unknown>)
+              : {};
+          const sets = cleanString(rawWeek.sets);
+          const reps = cleanString(rawWeek.reps);
+          const actualCompleted = cleanString(rawWeek.actualCompleted);
+          const arrangement = cleanString(rawWeek.arrangement);
+          if (sets.length > 12 || reps.length > 20 || actualCompleted.length > 30) {
+            errors.push(`第${exerciseIndex + 1}项第${lineIndex + 1}行第${weekKey}周输入过长`);
+          }
+          if (arrangement.length > 500)
+            errors.push(
+              `第${exerciseIndex + 1}项第${lineIndex + 1}行第${weekKey}周安排不能超过500个字符`
+            );
+          weeks[weekKey] = {
+            sets,
+            reps,
+            percentage: optionalNumber(rawWeek.percentage, 0, 100, '训练百分比', errors),
+            actualCompleted,
+            arrangement,
+          };
         }
-        if (arrangement.length > 500) errors.push(`第${exerciseIndex + 1}项第${lineIndex + 1}行第${weekKey}周安排不能超过500个字符`);
-        weeks[weekKey] = {
-          sets,
-          reps,
-          percentage: optionalNumber(rawWeek.percentage, 0, 100, '训练百分比', errors),
-          actualCompleted,
-          arrangement
+        return {
+          id: cleanString(line.id).slice(0, 50) || randomUUID(),
+          weeks,
         };
-      }
+      });
+      const maxWeight = optionalNumber(exercise.maxWeight, 0, 1000, 'MAX重量', errors);
       return {
-        id: cleanString(line.id).slice(0, 50) || randomUUID(),
-        weeks
+        id: cleanString(exercise.id).slice(0, 50) || randomUUID(),
+        name,
+        maxWeight,
+        unitNote,
+        category,
+        bodyPosition,
+        targetIntensity: optionalNumber(exercise.targetIntensity, 0, 100, '目标强度', errors),
+        estimatedMinutes: optionalNumber(exercise.estimatedMinutes, 0, 600, '预计时间', errors),
+        lines,
       };
     });
-    const maxWeight = optionalNumber(exercise.maxWeight, 0, 1000, 'MAX重量', errors);
-    return {
-      id: cleanString(exercise.id).slice(0, 50) || randomUUID(),
-      name,
-      maxWeight,
-      unitNote,
-      category,
-      bodyPosition,
-      targetIntensity: optionalNumber(exercise.targetIntensity, 0, 100, '目标强度', errors),
-      estimatedMinutes: optionalNumber(exercise.estimatedMinutes, 0, 600, '预计时间', errors),
-      lines
-    };
-  });
   if (!exercises.some((exercise) => exercise.name)) errors.push('至少填写一个训练项目名称');
-  if (totalLines > (isAIPlan ? 200 : 30)) errors.push(isAIPlan ? 'AI体能训练最多容纳200行训练处方' : '导出模板最多容纳30行训练处方');
+  if (totalLines > (isAIPlan ? 200 : 30))
+    errors.push(isAIPlan ? 'AI体能训练最多容纳200行训练处方' : '导出模板最多容纳30行训练处方');
 
   const data: TrainingPlanData = {
     startDate,
@@ -743,21 +906,29 @@ function parseTrainingPlanData(input: unknown) {
     exercises,
     weekKeys,
     weekLabels,
-    ...(sourceType ? {
-      sourceType,
-      summary: cleanString(source.summary).slice(0, 1000),
-      durationWeeks: optionalNumber(source.durationWeeks, 0, 52, '训练阶段数', errors),
-      weeklyPlans: Array.isArray(source.weeklyPlans) ? source.weeklyPlans : [],
-      confidence: optionalNumber(source.confidence, 0, 1, '识别置信度', errors),
-      warnings: Array.isArray(source.warnings) ? source.warnings.map(cleanString).filter(Boolean).slice(0, 50) : [],
-      unmappedContent: Array.isArray(source.unmappedContent) ? source.unmappedContent.map(cleanString).filter(Boolean).slice(0, 100) : []
-    } : {})
+    ...(sourceType
+      ? {
+          sourceType,
+          summary: cleanString(source.summary).slice(0, 1000),
+          durationWeeks: optionalNumber(source.durationWeeks, 0, 52, '训练阶段数', errors),
+          weeklyPlans: Array.isArray(source.weeklyPlans) ? source.weeklyPlans : [],
+          confidence: optionalNumber(source.confidence, 0, 1, '识别置信度', errors),
+          warnings: Array.isArray(source.warnings)
+            ? source.warnings.map(cleanString).filter(Boolean).slice(0, 50)
+            : [],
+          unmappedContent: Array.isArray(source.unmappedContent)
+            ? source.unmappedContent.map(cleanString).filter(Boolean).slice(0, 100)
+            : [],
+        }
+      : {}),
   };
   return { data, errors: [...new Set(errors)] };
 }
 
 function planRecord(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function emptyMatrixWeek(): TrainingPlanWeekEntry {
@@ -767,14 +938,20 @@ function emptyMatrixWeek(): TrainingPlanWeekEntry {
 function aiPercentage(value: unknown) {
   if (value === '' || value === null || value === undefined) return null;
   const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? Math.round(numeric * 10) / 10 : null;
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100
+    ? Math.round(numeric * 10) / 10
+    : null;
 }
 
 function recentTrainingPlanMaxWeights(athleteId: number) {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT plan_data AS dataJson FROM training_plans
     WHERE athlete_id = ? ORDER BY start_date DESC, id DESC LIMIT 12
-  `).all(athleteId) as Array<{ dataJson: string }>;
+  `
+    )
+    .all(athleteId) as Array<{ dataJson: string }>;
   const maxWeights = new Map<string, number>();
   for (const row of rows) {
     try {
@@ -784,7 +961,12 @@ function recentTrainingPlanMaxWeights(athleteId: number) {
         const exercise = planRecord(exerciseValue);
         const name = cleanString(exercise.name);
         const maxWeight = Number(exercise.maxWeight);
-        if (name && Number.isFinite(maxWeight) && maxWeight >= 0 && !maxWeights.has(name.toLocaleLowerCase())) {
+        if (
+          name &&
+          Number.isFinite(maxWeight) &&
+          maxWeight >= 0 &&
+          !maxWeights.has(name.toLocaleLowerCase())
+        ) {
           maxWeights.set(name.toLocaleLowerCase(), maxWeight);
         }
       }
@@ -798,17 +980,26 @@ function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
   const sourceType = plan.sourceType === 'ai_import' ? 'ai_import' : 'ai_generated';
   const sourceWeeks = Array.isArray(plan.weeklyPlans) ? plan.weeklyPlans.map(planRecord) : [];
   const weekKeys = sourceWeeks.map((_week, index) => String(index + 1));
-  const weekLabels = Object.fromEntries(sourceWeeks.map((week, index) => {
-    const weekNumber = Number(week.weekNumber);
-    const label = cleanString(week.label);
-    return [weekKeys[index], label || (Number.isFinite(weekNumber) && weekNumber > 0 ? `WEEK ${weekNumber}` : `阶段 ${index + 1}`)];
-  }));
+  const weekLabels = Object.fromEntries(
+    sourceWeeks.map((week, index) => {
+      const weekNumber = Number(week.weekNumber);
+      const label = cleanString(week.label);
+      return [
+        weekKeys[index],
+        label ||
+          (Number.isFinite(weekNumber) && weekNumber > 0
+            ? `WEEK ${weekNumber}`
+            : `阶段 ${index + 1}`),
+      ];
+    })
+  );
   const configuredMax = new Map<string, number>();
   for (const exerciseValue of Array.isArray(plan.exercises) ? plan.exercises : []) {
     const exercise = planRecord(exerciseValue);
     const name = cleanString(exercise.name);
     const maxWeight = Number(exercise.maxWeight);
-    if (name && Number.isFinite(maxWeight) && maxWeight >= 0) configuredMax.set(name.toLocaleLowerCase(), maxWeight);
+    if (name && Number.isFinite(maxWeight) && maxWeight >= 0)
+      configuredMax.set(name.toLocaleLowerCase(), maxWeight);
   }
   const recentMax = athleteId ? recentTrainingPlanMaxWeights(athleteId) : new Map<string, number>();
   const exerciseMap = new Map<string, TrainingPlanExercise>();
@@ -818,13 +1009,19 @@ function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
     const occurrenceByExercise = new Map<string, number>();
     const days = Array.isArray(week.days) ? week.days.map(planRecord) : [];
     for (const day of days) {
-      const dayLabel = sourceType === 'ai_import'
-        ? [cleanString(day.date), cleanString(day.dayLabel)].filter(Boolean).join(' ')
-        : cleanString(day.dayOfWeek);
+      const dayLabel =
+        sourceType === 'ai_import'
+          ? [cleanString(day.date), cleanString(day.dayLabel)].filter(Boolean).join(' ')
+          : cleanString(day.dayOfWeek);
       const dayFocus = cleanString(day.focus);
-      const items = sourceType === 'ai_import'
-        ? (Array.isArray(day.items) ? day.items.map(planRecord) : [])
-        : (Array.isArray(day.exercises) ? day.exercises.map(planRecord) : []);
+      const items =
+        sourceType === 'ai_import'
+          ? Array.isArray(day.items)
+            ? day.items.map(planRecord)
+            : []
+          : Array.isArray(day.exercises)
+            ? day.exercises.map(planRecord)
+            : [];
       for (const item of items) {
         const name = cleanString(item.name);
         if (!name) continue;
@@ -842,14 +1039,14 @@ function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
             bodyPosition: inferStrengthBodyPosition(name),
             targetIntensity: aiPercentage(item.percentage),
             estimatedMinutes: strengthImportNumber(item.duration),
-            lines: []
+            lines: [],
           };
           exerciseMap.set(normalizedName, exercise);
         }
         while (exercise.lines.length <= occurrence) {
           exercise.lines.push({
             id: randomUUID(),
-            weeks: Object.fromEntries(weekKeys.map((key) => [key, emptyMatrixWeek()]))
+            weeks: Object.fromEntries(weekKeys.map((key) => [key, emptyMatrixWeek()])),
           });
         }
         const detailParts = [
@@ -861,14 +1058,16 @@ function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
           cleanString(item.intensity) && `强度区间 ${cleanString(item.intensity)}`,
           cleanString(item.pace) && `配速 ${cleanString(item.pace)}`,
           cleanString(item.notes),
-          sourceType === 'ai_import' && cleanString(item.rawText) !== name ? cleanString(item.rawText) : ''
+          sourceType === 'ai_import' && cleanString(item.rawText) !== name
+            ? cleanString(item.rawText)
+            : '',
         ].filter((part): part is string => Boolean(part));
         exercise.lines[occurrence].weeks[weekKey] = {
           sets: cleanString(item.sets),
           reps: cleanString(item.reps),
           percentage: aiPercentage(item.percentage),
           actualCompleted: '',
-          arrangement: [...new Set(detailParts)].join(' · ').slice(0, 500)
+          arrangement: [...new Set(detailParts)].join(' · ').slice(0, 500),
         };
       }
     }
@@ -879,13 +1078,17 @@ function normalizeAIPlanToMatrix(planValue: unknown, athleteId?: number) {
     sourceType,
     weekKeys,
     weekLabels,
-    exercises: [...exerciseMap.values()]
+    exercises: [...exerciseMap.values()],
   };
 }
 
 function readStoredTrainingPlanData(dataJson: string): unknown {
   const raw = JSON.parse(dataJson || '{}') as Record<string, unknown>;
-  if (raw.sourceType === 'ai_import' || raw.sourceType === 'ai_generated' || Array.isArray(raw.weeklyPlans)) {
+  if (
+    raw.sourceType === 'ai_import' ||
+    raw.sourceType === 'ai_generated' ||
+    Array.isArray(raw.weeklyPlans)
+  ) {
     const exercises = Array.isArray(raw.exercises) ? raw.exercises.map(planRecord) : [];
     const hasMatrixLines = exercises.some((exercise) => Array.isArray(exercise.lines));
     return parseTrainingPlanData(hasMatrixLines ? raw : normalizeAIPlanToMatrix(raw)).data;
@@ -929,13 +1132,15 @@ async function buildTrainingPlanWorkbook(input: {
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 1,
-      margins: { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 }
+      margins: { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 },
     },
-    views: [{ state: 'frozen', xSplit: 2, ySplit: 6, topLeftCell: 'C7' }]
+    views: [{ state: 'frozen', xSplit: 2, ySplit: 6, topLeftCell: 'C7' }],
   });
   const widths = [9, 18];
   for (let week = 0; week < 4; week += 1) widths.push(5.5, 3.5, 7, 7, 8.5, 12);
-  widths.forEach((width, index) => { sheet.getColumn(index + 1).width = width; });
+  widths.forEach((width, index) => {
+    sheet.getColumn(index + 1).width = width;
+  });
   sheet.properties.defaultRowHeight = 22;
   sheet.getRow(1).height = 25;
   sheet.getRow(2).height = 25;
@@ -948,9 +1153,13 @@ async function buildTrainingPlanWorkbook(input: {
     top: { style: 'thin', color: { argb: 'FF162832' } },
     left: { style: 'thin', color: { argb: 'FF162832' } },
     bottom: { style: 'thin', color: { argb: 'FF162832' } },
-    right: { style: 'thin', color: { argb: 'FF162832' } }
+    right: { style: 'thin', color: { argb: 'FF162832' } },
   };
-  const center: Partial<ExcelJS.Alignment> = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  const center: Partial<ExcelJS.Alignment> = {
+    horizontal: 'center',
+    vertical: 'middle',
+    wrapText: true,
+  };
   const ink = 'FF0B3442';
   const blue = 'FF9DC2E0';
   const blueBody = 'FFDCEBF6';
@@ -961,7 +1170,11 @@ async function buildTrainingPlanWorkbook(input: {
   for (let row = 1; row <= 36; row += 1) {
     for (let column = 1; column <= 26; column += 1) {
       const cell = sheet.getCell(row, column);
-      cell.font = { name: 'Microsoft YaHei UI', size: row <= 6 ? 10.5 : 10, color: { argb: 'FF122832' } };
+      cell.font = {
+        name: 'Microsoft YaHei UI',
+        size: row <= 6 ? 10.5 : 10,
+        color: { argb: 'FF122832' },
+      };
       cell.alignment = center;
       cell.border = allBorder;
     }
@@ -970,39 +1183,85 @@ async function buildTrainingPlanWorkbook(input: {
   sheet.mergeCells('A1:B3');
   const photoCell = sheet.getCell('A1');
   photoCell.value = '证件照\n未上传';
-  photoCell.font = { name: 'Microsoft YaHei UI', size: 10, bold: true, color: { argb: 'FF6E7F87' } };
+  photoCell.font = {
+    name: 'Microsoft YaHei UI',
+    size: 10,
+    bold: true,
+    color: { argb: 'FF6E7F87' },
+  };
   photoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F4F5' } };
 
-  const labelValue = (labelRange: string, valueRange: string, label: string, value: string | number | null) => {
+  const labelValue = (
+    labelRange: string,
+    valueRange: string,
+    label: string,
+    value: string | number | null
+  ) => {
     sheet.mergeCells(labelRange);
     sheet.mergeCells(valueRange);
     const labelCell = sheet.getCell(labelRange.split(':')[0]);
     const valueCell = sheet.getCell(valueRange.split(':')[0]);
     labelCell.value = label;
-    labelCell.font = { name: 'Microsoft YaHei UI', size: 10, italic: true, bold: true, color: { argb: ink } };
+    labelCell.font = {
+      name: 'Microsoft YaHei UI',
+      size: 10,
+      italic: true,
+      bold: true,
+      color: { argb: ink },
+    };
     valueCell.value = value ?? '';
-    valueCell.font = { name: 'Microsoft YaHei UI', size: 11, bold: true, color: { argb: 'FF081F29' } };
+    valueCell.font = {
+      name: 'Microsoft YaHei UI',
+      size: 11,
+      bold: true,
+      color: { argb: 'FF081F29' },
+    };
   };
   const periodLabel = `${input.data.startDate.replaceAll('-', '.')}—${input.data.endDate.slice(5).replace('-', '.')}`;
   labelValue('C1:D1', 'E1:J1', '周期', periodLabel);
-  sheet.getCell('E1').font = { name: 'Bahnschrift', size: 8.5, bold: true, color: { argb: 'FF081F29' } };
+  sheet.getCell('E1').font = {
+    name: 'Bahnschrift',
+    size: 8.5,
+    bold: true,
+    color: { argb: 'FF081F29' },
+  };
   labelValue('K1:L1', 'M1:N1', '年龄', input.data.age);
-  labelValue('O1:P1', 'Q1:R1', '体重', input.data.bodyWeight === null ? '' : `${input.data.bodyWeight} kg`);
+  labelValue(
+    'O1:P1',
+    'Q1:R1',
+    '体重',
+    input.data.bodyWeight === null ? '' : `${input.data.bodyWeight} kg`
+  );
   labelValue('C2:D2', 'E2:J2', '姓名', input.athleteName);
   labelValue('K2:L2', 'M2:R2', '项目 / 组别', `${input.project} · ${input.team}`);
   const exerciseNames = input.data.exercises
-    .map((exercise) => exercise.name.trim().replace(/\s*\r?\n\s*/g, ' / ').replace(/\s{2,}/g, ' '))
+    .map((exercise) =>
+      exercise.name
+        .trim()
+        .replace(/\s*\r?\n\s*/g, ' / ')
+        .replace(/\s{2,}/g, ' ')
+    )
     .filter(Boolean)
     .slice(0, 8);
   labelValue('C3:D3', 'E3:F3', '项目数', `${exerciseNames.length} / 8`);
   sheet.mergeCells('G3:R3');
   const exerciseNamesCell = sheet.getCell('G3');
   exerciseNamesCell.value = exerciseNames.join(' ｜ ');
-  exerciseNamesCell.font = { name: 'Microsoft YaHei UI', size: 9.5, bold: true, color: { argb: ink } };
+  exerciseNamesCell.font = {
+    name: 'Microsoft YaHei UI',
+    size: 9.5,
+    bold: true,
+    color: { argb: ink },
+  };
   exerciseNamesCell.alignment = center;
   sheet.mergeCells('S1:Z3');
   sheet.getCell('S1').value = input.data.title;
-  sheet.getCell('S1').font = { name: 'Microsoft YaHei UI', size: 15, bold: true, color: { argb: 'FFE53B2F' } };
+  sheet.getCell('S1').font = {
+    name: 'Microsoft YaHei UI',
+    size: 15,
+    bold: true,
+    color: { argb: 'FFE53B2F' },
+  };
   sheet.getCell('S1').alignment = center;
 
   if (input.photoUrl) {
@@ -1014,7 +1273,7 @@ async function buildTrainingPlanWorkbook(input: {
       sheet.addImage(imageId, {
         tl: { col: 0.08, row: 0.08 },
         br: { col: 1.92, row: 2.92 },
-        editAs: 'oneCell'
+        editAs: 'oneCell',
       } as never);
       photoCell.value = '';
     }
@@ -1022,7 +1281,13 @@ async function buildTrainingPlanWorkbook(input: {
 
   sheet.mergeCells('A4:Z4');
   sheet.getCell('A4').value = input.data.scheduleLabel;
-  sheet.getCell('A4').font = { name: 'Microsoft YaHei UI', size: 15, bold: true, italic: true, color: { argb: 'FF102A35' } };
+  sheet.getCell('A4').font = {
+    name: 'Microsoft YaHei UI',
+    size: 15,
+    bold: true,
+    italic: true,
+    color: { argb: 'FF102A35' },
+  };
   sheet.getCell('A4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: maxFill } };
 
   sheet.mergeCells('A5:A6');
@@ -1030,8 +1295,18 @@ async function buildTrainingPlanWorkbook(input: {
   sheet.getCell('A5').value = 'MAX';
   sheet.getCell('B5').value = '项目';
   for (const coordinate of ['A5', 'B5']) {
-    sheet.getCell(coordinate).font = { name: 'Microsoft YaHei UI', size: 11, bold: true, italic: true, color: { argb: 'FF081F29' } };
-    sheet.getCell(coordinate).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: maxFill } };
+    sheet.getCell(coordinate).font = {
+      name: 'Microsoft YaHei UI',
+      size: 11,
+      bold: true,
+      italic: true,
+      color: { argb: 'FF081F29' },
+    };
+    sheet.getCell(coordinate).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: maxFill },
+    };
   }
   const weekStarts = [3, 9, 15, 21];
   const subHeaders = ['组', '×', '次', '%', '重量', '完成次数'];
@@ -1039,13 +1314,27 @@ async function buildTrainingPlanWorkbook(input: {
     sheet.mergeCells(5, start, 5, start + 5);
     const header = sheet.getCell(5, start);
     header.value = `WEEK ${weekIndex + 1}`;
-    header.font = { name: 'Bahnschrift', size: 12, bold: true, italic: true, color: { argb: 'FF0B2530' } };
-    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: weekIndex % 2 === 0 ? blue : amber } };
+    header.font = {
+      name: 'Bahnschrift',
+      size: 12,
+      bold: true,
+      italic: true,
+      color: { argb: 'FF0B2530' },
+    };
+    header.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: weekIndex % 2 === 0 ? blue : amber },
+    };
     subHeaders.forEach((label, offset) => {
       const cell = sheet.getCell(6, start + offset);
       cell.value = label;
       cell.font = { name: 'Microsoft YaHei UI', size: 10, bold: true, color: { argb: 'FF0B2530' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: weekIndex % 2 === 0 ? blue : amber } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: weekIndex % 2 === 0 ? blue : amber },
+      };
     });
   });
 
@@ -1066,7 +1355,12 @@ async function buildTrainingPlanWorkbook(input: {
     maxCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: maxFill } };
     const itemCell = sheet.getCell(startRow, 2);
     itemCell.value = exercise.name;
-    itemCell.font = { name: 'Microsoft YaHei UI', size: 11, bold: true, color: { argb: 'FF102A35' } };
+    itemCell.font = {
+      name: 'Microsoft YaHei UI',
+      size: 11,
+      bold: true,
+      color: { argb: 'FF102A35' },
+    };
 
     exercise.lines.forEach((line, lineOffset) => {
       const rowNumber = startRow + lineOffset;
@@ -1078,32 +1372,39 @@ async function buildTrainingPlanWorkbook(input: {
           sheet.getCell(rowNumber, columnStart + offset).fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: bodyFill }
+            fgColor: { argb: bodyFill },
           };
         }
         sheet.getCell(rowNumber, columnStart).value = excelNumberOrText(week.sets);
-        sheet.getCell(rowNumber, columnStart + 1).value = week.sets || week.reps || week.percentage !== null ? '×' : '';
+        sheet.getCell(rowNumber, columnStart + 1).value =
+          week.sets || week.reps || week.percentage !== null ? '×' : '';
         sheet.getCell(rowNumber, columnStart + 2).value = excelNumberOrText(week.reps);
         const percentageCell = sheet.getCell(rowNumber, columnStart + 3);
         percentageCell.value = week.percentage === null ? null : week.percentage / 100;
         percentageCell.numFmt = '0.0%';
         const weightCell = sheet.getCell(rowNumber, columnStart + 4);
         const percentageCoordinate = percentageCell.address;
-        const calculated = exercise.maxWeight !== null && week.percentage !== null
-          ? Math.round(exercise.maxWeight * week.percentage) / 100
-          : 0;
+        const calculated =
+          exercise.maxWeight !== null && week.percentage !== null
+            ? Math.round(exercise.maxWeight * week.percentage) / 100
+            : 0;
         weightCell.value = {
           formula: `IF(OR($A$${startRow}="",${percentageCoordinate}=""),"",ROUND($A$${startRow}*${percentageCoordinate},1))`,
-          result: calculated || undefined
+          result: calculated || undefined,
         };
         weightCell.numFmt = '0.0';
-        weightCell.font = { name: 'Bahnschrift', size: 10, bold: true, color: { argb: 'FFE64132' } };
+        weightCell.font = {
+          name: 'Bahnschrift',
+          size: 10,
+          bold: true,
+          color: { argb: 'FFE64132' },
+        };
         sheet.getCell(rowNumber, columnStart + 5).value = excelNumberOrText(week.actualCompleted);
         sheet.getCell(rowNumber, columnStart + 5).font = {
           name: 'Microsoft YaHei UI',
           size: 9.5,
           bold: Boolean(week.actualCompleted),
-          color: { argb: 'FF14706D' }
+          color: { argb: 'FF14706D' },
         };
       });
     });
@@ -1119,9 +1420,10 @@ async function buildTrainingPlanWorkbook(input: {
 function parseStrengthValues(input: unknown, targetsOnly = false) {
   const values: StrengthMetricValues = {};
   const errors: string[] = [];
-  const source = input && typeof input === 'object' && !Array.isArray(input)
-    ? input as Record<string, unknown>
-    : {};
+  const source =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
   for (const metric of STRENGTH_METRICS) {
     if (targetsOnly && !metric.targetEnabled) continue;
     const raw = source[metric.key];
@@ -1159,18 +1461,32 @@ type AdviceTestRow = {
 };
 
 function adviceTestById(strengthTestId: number) {
-  const session = db.prepare(`
+  const session = db
+    .prepare(
+      `
     SELECT ts.id AS strengthTestId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
       a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team, a.gender
     FROM test_sessions ts JOIN athletes a ON a.id = ts.athlete_id
     LEFT JOIN project_teams pt ON pt.id = a.team_id
     WHERE ts.id = ? AND ts.test_type = '力量素质测试'
-  `).get(strengthTestId) as Omit<AdviceTestRow, 'metricsJson' | 'targetsJson'> | undefined;
+  `
+    )
+    .get(strengthTestId) as Omit<AdviceTestRow, 'metricsJson' | 'targetsJson'> | undefined;
   if (!session) return undefined;
-  const metrics: StrengthMetricValues = {}; const targets: StrengthMetricValues = {};
-  const measurements = db.prepare(`SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`).all(strengthTestId) as Array<{ metricCode: string; valueNum: number; targetValue: number | null }>;
+  const metrics: StrengthMetricValues = {};
+  const targets: StrengthMetricValues = {};
+  const measurements = db
+    .prepare(
+      `SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`
+    )
+    .all(strengthTestId) as Array<{
+    metricCode: string;
+    valueNum: number;
+    targetValue: number | null;
+  }>;
   for (const measurement of measurements) {
-    const key = strengthMetricKeyByCode.get(measurement.metricCode); if (!key) continue;
+    const key = strengthMetricKeyByCode.get(measurement.metricCode);
+    if (!key) continue;
     metrics[key] = measurement.valueNum;
     if (measurement.targetValue !== null) targets[key] = measurement.targetValue;
   }
@@ -1184,34 +1500,47 @@ function limitedText(value: unknown, fallback: string, max = 500) {
 
 function limitedList(value: unknown, fallback: string[], maxItems = 6) {
   if (!Array.isArray(value)) return fallback;
-  const list = value.map((item) => limitedText(item, '', 240)).filter(Boolean).slice(0, maxItems);
+  const list = value
+    .map((item) => limitedText(item, '', 240))
+    .filter(Boolean)
+    .slice(0, maxItems);
   return list.length ? list : fallback;
 }
 
 function normalizeAdviceContent(input: unknown): StrengthAdviceContent {
-  const source = input && typeof input === 'object' && !Array.isArray(input)
-    ? input as Record<string, unknown>
-    : {};
+  const source =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
   const rawWeeks = Array.isArray(source.weeks) ? source.weeks : [];
   const weeks = Array.from({ length: 4 }, (_, index) => {
-    const raw = rawWeeks[index] && typeof rawWeeks[index] === 'object'
-      ? rawWeeks[index] as Record<string, unknown>
-      : {};
+    const raw =
+      rawWeeks[index] && typeof rawWeeks[index] === 'object'
+        ? (rawWeeks[index] as Record<string, unknown>)
+        : {};
     return {
       week: index + 1,
       focus: limitedText(raw.focus, `第${index + 1}周训练重点`, 120),
       load: limitedText(raw.load, '负荷由教练结合当周状态确定', 160),
-      prescription: limitedList(raw.prescription, ['根据测试短板安排专项练习，动作质量优先。'], 5)
+      prescription: limitedList(raw.prescription, ['根据测试短板安排专项练习，动作质量优先。'], 5),
     };
   });
   return {
     title: limitedText(source.title, '个人力量训练建议方案', 80),
-    overview: limitedText(source.overview, '根据本次力量测试与教练目标生成，须经教练审核后执行。', 800),
+    overview: limitedText(
+      source.overview,
+      '根据本次力量测试与教练目标生成，须经教练审核后执行。',
+      800
+    ),
     strengths: limitedList(source.strengths, ['本次数据不足，暂不判断优势项目。'], 5),
     priorities: limitedList(source.priorities, ['本次数据不足，建议补充测试后再确定训练重点。'], 5),
     weeks,
     recovery: limitedList(source.recovery, ['记录睡眠、疲劳和晨脉，根据恢复状态调整训练量。'], 5),
-    cautions: limitedList(source.cautions, ['所有负荷调整须经负责教练确认；出现疼痛或异常疲劳时立即停止训练并复核。'], 5)
+    cautions: limitedList(
+      source.cautions,
+      ['所有负荷调整须经负责教练确认；出现疼痛或异常疲劳时立即停止训练并复核。'],
+      5
+    ),
   };
 }
 
@@ -1223,12 +1552,18 @@ function buildRuleAdvice(test: AdviceTestRow): StrengthAdviceContent {
     .filter((item) => item.difference >= 0)
     .sort((left, right) => right.difference - left.difference)
     .slice(0, 3)
-    .map((item) => `${item.label}达到目标的${(100 + item.difference).toFixed(1)}%，可作为稳定能力继续保持。`);
+    .map(
+      (item) =>
+        `${item.label}达到目标的${(100 + item.difference).toFixed(1)}%，可作为稳定能力继续保持。`
+    );
   const gaps = comparisons
     .filter((item) => item.difference < 0)
     .sort((left, right) => left.difference - right.difference)
     .slice(0, 3);
-  const priorities = gaps.map((item) => `${item.label}距离目标仍差${Math.abs(item.difference).toFixed(1)}%，列入本周期优先改善项。`);
+  const priorities = gaps.map(
+    (item) =>
+      `${item.label}距离目标仍差${Math.abs(item.difference).toFixed(1)}%，列入本周期优先改善项。`
+  );
   const focus = gaps.map((item) => item.label).join('、') || '动作质量与基础力量';
   return normalizeAdviceContent({
     title: `${test.testDate} 个人力量训练建议方案`,
@@ -1236,15 +1571,57 @@ function buildRuleAdvice(test: AdviceTestRow): StrengthAdviceContent {
       ? `本次共有${comparisons.length}项指标可与目标比较，其中${strengths.length}项达到目标、${gaps.length}项列为优先改善项。方案以${focus}为主线，采用逐周递进并在末周复核。`
       : '本次尚未形成完整的目标对比。以下为建议训练框架，请先由教练补充目标值，再确认具体负荷。',
     strengths: strengths.length ? strengths : ['暂未发现同时具备实测值和目标值的达标项目。'],
-    priorities: priorities.length ? priorities : ['补充关键项目目标值，并核对测试动作、单位和测试条件。'],
+    priorities: priorities.length
+      ? priorities
+      : ['补充关键项目目标值，并核对测试动作、单位和测试条件。'],
     weeks: [
-      { week: 1, focus: '动作校准与基础适应', load: '中低负荷，主观用力RPE 5—6', prescription: [`围绕${focus}完成技术动作校准`, '主练动作3—4组，每组6—10次', '左右侧动作分别记录完成质量'] },
-      { week: 2, focus: '重点能力累积', load: '中等负荷，RPE 6—7', prescription: [`提高${focus}的有效训练量`, '主练动作4组，每组5—8次', '保留2—3次余力，避免力竭'] },
-      { week: 3, focus: '专项强化', load: '中高负荷，RPE 7—8', prescription: [`强化${focus}，减少无关训练量`, '主练动作3—5组，每组3—6次', '组间充分恢复并记录实际完成值'] },
-      { week: 4, focus: '减量巩固与复测', load: '较上周减量20%—30%', prescription: ['保持动作速度和质量', '避免新增高疲劳训练内容', '周期末按相同条件完成复测'] }
+      {
+        week: 1,
+        focus: '动作校准与基础适应',
+        load: '中低负荷，主观用力RPE 5—6',
+        prescription: [
+          `围绕${focus}完成技术动作校准`,
+          '主练动作3—4组，每组6—10次',
+          '左右侧动作分别记录完成质量',
+        ],
+      },
+      {
+        week: 2,
+        focus: '重点能力累积',
+        load: '中等负荷，RPE 6—7',
+        prescription: [
+          `提高${focus}的有效训练量`,
+          '主练动作4组，每组5—8次',
+          '保留2—3次余力，避免力竭',
+        ],
+      },
+      {
+        week: 3,
+        focus: '专项强化',
+        load: '中高负荷，RPE 7—8',
+        prescription: [
+          `强化${focus}，减少无关训练量`,
+          '主练动作3—5组，每组3—6次',
+          '组间充分恢复并记录实际完成值',
+        ],
+      },
+      {
+        week: 4,
+        focus: '减量巩固与复测',
+        load: '较上周减量20%—30%',
+        prescription: ['保持动作速度和质量', '避免新增高疲劳训练内容', '周期末按相同条件完成复测'],
+      },
     ],
-    recovery: ['每次训练记录RPE、睡眠和疲劳指数。', '同一重点力量能力之间建议保留足够恢复时间。', '若连续两天恢复指标明显变差，由教练下调当日总量。'],
-    cautions: ['本方案依据有限测试数据生成，必须由负责教练结合专项课表审核。', '单次测试结果仅用于训练调整，不用于选材定论。', '训练中出现疼痛、眩晕或异常疲劳时立即停止并复核。']
+    recovery: [
+      '每次训练记录RPE、睡眠和疲劳指数。',
+      '同一重点力量能力之间建议保留足够恢复时间。',
+      '若连续两天恢复指标明显变差，由教练下调当日总量。',
+    ],
+    cautions: [
+      '本方案依据有限测试数据生成，必须由负责教练结合专项课表审核。',
+      '单次测试结果仅用于训练调整，不用于选材定论。',
+      '训练中出现疼痛、眩晕或异常疲劳时立即停止并复核。',
+    ],
   });
 }
 
@@ -1259,14 +1636,18 @@ async function buildAiAdvice(test: AdviceTestRow) {
   const metrics = JSON.parse(test.metricsJson || '{}') as StrengthMetricValues;
   const targets = JSON.parse(test.targetsJson || '{}') as StrengthMetricValues;
   const comparison = adviceComparisons(test, metrics, targets);
-  const recentRecords = db.prepare(`
+  const recentRecords = db
+    .prepare(
+      `
     SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.duration_min AS durationMin, ts.rpe, ts.srpe,
       dw.sleep_hours AS sleepHours, dw.fatigue_index AS fatigueIndex, COALESCE(dw.status, 'missing') AS status
     FROM training_sessions ts
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     WHERE ts.athlete_id = ? AND ts.session_date BETWEEN date(?, '-27 days') AND ?
     ORDER BY ts.session_date, ts.session_order
-  `).all(test.athleteId, test.testDate, test.testDate);
+  `
+    )
+    .all(test.athleteId, test.testDate, test.testDate);
   const endpoint = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
   try {
     const response = await fetch(endpoint, {
@@ -1281,7 +1662,7 @@ async function buildAiAdvice(test: AdviceTestRow) {
         messages: [
           {
             role: 'system',
-            content: `你是${test.project}体能训练建议助手。只依据给定数据生成供教练审核的草案，不作医疗诊断，不虚构缺失数据，不把相关性写成因果。输出严格JSON，字段为title、overview、strengths、priorities、weeks、recovery、cautions；weeks固定4项，每项含week、focus、load、prescription。训练强度使用范围并强调动作质量和教练确认。`
+            content: `你是${test.project}体能训练建议助手。只依据给定数据生成供教练审核的草案，不作医疗诊断，不虚构缺失数据，不把相关性写成因果。输出严格JSON，字段为title、overview、strengths、priorities、weeks、recovery、cautions；weeks固定4项，每项含week、focus、load、prescription。训练强度使用范围并强调动作质量和教练确认。`,
           },
           {
             role: 'user',
@@ -1293,16 +1674,21 @@ async function buildAiAdvice(test: AdviceTestRow) {
               gender: test.gender,
               targetType: test.project === '激流' ? '同性别冠军模型参考区间边界' : '教练确认目标值',
               comparison,
-              recentRecords
-            })
-          }
-        ]
+              recentRecords,
+            }),
+          },
+        ],
       }),
-      signal: AbortSignal.timeout(Number(process.env.AI_TIMEOUT_MS) || 180000)
+      signal: AbortSignal.timeout(Number(process.env.AI_TIMEOUT_MS) || 180000),
     });
     if (!response.ok) throw new Error(`AI service returned ${response.status}`);
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const raw = cleanString(payload.choices?.[0]?.message?.content).replace(/^```json\s*|\s*```$/g, '');
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const raw = cleanString(payload.choices?.[0]?.message?.content).replace(
+      /^```json\s*|\s*```$/g,
+      ''
+    );
     if (!raw) throw new Error('AI service returned empty content');
     return { content: normalizeAdviceContent(JSON.parse(raw)), source: 'ai' as const, model };
   } catch {
@@ -1310,41 +1696,59 @@ async function buildAiAdvice(test: AdviceTestRow) {
       content: buildRuleAdvice(test),
       source: 'rules' as const,
       model: 'AI服务不可用·规则兜底',
-      fallbackReason: 'ai_unavailable' as const
+      fallbackReason: 'ai_unavailable' as const,
     };
   }
 }
 
-function adviceComparisons(test: AdviceTestRow, metrics: StrengthMetricValues, targets: StrengthMetricValues) {
+function adviceComparisons(
+  test: AdviceTestRow,
+  metrics: StrengthMetricValues,
+  targets: StrengthMetricValues
+) {
   if (test.project === '激流') {
     return SLALOM_CHAMPION_METRICS.flatMap((metric) => {
       const comparison = slalomComparison(metric, metrics, test.gender);
       if (!comparison.range || comparison.value === null) return [];
       const target = metric.direction === 'higher' ? comparison.range[0] : comparison.range[1];
-      const difference = metric.direction === 'higher'
-        ? (comparison.value - target) / target * 100
-        : (target - comparison.value) / target * 100;
-      return [{
-        key: metric.key,
-        label: metric.label,
-        unit: metric.unit,
-        value: comparison.value,
-        measured: comparison.value,
-        target,
-        referenceRange: comparison.range,
-        direction: metric.direction,
-        difference: Math.round(difference * 10) / 10
-      }];
+      const difference =
+        metric.direction === 'higher'
+          ? ((comparison.value - target) / target) * 100
+          : ((target - comparison.value) / target) * 100;
+      return [
+        {
+          key: metric.key,
+          label: metric.label,
+          unit: metric.unit,
+          value: comparison.value,
+          measured: comparison.value,
+          target,
+          referenceRange: comparison.range,
+          direction: metric.direction,
+          difference: Math.round(difference * 10) / 10,
+        },
+      ];
     });
   }
-  return STRENGTH_METRICS
-    .filter((metric) => metric.targetEnabled && !metric.projects)
-    .flatMap((metric) => {
+  return STRENGTH_METRICS.filter((metric) => metric.targetEnabled && !metric.projects).flatMap(
+    (metric) => {
       const value = metrics[metric.key];
       const target = targets[metric.key];
       if (typeof value !== 'number' || typeof target !== 'number' || target <= 0) return [];
-      return [{ key: metric.key, label: metric.label, unit: metric.unit, value, measured: value, target, direction: 'higher' as const, difference: Math.round((value - target) / target * 1000) / 10 }];
-    });
+      return [
+        {
+          key: metric.key,
+          label: metric.label,
+          unit: metric.unit,
+          value,
+          measured: value,
+          target,
+          direction: 'higher' as const,
+          difference: Math.round(((value - target) / target) * 1000) / 10,
+        },
+      ];
+    }
+  );
 }
 
 function mapAdviceRow(row: Record<string, unknown>) {
@@ -1359,12 +1763,14 @@ function mapAdviceRow(row: Record<string, unknown>) {
     generatedAt: row.generatedAt,
     generatedBy: row.generatedBy,
     reviewedAt: row.reviewedAt || null,
-    reviewedBy: row.reviewedBy || null
+    reviewedBy: row.reviewedBy || null,
   };
 }
 
 function latestAdvice(strengthTestId: number, approvedOnly = false) {
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT sa.id, sa.test_session_id AS strengthTestId, sa.version,
       sa.content_json AS contentJson, sa.source, sa.model, sa.status,
       sa.generated_at AS generatedAt, generator.display_name AS generatedBy,
@@ -1374,7 +1780,9 @@ function latestAdvice(strengthTestId: number, approvedOnly = false) {
     LEFT JOIN users reviewer ON reviewer.id = sa.reviewed_by
     WHERE sa.test_session_id = ? ${approvedOnly ? "AND sa.status = 'approved'" : ''}
     ORDER BY sa.version DESC LIMIT 1
-  `).get(strengthTestId) as Record<string, unknown> | undefined;
+  `
+    )
+    .get(strengthTestId) as Record<string, unknown> | undefined;
   return row ? mapAdviceRow(row) : null;
 }
 
@@ -1390,10 +1798,14 @@ function validatePersonName(value: unknown) {
 }
 
 function userById(userId: number): AuthUser | null {
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId
     FROM users WHERE id = ?
-  `).get(userId) as AuthUser | undefined;
+  `
+    )
+    .get(userId) as AuthUser | undefined;
   return row || null;
 }
 
@@ -1404,12 +1816,16 @@ function numberOrNull(value: unknown): number | null {
 }
 
 function parseDate(value: unknown): string {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  if (value instanceof Date && !Number.isNaN(value.getTime()))
+    return value.toISOString().slice(0, 10);
   if (typeof value === 'number') {
     const parsed = new Date(Math.round((value - 25569) * 86400 * 1000));
     if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   }
-  const raw = cleanString(value).replace(/[./年]/g, '-').replace(/月/g, '-').replace(/日/g, '');
+  const raw = cleanString(value)
+    .replace(/[./年]/g, '-')
+    .replace(/月/g, '-')
+    .replace(/日/g, '');
   const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!match) return '';
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
@@ -1422,7 +1838,9 @@ function isValidIsoDate(value: string) {
 }
 
 function pick(row: Record<string, unknown>, aliases: string[]) {
-  const normalized = new Map(Object.entries(row).map(([key, value]) => [key.replace(/\s+/g, '').toLowerCase(), value]));
+  const normalized = new Map(
+    Object.entries(row).map(([key, value]) => [key.replace(/\s+/g, '').toLowerCase(), value])
+  );
   for (const alias of aliases) {
     const value = normalized.get(alias.replace(/\s+/g, '').toLowerCase());
     if (value !== undefined) return value;
@@ -1453,11 +1871,11 @@ function emptyTrainingBreakdown(): TrainingBreakdown {
       speedStrength: 0,
       recovery: 0,
       running: 0,
-      other: 0
+      other: 0,
     },
     waterDistanceByZone: emptyZoneDistances(),
     waterTimeByZone: emptyZoneDistances(),
-    ergDistanceByZone: emptyZoneDistances()
+    ergDistanceByZone: emptyZoneDistances(),
   };
 }
 
@@ -1469,24 +1887,38 @@ function parseTrainingBreakdownJson(value: string): TrainingBreakdown {
       waterMinutes: Number(parsed.waterMinutes) || 0,
       ergMinutes: Number(parsed.ergMinutes) || 0,
       landMinutes: { ...fallback.landMinutes, ...(parsed.landMinutes || {}) },
-      waterDistanceByZone: { ...fallback.waterDistanceByZone, ...(parsed.waterDistanceByZone || {}) },
+      waterDistanceByZone: {
+        ...fallback.waterDistanceByZone,
+        ...(parsed.waterDistanceByZone || {}),
+      },
       waterTimeByZone: { ...fallback.waterTimeByZone, ...(parsed.waterTimeByZone || {}) },
-      ergDistanceByZone: { ...fallback.ergDistanceByZone, ...(parsed.ergDistanceByZone || {}) }
+      ergDistanceByZone: { ...fallback.ergDistanceByZone, ...(parsed.ergDistanceByZone || {}) },
     };
   } catch {
     return emptyTrainingBreakdown();
   }
 }
 
-function trainingSessionBreakdown(input: { trainingType: string; structureType: string; intensityZone: string; durationMin: number; distanceKm: number }): TrainingBreakdown {
+function trainingSessionBreakdown(input: {
+  trainingType: string;
+  structureType: string;
+  intensityZone: string;
+  durationMin: number;
+  distanceKm: number;
+}): TrainingBreakdown {
   const breakdown = emptyTrainingBreakdown();
   const zone = input.intensityZone as IntensityZoneKey;
-  if ((input.trainingType === '专项训练' || input.distanceKm > 0) && intensityZones.includes(zone)) {
+  if (
+    (input.trainingType === '专项训练' || input.distanceKm > 0) &&
+    intensityZones.includes(zone)
+  ) {
     breakdown.waterMinutes = input.durationMin;
     breakdown.waterDistanceByZone[zone] = input.distanceKm;
     breakdown.waterTimeByZone[zone] = input.durationMin;
-  } else if (input.structureType === '最大力量') breakdown.landMinutes.maxStrength = input.durationMin;
-  else if (input.structureType === '速度力量') breakdown.landMinutes.speedStrength = input.durationMin;
+  } else if (input.structureType === '最大力量')
+    breakdown.landMinutes.maxStrength = input.durationMin;
+  else if (input.structureType === '速度力量')
+    breakdown.landMinutes.speedStrength = input.durationMin;
   else if (input.structureType === '功能训练') breakdown.landMinutes.functional = input.durationMin;
   else if (input.structureType === '再生恢复') breakdown.landMinutes.recovery = input.durationMin;
   else breakdown.landMinutes.other = input.durationMin;
@@ -1494,76 +1926,135 @@ function trainingSessionBreakdown(input: { trainingType: string; structureType: 
 }
 
 app.get('/api/teams', (_req, res) => {
-  const teams = db.prepare(`
+  const teams = db
+    .prepare(
+      `
     SELECT pt.id, pt.project, pt.name,
       (SELECT COUNT(*) FROM athletes a WHERE a.team_id = pt.id AND a.active = 1) AS athleteCount
     FROM project_teams pt WHERE pt.active = 1 ORDER BY pt.project, pt.name
-  `).all();
+  `
+    )
+    .all();
   res.json({ teams });
 });
 
-app.get('/api/admin/teams', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const permissions = accountPermissions(currentUser.id);
-  const allTeams = db.prepare(`
+app.get(
+  '/api/admin/teams',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const permissions = accountPermissions(currentUser.id);
+    const allTeams = db
+      .prepare(
+        `
     SELECT id, project, name FROM project_teams WHERE active = 1 ORDER BY project, name
-  `).all() as Array<{ id: number; project: string; name: string }>;
-  const athleteIds = accessibleAthleteIds(currentUser);
-  const visibleAthletes = athleteIds.length ? db.prepare(`
+  `
+      )
+      .all() as Array<{ id: number; project: string; name: string }>;
+    const athleteIds = accessibleAthleteIds(currentUser);
+    const visibleAthletes = athleteIds.length
+      ? (db
+          .prepare(
+            `
     SELECT a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id IN (${athleteIds.map(() => '?').join(',')}) AND a.active = 1
-  `).all(...athleteIds) as Array<{ project: string; team: string }> : [];
-  const athleteCounts = new Map<string, number>();
-  for (const athlete of visibleAthletes) {
-    const key = `${athlete.project}\u0000${athlete.team}`;
-    athleteCounts.set(key, (athleteCounts.get(key) || 0) + 1);
+  `
+          )
+          .all(...athleteIds) as Array<{ project: string; team: string }>)
+      : [];
+    const athleteCounts = new Map<string, number>();
+    for (const athlete of visibleAthletes) {
+      const key = `${athlete.project}\u0000${athlete.team}`;
+      athleteCounts.set(key, (athleteCounts.get(key) || 0) + 1);
+    }
+    const teams = allTeams
+      .filter((team) => permissionsAllowProjectTeam(permissions, team.project, team.name))
+      .map((team) => ({
+        ...team,
+        athleteCount: athleteCounts.get(`${team.project}\u0000${team.name}`) || 0,
+        canDelete: currentUser.role !== 'SCC',
+      }));
+    const canCreateProjects =
+      currentUser.role === 'SCC'
+        ? []
+        : PROJECTS.filter(
+            (project) =>
+              (permissions.projects.includes('*') || permissions.projects.includes(project)) &&
+              permissions.teams.some(
+                (item) => (item.project === '*' || item.project === project) && item.team === '*'
+              )
+          );
+    res.json({ teams, canCreateProjects });
   }
-  const teams = allTeams
-    .filter((team) => permissionsAllowProjectTeam(permissions, team.project, team.name))
-    .map((team) => ({
-      ...team,
-      athleteCount: athleteCounts.get(`${team.project}\u0000${team.name}`) || 0,
-      canDelete: currentUser.role !== 'SCC'
-    }));
-  const canCreateProjects = currentUser.role === 'SCC' ? [] : PROJECTS.filter((project) =>
-    (permissions.projects.includes('*') || permissions.projects.includes(project))
-      && permissions.teams.some((item) => (item.project === '*' || item.project === project) && item.team === '*')
-  );
-  res.json({ teams, canCreateProjects });
-});
+);
 
-app.post('/api/admin/teams', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const project = cleanString(req.body?.project);
-  const name = cleanString(req.body?.name);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效项目。' });
-  if (name.length < 2 || name.length > 30) return res.status(400).json({ message: '队伍名称须为2—30个字符。' });
-  const permissions = accountPermissions(req.authUser!.id);
-  const canCreate = req.authUser!.role !== 'SCC'
-    && (permissions.projects.includes('*') || permissions.projects.includes(project))
-    && permissions.teams.some((item) => (item.project === '*' || item.project === project) && item.team === '*');
-  if (!canCreate) return res.status(403).json({ message: '无权在该项目下新增队伍。' });
-  const existing = db.prepare('SELECT id, active FROM project_teams WHERE project = ? AND name = ?').get(project, name) as { id: number; active: number } | undefined;
-  if (existing?.active) return res.status(409).json({ message: '该项目下已存在同名队伍。' });
-  if (existing) {
-    db.prepare('UPDATE project_teams SET active = 1 WHERE id = ?').run(existing.id);
-    return res.status(201).json({ message: '队伍已恢复。', id: existing.id });
+app.post(
+  '/api/admin/teams',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const project = cleanString(req.body?.project);
+    const name = cleanString(req.body?.name);
+    if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效项目。' });
+    if (name.length < 2 || name.length > 30)
+      return res.status(400).json({ message: '队伍名称须为2—30个字符。' });
+    const permissions = accountPermissions(req.authUser!.id);
+    const canCreate =
+      req.authUser!.role !== 'SCC' &&
+      (permissions.projects.includes('*') || permissions.projects.includes(project)) &&
+      permissions.teams.some(
+        (item) => (item.project === '*' || item.project === project) && item.team === '*'
+      );
+    if (!canCreate) return res.status(403).json({ message: '无权在该项目下新增队伍。' });
+    const existing = db
+      .prepare('SELECT id, active FROM project_teams WHERE project = ? AND name = ?')
+      .get(project, name) as { id: number; active: number } | undefined;
+    if (existing?.active) return res.status(409).json({ message: '该项目下已存在同名队伍。' });
+    if (existing) {
+      db.prepare('UPDATE project_teams SET active = 1 WHERE id = ?').run(existing.id);
+      return res.status(201).json({ message: '队伍已恢复。', id: existing.id });
+    }
+    const result = db
+      .prepare('INSERT INTO project_teams (project, name) VALUES (?, ?)')
+      .run(project, name);
+    res.status(201).json({ message: '队伍已添加。', id: Number(result.lastInsertRowid) });
   }
-  const result = db.prepare('INSERT INTO project_teams (project, name) VALUES (?, ?)').run(project, name);
-  res.status(201).json({ message: '队伍已添加。', id: Number(result.lastInsertRowid) });
-});
+);
 
-app.delete('/api/admin/teams/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const id = Number(req.params.id);
-  const team = db.prepare('SELECT id, project, name FROM project_teams WHERE id = ? AND active = 1').get(id) as { id: number; project: string; name: string } | undefined;
-  if (!team) return res.status(404).json({ message: '队伍不存在。' });
-  if (req.authUser!.role === 'SCC' || !permissionsAllowProjectTeam(accountPermissions(req.authUser!.id), team.project, team.name)) {
-    return res.status(403).json({ message: '无权删除该队伍。' });
+app.delete(
+  '/api/admin/teams/:id',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const id = Number(req.params.id);
+    const team = db
+      .prepare('SELECT id, project, name FROM project_teams WHERE id = ? AND active = 1')
+      .get(id) as { id: number; project: string; name: string } | undefined;
+    if (!team) return res.status(404).json({ message: '队伍不存在。' });
+    if (
+      req.authUser!.role === 'SCC' ||
+      !permissionsAllowProjectTeam(accountPermissions(req.authUser!.id), team.project, team.name)
+    ) {
+      return res.status(403).json({ message: '无权删除该队伍。' });
+    }
+    const athleteCount = (
+      db
+        .prepare('SELECT COUNT(*) AS count FROM athletes WHERE team_id = ? AND active = 1')
+        .get(team.id) as { count: number }
+    ).count;
+    const pendingCount = (
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM registration_requests WHERE project = ? AND team = ? AND status = 'pending'"
+        )
+        .get(team.project, team.name) as { count: number }
+    ).count;
+    if (athleteCount || pendingCount)
+      return res.status(409).json({ message: '该队伍仍有运动员或待审核申请，不能删除。' });
+    db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
+    res.json({ message: '队伍已删除。' });
   }
-  const athleteCount = (db.prepare('SELECT COUNT(*) AS count FROM athletes WHERE team_id = ? AND active = 1').get(team.id) as { count: number }).count;
-  const pendingCount = (db.prepare("SELECT COUNT(*) AS count FROM registration_requests WHERE project = ? AND team = ? AND status = 'pending'").get(team.project, team.name) as { count: number }).count;
-  if (athleteCount || pendingCount) return res.status(409).json({ message: '该队伍仍有运动员或待审核申请，不能删除。' });
-  db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
-  res.json({ message: '队伍已删除。' });
-});
+);
 
 app.post('/api/auth/register', (req, res) => {
   if (consumeRateLimit(req, 'register', 30, 15 * 60 * 1000)) {
@@ -1577,21 +2068,34 @@ app.post('/api/auth/register', (req, res) => {
   const project = cleanString(req.body?.project);
   const team = cleanString(req.body?.team);
   const identityNumber = cleanString(req.body?.identityNumber).toUpperCase();
-  const gender = /^\d{17}[\dX]$/.test(identityNumber) ? (Number(identityNumber[16]) % 2 ? '男' : '女') : '';
+  const gender = /^\d{17}[\dX]$/.test(identityNumber)
+    ? Number(identityNumber[16]) % 2
+      ? '男'
+      : '女'
+    : '';
   const nativePlace = cleanString(req.body?.nativePlace);
   const errors: string[] = [];
-  const [nativePlaceProvince = '', nativePlaceCity = '', ...nativePlaceRest] = nativePlace.split('/');
+  const [nativePlaceProvince = '', nativePlaceCity = '', ...nativePlaceRest] =
+    nativePlace.split('/');
 
   if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
-  if (password.length < 8 || password.length > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+  if (
+    password.length < 8 ||
+    password.length > 72 ||
+    !/[A-Za-z]/.test(password) ||
+    !/\d/.test(password)
+  ) {
     errors.push('密码须为8—72位，并同时包含字母和数字');
   }
   if (displayName.length < 2 || displayName.length > 20) errors.push('姓名须为2—20个字符');
   if (requestedRole !== 'ATL') errors.push('当前仅开放运动员注册');
   if (!projectSet.has(project)) errors.push('请选择赛艇、皮划艇或激流');
-  const validTeam = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(project, team);
+  const validTeam = db
+    .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+    .get(project, team);
   if (!validTeam) errors.push('请选择该项目下的有效队伍');
-  if (!/^\d{17}[\dX]$/.test(identityNumber)) errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
+  if (!/^\d{17}[\dX]$/.test(identityNumber))
+    errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
   if (nativePlaceRest.length || !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)) {
     errors.push('请选择有效且对应的籍贯省市');
   }
@@ -1599,23 +2103,51 @@ app.post('/api/auth/register', (req, res) => {
 
   const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
   if (existingUser) return res.status(409).json({ message: '该账号已存在。' });
-  const existingRequest = db.prepare('SELECT id, status FROM registration_requests WHERE username = ?').get(username) as { id: number; status: string } | undefined;
-  if (existingRequest?.status === 'pending') return res.status(409).json({ message: '该账号正在审核中。' });
-  if (existingRequest?.status === 'approved') return res.status(409).json({ message: '该账号已通过审核，请直接登录。' });
+  const existingRequest = db
+    .prepare('SELECT id, status FROM registration_requests WHERE username = ?')
+    .get(username) as { id: number; status: string } | undefined;
+  if (existingRequest?.status === 'pending')
+    return res.status(409).json({ message: '该账号正在审核中。' });
+  if (existingRequest?.status === 'approved')
+    return res.status(409).json({ message: '该账号已通过审核，请直接登录。' });
 
   const passwordHash = bcrypt.hashSync(password, 11);
   if (existingRequest?.status === 'rejected') {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
         project = ?, team = ?, gender = ?, identity_number = ?, native_place = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
         reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(passwordHash, displayName, requestedRole, project, team, gender, identityNumber, nativePlace, existingRequest.id);
+    `
+    ).run(
+      passwordHash,
+      displayName,
+      requestedRole,
+      project,
+      team,
+      gender,
+      identityNumber,
+      nativePlace,
+      existingRequest.id
+    );
   } else {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO registration_requests (
         username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(username, passwordHash, displayName, requestedRole, project, team, gender, identityNumber, nativePlace);
+    `
+    ).run(
+      username,
+      passwordHash,
+      displayName,
+      requestedRole,
+      project,
+      team,
+      gender,
+      identityNumber,
+      nativePlace
+    );
   }
   res.status(201).json({ message: '申请已提交，审核通过后即可登录。' });
 });
@@ -1626,14 +2158,28 @@ app.post('/api/auth/login', (req, res) => {
   }
   const username = cleanString(req.body?.username).toLowerCase();
   const password = cleanString(req.body?.password);
-  const row = db.prepare(
-    'SELECT id, username, password_hash, display_name, role, athlete_id FROM users WHERE username = ? AND active = 1'
-  ).get(username) as { id: number; username: string; password_hash: string; display_name: string; role: Role; athlete_id: number | null } | undefined;
+  const row = db
+    .prepare(
+      'SELECT id, username, password_hash, display_name, role, athlete_id FROM users WHERE username = ? AND active = 1'
+    )
+    .get(username) as
+    | {
+        id: number;
+        username: string;
+        password_hash: string;
+        display_name: string;
+        role: Role;
+        athlete_id: number | null;
+      }
+    | undefined;
 
   if (!row) {
-    const request = db.prepare('SELECT status FROM registration_requests WHERE username = ?').get(username) as { status: string } | undefined;
+    const request = db
+      .prepare('SELECT status FROM registration_requests WHERE username = ?')
+      .get(username) as { status: string } | undefined;
     if (request?.status === 'pending') return res.status(403).json({ message: '账户正在审核中。' });
-    if (request?.status === 'rejected') return res.status(403).json({ message: '注册申请未通过，请联系管理员。' });
+    if (request?.status === 'rejected')
+      return res.status(403).json({ message: '注册申请未通过，请联系管理员。' });
   }
   if (!row || !bcrypt.compareSync(password, row.password_hash)) {
     return res.status(401).json({ message: '账号或密码不正确。' });
@@ -1644,7 +2190,7 @@ app.post('/api/auth/login', (req, res) => {
     username: row.username,
     displayName: row.display_name,
     role: row.role,
-    athleteId: row.athlete_id
+    athleteId: row.athlete_id,
   };
   const token = jwt.sign(user, jwtSecret, { expiresIn: '12h' });
   clearRateLimit(req, 'login');
@@ -1661,13 +2207,18 @@ app.get('/api/preferences/overview-layout', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   const scope = cleanString(req.query.scope);
   if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
-  if (!['self', 'team'].includes(scope)) return res.status(400).json({ message: '总览范围参数无效。' });
+  if (!['self', 'team'].includes(scope))
+    return res.status(400).json({ message: '总览范围参数无效。' });
 
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT layout_json AS layoutJson, updated_at AS updatedAt
     FROM user_dashboard_preferences
     WHERE user_id = ? AND dashboard = 'overview' AND project = ? AND scope = ?
-  `).get(req.authUser!.id, project, scope) as { layoutJson: string; updatedAt: string } | undefined;
+  `
+    )
+    .get(req.authUser!.id, project, scope) as { layoutJson: string; updatedAt: string } | undefined;
 
   if (!row) return res.json({ layout: null, updatedAt: null });
   try {
@@ -1681,24 +2232,37 @@ app.get('/api/preferences/overview-layout', requireAuth, (req, res) => {
 
 function selectableProjects(user: AuthUser): Project[] {
   if (user.role === 'ATL') {
-    const athlete = user.athleteId ? db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(user.athleteId) as { project: string } | undefined : undefined;
+    const athlete = user.athleteId
+      ? (db
+          .prepare('SELECT project FROM athletes WHERE id = ? AND active = 1')
+          .get(user.athleteId) as { project: string } | undefined)
+      : undefined;
     return athlete && projectSet.has(athlete.project) ? [athlete.project] : [];
   }
   const permissions = accountPermissions(user.id);
-  return PROJECTS.filter((project) => permissions.projects.includes('*') || permissions.projects.includes(project));
+  return PROJECTS.filter(
+    (project) => permissions.projects.includes('*') || permissions.projects.includes(project)
+  );
 }
 
 app.get('/api/preferences/current-project', requireAuth, (req, res) => {
   const projects = selectableProjects(req.authUser!);
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT layout_json AS value FROM user_dashboard_preferences
     WHERE user_id = ? AND dashboard = 'app-context' AND project = '*' AND scope = 'current-project'
-  `).get(req.authUser!.id) as { value: string } | undefined;
+  `
+    )
+    .get(req.authUser!.id) as { value: string } | undefined;
   let project: Project | null = null;
   try {
     const saved = JSON.parse(row?.value || '{}') as { project?: unknown };
-    if (typeof saved.project === 'string' && projects.includes(saved.project)) project = saved.project;
-  } catch { /* 损坏偏好不影响进入系统 */ }
+    if (typeof saved.project === 'string' && projects.includes(saved.project))
+      project = saved.project;
+  } catch {
+    /* 损坏偏好不影响进入系统 */
+  }
   res.json({ project, projects });
 });
 
@@ -1707,11 +2271,13 @@ app.put('/api/preferences/current-project', requireAuth, (req, res) => {
   const projects = selectableProjects(req.authUser!);
   if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
   if (!projects.includes(project)) return res.status(403).json({ message: '无权选择该项目。' });
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO user_dashboard_preferences (user_id, dashboard, project, scope, layout_json, updated_at)
     VALUES (?, 'app-context', '*', 'current-project', ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id, dashboard, project, scope) DO UPDATE SET layout_json = excluded.layout_json, updated_at = CURRENT_TIMESTAMP
-  `).run(req.authUser!.id, JSON.stringify({ project }));
+  `
+  ).run(req.authUser!.id, JSON.stringify({ project }));
   res.json({ project });
 });
 
@@ -1720,23 +2286,34 @@ app.put('/api/preferences/overview-layout', requireAuth, (req, res) => {
   const scope = cleanString(req.body?.scope);
   const layout = req.body?.layout as unknown;
   if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
-  if (!['self', 'team'].includes(scope)) return res.status(400).json({ message: '总览范围参数无效。' });
-  if (!isOverviewLayoutState(layout)) return res.status(400).json({ message: '卡片布局数据无效。' });
+  if (!['self', 'team'].includes(scope))
+    return res.status(400).json({ message: '总览范围参数无效。' });
+  if (!isOverviewLayoutState(layout))
+    return res.status(400).json({ message: '卡片布局数据无效。' });
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO user_dashboard_preferences (user_id, dashboard, project, scope, layout_json, updated_at)
     VALUES (?, 'overview', ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id, dashboard, project, scope) DO UPDATE SET
       layout_json = excluded.layout_json,
       updated_at = CURRENT_TIMESTAMP
-  `).run(req.authUser!.id, project, scope, JSON.stringify(layout));
+  `
+  ).run(req.authUser!.id, project, scope, JSON.stringify(layout));
 
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT updated_at AS updatedAt
     FROM user_dashboard_preferences
     WHERE user_id = ? AND dashboard = 'overview' AND project = ? AND scope = ?
-  `).get(req.authUser!.id, project, scope) as { updatedAt: string } | undefined;
-  res.json({ message: '训练总览布局已同步。', updatedAt: row?.updatedAt || new Date().toISOString() });
+  `
+    )
+    .get(req.authUser!.id, project, scope) as { updatedAt: string } | undefined;
+  res.json({
+    message: '训练总览布局已同步。',
+    updatedAt: row?.updatedAt || new Date().toISOString(),
+  });
 });
 
 app.put('/api/profile/name', requireAuth, (req, res) => {
@@ -1751,15 +2328,23 @@ app.put('/api/profile/name', requireAuth, (req, res) => {
     if (current.role === 'ATL' && current.athleteId) {
       db.prepare('UPDATE athletes SET name = ? WHERE id = ?').run(name, current.athleteId);
     }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(current.id, 'UPDATE_OWN_NAME', 'user', current.id, JSON.stringify({ from: current.displayName, to: name }));
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      current.id,
+      'UPDATE_OWN_NAME',
+      'user',
+      current.id,
+      JSON.stringify({ from: current.displayName, to: name })
+    );
     db.exec('COMMIT');
     res.json({ message: '姓名已修改。', user: { ...current, displayName: name } });
   } catch (renameError) {
     db.exec('ROLLBACK');
-    const message = renameError instanceof Error && renameError.message.includes('UNIQUE')
-      ? '该姓名已被其他运动员使用。'
-      : '姓名修改失败。';
+    const message =
+      renameError instanceof Error && renameError.message.includes('UNIQUE')
+        ? '该姓名已被其他运动员使用。'
+        : '姓名修改失败。';
     res.status(409).json({ message });
   }
 });
@@ -1780,15 +2365,23 @@ app.put('/api/users/:id/name', requireAuth, (req, res) => {
     if (target.role === 'ATL' && target.athleteId) {
       db.prepare('UPDATE athletes SET name = ? WHERE id = ?').run(name, target.athleteId);
     }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(requester.id, 'UPDATE_USER_NAME', 'user', target.id, JSON.stringify({ from: target.displayName, to: name }));
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      requester.id,
+      'UPDATE_USER_NAME',
+      'user',
+      target.id,
+      JSON.stringify({ from: target.displayName, to: name })
+    );
     db.exec('COMMIT');
     res.json({ message: '姓名已修改。', displayName: name });
   } catch (renameError) {
     db.exec('ROLLBACK');
-    const message = renameError instanceof Error && renameError.message.includes('UNIQUE')
-      ? '该姓名已被其他运动员使用。'
-      : '姓名修改失败。';
+    const message =
+      renameError instanceof Error && renameError.message.includes('UNIQUE')
+        ? '该姓名已被其他运动员使用。'
+        : '姓名修改失败。';
     res.status(409).json({ message });
   }
 });
@@ -1830,7 +2423,7 @@ function readAthleteAdminPayload(body: Record<string, unknown>) {
     originCoach: cleanString(body.originCoach),
     specialties: cleanString(body.specialties),
     notes: cleanString(body.notes),
-    coachId: Number(body.coachId) || 0
+    coachId: Number(body.coachId) || 0,
   };
 }
 
@@ -1839,11 +2432,19 @@ function athletePayloadErrors(payload: ReturnType<typeof readAthleteAdminPayload
   const nameResult = validatePersonName(payload.name);
   if (nameResult.error) errors.push(nameResult.error);
   if (!projectSet.has(payload.project)) errors.push('请选择有效的运动项目');
-  if (!db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(payload.project, payload.team)) errors.push('请选择有效的所属队伍');
-  if (payload.gender && !['男', '女'].includes(payload.gender)) errors.push('运动员性别应为男、女或暂不填写');
-  if (payload.identityNumber && !/^\d{17}[\dX]$/.test(payload.identityNumber)) errors.push('身份证号格式不正确');
+  if (
+    !db
+      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+      .get(payload.project, payload.team)
+  )
+    errors.push('请选择有效的所属队伍');
+  if (payload.gender && !['男', '女'].includes(payload.gender))
+    errors.push('运动员性别应为男、女或暂不填写');
+  if (payload.identityNumber && !/^\d{17}[\dX]$/.test(payload.identityNumber))
+    errors.push('身份证号格式不正确');
   if (payload.phone && !/^1\d{10}$/.test(payload.phone)) errors.push('手机号须为11位');
-  if (payload.emergencyPhone && !/^1\d{10}$/.test(payload.emergencyPhone)) errors.push('紧急联系电话须为11位');
+  if (payload.emergencyPhone && !/^1\d{10}$/.test(payload.emergencyPhone))
+    errors.push('紧急联系电话须为11位');
   if (!athleteHealthStatuses.has(payload.healthStatus)) errors.push('请选择有效的身体状态');
   if (!athleteTrainingStatuses.has(payload.athleteStatus)) errors.push('请选择有效的运动员状态');
   return errors;
@@ -1853,23 +2454,40 @@ function strengthMetricCode(key: string) {
   return key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
-const strengthMetricKeyByCode = new Map(STRENGTH_METRICS.map((metric) => [strengthMetricCode(metric.key), metric.key]));
+const strengthMetricKeyByCode = new Map(
+  STRENGTH_METRICS.map((metric) => [strengthMetricCode(metric.key), metric.key])
+);
 
 function athleteProfileComplete(payload: ReturnType<typeof readAthleteAdminPayload>) {
-  return ['男', '女'].includes(payload.gender)
-    && [payload.region, payload.city, payload.county].every((value) => value && value !== '未设置');
+  return (
+    ['男', '女'].includes(payload.gender) &&
+    [payload.region, payload.city, payload.county].every((value) => value && value !== '未设置')
+  );
 }
 
 function athleteScopeError(user: AuthUser, payload: ReturnType<typeof readAthleteAdminPayload>) {
   const permissions = accountPermissions(user.id);
-  if (!permissionsAllowProjectTeam(permissions, payload.project, payload.team)) return '运动员项目或队伍不能超出当前账号权限';
-  if ([payload.region, payload.city, payload.county].some((value) => !value || value === '未设置')) return '';
-  const athlete: ScopeAthlete = { id: 0, project: payload.project, team: payload.team, region: payload.region, city: payload.city, county: payload.county };
+  if (!permissionsAllowProjectTeam(permissions, payload.project, payload.team))
+    return '运动员项目或队伍不能超出当前账号权限';
+  if ([payload.region, payload.city, payload.county].some((value) => !value || value === '未设置'))
+    return '';
+  const athlete: ScopeAthlete = {
+    id: 0,
+    project: payload.project,
+    team: payload.team,
+    region: payload.region,
+    city: payload.city,
+    county: payload.county,
+  };
   return permissionsAllowAthlete(permissions, athlete) ? '' : '运动员地区不能超出当前账号权限';
 }
 
-function upsertAthleteProfile(athleteId: number, payload: ReturnType<typeof readAthleteAdminPayload>) {
-  db.prepare(`
+function upsertAthleteProfile(
+  athleteId: number,
+  payload: ReturnType<typeof readAthleteAdminPayload>
+) {
+  db.prepare(
+    `
     INSERT INTO athlete_profiles (
       athlete_id, identity_number, ethnicity, phone, blood_type, emergency_contact, emergency_phone,
       education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status,
@@ -1888,178 +2506,410 @@ function upsertAthleteProfile(athleteId: number, payload: ReturnType<typeof read
       camp_period = excluded.camp_period, origin_place = excluded.origin_place,
       origin_unit = excluded.origin_unit, origin_coach = excluded.origin_coach,
       specialties = excluded.specialties, notes = excluded.notes, updated_at = CURRENT_TIMESTAMP
-  `).run(
-    athleteId, payload.identityNumber, payload.ethnicity, payload.phone, payload.bloodType,
-    payload.emergencyContact, payload.emergencyPhone, payload.education, payload.technicalLevel,
-    payload.athletePosition, payload.healthStatus, payload.bestResult, payload.nativePlace, payload.homeAddress,
-    payload.athleteStatus, payload.startSportDate, payload.trainingVenue, payload.currentEvent,
-    payload.trainingPhase, payload.campPeriod, payload.originPlace, payload.originUnit,
-    payload.originCoach, payload.specialties, payload.notes
+  `
+  ).run(
+    athleteId,
+    payload.identityNumber,
+    payload.ethnicity,
+    payload.phone,
+    payload.bloodType,
+    payload.emergencyContact,
+    payload.emergencyPhone,
+    payload.education,
+    payload.technicalLevel,
+    payload.athletePosition,
+    payload.healthStatus,
+    payload.bestResult,
+    payload.nativePlace,
+    payload.homeAddress,
+    payload.athleteStatus,
+    payload.startSportDate,
+    payload.trainingVenue,
+    payload.currentEvent,
+    payload.trainingPhase,
+    payload.campPeriod,
+    payload.originPlace,
+    payload.originUnit,
+    payload.originCoach,
+    payload.specialties,
+    payload.notes
   );
 }
 
-app.post('/api/admin/athletes', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const payload = readAthleteAdminPayload(req.body || {});
-  const username = cleanString(req.body?.username).toLowerCase();
-  const password = cleanString(req.body?.password);
-  const createAccount = req.body?.createAccount === true;
-  const errors = athletePayloadErrors(payload);
-  if (createAccount && currentUser.role === 'SCC') errors.push('教练可创建和维护运动员档案，但不能直接创建登录账号');
-  if (createAccount && !/^[a-z0-9_]{4,24}$/.test(username)) errors.push('登录账号须为4—24位字母、数字或下划线');
-  if (createAccount && (password.length < 8 || password.length > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password))) errors.push('初始密码须为8—72位，并同时包含字母和数字');
-  const permissions = {
-    areas: [{ areaLevel: 'county' as const, province: payload.region, city: payload.city, county: payload.county }],
-    projects: [payload.project],
-    teams: [{ project: payload.project, team: payload.team }]
-  };
-  const scopeError = athleteScopeError(currentUser, payload);
-  if (scopeError) errors.push(scopeError);
-  if (createAccount && [payload.region, payload.city, payload.county].some((value) => value === '未设置')) errors.push('创建登录账号前请补全省、市、区县');
-  if (createAccount && db.prepare('SELECT id FROM users WHERE username = ?').get(username)) errors.push('该登录账号已存在');
-  const selectedTeam = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(payload.project, payload.team) as { id: number } | undefined;
-  if (selectedTeam && db.prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team_id = ?').get(payload.name, payload.project, selectedTeam.id)) errors.push('该队伍中已存在同名运动员');
-  const coach = payload.coachId ? userById(payload.coachId) : null;
-  if (currentUser.role !== 'SCC' && payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
-  if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+app.post(
+  '/api/admin/athletes',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const payload = readAthleteAdminPayload(req.body || {});
+    const username = cleanString(req.body?.username).toLowerCase();
+    const password = cleanString(req.body?.password);
+    const createAccount = req.body?.createAccount === true;
+    const errors = athletePayloadErrors(payload);
+    if (createAccount && currentUser.role === 'SCC')
+      errors.push('教练可创建和维护运动员档案，但不能直接创建登录账号');
+    if (createAccount && !/^[a-z0-9_]{4,24}$/.test(username))
+      errors.push('登录账号须为4—24位字母、数字或下划线');
+    if (
+      createAccount &&
+      (password.length < 8 ||
+        password.length > 72 ||
+        !/[A-Za-z]/.test(password) ||
+        !/\d/.test(password))
+    )
+      errors.push('初始密码须为8—72位，并同时包含字母和数字');
+    const permissions = {
+      areas: [
+        {
+          areaLevel: 'county' as const,
+          province: payload.region,
+          city: payload.city,
+          county: payload.county,
+        },
+      ],
+      projects: [payload.project],
+      teams: [{ project: payload.project, team: payload.team }],
+    };
+    const scopeError = athleteScopeError(currentUser, payload);
+    if (scopeError) errors.push(scopeError);
+    if (
+      createAccount &&
+      [payload.region, payload.city, payload.county].some((value) => value === '未设置')
+    )
+      errors.push('创建登录账号前请补全省、市、区县');
+    if (createAccount && db.prepare('SELECT id FROM users WHERE username = ?').get(username))
+      errors.push('该登录账号已存在');
+    const selectedTeam = db
+      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+      .get(payload.project, payload.team) as { id: number } | undefined;
+    if (
+      selectedTeam &&
+      db
+        .prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team_id = ?')
+        .get(payload.name, payload.project, selectedTeam.id)
+    )
+      errors.push('该队伍中已存在同名运动员');
+    const coach = payload.coachId ? userById(payload.coachId) : null;
+    if (
+      currentUser.role !== 'SCC' &&
+      payload.coachId &&
+      (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))
+    )
+      errors.push('请选择可管理范围内的教练');
+    if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
-  db.exec('BEGIN');
-  try {
-    const athleteResult = db.prepare(`
+    db.exec('BEGIN');
+    try {
+      const athleteResult = db
+        .prepare(
+          `
       INSERT INTO athletes (name, project, team_id, gender, birth_date, profile_status, source)
       VALUES (?, ?, ?, ?, ?, ?, 'manual')
-    `).run(payload.name, payload.project, selectedTeam!.id, payload.gender, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete');
-    const athleteId = Number(athleteResult.lastInsertRowid);
-    upsertAthleteOrigin({ athleteId, province: payload.region, city: payload.city, county: payload.county });
-    upsertAthleteProfile(athleteId, payload);
-    let userId: number | null = null;
-    if (createAccount) {
-      const userResult = db.prepare(`INSERT INTO users (username, password_hash, display_name, role, athlete_id, active) VALUES (?, ?, ?, 'ATL', ?, 1)`)
-        .run(username, bcrypt.hashSync(password, 11), payload.name, athleteId);
-      userId = Number(userResult.lastInsertRowid);
-      db.prepare('INSERT INTO account_profiles (user_id, parent_user_id, account_code) VALUES (?, ?, ?)')
-        .run(userId, currentUser.id, accountCodeFor(userId, 'ATL', payload.region, payload.project));
-      replaceAccountScope({ userId, role: 'ATL', parentUserId: currentUser.id, permissions, grantedBy: currentUser.id });
+    `
+        )
+        .run(
+          payload.name,
+          payload.project,
+          selectedTeam!.id,
+          payload.gender,
+          payload.birthDate || null,
+          athleteProfileComplete(payload) ? 'complete' : 'incomplete'
+        );
+      const athleteId = Number(athleteResult.lastInsertRowid);
+      upsertAthleteOrigin({
+        athleteId,
+        province: payload.region,
+        city: payload.city,
+        county: payload.county,
+      });
+      upsertAthleteProfile(athleteId, payload);
+      let userId: number | null = null;
+      if (createAccount) {
+        const userResult = db
+          .prepare(
+            `INSERT INTO users (username, password_hash, display_name, role, athlete_id, active) VALUES (?, ?, ?, 'ATL', ?, 1)`
+          )
+          .run(username, bcrypt.hashSync(password, 11), payload.name, athleteId);
+        userId = Number(userResult.lastInsertRowid);
+        db.prepare(
+          'INSERT INTO account_profiles (user_id, parent_user_id, account_code) VALUES (?, ?, ?)'
+        ).run(
+          userId,
+          currentUser.id,
+          accountCodeFor(userId, 'ATL', payload.region, payload.project)
+        );
+        replaceAccountScope({
+          userId,
+          role: 'ATL',
+          parentUserId: currentUser.id,
+          permissions,
+          grantedBy: currentUser.id,
+        });
+      }
+      const assignedCoachId = currentUser.role === 'SCC' ? currentUser.id : payload.coachId;
+      if (assignedCoachId)
+        db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
+          assignedCoachId,
+          athleteId
+        );
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        currentUser.id,
+        'CREATE_ATHLETE',
+        'athlete',
+        athleteId,
+        JSON.stringify({
+          username: createAccount ? username : '',
+          createAccount,
+          project: payload.project,
+          team: payload.team,
+        })
+      );
+      db.exec('COMMIT');
+      res
+        .status(201)
+        .json({
+          message: createAccount
+            ? '运动员及登录账号已创建。'
+            : '运动员档案已创建，暂未创建登录账号。',
+          id: athleteId,
+          accountId: userId,
+        });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      res
+        .status(409)
+        .json({
+          message:
+            error instanceof Error && error.message.includes('UNIQUE')
+              ? '运动员姓名或登录账号已存在。'
+              : '运动员创建失败。',
+        });
     }
-    const assignedCoachId = currentUser.role === 'SCC' ? currentUser.id : payload.coachId;
-    if (assignedCoachId) db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(assignedCoachId, athleteId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(currentUser.id, 'CREATE_ATHLETE', 'athlete', athleteId, JSON.stringify({ username: createAccount ? username : '', createAccount, project: payload.project, team: payload.team }));
-    db.exec('COMMIT');
-    res.status(201).json({ message: createAccount ? '运动员及登录账号已创建。' : '运动员档案已创建，暂未创建登录账号。', id: athleteId, accountId: userId });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(409).json({ message: error instanceof Error && error.message.includes('UNIQUE') ? '运动员姓名或登录账号已存在。' : '运动员创建失败。' });
   }
-});
+);
 
-app.put('/api/admin/athletes/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const athleteId = Number(req.params.id);
-  if (!hasAthleteAccess(currentUser, athleteId)) return res.status(404).json({ message: '运动员不存在或不在可管理范围内。' });
-  const payload = readAthleteAdminPayload(req.body || {});
-  const errors = athletePayloadErrors(payload);
-  const permissions = {
-    areas: [{ areaLevel: 'county' as const, province: payload.region, city: payload.city, county: payload.county }],
-    projects: [payload.project],
-    teams: [{ project: payload.project, team: payload.team }]
-  };
-  const scopeError = athleteScopeError(currentUser, payload);
-  if (scopeError) errors.push(scopeError);
-  const coach = payload.coachId ? userById(payload.coachId) : null;
-  if (currentUser.role !== 'SCC' && payload.coachId && (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))) errors.push('请选择可管理范围内的教练');
-  if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+app.put(
+  '/api/admin/athletes/:id',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const athleteId = Number(req.params.id);
+    if (!hasAthleteAccess(currentUser, athleteId))
+      return res.status(404).json({ message: '运动员不存在或不在可管理范围内。' });
+    const payload = readAthleteAdminPayload(req.body || {});
+    const errors = athletePayloadErrors(payload);
+    const permissions = {
+      areas: [
+        {
+          areaLevel: 'county' as const,
+          province: payload.region,
+          city: payload.city,
+          county: payload.county,
+        },
+      ],
+      projects: [payload.project],
+      teams: [{ project: payload.project, team: payload.team }],
+    };
+    const scopeError = athleteScopeError(currentUser, payload);
+    if (scopeError) errors.push(scopeError);
+    const coach = payload.coachId ? userById(payload.coachId) : null;
+    if (
+      currentUser.role !== 'SCC' &&
+      payload.coachId &&
+      (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))
+    )
+      errors.push('请选择可管理范围内的教练');
+    if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
-  db.exec('BEGIN');
-  try {
-    const selectedTeam = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(payload.project, payload.team) as { id: number } | undefined;
-    db.prepare(`UPDATE athletes SET name = ?, project = ?, team_id = ?, gender = ?, birth_date = ?, profile_status = ? WHERE id = ?`)
-      .run(payload.name, payload.project, selectedTeam!.id, payload.gender, payload.birthDate || null, athleteProfileComplete(payload) ? 'complete' : 'incomplete', athleteId);
-    upsertAthleteOrigin({ athleteId, province: payload.region, city: payload.city, county: payload.county });
-    upsertAthleteProfile(athleteId, payload);
-    db.prepare("UPDATE users SET display_name = ? WHERE role = 'ATL' AND athlete_id = ?").run(payload.name, athleteId);
-    const athleteUser = db.prepare("SELECT u.id, ap.parent_user_id AS parentUserId FROM users u LEFT JOIN account_profiles ap ON ap.user_id = u.id WHERE u.role = 'ATL' AND u.athlete_id = ?")
-      .get(athleteId) as { id: number; parentUserId: number | null } | undefined;
-    if (athleteUser) replaceAccountScope({ userId: athleteUser.id, role: 'ATL', parentUserId: athleteUser.parentUserId || currentUser.id, permissions, grantedBy: currentUser.id });
-    if (currentUser.role !== 'SCC') {
-      db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
-      if (payload.coachId) db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(payload.coachId, athleteId);
+    db.exec('BEGIN');
+    try {
+      const selectedTeam = db
+        .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+        .get(payload.project, payload.team) as { id: number } | undefined;
+      db.prepare(
+        `UPDATE athletes SET name = ?, project = ?, team_id = ?, gender = ?, birth_date = ?, profile_status = ? WHERE id = ?`
+      ).run(
+        payload.name,
+        payload.project,
+        selectedTeam!.id,
+        payload.gender,
+        payload.birthDate || null,
+        athleteProfileComplete(payload) ? 'complete' : 'incomplete',
+        athleteId
+      );
+      upsertAthleteOrigin({
+        athleteId,
+        province: payload.region,
+        city: payload.city,
+        county: payload.county,
+      });
+      upsertAthleteProfile(athleteId, payload);
+      db.prepare("UPDATE users SET display_name = ? WHERE role = 'ATL' AND athlete_id = ?").run(
+        payload.name,
+        athleteId
+      );
+      const athleteUser = db
+        .prepare(
+          "SELECT u.id, ap.parent_user_id AS parentUserId FROM users u LEFT JOIN account_profiles ap ON ap.user_id = u.id WHERE u.role = 'ATL' AND u.athlete_id = ?"
+        )
+        .get(athleteId) as { id: number; parentUserId: number | null } | undefined;
+      if (athleteUser)
+        replaceAccountScope({
+          userId: athleteUser.id,
+          role: 'ATL',
+          parentUserId: athleteUser.parentUserId || currentUser.id,
+          permissions,
+          grantedBy: currentUser.id,
+        });
+      if (currentUser.role !== 'SCC') {
+        db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
+        if (payload.coachId)
+          db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
+            payload.coachId,
+            athleteId
+          );
+      }
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+      ).run(currentUser.id, 'UPDATE_ATHLETE_PROFILE', 'athlete', athleteId);
+      db.exec('COMMIT');
+      res.json({ message: '运动员资料已更新。' });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      res
+        .status(409)
+        .json({
+          message:
+            error instanceof Error && error.message.includes('UNIQUE')
+              ? '该运动员姓名已存在。'
+              : '运动员资料更新失败。',
+        });
     }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
-      .run(currentUser.id, 'UPDATE_ATHLETE_PROFILE', 'athlete', athleteId);
-    db.exec('COMMIT');
-    res.json({ message: '运动员资料已更新。' });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(409).json({ message: error instanceof Error && error.message.includes('UNIQUE') ? '该运动员姓名已存在。' : '运动员资料更新失败。' });
   }
-});
+);
 
-app.put('/api/admin/athletes/bulk/profile', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[] : [];
-  if (!ids.length || ids.some((id) => !hasAthleteAccess(req.authUser!, id))) return res.status(400).json({ message: '请选择可管理范围内的运动员。' });
-  const allowed = [
-    ['technicalLevel', 'technical_level'], ['athletePosition', 'position'], ['healthStatus', 'health_status'],
-    ['currentEvent', 'current_event'], ['athleteStatus', 'athlete_status'], ['trainingPhase', 'training_phase']
-  ] as const;
-  const changes = allowed.map(([key, column]) => ({ column, value: cleanString(req.body?.[key]) })).filter((item) => item.value);
-  if (!changes.length) return res.status(400).json({ message: '请至少填写一项批量修改内容。' });
-  if (changes.some((item) => item.column === 'health_status' && !athleteHealthStatuses.has(item.value))) return res.status(400).json({ message: '身体状态无效。' });
-  if (changes.some((item) => item.column === 'athlete_status' && !athleteTrainingStatuses.has(item.value))) return res.status(400).json({ message: '运动员状态无效。' });
-  db.exec('BEGIN');
-  try {
-    for (const id of ids) {
-      db.prepare('INSERT OR IGNORE INTO athlete_profiles (athlete_id) VALUES (?)').run(id);
-      for (const change of changes) db.prepare(`UPDATE athlete_profiles SET ${change.column} = ?, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?`).run(change.value, id);
-      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)').run(req.authUser!.id, 'BULK_UPDATE_ATHLETE', 'athlete', id);
+app.put(
+  '/api/admin/athletes/bulk/profile',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const ids = Array.isArray(req.body?.ids)
+      ? ([...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[])
+      : [];
+    if (!ids.length || ids.some((id) => !hasAthleteAccess(req.authUser!, id)))
+      return res.status(400).json({ message: '请选择可管理范围内的运动员。' });
+    const allowed = [
+      ['technicalLevel', 'technical_level'],
+      ['athletePosition', 'position'],
+      ['healthStatus', 'health_status'],
+      ['currentEvent', 'current_event'],
+      ['athleteStatus', 'athlete_status'],
+      ['trainingPhase', 'training_phase'],
+    ] as const;
+    const changes = allowed
+      .map(([key, column]) => ({ column, value: cleanString(req.body?.[key]) }))
+      .filter((item) => item.value);
+    if (!changes.length) return res.status(400).json({ message: '请至少填写一项批量修改内容。' });
+    if (
+      changes.some(
+        (item) => item.column === 'health_status' && !athleteHealthStatuses.has(item.value)
+      )
+    )
+      return res.status(400).json({ message: '身体状态无效。' });
+    if (
+      changes.some(
+        (item) => item.column === 'athlete_status' && !athleteTrainingStatuses.has(item.value)
+      )
+    )
+      return res.status(400).json({ message: '运动员状态无效。' });
+    db.exec('BEGIN');
+    try {
+      for (const id of ids) {
+        db.prepare('INSERT OR IGNORE INTO athlete_profiles (athlete_id) VALUES (?)').run(id);
+        for (const change of changes)
+          db.prepare(
+            `UPDATE athlete_profiles SET ${change.column} = ?, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?`
+          ).run(change.value, id);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+        ).run(req.authUser!.id, 'BULK_UPDATE_ATHLETE', 'athlete', id);
+      }
+      db.exec('COMMIT');
+      res.json({ message: `已更新 ${ids.length} 名运动员。` });
+    } catch {
+      db.exec('ROLLBACK');
+      res.status(500).json({ message: '批量修改失败。' });
     }
-    db.exec('COMMIT');
-    res.json({ message: `已更新 ${ids.length} 名运动员。` });
-  } catch {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: '批量修改失败。' });
   }
-});
+);
 
-app.post('/api/admin/athletes/bulk/delete', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[] : [];
-  if (!ids.length || ids.some((id) => !hasAthleteAccess(req.authUser!, id))) return res.status(400).json({ message: '请选择可管理范围内的运动员。' });
-  const placeholders = ids.map(() => '?').join(',');
-  db.exec('BEGIN');
-  try {
-    db.prepare(`UPDATE athletes SET active = 0 WHERE id IN (${placeholders})`).run(...ids);
-    db.prepare(`UPDATE users SET active = 0 WHERE role = 'ATL' AND athlete_id IN (${placeholders})`).run(...ids);
-    for (const id of ids) db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)').run(req.authUser!.id, 'DELETE_ATHLETE', 'athlete', id);
-    db.exec('COMMIT');
-    res.json({ message: `已删除 ${ids.length} 名运动员。` });
-  } catch {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: '运动员删除失败。' });
+app.post(
+  '/api/admin/athletes/bulk/delete',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const ids = Array.isArray(req.body?.ids)
+      ? ([...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[])
+      : [];
+    if (!ids.length || ids.some((id) => !hasAthleteAccess(req.authUser!, id)))
+      return res.status(400).json({ message: '请选择可管理范围内的运动员。' });
+    const placeholders = ids.map(() => '?').join(',');
+    db.exec('BEGIN');
+    try {
+      db.prepare(`UPDATE athletes SET active = 0 WHERE id IN (${placeholders})`).run(...ids);
+      db.prepare(
+        `UPDATE users SET active = 0 WHERE role = 'ATL' AND athlete_id IN (${placeholders})`
+      ).run(...ids);
+      for (const id of ids)
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+        ).run(req.authUser!.id, 'DELETE_ATHLETE', 'athlete', id);
+      db.exec('COMMIT');
+      res.json({ message: `已删除 ${ids.length} 名运动员。` });
+    } catch {
+      db.exec('ROLLBACK');
+      res.status(500).json({ message: '运动员删除失败。' });
+    }
   }
-});
+);
 
-app.delete('/api/admin/athletes/:id', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const athleteId = Number(req.params.id);
-  if (!hasAthleteAccess(req.authUser!, athleteId)) return res.status(404).json({ message: '运动员不存在或不在可管理范围内。' });
-  db.exec('BEGIN');
-  try {
-    db.prepare('UPDATE athletes SET active = 0 WHERE id = ?').run(athleteId);
-    db.prepare("UPDATE users SET active = 0 WHERE role = 'ATL' AND athlete_id = ?").run(athleteId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)').run(req.authUser!.id, 'DELETE_ATHLETE', 'athlete', athleteId);
-    db.exec('COMMIT');
-    res.json({ message: '运动员已删除。' });
-  } catch {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: '运动员删除失败。' });
+app.delete(
+  '/api/admin/athletes/:id',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const athleteId = Number(req.params.id);
+    if (!hasAthleteAccess(req.authUser!, athleteId))
+      return res.status(404).json({ message: '运动员不存在或不在可管理范围内。' });
+    db.exec('BEGIN');
+    try {
+      db.prepare('UPDATE athletes SET active = 0 WHERE id = ?').run(athleteId);
+      db.prepare("UPDATE users SET active = 0 WHERE role = 'ATL' AND athlete_id = ?").run(
+        athleteId
+      );
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+      ).run(req.authUser!.id, 'DELETE_ATHLETE', 'athlete', athleteId);
+      db.exec('COMMIT');
+      res.json({ message: '运动员已删除。' });
+    } catch {
+      db.exec('ROLLBACK');
+      res.status(500).json({ message: '运动员删除失败。' });
+    }
   }
-});
+);
 
 app.put('/api/admin/athletes/:id/name', requireAuth, (req, res) => {
   const athleteId = Number(req.params.id);
   if (!canManageRole(req.authUser!.role, 'ATL') || !hasAthleteAccess(req.authUser!, athleteId)) {
     return res.status(403).json({ message: '当前账户不能修改该运动员姓名。' });
   }
-  const athlete = db.prepare('SELECT id, name FROM athletes WHERE id = ?').get(athleteId) as { id: number; name: string } | undefined;
+  const athlete = db.prepare('SELECT id, name FROM athletes WHERE id = ?').get(athleteId) as
+    { id: number; name: string } | undefined;
   if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
   const { name, error } = validatePersonName(req.body?.name);
   if (error) return res.status(400).json({ message: error });
@@ -2067,16 +2917,27 @@ app.put('/api/admin/athletes/:id/name', requireAuth, (req, res) => {
   db.exec('BEGIN');
   try {
     db.prepare('UPDATE athletes SET name = ? WHERE id = ?').run(name, athleteId);
-    db.prepare("UPDATE users SET display_name = ? WHERE athlete_id = ? AND role = 'ATL'").run(name, athleteId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(req.authUser!.id, 'UPDATE_ATHLETE_NAME', 'athlete', athleteId, JSON.stringify({ from: athlete.name, to: name }));
+    db.prepare("UPDATE users SET display_name = ? WHERE athlete_id = ? AND role = 'ATL'").run(
+      name,
+      athleteId
+    );
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      req.authUser!.id,
+      'UPDATE_ATHLETE_NAME',
+      'athlete',
+      athleteId,
+      JSON.stringify({ from: athlete.name, to: name })
+    );
     db.exec('COMMIT');
     res.json({ message: '运动员姓名已修改。', name });
   } catch (renameError) {
     db.exec('ROLLBACK');
-    const message = renameError instanceof Error && renameError.message.includes('UNIQUE')
-      ? '该姓名已被其他运动员使用。'
-      : '姓名修改失败。';
+    const message =
+      renameError instanceof Error && renameError.message.includes('UNIQUE')
+        ? '该姓名已被其他运动员使用。'
+        : '姓名修改失败。';
     res.status(409).json({ message });
   }
 });
@@ -2087,17 +2948,28 @@ app.post('/api/auth/change-password', requireAuth, (req, res) => {
   }
   const currentPassword = cleanString(req.body?.currentPassword);
   const newPassword = cleanString(req.body?.newPassword);
-  if (newPassword.length < 8 || newPassword.length > 72 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+  if (
+    newPassword.length < 8 ||
+    newPassword.length > 72 ||
+    !/[A-Za-z]/.test(newPassword) ||
+    !/\d/.test(newPassword)
+  ) {
     return res.status(400).json({ message: '新密码须为8—72位，并同时包含字母和数字。' });
   }
-  if (currentPassword === newPassword) return res.status(400).json({ message: '新密码不能与当前密码相同。' });
-  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.authUser!.id) as { password_hash: string } | undefined;
+  if (currentPassword === newPassword)
+    return res.status(400).json({ message: '新密码不能与当前密码相同。' });
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.authUser!.id) as
+    { password_hash: string } | undefined;
   if (!row || !bcrypt.compareSync(currentPassword, row.password_hash)) {
     return res.status(401).json({ message: '当前密码不正确。' });
   }
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 11), req.authUser!.id);
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
-    .run(req.authUser!.id, 'CHANGE_PASSWORD', 'user', req.authUser!.id);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
+    bcrypt.hashSync(newPassword, 11),
+    req.authUser!.id
+  );
+  db.prepare(
+    'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+  ).run(req.authUser!.id, 'CHANGE_PASSWORD', 'user', req.authUser!.id);
   clearRateLimit(req, 'change-password');
   res.json({ message: '密码已修改。' });
 });
@@ -2106,7 +2978,9 @@ app.get('/api/athletes', requireAuth, (req, res) => {
   const ids = accessibleAthleteIds(req.authUser!);
   if (!ids.length) return res.json({ athletes: [] });
   const placeholders = ids.map(() => '?').join(',');
-  const athletes = db.prepare(`
+  const athletes = db
+    .prepare(
+      `
     SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       a.photo_url AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
       EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
@@ -2160,7 +3034,9 @@ app.get('/api/athletes', requireAuth, (req, res) => {
     LEFT JOIN users u ON u.id = ca.coach_user_id
     WHERE a.id IN (${placeholders}) AND a.active = 1
     GROUP BY a.id ORDER BY a.project, pt.name, a.name
-  `).all(...ids) as Array<{
+  `
+    )
+    .all(...ids) as Array<{
     id: number;
     name: string;
     project: string;
@@ -2228,21 +3104,25 @@ app.get('/api/athletes', requireAuth, (req, res) => {
     createdAt: string;
     coaches: string | null;
   }>;
-  const coachRows = db.prepare(`
+  const coachRows = db
+    .prepare(
+      `
     SELECT ca.athlete_id AS athleteId, u.id, u.display_name AS displayName
     FROM coach_athletes ca
     JOIN users u ON u.id = ca.coach_user_id
     WHERE ca.athlete_id IN (${placeholders})
     ORDER BY u.display_name
-  `).all(...ids) as Array<{ athleteId: number; id: number; displayName: string }>;
+  `
+    )
+    .all(...ids) as Array<{ athleteId: number; id: number; displayName: string }>;
   res.json({
     athletes: athletes.map((athlete) => ({
       ...athlete,
       coaches: athlete.coaches || '',
       coachUsers: coachRows
         .filter((coach) => coach.athleteId === athlete.id)
-        .map(({ id, displayName }) => ({ id, displayName }))
-    }))
+        .map(({ id, displayName }) => ({ id, displayName })),
+    })),
   });
 });
 
@@ -2256,13 +3136,23 @@ app.put('/api/athletes/:id/position', requireAuth, (req, res) => {
     return res.status(403).json({ message: '运动员只能修改本人的位置/号位。' });
   }
   const athletePosition = cleanString(req.body?.athletePosition);
-  if (athletePosition.length > 40) return res.status(400).json({ message: '位置/号位不能超过40个字符。' });
+  if (athletePosition.length > 40)
+    return res.status(400).json({ message: '位置/号位不能超过40个字符。' });
   const athlete = db.prepare('SELECT id FROM athletes WHERE id = ? AND active = 1').get(athleteId);
   if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
   db.prepare('INSERT OR IGNORE INTO athlete_profiles (athlete_id) VALUES (?)').run(athleteId);
-  db.prepare('UPDATE athlete_profiles SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?').run(athletePosition, athleteId);
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(user.id, 'UPDATE_ATHLETE_POSITION', 'athlete', athleteId, JSON.stringify({ athletePosition }));
+  db.prepare(
+    'UPDATE athlete_profiles SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?'
+  ).run(athletePosition, athleteId);
+  db.prepare(
+    'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+  ).run(
+    user.id,
+    'UPDATE_ATHLETE_POSITION',
+    'athlete',
+    athleteId,
+    JSON.stringify({ athletePosition })
+  );
   res.json({ message: '位置/号位已保存。', athletePosition });
 });
 
@@ -2290,7 +3180,7 @@ const bodyCompositionFields = [
   ['rightArmLeanKg', 'right_arm_lean_kg', 0.5, 20],
   ['trunkLeanKg', 'trunk_lean_kg', 5, 60],
   ['leftLegLeanKg', 'left_leg_lean_kg', 2, 35],
-  ['rightLegLeanKg', 'right_leg_lean_kg', 2, 35]
+  ['rightLegLeanKg', 'right_leg_lean_kg', 2, 35],
 ] as const;
 
 app.get('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
@@ -2301,7 +3191,9 @@ app.get('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
   }
   const athlete = db.prepare('SELECT id FROM athletes WHERE id = ? AND active = 1').get(athleteId);
   if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
-  const history = db.prepare(`
+  const history = db
+    .prepare(
+      `
     SELECT measurement_date AS measurementDate,
       height_cm AS heightCm, weight_kg AS weightKg, body_fat_pct AS bodyFatPct,
       skeletal_muscle_kg AS skeletalMuscleKg, muscle_mass_kg AS muscleMassKg,
@@ -2319,7 +3211,9 @@ app.get('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
     WHERE athlete_id = ?
     ORDER BY measurement_date DESC, id DESC
     LIMIT 24
-  `).all(athleteId);
+  `
+    )
+    .all(athleteId);
   res.json({ history });
 });
 
@@ -2335,7 +3229,8 @@ app.put('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
   const athlete = db.prepare('SELECT id FROM athletes WHERE id = ? AND active = 1').get(athleteId);
   if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
   const measurementDate = parseDate(req.body?.measurementDate);
-  if (!measurementDate || !isValidIsoDate(measurementDate)) return res.status(400).json({ message: '测量日期格式无效。' });
+  if (!measurementDate || !isValidIsoDate(measurementDate))
+    return res.status(400).json({ message: '测量日期格式无效。' });
 
   const values: Record<string, number | null> = {};
   for (const [inputKey, , min, max] of bodyCompositionFields) {
@@ -2349,7 +3244,8 @@ app.put('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
     return res.status(400).json({ message: '请至少填写一项身体成分指标。' });
   }
   const note = cleanString(req.body?.note).slice(0, 300);
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO athlete_body_measurements (
       athlete_id, measurement_date, height_cm, weight_kg, body_fat_pct,
       skeletal_muscle_kg, muscle_mass_kg, upper_limb_muscle_kg, lower_limb_muscle_kg,
@@ -2373,17 +3269,45 @@ app.put('/api/athletes/:id/body-composition', requireAuth, (req, res) => {
       trunk_lean_kg = excluded.trunk_lean_kg, left_leg_lean_kg = excluded.left_leg_lean_kg,
       right_leg_lean_kg = excluded.right_leg_lean_kg,
       note = excluded.note, source = 'manual', quality = 'valid'
-  `).run(
-    athleteId, measurementDate, values.heightCm, values.weightKg, values.bodyFatPct,
-    values.skeletalMuscleKg, values.muscleMassKg, values.upperLimbMuscleKg, values.lowerLimbMuscleKg,
-    values.trunkMuscleKg, values.subcutaneousFatMm, values.tricepsSkinfoldMm, values.abdominalSkinfoldMm,
-    values.thighSkinfoldMm, values.calfSkinfoldMm, values.visceralFatLevel, values.basalMetabolismKcal,
-    values.totalBodyWaterKg, values.ecwTbwRatio, values.phaseAngleDeg, values.visceralFatAreaCm2,
-    values.leftArmLeanKg, values.rightArmLeanKg, values.trunkLeanKg, values.leftLegLeanKg, values.rightLegLeanKg,
+  `
+  ).run(
+    athleteId,
+    measurementDate,
+    values.heightCm,
+    values.weightKg,
+    values.bodyFatPct,
+    values.skeletalMuscleKg,
+    values.muscleMassKg,
+    values.upperLimbMuscleKg,
+    values.lowerLimbMuscleKg,
+    values.trunkMuscleKg,
+    values.subcutaneousFatMm,
+    values.tricepsSkinfoldMm,
+    values.abdominalSkinfoldMm,
+    values.thighSkinfoldMm,
+    values.calfSkinfoldMm,
+    values.visceralFatLevel,
+    values.basalMetabolismKcal,
+    values.totalBodyWaterKg,
+    values.ecwTbwRatio,
+    values.phaseAngleDeg,
+    values.visceralFatAreaCm2,
+    values.leftArmLeanKg,
+    values.rightArmLeanKg,
+    values.trunkLeanKg,
+    values.leftLegLeanKg,
+    values.rightLegLeanKg,
     note
   );
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(user.id, 'UPSERT_BODY_COMPOSITION', 'athlete', athleteId, JSON.stringify({ measurementDate }));
+  db.prepare(
+    'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+  ).run(
+    user.id,
+    'UPSERT_BODY_COMPOSITION',
+    'athlete',
+    athleteId,
+    JSON.stringify({ measurementDate })
+  );
   res.json({ message: '身体成分数据已保存。' });
 });
 
@@ -2404,8 +3328,9 @@ app.post('/api/athletes/:id/photo', requireAuth, photoUpload.single('photo'), (r
   writeFileSync(resolve(athletePhotoRoot, filename), req.file.buffer);
   const photoUrl = `/uploads/athlete-photos/${filename}`;
   db.prepare('UPDATE athletes SET photo_url = ? WHERE id = ?').run(photoUrl, athleteId);
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(user.id, 'UPLOAD_ATHLETE_PHOTO', 'athlete', athleteId, JSON.stringify({ photoUrl }));
+  db.prepare(
+    'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+  ).run(user.id, 'UPLOAD_ATHLETE_PHOTO', 'athlete', athleteId, JSON.stringify({ photoUrl }));
   res.json({ message: '证件照已保存，并已绑定到该运动员。', photoUrl });
 });
 
@@ -2413,7 +3338,9 @@ const injuryStatuses = new Set(['healthy', 'observation', 'restricted', 'rehab',
 const injurySides = new Set(['left', 'right', 'bilateral', 'center', 'unspecified']);
 
 function injuryRecordById(recordId: number) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT ir.id, ir.athlete_id AS athleteId, ir.record_type AS recordType,
       ir.injury_name AS injuryName, ir.body_part AS bodyPart, ir.side, ir.status,
       ir.pain_score AS painScore, ir.onset_date AS onsetDate,
@@ -2422,7 +3349,9 @@ function injuryRecordById(recordId: number) {
     FROM injury_records ir
     JOIN users u ON u.id = ir.created_by
     WHERE ir.id = ?
-  `).get(recordId);
+  `
+    )
+    .get(recordId);
 }
 
 app.get('/api/athletes/:id/injuries', requireAuth, (req, res) => {
@@ -2430,7 +3359,9 @@ app.get('/api/athletes/:id/injuries', requireAuth, (req, res) => {
   if (!athleteId || !hasAthleteAccess(req.authUser!, athleteId)) {
     return res.status(403).json({ message: '无权查看该运动员的伤病记录。' });
   }
-  const records = db.prepare(`
+  const records = db
+    .prepare(
+      `
     SELECT ir.id, ir.athlete_id AS athleteId, ir.record_type AS recordType,
       ir.injury_name AS injuryName, ir.body_part AS bodyPart, ir.side, ir.status,
       ir.pain_score AS painScore, ir.onset_date AS onsetDate,
@@ -2441,7 +3372,9 @@ app.get('/api/athletes/:id/injuries', requireAuth, (req, res) => {
     WHERE ir.athlete_id = ?
     ORDER BY ir.created_at DESC, ir.id DESC
     LIMIT 100
-  `).all(athleteId);
+  `
+    )
+    .all(athleteId);
   res.json({ records });
 });
 
@@ -2468,41 +3401,55 @@ app.post('/api/athletes/:id/injuries', requireAuth, (req, res) => {
   const status = isAthleteFeedback ? 'observation' : requestedStatus;
   const errors: string[] = [];
   if (!bodyPart || bodyPart.length > 30) errors.push('请选择或填写有效的伤病部位');
-  if (!injuryName || injuryName.length > 80) errors.push(isAthleteFeedback ? '请填写不适情况' : '请填写问题名称或诊断');
+  if (!injuryName || injuryName.length > 80)
+    errors.push(isAthleteFeedback ? '请填写不适情况' : '请填写问题名称或诊断');
   if (!injurySides.has(side)) errors.push('请选择有效的身体侧别');
   if (!injuryStatuses.has(status)) errors.push('请选择有效的健康状态');
-  if (!Number.isInteger(painScore) || painScore < 0 || painScore > 10) errors.push('疼痛评分应为0至10的整数');
+  if (!Number.isInteger(painScore) || painScore < 0 || painScore > 10)
+    errors.push('疼痛评分应为0至10的整数');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(onsetDate)) errors.push('请选择首次出现日期');
   if (reviewDate && !/^\d{4}-\d{2}-\d{2}$/.test(reviewDate)) errors.push('复查日期格式错误');
-  if (restrictions.length > 500 || rehabPlan.length > 500 || note.length > 800) errors.push('文字内容过长');
+  if (restrictions.length > 500 || rehabPlan.length > 500 || note.length > 800)
+    errors.push('文字内容过长');
   if (errors.length) return res.status(400).json({ message: errors.join('；') });
 
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     INSERT INTO injury_records
       (athlete_id, record_type, injury_name, body_part, side, status, pain_score,
        onset_date, restrictions, rehab_plan, review_date, note, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    athleteId,
-    isAthleteFeedback ? 'feedback' : 'formal',
-    injuryName,
-    bodyPart,
-    side,
-    status,
-    painScore,
-    onsetDate,
-    restrictions,
-    rehabPlan,
-    reviewDate,
-    note,
-    user.id
-  );
+  `
+    )
+    .run(
+      athleteId,
+      isAthleteFeedback ? 'feedback' : 'formal',
+      injuryName,
+      bodyPart,
+      side,
+      status,
+      painScore,
+      onsetDate,
+      restrictions,
+      rehabPlan,
+      reviewDate,
+      note,
+      user.id
+    );
   const recordId = Number(result.lastInsertRowid);
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(user.id, isAthleteFeedback ? 'SUBMIT_INJURY_FEEDBACK' : 'CREATE_INJURY_RECORD', 'injury_record', recordId, JSON.stringify({ athleteId, bodyPart, status, painScore }));
+  db.prepare(
+    'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+  ).run(
+    user.id,
+    isAthleteFeedback ? 'SUBMIT_INJURY_FEEDBACK' : 'CREATE_INJURY_RECORD',
+    'injury_record',
+    recordId,
+    JSON.stringify({ athleteId, bodyPart, status, painScore })
+  );
   res.status(201).json({
     message: isAthleteFeedback ? '疼痛反馈已提交，等待教练确认。' : '伤病与恢复记录已保存。',
-    record: injuryRecordById(recordId)
+    record: injuryRecordById(recordId),
   });
 });
 
@@ -2510,8 +3457,11 @@ app.get('/api/training-plans', requireAuth, (req, res) => {
   const user = req.authUser!;
   const athleteId = Number(req.query.athleteId || user.athleteId || 0);
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
-  if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员的体能训练。' });
-  const rows = db.prepare(`
+  if (!hasAthleteAccess(user, athleteId))
+    return res.status(403).json({ message: '无权查看该运动员的体能训练。' });
+  const rows = db
+    .prepare(
+      `
     SELECT tp.id, tp.athlete_id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team,
       a.photo_url AS photoUrl, tp.plan_data AS dataJson, tp.updated_at AS updatedAt,
       u.display_name AS updatedBy
@@ -2521,7 +3471,9 @@ app.get('/api/training-plans', requireAuth, (req, res) => {
     JOIN users u ON u.id = tp.updated_by
     WHERE tp.athlete_id = ?
     ORDER BY tp.start_date DESC, tp.id DESC
-  `).all(athleteId) as Array<{
+  `
+    )
+    .all(athleteId) as Array<{
     id: number;
     athleteId: number;
     athleteName: string;
@@ -2535,108 +3487,144 @@ app.get('/api/training-plans', requireAuth, (req, res) => {
   res.json({
     plans: rows.map(({ dataJson, ...row }) => ({
       ...row,
-      data: readStoredTrainingPlanData(dataJson)
-    }))
+      data: readStoredTrainingPlanData(dataJson),
+    })),
   });
 });
 
-app.post('/api/training-plans', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const user = req.authUser!;
-  const athleteId = Number(req.body?.athleteId || 0);
-  const requestedPlanId = Number(req.body?.planId || 0);
-  if (!athleteId || !hasAthleteAccess(user, athleteId)) {
-    return res.status(403).json({ message: '无权维护该运动员的体能训练。' });
-  }
-  const parsed = parseTrainingPlanData(req.body?.data);
-  if (parsed.errors.length) return res.status(400).json({ message: parsed.errors.join('；') });
-  const existing = requestedPlanId
-    ? db.prepare('SELECT id FROM training_plans WHERE id = ? AND athlete_id = ?').get(requestedPlanId, athleteId) as { id: number } | undefined
-    : db.prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?').get(athleteId, parsed.data.startDate) as { id: number } | undefined;
-  if (requestedPlanId && !existing) return res.status(404).json({ message: '要更新的历史训练不存在。' });
-  try {
-    if (existing) {
-      db.prepare(`
+app.post(
+  '/api/training-plans',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const user = req.authUser!;
+    const athleteId = Number(req.body?.athleteId || 0);
+    const requestedPlanId = Number(req.body?.planId || 0);
+    if (!athleteId || !hasAthleteAccess(user, athleteId)) {
+      return res.status(403).json({ message: '无权维护该运动员的体能训练。' });
+    }
+    const parsed = parseTrainingPlanData(req.body?.data);
+    if (parsed.errors.length) return res.status(400).json({ message: parsed.errors.join('；') });
+    const existing = requestedPlanId
+      ? (db
+          .prepare('SELECT id FROM training_plans WHERE id = ? AND athlete_id = ?')
+          .get(requestedPlanId, athleteId) as { id: number } | undefined)
+      : (db
+          .prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?')
+          .get(athleteId, parsed.data.startDate) as { id: number } | undefined);
+    if (requestedPlanId && !existing)
+      return res.status(404).json({ message: '要更新的历史训练不存在。' });
+    try {
+      if (existing) {
+        db.prepare(
+          `
         UPDATE training_plans SET
           plan_date = ?, start_date = ?, end_date = ?, title = ?, schedule_label = ?,
           plan_data = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(
-        parsed.data.startDate,
-        parsed.data.startDate,
-        parsed.data.endDate,
-        parsed.data.title,
-        parsed.data.scheduleLabel,
-        JSON.stringify(parsed.data),
-        user.id,
-        existing.id
-      );
-    } else {
-      db.prepare(`
+      `
+        ).run(
+          parsed.data.startDate,
+          parsed.data.startDate,
+          parsed.data.endDate,
+          parsed.data.title,
+          parsed.data.scheduleLabel,
+          JSON.stringify(parsed.data),
+          user.id,
+          existing.id
+        );
+      } else {
+        db.prepare(
+          `
         INSERT INTO training_plans
           (athlete_id, plan_date, start_date, end_date, title, schedule_label, plan_data, created_by, updated_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `
+        ).run(
+          athleteId,
+          parsed.data.startDate,
+          parsed.data.startDate,
+          parsed.data.endDate,
+          parsed.data.title,
+          parsed.data.scheduleLabel,
+          JSON.stringify(parsed.data),
+          user.id,
+          user.id
+        );
+      }
+    } catch (saveError) {
+      if (saveError instanceof Error && saveError.message.includes('UNIQUE')) {
+        return res.status(409).json({ message: '该运动员已有相同开始日期的体能训练。' });
+      }
+      throw saveError;
+    }
+    const saved =
+      existing ||
+      (db
+        .prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?')
+        .get(athleteId, parsed.data.startDate) as { id: number });
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      user.id,
+      existing ? 'UPDATE_TRAINING_PLAN' : 'CREATE_TRAINING_PLAN',
+      'training_plan',
+      saved.id,
+      JSON.stringify({
         athleteId,
-        parsed.data.startDate,
-        parsed.data.startDate,
-        parsed.data.endDate,
-        parsed.data.title,
-        parsed.data.scheduleLabel,
-        JSON.stringify(parsed.data),
-        user.id,
-        user.id
-      );
-    }
-  } catch (saveError) {
-    if (saveError instanceof Error && saveError.message.includes('UNIQUE')) {
-      return res.status(409).json({ message: '该运动员已有相同开始日期的体能训练。' });
-    }
-    throw saveError;
+        startDate: parsed.data.startDate,
+        endDate: parsed.data.endDate,
+        exercises: parsed.data.exercises.length,
+      })
+    );
+    res.json({ message: existing ? '体能训练已更新。' : '体能训练已保存。', id: saved.id });
   }
-  const saved = existing || db.prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?')
-    .get(athleteId, parsed.data.startDate) as { id: number };
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(user.id, existing ? 'UPDATE_TRAINING_PLAN' : 'CREATE_TRAINING_PLAN', 'training_plan', saved.id, JSON.stringify({
-      athleteId,
-      startDate: parsed.data.startDate,
-      endDate: parsed.data.endDate,
-      exercises: parsed.data.exercises.length
-    }));
-  res.json({ message: existing ? '体能训练已更新。' : '体能训练已保存。', id: saved.id });
-});
+);
 
-app.delete('/api/training-plans/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const planId = Number(req.params.id);
-  const row = db.prepare(`
+app.delete(
+  '/api/training-plans/:id',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const planId = Number(req.params.id);
+    const row = db
+      .prepare(
+        `
     SELECT tp.id, tp.athlete_id AS athleteId, tp.start_date AS startDate,
       tp.end_date AS endDate, tp.title, a.name AS athleteName
     FROM training_plans tp
     JOIN athletes a ON a.id = tp.athlete_id
     WHERE tp.id = ?
-  `).get(planId) as {
-    id: number;
-    athleteId: number;
-    startDate: string;
-    endDate: string;
-    title: string;
-    athleteName: string;
-  } | undefined;
-  if (!row) return res.status(404).json({ message: '历史训练不存在或已经删除。' });
-  if (!hasAthleteAccess(req.authUser!, row.athleteId)) {
-    return res.status(403).json({ message: '无权删除该运动员的体能训练。' });
+  `
+      )
+      .get(planId) as
+      | {
+          id: number;
+          athleteId: number;
+          startDate: string;
+          endDate: string;
+          title: string;
+          athleteName: string;
+        }
+      | undefined;
+    if (!row) return res.status(404).json({ message: '历史训练不存在或已经删除。' });
+    if (!hasAthleteAccess(req.authUser!, row.athleteId)) {
+      return res.status(403).json({ message: '无权删除该运动员的体能训练。' });
+    }
+    db.exec('BEGIN');
+    try {
+      db.prepare('DELETE FROM training_plans WHERE id = ?').run(planId);
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(req.authUser!.id, 'DELETE_TRAINING_PLAN', 'training_plan', planId, JSON.stringify(row));
+      db.exec('COMMIT');
+      res.json({ message: '历史训练已删除。' });
+    } catch (deleteError) {
+      db.exec('ROLLBACK');
+      throw deleteError;
+    }
   }
-  db.exec('BEGIN');
-  try {
-    db.prepare('DELETE FROM training_plans WHERE id = ?').run(planId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(req.authUser!.id, 'DELETE_TRAINING_PLAN', 'training_plan', planId, JSON.stringify(row));
-    db.exec('COMMIT');
-    res.json({ message: '历史训练已删除。' });
-  } catch (deleteError) {
-    db.exec('ROLLBACK');
-    throw deleteError;
-  }
-});
+);
 
 // ============================================
 // AI 驱动体能训练 API
@@ -2647,10 +3635,14 @@ app.delete('/api/training-plans/:id', requireAuth, requireRole('SCC', 'PRJ', 'RE
  */
 function getAthleteContext(athleteId: number): AthleteContext {
   // 获取运动员基本信息
-  const athlete = db.prepare(`
+  const athlete = db
+    .prepare(
+      `
     SELECT id, name, project, team, gender, region
     FROM athletes WHERE id = ?
-  `).get(athleteId) as {
+  `
+    )
+    .get(athleteId) as {
     id: number;
     name: string;
     project: string;
@@ -2660,41 +3652,55 @@ function getAthleteContext(athleteId: number): AthleteContext {
   };
 
   // 获取最近6个月的体能训练
-  const recentPlans = db.prepare(`
+  const recentPlans = db
+    .prepare(
+      `
     SELECT plan_date as date, plan_data as dataJson
     FROM training_plans
     WHERE athlete_id = ? AND plan_date >= date('now', '-6 months')
     ORDER BY plan_date DESC
     LIMIT 3
-  `).all(athleteId) as Array<{ date: string; dataJson: string }>;
+  `
+    )
+    .all(athleteId) as Array<{ date: string; dataJson: string }>;
 
-  const parsedPlans = recentPlans.map(plan => {
-    try {
-      const data = JSON.parse(plan.dataJson);
-      return {
-        date: plan.date,
-        duration: data.durationWeeks || 4,
-        title: data.title || '',
-        exercises: data.exercises?.map((e: { name: string }) => e.name) || [],
-        maxWeights: data.exercises?.reduce((acc: Record<string, number>, e: { name: string; maxWeight: number | null }) => {
-          if (e.maxWeight) acc[e.name] = e.maxWeight;
-          return acc;
-        }, {} as Record<string, number>) || {}
-      };
-    } catch {
-      return null;
-    }
-  }).filter(Boolean);
+  const parsedPlans = recentPlans
+    .map((plan) => {
+      try {
+        const data = JSON.parse(plan.dataJson);
+        return {
+          date: plan.date,
+          duration: data.durationWeeks || 4,
+          title: data.title || '',
+          exercises: data.exercises?.map((e: { name: string }) => e.name) || [],
+          maxWeights:
+            data.exercises?.reduce(
+              (acc: Record<string, number>, e: { name: string; maxWeight: number | null }) => {
+                if (e.maxWeight) acc[e.name] = e.maxWeight;
+                return acc;
+              },
+              {} as Record<string, number>
+            ) || {},
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 
   // 训练与恢复分别来自权威表，按训练课次返回；恢复状态按日期关联。
-  const recentRecords = db.prepare(`
+  const recentRecords = db
+    .prepare(
+      `
     SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.duration_min AS durationMin, ts.rpe,
       dw.fatigue_index AS fatigueIndex, COALESCE(dw.status, 'missing') AS status
     FROM training_sessions ts
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     WHERE ts.athlete_id = ? AND ts.session_date >= date('now', '-28 days')
     ORDER BY ts.session_date DESC, ts.session_order DESC
-  `).all(athleteId) as Array<{
+  `
+    )
+    .all(athleteId) as Array<{
     date: string;
     trainingType: string;
     durationMin: number;
@@ -2704,24 +3710,36 @@ function getAthleteContext(athleteId: number): AthleteContext {
   }>;
 
   // 力量测试聚合自测试事件与指标明细，不再读取旧 JSON 宽字段。
-  const strengthTests = db.prepare(`
+  const strengthTests = db
+    .prepare(
+      `
     SELECT ts.id, ts.test_date AS date
     FROM test_sessions ts
     WHERE ts.athlete_id = ? AND ts.test_type = '力量素质测试'
     ORDER BY ts.test_date DESC, ts.id DESC
     LIMIT 3
-  `).all(athleteId) as Array<{ id: number; date: string }>;
+  `
+    )
+    .all(athleteId) as Array<{ id: number; date: string }>;
 
   const parsedTests = strengthTests.map((test) => ({
     date: test.date,
-    metrics: Object.fromEntries((db.prepare(`SELECT metric_code AS code, value_num AS value FROM test_measurements WHERE test_session_id = ?`).all(test.id) as Array<{ code: string; value: number }>).map((item) => [item.code, item.value]))
+    metrics: Object.fromEntries(
+      (
+        db
+          .prepare(
+            `SELECT metric_code AS code, value_num AS value FROM test_measurements WHERE test_session_id = ?`
+          )
+          .all(test.id) as Array<{ code: string; value: number }>
+      ).map((item) => [item.code, item.value])
+    ),
   }));
 
   return {
     athlete,
     recentPlans: parsedPlans as AthleteContext['recentPlans'],
     recentRecords,
-    strengthTests: parsedTests as AthleteContext['strengthTests']
+    strengthTests: parsedTests as AthleteContext['strengthTests'],
   };
 }
 
@@ -2759,14 +3777,15 @@ app.post(
       const result = await aiService.generateTrainingPlan(context, inputContent);
 
       // 记录审计日志
-      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-        .run(
-          req.authUser!.id,
-          'AI_GENERATE_TRAINING_PLAN',
-          'training_plan',
-          athleteId,
-          JSON.stringify({ model: result.modelUsed, inputType: 'text' })
-        );
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        req.authUser!.id,
+        'AI_GENERATE_TRAINING_PLAN',
+        'training_plan',
+        athleteId,
+        JSON.stringify({ model: result.modelUsed, inputType: 'text' })
+      );
 
       res.json({
         plan: result.plan,
@@ -2775,13 +3794,13 @@ app.post(
           inputContent: inputContent.slice(0, 1000),
           modelUsed: result.modelUsed,
           attempts: result.attempts,
-          generatedAt: new Date().toISOString()
-        }
+          generatedAt: new Date().toISOString(),
+        },
       });
     } catch (error) {
       console.error('[AI Training Plan] Error:', error);
       res.status(500).json({
-        message: `AI 生成失败：${error instanceof Error ? error.message : '未知错误'}`
+        message: `AI 生成失败：${error instanceof Error ? error.message : '未知错误'}`,
       });
     }
   }
@@ -2811,7 +3830,10 @@ app.post(
       if (!cleanString(plan.title) || cleanString(plan.title).length > 80) {
         return res.status(400).json({ message: '请确认训练名称，长度应为1至80个字符' });
       }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanString(plan.startDate)) || !/^\d{4}-\d{2}-\d{2}$/.test(cleanString(plan.endDate))) {
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(cleanString(plan.startDate)) ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(cleanString(plan.endDate))
+      ) {
         return res.status(400).json({ message: '请人工确认有效的开始日期和结束日期' });
       }
       if (plan.startDate > plan.endDate) {
@@ -2821,118 +3843,155 @@ app.post(
         return res.status(400).json({ message: '体能训练内容为空' });
       }
 
-      const athlete = db.prepare('SELECT id, name FROM athletes WHERE id = ?').get(targetId) as { id: number; name: string } | undefined;
+      const athlete = db.prepare('SELECT id, name FROM athletes WHERE id = ?').get(targetId) as
+        { id: number; name: string } | undefined;
       if (!athlete) return res.status(400).json({ message: '运动员不存在，请刷新名单后重试' });
-      const existing = db.prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?')
+      const existing = db
+        .prepare('SELECT id FROM training_plans WHERE athlete_id = ? AND plan_date = ?')
         .get(targetId, plan.startDate) as { id: number } | undefined;
       if (existing) return res.status(409).json({ message: '该运动员已有相同开始日期的体能训练' });
 
-      const storedPlan = normalizeAIPlanToMatrix({
-        sourceType: 'ai_generated',
-        title: plan.title,
-        summary: plan.summary || '',
-        startDate: plan.startDate,
-        endDate: plan.endDate,
-        scheduleLabel: plan.scheduleLabel || '',
-        bodyWeight: plan.bodyWeight ?? null,
-        age: plan.age ?? null,
-        durationWeeks: plan.durationWeeks ?? null,
-        weeklyPlans: plan.weeklyPlans,
-        exercises: Array.isArray(plan.exercises) ? plan.exercises : []
-      }, targetId);
+      const storedPlan = normalizeAIPlanToMatrix(
+        {
+          sourceType: 'ai_generated',
+          title: plan.title,
+          summary: plan.summary || '',
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          scheduleLabel: plan.scheduleLabel || '',
+          bodyWeight: plan.bodyWeight ?? null,
+          age: plan.age ?? null,
+          durationWeeks: plan.durationWeeks ?? null,
+          weeklyPlans: plan.weeklyPlans,
+          exercises: Array.isArray(plan.exercises) ? plan.exercises : [],
+        },
+        targetId
+      );
       if (!Array.isArray(storedPlan.exercises) || !storedPlan.exercises.length) {
         return res.status(400).json({ message: 'AI体能训练没有可写入训练矩阵的项目' });
       }
 
-      const inserted = db.prepare(`
+      const inserted = db
+        .prepare(
+          `
         INSERT INTO training_plans
           (athlete_id, plan_date, start_date, end_date, title, schedule_label, plan_data, ai_metadata, created_by, updated_by)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        targetId,
-        plan.startDate,
-        plan.startDate,
-        plan.endDate,
-        plan.title,
-        plan.scheduleLabel || '',
-        JSON.stringify(storedPlan),
-        JSON.stringify(aiMetadata),
-        req.authUser!.id,
-        req.authUser!.id
-      );
-      const planId = Number(inserted.lastInsertRowid);
-      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
+      `
+        )
         .run(
+          targetId,
+          plan.startDate,
+          plan.startDate,
+          plan.endDate,
+          plan.title,
+          plan.scheduleLabel || '',
+          JSON.stringify(storedPlan),
+          JSON.stringify(aiMetadata),
           req.authUser!.id,
-          'SAVE_AI_TRAINING_PLAN',
-          'training_plan',
-          planId,
-          JSON.stringify({ athleteId: targetId, title: plan.title, model: aiMetadata?.modelUsed })
+          req.authUser!.id
         );
+      const planId = Number(inserted.lastInsertRowid);
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        req.authUser!.id,
+        'SAVE_AI_TRAINING_PLAN',
+        'training_plan',
+        planId,
+        JSON.stringify({ athleteId: targetId, title: plan.title, model: aiMetadata?.modelUsed })
+      );
       res.json({
         message: 'AI 体能训练已保存',
         id: planId,
         created: 1,
         replaced: 0,
         skipped: 0,
-        results: [{ athleteId: targetId, athleteName: athlete.name, status: 'created', planId }]
+        results: [{ athleteId: targetId, athleteName: athlete.name, status: 'created', planId }],
       });
     } catch (error) {
       console.error('[AI Training Plan Save] Error:', error);
       if (error instanceof Error && error.message.includes('UNIQUE')) {
         return res.status(409).json({ message: '该运动员已有相同开始日期的体能训练' });
       }
-      res.status(500).json({ message: `保存失败：${error instanceof Error ? error.message : '未知错误'}` });
+      res
+        .status(500)
+        .json({ message: `保存失败：${error instanceof Error ? error.message : '未知错误'}` });
     }
   }
 );
 
 app.get('/api/training-plans/:id/export', requireAuth, async (req, res) => {
   const planId = Number(req.params.id);
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT tp.id, tp.athlete_id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team,
       a.photo_url AS photoUrl, tp.plan_data AS dataJson
     FROM training_plans tp
     JOIN athletes a ON a.id = tp.athlete_id
     LEFT JOIN project_teams pt ON pt.id = a.team_id
     WHERE tp.id = ?
-  `).get(planId) as {
-    id: number;
-    athleteId: number;
-    athleteName: string;
-    project: string;
-    team: string;
-    photoUrl: string;
-    dataJson: string;
-  } | undefined;
+  `
+    )
+    .get(planId) as
+    | {
+        id: number;
+        athleteId: number;
+        athleteName: string;
+        project: string;
+        team: string;
+        photoUrl: string;
+        dataJson: string;
+      }
+    | undefined;
   if (!row) return res.status(404).json({ message: '体能训练不存在。' });
-  if (!hasAthleteAccess(req.authUser!, row.athleteId)) return res.status(403).json({ message: '无权导出该体能训练。' });
+  if (!hasAthleteAccess(req.authUser!, row.athleteId))
+    return res.status(403).json({ message: '无权导出该体能训练。' });
   const parsed = parseTrainingPlanData(JSON.parse(row.dataJson || '{}'));
-  if (parsed.errors.length) return res.status(409).json({ message: `体能训练数据不完整：${parsed.errors.join('；')}` });
+  if (parsed.errors.length)
+    return res.status(409).json({ message: `体能训练数据不完整：${parsed.errors.join('；')}` });
   const workbook = await buildTrainingPlanWorkbook({
     athleteName: row.athleteName,
     project: row.project,
     team: row.team,
     photoUrl: row.photoUrl,
-    data: parsed.data
+    data: parsed.data,
   });
   const buffer = await workbook.xlsx.writeBuffer();
   const safePeriod = `${parsed.data.startDate.replaceAll('-', '')}-${parsed.data.endDate.replaceAll('-', '')}`;
   const filename = `${row.athleteName}_${safePeriod}_四周体能训练.xlsx`;
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+  );
   res.send(Buffer.from(buffer));
 });
 
 function strengthImportCandidates(user: AuthUser) {
   const ids = accessibleAthleteIds(user);
-  if (!ids.length) return [] as Array<{ id: number; name: string; project: string; team: string; gender: string }>;
+  if (!ids.length)
+    return [] as Array<{ id: number; name: string; project: string; team: string; gender: string }>;
   const placeholders = ids.map(() => '?').join(',');
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT id, name, project, team, gender
     FROM athletes WHERE id IN (${placeholders}) AND active = 1
     ORDER BY name, id
-  `).all(...ids) as Array<{ id: number; name: string; project: string; team: string; gender: string }>;
+  `
+    )
+    .all(...ids) as Array<{
+    id: number;
+    name: string;
+    project: string;
+    team: string;
+    gender: string;
+  }>;
 }
 
 function strengthImportDate(value: unknown) {
@@ -2942,7 +4001,11 @@ function strengthImportDate(value: unknown) {
     const day = String(value.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
-  const text = cleanString(value).replace(/[.\/年]/g, '-').replace(/月/g, '-').replace(/日/g, '').replace(/-+/g, '-');
+  const text = cleanString(value)
+    .replace(/[.\/年]/g, '-')
+    .replace(/月/g, '-')
+    .replace(/日/g, '')
+    .replace(/-+/g, '-');
   const match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (!match) return text;
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
@@ -2950,7 +4013,9 @@ function strengthImportDate(value: unknown) {
 
 function strengthImportNumber(value: unknown) {
   if (value === '' || value === null || value === undefined) return null;
-  const match = cleanString(value).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  const match = cleanString(value)
+    .replace(',', '.')
+    .match(/-?\d+(?:\.\d+)?/);
   const number = match ? Number(match[0]) : Number.NaN;
   return Number.isFinite(number) ? Math.round(number * 10) / 10 : null;
 }
@@ -2968,13 +4033,16 @@ function strengthCellText(value: ExcelJS.CellValue) {
   if (value && typeof value === 'object') {
     if ('result' in value) return cleanString(value.result);
     if ('text' in value) return cleanString(value.text);
-    if ('richText' in value && Array.isArray(value.richText)) return value.richText.map((item) => item.text).join('');
+    if ('richText' in value && Array.isArray(value.richText))
+      return value.richText.map((item) => item.text).join('');
   }
   return cleanString(value);
 }
 
 function normalizedStrengthHeader(value: unknown) {
-  return cleanString(value).toLowerCase().replace(/[\s_()（）/\\-]/g, '');
+  return cleanString(value)
+    .toLowerCase()
+    .replace(/[\s_()（）/\\-]/g, '');
 }
 
 function strengthRecordValue(record: Record<string, unknown>, aliases: string[]) {
@@ -2990,63 +4058,152 @@ function validateStrengthImportRow(
   rowNumber: number,
   athletes: Array<{ id: number; name: string; project: string; team: string; gender: string }>
 ): StrengthImportRow {
-  const athleteName = cleanString(source.athleteName ?? strengthRecordValue(source, ['运动员', '运动员姓名', '姓名', 'athlete']));
+  const athleteName = cleanString(
+    source.athleteName ?? strengthRecordValue(source, ['运动员', '运动员姓名', '姓名', 'athlete'])
+  );
   const team = cleanString(source.team ?? strengthRecordValue(source, ['队伍', '组别', 'team']));
   const requestedAthleteId = Number(source.athleteId || 0);
-  let matches = requestedAthleteId ? athletes.filter((athlete) => athlete.id === requestedAthleteId) : athletes.filter((athlete) => athlete.name === athleteName);
+  let matches = requestedAthleteId
+    ? athletes.filter((athlete) => athlete.id === requestedAthleteId)
+    : athletes.filter((athlete) => athlete.name === athleteName);
   if (matches.length > 1 && team) matches = matches.filter((athlete) => athlete.team === team);
   const matched = matches.length === 1 ? matches[0] : null;
-  const trainingDate = strengthImportDate(source.trainingDate ?? strengthRecordValue(source, ['训练日期', '日期', 'date']));
-  const sessionLabel = cleanString(source.sessionLabel ?? strengthRecordValue(source, ['训练场次', '场次', '训练名称', 'session'])) || '体能训练';
-  const exerciseName = cleanString(source.exerciseName ?? strengthRecordValue(source, ['动作', '动作名称', '训练项目', '项目', 'exercise']));
-  const categoryValue = cleanString(source.trainingCategory ?? strengthRecordValue(source, ['训练类型', '体能类型', '训练分类', 'category']));
-  const bodyPositionValue = cleanString(source.bodyPosition ?? strengthRecordValue(source, ['身体位置', '训练身体位置', '部位', 'bodyposition']));
-  const environmentValue = cleanString(source.trainingEnvironment ?? strengthRecordValue(source, ['训练环境', '水陆类型', '训练场地', 'environment']));
-  const intensityZoneValue = cleanString(source.intensityZone ?? strengthRecordValue(source, ['强度区间', '强度分区', 'intensityzone'])).toUpperCase();
-  const trainingCategory = isStrengthTrainingCategory(categoryValue) ? categoryValue : inferStrengthCategory(exerciseName);
-  const bodyPosition = isStrengthBodyPosition(bodyPositionValue) ? bodyPositionValue : inferStrengthBodyPosition(exerciseName);
-  const trainingEnvironment = isStrengthTrainingEnvironment(environmentValue) ? environmentValue : '陆上';
+  const trainingDate = strengthImportDate(
+    source.trainingDate ?? strengthRecordValue(source, ['训练日期', '日期', 'date'])
+  );
+  const sessionLabel =
+    cleanString(
+      source.sessionLabel ??
+        strengthRecordValue(source, ['训练场次', '场次', '训练名称', 'session'])
+    ) || '体能训练';
+  const exerciseName = cleanString(
+    source.exerciseName ??
+      strengthRecordValue(source, ['动作', '动作名称', '训练项目', '项目', 'exercise'])
+  );
+  const categoryValue = cleanString(
+    source.trainingCategory ??
+      strengthRecordValue(source, ['训练类型', '体能类型', '训练分类', 'category'])
+  );
+  const bodyPositionValue = cleanString(
+    source.bodyPosition ??
+      strengthRecordValue(source, ['身体位置', '训练身体位置', '部位', 'bodyposition'])
+  );
+  const environmentValue = cleanString(
+    source.trainingEnvironment ??
+      strengthRecordValue(source, ['训练环境', '水陆类型', '训练场地', 'environment'])
+  );
+  const intensityZoneValue = cleanString(
+    source.intensityZone ?? strengthRecordValue(source, ['强度区间', '强度分区', 'intensityzone'])
+  ).toUpperCase();
+  const trainingCategory = isStrengthTrainingCategory(categoryValue)
+    ? categoryValue
+    : inferStrengthCategory(exerciseName);
+  const bodyPosition = isStrengthBodyPosition(bodyPositionValue)
+    ? bodyPositionValue
+    : inferStrengthBodyPosition(exerciseName);
+  const trainingEnvironment = isStrengthTrainingEnvironment(environmentValue)
+    ? environmentValue
+    : '陆上';
   const intensityZone = isStrengthIntensityZone(intensityZoneValue) ? intensityZoneValue : 'AN';
-  const setIndex = Math.max(1, Math.round(strengthImportNumber(source.setIndex ?? strengthRecordValue(source, ['组次', '第几组', '组序号', 'set'])) || 1));
-  const targetReps = strengthImportNumber(source.targetReps ?? strengthRecordValue(source, ['计划次数', '目标次数', 'targetreps']));
-  const actualReps = strengthImportNumber(source.actualReps ?? strengthRecordValue(source, ['实际次数', '完成次数', '次数', 'actualreps', 'reps']));
-  const plannedWeightKg = strengthImportNumber(source.plannedWeightKg ?? strengthRecordValue(source, ['计划重量kg', '计划重量', '目标重量kg', 'plannedweightkg']));
-  const actualWeightKg = strengthImportNumber(source.actualWeightKg ?? strengthRecordValue(source, ['实际重量kg', '实际重量', '重量kg', '重量', 'weightkg']));
-  const durationMin = strengthImportNumber(source.durationMin ?? strengthRecordValue(source, ['训练时间min', '训练时长min', '训练时间', '时长', 'durationmin'])) || 0;
-  const distanceKm = strengthImportNumber(source.distanceKm ?? strengthRecordValue(source, ['训练距离km', '训练距离', '距离km', 'distancekm'])) || 0;
-  const intensityPercent = strengthImportNumber(source.intensityPercent ?? strengthRecordValue(source, ['强度%', '训练强度%', '强度百分比', 'intensitypercent']));
+  const setIndex = Math.max(
+    1,
+    Math.round(
+      strengthImportNumber(
+        source.setIndex ?? strengthRecordValue(source, ['组次', '第几组', '组序号', 'set'])
+      ) || 1
+    )
+  );
+  const targetReps = strengthImportNumber(
+    source.targetReps ?? strengthRecordValue(source, ['计划次数', '目标次数', 'targetreps'])
+  );
+  const actualReps = strengthImportNumber(
+    source.actualReps ??
+      strengthRecordValue(source, ['实际次数', '完成次数', '次数', 'actualreps', 'reps'])
+  );
+  const plannedWeightKg = strengthImportNumber(
+    source.plannedWeightKg ??
+      strengthRecordValue(source, ['计划重量kg', '计划重量', '目标重量kg', 'plannedweightkg'])
+  );
+  const actualWeightKg = strengthImportNumber(
+    source.actualWeightKg ??
+      strengthRecordValue(source, ['实际重量kg', '实际重量', '重量kg', '重量', 'weightkg'])
+  );
+  const durationMin =
+    strengthImportNumber(
+      source.durationMin ??
+        strengthRecordValue(source, [
+          '训练时间min',
+          '训练时长min',
+          '训练时间',
+          '时长',
+          'durationmin',
+        ])
+    ) || 0;
+  const distanceKm =
+    strengthImportNumber(
+      source.distanceKm ??
+        strengthRecordValue(source, ['训练距离km', '训练距离', '距离km', 'distancekm'])
+    ) || 0;
+  const intensityPercent = strengthImportNumber(
+    source.intensityPercent ??
+      strengthRecordValue(source, ['强度%', '训练强度%', '强度百分比', 'intensitypercent'])
+  );
   const rpe = strengthImportNumber(source.rpe ?? strengthRecordValue(source, ['rpe', '主观疲劳']));
-  const completed = strengthImportBoolean(source.completed ?? strengthRecordValue(source, ['是否完成', '完成状态', 'completed']), true);
+  const completed = strengthImportBoolean(
+    source.completed ?? strengthRecordValue(source, ['是否完成', '完成状态', 'completed']),
+    true
+  );
   const note = cleanString(source.note ?? strengthRecordValue(source, ['备注', '说明', 'note']));
-  const confidence = strengthImportNumber(source.confidence ?? strengthRecordValue(source, ['置信度', 'confidence']));
+  const confidence = strengthImportNumber(
+    source.confidence ?? strengthRecordValue(source, ['置信度', 'confidence'])
+  );
   const originalText = cleanString(source.originalText) || JSON.stringify(source).slice(0, 1000);
   const errors: string[] = [];
   const warnings: string[] = [];
   if (!/^\d{4}-\d{2}-\d{2}$/.test(trainingDate)) errors.push('训练日期格式应为YYYY-MM-DD');
   if (!athleteName && !requestedAthleteId) errors.push('缺少运动员姓名');
-  else if (!matched) errors.push(matches.length > 1 ? '同名运动员需要选择队伍' : '未匹配到权限范围内的运动员');
+  else if (!matched)
+    errors.push(matches.length > 1 ? '同名运动员需要选择队伍' : '未匹配到权限范围内的运动员');
   if (!exerciseName) errors.push('缺少动作名称');
-  if (actualReps === null || actualReps < 0 || actualReps > 1000) errors.push('实际次数应在0至1000之间');
-  if (actualWeightKg === null || actualWeightKg < 0 || actualWeightKg > 1000) errors.push('实际重量应在0至1000kg之间');
-  if (targetReps !== null && (targetReps < 0 || targetReps > 1000)) errors.push('计划次数应在0至1000之间');
-  if (plannedWeightKg !== null && (plannedWeightKg < 0 || plannedWeightKg > 1000)) errors.push('计划重量应在0至1000kg之间');
+  if (actualReps === null || actualReps < 0 || actualReps > 1000)
+    errors.push('实际次数应在0至1000之间');
+  if (actualWeightKg === null || actualWeightKg < 0 || actualWeightKg > 1000)
+    errors.push('实际重量应在0至1000kg之间');
+  if (targetReps !== null && (targetReps < 0 || targetReps > 1000))
+    errors.push('计划次数应在0至1000之间');
+  if (plannedWeightKg !== null && (plannedWeightKg < 0 || plannedWeightKg > 1000))
+    errors.push('计划重量应在0至1000kg之间');
   if (durationMin < 0 || durationMin > 1440) errors.push('训练时间应在0至1440分钟之间');
   if (distanceKm < 0 || distanceKm > 1000) errors.push('训练距离应在0至1000km之间');
-  if (intensityPercent !== null && (intensityPercent < 0 || intensityPercent > 100)) errors.push('训练强度应在0至100%之间');
+  if (intensityPercent !== null && (intensityPercent < 0 || intensityPercent > 100))
+    errors.push('训练强度应在0至100%之间');
   if (rpe !== null && (rpe < 0 || rpe > 10)) errors.push('RPE应在0至10之间');
-  if (categoryValue && !isStrengthTrainingCategory(categoryValue)) warnings.push(`训练类型“${categoryValue}”无法识别，已按动作归入${trainingCategory}`);
-  if (bodyPositionValue && !isStrengthBodyPosition(bodyPositionValue)) warnings.push(`身体位置“${bodyPositionValue}”无法识别，已自动归类`);
-  if (environmentValue && !isStrengthTrainingEnvironment(environmentValue)) warnings.push(`训练环境“${environmentValue}”无法识别，已按陆上训练处理`);
-  if (intensityZoneValue && !isStrengthIntensityZone(intensityZoneValue)) warnings.push(`强度区间“${intensityZoneValue}”无法识别，已按AN处理`);
+  if (categoryValue && !isStrengthTrainingCategory(categoryValue))
+    warnings.push(`训练类型“${categoryValue}”无法识别，已按动作归入${trainingCategory}`);
+  if (bodyPositionValue && !isStrengthBodyPosition(bodyPositionValue))
+    warnings.push(`身体位置“${bodyPositionValue}”无法识别，已自动归类`);
+  if (environmentValue && !isStrengthTrainingEnvironment(environmentValue))
+    warnings.push(`训练环境“${environmentValue}”无法识别，已按陆上训练处理`);
+  if (intensityZoneValue && !isStrengthIntensityZone(intensityZoneValue))
+    warnings.push(`强度区间“${intensityZoneValue}”无法识别，已按AN处理`);
   if (confidence !== null && confidence < 0.7) warnings.push('AI识别置信度较低，请人工核对');
-  const duplicate = Boolean(matched && /^\d{4}-\d{2}-\d{2}$/.test(trainingDate) && exerciseName && db.prepare(`
+  const duplicate = Boolean(
+    matched &&
+    /^\d{4}-\d{2}-\d{2}$/.test(trainingDate) &&
+    exerciseName &&
+    db
+      .prepare(
+        `
     SELECT srs.id
     FROM strength_result_sets srs
     JOIN training_sessions ts ON ts.id = srs.training_session_id
     WHERE ts.athlete_id = ? AND ts.session_date = ? AND ts.content = ?
       AND srs.exercise_name = ? AND srs.set_index = ?
     LIMIT 1
-  `).get(matched.id, trainingDate, sessionLabel, exerciseName, setIndex));
+  `
+      )
+      .get(matched.id, trainingDate, sessionLabel, exerciseName, setIndex)
+  );
   if (duplicate) warnings.push('系统中存在相同场次、动作和组次');
   return {
     rowNumber,
@@ -3076,31 +4233,46 @@ function validateStrengthImportRow(
     originalText,
     duplicate,
     errors,
-    warnings
+    warnings,
   };
 }
 
 function parseStrengthCsv(buffer: Buffer) {
-  const lines = buffer.toString('utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+  const lines = buffer
+    .toString('utf8')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .filter((line) => line.trim());
   const parseLine = (line: string) => {
     const values: string[] = [];
     let value = '';
     let quoted = false;
     for (let index = 0; index < line.length; index += 1) {
       const character = line[index];
-      if (character === '"' && quoted && line[index + 1] === '"') { value += '"'; index += 1; }
-      else if (character === '"') quoted = !quoted;
-      else if (character === ',' && !quoted) { values.push(value); value = ''; }
-      else value += character;
+      if (character === '"' && quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else if (character === '"') quoted = !quoted;
+      else if (character === ',' && !quoted) {
+        values.push(value);
+        value = '';
+      } else value += character;
     }
     values.push(value);
     return values;
   };
   const headers = parseLine(lines.shift() || '').map(normalizedStrengthHeader);
-  return lines.map((line) => Object.fromEntries(parseLine(line).map((value, index) => [headers[index] || `column${index}`, value])));
+  return lines.map((line) =>
+    Object.fromEntries(
+      parseLine(line).map((value, index) => [headers[index] || `column${index}`, value])
+    )
+  );
 }
 
-async function parseStrengthImportFile(file: Express.Multer.File, athletes: ReturnType<typeof strengthImportCandidates>) {
+async function parseStrengthImportFile(
+  file: Express.Multer.File,
+  athletes: ReturnType<typeof strengthImportCandidates>
+) {
   const filename = file.originalname.toLowerCase();
   if (filename.endsWith('.xlsx') || file.mimetype.includes('spreadsheet')) {
     const workbook = new ExcelJS.Workbook();
@@ -3111,8 +4283,13 @@ async function parseStrengthImportFile(file: Express.Multer.File, athletes: Retu
       let headerNumber = 0;
       for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 12); rowNumber += 1) {
         const values = sheet.getRow(rowNumber).values as ExcelJS.CellValue[];
-        const candidate = values.slice(1).map((value) => normalizedStrengthHeader(strengthCellText(value)));
-        if (candidate.some((value) => ['运动员', '运动员姓名', '姓名'].includes(value)) && candidate.some((value) => ['动作', '动作名称', '训练项目', '项目'].includes(value))) {
+        const candidate = values
+          .slice(1)
+          .map((value) => normalizedStrengthHeader(strengthCellText(value)));
+        if (
+          candidate.some((value) => ['运动员', '运动员姓名', '姓名'].includes(value)) &&
+          candidate.some((value) => ['动作', '动作名称', '训练项目', '项目'].includes(value))
+        ) {
           headers = candidate;
           headerNumber = rowNumber;
           break;
@@ -3121,22 +4298,37 @@ async function parseStrengthImportFile(file: Express.Multer.File, athletes: Retu
       if (!headerNumber) return;
       for (let rowNumber = headerNumber + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
         const row = sheet.getRow(rowNumber);
-        const record = Object.fromEntries(headers.map((header, index) => [header || `column${index}`, strengthCellText(row.getCell(index + 1).value)]));
-        if (Object.values(record).some((value) => cleanString(value))) records.push({ ...record, originalText: `${sheet.name}!${rowNumber}` });
+        const record = Object.fromEntries(
+          headers.map((header, index) => [
+            header || `column${index}`,
+            strengthCellText(row.getCell(index + 1).value),
+          ])
+        );
+        if (Object.values(record).some((value) => cleanString(value)))
+          records.push({ ...record, originalText: `${sheet.name}!${rowNumber}` });
       }
     });
     if (!records.length) throw new Error('未找到包含“运动员”和“动作”表头的训练结果工作表。');
     return { records, sourceType: 'excel' as const, modelUsed: '结构化Excel解析' };
   }
   if (filename.endsWith('.csv') || file.mimetype.includes('csv')) {
-    return { records: parseStrengthCsv(file.buffer), sourceType: 'csv' as const, modelUsed: '结构化CSV解析' };
+    return {
+      records: parseStrengthCsv(file.buffer),
+      sourceType: 'csv' as const,
+      modelUsed: '结构化CSV解析',
+    };
   }
   if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
-    const recognized = await recognizeStrengthImport({ buffer: file.buffer, filename: file.originalname, mimetype: file.mimetype, athletes });
+    const recognized = await recognizeStrengthImport({
+      buffer: file.buffer,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      athletes,
+    });
     return {
       records: recognized.rows as Array<RecognizedStrengthRow & Record<string, unknown>>,
-      sourceType: file.mimetype === 'application/pdf' ? 'pdf' as const : 'image' as const,
-      modelUsed: recognized.modelUsed
+      sourceType: file.mimetype === 'application/pdf' ? ('pdf' as const) : ('image' as const),
+      modelUsed: recognized.modelUsed,
     };
   }
   throw new Error('仅支持XLSX、CSV、JPG、PNG、WEBP或PDF文件。');
@@ -3144,8 +4336,11 @@ async function parseStrengthImportFile(file: Express.Multer.File, athletes: Retu
 
 app.get('/api/strength-training/results', requireAuth, (req, res) => {
   const athleteId = Number(req.query.athleteId || 0);
-  if (!athleteId || !hasAthleteAccess(req.authUser!, athleteId)) return res.status(403).json({ message: '无权查看该运动员的体能训练结果。' });
-  const rows = db.prepare(`
+  if (!athleteId || !hasAthleteAccess(req.authUser!, athleteId))
+    return res.status(403).json({ message: '无权查看该运动员的体能训练结果。' });
+  const rows = db
+    .prepare(
+      `
     SELECT ts.id AS sessionId, ts.session_date AS trainingDate, ts.session_order AS sessionOrder,
       ts.content AS sessionLabel, ts.rpe AS sessionRpe, ts.smvl AS volume, ts.source,
       ts.duration_min AS sessionDurationMin, ts.distance_km AS sessionDistanceKm,
@@ -3166,196 +4361,397 @@ app.get('/api/strength-training/results', requireAuth, (req, res) => {
     LEFT JOIN data_import_batches dib ON dib.id = srs.data_import_batch_id
     WHERE ts.athlete_id = ?
     ORDER BY ts.session_date DESC, ts.session_order DESC, srs.exercise_name, srs.set_index
-  `).all(athleteId) as Array<Record<string, unknown> & { sessionId: number }>;
-  const grouped = new Map<number, { id: number; trainingDate: string; sessionOrder: number; sessionLabel: string; rpe: number | null; volume: number; durationMin: number; distanceKm: number; trainingType: string; structureType: string; intensityZone: StrengthIntensityZone; srpe: number; source: string; sourceFilename: string; modelUsed: string; importedAt: string; sets: Array<Record<string, unknown>> }>();
+  `
+    )
+    .all(athleteId) as Array<Record<string, unknown> & { sessionId: number }>;
+  const grouped = new Map<
+    number,
+    {
+      id: number;
+      trainingDate: string;
+      sessionOrder: number;
+      sessionLabel: string;
+      rpe: number | null;
+      volume: number;
+      durationMin: number;
+      distanceKm: number;
+      trainingType: string;
+      structureType: string;
+      intensityZone: StrengthIntensityZone;
+      srpe: number;
+      source: string;
+      sourceFilename: string;
+      modelUsed: string;
+      importedAt: string;
+      sets: Array<Record<string, unknown>>;
+    }
+  >();
   for (const row of rows) {
     const sessionId = Number(row.sessionId);
-    if (!grouped.has(sessionId)) grouped.set(sessionId, {
-      id: sessionId,
-      trainingDate: cleanString(row.trainingDate),
-      sessionOrder: Number(row.sessionOrder),
-      sessionLabel: cleanString(row.sessionLabel),
-      rpe: row.sessionRpe === null ? null : Number(row.sessionRpe),
-      volume: Number(row.volume || 0),
-      durationMin: Number(row.sessionDurationMin || 0),
-      distanceKm: Number(row.sessionDistanceKm || 0),
-      trainingType: cleanString(row.trainingType),
-      structureType: cleanString(row.structureType),
-      intensityZone: isStrengthIntensityZone(row.sessionIntensityZone) ? row.sessionIntensityZone : 'AN',
-      srpe: Number(row.srpe || 0),
-      source: cleanString(row.source),
-      sourceFilename: cleanString(row.sourceFilename),
-      modelUsed: cleanString(row.modelUsed),
-      importedAt: cleanString(row.importedAt),
-      sets: []
-    });
+    if (!grouped.has(sessionId))
+      grouped.set(sessionId, {
+        id: sessionId,
+        trainingDate: cleanString(row.trainingDate),
+        sessionOrder: Number(row.sessionOrder),
+        sessionLabel: cleanString(row.sessionLabel),
+        rpe: row.sessionRpe === null ? null : Number(row.sessionRpe),
+        volume: Number(row.volume || 0),
+        durationMin: Number(row.sessionDurationMin || 0),
+        distanceKm: Number(row.sessionDistanceKm || 0),
+        trainingType: cleanString(row.trainingType),
+        structureType: cleanString(row.structureType),
+        intensityZone: isStrengthIntensityZone(row.sessionIntensityZone)
+          ? row.sessionIntensityZone
+          : 'AN',
+        srpe: Number(row.srpe || 0),
+        source: cleanString(row.source),
+        sourceFilename: cleanString(row.sourceFilename),
+        modelUsed: cleanString(row.modelUsed),
+        importedAt: cleanString(row.importedAt),
+        sets: [],
+      });
     grouped.get(sessionId)!.sets.push({
-      id: Number(row.id), exerciseName: cleanString(row.exerciseName), setIndex: Number(row.setIndex),
-      targetReps: row.targetReps === null ? null : Number(row.targetReps), actualReps: Number(row.actualReps),
-      actualWeightKg: Number(row.actualWeightKg), plannedWeightKg: row.plannedWeightKg === null ? null : Number(row.plannedWeightKg),
-      trainingCategory: isStrengthTrainingCategory(row.trainingCategory) ? row.trainingCategory : inferStrengthCategory(cleanString(row.exerciseName)),
-      bodyPosition: isStrengthBodyPosition(row.bodyPosition) ? row.bodyPosition : inferStrengthBodyPosition(cleanString(row.exerciseName)),
-      trainingEnvironment: isStrengthTrainingEnvironment(row.trainingEnvironment) ? row.trainingEnvironment : '陆上',
-      durationMin: Number(row.durationMin || 0), distanceKm: Number(row.distanceKm || 0),
+      id: Number(row.id),
+      exerciseName: cleanString(row.exerciseName),
+      setIndex: Number(row.setIndex),
+      targetReps: row.targetReps === null ? null : Number(row.targetReps),
+      actualReps: Number(row.actualReps),
+      actualWeightKg: Number(row.actualWeightKg),
+      plannedWeightKg: row.plannedWeightKg === null ? null : Number(row.plannedWeightKg),
+      trainingCategory: isStrengthTrainingCategory(row.trainingCategory)
+        ? row.trainingCategory
+        : inferStrengthCategory(cleanString(row.exerciseName)),
+      bodyPosition: isStrengthBodyPosition(row.bodyPosition)
+        ? row.bodyPosition
+        : inferStrengthBodyPosition(cleanString(row.exerciseName)),
+      trainingEnvironment: isStrengthTrainingEnvironment(row.trainingEnvironment)
+        ? row.trainingEnvironment
+        : '陆上',
+      durationMin: Number(row.durationMin || 0),
+      distanceKm: Number(row.distanceKm || 0),
       intensityPercent: row.intensityPercent === null ? null : Number(row.intensityPercent),
       intensityZone: isStrengthIntensityZone(row.setIntensityZone) ? row.setIntensityZone : 'AN',
       rpe: row.rpe === null ? null : Number(row.rpe),
-      completed: Boolean(row.completed), note: cleanString(row.note), importBatchId: cleanString(row.importBatchId),
-      confidence: row.confidence === null ? null : Number(row.confidence)
+      completed: Boolean(row.completed),
+      note: cleanString(row.note),
+      importBatchId: cleanString(row.importBatchId),
+      confidence: row.confidence === null ? null : Number(row.confidence),
     });
   }
   res.json({ sessions: [...grouped.values()] });
 });
 
-app.get('/api/strength-training/import/template', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), async (_req, res) => {
-  const templatePath = resolve(process.cwd(), 'public', 'templates', '竞迹体能训练数据导入模板.xlsx');
-  if (!existsSync(templatePath)) return res.status(404).json({ message: '体能训练导入模板尚未部署。' });
-  res.download(templatePath, '竞迹体能训练数据导入模板.xlsx');
-});
+app.get(
+  '/api/strength-training/import/template',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  async (_req, res) => {
+    const templatePath = resolve(
+      process.cwd(),
+      'public',
+      'templates',
+      '竞迹体能训练数据导入模板.xlsx'
+    );
+    if (!existsSync(templatePath))
+      return res.status(404).json({ message: '体能训练导入模板尚未部署。' });
+    res.download(templatePath, '竞迹体能训练数据导入模板.xlsx');
+  }
+);
 
-app.post('/api/strength-training/import/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), upload.single('file'), async (req, res, next) => {
-  try {
-    if (!req.file) return res.status(400).json({ message: '请选择训练结果文件。' });
+app.post(
+  '/api/strength-training/import/preview',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  upload.single('file'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: '请选择训练结果文件。' });
+      const athletes = strengthImportCandidates(req.authUser!);
+      if (!athletes.length)
+        return res.status(403).json({ message: '当前账号没有可导入的运动员。' });
+      const parsed = await parseStrengthImportFile(req.file, athletes);
+      const rows = parsed.records
+        .slice(0, 1000)
+        .map((record, index) => validateStrengthImportRow(record, index + 1, athletes));
+      const token = randomUUID();
+      strengthImportCache.set(token, {
+        ownerId: req.authUser!.id,
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        sourceType: parsed.sourceType,
+        rows,
+        modelUsed: parsed.modelUsed,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      });
+      res.json({
+        token,
+        filename: req.file.originalname,
+        modelUsed: parsed.modelUsed,
+        total: rows.length,
+        valid: rows.filter((row) => !row.errors.length).length,
+        invalid: rows.filter((row) => row.errors.length).length,
+        duplicate: rows.filter((row) => row.duplicate).length,
+        rows,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.post(
+  '/api/strength-training/import/commit',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const token = cleanString(req.body?.token);
+    const cached = strengthImportCache.get(token);
+    if (!cached || cached.ownerId !== req.authUser!.id || cached.expiresAt < Date.now()) {
+      strengthImportCache.delete(token);
+      return res.status(410).json({ message: '导入预览已过期，请重新上传文件。' });
+    }
+    const policy = ['skip', 'update', 'new'].includes(cleanString(req.body?.conflictPolicy))
+      ? (cleanString(req.body.conflictPolicy) as 'skip' | 'update' | 'new')
+      : 'skip';
     const athletes = strengthImportCandidates(req.authUser!);
-    if (!athletes.length) return res.status(403).json({ message: '当前账号没有可导入的运动员。' });
-    const parsed = await parseStrengthImportFile(req.file, athletes);
-    const rows = parsed.records.slice(0, 1000).map((record, index) => validateStrengthImportRow(record, index + 1, athletes));
-    const token = randomUUID();
-    strengthImportCache.set(token, {
-      ownerId: req.authUser!.id,
-      filename: req.file.originalname,
-      mimetype: req.file.mimetype,
-      sourceType: parsed.sourceType,
-      rows,
-      modelUsed: parsed.modelUsed,
-      expiresAt: Date.now() + 30 * 60 * 1000
-    });
-    res.json({
-      token,
-      filename: req.file.originalname,
-      modelUsed: parsed.modelUsed,
-      total: rows.length,
-      valid: rows.filter((row) => !row.errors.length).length,
-      invalid: rows.filter((row) => row.errors.length).length,
-      duplicate: rows.filter((row) => row.duplicate).length,
-      rows
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+    const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : cached.rows;
+    const rows: StrengthImportRow[] = sourceRows.map(
+      (row: Record<string, unknown>, index: number) =>
+        validateStrengthImportRow(row, Number(row.rowNumber || index + 1), athletes)
+    );
+    const invalid = rows.filter((row) => row.errors.length);
+    if (invalid.length)
+      return res
+        .status(400)
+        .json({ message: `仍有${invalid.length}行未通过校验，请先修正红色字段。`, rows });
 
-app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const token = cleanString(req.body?.token);
-  const cached = strengthImportCache.get(token);
-  if (!cached || cached.ownerId !== req.authUser!.id || cached.expiresAt < Date.now()) {
-    strengthImportCache.delete(token);
-    return res.status(410).json({ message: '导入预览已过期，请重新上传文件。' });
-  }
-  const policy = ['skip', 'update', 'new'].includes(cleanString(req.body?.conflictPolicy)) ? cleanString(req.body.conflictPolicy) as 'skip' | 'update' | 'new' : 'skip';
-  const athletes = strengthImportCandidates(req.authUser!);
-  const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : cached.rows;
-  const rows: StrengthImportRow[] = sourceRows.map((row: Record<string, unknown>, index: number) => validateStrengthImportRow(row, Number(row.rowNumber || index + 1), athletes));
-  const invalid = rows.filter((row) => row.errors.length);
-  if (invalid.length) return res.status(400).json({ message: `仍有${invalid.length}行未通过校验，请先修正红色字段。`, rows });
-
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
-  const batchId = token;
-  const batchProject = db.prepare('SELECT project FROM athletes WHERE id = ?').get(rows[0]?.athleteId) as { project: Project } | undefined;
-  if (!batchProject) return res.status(400).json({ message: '导入记录缺少有效运动员。' });
-  const sessionIds = new Set<number>();
-  const sessionMap = new Map<string, number>();
-  const source = cached.sourceType === 'image' || cached.sourceType === 'pdf' ? 'ai_import' : 'file_import';
-  db.exec('BEGIN');
-  try {
-    db.prepare(`
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+    const batchId = token;
+    const batchProject = db
+      .prepare('SELECT project FROM athletes WHERE id = ?')
+      .get(rows[0]?.athleteId) as { project: Project } | undefined;
+    if (!batchProject) return res.status(400).json({ message: '导入记录缺少有效运动员。' });
+    const sessionIds = new Set<number>();
+    const sessionMap = new Map<string, number>();
+    const source =
+      cached.sourceType === 'image' || cached.sourceType === 'pdf' ? 'ai_import' : 'file_import';
+    db.exec('BEGIN');
+    try {
+      db.prepare(
+        `
       INSERT INTO data_import_batches
         (id, file_hash, source_filename, source_mimetype, file_size, project, parser_version, status, item_count, created_by, summary_json)
       VALUES (?, ?, ?, ?, 0, ?, ?, 'reviewing', ?, ?, ?)
-    `).run(batchId, `legacy-strength-import:${batchId}`, cached.filename, cached.mimetype, batchProject.project,
-      `strength-result-${cached.modelUsed}`, rows.length, req.authUser!.id, JSON.stringify({ sourceType: cached.sourceType, channel: 'strength_training_import' }));
-    const createImportItem = db.prepare(`
+    `
+      ).run(
+        batchId,
+        `legacy-strength-import:${batchId}`,
+        cached.filename,
+        cached.mimetype,
+        batchProject.project,
+        `strength-result-${cached.modelUsed}`,
+        rows.length,
+        req.authUser!.id,
+        JSON.stringify({ sourceType: cached.sourceType, channel: 'strength_training_import' })
+      );
+      const createImportItem = db.prepare(`
       INSERT INTO data_import_items
         (batch_id, item_type, athlete_id, raw_athlete_name, event_date, session_label, exercise_name, set_index,
          target_reps, actual_reps, actual_weight_kg, intensity_percent, payload_json, source_sheet, source_address,
          raw_value, quality, messages_json, business_key)
       VALUES (?, 'training_set', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '体能训练导入', ?, ?, 'valid', '[]', ?)
     `);
-    const completeImportItem = db.prepare(`UPDATE data_import_items SET quality = ?, messages_json = ?, committed_entity_type = ?, committed_entity_id = ? WHERE id = ?`);
-
-    for (const row of rows) {
-      const importItem = createImportItem.run(
-        batchId, row.athleteId, row.athleteName, row.trainingDate, row.sessionLabel, row.exerciseName, row.setIndex,
-        row.targetReps, row.actualReps, row.actualWeightKg, row.intensityPercent,
-        JSON.stringify({ trainingCategory: row.trainingCategory, bodyPosition: row.bodyPosition, trainingEnvironment: row.trainingEnvironment, durationMin: row.durationMin, distanceKm: row.distanceKm, intensityZone: row.intensityZone, rpe: row.rpe, note: row.note, confidence: row.confidence, originalText: row.originalText }),
-        String(row.rowNumber), row.originalText, `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}|${row.exerciseName}|${row.setIndex}`
+      const completeImportItem = db.prepare(
+        `UPDATE data_import_items SET quality = ?, messages_json = ?, committed_entity_type = ?, committed_entity_id = ? WHERE id = ?`
       );
-      const importItemId = Number(importItem.lastInsertRowid);
-      const baseKey = `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}`;
-      let sessionId = sessionMap.get(baseKey);
-      if (!sessionId) {
-        const existing = policy === 'new' ? undefined : db.prepare(`
+
+      for (const row of rows) {
+        const importItem = createImportItem.run(
+          batchId,
+          row.athleteId,
+          row.athleteName,
+          row.trainingDate,
+          row.sessionLabel,
+          row.exerciseName,
+          row.setIndex,
+          row.targetReps,
+          row.actualReps,
+          row.actualWeightKg,
+          row.intensityPercent,
+          JSON.stringify({
+            trainingCategory: row.trainingCategory,
+            bodyPosition: row.bodyPosition,
+            trainingEnvironment: row.trainingEnvironment,
+            durationMin: row.durationMin,
+            distanceKm: row.distanceKm,
+            intensityZone: row.intensityZone,
+            rpe: row.rpe,
+            note: row.note,
+            confidence: row.confidence,
+            originalText: row.originalText,
+          }),
+          String(row.rowNumber),
+          row.originalText,
+          `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}|${row.exerciseName}|${row.setIndex}`
+        );
+        const importItemId = Number(importItem.lastInsertRowid);
+        const baseKey = `${row.athleteId}|${row.trainingDate}|${row.sessionLabel}`;
+        let sessionId = sessionMap.get(baseKey);
+        if (!sessionId) {
+          const existing =
+            policy === 'new'
+              ? undefined
+              : (db
+                  .prepare(
+                    `
           SELECT id FROM training_sessions
           WHERE athlete_id = ? AND session_date = ? AND training_type = '力量训练' AND content = ?
           ORDER BY session_order DESC LIMIT 1
-        `).get(row.athleteId, row.trainingDate, row.sessionLabel) as { id: number } | undefined;
-        if (existing) sessionId = existing.id;
-        else {
-          const orderRow = db.prepare('SELECT COALESCE(MAX(session_order), 0) AS maxOrder FROM training_sessions WHERE athlete_id = ? AND session_date = ?')
-            .get(row.athleteId, row.trainingDate) as { maxOrder: number };
-          const inserted = db.prepare(`
+        `
+                  )
+                  .get(row.athleteId, row.trainingDate, row.sessionLabel) as
+                  { id: number } | undefined);
+          if (existing) sessionId = existing.id;
+          else {
+            const orderRow = db
+              .prepare(
+                'SELECT COALESCE(MAX(session_order), 0) AS maxOrder FROM training_sessions WHERE athlete_id = ? AND session_date = ?'
+              )
+              .get(row.athleteId, row.trainingDate) as { maxOrder: number };
+            const inserted = db
+              .prepare(
+                `
             INSERT INTO training_sessions
               (athlete_id, session_date, session_order, start_time, training_type, structure_type,
                intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl,
                source, quality, is_demo, created_by)
             VALUES (?, ?, ?, '', '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, 0, 0, ?, ?, 0, ?)
-          `).run(row.athleteId, row.trainingDate, Number(orderRow.maxOrder) + 1, row.sessionLabel, source, row.confidence !== null && row.confidence < 0.7 ? 'partial' : 'valid', req.authUser!.id);
-          sessionId = Number(inserted.lastInsertRowid);
+          `
+              )
+              .run(
+                row.athleteId,
+                row.trainingDate,
+                Number(orderRow.maxOrder) + 1,
+                row.sessionLabel,
+                source,
+                row.confidence !== null && row.confidence < 0.7 ? 'partial' : 'valid',
+                req.authUser!.id
+              );
+            sessionId = Number(inserted.lastInsertRowid);
+          }
+          sessionMap.set(baseKey, sessionId);
         }
-        sessionMap.set(baseKey, sessionId);
-      }
-      sessionIds.add(sessionId);
-      const existingSet = db.prepare('SELECT id FROM strength_result_sets WHERE training_session_id = ? AND exercise_name = ? AND set_index = ?')
-        .get(sessionId, row.exerciseName, row.setIndex) as { id: number } | undefined;
-      if (existingSet && policy === 'skip') {
-        completeImportItem.run('skipped', JSON.stringify(['与现有力量训练组重复，按跳过策略处理。']), 'strength_result_set', existingSet.id, importItemId);
-        skipped += 1;
-        continue;
-      }
-      if (existingSet) {
-        db.prepare(`
+        sessionIds.add(sessionId);
+        const existingSet = db
+          .prepare(
+            'SELECT id FROM strength_result_sets WHERE training_session_id = ? AND exercise_name = ? AND set_index = ?'
+          )
+          .get(sessionId, row.exerciseName, row.setIndex) as { id: number } | undefined;
+        if (existingSet && policy === 'skip') {
+          completeImportItem.run(
+            'skipped',
+            JSON.stringify(['与现有力量训练组重复，按跳过策略处理。']),
+            'strength_result_set',
+            existingSet.id,
+            importItemId
+          );
+          skipped += 1;
+          continue;
+        }
+        if (existingSet) {
+          db.prepare(
+            `
           UPDATE strength_result_sets SET target_reps = ?, actual_reps = ?, actual_weight_kg = ?, planned_weight_kg = ?,
             training_category = ?, body_position = ?, training_environment = ?, duration_min = ?, distance_km = ?,
             intensity_percent = ?, intensity_zone = ?, rpe = ?, completed = ?,
             note = ?, source = ?, data_import_batch_id = ?, source_row = ?, original_text = ?, ai_confidence = ?,
             created_by = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
-        `).run(row.targetReps, row.actualReps, row.actualWeightKg, row.plannedWeightKg,
-          row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin, row.distanceKm,
-          row.intensityPercent, row.intensityZone, row.rpe, row.completed ? 1 : 0, row.note, source,
-          batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id, existingSet.id);
-        completeImportItem.run('valid', '[]', 'strength_result_set', existingSet.id, importItemId);
-        updated += 1;
-      } else {
-        const insertedSet = db.prepare(`
+        `
+          ).run(
+            row.targetReps,
+            row.actualReps,
+            row.actualWeightKg,
+            row.plannedWeightKg,
+            row.trainingCategory,
+            row.bodyPosition,
+            row.trainingEnvironment,
+            row.durationMin,
+            row.distanceKm,
+            row.intensityPercent,
+            row.intensityZone,
+            row.rpe,
+            row.completed ? 1 : 0,
+            row.note,
+            source,
+            batchId,
+            String(row.rowNumber),
+            row.originalText,
+            row.confidence,
+            req.authUser!.id,
+            existingSet.id
+          );
+          completeImportItem.run(
+            'valid',
+            '[]',
+            'strength_result_set',
+            existingSet.id,
+            importItemId
+          );
+          updated += 1;
+        } else {
+          const insertedSet = db
+            .prepare(
+              `
           INSERT INTO strength_result_sets
             (training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg,
              training_category, body_position, training_environment, duration_min, distance_km, intensity_percent,
              intensity_zone, rpe, completed, note, source, data_import_batch_id, source_row, original_text, ai_confidence, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(sessionId, row.exerciseName, row.setIndex, row.targetReps, row.actualReps, row.actualWeightKg,
-          row.plannedWeightKg, row.trainingCategory, row.bodyPosition, row.trainingEnvironment, row.durationMin,
-          row.distanceKm, row.intensityPercent, row.intensityZone, row.rpe, row.completed ? 1 : 0, row.note,
-          source, batchId, String(row.rowNumber), row.originalText, row.confidence, req.authUser!.id);
-        completeImportItem.run('valid', '[]', 'strength_result_set', Number(insertedSet.lastInsertRowid), importItemId);
-        imported += 1;
+        `
+            )
+            .run(
+              sessionId,
+              row.exerciseName,
+              row.setIndex,
+              row.targetReps,
+              row.actualReps,
+              row.actualWeightKg,
+              row.plannedWeightKg,
+              row.trainingCategory,
+              row.bodyPosition,
+              row.trainingEnvironment,
+              row.durationMin,
+              row.distanceKm,
+              row.intensityPercent,
+              row.intensityZone,
+              row.rpe,
+              row.completed ? 1 : 0,
+              row.note,
+              source,
+              batchId,
+              String(row.rowNumber),
+              row.originalText,
+              row.confidence,
+              req.authUser!.id
+            );
+          completeImportItem.run(
+            'valid',
+            '[]',
+            'strength_result_set',
+            Number(insertedSet.lastInsertRowid),
+            importItemId
+          );
+          imported += 1;
+        }
       }
-    }
 
-    for (const sessionId of sessionIds) {
-      const totals = db.prepare(`
+      for (const sessionId of sessionIds) {
+        const totals = db
+          .prepare(
+            `
         SELECT COALESCE(SUM(actual_reps * actual_weight_kg), 0) AS volume,
           AVG(CASE WHEN rpe IS NOT NULL THEN rpe END) AS averageRpe,
           COALESCE(SUM(duration_min), 0) AS durationMin,
@@ -3363,42 +4759,93 @@ app.post('/api/strength-training/import/commit', requireAuth, requireRole('SCC',
           MAX(CASE WHEN duration_min > 0 THEN 1 ELSE 0 END) AS durationReported,
           MAX(CASE WHEN distance_km > 0 THEN 1 ELSE 0 END) AS distanceReported
         FROM strength_result_sets WHERE training_session_id = ?
-      `).get(sessionId) as { volume: number; averageRpe: number | null; durationMin: number; distanceKm: number; durationReported: number; distanceReported: number };
-      const dominant = db.prepare(`
+      `
+          )
+          .get(sessionId) as {
+          volume: number;
+          averageRpe: number | null;
+          durationMin: number;
+          distanceKm: number;
+          durationReported: number;
+          distanceReported: number;
+        };
+        const dominant = db
+          .prepare(
+            `
         SELECT training_environment AS environment, intensity_zone AS zone
         FROM strength_result_sets WHERE training_session_id = ?
         GROUP BY training_environment, intensity_zone ORDER BY SUM(duration_min) DESC, COUNT(*) DESC LIMIT 1
-      `).get(sessionId) as { environment: string; zone: string } | undefined;
-      const duration = Math.round(Number(totals.durationMin || 0) * 10) / 10;
-      const averageRpe = totals.averageRpe === null ? null : Math.round(Number(totals.averageRpe) * 10) / 10;
-      db.prepare(`UPDATE training_sessions SET rpe = ?, smvl = ?, duration_min = ?, distance_km = ?, duration_reported = ?, distance_reported = ?, srpe = ?,
-        structure_type = ?, intensity_zone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .run(averageRpe, Math.round(Number(totals.volume || 0) * 10) / 10, duration,
-          Math.round(Number(totals.distanceKm || 0) * 10) / 10, Number(totals.durationReported), Number(totals.distanceReported), Math.round((averageRpe || 0) * duration * 10) / 10,
-          dominant?.environment || '陆上', isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN', sessionId);
-    }
-    db.prepare(`
+      `
+          )
+          .get(sessionId) as { environment: string; zone: string } | undefined;
+        const duration = Math.round(Number(totals.durationMin || 0) * 10) / 10;
+        const averageRpe =
+          totals.averageRpe === null ? null : Math.round(Number(totals.averageRpe) * 10) / 10;
+        db.prepare(
+          `UPDATE training_sessions SET rpe = ?, smvl = ?, duration_min = ?, distance_km = ?, duration_reported = ?, distance_reported = ?, srpe = ?,
+        structure_type = ?, intensity_zone = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+        ).run(
+          averageRpe,
+          Math.round(Number(totals.volume || 0) * 10) / 10,
+          duration,
+          Math.round(Number(totals.distanceKm || 0) * 10) / 10,
+          Number(totals.durationReported),
+          Number(totals.distanceReported),
+          Math.round((averageRpe || 0) * duration * 10) / 10,
+          dominant?.environment || '陆上',
+          isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN',
+          sessionId
+        );
+      }
+      db.prepare(
+        `
       UPDATE data_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(imported + updated, skipped, batchId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(req.authUser!.id, 'IMPORT_STRENGTH_RESULTS', 'data_import_batch', null, JSON.stringify({ batchId, imported, updated, skipped, sourceType: cached.sourceType }));
-    db.exec('COMMIT');
-    strengthImportCache.delete(token);
-    res.json({ message: `已保存${imported + updated}条体能训练结果。`, imported, updated, skipped, sessions: sessionIds.size });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
+    `
+      ).run(imported + updated, skipped, batchId);
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        req.authUser!.id,
+        'IMPORT_STRENGTH_RESULTS',
+        'data_import_batch',
+        null,
+        JSON.stringify({ batchId, imported, updated, skipped, sourceType: cached.sourceType })
+      );
+      db.exec('COMMIT');
+      strengthImportCache.delete(token);
+      res.json({
+        message: `已保存${imported + updated}条体能训练结果。`,
+        imported,
+        updated,
+        skipped,
+        sessions: sessionIds.size,
+      });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
   }
-});
+);
 
 function dataImportScope(user: AuthUser, project: string) {
   const permissions = accountPermissions(user.id);
-  const projectAllowed = permissions.projects.includes('*') || permissions.projects.includes(project);
-  const allTeams = (db.prepare('SELECT name FROM project_teams WHERE project = ? AND active = 1 ORDER BY name').all(project) as Array<{ name: string }>).map((row) => row.name);
-  const allowedTeams = new Set(allTeams.filter((team) => permissions.teams.some((item) =>
-    (item.project === '*' || item.project === project) && (item.team === '*' || item.team === team)
-  )));
+  const projectAllowed =
+    permissions.projects.includes('*') || permissions.projects.includes(project);
+  const allTeams = (
+    db
+      .prepare('SELECT name FROM project_teams WHERE project = ? AND active = 1 ORDER BY name')
+      .all(project) as Array<{ name: string }>
+  ).map((row) => row.name);
+  const allowedTeams = new Set(
+    allTeams.filter((team) =>
+      permissions.teams.some(
+        (item) =>
+          (item.project === '*' || item.project === project) &&
+          (item.team === '*' || item.team === team)
+      )
+    )
+  );
   const area = permissions.areas[0];
   return {
     allowed: projectAllowed && allowedTeams.size > 0,
@@ -3406,34 +4853,254 @@ function dataImportScope(user: AuthUser, project: string) {
     defaultArea: {
       region: area?.areaLevel === 'national' ? '未设置' : area?.province || '未设置',
       city: area && ['city', 'county'].includes(area.areaLevel) ? area.city || '未设置' : '未设置',
-      county: area?.areaLevel === 'county' ? area.county || '未设置' : '未设置'
-    }
+      county: area?.areaLevel === 'county' ? area.county || '未设置' : '未设置',
+    },
   };
 }
 
 const unifiedTemplateName = '竞迹统一数据导入模板.xlsx';
-const unifiedTemplatePath = () => [
-  resolve(process.cwd(), 'public', 'templates', unifiedTemplateName),
-  resolve(process.cwd(), 'dist', 'templates', unifiedTemplateName)
-].find(existsSync);
+const unifiedTemplatePath = () =>
+  [
+    resolve(process.cwd(), 'public', 'templates', unifiedTemplateName),
+    resolve(process.cwd(), 'dist', 'templates', unifiedTemplateName),
+  ].find(existsSync);
 
 const unifiedExportHeaders: Array<[string, string[]]> = [
-  ['运动员信息', ['姓名','运动项目','所属队伍','性别','出生日期','身份证号','省份','城市','区县','民族','手机号','血型','紧急联系人','紧急电话','学历','技术等级','位置号位','身体状态','最好成绩','籍贯','家庭住址','训练状态','开始运动日期','训练场地','备战赛事','备战阶段','集训时间','输送地','输送单位','输送教练','优势项','备注']],
-  ['竞技水平评估', ['姓名','评估日期','技术等级','最好成绩','竞技总分','竞技状态','专项耐力','力量爆发','技术效率','负荷适应','恢复能力','比赛能力','备注']],
-  ['身体测量', ['姓名','测量日期','身高cm','体重kg','体脂率%','骨骼肌kg','肌肉量kg','上肢肌肉kg','下肢肌肉kg','躯干肌肉kg','皮下脂肪mm','肱三头肌皮褶mm','腹部皮褶mm','大腿皮褶mm','小腿皮褶mm','内脏脂肪等级','基础代谢kcal','总水分kg','细胞外水比','相位角°','内脏脂肪面积cm²','左上肢瘦体重kg','右上肢瘦体重kg','躯干瘦体重kg','左下肢瘦体重kg','右下肢瘦体重kg','备注']],
-  ['恢复状态', ['姓名','日期','睡眠小时','睡眠质量','晨脉','体重kg','疲劳','肌肉酸痛','情绪','状态','备注']],
-  ['训练课次', ['姓名','日期','课次序号','开始时间','训练类型','训练内容','训练阶段','强度区间','时长分钟','距离千米','RPE','SRPE','SMVL','平均心率','最大心率','平均功率W','桨频SPM']],
-  ['力量训练组次', ['姓名','日期','课次名称','动作','组序','计划次数','实际次数','计划重量kg','实际重量kg','强度百分比','RPE','完成状态','类别','身体部位','备注']],
-  ['测试指标', ['姓名','测试日期','测试类型','指标代码','指标名称','数值','单位','侧别','协议','备注','测试时长分钟']],
-  ['FMS测试', ['姓名','测试日期','深蹲','跨栏步','直线弓步蹲','肩部灵活性','主动直腿上抬','躯干稳定俯卧撑','旋转稳定性','备注']],
-  ['冠军模型测试', ['姓名','测试日期','身高cm','臂展cm','体脂率%','骨骼肌kg','一般耐力评分','VO2Max','不对称指数%','CMJ峰值功率W','无氧功率W/kg','IMTP峰值力量N','核心力量评分','测试协议','备注']],
-  ['伤病记录', ['姓名','发生日期','伤病名称','部位','侧别','状态','疼痛评分','训练限制','康复计划','复查日期','备注']],
-  ['竞技状态', ['姓名','评估日期','总分','等级','专项耐力','力量爆发','技术效率','负荷适应','恢复能力','比赛能力','备注']]
+  [
+    '运动员信息',
+    [
+      '姓名',
+      '运动项目',
+      '所属队伍',
+      '性别',
+      '出生日期',
+      '身份证号',
+      '省份',
+      '城市',
+      '区县',
+      '民族',
+      '手机号',
+      '血型',
+      '紧急联系人',
+      '紧急电话',
+      '学历',
+      '技术等级',
+      '位置号位',
+      '身体状态',
+      '最好成绩',
+      '籍贯',
+      '家庭住址',
+      '训练状态',
+      '开始运动日期',
+      '训练场地',
+      '备战赛事',
+      '备战阶段',
+      '集训时间',
+      '输送地',
+      '输送单位',
+      '输送教练',
+      '优势项',
+      '备注',
+    ],
+  ],
+  [
+    '竞技水平评估',
+    [
+      '姓名',
+      '评估日期',
+      '技术等级',
+      '最好成绩',
+      '竞技总分',
+      '竞技状态',
+      '专项耐力',
+      '力量爆发',
+      '技术效率',
+      '负荷适应',
+      '恢复能力',
+      '比赛能力',
+      '备注',
+    ],
+  ],
+  [
+    '身体测量',
+    [
+      '姓名',
+      '测量日期',
+      '身高cm',
+      '体重kg',
+      '体脂率%',
+      '骨骼肌kg',
+      '肌肉量kg',
+      '上肢肌肉kg',
+      '下肢肌肉kg',
+      '躯干肌肉kg',
+      '皮下脂肪mm',
+      '肱三头肌皮褶mm',
+      '腹部皮褶mm',
+      '大腿皮褶mm',
+      '小腿皮褶mm',
+      '内脏脂肪等级',
+      '基础代谢kcal',
+      '总水分kg',
+      '细胞外水比',
+      '相位角°',
+      '内脏脂肪面积cm²',
+      '左上肢瘦体重kg',
+      '右上肢瘦体重kg',
+      '躯干瘦体重kg',
+      '左下肢瘦体重kg',
+      '右下肢瘦体重kg',
+      '备注',
+    ],
+  ],
+  [
+    '恢复状态',
+    [
+      '姓名',
+      '日期',
+      '睡眠小时',
+      '睡眠质量',
+      '晨脉',
+      '体重kg',
+      '疲劳',
+      '肌肉酸痛',
+      '情绪',
+      '状态',
+      '备注',
+    ],
+  ],
+  [
+    '训练课次',
+    [
+      '姓名',
+      '日期',
+      '课次序号',
+      '开始时间',
+      '训练类型',
+      '训练内容',
+      '训练阶段',
+      '强度区间',
+      '时长分钟',
+      '距离千米',
+      'RPE',
+      'SRPE',
+      'SMVL',
+      '平均心率',
+      '最大心率',
+      '平均功率W',
+      '桨频SPM',
+    ],
+  ],
+  [
+    '力量训练组次',
+    [
+      '姓名',
+      '日期',
+      '课次名称',
+      '动作',
+      '组序',
+      '计划次数',
+      '实际次数',
+      '计划重量kg',
+      '实际重量kg',
+      '强度百分比',
+      'RPE',
+      '完成状态',
+      '类别',
+      '身体部位',
+      '备注',
+    ],
+  ],
+  [
+    '测试指标',
+    [
+      '姓名',
+      '测试日期',
+      '测试类型',
+      '指标代码',
+      '指标名称',
+      '数值',
+      '单位',
+      '侧别',
+      '协议',
+      '备注',
+      '测试时长分钟',
+    ],
+  ],
+  [
+    'FMS测试',
+    [
+      '姓名',
+      '测试日期',
+      '深蹲',
+      '跨栏步',
+      '直线弓步蹲',
+      '肩部灵活性',
+      '主动直腿上抬',
+      '躯干稳定俯卧撑',
+      '旋转稳定性',
+      '备注',
+    ],
+  ],
+  [
+    '冠军模型测试',
+    [
+      '姓名',
+      '测试日期',
+      '身高cm',
+      '臂展cm',
+      '体脂率%',
+      '骨骼肌kg',
+      '一般耐力评分',
+      'VO2Max',
+      '不对称指数%',
+      'CMJ峰值功率W',
+      '无氧功率W/kg',
+      'IMTP峰值力量N',
+      '核心力量评分',
+      '测试协议',
+      '备注',
+    ],
+  ],
+  [
+    '伤病记录',
+    [
+      '姓名',
+      '发生日期',
+      '伤病名称',
+      '部位',
+      '侧别',
+      '状态',
+      '疼痛评分',
+      '训练限制',
+      '康复计划',
+      '复查日期',
+      '备注',
+    ],
+  ],
+  [
+    '竞技状态',
+    [
+      '姓名',
+      '评估日期',
+      '总分',
+      '等级',
+      '专项耐力',
+      '力量爆发',
+      '技术效率',
+      '负荷适应',
+      '恢复能力',
+      '比赛能力',
+      '备注',
+    ],
+  ],
 ];
 
 function writeUnifiedExportRows(sheet: ExcelJS.Worksheet | undefined, rows: unknown[][]) {
   if (!sheet) return;
-  rows.forEach((values, index) => { sheet.getRow(index + 4).values = values as ExcelJS.CellValue[]; });
+  rows.forEach((values, index) => {
+    sheet.getRow(index + 4).values = values as ExcelJS.CellValue[];
+  });
 }
 
 async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
@@ -3441,7 +5108,8 @@ async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
   workbook.creator = '竞迹训练监控系统';
   const instructions = workbook.addWorksheet('填写说明');
   instructions.getCell('A1').value = '竞迹训练监控系统｜统一数据导出';
-  instructions.getCell('A3').value = '本文件与“下载统一数据模板”使用相同的工作表和字段；保留第1—3行即可再次导入。具体合理区间见“数据字典”。';
+  instructions.getCell('A3').value =
+    '本文件与“下载统一数据模板”使用相同的工作表和字段；保留第1—3行即可再次导入。具体合理区间见“数据字典”。';
   instructions.getColumn(1).width = 110;
   for (const [name, headers] of unifiedExportHeaders) {
     const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', ySplit: 3 }] });
@@ -3450,18 +5118,36 @@ async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
     sheet.getCell('A1').font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
     sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF246BFD' } };
     sheet.getCell('A2').value = '由竞迹训练监控系统导出；保留表头后可作为统一数据导入文件使用。';
-    const header = sheet.getRow(3); header.values = headers;
+    const header = sheet.getRow(3);
+    header.values = headers;
     header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172033' } };
     header.alignment = { horizontal: 'center', vertical: 'middle' };
-    headers.forEach((label, index) => { sheet.getColumn(index + 1).width = /备注|内容|地址|计划/.test(label) ? 24 : /姓名|日期|项目|队伍|类型|状态/.test(label) ? 16 : 13; });
+    headers.forEach((label, index) => {
+      sheet.getColumn(index + 1).width = /备注|内容|地址|计划/.test(label)
+        ? 24
+        : /姓名|日期|项目|队伍|类型|状态/.test(label)
+          ? 16
+          : 13;
+    });
   }
   const dictionary = workbook.addWorksheet('数据字典');
-  dictionary.addRow(['指标代码','指标名称','单位','业务域','最小值','最大值','说明']);
-  [['height_cm','身高','cm','身体形态',100,230],['weight_kg','体重','kg','身体形态',30,200],['squat_kg','深蹲','kg','力量',0,450],['deadlift_kg','硬拉','kg','力量',0,500],['bench_press_kg','卧推','kg','力量',0,350],['vertical_jump_cm','纵跳','cm','爆发力',0,120],['fms_deep_squat','FMS深蹲','分','FMS',0,3],['vo2max_ml_kg_min','最大摄氧量','ml/kg/min','冠军模型',20,90]].forEach((row) => dictionary.addRow([...row, '合理区间，超出后需人工确认']));
+  dictionary.addRow(['指标代码', '指标名称', '单位', '业务域', '最小值', '最大值', '说明']);
+  [
+    ['height_cm', '身高', 'cm', '身体形态', 100, 230],
+    ['weight_kg', '体重', 'kg', '身体形态', 30, 200],
+    ['squat_kg', '深蹲', 'kg', '力量', 0, 450],
+    ['deadlift_kg', '硬拉', 'kg', '力量', 0, 500],
+    ['bench_press_kg', '卧推', 'kg', '力量', 0, 350],
+    ['vertical_jump_cm', '纵跳', 'cm', '爆发力', 0, 120],
+    ['fms_deep_squat', 'FMS深蹲', '分', 'FMS', 0, 3],
+    ['vo2max_ml_kg_min', '最大摄氧量', 'ml/kg/min', '冠军模型', 20, 90],
+  ].forEach((row) => dictionary.addRow([...row, '合理区间，超出后需人工确认']));
   if (!athleteIds.length) return workbook;
   const placeholders = athleteIds.map(() => '?').join(',');
-  const profileRows = db.prepare(`
+  const profileRows = db
+    .prepare(
+      `
     SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, a.birth_date, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       ap.identity_number, ap.ethnicity, ap.phone, ap.blood_type, ap.emergency_contact, ap.emergency_phone,
       ap.education, ap.technical_level, ap.position, ap.health_status, ap.best_result, ap.native_place,
@@ -3470,195 +5156,549 @@ async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
     FROM athletes a LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
     LEFT JOIN project_teams pt ON pt.id = a.team_id LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     WHERE a.id IN (${placeholders}) AND a.project = ? AND a.active = 1 ORDER BY pt.name, a.name
-  `).all(...athleteIds, project) as Array<Record<string, unknown>>;
+  `
+    )
+    .all(...athleteIds, project) as Array<Record<string, unknown>>;
   const profileIds = profileRows.map((row) => Number(row.id));
   if (!profileIds.length) return workbook;
   const ids = profileIds.map(() => '?').join(',');
   const nameById = new Map(profileRows.map((row) => [Number(row.id), String(row.name)]));
-  writeUnifiedExportRows(workbook.getWorksheet('运动员信息'), profileRows.map((row) => [
-    row.name, row.project, row.team, row.gender, row.birth_date, row.identity_number, row.region, row.city, row.county,
-    row.ethnicity, row.phone, row.blood_type, row.emergency_contact, row.emergency_phone, row.education, row.technical_level,
-    row.position, row.health_status, row.best_result, row.native_place, row.home_address, row.athlete_status, row.start_sport_date,
-    row.training_venue, row.current_event, row.training_phase, row.camp_period, row.origin_place, row.origin_unit, row.origin_coach,
-    row.specialties, row.notes
-  ]));
-  const bodyRows = db.prepare(`SELECT * FROM athlete_body_measurements WHERE athlete_id IN (${ids}) ORDER BY measurement_date, athlete_id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('身体测量'), bodyRows.map((row) => [nameById.get(Number(row.athlete_id)), row.measurement_date, row.height_cm, row.weight_kg, row.body_fat_pct, row.skeletal_muscle_kg, row.muscle_mass_kg, row.upper_limb_muscle_kg, row.lower_limb_muscle_kg, row.trunk_muscle_kg, row.subcutaneous_fat_mm, row.triceps_skinfold_mm, row.abdominal_skinfold_mm, row.thigh_skinfold_mm, row.calf_skinfold_mm, row.visceral_fat_level, row.basal_metabolism_kcal, row.total_body_water_kg, row.ecw_tbw_ratio, row.phase_angle_deg, row.visceral_fat_area_cm2, row.left_arm_lean_kg, row.right_arm_lean_kg, row.trunk_lean_kg, row.left_leg_lean_kg, row.right_leg_lean_kg, row.note]));
-  const wellnessRows = db.prepare(`SELECT * FROM daily_wellness WHERE athlete_id IN (${ids}) ORDER BY wellness_date, athlete_id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('恢复状态'), wellnessRows.map((row) => [nameById.get(Number(row.athlete_id)), row.wellness_date, row.sleep_hours, row.sleep_quality, row.morning_pulse, row.weight_kg, row.fatigue_index, row.soreness_index, row.mood_index, row.status, '']));
-  const sessionRows = db.prepare(`SELECT * FROM training_sessions WHERE athlete_id IN (${ids}) ORDER BY session_date, athlete_id, session_order`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('训练课次'), sessionRows.map((row) => [nameById.get(Number(row.athlete_id)), row.session_date, row.session_order, row.start_time, row.training_type, row.content, row.structure_type, row.intensity_zone, row.duration_min, row.distance_km, row.rpe, row.srpe, row.smvl, row.average_heart_rate, row.max_heart_rate, row.average_power_w, row.stroke_rate_spm]));
-  const setRows = db.prepare(`SELECT srs.*, ts.athlete_id, ts.session_date, ts.content FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id WHERE ts.athlete_id IN (${ids}) ORDER BY ts.session_date, ts.athlete_id, srs.id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('力量训练组次'), setRows.map((row) => [nameById.get(Number(row.athlete_id)), row.session_date, row.content, row.exercise_name, row.set_index, row.target_reps, row.actual_reps, null, row.actual_weight_kg, row.intensity_percent, row.rpe, Number(row.completed) ? '完成' : '未完成', row.training_category, row.body_position, row.note]));
-  const testRows = db.prepare(`SELECT ts.athlete_id, ts.test_date, ts.test_type, ts.duration_min, ts.protocol, tm.metric_code, tm.value_num, tm.unit, tm.side, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) ORDER BY ts.test_date, ts.athlete_id, tm.id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('测试指标'), testRows.map((row) => [nameById.get(Number(row.athlete_id)), row.test_date, row.test_type, row.metric_code, row.label || row.metric_code, row.value_num, row.unit, row.side, row.protocol, '', row.duration_min]));
-  const sideLabel: Record<string, string> = { left: '左', right: '右', bilateral: '双侧', center: '中央', unspecified: '未指定' };
-  const statusLabel: Record<string, string> = { healthy: '健康', observation: '观察', restricted: '限训', rehab: '康复', suspended: '停训' };
-  const injuryRows = db.prepare(`SELECT * FROM injury_records WHERE athlete_id IN (${ids}) ORDER BY onset_date, athlete_id, id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('伤病记录'), injuryRows.map((row) => [nameById.get(Number(row.athlete_id)), row.onset_date, row.injury_name, row.body_part, sideLabel[String(row.side)] || row.side, statusLabel[String(row.status)] || row.status, row.pain_score, row.restrictions, row.rehab_plan, row.review_date, row.note]));
-  const stateLabel: Record<string, string> = { peak: '巅峰', good: '良好', build: '建设', adjust: '调整' };
-  const stateRows = db.prepare(`SELECT * FROM competitive_state_assessments WHERE athlete_id IN (${ids}) ORDER BY assessment_date, athlete_id`).all(...profileIds) as Array<Record<string, unknown>>;
-  writeUnifiedExportRows(workbook.getWorksheet('竞技状态'), stateRows.map((row) => [nameById.get(Number(row.athlete_id)), row.assessment_date, row.overall_score, stateLabel[String(row.state_level)] || row.state_level, row.endurance_score, row.power_score, row.technique_score, row.load_adaptation_score, row.recovery_score, row.competition_score, row.note]));
+  writeUnifiedExportRows(
+    workbook.getWorksheet('运动员信息'),
+    profileRows.map((row) => [
+      row.name,
+      row.project,
+      row.team,
+      row.gender,
+      row.birth_date,
+      row.identity_number,
+      row.region,
+      row.city,
+      row.county,
+      row.ethnicity,
+      row.phone,
+      row.blood_type,
+      row.emergency_contact,
+      row.emergency_phone,
+      row.education,
+      row.technical_level,
+      row.position,
+      row.health_status,
+      row.best_result,
+      row.native_place,
+      row.home_address,
+      row.athlete_status,
+      row.start_sport_date,
+      row.training_venue,
+      row.current_event,
+      row.training_phase,
+      row.camp_period,
+      row.origin_place,
+      row.origin_unit,
+      row.origin_coach,
+      row.specialties,
+      row.notes,
+    ])
+  );
+  const bodyRows = db
+    .prepare(
+      `SELECT * FROM athlete_body_measurements WHERE athlete_id IN (${ids}) ORDER BY measurement_date, athlete_id`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('身体测量'),
+    bodyRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.measurement_date,
+      row.height_cm,
+      row.weight_kg,
+      row.body_fat_pct,
+      row.skeletal_muscle_kg,
+      row.muscle_mass_kg,
+      row.upper_limb_muscle_kg,
+      row.lower_limb_muscle_kg,
+      row.trunk_muscle_kg,
+      row.subcutaneous_fat_mm,
+      row.triceps_skinfold_mm,
+      row.abdominal_skinfold_mm,
+      row.thigh_skinfold_mm,
+      row.calf_skinfold_mm,
+      row.visceral_fat_level,
+      row.basal_metabolism_kcal,
+      row.total_body_water_kg,
+      row.ecw_tbw_ratio,
+      row.phase_angle_deg,
+      row.visceral_fat_area_cm2,
+      row.left_arm_lean_kg,
+      row.right_arm_lean_kg,
+      row.trunk_lean_kg,
+      row.left_leg_lean_kg,
+      row.right_leg_lean_kg,
+      row.note,
+    ])
+  );
+  const wellnessRows = db
+    .prepare(
+      `SELECT * FROM daily_wellness WHERE athlete_id IN (${ids}) ORDER BY wellness_date, athlete_id`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('恢复状态'),
+    wellnessRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.wellness_date,
+      row.sleep_hours,
+      row.sleep_quality,
+      row.morning_pulse,
+      row.weight_kg,
+      row.fatigue_index,
+      row.soreness_index,
+      row.mood_index,
+      row.status,
+      '',
+    ])
+  );
+  const sessionRows = db
+    .prepare(
+      `SELECT * FROM training_sessions WHERE athlete_id IN (${ids}) ORDER BY session_date, athlete_id, session_order`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('训练课次'),
+    sessionRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.session_date,
+      row.session_order,
+      row.start_time,
+      row.training_type,
+      row.content,
+      row.structure_type,
+      row.intensity_zone,
+      row.duration_min,
+      row.distance_km,
+      row.rpe,
+      row.srpe,
+      row.smvl,
+      row.average_heart_rate,
+      row.max_heart_rate,
+      row.average_power_w,
+      row.stroke_rate_spm,
+    ])
+  );
+  const setRows = db
+    .prepare(
+      `SELECT srs.*, ts.athlete_id, ts.session_date, ts.content FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id WHERE ts.athlete_id IN (${ids}) ORDER BY ts.session_date, ts.athlete_id, srs.id`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('力量训练组次'),
+    setRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.session_date,
+      row.content,
+      row.exercise_name,
+      row.set_index,
+      row.target_reps,
+      row.actual_reps,
+      null,
+      row.actual_weight_kg,
+      row.intensity_percent,
+      row.rpe,
+      Number(row.completed) ? '完成' : '未完成',
+      row.training_category,
+      row.body_position,
+      row.note,
+    ])
+  );
+  const testRows = db
+    .prepare(
+      `SELECT ts.athlete_id, ts.test_date, ts.test_type, ts.duration_min, ts.protocol, tm.metric_code, tm.value_num, tm.unit, tm.side, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) ORDER BY ts.test_date, ts.athlete_id, tm.id`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('测试指标'),
+    testRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.test_date,
+      row.test_type,
+      row.metric_code,
+      row.label || row.metric_code,
+      row.value_num,
+      row.unit,
+      row.side,
+      row.protocol,
+      '',
+      row.duration_min,
+    ])
+  );
+  const sideLabel: Record<string, string> = {
+    left: '左',
+    right: '右',
+    bilateral: '双侧',
+    center: '中央',
+    unspecified: '未指定',
+  };
+  const statusLabel: Record<string, string> = {
+    healthy: '健康',
+    observation: '观察',
+    restricted: '限训',
+    rehab: '康复',
+    suspended: '停训',
+  };
+  const injuryRows = db
+    .prepare(
+      `SELECT * FROM injury_records WHERE athlete_id IN (${ids}) ORDER BY onset_date, athlete_id, id`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('伤病记录'),
+    injuryRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.onset_date,
+      row.injury_name,
+      row.body_part,
+      sideLabel[String(row.side)] || row.side,
+      statusLabel[String(row.status)] || row.status,
+      row.pain_score,
+      row.restrictions,
+      row.rehab_plan,
+      row.review_date,
+      row.note,
+    ])
+  );
+  const stateLabel: Record<string, string> = {
+    peak: '巅峰',
+    good: '良好',
+    build: '建设',
+    adjust: '调整',
+  };
+  const stateRows = db
+    .prepare(
+      `SELECT * FROM competitive_state_assessments WHERE athlete_id IN (${ids}) ORDER BY assessment_date, athlete_id`
+    )
+    .all(...profileIds) as Array<Record<string, unknown>>;
+  writeUnifiedExportRows(
+    workbook.getWorksheet('竞技状态'),
+    stateRows.map((row) => [
+      nameById.get(Number(row.athlete_id)),
+      row.assessment_date,
+      row.overall_score,
+      stateLabel[String(row.state_level)] || row.state_level,
+      row.endurance_score,
+      row.power_score,
+      row.technique_score,
+      row.load_adaptation_score,
+      row.recovery_score,
+      row.competition_score,
+      row.note,
+    ])
+  );
   const profileById = new Map(profileRows.map((row) => [Number(row.id), row]));
-  writeUnifiedExportRows(workbook.getWorksheet('竞技水平评估'), stateRows.map((row) => {
-    const profile = profileById.get(Number(row.athlete_id));
-    return [nameById.get(Number(row.athlete_id)), row.assessment_date, profile?.technical_level, profile?.best_result, row.overall_score, stateLabel[String(row.state_level)] || row.state_level, row.endurance_score, row.power_score, row.technique_score, row.load_adaptation_score, row.recovery_score, row.competition_score, row.note];
-  }));
+  writeUnifiedExportRows(
+    workbook.getWorksheet('竞技水平评估'),
+    stateRows.map((row) => {
+      const profile = profileById.get(Number(row.athlete_id));
+      return [
+        nameById.get(Number(row.athlete_id)),
+        row.assessment_date,
+        profile?.technical_level,
+        profile?.best_result,
+        row.overall_score,
+        stateLabel[String(row.state_level)] || row.state_level,
+        row.endurance_score,
+        row.power_score,
+        row.technique_score,
+        row.load_adaptation_score,
+        row.recovery_score,
+        row.competition_score,
+        row.note,
+      ];
+    })
+  );
   return workbook;
 }
 
-app.get('/api/data-import/template', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
-  // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
-  const templatePath = unifiedTemplatePath();
-  if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
-  res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.download(templatePath, unifiedTemplateName);
-});
+app.get(
+  '/api/data-import/template',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (_req, res) => {
+    // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
+    const templatePath = unifiedTemplatePath();
+    if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
+    res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.download(templatePath, unifiedTemplateName);
+  }
+);
 
-app.get('/api/data-import/export', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), async (req, res) => {
-  try {
+app.get(
+  '/api/data-import/export',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  async (req, res) => {
+    try {
+      const project = cleanString(req.query.project);
+      if (!projectSet.has(project))
+        return res.status(400).json({ message: '请选择有效的运动项目。' });
+      const scope = dataImportScope(req.authUser!, project);
+      if (!scope.allowed) return res.status(403).json({ message: '当前账号无权导出该项目数据。' });
+      const athleteIds = strengthImportCandidates(req.authUser!)
+        .filter((athlete) => athlete.project === project)
+        .map((athlete) => athlete.id);
+      const workbook = await buildUnifiedDataExport(project, athleteIds);
+      const buffer = await workbook.xlsx.writeBuffer();
+      const filename = `竞迹${project}统一数据导出_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+      );
+      res.send(Buffer.from(buffer));
+    } catch (error) {
+      res
+        .status(500)
+        .json({ message: error instanceof Error ? error.message : '统一数据导出失败。' });
+    }
+  }
+);
+
+app.post(
+  '/api/data-import/analyze',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  dataImportUpload.single('file'),
+  (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: '请选择要导入的 Excel 文件。' });
+      const project = cleanString(req.body?.project);
+      if (!projectSet.has(project))
+        return res.status(400).json({ message: '请选择有效的运动项目。' });
+      const scope = dataImportScope(req.authUser!, project);
+      if (!scope.allowed)
+        return res.status(403).json({ message: '当前账号在该项目下没有可导入的队伍权限。' });
+      const athletes = strengthImportCandidates(req.authUser!).filter(
+        (athlete) => athlete.project === project
+      );
+      const batch = analyzeDataImport({
+        buffer: req.file.buffer,
+        filename: req.file.originalname,
+        mimetype: req.file.mimetype,
+        project,
+        defaultDate: cleanString(req.body?.defaultDate),
+        defaultArea: scope.defaultArea,
+        userId: req.authUser!.id,
+        athletes,
+      });
+      res.json({ batch });
+    } catch (error) {
+      res
+        .status(400)
+        .json({ message: error instanceof Error ? error.message : '数据文件解析失败。' });
+    }
+  }
+);
+
+app.get(
+  '/api/data-import/batches',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
     const project = cleanString(req.query.project);
-    if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
-    const scope = dataImportScope(req.authUser!, project);
-    if (!scope.allowed) return res.status(403).json({ message: '当前账号无权导出该项目数据。' });
-    const athleteIds = strengthImportCandidates(req.authUser!).filter((athlete) => athlete.project === project).map((athlete) => athlete.id);
-    const workbook = await buildUnifiedDataExport(project, athleteIds);
-    const buffer = await workbook.xlsx.writeBuffer();
-    const filename = `竞迹${project}统一数据导出_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.send(Buffer.from(buffer));
-  } catch (error) {
-    res.status(500).json({ message: error instanceof Error ? error.message : '统一数据导出失败。' });
+    if (!projectSet.has(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
+    if (!dataImportScope(req.authUser!, project).allowed)
+      return res.status(403).json({ message: '当前账号无权查看该项目的导入记录。' });
+    res.json({ batches: listDataImportBatches(project, req.authUser!.id) });
   }
-});
+);
 
-app.post('/api/data-import/analyze', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), dataImportUpload.single('file'), (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ message: '请选择要导入的 Excel 文件。' });
-    const project = cleanString(req.body?.project);
-    if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
-    const scope = dataImportScope(req.authUser!, project);
-    if (!scope.allowed) return res.status(403).json({ message: '当前账号在该项目下没有可导入的队伍权限。' });
-    const athletes = strengthImportCandidates(req.authUser!).filter((athlete) => athlete.project === project);
-    const batch = analyzeDataImport({
-      buffer: req.file.buffer,
-      filename: req.file.originalname,
-      mimetype: req.file.mimetype,
-      project,
-      defaultDate: cleanString(req.body?.defaultDate),
-      defaultArea: scope.defaultArea,
-      userId: req.authUser!.id,
-      athletes
-    });
-    res.json({ batch });
-  } catch (error) {
-    res.status(400).json({ message: error instanceof Error ? error.message : '数据文件解析失败。' });
+app.get(
+  '/api/data-import/batches/:id',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    try {
+      res.json({ batch: getDataImportBatch(cleanString(req.params.id), req.authUser!.id) });
+    } catch (error) {
+      res
+        .status(404)
+        .json({ message: error instanceof Error ? error.message : '导入批次不存在。' });
+    }
   }
-});
+);
 
-app.get('/api/data-import/batches', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
-  if (!dataImportScope(req.authUser!, project).allowed) return res.status(403).json({ message: '当前账号无权查看该项目的导入记录。' });
-  res.json({ batches: listDataImportBatches(project, req.authUser!.id) });
-});
-
-app.get('/api/data-import/batches/:id', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  try {
-    res.json({ batch: getDataImportBatch(cleanString(req.params.id), req.authUser!.id) });
-  } catch (error) {
-    res.status(404).json({ message: error instanceof Error ? error.message : '导入批次不存在。' });
+app.put(
+  '/api/data-import/batches/:id/items',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    try {
+      const corrections = Array.isArray(req.body?.corrections)
+        ? req.body.corrections.slice(0, 5000)
+        : [];
+      const batch = updateDataImportItems({
+        batchId: cleanString(req.params.id),
+        userId: req.authUser!.id,
+        athletes: strengthImportCandidates(req.authUser!),
+        corrections,
+      });
+      res.json({ batch });
+    } catch (error) {
+      res
+        .status(400)
+        .json({ message: error instanceof Error ? error.message : '导入数据校验失败。' });
+    }
   }
-});
+);
 
-app.put('/api/data-import/batches/:id/items', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  try {
-    const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections.slice(0, 5000) : [];
-    const batch = updateDataImportItems({
-      batchId: cleanString(req.params.id),
-      userId: req.authUser!.id,
-      athletes: strengthImportCandidates(req.authUser!),
-      corrections
-    });
-    res.json({ batch });
-  } catch (error) {
-    res.status(400).json({ message: error instanceof Error ? error.message : '导入数据校验失败。' });
+app.put(
+  '/api/data-import/batches/:id/athletes',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    try {
+      const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
+      const scope = dataImportScope(req.authUser!, batch.project);
+      if (!scope.allowed)
+        return res.status(403).json({ message: '当前账号无权在该项目创建运动员。' });
+      const corrections = Array.isArray(req.body?.corrections)
+        ? req.body.corrections.slice(0, 500)
+        : [];
+      const updated = updateDataImportAthleteCandidates({
+        batchId: batch.id,
+        userId: req.authUser!.id,
+        allowedTeams: scope.allowedTeams,
+        corrections,
+      });
+      res.json({ batch: updated });
+    } catch (error) {
+      res
+        .status(400)
+        .json({ message: error instanceof Error ? error.message : '新运动员资料保存失败。' });
+    }
   }
-});
+);
 
-app.put('/api/data-import/batches/:id/athletes', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  try {
-    const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
-    const scope = dataImportScope(req.authUser!, batch.project);
-    if (!scope.allowed) return res.status(403).json({ message: '当前账号无权在该项目创建运动员。' });
-    const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections.slice(0, 500) : [];
-    const updated = updateDataImportAthleteCandidates({
-      batchId: batch.id,
-      userId: req.authUser!.id,
-      allowedTeams: scope.allowedTeams,
-      corrections
-    });
-    res.json({ batch: updated });
-  } catch (error) {
-    res.status(400).json({ message: error instanceof Error ? error.message : '新运动员资料保存失败。' });
+app.post(
+  '/api/data-import/batches/:id/commit',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    try {
+      const conflictPolicy = cleanString(req.body?.conflictPolicy) === 'update' ? 'update' : 'skip';
+      const result = commitDataImport({
+        batchId: cleanString(req.params.id),
+        userId: req.authUser!.id,
+        creatorRole: req.authUser!.role,
+        athletes: strengthImportCandidates(req.authUser!),
+        allowedTeams: dataImportScope(
+          req.authUser!,
+          getDataImportBatch(cleanString(req.params.id), req.authUser!.id).project
+        ).allowedTeams,
+        conflictPolicy,
+      });
+      res.json({
+        message: `已创建${result.createdAthletes || 0}名无账号运动员，写入${result.imported}条数据，跳过${result.skipped}条。`,
+        ...result,
+      });
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : '导入提交失败。' });
+    }
   }
-});
+);
 
-app.post('/api/data-import/batches/:id/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  try {
-    const conflictPolicy = cleanString(req.body?.conflictPolicy) === 'update' ? 'update' : 'skip';
-    const result = commitDataImport({
-      batchId: cleanString(req.params.id),
-      userId: req.authUser!.id,
-      creatorRole: req.authUser!.role,
-      athletes: strengthImportCandidates(req.authUser!),
-      allowedTeams: dataImportScope(req.authUser!, getDataImportBatch(cleanString(req.params.id), req.authUser!.id).project).allowedTeams,
-      conflictPolicy
-    });
-    res.json({ message: `已创建${result.createdAthletes || 0}名无账号运动员，写入${result.imported}条数据，跳过${result.skipped}条。`, ...result });
-  } catch (error) {
-    res.status(400).json({ message: error instanceof Error ? error.message : '导入提交失败。' });
+app.get(
+  '/api/data-management/metrics',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (_req, res) => {
+    const metrics = db
+      .prepare(
+        `SELECT code, label, domain, unit, direction, frequency, active FROM metric_definitions ORDER BY active DESC, domain, label`
+      )
+      .all();
+    const aliases = db
+      .prepare(
+        `SELECT alias, normalized_alias AS normalizedAlias, metric_code AS metricCode, canonical_label AS canonicalLabel, unit, side FROM metric_aliases ORDER BY metric_code, alias`
+      )
+      .all();
+    res.json({ metrics, aliases });
   }
-});
-
-app.get('/api/data-management/metrics', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
-  const metrics = db.prepare(`SELECT code, label, domain, unit, direction, frequency, active FROM metric_definitions ORDER BY active DESC, domain, label`).all();
-  const aliases = db.prepare(`SELECT alias, normalized_alias AS normalizedAlias, metric_code AS metricCode, canonical_label AS canonicalLabel, unit, side FROM metric_aliases ORDER BY metric_code, alias`).all();
-  res.json({ metrics, aliases });
-});
+);
 
 app.put('/api/data-management/metrics/:code', requireAuth, requireRole('TD', 'DMD'), (req, res) => {
   const code = cleanString(req.params.code);
   const label = cleanString(req.body?.label);
   const unit = cleanString(req.body?.unit);
   const active = req.body?.active === false ? 0 : 1;
-  if (!/^[a-z][a-z0-9_]{1,80}$/.test(code) || !label || label.length > 80 || unit.length > 24) return res.status(400).json({ message: '指标编码、名称或单位不合法。' });
-  const result = db.prepare(`UPDATE metric_definitions SET label = ?, unit = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?`).run(label, unit, active, code);
-  if (!result.changes) return res.status(404).json({ message: '指标不存在；请先通过正式导入或迁移建立指标。' });
+  if (!/^[a-z][a-z0-9_]{1,80}$/.test(code) || !label || label.length > 80 || unit.length > 24)
+    return res.status(400).json({ message: '指标编码、名称或单位不合法。' });
+  const result = db
+    .prepare(
+      `UPDATE metric_definitions SET label = ?, unit = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?`
+    )
+    .run(label, unit, active, code);
+  if (!result.changes)
+    return res.status(404).json({ message: '指标不存在；请先通过正式导入或迁移建立指标。' });
   res.json({ message: '指标字典已更新。' });
 });
 
-app.put('/api/data-management/metric-aliases', requireAuth, requireRole('TD', 'DMD'), (req, res) => {
-  const alias = cleanString(req.body?.alias); const metricCode = cleanString(req.body?.metricCode);
-  const side = ['left', 'right', 'bilateral', 'center'].includes(cleanString(req.body?.side)) ? cleanString(req.body?.side) : 'center';
-  const metric = db.prepare(`SELECT label, unit FROM metric_definitions WHERE code = ? AND active = 1`).get(metricCode) as { label: string; unit: string } | undefined;
-  if (!alias || alias.length > 80 || !metric) return res.status(400).json({ message: '别名或指标编码无效。' });
-  db.prepare(`INSERT INTO metric_aliases (alias, normalized_alias, metric_code, canonical_label, unit, side) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(alias) DO UPDATE SET normalized_alias = excluded.normalized_alias, metric_code = excluded.metric_code, canonical_label = excluded.canonical_label, unit = excluded.unit, side = excluded.side, updated_at = CURRENT_TIMESTAMP`)
-    .run(alias, alias.normalize('NFKC').replace(/\s+/g, '').toLowerCase(), metricCode, metric.label, metric.unit, side);
-  res.json({ message: '指标别名已保存。' });
-});
+app.put(
+  '/api/data-management/metric-aliases',
+  requireAuth,
+  requireRole('TD', 'DMD'),
+  (req, res) => {
+    const alias = cleanString(req.body?.alias);
+    const metricCode = cleanString(req.body?.metricCode);
+    const side = ['left', 'right', 'bilateral', 'center'].includes(cleanString(req.body?.side))
+      ? cleanString(req.body?.side)
+      : 'center';
+    const metric = db
+      .prepare(`SELECT label, unit FROM metric_definitions WHERE code = ? AND active = 1`)
+      .get(metricCode) as { label: string; unit: string } | undefined;
+    if (!alias || alias.length > 80 || !metric)
+      return res.status(400).json({ message: '别名或指标编码无效。' });
+    db.prepare(
+      `INSERT INTO metric_aliases (alias, normalized_alias, metric_code, canonical_label, unit, side) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(alias) DO UPDATE SET normalized_alias = excluded.normalized_alias, metric_code = excluded.metric_code, canonical_label = excluded.canonical_label, unit = excluded.unit, side = excluded.side, updated_at = CURRENT_TIMESTAMP`
+    ).run(
+      alias,
+      alias.normalize('NFKC').replace(/\s+/g, '').toLowerCase(),
+      metricCode,
+      metric.label,
+      metric.unit,
+      side
+    );
+    res.json({ message: '指标别名已保存。' });
+  }
+);
 
-app.get('/api/data-management/standards', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (_req, res) => {
-  res.json({
-    athlete: ['athletes', 'athlete_profiles', 'athlete_origins', 'athlete_aliases'],
-    training: { types: ['专项训练', '体能训练', '恢复训练', '休息'], structures: ['水上训练', '陆上训练', '体能训练', '再生恢复'], zoneSystems: INTENSITY_ZONE_SYSTEMS.map((system) => system.label) },
-    testing: ['test_sessions', 'test_measurements', 'metric_definitions', 'metric_aliases'],
-    sources: ['manual', 'file_import', 'ai_import', 'legacy_migration'],
-    qualities: ['valid', 'partial', 'insufficient', 'outlier', 'estimated'],
-    retiredTables: ['training_records', 'athlete_strength_tests', 'strength_training_sets', 'strength_import_batches']
-  });
-});
+app.get(
+  '/api/data-management/standards',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (_req, res) => {
+    res.json({
+      athlete: ['athletes', 'athlete_profiles', 'athlete_origins', 'athlete_aliases'],
+      training: {
+        types: ['专项训练', '体能训练', '恢复训练', '休息'],
+        structures: ['水上训练', '陆上训练', '体能训练', '再生恢复'],
+        zoneSystems: INTENSITY_ZONE_SYSTEMS.map((system) => system.label),
+      },
+      testing: ['test_sessions', 'test_measurements', 'metric_definitions', 'metric_aliases'],
+      sources: ['manual', 'file_import', 'ai_import', 'legacy_migration'],
+      qualities: ['valid', 'partial', 'insufficient', 'outlier', 'estimated'],
+      retiredTables: [
+        'training_records',
+        'athlete_strength_tests',
+        'strength_training_sets',
+        'strength_import_batches',
+      ],
+    });
+  }
+);
 
 app.get('/api/overview/teams', requireAuth, (req, res) => {
   const user = req.authUser!;
@@ -3667,14 +5707,18 @@ app.get('/api/overview/teams', requireAuth, (req, res) => {
   const ids = accessibleAthleteIds(user);
   if (!ids.length) return res.json({ teams: [] });
   const placeholders = ids.map(() => '?').join(',');
-  const teams = db.prepare(`
+  const teams = db
+    .prepare(
+      `
     SELECT pt.id, pt.project, pt.name, COUNT(a.id) AS athleteCount
     FROM project_teams pt
     JOIN athletes a ON a.team_id = pt.id AND a.active = 1
     WHERE pt.active = 1 AND pt.project = ? AND a.id IN (${placeholders})
     GROUP BY pt.id, pt.project, pt.name
     ORDER BY pt.name
-  `).all(project, ...ids);
+  `
+    )
+    .all(project, ...ids);
   res.json({ teams });
 });
 
@@ -3682,18 +5726,21 @@ app.get('/api/overview', requireAuth, (req, res) => {
   const user = req.authUser!;
   const range = normalizeOverviewRange({
     from: cleanString(req.query.from),
-    to: cleanString(req.query.to)
+    to: cleanString(req.query.to),
   });
   const { from, to } = range;
   const requestedId = Number(req.query.athleteId || 0);
   const requestedTeamId = Number(req.query.teamId || 0);
   const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!projectSet.has(project))
+    return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
     return res.status(400).json({ message: '请选择有效的分析日期范围。' });
   }
   if (user.role !== 'ATL' && requestedId) {
-    return res.status(400).json({ message: '管理账号的训练总览按权限范围进行团队聚合，请前往个人档案查看单人数据。' });
+    return res
+      .status(400)
+      .json({ message: '管理账号的训练总览按权限范围进行团队聚合，请前往个人档案查看单人数据。' });
   }
   if (user.role === 'ATL' && requestedId && requestedId !== user.athleteId) {
     return res.status(403).json({ message: '运动员账号只能查看本人的训练总览。' });
@@ -3707,28 +5754,55 @@ app.get('/api/overview', requireAuth, (req, res) => {
   let ids = accessibleAthleteIds(user);
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
-    ids = (db.prepare(`SELECT id FROM athletes WHERE id IN (${placeholders}) AND project = ? AND active = 1`)
-      .all(...ids, project) as Array<{ id: number }>).map((row) => row.id);
+    ids = (
+      db
+        .prepare(
+          `SELECT id FROM athletes WHERE id IN (${placeholders}) AND project = ? AND active = 1`
+        )
+        .all(...ids, project) as Array<{ id: number }>
+    ).map((row) => row.id);
   }
   if (requestedTeamId) {
-    if (!ids.length) return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
-    const selectedTeam = db.prepare(`
+    if (!ids.length)
+      return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+    const selectedTeam = db
+      .prepare(
+        `
       SELECT pt.id FROM project_teams pt
       JOIN athletes a ON a.team_id = pt.id AND a.active = 1
       WHERE pt.id = ? AND pt.project = ? AND pt.active = 1 AND a.id IN (${ids.map(() => '?').join(',')})
       LIMIT 1
-    `).get(requestedTeamId, project, ...ids) as { id: number } | undefined;
-    if (!selectedTeam) return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
-    ids = (db.prepare(`SELECT id FROM athletes WHERE id IN (${ids.map(() => '?').join(',')}) AND team_id = ?`)
-      .all(...ids, requestedTeamId) as Array<{ id: number }>).map((row) => row.id);
+    `
+      )
+      .get(requestedTeamId, project, ...ids) as { id: number } | undefined;
+    if (!selectedTeam)
+      return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+    ids = (
+      db
+        .prepare(
+          `SELECT id FROM athletes WHERE id IN (${ids.map(() => '?').join(',')}) AND team_id = ?`
+        )
+        .all(...ids, requestedTeamId) as Array<{ id: number }>
+    ).map((row) => row.id);
   }
   if (user.role === 'ATL') {
     if (!user.athleteId) return res.status(403).json({ message: '当前运动员账号未绑定人员档案。' });
-    const selected = db.prepare('SELECT project FROM athletes WHERE id = ?').get(user.athleteId) as { project: string } | undefined;
-    if (!selected || selected.project !== project) return res.status(400).json({ message: '本人档案不属于当前项目。' });
+    const selected = db.prepare('SELECT project FROM athletes WHERE id = ?').get(user.athleteId) as
+      { project: string } | undefined;
+    if (!selected || selected.project !== project)
+      return res.status(400).json({ message: '本人档案不属于当前项目。' });
     ids = [user.athleteId];
   }
-  res.json({ overview: buildOverviewPayload({ athleteIds: ids, from, to, project, individual: user.role === 'ATL', period: range.period }) });
+  res.json({
+    overview: buildOverviewPayload({
+      athleteIds: ids,
+      from,
+      to,
+      project,
+      individual: user.role === 'ATL',
+      period: range.period,
+    }),
+  });
 });
 
 app.get('/api/records', requireAuth, (req, res) => {
@@ -3737,21 +5811,31 @@ app.get('/api/records', requireAuth, (req, res) => {
   const to = cleanString(req.query.to) || '2026-12-31';
   const requestedId = Number(req.query.athleteId || 0);
   const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!projectSet.has(project))
+    return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
   let ids = accessibleAthleteIds(user);
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
-    ids = (db.prepare(`SELECT id FROM athletes WHERE id IN (${placeholders}) AND project = ?`).all(...ids, project) as Array<{ id: number }>).map((row) => row.id);
+    ids = (
+      db
+        .prepare(`SELECT id FROM athletes WHERE id IN (${placeholders}) AND project = ?`)
+        .all(...ids, project) as Array<{ id: number }>
+    ).map((row) => row.id);
   }
   if (requestedId) {
-    if (!hasAthleteAccess(user, requestedId)) return res.status(403).json({ message: '无权查看该运动员。' });
-    const selected = db.prepare('SELECT project FROM athletes WHERE id = ?').get(requestedId) as { project: string } | undefined;
-    if (!selected || selected.project !== project) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+    if (!hasAthleteAccess(user, requestedId))
+      return res.status(403).json({ message: '无权查看该运动员。' });
+    const selected = db.prepare('SELECT project FROM athletes WHERE id = ?').get(requestedId) as
+      { project: string } | undefined;
+    if (!selected || selected.project !== project)
+      return res.status(400).json({ message: '所选运动员不属于当前项目。' });
     ids = [requestedId];
   }
   if (!ids.length) return res.json({ records: [] });
   const placeholders = ids.map(() => '?').join(',');
-  const records = db.prepare(`
+  const records = db
+    .prepare(
+      `
     SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName,
       a.project, COALESCE(pt.name, '') AS team, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
@@ -3772,22 +5856,36 @@ app.get('/api/records', requireAuth, (req, res) => {
     LEFT JOIN users u ON u.id = ts.created_by
     WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
     ORDER BY ts.session_date, ts.session_order, a.name
-  `).all(...ids, from, to) as Array<Record<string, unknown> & { trainingType: string; structureType: string; intensityZone: string; durationMin: number; distanceKm: number }>;
+  `
+    )
+    .all(...ids, from, to) as Array<
+    Record<string, unknown> & {
+      trainingType: string;
+      structureType: string;
+      intensityZone: string;
+      durationMin: number;
+      distanceKm: number;
+    }
+  >;
   res.json({
     records: records.map((record) => ({
       ...record,
       durationReported: Boolean(record.durationReported),
       distanceReported: Boolean(record.distanceReported),
-      trainingBreakdown: trainingSessionBreakdown(record)
-    }))
+      trainingBreakdown: trainingSessionBreakdown(record),
+    })),
   });
 });
 
-app.post('/api/special-training/sessions', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const user = req.authUser!;
-  const rows = Array.isArray(req.body?.sessions) ? req.body.sessions.slice(0, 1000) : [];
-  if (!rows.length) return res.status(400).json({ message: '请提供需要保存的训练数据。' });
-  const insert = db.prepare(`
+app.post(
+  '/api/special-training/sessions',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const user = req.authUser!;
+    const rows = Array.isArray(req.body?.sessions) ? req.body.sessions.slice(0, 1000) : [];
+    if (!rows.length) return res.status(400).json({ message: '请提供需要保存的训练数据。' });
+    const insert = db.prepare(`
     INSERT INTO training_sessions
       (athlete_id, session_date, session_order, start_time, training_type, structure_type,
        intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl,
@@ -3795,55 +5893,100 @@ app.post('/api/special-training/sessions', requireAuth, requireRole('SCC', 'PRJ'
        source, quality, is_demo, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'valid', 0, ?)
   `);
-  const nextOrder = db.prepare('SELECT COALESCE(MAX(session_order), 0) + 1 AS value FROM training_sessions WHERE athlete_id = ? AND session_date = ?');
-  let imported = 0;
-  try {
-    db.exec('BEGIN');
-    for (const row of rows) {
-      const athleteId = Number(row?.athleteId || 0);
-      const athlete = db.prepare('SELECT id, project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as { id: number; project: string } | undefined;
-      if (!athlete || !hasAthleteAccess(user, athleteId)) throw new Error('存在无权录入或不存在的运动员。');
-      const date = cleanString(row?.date);
-      if (!isValidIsoDate(date)) throw new Error('训练日期无效，请使用正确的年月日。');
-      if (cleanString(row?.project) && cleanString(row.project) !== athlete.project) throw new Error('训练项目与运动员档案不一致。');
-      const duration = numberOrNull(row?.duration);
-      const distance = numberOrNull(row?.distance);
-      const rpe = numberOrNull(row?.rpe);
-      const heartRate = numberOrNull(row?.heartRate);
-      const maxHeartRate = numberOrNull(row?.maxHeartRate);
-      const power = numberOrNull(row?.power);
-      const strokeRate = numberOrNull(row?.strokeRate);
-      if (duration === null || duration <= 0 || duration > 1440) throw new Error('训练时长须在 1—1440 分钟之间。');
-      if (distance === null || distance < 0 || distance > 500) throw new Error('训练距离须在 0—500 公里之间。');
-      if (rpe === null || rpe < 1 || rpe > 10) throw new Error('RPE 须在 1—10 之间。');
-      if (heartRate === null || heartRate < 30 || heartRate > 240) throw new Error('平均心率须在 30—240 bpm 之间。');
-      if (maxHeartRate === null || maxHeartRate < 30 || maxHeartRate > 240 || maxHeartRate < heartRate) throw new Error('最大心率须在 30—240 bpm 之间，且不能低于平均心率。');
-      if (power === null || power < 0 || power > 3000) throw new Error('平均功率须在 0—3000 W 之间。');
-      if (strokeRate === null || strokeRate < 1 || strokeRate > 250) throw new Error('桨频或划频须在 1—250 次/分之间。');
-      const order = (nextOrder.get(athleteId, date) as { value: number }).value;
-      const trainingType = cleanString(row?.type) || '专项训练';
-      const content = cleanString(row?.content);
-      if (!content || content.length > 100) throw new Error('训练内容须填写且不能超过 100 个字符。');
-      const defaultStructure = trainingType === '专项力量' ? '最大力量' : trainingType === '恢复训练' ? '再生恢复' : '专项训练';
-      insert.run(athleteId, date, order, cleanString(row?.startTime), trainingType,
-        cleanString(row?.structureType) || defaultStructure, cleanString(row?.intensityZone) || 'U2',
-        content, duration, distance, rpe, Math.round(duration * rpe), heartRate,
-        maxHeartRate, power, strokeRate,
-        cleanString(row?.source) === 'import' ? 'table_import' : 'manual', user.id);
-      imported += 1;
+    const nextOrder = db.prepare(
+      'SELECT COALESCE(MAX(session_order), 0) + 1 AS value FROM training_sessions WHERE athlete_id = ? AND session_date = ?'
+    );
+    let imported = 0;
+    try {
+      db.exec('BEGIN');
+      for (const row of rows) {
+        const athleteId = Number(row?.athleteId || 0);
+        const athlete = db
+          .prepare('SELECT id, project FROM athletes WHERE id = ? AND active = 1')
+          .get(athleteId) as { id: number; project: string } | undefined;
+        if (!athlete || !hasAthleteAccess(user, athleteId))
+          throw new Error('存在无权录入或不存在的运动员。');
+        const date = cleanString(row?.date);
+        if (!isValidIsoDate(date)) throw new Error('训练日期无效，请使用正确的年月日。');
+        if (cleanString(row?.project) && cleanString(row.project) !== athlete.project)
+          throw new Error('训练项目与运动员档案不一致。');
+        const duration = numberOrNull(row?.duration);
+        const distance = numberOrNull(row?.distance);
+        const rpe = numberOrNull(row?.rpe);
+        const heartRate = numberOrNull(row?.heartRate);
+        const maxHeartRate = numberOrNull(row?.maxHeartRate);
+        const power = numberOrNull(row?.power);
+        const strokeRate = numberOrNull(row?.strokeRate);
+        if (duration === null || duration <= 0 || duration > 1440)
+          throw new Error('训练时长须在 1—1440 分钟之间。');
+        if (distance === null || distance < 0 || distance > 500)
+          throw new Error('训练距离须在 0—500 公里之间。');
+        if (rpe === null || rpe < 1 || rpe > 10) throw new Error('RPE 须在 1—10 之间。');
+        if (heartRate === null || heartRate < 30 || heartRate > 240)
+          throw new Error('平均心率须在 30—240 bpm 之间。');
+        if (
+          maxHeartRate === null ||
+          maxHeartRate < 30 ||
+          maxHeartRate > 240 ||
+          maxHeartRate < heartRate
+        )
+          throw new Error('最大心率须在 30—240 bpm 之间，且不能低于平均心率。');
+        if (power === null || power < 0 || power > 3000)
+          throw new Error('平均功率须在 0—3000 W 之间。');
+        if (strokeRate === null || strokeRate < 1 || strokeRate > 250)
+          throw new Error('桨频或划频须在 1—250 次/分之间。');
+        const order = (nextOrder.get(athleteId, date) as { value: number }).value;
+        const trainingType = cleanString(row?.type) || '专项训练';
+        const content = cleanString(row?.content);
+        if (!content || content.length > 100)
+          throw new Error('训练内容须填写且不能超过 100 个字符。');
+        const defaultStructure =
+          trainingType === '专项力量'
+            ? '最大力量'
+            : trainingType === '恢复训练'
+              ? '再生恢复'
+              : '专项训练';
+        insert.run(
+          athleteId,
+          date,
+          order,
+          cleanString(row?.startTime),
+          trainingType,
+          cleanString(row?.structureType) || defaultStructure,
+          cleanString(row?.intensityZone) || 'U2',
+          content,
+          duration,
+          distance,
+          rpe,
+          Math.round(duration * rpe),
+          heartRate,
+          maxHeartRate,
+          power,
+          strokeRate,
+          cleanString(row?.source) === 'import' ? 'table_import' : 'manual',
+          user.id
+        );
+        imported += 1;
+      }
+      db.exec('COMMIT');
+      res.status(201).json({ message: `已保存 ${imported} 条专项训练数据。`, imported });
+    } catch (error) {
+      try {
+        db.exec('ROLLBACK');
+      } catch {}
+      res
+        .status(400)
+        .json({ message: error instanceof Error ? error.message : '专项训练数据保存失败。' });
     }
-    db.exec('COMMIT');
-    res.status(201).json({ message: `已保存 ${imported} 条专项训练数据。`, imported });
-  } catch (error) {
-    try { db.exec('ROLLBACK'); } catch {}
-    res.status(400).json({ message: error instanceof Error ? error.message : '专项训练数据保存失败。' });
   }
-});
+);
 
 app.get('/api/analysis/model', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
-  if (!hasSpecialAnalysis(project)) return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
+  if (!projectSet.has(project))
+    return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!hasSpecialAnalysis(project))
+    return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
   res.json({ standard: analysisStandardForProject(project) });
 });
 
@@ -3852,15 +5995,20 @@ app.get('/api/special-champion-models', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   if (!projectSet.has(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
 
-  const projectAllowed = user.role === 'ATL'
-    ? (db.prepare('SELECT 1 FROM athletes WHERE id = ? AND project = ? AND active = 1').get(user.athleteId, project) !== undefined)
-    : (() => {
-      const permissions = accountPermissions(user.id);
-      return permissions.projects.includes('*') || permissions.projects.includes(project);
-    })();
+  const projectAllowed =
+    user.role === 'ATL'
+      ? db
+          .prepare('SELECT 1 FROM athletes WHERE id = ? AND project = ? AND active = 1')
+          .get(user.athleteId, project) !== undefined
+      : (() => {
+          const permissions = accountPermissions(user.id);
+          return permissions.projects.includes('*') || permissions.projects.includes(project);
+        })();
   if (!projectAllowed) return res.status(403).json({ message: '无权查看当前项目的冠军模型。' });
 
-  const events = db.prepare(`
+  const events = db
+    .prepare(
+      `
     SELECT 
       event_code AS eventCode, 
       event_name AS eventName,
@@ -3872,7 +6020,9 @@ app.get('/api/special-champion-models', requireAuth, (req, res) => {
     FROM special_champion_models
     WHERE project = ? AND active = 1
     ORDER BY sort_order, event_code
-  `).all(project);
+  `
+    )
+    .all(project);
   res.json({ project, events });
 });
 //冠军模型接口
@@ -3881,7 +6031,9 @@ app.get('/api/special-champion-models/ergometer', (req, res) => {
   const gender = String(req.query.gender || 'MALE');
   const testType = String(req.query.testType || '2000M');
 
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT
       body_weight_kg AS bodyWeightKg,
       level_code AS levelCode,
@@ -3893,13 +6045,15 @@ app.get('/api/special-champion-models/ergometer', (req, res) => {
       AND test_type = ?
       AND active = 1
     ORDER BY body_weight_kg, sort_order
-  `).all(project, gender, testType);
+  `
+    )
+    .all(project, gender, testType);
 
   res.json({
     project,
     gender,
     testType,
-    rows
+    rows,
   });
 });
 
@@ -3909,17 +6063,24 @@ app.get('/api/analysis/summary', requireAuth, (req, res) => {
   const to = cleanString(req.query.to);
   const requestedId = Number(req.query.athleteId || user.athleteId || 0);
   const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
-  if (!hasSpecialAnalysis(project)) return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
+  if (!projectSet.has(project))
+    return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!hasSpecialAnalysis(project))
+    return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
     return res.status(400).json({ message: '请选择有效的分析日期范围。' });
   }
   if (!requestedId) return res.status(400).json({ message: '请选择一名运动员后再进行个人分析。' });
-  if (!hasAthleteAccess(user, requestedId)) return res.status(403).json({ message: '无权分析该运动员。' });
-  const athlete = db.prepare('SELECT project FROM athletes WHERE id = ?').get(requestedId) as { project: string } | undefined;
-  if (!athlete || athlete.project !== project) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+  if (!hasAthleteAccess(user, requestedId))
+    return res.status(403).json({ message: '无权分析该运动员。' });
+  const athlete = db.prepare('SELECT project FROM athletes WHERE id = ?').get(requestedId) as
+    { project: string } | undefined;
+  if (!athlete || athlete.project !== project)
+    return res.status(400).json({ message: '所选运动员不属于当前项目。' });
 
-  const records = db.prepare(`
+  const records = db
+    .prepare(
+      `
     SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.duration_min AS durationMin, ts.distance_km AS distanceKm,
       ts.rpe, ts.srpe, ts.smvl, dw.morning_pulse AS morningPulse, dw.weight_kg AS weightKg,
@@ -3928,16 +6089,18 @@ app.get('/api/analysis/summary', requireAuth, (req, res) => {
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     WHERE ts.athlete_id = ? AND ts.session_date BETWEEN ? AND ?
     ORDER BY ts.session_date, ts.session_order
-  `).all(requestedId, from, to) as RowingAnalysisRecord[];
+  `
+    )
+    .all(requestedId, from, to) as RowingAnalysisRecord[];
 
   const standard = analysisStandardForProject(project);
   res.json({
     standard: {
       version: standard.version,
       decision: standard.decision,
-      missingDataRule: standard.missingDataRule
+      missingDataRule: standard.missingDataRule,
     },
-    analysis: analyzePeriodForProject(project, records)
+    analysis: analyzePeriodForProject(project, records),
   });
 });
 
@@ -3946,20 +6109,46 @@ app.get('/api/athletes/:id/overview', requireAuth, (req, res) => {
   const athleteId = Number(req.params.id || 0);
   const range = normalizeOverviewRange({
     from: cleanString(req.query.from),
-    to: cleanString(req.query.to)
+    to: cleanString(req.query.to),
   });
   const project = cleanString(req.query.project);
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
-  if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员档案分析。' });
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
-  const athlete = db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as { project: string } | undefined;
-  if (!athlete || athlete.project !== project) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
-  res.json({ overview: buildOverviewPayload({ athleteIds: [athleteId], from: range.from, to: range.to, project, individual: true, period: range.period }) });
+  if (!hasAthleteAccess(user, athleteId))
+    return res.status(403).json({ message: '无权查看该运动员档案分析。' });
+  if (!projectSet.has(project))
+    return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  const athlete = db
+    .prepare('SELECT project FROM athletes WHERE id = ? AND active = 1')
+    .get(athleteId) as { project: string } | undefined;
+  if (!athlete || athlete.project !== project)
+    return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+  res.json({
+    overview: buildOverviewPayload({
+      athleteIds: [athleteId],
+      from: range.from,
+      to: range.to,
+      project,
+      individual: true,
+      period: range.period,
+    }),
+  });
 });
 
-function athleteProfileScope(user: AuthUser, athleteId: number, from: string, to: string, project: string) {
+function athleteProfileScope(
+  user: AuthUser,
+  athleteId: number,
+  from: string,
+  to: string,
+  project: string
+) {
   if (!athleteId || !hasAthleteAccess(user, athleteId)) return null;
-  return resolveProfileScope({ athleteId, accessibleAthleteIds: accessibleAthleteIds(user), from, to, project });
+  return resolveProfileScope({
+    athleteId,
+    accessibleAthleteIds: accessibleAthleteIds(user),
+    from,
+    to,
+    project,
+  });
 }
 
 app.get('/api/athletes/:id/wellness-trends', requireAuth, (req, res) => {
@@ -3967,7 +6156,15 @@ app.get('/api/athletes/:id/wellness-trends', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   const from = parseDate(req.query.from);
   const to = parseDate(req.query.to);
-  if (!projectSet.has(project) || !from || !to || !isValidIsoDate(from) || !isValidIsoDate(to) || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  if (
+    !projectSet.has(project) ||
+    !from ||
+    !to ||
+    !isValidIsoDate(from) ||
+    !isValidIsoDate(to) ||
+    from > to
+  )
+    return res.status(400).json({ message: '请选择有效项目和日期范围。' });
   const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
   if (!scope) return res.status(403).json({ message: '无权查看该运动员恢复趋势。' });
   res.json(buildWellnessTrends(scope));
@@ -3978,7 +6175,15 @@ app.get('/api/athletes/:id/profile-comparison', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   const from = parseDate(req.query.from);
   const to = parseDate(req.query.to);
-  if (!projectSet.has(project) || !from || !to || !isValidIsoDate(from) || !isValidIsoDate(to) || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  if (
+    !projectSet.has(project) ||
+    !from ||
+    !to ||
+    !isValidIsoDate(from) ||
+    !isValidIsoDate(to) ||
+    from > to
+  )
+    return res.status(400).json({ message: '请选择有效项目和日期范围。' });
   const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
   if (!scope) return res.status(403).json({ message: '无权查看该运动员团队比较。' });
   res.json(buildProfileComparison(scope));
@@ -3988,37 +6193,45 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
   const user = req.authUser!;
   const athleteId = Number(req.params.id || 0);
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
-  if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员冠军模型对标。' });
-  const athlete = db.prepare(`
+  if (!hasAthleteAccess(user, athleteId))
+    return res.status(403).json({ message: '无权查看该运动员冠军模型对标。' });
+  const athlete = db
+    .prepare(
+      `
     SELECT id, name, project, gender
     FROM athletes
     WHERE id = ? AND active = 1
-  `).get(athleteId) as { id: number; name: string; project: Project; gender: string } | undefined;
+  `
+    )
+    .get(athleteId) as { id: number; name: string; project: Project; gender: string } | undefined;
   if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
   const gender = athlete.gender?.includes('女') ? '女' : '男';
   // 冠军模型尚未完成真实数据配置，任何历史初始化基线均不得用于正式对标或评分。
   const hasConfiguredChampionModel = false;
-  if (!hasConfiguredChampionModel) return res.json({
-    benchmark: {
-      athleteId: athlete.id,
-      athleteName: athlete.name,
-      project: athlete.project,
-      gender,
-      modelVersion: 'UNCONFIGURED',
-      rows: [],
-      dimensions: [],
-      summary: {
-        score: null,
-        averageStandardDistance: null,
-        topPriorityIndex: null,
-        achieved: 0,
-        comparable: 0,
-        primaryGap: '模型数据待配置。',
-        source: '暂无正式冠军模型数据'
-      }
-    }
-  });
-  const standards = db.prepare(`
+  if (!hasConfiguredChampionModel)
+    return res.json({
+      benchmark: {
+        athleteId: athlete.id,
+        athleteName: athlete.name,
+        project: athlete.project,
+        gender,
+        modelVersion: 'UNCONFIGURED',
+        rows: [],
+        dimensions: [],
+        summary: {
+          score: null,
+          averageStandardDistance: null,
+          topPriorityIndex: null,
+          achieved: 0,
+          comparable: 0,
+          primaryGap: '模型数据待配置。',
+          source: '暂无正式冠军模型数据',
+        },
+      },
+    });
+  const standards = db
+    .prepare(
+      `
     SELECT cms.metric_code AS code, cms.model_version AS modelVersion,
       cms.target_min AS targetMin, cms.target_max AS targetMax, cms.elite_mean AS eliteMean,
       cms.weight, cms.rationale, cms.source_note AS sourceNote,
@@ -4027,10 +6240,21 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
     JOIN metric_definitions md ON md.code = cms.metric_code
     WHERE cms.project = ? AND cms.gender = ? AND cms.active = 1
     ORDER BY cms.weight DESC, cms.metric_code
-  `).all(athlete.project, gender) as Array<{
-    code: string; modelVersion: string; targetMin: number | null; targetMax: number | null;
-    eliteMean: number | null; weight: number; rationale: string; sourceNote: string;
-    label: string; domain: string; unit: string; direction: 'higher_better' | 'lower_better' | 'neutral';
+  `
+    )
+    .all(athlete.project, gender) as Array<{
+    code: string;
+    modelVersion: string;
+    targetMin: number | null;
+    targetMax: number | null;
+    eliteMean: number | null;
+    weight: number;
+    rationale: string;
+    sourceNote: string;
+    label: string;
+    domain: string;
+    unit: string;
+    direction: 'higher_better' | 'lower_better' | 'neutral';
   }>;
   if (!standards.length) {
     return res.json({
@@ -4042,90 +6266,178 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
         modelVersion: 'CHAMPION-2026-R1',
         rows: [],
         dimensions: [],
-        summary: { score: null, averageStandardDistance: null, topPriorityIndex: null, achieved: 0, comparable: 0, primaryGap: '暂无该项目冠军模型标准。', source: '暂无标准' }
-      }
+        summary: {
+          score: null,
+          averageStandardDistance: null,
+          topPriorityIndex: null,
+          achieved: 0,
+          comparable: 0,
+          primaryGap: '暂无该项目冠军模型标准。',
+          source: '暂无标准',
+        },
+      },
     });
   }
   const codes = standards.map((row) => row.code);
   const placeholders = codes.map(() => '?').join(',');
-  const rawMeasurements = db.prepare(`
+  const rawMeasurements = db
+    .prepare(
+      `
     SELECT tm.metric_code AS code, tm.value_num AS value, tm.target_value AS target, tm.side,
       ts.test_date AS testDate, ts.id AS sessionId
     FROM test_sessions ts
     JOIN test_measurements tm ON tm.test_session_id = ts.id
     WHERE ts.athlete_id = ?
     ORDER BY ts.test_date DESC, ts.id DESC
-  `).all(athlete.id) as Array<{ code: string; value: number; target: number | null; side: string; testDate: string; sessionId: number }>;
+  `
+    )
+    .all(athlete.id) as Array<{
+    code: string;
+    value: number;
+    target: number | null;
+    side: string;
+    testDate: string;
+    sessionId: number;
+  }>;
   const canonicalCode = (code: string, side = 'center') => {
     const aliases: Record<string, string> = {
-      height_cm: 'heightCm', arm_span_cm: 'armSpanCm', bench_press_kg: 'benchPressKg',
-      bench_pull_kg: 'benchPullKg', squat_kg: 'squatKg', deadlift_kg: 'deadliftKg',
-      front_plank_sec: 'frontPlankSec'
+      height_cm: 'heightCm',
+      arm_span_cm: 'armSpanCm',
+      bench_press_kg: 'benchPressKg',
+      bench_pull_kg: 'benchPullKg',
+      squat_kg: 'squatKg',
+      deadlift_kg: 'deadliftKg',
+      front_plank_sec: 'frontPlankSec',
     };
-    if (code === 'side_plank_sec') return side === 'left' ? 'leftPlankSec' : side === 'right' ? 'rightPlankSec' : code;
+    if (code === 'side_plank_sec')
+      return side === 'left' ? 'leftPlankSec' : side === 'right' ? 'rightPlankSec' : code;
     return aliases[code] || code;
   };
-  const bodyMeasurements = db.prepare(`
+  const bodyMeasurements = db
+    .prepare(
+      `
     SELECT measurement_date AS testDate, height_cm AS heightCm, body_fat_pct AS bodyFatPct,
       skeletal_muscle_kg AS skeletalMuscleKg
     FROM athlete_body_measurements
     WHERE athlete_id = ?
     ORDER BY measurement_date DESC, id DESC
-  `).all(athlete.id) as Array<{ testDate: string; heightCm: number | null; bodyFatPct: number | null; skeletalMuscleKg: number | null }>;
-  type ChampionMeasurement = { code: string; value: number; target: number | null; testDate: string; sessionId: number };
+  `
+    )
+    .all(athlete.id) as Array<{
+    testDate: string;
+    heightCm: number | null;
+    bodyFatPct: number | null;
+    skeletalMuscleKg: number | null;
+  }>;
+  type ChampionMeasurement = {
+    code: string;
+    value: number;
+    target: number | null;
+    testDate: string;
+    sessionId: number;
+  };
   const bodyChampionMeasurements: ChampionMeasurement[] = bodyMeasurements.flatMap((item) => {
     const values: Array<[string, number | null]> = [
-      ['heightCm', item.heightCm], ['body_fat_pct', item.bodyFatPct], ['skeletal_muscle_kg', item.skeletalMuscleKg]
+      ['heightCm', item.heightCm],
+      ['body_fat_pct', item.bodyFatPct],
+      ['skeletal_muscle_kg', item.skeletalMuscleKg],
     ];
-    return values.flatMap(([code, value]) => typeof value === 'number' ? [{ code, value, target: null, testDate: item.testDate, sessionId: 0 }] : []);
+    return values.flatMap(([code, value]) =>
+      typeof value === 'number'
+        ? [{ code, value, target: null, testDate: item.testDate, sessionId: 0 }]
+        : []
+    );
   });
   const measurements: ChampionMeasurement[] = [
     ...rawMeasurements.map((item) => ({ ...item, code: canonicalCode(item.code, item.side) })),
-    ...bodyChampionMeasurements
+    ...bodyChampionMeasurements,
   ].filter((item) => codes.includes(item.code));
-  measurements.sort((left, right) => left.code.localeCompare(right.code) || right.testDate.localeCompare(left.testDate) || right.sessionId - left.sessionId);
-  const byCode = new Map<string, Array<{ value: number; target: number | null; testDate: string; sessionId: number }>>();
+  measurements.sort(
+    (left, right) =>
+      left.code.localeCompare(right.code) ||
+      right.testDate.localeCompare(left.testDate) ||
+      right.sessionId - left.sessionId
+  );
+  const byCode = new Map<
+    string,
+    Array<{ value: number; target: number | null; testDate: string; sessionId: number }>
+  >();
   for (const measurement of measurements) {
     byCode.set(measurement.code, [...(byCode.get(measurement.code) || []), measurement]);
   }
-  const lowerScore = (value: number, targetMax: number | null) => targetMax && value > 0 ? targetMax / value * 100 : null;
-  const higherScore = (value: number, targetMin: number | null) => targetMin && targetMin > 0 ? value / targetMin * 100 : null;
-  const standardDistanceFor = (value: number, standard: { targetMin: number | null; targetMax: number | null; eliteMean: number | null; direction: 'higher_better' | 'lower_better' | 'neutral' }) => {
-    if (standard.targetMin === null || standard.targetMax === null || standard.targetMin === standard.targetMax) return null;
+  const lowerScore = (value: number, targetMax: number | null) =>
+    targetMax && value > 0 ? (targetMax / value) * 100 : null;
+  const higherScore = (value: number, targetMin: number | null) =>
+    targetMin && targetMin > 0 ? (value / targetMin) * 100 : null;
+  const standardDistanceFor = (
+    value: number,
+    standard: {
+      targetMin: number | null;
+      targetMax: number | null;
+      eliteMean: number | null;
+      direction: 'higher_better' | 'lower_better' | 'neutral';
+    }
+  ) => {
+    if (
+      standard.targetMin === null ||
+      standard.targetMax === null ||
+      standard.targetMin === standard.targetMax
+    )
+      return null;
     const width = Math.abs(standard.targetMax - standard.targetMin);
     if (standard.direction === 'higher_better') {
       if (value >= standard.targetMin && value <= standard.targetMax) return 0;
-      if (value > standard.targetMax) return Math.round((standard.targetMax - value) / width * 100) / 100;
-      return Math.round((standard.targetMin - value) / width * 100) / 100;
+      if (value > standard.targetMax)
+        return Math.round(((standard.targetMax - value) / width) * 100) / 100;
+      return Math.round(((standard.targetMin - value) / width) * 100) / 100;
     }
     if (standard.direction === 'lower_better') {
       if (value >= standard.targetMin && value <= standard.targetMax) return 0;
-      if (value < standard.targetMin) return Math.round((value - standard.targetMin) / width * 100) / 100;
-      return Math.round((value - standard.targetMax) / width * 100) / 100;
+      if (value < standard.targetMin)
+        return Math.round(((value - standard.targetMin) / width) * 100) / 100;
+      return Math.round(((value - standard.targetMax) / width) * 100) / 100;
     }
     if (!standard.eliteMean) return null;
-    return Math.round(Math.abs(value - standard.eliteMean) / width * 100) / 100;
+    return Math.round((Math.abs(value - standard.eliteMean) / width) * 100) / 100;
   };
   const rows = standards.map((standard) => {
     const history = byCode.get(standard.code) || [];
     const current = history[0];
     const previous = history.find((item) => item.testDate !== current?.testDate);
     const value = current?.value ?? null;
-    const rawPercent = value === null ? null : standard.direction === 'lower_better'
-      ? lowerScore(value, standard.targetMax)
-      : standard.direction === 'higher_better'
-        ? higherScore(value, standard.targetMin)
-        : standard.eliteMean ? 100 - Math.abs(value - standard.eliteMean) / standard.eliteMean * 100 : null;
+    const rawPercent =
+      value === null
+        ? null
+        : standard.direction === 'lower_better'
+          ? lowerScore(value, standard.targetMax)
+          : standard.direction === 'higher_better'
+            ? higherScore(value, standard.targetMin)
+            : standard.eliteMean
+              ? 100 - (Math.abs(value - standard.eliteMean) / standard.eliteMean) * 100
+              : null;
     const percent = rawPercent === null ? null : Math.round(rawPercent * 10) / 10;
     const score = percent === null ? null : Math.min(120, Math.max(0, percent));
-    const status = score === null ? 'missing' : score >= 100 ? 'elite' : score >= 90 ? 'near' : 'develop';
+    const status =
+      score === null ? 'missing' : score >= 100 ? 'elite' : score >= 90 ? 'near' : 'develop';
     const standardDistance = value === null ? null : standardDistanceFor(value, standard);
-    const eliteGapPct = value === null || !standard.eliteMean ? null
-      : Math.round(Math.abs(value - standard.eliteMean) / standard.eliteMean * 1000) / 10;
-    const priorityIndex = standardDistance === null ? null : Math.max(0, Math.round(standardDistance * standard.weight * 1000) / 10);
-    const gap = value === null ? null : standard.direction === 'lower_better'
-      ? (standard.targetMax === null ? null : Math.round((value - standard.targetMax) * 100) / 100)
-      : (standard.targetMin === null ? null : Math.round((standard.targetMin - value) * 100) / 100);
+    const eliteGapPct =
+      value === null || !standard.eliteMean
+        ? null
+        : Math.round((Math.abs(value - standard.eliteMean) / standard.eliteMean) * 1000) / 10;
+    const priorityIndex =
+      standardDistance === null
+        ? null
+        : Math.max(0, Math.round(standardDistance * standard.weight * 1000) / 10);
+    const gap =
+      value === null
+        ? null
+        : standard.direction === 'lower_better'
+          ? standard.targetMax === null
+            ? null
+            : Math.round((value - standard.targetMax) * 100) / 100
+          : standard.targetMin === null
+            ? null
+            : Math.round((standard.targetMin - value) * 100) / 100;
     return {
       code: standard.code,
       label: standard.label,
@@ -4147,24 +6459,72 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
       weight: standard.weight,
       rationale: standard.rationale,
       sourceNote: standard.sourceNote,
-      testDate: current?.testDate ?? null
+      testDate: current?.testDate ?? null,
     };
   });
   const dimensionDefinitions = [
-    { key: 'body_shape', label: '身体形态Body Shape', codes: ['heightCm', 'armSpanCm', 'body_fat_pct', 'skeletal_muscle_kg'] },
-    { key: 'endurance', label: '一般耐力Endurance', codes: ['general_endurance_score', 'erg_6k_sec'] },
+    {
+      key: 'body_shape',
+      label: '身体形态Body Shape',
+      codes: ['heightCm', 'armSpanCm', 'body_fat_pct', 'skeletal_muscle_kg'],
+    },
+    {
+      key: 'endurance',
+      label: '一般耐力Endurance',
+      codes: ['general_endurance_score', 'erg_6k_sec'],
+    },
     { key: 'vo2max', label: 'VO2Max', codes: ['vo2max_ml_kg_min'] },
-    { key: 'asymmetry', label: '不对称性asymmetry', codes: ['asymmetry_index_pct', 'dsd_ratio', 'left_paddle_power_w', 'right_paddle_power_w'] },
-    { key: 'power', label: '爆发力Power', codes: ['cmj_peak_power_w', 'seven_stroke_power_w', 'benchPressPeakPowerW', 'benchPullPeakPowerW'] },
-    { key: 'anaerobic_power', label: '无氧功Anaerobic Power', codes: ['anaerobic_power_wkg', 'wingatePeakPowerWkg', 'wingateWorkJkg', 'sprint_200_sec', 'sprint_500_sec', 'sprint300Sec'] },
-    { key: 'fmax', label: '最大力量Fmax', codes: ['imtp_peak_force_n', 'benchPressKg', 'benchPullKg', 'squatKg', 'deadliftKg'] },
-    { key: 'core', label: '核心力量Core', codes: ['core_strength_score', 'frontPlankSec', 'leftPlankSec', 'rightPlankSec'] }
+    {
+      key: 'asymmetry',
+      label: '不对称性asymmetry',
+      codes: ['asymmetry_index_pct', 'dsd_ratio', 'left_paddle_power_w', 'right_paddle_power_w'],
+    },
+    {
+      key: 'power',
+      label: '爆发力Power',
+      codes: [
+        'cmj_peak_power_w',
+        'seven_stroke_power_w',
+        'benchPressPeakPowerW',
+        'benchPullPeakPowerW',
+      ],
+    },
+    {
+      key: 'anaerobic_power',
+      label: '无氧功Anaerobic Power',
+      codes: [
+        'anaerobic_power_wkg',
+        'wingatePeakPowerWkg',
+        'wingateWorkJkg',
+        'sprint_200_sec',
+        'sprint_500_sec',
+        'sprint300Sec',
+      ],
+    },
+    {
+      key: 'fmax',
+      label: '最大力量Fmax',
+      codes: ['imtp_peak_force_n', 'benchPressKg', 'benchPullKg', 'squatKg', 'deadliftKg'],
+    },
+    {
+      key: 'core',
+      label: '核心力量Core',
+      codes: ['core_strength_score', 'frontPlankSec', 'leftPlankSec', 'rightPlankSec'],
+    },
   ];
   const dimensions = dimensionDefinitions.map((definition) => {
     const items = rows.filter((row) => definition.codes.includes(row.code) && row.score !== null);
     const weight = items.reduce((sum, row) => sum + row.weight, 0);
-    const current = weight ? Math.round(items.reduce((sum, row) => sum + Math.min(120, row.score || 0) * row.weight, 0) / weight * 10) / 10 : null;
-    const priorityIndex = items.length ? Math.round(items.reduce((sum, row) => sum + (row.priorityIndex || 0), 0) * 10) / 10 : null;
+    const current = weight
+      ? Math.round(
+          (items.reduce((sum, row) => sum + Math.min(120, row.score || 0) * row.weight, 0) /
+            weight) *
+            10
+        ) / 10
+      : null;
+    const priorityIndex = items.length
+      ? Math.round(items.reduce((sum, row) => sum + (row.priorityIndex || 0), 0) * 10) / 10
+      : null;
     return {
       key: definition.key,
       label: definition.label,
@@ -4173,25 +6533,37 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
       gap: current === null ? null : Math.round((100 - current) * 10) / 10,
       priorityIndex,
       comparable: items.length,
-      achieved: items.filter((row) => row.status === 'elite').length
+      achieved: items.filter((row) => row.status === 'elite').length,
     };
   });
   const comparable = rows.filter((row) => row.score !== null);
   const scoreSum = comparable.reduce((sum, row) => sum + (row.score || 0) * row.weight, 0);
   const weightSum = comparable.reduce((sum, row) => sum + row.weight, 0);
-  const score = weightSum ? Math.round(scoreSum / weightSum * 10) / 10 : null;
-  const gapRows = comparable.filter((row) => row.standardDistance !== null && row.standardDistance > 0);
+  const score = weightSum ? Math.round((scoreSum / weightSum) * 10) / 10 : null;
+  const gapRows = comparable.filter(
+    (row) => row.standardDistance !== null && row.standardDistance > 0
+  );
   const averageStandardDistance = gapRows.length
-    ? Math.round(gapRows.reduce((sum, row) => sum + (row.standardDistance || 0) * row.weight, 0) / gapRows.reduce((sum, row) => sum + row.weight, 0) * 100) / 100
-    : comparable.length ? 0 : null;
-  const topPriorityIndex = comparable.length ? Math.max(...comparable.map((row) => row.priorityIndex || 0)) : null;
+    ? Math.round(
+        (gapRows.reduce((sum, row) => sum + (row.standardDistance || 0) * row.weight, 0) /
+          gapRows.reduce((sum, row) => sum + row.weight, 0)) *
+          100
+      ) / 100
+    : comparable.length
+      ? 0
+      : null;
+  const topPriorityIndex = comparable.length
+    ? Math.max(...comparable.map((row) => row.priorityIndex || 0))
+    : null;
   const achieved = comparable.filter((row) => row.status === 'elite').length;
   const primary = comparable
     .filter((row) => row.status !== 'elite')
-    .sort((left, right) => ((right.priorityIndex || 0) - (left.priorityIndex || 0)))[0];
+    .sort((left, right) => (right.priorityIndex || 0) - (left.priorityIndex || 0))[0];
   const primaryGap = primary
     ? `${primary.label}标准化差距 ${formatServerNumber(primary.standardDistance, 2)} 个冠军区间宽度，加权补强优先级 ${formatServerNumber(primary.priorityIndex, 1)}，建议优先纳入下一阶段训练目标。`
-    : comparable.length ? '已测试指标整体达到冠军模型参考区间，下一阶段重点维持专项表现和伤病风险控制。' : '暂无可对标实测数据，请先录入专业综合评估。';
+    : comparable.length
+      ? '已测试指标整体达到冠军模型参考区间，下一阶段重点维持专项表现和伤病风险控制。'
+      : '暂无可对标实测数据，请先录入专业综合评估。';
   res.json({
     benchmark: {
       athleteId: athlete.id,
@@ -4208,9 +6580,9 @@ app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
         achieved,
         comparable: comparable.length,
         primaryGap,
-        source: standards[0]?.sourceNote || '项目冠军模型初始化生成'
-      }
-    }
+        source: standards[0]?.sourceNote || '项目冠军模型初始化生成',
+      },
+    },
   });
 });
 
@@ -4218,59 +6590,103 @@ app.get('/api/strength-tests', requireAuth, (req, res) => {
   const user = req.authUser!;
   const athleteId = Number(req.query.athleteId || user.athleteId || 0);
   if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
-  if (!hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员的力量测试档案。' });
-  const sessions = db.prepare(`SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, created_at AS updatedAt FROM test_sessions WHERE athlete_id = ? AND test_type = '力量素质测试' ORDER BY test_date DESC, id DESC`).all(athleteId) as Array<{ id: number; athleteId: number; testDate: string; protocol: string; updatedAt: string }>;
-  const measurementQuery = db.prepare(`SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`);
-  res.json({ tests: sessions.map((session) => {
-    const metrics: StrengthMetricValues = {}; const targets: StrengthMetricValues = {};
-    for (const measurement of measurementQuery.all(session.id) as Array<{ metricCode: string; valueNum: number; targetValue: number | null }>) {
-      const key = strengthMetricKeyByCode.get(measurement.metricCode); if (!key) continue;
-      metrics[key] = Number(measurement.valueNum);
-      if (measurement.targetValue !== null) targets[key] = Number(measurement.targetValue);
-    }
-    return { ...session, notes: session.protocol, updatedBy: '', metrics, targets };
-  }) });
+  if (!hasAthleteAccess(user, athleteId))
+    return res.status(403).json({ message: '无权查看该运动员的力量测试档案。' });
+  const sessions = db
+    .prepare(
+      `SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, created_at AS updatedAt FROM test_sessions WHERE athlete_id = ? AND test_type = '力量素质测试' ORDER BY test_date DESC, id DESC`
+    )
+    .all(athleteId) as Array<{
+    id: number;
+    athleteId: number;
+    testDate: string;
+    protocol: string;
+    updatedAt: string;
+  }>;
+  const measurementQuery = db.prepare(
+    `SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`
+  );
+  res.json({
+    tests: sessions.map((session) => {
+      const metrics: StrengthMetricValues = {};
+      const targets: StrengthMetricValues = {};
+      for (const measurement of measurementQuery.all(session.id) as Array<{
+        metricCode: string;
+        valueNum: number;
+        targetValue: number | null;
+      }>) {
+        const key = strengthMetricKeyByCode.get(measurement.metricCode);
+        if (!key) continue;
+        metrics[key] = Number(measurement.valueNum);
+        if (measurement.targetValue !== null) targets[key] = Number(measurement.targetValue);
+      }
+      return { ...session, notes: session.protocol, updatedBy: '', metrics, targets };
+    }),
+  });
 });
 
-app.post('/api/strength-tests', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const user = req.authUser!;
-  const athleteId = Number(req.body?.athleteId || 0);
-  const testDate = cleanString(req.body?.testDate);
-  const notes = cleanString(req.body?.notes);
-  if (!athleteId || !hasAthleteAccess(user, athleteId)) {
-    return res.status(403).json({ message: '无权维护该运动员的力量测试档案。' });
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {
-    return res.status(400).json({ message: '请选择有效的测试日期。' });
-  }
-  if (notes.length > 500) return res.status(400).json({ message: '备注不能超过500个字符。' });
-  const metricsResult = parseStrengthValues(req.body?.metrics);
-  const targetsResult = parseStrengthValues(req.body?.targets, true);
-  const errors = [...metricsResult.errors, ...targetsResult.errors];
-  if (!Object.keys(metricsResult.values).length) errors.push('至少填写一项实测数据');
-  if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+app.post(
+  '/api/strength-tests',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const user = req.authUser!;
+    const athleteId = Number(req.body?.athleteId || 0);
+    const testDate = cleanString(req.body?.testDate);
+    const notes = cleanString(req.body?.notes);
+    if (!athleteId || !hasAthleteAccess(user, athleteId)) {
+      return res.status(403).json({ message: '无权维护该运动员的力量测试档案。' });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {
+      return res.status(400).json({ message: '请选择有效的测试日期。' });
+    }
+    if (notes.length > 500) return res.status(400).json({ message: '备注不能超过500个字符。' });
+    const metricsResult = parseStrengthValues(req.body?.metrics);
+    const targetsResult = parseStrengthValues(req.body?.targets, true);
+    const errors = [...metricsResult.errors, ...targetsResult.errors];
+    if (!Object.keys(metricsResult.values).length) errors.push('至少填写一项实测数据');
+    if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
-  const existing = db.prepare(`SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`).get(athleteId, testDate) as { id: number } | undefined;
-  db.prepare(`INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by) VALUES (?, ?, '力量素质测试', ?, 'manual', 'valid', 0, ?) ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET protocol = excluded.protocol, source = 'manual', quality = 'valid'`).run(athleteId, testDate, notes, user.id);
-  const saved = db.prepare(`SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`).get(athleteId, testDate) as { id: number };
-  const definition = db.prepare(`INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, minimum, maximum) VALUES (?, ?, 'strength', ?, 'higher_better', 'phase', ?, ?) ON CONFLICT(code) DO NOTHING`);
-  const measurement = db.prepare(`INSERT INTO test_measurements (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo) VALUES (?, ?, ?, ?, ?, 'center', 'valid', 'manual', 0) ON CONFLICT(test_session_id, metric_code, side) DO UPDATE SET value_num = excluded.value_num, target_value = excluded.target_value, unit = excluded.unit, source = 'manual', quality = 'valid'`);
-  for (const metric of STRENGTH_METRICS) {
-    const value = metricsResult.values[metric.key]; if (value === undefined) continue;
-    const code = strengthMetricCode(metric.key); definition.run(code, metric.label, metric.unit, metric.min, metric.max);
-    measurement.run(saved.id, code, value, targetsResult.values[metric.key] ?? null, metric.unit);
-  }
-  db.prepare(`
+    const existing = db
+      .prepare(
+        `SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`
+      )
+      .get(athleteId, testDate) as { id: number } | undefined;
+    db.prepare(
+      `INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by) VALUES (?, ?, '力量素质测试', ?, 'manual', 'valid', 0, ?) ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET protocol = excluded.protocol, source = 'manual', quality = 'valid'`
+    ).run(athleteId, testDate, notes, user.id);
+    const saved = db
+      .prepare(
+        `SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`
+      )
+      .get(athleteId, testDate) as { id: number };
+    const definition = db.prepare(
+      `INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, minimum, maximum) VALUES (?, ?, 'strength', ?, 'higher_better', 'phase', ?, ?) ON CONFLICT(code) DO NOTHING`
+    );
+    const measurement = db.prepare(
+      `INSERT INTO test_measurements (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo) VALUES (?, ?, ?, ?, ?, 'center', 'valid', 'manual', 0) ON CONFLICT(test_session_id, metric_code, side) DO UPDATE SET value_num = excluded.value_num, target_value = excluded.target_value, unit = excluded.unit, source = 'manual', quality = 'valid'`
+    );
+    for (const metric of STRENGTH_METRICS) {
+      const value = metricsResult.values[metric.key];
+      if (value === undefined) continue;
+      const code = strengthMetricCode(metric.key);
+      definition.run(code, metric.label, metric.unit, metric.min, metric.max);
+      measurement.run(saved.id, code, value, targetsResult.values[metric.key] ?? null, metric.unit);
+    }
+    db.prepare(
+      `
     INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
     VALUES (?, ?, 'test_session', ?, ?)
-  `).run(
-    user.id,
-    existing ? 'UPDATE_STRENGTH_TEST' : 'CREATE_STRENGTH_TEST',
-    saved.id,
-    JSON.stringify({ athleteId, testDate })
-  );
-  res.json({ message: existing ? '力量测试档案已更新。' : '力量测试档案已保存。', id: saved.id });
-});
+  `
+    ).run(
+      user.id,
+      existing ? 'UPDATE_STRENGTH_TEST' : 'CREATE_STRENGTH_TEST',
+      saved.id,
+      JSON.stringify({ athleteId, testDate })
+    );
+    res.json({ message: existing ? '力量测试档案已更新。' : '力量测试档案已保存。', id: saved.id });
+  }
+);
 
 app.get('/api/strength-tests/:id/advice', requireAuth, (req, res) => {
   const user = req.authUser!;
@@ -4297,39 +6713,58 @@ app.post(
         return res.status(403).json({ message: '无权为该运动员生成训练建议。' });
       }
       const generated = await buildAiAdvice(test);
-      const nextVersion = Number((db.prepare(`
+      const nextVersion = Number(
+        (
+          db
+            .prepare(
+              `
         SELECT COALESCE(MAX(version), 0) + 1 AS version
         FROM strength_ai_advice WHERE test_session_id = ?
-      `).get(strengthTestId) as { version: number }).version);
-      const result = db.prepare(`
+      `
+            )
+            .get(strengthTestId) as { version: number }
+        ).version
+      );
+      const result = db
+        .prepare(
+          `
         INSERT INTO strength_ai_advice
           (test_session_id, version, content_json, source, model, status, generated_by)
         VALUES (?, ?, ?, ?, ?, 'draft', ?)
-      `).run(
-        strengthTestId,
-        nextVersion,
-        JSON.stringify(generated.content),
-        generated.source,
-        generated.model,
-        user.id
-      );
+      `
+        )
+        .run(
+          strengthTestId,
+          nextVersion,
+          JSON.stringify(generated.content),
+          generated.source,
+          generated.model,
+          user.id
+        );
       const adviceId = Number(result.lastInsertRowid);
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
         VALUES (?, 'GENERATE_STRENGTH_ADVICE', 'strength_ai_advice', ?, ?)
-      `).run(user.id, adviceId, JSON.stringify({
-        strengthTestId,
-        version: nextVersion,
-        source: generated.source,
-        model: generated.model
-      }));
+      `
+      ).run(
+        user.id,
+        adviceId,
+        JSON.stringify({
+          strengthTestId,
+          version: nextVersion,
+          source: generated.source,
+          model: generated.model,
+        })
+      );
       res.json({
-        message: generated.source === 'ai'
-          ? 'AI训练建议草案已生成。'
-          : 'fallbackReason' in generated
-            ? 'AI服务暂时不可用，已自动生成规则兜底草案。'
-            : '尚未配置AI API，已根据现有规则生成训练建议草案。',
-        advice: latestAdvice(strengthTestId)
+        message:
+          generated.source === 'ai'
+            ? 'AI训练建议草案已生成。'
+            : 'fallbackReason' in generated
+              ? 'AI服务暂时不可用，已自动生成规则兜底草案。'
+              : '尚未配置AI API，已根据现有规则生成训练建议草案。',
+        advice: latestAdvice(strengthTestId),
       });
     } catch (error) {
       next(error);
@@ -4350,21 +6785,29 @@ app.put(
     if (!hasAthleteAccess(user, test.athleteId)) {
       return res.status(403).json({ message: '无权编辑该运动员的训练建议。' });
     }
-    const exists = db.prepare(`
+    const exists = db
+      .prepare(
+        `
       SELECT id FROM strength_ai_advice WHERE id = ? AND test_session_id = ?
-    `).get(adviceId, strengthTestId);
+    `
+      )
+      .get(adviceId, strengthTestId);
     if (!exists) return res.status(404).json({ message: '训练建议不存在。' });
     const content = normalizeAdviceContent(req.body?.content);
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE strength_ai_advice
       SET content_json = ?, status = 'draft', reviewed_by = NULL, reviewed_at = NULL,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND test_session_id = ?
-    `).run(JSON.stringify(content), adviceId, strengthTestId);
-    db.prepare(`
+    `
+    ).run(JSON.stringify(content), adviceId, strengthTestId);
+    db.prepare(
+      `
       INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
       VALUES (?, 'UPDATE_STRENGTH_ADVICE', 'strength_ai_advice', ?, ?)
-    `).run(user.id, adviceId, JSON.stringify({ strengthTestId }));
+    `
+    ).run(user.id, adviceId, JSON.stringify({ strengthTestId }));
     res.json({ message: '训练建议草案已保存，需重新确认。', advice: latestAdvice(strengthTestId) });
   }
 );
@@ -4382,25 +6825,37 @@ app.post(
     if (!hasAthleteAccess(user, test.athleteId)) {
       return res.status(403).json({ message: '无权确认该运动员的训练建议。' });
     }
-    const result = db.prepare(`
+    const result = db
+      .prepare(
+        `
       UPDATE strength_ai_advice
       SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND test_session_id = ?
-    `).run(user.id, adviceId, strengthTestId);
+    `
+      )
+      .run(user.id, adviceId, strengthTestId);
     if (!result.changes) return res.status(404).json({ message: '训练建议不存在。' });
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
       VALUES (?, 'APPROVE_STRENGTH_ADVICE', 'strength_ai_advice', ?, ?)
-    `).run(user.id, adviceId, JSON.stringify({ strengthTestId }));
-    res.json({ message: '训练建议已由教练确认，运动员现在可以查看和下载。', advice: latestAdvice(strengthTestId) });
+    `
+    ).run(user.id, adviceId, JSON.stringify({ strengthTestId }));
+    res.json({
+      message: '训练建议已由教练确认，运动员现在可以查看和下载。',
+      advice: latestAdvice(strengthTestId),
+    });
   }
 );
 
 function parseRaceTime(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date) {
-    return ((value.getUTCHours() * 60 + value.getUTCMinutes()) * 60 + value.getUTCSeconds()) * 1000 + value.getUTCMilliseconds();
+    return (
+      ((value.getUTCHours() * 60 + value.getUTCMinutes()) * 60 + value.getUTCSeconds()) * 1000 +
+      value.getUTCMilliseconds()
+    );
   }
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value <= 0) return null;
@@ -4421,8 +6876,15 @@ function findSpecialTestSheet(workbook: ExcelJS.Workbook) {
   for (const sheet of workbook.worksheets) {
     for (let rowNumber = 1; rowNumber <= Math.min(sheet.rowCount, 15); rowNumber += 1) {
       const headings: string[] = [];
-      sheet.getRow(rowNumber).eachCell({ includeEmpty: true }, (cell) => headings.push(excelCellText(cell).replace(/\s+/g, '')));
-      const hasCrew = headings.includes('运动员/组合') || headings.includes('运动员姓名') || headings.includes('组合名称');
+      sheet
+        .getRow(rowNumber)
+        .eachCell({ includeEmpty: true }, (cell) =>
+          headings.push(excelCellText(cell).replace(/\s+/g, ''))
+        );
+      const hasCrew =
+        headings.includes('运动员/组合') ||
+        headings.includes('运动员姓名') ||
+        headings.includes('组合名称');
       const hasDate = headings.includes('训练日期') || headings.includes('测试日期');
       const hasDistance = headings.includes('训练距离(m)') || headings.includes('测试距离(m)');
       if (hasDate && hasDistance && hasCrew) return { sheet, headerRowNumber: rowNumber };
@@ -4431,16 +6893,26 @@ function findSpecialTestSheet(workbook: ExcelJS.Workbook) {
   return null;
 }
 
-async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expectedProject: string): Promise<SpecialTestImportRow[]> {
+async function parseSpecialTestWorkbook(
+  buffer: Buffer,
+  user: AuthUser,
+  expectedProject: string
+): Promise<SpecialTestImportRow[]> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
   const found = findSpecialTestSheet(workbook);
   if (!found) throw new Error('未找到专项训练表头，请使用最新模板中的“专项训练成绩”工作表');
   const { sheet, headerRowNumber } = found;
   const headers: string[] = [];
-  sheet.getRow(headerRowNumber).eachCell({ includeEmpty: true }, (cell, columnNumber) => { headers[columnNumber] = excelCellText(cell).trim(); });
-  const athletes = db.prepare('SELECT id, name, project FROM athletes WHERE active = 1').all() as Array<{ id: number; name: string; project: string }>;
-  const athleteByName = new Map(athletes.map((athlete) => [athlete.name.replace(/\s+/g, ''), athlete]));
+  sheet.getRow(headerRowNumber).eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+    headers[columnNumber] = excelCellText(cell).trim();
+  });
+  const athletes = db
+    .prepare('SELECT id, name, project FROM athletes WHERE active = 1')
+    .all() as Array<{ id: number; name: string; project: string }>;
+  const athleteByName = new Map(
+    athletes.map((athlete) => [athlete.name.replace(/\s+/g, ''), athlete])
+  );
   const allowed = new Set(accessibleAthleteIds(user));
   const rows: SpecialTestImportRow[] = [];
 
@@ -4452,7 +6924,8 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
       if (!header || !columnNumber) return;
       const cell = excelRow.getCell(columnNumber);
       let value: unknown = cell.value;
-      if (value && typeof value === 'object' && 'formula' in value) value = 'result' in value ? (value as { result?: unknown }).result ?? '' : '';
+      if (value && typeof value === 'object' && 'formula' in value)
+        value = 'result' in value ? ((value as { result?: unknown }).result ?? '') : '';
       if (value !== null && value !== undefined && value !== '') hasValue = true;
       item[header] = value ?? '';
     });
@@ -4460,26 +6933,60 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
     const errors: string[] = [];
     const warnings: string[] = [];
     const testDate = parseDate(pick(item, ['训练日期', '测试日期', '日期']));
-    const project = cleanString(pick(item, ['项目', '运动项目'])) as SpecialTestImportRow['project'];
-    const distanceM = Math.round(numberOrZero(pick(item, ['训练距离(m)', '训练距离（m）', '训练距离', '测试距离(m)', '测试距离（m）', '测试距离', '距离(m)'])));
+    const project = cleanString(
+      pick(item, ['项目', '运动项目'])
+    ) as SpecialTestImportRow['project'];
+    const distanceM = Math.round(
+      numberOrZero(
+        pick(item, [
+          '训练距离(m)',
+          '训练距离（m）',
+          '训练距离',
+          '测试距离(m)',
+          '测试距离（m）',
+          '测试距离',
+          '距离(m)',
+        ])
+      )
+    );
     const boatClass = cleanString(pick(item, ['艇型', '项目'])) || '未分组';
     const genderGroup = cleanString(pick(item, ['性别组别', '组别'])) || '未分组';
     const rawCrewName = cleanString(pick(item, ['运动员/组合', '组合名称', '运动员姓名', '姓名']));
     const rawMemberNames = cleanString(pick(item, ['运动员姓名', '成员姓名', '成员']));
-    const memberNames = (rawMemberNames || rawCrewName).split(/[、,，+＋/]/).map((name) => name.trim()).filter(Boolean);
-    const members = memberNames.map((name) => athleteByName.get(name.replace(/\s+/g, ''))).filter(Boolean) as Array<{ id: number; name: string; project: string }>;
-    const attemptsMs = ['第1轮', '第一轮', '一', '第2轮', '第二轮', '二', '第3轮', '第三轮', '三']
-      .reduce<number[]>((times, alias, index) => {
-        if (index % 3 !== 0) return times;
-        const aliases = index === 0 ? ['第1轮', '第一轮', '一'] : index === 3 ? ['第2轮', '第二轮', '二'] : ['第3轮', '第三轮', '三'];
-        const parsed = parseRaceTime(pick(item, aliases));
-        if (parsed !== null) times.push(parsed);
-        return times;
-      }, []);
+    const memberNames = (rawMemberNames || rawCrewName)
+      .split(/[、,，+＋/]/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const members = memberNames
+      .map((name) => athleteByName.get(name.replace(/\s+/g, '')))
+      .filter(Boolean) as Array<{ id: number; name: string; project: string }>;
+    const attemptsMs = [
+      '第1轮',
+      '第一轮',
+      '一',
+      '第2轮',
+      '第二轮',
+      '二',
+      '第3轮',
+      '第三轮',
+      '三',
+    ].reduce<number[]>((times, alias, index) => {
+      if (index % 3 !== 0) return times;
+      const aliases =
+        index === 0
+          ? ['第1轮', '第一轮', '一']
+          : index === 3
+            ? ['第2轮', '第二轮', '二']
+            : ['第3轮', '第三轮', '三'];
+      const parsed = parseRaceTime(pick(item, aliases));
+      if (parsed !== null) times.push(parsed);
+      return times;
+    }, []);
     const previousBestMs = parseRaceTime(pick(item, ['历史最好', '个人最好', '此前最好']));
     if (!testDate) errors.push('训练日期格式无效，应为YYYY-MM-DD');
     if (!projectSet.has(project)) errors.push('项目必须填写“赛艇”“皮划艇”或“激流”');
-    else if (project !== expectedProject) errors.push(`当前为${expectedProject}空间，不能导入${project}数据`);
+    else if (project !== expectedProject)
+      errors.push(`当前为${expectedProject}空间，不能导入${project}数据`);
     if (distanceM <= 0 || distanceM > 100000) errors.push('训练距离应为1—100000米');
     if (!rawCrewName) errors.push('缺少运动员/组合');
     if (!memberNames.length) errors.push('缺少运动员姓名');
@@ -4487,11 +6994,14 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
       const athlete = athleteByName.get(name.replace(/\s+/g, ''));
       if (!athlete) errors.push(`运动员“${name}”不在系统名单中`);
       else if (!allowed.has(athlete.id)) errors.push(`当前账户无权导入运动员“${name}”`);
-      else if (athlete.project !== project) errors.push(`运动员“${name}”属于${athlete.project}，与本行项目不一致`);
+      else if (athlete.project !== project)
+        errors.push(`运动员“${name}”属于${athlete.project}，与本行项目不一致`);
     }
     if (!attemptsMs.length) errors.push('至少填写一轮有效成绩，如0:55.15');
     if (attemptsMs.length < 2) warnings.push('仅有一轮成绩，稳定性分析将不完整');
-    const averageMs = attemptsMs.length ? Math.round(attemptsMs.reduce((sum, value) => sum + value, 0) / attemptsMs.length) : 0;
+    const averageMs = attemptsMs.length
+      ? Math.round(attemptsMs.reduce((sum, value) => sum + value, 0) / attemptsMs.length)
+      : 0;
     const bestMs = attemptsMs.length ? Math.min(...attemptsMs) : 0;
     rows.push({
       rowNumber,
@@ -4512,7 +7022,7 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
       averageMs,
       bestMs,
       errors: [...new Set(errors)],
-      warnings: [...new Set(warnings)]
+      warnings: [...new Set(warnings)],
     });
   });
   return rows;
@@ -4520,11 +7030,26 @@ async function parseSpecialTestWorkbook(buffer: Buffer, user: AuthUser, expected
 
 function readSpecialTestEvents(user: AuthUser, project: string, from: string, to: string) {
   const allowed = new Set(accessibleAthleteIds(user));
-  const events = db.prepare(`
+  const events = db
+    .prepare(
+      `
     SELECT id, project, test_date AS testDate, distance_m AS distanceM, boat_class AS boatClass,
       gender_group AS genderGroup, session, wind_conditions AS windConditions, location, note
     FROM special_test_events WHERE project IN (?, ?) AND test_date BETWEEN ? AND ? ORDER BY test_date DESC, distance_m ASC
-  `).all(project, projectLabel(project), from, to) as Array<{ id: number; project: Project; testDate: string; distanceM: number; boatClass: string; genderGroup: string; session: string; windConditions: string; location: string; note: string }>;
+  `
+    )
+    .all(project, projectLabel(project), from, to) as Array<{
+    id: number;
+    project: Project;
+    testDate: string;
+    distanceM: number;
+    boatClass: string;
+    genderGroup: string;
+    session: string;
+    windConditions: string;
+    location: string;
+    note: string;
+  }>;
 
   const selectResults = db.prepare(`
     SELECT id, crew_name AS crewName, member_athlete_ids AS memberAthleteIds,
@@ -4532,33 +7057,51 @@ function readSpecialTestEvents(user: AuthUser, project: string, from: string, to
       attempts_ms AS attemptsMs, average_ms AS averageMs, best_ms AS bestMs
     FROM special_test_results WHERE event_id = ? ORDER BY best_ms ASC, average_ms ASC
   `);
-  const output = events.map((event) => {
-    const all = (selectResults.all(event.id) as Array<{ id: number; crewName: string; memberAthleteIds: string; memberNames: string; previousBestMs: number | null; attemptsMs: string; averageMs: number; bestMs: number }>).map((row, index) => ({
-      ...row,
-      rank: index + 1,
-      memberAthleteIds: JSON.parse(row.memberAthleteIds || '[]') as number[],
-      memberNames: JSON.parse(row.memberNames || '[]') as string[],
-      attemptsMs: JSON.parse(row.attemptsMs || '[]') as number[]
-    }));
-    const visible = all.filter((row) => row.memberAthleteIds.length > 0).filter((row) => user.role === 'ATL'
-      ? row.memberAthleteIds.some((id) => allowed.has(id))
-      : row.memberAthleteIds.every((id) => allowed.has(id)));
-    const leaderMs = all[0]?.bestMs || 0;
-    return {
-      ...event,
-      project,
-      dataSource: 'legacy_special_test',
-      dataQuality: 'unverified' as const,
-      results: visible.map((row) => ({
+  const output = events
+    .map((event) => {
+      const all = (
+        selectResults.all(event.id) as Array<{
+          id: number;
+          crewName: string;
+          memberAthleteIds: string;
+          memberNames: string;
+          previousBestMs: number | null;
+          attemptsMs: string;
+          averageMs: number;
+          bestMs: number;
+        }>
+      ).map((row, index) => ({
         ...row,
-        crewName: user.role === 'ATL' ? user.displayName : row.crewName,
-        memberNames: user.role === 'ATL' ? [user.displayName] : row.memberNames,
-        memberAthleteIds: user.role === 'ATL' && user.athleteId ? [user.athleteId] : row.memberAthleteIds,
-        deltaPreviousMs: row.previousBestMs === null ? null : row.bestMs - row.previousBestMs,
-        gapLeaderMs: leaderMs ? row.bestMs - leaderMs : 0
-      }))
-    };
-  }).filter((event) => event.results.length > 0);
+        rank: index + 1,
+        memberAthleteIds: JSON.parse(row.memberAthleteIds || '[]') as number[],
+        memberNames: JSON.parse(row.memberNames || '[]') as string[],
+        attemptsMs: JSON.parse(row.attemptsMs || '[]') as number[],
+      }));
+      const visible = all
+        .filter((row) => row.memberAthleteIds.length > 0)
+        .filter((row) =>
+          user.role === 'ATL'
+            ? row.memberAthleteIds.some((id) => allowed.has(id))
+            : row.memberAthleteIds.every((id) => allowed.has(id))
+        );
+      const leaderMs = all[0]?.bestMs || 0;
+      return {
+        ...event,
+        project,
+        dataSource: 'legacy_special_test',
+        dataQuality: 'unverified' as const,
+        results: visible.map((row) => ({
+          ...row,
+          crewName: user.role === 'ATL' ? user.displayName : row.crewName,
+          memberNames: user.role === 'ATL' ? [user.displayName] : row.memberNames,
+          memberAthleteIds:
+            user.role === 'ATL' && user.athleteId ? [user.athleteId] : row.memberAthleteIds,
+          deltaPreviousMs: row.previousBestMs === null ? null : row.bestMs - row.previousBestMs,
+          gapLeaderMs: leaderMs ? row.bestMs - leaderMs : 0,
+        })),
+      };
+    })
+    .filter((event) => event.results.length > 0);
   return output;
 }
 
@@ -4567,14 +7110,24 @@ app.get('/api/special-training/overview', requireAuth, (req, res) => {
   const project = cleanString(req.query.project);
   const from = parseDate(req.query.from);
   const to = parseDate(req.query.to);
-  if (req.query.athleteId !== undefined) return res.status(400).json({ message: '专项首页不支持运动员筛选。' });
+  if (req.query.athleteId !== undefined)
+    return res.status(400).json({ message: '专项首页不支持运动员筛选。' });
   const teamId = Number(req.query.teamId || 0);
-  if (!projectSet.has(project) || !from || !to || from > to) return res.status(400).json({ message: '请选择有效项目和日期范围。' });
-  if (!Number.isInteger(teamId) || teamId < 0) return res.status(400).json({ message: '队伍筛选参数无效。' });
+  if (!projectSet.has(project) || !from || !to || from > to)
+    return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  if (!Number.isInteger(teamId) || teamId < 0)
+    return res.status(400).json({ message: '队伍筛选参数无效。' });
   const accessible = accessibleAthleteIds(user);
-  let scoped = accessible.length ? db.prepare(`SELECT a.id, a.team_id AS teamId FROM athletes a WHERE a.id IN (${accessible.map(() => '?').join(',')}) AND a.project = ? AND a.active = 1`).all(...accessible, project) as Array<{ id: number; teamId: number | null }> : [];
+  let scoped = accessible.length
+    ? (db
+        .prepare(
+          `SELECT a.id, a.team_id AS teamId FROM athletes a WHERE a.id IN (${accessible.map(() => '?').join(',')}) AND a.project = ? AND a.active = 1`
+        )
+        .all(...accessible, project) as Array<{ id: number; teamId: number | null }>)
+    : [];
   if (teamId) {
-    if (!scoped.some((row) => row.teamId === teamId)) return res.status(403).json({ message: '无权查看该队伍或该队伍不属于当前项目。' });
+    if (!scoped.some((row) => row.teamId === teamId))
+      return res.status(403).json({ message: '无权查看该队伍或该队伍不属于当前项目。' });
     scoped = scoped.filter((row) => row.teamId === teamId);
   }
   const athleteIds = scoped.map((row) => row.id);
@@ -4584,54 +7137,104 @@ app.get('/api/special-training/overview', requireAuth, (req, res) => {
 app.get('/api/special-tests', requireAuth, (req, res) => {
   const user = req.authUser!;
   const project = cleanString(req.query.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+  if (!projectSet.has(project))
+    return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
   const from = parseDate(req.query.from) || '1900-01-01';
   const to = parseDate(req.query.to) || '2999-12-31';
   const athleteId = req.query.athleteId === undefined ? null : Number(req.query.athleteId);
-  if (athleteId !== null && (!Number.isInteger(athleteId) || athleteId <= 0 || !hasAthleteAccess(user, athleteId))) return res.status(403).json({ message: '无权查看该运动员专项测试。' });
-  const athlete = athleteId === null ? null : db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as { project: string } | undefined;
-  if (athleteId !== null && (!athlete || athlete.project !== project)) return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+  if (
+    athleteId !== null &&
+    (!Number.isInteger(athleteId) || athleteId <= 0 || !hasAthleteAccess(user, athleteId))
+  )
+    return res.status(403).json({ message: '无权查看该运动员专项测试。' });
+  const athlete =
+    athleteId === null
+      ? null
+      : (db.prepare('SELECT project FROM athletes WHERE id = ? AND active = 1').get(athleteId) as
+          { project: string } | undefined);
+  if (athleteId !== null && (!athlete || athlete.project !== project))
+    return res.status(400).json({ message: '所选运动员不属于当前项目。' });
   const events = readSpecialTestEvents(user, project, from, to);
-  res.json({ events: athleteId === null ? events : events.map((event) => ({ ...event, results: event.results.filter((result) => result.memberAthleteIds.includes(athleteId)) })).filter((event) => event.results.length) });
+  res.json({
+    events:
+      athleteId === null
+        ? events
+        : events
+            .map((event) => ({
+              ...event,
+              results: event.results.filter((result) =>
+                result.memberAthleteIds.includes(athleteId)
+              ),
+            }))
+            .filter((event) => event.results.length),
+  });
 });
 
-app.post('/api/special-tests/import/preview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ message: '请选择Excel文件。' });
-  if (!req.file.originalname.toLowerCase().endsWith('.xlsx')) return res.status(400).json({ message: '当前版本仅支持.xlsx文件。' });
-  const project = cleanString(req.body?.project);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
-  try {
-    const rows = await parseSpecialTestWorkbook(req.file.buffer, req.authUser!, project);
-    if (!rows.length) return res.status(400).json({ message: 'Excel中没有可读取的专项训练成绩。' });
-    const importId = randomUUID();
-    specialTestImportCache.set(importId, { ownerId: req.authUser!.id, rows, expiresAt: Date.now() + 30 * 60 * 1000 });
-    res.json({
-      importId,
-      fileName: req.file.originalname,
-      total: rows.length,
-      valid: rows.filter((row) => row.errors.length === 0).length,
-      invalid: rows.filter((row) => row.errors.length > 0).length,
-      warningCount: rows.reduce((sum, row) => sum + row.warnings.length, 0),
-      rows: rows.map(({ memberAthleteIds: _ids, ...row }) => row)
-    });
-  } catch (error) {
-    res.status(400).json({ message: `无法读取专项训练Excel：${error instanceof Error ? error.message : '文件格式错误'}` });
+app.post(
+  '/api/special-tests/import/preview',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  upload.single('file'),
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: '请选择Excel文件。' });
+    if (!req.file.originalname.toLowerCase().endsWith('.xlsx'))
+      return res.status(400).json({ message: '当前版本仅支持.xlsx文件。' });
+    const project = cleanString(req.body?.project);
+    if (!projectSet.has(project))
+      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    try {
+      const rows = await parseSpecialTestWorkbook(req.file.buffer, req.authUser!, project);
+      if (!rows.length)
+        return res.status(400).json({ message: 'Excel中没有可读取的专项训练成绩。' });
+      const importId = randomUUID();
+      specialTestImportCache.set(importId, {
+        ownerId: req.authUser!.id,
+        rows,
+        expiresAt: Date.now() + 30 * 60 * 1000,
+      });
+      res.json({
+        importId,
+        fileName: req.file.originalname,
+        total: rows.length,
+        valid: rows.filter((row) => row.errors.length === 0).length,
+        invalid: rows.filter((row) => row.errors.length > 0).length,
+        warningCount: rows.reduce((sum, row) => sum + row.warnings.length, 0),
+        rows: rows.map(({ memberAthleteIds: _ids, ...row }) => row),
+      });
+    } catch (error) {
+      res
+        .status(400)
+        .json({
+          message: `无法读取专项训练Excel：${error instanceof Error ? error.message : '文件格式错误'}`,
+        });
+    }
   }
-});
+);
 
-app.post('/api/special-tests/import/commit', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const importId = cleanString(req.body?.importId);
-  const cached = specialTestImportCache.get(importId);
-  if (!cached || cached.expiresAt < Date.now() || cached.ownerId !== req.authUser!.id) {
-    return res.status(400).json({ message: '导入预览已失效，请重新上传Excel。' });
-  }
-  const rows = cached.rows.filter((row) => row.errors.length === 0);
-  const grouped = new Map<string, SpecialTestImportRow[]>();
-  for (const row of rows) {
-    const key = [row.project, row.testDate, row.distanceM, row.boatClass, row.genderGroup, row.session].join('|');
-    grouped.set(key, [...(grouped.get(key) || []), row]);
-  }
-  const upsertEvent = db.prepare(`
+app.post(
+  '/api/special-tests/import/commit',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const importId = cleanString(req.body?.importId);
+    const cached = specialTestImportCache.get(importId);
+    if (!cached || cached.expiresAt < Date.now() || cached.ownerId !== req.authUser!.id) {
+      return res.status(400).json({ message: '导入预览已失效，请重新上传Excel。' });
+    }
+    const rows = cached.rows.filter((row) => row.errors.length === 0);
+    const grouped = new Map<string, SpecialTestImportRow[]>();
+    for (const row of rows) {
+      const key = [
+        row.project,
+        row.testDate,
+        row.distanceM,
+        row.boatClass,
+        row.genderGroup,
+        row.session,
+      ].join('|');
+      grouped.set(key, [...(grouped.get(key) || []), row]);
+    }
+    const upsertEvent = db.prepare(`
     INSERT INTO special_test_events
       (project, test_date, distance_m, boat_class, gender_group, session, wind_conditions, location, note, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -4639,269 +7242,448 @@ app.post('/api/special-tests/import/commit', requireAuth, requireRole('SCC', 'PR
       wind_conditions = excluded.wind_conditions, location = excluded.location, note = excluded.note
     RETURNING id
   `);
-  const insertResult = db.prepare(`
+    const insertResult = db.prepare(`
     INSERT INTO special_test_results
       (event_id, crew_name, member_athlete_ids, member_names, previous_best_ms, attempts_ms, average_ms, best_ms)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  db.exec('BEGIN');
-  try {
-    for (const eventRows of grouped.values()) {
-      const first = eventRows[0];
-      const saved = upsertEvent.get(projectLabel(first.project), first.testDate, first.distanceM, first.boatClass, first.genderGroup, first.session, first.windConditions, first.location, first.note, req.authUser!.id) as { id: number };
-      db.prepare('DELETE FROM special_test_results WHERE event_id = ?').run(saved.id);
-      for (const row of eventRows) {
-        insertResult.run(saved.id, row.crewName, JSON.stringify(row.memberAthleteIds), JSON.stringify(row.memberNames), row.previousBestMs, JSON.stringify(row.attemptsMs), row.averageMs, row.bestMs);
+    db.exec('BEGIN');
+    try {
+      for (const eventRows of grouped.values()) {
+        const first = eventRows[0];
+        const saved = upsertEvent.get(
+          projectLabel(first.project),
+          first.testDate,
+          first.distanceM,
+          first.boatClass,
+          first.genderGroup,
+          first.session,
+          first.windConditions,
+          first.location,
+          first.note,
+          req.authUser!.id
+        ) as { id: number };
+        db.prepare('DELETE FROM special_test_results WHERE event_id = ?').run(saved.id);
+        for (const row of eventRows) {
+          insertResult.run(
+            saved.id,
+            row.crewName,
+            JSON.stringify(row.memberAthleteIds),
+            JSON.stringify(row.memberNames),
+            row.previousBestMs,
+            JSON.stringify(row.attemptsMs),
+            row.averageMs,
+            row.bestMs
+          );
+        }
       }
+      db.prepare(
+        "INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, 'IMPORT_SPECIAL_TEST', 'special_test_event', ?)"
+      ).run(req.authUser!.id, JSON.stringify({ events: grouped.size, results: rows.length }));
+      db.exec('COMMIT');
+      specialTestImportCache.delete(importId);
+      res.json({
+        imported: rows.length,
+        events: grouped.size,
+        skipped: cached.rows.length - rows.length,
+      });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      res
+        .status(500)
+        .json({
+          message: `写入专项训练数据失败：${error instanceof Error ? error.message : '未知错误'}`,
+        });
     }
-    db.prepare("INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, 'IMPORT_SPECIAL_TEST', 'special_test_event', ?)")
-      .run(req.authUser!.id, JSON.stringify({ events: grouped.size, results: rows.length }));
-    db.exec('COMMIT');
-    specialTestImportCache.delete(importId);
-    res.json({ imported: rows.length, events: grouped.size, skipped: cached.rows.length - rows.length });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: `写入专项训练数据失败：${error instanceof Error ? error.message : '未知错误'}` });
   }
-});
+);
 
-app.get('/api/special-tests/import/template', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), async (_req, res, next) => {
-  const templateName = '竞迹专项训练导入模板.xlsx';
-  const templatePath = resolve(process.cwd(), 'public', 'templates', templateName);
-  if (!existsSync(templatePath)) return res.status(500).json({ message: '标准模板尚未部署，请联系管理员。' });
-  try {
-    const template = readFileSync(templatePath);
-    const downloadName = '竞迹专项训练导入模板.xlsx';
-    res.setHeader('Content-Disposition', `attachment; filename="special-training-import-template.xlsx"; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
-    res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(template);
-  } catch (error) {
-    next(error);
+app.get(
+  '/api/special-tests/import/template',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  async (_req, res, next) => {
+    const templateName = '竞迹专项训练导入模板.xlsx';
+    const templatePath = resolve(process.cwd(), 'public', 'templates', templateName);
+    if (!existsSync(templatePath))
+      return res.status(500).json({ message: '标准模板尚未部署，请联系管理员。' });
+    try {
+      const template = readFileSync(templatePath);
+      const downloadName = '竞迹专项训练导入模板.xlsx';
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="special-training-import-template.xlsx"; filename*=UTF-8''${encodeURIComponent(downloadName)}`
+      );
+      res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(template);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
-app.get('/api/admin/registrations', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const requestedStatus = cleanString(req.query.status);
-  const status = ['pending', 'approved', 'rejected'].includes(requestedStatus) ? requestedStatus : 'pending';
-  const allRequests = db.prepare(`
+app.get(
+  '/api/admin/registrations',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const requestedStatus = cleanString(req.query.status);
+    const status = ['pending', 'approved', 'rejected'].includes(requestedStatus)
+      ? requestedStatus
+      : 'pending';
+    const allRequests = db
+      .prepare(
+        `
     SELECT id, username, display_name AS displayName, requested_role AS requestedRole,
       project, team, gender, identity_number AS identityNumber, native_place AS nativePlace, status,
       created_at AS createdAt, reviewed_at AS reviewedAt
     FROM registration_requests WHERE status = ? ORDER BY created_at ASC
-  `).all(status) as Array<{
-    id: number;
-    username: string;
-    displayName: string;
-    requestedRole: 'ATL' | 'SCC';
-    project: string;
-    team: string;
-    gender: string | null;
-    identityNumber: string | null;
-    nativePlace: string | null;
-    status: string;
-    createdAt: string;
-    reviewedAt: string | null;
-  }>;
-  const reviewer = req.authUser!;
-  const permissions = accountPermissions(reviewer.id);
-  const requests = allRequests.filter((request) =>
-    canManageRole(reviewer.role, request.requestedRole)
-      && permissionsAllowProjectTeam(permissions, request.project, request.team)
-  );
-  const pending = status === 'pending' ? requests.length : (db.prepare(`
+  `
+      )
+      .all(status) as Array<{
+      id: number;
+      username: string;
+      displayName: string;
+      requestedRole: 'ATL' | 'SCC';
+      project: string;
+      team: string;
+      gender: string | null;
+      identityNumber: string | null;
+      nativePlace: string | null;
+      status: string;
+      createdAt: string;
+      reviewedAt: string | null;
+    }>;
+    const reviewer = req.authUser!;
+    const permissions = accountPermissions(reviewer.id);
+    const requests = allRequests.filter(
+      (request) =>
+        canManageRole(reviewer.role, request.requestedRole) &&
+        permissionsAllowProjectTeam(permissions, request.project, request.team)
+    );
+    const pending =
+      status === 'pending'
+        ? requests.length
+        : (
+            db
+              .prepare(
+                `
     SELECT requested_role AS requestedRole, project, team
     FROM registration_requests WHERE status = 'pending'
-  `).all() as Array<{ requestedRole: 'ATL' | 'SCC'; project: string; team: string }>)
-    .filter((request) => canManageRole(reviewer.role, request.requestedRole)
-      && permissionsAllowProjectTeam(permissions, request.project, request.team)).length;
-  res.json({ requests, pending });
-});
+  `
+              )
+              .all() as Array<{ requestedRole: 'ATL' | 'SCC'; project: string; team: string }>
+          ).filter(
+            (request) =>
+              canManageRole(reviewer.role, request.requestedRole) &&
+              permissionsAllowProjectTeam(permissions, request.project, request.team)
+          ).length;
+    res.json({ requests, pending });
+  }
+);
 
-app.put('/api/admin/registrations/:id/name', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const requestId = Number(req.params.id);
-  const registration = db.prepare(`
+app.put(
+  '/api/admin/registrations/:id/name',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const requestId = Number(req.params.id);
+    const registration = db
+      .prepare(
+        `
     SELECT id, username, display_name AS displayName, requested_role AS requestedRole, status
     FROM registration_requests WHERE id = ?
-  `).get(requestId) as {
-    id: number;
-    username: string;
-    displayName: string;
-    requestedRole: 'ATL' | 'SCC';
-    status: 'pending' | 'approved' | 'rejected';
-  } | undefined;
-  if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
-  const registrationScope = db.prepare(`
+  `
+      )
+      .get(requestId) as
+      | {
+          id: number;
+          username: string;
+          displayName: string;
+          requestedRole: 'ATL' | 'SCC';
+          status: 'pending' | 'approved' | 'rejected';
+        }
+      | undefined;
+    if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
+    const registrationScope = db
+      .prepare(
+        `
     SELECT requested_role AS requestedRole, project, team
     FROM registration_requests WHERE id = ?
-  `).get(requestId) as { requestedRole: Role; project: string; team: string };
-  if (
-    !canManageRole(req.authUser!.role, registrationScope.requestedRole)
-    || !permissionsAllowProjectTeam(accountPermissions(req.authUser!.id), registrationScope.project, registrationScope.team)
-  ) return res.status(403).json({ message: '无权修改该注册申请。' });
-  const { name, error } = validatePersonName(req.body?.name);
-  if (error) return res.status(400).json({ message: error });
+  `
+      )
+      .get(requestId) as { requestedRole: Role; project: string; team: string };
+    if (
+      !canManageRole(req.authUser!.role, registrationScope.requestedRole) ||
+      !permissionsAllowProjectTeam(
+        accountPermissions(req.authUser!.id),
+        registrationScope.project,
+        registrationScope.team
+      )
+    )
+      return res.status(403).json({ message: '无权修改该注册申请。' });
+    const { name, error } = validatePersonName(req.body?.name);
+    if (error) return res.status(400).json({ message: error });
 
-  db.exec('BEGIN');
-  try {
-    db.prepare('UPDATE registration_requests SET display_name = ? WHERE id = ?').run(name, requestId);
-    if (registration.status === 'approved') {
-      const linkedUser = db.prepare('SELECT id, athlete_id AS athleteId FROM users WHERE username = ?').get(registration.username) as {
-        id: number;
-        athleteId: number | null;
-      } | undefined;
-      if (linkedUser) {
-        db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name, linkedUser.id);
-        if (registration.requestedRole === 'ATL' && linkedUser.athleteId) {
-          db.prepare('UPDATE athletes SET name = ? WHERE id = ?').run(name, linkedUser.athleteId);
+    db.exec('BEGIN');
+    try {
+      db.prepare('UPDATE registration_requests SET display_name = ? WHERE id = ?').run(
+        name,
+        requestId
+      );
+      if (registration.status === 'approved') {
+        const linkedUser = db
+          .prepare('SELECT id, athlete_id AS athleteId FROM users WHERE username = ?')
+          .get(registration.username) as
+          | {
+              id: number;
+              athleteId: number | null;
+            }
+          | undefined;
+        if (linkedUser) {
+          db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name, linkedUser.id);
+          if (registration.requestedRole === 'ATL' && linkedUser.athleteId) {
+            db.prepare('UPDATE athletes SET name = ? WHERE id = ?').run(name, linkedUser.athleteId);
+          }
         }
       }
-    }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
         req.authUser!.id,
         'UPDATE_REGISTRATION_NAME',
         'registration_request',
         requestId,
         JSON.stringify({ from: registration.displayName, to: name })
       );
-    db.exec('COMMIT');
-    res.json({ message: '申请姓名已修改。', displayName: name });
-  } catch (renameError) {
-    db.exec('ROLLBACK');
-    const message = renameError instanceof Error && renameError.message.includes('UNIQUE')
-      ? '该姓名已被其他运动员使用。'
-      : '姓名修改失败。';
-    res.status(409).json({ message });
+      db.exec('COMMIT');
+      res.json({ message: '申请姓名已修改。', displayName: name });
+    } catch (renameError) {
+      db.exec('ROLLBACK');
+      const message =
+        renameError instanceof Error && renameError.message.includes('UNIQUE')
+          ? '该姓名已被其他运动员使用。'
+          : '姓名修改失败。';
+      res.status(409).json({ message });
+    }
   }
-});
+);
 
-app.post('/api/admin/registrations/:id/approve', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const requestId = Number(req.params.id);
-  const request = db.prepare(`
+app.post(
+  '/api/admin/registrations/:id/approve',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const requestId = Number(req.params.id);
+    const request = db
+      .prepare(
+        `
     SELECT id, username, password_hash, display_name, requested_role,
       project, team, gender, identity_number, native_place, status
     FROM registration_requests WHERE id = ?
-  `).get(requestId) as {
-    id: number; username: string; password_hash: string; display_name: string;
-    requested_role: 'ATL' | 'SCC'; project: string; team: string;
-    gender: string | null; status: string;
-    identity_number: string | null; native_place: string | null;
-  } | undefined;
-  if (!request) return res.status(404).json({ message: '注册申请不存在。' });
-  if (request.status !== 'pending') return res.status(409).json({ message: '该申请已经处理。' });
-  if (db.prepare('SELECT id FROM users WHERE username = ?').get(request.username)) {
-    return res.status(409).json({ message: '账号已存在，无法重复审核。' });
-  }
-  const reviewer = req.authUser!;
-  if (
-    !canManageRole(reviewer.role, request.requested_role)
-    || !permissionsAllowProjectTeam(accountPermissions(reviewer.id), request.project, request.team)
-  ) return res.status(403).json({ message: '该申请超出当前账号的管辖范围。' });
-
-  db.exec('BEGIN');
-  try {
-    let athleteId: number | null = null;
-    if (request.requested_role === 'ATL') {
-        const athlete = db.prepare(`SELECT a.id, a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.name = ?`).get(request.display_name) as { id: number; project: string; team: string } | undefined;
-      if (athlete) {
-        const linkedUser = db.prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'").get(athlete.id);
-        if (linkedUser) throw new Error('该运动员已有登录账户。');
-        if (athlete.project !== request.project || athlete.team !== request.team) {
-          throw new Error(`该姓名已存在于项目「${athlete.project} / ${athlete.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`);
+  `
+      )
+      .get(requestId) as
+      | {
+          id: number;
+          username: string;
+          password_hash: string;
+          display_name: string;
+          requested_role: 'ATL' | 'SCC';
+          project: string;
+          team: string;
+          gender: string | null;
+          status: string;
+          identity_number: string | null;
+          native_place: string | null;
         }
-        athleteId = athlete.id;
-      } else {
-        const team = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(request.project, request.team) as { id: number } | undefined;
-        if (!team) throw new Error('申请所属队伍不存在或已停用。');
-        const result = db.prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
-          .run(request.display_name, request.project, team.id, request.gender);
-        athleteId = Number(result.lastInsertRowid);
-      }
-      db.prepare(`
+      | undefined;
+    if (!request) return res.status(404).json({ message: '注册申请不存在。' });
+    if (request.status !== 'pending') return res.status(409).json({ message: '该申请已经处理。' });
+    if (db.prepare('SELECT id FROM users WHERE username = ?').get(request.username)) {
+      return res.status(409).json({ message: '账号已存在，无法重复审核。' });
+    }
+    const reviewer = req.authUser!;
+    if (
+      !canManageRole(reviewer.role, request.requested_role) ||
+      !permissionsAllowProjectTeam(accountPermissions(reviewer.id), request.project, request.team)
+    )
+      return res.status(403).json({ message: '该申请超出当前账号的管辖范围。' });
+
+    db.exec('BEGIN');
+    try {
+      let athleteId: number | null = null;
+      if (request.requested_role === 'ATL') {
+        const athlete = db
+          .prepare(
+            `SELECT a.id, a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.name = ?`
+          )
+          .get(request.display_name) as { id: number; project: string; team: string } | undefined;
+        if (athlete) {
+          const linkedUser = db
+            .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
+            .get(athlete.id);
+          if (linkedUser) throw new Error('该运动员已有登录账户。');
+          if (athlete.project !== request.project || athlete.team !== request.team) {
+            throw new Error(
+              `该姓名已存在于项目「${athlete.project} / ${athlete.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`
+            );
+          }
+          athleteId = athlete.id;
+        } else {
+          const team = db
+            .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+            .get(request.project, request.team) as { id: number } | undefined;
+          if (!team) throw new Error('申请所属队伍不存在或已停用。');
+          const result = db
+            .prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
+            .run(request.display_name, request.project, team.id, request.gender);
+          athleteId = Number(result.lastInsertRowid);
+        }
+        db.prepare(
+          `
         INSERT OR IGNORE INTO athlete_profiles (athlete_id, identity_number, native_place, created_at)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(athleteId, request.identity_number || '', request.native_place || '');
-      const [originProvince = '', originCity = '', originCounty = ''] = (request.native_place || '').split('/');
-      if (athleteId && provinceSet.has(originProvince) && originCity) {
-        upsertAthleteOrigin({
-          athleteId,
-          province: originProvince,
-          city: originCity,
-          county: originCounty,
-          source: 'registration',
-          quality: 'valid'
-        });
+      `
+        ).run(athleteId, request.identity_number || '', request.native_place || '');
+        const [originProvince = '', originCity = '', originCounty = ''] = (
+          request.native_place || ''
+        ).split('/');
+        if (athleteId && provinceSet.has(originProvince) && originCity) {
+          upsertAthleteOrigin({
+            athleteId,
+            province: originProvince,
+            city: originCity,
+            county: originCounty,
+            source: 'registration',
+            quality: 'valid',
+          });
+        }
       }
-    }
 
-    const result = db.prepare(`
+      const result = db
+        .prepare(
+          `
       INSERT INTO users (username, password_hash, display_name, role, athlete_id)
       VALUES (?, ?, ?, ?, ?)
-    `).run(request.username, request.password_hash, request.display_name, request.requested_role, athleteId);
-    const newUserId = Number(result.lastInsertRowid);
-    if (request.requested_role === 'SCC') {
-      db.prepare('INSERT OR IGNORE INTO coach_profiles (user_id, category) VALUES (?, ?)')
-        .run(newUserId, DEFAULT_COACH_CATEGORY);
-    }
-    const inheritedArea = accountPermissions(reviewer.id).areas[0] || {
-      areaLevel: 'national' as AreaLevel, province: '', city: '', county: ''
-    };
-    initializeAccountScope({
-      userId: newUserId,
-      role: request.requested_role,
-      parentUserId: reviewer.id,
-      province: inheritedArea.province,
-      city: inheritedArea.city,
-      county: inheritedArea.county,
-      project: request.project,
-      team: request.team,
-      grantedBy: reviewer.id,
-      areaLevel: inheritedArea.areaLevel
-    });
-    if (request.requested_role === 'ATL' && reviewer.role === 'SCC' && athleteId) {
-      db.prepare('INSERT OR IGNORE INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)')
-        .run(reviewer.id, athleteId);
-    }
-    db.prepare(`
+    `
+        )
+        .run(
+          request.username,
+          request.password_hash,
+          request.display_name,
+          request.requested_role,
+          athleteId
+        );
+      const newUserId = Number(result.lastInsertRowid);
+      if (request.requested_role === 'SCC') {
+        db.prepare('INSERT OR IGNORE INTO coach_profiles (user_id, category) VALUES (?, ?)').run(
+          newUserId,
+          DEFAULT_COACH_CATEGORY
+        );
+      }
+      const inheritedArea = accountPermissions(reviewer.id).areas[0] || {
+        areaLevel: 'national' as AreaLevel,
+        province: '',
+        city: '',
+        county: '',
+      };
+      initializeAccountScope({
+        userId: newUserId,
+        role: request.requested_role,
+        parentUserId: reviewer.id,
+        province: inheritedArea.province,
+        city: inheritedArea.city,
+        county: inheritedArea.county,
+        project: request.project,
+        team: request.team,
+        grantedBy: reviewer.id,
+        areaLevel: inheritedArea.areaLevel,
+      });
+      if (request.requested_role === 'ATL' && reviewer.role === 'SCC' && athleteId) {
+        db.prepare(
+          'INSERT OR IGNORE INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
+        ).run(reviewer.id, athleteId);
+      }
+      db.prepare(
+        `
       UPDATE registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(req.authUser!.id, requestId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(req.authUser!.id, 'APPROVE_REGISTRATION', 'user', Number(result.lastInsertRowid), JSON.stringify({ requestId, role: request.requested_role }));
-    db.exec('COMMIT');
-    res.json({ message: '账户已开通。' });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(400).json({ message: error instanceof Error ? error.message : '审核失败。' });
+    `
+      ).run(req.authUser!.id, requestId);
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        req.authUser!.id,
+        'APPROVE_REGISTRATION',
+        'user',
+        Number(result.lastInsertRowid),
+        JSON.stringify({ requestId, role: request.requested_role })
+      );
+      db.exec('COMMIT');
+      res.json({ message: '账户已开通。' });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      res.status(400).json({ message: error instanceof Error ? error.message : '审核失败。' });
+    }
   }
-});
+);
 
-app.post('/api/admin/registrations/:id/reject', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const requestId = Number(req.params.id);
-  const registration = db.prepare(`
+app.post(
+  '/api/admin/registrations/:id/reject',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const requestId = Number(req.params.id);
+    const registration = db
+      .prepare(
+        `
     SELECT requested_role AS requestedRole, project, team
     FROM registration_requests WHERE id = ?
-  `).get(requestId) as {
-    requestedRole: Role; project: string; team: string;
-  } | undefined;
-  if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
-  if (
-    !canManageRole(req.authUser!.role, registration.requestedRole)
-    || !permissionsAllowProjectTeam(accountPermissions(req.authUser!.id), registration.project, registration.team)
-  ) return res.status(403).json({ message: '无权处理该注册申请。' });
-  const result = db.prepare(`
+  `
+      )
+      .get(requestId) as
+      | {
+          requestedRole: Role;
+          project: string;
+          team: string;
+        }
+      | undefined;
+    if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
+    if (
+      !canManageRole(req.authUser!.role, registration.requestedRole) ||
+      !permissionsAllowProjectTeam(
+        accountPermissions(req.authUser!.id),
+        registration.project,
+        registration.team
+      )
+    )
+      return res.status(403).json({ message: '无权处理该注册申请。' });
+    const result = db
+      .prepare(
+        `
     UPDATE registration_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
     WHERE id = ? AND status = 'pending'
-  `).run(req.authUser!.id, requestId);
-  if (!result.changes) return res.status(409).json({ message: '申请不存在或已经处理。' });
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
-    .run(req.authUser!.id, 'REJECT_REGISTRATION', 'registration_request', requestId);
-  res.json({ message: '申请已拒绝。' });
-});
+  `
+      )
+      .run(req.authUser!.id, requestId);
+    if (!result.changes) return res.status(409).json({ message: '申请不存在或已经处理。' });
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+    ).run(req.authUser!.id, 'REJECT_REGISTRATION', 'registration_request', requestId);
+    res.json({ message: '申请已拒绝。' });
+  }
+);
 
-app.get('/api/admin/assignments', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const ids = accessibleAthleteIds(req.authUser!);
-  if (!ids.length) return res.json({ athletes: [], coaches: [] });
-  const placeholders = ids.map(() => '?').join(',');
-  const athletes = db.prepare(`
+app.get(
+  '/api/admin/assignments',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const ids = accessibleAthleteIds(req.authUser!);
+    if (!ids.length) return res.json({ athletes: [], coaches: [] });
+    const placeholders = ids.map(() => '?').join(',');
+    const athletes = db
+      .prepare(
+        `
     SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       COALESCE(GROUP_CONCAT(u.display_name, '、'), '') AS coaches,
       COALESCE(GROUP_CONCAT(u.id, ','), '') AS coachIds
@@ -4912,98 +7694,154 @@ app.get('/api/admin/assignments', requireAuth, requireRole('SCC', 'PRJ', 'REG', 
     LEFT JOIN users u ON u.id = ca.coach_user_id
     WHERE a.id IN (${placeholders}) AND a.active = 1
     GROUP BY a.id ORDER BY a.project, pt.name, a.name
-  `).all(...ids);
-  const allCoaches = db.prepare(`
+  `
+      )
+      .all(...ids);
+    const allCoaches = db
+      .prepare(
+        `
     SELECT u.id, u.username, u.display_name AS displayName, u.role, u.athlete_id AS athleteId,
       COALESCE(cp.category, '体能教练') AS category
     FROM users u
     LEFT JOIN coach_profiles cp ON cp.user_id = u.id
     WHERE u.role = 'SCC' AND u.active = 1 ORDER BY u.id
-  `).all() as Array<AuthUser & { displayName: string; category: string }>;
-  const coaches = allCoaches
-    .filter((coach) => coach.id === req.authUser!.id || canManageAccount(req.authUser!, coach))
-    .map(({ id, displayName, category }) => ({ id, displayName, category }));
-  res.json({ athletes, coaches });
-});
-
-app.put('/api/admin/coaches/:id/category', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const coachId = Number(req.params.id);
-  const category = cleanString(req.body?.category);
-  const coach = userById(coachId);
-  if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach)) {
-    return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
+  `
+      )
+      .all() as Array<AuthUser & { displayName: string; category: string }>;
+    const coaches = allCoaches
+      .filter((coach) => coach.id === req.authUser!.id || canManageAccount(req.authUser!, coach))
+      .map(({ id, displayName, category }) => ({ id, displayName, category }));
+    res.json({ athletes, coaches });
   }
-  if (!isCoachCategory(category)) return res.status(400).json({ message: '教练类别无效。' });
-  db.prepare(`
+);
+
+app.put(
+  '/api/admin/coaches/:id/category',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const coachId = Number(req.params.id);
+    const category = cleanString(req.body?.category);
+    const coach = userById(coachId);
+    if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach)) {
+      return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
+    }
+    if (!isCoachCategory(category)) return res.status(400).json({ message: '教练类别无效。' });
+    db.prepare(
+      `
     INSERT INTO coach_profiles (user_id, category, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET category = excluded.category, updated_at = CURRENT_TIMESTAMP
-  `).run(coachId, category);
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(currentUser.id, 'UPDATE_COACH_CATEGORY', 'user', coachId, JSON.stringify({ category }));
-  res.json({ message: '教练类别已更新。', category });
-});
+  `
+    ).run(coachId, category);
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(currentUser.id, 'UPDATE_COACH_CATEGORY', 'user', coachId, JSON.stringify({ category }));
+    res.json({ message: '教练类别已更新。', category });
+  }
+);
 
-app.put('/api/admin/assignments/:athleteId', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const athleteId = Number(req.params.athleteId);
-  const coachIds = Array.isArray(req.body?.coachIds) ? req.body.coachIds.map(Number).filter(Number.isFinite) : [];
-  const region = cleanString(req.body?.region);
-  const city = cleanString(req.body?.city);
-  const county = cleanString(req.body?.county);
-  const currentUser = req.authUser!;
-  const validCoaches = new Set(
-    (db.prepare(`
+app.put(
+  '/api/admin/assignments/:athleteId',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const athleteId = Number(req.params.athleteId);
+    const coachIds = Array.isArray(req.body?.coachIds)
+      ? req.body.coachIds.map(Number).filter(Number.isFinite)
+      : [];
+    const region = cleanString(req.body?.region);
+    const city = cleanString(req.body?.city);
+    const county = cleanString(req.body?.county);
+    const currentUser = req.authUser!;
+    const validCoaches = new Set(
+      (
+        db
+          .prepare(
+            `
       SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId
       FROM users WHERE role = 'SCC' AND active = 1
-    `).all() as AuthUser[])
-      .filter((coach) => canManageAccount(currentUser, coach))
-      .map((row) => row.id)
-  );
-  const athlete = db.prepare('SELECT id, project, team FROM athletes WHERE id = ?').get(athleteId) as {
-    id: number; project: string; team: string;
-  } | undefined;
-  const targetScope = {
-    id: athleteId,
-    region,
-    city,
-    county,
-    project: athlete?.project || '',
-    team: athlete?.team || ''
-  };
-  if (
-    !athlete
-    || !hasAthleteAccess(currentUser, athleteId)
-    || coachIds.some((id: number) => !validCoaches.has(id))
-    || !provinceSet.has(region)
-    || city.length < 2
-    || county.length < 2
-    || !permissionsAllowAthlete(accountPermissions(currentUser.id), targetScope)
-  ) {
-    return res.status(400).json({ message: '运动员或教练信息无效。' });
-  }
-  db.exec('BEGIN');
-  try {
-    upsertAthleteOrigin({ athleteId, province: region, city, county, source: 'manual', quality: 'valid' });
-    const athleteUser = db.prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'").get(athleteId) as { id: number } | undefined;
-    if (athleteUser) {
-      db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(athleteUser.id);
-      db.prepare(`
+    `
+          )
+          .all() as AuthUser[]
+      )
+        .filter((coach) => canManageAccount(currentUser, coach))
+        .map((row) => row.id)
+    );
+    const athlete = db
+      .prepare('SELECT id, project, team FROM athletes WHERE id = ?')
+      .get(athleteId) as
+      | {
+          id: number;
+          project: string;
+          team: string;
+        }
+      | undefined;
+    const targetScope = {
+      id: athleteId,
+      region,
+      city,
+      county,
+      project: athlete?.project || '',
+      team: athlete?.team || '',
+    };
+    if (
+      !athlete ||
+      !hasAthleteAccess(currentUser, athleteId) ||
+      coachIds.some((id: number) => !validCoaches.has(id)) ||
+      !provinceSet.has(region) ||
+      city.length < 2 ||
+      county.length < 2 ||
+      !permissionsAllowAthlete(accountPermissions(currentUser.id), targetScope)
+    ) {
+      return res.status(400).json({ message: '运动员或教练信息无效。' });
+    }
+    db.exec('BEGIN');
+    try {
+      upsertAthleteOrigin({
+        athleteId,
+        province: region,
+        city,
+        county,
+        source: 'manual',
+        quality: 'valid',
+      });
+      const athleteUser = db
+        .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
+        .get(athleteId) as { id: number } | undefined;
+      if (athleteUser) {
+        db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(athleteUser.id);
+        db.prepare(
+          `
         INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
         VALUES (?, 'county', ?, ?, ?, ?)
-      `).run(athleteUser.id, region, city, county, currentUser.id);
+      `
+        ).run(athleteUser.id, region, city, county, currentUser.id);
+      }
+      db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
+      const insert = db.prepare(
+        'INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
+      );
+      for (const coachId of coachIds) insert.run(coachId, athleteId);
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        currentUser.id,
+        'UPDATE_ASSIGNMENT',
+        'athlete',
+        athleteId,
+        JSON.stringify({ coachIds, region, city, county })
+      );
+      db.exec('COMMIT');
+      res.json({ updated: true });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      res
+        .status(500)
+        .json({ message: `更新关系失败：${error instanceof Error ? error.message : '未知错误'}` });
     }
-    db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
-    const insert = db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)');
-    for (const coachId of coachIds) insert.run(coachId, athleteId);
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(currentUser.id, 'UPDATE_ASSIGNMENT', 'athlete', athleteId, JSON.stringify({ coachIds, region, city, county }));
-    db.exec('COMMIT');
-    res.json({ updated: true });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: `更新关系失败：${error instanceof Error ? error.message : '未知错误'}` });
   }
-});
+);
 
 type AccountRow = AuthUser & {
   active: number;
@@ -5013,7 +7851,9 @@ type AccountRow = AuthUser & {
 };
 
 function allAccountRows() {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT u.id, u.username, u.display_name AS displayName, u.role,
       u.athlete_id AS athleteId, u.active,
       ap.parent_user_id AS parentUserId, parent.display_name AS parentName,
@@ -5025,7 +7865,9 @@ function allAccountRows() {
       WHEN 'DMD' THEN 5 WHEN 'TD' THEN 4 WHEN 'PRJ' THEN 3
       WHEN 'REG' THEN 3 WHEN 'SCC' THEN 2 ELSE 1 END DESC,
       u.display_name, u.id
-  `).all() as AccountRow[];
+  `
+    )
+    .all() as AccountRow[];
 }
 
 function serializeAccount(row: AccountRow) {
@@ -5039,11 +7881,11 @@ function serializeAccount(row: AccountRow) {
       role: row.role,
       areas: permissions.areas,
       projects: permissions.projects,
-      teams: permissions.teams
+      teams: permissions.teams,
     }),
     areas: permissions.areas,
     projects: permissions.projects,
-    teams: permissions.teams
+    teams: permissions.teams,
   };
 }
 
@@ -5054,7 +7896,8 @@ function resolveParent(
   targetPermissions: ReturnType<typeof parseScopePayload>
 ) {
   const parent = userById(parentUserId);
-  if (!parent || !canManageRole(parent.role, targetRole)) return { error: '上级账号层级不符合要求。', parent: null };
+  if (!parent || !canManageRole(parent.role, targetRole))
+    return { error: '上级账号层级不符合要求。', parent: null };
   if (parent.id !== currentUser.id && !canManageAccount(currentUser, parent)) {
     return { error: '不能选择权限范围外的上级账号。', parent: null };
   }
@@ -5064,192 +7907,300 @@ function resolveParent(
   return { error: '', parent };
 }
 
-app.get('/api/access/accounts', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const rows = allAccountRows();
-  const current = rows.find((row) => row.id === currentUser.id);
-  const accounts = rows.filter((row) => row.id !== currentUser.id && canManageAccount(currentUser, row));
-  const visibleParents = rows.filter((row) =>
-    row.active === 1
-    && (row.id === currentUser.id || canManageAccount(currentUser, row))
-    && canManageRole(currentUser.role, 'ATL')
-  );
-  res.json({
-    current: current ? serializeAccount(current) : null,
-    accounts: accounts.map(serializeAccount),
-    possibleParents: visibleParents.map((row) => ({
-      id: row.id,
-      displayName: row.displayName,
-      role: row.role,
-      roleLabel: ROLE_META[row.role].label
-    })),
-    meta: {
-      roles: ROLE_META,
-      hierarchy: ROLE_HIERARCHY,
-      areaLevels: AREA_LEVEL_META,
-      provinces: PROVINCES,
-      projects: [...PROJECTS]
-    }
-  });
-});
+app.get(
+  '/api/access/accounts',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const rows = allAccountRows();
+    const current = rows.find((row) => row.id === currentUser.id);
+    const accounts = rows.filter(
+      (row) => row.id !== currentUser.id && canManageAccount(currentUser, row)
+    );
+    const visibleParents = rows.filter(
+      (row) =>
+        row.active === 1 &&
+        (row.id === currentUser.id || canManageAccount(currentUser, row)) &&
+        canManageRole(currentUser.role, 'ATL')
+    );
+    res.json({
+      current: current ? serializeAccount(current) : null,
+      accounts: accounts.map(serializeAccount),
+      possibleParents: visibleParents.map((row) => ({
+        id: row.id,
+        displayName: row.displayName,
+        role: row.role,
+        roleLabel: ROLE_META[row.role].label,
+      })),
+      meta: {
+        roles: ROLE_META,
+        hierarchy: ROLE_HIERARCHY,
+        areaLevels: AREA_LEVEL_META,
+        provinces: PROVINCES,
+        projects: [...PROJECTS],
+      },
+    });
+  }
+);
 
-app.post('/api/access/accounts', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const username = cleanString(req.body?.username).toLowerCase();
-  const password = cleanString(req.body?.password);
-  const displayNameResult = validatePersonName(req.body?.displayName);
-  const role = cleanString(req.body?.role) as Role;
-  const parentUserId = Number(req.body?.parentUserId);
-  const gender = cleanString(req.body?.gender);
-  const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
-  const permissions = parseScopePayload(req.body);
-  const errors: string[] = [];
-  if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
-  if (password.length < 8 || password.length > 72 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    errors.push('密码须为8—72位，并同时包含字母和数字');
-  }
-  if (displayNameResult.error) errors.push(displayNameResult.error);
-  if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) errors.push('不能创建该层级的账号');
-  const scopeError = validateScopePayload(permissions);
-  if (scopeError) errors.push(scopeError);
-  if (!permissionsContain(accountPermissions(currentUser.id), permissions)) errors.push('账号权限范围不能超出当前账号');
-  if (role === 'ATL') {
-    if (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county') {
-      errors.push('运动员必须绑定一个省、市、区县');
+app.post(
+  '/api/access/accounts',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const username = cleanString(req.body?.username).toLowerCase();
+    const password = cleanString(req.body?.password);
+    const displayNameResult = validatePersonName(req.body?.displayName);
+    const role = cleanString(req.body?.role) as Role;
+    const parentUserId = Number(req.body?.parentUserId);
+    const gender = cleanString(req.body?.gender);
+    const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
+    const permissions = parseScopePayload(req.body);
+    const errors: string[] = [];
+    if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
+    if (
+      password.length < 8 ||
+      password.length > 72 ||
+      !/[A-Za-z]/.test(password) ||
+      !/\d/.test(password)
+    ) {
+      errors.push('密码须为8—72位，并同时包含字母和数字');
     }
-    if (permissions.projects.length !== 1 || permissions.projects[0] === '*') errors.push('运动员必须绑定一个具体项目');
-    if (permissions.teams.length !== 1 || permissions.teams[0].team === '*') errors.push('运动员必须绑定一个具体队伍');
-    if (!['男', '女'].includes(gender)) errors.push('请选择运动员性别');
-  }
-  if (role === 'SCC' && !isCoachCategory(coachCategory)) errors.push('请选择有效的教练类别');
-  const parentResult = Number.isFinite(parentUserId)
-    ? resolveParent(currentUser, role, parentUserId, permissions)
-    : { error: '请选择上级管理账号。', parent: null };
-  if (parentResult.error) errors.push(parentResult.error);
-  if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
-  if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) {
-    return res.status(409).json({ message: '该登录账号已存在。' });
-  }
-
-  db.exec('BEGIN');
-  try {
-    let athleteId: number | null = null;
-    const area = permissions.areas[0];
-    const project = permissions.projects[0];
-    const team = permissions.teams[0].team;
+    if (displayNameResult.error) errors.push(displayNameResult.error);
+    if (!ROLES.includes(role) || !canManageRole(currentUser.role, role))
+      errors.push('不能创建该层级的账号');
+    const scopeError = validateScopePayload(permissions);
+    if (scopeError) errors.push(scopeError);
+    if (!permissionsContain(accountPermissions(currentUser.id), permissions))
+      errors.push('账号权限范围不能超出当前账号');
     if (role === 'ATL') {
-      const teamRow = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(project, team) as { id: number } | undefined;
-      if (!teamRow) throw new Error('所选队伍不存在或已停用。');
-      const athleteResult = db.prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
-        .run(displayNameResult.name, project, teamRow.id, gender);
-      athleteId = Number(athleteResult.lastInsertRowid);
-      upsertAthleteOrigin({ athleteId, province: area.province, city: area.city, county: area.county, source: 'manual', quality: 'valid' });
-      db.prepare(`
-        INSERT INTO athlete_profiles (athlete_id, created_at)
-        VALUES (?, CURRENT_TIMESTAMP)
-      `).run(athleteId);
+      if (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county') {
+        errors.push('运动员必须绑定一个省、市、区县');
+      }
+      if (permissions.projects.length !== 1 || permissions.projects[0] === '*')
+        errors.push('运动员必须绑定一个具体项目');
+      if (permissions.teams.length !== 1 || permissions.teams[0].team === '*')
+        errors.push('运动员必须绑定一个具体队伍');
+      if (!['男', '女'].includes(gender)) errors.push('请选择运动员性别');
     }
-    const userResult = db.prepare(`
-      INSERT INTO users (username, password_hash, display_name, role, athlete_id, active)
-      VALUES (?, ?, ?, ?, ?, 1)
-    `).run(username, bcrypt.hashSync(password, 11), displayNameResult.name, role, athleteId);
-    const userId = Number(userResult.lastInsertRowid);
-    if (role === 'SCC') {
-      db.prepare('INSERT INTO coach_profiles (user_id, category) VALUES (?, ?)').run(userId, coachCategory);
+    if (role === 'SCC' && !isCoachCategory(coachCategory)) errors.push('请选择有效的教练类别');
+    const parentResult = Number.isFinite(parentUserId)
+      ? resolveParent(currentUser, role, parentUserId, permissions)
+      : { error: '请选择上级管理账号。', parent: null };
+    if (parentResult.error) errors.push(parentResult.error);
+    if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+    if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) {
+      return res.status(409).json({ message: '该登录账号已存在。' });
     }
-    db.prepare(`
-      INSERT INTO account_profiles (user_id, parent_user_id, account_code)
-      VALUES (?, ?, ?)
-    `).run(userId, parentUserId, accountCodeFor(userId, role, area.province, project));
-    replaceAccountScope({ userId, role, parentUserId, permissions, grantedBy: currentUser.id });
-    if (role === 'ATL' && athleteId && parentResult.parent?.role === 'SCC') {
-      db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(parentUserId, athleteId);
-    }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(currentUser.id, 'CREATE_ACCOUNT', 'user', userId, JSON.stringify({ username, role, parentUserId, permissions }));
-    db.exec('COMMIT');
-    res.status(201).json({ message: '账号已创建并完成权限绑定。', id: userId });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    const message = error instanceof Error && error.message.includes('UNIQUE')
-      ? '姓名或账号已存在，请核对后再试。'
-      : error instanceof Error ? error.message : '创建账号失败。';
-    res.status(400).json({ message });
-  }
-});
 
-app.put('/api/access/accounts/:id', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const targetId = Number(req.params.id);
-  const target = userById(targetId);
-  if (!target || !canManageAccount(currentUser, target)) {
-    return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
-  }
-  const role = cleanString(req.body?.role) as Role;
-  const parentUserId = Number(req.body?.parentUserId);
-  const permissions = parseScopePayload(req.body);
-  const scopeError = validateScopePayload(permissions);
-  if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) {
-    return res.status(400).json({ message: '目标角色层级无效。' });
-  }
-  if ((target.role === 'ATL') !== (role === 'ATL')) {
-    return res.status(400).json({ message: '运动员账号不能与管理岗位相互转换。' });
-  }
-  if (scopeError) return res.status(400).json({ message: scopeError });
-  if (!permissionsContain(accountPermissions(currentUser.id), permissions)) {
-    return res.status(403).json({ message: '新的权限范围不能超出当前账号。' });
-  }
-  const parentResult = resolveParent(currentUser, role, parentUserId, permissions);
-  if (parentResult.error) return res.status(400).json({ message: parentResult.error });
-  if (parentUserId === targetId) return res.status(400).json({ message: '上级账号不能选择本人。' });
-  if (target.role === 'ATL') {
-    if (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county'
-      || permissions.projects.length !== 1 || permissions.projects[0] === '*'
-      || permissions.teams.length !== 1 || permissions.teams[0].team === '*') {
-      return res.status(400).json({ message: '运动员必须绑定一个具体区县、项目和队伍。' });
-    }
-  }
-
-  db.exec('BEGIN');
-  try {
-    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, targetId);
-    replaceAccountScope({ userId: targetId, role, parentUserId, permissions, grantedBy: currentUser.id });
-    if (target.role === 'ATL' && target.athleteId) {
+    db.exec('BEGIN');
+    try {
+      let athleteId: number | null = null;
       const area = permissions.areas[0];
       const project = permissions.projects[0];
       const team = permissions.teams[0].team;
-      const teamRow = db.prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1').get(project, team) as { id: number } | undefined;
-      if (!teamRow) throw new Error('所选队伍不存在或已停用。');
-      db.prepare(`UPDATE athletes SET project = ?, team_id = ? WHERE id = ?`).run(project, teamRow.id, target.athleteId);
-      upsertAthleteOrigin({ athleteId: target.athleteId, province: area.province, city: area.city, county: area.county, source: 'manual', quality: 'valid' });
-      db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(target.athleteId);
-      if (parentResult.parent?.role === 'SCC') {
-        db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(parentUserId, target.athleteId);
+      if (role === 'ATL') {
+        const teamRow = db
+          .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+          .get(project, team) as { id: number } | undefined;
+        if (!teamRow) throw new Error('所选队伍不存在或已停用。');
+        const athleteResult = db
+          .prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
+          .run(displayNameResult.name, project, teamRow.id, gender);
+        athleteId = Number(athleteResult.lastInsertRowid);
+        upsertAthleteOrigin({
+          athleteId,
+          province: area.province,
+          city: area.city,
+          county: area.county,
+          source: 'manual',
+          quality: 'valid',
+        });
+        db.prepare(
+          `
+        INSERT INTO athlete_profiles (athlete_id, created_at)
+        VALUES (?, CURRENT_TIMESTAMP)
+      `
+        ).run(athleteId);
+      }
+      const userResult = db
+        .prepare(
+          `
+      INSERT INTO users (username, password_hash, display_name, role, athlete_id, active)
+      VALUES (?, ?, ?, ?, ?, 1)
+    `
+        )
+        .run(username, bcrypt.hashSync(password, 11), displayNameResult.name, role, athleteId);
+      const userId = Number(userResult.lastInsertRowid);
+      if (role === 'SCC') {
+        db.prepare('INSERT INTO coach_profiles (user_id, category) VALUES (?, ?)').run(
+          userId,
+          coachCategory
+        );
+      }
+      db.prepare(
+        `
+      INSERT INTO account_profiles (user_id, parent_user_id, account_code)
+      VALUES (?, ?, ?)
+    `
+      ).run(userId, parentUserId, accountCodeFor(userId, role, area.province, project));
+      replaceAccountScope({ userId, role, parentUserId, permissions, grantedBy: currentUser.id });
+      if (role === 'ATL' && athleteId && parentResult.parent?.role === 'SCC') {
+        db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
+          parentUserId,
+          athleteId
+        );
+      }
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        currentUser.id,
+        'CREATE_ACCOUNT',
+        'user',
+        userId,
+        JSON.stringify({ username, role, parentUserId, permissions })
+      );
+      db.exec('COMMIT');
+      res.status(201).json({ message: '账号已创建并完成权限绑定。', id: userId });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      const message =
+        error instanceof Error && error.message.includes('UNIQUE')
+          ? '姓名或账号已存在，请核对后再试。'
+          : error instanceof Error
+            ? error.message
+            : '创建账号失败。';
+      res.status(400).json({ message });
+    }
+  }
+);
+
+app.put(
+  '/api/access/accounts/:id',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const targetId = Number(req.params.id);
+    const target = userById(targetId);
+    if (!target || !canManageAccount(currentUser, target)) {
+      return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+    }
+    const role = cleanString(req.body?.role) as Role;
+    const parentUserId = Number(req.body?.parentUserId);
+    const permissions = parseScopePayload(req.body);
+    const scopeError = validateScopePayload(permissions);
+    if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) {
+      return res.status(400).json({ message: '目标角色层级无效。' });
+    }
+    if ((target.role === 'ATL') !== (role === 'ATL')) {
+      return res.status(400).json({ message: '运动员账号不能与管理岗位相互转换。' });
+    }
+    if (scopeError) return res.status(400).json({ message: scopeError });
+    if (!permissionsContain(accountPermissions(currentUser.id), permissions)) {
+      return res.status(403).json({ message: '新的权限范围不能超出当前账号。' });
+    }
+    const parentResult = resolveParent(currentUser, role, parentUserId, permissions);
+    if (parentResult.error) return res.status(400).json({ message: parentResult.error });
+    if (parentUserId === targetId)
+      return res.status(400).json({ message: '上级账号不能选择本人。' });
+    if (target.role === 'ATL') {
+      if (
+        permissions.areas.length !== 1 ||
+        permissions.areas[0].areaLevel !== 'county' ||
+        permissions.projects.length !== 1 ||
+        permissions.projects[0] === '*' ||
+        permissions.teams.length !== 1 ||
+        permissions.teams[0].team === '*'
+      ) {
+        return res.status(400).json({ message: '运动员必须绑定一个具体区县、项目和队伍。' });
       }
     }
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-      .run(currentUser.id, 'UPDATE_ACCOUNT_ACCESS', 'user', targetId, JSON.stringify({ role, parentUserId, permissions }));
-    db.exec('COMMIT');
-    res.json({ message: '角色、上级账号和数据范围已更新。' });
-  } catch (error) {
-    db.exec('ROLLBACK');
-    res.status(500).json({ message: error instanceof Error ? error.message : '权限更新失败。' });
-  }
-});
 
-app.put('/api/access/accounts/:id/status', requireAuth, requireRole('PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
-  const currentUser = req.authUser!;
-  const targetId = Number(req.params.id);
-  const target = userById(targetId);
-  if (!target || !canManageAccount(currentUser, target)) {
-    return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+    db.exec('BEGIN');
+    try {
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, targetId);
+      replaceAccountScope({
+        userId: targetId,
+        role,
+        parentUserId,
+        permissions,
+        grantedBy: currentUser.id,
+      });
+      if (target.role === 'ATL' && target.athleteId) {
+        const area = permissions.areas[0];
+        const project = permissions.projects[0];
+        const team = permissions.teams[0].team;
+        const teamRow = db
+          .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+          .get(project, team) as { id: number } | undefined;
+        if (!teamRow) throw new Error('所选队伍不存在或已停用。');
+        db.prepare(`UPDATE athletes SET project = ?, team_id = ? WHERE id = ?`).run(
+          project,
+          teamRow.id,
+          target.athleteId
+        );
+        upsertAthleteOrigin({
+          athleteId: target.athleteId,
+          province: area.province,
+          city: area.city,
+          county: area.county,
+          source: 'manual',
+          quality: 'valid',
+        });
+        db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(target.athleteId);
+        if (parentResult.parent?.role === 'SCC') {
+          db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
+            parentUserId,
+            target.athleteId
+          );
+        }
+      }
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        currentUser.id,
+        'UPDATE_ACCOUNT_ACCESS',
+        'user',
+        targetId,
+        JSON.stringify({ role, parentUserId, permissions })
+      );
+      db.exec('COMMIT');
+      res.json({ message: '角色、上级账号和数据范围已更新。' });
+    } catch (error) {
+      db.exec('ROLLBACK');
+      res.status(500).json({ message: error instanceof Error ? error.message : '权限更新失败。' });
+    }
   }
-  const active = req.body?.active === true;
-  db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, targetId);
-  db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)')
-    .run(currentUser.id, active ? 'ENABLE_ACCOUNT' : 'DISABLE_ACCOUNT', 'user', targetId, JSON.stringify({ active }));
-  res.json({ message: active ? '账号已启用。' : '账号已停用。', active });
-});
+);
+
+app.put(
+  '/api/access/accounts/:id/status',
+  requireAuth,
+  requireRole('PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    const currentUser = req.authUser!;
+    const targetId = Number(req.params.id);
+    const target = userById(targetId);
+    if (!target || !canManageAccount(currentUser, target)) {
+      return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+    }
+    const active = req.body?.active === true;
+    db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, targetId);
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      currentUser.id,
+      active ? 'ENABLE_ACCOUNT' : 'DISABLE_ACCOUNT',
+      'user',
+      targetId,
+      JSON.stringify({ active })
+    );
+    res.json({ message: active ? '账号已启用。' : '账号已停用。', active });
+  }
+);
 
 app.get('/api/access/audit-logs', requireAuth, requireRole('DMD'), (req, res) => {
   const currentUser = req.authUser!;
@@ -5258,7 +8209,9 @@ app.get('/api/access/audit-logs', requireAuth, requireRole('DMD'), (req, res) =>
     .map((row) => row.id);
   if (!visibleIds.length) return res.json({ logs: [] });
   const placeholders = visibleIds.map(() => '?').join(',');
-  const logs = db.prepare(`
+  const logs = db
+    .prepare(
+      `
     SELECT l.id, l.action, l.entity_type AS entityType, l.entity_id AS entityId,
       l.detail, l.created_at AS createdAt,
       u.id AS actorId, u.display_name AS actorName, u.username AS actorUsername
@@ -5266,7 +8219,9 @@ app.get('/api/access/audit-logs', requireAuth, requireRole('DMD'), (req, res) =>
     JOIN users u ON u.id = l.user_id
     WHERE l.user_id IN (${placeholders})
     ORDER BY l.id DESC LIMIT 200
-  `).all(...visibleIds);
+  `
+    )
+    .all(...visibleIds);
   res.json({ logs });
 });
 
@@ -5294,11 +8249,15 @@ function shutdown(signal: NodeJS.Signals) {
   if (shuttingDown) return;
   shuttingDown = true;
   server.close(() => {
-    try { db.close(); } catch {}
+    try {
+      db.close();
+    } catch {}
     process.exit(0);
   });
   setTimeout(() => {
-    try { db.close(); } catch {}
+    try {
+      db.close();
+    } catch {}
     process.exit(0);
   }, 5000).unref();
   console.log(`收到 ${signal}，正在关闭服务。`);

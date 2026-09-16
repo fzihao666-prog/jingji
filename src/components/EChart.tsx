@@ -6,7 +6,15 @@ import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import './EChart.css';
 
-use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+use([
+  BarChart,
+  LineChart,
+  PieChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  CanvasRenderer,
+]);
 const resizers = new Map<Element, () => void>();
 let observer: ResizeObserver | undefined;
 
@@ -29,12 +37,14 @@ export function EChart({ option, label }: { option: EChartsOption; label: string
           categoryAxis: { axisLine: { lineStyle: { color: token('--line') } } },
           timeAxis: { axisLine: { lineStyle: { color: token('--line') } } },
           valueAxis: { splitLine: { lineStyle: { color: token('--line') } } },
-          legend: { textStyle: { color: token('--muted') } }
+          legend: { textStyle: { color: token('--muted') } },
         });
         chart.current.setOption(currentOption.current);
       } else chart.current.resize();
     };
-    observer ??= new ResizeObserver((entries) => entries.forEach((entry) => resizers.get(entry.target)?.()));
+    observer ??= new ResizeObserver((entries) =>
+      entries.forEach((entry) => resizers.get(entry.target)?.())
+    );
     resizers.set(container, resize);
     observer.observe(container);
     resize();

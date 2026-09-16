@@ -1,6 +1,6 @@
 ---
 name: governance
-description: "Repository policy design or changes: CI, releases, dependency or license policy, secrets scanning, protected-branch/PR rules, and performance budgets. Not for routine metadata edits such as a one-line .gitignore change. 日本語の依頼例:「CI/CD設定」「リリース手順」「依存ライセンス」「ブランチ/PR運用」。"
+description: 'Repository policy design or changes: CI, releases, dependency or license policy, secrets scanning, protected-branch/PR rules, and performance budgets. Not for routine metadata edits such as a one-line .gitignore change. 日本語の依頼例:「CI/CD設定」「リリース手順」「依存ライセンス」「ブランチ/PR運用」。'
 ---
 
 # Governance

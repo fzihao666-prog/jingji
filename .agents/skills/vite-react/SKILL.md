@@ -1,6 +1,6 @@
 ---
 name: vite-react
-description: "Standalone Vite + React SPA structure, env vars, splitting, and vite.config. Not for Astro/Next.js or merely because Vitest/Storybook use Vite internally. 日本語の依頼例:「Vite + React SPA」「素のViteプロジェクト」「vite.config」。"
+description: 'Standalone Vite + React SPA structure, env vars, splitting, and vite.config. Not for Astro/Next.js or merely because Vitest/Storybook use Vite internally. 日本語の依頼例:「Vite + React SPA」「素のViteプロジェクト」「vite.config」。'
 ---
 
 # Vite + React SPA

@@ -1,6 +1,6 @@
 ---
 name: testing-playwright
-description: "Playwright E2E tests, locators, web-first assertions, isolation, network stubbing, and flake prevention. 日本語の依頼例:「E2Eテスト」「Playwright」「ブラウザテスト」「flakyを直す」。"
+description: 'Playwright E2E tests, locators, web-first assertions, isolation, network stubbing, and flake prevention. 日本語の依頼例:「E2Eテスト」「Playwright」「ブラウザテスト」「flakyを直す」。'
 ---
 
 # Playwright
@@ -29,7 +29,7 @@ E2E tests cover critical user journeys end-to-end (signup, checkout, the money p
 ## Fixtures over Page Objects
 
 - Encode app-specific setup as custom fixtures (`test.extend`) — authenticated page, seeded user, feature flags.
-- Keep page helpers lightweight: functions/classes wrapping *actions* (`checkout.fillShipping(data)`), not assertion museums. Assertions live in tests.
+- Keep page helpers lightweight: functions/classes wrapping _actions_ (`checkout.fillShipping(data)`), not assertion museums. Assertions live in tests.
 
 ## Network
 

@@ -11,7 +11,7 @@ import {
   ShieldAlert,
   Smartphone,
   Unplug,
-  Zap
+  Zap,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import type { User } from '../types';
@@ -72,14 +72,15 @@ type NavigatorWithBluetooth = Navigator & {
   bluetooth?: BluetoothApiLike;
 };
 
-type ConnectionStatus = 'idle' | 'requesting' | 'connecting' | 'connected' | 'unsupported' | 'error';
+type ConnectionStatus =
+  'idle' | 'requesting' | 'connecting' | 'connected' | 'unsupported' | 'error';
 
 const serviceOptions = [
   { label: '健身设备 FTMS', value: 'fitness_machine', note: '赛艇机、测功仪等常见训练设备' },
   { label: '心率', value: 'heart_rate', note: '心率带、心率臂带' },
   { label: '电量', value: 'battery_service', note: '读取设备电池' },
   { label: '设备信息', value: 'device_information', note: '读取厂商与型号' },
-  { label: '自定义', value: 'custom', note: '手动填写服务 UUID' }
+  { label: '自定义', value: 'custom', note: '手动填写服务 UUID' },
 ];
 
 const defaultOptionalServices = [
@@ -90,7 +91,7 @@ const defaultOptionalServices = [
   '00001826-0000-1000-8000-00805f9b34fb',
   '0000180d-0000-1000-8000-00805f9b34fb',
   '0000180f-0000-1000-8000-00805f9b34fb',
-  '0000180a-0000-1000-8000-00805f9b34fb'
+  '0000180a-0000-1000-8000-00805f9b34fb',
 ];
 
 function nowLabel() {
@@ -127,8 +128,12 @@ export function BluetoothConnectPage({ user }: Props) {
   const [server, setServer] = useState<BluetoothRemoteGATTServerLike | null>(null);
   const [battery, setBattery] = useState<number | null>(null);
   const [servicePreset, setServicePreset] = useState('fitness_machine');
-  const [customServiceUuid, setCustomServiceUuid] = useState('00001826-0000-1000-8000-00805f9b34fb');
-  const [characteristicUuid, setCharacteristicUuid] = useState('00002ad1-0000-1000-8000-00805f9b34fb');
+  const [customServiceUuid, setCustomServiceUuid] = useState(
+    '00001826-0000-1000-8000-00805f9b34fb'
+  );
+  const [characteristicUuid, setCharacteristicUuid] = useState(
+    '00002ad1-0000-1000-8000-00805f9b34fb'
+  );
   const [commandText, setCommandText] = useState('');
   const [lastValue, setLastValue] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -176,7 +181,7 @@ export function BluetoothConnectPage({ user }: Props) {
       pushLog('开始扫描附近蓝牙设备');
       const selected = await bluetoothApi.requestDevice({
         acceptAllDevices: true,
-        optionalServices: defaultOptionalServices
+        optionalServices: defaultOptionalServices,
       });
 
       setDevice(selected);
@@ -278,33 +283,67 @@ export function BluetoothConnectPage({ user }: Props) {
 
   return (
     <PageContainer className="bluetooth-page">
-      <PageHeader eyebrow="DEVICE MANAGEMENT" title="设备管理" className="bluetooth-heading" actions={<div className="bluetooth-actions">
-          <button className="secondary-button" type="button" onClick={connectDevice} disabled={busy}>
-            {busy ? <LoaderCircle size={16} className="spin" /> : <Bluetooth size={16} />}扫描并连接
-          </button>
-          <button className="ghost-button" type="button" onClick={disconnectDevice} disabled={!device && !server}>
-            <Unplug size={16} />断开
-          </button>
-        </div>}/>
+      <PageHeader
+        eyebrow="DEVICE MANAGEMENT"
+        title="设备管理"
+        className="bluetooth-heading"
+        actions={
+          <div className="bluetooth-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={connectDevice}
+              disabled={busy}
+            >
+              {busy ? <LoaderCircle size={16} className="spin" /> : <Bluetooth size={16} />}
+              扫描并连接
+            </button>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={disconnectDevice}
+              disabled={!device && !server}
+            >
+              <Unplug size={16} />
+              断开
+            </button>
+          </div>
+        }
+      />
 
       <section className="bluetooth-status-grid">
         <div className="bluetooth-status-card">
-          <span><RadioTower size={16} />浏览器环境</span>
+          <span>
+            <RadioTower size={16} />
+            浏览器环境
+          </span>
           <strong>{supported ? '可连接' : '受限'}</strong>
-          <small>{securityHint || (bluetoothApi ? '支持 Web Bluetooth' : '当前浏览器不支持 Web Bluetooth')}</small>
+          <small>
+            {securityHint ||
+              (bluetoothApi ? '支持 Web Bluetooth' : '当前浏览器不支持 Web Bluetooth')}
+          </small>
         </div>
         <div className="bluetooth-status-card">
-          <span><Smartphone size={16} />当前设备</span>
+          <span>
+            <Smartphone size={16} />
+            当前设备
+          </span>
           <strong>{device?.name || '未选择设备'}</strong>
           <small>{connectionLabel}</small>
         </div>
         <div className="bluetooth-status-card">
-          <span><BatteryCharging size={16} />设备电量</span>
+          <span>
+            <BatteryCharging size={16} />
+            设备电量
+          </span>
           <strong>{battery === null ? '--' : battery + '%'}</strong>
           <small>连接后自动尝试读取</small>
         </div>
         <div className="bluetooth-status-card">
-          <span><Zap size={16} />最近数据</span>
+          <span>
+            <Zap size={16} />
+            最近数据
+          </span>
           <strong>{lastValue || '--'}</strong>
           <small>读取或监听后显示十六进制数据</small>
         </div>
@@ -321,17 +360,28 @@ export function BluetoothConnectPage({ user }: Props) {
       )}
 
       <AppCard className="bluetooth-panel">
-        <SectionHeader title="设备数据通道" description={`登录用户：${user?.username || '当前用户'}`} actions={<span className={'bluetooth-chip ' + (server?.connected ? 'connected' : '')}>
-            {server?.connected ? <BluetoothConnected size={15} /> : <BluetoothOff size={15} />}
-            {connectionLabel}
-          </span>}/>
+        <SectionHeader
+          title="设备数据通道"
+          description={`登录用户：${user?.username || '当前用户'}`}
+          actions={
+            <span className={'bluetooth-chip ' + (server?.connected ? 'connected' : '')}>
+              {server?.connected ? <BluetoothConnected size={15} /> : <BluetoothOff size={15} />}
+              {connectionLabel}
+            </span>
+          }
+        />
 
         <div className="bluetooth-form-grid">
           <label>
             <span>服务类型</span>
-            <select value={servicePreset} onChange={(event) => setServicePreset(event.target.value)}>
+            <select
+              value={servicePreset}
+              onChange={(event) => setServicePreset(event.target.value)}
+            >
               {serviceOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
           </label>
@@ -363,23 +413,43 @@ export function BluetoothConnectPage({ user }: Props) {
         </div>
 
         <div className="bluetooth-command-row">
-          <button className="secondary-button" type="button" onClick={readCharacteristic} disabled={!server?.connected}>
-            <RefreshCcw size={16} />读取特征值
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={readCharacteristic}
+            disabled={!server?.connected}
+          >
+            <RefreshCcw size={16} />
+            读取特征值
           </button>
-          <button className="secondary-button" type="button" onClick={startNotify} disabled={!server?.connected}>
-            <CheckCircle2 size={16} />监听数据
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={startNotify}
+            disabled={!server?.connected}
+          >
+            <CheckCircle2 size={16} />
+            监听数据
           </button>
-          <button className="primary-button" type="button" onClick={sendCommand} disabled={!server?.connected}>
-            <Send size={16} />发送
+          <button
+            className="primary-button"
+            type="button"
+            onClick={sendCommand}
+            disabled={!server?.connected}
+          >
+            <Send size={16} />
+            发送
           </button>
         </div>
       </AppCard>
 
       <AppCard className="bluetooth-log-panel">
-        <SectionHeader title="连接日志" description="只记录本次页面操作，不影响其他训练数据。"/>
+        <SectionHeader title="连接日志" description="只记录本次页面操作，不影响其他训练数据。" />
         {logs.length ? (
           <div className="bluetooth-log-list">
-            {logs.map((item, index) => <div key={index}>{item}</div>)}
+            {logs.map((item, index) => (
+              <div key={index}>{item}</div>
+            ))}
           </div>
         ) : (
           <div className="bluetooth-empty">等待扫描、连接或读取设备数据。</div>

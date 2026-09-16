@@ -20,13 +20,16 @@ export function TeamsPage() {
       const result = await api.adminTeams();
       setTeams(result.teams);
       setCanCreateProjects(result.canCreateProjects);
-      if (result.canCreateProjects.length && !result.canCreateProjects.includes(project)) setProject(result.canCreateProjects[0]);
+      if (result.canCreateProjects.length && !result.canCreateProjects.includes(project))
+        setProject(result.canCreateProjects[0]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -58,29 +61,89 @@ export function TeamsPage() {
 
   return (
     <PageContainer className="teams-page">
-      <PageHeader variant="compact" eyebrow="PROJECT TEAM DIRECTORY" title="队伍管理" actions={<span className="count-chip large"><Layers3 size={17} />{teams.length}支队伍</span>}/>
+      <PageHeader
+        variant="compact"
+        eyebrow="PROJECT TEAM DIRECTORY"
+        title="队伍管理"
+        actions={
+          <span className="count-chip large">
+            <Layers3 size={17} />
+            {teams.length}支队伍
+          </span>
+        }
+      />
 
-      {canCreateProjects.length > 0 && <form className="team-create-panel" onSubmit={create}>
-        <label><span>所属项目</span><select value={project} onChange={(event) => setProject(event.target.value as Project)}>{canCreateProjects.map((item) => <option key={item}>{item}</option>)}</select></label>
-        <label><span>队伍名称</span><input value={name} onChange={(event) => setName(event.target.value)} placeholder="如：女子双桨组" minLength={2} maxLength={30} required /></label>
-        <button className="primary-button" disabled={busy}><Plus size={17} />{busy ? '添加中…' : '添加队伍'}</button>
-      </form>}
+      {canCreateProjects.length > 0 && (
+        <form className="team-create-panel" onSubmit={create}>
+          <label>
+            <span>所属项目</span>
+            <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
+              {canCreateProjects.map((item) => (
+                <option key={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>队伍名称</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="如：女子双桨组"
+              minLength={2}
+              maxLength={30}
+              required
+            />
+          </label>
+          <button className="primary-button" disabled={busy}>
+            <Plus size={17} />
+            {busy ? '添加中…' : '添加队伍'}
+          </button>
+        </form>
+      )}
       {message && <div className="message-banner success">{message}</div>}
 
-      {loading ? <ContentState kind="loading" title="正在加载队伍目录…"/> : (
+      {loading ? (
+        <ContentState kind="loading" title="正在加载队伍目录…" />
+      ) : (
         <section className="team-project-grid">
-          {PROJECTS.filter((item) => teams.some((team) => team.project === item) || canCreateProjects.includes(item)).map((item) => {
+          {PROJECTS.filter(
+            (item) =>
+              teams.some((team) => team.project === item) || canCreateProjects.includes(item)
+          ).map((item) => {
             const projectTeams = teams.filter((team) => team.project === item);
             return (
               <article className="team-project-card" key={item}>
-                <header><div><strong>{item}</strong><small>{projectTeams.length}支队伍</small></div></header>
+                <header>
+                  <div>
+                    <strong>{item}</strong>
+                    <small>{projectTeams.length}支队伍</small>
+                  </div>
+                </header>
                 <div className="team-directory-list">
-                  {projectTeams.length ? projectTeams.map((team) => (
-                    <div key={team.id}>
-                      <span><UsersRound size={15} /><strong>{team.name}</strong><small>{team.athleteCount}名运动员</small></span>
-                      {team.canDelete && <button className="icon-button" onClick={() => void remove(team)} disabled={team.athleteCount > 0} title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'} aria-label={`删除${team.name}`}><Trash2 size={16} /></button>}
-                    </div>
-                  )) : <p>暂无队伍，可在上方添加。</p>}
+                  {projectTeams.length ? (
+                    projectTeams.map((team) => (
+                      <div key={team.id}>
+                        <span>
+                          <UsersRound size={15} />
+                          <strong>{team.name}</strong>
+                          <small>{team.athleteCount}名运动员</small>
+                        </span>
+                        {team.canDelete && (
+                          <button
+                            className="icon-button"
+                            onClick={() => void remove(team)}
+                            disabled={team.athleteCount > 0}
+                            title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'}
+                            aria-label={`删除${team.name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p>暂无队伍，可在上方添加。</p>
+                  )}
                 </div>
               </article>
             );

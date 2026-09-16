@@ -1,4 +1,7 @@
-import { aggregateSpecialTraining, type SpecialTrainingAthlete } from '../shared/special-training.ts';
+import {
+  aggregateSpecialTraining,
+  type SpecialTrainingAthlete,
+} from '../shared/special-training.ts';
 import { summarizeDailyRpe } from './rpe-statistics.ts';
 import { db } from './db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
@@ -137,16 +140,27 @@ function emptyBreakdown() {
   return {
     waterMinutes: 0,
     ergMinutes: 0,
-    landMinutes: { functional: 0, endurance: 0, maxStrength: 0, speedStrength: 0, recovery: 0, running: 0, other: 0 },
+    landMinutes: {
+      functional: 0,
+      endurance: 0,
+      maxStrength: 0,
+      speedStrength: 0,
+      recovery: 0,
+      running: 0,
+      other: 0,
+    },
     waterDistanceByZone: Object.fromEntries(zones.map((zone) => [zone, 0])),
     waterTimeByZone: Object.fromEntries(zones.map((zone) => [zone, 0])),
-    ergDistanceByZone: Object.fromEntries(zones.map((zone) => [zone, 0]))
+    ergDistanceByZone: Object.fromEntries(zones.map((zone) => [zone, 0])),
   };
 }
 
 function sessionBreakdown(row: SessionRow) {
   const breakdown = emptyBreakdown();
-  if (zones.includes(row.intensityZone as typeof zones[number]) && row.trainingType === '专项训练') {
+  if (
+    zones.includes(row.intensityZone as (typeof zones)[number]) &&
+    row.trainingType === '专项训练'
+  ) {
     breakdown.waterMinutes = row.durationMin;
     breakdown.waterDistanceByZone[row.intensityZone] = row.distanceKm;
     breakdown.waterTimeByZone[row.intensityZone] = row.durationMin;
@@ -159,7 +173,9 @@ function sessionBreakdown(row: SessionRow) {
 }
 
 function average(values: Array<number | null | undefined>) {
-  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const valid = values.filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value)
+  );
   return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
 }
 
@@ -169,9 +185,13 @@ function round(value: number | null, digits = 2) {
 
 function emptyTrainingVolume() {
   return {
-    days: [], totalDurationMin: null, totalDistanceKm: null,
-    averageDurationMin: null, averageDistanceKm: null,
-    durationDayCount: 0, distanceDayCount: 0
+    days: [],
+    totalDurationMin: null,
+    totalDistanceKm: null,
+    averageDurationMin: null,
+    averageDistanceKm: null,
+    durationDayCount: 0,
+    distanceDayCount: 0,
   };
 }
 
@@ -185,48 +205,96 @@ function teamDurationSessions(sessions: SessionRow[], individual: boolean) {
     const activity = `${row.trainingType}|${row.structureType}|${row.content}`.trim();
     const slot = row.startTime.trim()
       ? `start:${row.startTime.trim()}`
-      : row.content.trim() ? `activity:${activity}` : `order:${row.sessionOrder}|${activity}`;
+      : row.content.trim()
+        ? `activity:${activity}`
+        : `order:${row.sessionOrder}|${activity}`;
     const key = `${scope}|${row.date}|${slot}`;
     const current = grouped.get(key);
-    if (!current || (row.durationReported && (!current.durationReported || row.durationMin > current.durationMin))) grouped.set(key, row);
+    if (
+      !current ||
+      (row.durationReported && (!current.durationReported || row.durationMin > current.durationMin))
+    )
+      grouped.set(key, row);
   }
   return [...grouped.values()];
 }
 
 function aggregateTrainingVolume(sessions: SessionRow[], individual: boolean) {
-  const byDate = new Map<string, { date: string; durationMin: number; distanceKm: number; durationCount: number; distanceCount: number; sessionCount: number }>();
+  const byDate = new Map<
+    string,
+    {
+      date: string;
+      durationMin: number;
+      distanceKm: number;
+      durationCount: number;
+      distanceCount: number;
+      sessionCount: number;
+    }
+  >();
   const durationSessions = teamDurationSessions(sessions, individual);
   for (const session of durationSessions) {
     if (session.sessionDemo) continue;
-    const row = byDate.get(session.date) || { date: session.date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0, sessionCount: 0 };
+    const row = byDate.get(session.date) || {
+      date: session.date,
+      durationMin: 0,
+      distanceKm: 0,
+      durationCount: 0,
+      distanceCount: 0,
+      sessionCount: 0,
+    };
     row.sessionCount += 1;
-    if (session.durationReported) { row.durationMin += session.durationMin; row.durationCount += 1; }
+    if (session.durationReported) {
+      row.durationMin += session.durationMin;
+      row.durationCount += 1;
+    }
     byDate.set(session.date, row);
   }
   for (const session of durationSessions) {
     if (session.sessionDemo) continue;
-    const row = byDate.get(session.date) || { date: session.date, durationMin: 0, distanceKm: 0, durationCount: 0, distanceCount: 0, sessionCount: 0 };
-    if (session.distanceReported) { row.distanceKm += session.distanceKm; row.distanceCount += 1; }
+    const row = byDate.get(session.date) || {
+      date: session.date,
+      durationMin: 0,
+      distanceKm: 0,
+      durationCount: 0,
+      distanceCount: 0,
+      sessionCount: 0,
+    };
+    if (session.distanceReported) {
+      row.distanceKm += session.distanceKm;
+      row.distanceCount += 1;
+    }
     byDate.set(session.date, row);
   }
   const days = [...byDate.values()].map((row) => ({
     date: row.date,
     durationMin: row.durationCount ? round(row.durationMin, 1) : null,
     distanceKm: row.distanceCount ? round(row.distanceKm, 1) : null,
-    sessionCount: row.sessionCount
+    sessionCount: row.sessionCount,
   }));
   const durationDays = days.filter((row) => row.durationMin !== null);
   const distanceDays = days.filter((row) => row.distanceKm !== null);
-  const totalDurationMin = durationDays.length ? round(durationDays.reduce((sum, row) => sum + Number(row.durationMin), 0), 1) : null;
-  const totalDistanceKm = distanceDays.length ? round(distanceDays.reduce((sum, row) => sum + Number(row.distanceKm), 0), 1) : null;
+  const totalDurationMin = durationDays.length
+    ? round(
+        durationDays.reduce((sum, row) => sum + Number(row.durationMin), 0),
+        1
+      )
+    : null;
+  const totalDistanceKm = distanceDays.length
+    ? round(
+        distanceDays.reduce((sum, row) => sum + Number(row.distanceKm), 0),
+        1
+      )
+    : null;
   return {
     days,
     totalDurationMin,
     totalDistanceKm,
-    averageDurationMin: totalDurationMin === null ? null : round(totalDurationMin / durationDays.length, 1),
-    averageDistanceKm: totalDistanceKm === null ? null : round(totalDistanceKm / distanceDays.length, 1),
+    averageDurationMin:
+      totalDurationMin === null ? null : round(totalDurationMin / durationDays.length, 1),
+    averageDistanceKm:
+      totalDistanceKm === null ? null : round(totalDistanceKm / distanceDays.length, 1),
     durationDayCount: durationDays.length,
-    distanceDayCount: distanceDays.length
+    distanceDayCount: distanceDays.length,
   };
 }
 
@@ -242,7 +310,7 @@ function emptyTrainingAnalytics() {
       physicalLoad: null as number | null,
       rpeAverage: null as number | null,
       rpeHighest: null as number | null,
-      rpeLowest: null as number | null
+      rpeLowest: null as number | null,
     },
     days: [] as Array<{
       date: string;
@@ -258,41 +326,66 @@ function emptyTrainingAnalytics() {
       rpeCount: number;
       morningPulse: number | null;
       averageHeartRate: number | null;
-    }>
+    }>,
   };
 }
 
 function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean) {
   const actualSessions = sessions.filter((row) => !row.sessionDemo);
   const durationSessions = teamDurationSessions(actualSessions, individual);
-  const days = new Map<string, {
-    date: string;
-    physicalDurationMin: number; physicalDurationCount: number;
-    physicalLoad: number; physicalLoadCount: number;
-    specialLoad: number; specialLoadCount: number;
-    specialDurationMin: number; specialDurationCount: number;
-    specialDistanceKm: number; specialDistanceCount: number;
-    rpe: Array<{ athleteId: number; rpe: number }>; morningPulse: number[]; averageHeartRate: number[];
-    wellnessKeys: Set<string>;
-  }>();
+  const days = new Map<
+    string,
+    {
+      date: string;
+      physicalDurationMin: number;
+      physicalDurationCount: number;
+      physicalLoad: number;
+      physicalLoadCount: number;
+      specialLoad: number;
+      specialLoadCount: number;
+      specialDurationMin: number;
+      specialDurationCount: number;
+      specialDistanceKm: number;
+      specialDistanceCount: number;
+      rpe: Array<{ athleteId: number; rpe: number }>;
+      morningPulse: number[];
+      averageHeartRate: number[];
+      wellnessKeys: Set<string>;
+    }
+  >();
   const totals = {
-    totalDurationMin: 0, totalDurationCount: 0,
-    recoveryDurationMin: 0, recoveryDurationCount: 0,
-    specialDurationMin: 0, specialDurationCount: 0,
-    specialDistanceKm: 0, specialDistanceCount: 0,
-    physicalDurationMin: 0, physicalDurationCount: 0,
-    physicalLoad: 0, physicalLoadCount: 0,
-    rpe: [] as number[]
+    totalDurationMin: 0,
+    totalDurationCount: 0,
+    recoveryDurationMin: 0,
+    recoveryDurationCount: 0,
+    specialDurationMin: 0,
+    specialDurationCount: 0,
+    specialDistanceKm: 0,
+    specialDistanceCount: 0,
+    physicalDurationMin: 0,
+    physicalDurationCount: 0,
+    physicalLoad: 0,
+    physicalLoadCount: 0,
+    rpe: [] as number[],
   };
-  const getDay = (row: SessionRow) => days.get(row.date) || {
-    date: row.date,
-    physicalDurationMin: 0, physicalDurationCount: 0,
-    physicalLoad: 0, physicalLoadCount: 0,
-    specialLoad: 0, specialLoadCount: 0,
-    specialDurationMin: 0, specialDurationCount: 0,
-    specialDistanceKm: 0, specialDistanceCount: 0,
-    rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
-  };
+  const getDay = (row: SessionRow) =>
+    days.get(row.date) || {
+      date: row.date,
+      physicalDurationMin: 0,
+      physicalDurationCount: 0,
+      physicalLoad: 0,
+      physicalLoadCount: 0,
+      specialLoad: 0,
+      specialLoadCount: 0,
+      specialDurationMin: 0,
+      specialDurationCount: 0,
+      specialDistanceKm: 0,
+      specialDistanceCount: 0,
+      rpe: [],
+      morningPulse: [],
+      averageHeartRate: [],
+      wellnessKeys: new Set<string>(),
+    };
   for (const row of durationSessions) {
     const day = getDay(row);
     const category = trainingLoadCategory(row);
@@ -320,9 +413,15 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       day.rpe.push({ athleteId: row.athleteId, rpe: row.rpe });
       totals.rpe.push(row.rpe);
     }
-    if (row.averageHeartRate !== null && Number.isFinite(row.averageHeartRate)) day.averageHeartRate.push(row.averageHeartRate);
+    if (row.averageHeartRate !== null && Number.isFinite(row.averageHeartRate))
+      day.averageHeartRate.push(row.averageHeartRate);
     const wellnessKey = `${row.athleteId}:${row.date}`;
-    if (!row.wellnessDemo && !day.wellnessKeys.has(wellnessKey) && row.morningPulse !== null && Number.isFinite(row.morningPulse)) {
+    if (
+      !row.wellnessDemo &&
+      !day.wellnessKeys.has(wellnessKey) &&
+      row.morningPulse !== null &&
+      Number.isFinite(row.morningPulse)
+    ) {
       day.morningPulse.push(row.morningPulse);
       day.wellnessKeys.add(wellnessKey);
     }
@@ -331,12 +430,20 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
   for (const row of durationSessions) {
     const day = days.get(row.date) || {
       date: row.date,
-      physicalDurationMin: 0, physicalDurationCount: 0,
-      physicalLoad: 0, physicalLoadCount: 0,
-      specialLoad: 0, specialLoadCount: 0,
-      specialDurationMin: 0, specialDurationCount: 0,
-      specialDistanceKm: 0, specialDistanceCount: 0,
-      rpe: [], morningPulse: [], averageHeartRate: [], wellnessKeys: new Set<string>()
+      physicalDurationMin: 0,
+      physicalDurationCount: 0,
+      physicalLoad: 0,
+      physicalLoadCount: 0,
+      specialLoad: 0,
+      specialLoadCount: 0,
+      specialDurationMin: 0,
+      specialDurationCount: 0,
+      specialDistanceKm: 0,
+      specialDistanceCount: 0,
+      rpe: [],
+      morningPulse: [],
+      averageHeartRate: [],
+      wellnessKeys: new Set<string>(),
     };
     if (row.durationReported) {
       totals.totalDurationMin += row.durationMin;
@@ -361,7 +468,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     }
     days.set(row.date, day);
   }
-  const value = (sum: number, count: number) => count ? round(sum, 1) : null;
+  const value = (sum: number, count: number) => (count ? round(sum, 1) : null);
   return {
     summary: {
       totalDurationMin: value(totals.totalDurationMin, totals.totalDurationCount),
@@ -373,7 +480,7 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       physicalLoad: value(totals.physicalLoad, totals.physicalLoadCount),
       rpeAverage: average(totals.rpe) === null ? null : round(average(totals.rpe), 1),
       rpeHighest: totals.rpe.length ? round(Math.max(...totals.rpe), 1) : null,
-      rpeLowest: totals.rpe.length ? round(Math.min(...totals.rpe), 1) : null
+      rpeLowest: totals.rpe.length ? round(Math.min(...totals.rpe), 1) : null,
     },
     days: [...days.values()].map((day) => ({
       date: day.date,
@@ -384,8 +491,9 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       specialDistanceKm: value(day.specialDistanceKm, day.specialDistanceCount),
       ...summarizeDailyRpe(day.rpe),
       morningPulse: average(day.morningPulse) === null ? null : round(average(day.morningPulse), 1),
-      averageHeartRate: average(day.averageHeartRate) === null ? null : round(average(day.averageHeartRate), 1)
-    }))
+      averageHeartRate:
+        average(day.averageHeartRate) === null ? null : round(average(day.averageHeartRate), 1),
+    })),
   };
 }
 
@@ -395,26 +503,83 @@ function ageAt(birthDate: string | null, date: string) {
   const target = new Date(`${date}T00:00:00Z`);
   if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime())) return null;
   let age = target.getUTCFullYear() - birth.getUTCFullYear();
-  const birthdayPassed = target.getUTCMonth() > birth.getUTCMonth()
-    || (target.getUTCMonth() === birth.getUTCMonth() && target.getUTCDate() >= birth.getUTCDate());
+  const birthdayPassed =
+    target.getUTCMonth() > birth.getUTCMonth() ||
+    (target.getUTCMonth() === birth.getUTCMonth() && target.getUTCDate() >= birth.getUTCDate());
   if (!birthdayPassed) age -= 1;
   return age >= 0 ? age : null;
 }
 
-type PhysiologyMetricCode = 'blood_lactate_mmol' | 'creatine_kinase_u_l' | 'blood_urea_n_mmol_l' | 'hemoglobin_g_l' | 'hrv_rmssd_ms' | 'resting_heart_rate_bpm';
+type PhysiologyMetricCode =
+  | 'blood_lactate_mmol'
+  | 'creatine_kinase_u_l'
+  | 'blood_urea_n_mmol_l'
+  | 'hemoglobin_g_l'
+  | 'hrv_rmssd_ms'
+  | 'resting_heart_rate_bpm';
 type PhysiologyStatus = 'NORMAL' | 'FLUCTUATION' | 'ATTENTION' | 'ABNORMAL' | 'MISSING';
 
-const physiologyMetricDefinitions: Array<{ code: PhysiologyMetricCode; label: string; unit: string; direction: 'higher' | 'lower'; thresholds: [number, number, number]; baseline: number }> = [
-  { code: 'blood_lactate_mmol', label: '血乳酸 Lactate', unit: 'mmol/L', direction: 'higher', thresholds: [2.5, 4, 6], baseline: 1.9 },
-  { code: 'creatine_kinase_u_l', label: '肌酸激酶 CK', unit: 'U/L', direction: 'higher', thresholds: [300, 500, 700], baseline: 240 },
-  { code: 'blood_urea_n_mmol_l', label: '血尿素 BUN', unit: 'mmol/L', direction: 'higher', thresholds: [6, 8, 10], baseline: 4.9 },
-  { code: 'hemoglobin_g_l', label: '血红蛋白 Hb', unit: 'g/L', direction: 'lower', thresholds: [130, 120, 110], baseline: 145 },
-  { code: 'hrv_rmssd_ms', label: '心率变异性 HRV', unit: 'ms', direction: 'lower', thresholds: [55, 40, 30], baseline: 66 },
-  { code: 'resting_heart_rate_bpm', label: '静息心率 RHR', unit: 'bpm', direction: 'higher', thresholds: [60, 70, 80], baseline: 53 }
+const physiologyMetricDefinitions: Array<{
+  code: PhysiologyMetricCode;
+  label: string;
+  unit: string;
+  direction: 'higher' | 'lower';
+  thresholds: [number, number, number];
+  baseline: number;
+}> = [
+  {
+    code: 'blood_lactate_mmol',
+    label: '血乳酸 Lactate',
+    unit: 'mmol/L',
+    direction: 'higher',
+    thresholds: [2.5, 4, 6],
+    baseline: 1.9,
+  },
+  {
+    code: 'creatine_kinase_u_l',
+    label: '肌酸激酶 CK',
+    unit: 'U/L',
+    direction: 'higher',
+    thresholds: [300, 500, 700],
+    baseline: 240,
+  },
+  {
+    code: 'blood_urea_n_mmol_l',
+    label: '血尿素 BUN',
+    unit: 'mmol/L',
+    direction: 'higher',
+    thresholds: [6, 8, 10],
+    baseline: 4.9,
+  },
+  {
+    code: 'hemoglobin_g_l',
+    label: '血红蛋白 Hb',
+    unit: 'g/L',
+    direction: 'lower',
+    thresholds: [130, 120, 110],
+    baseline: 145,
+  },
+  {
+    code: 'hrv_rmssd_ms',
+    label: '心率变异性 HRV',
+    unit: 'ms',
+    direction: 'lower',
+    thresholds: [55, 40, 30],
+    baseline: 66,
+  },
+  {
+    code: 'resting_heart_rate_bpm',
+    label: '静息心率 RHR',
+    unit: 'bpm',
+    direction: 'higher',
+    thresholds: [60, 70, 80],
+    baseline: 53,
+  },
 ];
 
 function calendarDays(from: string, to: string) {
-  const count = Math.floor((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86400000) + 1;
+  const count =
+    Math.floor((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86400000) + 1;
   const cursor = new Date(`${to}T12:00:00Z`);
   return Array.from({ length: count }, (_, index) => {
     const current = new Date(cursor);
@@ -423,10 +588,26 @@ function calendarDays(from: string, to: string) {
   });
 }
 
-function physiologyStatus(definition: typeof physiologyMetricDefinitions[number], value: number): Exclude<PhysiologyStatus, 'MISSING'> {
+function physiologyStatus(
+  definition: (typeof physiologyMetricDefinitions)[number],
+  value: number
+): Exclude<PhysiologyStatus, 'MISSING'> {
   const [fluctuation, attention, abnormal] = definition.thresholds;
-  if (definition.direction === 'higher') return value >= abnormal ? 'ABNORMAL' : value >= attention ? 'ATTENTION' : value >= fluctuation ? 'FLUCTUATION' : 'NORMAL';
-  return value <= abnormal ? 'ABNORMAL' : value <= attention ? 'ATTENTION' : value <= fluctuation ? 'FLUCTUATION' : 'NORMAL';
+  if (definition.direction === 'higher')
+    return value >= abnormal
+      ? 'ABNORMAL'
+      : value >= attention
+        ? 'ATTENTION'
+        : value >= fluctuation
+          ? 'FLUCTUATION'
+          : 'NORMAL';
+  return value <= abnormal
+    ? 'ABNORMAL'
+    : value <= attention
+      ? 'ATTENTION'
+      : value <= fluctuation
+        ? 'FLUCTUATION'
+        : 'NORMAL';
 }
 
 function median(values: number[]) {
@@ -439,20 +620,44 @@ function median(values: number[]) {
 function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) {
   const dates = calendarDays(from, to);
   const placeholders = athleteIds.map(() => '?').join(',');
-  const metricCodes = physiologyMetricDefinitions.filter((item) => item.code !== 'resting_heart_rate_bpm').map((item) => item.code);
+  const metricCodes = physiologyMetricDefinitions
+    .filter((item) => item.code !== 'resting_heart_rate_bpm')
+    .map((item) => item.code);
   const metricPlaceholders = metricCodes.map(() => '?').join(',');
-  const measurements = db.prepare(`
+  const measurements = db
+    .prepare(
+      `
     SELECT ts.test_date AS date, tm.metric_code AS code, tm.value_num AS value, tm.is_demo AS isDemo, tm.source
     FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id
     WHERE ts.athlete_id IN (${placeholders}) AND ts.test_date BETWEEN ? AND ? AND tm.metric_code IN (${metricPlaceholders})
-  `).all(...athleteIds, from, to, ...metricCodes) as Array<{ date: string; code: PhysiologyMetricCode; value: number; isDemo: number; source: string }>;
-  const restingHeartRates = db.prepare(`
+  `
+    )
+    .all(...athleteIds, from, to, ...metricCodes) as Array<{
+    date: string;
+    code: PhysiologyMetricCode;
+    value: number;
+    isDemo: number;
+    source: string;
+  }>;
+  const restingHeartRates = db
+    .prepare(
+      `
     SELECT wellness_date AS date, morning_pulse AS value, is_demo AS isDemo, source
     FROM daily_wellness
     WHERE athlete_id IN (${placeholders}) AND wellness_date BETWEEN ? AND ? AND morning_pulse IS NOT NULL
-  `).all(...athleteIds, from, to) as Array<{ date: string; value: number; isDemo: number; source: string }>;
-  for (const row of restingHeartRates) measurements.push({ ...row, code: 'resting_heart_rate_bpm' });
-  const demoScope = measurements.some((row) => row.isDemo || /seed|demo|estimated/i.test(row.source));
+  `
+    )
+    .all(...athleteIds, from, to) as Array<{
+    date: string;
+    value: number;
+    isDemo: number;
+    source: string;
+  }>;
+  for (const row of restingHeartRates)
+    measurements.push({ ...row, code: 'resting_heart_rate_bpm' });
+  const demoScope = measurements.some(
+    (row) => row.isDemo || /seed|demo|estimated/i.test(row.source)
+  );
   const valuesByCell = new Map<string, Array<{ value: number; isDemo: number; source: string }>>();
   for (const row of measurements) {
     const key = `${row.code}|${row.date}`;
@@ -462,9 +667,9 @@ function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) 
   }
   const simulatedCounts = (seed: number) => {
     const sampleCount = Math.max(1, athleteIds.length);
-    const abnormal = seed % 9 === 0 ? Math.max(1, Math.round(sampleCount * .12)) : 0;
-    const attention = seed % 5 === 0 ? Math.max(1, Math.round(sampleCount * .16)) : 0;
-    const fluctuation = Math.max(1, Math.round(sampleCount * (.12 + (seed % 3) * .05)));
+    const abnormal = seed % 9 === 0 ? Math.max(1, Math.round(sampleCount * 0.12)) : 0;
+    const attention = seed % 5 === 0 ? Math.max(1, Math.round(sampleCount * 0.16)) : 0;
+    const fluctuation = Math.max(1, Math.round(sampleCount * (0.12 + (seed % 3) * 0.05)));
     const normal = Math.max(0, sampleCount - abnormal - attention - fluctuation);
     return { sampleCount, normal, fluctuation, attention, abnormal };
   };
@@ -477,8 +682,12 @@ function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) 
         unit: definition.unit,
         days: dates.map((date, dayIndex) => {
           const rows = valuesByCell.get(`${definition.code}|${date}`) || [];
-          let normal = 0; let fluctuation = 0; let attention = 0; let abnormal = 0;
-          let valueMedian: number | null = null; let isEstimated = false;
+          let normal = 0;
+          let fluctuation = 0;
+          let attention = 0;
+          let abnormal = 0;
+          let valueMedian: number | null = null;
+          let isEstimated = false;
           if (rows.length) {
             valueMedian = median(rows.map((row) => row.value));
             for (const row of rows) {
@@ -488,34 +697,63 @@ function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) 
               else if (status === 'ATTENTION') attention += 1;
               else abnormal += 1;
             }
-            isEstimated = rows.every((row) => row.isDemo || /seed|demo|estimated/i.test(row.source));
+            isEstimated = rows.every(
+              (row) => row.isDemo || /seed|demo|estimated/i.test(row.source)
+            );
           } else if (demoScope) {
-            const seed = [...`${definition.code}${date}`].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+            const seed = [...`${definition.code}${date}`].reduce(
+              (sum, char) => sum + char.charCodeAt(0),
+              0
+            );
             ({ normal, fluctuation, attention, abnormal } = simulatedCounts(seed));
-            const shift = (seed % 7 - 3) / 10;
-            valueMedian = round(definition.baseline * (1 + shift), definition.unit === 'U/L' ? 0 : 1);
+            const shift = ((seed % 7) - 3) / 10;
+            valueMedian = round(
+              definition.baseline * (1 + shift),
+              definition.unit === 'U/L' ? 0 : 1
+            );
             isEstimated = true;
           }
           const sampleCount = normal + fluctuation + attention + abnormal;
           const abnormalRate = sampleCount ? abnormal / sampleCount : null;
           const attentionRate = sampleCount ? (attention + abnormal) / sampleCount : null;
-          const status: PhysiologyStatus = !sampleCount ? 'MISSING'
-            : abnormalRate! >= .15 ? 'ABNORMAL'
-              : attentionRate! >= .25 ? 'ATTENTION'
-                : (fluctuation + attention + abnormal) / sampleCount >= .25 ? 'FLUCTUATION' : 'NORMAL';
-          const abnormalRateChange = abnormalRate === null || previousAbnormalRate === null ? null : round((abnormalRate - previousAbnormalRate) * 100, 1);
+          const status: PhysiologyStatus = !sampleCount
+            ? 'MISSING'
+            : abnormalRate! >= 0.15
+              ? 'ABNORMAL'
+              : attentionRate! >= 0.25
+                ? 'ATTENTION'
+                : (fluctuation + attention + abnormal) / sampleCount >= 0.25
+                  ? 'FLUCTUATION'
+                  : 'NORMAL';
+          const abnormalRateChange =
+            abnormalRate === null || previousAbnormalRate === null
+              ? null
+              : round((abnormalRate - previousAbnormalRate) * 100, 1);
           if (abnormalRate !== null) previousAbnormalRate = abnormalRate;
-          return { date, status, median: valueMedian, sampleCount, normal, fluctuation, attention, abnormal, abnormalRateChange, isEstimated };
-        })
+          return {
+            date,
+            status,
+            median: valueMedian,
+            sampleCount,
+            normal,
+            fluctuation,
+            attention,
+            abnormal,
+            abnormalRateChange,
+            isEstimated,
+          };
+        }),
       };
-    })
+    }),
   };
 }
 
 function readOverviewSessions(input: { athleteIds: number[]; from: string; to: string }) {
   if (!input.athleteIds.length) return [];
   const placeholders = input.athleteIds.map(() => '?').join(',');
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team_id AS teamId, COALESCE(pt.name, '') AS team,
       COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county, ts.session_date AS date, ts.session_order AS sessionOrder, COALESCE(ts.start_time, '') AS startTime,
       ts.training_type AS trainingType, ts.structure_type AS structureType,
@@ -541,14 +779,30 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
       AND lower(ts.source) NOT LIKE '%seed%'
       AND lower(ts.source) NOT LIKE '%estimated%'
     ORDER BY ts.session_date, ts.session_order, a.name
-  `).all(...input.athleteIds, input.from, input.to) as SessionRow[];
+  `
+    )
+    .all(...input.athleteIds, input.from, input.to) as SessionRow[];
 }
 
-export function buildSpecialTrainingPayload(input: { athleteIds: number[]; from: string; to: string; individual: boolean }) {
-  if (!input.athleteIds.length) return { training: aggregateSpecialTraining([]), athletes: [] as SpecialTrainingAthlete[] };
-  const sessions = readOverviewSessions(input).filter((row) => !row.sessionDemo && !/seed|demo|estimated/i.test(row.sessionSource) && row.sessionQuality !== 'estimated' && trainingLoadCategory(row) === 'special');
+export function buildSpecialTrainingPayload(input: {
+  athleteIds: number[];
+  from: string;
+  to: string;
+  individual: boolean;
+}) {
+  if (!input.athleteIds.length)
+    return { training: aggregateSpecialTraining([]), athletes: [] as SpecialTrainingAthlete[] };
+  const sessions = readOverviewSessions(input).filter(
+    (row) =>
+      !row.sessionDemo &&
+      !/seed|demo|estimated/i.test(row.sessionSource) &&
+      row.sessionQuality !== 'estimated' &&
+      trainingLoadCategory(row) === 'special'
+  );
   const placeholders = input.athleteIds.map(() => '?').join(',');
-  const athletes = db.prepare(`
+  const athletes = db
+    .prepare(
+      `
     SELECT a.id, a.name, COALESCE(NULLIF(pt.name, ''), a.team, '') AS team, COALESCE(a.gender, '') AS gender,
       a.birth_date AS birthDate,
       (SELECT bm.weight_kg FROM athlete_body_measurements bm
@@ -558,24 +812,70 @@ export function buildSpecialTrainingPayload(input: { athleteIds: number[]; from:
     LEFT JOIN project_teams pt ON pt.id = a.team_id
     WHERE a.id IN (${placeholders}) AND a.active = 1
     ORDER BY team, a.name, a.id
-  `).all(input.to, ...input.athleteIds) as Array<Omit<SpecialTrainingAthlete, 'summary'>>;
+  `
+    )
+    .all(input.to, ...input.athleteIds) as Array<Omit<SpecialTrainingAthlete, 'summary'>>;
 
   return {
     training: aggregateSpecialTraining(teamDurationSessions(sessions, input.individual)),
     athletes: athletes.map((athlete) => ({
       ...athlete,
-      summary: aggregateSpecialTraining(sessions.filter((session) => session.athleteId === athlete.id)).summary
-    }))
+      summary: aggregateSpecialTraining(
+        sessions.filter((session) => session.athleteId === athlete.id)
+      ).summary,
+    })),
   };
 }
 
-export function buildOverviewPayload(input: { athleteIds: number[]; from: string; to: string; project: string; individual: boolean; period?: 'day' | 'week' | 'month' | null }) {
-  if (!input.athleteIds.length) return {
-    records: [], trainingVolume: emptyTrainingVolume(), trainingAnalytics: emptyTrainingAnalytics(), physiologyHeatmap: { metrics: [] }, intensityDistribution: zones.map((zone) => ({ zone, durationMin: 0, sessionCount: 0, percentage: 0 })),
-    trainingLoadRatio: { specialLoad: 0, physicalLoad: 0, recoveryLoad: 0, totalLoad: 0, specialPercentage: 0, physicalPercentage: 0, recoveryPercentage: 0 },
-    strengthTests: [], measurements: [], profiles: [], injuries: [],
-    meta: { project: input.project, from: input.from, to: input.to, period: input.period ?? null, athleteCount: 0, sessionCount: 0, wellnessDays: 0, testCount: 0, coverage: 0, containsDemoData: false, sources: [], scope: input.individual ? 'individual' : 'team', generatedAt: new Date().toISOString() }
-  };
+export function buildOverviewPayload(input: {
+  athleteIds: number[];
+  from: string;
+  to: string;
+  project: string;
+  individual: boolean;
+  period?: 'day' | 'week' | 'month' | null;
+}) {
+  if (!input.athleteIds.length)
+    return {
+      records: [],
+      trainingVolume: emptyTrainingVolume(),
+      trainingAnalytics: emptyTrainingAnalytics(),
+      physiologyHeatmap: { metrics: [] },
+      intensityDistribution: zones.map((zone) => ({
+        zone,
+        durationMin: 0,
+        sessionCount: 0,
+        percentage: 0,
+      })),
+      trainingLoadRatio: {
+        specialLoad: 0,
+        physicalLoad: 0,
+        recoveryLoad: 0,
+        totalLoad: 0,
+        specialPercentage: 0,
+        physicalPercentage: 0,
+        recoveryPercentage: 0,
+      },
+      strengthTests: [],
+      measurements: [],
+      profiles: [],
+      injuries: [],
+      meta: {
+        project: input.project,
+        from: input.from,
+        to: input.to,
+        period: input.period ?? null,
+        athleteCount: 0,
+        sessionCount: 0,
+        wellnessDays: 0,
+        testCount: 0,
+        coverage: 0,
+        containsDemoData: false,
+        sources: [],
+        scope: input.individual ? 'individual' : 'team',
+        generatedAt: new Date().toISOString(),
+      },
+    };
   const placeholders = input.athleteIds.map(() => '?').join(',');
   const sessions = readOverviewSessions(input);
 
@@ -617,44 +917,62 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       averageHeartRate: row.averageHeartRate,
       maxHeartRate: row.maxHeartRate,
       averagePowerW: row.averagePowerW,
-      strokeRateSpm: row.strokeRateSpm
-    }
+      strokeRateSpm: row.strokeRateSpm,
+    },
   }));
   const actualSessions = sessions.filter((row) => !row.sessionDemo);
   const intensityTotalDuration = actualSessions
-    .filter((row) => zones.includes(row.intensityZone as typeof zones[number]) && Boolean(row.durationReported))
+    .filter(
+      (row) =>
+        zones.includes(row.intensityZone as (typeof zones)[number]) && Boolean(row.durationReported)
+    )
     .reduce((sum, row) => sum + row.durationMin, 0);
   const intensityDistribution = zones.map((zone) => {
-    const rows = actualSessions.filter((row) => row.intensityZone === zone && Boolean(row.durationReported));
+    const rows = actualSessions.filter(
+      (row) => row.intensityZone === zone && Boolean(row.durationReported)
+    );
     const durationMin = rows.reduce((sum, row) => sum + row.durationMin, 0);
     return {
       zone,
       durationMin: round(durationMin, 1),
       sessionCount: rows.length,
-      percentage: intensityTotalDuration ? round(durationMin / intensityTotalDuration * 100, 2) : 0
+      percentage: intensityTotalDuration
+        ? round((durationMin / intensityTotalDuration) * 100, 2)
+        : 0,
     };
   });
   const trainingVolume = aggregateTrainingVolume(sessions, input.individual);
   const trainingAnalytics = aggregateTrainingAnalytics(sessions, input.individual);
   const physiologyHeatmap = buildPhysiologyHeatmap(input.athleteIds, input.from, input.to);
-  const trainingLoads = teamDurationSessions(actualSessions, input.individual).reduce((totals, row) => {
-    const load = Number(row.srpe);
-    const category = trainingLoadCategory(row);
-    if (category && Number.isFinite(load) && load > 0) totals[category] += load;
-    return totals;
-  }, { special: 0, physical: 0, recovery: 0 });
+  const trainingLoads = teamDurationSessions(actualSessions, input.individual).reduce(
+    (totals, row) => {
+      const load = Number(row.srpe);
+      const category = trainingLoadCategory(row);
+      if (category && Number.isFinite(load) && load > 0) totals[category] += load;
+      return totals;
+    },
+    { special: 0, physical: 0, recovery: 0 }
+  );
   const trainingLoadTotal = trainingLoads.special + trainingLoads.physical + trainingLoads.recovery;
   const trainingLoadRatio = {
     specialLoad: round(trainingLoads.special, 1),
     physicalLoad: round(trainingLoads.physical, 1),
     recoveryLoad: round(trainingLoads.recovery, 1),
     totalLoad: round(trainingLoadTotal, 1),
-    specialPercentage: trainingLoadTotal ? round(trainingLoads.special / trainingLoadTotal * 100, 2) : 0,
-    physicalPercentage: trainingLoadTotal ? round(trainingLoads.physical / trainingLoadTotal * 100, 2) : 0,
-    recoveryPercentage: trainingLoadTotal ? round(trainingLoads.recovery / trainingLoadTotal * 100, 2) : 0
+    specialPercentage: trainingLoadTotal
+      ? round((trainingLoads.special / trainingLoadTotal) * 100, 2)
+      : 0,
+    physicalPercentage: trainingLoadTotal
+      ? round((trainingLoads.physical / trainingLoadTotal) * 100, 2)
+      : 0,
+    recoveryPercentage: trainingLoadTotal
+      ? round((trainingLoads.recovery / trainingLoadTotal) * 100, 2)
+      : 0,
   };
 
-  const profileRows = db.prepare(`
+  const profileRows = db
+    .prepare(
+      `
     SELECT a.id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, '') AS team, a.gender,
       COALESCE(ap.position, '') AS athletePosition,
       COALESCE(ap.best_result, '') AS bestResult,
@@ -674,8 +992,12 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     WHERE a.id IN (${placeholders}) AND a.active = 1
     ORDER BY pt.name, a.name
-  `).all(...input.athleteIds) as ProfileRow[];
-  const bodyRows = db.prepare(`
+  `
+    )
+    .all(...input.athleteIds) as ProfileRow[];
+  const bodyRows = db
+    .prepare(
+      `
     SELECT athlete_id AS athleteId, measurement_date AS measurementDate,
       height_cm AS heightCm, weight_kg AS weightKg, body_fat_pct AS bodyFatPct,
       skeletal_muscle_kg AS skeletalMuscleKg, muscle_mass_kg AS muscleMassKg,
@@ -694,8 +1016,12 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     FROM athlete_body_measurements
     WHERE athlete_id IN (${placeholders}) AND measurement_date <= ?
     ORDER BY athlete_id, measurement_date DESC, id DESC
-  `).all(...input.athleteIds, input.to) as BodyRow[];
-  const competitiveRows = db.prepare(`
+  `
+    )
+    .all(...input.athleteIds, input.to) as BodyRow[];
+  const competitiveRows = db
+    .prepare(
+      `
     SELECT athlete_id AS athleteId, assessment_date AS assessmentDate,
       overall_score AS competitiveScore, state_level AS competitiveLevel,
       endurance_score AS endurance, power_score AS power, technique_score AS technique,
@@ -704,7 +1030,9 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     FROM competitive_state_assessments
     WHERE athlete_id IN (${placeholders}) AND assessment_date <= ?
     ORDER BY athlete_id, assessment_date DESC, id DESC
-  `).all(...input.athleteIds, input.to) as CompetitiveRow[];
+  `
+    )
+    .all(...input.athleteIds, input.to) as CompetitiveRow[];
   const profiles = profileRows.map((profile) => {
     const bodyHistory = bodyRows.filter((row) => row.athleteId === profile.athleteId);
     const stateHistory = competitiveRows.filter((row) => row.athleteId === profile.athleteId);
@@ -767,7 +1095,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
         trunkLeanKg: row.trunkLeanKg,
         leftLegLeanKg: row.leftLegLeanKg,
         rightLegLeanKg: row.rightLegLeanKg,
-        note: row.note || ''
+        note: row.note || '',
       })),
       competitiveAssessmentDate: state?.assessmentDate || null,
       technicalLevel: profile.technicalLevel || null,
@@ -781,16 +1109,18 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
         technique: state?.technique ?? null,
         loadAdaptation: state?.loadAdaptation ?? null,
         recovery: state?.recovery ?? null,
-        competition: state?.competition ?? null
+        competition: state?.competition ?? null,
       },
       originSource: profile.originSource,
       originIsDemo: Boolean(profile.originIsDemo),
       source: [...new Set([body?.source, state?.source].filter(Boolean))].join('、'),
-      isDemo: Boolean(profile.originIsDemo || body?.isDemo || state?.isDemo)
+      isDemo: Boolean(profile.originIsDemo || body?.isDemo || state?.isDemo),
     };
   });
 
-  const injuries = db.prepare(`
+  const injuries = db
+    .prepare(
+      `
     SELECT ir.athlete_id AS athleteId, a.name AS athleteName,
       ir.injury_name AS injuryName, ir.body_part AS bodyPart, ir.side, ir.status,
       ir.pain_score AS painScore, ir.onset_date AS onsetDate, ir.review_date AS reviewDate,
@@ -804,9 +1134,13 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
         ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
       )
     ORDER BY ir.pain_score DESC, a.name
-  `).all(...input.athleteIds);
+  `
+    )
+    .all(...input.athleteIds);
 
-  const measurementRows = db.prepare(`
+  const measurementRows = db
+    .prepare(
+      `
     SELECT ts.id AS sessionId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
       ts.test_type AS testType, ts.source AS testSource, ts.is_demo AS testDemo,
       tm.metric_code AS code, md.label, md.domain, tm.value_num AS value,
@@ -816,20 +1150,28 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
     JOIN metric_definitions md ON md.code = tm.metric_code
     WHERE ts.athlete_id IN (${placeholders})
     ORDER BY ts.test_date DESC, ts.id DESC, tm.metric_code
-  `).all(...input.athleteIds) as MeasurementRow[];
+  `
+    )
+    .all(...input.athleteIds) as MeasurementRow[];
 
   const testDates = [...new Set(measurementRows.map((row) => row.testDate))].slice(0, 2);
   const strengthTests = testDates.map((testDate, index) => {
-    const rows = measurementRows.filter((row) => row.testDate === testDate && !row.code.includes('_'));
+    const rows = measurementRows.filter(
+      (row) => row.testDate === testDate && !row.code.includes('_')
+    );
     const codes = [...new Set(rows.map((row) => row.code))];
-    const metrics = Object.fromEntries(codes.flatMap((code) => {
-      const value = average(rows.filter((row) => row.code === code).map((row) => row.value));
-      return value === null ? [] : [[code, round(value, 2)]];
-    }));
-    const targets = Object.fromEntries(codes.flatMap((code) => {
-      const value = average(rows.filter((row) => row.code === code).map((row) => row.target));
-      return value === null ? [] : [[code, round(value, 2)]];
-    }));
+    const metrics = Object.fromEntries(
+      codes.flatMap((code) => {
+        const value = average(rows.filter((row) => row.code === code).map((row) => row.value));
+        return value === null ? [] : [[code, round(value, 2)]];
+      })
+    );
+    const targets = Object.fromEntries(
+      codes.flatMap((code) => {
+        const value = average(rows.filter((row) => row.code === code).map((row) => row.target));
+        return value === null ? [] : [[code, round(value, 2)]];
+      })
+    );
     return {
       id: input.individual ? rows[0]?.sessionId || -(index + 1) : -(index + 1),
       athleteId: input.individual ? input.athleteIds[0] : 0,
@@ -838,7 +1180,7 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       targets,
       notes: input.individual ? '专业综合评估' : `${input.project}项目组均值`,
       updatedAt: `${testDate} 12:00:00`,
-      updatedBy: '测试数据汇总'
+      updatedBy: '测试数据汇总',
     };
   });
 
@@ -858,29 +1200,50 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       value: round(value, 2),
       target: round(average(rows.map((row) => row.target)), 2),
       previous: round(previousValue, 2),
-      changePct: value !== null && previousValue !== null && previousValue !== 0 ? round((value - previousValue) / previousValue * 100, 1) : null,
+      changePct:
+        value !== null && previousValue !== null && previousValue !== 0
+          ? round(((value - previousValue) / previousValue) * 100, 1)
+          : null,
       unit: rows[0].unit,
       quality: rows.some((row) => row.quality !== 'valid') ? 'partial' : 'valid',
       source: [...new Set(rows.map((row) => row.source))].join('、'),
       sampleCount: rows.length,
-      isDemo: rows.every((row) => Boolean(row.isDemo))
+      isDemo: rows.every((row) => Boolean(row.isDemo)),
     };
   });
 
-  const wellnessCells = sessions.flatMap((row) => [row.sleepHours, row.morningPulse, row.weightKg, row.fatigueIndex]);
-  const availableCells = wellnessCells.filter((value) => typeof value === 'number' && Number.isFinite(value)).length;
-  const sources = [...new Set([
-    ...sessions.flatMap((row) => [row.sessionSource, row.wellnessSource]),
-    ...profileRows.map((row) => row.originSource),
-    ...bodyRows.map((row) => row.source), ...competitiveRows.map((row) => row.source)
-  ].filter(Boolean) as string[])];
-  const wellnessDays = db.prepare(`
+  const wellnessCells = sessions.flatMap((row) => [
+    row.sleepHours,
+    row.morningPulse,
+    row.weightKg,
+    row.fatigueIndex,
+  ]);
+  const availableCells = wellnessCells.filter(
+    (value) => typeof value === 'number' && Number.isFinite(value)
+  ).length;
+  const sources = [
+    ...new Set(
+      [
+        ...sessions.flatMap((row) => [row.sessionSource, row.wellnessSource]),
+        ...profileRows.map((row) => row.originSource),
+        ...bodyRows.map((row) => row.source),
+        ...competitiveRows.map((row) => row.source),
+      ].filter(Boolean) as string[]
+    ),
+  ];
+  const wellnessDays = db
+    .prepare(
+      `
     SELECT COUNT(*) AS count FROM daily_wellness
     WHERE athlete_id IN (${placeholders}) AND wellness_date BETWEEN ? AND ?
-  `).get(...input.athleteIds, input.from, input.to) as { count: number };
+  `
+    )
+    .get(...input.athleteIds, input.from, input.to) as { count: number };
   // 同队同日同测试类型的测试时长会为每名参与者各存一条；团队汇总时只取一份，
   // 避免把同一批测试按参与人数重复累计。不同测试类型仍会分别累加到当天测试时长。
-  const testSummary = db.prepare(`
+  const testSummary = db
+    .prepare(
+      `
     SELECT SUM(duration_min) AS totalDurationMin, COUNT(*) AS count
     FROM (
       SELECT test_date, test_type, MAX(duration_min) AS duration_min
@@ -891,10 +1254,14 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
         AND duration_min IS NOT NULL
       GROUP BY test_date, test_type
     )
-  `).get(...input.athleteIds, input.from, input.to) as { totalDurationMin: number | null; count: number };
-  trainingAnalytics.summary.testDurationMin = testSummary.totalDurationMin === null
-    ? null
-    : round(Number(testSummary.totalDurationMin), 1);
+  `
+    )
+    .get(...input.athleteIds, input.from, input.to) as {
+    totalDurationMin: number | null;
+    count: number;
+  };
+  trainingAnalytics.summary.testDurationMin =
+    testSummary.totalDurationMin === null ? null : round(Number(testSummary.totalDurationMin), 1);
 
   return {
     records,
@@ -916,12 +1283,14 @@ export function buildOverviewPayload(input: { athleteIds: number[]; from: string
       sessionCount: sessions.length,
       wellnessDays: wellnessDays.count,
       testCount: testSummary.count,
-      coverage: wellnessCells.length ? round(availableCells / wellnessCells.length * 100, 1) : 0,
-      containsDemoData: sessions.some((row) => Boolean(row.sessionDemo)) || measurementRows.some((row) => Boolean(row.isDemo))
-        || profiles.some((profile) => profile.isDemo),
+      coverage: wellnessCells.length ? round((availableCells / wellnessCells.length) * 100, 1) : 0,
+      containsDemoData:
+        sessions.some((row) => Boolean(row.sessionDemo)) ||
+        measurementRows.some((row) => Boolean(row.isDemo)) ||
+        profiles.some((profile) => profile.isDemo),
       sources,
       scope: input.individual ? 'individual' : 'team',
-      generatedAt: new Date().toISOString()
-    }
+      generatedAt: new Date().toISOString(),
+    },
   };
 }

@@ -1,6 +1,6 @@
 ---
 name: motion
-description: "Add, change, or debug animations, transitions, keyframes, View Transitions, scroll effects, reduced motion, and animation performance. 日本語の依頼例:「アニメーション」「動きを修正」「ページ遷移」「スクロール演出」。"
+description: 'Add, change, or debug animations, transitions, keyframes, View Transitions, scroll effects, reduced motion, and animation performance. 日本語の依頼例:「アニメーション」「動きを修正」「ページ遷移」「スクロール演出」。'
 ---
 
 # Motion
@@ -29,7 +29,7 @@ Base invariants live in the active styling skill when one exists (prefer composi
 
 ## Reduced motion
 
-- `@media (prefers-reduced-motion: reduce)`: large/parallax/auto-playing motion is removed; motion that *conveys state* (a panel opening) is reduced to a quick fade or instant change — not deleted, the state change must still be perceivable. JS animations check `matchMedia('(prefers-reduced-motion: reduce)')`.
+- `@media (prefers-reduced-motion: reduce)`: large/parallax/auto-playing motion is removed; motion that _conveys state_ (a panel opening) is reduced to a quick fade or instant change — not deleted, the state change must still be perceivable. JS animations check `matchMedia('(prefers-reduced-motion: reduce)')`.
 
 ## Performance
 

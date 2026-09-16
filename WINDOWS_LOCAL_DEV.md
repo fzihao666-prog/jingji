@@ -224,6 +224,7 @@ npm run dev
 ### 1. 如果你有阿里云百炼 API 密钥
 
 直接在 `.env` 中配置：
+
 ```env
 AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 AI_API_KEY=在这里填写百炼API密钥
@@ -369,15 +370,15 @@ ATHLETE_PHOTO_ROOT=/app/jingji/data/uploads/athlete-photos
 
 ## 八、VS Code 快捷键
 
-| 快捷键 | 功能 |
-|--------|------|
-| `F5` | 启动调试 |
-| `Ctrl+Shift+B` | 运行构建任务 |
-| `Ctrl+`` ` | 打开/关闭终端 |
-| `Ctrl+P` | 快速打开文件 |
-| `Ctrl+Shift+F` | 全局搜索 |
-| `F12` | 跳转到定义 |
-| `Alt+Click` | 多光标编辑 |
+| 快捷键         | 功能          |
+| -------------- | ------------- |
+| `F5`           | 启动调试      |
+| `Ctrl+Shift+B` | 运行构建任务  |
+| `Ctrl+`` `     | 打开/关闭终端 |
+| `Ctrl+P`       | 快速打开文件  |
+| `Ctrl+Shift+F` | 全局搜索      |
+| `F12`          | 跳转到定义    |
+| `Alt+Click`    | 多光标编辑    |
 
 ---
 
@@ -390,5 +391,6 @@ ATHLETE_PHOTO_ROOT=/app/jingji/data/uploads/athlete-photos
 5. **测试 API**：使用 Thunder Client 或 Postman
 
 访问地址：
+
 - 前端：http://localhost:5173
 - 后端 API：http://localhost:8787

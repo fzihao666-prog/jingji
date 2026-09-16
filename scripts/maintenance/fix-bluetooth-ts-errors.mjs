@@ -22,21 +22,32 @@ function patchFile(relativePath, transform) {
 patchFile('src/pages/BluetoothConnectPage.tsx', (source) => {
   return source
     .replace(/user\?\.name\s*\|\|\s*/g, '')
-    .replace(/\{user\?\.name \|\| user\?\.username \|\| '当前用户'\}/g, "{user?.username || '当前用户'}");
+    .replace(
+      /\{user\?\.name \|\| user\?\.username \|\| '当前用户'\}/g,
+      "{user?.username || '当前用户'}"
+    );
 });
 
 patchFile('src/App.tsx', (source) => {
   let next = source;
-  if (!/import\s+\{\s*BluetoothConnectPage\s*\}\s+from\s+['"]\.\/pages\/BluetoothConnectPage['"]/.test(next)) {
+  if (
+    !/import\s+\{\s*BluetoothConnectPage\s*\}\s+from\s+['"]\.\/pages\/BluetoothConnectPage['"]/.test(
+      next
+    )
+  ) {
     const importPatterns = [
       /import \{ AccountAuditPage \} from ['"]\.\/pages\/AccountAuditPage['"];?/,
       /import \{ WeeklyTrainingPlanPage \} from ['"]\.\/pages\/WeeklyTrainingPlanPage['"];?/,
-      /import \{ TrainingPlanPage \} from ['"]\.\/pages\/TrainingPlanPage['"];?/
+      /import \{ TrainingPlanPage \} from ['"]\.\/pages\/TrainingPlanPage['"];?/,
     ];
     let inserted = false;
     for (const pattern of importPatterns) {
       if (pattern.test(next)) {
-        next = next.replace(pattern, (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`);
+        next = next.replace(
+          pattern,
+          (match) =>
+            `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`
+        );
         inserted = true;
         break;
       }
@@ -50,11 +61,14 @@ patchFile('src/App.tsx', (source) => {
     const renderPatterns = [
       /(\s*\{page === ['"]accountAudit['"] && <AccountAuditPage[^\n]+\/>\})/,
       /(\s*\{page === ['"]weeklyPlan['"] && <WeeklyTrainingPlanPage[^\n]+\/>\})/,
-      /(\s*\{page === ['"]plans['"] && <TrainingPlanPage[^\n]+\/>\})/
+      /(\s*\{page === ['"]plans['"] && <TrainingPlanPage[^\n]+\/>\})/,
     ];
     for (const pattern of renderPatterns) {
       if (pattern.test(next)) {
-        next = next.replace(pattern, `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`);
+        next = next.replace(
+          pattern,
+          `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`
+        );
         break;
       }
     }

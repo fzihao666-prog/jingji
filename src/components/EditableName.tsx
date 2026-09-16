@@ -17,7 +17,7 @@ export function EditableName({
   onSave,
   label = '姓名',
   className = '',
-  showValue = true
+  showValue = true,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(value);
@@ -80,35 +80,57 @@ export function EditableName({
           </button>
         )}
       </span>
-      {open && createPortal(
-        <div className="modal-backdrop name-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-          <section className="name-editor-modal" role="dialog" aria-modal="true" aria-labelledby="name-editor-title">
-            <div className="modal-heading">
-              <div><span>资料修改</span><h2 id="name-editor-title">修改{label}</h2></div>
-              <button className="icon-button" type="button" onClick={close} aria-label="关闭"><X size={19} /></button>
-            </div>
-            <form onSubmit={submit}>
-              <label>
-                <span>新姓名</span>
-                <input
-                  autoFocus
-                  value={name}
-                  maxLength={20}
-                  onChange={(event) => setName(event.target.value)}
-                  onFocus={(event) => event.currentTarget.select()}
-                  required
-                />
-              </label>
-              {error && <p className="name-editor-error">{error}</p>}
-              <div className="name-editor-actions">
-                <button type="button" className="secondary-button" onClick={close}>取消</button>
-                <button className="primary-button" disabled={saving}><Check size={16} />{saving ? '保存中…' : '保存姓名'}</button>
+      {open &&
+        createPortal(
+          <div
+            className="modal-backdrop name-modal-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) close();
+            }}
+          >
+            <section
+              className="name-editor-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="name-editor-title"
+            >
+              <div className="modal-heading">
+                <div>
+                  <span>资料修改</span>
+                  <h2 id="name-editor-title">修改{label}</h2>
+                </div>
+                <button className="icon-button" type="button" onClick={close} aria-label="关闭">
+                  <X size={19} />
+                </button>
               </div>
-            </form>
-          </section>
-        </div>,
-        document.body
-      )}
+              <form onSubmit={submit}>
+                <label>
+                  <span>新姓名</span>
+                  <input
+                    autoFocus
+                    value={name}
+                    maxLength={20}
+                    onChange={(event) => setName(event.target.value)}
+                    onFocus={(event) => event.currentTarget.select()}
+                    required
+                  />
+                </label>
+                {error && <p className="name-editor-error">{error}</p>}
+                <div className="name-editor-actions">
+                  <button type="button" className="secondary-button" onClick={close}>
+                    取消
+                  </button>
+                  <button className="primary-button" disabled={saving}>
+                    <Check size={16} />
+                    {saving ? '保存中…' : '保存姓名'}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </div>,
+          document.body
+        )}
     </>
   );
 }

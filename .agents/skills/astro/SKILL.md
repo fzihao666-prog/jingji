@@ -1,6 +1,6 @@
 ---
 name: astro
-description: "Astro-specific pages, routing/rendering, islands, client directives, content collections, and .astro components. Not for framework-neutral styling or tests merely because Astro is installed. 日本語の依頼例:「Astroで実装」「アイランド」「コンテンツコレクション」「.astroコンポーネント」。"
+description: 'Astro-specific pages, routing/rendering, islands, client directives, content collections, and .astro components. Not for framework-neutral styling or tests merely because Astro is installed. 日本語の依頼例:「Astroで実装」「アイランド」「コンテンツコレクション」「.astroコンポーネント」。'
 ---
 
 # Astro

@@ -10,9 +10,9 @@ import {
   Save,
   Search,
   UploadCloud,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api";
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api';
 import type {
   Athlete,
   DataImportAthleteCandidate,
@@ -22,15 +22,15 @@ import type {
   Project,
   ProjectTeam,
   User,
-} from "../types";
-import "./DataImportPage.css";
+} from '../types';
+import './DataImportPage.css';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 
 type Props = {
   user: User;
   project: Project;
   athletes: Athlete[];
-  mode?: "import" | "history";
+  mode?: 'import' | 'history';
   onChanged: () => void;
 };
 
@@ -51,75 +51,67 @@ type AthleteCorrection = {
 };
 
 function normalizeAthleteName(value: string) {
-  return value.normalize("NFKC").replace(/[\s·•]/g, "");
+  return value.normalize('NFKC').replace(/[\s·•]/g, '');
 }
 
-const ITEM_LABELS: Record<DataImportItem["itemType"], string> = {
-  athlete_profile: "运动员档案",
-  wellness: "恢复状态",
-  training_session: "训练课次",
-  training_set: "训练组次",
-  test_measurement: "力量测试",
-  body_measurement: "身体测量",
-  injury_record: "伤病记录",
-  competitive_state: "竞技状态",
-  scoring_rule: "评分规则",
+const ITEM_LABELS: Record<DataImportItem['itemType'], string> = {
+  athlete_profile: '运动员档案',
+  wellness: '恢复状态',
+  training_session: '训练课次',
+  training_set: '训练组次',
+  test_measurement: '力量测试',
+  body_measurement: '身体测量',
+  injury_record: '伤病记录',
+  competitive_state: '竞技状态',
+  scoring_rule: '评分规则',
 };
 
-const STATUS_LABELS: Record<DataImportBatch["status"], string> = {
-  reviewing: "待审核",
-  committed: "已入库",
-  failed: "失败",
-  rolled_back: "已撤销",
+const STATUS_LABELS: Record<DataImportBatch['status'], string> = {
+  reviewing: '待审核',
+  committed: '已入库',
+  failed: '失败',
+  rolled_back: '已撤销',
 };
 
 function displayValue(item: DataImportItem) {
-  if (item.itemType === "athlete_profile") return "基础档案与生源信息";
-  if (item.itemType === "wellness") return "每日恢复记录";
-  if (item.itemType === "training_session") return `${item.valueNum ?? 0} min`;
-  if (item.itemType === "injury_record") return item.metricLabel || "伤病记录";
-  if (item.itemType === "training_set")
-    return `${item.actualWeightKg ?? "—"} kg × ${item.actualReps ?? "—"} 次`;
-  if (item.itemType === "scoring_rule")
-    return `${item.valueNum ?? "—"} ${item.unit} / ${String(item.payload.score || "—")}分`;
-  return `${item.valueNum ?? "—"} ${item.unit}`;
+  if (item.itemType === 'athlete_profile') return '基础档案与生源信息';
+  if (item.itemType === 'wellness') return '每日恢复记录';
+  if (item.itemType === 'training_session') return `${item.valueNum ?? 0} min`;
+  if (item.itemType === 'injury_record') return item.metricLabel || '伤病记录';
+  if (item.itemType === 'training_set')
+    return `${item.actualWeightKg ?? '—'} kg × ${item.actualReps ?? '—'} 次`;
+  if (item.itemType === 'scoring_rule')
+    return `${item.valueNum ?? '—'} ${item.unit} / ${String(item.payload.score || '—')}分`;
+  return `${item.valueNum ?? '—'} ${item.unit}`;
 }
 
-export function DataImportPage({ project, athletes, mode = "import", onChanged }: Props) {
+export function DataImportPage({ project, athletes, mode = 'import', onChanged }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [defaultDate, setDefaultDate] = useState("");
-  const [bulkCandidateTeam, setBulkCandidateTeam] = useState("");
+  const [defaultDate, setDefaultDate] = useState('');
+  const [bulkCandidateTeam, setBulkCandidateTeam] = useState('');
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
-  const [busy, setBusy] = useState<"analyze" | "save" | "commit" | "load" | "template" | "export" | "">(
-    "",
+  const [busy, setBusy] = useState<
+    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | ''
+  >('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState<'all' | 'error' | 'warning' | 'training' | 'test'>('all');
+  const [query, setQuery] = useState('');
+  const [conflictPolicy, setConflictPolicy] = useState<'skip' | 'update'>('skip');
+  const [corrections, setCorrections] = useState<Map<number, Correction>>(new Map());
+  const [athleteCorrections, setAthleteCorrections] = useState<Map<number, AthleteCorrection>>(
+    new Map()
   );
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [filter, setFilter] = useState<
-    "all" | "error" | "warning" | "training" | "test"
-  >("all");
-  const [query, setQuery] = useState("");
-  const [conflictPolicy, setConflictPolicy] = useState<"skip" | "update">(
-    "skip",
-  );
-  const [corrections, setCorrections] = useState<Map<number, Correction>>(
-    new Map(),
-  );
-  const [athleteCorrections, setAthleteCorrections] = useState<
-    Map<number, AthleteCorrection>
-  >(new Map());
 
   const refreshBatches = async () => {
     try {
       const result = await api.dataImportBatches(project);
       setBatches(result.batches);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "导入记录加载失败。",
-      );
+      setError(nextError instanceof Error ? nextError.message : '导入记录加载失败。');
     }
   };
 
@@ -127,113 +119,99 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
     setBatch(null);
     setCorrections(new Map());
     setAthleteCorrections(new Map());
-    setMessage("");
-    setError("");
+    setMessage('');
+    setError('');
     void refreshBatches();
     void api
       .adminTeams()
       .then((result) => {
-        const available = result.teams.filter(
-          (team) => team.project === project,
-        );
+        const available = result.teams.filter((team) => team.project === project);
         setTeams(available);
         setBulkCandidateTeam((current) =>
-          available.some((team) => team.name === current) ? current : "",
+          available.some((team) => team.name === current) ? current : ''
         );
       })
       .catch((nextError) =>
-        setError(
-          nextError instanceof Error ? nextError.message : "队伍列表加载失败。",
-        ),
+        setError(nextError instanceof Error ? nextError.message : '队伍列表加载失败。')
       );
   }, [project]);
 
   const analyze = async () => {
     if (!file) return;
-    setBusy("analyze");
-    setError("");
-    setMessage("");
+    setBusy('analyze');
+    setError('');
+    setMessage('');
     try {
-      const result = await api.analyzeDataImport(
-        file,
-        project,
-        defaultDate || undefined,
-      );
+      const result = await api.analyzeDataImport(file, project, defaultDate || undefined);
       setBatch(result.batch);
       setCorrections(new Map());
       setAthleteCorrections(new Map());
       setMessage(
         result.batch.summary.duplicateFile
-          ? "该文件已上传过，已打开原有导入批次。"
-          : `已识别${result.batch.itemCount}条候选数据，请先处理红色错误并复核黄色警告。`,
+          ? '该文件已上传过，已打开原有导入批次。'
+          : `已识别${result.batch.itemCount}条候选数据，请先处理红色错误并复核黄色警告。`
       );
       await refreshBatches();
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "文件解析失败。",
-      );
+      setError(nextError instanceof Error ? nextError.message : '文件解析失败。');
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const downloadTemplate = async () => {
-    setBusy("template");
-    setError("");
-    setMessage("");
+    setBusy('template');
+    setError('');
+    setMessage('');
     try {
       await api.downloadDataImportTemplate();
-      setMessage("统一数据导入模板已开始下载。");
+      setMessage('统一数据导入模板已开始下载。');
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "统一数据导入模板下载失败。",
-      );
+      setError(nextError instanceof Error ? nextError.message : '统一数据导入模板下载失败。');
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const exportUnifiedData = async () => {
-    setBusy("export");
-    setError("");
-    setMessage("");
+    setBusy('export');
+    setError('');
+    setMessage('');
     try {
       await api.exportUnifiedData(project);
-      setMessage("当前权限范围内的运动员数据已开始导出，可直接作为统一导入模板使用。");
+      setMessage('当前权限范围内的运动员数据已开始导出，可直接作为统一导入模板使用。');
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "统一数据导出失败。");
+      setError(nextError instanceof Error ? nextError.message : '统一数据导出失败。');
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const loadBatch = async (id: string) => {
-    setBusy("load");
-    setError("");
-    setMessage("");
+    setBusy('load');
+    setError('');
+    setMessage('');
     try {
       const result = await api.dataImportBatch(id);
       setBatch(result.batch);
       setCorrections(new Map());
       setAthleteCorrections(new Map());
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "批次加载失败。",
-      );
+      setError(nextError instanceof Error ? nextError.message : '批次加载失败。');
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
-  const patchItem = (itemId: number, patch: Omit<Correction, "id">) => {
+  const patchItem = (itemId: number, patch: Omit<Correction, 'id'>) => {
     const sourceItem = batch?.items.find((item) => item.id === itemId);
     const groupedIds =
-      sourceItem && "athleteId" in patch
+      sourceItem && 'athleteId' in patch
         ? batch?.items
             .filter(
               (item) =>
                 normalizeAthleteName(item.rawAthleteName) ===
-                normalizeAthleteName(sourceItem.rawAthleteName),
+                normalizeAthleteName(sourceItem.rawAthleteName)
             )
             .map((item) => item.id) || [itemId]
         : [itemId];
@@ -242,34 +220,28 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
         ? {
             ...current,
             items: current.items.map((item) =>
-              groupedIds.includes(item.id) ? { ...item, ...patch } : item,
+              groupedIds.includes(item.id) ? { ...item, ...patch } : item
             ),
           }
-        : current,
+        : current
     );
     setCorrections((current) => {
       const next = new Map(current);
-      for (const id of groupedIds)
-        next.set(id, { ...(next.get(id) || { id }), ...patch });
+      for (const id of groupedIds) next.set(id, { ...(next.get(id) || { id }), ...patch });
       return next;
     });
   };
 
-  const patchAthleteCandidate = (
-    candidateId: number,
-    patch: Omit<AthleteCorrection, "id">,
-  ) => {
+  const patchAthleteCandidate = (candidateId: number, patch: Omit<AthleteCorrection, 'id'>) => {
     setBatch((current) =>
       current
         ? {
             ...current,
             athleteCandidates: current.athleteCandidates.map((candidate) =>
-              candidate.id === candidateId
-                ? { ...candidate, ...patch }
-                : candidate,
+              candidate.id === candidateId ? { ...candidate, ...patch } : candidate
             ),
           }
-        : current,
+        : current
     );
     setAthleteCorrections((current) => {
       const next = new Map(current);
@@ -283,12 +255,10 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
 
   const applyBulkCandidateTeam = () => {
     if (!batch || !bulkCandidateTeam) {
-      setError("请先选择要批量分配的新运动员所属队伍。");
+      setError('请先选择要批量分配的新运动员所属队伍。');
       return;
     }
-    const pending = batch.athleteCandidates.filter(
-      (candidate) => candidate.status === "pending",
-    );
+    const pending = batch.athleteCandidates.filter((candidate) => candidate.status === 'pending');
     if (!pending.length) return;
     for (const candidate of pending)
       patchAthleteCandidate(candidate.id, { team: bulkCandidateTeam });
@@ -297,39 +267,33 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
 
   const saveCorrections = async () => {
     if (!batch || (!corrections.size && !athleteCorrections.size)) return batch;
-    setBusy("save");
-    setError("");
+    setBusy('save');
+    setError('');
     try {
       let currentBatch = batch;
       if (athleteCorrections.size)
         currentBatch = (
-          await api.updateDataImportAthletes(batch.id, [
-            ...athleteCorrections.values(),
-          ])
+          await api.updateDataImportAthletes(batch.id, [...athleteCorrections.values()])
         ).batch;
       if (corrections.size)
-        currentBatch = (
-          await api.updateDataImportItems(batch.id, [...corrections.values()])
-        ).batch;
+        currentBatch = (await api.updateDataImportItems(batch.id, [...corrections.values()])).batch;
       setBatch(currentBatch);
       setCorrections(new Map());
       setAthleteCorrections(new Map());
-      setMessage("校对内容已保存，服务端已重新执行数据校验。");
+      setMessage('校对内容已保存，服务端已重新执行数据校验。');
       return currentBatch;
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "校对内容保存失败。",
-      );
+      setError(nextError instanceof Error ? nextError.message : '校对内容保存失败。');
       return null;
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
   const commit = async () => {
     if (!batch) return;
-    setError("");
-    setMessage("");
+    setError('');
+    setMessage('');
     let currentBatch = batch;
     if (corrections.size || athleteCorrections.size) {
       const saved = await saveCorrections();
@@ -340,22 +304,17 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
       setError(`仍有${currentBatch.errorCount}条红色错误，请先修正后再提交。`);
       return;
     }
-    setBusy("commit");
+    setBusy('commit');
     try {
-      const result = await api.commitDataImport(
-        currentBatch.id,
-        conflictPolicy,
-      );
+      const result = await api.commitDataImport(currentBatch.id, conflictPolicy);
       setBatch(result.batch);
       setMessage(result.message);
       await refreshBatches();
       onChanged();
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "正式入库失败。",
-      );
+      setError(nextError instanceof Error ? nextError.message : '正式入库失败。');
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
@@ -364,14 +323,10 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
     const needle = query.trim().toLowerCase();
     return batch.items
       .filter((item) => {
-        if (filter === "error" && item.quality !== "error") return false;
-        if (filter === "warning" && item.quality !== "warning") return false;
-        if (filter === "training" && item.itemType !== "training_set")
-          return false;
-        if (
-          filter === "test" &&
-          !["test_measurement", "body_measurement"].includes(item.itemType)
-        )
+        if (filter === 'error' && item.quality !== 'error') return false;
+        if (filter === 'warning' && item.quality !== 'warning') return false;
+        if (filter === 'training' && item.itemType !== 'training_set') return false;
+        if (filter === 'test' && !['test_measurement', 'body_measurement'].includes(item.itemType))
           return false;
         if (!needle) return true;
         return [
@@ -385,95 +340,106 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
       .slice(0, 500);
   }, [batch, filter, query]);
 
-  const historyOnly = mode === "history";
+  const historyOnly = mode === 'history';
 
   return (
     <PageContainer className="data-import-page">
-      <PageHeader className="data-import-hero" eyebrow={historyOnly ? "IMPORT HISTORY" : "DATA INTAKE"} title={historyOnly ? "导入记录" : "统一数据导入"} actions={!historyOnly && <div className="data-import-hero-actions">
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy)}
-            onClick={downloadTemplate}
-          >
-            <Download size={19} />
-            <div>
-              <strong>{busy === "template" ? "正在准备模板…" : "下载统一数据模板"}</strong>
-              <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
+      <PageHeader
+        className="data-import-hero"
+        eyebrow={historyOnly ? 'IMPORT HISTORY' : 'DATA INTAKE'}
+        title={historyOnly ? '导入记录' : '统一数据导入'}
+        actions={
+          !historyOnly && (
+            <div className="data-import-hero-actions">
+              <button
+                type="button"
+                className="data-import-template"
+                disabled={Boolean(busy)}
+                onClick={downloadTemplate}
+              >
+                <Download size={19} />
+                <div>
+                  <strong>{busy === 'template' ? '正在准备模板…' : '下载统一数据模板'}</strong>
+                  <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="data-import-template"
+                disabled={Boolean(busy)}
+                onClick={exportUnifiedData}
+              >
+                <FileSpreadsheet size={19} />
+                <div>
+                  <strong>{busy === 'export' ? '正在导出数据…' : '导出统一数据'}</strong>
+                  <span>导出当前项目及权限范围内的全部已入库数据</span>
+                </div>
+              </button>
+              <div className="data-import-safety">
+                <Database size={20} />
+                <div>
+                  <strong>先暂存，后入库</strong>
+                  <span>原值、工作表和单元格坐标全程保留</span>
+                </div>
+              </div>
             </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy)}
-            onClick={exportUnifiedData}
-          >
-            <FileSpreadsheet size={19} />
-            <div>
-              <strong>{busy === "export" ? "正在导出数据…" : "导出统一数据"}</strong>
-              <span>导出当前项目及权限范围内的全部已入库数据</span>
-            </div>
-          </button>
-          <div className="data-import-safety">
-            <Database size={20} />
-            <div>
-              <strong>先暂存，后入库</strong>
-              <span>原值、工作表和单元格坐标全程保留</span>
-            </div>
-          </div>
-        </div>}/>
+          )
+        }
+      />
 
-      <div className={`data-import-grid ${historyOnly ? "history-only" : ""}`}>
-        {!historyOnly && <section className="data-import-upload-card">
-          <div className="data-import-card-heading">
-            <FileSpreadsheet size={20} />
-            <div>
-              <strong>上传源文件</strong>
-              <span>支持旧版 XLS 与新版 XLSX，单文件不超过 80MB</span>
+      <div className={`data-import-grid ${historyOnly ? 'history-only' : ''}`}>
+        {!historyOnly && (
+          <section className="data-import-upload-card">
+            <div className="data-import-card-heading">
+              <FileSpreadsheet size={20} />
+              <div>
+                <strong>上传源文件</strong>
+                <span>支持旧版 XLS 与新版 XLSX，单文件不超过 80MB</span>
+              </div>
             </div>
-          </div>
-          <button
-            type="button"
-            className="data-import-drop"
-            onClick={() => fileRef.current?.click()}
-          >
-            <UploadCloud size={28} />
-            <strong>{file ? file.name : "选择 Excel 文件"}</strong>
-            <span>
-              {file
-                ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                : "系统会自动遍历多张工作表和重复运动员小表"}
-            </span>
-          </button>
-          <input
-            ref={fileRef}
-            className="visually-hidden"
-            type="file"
-            accept=".xls,.xlsx"
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
-          />
-          <label className="data-import-date">
-            <span>缺失日期时使用</span>
+            <button
+              type="button"
+              className="data-import-drop"
+              onClick={() => fileRef.current?.click()}
+            >
+              <UploadCloud size={28} />
+              <strong>{file ? file.name : '选择 Excel 文件'}</strong>
+              <span>
+                {file
+                  ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                  : '系统会自动遍历多张工作表和重复运动员小表'}
+              </span>
+            </button>
             <input
-              type="date"
-              value={defaultDate}
-              onChange={(event) => setDefaultDate(event.target.value)}
+              ref={fileRef}
+              className="visually-hidden"
+              type="file"
+              accept=".xls,.xlsx"
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
             />
-            <small>可选；表内存在日期时仍优先保留表内日期</small>
-          </label>
-          <button
-            className="data-import-primary"
-            disabled={!file || Boolean(busy)}
-            onClick={analyze}
-          >
-            {busy === "analyze" ? (
-              <RefreshCw className="spin" size={17} />
-            ) : (
-              <FileCheck2 size={17} />
-            )}
-            解析并生成审核预览
-          </button>
-        </section>}
+            <label className="data-import-date">
+              <span>缺失日期时使用</span>
+              <input
+                type="date"
+                value={defaultDate}
+                onChange={(event) => setDefaultDate(event.target.value)}
+              />
+              <small>可选；表内存在日期时仍优先保留表内日期</small>
+            </label>
+            <button
+              className="data-import-primary"
+              disabled={!file || Boolean(busy)}
+              onClick={analyze}
+            >
+              {busy === 'analyze' ? (
+                <RefreshCw className="spin" size={17} />
+              ) : (
+                <FileCheck2 size={17} />
+              )}
+              解析并生成审核预览
+            </button>
+          </section>
+        )}
 
         <section className="data-import-history-card">
           <div className="data-import-card-heading">
@@ -484,24 +450,21 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
             </div>
           </div>
           <div className="data-import-history-list">
-            {!batches.length && (
-              <p className="data-import-empty">当前项目还没有导入记录。</p>
-            )}
+            {!batches.length && <p className="data-import-empty">当前项目还没有导入记录。</p>}
             {batches.map((item) => (
               <button
                 key={item.id}
-                className={batch?.id === item.id ? "active" : ""}
+                className={batch?.id === item.id ? 'active' : ''}
                 onClick={() => loadBatch(item.id)}
-                disabled={busy === "load"}
+                disabled={busy === 'load'}
               >
                 <span className={`batch-state ${item.status}`}>
-                  {STATUS_LABELS[item.status as DataImportBatch["status"]] ||
-                    item.status}
+                  {STATUS_LABELS[item.status as DataImportBatch['status']] || item.status}
                 </span>
                 <strong title={item.filename}>{item.filename}</strong>
                 <small>
-                  {item.itemCount}条 · 错误{item.errorCount} ·{" "}
-                  {new Date(item.createdAt).toLocaleString("zh-CN")}
+                  {item.itemCount}条 · 错误{item.errorCount} ·{' '}
+                  {new Date(item.createdAt).toLocaleString('zh-CN')}
                 </small>
               </button>
             ))}
@@ -510,7 +473,7 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
       </div>
 
       {(message || error) && (
-        <div className={`data-import-message ${error ? "error" : "success"}`}>
+        <div className={`data-import-message ${error ? 'error' : 'success'}`}>
           {error ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
           <span>{error || message}</span>
         </div>
@@ -531,7 +494,7 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                 <div className="data-import-candidate-bulk">
                   <select
                     value={bulkCandidateTeam}
-                    disabled={batch.status !== "reviewing" || Boolean(busy)}
+                    disabled={batch.status !== 'reviewing' || Boolean(busy)}
                     onChange={(event) => setBulkCandidateTeam(event.target.value)}
                   >
                     <option value="">批量选择所属队伍</option>
@@ -543,7 +506,7 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                   </select>
                   <button
                     type="button"
-                    disabled={batch.status !== "reviewing" || Boolean(busy)}
+                    disabled={batch.status !== 'reviewing' || Boolean(busy)}
                     onClick={applyBulkCandidateTeam}
                   >
                     批量应用
@@ -551,9 +514,7 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                 </div>
                 <button
                   disabled={
-                    !athleteCorrections.size ||
-                    Boolean(busy) ||
-                    batch.status !== "reviewing"
+                    !athleteCorrections.size || Boolean(busy) || batch.status !== 'reviewing'
                   }
                   onClick={saveCorrections}
                 >
@@ -562,79 +523,68 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                 </button>
               </div>
               <div className="data-import-candidate-grid">
-                {batch.athleteCandidates.map(
-                  (candidate: DataImportAthleteCandidate) => (
-                    <article key={candidate.id}>
-                      <span className={`candidate-state ${candidate.status}`}>
-                        {candidate.status === "pending"
-                          ? "待创建"
-                          : candidate.status === "created"
-                            ? "已创建"
-                            : "已匹配"}
-                      </span>
-                      <label>
-                        <span>姓名</span>
-                        <input
-                          disabled={
-                            batch.status !== "reviewing" ||
-                            candidate.status !== "pending"
-                          }
-                          value={candidate.name}
-                          onChange={(event) =>
-                            patchAthleteCandidate(candidate.id, {
-                              name: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        <span>性别</span>
-                        <select
-                          disabled={
-                            batch.status !== "reviewing" ||
-                            candidate.status !== "pending"
-                          }
-                          value={candidate.gender}
-                          onChange={(event) =>
-                            patchAthleteCandidate(candidate.id, {
-                              gender: event.target.value,
-                            })
-                          }
-                        >
-                          <option value="">暂不填写</option>
-                          <option>男</option>
-                          <option>女</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>所属队伍</span>
-                        <select
-                          disabled={
-                            batch.status !== "reviewing" ||
-                            candidate.status !== "pending"
-                          }
-                          value={candidate.team}
-                          onChange={(event) =>
-                            patchAthleteCandidate(candidate.id, {
-                              team: event.target.value,
-                            })
-                          }
-                        >
-                          <option value="">请选择所属队伍</option>
-                          {teams.map((team) => (
-                            <option key={team.id} value={team.name}>
-                              {team.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <small>
-                        {candidate.region}/{candidate.city}/{candidate.county} ·
-                        来源：{candidate.sourceSheet}
-                      </small>
-                    </article>
-                  ),
-                )}
+                {batch.athleteCandidates.map((candidate: DataImportAthleteCandidate) => (
+                  <article key={candidate.id}>
+                    <span className={`candidate-state ${candidate.status}`}>
+                      {candidate.status === 'pending'
+                        ? '待创建'
+                        : candidate.status === 'created'
+                          ? '已创建'
+                          : '已匹配'}
+                    </span>
+                    <label>
+                      <span>姓名</span>
+                      <input
+                        disabled={batch.status !== 'reviewing' || candidate.status !== 'pending'}
+                        value={candidate.name}
+                        onChange={(event) =>
+                          patchAthleteCandidate(candidate.id, {
+                            name: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>性别</span>
+                      <select
+                        disabled={batch.status !== 'reviewing' || candidate.status !== 'pending'}
+                        value={candidate.gender}
+                        onChange={(event) =>
+                          patchAthleteCandidate(candidate.id, {
+                            gender: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">暂不填写</option>
+                        <option>男</option>
+                        <option>女</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>所属队伍</span>
+                      <select
+                        disabled={batch.status !== 'reviewing' || candidate.status !== 'pending'}
+                        value={candidate.team}
+                        onChange={(event) =>
+                          patchAthleteCandidate(candidate.id, {
+                            team: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">请选择所属队伍</option>
+                        {teams.map((team) => (
+                          <option key={team.id} value={team.name}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <small>
+                      {candidate.region}/{candidate.city}/{candidate.county} · 来源：
+                      {candidate.sourceSheet}
+                    </small>
+                  </article>
+                ))}
               </div>
             </section>
           )}
@@ -661,9 +611,7 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
             </div>
             <div>
               <span>批次状态</span>
-              <strong className="status-text">
-                {STATUS_LABELS[batch.status]}
-              </strong>
+              <strong className="status-text">{STATUS_LABELS[batch.status]}</strong>
               <small>{batch.parserVersion}</small>
             </div>
           </section>
@@ -722,7 +670,7 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                   disabled={
                     (!corrections.size && !athleteCorrections.size) ||
                     Boolean(busy) ||
-                    batch.status !== "reviewing"
+                    batch.status !== 'reviewing'
                   }
                   onClick={saveCorrections}
                 >
@@ -730,23 +678,23 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                   保存校对
                   {corrections.size + athleteCorrections.size
                     ? `（${corrections.size + athleteCorrections.size}）`
-                    : ""}
+                    : ''}
                 </button>
               </div>
             </div>
             <div className="data-import-filters">
               {(
                 [
-                  ["all", `全部 ${batch.itemCount}`],
-                  ["error", `错误 ${batch.errorCount}`],
-                  ["warning", `警告 ${batch.warningCount}`],
-                  ["training", "训练组次"],
-                  ["test", "测试与身体"],
+                  ['all', `全部 ${batch.itemCount}`],
+                  ['error', `错误 ${batch.errorCount}`],
+                  ['warning', `警告 ${batch.warningCount}`],
+                  ['training', '训练组次'],
+                  ['test', '测试与身体'],
                 ] as const
               ).map(([key, label]) => (
                 <button
                   key={key}
-                  className={filter === key ? "active" : ""}
+                  className={filter === key ? 'active' : ''}
                   onClick={() => setFilter(key)}
                 >
                   {label}
@@ -772,32 +720,30 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                     <tr key={item.id} className={item.quality}>
                       <td>
                         <span className={`quality-pill ${item.quality}`}>
-                          {item.quality === "valid"
-                            ? "通过"
-                            : item.quality === "warning"
-                              ? "复核"
-                              : item.quality === "error"
-                                ? "错误"
-                                : "跳过"}
+                          {item.quality === 'valid'
+                            ? '通过'
+                            : item.quality === 'warning'
+                              ? '复核'
+                              : item.quality === 'error'
+                                ? '错误'
+                                : '跳过'}
                         </span>
                       </td>
                       <td>{ITEM_LABELS[item.itemType]}</td>
                       <td>
-                        {item.itemType === "scoring_rule" ? (
+                        {item.itemType === 'scoring_rule' ? (
                           <span>规则数据</span>
                         ) : (
                           <select
-                            disabled={batch.status !== "reviewing"}
-                            value={item.athleteId || ""}
+                            disabled={batch.status !== 'reviewing'}
+                            value={item.athleteId || ''}
                             onChange={(event) =>
                               patchItem(item.id, {
                                 athleteId: Number(event.target.value) || null,
                               })
                             }
                           >
-                            <option value="">
-                              新建无账号档案：{item.rawAthleteName}
-                            </option>
+                            <option value="">新建无账号档案：{item.rawAthleteName}</option>
                             {athletes.map((athlete) => (
                               <option key={athlete.id} value={athlete.id}>
                                 {athlete.name} · {athlete.team}
@@ -807,11 +753,11 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                         )}
                       </td>
                       <td>
-                        {item.itemType === "scoring_rule" ? (
-                          "—"
+                        {item.itemType === 'scoring_rule' ? (
+                          '—'
                         ) : (
                           <input
-                            disabled={batch.status !== "reviewing"}
+                            disabled={batch.status !== 'reviewing'}
                             type="date"
                             value={item.eventDate}
                             onChange={(event) =>
@@ -824,65 +770,59 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                       </td>
                       <td>
                         <strong>{item.exerciseName || item.metricLabel}</strong>
-                        {item.side !== "center" && (
+                        {item.side !== 'center' && (
                           <small>
-                            {item.side === "left"
-                              ? "左侧"
-                              : item.side === "right"
-                                ? "右侧"
-                                : "双侧"}
+                            {item.side === 'left'
+                              ? '左侧'
+                              : item.side === 'right'
+                                ? '右侧'
+                                : '双侧'}
                           </small>
                         )}
                       </td>
                       <td>
-                        {item.itemType === "training_set" ? (
+                        {item.itemType === 'training_set' ? (
                           <div className="training-value-inputs">
                             <input
-                              disabled={batch.status !== "reviewing"}
+                              disabled={batch.status !== 'reviewing'}
                               type="number"
                               step="0.1"
-                              value={item.actualWeightKg ?? ""}
+                              value={item.actualWeightKg ?? ''}
                               onChange={(event) =>
                                 patchItem(item.id, {
                                   actualWeightKg:
-                                    event.target.value === ""
-                                      ? null
-                                      : Number(event.target.value),
+                                    event.target.value === '' ? null : Number(event.target.value),
                                 })
                               }
                             />
                             <span>kg ×</span>
                             <input
-                              disabled={batch.status !== "reviewing"}
+                              disabled={batch.status !== 'reviewing'}
                               type="number"
                               step="1"
-                              value={item.actualReps ?? ""}
+                              value={item.actualReps ?? ''}
                               onChange={(event) =>
                                 patchItem(item.id, {
                                   actualReps:
-                                    event.target.value === ""
-                                      ? null
-                                      : Number(event.target.value),
+                                    event.target.value === '' ? null : Number(event.target.value),
                                 })
                               }
                             />
                             <span>次</span>
                           </div>
-                        ) : item.itemType === "scoring_rule" ? (
+                        ) : item.itemType === 'scoring_rule' ? (
                           displayValue(item)
                         ) : (
                           <div className="metric-value-input">
                             <input
-                              disabled={batch.status !== "reviewing"}
+                              disabled={batch.status !== 'reviewing'}
                               type="number"
                               step="0.1"
-                              value={item.valueNum ?? ""}
+                              value={item.valueNum ?? ''}
                               onChange={(event) =>
                                 patchItem(item.id, {
                                   valueNum:
-                                    event.target.value === ""
-                                      ? null
-                                      : Number(event.target.value),
+                                    event.target.value === '' ? null : Number(event.target.value),
                                 })
                               }
                             />
@@ -893,16 +833,14 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                       <td>
                         <strong>{item.sourceSheet}</strong>
                         <small>
-                          {item.sourceAddress} · 原值 {item.rawValue || "空"}
+                          {item.sourceAddress} · 原值 {item.rawValue || '空'}
                         </small>
                       </td>
                       <td>
                         <div className="import-messages">
                           {item.messages.length ? (
                             item.messages.map((entry, index) => (
-                              <span key={index}>
-                                {entry.replace(/^错误：|^警告：/, "")}
-                              </span>
+                              <span key={index}>{entry.replace(/^错误：|^警告：/, '')}</span>
                             ))
                           ) : (
                             <span>校验通过</span>
@@ -926,34 +864,26 @@ export function DataImportPage({ project, athletes, mode = "import", onChanged }
                 <span>冲突处理</span>
                 <select
                   value={conflictPolicy}
-                  onChange={(event) =>
-                    setConflictPolicy(event.target.value as "skip" | "update")
-                  }
-                  disabled={batch.status !== "reviewing"}
+                  onChange={(event) => setConflictPolicy(event.target.value as 'skip' | 'update')}
+                  disabled={batch.status !== 'reviewing'}
                 >
                   <option value="skip">保留数据库原值，跳过重复项</option>
                   <option value="update">使用本批次更新重复项</option>
                 </select>
               </label>
               <div>
-                <small>
-                  跳过项和空白值不会写入；整个批次在同一事务内提交。
-                </small>
+                <small>跳过项和空白值不会写入；整个批次在同一事务内提交。</small>
                 <button
                   className="data-import-primary"
-                  disabled={
-                    Boolean(busy) ||
-                    batch.status !== "reviewing" ||
-                    batch.errorCount > 0
-                  }
+                  disabled={Boolean(busy) || batch.status !== 'reviewing' || batch.errorCount > 0}
                   onClick={commit}
                 >
                   <Database size={17} />
-                  {busy === "commit"
-                    ? "正在写入…"
-                    : batch.status === "committed"
-                      ? "已写入数据库"
-                      : "确认写入数据库"}
+                  {busy === 'commit'
+                    ? '正在写入…'
+                    : batch.status === 'committed'
+                      ? '已写入数据库'
+                      : '确认写入数据库'}
                 </button>
               </div>
             </footer>

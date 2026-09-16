@@ -1,6 +1,6 @@
 ---
 name: retro
-description: "Turn session friction, repeated mistakes, and human corrections into minimal rule or skill improvements for approval. 日本語の依頼例:「振り返り」「レトロ」「学びをルール化」「同じミスを防ぎたい」。"
+description: 'Turn session friction, repeated mistakes, and human corrections into minimal rule or skill improvements for approval. 日本語の依頼例:「振り返り」「レトロ」「学びをルール化」「同じミスを防ぎたい」。'
 ---
 
 # Retro — turn friction into rules

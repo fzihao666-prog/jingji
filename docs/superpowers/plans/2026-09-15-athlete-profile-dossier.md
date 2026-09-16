@@ -24,25 +24,48 @@
 ### Task 1: 档案查询领域服务与回归脚本
 
 **Files:**
+
 - Create: `server/athlete-profile-service.ts`
 - Create: `scripts/athlete-profile-check.mjs`
 - Modify: `server/index.ts`
 
 **Interfaces:**
+
 - Consumes: `buildOverviewPayload({ athleteIds, from, to, project, individual })`、SQLite `db`、已验证的目标运动员和可访问运动员 ID 集合。
 - Produces: `buildWellnessTrends(input)`、`buildProfileComparison(input)`、`filterSpecialTestEventsByAthlete(input)`。
 
 - [ ] **Step 1: 编写失败的 API 回归脚本**
 
 ```js
-const wellness = await json(`/api/athletes/${athlete.id}/wellness-trends?from=2026-07-01&to=2026-07-31`, {}, token);
+const wellness = await json(
+  `/api/athletes/${athlete.id}/wellness-trends?from=2026-07-01&to=2026-07-31`,
+  {},
+  token
+);
 assert(wellness.status === 200, 'wellness trends request failed');
-assert(wellness.payload.series.every((series) => series.points.every((point) => point.value !== 0 || point.source !== 'missing')), 'missing wellness was coerced to zero');
+assert(
+  wellness.payload.series.every((series) =>
+    series.points.every((point) => point.value !== 0 || point.source !== 'missing')
+  ),
+  'missing wellness was coerced to zero'
+);
 
-const comparison = await json(`/api/athletes/${athlete.id}/profile-comparison?from=2026-07-01&to=2026-07-31&project=${encodeURIComponent(athlete.project)}`, {}, token);
+const comparison = await json(
+  `/api/athletes/${athlete.id}/profile-comparison?from=2026-07-01&to=2026-07-31&project=${encodeURIComponent(athlete.project)}`,
+  {},
+  token
+);
 assert(comparison.status === 200, 'profile comparison request failed');
-assert(comparison.payload.scope.teamId === athlete.teamId, 'comparison scope must use athlete team id');
-assert(comparison.payload.items.every((item) => item.teamSampleCount === null || item.teamSampleCount >= 2), 'single-athlete team comparison leaked');
+assert(
+  comparison.payload.scope.teamId === athlete.teamId,
+  'comparison scope must use athlete team id'
+);
+assert(
+  comparison.payload.items.every(
+    (item) => item.teamSampleCount === null || item.teamSampleCount >= 2
+  ),
+  'single-athlete team comparison leaked'
+);
 ```
 
 - [ ] **Step 2: 运行脚本并确认因路由缺失失败**
@@ -54,7 +77,13 @@ Expected: FAIL，提示 `wellness trends request failed` 或 404。
 - [ ] **Step 3: 实现最小领域服务**
 
 ```ts
-export type ProfileScope = { athleteId: number; teamId: number | null; project: string; from: string; to: string };
+export type ProfileScope = {
+  athleteId: number;
+  teamId: number | null;
+  project: string;
+  from: string;
+  to: string;
+};
 
 export function buildWellnessTrends(input: ProfileScope & { comparableAthleteIds: number[] }) {
   // 查询 daily_wellness 的有效非演示日报，并按日期返回个人值、团队均值和样本数。
@@ -72,8 +101,12 @@ export function buildProfileComparison(input: ProfileScope & { comparableAthlete
 ```ts
 app.get('/api/athletes/:id/wellness-trends', requireAuth, (req, res) => {
   const athleteId = Number(req.params.id);
-  if (!hasAthleteAccess(req.authUser!, athleteId)) return res.status(403).json({ message: '无权访问该运动员。' });
-  const { from, to } = normalizeOverviewRange({ from: cleanString(req.query.from), to: cleanString(req.query.to) });
+  if (!hasAthleteAccess(req.authUser!, athleteId))
+    return res.status(403).json({ message: '无权访问该运动员。' });
+  const { from, to } = normalizeOverviewRange({
+    from: cleanString(req.query.from),
+    to: cleanString(req.query.to),
+  });
   return res.json(buildWellnessTrends(resolveProfileScope(req.authUser!, athleteId, from, to)));
 });
 ```
@@ -96,12 +129,14 @@ git commit -m "feat: add athlete profile data queries"
 ### Task 2: 传输类型、API 门面与复用模块输入
 
 **Files:**
+
 - Modify: `src/types.ts`
 - Modify: `src/api.ts`
 - Modify: `src/components/InjuryRecoveryModule.tsx`
 - Modify: `src/components/StrengthProfileModule.tsx`
 
 **Interfaces:**
+
 - Consumes: Task 1 的 `wellness-trends`、`profile-comparison` 与专项测试响应。
 - Produces: `WellnessTrendsPayload`、`ProfileComparisonPayload`、可选 `to` 的伤病模块、可选日期范围的体能测试模块。
 
@@ -153,11 +188,13 @@ git commit -m "feat: expose athlete profile data to client"
 ### Task 3: 个人档案组合页与恢复/比较可视化
 
 **Files:**
+
 - Modify: `src/pages/PersonalPage.tsx`
 - Modify: `src/styles.css`
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Consumes: Task 2 的 API 门面、全局 `from`、`to`、`project`、当前运动员和既有图表模块。
 - Produces: 单页五区域综合档案，所有卡片遵循全局筛选。
 
@@ -184,7 +221,11 @@ Expected: FAIL，提示找不到新的区域标题。
 ```tsx
 <section aria-labelledby="profile-recovery-title">
   <SectionHeading id="profile-recovery-title" title="生理生化与恢复状态" />
-  <ContentState kind="empty" title="生理生化数据暂未接入" description="等待正式数据模型接入后展示。" />
+  <ContentState
+    kind="empty"
+    title="生理生化数据暂未接入"
+    description="等待正式数据模型接入后展示。"
+  />
   <WellnessTrendCards trends={wellnessTrends} />
   <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
 </section>
@@ -195,8 +236,13 @@ Expected: FAIL，提示找不到新的区域标题。
 - [ ] **Step 4: 实现样式并保持可访问性**
 
 ```css
-.personal-profile-section { display: grid; gap: var(--space-4); }
-.personal-profile-comparison-empty { color: var(--text-muted); }
+.personal-profile-section {
+  display: grid;
+  gap: var(--space-4);
+}
+.personal-profile-comparison-empty {
+  color: var(--text-muted);
+}
 ```
 
 复用 `src/styles.css` 的现有色彩变量和卡片规则；趋势图提供文字摘要，图例和状态不只靠颜色表达，窄屏下卡片单列排列。
@@ -219,9 +265,11 @@ git commit -m "feat: compose athlete profile dossier"
 ### Task 4: 全量验证与交付检查
 
 **Files:**
+
 - Modify: `docs/architecture.md`（仅当实现中的路由/服务边界与设计不同）
 
 **Interfaces:**
+
 - Consumes: 前三项提交后的工作树。
 - Produces: 可复现验证结果与准确交付说明。
 

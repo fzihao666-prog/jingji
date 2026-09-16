@@ -4,11 +4,19 @@ import { chromium } from 'playwright-core';
 const output = process.argv[2] || 'outputs/special-distance-module-20260731';
 const baseUrl = process.argv[3] || 'http://127.0.0.1:5173';
 mkdirSync(output, { recursive: true });
-const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
-const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1 });
+const browser = await chromium.launch({
+  executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  headless: true,
+});
+const page = await browser.newPage({
+  viewport: { width: 1600, height: 1000 },
+  deviceScaleFactor: 1,
+});
 const errors = [];
 page.on('pageerror', (error) => errors.push(error.message));
-page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('console', (message) => {
+  if (message.type() === 'error') errors.push(message.text());
+});
 await page.goto(baseUrl, { waitUntil: 'networkidle' });
 await page.getByLabel('账号', { exact: true }).fill('admin01');
 await page.getByLabel('密码', { exact: true }).fill('demo123');
@@ -20,6 +28,7 @@ await page.waitForTimeout(900);
 await page.screenshot({ path: `${output}/special-tests-page.png`, fullPage: true });
 const titleVisible = await page.getByRole('heading', { name: '专项距离训练' }).isVisible();
 const templateVisible = await page.getByRole('button', { name: /下载模板/ }).isVisible();
-if (!titleVisible || !templateVisible || errors.length) throw new Error(JSON.stringify({ titleVisible, templateVisible, errors }));
+if (!titleVisible || !templateVisible || errors.length)
+  throw new Error(JSON.stringify({ titleVisible, templateVisible, errors }));
 console.log(JSON.stringify({ titleVisible, templateVisible, errors: 0 }));
 await browser.close();

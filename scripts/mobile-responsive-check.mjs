@@ -7,12 +7,14 @@ await mkdir(output, { recursive: true });
 
 const browser = await chromium.launch({
   executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: true
+  headless: true,
 });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
 const browserErrors = [];
 page.on('pageerror', (error) => browserErrors.push(error.message));
-page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(message.text()); });
+page.on('console', (message) => {
+  if (message.type() === 'error') browserErrors.push(message.text());
+});
 
 await page.goto(baseUrl, { waitUntil: 'networkidle' });
 if (await page.locator('input[type="password"]').count()) {
@@ -31,11 +33,14 @@ async function assertViewport(name, allowSelectors = []) {
     const bodyOverflow = document.body.scrollWidth - window.innerWidth;
     const allowedState = allowed.map((selector) => {
       const element = document.querySelector(selector);
-      return element ? { selector, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth } : { selector, missing: true };
+      return element
+        ? { selector, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }
+        : { selector, missing: true };
     });
     return { rootOverflow, bodyOverflow, width: window.innerWidth, allowedState };
   }, allowSelectors);
-  if (state.rootOverflow > 2 || state.bodyOverflow > 2) throw new Error(`${name}整页横向溢出: ${JSON.stringify(state)}`);
+  if (state.rootOverflow > 2 || state.bodyOverflow > 2)
+    throw new Error(`${name}整页横向溢出: ${JSON.stringify(state)}`);
   results.push({ name, ...state });
   await page.screenshot({ path: `${output}/${name}.png`, fullPage: true });
 }
@@ -50,7 +55,7 @@ await assertViewport('01-overview');
 await go('运动员表现');
 await page.locator('.athlete-picker-trigger').click();
 const personalOptions = page.locator('.athlete-picker-options button');
-if (await personalOptions.count() > 1) await personalOptions.nth(1).click();
+if ((await personalOptions.count()) > 1) await personalOptions.nth(1).click();
 await page.locator('.personal-identity-card').waitFor();
 await assertViewport('02-personal');
 if (await page.locator('.model-standard-card, .personal-calendar-section').count()) {

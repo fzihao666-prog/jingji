@@ -5,13 +5,15 @@ export async function exportPdfSheets(container: HTMLElement, fileName: string, 
       if (image.complete && image.naturalWidth > 0) return Promise.resolve();
       return new Promise<void>((resolve, reject) => {
         image.addEventListener('load', () => resolve(), { once: true });
-        image.addEventListener('error', () => reject(new Error(`报告图片加载失败：${image.src}`)), { once: true });
+        image.addEventListener('error', () => reject(new Error(`报告图片加载失败：${image.src}`)), {
+          once: true,
+        });
       });
     })
   );
   const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
     import('html2canvas'),
-    import('jspdf')
+    import('jspdf'),
   ]);
   const sheets = Array.from(container.querySelectorAll<HTMLElement>('.personal-pdf-sheet'));
   if (!sheets.length) throw new Error('没有可导出的报告页面。');
@@ -23,7 +25,7 @@ export async function exportPdfSheets(container: HTMLElement, fileName: string, 
       scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true,
-      logging: false
+      logging: false,
     });
     drawWatermark(canvas, watermark);
     pdf.addImage(canvas.toDataURL('image/jpeg', 0.96), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
@@ -58,5 +60,8 @@ function drawWatermark(canvas: HTMLCanvasElement, text: string) {
 }
 
 function safeFileName(value: string) {
-  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/\s+/g, '_').slice(0, 120);
+  return value
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 120);
 }

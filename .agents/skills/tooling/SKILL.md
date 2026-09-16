@@ -1,6 +1,6 @@
 ---
 name: tooling
-description: "ESLint, Stylelint, TypeScript config, environment validation, dead-code checks, and automated convention enforcement. 日本語の依頼例:「Lint設定」「tsconfig」「Stylelint」「ルールをCIで強制」。"
+description: 'ESLint, Stylelint, TypeScript config, environment validation, dead-code checks, and automated convention enforcement. 日本語の依頼例:「Lint設定」「tsconfig」「Stylelint」「ルールをCIで強制」。'
 ---
 
 # Tooling — enforce rules with machines, not memory
@@ -13,21 +13,21 @@ Every mechanical rule in this rule-set should be backed by a tool so `lint`/CI c
 
 ## ESLint — rule → enforcement map
 
-| Convention (source) | ESLint rule / plugin |
-|---|---|
-| No `any` (AGENTS.md) | `@typescript-eslint/no-explicit-any` |
-| `@ts-expect-error` needs reason, `@ts-ignore` banned (AGENTS.md) | `@typescript-eslint/ban-ts-comment` with `ts-expect-error: 'allow-with-description'` |
-| Hooks rules + complete effect deps (react-patterns) | `eslint-plugin-react-hooks` (`rules-of-hooks`, `exhaustive-deps`) — suppression comments banned |
-| No array-index keys (react-patterns) | `react/no-array-index-key` |
-| Named exports only, with exceptions (react-patterns) | `import/no-default-export` + overrides allowing `app/**`, `pages/**`, `src/pages/**`, `*.stories.*`, `*.config.*`, `.storybook/**` |
-| No inline styles (AGENTS.md) | `react/forbid-dom-props` (`style`) |
-| No `dangerouslySetInnerHTML` / eval family (frontend-security) | `react/no-danger`, `no-eval`, `no-implied-eval`, `no-new-func` |
-| Semantic HTML, labels, keyboard, no positive tabindex (a11y) | `eslint-plugin-jsx-a11y` (recommended config, as errors) |
-| Testing Library discipline (testing-vitest) | `eslint-plugin-testing-library` (`prefer-user-event`, `prefer-find-by`, `no-container`, `no-node-access`, `no-wait-for-side-effects`) |
-| Playwright bans (testing-playwright) | `eslint-plugin-playwright` (`no-wait-for-timeout`, `no-networkidle`, `missing-playwright-await`, `no-element-handle`) |
-| Awaited play interactions (storybook) | `eslint-plugin-storybook` (`await-interactions`, `use-storybook-expect`) |
-| Server-only module isolation (nextjs) | `server-only` package + `import/no-restricted-paths` |
-| Feature-boundary imports (vite-react) | `eslint-plugin-boundaries` or `dependency-cruiser` in CI |
+| Convention (source)                                              | ESLint rule / plugin                                                                                                                  |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| No `any` (AGENTS.md)                                             | `@typescript-eslint/no-explicit-any`                                                                                                  |
+| `@ts-expect-error` needs reason, `@ts-ignore` banned (AGENTS.md) | `@typescript-eslint/ban-ts-comment` with `ts-expect-error: 'allow-with-description'`                                                  |
+| Hooks rules + complete effect deps (react-patterns)              | `eslint-plugin-react-hooks` (`rules-of-hooks`, `exhaustive-deps`) — suppression comments banned                                       |
+| No array-index keys (react-patterns)                             | `react/no-array-index-key`                                                                                                            |
+| Named exports only, with exceptions (react-patterns)             | `import/no-default-export` + overrides allowing `app/**`, `pages/**`, `src/pages/**`, `*.stories.*`, `*.config.*`, `.storybook/**`    |
+| No inline styles (AGENTS.md)                                     | `react/forbid-dom-props` (`style`)                                                                                                    |
+| No `dangerouslySetInnerHTML` / eval family (frontend-security)   | `react/no-danger`, `no-eval`, `no-implied-eval`, `no-new-func`                                                                        |
+| Semantic HTML, labels, keyboard, no positive tabindex (a11y)     | `eslint-plugin-jsx-a11y` (recommended config, as errors)                                                                              |
+| Testing Library discipline (testing-vitest)                      | `eslint-plugin-testing-library` (`prefer-user-event`, `prefer-find-by`, `no-container`, `no-node-access`, `no-wait-for-side-effects`) |
+| Playwright bans (testing-playwright)                             | `eslint-plugin-playwright` (`no-wait-for-timeout`, `no-networkidle`, `missing-playwright-await`, `no-element-handle`)                 |
+| Awaited play interactions (storybook)                            | `eslint-plugin-storybook` (`await-interactions`, `use-storybook-expect`)                                                              |
+| Server-only module isolation (nextjs)                            | `server-only` package + `import/no-restricted-paths`                                                                                  |
+| Feature-boundary imports (vite-react)                            | `eslint-plugin-boundaries` or `dependency-cruiser` in CI                                                                              |
 
 ## Stylelint (CSS Modules profile only)
 

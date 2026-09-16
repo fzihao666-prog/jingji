@@ -9,20 +9,25 @@ export const REGION_GROUPS = [
   { name: '华南', regions: ['广东', '广西', '海南'] },
   { name: '西南', regions: ['重庆', '四川', '贵州', '云南', '西藏'] },
   { name: '西北', regions: ['陕西', '甘肃', '青海', '宁夏', '新疆'] },
-  { name: '港澳台', regions: ['香港', '澳门', '台湾'] }
+  { name: '港澳台', regions: ['香港', '澳门', '台湾'] },
 ] as const;
 
 export const PROVINCES = REGION_GROUPS.flatMap((group) => [...group.regions]);
 export type Province = (typeof REGION_GROUPS)[number]['regions'][number];
 
 const provinceCodes = new Map(
-  provinceData.map((item) => [PROVINCES.find((province) => item.name.startsWith(province)), item.province])
+  provinceData.map((item) => [
+    PROVINCES.find((province) => item.name.startsWith(province)),
+    item.province,
+  ])
 );
 
 export const PROVINCE_CITIES: Record<string, string[]> = Object.fromEntries(
   PROVINCES.map((province) => {
     const provinceCode = provinceCodes.get(province);
-    const cities = cityData.filter((item) => item.province === provinceCode).map((item) => item.name);
+    const cities = cityData
+      .filter((item) => item.province === provinceCode)
+      .map((item) => item.name);
     const provinceLevelName = provinceData.find((item) => item.province === provinceCode)?.name;
     return [province, cities.length ? cities : provinceLevelName ? [provinceLevelName] : []];
   })

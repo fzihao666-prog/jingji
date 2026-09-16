@@ -1,7 +1,13 @@
 import type { TrainingStatus } from '../types';
 import { statusMeta } from '../utils';
 
-export function StatusPill({ status, compact = false }: { status: TrainingStatus; compact?: boolean }) {
+export function StatusPill({
+  status,
+  compact = false,
+}: {
+  status: TrainingStatus;
+  compact?: boolean;
+}) {
   const meta = statusMeta[status];
   return (
     <span className={`status-pill status-${status}`}>
@@ -10,4 +16,3 @@ export function StatusPill({ status, compact = false }: { status: TrainingStatus
     </span>
   );
 }
-

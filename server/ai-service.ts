@@ -114,9 +114,8 @@ export class TrainingPlanAIService {
   private loadModelConfigs(): AIModelConfig[] {
     const models: AIModelConfig[] = [];
     const configuredTimeout = Number(process.env.AI_TIMEOUT_MS);
-    const timeout = Number.isFinite(configuredTimeout) && configuredTimeout >= 30000
-      ? configuredTimeout
-      : 180000;
+    const timeout =
+      Number.isFinite(configuredTimeout) && configuredTimeout >= 30000 ? configuredTimeout : 180000;
 
     // 主模型（优先级最高）
     if (process.env.AI_API_KEY && process.env.AI_BASE_URL && process.env.AI_MODEL) {
@@ -125,18 +124,22 @@ export class TrainingPlanAIService {
         baseUrl: process.env.AI_BASE_URL.replace(/\/+$/, ''),
         apiKey: process.env.AI_API_KEY,
         model: process.env.AI_MODEL,
-        timeout
+        timeout,
       });
     }
 
     // 备用模型
-    if (process.env.AI_FALLBACK_API_KEY && process.env.AI_FALLBACK_BASE_URL && process.env.AI_FALLBACK_MODEL) {
+    if (
+      process.env.AI_FALLBACK_API_KEY &&
+      process.env.AI_FALLBACK_BASE_URL &&
+      process.env.AI_FALLBACK_MODEL
+    ) {
       models.push({
         name: 'Fallback',
         baseUrl: process.env.AI_FALLBACK_BASE_URL.replace(/\/+$/, ''),
         apiKey: process.env.AI_FALLBACK_API_KEY,
         model: process.env.AI_FALLBACK_MODEL,
-        timeout
+        timeout,
       });
     }
 
@@ -147,29 +150,37 @@ export class TrainingPlanAIService {
         baseUrl: process.env.AI_CN_BASE_URL.replace(/\/+$/, ''),
         apiKey: process.env.AI_CN_API_KEY,
         model: process.env.AI_CN_MODEL,
-        timeout
+        timeout,
       });
     }
 
     // 百度文心一言
-    if (process.env.AI_BAIDU_API_KEY && process.env.AI_BAIDU_BASE_URL && process.env.AI_BAIDU_MODEL) {
+    if (
+      process.env.AI_BAIDU_API_KEY &&
+      process.env.AI_BAIDU_BASE_URL &&
+      process.env.AI_BAIDU_MODEL
+    ) {
       models.push({
         name: 'ERNIE',
         baseUrl: process.env.AI_BAIDU_BASE_URL.replace(/\/+$/, ''),
         apiKey: process.env.AI_BAIDU_API_KEY,
         model: process.env.AI_BAIDU_MODEL,
-        timeout
+        timeout,
       });
     }
 
     // Google Gemini
-    if (process.env.AI_GEMINI_API_KEY && process.env.AI_GEMINI_BASE_URL && process.env.AI_GEMINI_MODEL) {
+    if (
+      process.env.AI_GEMINI_API_KEY &&
+      process.env.AI_GEMINI_BASE_URL &&
+      process.env.AI_GEMINI_MODEL
+    ) {
       models.push({
         name: 'Gemini',
         baseUrl: process.env.AI_GEMINI_BASE_URL.replace(/\/+$/, ''),
         apiKey: process.env.AI_GEMINI_API_KEY,
         model: process.env.AI_GEMINI_MODEL,
-        timeout
+        timeout,
       });
     }
 
@@ -199,7 +210,7 @@ export class TrainingPlanAIService {
         return {
           plan: result,
           modelUsed: `${model.name} (${model.model})`,
-          attempts: i + 1
+          attempts: i + 1,
         };
       } catch (error) {
         console.warn(`[AI] 模型 ${model.name} 失败:`, error);
@@ -214,10 +225,7 @@ export class TrainingPlanAIService {
   /**
    * 构建 AI Prompt
    */
-  private buildPrompt(
-    context: AthleteContext,
-    inputContent: string
-  ): string {
+  private buildPrompt(context: AthleteContext, inputContent: string): string {
     return `你是一位资深的${context.athlete.project}项目体能训练专家教练，拥有丰富的国家队训练指导经验。
 
 ## 运动员基本信息
@@ -228,19 +236,25 @@ export class TrainingPlanAIService {
 ${context.athlete.region ? `- 地区：${context.athlete.region}` : ''}
 
 ## 历史体能训练（最近6个月）
-${context.recentPlans.length > 0
-  ? JSON.stringify(context.recentPlans.slice(0, 3), null, 2)
-  : '暂无历史体能训练数据'}
+${
+  context.recentPlans.length > 0
+    ? JSON.stringify(context.recentPlans.slice(0, 3), null, 2)
+    : '暂无历史体能训练数据'
+}
 
 ## 近期训练记录（最近28天）
-${context.recentRecords.length > 0
-  ? JSON.stringify(context.recentRecords.slice(0, 10), null, 2)
-  : '暂无近期训练记录'}
+${
+  context.recentRecords.length > 0
+    ? JSON.stringify(context.recentRecords.slice(0, 10), null, 2)
+    : '暂无近期训练记录'
+}
 
 ## 力量测试数据（最近3次）
-${context.strengthTests.length > 0
-  ? JSON.stringify(context.strengthTests.slice(0, 3), null, 2)
-  : '暂无力量测试数据'}
+${
+  context.strengthTests.length > 0
+    ? JSON.stringify(context.strengthTests.slice(0, 3), null, 2)
+    : '暂无力量测试数据'
+}
 
 ## 用户输入的训练需求描述
 ${inputContent}
@@ -308,7 +322,7 @@ ${inputContent}
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${model.apiKey}`
+        Authorization: `Bearer ${model.apiKey}`,
       },
       body: JSON.stringify({
         model: model.model,
@@ -319,22 +333,23 @@ ${inputContent}
         messages: [
           {
             role: 'system',
-            content: '你是一位专业的赛艇和皮划艇体能训练教练。请严格按照用户要求的JSON格式输出，不要添加任何markdown代码块标记。'
+            content:
+              '你是一位专业的赛艇和皮划艇体能训练教练。请严格按照用户要求的JSON格式输出，不要添加任何markdown代码块标记。',
           },
           {
             role: 'user',
-            content: prompt
-          }
-        ]
+            content: prompt,
+          },
+        ],
       }),
-      signal: AbortSignal.timeout(model.timeout)
+      signal: AbortSignal.timeout(model.timeout),
     });
 
     if (!response.ok) {
       throw new Error(`API 返回错误: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
       error?: { message?: string };
     };

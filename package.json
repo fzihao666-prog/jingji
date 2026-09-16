@@ -10,6 +10,8 @@
     "build": "tsc -b && vite build",
     "start": "tsx server/index.ts",
     "check": "tsc -b --pretty false",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "plan-check": "node scripts/training-plan-check.mjs",
     "plan-visual-check": "node scripts/training-plan-visual-check.mjs",
     "strength-training-check": "node scripts/strength-training-check.mjs",

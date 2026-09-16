@@ -36,21 +36,41 @@ function configuredModels(): ModelConfig[] {
   const timeout = Number.isFinite(timeoutValue) && timeoutValue >= 30_000 ? timeoutValue : 180_000;
   const candidates = [
     ['Primary', process.env.AI_BASE_URL, process.env.AI_API_KEY, process.env.AI_MODEL],
-    ['Fallback', process.env.AI_FALLBACK_BASE_URL, process.env.AI_FALLBACK_API_KEY, process.env.AI_FALLBACK_MODEL],
+    [
+      'Fallback',
+      process.env.AI_FALLBACK_BASE_URL,
+      process.env.AI_FALLBACK_API_KEY,
+      process.env.AI_FALLBACK_MODEL,
+    ],
     ['Qwen', process.env.AI_CN_BASE_URL, process.env.AI_CN_API_KEY, process.env.AI_CN_MODEL],
-    ['Gemini', process.env.AI_GEMINI_BASE_URL, process.env.AI_GEMINI_API_KEY, process.env.AI_GEMINI_MODEL]
+    [
+      'Gemini',
+      process.env.AI_GEMINI_BASE_URL,
+      process.env.AI_GEMINI_API_KEY,
+      process.env.AI_GEMINI_MODEL,
+    ],
   ] as const;
-  return candidates.flatMap(([name, baseUrl, apiKey, model]) => baseUrl && apiKey && model ? [{
-    name,
-    baseUrl: baseUrl.replace(/\/+$/, ''),
-    apiKey,
-    model,
-    timeout
-  }] : []);
+  return candidates.flatMap(([name, baseUrl, apiKey, model]) =>
+    baseUrl && apiKey && model
+      ? [
+          {
+            name,
+            baseUrl: baseUrl.replace(/\/+$/, ''),
+            apiKey,
+            model,
+            timeout,
+          },
+        ]
+      : []
+  );
 }
 
 function cleanJson(content: string) {
-  return content.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+  return content
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
 }
 
 export async function recognizeStrengthImport(input: {
@@ -67,7 +87,7 @@ export async function recognizeStrengthImport(input: {
     name: athlete.name,
     project: athlete.project,
     team: athlete.team,
-    gender: athlete.gender
+    gender: athlete.gender,
   }));
   const prompt = `你是体育体能训练结果录入助手。请从附件中逐组提取已经完成的体能训练结果，不要生成训练计划。
 
@@ -85,19 +105,22 @@ ${JSON.stringify(athleteDirectory)}
 5. 找不到日期或运动员姓名时仍保留该行，交给用户校对。`;
 
   const dataUrl = `data:${input.mimetype};base64,${input.buffer.toString('base64')}`;
-  const attachment = input.mimetype === 'application/pdf'
-    ? { type: 'file', file: { filename: input.filename, file_data: dataUrl } }
-    : { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } };
+  const attachment =
+    input.mimetype === 'application/pdf'
+      ? { type: 'file', file: { filename: input.filename, file_data: dataUrl } }
+      : { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } };
   let lastError: Error | null = null;
 
   for (const model of models) {
     try {
-      const endpoint = model.baseUrl.endsWith('/chat/completions') ? model.baseUrl : `${model.baseUrl}/chat/completions`;
+      const endpoint = model.baseUrl.endsWith('/chat/completions')
+        ? model.baseUrl
+        : `${model.baseUrl}/chat/completions`;
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${model.apiKey}`
+          Authorization: `Bearer ${model.apiKey}`,
         },
         body: JSON.stringify({
           model: model.model,
@@ -107,13 +130,16 @@ ${JSON.stringify(athleteDirectory)}
           ...(model.model.toLowerCase().startsWith('qwen') ? { enable_thinking: false } : {}),
           messages: [
             { role: 'system', content: '只识别已完成的体能训练结果，并严格输出JSON。' },
-            { role: 'user', content: [{ type: 'text', text: prompt }, attachment] }
-          ]
+            { role: 'user', content: [{ type: 'text', text: prompt }, attachment] },
+          ],
         }),
-        signal: AbortSignal.timeout(model.timeout)
+        signal: AbortSignal.timeout(model.timeout),
       });
       if (!response.ok) throw new Error(`识别接口返回 ${response.status}`);
-      const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
+      const payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        error?: { message?: string };
+      };
       if (payload.error?.message) throw new Error(payload.error.message);
       const content = payload.choices?.[0]?.message?.content;
       if (!content) throw new Error('识别接口返回空内容');

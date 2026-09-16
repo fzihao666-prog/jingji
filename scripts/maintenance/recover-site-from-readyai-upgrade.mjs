@@ -25,8 +25,14 @@ function patchFile(relativePath, transform) {
 
 patchFile('src/App.tsx', (source) => {
   return source
-    .replace(/\n?import\s+\{\s*PublicLandingPage\s*\}\s+from\s+['"]\.\/pages\/PublicLandingPage['"];?/g, '')
-    .replace(/return\s+<PublicLandingPage>(\s*<LoginPage[\s\S]*?\/>\s*)<\/PublicLandingPage>;/g, 'return $1;')
+    .replace(
+      /\n?import\s+\{\s*PublicLandingPage\s*\}\s+from\s+['"]\.\/pages\/PublicLandingPage['"];?/g,
+      ''
+    )
+    .replace(
+      /return\s+<PublicLandingPage>(\s*<LoginPage[\s\S]*?\/>\s*)<\/PublicLandingPage>;/g,
+      'return $1;'
+    )
     .replace(/(<PublicLandingPage>)(\s*<LoginPage[\s\S]*?\/>\s*)(<\/PublicLandingPage>)/g, '$2');
 });
 

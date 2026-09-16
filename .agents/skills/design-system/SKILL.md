@@ -1,6 +1,6 @@
 ---
 name: design-system
-description: "Shared UI components, design tokens, typography, icons, and Figma-to-code consistency. Use for reusable design-system work. 日本語の依頼例:「共通コンポーネント」「デザインシステム」「トークン定義」「Figma通りに実装」。"
+description: 'Shared UI components, design tokens, typography, icons, and Figma-to-code consistency. Use for reusable design-system work. 日本語の依頼例:「共通コンポーネント」「デザインシステム」「トークン定義」「Figma通りに実装」。'
 ---
 
 # Design System

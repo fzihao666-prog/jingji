@@ -136,14 +136,14 @@ jingji/
 
 当前导航按业务域组织：
 
-| 导航域 | 页面/子页面 | 主要数据源 |
-|---|---|---|
-| 训练总览 | 团队或运动员总览 | `/api/overview`、测试及训练记录 |
-| 专项训练 | 专项分析、专项指标、训练安排、运动员看板 | 训练场次、专项测试、设备指标 |
-| 体能训练 | 体能总览、训练安排、训练记录、训练分析、体能评估 | 训练计划、体能结果、力量测试 |
-| 数据采集 | 蓝牙连接 | 浏览器 Web Bluetooth |
-| 个人档案 | 个人画像、身体成分、伤病、测试与报告 | 多个运动员级接口 |
-| 组织管理 | 运动员、教练、队伍、权限、账户审核 | 管理类接口 |
+| 导航域   | 页面/子页面                                      | 主要数据源                      |
+| -------- | ------------------------------------------------ | ------------------------------- |
+| 训练总览 | 团队或运动员总览                                 | `/api/overview`、测试及训练记录 |
+| 专项训练 | 专项分析、专项指标、训练安排、运动员看板         | 训练场次、专项测试、设备指标    |
+| 体能训练 | 体能总览、训练安排、训练记录、训练分析、体能评估 | 训练计划、体能结果、力量测试    |
+| 数据采集 | 蓝牙连接                                         | 浏览器 Web Bluetooth            |
+| 个人档案 | 个人画像、身体成分、伤病、测试与报告             | 多个运动员级接口                |
+| 组织管理 | 运动员、教练、队伍、权限、账户审核               | 管理类接口                      |
 
 运动员账号只能看到本人相关功能；管理账号的菜单按角色过滤。菜单过滤只负责用户体验，不能替代服务端授权。
 
@@ -212,17 +212,17 @@ sequenceDiagram
 
 ### 6.3 API 业务域
 
-| API 域 | 路径前缀 | 主要职责 |
-|---|---|---|
-| 认证与资料 | `/api/auth`、`/api/me`、`/api/profile` | 登录、注册、会话、改名、改密 |
-| 偏好 | `/api/preferences` | 总览布局持久化 |
-| 运动员 | `/api/athletes`、`/api/admin/athletes` | 档案、身体成分、照片、伤病、批量管理 |
-| 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与绑定 |
-| 专项训练 | `/api/special-training`、`/api/special-tests` | 训练场次、专项测试和模板导入 |
-| 体能训练 | `/api/training-plans`、`/api/strength-training` | 计划、AI 生成、结果导入和分析 |
-| 测试与模型 | `/api/strength-tests`、`/api/analysis`、冠军模型接口 | 测试、建议、项目模型和个人分析 |
-| 总览与记录 | `/api/overview`、`/api/records` | 权限范围内的聚合和场次查询 |
-| 组织治理 | `/api/admin/registrations`、`/api/access` | 审核、账号、授权和审计 |
+| API 域     | 路径前缀                                                     | 主要职责                             |
+| ---------- | ------------------------------------------------------------ | ------------------------------------ |
+| 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密         |
+| 偏好       | `/api/preferences`                                           | 总览布局持久化                       |
+| 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理 |
+| 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与绑定             |
+| 专项训练   | `/api/special-training`、`/api/special-tests`                | 训练场次、专项测试和模板导入         |
+| 体能训练   | `/api/training-plans`、`/api/strength-training`              | 计划、AI 生成、结果导入和分析        |
+| 测试与模型 | `/api/strength-tests`、`/api/analysis`、冠军模型接口         | 测试、建议、项目模型和个人分析       |
+| 总览与记录 | `/api/overview`、`/api/records`                              | 权限范围内的聚合和场次查询           |
+| 组织治理   | `/api/admin/registrations`、`/api/access`                    | 审核、账号、授权和审计               |
 
 ## 7. 共享领域模型
 
@@ -323,17 +323,17 @@ erDiagram
 
 ### 8.3 数据域
 
-| 数据域 | 核心表 | 说明 |
-|---|---|---|
-| 身份与组织 | `users`、`account_profiles`、权限表、`coach_athletes` | 身份、层级和数据范围 |
-| 运动员主数据 | `athletes`、`athlete_profiles`、`athlete_origins` | 稳定身份和扩展档案 |
-| 训练事实 | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源 |
-| 训练计划 | `training_plans` | 结构化列与 `plan_data` JSON 并存 |
-| 测试评估 | `test_sessions`、`test_measurements`、身体测量、竞技状态 | 统一指标模型；`test_sessions.duration_min` 保存测试批次时长，团队汇总按测试日期与类型去重 |
-| 专项测试 | `special_test_events`、`special_test_results` | 事件与参与者成绩 |
-| 专项冠军模型 | `special_champion_models` | 按项目、分组、标准代码与细分项目维护的赛事标杆配置；成绩与比赛日期作为同一条正式配置保存，不写入模拟成绩 |
-| 健康 | `injury_records` | 疼痛、限制、康复与复查 |
-| 导入与审计 | `data_import_batches`、`data_import_items`、`audit_logs` | 统一暂存、提交追踪和敏感操作审计 |
+| 数据域       | 核心表                                                        | 说明                                                                                                     |
+| ------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 身份与组织   | `users`、`account_profiles`、权限表、`coach_athletes`         | 身份、层级和数据范围                                                                                     |
+| 运动员主数据 | `athletes`、`athlete_profiles`、`athlete_origins`             | 稳定身份和扩展档案                                                                                       |
+| 训练事实     | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源                                                                             |
+| 训练计划     | `training_plans`                                              | 结构化列与 `plan_data` JSON 并存                                                                         |
+| 测试评估     | `test_sessions`、`test_measurements`、身体测量、竞技状态      | 统一指标模型；`test_sessions.duration_min` 保存测试批次时长，团队汇总按测试日期与类型去重                |
+| 专项测试     | `special_test_events`、`special_test_results`                 | 事件与参与者成绩                                                                                         |
+| 专项冠军模型 | `special_champion_models`                                     | 按项目、分组、标准代码与细分项目维护的赛事标杆配置；成绩与比赛日期作为同一条正式配置保存，不写入模拟成绩 |
+| 健康         | `injury_records`                                              | 疼痛、限制、康复与复查                                                                                   |
+| 导入与审计   | `data_import_batches`、`data_import_items`、`audit_logs`      | 统一暂存、提交追踪和敏感操作审计                                                                         |
 
 ### 8.4 数据库收敛
 
@@ -558,13 +558,13 @@ npm run special-test-check
 
 测试策略分层：
 
-| 层级 | 目标 |
-|---|---|
-| TypeScript 检查 | 接口和类型基本一致 |
-| 构建检查 | 浏览器与服务端入口可编译 |
-| API 回归 | 认证、权限、导入和关键业务流程 |
-| 专项脚本 | 体能计划、训练结果、专项训练和数据库锁 |
-| 浏览器视觉检查 | 导航、响应式、关键页面布局和交互 |
+| 层级            | 目标                                   |
+| --------------- | -------------------------------------- |
+| TypeScript 检查 | 接口和类型基本一致                     |
+| 构建检查        | 浏览器与服务端入口可编译               |
+| API 回归        | 认证、权限、导入和关键业务流程         |
+| 专项脚本        | 体能计划、训练结果、专项训练和数据库锁 |
+| 浏览器视觉检查  | 导航、响应式、关键页面布局和交互       |
 
 新增跨权限功能至少要覆盖：允许角色、禁止角色、范围内资源、范围外资源和停用账号。
 
