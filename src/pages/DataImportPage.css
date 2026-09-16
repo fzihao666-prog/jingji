@@ -1,7 +1,9 @@
+/* stylelint-disable no-descending-specificity -- 页面状态与响应式覆盖依赖现有规则顺序。 */
 .data-import-page {
   min-height: 100%;
   color: #12303b;
 }
+
 .data-import-hero {
   min-height: 142px;
   padding: 26px 28px;
@@ -12,8 +14,9 @@
   border-radius: 20px;
   color: #fff;
   background: linear-gradient(125deg, #0c3642 0%, #105d63 62%, #148d83 100%);
-  box-shadow: 0 18px 42px rgba(7, 48, 58, 0.16);
+  box-shadow: 0 18px 42px rgb(7 48 58 / 16%);
 }
+
 .data-import-hero > div:first-child > span,
 .data-import-review-head > div:first-child > span {
   color: #71d7c8;
@@ -22,15 +25,16 @@
     sans-serif;
   letter-spacing: 0.18em;
 }
+
 .data-import-safety {
   min-width: 255px;
   padding: 16px 18px;
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgb(255 255 255 / 18%);
   border-radius: 13px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgb(255 255 255 / 8%);
 }
 
 .data-import-hero-actions {
@@ -38,28 +42,34 @@
   align-items: stretch;
   gap: 12px;
 }
+
 .data-import-safety div,
 .data-import-card-heading div {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
+
 .data-import-safety strong {
   font-size: 11px;
 }
+
 .data-import-safety span {
   color: #b9d5d7;
   font-size: 8px;
 }
+
 .data-import-grid {
   margin-top: 18px;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(330px, 0.85fr);
   gap: 18px;
 }
+
 .data-import-grid.history-only {
   grid-template-columns: minmax(0, 1fr);
 }
+
 .data-import-upload-card,
 .data-import-history-card,
 .data-import-sheet-audit,
@@ -68,23 +78,28 @@
   border: 1px solid #dbe5e7;
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 11px 30px rgba(20, 60, 68, 0.06);
+  box-shadow: 0 11px 30px rgb(20 60 68 / 6%);
 }
+
 .data-import-card-heading {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .data-import-card-heading > svg {
   color: #128e84;
 }
+
 .data-import-card-heading strong {
   font-size: 12px;
 }
+
 .data-import-card-heading span {
   color: #789097;
   font-size: 8px;
 }
+
 .data-import-drop {
   width: 100%;
   min-height: 114px;
@@ -100,10 +115,12 @@
   background: #f1faf8;
   cursor: pointer;
 }
+
 .data-import-drop:hover {
   border-color: #118177;
   background: #e9f6f4;
 }
+
 .data-import-drop strong {
   max-width: 90%;
   overflow: hidden;
@@ -111,10 +128,12 @@
   white-space: nowrap;
   font-size: 11px;
 }
+
 .data-import-drop span {
   color: #728b91;
   font-size: 8px;
 }
+
 .data-import-date {
   margin-top: 13px;
   display: grid;
@@ -122,11 +141,13 @@
   align-items: center;
   gap: 9px;
 }
+
 .data-import-date > span {
   color: #5e767d;
   font-size: 9px;
   font-weight: 800;
 }
+
 .data-import-date input,
 .data-import-table input,
 .data-import-table select,
@@ -140,10 +161,12 @@
   font-size: 9px;
   outline: 0;
 }
+
 .data-import-date small {
   color: #8ba0a5;
   font-size: 8px;
 }
+
 .data-import-primary {
   min-height: 38px;
   padding: 0 15px;
@@ -168,7 +191,7 @@
   font: inherit;
   cursor: pointer;
   padding: 13px 15px;
-  border: 1px solid rgba(36, 107, 253, 0.22);
+  border: 1px solid rgb(36 107 253 / 22%);
   border-radius: 12px;
   color: #174ea6;
   background: #f4f8ff;
@@ -180,7 +203,7 @@
 }
 
 .data-import-template:hover {
-  border-color: rgba(36, 107, 253, 0.48);
+  border-color: rgb(36 107 253 / 48%);
   background: #edf4ff;
   transform: translateY(-1px);
 }
@@ -195,21 +218,26 @@
   display: grid;
   gap: 3px;
 }
+
 .data-import-template span {
   color: #60708a;
   font-size: 12px;
 }
+
 .data-import-upload-card > .data-import-primary {
   width: 100%;
   margin-top: 13px;
 }
+
 .data-import-primary:hover:not(:disabled) {
   background: #08796f;
 }
+
 .data-import-primary:disabled {
   opacity: 0.48;
   cursor: not-allowed;
 }
+
 .data-import-history-list {
   max-height: 242px;
   margin-top: 14px;
@@ -217,6 +245,7 @@
   gap: 7px;
   overflow: auto;
 }
+
 .data-import-history-list > button {
   min-width: 0;
   padding: 10px 11px;
@@ -229,21 +258,25 @@
   background: #fafcfc;
   cursor: pointer;
 }
+
 .data-import-history-list > button.active {
   border-color: #58aaa3;
   background: #eef8f6;
 }
+
 .data-import-history-list strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 9px;
 }
+
 .data-import-history-list small {
   grid-column: 2;
   color: #82969b;
   font-size: 7px;
 }
+
 .batch-state {
   align-self: start;
   padding: 3px 5px;
@@ -254,15 +287,20 @@
   font-size: 7px;
   font-weight: 900;
 }
+
 .batch-state.committed {
   color: #087d72;
   background: #dff3ef;
 }
+
+/* stylelint-disable selector-class-pattern -- 状态类与后端返回值保持一致。 */
 .batch-state.failed,
 .batch-state.rolled_back {
   color: #b74a3d;
   background: #fee9e5;
 }
+/* stylelint-enable selector-class-pattern */
+
 .data-import-message {
   margin-top: 16px;
   padding: 11px 14px;
@@ -273,20 +311,24 @@
   font-size: 9px;
   font-weight: 750;
 }
+
 .data-import-message.success {
   color: #0b766d;
   background: #e4f5f1;
 }
+
 .data-import-message.error {
   color: #b33f35;
   background: #ffebe7;
 }
+
 .data-import-summary {
   margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
+
 .data-import-summary > div {
   min-height: 93px;
   padding: 15px 16px;
@@ -296,41 +338,50 @@
   flex-direction: column;
   background: #fff;
 }
+
 .data-import-summary span {
   color: #71878d;
   font-size: 8px;
   font-weight: 750;
 }
+
 .data-import-summary strong {
   margin-top: 5px;
   font:
     850 24px Bahnschrift,
     sans-serif;
 }
+
 .data-import-summary small {
   margin-top: auto;
   color: #92a3a7;
   font-size: 7px;
 }
+
 .data-import-summary .warning strong {
   color: #bf8110;
 }
+
 .data-import-summary .danger strong {
   color: #d34b3d;
 }
+
 .data-import-summary .status-text {
   font-size: 17px;
   color: #148a81;
 }
+
 .data-import-sheet-audit {
   margin-top: 18px;
 }
+
 .sheet-audit-grid {
   margin-top: 14px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+
 .sheet-audit-grid article {
   min-width: 0;
   padding: 11px;
@@ -341,17 +392,20 @@
   color: #10897f;
   background: #f5fbfa;
 }
+
 .sheet-audit-grid article.ignored {
   color: #9a721f;
   border-color: #eee2c9;
   background: #fffaf0;
 }
+
 .sheet-audit-grid article div {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
+
 .sheet-audit-grid strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -359,19 +413,23 @@
   color: #193a44;
   font-size: 9px;
 }
+
 .sheet-audit-grid span {
   color: #5e777e;
   font-size: 8px;
 }
+
 .sheet-audit-grid small {
   color: #8b9ca0;
   font-size: 7px;
 }
+
 .data-import-review {
   margin-top: 18px;
   padding: 0;
   overflow: hidden;
 }
+
 .data-import-review-head {
   padding: 20px 22px 15px;
   display: flex;
@@ -379,19 +437,23 @@
   justify-content: space-between;
   gap: 15px;
 }
+
 .data-import-review-head h2 {
   margin-top: 3px;
   font-size: 18px;
 }
+
 .data-import-review-head p {
   margin-top: 4px;
   color: #7d9095;
   font-size: 8px;
 }
+
 .data-import-review-actions {
   display: flex;
   gap: 8px;
 }
+
 .data-import-review-actions > button {
   min-height: 34px;
   padding: 0 11px;
@@ -406,9 +468,11 @@
   font-weight: 800;
   cursor: pointer;
 }
+
 .data-import-review-actions > button:disabled {
   opacity: 0.45;
 }
+
 .data-import-search {
   width: 230px;
   height: 34px;
@@ -421,6 +485,7 @@
   color: #789096;
   background: #fff;
 }
+
 .data-import-search input {
   min-width: 0;
   flex: 1;
@@ -428,11 +493,13 @@
   outline: 0;
   font-size: 8px;
 }
+
 .data-import-filters {
   padding: 0 22px 13px;
   display: flex;
   gap: 6px;
 }
+
 .data-import-filters button {
   min-height: 28px;
   padding: 0 10px;
@@ -444,22 +511,26 @@
   font-weight: 750;
   cursor: pointer;
 }
+
 .data-import-filters button.active {
   color: #fff;
   border-color: #118a81;
   background: #118a81;
 }
+
 .data-import-table-wrap {
   max-height: 650px;
   overflow: auto;
   border-top: 1px solid #e2e9ea;
   border-bottom: 1px solid #e2e9ea;
 }
+
 .data-import-table {
   width: 100%;
   min-width: 1320px;
   border-collapse: collapse;
 }
+
 .data-import-table th {
   position: sticky;
   z-index: 2;
@@ -471,49 +542,62 @@
   font-size: 8px;
   text-align: left;
 }
+
 .data-import-table td {
   padding: 7px 9px;
   border-top: 1px solid #e7eded;
   vertical-align: middle;
   font-size: 8px;
 }
+
 .data-import-table tr.error {
   background: #fff4f1;
 }
+
 .data-import-table tr.warning {
   background: #fffbef;
 }
+
 .data-import-table tr.skipped {
   color: #819397;
   background: #f5f7f7;
 }
+
 .data-import-table td:nth-child(3) {
   width: 190px;
 }
+
 .data-import-table td:nth-child(4) {
   width: 135px;
 }
+
 .data-import-table td:nth-child(5) {
   min-width: 130px;
 }
+
 .data-import-table td:nth-child(6) {
   min-width: 190px;
 }
+
 .data-import-table td:nth-child(7) {
   min-width: 150px;
 }
+
 .data-import-table td:nth-child(8) {
   min-width: 210px;
 }
+
 .data-import-table td > strong,
 .data-import-table td > small {
   display: block;
 }
+
 .data-import-table td > small {
   margin-top: 3px;
   color: #82969b;
   font-size: 7px;
 }
+
 .quality-pill {
   display: inline-flex;
   min-width: 38px;
@@ -525,50 +609,62 @@
   font-size: 7px;
   font-weight: 900;
 }
+
 .quality-pill.warning {
   color: #9a6c0c;
   background: #ffefc4;
 }
+
 .quality-pill.error {
   color: #b73c32;
   background: #ffdfda;
 }
+
 .quality-pill.skipped {
   color: #718287;
   background: #e8eeee;
 }
+
 .training-value-inputs,
 .metric-value-input {
   display: flex;
   align-items: center;
   gap: 5px;
 }
+
 .training-value-inputs input {
   width: 62px;
 }
+
 .metric-value-input input {
   width: 90px;
 }
+
 .training-value-inputs span,
 .metric-value-input span {
   color: #72878d;
   font-size: 7px;
 }
+
 .import-messages {
   display: grid;
   gap: 2px;
 }
+
 .import-messages span {
   color: #6f8388;
   font-size: 7px;
   line-height: 1.45;
 }
+
 .error .import-messages span {
   color: #b84439;
 }
+
 .warning .import-messages span {
   color: #9a6b0d;
 }
+
 .data-import-commit-bar {
   padding: 14px 18px;
   display: flex;
@@ -577,54 +673,66 @@
   gap: 15px;
   background: #f8fbfb;
 }
+
 .data-import-commit-bar > label {
   display: flex;
   align-items: center;
   gap: 9px;
 }
+
 .data-import-commit-bar > label > span {
   color: #61787e;
   font-size: 8px;
   font-weight: 800;
 }
+
 .data-import-commit-bar select {
   width: 245px;
 }
+
 .data-import-commit-bar > div {
   display: flex;
   align-items: center;
   gap: 12px;
 }
+
 .data-import-commit-bar small {
   color: #7c9095;
   font-size: 7px;
 }
+
 .data-import-empty {
   padding: 24px !important;
   color: #82969b;
   text-align: center;
   font-size: 8px;
 }
+
 .spin {
   animation: data-import-spin 0.8s linear infinite;
 }
+
 @keyframes data-import-spin {
   to {
     transform: rotate(360deg);
   }
 }
-@media (max-width: 1050px) {
+
+@media (width <= 1050px) {
   .data-import-grid {
     grid-template-columns: 1fr;
   }
+
   .data-import-summary {
     grid-template-columns: repeat(3, 1fr);
   }
+
   .sheet-audit-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 720px) {
+
+@media (width <= 720px) {
   .data-import-hero {
     padding: 20px;
     align-items: flex-start;
@@ -635,37 +743,47 @@
     width: 100%;
     flex-direction: column;
   }
+
   .data-import-safety {
     width: 100%;
     min-width: 0;
   }
+
   .data-import-summary {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .sheet-audit-grid {
     grid-template-columns: 1fr;
   }
+
   .data-import-date {
     grid-template-columns: 1fr;
   }
+
   .data-import-review-head,
   .data-import-commit-bar {
     align-items: stretch;
     flex-direction: column;
   }
+
   .data-import-review-actions {
     flex-direction: column;
   }
+
   .data-import-search {
     width: 100%;
   }
+
   .data-import-filters {
     overflow-x: auto;
   }
+
   .data-import-commit-bar > div {
     align-items: stretch;
     flex-direction: column;
   }
+
   .data-import-commit-bar select {
     width: 100%;
   }
@@ -681,18 +799,21 @@
   font-size: 9px;
   outline: 0;
 }
+
 .data-import-candidates {
   margin-top: 18px;
   padding: 22px;
   border: 1px solid #dbe5e7;
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 11px 30px rgba(20, 60, 68, 0.06);
+  box-shadow: 0 11px 30px rgb(20 60 68 / 6%);
 }
+
 .data-import-candidates .data-import-review-head {
   padding: 0 0 15px;
   align-items: center;
 }
+
 .data-import-candidates .data-import-review-head > button {
   min-height: 34px;
   padding: 0 12px;
@@ -706,14 +827,17 @@
   font-size: 8px;
   font-weight: 800;
 }
+
 .data-import-candidates .data-import-review-head > button:disabled {
   opacity: 0.45;
 }
+
 .data-import-candidate-bulk {
   display: flex;
   align-items: center;
   gap: 7px;
 }
+
 .data-import-candidate-bulk select,
 .data-import-candidate-bulk button {
   height: 34px;
@@ -725,19 +849,23 @@
   font-size: 8px;
   font-weight: 800;
 }
+
 .data-import-candidate-bulk button {
   cursor: pointer;
 }
+
 .data-import-candidate-bulk button:disabled,
 .data-import-candidate-bulk select:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
+
 .data-import-candidate-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
 }
+
 .data-import-candidate-grid article {
   position: relative;
   padding: 14px;
@@ -748,18 +876,22 @@
   gap: 9px;
   background: #f8fbfb;
 }
+
 .data-import-candidate-grid label {
   display: grid;
   gap: 4px;
 }
+
 .data-import-candidate-grid label:nth-of-type(3) {
   grid-column: 1/-1;
 }
+
 .data-import-candidate-grid label span {
   color: #6e858a;
   font-size: 7px;
   font-weight: 800;
 }
+
 .data-import-candidate-grid input,
 .data-import-candidate-grid select {
   width: 100%;
@@ -771,11 +903,13 @@
   background: #fff;
   font-size: 8px;
 }
+
 .data-import-candidate-grid small {
   grid-column: 1/-1;
   color: #899da1;
   font-size: 7px;
 }
+
 .candidate-state {
   position: absolute;
   top: 10px;
@@ -787,27 +921,33 @@
   font-size: 7px;
   font-weight: 850;
 }
+
 .candidate-state.created,
 .candidate-state.matched {
   color: #0b796f;
   background: #def2ee;
 }
-@media (max-width: 1050px) {
+
+@media (width <= 1050px) {
   .data-import-candidate-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-@media (max-width: 720px) {
+
+@media (width <= 720px) {
   .data-import-candidates .data-import-review-head {
     align-items: stretch;
     flex-direction: column;
   }
+
   .data-import-candidate-bulk {
     width: 100%;
   }
+
   .data-import-candidate-bulk select {
     flex: 1;
   }
+
   .data-import-candidate-grid {
     grid-template-columns: 1fr;
   }

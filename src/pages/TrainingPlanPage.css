@@ -1,3 +1,4 @@
+/* stylelint-disable no-descending-specificity -- 页面状态与响应式覆盖依赖现有规则顺序。 */
 .strength-workbench {
   --strength-ink: #073b4c;
   --strength-teal: #0e8f87;
@@ -6,6 +7,7 @@
   --strength-muted: #647a82;
   --strength-line: #d5e2e4;
   --strength-danger: #c95a4a;
+
   max-width: none;
   min-width: 0;
   color: var(--strength-ink);
@@ -26,7 +28,7 @@
 .strength-ai-drawer > header span {
   color: var(--strength-teal);
   font:
-    800 9px 'Bahnschrift',
+    800 9px Bahnschrift,
     sans-serif;
   letter-spacing: 0.18em;
 }
@@ -34,11 +36,13 @@
 .strength-page-head .app-page-header-copy {
   min-width: 0;
 }
+
 .strength-page-head .app-page-header-eyebrow {
   color: var(--strength-teal);
   font-weight: 800;
   letter-spacing: 0.18em;
 }
+
 .strength-filter-bar {
   position: relative;
   min-width: 0;
@@ -53,9 +57,11 @@
   background: var(--paper);
   box-shadow: var(--shadow);
 }
+
 .strength-filter-bar.app-filter-bar {
   display: flex;
 }
+
 .strength-filter-intro {
   min-width: 136px;
   height: 44px;
@@ -65,6 +71,7 @@
   align-items: center;
   gap: 9px;
 }
+
 .strength-filter-intro > i {
   width: 34px;
   height: 34px;
@@ -74,32 +81,39 @@
   color: #0d9488;
   background: #e6f6f3;
 }
+
 .strength-filter-intro strong,
 .strength-filter-intro small {
   display: block;
 }
+
 .strength-filter-intro strong {
   color: var(--strength-ink);
   font-size: 10px;
 }
+
 .strength-filter-intro small {
   margin-top: 3px;
   color: #8a9ba0;
   font-size: 7px;
   white-space: nowrap;
 }
+
 .strength-command-controls {
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
   gap: 9px;
 }
+
 .strength-command-controls label {
   min-width: 0;
 }
+
 .strength-command-controls label.period-filter {
   min-width: 230px;
 }
+
 .strength-command-controls label > span,
 .strength-plan-meta label > span,
 .strength-exercise-card label > span {
@@ -111,6 +125,7 @@
   font-size: 8px;
   font-weight: 760;
 }
+
 .strength-command-controls select,
 .strength-plan-meta input,
 .strength-exercise-card input,
@@ -127,6 +142,7 @@
   font-size: 10px;
   font-weight: 720;
 }
+
 .exercise-cell select {
   width: 100%;
   height: 30px;
@@ -137,18 +153,21 @@
   background: #fff;
   font-size: 8px;
 }
+
 .exercise-meta-row {
   margin-top: 6px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 5px;
 }
+
 .exercise-meta-row label span {
   display: block;
   margin-bottom: 2px;
   color: #7b8f95;
   font-size: 7px;
 }
+
 .exercise-meta-row input {
   width: 100%;
   height: 28px;
@@ -157,14 +176,16 @@
   border-radius: 6px;
   font-size: 8px;
 }
+
 .strength-command-controls select:focus,
 .strength-plan-meta input:focus,
 .strength-exercise-card input:focus,
 .strength-import-table input:focus,
 .strength-import-table select:focus {
   border-color: #62aaa2;
-  box-shadow: 0 0 0 3px rgba(14, 143, 135, 0.09);
+  box-shadow: 0 0 0 3px rgb(14 143 135 / 9%);
 }
+
 .strength-command-actions {
   padding-top: 22px;
   display: flex;
@@ -173,6 +194,7 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
 .strength-filter-reset {
   width: 58px;
   height: 44px;
@@ -188,6 +210,7 @@
   font-weight: 750;
   cursor: pointer;
 }
+
 .strength-filter-reset:hover {
   color: #0d9488;
   border-color: #8fc7c1;
@@ -210,57 +233,69 @@
   font-weight: 780;
   cursor: pointer;
 }
+
 .strength-button:hover:not(:disabled),
 .strength-icon-button:hover:not(:disabled) {
   border-color: #82b8b2;
   background: #f4faf9;
 }
+
 .strength-button:focus-visible,
 .strength-icon-button:focus-visible,
 .strength-view-tabs button:focus-visible,
 .strength-mini-week button:focus-visible {
-  outline: 3px solid rgba(14, 143, 135, 0.2);
+  outline: 3px solid rgb(14 143 135 / 20%);
   outline-offset: 2px;
 }
+
 .strength-button:disabled,
 .strength-icon-button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
 .strength-button.ai {
   color: #126f72;
   border-color: #96c9c4;
   background: #eff8f7;
 }
+
 .strength-button.import {
   color: #fff;
   border-color: var(--strength-teal);
   background: var(--strength-teal);
 }
+
 .strength-button.import:hover:not(:disabled) {
   color: #fff;
   background: #0a7d76;
 }
+
 .strength-button.save {
   color: #fff;
   border-color: var(--strength-ink);
   background: var(--strength-ink);
-  box-shadow: 0 8px 18px rgba(7, 59, 76, 0.13);
+  box-shadow: 0 8px 18px rgb(7 59 76 / 13%);
 }
+
 .strength-button.save:hover:not(:disabled) {
   color: #fff;
   background: #0b4c60;
 }
+
 .strength-button.ghost {
   background: #f8fbfb;
 }
+
 .strength-icon-button {
   width: 38px;
   padding: 0;
 }
+
 .strength-more {
   position: relative;
 }
+
 .strength-more-menu {
   position: absolute;
   z-index: 15;
@@ -271,8 +306,9 @@
   border: 1px solid var(--strength-line);
   border-radius: 10px;
   background: #fff;
-  box-shadow: 0 14px 35px rgba(7, 59, 76, 0.14);
+  box-shadow: 0 14px 35px rgb(7 59 76 / 14%);
 }
+
 .strength-more-menu button {
   width: 100%;
   min-height: 34px;
@@ -288,9 +324,11 @@
   font-weight: 700;
   cursor: pointer;
 }
+
 .strength-more-menu button:hover {
   background: #f0f6f6;
 }
+
 .strength-more-menu button.danger {
   color: var(--strength-danger);
 }
@@ -306,9 +344,10 @@
   gap: 12px;
   border: 1px solid var(--strength-line);
   border-radius: 15px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 8px 24px rgba(7, 59, 76, 0.035);
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 8px 24px rgb(7 59 76 / 3.5%);
 }
+
 .strength-training-avatar {
   width: 42px;
   height: 42px;
@@ -317,26 +356,30 @@
   place-items: center;
   color: #fff;
   background: linear-gradient(145deg, #0d9488, #075d68);
-  box-shadow: 0 7px 16px rgba(13, 148, 136, 0.2);
+  box-shadow: 0 7px 16px rgb(13 148 136 / 20%);
   font-size: 15px;
   font-weight: 850;
 }
+
 .strength-training-athlete {
   min-width: 0;
   padding-right: 18px;
   border-right: 1px solid #e2eaeb;
 }
+
 .strength-training-athlete > span {
   display: block;
   color: #83949a;
   font-size: 8px;
 }
+
 .strength-training-athlete strong {
   display: block;
   margin-top: 4px;
   font-size: 14px;
   line-height: 1.2;
 }
+
 .strength-training-athlete small {
   display: block;
   margin-top: 5px;
@@ -346,6 +389,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .strength-training-context dl {
   margin: 0;
   border: 1px solid #e0e9ea;
@@ -355,6 +399,7 @@
   grid-template-columns: 1.45fr 0.52fr 0.9fr 0.8fr 0.78fr 0.76fr;
   background: #f8fbfb;
 }
+
 .strength-training-context dl > div {
   min-width: 0;
   min-height: 58px;
@@ -363,19 +408,22 @@
   display: grid;
   align-content: center;
 }
+
 .strength-training-context dl > div:last-child {
   border-right: 0;
 }
+
 .strength-training-context dt {
   color: #83949a;
   font-size: 8px;
 }
+
 .strength-training-context dd {
   margin: 5px 0 0;
   overflow: hidden;
   color: var(--strength-ink);
   font:
-    780 10px 'Bahnschrift',
+    780 10px Bahnschrift,
     sans-serif;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -392,6 +440,7 @@
   border-radius: 10px;
   background: #eaf1f1;
 }
+
 .strength-view-tabs button {
   min-height: 34px;
   padding: 0 15px;
@@ -406,19 +455,21 @@
   font-weight: 760;
   cursor: pointer;
 }
+
 .strength-view-tabs button.active {
   color: #fff;
   background: var(--strength-ink);
-  box-shadow: 0 5px 12px rgba(7, 59, 76, 0.13);
+  box-shadow: 0 5px 12px rgb(7 59 76 / 13%);
 }
+
 .strength-view-tabs button span {
   min-width: 18px;
   padding: 2px 5px;
   border-radius: 99px;
   color: inherit;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(255 255 255 / 15%);
   font:
-    800 8px 'Bahnschrift',
+    800 8px Bahnschrift,
     sans-serif;
 }
 
@@ -431,6 +482,7 @@
   overflow: hidden;
   background: var(--paper);
 }
+
 .strength-status-rail > div {
   min-height: 92px;
   padding: 16px 20px;
@@ -439,28 +491,32 @@
   align-content: center;
   border-right: 1px solid #e1e9ea;
 }
+
 .strength-status-rail > div:last-child {
   border-right: 0;
 }
+
 .strength-status-rail span {
   grid-column: 1 / span 2;
   color: #72868c;
   font-size: 9px;
   font-weight: 700;
 }
+
 .strength-status-rail strong {
   color: var(--strength-ink);
   font:
-    850 24px 'Bahnschrift',
+    850 24px Bahnschrift,
     sans-serif;
   letter-spacing: -0.03em;
 }
+
 .strength-status-rail small {
   align-self: end;
   padding-bottom: 4px;
   color: #91a1a6;
   font:
-    750 7px 'Bahnschrift',
+    750 7px Bahnschrift,
     sans-serif;
   letter-spacing: 0.08em;
 }
@@ -475,6 +531,7 @@
   background: var(--paper);
   box-shadow: var(--shadow);
 }
+
 .strength-comparison-panel > header,
 .strength-results-panel > header {
   padding: 18px 20px 13px;
@@ -484,21 +541,25 @@
   gap: 18px;
   border-bottom: 1px solid #e2e9ea;
 }
+
 .strength-comparison-panel h2,
 .strength-results-panel h2 {
   margin-top: 4px;
   font-size: 18px;
 }
+
 .strength-comparison-panel header p,
 .strength-results-panel header p {
   margin-top: 4px;
   color: var(--strength-muted);
   font-size: 9px;
 }
+
 .strength-mini-week {
   display: flex;
   gap: 4px;
 }
+
 .strength-mini-week button {
   width: 32px;
   height: 28px;
@@ -507,18 +568,21 @@
   color: #647a82;
   background: #f9fbfb;
   font:
-    750 9px 'Bahnschrift',
+    750 9px Bahnschrift,
     sans-serif;
   cursor: pointer;
 }
+
 .strength-mini-week button.active {
   border-color: var(--strength-teal);
   color: #fff;
   background: var(--strength-teal);
 }
+
 .strength-comparison-table {
   overflow-x: auto;
 }
+
 .comparison-head,
 .comparison-row {
   min-width: 780px;
@@ -528,6 +592,7 @@
   gap: 12px;
   align-items: center;
 }
+
 .comparison-head {
   min-height: 36px;
   color: #84969b;
@@ -535,41 +600,48 @@
   font-size: 8px;
   font-weight: 750;
 }
+
 .comparison-row {
   min-height: 54px;
   border-top: 1px solid #edf1f2;
   color: #425e67;
   font-size: 9px;
 }
+
 .comparison-row > strong {
   color: var(--strength-ink);
   font-size: 11px;
 }
+
 .comparison-row .muted {
   color: #9caaae;
 }
+
 .completion-cell {
   display: grid;
   grid-template-columns: 1fr 32px;
   align-items: center;
   gap: 7px;
 }
+
 .completion-cell i {
   height: 6px;
   border-radius: 99px;
   overflow: hidden;
   background: #e4eeee;
 }
+
 .completion-cell b {
   display: block;
   height: 100%;
   border-radius: inherit;
   background: var(--strength-teal);
 }
+
 .completion-cell em {
   color: #577078;
   font:
-    750 8px 'Bahnschrift',
+    750 8px Bahnschrift,
     sans-serif;
   font-style: normal;
 }
@@ -586,13 +658,16 @@
   background: var(--paper);
   box-shadow: var(--shadow);
 }
+
 .strength-plan-meta label.wide {
   grid-column: span 2;
 }
+
 .strength-week-editor {
   margin-top: 0;
   overflow: hidden;
 }
+
 .strength-week-editor > header {
   padding: 12px 14px;
   display: flex;
@@ -602,11 +677,13 @@
   border-bottom: 1px solid #dce6e7;
   background: #f7fafa;
 }
+
 .strength-week-tabs {
   display: flex;
   gap: 5px;
   overflow-x: auto;
 }
+
 .strength-week-tabs button {
   min-width: 112px;
   min-height: 45px;
@@ -621,35 +698,42 @@
   background: #fff;
   cursor: pointer;
 }
+
 .strength-week-tabs button small {
   color: #8b9da2;
   font:
-    800 8px 'Bahnschrift',
+    800 8px Bahnschrift,
     sans-serif;
 }
+
 .strength-week-tabs button strong {
   font-size: 9px;
 }
+
 .strength-week-tabs button.active {
   border-color: var(--strength-teal);
   color: #fff;
   background: var(--strength-teal);
-  box-shadow: 0 6px 14px rgba(14, 143, 135, 0.14);
+  box-shadow: 0 6px 14px rgb(14 143 135 / 14%);
 }
+
 .strength-week-tabs button.active small {
   color: #c9ece8;
 }
+
 .strength-exercise-list {
   padding: 14px;
   display: grid;
   gap: 10px;
 }
+
 .strength-exercise-card {
   border: 1px solid #d8e4e5;
   border-radius: 11px;
   overflow: hidden;
   background: #fff;
 }
+
 .strength-exercise-card > header {
   padding: 11px 12px;
   display: grid;
@@ -658,17 +742,21 @@
   gap: 10px;
   background: #f4f8f8;
 }
+
 .strength-exercise-card > header label > input {
   height: 36px;
   font-size: 11px;
   font-weight: 800;
 }
+
 .strength-exercise-card label.max > div {
   position: relative;
 }
+
 .strength-exercise-card label.max input {
   padding-right: 35px;
 }
+
 .strength-exercise-card label.max em {
   position: absolute;
   right: 10px;
@@ -677,10 +765,12 @@
   font-size: 8px;
   font-style: normal;
 }
+
 .exercise-actions {
   display: flex;
   gap: 5px;
 }
+
 .exercise-actions button,
 .strength-prescription-row > button {
   height: 36px;
@@ -696,6 +786,7 @@
   font-weight: 700;
   cursor: pointer;
 }
+
 .exercise-actions button:last-child,
 .strength-prescription-row > button {
   width: 36px;
@@ -703,6 +794,7 @@
   justify-content: center;
   color: var(--strength-danger);
 }
+
 .strength-prescription-head,
 .strength-prescription-row {
   padding: 0 12px;
@@ -711,6 +803,7 @@
   gap: 8px;
   align-items: center;
 }
+
 .strength-prescription-head {
   min-height: 30px;
   color: #84969b;
@@ -718,25 +811,31 @@
   font-size: 8px;
   font-weight: 750;
 }
+
 .strength-prescription-row {
   min-height: 52px;
   border-top: 1px solid #edf1f2;
 }
+
 .strength-prescription-row input {
   height: 34px;
 }
+
 .strength-prescription-row > strong {
   color: var(--strength-teal);
   font:
-    800 10px 'Bahnschrift',
+    800 10px Bahnschrift,
     sans-serif;
 }
+
 .percent-input {
   position: relative;
 }
+
 .percent-input input {
   padding-right: 25px;
 }
+
 .percent-input span {
   position: absolute;
   top: 10px;
@@ -744,6 +843,7 @@
   color: #7c8f95;
   font-size: 8px;
 }
+
 .strength-add-exercise {
   width: calc(100% - 28px);
   min-height: 38px;
@@ -765,8 +865,9 @@
   margin-top: 0;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 14px 35px rgba(7, 59, 76, 0.05);
+  box-shadow: 0 14px 35px rgb(7 59 76 / 5%);
 }
+
 .strength-load-visual {
   margin: 13px 13px 0;
   border: 1px solid #d9e4e5;
@@ -774,6 +875,7 @@
   overflow: hidden;
   background: #fff;
 }
+
 .strength-load-visual > header {
   min-height: 61px;
   padding: 11px 14px;
@@ -784,22 +886,26 @@
   border-bottom: 1px solid #e2e9ea;
   background: #f8fbfb;
 }
+
 .strength-load-visual header > div:first-child > span {
   color: var(--strength-teal);
   font:
-    800 8px 'Bahnschrift',
+    800 8px Bahnschrift,
     sans-serif;
   letter-spacing: 0.15em;
 }
+
 .strength-load-visual h3 {
   margin-top: 3px;
   font-size: 14px;
 }
+
 .strength-load-visual p {
   margin-top: 3px;
   color: var(--strength-muted);
   font-size: 8px;
 }
+
 .strength-load-legend {
   display: flex;
   align-items: center;
@@ -808,26 +914,31 @@
   font-size: 8px;
   white-space: nowrap;
 }
+
 .strength-load-legend span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
+
 .strength-load-legend i {
   width: 12px;
   height: 7px;
   border-radius: 2px;
   background: #0e8f87;
 }
+
 .strength-load-legend span:last-child i {
   height: 2px;
   border-radius: 99px;
   background: #d1813f;
 }
+
 .strength-load-chart {
   height: 270px;
   padding: 12px 12px 8px;
 }
+
 .strength-record-browser {
   margin: 13px 13px 0;
   padding: 10px 12px;
@@ -838,20 +949,24 @@
   gap: 10px;
   background: #f8fbfb;
 }
+
 .strength-record-browser > div:first-child {
   min-width: 190px;
   margin-right: auto;
   display: grid;
   gap: 3px;
 }
+
 .strength-record-browser > div:first-child strong {
   color: var(--strength-ink);
   font-size: 10px;
 }
+
 .strength-record-browser > div:first-child span {
   color: var(--strength-muted);
   font-size: 8px;
 }
+
 .strength-record-browser label {
   display: grid;
   gap: 4px;
@@ -859,11 +974,13 @@
   font-size: 8px;
   font-weight: 750;
 }
+
 .strength-record-browser label > span {
   display: flex;
   align-items: center;
   gap: 4px;
 }
+
 .strength-record-browser input {
   width: 158px;
   height: 34px;
@@ -873,9 +990,10 @@
   color: var(--strength-ink);
   background: #fff;
   font:
-    750 9px 'Bahnschrift',
+    750 9px Bahnschrift,
     sans-serif;
 }
+
 .strength-record-browser button {
   height: 34px;
   padding: 0 11px;
@@ -890,28 +1008,33 @@
   font-weight: 750;
   cursor: pointer;
 }
+
 .strength-record-browser button:hover {
   border-color: var(--strength-teal);
   background: #eef8f6;
 }
+
 .strength-session-list {
   padding: 13px;
   display: grid;
   gap: 10px;
 }
+
 .strength-session-card {
   border: 1px solid #d9e4e5;
   border-radius: 13px;
   overflow: hidden;
-  box-shadow: 0 8px 20px rgba(7, 59, 76, 0.025);
+  box-shadow: 0 8px 20px rgb(7 59 76 / 2.5%);
   transition:
     transform 0.18s ease,
     box-shadow 0.18s ease;
 }
+
 .strength-session-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 26px rgba(7, 59, 76, 0.07);
+  box-shadow: 0 12px 26px rgb(7 59 76 / 7%);
 }
+
 .strength-session-card > header {
   min-height: 48px;
   padding: 8px 12px;
@@ -921,21 +1044,25 @@
   gap: 16px;
   background: #f5f9f9;
 }
+
 .strength-session-card > header > div {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
+
 .strength-session-card time {
   color: var(--strength-teal);
   font:
-    800 10px 'Bahnschrift',
+    800 10px Bahnschrift,
     sans-serif;
 }
+
 .strength-session-card header strong {
   font-size: 10px;
 }
+
 .strength-session-card header span {
   padding: 3px 6px;
   border-radius: 99px;
@@ -943,6 +1070,7 @@
   background: #e5eeee;
   font-size: 8px;
 }
+
 .strength-session-card header small {
   max-width: 200px;
   overflow: hidden;
@@ -951,9 +1079,11 @@
   color: #85979c;
   font-size: 8px;
 }
+
 .strength-result-table {
   overflow-x: auto;
 }
+
 .result-head,
 .result-row {
   min-width: 700px;
@@ -963,6 +1093,7 @@
   gap: 8px;
   align-items: center;
 }
+
 .result-head {
   min-height: 30px;
   color: #87989d;
@@ -970,15 +1101,18 @@
   font-size: 8px;
   font-weight: 750;
 }
+
 .result-row {
   min-height: 42px;
   border-top: 1px solid #edf1f2;
   color: #536c74;
   font-size: 9px;
 }
+
 .result-row > strong {
   color: var(--strength-ink);
 }
+
 .result-row .done,
 .result-row .missed {
   display: inline-flex;
@@ -986,6 +1120,7 @@
   gap: 4px;
   color: var(--strength-teal);
 }
+
 .result-row .missed {
   color: var(--strength-danger);
 }
@@ -999,22 +1134,28 @@
   color: #81949a;
   text-align: center;
 }
+
 .strength-empty strong {
   color: #365660;
   font-size: 12px;
 }
+
 .strength-empty span {
   font-size: 9px;
 }
+
 .strength-empty.compact {
   min-height: 180px;
 }
+
 .strength-empty.results {
   min-height: 390px;
 }
+
 .strength-empty.results .strength-button {
   margin-top: 8px;
 }
+
 .strength-inline-message {
   margin: 10px 0;
   min-height: 35px;
@@ -1027,6 +1168,7 @@
   background: #edf8f6;
   font-size: 9px;
 }
+
 .strength-inline-message.error {
   color: #a4483c;
   background: #fff1ee;
@@ -1039,19 +1181,21 @@
   padding: 24px;
   display: grid;
   place-items: center;
-  background: rgba(4, 35, 45, 0.56);
+  background: rgb(4 35 45 / 56%);
   backdrop-filter: blur(3px);
 }
+
 .strength-import-dialog,
 .strength-ai-drawer {
   width: min(1180px, 96vw);
   max-height: calc(100vh - 48px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgb(255 255 255 / 40%);
   border-radius: 14px;
   overflow: hidden;
   background: var(--strength-canvas);
-  box-shadow: 0 28px 80px rgba(3, 33, 43, 0.28);
+  box-shadow: 0 28px 80px rgb(3 33 43 / 28%);
 }
+
 .strength-import-dialog > header,
 .strength-ai-drawer > header {
   min-height: 74px;
@@ -1063,19 +1207,23 @@
   border-bottom: 1px solid var(--strength-line);
   background: #fff;
 }
+
 .strength-import-dialog h2,
 .strength-ai-drawer h2 {
   margin-top: 3px;
   font-size: 18px;
 }
+
 .strength-import-dialog header p {
   margin-top: 3px;
   color: var(--strength-muted);
   font-size: 9px;
 }
+
 .strength-import-start {
   padding: 22px;
 }
+
 .strength-dropzone {
   min-height: 220px;
   padding: 26px;
@@ -1089,21 +1237,26 @@
   background: #f8fcfb;
   cursor: pointer;
 }
+
 .strength-dropzone.has-file {
   border-style: solid;
   background: var(--strength-mint);
 }
+
 .strength-dropzone input {
   display: none;
 }
+
 .strength-dropzone strong {
   color: var(--strength-ink);
   font-size: 13px;
 }
+
 .strength-dropzone span {
   color: var(--strength-muted);
   font-size: 9px;
 }
+
 .strength-import-guidance {
   margin-top: 10px;
   padding: 11px 13px;
@@ -1114,9 +1267,11 @@
   background: #eaf2f2;
   font-size: 9px;
 }
+
 .strength-import-guidance strong {
   color: var(--strength-ink);
 }
+
 .strength-import-start footer,
 .strength-import-review footer {
   margin-top: 14px;
@@ -1124,11 +1279,13 @@
   justify-content: space-between;
   gap: 8px;
 }
+
 .strength-import-review {
   padding: 14px;
   max-height: calc(100vh - 125px);
   overflow: auto;
 }
+
 .strength-import-summary {
   margin-bottom: 10px;
   padding: 10px 13px;
@@ -1140,39 +1297,47 @@
   color: #fff;
   background: var(--strength-ink);
 }
+
 .strength-import-summary > div {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: end;
 }
+
 .strength-import-summary span {
   color: #a9c4cb;
   font-size: 8px;
 }
+
 .strength-import-summary strong {
   font:
-    800 16px 'Bahnschrift',
+    800 16px Bahnschrift,
     sans-serif;
 }
+
 .strength-import-summary strong.danger {
   color: #ffb2a8;
 }
+
 .strength-import-summary small {
   justify-self: end;
   color: #c7d9dc;
   font-size: 8px;
 }
+
 .strength-import-table-wrap {
   border: 1px solid var(--strength-line);
   border-radius: 9px;
   overflow: auto;
   background: #fff;
 }
+
 .strength-import-table {
   width: 100%;
   min-width: 1960px;
   border-collapse: collapse;
 }
+
 .strength-import-table th {
   height: 33px;
   padding: 0 6px;
@@ -1181,43 +1346,53 @@
   font-size: 8px;
   text-align: left;
 }
+
 .strength-import-table td {
   min-width: 75px;
   padding: 5px;
   border-top: 1px solid #e6eded;
 }
+
 .strength-import-table td:nth-child(3) {
   min-width: 170px;
 }
+
 .strength-import-table td:nth-child(4),
 .strength-import-table td:nth-child(5),
 .strength-import-table td:last-child {
   min-width: 130px;
 }
+
 .strength-import-table input,
 .strength-import-table select {
   height: 32px;
   padding: 0 7px;
   font-size: 9px;
 }
+
 .strength-import-table tr.invalid {
   background: #fff5f2;
 }
+
 .strength-import-table tr.duplicate {
   background: #fffbea;
 }
+
 .import-row-state {
   min-width: 64px !important;
   color: var(--strength-teal);
 }
+
 .strength-import-table tr.invalid .import-row-state {
   color: var(--strength-danger);
 }
+
 .import-row-state small {
   display: block;
   margin-top: 2px;
   font-size: 7px;
 }
+
 .strength-conflict-policy {
   margin-top: 10px;
   padding: 10px 12px;
@@ -1229,11 +1404,13 @@
   color: #526a72;
   font-size: 9px;
 }
+
 .strength-conflict-policy legend {
   padding: 0 5px;
   color: var(--strength-ink);
   font-weight: 750;
 }
+
 .strength-conflict-policy label {
   display: flex;
   align-items: center;
@@ -1244,10 +1421,12 @@
   max-height: calc(100vh - 122px);
   overflow: auto;
 }
+
 .strength-ai-drawer .ai-training-container {
   max-width: none;
   padding: 18px;
 }
+
 .strength-ai-drawer .ai-header {
   margin-bottom: 14px;
   padding: 18px 22px;
@@ -1255,24 +1434,28 @@
   text-align: left;
   box-shadow: none;
 }
+
 .strength-ai-drawer .ai-header h2 {
   font-size: 20px;
 }
+
 .strength-ai-drawer .input-section {
   padding: 18px;
   border-radius: 11px;
   box-shadow: none;
   border: 1px solid var(--strength-line);
 }
+
 .strength-ai-drawer .text-input-wrapper textarea {
   min-height: 150px;
   border-width: 1px;
 }
 
-@media (max-width: 1180px) {
+@media (width <= 1180px) {
   .strength-filter-bar {
     grid-template-columns: minmax(0, 1fr) auto;
   }
+
   .strength-filter-intro {
     grid-column: 1 / -1;
     min-width: 0;
@@ -1281,38 +1464,47 @@
     border-right: 0;
     border-bottom: 1px solid #e5eded;
   }
+
   .strength-filter-intro small {
     white-space: normal;
   }
+
   .strength-training-context {
     grid-template-columns: 42px minmax(145px, 0.52fr) minmax(0, 2fr);
   }
+
   .strength-training-context dl {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
   .strength-training-context dl > div {
     border-bottom: 1px solid #e3ebec;
   }
+
   .strength-training-context dl > div:nth-child(3n) {
     border-right: 0;
   }
+
   .strength-training-context dl > div:nth-child(n + 4) {
     border-bottom: 0;
   }
+
   .strength-plan-meta {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@media (max-width: 760px) {
+@media (width <= 760px) {
   .strength-workbench {
     padding: 14px 10px 28px;
   }
+
   .strength-page-head {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 10px;
   }
+
   .strength-command-actions {
     width: 100%;
     padding: 8px 0 0;
@@ -1320,27 +1512,31 @@
     grid-template-columns: repeat(2, 1fr);
     justify-content: stretch;
   }
+
   .strength-command-actions .strength-button {
     width: 100%;
+    padding: 0 7px;
+    font-size: 8px;
   }
+
   .strength-command-actions .strength-more {
     justify-self: end;
   }
+
   .strength-filter-bar {
     padding: 12px;
     grid-template-columns: 1fr;
     gap: 10px;
   }
+
   .strength-filter-intro {
     grid-column: auto;
   }
+
   .strength-command-controls {
     grid-template-columns: 1fr;
   }
-  .strength-command-actions .strength-button {
-    padding: 0 7px;
-    font-size: 8px;
-  }
+
   .strength-filter-reset {
     width: 100%;
     height: 36px;
@@ -1349,14 +1545,17 @@
     justify-content: center;
     gap: 5px;
   }
+
   .strength-training-context {
     grid-template-columns: 42px 1fr;
     gap: 10px;
   }
+
   .strength-training-athlete {
     padding: 0;
     border-right: 0;
   }
+
   .strength-training-context dl {
     grid-column: 1 / -1;
     border: 0;
@@ -1366,6 +1565,7 @@
     gap: 6px;
     background: transparent;
   }
+
   .strength-training-context dl > div {
     min-height: 48px;
     padding: 8px 10px;
@@ -1373,103 +1573,130 @@
     border-radius: 8px;
     background: #f8fbfb;
   }
+
   .strength-view-tabs {
     width: 100%;
   }
+
   .strength-view-tabs button {
     flex: 1;
     padding: 0 7px;
     justify-content: center;
   }
+
   .strength-status-rail {
     grid-template-columns: 1fr 1fr;
   }
+
   .strength-status-rail > div {
     min-height: 78px;
     padding: 12px 14px;
     border-bottom: 1px solid #e1e9ea;
   }
+
   .strength-status-rail > div:nth-child(2) {
     border-right: 0;
   }
+
   .strength-comparison-panel > header,
   .strength-results-panel > header {
     align-items: flex-start;
     flex-direction: column;
   }
+
   .strength-load-visual > header {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
   }
+
   .strength-load-chart {
     height: 235px;
     padding-left: 4px;
   }
+
   .strength-record-browser {
     align-items: stretch;
     flex-direction: column;
   }
+
   .strength-record-browser > div:first-child {
     min-width: 0;
     margin-right: 0;
   }
+
   .strength-record-browser input,
   .strength-record-browser button {
     width: 100%;
   }
+
   .strength-plan-meta {
     grid-template-columns: 1fr 1fr;
   }
+
   .strength-plan-meta label.wide {
     grid-column: 1 / -1;
   }
+
   .strength-week-editor > header {
     align-items: flex-start;
     flex-direction: column;
   }
+
   .strength-week-tabs {
     width: 100%;
   }
+
   .strength-week-tabs button {
     min-width: 96px;
   }
+
   .strength-exercise-card > header {
     grid-template-columns: 1fr 105px;
   }
+
   .exercise-actions {
     grid-column: 1 / -1;
   }
+
   .strength-prescription-head {
     display: none;
   }
+
   .strength-prescription-row {
     padding: 10px;
     grid-template-columns: 1.4fr 0.55fr 0.65fr;
     gap: 6px;
   }
+
   .strength-prescription-row .percent-input,
   .strength-prescription-row > strong {
     grid-column: span 1;
   }
+
   .strength-prescription-row > button {
     justify-self: end;
   }
+
   .strength-import-summary {
     grid-template-columns: 1fr 1fr;
   }
+
   .strength-import-summary small {
     grid-column: 1 / -1;
     justify-self: start;
   }
+
   .strength-dialog-backdrop {
     padding: 8px;
   }
+
   .strength-import-dialog,
   .strength-ai-drawer {
     width: 100%;
     max-height: calc(100vh - 16px);
   }
+
   .strength-conflict-policy {
     align-items: flex-start;
     flex-direction: column;

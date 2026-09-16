@@ -55,6 +55,8 @@
     "eslint-config-prettier": "^10.1.8",
     "playwright-core": "latest",
     "prettier": "^3.9.6",
+    "stylelint": "^17.15.0",
+    "stylelint-config-standard": "^40.0.0",
     "tsx": "latest",
     "typescript": "^5.9.3",
     "vite": "latest"

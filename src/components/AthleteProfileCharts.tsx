@@ -1164,7 +1164,7 @@ function BodyCompositionSimulationDesktop({
 
         {/* 右侧：身体组成数据 */}
         <div className="body-composition-analysis">
-          <div className="body-comp-total">
+          <div className="body-comp-card body-comp-total">
             <span>体重</span>
             <strong>{formatNumber(total, 1)} kg</strong>
           </div>
@@ -1174,7 +1174,7 @@ function BodyCompositionSimulationDesktop({
           {renderCompositionBar('脂肪量', fatMass, fatPercent, 'fat')}
 
           {profile.skeletalMuscleKg !== null && (
-            <div className="body-comp-muscle">
+            <div className="body-comp-card body-comp-muscle">
               <span>骨骼肌量</span>
 
               <strong>{formatNumber(profile.skeletalMuscleKg, 1)} kg</strong>

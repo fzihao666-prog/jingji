@@ -1,3 +1,4 @@
+/* stylelint-disable no-descending-specificity -- 页面状态与响应式覆盖依赖现有规则顺序。 */
 .special-training-page {
   display: grid;
   gap: var(--overview-gap);
@@ -9,31 +10,38 @@
   gap: var(--overview-gap);
   padding-bottom: 36px;
 }
+
 .special-champion-model {
   min-width: 0;
   display: grid;
   gap: 10px;
 }
+
 .special-champion-model .app-section-header {
   align-items: flex-start;
 }
+
 .special-champion-model .app-content-state {
   min-height: 126px;
 }
+
 .champion-model-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
+
 .champion-model-head .panel-heading {
   min-height: 24px;
   margin-bottom: 0;
   padding-left: 0;
 }
+
 .champion-model-head .panel-heading h2 {
   line-height: 1.1;
 }
+
 .champion-model-section {
   min-width: 0;
   overflow: hidden;
@@ -41,6 +49,7 @@
   border-radius: 10px;
   background: linear-gradient(180deg, #fbfdfd 0%, #f7fbfb 100%);
 }
+
 .champion-model-section-title {
   display: flex;
   align-items: baseline;
@@ -50,20 +59,24 @@
   border-bottom: 1px solid #e1ebec;
   background: #f5faf9;
 }
+
 .champion-model-section-title strong {
   color: #203f48;
   font-size: 12px;
   font-weight: 900;
 }
+
 .champion-model-section-title span {
   color: #7b9096;
   font-size: 9px;
   font-weight: 700;
 }
+
 .champion-model-groups {
   display: grid;
   gap: 14px;
 }
+
 .champion-model-group {
   min-width: 0;
   overflow: hidden;
@@ -71,6 +84,7 @@
   border-radius: 10px;
   background: #fbfdfd;
 }
+
 .champion-model-group > h3 {
   margin: 0;
   padding: 9px 13px;
@@ -79,16 +93,19 @@
   background: #f3f8f8;
   font-size: 11px;
 }
+
 .champion-table-scroll {
   min-width: 0;
   overflow: auto;
 }
+
 .champion-model-table {
   width: 100%;
   min-width: 760px;
   border-collapse: collapse;
   table-layout: fixed;
 }
+
 .champion-model-table th,
 .champion-model-table td {
   padding: 8px 10px;
@@ -99,6 +116,7 @@
   font-size: 10px;
   line-height: 1.35;
 }
+
 .champion-model-table thead th {
   position: sticky;
   top: 0;
@@ -109,75 +127,94 @@
   font-weight: 900;
   white-space: nowrap;
 }
+
 .champion-model-table thead th:first-child {
   width: 96px;
 }
+
 .champion-model-table tbody tr:last-child > * {
   border-bottom: 0;
 }
+
 .champion-model-table tbody tr:hover > * {
   background: #f5fbfa;
 }
+
 .champion-model-table tbody > tr > th {
   color: #234b55;
   font-size: 10px;
   font-weight: 900;
 }
+
 .champion-model-table tbody td {
   font-variant-numeric: tabular-nums;
 }
+
 .rowing-world-best-table {
   min-width: 940px;
   table-layout: fixed;
 }
+
 .rowing-world-best-event {
   width: 210px;
 }
+
 .rowing-world-best-country {
   width: 88px;
 }
+
 .rowing-world-best-result {
   width: 112px;
 }
+
 .rowing-world-best-pace {
   width: 96px;
 }
+
 .rowing-world-best-competition {
   width: 250px;
 }
+
 .rowing-world-best-location {
   width: 184px;
 }
+
 .rowing-world-best-table th,
 .rowing-world-best-table td {
   padding: 10px 14px;
 }
+
 .rowing-world-best-table tbody > tr > th {
   white-space: normal;
   word-break: keep-all;
   line-height: 1.45;
 }
+
 .rowing-world-best-table tbody td:nth-child(3),
 .rowing-world-best-table tbody td:nth-child(4) {
   color: #0f756f;
   font-weight: 850;
 }
+
 .champion-standard-cell {
   min-width: 0;
   display: grid;
   gap: 3px;
 }
+
 .champion-standard-cell strong {
   color: #087b74;
   font-size: 16px;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
 }
+
 .champion-standard-cell b {
   color: #405d65;
   font-size: 9px;
   font-weight: 700;
 }
+
 .champion-standard-cell span {
   overflow: hidden;
   color: #7b9096;
@@ -186,23 +223,27 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .champion-pending {
   color: #9aa9ad;
   font-size: 10px;
 }
+
 .ergometer-model-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+
 .ergometer-model-card {
   min-width: 0;
   overflow: hidden;
   border: 1px solid #d7e5e7;
   border-radius: 10px;
   background: #fbfdfd;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 78%);
 }
+
 .ergometer-model-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -212,12 +253,14 @@
   border-bottom: 1px solid #e3ecec;
   background: linear-gradient(135deg, #f7fbfb 0%, #eef7f6 100%);
 }
+
 .ergometer-model-head strong {
   display: block;
   color: #173f49;
   font-size: 12px;
   font-weight: 900;
 }
+
 .ergometer-model-head span {
   display: block;
   margin-top: 3px;
@@ -225,6 +268,7 @@
   font-size: 9px;
   font-weight: 750;
 }
+
 .ergometer-model-tabs {
   display: inline-flex;
   align-items: center;
@@ -234,6 +278,7 @@
   border-radius: 8px;
   background: #fff;
 }
+
 .ergometer-model-tabs button {
   height: 26px;
   padding: 0 8px;
@@ -247,73 +292,88 @@
   white-space: nowrap;
   cursor: pointer;
 }
+
 .ergometer-model-tabs button.active {
   color: #fff;
   background: #117d76;
-  box-shadow: 0 4px 12px rgba(17, 125, 118, 0.18);
+  box-shadow: 0 4px 12px rgb(17 125 118 / 18%);
 }
+
 .ergometer-model-card .champion-model-table {
   min-width: 690px;
 }
+
 .ergometer-model-card .champion-table-scroll {
   max-height: 430px;
   scrollbar-gutter: stable;
 }
+
 .ergometer-model-card .champion-model-table th,
 .ergometer-model-card .champion-model-table td {
   padding: 7px 8px;
   text-align: center;
 }
+
 .ergometer-model-card .champion-model-table th:first-child {
   text-align: left;
 }
+
 .training-dashboard-champion .app-content-state {
   min-height: 118px;
   grid-template-columns: auto minmax(0, 1fr);
   text-align: left;
   justify-content: start;
 }
+
 .training-dashboard-champion .app-content-state strong {
   grid-column: 2;
 }
+
 .training-dashboard-champion .app-content-state span {
   grid-column: 2;
   max-width: 720px;
 }
+
 .training-dashboard-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--overview-gap);
 }
+
 .training-dashboard-metric {
   display: grid;
   gap: 6px;
   min-width: 0;
   padding: 18px;
 }
+
 .training-dashboard-metric span,
 .training-dashboard-metric em {
   color: #71878e;
   font-size: 10px;
   font-style: normal;
 }
+
 .training-dashboard-metric strong {
   color: #163e48;
   font-size: 24px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
+
 .training-dashboard-metric strong small {
   margin-left: 4px;
   color: #668087;
   font-size: 11px;
 }
+
 .special-athlete-list {
   max-height: 381px;
   overflow-y: auto;
   scrollbar-gutter: stable;
   border-top: 1px solid #e3ebec;
 }
+
 .special-athlete-row {
   display: grid;
   grid-template-columns: minmax(130px, 1.2fr) minmax(150px, 0.9fr) minmax(400px, 2.4fr);
@@ -323,15 +383,18 @@
   padding: 11px 4px;
   border-bottom: 1px solid #e7eeee;
 }
+
 .special-athlete-row:last-child {
   border-bottom: 0;
 }
+
 .special-athlete-identity,
 .special-athlete-meta {
   min-width: 0;
   display: grid;
   gap: 5px;
 }
+
 .special-athlete-identity strong {
   overflow: hidden;
   color: #234b55;
@@ -339,35 +402,42 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .special-athlete-identity span,
 .special-athlete-meta {
   color: #7a9096;
   font-size: 9px;
 }
+
 .special-athlete-meta {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
+
 .special-athlete-meta span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .special-athlete-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 0;
 }
+
 .special-athlete-summary div {
   min-width: 0;
   padding-left: 11px;
   border-left: 1px solid #e3ebec;
 }
+
 .special-athlete-summary dt {
   color: #80949a;
   font-size: 8px;
 }
+
 .special-athlete-summary dd {
   margin: 4px 0 0;
   overflow: hidden;
@@ -378,56 +448,63 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .training-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: var(--overview-gap);
   align-items: start;
 }
+
 .training-dashboard-grid > .app-card,
 .training-dashboard-grid > .app-section-header {
   min-width: 0;
 }
+
 .dashboard-span-4 {
   grid-column: span 4;
 }
+
 .dashboard-span-5 {
   grid-column: span 5;
 }
+
 .dashboard-span-7 {
   grid-column: span 7;
 }
+
 .dashboard-span-8 {
   grid-column: span 8;
 }
+
 .dashboard-span-12 {
   grid-column: 1 / -1;
   min-width: 0;
 }
+
 .dashboard-action-button {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 0;
   color: #117d76;
-  background: transparent;
   font: inherit;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
-}
-.dashboard-action-button {
   padding: 9px 12px;
   border: 1px solid #bfdfdc;
   border-radius: 8px;
   background: #f3faf9;
 }
+
 .strength-dashboard-page .strength-dashboard-grid {
   margin: 0;
 }
+
 .champion-current-comparison {
   padding: 8px 18px 14px;
 }
+
 .champion-comparison-head,
 .champion-current-comparison > div:not(.champion-comparison-head) {
   display: grid;
@@ -438,31 +515,38 @@
   border-bottom: 1px solid #e7eeee;
   font-size: 10px;
 }
+
 .champion-comparison-head {
   color: #7a9096;
   font-size: 9px;
   font-weight: 800;
 }
+
 .champion-current-comparison strong {
   color: #234b55;
 }
+
 .champion-current-comparison b {
   color: #117d76;
   font-variant-numeric: tabular-nums;
 }
+
 .champion-current-comparison > div span {
   color: #8a9aa0;
 }
+
 .champion-current-comparison > small {
   display: block;
   margin-top: 10px;
   color: #83959a;
   font-size: 9px;
 }
+
 .physical-core-metrics {
   margin-top: 10px;
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
+
 .physical-athlete-filter {
   display: inline-flex;
   align-items: center;
@@ -471,6 +555,7 @@
   font-size: 10px;
   font-weight: 700;
 }
+
 .physical-athlete-filter select {
   height: 32px;
   min-width: 164px;
@@ -482,12 +567,14 @@
   font: inherit;
   font-weight: 600;
 }
+
 .special-team-filter {
   width: auto;
   gap: 6px;
   font-size: 9px;
   white-space: nowrap;
 }
+
 .special-team-filter select {
   height: 28px;
   min-width: 142px;
@@ -495,9 +582,11 @@
   padding-left: 9px;
   font-size: 10px;
 }
+
 .physical-dashboard-grid .app-content-state {
   min-height: 246px;
 }
+
 .physical-ability-profile {
   min-height: 246px;
   padding: 18px;
@@ -506,10 +595,12 @@
   gap: 18px;
   align-items: center;
 }
+
 .physical-radar {
   display: grid;
   gap: 11px;
 }
+
 .physical-radar > div {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr) 34px;
@@ -518,12 +609,14 @@
   color: #4d6870;
   font-size: 10px;
 }
+
 .physical-radar i {
   height: 8px;
   border-radius: 99px;
   overflow: hidden;
   background: #e8efef;
 }
+
 .physical-radar i b {
   display: block;
   width: var(--profile-score);
@@ -531,43 +624,52 @@
   border-radius: inherit;
   background: var(--profile-color);
 }
+
 .physical-radar strong {
   color: #234b55;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
+
 .physical-ability-profile aside {
   padding-left: 15px;
   border-left: 1px solid #e3ecec;
 }
+
 .physical-ability-profile aside > span {
   color: #83969b;
   font-size: 8px;
 }
+
 .physical-ability-profile h3 {
   margin: 4px 0 12px;
   color: #234b55;
   font-size: 13px;
 }
+
 .physical-ability-profile p {
   display: grid;
   gap: 4px;
   margin: 0 0 11px;
 }
+
 .physical-ability-profile p b {
   color: #687f86;
   font-size: 9px;
 }
+
 .physical-ability-profile p em {
   color: #117d76;
   font-size: 9px;
   font-style: normal;
 }
+
 .physical-trend {
   min-height: 246px;
   display: grid;
   grid-template-rows: auto 1fr;
 }
+
 .physical-trend > label {
   display: flex;
   align-items: center;
@@ -577,6 +679,7 @@
   color: #71878e;
   font-size: 9px;
 }
+
 .physical-trend select {
   height: 27px;
   border: 1px solid #d5e3e5;
@@ -585,14 +688,17 @@
   background: #fff;
   font-size: 10px;
 }
+
 .physical-chart-canvas {
   height: 220px;
   padding: 10px 12px 8px;
 }
+
 .physical-structure {
   min-height: 246px;
   padding: 30px 18px 16px;
 }
+
 .physical-structure-bar {
   height: 26px;
   margin-bottom: 20px;
@@ -601,10 +707,12 @@
   display: flex;
   background: #eef3f3;
 }
+
 .physical-structure-bar i {
   min-width: 2px;
   height: 100%;
 }
+
 .physical-structure > div:not(.physical-structure-bar) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto 48px;
@@ -614,15 +722,18 @@
   color: #60777e;
   font-size: 10px;
 }
+
 .physical-structure b {
   color: #35545d;
   font-weight: 700;
 }
+
 .physical-structure strong {
   color: #117d76;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
 .physical-structure small {
   display: block;
   margin-top: 12px;
@@ -630,86 +741,104 @@
   font-size: 9px;
 }
 
-@media (max-width: 1200px) {
+@media (width <= 1200px) {
   .training-dashboard-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
   .physical-core-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
   .dashboard-span-4,
   .dashboard-span-5,
   .dashboard-span-7,
   .dashboard-span-8 {
     grid-column: span 6;
   }
+
   .ergometer-model-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 760px) {
+@media (width <= 760px) {
   .training-dashboard-metrics,
   .training-dashboard-grid {
     grid-template-columns: 1fr;
   }
+
   .physical-core-metrics {
     grid-template-columns: 1fr 1fr;
   }
+
   .physical-athlete-filter {
     width: 100%;
     justify-content: space-between;
   }
+
   .physical-athlete-filter select {
     min-width: 0;
     flex: 1;
   }
+
   .special-team-filter {
     width: auto;
     max-width: 100%;
     justify-content: flex-start;
   }
+
   .special-team-filter select {
     flex: 0 1 190px;
     min-width: 128px;
   }
+
   .champion-comparison-head,
   .champion-current-comparison > div:not(.champion-comparison-head) {
     grid-template-columns: minmax(80px, 1.2fr) repeat(3, minmax(56px, 1fr));
     gap: 6px;
     font-size: 8px;
   }
+
   .physical-ability-profile {
     grid-template-columns: 1fr;
   }
+
   .physical-ability-profile aside {
     padding: 12px 0 0;
     border-top: 1px solid #e3ecec;
     border-left: 0;
   }
+
   .physical-chart-canvas {
     height: 220px;
   }
+
   .special-athlete-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
     padding: 12px 0;
   }
+
   .special-athlete-meta {
     justify-self: end;
     grid-template-columns: 1fr;
     text-align: right;
   }
+
   .special-athlete-summary {
     grid-column: 1 / -1;
     gap: 6px;
   }
+
   .special-athlete-summary div {
     padding-left: 7px;
   }
+
   .special-athlete-summary dd {
     font-size: 10px;
   }
+
   .dashboard-span-4,
   .dashboard-span-5,
   .dashboard-span-7,
@@ -717,22 +846,27 @@
   .dashboard-span-12 {
     grid-column: 1;
   }
+
   .special-champion-model .app-section-header {
     gap: 9px;
   }
+
   .champion-model-head,
   .champion-model-section-title,
   .ergometer-model-head {
     display: grid;
     grid-template-columns: 1fr;
   }
+
   .champion-model-table {
     min-width: 670px;
   }
+
   .champion-model-table th,
   .champion-model-table td {
     padding: 8px 9px;
   }
+
   .ergometer-model-card .champion-model-table {
     min-width: 640px;
   }
@@ -778,6 +912,7 @@
 .special-page-tabs button.active {
   color: #117d76;
 }
+
 .special-page-tabs button.active::after {
   background: #15978d;
 }
@@ -792,27 +927,34 @@
 .special-metric {
   min-width: 0;
 }
+
 .special-metric .metric-copy {
   min-width: 0;
 }
+
 .special-metric .metric-copy > strong {
   white-space: nowrap;
 }
+
 .special-metric .metric-copy > strong small {
   margin-left: 5px;
 }
+
 .special-metric.tone-blue {
   --metric-start: #173f5b;
   --metric-end: #12364d;
 }
+
 .special-metric.tone-green {
   --metric-start: #245545;
   --metric-end: #173f36;
 }
+
 .special-metric.tone-orange {
   --metric-start: #6d4930;
   --metric-end: #473323;
 }
+
 .special-metric.tone-purple {
   --metric-start: #4b3b69;
   --metric-end: #32284b;
@@ -828,18 +970,23 @@
 .span-3 {
   grid-column: span 3;
 }
+
 .span-4 {
   grid-column: span 4;
 }
+
 .span-5 {
   grid-column: span 5;
 }
+
 .span-7 {
   grid-column: span 7;
 }
+
 .span-8 {
   grid-column: span 8;
 }
+
 .span-12 {
   grid-column: 1 / -1;
 }
@@ -847,6 +994,7 @@
 .special-card {
   min-width: 0;
 }
+
 .special-chart {
   width: 100%;
   height: 275px;
@@ -880,6 +1028,7 @@
   height: 7px;
   border-radius: 50%;
 }
+
 .special-legend strong {
   color: #234b55;
 }
@@ -896,6 +1045,7 @@
   min-width: 650px;
   border-collapse: collapse;
 }
+
 .special-table-wrap th {
   height: 38px;
   padding: 0 10px;
@@ -904,6 +1054,7 @@
   font-size: 9px;
   text-align: left;
 }
+
 .special-table-wrap td {
   height: 46px;
   padding: 7px 10px;
@@ -911,14 +1062,17 @@
   color: #567078;
   font-size: 9px;
 }
+
 .special-table-wrap td strong {
   color: #163e48;
 }
+
 .special-table-wrap td small {
   display: block;
   margin-top: 3px;
   color: #8a9a9f;
 }
+
 .special-table-wrap .table-value {
   color: #10877f;
   font-weight: 800;
@@ -934,27 +1088,33 @@
   background: #edf2f3;
   font-size: 9px;
 }
+
 .rank-1 {
   color: #9a6710;
   background: #ffecbd;
 }
+
 .rank-2 {
   color: #56717a;
   background: #e7edef;
 }
+
 .rank-3 {
   color: #9f582a;
   background: #ffe2d1;
 }
+
 .status {
   padding: 4px 7px;
   border-radius: 99px;
   font-size: 8px;
 }
+
 .status.good {
   color: #208163;
   background: #e5f5ee;
 }
+
 .status.attention {
   color: #ac6a13;
   background: #fff3d8;
@@ -965,6 +1125,7 @@
   gap: 9px;
   padding-top: 7px;
 }
+
 .insight-list > div {
   min-height: 58px;
   padding: 10px;
@@ -979,6 +1140,7 @@
   font-size: 9px;
   line-height: 1.6;
 }
+
 .insight-list i {
   width: 28px;
   height: 28px;
@@ -988,10 +1150,12 @@
   color: #208f76;
   background: #e2f3ed;
 }
+
 .insight-list i.warn {
   color: #d17925;
   background: #fff1dd;
 }
+
 .insight-list svg {
   width: 14px;
 }
@@ -1005,6 +1169,7 @@
   font-size: 8px;
   font-weight: 800;
 }
+
 .project-notes > div {
   min-height: 49px;
   border-bottom: 1px solid #e6edef;
@@ -1013,16 +1178,19 @@
   align-items: center;
   gap: 8px;
 }
+
 .project-notes b {
   color: #189288;
   font:
-    800 12px 'Bahnschrift',
+    800 12px Bahnschrift,
     sans-serif;
 }
+
 .project-notes p {
   color: #536e76;
   font-size: 9px;
 }
+
 .technique-note {
   margin-top: 10px;
   padding: 9px;
@@ -1033,6 +1201,7 @@
   background: #f3effb;
   font-size: 8px;
 }
+
 .technique-note svg {
   width: 14px;
 }
@@ -1042,6 +1211,7 @@
   gap: 15px;
   padding-top: 13px;
 }
+
 .zone-bars header {
   display: flex;
   align-items: center;
@@ -1049,16 +1219,19 @@
   color: #526c74;
   font-size: 9px;
 }
+
 .zone-bars header span {
   display: flex;
   align-items: center;
   gap: 6px;
 }
+
 .zone-bars header i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
 }
+
 .zone-bars > div > b,
 .zone-bars > div > b i,
 .week-schedule {
@@ -1074,9 +1247,11 @@
   min-width: 128px;
   border-right: 1px solid #e2eaec;
 }
+
 .week-schedule > article:last-child {
   border-right: 0;
 }
+
 .week-schedule > article > header {
   height: 54px;
   display: grid;
@@ -1084,15 +1259,18 @@
   text-align: center;
   background: #f4f8f8;
 }
+
 .week-schedule > article > header strong {
   color: #355963;
   font-size: 10px;
 }
+
 .week-schedule > article > header span {
   margin-top: 2px;
   color: #7d9197;
   font-size: 8px;
 }
+
 .week-schedule > article > div {
   min-height: 235px;
   padding: 7px;
@@ -1100,6 +1278,7 @@
   align-content: start;
   gap: 7px;
 }
+
 .schedule-event {
   min-height: 67px;
   padding: 8px;
@@ -1108,36 +1287,43 @@
   color: #3472bd;
   background: #eaf2ff;
 }
+
 .schedule-event.type-1 {
   border-left-color: #4aa366;
   color: #318151;
   background: #e9f6ec;
 }
+
 .schedule-event.type-2 {
   border-left-color: #ef8a3c;
   color: #bf6629;
   background: #fff0e4;
 }
+
 .schedule-event.type-3 {
   border-left-color: #9067d6;
   color: #7450b2;
   background: #f1ebfb;
 }
+
 .schedule-event b,
 .schedule-event span {
   display: block;
   font-size: 8px;
 }
+
 .schedule-event span {
   margin-top: 3px;
   opacity: 0.8;
 }
+
 .schedule-event p {
   margin-top: 5px;
   color: #4c6972;
   font-size: 8px;
   line-height: 1.4;
 }
+
 .rest-day {
   padding: 20px 4px;
   color: #96a5aa;
@@ -1148,6 +1334,7 @@
 .today-sessions {
   display: grid;
 }
+
 .today-sessions > div {
   min-height: 62px;
   display: grid;
@@ -1157,10 +1344,12 @@
   border-bottom: 1px solid #e5edef;
   font-size: 9px;
 }
+
 .today-sessions time {
   color: #274d58;
   font-weight: 800;
 }
+
 .today-sessions i {
   padding: 5px;
   border-radius: 5px;
@@ -1169,10 +1358,12 @@
   font-style: normal;
   text-align: center;
 }
+
 .today-sessions strong {
   color: #31545e;
   overflow-wrap: anywhere;
 }
+
 .today-sessions span {
   color: #809197;
   overflow-wrap: anywhere;
@@ -1181,6 +1372,7 @@
 .progress-steps {
   padding: 2px 0 0 9px;
 }
+
 .progress-steps > div {
   position: relative;
   min-height: 55px;
@@ -1188,6 +1380,7 @@
   grid-template-columns: 27px minmax(0, 1fr);
   gap: 9px;
 }
+
 .progress-steps > div::after {
   content: '';
   position: absolute;
@@ -1197,9 +1390,11 @@
   width: 1px;
   background: #dce6e8;
 }
+
 .progress-steps > div:last-child::after {
   display: none;
 }
+
 .progress-steps i {
   width: 27px;
   height: 27px;
@@ -1211,11 +1406,13 @@
   font-style: normal;
   font-size: 9px;
 }
+
 .progress-steps .done i,
 .progress-steps .current i {
   color: #fff;
   background: #118e87;
 }
+
 .progress-steps span {
   min-width: 0;
   padding-top: 2px;
@@ -1223,14 +1420,17 @@
   justify-content: space-between;
   gap: 8px;
 }
+
 .progress-steps strong {
   color: #345660;
   font-size: 9px;
 }
+
 .progress-steps small {
   color: #819399;
   font-size: 8px;
 }
+
 .progress-steps .done small,
 .progress-steps .current small {
   color: #168c7f;
@@ -1247,20 +1447,24 @@
   font-size: 10px;
   text-align: center;
 }
+
 .special-loading svg {
   color: #168f88;
 }
+
 .special-training-page > .special-empty span {
   font-size: 10px;
 }
 
-@media (max-width: 1200px) {
+@media (width <= 1200px) {
   .special-metrics {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+
   .special-metrics .overview-card-shell.card-size-metric {
     grid-column: span 2;
   }
+
   .span-3,
   .span-4,
   .span-5,
@@ -1270,16 +1474,19 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (width <= 760px) {
   .special-metrics {
     grid-template-columns: 1fr;
   }
+
   .special-metrics .overview-card-shell.card-size-metric {
     grid-column: 1;
   }
+
   .special-grid {
     grid-template-columns: 1fr;
   }
+
   .span-3,
   .span-4,
   .span-5,
@@ -1289,10 +1496,12 @@
   .week-schedule {
     grid-template-columns: repeat(7, 128px);
   }
+
   .today-sessions > div {
     padding: 8px 0;
     grid-template-columns: 76px 58px minmax(0, 1fr);
   }
+
   .today-sessions > div span {
     grid-column: 3;
   }
