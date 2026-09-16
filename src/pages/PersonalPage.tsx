@@ -15,10 +15,6 @@ import { analyzeSlalomPeriod } from '../../shared/slalom-model';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
-import {
-  BodyCompositionModelOverview,
-  type BodyCompositionProfile,
-} from '../components/AthleteProfileCharts';
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import { EChart } from '../components/EChart';
@@ -26,7 +22,6 @@ import { api } from '../api';
 import type { EChartsOption } from 'echarts';
 import type {
   Athlete,
-  BodyCompositionRecord,
   ChampionBenchmarkPayload,
   OverviewMeasurement,
   Project,
@@ -166,8 +161,6 @@ export function PersonalPage(props: Props) {
   const [positionMessage, setPositionMessage] = useState('');
   const canEditOwnPosition =
     props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
-  const [bodyHistory, setBodyHistory] = useState<BodyCompositionRecord[]>([]);
-  const [bodyHistoryLoading, setBodyHistoryLoading] = useState(false);
   const [profileMeasurements, setProfileMeasurements] = useState<OverviewMeasurement[]>([]);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
   const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
@@ -175,29 +168,6 @@ export function PersonalPage(props: Props) {
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
   const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
   const [dossierDataLoading, setDossierDataLoading] = useState(false);
-
-  useEffect(() => {
-    let ignored = false;
-    if (!selectedAthlete) {
-      setBodyHistory([]);
-      return;
-    }
-    setBodyHistoryLoading(true);
-    api
-      .getBodyCompositionHistory(selectedAthlete.id)
-      .then((result) => {
-        if (!ignored) setBodyHistory(result.history);
-      })
-      .catch(() => {
-        if (!ignored) setBodyHistory([]);
-      })
-      .finally(() => {
-        if (!ignored) setBodyHistoryLoading(false);
-      });
-    return () => {
-      ignored = true;
-    };
-  }, [selectedAthlete?.id]);
 
   useEffect(() => {
     let ignored = false;
@@ -280,47 +250,6 @@ export function PersonalPage(props: Props) {
       ignored = true;
     };
   }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
-
-  const bodyCompositionProfile = useMemo<BodyCompositionProfile | null>(() => {
-    if (!selectedAthlete) return null;
-    const historyBeforeEnd = bodyHistory.filter((record) => record.measurementDate <= props.to);
-    const latest = historyBeforeEnd[0];
-    return {
-      athleteId: selectedAthlete.id,
-      athleteName: selectedAthlete.name,
-      project: selectedAthlete.project,
-      team: selectedAthlete.team,
-      gender: selectedAthlete.gender,
-      age: ageAtDate(selectedAthlete.birthDate, props.to),
-      bodyMeasurementDate: latest?.measurementDate || selectedAthlete.bodyMeasurementDate,
-      heightCm: latest?.heightCm ?? selectedAthlete.heightCm,
-      weightKg: latest?.weightKg ?? selectedAthlete.weightKg,
-      bodyFatPct: latest?.bodyFatPct ?? selectedAthlete.bodyFatPct,
-      skeletalMuscleKg: latest?.skeletalMuscleKg ?? selectedAthlete.skeletalMuscleKg,
-      muscleMassKg: latest?.muscleMassKg ?? selectedAthlete.muscleMassKg,
-      upperLimbMuscleKg: latest?.upperLimbMuscleKg ?? selectedAthlete.upperLimbMuscleKg,
-      lowerLimbMuscleKg: latest?.lowerLimbMuscleKg ?? selectedAthlete.lowerLimbMuscleKg,
-      trunkMuscleKg: latest?.trunkMuscleKg ?? selectedAthlete.trunkMuscleKg,
-      tricepsSkinfoldMm: latest?.tricepsSkinfoldMm ?? selectedAthlete.tricepsSkinfoldMm,
-      abdominalSkinfoldMm: latest?.abdominalSkinfoldMm ?? selectedAthlete.abdominalSkinfoldMm,
-      thighSkinfoldMm: latest?.thighSkinfoldMm ?? selectedAthlete.thighSkinfoldMm,
-      calfSkinfoldMm: latest?.calfSkinfoldMm ?? selectedAthlete.calfSkinfoldMm,
-      visceralFatLevel: latest?.visceralFatLevel ?? selectedAthlete.visceralFatLevel,
-      basalMetabolismKcal: latest?.basalMetabolismKcal ?? selectedAthlete.basalMetabolismKcal,
-      totalBodyWaterKg: latest?.totalBodyWaterKg ?? selectedAthlete.totalBodyWaterKg,
-      ecwTbwRatio: latest?.ecwTbwRatio ?? selectedAthlete.ecwTbwRatio,
-      phaseAngleDeg: latest?.phaseAngleDeg ?? selectedAthlete.phaseAngleDeg,
-      visceralFatAreaCm2: latest?.visceralFatAreaCm2 ?? selectedAthlete.visceralFatAreaCm2,
-      leftArmLeanKg: latest?.leftArmLeanKg ?? selectedAthlete.leftArmLeanKg,
-      rightArmLeanKg: latest?.rightArmLeanKg ?? selectedAthlete.rightArmLeanKg,
-      trunkLeanKg: latest?.trunkLeanKg ?? selectedAthlete.trunkLeanKg,
-      leftLegLeanKg: latest?.leftLegLeanKg ?? selectedAthlete.leftLegLeanKg,
-      rightLegLeanKg: latest?.rightLegLeanKg ?? selectedAthlete.rightLegLeanKg,
-      bodyCompositionHistory: historyBeforeEnd.filter(
-        (record) => record.measurementDate >= props.from
-      ),
-    };
-  }, [selectedAthlete, bodyHistory, props.from, props.to]);
 
   useEffect(() => {
     setPositionDraft(rowingSeatValue(selectedAthlete?.athletePosition));
@@ -565,32 +494,6 @@ export function PersonalPage(props: Props) {
           </section>
 
           <ProfileSection
-            title="制胜要素分析"
-            subtitle="身体形态、功能动作、专项与体能测试均遵循当前项目和日期范围。"
-          >
-            <AppCard
-              variant="chart"
-              className="professional-panel body-composition-card personal-body-assessment-card"
-            >
-              <header className="personal-body-assessment-heading">
-                <div>
-                  <span>BODY COMPOSITION</span>
-                  <h2>身体成分</h2>
-                </div>
-                <small>
-                  {bodyHistoryLoading
-                    ? '读取中…'
-                    : bodyCompositionProfile?.bodyMeasurementDate || '暂无实测'}
-                </small>
-              </header>
-              <BodyCompositionModelOverview
-                profiles={bodyCompositionProfile ? [bodyCompositionProfile] : []}
-                individual
-              />
-            </AppCard>
-          </ProfileSection>
-
-          <ProfileSection
             title="训练情况"
             subtitle={`${props.from} 至 ${props.to}，仅统计当前运动员的有效训练课次。`}
           >
@@ -745,24 +648,12 @@ function ProfileSection({
 }
 
 function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; loading: boolean }) {
-  if (loading)
-    return (
-      <AppCard variant="chart" className="professional-panel">
-        <div className="professional-chart-empty">正在读取恢复趋势…</div>
-      </AppCard>
-    );
-  if (!trends.some((trend) => trend.points.some((point) => point.personalValue !== null)))
-    return (
-      <AppCard variant="chart" className="professional-panel">
-        <ContentState
-          kind="empty"
-          title="暂无恢复趋势数据"
-          description="当前周期未找到有效的日报或训练 RPE 记录。"
-        />
-      </AppCard>
-    );
+  const hasData = trends.some((trend) => trend.points.some((point) => point.personalValue !== null));
+  const statusMessage = loading ? '正在读取恢复趋势。' : hasData ? '恢复趋势已更新。' : '暂无恢复趋势数据。';
   return (
-    <section className="personal-wellness-grid" aria-label="恢复趋势">
+    <div className="personal-wellness-status">
+      <p className="visually-hidden" aria-live="polite">{statusMessage}</p>
+      {loading ? <AppCard variant="chart" className="professional-panel"><div className="professional-chart-empty">正在读取恢复趋势…</div></AppCard> : !hasData ? <AppCard variant="chart" className="professional-panel"><ContentState kind="empty" title="暂无恢复趋势数据" description="当前周期未找到有效的日报或训练 RPE 记录。" /></AppCard> : <section className="personal-wellness-grid" aria-label="恢复趋势">
       {trends.map((trend) => (
         <AppCard
           key={trend.key}
@@ -812,7 +703,8 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
           )}
         </AppCard>
       ))}
-    </section>
+      </section>}
+    </div>
   );
 }
 

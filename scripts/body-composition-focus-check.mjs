@@ -7,9 +7,8 @@ const assert = (value, message) => {
   if (!value) throw new Error(message);
 };
 
-assert(page.includes('<h2>身体成分</h2>'), '页面标题必须为“身体成分”');
-assert(!page.includes('运动员身体成分评估'), '页面不应保留旧标题');
-assert(!page.includes('身体成分仅展示有效实测'), '页面不应保留冗长说明');
+assert(!page.includes('制胜要素分析'), '个人档案不应保留制胜要素分析区块');
+assert(!page.includes('个人 vs 团队对比'), '个人档案不应保留团队对比区块');
 assert(model.includes('身体成分模拟图'), '新版应以身体成分模拟图为主视觉');
 assert(model.includes("from 'd3-scale'"), '模拟图必须显式使用 d3-scale');
 assert(model.includes('scaleLinear'), '结构图必须用 D3 线性比例尺计算质量标尺');
