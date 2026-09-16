@@ -770,8 +770,8 @@ export function BodyCompositionModelOverview({
   });
   return (
     <div className="body-composition-atlas" aria-label="运动员身体成分结构报告">
-      <header className="body-atlas-toolbar">
-        {!individual && (
+      {!individual && (
+        <header className="body-atlas-toolbar">
           <label>
             <span>评估对象</span>
             <select
@@ -785,19 +785,8 @@ export function BodyCompositionModelOverview({
               ))}
             </select>
           </label>
-        )}
-        <div>
-          <span>DATA SNAPSHOT</span>
-          <strong>{activeProfile.athleteName}</strong>
-          <small>
-            {activeProfile.project} · {activeProfile.team}
-          </small>
-        </div>
-        <div className="body-atlas-source">
-          <strong>{activeProfile.bodyMeasurementDate || '未录入测量日期'}</strong>
-          <small>仅展示已采集的实测值；计算值单独标注</small>
-        </div>
-      </header>
+        </header>
+      )}
       <section className="body-atlas-summary" aria-label="核心身体成分指标">
         <AtlasMetric label="体重" value={activeProfile.weightKg} unit="kg" source="实测" />
         <AtlasMetric
