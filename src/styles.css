@@ -3175,12 +3175,12 @@ p {
   white-space: nowrap;
 }
 .fms-personal-layout {
-  min-height: 360px;
-  padding: 16px 18px 14px;
+  min-height: 330px;
+  padding: 14px 16px 12px;
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: minmax(250px, 1fr) auto;
-  gap: 12px;
+  grid-template-rows: minmax(220px, 1fr) auto;
+  gap: 10px;
 }
 .functional-test-grid {
   display: grid;
@@ -3195,8 +3195,34 @@ p {
   }
 }
 .fms-personal-chart {
-  min-height: 260px;
+  position: relative;
+  min-height: 225px;
   width: 100%;
+}
+.fms-radar-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -46%);
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.fms-radar-center span {
+  color: #82979d;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.fms-radar-center strong {
+  margin-top: 2px;
+  color: #123f47;
+  font:
+    900 18px 'Bahnschrift',
+    sans-serif;
+  line-height: 1;
 }
 .fms-personal-summary {
   display: grid;

@@ -1296,6 +1296,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
             />
 
             <Tooltip formatter={(value, name) => [`${formatNumber(Number(value), 1)} 分`, name]} />
+
             <Radar
               dataKey="score"
               name="个人得分"
@@ -1312,6 +1313,11 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
             />
           </RadarChart>
         </ResponsiveContainer>
+
+        <div className="fms-radar-center">
+          <span>FMS</span>
+          <strong>{total === null ? '—' : formatNumber(total, 1)}</strong>
+        </div>
       </div>
       <aside className="fms-personal-summary">
         <article>
