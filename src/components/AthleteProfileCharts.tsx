@@ -779,13 +779,6 @@ export function BodyCompositionModelOverview({
       )}
       <div className="body-atlas-grid">
         <section className="body-atlas-panel body-simulation-panel">
-          <header>
-            <div>
-              <span>01 / COMPOSITION SIMULATION</span>
-              <h4>身体成分模拟图</h4>
-            </div>
-            <small>数据卡为真实采集或明确计算值</small>
-          </header>
           {activeProfile.weightKg !== null && fatMass !== null && fatFreeMass !== null ? (
             <>
               <BodyCompositionSimulation
@@ -800,49 +793,10 @@ export function BodyCompositionModelOverview({
           )}
         </section>
       </div>
-      <section className="body-atlas-summary" aria-label="核心身体成分指标">
-        <AtlasMetric label="体重" value={activeProfile.weightKg} unit="kg" source="实测" />
-        <AtlasMetric
-          label="骨骼肌量"
-          value={activeProfile.skeletalMuscleKg}
-          unit="kg"
-          source="实测"
-        />
-        <AtlasMetric label="体脂率" value={activeProfile.bodyFatPct} unit="%" source="实测" />
-        <AtlasMetric
-          label="去脂体重"
-          value={fatFreeMass}
-          unit="kg"
-          source={fatFreeMass === null ? null : '计算'}
-        />
-      </section>
       <p className="body-atlas-note">
         体重、骨骼肌量与体脂率为原始采集字段；脂肪量与去脂体重仅在体重、体脂率齐全时按公式计算。该视图不提供医学判断或训练建议。
       </p>
     </div>
-  );
-}
-
-function AtlasMetric({
-  label,
-  value,
-  unit,
-  source,
-}: {
-  label: string;
-  value: number | null;
-  unit: string;
-  source: '实测' | '计算' | null;
-}) {
-  return (
-    <article>
-      <span>{label}</span>
-      <strong>
-        {value === null ? '—' : formatNumber(value, 1)}
-        <small>{value === null ? '' : unit}</small>
-      </strong>
-      <em>{source || '未采集'}</em>
-    </article>
   );
 }
 
@@ -1013,8 +967,6 @@ type CompositionMetric = {
   label: string;
   value: number | null;
   unit: string;
-  source: '实测' | '计算';
-  emphasis: 'primary' | 'secondary';
 };
 type MeasuredCompositionMetric = CompositionMetric & { value: number };
 
@@ -1031,180 +983,223 @@ function BodyCompositionSimulationDesktop({
   fatMass,
   fatFreeMass,
 }: BodyCompositionSimulationDesktopProps) {
-  const fatRatio = total > 0 ? fatMass / total : 0;
-  const fatFreeRatio = total > 0 ? fatFreeMass / total : 0;
+  const fatPercent = total > 0 ? (fatMass / total) * 100 : 0;
 
-  const fatPercent = fatRatio * 100;
-  const fatFreePercent = fatFreeRatio * 100;
+  const fatFreePercent = total > 0 ? (fatFreeMass / total) * 100 : 0;
 
   const skeletalMusclePercent =
     total > 0 && profile.skeletalMuscleKg !== null
       ? (profile.skeletalMuscleKg / total) * 100
       : null;
+
   const bmi = profile.heightCm === null ? null : total / (profile.heightCm / 100) ** 2;
-  const leftMetrics: MeasuredCompositionMetric[] = [
-    { id: 'weight', label: '体重', value: total, unit: 'kg', source: '实测', emphasis: 'primary' },
-    { id: 'bmi', label: 'BMI', value: bmi, unit: '', source: '计算', emphasis: 'secondary' },
+
+  const secondaryMetrics = [
+    {
+      id: 'bmi',
+      label: 'BMI',
+      value: bmi,
+      unit: '',
+    },
     {
       id: 'bodyFat',
       label: '体脂率',
       value: profile.bodyFatPct,
       unit: '%',
-      source: '实测',
-      emphasis: 'primary',
-    },
-    {
-      id: 'fatFreeMass',
-      label: '去脂体重',
-      value: fatFreeMass,
-      unit: 'kg',
-      source: '计算',
-      emphasis: 'secondary',
     },
     {
       id: 'totalBodyWater',
       label: '体水分',
       value: profile.totalBodyWaterKg,
       unit: 'kg',
-      source: '实测',
-      emphasis: 'secondary',
     },
-  ].filter((metric): metric is MeasuredCompositionMetric => metric.value !== null);
-  const rightMetrics: MeasuredCompositionMetric[] = [
     {
       id: 'muscleMass',
       label: '肌肉量',
       value: profile.muscleMassKg,
       unit: 'kg',
-      source: '实测',
-      emphasis: 'primary',
-    },
-    {
-      id: 'skeletalMuscle',
-      label: '骨骼肌量',
-      value: profile.skeletalMuscleKg,
-      unit: 'kg',
-      source: '实测',
-      emphasis: 'primary',
     },
     {
       id: 'basalMetabolism',
       label: '基础代谢',
       value: profile.basalMetabolismKcal,
       unit: 'kcal',
-      source: '实测',
-      emphasis: 'secondary',
     },
     {
       id: 'visceralFat',
       label: '内脏脂肪等级',
       value: profile.visceralFatLevel,
       unit: '级',
-      source: '实测',
-      emphasis: 'secondary',
     },
   ].filter((metric): metric is MeasuredCompositionMetric => metric.value !== null);
-  const cardY = scaleBand<string>()
-    .domain(['0', '1', '2', '3', '4'])
-    .range([62, 416])
-    .paddingInner(0.16);
-  const renderMetric = (
-    metric: MeasuredCompositionMetric,
-    side: 'left' | 'right',
-    index: number
-  ) => {
-    const x = side === 'left' ? 18 : 622;
-    const y = cardY(String(index)) || 62;
-    const primary = metric.emphasis === 'primary';
-    return (
-      <g
-        className={`body-sim-metric-card ${primary ? 'is-primary' : ''}`}
-        key={metric.id}
-        transform={`translate(${x} ${y})`}
-      >
-        <rect width="180" height="58" rx="7" />
-        <text x="12" y="18" className="body-sim-metric-label">
-          {metric.label}
-        </text>
-        <text x="12" y="43" className="body-sim-metric-value">
-          {formatNumber(metric.value, 1)}
-          <tspan>{metric.unit}</tspan>
-        </text>
-        <text x="168" y="18" textAnchor="end" className="body-sim-metric-source">
-          {metric.source}
-        </text>
-      </g>
-    );
-  };
-  const allMetrics = [...leftMetrics, ...rightMetrics];
+
+  const renderCompositionBar = (
+    label: string,
+    value: number,
+    percent: number,
+    type: 'lean' | 'fat'
+  ) => (
+    <div className={`body-comp-card body-comp-bar is-${type}`} key={label}>
+      <div className="body-comp-bar-head">
+        <span>{label}</span>
+
+        <strong>
+          {formatNumber(value, 1)}
+          <small> kg</small>
+        </strong>
+      </div>
+
+      <div className="body-comp-track">
+        <div className={`body-comp-fill is-${type}`} style={{ width: `${percent}%` }} />
+      </div>
+
+      <div className="body-comp-bar-foot">
+        <span>{formatNumber(percent, 1)}%</span>
+      </div>
+    </div>
+  );
   return (
-    <div className="body-composition-simulation body-composition-simulation-v2">
-      <svg
-        viewBox="0 0 820 490"
-        role="img"
-        aria-label={`身体成分模拟图：${allMetrics.map((metric) => `${metric.label}${formatNumber(metric.value, 1)}${metric.unit}`).join('，')}`}
-      >
-        <title>运动员身体成分模拟图</title>
-        <defs>
-          <linearGradient id="body-sim-core" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#4ab5ad" />
-            <stop offset="1" stopColor="#08766f" />
-          </linearGradient>
-          <g id="body-sim-athlete">
-            <circle cx="410" cy="92" r="28" />
-            <path d="M394 121 L426 121 L434 150 L386 150 Z" />
-            <path d="M386 148 C355 156 347 183 355 232 L367 278 C373 301 387 312 410 313 C433 312 447 301 453 278 L465 232 C473 183 465 156 434 148 Z" />
-            <path d="M365 158 C339 174 330 202 336 237 L344 278 C347 294 365 294 367 278 L370 221 L390 169 Z" />
-            <path d="M455 158 C481 174 490 202 484 237 L476 278 C473 294 455 294 453 278 L450 221 L430 169 Z" />
-            <path d="M378 308 C371 348 370 407 376 452 L397 452 L406 335 L405 313 Z" />
-            <path d="M442 308 C449 348 450 407 444 452 L423 452 L414 335 L415 313 Z" />
-            <path d="M376 452 L364 466 L399 466 L401 452 Z" />
-            <path d="M444 452 L456 466 L421 466 L419 452 Z" />
-          </g>
-        </defs>
-        <text x="18" y="28" className="body-sim-title">
-          ATHLETE BODY COMPOSITION
-        </text>
-        <text x="18" y="45" className="body-sim-subtitle">
-          实测数据以卡片呈现；计算项单独标记
-        </text>
-        <g className="body-sim-guide">
-          <line x1="410" x2="410" y1="58" y2="470" />
-          <circle cx="410" cy="260" r="130" />
-        </g>
-        <g transform="translate(410 277)">
-          <g
-            className="body-sim-silhouette body-sim-fat-shell"
-            transform={`translate(-410 -277) scale(${outerScale} 1) translate(${410 / outerScale - 410} 0)`}
-          >
-            <use href="#body-sim-athlete" />
-          </g>
-          <g
-            className="body-sim-silhouette body-sim-lean-core"
-            transform={`translate(-410 -277) scale(${coreScale} .98) translate(${410 / coreScale - 410} 0)`}
-          >
-            <use href="#body-sim-athlete" />
-          </g>
-        </g>
-        {leftMetrics.map((metric, index) => renderMetric(metric, 'left', index))}
-        {rightMetrics.map((metric, index) => renderMetric(metric, 'right', index))}
-        <text x="410" y="486" textAnchor="middle" className="body-chart-label">
-          人体轮廓仅作为身体成分数据的定位示意
-        </text>
-      </svg>
-      <dl className="body-chart-mobile-list">
-        {allMetrics.map((metric) => (
-          <div key={metric.id}>
-            <dt>
-              {metric.label}
-              <small>{metric.source}</small>
-            </dt>
-            <dd>
-              {formatNumber(metric.value, 1)} {metric.unit}
-            </dd>
+    <div className="body-composition-simulation body-composition-simulation-v3">
+      <div className="body-composition-main">
+        {/* 左侧：身体成分模拟图 */}
+        <div className="body-composition-figure-panel">
+          <svg viewBox="0 0 260 420" role="img" aria-label="身体成分结构示意">
+            <defs>
+              <g id="body-sim-athlete">
+                {/* 头部 */}
+                <circle cx="130" cy="52" r="26" />
+
+                {/* 颈肩 */}
+                <path d="M114 82 L146 82 L154 108 L106 108 Z" />
+
+                {/* 躯干 */}
+                <path
+                  d="
+                M106 106
+                C78 114 70 142 78 190
+                L88 236
+                C94 258 108 268 130 270
+                C152 268 166 258 172 236
+                L182 190
+                C190 142 182 114 154 106
+                Z
+              "
+                />
+
+                {/* 左臂 */}
+                <path
+                  d="
+                M88 118
+                C66 134 60 162 66 196
+                L74 236
+                C76 250 90 250 92 236
+                L95 184
+                L112 132
+                Z
+              "
+                />
+
+                {/* 右臂 */}
+                <path
+                  d="
+                M172 118
+                C194 134 200 162 194 196
+                L186 236
+                C184 250 170 250 168 236
+                L165 184
+                L148 132
+                Z
+              "
+                />
+
+                {/* 左腿 */}
+                <path
+                  d="
+                M102 264
+                C96 304 96 356 102 404
+                L120 404
+                L126 292
+                L126 270
+                Z
+              "
+                />
+
+                {/* 右腿 */}
+                <path
+                  d="
+                M158 264
+                C164 304 164 356 158 404
+                L140 404
+                L134 292
+                L134 270
+                Z
+              "
+                />
+              </g>
+            </defs>
+
+            {/* 外层：脂肪层 */}
+            <use href="#body-sim-athlete" className="body-sim-shell" />
+
+            {/* 内层：去脂主体 */}
+            <use
+              href="#body-sim-athlete"
+              className="body-sim-core"
+              transform="translate(20 8) scale(0.84 0.96)"
+            />
+          </svg>
+
+          <div className="body-sim-legend">
+            <span>
+              <i className="body-sim-legend-dot is-lean" />
+              去脂组织
+            </span>
+
+            <span>
+              <i className="body-sim-legend-dot is-fat" />
+              脂肪组织
+            </span>
           </div>
-        ))}
-      </dl>
+        </div>
+
+        {/* 右侧：身体组成数据 */}
+        <div className="body-composition-analysis">
+          <div className="body-comp-total">
+            <span>体重</span>
+            <strong>{formatNumber(total, 1)} kg</strong>
+          </div>
+
+          {renderCompositionBar('去脂体重', fatFreeMass, fatFreePercent, 'lean')}
+
+          {renderCompositionBar('脂肪量', fatMass, fatPercent, 'fat')}
+
+          {profile.skeletalMuscleKg !== null && (
+            <div className="body-comp-muscle">
+              <span>骨骼肌量</span>
+
+              <strong>{formatNumber(profile.skeletalMuscleKg, 1)} kg</strong>
+
+              <small>
+                占体重{' '}
+                {skeletalMusclePercent === null
+                  ? '--'
+                  : `${formatNumber(skeletalMusclePercent, 1)}%`}
+              </small>
+            </div>
+          )}
+          <dl className="body-composition-secondary-metrics">
+            {secondaryMetrics.map((metric) => (
+              <div key={metric.id} className="body-comp-metric-card">
+                <dt>{metric.label}</dt>
+                <dd>
+                  {formatNumber(metric.value, 1)}
+                  {metric.unit && ` ${metric.unit}`}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1237,35 +1232,30 @@ function BodyCompositionSimulation({
       label: 'BMI',
       value: bmi,
       unit: '',
-      source: '计算',
     },
     {
       id: 'totalBodyWater',
       label: '体水分',
       value: profile.totalBodyWaterKg,
       unit: 'kg',
-      source: '实测',
     },
     {
       id: 'muscleMass',
       label: '肌肉量',
       value: profile.muscleMassKg,
       unit: 'kg',
-      source: '实测',
     },
     {
       id: 'basalMetabolism',
       label: '基础代谢',
       value: profile.basalMetabolismKcal,
       unit: 'kcal',
-      source: '实测',
     },
     {
       id: 'visceralFat',
       label: '内脏脂肪等级',
       value: profile.visceralFatLevel,
       unit: '级',
-      source: '实测',
     },
   ].filter(
     (
@@ -1275,7 +1265,6 @@ function BodyCompositionSimulation({
       label: string;
       value: number;
       unit: string;
-      source: string;
     } => metric.value !== null
   );
 
@@ -1291,10 +1280,7 @@ function BodyCompositionSimulation({
       <dl className="body-composition-mobile-summary">
         {secondaryMetrics.map((metric) => (
           <div key={metric.id}>
-            <dt>
-              {metric.label}
-              <small>{metric.source}</small>
-            </dt>
+            <dt>{metric.label}</dt>
 
             <dd>
               {formatNumber(metric.value, 1)}

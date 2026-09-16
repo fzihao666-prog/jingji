@@ -3200,22 +3200,6 @@ p {
 .body-composition-profile-card .body-atlas-toolbar strong {
   font-size: 16px;
 }
-.body-composition-profile-card .body-atlas-summary {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.body-composition-profile-card .body-atlas-summary article:nth-child(2) {
-  border-right: 0;
-}
-.body-composition-profile-card .body-atlas-summary article:nth-child(-n + 2) {
-  border-bottom: 1px solid #e4eeee;
-}
-.body-composition-profile-card .body-atlas-summary article {
-  min-height: 76px;
-  padding: 10px 12px;
-}
-.body-composition-profile-card .body-atlas-summary strong {
-  font-size: 22px;
-}
 .body-composition-profile-card .body-atlas-grid {
   grid-template-columns: 1fr;
   gap: 10px;
@@ -7557,8 +7541,7 @@ p {
   display: grid;
   gap: 3px;
 }
-.body-atlas-toolbar > div > span,
-.body-atlas-panel header span {
+.body-atlas-toolbar > div > span {
   color: #486770;
   font:
     850 9px 'Bahnschrift',
@@ -7606,47 +7589,6 @@ p {
 .body-atlas-source small {
   white-space: nowrap;
 }
-.body-atlas-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid #dce8e9;
-  background: #fff;
-}
-.body-atlas-summary article {
-  min-width: 0;
-  min-height: 94px;
-  padding: 14px 15px;
-  display: grid;
-  align-content: center;
-  gap: 4px;
-  border-right: 1px solid #e4eeee;
-}
-.body-atlas-summary article:last-child {
-  border-right: 0;
-}
-.body-atlas-summary span {
-  color: #486770;
-  font-size: 9px;
-  font-weight: 850;
-}
-.body-atlas-summary strong {
-  color: #123f49;
-  font:
-    900 26px/1 'Bahnschrift',
-    'Microsoft YaHei UI',
-    sans-serif;
-  font-variant-numeric: tabular-nums;
-}
-.body-atlas-summary strong small {
-  margin-left: 3px;
-  color: #486770;
-  font-size: 9px;
-}
-.body-atlas-summary em {
-  color: #486770;
-  font-size: 8px;
-  font-style: normal;
-}
 .body-atlas-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7658,27 +7600,6 @@ p {
   padding: 15px;
   border: 1px solid #dce8e9;
   background: #fff;
-}
-.body-atlas-panel > header {
-  min-height: 42px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #e8efef;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.body-atlas-panel h4 {
-  margin-top: 3px;
-  color: #193f49;
-  font-size: 14px;
-}
-.body-atlas-panel header small {
-  max-width: 155px;
-  color: #486770;
-  font-size: 8px;
-  line-height: 1.45;
-  text-align: right;
 }
 .body-atlas-timeline-panel {
   min-height: 230px;
@@ -7785,6 +7706,181 @@ p {
 }
 .body-composition-simulation-v2 .body-sim-zone {
   fill: rgba(4, 102, 96, 0.54);
+}
+.body-composition-simulation-v3 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.body-composition-main {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+}
+
+/* 左侧人体模拟图 */
+.body-composition-figure-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 8px 0 12px;
+}
+
+.body-composition-figure-panel svg {
+  display: block;
+  width: 190px;
+  height: 320px;
+  overflow: visible;
+}
+
+/* 外层：脂肪组织 */
+.body-sim-shell {
+  fill: rgba(245, 185, 113, 0.2);
+  stroke: rgba(234, 139, 49, 0.75);
+  stroke-width: 2;
+}
+
+/* 内层：去脂组织 */
+.body-sim-core {
+  fill: rgba(74, 181, 173, 0.3);
+  stroke: rgba(8, 118, 111, 0.85);
+  stroke-width: 2;
+}
+
+.body-sim-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgba(28, 48, 58, 0.68);
+}
+
+.body-sim-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.body-sim-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.body-sim-legend-dot.is-lean {
+  background: #08766f;
+}
+
+.body-sim-legend-dot.is-fat {
+  background: #ea8b31;
+}
+
+/* 右侧组成分析 */
+.body-composition-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.body-comp-total span,
+.body-comp-bar-head span,
+.body-comp-muscle span {
+  display: block;
+  font-size: 11px;
+  color: rgba(28, 48, 58, 0.68);
+}
+
+.body-comp-total strong,
+.body-comp-bar-head strong,
+.body-comp-muscle strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #17343f;
+}
+
+.body-comp-bar strong small,
+.body-comp-muscle strong small {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(23, 52, 63, 0.72);
+}
+
+.body-comp-track {
+  height: 7px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(20, 40, 60, 0.08);
+}
+
+.body-comp-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.body-comp-fill.is-lean {
+  background: linear-gradient(90deg, #4ab5ad, #08766f);
+}
+
+.body-comp-fill.is-fat {
+  background: linear-gradient(90deg, #f5b971, #ea8b31);
+}
+
+.body-comp-bar-foot,
+.body-comp-muscle small {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: rgba(28, 48, 58, 0.62);
+}
+
+.body-composition-secondary-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 0;
+}
+
+.body-comp-metric-card {
+  padding: 6px 8px;
+  border: 1px solid rgba(20, 40, 60, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.body-comp-metric-card dt {
+  font-size: 10px;
+  color: rgba(28, 48, 58, 0.72);
+}
+
+.body-comp-metric-card dd {
+  margin: 3px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #17343f;
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+  .body-composition-main {
+    grid-template-columns: 1fr;
+  }
+
+  .body-composition-figure-panel {
+    min-height: 280px;
+  }
+
+  .body-composition-figure-panel svg {
+    width: 180px;
+    height: 300px;
+  }
+
 }
 .body-sim-metric-card rect {
   fill: #f7fbfb;
@@ -7980,24 +8076,12 @@ p {
   .body-atlas-source {
     text-align: left;
   }
-  .body-atlas-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .body-atlas-summary article:nth-child(2) {
-    border-right: 0;
-  }
-  .body-atlas-summary article:nth-child(-n + 2) {
-    border-bottom: 1px solid #e4eeee;
-  }
   .body-atlas-grid {
     grid-template-columns: 1fr;
   }
   .body-atlas-panel {
     min-height: 218px;
     padding: 13px;
-  }
-  .body-atlas-panel > header small {
-    max-width: 118px;
   }
   .body-composition-simulation svg,
   .body-segment-chart svg,
@@ -11539,10 +11623,31 @@ p {
   display: grid;
   gap: 6px;
 }
-.personal-header-metrics article:last-child { border-right: 0; }
-.personal-header-metrics span { color: var(--dossier-label); font-size: 9px; font-weight: 750; white-space: nowrap; }
-.personal-header-metrics strong { color: var(--dossier-value); font: 900 22px/1 "Bahnschrift", "Microsoft YaHei UI", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.personal-header-metrics strong small { margin-left: 4px; color: #b9ded7; font: 700 9px "Microsoft YaHei UI", sans-serif; }
+.personal-header-metrics article:last-child {
+  border-right: 0;
+}
+.personal-header-metrics span {
+  color: var(--dossier-label);
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.personal-header-metrics strong {
+  color: var(--dossier-value);
+  font:
+    900 22px/1 'Bahnschrift',
+    'Microsoft YaHei UI',
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.personal-header-metrics strong small {
+  margin-left: 4px;
+  color: #b9ded7;
+  font:
+    700 9px 'Microsoft YaHei UI',
+    sans-serif;
+}
 .personal-dossier-groups {
   margin-top: 16px;
   display: grid;
@@ -13472,7 +13577,10 @@ p {
   .personal-dossier-identity {
     min-height: 0;
   }
-  .personal-header-metrics { min-width: 0; width: min(420px, 46%); }
+  .personal-header-metrics {
+    min-width: 0;
+    width: min(420px, 46%);
+  }
   .personal-dossier-groups {
     grid-template-columns: 1fr;
   }
@@ -13592,11 +13700,27 @@ p {
     gap: 12px;
     flex-wrap: wrap;
   }
-  .personal-header-metrics { width: 100%; min-width: 0; grid-template-columns: 1fr; border-top: 1px solid var(--dossier-divider); border-left: 0; }
-  .personal-header-metrics article { padding: 11px 0; border-right: 0; border-bottom: 1px solid var(--dossier-divider); }
-  .personal-header-metrics article:last-child { border-bottom: 0; }
-  .personal-header-metrics article:first-child { padding-left: 0; }
-  .personal-header-metrics strong { font-size: 19px; }
+  .personal-header-metrics {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+    border-top: 1px solid var(--dossier-divider);
+    border-left: 0;
+  }
+  .personal-header-metrics article {
+    padding: 11px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--dossier-divider);
+  }
+  .personal-header-metrics article:last-child {
+    border-bottom: 0;
+  }
+  .personal-header-metrics article:first-child {
+    padding-left: 0;
+  }
+  .personal-header-metrics strong {
+    font-size: 19px;
+  }
   .personal-dossier-groups {
     margin-top: 14px;
     gap: 10px;
