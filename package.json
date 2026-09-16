@@ -49,7 +49,10 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
     "playwright-core": "latest",
+    "prettier": "^3.9.6",
     "tsx": "latest",
     "typescript": "^5.9.3",
     "vite": "latest"

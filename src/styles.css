@@ -25,6 +25,7 @@
 .personal-wellness-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .personal-wellness-card > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .personal-wellness-card h3 { margin: 0; font-size: 17px; }
+.personal-wellness-card > .app-echart { --chart-height: 220px; margin-top: 10px; }
 .personal-trend-points { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; margin-top: 14px; }
 .personal-trend-points > div { display: grid; gap: 4px; padding: 8px; border-radius: 8px; background: #f4f7f7; }
 .personal-trend-points span, .personal-trend-points small, .personal-special-test-list span, .personal-special-test-list small, .personal-comparison-grid small, .personal-comparison-grid em { color: #68757a; font-size: 12px; font-style: normal; }

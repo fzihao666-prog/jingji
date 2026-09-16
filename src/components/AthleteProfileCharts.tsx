@@ -299,10 +299,6 @@ export function BodyCompositionModelOverview({ profiles, individual }: BodyCompo
     const value = activeProfile[id as keyof BodyCompositionProfile];
     return { id, label, value: typeof value === 'number' ? value : null };
   });
-  const history = [...activeProfile.bodyCompositionHistory]
-    .filter((record) => record.measurementDate <= (activeProfile.bodyMeasurementDate || '9999-12-31'))
-    .sort((a, b) => a.measurementDate.localeCompare(b.measurementDate));
-
   return (
     <div className="body-composition-atlas" aria-label="运动员身体成分结构报告">
       <header className="body-atlas-toolbar">
@@ -320,7 +316,6 @@ export function BodyCompositionModelOverview({ profiles, individual }: BodyCompo
         <section className="body-atlas-panel body-simulation-panel"><header><div><span>01 / COMPOSITION SIMULATION</span><h3>身体成分模拟图</h3></div><small>数据卡为真实采集或明确计算值</small></header>{activeProfile.weightKg !== null && fatMass !== null && fatFreeMass !== null ? <><BodyCompositionSimulation profile={activeProfile} total={activeProfile.weightKg} fatMass={fatMass} fatFreeMass={fatFreeMass} segments={segments} /><dl className="body-composition-mobile-segment-status">{segments.map((segment) => <div key={segment.id}><dt>{segment.label}<small>实测节段去脂量</small></dt><dd>{segment.value === null ? '—' : `${formatNumber(segment.value, 1)} kg`}<small>{segment.value === null ? '未采集' : '实测'}</small></dd></div>)}</dl></> : <BodyAtlasEmpty detail="需同时录入体重与体脂率后生成成分分层模拟。" />}</section>
         <section className="body-atlas-panel"><header><div><span>02 / SEGMENTAL LEAN</span><h3>节段去脂量</h3></div><small>仅展示已采集的节段实测</small></header><SegmentalLeanBalance segments={segments} /></section>
       </div>
-      <section className="body-atlas-panel body-atlas-timeline-panel"><header><div><span>03 / RE-TEST</span><h3>复测轨迹</h3></div><small>按测量日期排列，不以训练日补点</small></header><BodyCompositionTimeline records={history} /></section>
       <p className="body-atlas-note">体重、骨骼肌量、体脂率与节段去脂量为原始采集字段；脂肪量与去脂体重仅在体重、体脂率齐全时按公式计算。该视图不提供医学判断或训练建议。</p>
     </div>
   );

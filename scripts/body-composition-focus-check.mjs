@@ -22,9 +22,8 @@ assert(model.includes("label: '肌肉量'"), '模拟图必须复用已有肌肉�
 assert(model.includes("label: '基础代谢'"), '模拟图必须复用已有基础代谢实测字段');
 assert(model.includes("label: '内脏脂肪等级'"), '模拟图必须复用已有内脏脂肪实测字段');
 assert(model.includes('SegmentalLeanBalance'), '新版必须包含节段去脂量平衡图');
-assert(model.includes('BodyCompositionTimeline'), '新版必须包含真实复测轨迹');
+assert(!model.includes('03 / RE-TEST'), '身体成分模块不应保留复测轨迹卡片');
 assert(model.includes('body-chart-mobile-list'), '窄屏必须有可读的同数据文本布局');
-assert(model.includes('body-timeline-details'), '复测轨迹必须提供逐次明细');
 assert(!model.includes('HumanModel'), '不得保留旧人体模拟图');
 assert(!model.includes('seeded('), '不得生成伪造的身体成分数据');
 assert(!model.includes('本期模拟'), '缺失数据不得显示模拟值');
