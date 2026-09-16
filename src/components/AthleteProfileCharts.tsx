@@ -758,16 +758,6 @@ export function BodyCompositionModelOverview({
       : null;
   const fatFreeMass =
     activeProfile.weightKg !== null && fatMass !== null ? activeProfile.weightKg - fatMass : null;
-  const segments: SegmentMeasure[] = [
-    ['leftArmLeanKg', '左上肢'],
-    ['rightArmLeanKg', '右上肢'],
-    ['trunkLeanKg', '躯干'],
-    ['leftLegLeanKg', '左下肢'],
-    ['rightLegLeanKg', '右下肢'],
-  ].map(([id, label]) => {
-    const value = activeProfile[id as keyof BodyCompositionProfile];
-    return { id, label, value: typeof value === 'number' ? value : null };
-  });
   return (
     <div className="body-composition-atlas" aria-label="运动员身体成分结构报告">
       {!individual && (
@@ -787,22 +777,6 @@ export function BodyCompositionModelOverview({
           </label>
         </header>
       )}
-      <section className="body-atlas-summary" aria-label="核心身体成分指标">
-        <AtlasMetric label="体重" value={activeProfile.weightKg} unit="kg" source="实测" />
-        <AtlasMetric
-          label="骨骼肌量"
-          value={activeProfile.skeletalMuscleKg}
-          unit="kg"
-          source="实测"
-        />
-        <AtlasMetric label="体脂率" value={activeProfile.bodyFatPct} unit="%" source="实测" />
-        <AtlasMetric
-          label="去脂体重"
-          value={fatFreeMass}
-          unit="kg"
-          source={fatFreeMass === null ? null : '计算'}
-        />
-      </section>
       <div className="body-atlas-grid">
         <section className="body-atlas-panel body-simulation-panel">
           <header>
@@ -819,40 +793,31 @@ export function BodyCompositionModelOverview({
                 total={activeProfile.weightKg}
                 fatMass={fatMass}
                 fatFreeMass={fatFreeMass}
-                segments={segments}
               />
-              <dl className="body-composition-mobile-segment-status">
-                {segments.map((segment) => (
-                  <div key={segment.id}>
-                    <dt>
-                      {segment.label}
-                      <small>实测节段去脂量</small>
-                    </dt>
-                    <dd>
-                      {segment.value === null ? '—' : `${formatNumber(segment.value, 1)} kg`}
-                      <small>{segment.value === null ? '未采集' : '实测'}</small>
-                    </dd>
-                  </div>
-                ))}
-              </dl>
             </>
           ) : (
             <BodyAtlasEmpty detail="需同时录入体重与体脂率后生成成分分层模拟。" />
           )}
         </section>
-        <section className="body-atlas-panel">
-          <header>
-            <div>
-              <span>02 / SEGMENTAL LEAN</span>
-              <h4>节段去脂量</h4>
-            </div>
-            <small>仅展示已采集的节段实测</small>
-          </header>
-          <SegmentalLeanBalance segments={segments} />
-        </section>
       </div>
+      <section className="body-atlas-summary" aria-label="核心身体成分指标">
+        <AtlasMetric label="体重" value={activeProfile.weightKg} unit="kg" source="实测" />
+        <AtlasMetric
+          label="骨骼肌量"
+          value={activeProfile.skeletalMuscleKg}
+          unit="kg"
+          source="实测"
+        />
+        <AtlasMetric label="体脂率" value={activeProfile.bodyFatPct} unit="%" source="实测" />
+        <AtlasMetric
+          label="去脂体重"
+          value={fatFreeMass}
+          unit="kg"
+          source={fatFreeMass === null ? null : '计算'}
+        />
+      </section>
       <p className="body-atlas-note">
-        体重、骨骼肌量、体脂率与节段去脂量为原始采集字段；脂肪量与去脂体重仅在体重、体脂率齐全时按公式计算。该视图不提供医学判断或训练建议。
+        体重、骨骼肌量与体脂率为原始采集字段；脂肪量与去脂体重仅在体重、体脂率齐全时按公式计算。该视图不提供医学判断或训练建议。
       </p>
     </div>
   );
@@ -1053,25 +1018,30 @@ type CompositionMetric = {
 };
 type MeasuredCompositionMetric = CompositionMetric & { value: number };
 
+type BodyCompositionSimulationDesktopProps = {
+  profile: BodyCompositionProfile;
+  total: number;
+  fatMass: number;
+  fatFreeMass: number;
+};
+
 function BodyCompositionSimulationDesktop({
   profile,
   total,
   fatMass,
   fatFreeMass,
-  segments,
-}: {
-  profile: BodyCompositionProfile;
-  total: number;
-  fatMass: number;
-  fatFreeMass: number;
-  segments: SegmentMeasure[];
-}) {
-  const ratio = scaleLinear().domain([0, total]).range([0, 1]).clamp(true);
-  const fatRatio = ratio(fatMass);
-  const fatFreeRatio = ratio(fatFreeMass);
+}: BodyCompositionSimulationDesktopProps) {
+  const fatRatio = total > 0 ? fatMass / total : 0;
+  const fatFreeRatio = total > 0 ? fatFreeMass / total : 0;
+
+  const fatPercent = fatRatio * 100;
+  const fatFreePercent = fatFreeRatio * 100;
+
+  const skeletalMusclePercent =
+    total > 0 && profile.skeletalMuscleKg !== null
+      ? (profile.skeletalMuscleKg / total) * 100
+      : null;
   const bmi = profile.heightCm === null ? null : total / (profile.heightCm / 100) ** 2;
-  const outerScale = 0.9 + fatRatio * 0.24;
-  const coreScale = 0.76 + fatFreeRatio * 0.16;
   const leftMetrics: MeasuredCompositionMetric[] = [
     { id: 'weight', label: '体重', value: total, unit: 'kg', source: '实测', emphasis: 'primary' },
     { id: 'bmi', label: 'BMI', value: bmi, unit: '', source: '计算', emphasis: 'secondary' },
@@ -1134,14 +1104,6 @@ function BodyCompositionSimulationDesktop({
       emphasis: 'secondary',
     },
   ].filter((metric): metric is MeasuredCompositionMetric => metric.value !== null);
-  const segmentValue = (id: string) => segments.find((segment) => segment.id === id)?.value ?? null;
-  const segmentCallouts = [
-    { id: 'leftArmLeanKg', label: '左上肢', x: 225, y: 170, endX: 326, anchor: 'end' as const },
-    { id: 'rightArmLeanKg', label: '右上肢', x: 595, y: 170, endX: 494, anchor: 'start' as const },
-    { id: 'trunkLeanKg', label: '躯干', x: 595, y: 246, endX: 476, anchor: 'start' as const },
-    { id: 'leftLegLeanKg', label: '左下肢', x: 225, y: 365, endX: 356, anchor: 'end' as const },
-    { id: 'rightLegLeanKg', label: '右下肢', x: 595, y: 396, endX: 464, anchor: 'start' as const },
-  ];
   const cardY = scaleBand<string>()
     .domain(['0', '1', '2', '3', '4'])
     .range([62, 416])
@@ -1180,7 +1142,7 @@ function BodyCompositionSimulationDesktop({
       <svg
         viewBox="0 0 820 490"
         role="img"
-        aria-label={`身体成分模拟图：${allMetrics.map((metric) => `${metric.label}${formatNumber(metric.value, 1)}${metric.unit}`).join('，')}；${segments.map((segment) => `${segment.label}${segment.value === null ? '未采集' : `${formatNumber(segment.value, 1)}千克`}`).join('，')}`}
+        aria-label={`身体成分模拟图：${allMetrics.map((metric) => `${metric.label}${formatNumber(metric.value, 1)}${metric.unit}`).join('，')}`}
       >
         <title>运动员身体成分模拟图</title>
         <defs>
@@ -1224,62 +1186,10 @@ function BodyCompositionSimulationDesktop({
             <use href="#body-sim-athlete" />
           </g>
         </g>
-        <g className="body-sim-zone-layer">
-          <path
-            className={
-              segmentValue('trunkLeanKg') === null ? 'body-sim-zone is-missing' : 'body-sim-zone'
-            }
-            d="M386 148 C355 156 347 183 355 232 L367 278 C373 301 387 312 410 313 C433 312 447 301 453 278 L465 232 C473 183 465 156 434 148 Z"
-          />
-          <path
-            className={
-              segmentValue('leftArmLeanKg') === null ? 'body-sim-zone is-missing' : 'body-sim-zone'
-            }
-            d="M365 158 C339 174 330 202 336 237 L344 278 C347 294 365 294 367 278 L370 221 L390 169 Z"
-          />
-          <path
-            className={
-              segmentValue('rightArmLeanKg') === null ? 'body-sim-zone is-missing' : 'body-sim-zone'
-            }
-            d="M455 158 C481 174 490 202 484 237 L476 278 C473 294 455 294 453 278 L450 221 L430 169 Z"
-          />
-          <path
-            className={
-              segmentValue('leftLegLeanKg') === null ? 'body-sim-zone is-missing' : 'body-sim-zone'
-            }
-            d="M378 308 C371 348 370 407 376 452 L397 452 L406 335 L405 313 Z M376 452 L364 466 L399 466 L401 452 Z"
-          />
-          <path
-            className={
-              segmentValue('rightLegLeanKg') === null ? 'body-sim-zone is-missing' : 'body-sim-zone'
-            }
-            d="M442 308 C449 348 450 407 444 452 L423 452 L414 335 L415 313 Z M444 452 L456 466 L421 466 L419 452 Z"
-          />
-        </g>
         {leftMetrics.map((metric, index) => renderMetric(metric, 'left', index))}
         {rightMetrics.map((metric, index) => renderMetric(metric, 'right', index))}
-        {segmentCallouts.map((callout) => {
-          const value = segmentValue(callout.id);
-          return (
-            <g className="body-segment-callout body-sim-callout-v2" key={callout.id}>
-              <circle cx={callout.endX} cy={callout.y} r="3" />
-              <line x1={callout.x} x2={callout.endX} y1={callout.y} y2={callout.y} />
-              <text x={callout.x} y={callout.y - 6} textAnchor={callout.anchor}>
-                {callout.label}
-              </text>
-              <text
-                x={callout.x}
-                y={callout.y + 12}
-                textAnchor={callout.anchor}
-                className={value === null ? 'body-chart-missing' : 'body-chart-value'}
-              >
-                {value === null ? '未采集' : `${formatNumber(value, 1)} kg`}
-              </text>
-            </g>
-          );
-        })}
         <text x="410" y="486" textAnchor="middle" className="body-chart-label">
-          分段指标为已采集的节段去脂量；人体轮廓仅作为数据定位示意
+          人体轮廓仅作为身体成分数据的定位示意
         </text>
       </svg>
       <dl className="body-chart-mobile-list">
@@ -1294,19 +1204,6 @@ function BodyCompositionSimulationDesktop({
             </dd>
           </div>
         ))}
-        {segments
-          .filter(
-            (segment): segment is SegmentMeasure & { value: number } => segment.value !== null
-          )
-          .map((segment) => (
-            <div key={segment.id}>
-              <dt>
-                {segment.label}
-                <small>实测节段去脂量</small>
-              </dt>
-              <dd>{formatNumber(segment.value, 1)} kg</dd>
-            </div>
-          ))}
       </dl>
     </div>
   );
@@ -1317,20 +1214,31 @@ function BodyCompositionSimulation({
   total,
   fatMass,
   fatFreeMass,
-  segments,
 }: {
   profile: BodyCompositionProfile;
   total: number;
   fatMass: number;
   fatFreeMass: number;
-  segments: SegmentMeasure[];
 }) {
   const bmi = profile.heightCm === null ? null : total / (profile.heightCm / 100) ** 2;
-  const metrics = [
-    { id: 'weight', label: '体重', value: total, unit: 'kg', source: '实测' },
-    { id: 'bmi', label: 'BMI', value: bmi, unit: '', source: '计算' },
-    { id: 'bodyFat', label: '体脂率', value: profile.bodyFatPct, unit: '%', source: '实测' },
-    { id: 'fatFreeMass', label: '去脂体重', value: fatFreeMass, unit: 'kg', source: '计算' },
+
+  const fatPercent = total > 0 ? (fatMass / total) * 100 : null;
+
+  const fatFreePercent = total > 0 ? (fatFreeMass / total) * 100 : null;
+
+  const skeletalMusclePercent =
+    total > 0 && profile.skeletalMuscleKg !== null
+      ? (profile.skeletalMuscleKg / total) * 100
+      : null;
+
+  const secondaryMetrics = [
+    {
+      id: 'bmi',
+      label: 'BMI',
+      value: bmi,
+      unit: '',
+      source: '计算',
+    },
     {
       id: 'totalBodyWater',
       label: '体水分',
@@ -1338,11 +1246,10 @@ function BodyCompositionSimulation({
       unit: 'kg',
       source: '实测',
     },
-    { id: 'muscleMass', label: '肌肉量', value: profile.muscleMassKg, unit: 'kg', source: '实测' },
     {
-      id: 'skeletalMuscle',
-      label: '骨骼肌量',
-      value: profile.skeletalMuscleKg,
+      id: 'muscleMass',
+      label: '肌肉量',
+      value: profile.muscleMassKg,
       unit: 'kg',
       source: '实测',
     },
@@ -1363,41 +1270,35 @@ function BodyCompositionSimulation({
   ].filter(
     (
       metric
-    ): metric is { id: string; label: string; value: number; unit: string; source: string } =>
-      metric.value !== null
+    ): metric is {
+      id: string;
+      label: string;
+      value: number;
+      unit: string;
+      source: string;
+    } => metric.value !== null
   );
+
   return (
     <div className="body-composition-simulation-shell">
-      <div className="body-composition-simulation-desktop">
-        <BodyCompositionSimulationDesktop
-          profile={profile}
-          total={total}
-          fatMass={fatMass}
-          fatFreeMass={fatFreeMass}
-          segments={segments}
-        />
-      </div>
+      <BodyCompositionSimulationDesktop
+        profile={profile}
+        total={total}
+        fatMass={fatMass}
+        fatFreeMass={fatFreeMass}
+      />
+
       <dl className="body-composition-mobile-summary">
-        {metrics.map((metric) => (
+        {secondaryMetrics.map((metric) => (
           <div key={metric.id}>
             <dt>
               {metric.label}
               <small>{metric.source}</small>
             </dt>
+
             <dd>
-              {formatNumber(metric.value, 1)} {metric.unit}
-            </dd>
-          </div>
-        ))}
-        {segments.map((segment) => (
-          <div key={segment.id}>
-            <dt>
-              {segment.label}
-              <small>实测节段去脂量</small>
-            </dt>
-            <dd>
-              {segment.value === null ? '—' : `${formatNumber(segment.value, 1)} kg`}
-              <small>{segment.value === null ? '未采集' : '实测'}</small>
+              {formatNumber(metric.value, 1)}
+              {metric.unit && ` ${metric.unit}`}
             </dd>
           </div>
         ))}

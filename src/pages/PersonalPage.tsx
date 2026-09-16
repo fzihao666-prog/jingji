@@ -1,4 +1,4 @@
-import { Activity, BrainCircuit, CalendarRange, Save, Search, Trophy } from 'lucide-react';
+import { CalendarRange, Save, Search, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
@@ -605,7 +605,6 @@ export function PersonalPage(props: Props) {
               <AppCard variant="chart" className="professional-panel body-composition-profile-card">
                 <header className="personal-analysis-card-heading">
                   <div>
-                    <Activity size={17} />
                     <span>
                       <small>BODY COMPOSITION</small>
                       <h3>身体成分</h3>
@@ -639,7 +638,6 @@ export function PersonalPage(props: Props) {
               >
                 <header className="personal-analysis-card-heading">
                   <div>
-                    <BrainCircuit size={17} />
                     <span>
                       <small>FMS SCREENING</small>
                       <h3>（FMS）功能动作筛查</h3>
