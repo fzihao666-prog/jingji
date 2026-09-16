@@ -16,6 +16,11 @@ assert(model.includes('BodyCompositionSimulation'), '新版必须包含全新的
 assert(model.includes('body-sim-silhouette'), '模拟图必须包含完整人体轮廓，而非抽象色块');
 assert(model.includes('body-sim-zone'), '人体模拟图必须拆分为可监测的身体分区');
 assert(model.includes('body-segment-callout'), '每个身体监测分区必须有直接数值标注');
+assert(model.includes('body-sim-metric-card'), '模拟图必须以左右数据卡呈现核心身体成分指标');
+assert(model.includes("label: 'BMI'"), '模拟图必须在身高齐全时展示计算 BMI');
+assert(model.includes("label: '肌肉量'"), '模拟图必须复用已有肌肉量实测字段');
+assert(model.includes("label: '基础代谢'"), '模拟图必须复用已有基础代谢实测字段');
+assert(model.includes("label: '内脏脂肪等级'"), '模拟图必须复用已有内脏脂肪实测字段');
 assert(model.includes('SegmentalLeanBalance'), '新版必须包含节段去脂量平衡图');
 assert(model.includes('BodyCompositionTimeline'), '新版必须包含真实复测轨迹');
 assert(model.includes('body-chart-mobile-list'), '窄屏必须有可读的同数据文本布局');
