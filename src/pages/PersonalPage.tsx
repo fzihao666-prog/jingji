@@ -665,39 +665,10 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
             <small>{trend.unit || '主观评分'}</small>
           </header>
           {trend.points.some((point) => point.personalValue !== null) ? (
-            <>
-              <EChart
-                option={wellnessTrendOption(trend)}
-                label={`${trend.label}个人变化趋势，共 ${trend.points.filter((point) => point.personalValue !== null).length} 个有效记录；缺失日期不连线、不以零补齐。`}
-              />
-              <details>
-                <summary>查看趋势数据表</summary>
-                <table>
-                  <caption>{trend.label}个人日报变化</caption>
-                  <thead>
-                    <tr>
-                      <th>日期</th>
-                      <th>
-                        {trend.label}
-                        {trend.unit ? ` (${trend.unit})` : ''}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trend.points.map((point) => (
-                      <tr key={point.date}>
-                        <td>{point.date}</td>
-                        <td>
-                          {point.personalValue === null
-                            ? '—'
-                            : formatNumber(point.personalValue, 1)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </details>
-            </>
+            <EChart
+              option={wellnessTrendOption(trend)}
+              label={`${trend.label}个人变化趋势，共 ${trend.points.filter((point) => point.personalValue !== null).length} 个有效记录；缺失日期不连线、不以零补齐。`}
+            />
           ) : (
             <p>暂无数据</p>
           )}
