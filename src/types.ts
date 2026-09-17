@@ -8,6 +8,7 @@ import type {
 } from '../shared/strength-training';
 import type { Project } from '../shared/projects';
 import type { ChampionModelStandardType } from '../shared/champion-model';
+import type { RadarDirection, RadarDimensionDefinition } from '../shared/athlete-radar-model';
 
 export type { AreaLevel, Role };
 export type { Project };
@@ -567,6 +568,36 @@ export type OverviewMeasurement = {
   source: string;
   sampleCount: number;
   isDemo: boolean;
+};
+
+export type AthleteRadarReferenceSource = {
+  name: string;
+  url: string;
+  year: number;
+  protocol: string;
+};
+
+export type AthleteRadarDimension = {
+  key: RadarDimensionDefinition['key'];
+  label: string;
+  unit: string;
+  direction: RadarDirection;
+  currentValue: number | null;
+  referenceValue: number | null;
+  achievedPercent: number | null;
+  signedDifference: number | null;
+  status: 'ready' | 'measurement_pending' | 'reference_pending';
+  source: AthleteRadarReferenceSource | null;
+};
+
+export type AthleteRadarModel = {
+  kind: 'special' | 'physical';
+  dimensions: AthleteRadarDimension[];
+};
+
+export type AthleteRadarModelsPayload = {
+  special: AthleteRadarModel;
+  physical: AthleteRadarModel;
 };
 
 export type ChampionBenchmarkRow = {

@@ -66,6 +66,120 @@ try {
     adminLogin.status === 200 && adminToken && adminLogin.payload.user.role === 'DMD',
     '数据监控总监登录或角色迁移失败'
   );
+  const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
+  const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find(
+    (item) => item.project === 'ROWING'
+  );
+  const rowingRadarResult = await request(
+    `/api/athletes/${analysisAthlete.id}/radar-models?from=2026-06-01&to=2026-12-31`,
+    {},
+    adminToken
+  );
+  assert(
+    rowingRadarResult.status === 200 &&
+      rowingRadarResult.payload.special?.dimensions?.length === 5 &&
+      rowingRadarResult.payload.physical?.dimensions?.length === 6,
+    '赛艇个人雷达接口或维度数量错误'
+  );
+  const rowingRadarDimensions = [
+    ...(rowingRadarResult.payload.special?.dimensions || []),
+    ...(rowingRadarResult.payload.physical?.dimensions || []),
+  ];
+  assert(
+    rowingRadarDimensions.every(
+      (dimension) =>
+        dimension.currentValue === null &&
+        dimension.referenceValue === null &&
+        dimension.source === null &&
+        dimension.status !== 'ready'
+    ),
+    '无正式参考来源时赛艇个人雷达不得伪造参考值或 ready 状态'
+  );
+
+  const nonRowingAthlete = adminAthletesForAnalysis.payload.athletes.find(
+    (item) => item.project !== 'ROWING'
+  );
+  const nonRowingRadarResult = await request(
+    `/api/athletes/${nonRowingAthlete.id}/radar-models?from=2026-06-01&to=2026-12-31`,
+    {},
+    adminToken
+  );
+  const invalidRadarDateResult = await request(
+    `/api/athletes/${analysisAthlete.id}/radar-models?from=2026-12-31&to=2026-06-01`,
+    {},
+    adminToken
+  );
+  const extraRadarQueryResult = await request(
+    `/api/athletes/${analysisAthlete.id}/radar-models?from=2026-06-01&to=2026-12-31&extra=1`,
+    {},
+    adminToken
+  );
+  const arrayRadarDateResult = await request(
+    `/api/athletes/${analysisAthlete.id}/radar-models?from=2026-06-01&from=2026-07-01&to=2026-12-31`,
+    {},
+    adminToken
+  );
+  assert(
+    nonRowingRadarResult.status === 400 &&
+      invalidRadarDateResult.status === 400 &&
+      extraRadarQueryResult.status === 400 &&
+      arrayRadarDateResult.status === 400,
+    '赛艇个人雷达接口未拒绝非赛艇运动员、非法日期或额外查询参数'
+  );
+  const saveRadarBodyWeight = await request(
+    `/api/athletes/${analysisAthlete.id}/body-composition`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ measurementDate: '2026-09-01', weightKg: 80 }),
+    },
+    adminToken
+  );
+  const saveRadarPhysicalMeasurements = await request(
+    '/api/strength-tests',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        athleteId: analysisAthlete.id,
+        testDate: '2026-09-01',
+        metrics: {
+          squatKg: 120,
+          benchPullKg: 88,
+          highPullKg: 72,
+          verticalJumpCm: 54,
+          benchPull2MinReps: 66,
+          frontPlankSec: 210,
+        },
+        targets: {},
+        notes: '赛艇雷达接口检查',
+      }),
+    },
+    adminToken
+  );
+  const radarWithMeasurements = await request(
+    `/api/athletes/${analysisAthlete.id}/radar-models?from=2026-06-01&to=2026-12-31`,
+    {},
+    adminToken
+  );
+  const physicalCurrentValues = Object.fromEntries(
+    radarWithMeasurements.payload.physical.dimensions.map((dimension) => [
+      dimension.key,
+      dimension.currentValue,
+    ])
+  );
+  assert(
+    saveRadarBodyWeight.status === 200 &&
+      saveRadarPhysicalMeasurements.status === 200 &&
+      physicalCurrentValues.relative_squat === 1.5 &&
+      physicalCurrentValues.relative_bench_pull === 1.1 &&
+      physicalCurrentValues.relative_high_pull === 0.9 &&
+      physicalCurrentValues.vertical_jump === 54 &&
+      physicalCurrentValues.bench_pull_2min === 66 &&
+      physicalCurrentValues.front_plank === 210 &&
+      radarWithMeasurements.payload.physical.dimensions.every(
+        (dimension) => dimension.status === 'reference_pending'
+      ),
+    '赛艇体能雷达未按最新真实测试和此前有效体重计算当前值'
+  );
   const unifiedExport = await fetch(
     `${base}/api/data-import/export?project=${encodeURIComponent('赛艇')}`,
     {
@@ -80,10 +194,6 @@ try {
     '统一数据导出接口失败'
   );
 
-  const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
-  const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find(
-    (item) => item.project === '赛艇'
-  );
   const forbiddenAdminIndividualOverview = await request(
     `/api/overview?from=2020-01-01&to=2100-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,
     {},

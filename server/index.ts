@@ -3,6 +3,7 @@ import multer from 'multer';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
+import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -49,6 +50,11 @@ import {
 } from '../shared/training-intensity.ts';
 import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../shared/strength-model.ts';
+import {
+  ROWING_RADAR_DIMENSIONS,
+  buildRadarComparison,
+  type RadarDimensionDefinition,
+} from '../shared/athlete-radar-model.ts';
 import {
   STRENGTH_BODY_POSITIONS,
   STRENGTH_INTENSITY_ZONES,
@@ -6187,6 +6193,239 @@ app.get('/api/athletes/:id/profile-comparison', requireAuth, (req, res) => {
   const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
   if (!scope) return res.status(403).json({ message: '无权查看该运动员团队比较。' });
   res.json(buildProfileComparison(scope));
+});
+
+const radarMeasurementCodes = [
+  'erg_2k_sec',
+  'erg_5000_sec',
+  'erg_5k_sec',
+  'erg_30min_20spm_split_sec',
+  'erg_peak_power_w',
+  'seven_stroke_power_w',
+  'squat_kg',
+  'bench_pull_kg',
+  'clean_kg',
+  'high_pull_kg',
+  'vertical_jump_cm',
+  'bench_pull_2min_reps',
+  'bench_pull2_min_reps',
+  'front_plank_sec',
+] as const;
+
+const radarMetricAliases: Partial<
+  Record<RadarDimensionDefinition['key'], readonly (typeof radarMeasurementCodes)[number][]>
+> = {
+  rowing_erg_2000_time: ['erg_2k_sec'],
+  rowing_erg_5000_time: ['erg_5000_sec', 'erg_5k_sec'],
+  rowing_erg_30min_20spm_split: ['erg_30min_20spm_split_sec'],
+  rowing_erg_peak_power: ['erg_peak_power_w', 'seven_stroke_power_w'],
+  relative_squat: ['squat_kg'],
+  relative_bench_pull: ['bench_pull_kg'],
+  relative_high_pull: ['clean_kg', 'high_pull_kg'],
+  vertical_jump: ['vertical_jump_cm'],
+  bench_pull_2min: ['bench_pull_2min_reps', 'bench_pull2_min_reps'],
+  front_plank: ['front_plank_sec'],
+};
+
+type RadarMeasurementRow = {
+  code: (typeof radarMeasurementCodes)[number];
+  value: number;
+  testDate: string;
+};
+
+type RadarReferenceRow = {
+  value: number;
+  name: string;
+  url: string;
+  year: number;
+  protocol: string;
+  verifiedAt: string;
+};
+
+const radarModelDateSchema = z.string().trim().pipe(z.iso.date());
+const radarModelQuerySchema = z.strictObject({
+  from: radarModelDateSchema,
+  to: radarModelDateSchema,
+});
+const radarModelRequestSchema = z
+  .strictObject({
+    id: z
+      .string()
+      .regex(/^\d{1,10}$/)
+      .transform(Number)
+      .refine((value) => Number.isSafeInteger(value) && value > 0),
+    from: radarModelDateSchema,
+    to: radarModelDateSchema,
+  })
+  .refine(({ from, to }) => from <= to, { path: ['to'] });
+
+function firstRadarMeasurement(
+  rows: Map<string, RadarMeasurementRow>,
+  key: RadarDimensionDefinition['key']
+) {
+  const aliases = radarMetricAliases[key] || [];
+  for (const code of aliases) {
+    const row = rows.get(code);
+    if (row) return row;
+  }
+  return null;
+}
+
+function verifiedRadarSource(row: RadarReferenceRow | undefined) {
+  if (!row || !row.name.trim() || !row.protocol.trim() || !row.verifiedAt.trim() || row.year <= 0)
+    return null;
+  try {
+    const url = new URL(row.url);
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !url.hostname) return null;
+  } catch {
+    return null;
+  }
+  return { name: row.name, url: row.url, year: row.year, protocol: row.protocol };
+}
+
+app.get('/api/athletes/:id/radar-models', requireAuth, (req, res) => {
+  const user = req.authUser!;
+  const parsedQuery = radarModelQuerySchema.safeParse(req.query);
+  if (!parsedQuery.success) {
+    return res.status(400).json({ message: '请选择有效运动员和日期范围。' });
+  }
+  const parsedRequest = radarModelRequestSchema.safeParse({
+    id: req.params.id,
+    ...parsedQuery.data,
+  });
+  if (!parsedRequest.success) {
+    return res.status(400).json({ message: '请选择有效运动员和日期范围。' });
+  }
+  const { id: athleteId, from, to } = parsedRequest.data;
+  if (!hasAthleteAccess(user, athleteId)) {
+    return res.status(403).json({ message: '无权查看该运动员雷达模型。' });
+  }
+  const athlete = db
+    .prepare(
+      `
+      SELECT a.project, a.gender, COALESCE(ap.current_event, '') AS currentEvent
+      FROM athletes a
+      LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
+      WHERE a.id = ? AND a.active = 1
+    `
+    )
+    .get(athleteId) as { project: string; gender: string | null; currentEvent: string } | undefined;
+  if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+  if (athlete.project !== 'ROWING') {
+    return res.status(400).json({ message: '该项目的雷达维度尚未配置。' });
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  const metricPlaceholders = radarMeasurementCodes.map(() => '?').join(',');
+  const measurementRows = db
+    .prepare(
+      `
+      SELECT tm.metric_code AS code, tm.value_num AS value, ts.test_date AS testDate
+      FROM test_sessions ts
+      JOIN test_measurements tm ON tm.test_session_id = ts.id
+      WHERE ts.athlete_id = ? AND ts.test_date BETWEEN ? AND ?
+        AND tm.metric_code IN (${metricPlaceholders})
+        AND ts.quality = 'valid' AND tm.quality = 'valid'
+        AND ts.is_demo = 0 AND tm.is_demo = 0
+        AND tm.value_num > 0
+        AND trim(ts.source) <> '' AND trim(tm.source) <> ''
+        AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
+        AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
+        AND lower(ts.source) NOT LIKE '%estimated%' AND lower(tm.source) NOT LIKE '%estimated%'
+      ORDER BY ts.test_date DESC, ts.id DESC, tm.id DESC
+    `
+    )
+    .all(athleteId, from, to, ...radarMeasurementCodes) as RadarMeasurementRow[];
+  const latestMeasurements = new Map<string, RadarMeasurementRow>();
+  for (const row of measurementRows) {
+    if (!latestMeasurements.has(row.code)) latestMeasurements.set(row.code, row);
+  }
+
+  const weightStatement = db.prepare(`
+    SELECT weight_kg AS weight
+    FROM athlete_body_measurements
+    WHERE athlete_id = ? AND measurement_date <= ?
+      AND weight_kg > 0 AND quality = 'valid' AND is_demo = 0
+      AND trim(source) <> ''
+      AND lower(source) NOT LIKE '%demo%'
+      AND lower(source) NOT LIKE '%seed%'
+      AND lower(source) NOT LIKE '%estimated%'
+    ORDER BY measurement_date DESC, id DESC
+    LIMIT 1
+  `);
+  const referenceStatement = db.prepare(`
+    SELECT rv.value_num AS value, rs.name, rs.url, rs.source_year AS year,
+      rs.protocol, rs.verified_at AS verifiedAt
+    FROM radar_reference_values rv
+    JOIN radar_reference_sources rs ON rs.id = rv.source_id
+    WHERE rv.project = 'ROWING' AND rv.radar_kind = ? AND rv.metric_key = ?
+      AND rv.gender = ? AND rv.unit = ? AND rv.active = 1 AND rs.active = 1
+      AND trim(rs.name) <> '' AND trim(rs.protocol) <> '' AND trim(rs.verified_at) <> ''
+      AND rs.source_year > 0 AND (rs.url LIKE 'https://%' OR rs.url LIKE 'http://%')
+      AND (
+        rv.metric_key <> 'rowing_on_water_time'
+        OR (? <> '' AND (rv.boat_class = ? OR rv.applicability = ?))
+      )
+    ORDER BY rv.updated_at DESC, rv.id DESC
+    LIMIT 1
+  `);
+  const gender = athlete.gender?.includes('女')
+    ? '女'
+    : athlete.gender?.includes('男')
+      ? '男'
+      : null;
+
+  const buildModel = (kind: 'special' | 'physical') => ({
+    kind,
+    dimensions: ROWING_RADAR_DIMENSIONS[kind].map((definition) => {
+      const measurement = firstRadarMeasurement(latestMeasurements, definition.key);
+      let currentValue: number | null = measurement?.value ?? null;
+      if (
+        measurement &&
+        (definition.key === 'relative_squat' ||
+          definition.key === 'relative_bench_pull' ||
+          definition.key === 'relative_high_pull')
+      ) {
+        const body = weightStatement.get(athleteId, measurement.testDate) as
+          { weight: number } | undefined;
+        currentValue = body?.weight
+          ? Math.round((measurement.value / body.weight) * 100) / 100
+          : null;
+      }
+
+      const reference = gender
+        ? (referenceStatement.get(
+            kind,
+            definition.key,
+            gender,
+            definition.unit,
+            athlete.currentEvent,
+            athlete.currentEvent,
+            athlete.currentEvent
+          ) as RadarReferenceRow | undefined)
+        : undefined;
+      const source = verifiedRadarSource(reference);
+      const referenceValue =
+        source && reference && Number.isFinite(reference.value) ? reference.value : null;
+      const comparison = buildRadarComparison(definition.direction, currentValue, referenceValue);
+      return {
+        ...definition,
+        currentValue,
+        referenceValue,
+        achievedPercent: comparison.achievedPercent,
+        signedDifference: comparison.signedDifference,
+        status:
+          currentValue === null
+            ? ('measurement_pending' as const)
+            : comparison.comparable
+              ? ('ready' as const)
+              : ('reference_pending' as const),
+        source,
+      };
+    }),
+  });
+
+  return res.json({ special: buildModel('special'), physical: buildModel('physical') });
 });
 
 app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {

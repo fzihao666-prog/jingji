@@ -3,6 +3,7 @@ import type {
   AccessPayload,
   AreaPermission,
   Athlete,
+  AthleteRadarModelsPayload,
   AuditLog,
   BodyCompositionRecord,
   WellnessTrendsPayload,
@@ -171,6 +172,10 @@ export const api = {
   },
   async championBenchmark(id: number) {
     return request<{ benchmark: ChampionBenchmarkPayload }>(`/api/athletes/${id}/champion-model`);
+  },
+  async radarModels(id: number, from: string, to: string) {
+    const params = new URLSearchParams({ from, to });
+    return request<AthleteRadarModelsPayload>(`/api/athletes/${id}/radar-models?${params}`);
   },
   async specialChampionModels(project: Project) {
     const params = new URLSearchParams({ project });

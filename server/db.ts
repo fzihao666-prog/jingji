@@ -1043,6 +1043,38 @@ db.exec(`
     FOREIGN KEY (metric_code) REFERENCES metric_definitions(code)
   );
 
+  CREATE TABLE IF NOT EXISTS radar_reference_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL CHECK(project = 'ROWING'),
+    name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+    url TEXT NOT NULL CHECK(url LIKE 'https://%' OR url LIKE 'http://%'),
+    source_year INTEGER NOT NULL CHECK(source_year > 0),
+    protocol TEXT NOT NULL CHECK(length(trim(protocol)) > 0),
+    verified_at TEXT NOT NULL CHECK(length(trim(verified_at)) > 0),
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project, name, url, source_year, protocol)
+  );
+
+  CREATE TABLE IF NOT EXISTS radar_reference_values (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id INTEGER NOT NULL,
+    project TEXT NOT NULL CHECK(project = 'ROWING'),
+    radar_kind TEXT NOT NULL CHECK(radar_kind IN ('special', 'physical')),
+    metric_key TEXT NOT NULL,
+    gender TEXT NOT NULL CHECK(gender IN ('男', '女')),
+    boat_class TEXT NOT NULL DEFAULT '',
+    applicability TEXT NOT NULL CHECK(length(trim(applicability)) > 0),
+    value_num REAL NOT NULL CHECK(value_num > 0),
+    unit TEXT NOT NULL CHECK(length(trim(unit)) > 0),
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (source_id, radar_kind, metric_key, gender, boat_class, applicability),
+    FOREIGN KEY (source_id) REFERENCES radar_reference_sources(id) ON DELETE RESTRICT
+  );
+
   CREATE TABLE IF NOT EXISTS test_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     athlete_id INTEGER NOT NULL,
@@ -1299,6 +1331,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_test_measurements_session ON test_measurements (test_session_id, metric_code);
   CREATE INDEX IF NOT EXISTS idx_body_measurements_athlete_date ON athlete_body_measurements (athlete_id, measurement_date DESC);
   CREATE INDEX IF NOT EXISTS idx_champion_standards_lookup ON champion_model_standards (project, gender, active, metric_code);
+  CREATE INDEX IF NOT EXISTS idx_radar_reference_sources_lookup
+    ON radar_reference_sources (project, active, verified_at);
+  CREATE INDEX IF NOT EXISTS idx_radar_reference_values_lookup
+    ON radar_reference_values (project, radar_kind, metric_key, gender, active, boat_class, applicability);
   CREATE INDEX IF NOT EXISTS idx_special_champion_models_lookup ON special_champion_models (project, active, sort_order);
   CREATE INDEX IF NOT EXISTS idx_competitive_state_athlete_date ON competitive_state_assessments (athlete_id, assessment_date DESC);
   CREATE INDEX IF NOT EXISTS idx_data_import_batches_created ON data_import_batches (created_at DESC, project, status);
