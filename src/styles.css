@@ -3683,6 +3683,14 @@ p {
   align-items: stretch;
 }
 
+.body-composition-profile-card {
+  grid-column: 1 / -1;
+}
+
+.personal-fms-card {
+  grid-column: 1;
+}
+
 .body-composition-profile-card .body-composition-atlas {
   gap: 10px;
 }
@@ -3714,6 +3722,10 @@ p {
 @media (width <= 900px) {
   .functional-test-grid {
     grid-template-columns: 1fr;
+  }
+
+  .personal-fms-card {
+    grid-column: 1 / -1;
   }
 }
 
@@ -8898,9 +8910,14 @@ p {
 }
 
 .body-composition-simulation-v3 {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: block;
+}
+
+.body-composition-simulation-v3 .body-composition-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+  gap: clamp(16px, 3vw, 36px);
+  align-items: stretch;
 }
 
 /* 左侧人体模拟图 */
@@ -8910,7 +8927,7 @@ p {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 420px;
+  min-height: 400px;
   padding: 24px 120px 20px;
 }
 
@@ -8948,7 +8965,7 @@ p {
 .body-composition-label small {
   font-size: 12px;
   font-weight: 500;
-  color: rgb(31 41 55 / 55%);
+  color: #59636b;
 }
 
 .body-composition-label-fat {
@@ -9042,20 +9059,6 @@ p {
   pointer-events: none;
 }
 
-/* 外层：脂肪组织 */
-.body-sim-shell {
-  fill: rgb(245 185 113 / 20%);
-  stroke: rgb(234 139 49 / 75%);
-  stroke-width: 2;
-}
-
-/* 内层：去脂组织 */
-.body-sim-core {
-  fill: rgb(74 181 173 / 30%);
-  stroke: rgb(8 118 111 / 85%);
-  stroke-width: 2;
-}
-
 .body-sim-legend {
   display: flex;
   gap: 18px;
@@ -9084,213 +9087,57 @@ p {
   background: #ea8b31;
 }
 
-/* 右侧组成分析 */
-
-.body-comp-total span,
-.body-comp-bar-head span,
-.body-comp-muscle span {
-  display: block;
-  font-size: 11px;
-  color: rgb(28 48 58 / 68%);
-}
-
-.body-comp-total strong,
-.body-comp-bar-head strong,
-.body-comp-muscle strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 19px;
-  font-weight: 700;
-  color: #17343f;
-}
-
-.body-comp-bar strong small,
-.body-comp-muscle strong small {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgb(23 52 63 / 72%);
-}
-
-.body-comp-bar-foot,
-.body-comp-muscle small {
-  display: block;
-  margin-top: 3px;
-  font-size: 10px;
-  color: rgb(28 48 58 / 62%);
-}
-
 .body-composition-secondary-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin: 2px 0 0;
+  gap: 10px;
+  margin: 0;
+  align-content: center;
 }
 
 .body-comp-metric-card {
-  padding: 6px 8px;
+  min-height: 106px;
+  padding: 16px;
   border: 1px solid rgb(20 40 60 / 8%);
-  border-radius: 7px;
-  background: rgb(255 255 255 / 88%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 76%);
 }
 
 .body-comp-metric-card dt {
-  font-size: 10px;
-  color: rgb(28 48 58 / 72%);
+  color: rgb(28 48 58 / 62%);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .body-comp-metric-card dd {
-  margin: 3px 0 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #17343f;
-}
-
-/* 四张主卡片统一基础样式 */
-.body-comp-card {
-  padding: 18px 20px;
-  border: 1px solid rgb(20 40 60 / 8%);
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgb(20 40 60 / 4%);
-}
-
-/* 体重卡 */
-.body-comp-total {
-  min-height: 92px;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  align-items: baseline;
+  gap: 4px;
+  margin: 10px 0 0;
 }
 
-.body-comp-total span {
-  font-size: 14px;
-  color: rgb(28 48 58 / 62%);
-}
-
-.body-comp-total strong {
-  margin-top: 6px;
-  font-size: 32px;
-  line-height: 1;
+.body-comp-metric-card dd strong {
+  color: #17343f;
+  font-size: clamp(20px, 2.2vw, 28px);
   font-weight: 700;
-  color: #17343f;
-}
-
-/* 去脂 / 脂肪卡 */
-.body-comp-bar {
-  padding-top: 16px;
-  padding-bottom: 16px;
-}
-
-.body-comp-bar.is-lean {
-  background: linear-gradient(180deg, rgb(74 181 173 / 7%), rgb(255 255 255 / 96%));
-}
-
-.body-comp-bar.is-fat {
-  background: linear-gradient(180deg, rgb(245 185 113 / 10%), rgb(255 255 255 / 96%));
-}
-
-.body-comp-bar-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.body-comp-bar-head span {
-  font-size: 14px;
-  color: rgb(28 48 58 / 68%);
-}
-
-.body-comp-bar-head strong {
-  font-size: 26px;
   line-height: 1;
-  font-weight: 700;
-  color: #17343f;
+  font-variant-numeric: tabular-nums;
 }
 
-.body-comp-bar-head strong small {
-  margin-left: 4px;
-  font-size: 13px;
+.body-comp-metric-card dd small {
+  color: rgb(28 48 58 / 72%);
+  font-size: 11px;
   font-weight: 600;
-  color: rgb(23 52 63 / 55%);
-}
-
-/* 进度条 */
-.body-comp-track {
-  height: 10px;
-  margin-top: 14px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgb(20 40 60 / 8%);
-}
-
-.body-comp-fill {
-  height: 100%;
-  border-radius: inherit;
-}
-
-.body-comp-fill.is-lean {
-  background: linear-gradient(90deg, #56c9bf, #0b8a80);
-}
-
-.body-comp-fill.is-fat {
-  background: linear-gradient(90deg, #ffbd69, #f08a2f);
-}
-
-.body-comp-bar-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 7px;
-}
-
-.body-comp-bar-foot span {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgb(28 48 58 / 58%);
-}
-
-/* 骨骼肌卡 */
-.body-comp-muscle {
-  position: relative;
-  min-height: 88px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  background: linear-gradient(135deg, rgb(74 181 173 / 10%), rgb(255 255 255 / 96%));
-}
-
-.body-comp-muscle span {
-  font-size: 14px;
-  color: rgb(28 48 58 / 66%);
-}
-
-.body-comp-muscle strong {
-  margin-top: 6px;
-  font-size: 28px;
-  line-height: 1;
-  font-weight: 700;
-  color: #17343f;
-}
-
-.body-comp-muscle small {
-  margin-top: 8px;
-  font-size: 13px;
-  color: rgb(28 48 58 / 58%);
 }
 
 /* 响应式 */
 @media (width <= 900px) {
-  .body-composition-main {
+  .body-composition-simulation-v3 .body-composition-main {
     grid-template-columns: 1fr;
   }
 
   .body-composition-figure-panel {
-    min-height: 280px;
-  }
-
-  .body-composition-figure-panel svg {
-    width: 180px;
-    height: 300px;
+    min-height: 340px;
   }
 }
 
@@ -9607,55 +9454,31 @@ p {
   }
 }
 
-.body-composition-mobile-summary {
-  display: none;
-}
-
-@media (width <= 720px) {
-  .body-composition-simulation-desktop,
-  .body-composition-mobile-segment-status {
-    display: none;
+@media (width <= 480px) {
+  .body-composition-figure-panel {
+    min-height: 310px;
+    padding-inline: 88px;
   }
 
-  .body-composition-mobile-summary {
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 7px;
+  .body-composition-label {
+    min-width: 92px;
+    padding: 8px 9px;
   }
 
-  .body-composition-mobile-summary > div {
-    min-height: 40px;
-    padding: 9px 10px;
-    border-left: 3px solid #19857f;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    background: #f2f8f7;
+  .body-composition-guide {
+    width: 112px;
   }
 
-  .body-composition-mobile-summary dt {
-    color: #547078;
-    font-size: 11px;
+  .body-composition-guide-fat {
+    right: -102px;
   }
 
-  .body-composition-mobile-summary dt small,
-  .body-composition-mobile-summary dd small {
-    display: block;
-    margin-top: 2px;
-    color: #486770;
-    font-size: 8px;
+  .body-composition-guide-lean {
+    left: -102px;
   }
 
-  .body-composition-mobile-summary dd {
-    margin: 0;
-    color: #124f56;
-    font:
-      900 13px Bahnschrift,
-      'Microsoft YaHei UI',
-      sans-serif;
-    text-align: right;
+  .body-composition-secondary-metrics {
+    grid-template-columns: 1fr;
   }
 }
 

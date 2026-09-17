@@ -780,7 +780,7 @@ export function BodyCompositionModelOverview({
         <section className="body-atlas-panel body-simulation-panel">
           {activeProfile.weightKg !== null && fatMass !== null && fatFreeMass !== null ? (
             <>
-              <BodyCompositionSimulation
+              <BodyCompositionSimulationDesktop
                 profile={activeProfile}
                 total={activeProfile.weightKg}
                 fatMass={fatMass}
@@ -967,7 +967,6 @@ type CompositionMetric = {
   value: number | null;
   unit: string;
 };
-type MeasuredCompositionMetric = CompositionMetric & { value: number };
 
 type BodyCompositionSimulationDesktopProps = {
   profile: BodyCompositionProfile;
@@ -986,14 +985,15 @@ function BodyCompositionSimulationDesktop({
 
   const fatFreePercent = total > 0 ? (fatFreeMass / total) * 100 : 0;
 
-  const skeletalMusclePercent =
-    total > 0 && profile.skeletalMuscleKg !== null
-      ? (profile.skeletalMuscleKg / total) * 100
-      : null;
-
   const bmi = profile.heightCm === null ? null : total / (profile.heightCm / 100) ** 2;
 
-  const secondaryMetrics = [
+  const secondaryMetrics: CompositionMetric[] = [
+    {
+      id: 'weight',
+      label: '体重',
+      value: total,
+      unit: 'kg',
+    },
     {
       id: 'bmi',
       label: 'BMI',
@@ -1001,21 +1001,15 @@ function BodyCompositionSimulationDesktop({
       unit: '',
     },
     {
-      id: 'bodyFat',
-      label: '体脂率',
-      value: profile.bodyFatPct,
-      unit: '%',
+      id: 'skeletalMuscle',
+      label: '骨骼肌量',
+      value: profile.skeletalMuscleKg,
+      unit: 'kg',
     },
     {
       id: 'totalBodyWater',
       label: '体水分',
       value: profile.totalBodyWaterKg,
-      unit: 'kg',
-    },
-    {
-      id: 'muscleMass',
-      label: '肌肉量',
-      value: profile.muscleMassKg,
       unit: 'kg',
     },
     {
@@ -1030,33 +1024,8 @@ function BodyCompositionSimulationDesktop({
       value: profile.visceralFatLevel,
       unit: '级',
     },
-  ].filter((metric): metric is MeasuredCompositionMetric => metric.value !== null);
+  ];
 
-  const renderCompositionBar = (
-    label: string,
-    value: number,
-    percent: number,
-    type: 'lean' | 'fat'
-  ) => (
-    <div className={`body-comp-card body-comp-bar is-${type}`} key={label}>
-      <div className="body-comp-bar-head">
-        <span>{label}</span>
-
-        <strong>
-          {formatNumber(value, 1)}
-          <small> kg</small>
-        </strong>
-      </div>
-
-      <div className="body-comp-track">
-        <div className={`body-comp-fill is-${type}`} style={{ width: `${percent}%` }} />
-      </div>
-
-      <div className="body-comp-bar-foot">
-        <span>{formatNumber(percent, 1)}%</span>
-      </div>
-    </div>
-  );
   return (
     <div className="body-composition-simulation body-composition-simulation-v3">
       <div className="body-composition-main">
@@ -1067,7 +1036,11 @@ function BodyCompositionSimulationDesktop({
             <strong>{formatNumber(fatPercent, 1)}%</strong>
             <small>{formatNumber(fatMass, 1)} kg</small>
 
-            <svg className="body-composition-guide body-composition-guide-fat" viewBox="0 0 140 80">
+            <svg
+              aria-hidden="true"
+              className="body-composition-guide body-composition-guide-fat"
+              viewBox="0 0 140 80"
+            >
               <path d="M 10 20 C 40 20, 45 60, 130 60" />
               <circle cx="130" cy="60" r="4" />
             </svg>
@@ -1079,6 +1052,7 @@ function BodyCompositionSimulationDesktop({
             <small>{formatNumber(fatFreeMass, 1)} kg</small>
 
             <svg
+              aria-hidden="true"
               className="body-composition-guide body-composition-guide-lean"
               viewBox="0 0 140 80"
             >
@@ -1102,131 +1076,19 @@ function BodyCompositionSimulationDesktop({
 
         {/* 右侧：身体组成数据 */}
         <div className="body-composition-analysis">
-          <div className="body-comp-card body-comp-total">
-            <span>体重</span>
-            <strong>{formatNumber(total, 1)} kg</strong>
-          </div>
-
-          {renderCompositionBar('去脂体重', fatFreeMass, fatFreePercent, 'lean')}
-
-          {renderCompositionBar('脂肪量', fatMass, fatPercent, 'fat')}
-
-          {profile.skeletalMuscleKg !== null && (
-            <div className="body-comp-card body-comp-muscle">
-              <span>骨骼肌量</span>
-
-              <strong>{formatNumber(profile.skeletalMuscleKg, 1)} kg</strong>
-
-              <small>
-                占体重{' '}
-                {skeletalMusclePercent === null
-                  ? '--'
-                  : `${formatNumber(skeletalMusclePercent, 1)}%`}
-              </small>
-            </div>
-          )}
           <dl className="body-composition-secondary-metrics">
             {secondaryMetrics.map((metric) => (
               <div key={metric.id} className="body-comp-metric-card">
                 <dt>{metric.label}</dt>
                 <dd>
-                  {formatNumber(metric.value, 1)}
-                  {metric.unit && ` ${metric.unit}`}
+                  <strong>{metric.value === null ? '—' : formatNumber(metric.value, 1)}</strong>
+                  {metric.unit && <small>{metric.unit}</small>}
                 </dd>
               </div>
             ))}
           </dl>
         </div>
       </div>
-    </div>
-  );
-}
-
-function BodyCompositionSimulation({
-  profile,
-  total,
-  fatMass,
-  fatFreeMass,
-}: {
-  profile: BodyCompositionProfile;
-  total: number;
-  fatMass: number;
-  fatFreeMass: number;
-}) {
-  const bmi = profile.heightCm === null ? null : total / (profile.heightCm / 100) ** 2;
-
-  const fatPercent = total > 0 ? (fatMass / total) * 100 : null;
-
-  const fatFreePercent = total > 0 ? (fatFreeMass / total) * 100 : null;
-
-  const skeletalMusclePercent =
-    total > 0 && profile.skeletalMuscleKg !== null
-      ? (profile.skeletalMuscleKg / total) * 100
-      : null;
-
-  const secondaryMetrics = [
-    {
-      id: 'bmi',
-      label: 'BMI',
-      value: bmi,
-      unit: '',
-    },
-    {
-      id: 'totalBodyWater',
-      label: '体水分',
-      value: profile.totalBodyWaterKg,
-      unit: 'kg',
-    },
-    {
-      id: 'muscleMass',
-      label: '肌肉量',
-      value: profile.muscleMassKg,
-      unit: 'kg',
-    },
-    {
-      id: 'basalMetabolism',
-      label: '基础代谢',
-      value: profile.basalMetabolismKcal,
-      unit: 'kcal',
-    },
-    {
-      id: 'visceralFat',
-      label: '内脏脂肪等级',
-      value: profile.visceralFatLevel,
-      unit: '级',
-    },
-  ].filter(
-    (
-      metric
-    ): metric is {
-      id: string;
-      label: string;
-      value: number;
-      unit: string;
-    } => metric.value !== null
-  );
-
-  return (
-    <div className="body-composition-simulation-shell">
-      <BodyCompositionSimulationDesktop
-        profile={profile}
-        total={total}
-        fatMass={fatMass}
-        fatFreeMass={fatFreeMass}
-      />
-
-      <dl className="body-composition-mobile-summary">
-        {secondaryMetrics.map((metric) => (
-          <div key={metric.id}>
-            <dt>{metric.label}</dt>
-
-            <dd>
-              {formatNumber(metric.value, 1)}
-              {metric.unit && ` ${metric.unit}`}
-            </dd>
-          </div>
-        ))}
-      </dl>
     </div>
   );
 }

@@ -597,10 +597,7 @@ export function PersonalPage(props: Props) {
             </section>
           </section>
 
-          <ProfileSection
-            title="功能与专项测试"
-            subtitle="功能动作筛查、专项测试、体能测试档案与有氧指标。"
-          >
+          <section className="personal-profile-section" aria-label="测试模块">
             <div className="functional-test-grid">
               <AppCard variant="chart" className="professional-panel body-composition-profile-card">
                 <header className="personal-analysis-card-heading">
@@ -682,7 +679,7 @@ export function PersonalPage(props: Props) {
               </p>
             </AppCard>
             <AerobicEndurance measurements={profileMeasurements} loading={profileAnalysisLoading} />
-          </ProfileSection>
+          </section>
 
           <ProfileSection
             title="生理生化与恢复状态"
