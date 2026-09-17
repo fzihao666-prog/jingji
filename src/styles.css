@@ -3691,6 +3691,125 @@ p {
   grid-column: 1;
 }
 
+.athlete-radar-card {
+  grid-column: 1 / -1;
+}
+
+.athlete-radar-comparison {
+  min-width: 0;
+  padding: 18px 20px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 58fr) minmax(300px, 42fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.athlete-radar-chart,
+.athlete-radar-copy {
+  min-width: 0;
+}
+
+.athlete-radar-chart .app-echart {
+  --chart-height: 360px;
+}
+
+.athlete-radar-summary {
+  color: #365660;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.athlete-radar-details {
+  min-width: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 9px;
+}
+
+.athlete-radar-details > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbfb;
+}
+
+.athlete-radar-details dt {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.athlete-radar-details dt strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.athlete-radar-details dt span {
+  flex: 0 0 auto;
+  color: #8d5d16;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.athlete-radar-details dd {
+  min-width: 0;
+  margin: 8px 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.athlete-radar-details dd > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.athlete-radar-details dd small {
+  color: #365660;
+  font-size: 9px;
+}
+
+.athlete-radar-details dd strong {
+  min-width: 0;
+  color: #24515a;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.athlete-radar-details dd a {
+  grid-column: 1 / -1;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--river);
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.athlete-radar-details dd a:focus-visible {
+  outline: 3px solid var(--river);
+  outline-offset: 2px;
+}
+
+.athlete-radar-comparison.is-incomplete {
+  grid-template-columns: 1fr;
+}
+
+.athlete-radar-comparison.is-incomplete .app-content-state {
+  min-height: 150px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #f8fbfb;
+}
+
 .body-composition-profile-card .body-composition-atlas {
   gap: 10px;
 }
@@ -3726,6 +3845,24 @@ p {
 
   .personal-fms-card {
     grid-column: 1 / -1;
+  }
+
+  .athlete-radar-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .athlete-radar-chart .app-echart {
+    --chart-height: 320px;
+  }
+}
+
+@media (width <= 560px) {
+  .athlete-radar-comparison {
+    padding: 14px;
+  }
+
+  .athlete-radar-details dd {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

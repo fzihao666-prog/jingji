@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { init, use, type EChartsType } from 'echarts/core';
-import { BarChart, LineChart, PieChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import { BarChart, LineChart, PieChart, RadarChart } from 'echarts/charts';
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  RadarComponent,
+} from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import './EChart.css';
@@ -10,9 +15,11 @@ use([
   BarChart,
   LineChart,
   PieChart,
+  RadarChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
+  RadarComponent,
   CanvasRenderer,
 ]);
 const resizers = new Map<Element, () => void>();

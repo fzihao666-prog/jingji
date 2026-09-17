@@ -11,9 +11,11 @@ import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import { EChart } from '../components/EChart';
 import { api } from '../api';
 import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
+import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
 import type { EChartsOption } from 'echarts';
 import type {
   Athlete,
+  AthleteRadarModelsPayload,
   BodyCompositionRecord,
   ChampionBenchmarkPayload,
   OverviewMeasurement,
@@ -164,6 +166,8 @@ export function PersonalPage(props: Props) {
   const [bodyCompositionLoading, setBodyCompositionLoading] = useState(false);
   const [bodyCompositionError, setBodyCompositionError] = useState(false);
   const [dossierDataLoading, setDossierDataLoading] = useState(false);
+  const [radarModels, setRadarModels] = useState<AthleteRadarModelsPayload | null>(null);
+  const [radarModelsLoading, setRadarModelsLoading] = useState(false);
 
   useEffect(() => {
     let ignored = false;
@@ -240,6 +244,33 @@ export function PersonalPage(props: Props) {
       ignored = true;
     };
   }, [selectedAthlete?.id]);
+
+  useEffect(() => {
+    let ignored = false;
+    setRadarModels(null);
+
+    if (!selectedAthlete || selectedAthlete.project !== 'ROWING') {
+      setRadarModelsLoading(false);
+      return;
+    }
+
+    setRadarModelsLoading(true);
+    api
+      .radarModels(selectedAthlete.id, props.from, props.to)
+      .then((result) => {
+        if (!ignored) setRadarModels(result);
+      })
+      .catch(() => {
+        if (!ignored) setRadarModels(null);
+      })
+      .finally(() => {
+        if (!ignored) setRadarModelsLoading(false);
+      });
+
+    return () => {
+      ignored = true;
+    };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
 
   useEffect(() => {
     let ignored = false;
@@ -653,6 +684,50 @@ export function PersonalPage(props: Props) {
                 <p className="analysis-method-note">
                   FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
                 </p>
+              </AppCard>
+              <AppCard
+                variant="chart"
+                className="professional-panel analysis-feature-panel athlete-radar-card"
+              >
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <span>
+                      <small>SPECIAL TEST RADAR</small>
+                      <h3>专项测试雷达</h3>
+                      <p>当前周期测试与正式参考标准的可达成度对照</p>
+                    </span>
+                  </div>
+                </header>
+                <AthleteRadarComparison
+                  title="专项测试雷达"
+                  model={radarModels?.special ?? null}
+                  loading={radarModelsLoading}
+                  unavailableReason={
+                    selectedAthlete.project === 'ROWING' ? undefined : '该项目雷达维度待配置'
+                  }
+                />
+              </AppCard>
+              <AppCard
+                variant="chart"
+                className="professional-panel analysis-feature-panel athlete-radar-card"
+              >
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <span>
+                      <small>PHYSICAL TEST RADAR</small>
+                      <h3>体能测试雷达</h3>
+                      <p>力量、爆发力与核心能力的正式参考标准对照</p>
+                    </span>
+                  </div>
+                </header>
+                <AthleteRadarComparison
+                  title="体能测试雷达"
+                  model={radarModels?.physical ?? null}
+                  loading={radarModelsLoading}
+                  unavailableReason={
+                    selectedAthlete.project === 'ROWING' ? undefined : '该项目雷达维度待配置'
+                  }
+                />
               </AppCard>
             </div>
 

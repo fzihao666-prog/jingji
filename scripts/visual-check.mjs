@@ -2,8 +2,11 @@ import { chromium } from 'playwright-core';
 
 const outputDirectory = process.argv[2] || 'artifacts';
 const baseUrl = process.argv[3] || 'http://127.0.0.1:5173';
+const task3RadarOnly = process.env.TASK3_RADAR_ONLY === '1';
 const browser = await chromium.launch({
-  executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  executablePath:
+    process.env.PLAYWRIGHT_EXECUTABLE_PATH ||
+    'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   headless: true,
 });
 const page = await browser.newPage({
@@ -16,6 +19,128 @@ page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(`console: ${message.text()}`);
 });
+
+if (task3RadarOnly) {
+  const source = {
+    name: '赛艇测试公开标准',
+    url: 'https://example.com/rowing-standard',
+    year: 2026,
+    protocol: '标准测试协议',
+  };
+  const readyDimension = (key, label, unit, currentValue, referenceValue, achievedPercent) => ({
+    key,
+    label,
+    unit,
+    direction: 'higher_better',
+    currentValue,
+    referenceValue,
+    achievedPercent,
+    signedDifference: currentValue - referenceValue,
+    status: 'ready',
+    source,
+  });
+  await page.route('**/api/athletes/*/radar-models?*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        special: {
+          kind: 'special',
+          dimensions: [
+            readyDimension('rowing_erg_2000_time', '2000m测功仪', 's', 370, 360, 97.3),
+            readyDimension('rowing_erg_5000_time', '5000m测功仪', 's', 1000, 1050, 105),
+            readyDimension('rowing_erg_peak_power', '峰值功率', 'W', 920, 700, 150),
+          ],
+        },
+        physical: {
+          kind: 'physical',
+          dimensions: [
+            readyDimension('relative_squat', '相对深蹲', '倍体重', 2, 1.7, 117.6),
+            readyDimension('vertical_jump', '纵跳', 'cm', 55, 50, 110),
+            readyDimension('front_plank', '前支撑', 's', 190, 180, 105.6),
+          ],
+        },
+      }),
+    })
+  );
+}
+
+async function verifyAthleteRadarCards() {
+  await page.getByRole('button', { name: '运动员档案', exact: true }).click();
+  await page.getByRole('heading', { name: '运动员档案', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '专项测试雷达', exact: true, level: 3 }).waitFor();
+  await page.getByRole('heading', { name: '体能测试雷达', exact: true, level: 3 }).waitFor();
+  const liveStatuses = page.locator(
+    '.athlete-radar-card > .athlete-radar-root > .athlete-radar-live-status[aria-live="polite"]'
+  );
+  const liveStatusTexts = await liveStatuses.allTextContents();
+  if (liveStatusTexts.length !== 2 || liveStatusTexts.some((text) => !text.trim()))
+    throw new Error(`雷达卡片缺少持久且非空的 aria-live 状态文本：${liveStatusTexts.length}`);
+
+  const textContrast = await page
+    .locator('.athlete-radar-card')
+    .first()
+    .evaluate((card) => {
+      const parseColor = (value) => {
+        const channels = value
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number);
+        if (!channels || channels.length !== 3) throw new Error(`无法解析颜色：${value}`);
+        return channels;
+      };
+      const luminance = (value) => {
+        const [red, green, blue] = parseColor(value).map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+      };
+      const contrast = (foreground, background) => {
+        const foregroundLuminance = luminance(foreground);
+        const backgroundLuminance = luminance(background);
+        return (
+          (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+          (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+        );
+      };
+      const summary = card.querySelector('.athlete-radar-summary');
+      const detailLabel = card.querySelector('.athlete-radar-details dd small');
+      const detailRow = detailLabel?.closest('.athlete-radar-details > div');
+      if (!summary || !detailLabel || !detailRow) throw new Error('雷达文字对比度检查目标缺失');
+      return {
+        summary: contrast(getComputedStyle(summary).color, getComputedStyle(card).backgroundColor),
+        detailLabel: contrast(
+          getComputedStyle(detailLabel).color,
+          getComputedStyle(detailRow).backgroundColor
+        ),
+      };
+    });
+  if (textContrast.summary < 4.5 || textContrast.detailLabel < 4.5)
+    throw new Error(`雷达摘要或明细字段名文字对比度不足：${JSON.stringify(textContrast)}`);
+
+  const sourceLink = page.getByRole('link', { name: /来源：赛艇测试公开标准/ }).first();
+  await sourceLink.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  const sourceFocus = await sourceLink.evaluate((element) => {
+    const styles = getComputedStyle(element);
+    const alphaMatch = styles.outlineColor.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)/);
+    return {
+      active: document.activeElement === element,
+      outlineStyle: styles.outlineStyle,
+      outlineWidth: Number.parseFloat(styles.outlineWidth),
+      outlineAlpha: alphaMatch ? Number(alphaMatch[1]) : 1,
+    };
+  });
+  if (
+    !sourceFocus.active ||
+    sourceFocus.outlineStyle === 'none' ||
+    sourceFocus.outlineWidth < 3 ||
+    sourceFocus.outlineAlpha < 1
+  )
+    throw new Error(`雷达来源链接键盘焦点不可清晰识别：${JSON.stringify(sourceFocus)}`);
+}
 
 await page.goto(baseUrl, { waitUntil: 'networkidle' });
 await page.screenshot({ path: `${outputDirectory}/training-login.png`, fullPage: true });
@@ -33,10 +158,16 @@ await page.setViewportSize({ width: 390, height: 844 });
 await page.screenshot({ path: `${outputDirectory}/training-register-mobile.png`, fullPage: true });
 await page.setViewportSize({ width: 1440, height: 1000 });
 await page.getByRole('button', { name: /返回登录/ }).click();
-await page.getByLabel('账号', { exact: true }).fill('coach01');
+await page.getByLabel('账号', { exact: true }).fill(task3RadarOnly ? 'athlete01' : 'coach01');
 await page.getByLabel('密码', { exact: true }).fill('demo123');
 await page.getByRole('button', { name: '登录系统', exact: true }).click();
 await page.getByRole('heading', { name: '训练总览' }).waitFor();
+if (task3RadarOnly) {
+  await verifyAthleteRadarCards();
+  console.log(JSON.stringify({ athleteRadarCards: 'ok', browserErrors: errors }, null, 2));
+  await browser.close();
+  process.exit(0);
+}
 await page.waitForTimeout(1200);
 const removedNavEntries = await page
   .getByRole('button', { name: /^(训练日历|周期报告|AI识别导入)$/ })
@@ -104,8 +235,7 @@ await page.screenshot({
   fullPage: true,
 });
 
-await page.getByRole('button', { name: /运动员表现/ }).click();
-await page.getByRole('heading', { name: '运动员表现', exact: true }).waitFor();
+await verifyAthleteRadarCards();
 await page.locator('.athlete-picker-trigger').click();
 const athleteOptions = page.locator('.athlete-picker-options button');
 if ((await athleteOptions.count()) > 1) await athleteOptions.nth(1).click();
