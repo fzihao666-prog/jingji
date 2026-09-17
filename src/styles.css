@@ -9675,7 +9675,9 @@ p {
 
 .birthplace-detail-heading > div:last-child strong {
   color: #0b5f63;
-  font: 900 22px Bahnschrift, sans-serif;
+  font:
+    900 22px Bahnschrift,
+    sans-serif;
 }
 
 .birthplace-city-list {

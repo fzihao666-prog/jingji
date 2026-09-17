@@ -53,6 +53,7 @@
     "@types/react-dom": "latest",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
+    "knip": "^6.36.0",
     "playwright-core": "latest",
     "prettier": "^3.9.6",
     "stylelint": "^17.15.0",
