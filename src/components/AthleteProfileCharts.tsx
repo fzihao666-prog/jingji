@@ -16,6 +16,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import bodyModel from '../assets/body-composition/body-model.webp';
 import type {
   BodyCompositionRecord,
   CompetitiveStateLevel,
@@ -1061,91 +1062,30 @@ function BodyCompositionSimulationDesktop({
       <div className="body-composition-main">
         {/* 左侧：身体成分模拟图 */}
         <div className="body-composition-figure-panel">
-          <svg viewBox="0 0 260 420" role="img" aria-label="身体成分结构示意">
-            <defs>
-              <g id="body-sim-athlete">
-                {/* 头部 */}
-                <circle cx="130" cy="52" r="26" />
+          <div className="body-composition-label body-composition-label-fat">
+            <span>脂肪组织</span>
+            <strong>{formatNumber(fatPercent, 1)}%</strong>
+            <small>{formatNumber(fatMass, 1)} kg</small>
 
-                {/* 颈肩 */}
-                <path d="M114 82 L146 82 L154 108 L106 108 Z" />
+            <svg className="body-composition-guide body-composition-guide-fat" viewBox="0 0 140 80">
+              <path d="M 10 20 C 40 20, 45 60, 130 60" />
+              <circle cx="130" cy="60" r="4" />
+            </svg>
+          </div>
+          <img className="body-composition-model-image" src={bodyModel} alt="身体成分人体模型" />
+          <div className="body-composition-label body-composition-label-lean">
+            <span>去脂组织</span>
+            <strong>{formatNumber(fatFreePercent, 1)}%</strong>
+            <small>{formatNumber(fatFreeMass, 1)} kg</small>
 
-                {/* 躯干 */}
-                <path
-                  d="
-                M106 106
-                C78 114 70 142 78 190
-                L88 236
-                C94 258 108 268 130 270
-                C152 268 166 258 172 236
-                L182 190
-                C190 142 182 114 154 106
-                Z
-              "
-                />
-
-                {/* 左臂 */}
-                <path
-                  d="
-                M88 118
-                C66 134 60 162 66 196
-                L74 236
-                C76 250 90 250 92 236
-                L95 184
-                L112 132
-                Z
-              "
-                />
-
-                {/* 右臂 */}
-                <path
-                  d="
-                M172 118
-                C194 134 200 162 194 196
-                L186 236
-                C184 250 170 250 168 236
-                L165 184
-                L148 132
-                Z
-              "
-                />
-
-                {/* 左腿 */}
-                <path
-                  d="
-                M102 264
-                C96 304 96 356 102 404
-                L120 404
-                L126 292
-                L126 270
-                Z
-              "
-                />
-
-                {/* 右腿 */}
-                <path
-                  d="
-                M158 264
-                C164 304 164 356 158 404
-                L140 404
-                L134 292
-                L134 270
-                Z
-              "
-                />
-              </g>
-            </defs>
-
-            {/* 外层：脂肪层 */}
-            <use href="#body-sim-athlete" className="body-sim-shell" />
-
-            {/* 内层：去脂主体 */}
-            <use
-              href="#body-sim-athlete"
-              className="body-sim-core"
-              transform="translate(20 8) scale(0.84 0.96)"
-            />
-          </svg>
+            <svg
+              className="body-composition-guide body-composition-guide-lean"
+              viewBox="0 0 140 80"
+            >
+              <path d="M 130 20 C 100 20, 95 60, 10 60" />
+              <circle cx="10" cy="60" r="4" />
+            </svg>
+          </div>
 
           <div className="body-sim-legend">
             <span>

@@ -8905,19 +8905,141 @@ p {
 
 /* 左侧人体模拟图 */
 .body-composition-figure-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 320px;
-  padding: 8px 0 12px;
+  min-height: 420px;
+  padding: 24px 120px 20px;
 }
 
-.body-composition-figure-panel svg {
-  display: block;
-  width: 190px;
-  height: 320px;
+.body-composition-label {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 110px;
+  padding: 10px 12px;
+  border: 1px solid rgb(15 23 42 / 6%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow:
+    0 8px 24px rgb(15 23 42 / 6%),
+    inset 0 1px 0 rgb(255 255 255 / 70%);
+  backdrop-filter: blur(8px);
+  color: #1f2937;
+}
+
+.body-composition-label span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(31 41 55 / 68%);
+}
+
+.body-composition-label strong {
+  font-size: 22px;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.body-composition-label small {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(31 41 55 / 55%);
+}
+
+.body-composition-label-fat {
+  top: 88px;
+  left: 12px;
+  text-align: right;
+  border-color: rgb(234 139 49 / 16%);
+}
+
+.body-composition-label-fat strong {
+  color: #d97706;
+}
+
+.body-composition-label-lean {
+  right: 12px;
+  bottom: 104px;
+  text-align: left;
+  border-color: rgb(8 118 111 / 16%);
+}
+
+.body-composition-label-lean strong {
+  color: #0f766e;
+}
+
+.body-composition-guide {
+  position: absolute;
+  width: 140px;
+  height: 80px;
   overflow: visible;
+  pointer-events: none;
+}
+
+.body-composition-guide path {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.body-composition-guide circle {
+  stroke: none;
+}
+
+.body-composition-guide-fat {
+  top: 44px;
+  right: -128px;
+}
+
+.body-composition-guide-fat path {
+  stroke: #ea8b31;
+}
+
+.body-composition-guide-fat circle {
+  fill: #ea8b31;
+}
+
+.body-composition-guide-lean {
+  top: 42px;
+  left: -128px;
+}
+
+.body-composition-guide-lean path {
+  stroke: #08766f;
+}
+
+.body-composition-guide-lean circle {
+  fill: #08766f;
+}
+
+.body-composition-model-image {
+  display: block;
+  width: 240px;
+  max-height: 390px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 30px rgb(17 94 89 / 10%)) drop-shadow(0 0 18px rgb(45 212 191 / 8%));
+  opacity: 0.96;
+  position: relative;
+  z-index: 1;
+}
+
+.body-composition-figure-panel::before {
+  content: '';
+  position: absolute;
+  inset: 48px 100px 70px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgb(45 212 191 / 8%) 0%,
+    rgb(45 212 191 / 3%) 45%,
+    transparent 72%
+  );
+  pointer-events: none;
 }
 
 /* 外层：脂肪组织 */
