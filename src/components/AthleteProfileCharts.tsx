@@ -1,11 +1,13 @@
+import ChinaData from 'china-map-geojson/lib/china.js';
+import { geoMercator, geoPath } from 'd3-geo';
+import { scaleBand, scaleLinear } from 'd3-scale';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
   LabelList,
-  Line,
-  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -14,10 +16,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { geoMercator, geoPath } from 'd3-geo';
-import { scaleBand, scaleLinear } from 'd3-scale';
-import ChinaData from 'china-map-geojson/lib/china.js';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type {
   BodyCompositionRecord,
   CompetitiveStateLevel,
