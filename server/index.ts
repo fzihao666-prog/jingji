@@ -1,65 +1,50 @@
-import express, { type NextFunction, type Request, type Response } from 'express';
-import multer from 'multer';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
-import { z } from 'zod';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { db, upsertAthleteOrigin } from './db.ts';
-import { buildOverviewPayload, buildSpecialTrainingPayload } from './overview-service.ts';
+import { z } from 'zod';
 import {
-  buildProfileComparison,
-  buildWellnessTrends,
-  resolveProfileScope,
-} from './athlete-profile-service.ts';
-import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
-import {
-  AREA_LEVEL_META,
   AREA_LEVELS,
+  AREA_LEVEL_META,
+  ROLES,
   ROLE_HIERARCHY,
   ROLE_META,
-  ROLES,
   canManageRole,
   type AreaLevel,
   type Role,
 } from '../shared/access.ts';
 import {
+  ROWING_RADAR_DIMENSIONS,
+  buildRadarComparison,
+  type RadarDimensionDefinition,
+} from '../shared/athlete-radar-model.ts';
+import { CANOE_MODEL_STANDARD, analyzeCanoePeriod } from '../shared/canoe-model.ts';
+import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
+import {
+  PROJECTS,
+  hasSpecialAnalysis,
+  projectCapability,
+  projectLabel,
+  type Project,
+} from '../shared/projects.ts';
+import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
+import {
   ROWING_MODEL_STANDARD,
   analyzeRowingPeriod,
   type RowingAnalysisRecord,
 } from '../shared/rowing-model.ts';
-import { CANOE_MODEL_STANDARD, analyzeCanoePeriod } from '../shared/canoe-model.ts';
 import {
   SLALOM_CHAMPION_METRICS,
   SLALOM_MODEL_STANDARD,
   analyzeSlalomPeriod,
   slalomComparison,
 } from '../shared/slalom-model.ts';
-import {
-  hasSpecialAnalysis,
-  projectCapability,
-  projectLabel,
-  PROJECTS,
-  type Project,
-} from '../shared/projects.ts';
-import {
-  INTENSITY_ZONE_SYSTEMS,
-  PRIMARY_INTENSITY_ZONE_CODES,
-} from '../shared/training-intensity.ts';
-import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categories.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../shared/strength-model.ts';
 import {
-  ROWING_RADAR_DIMENSIONS,
-  buildRadarComparison,
-  type RadarDimensionDefinition,
-} from '../shared/athlete-radar-model.ts';
-import {
-  STRENGTH_BODY_POSITIONS,
-  STRENGTH_INTENSITY_ZONES,
-  STRENGTH_TRAINING_CATEGORIES,
-  STRENGTH_TRAINING_ENVIRONMENTS,
   inferStrengthBodyPosition,
   inferStrengthCategory,
   isStrengthBodyPosition,
@@ -71,8 +56,16 @@ import {
   type StrengthTrainingCategory,
   type StrengthTrainingEnvironment,
 } from '../shared/strength-training.ts';
+import {
+  INTENSITY_ZONE_SYSTEMS,
+  PRIMARY_INTENSITY_ZONE_CODES,
+} from '../shared/training-intensity.ts';
 import { TrainingPlanAIService, type AthleteContext } from './ai-service.ts';
-import { recognizeStrengthImport, type RecognizedStrengthRow } from './strength-import-ai.ts';
+import {
+  buildProfileComparison,
+  buildWellnessTrends,
+  resolveProfileScope,
+} from './athlete-profile-service.ts';
 import {
   analyzeDataImport,
   commitDataImport,
@@ -81,6 +74,9 @@ import {
   updateDataImportAthleteCandidates,
   updateDataImportItems,
 } from './data-import.ts';
+import { db, upsertAthleteOrigin } from './db.ts';
+import { buildOverviewPayload, buildSpecialTrainingPayload } from './overview-service.ts';
+import { recognizeStrengthImport, type RecognizedStrengthRow } from './strength-import-ai.ts';
 
 try {
   process.loadEnvFile(resolve(process.cwd(), '.env'));
@@ -2674,25 +2670,21 @@ app.post(
         })
       );
       db.exec('COMMIT');
-      res
-        .status(201)
-        .json({
-          message: createAccount
-            ? '运动员及登录账号已创建。'
-            : '运动员档案已创建，暂未创建登录账号。',
-          id: athleteId,
-          accountId: userId,
-        });
+      res.status(201).json({
+        message: createAccount
+          ? '运动员及登录账号已创建。'
+          : '运动员档案已创建，暂未创建登录账号。',
+        id: athleteId,
+        accountId: userId,
+      });
     } catch (error) {
       db.exec('ROLLBACK');
-      res
-        .status(409)
-        .json({
-          message:
-            error instanceof Error && error.message.includes('UNIQUE')
-              ? '运动员姓名或登录账号已存在。'
-              : '运动员创建失败。',
-        });
+      res.status(409).json({
+        message:
+          error instanceof Error && error.message.includes('UNIQUE')
+            ? '运动员姓名或登录账号已存在。'
+            : '运动员创建失败。',
+      });
     }
   }
 );
@@ -2786,14 +2778,12 @@ app.put(
       res.json({ message: '运动员资料已更新。' });
     } catch (error) {
       db.exec('ROLLBACK');
-      res
-        .status(409)
-        .json({
-          message:
-            error instanceof Error && error.message.includes('UNIQUE')
-              ? '该运动员姓名已存在。'
-              : '运动员资料更新失败。',
-        });
+      res.status(409).json({
+        message:
+          error instanceof Error && error.message.includes('UNIQUE')
+            ? '该运动员姓名已存在。'
+            : '运动员资料更新失败。',
+      });
     }
   }
 );
@@ -6196,35 +6186,58 @@ app.get('/api/athletes/:id/profile-comparison', requireAuth, (req, res) => {
 });
 
 const radarMeasurementCodes = [
+  'rowing_on_water_time_sec',
   'erg_2k_sec',
   'erg_5000_sec',
   'erg_5k_sec',
   'erg_30min_20spm_split_sec',
   'erg_peak_power_w',
   'seven_stroke_power_w',
+
   'squat_kg',
+  'squatKg',
+
   'bench_pull_kg',
+  'benchPullKg',
+
   'clean_kg',
+
   'high_pull_kg',
+  'highPullKg',
+
   'vertical_jump_cm',
+  'verticalJumpCm',
+
   'bench_pull_2min_reps',
   'bench_pull2_min_reps',
+
   'front_plank_sec',
+  'frontPlankSec',
 ] as const;
 
 const radarMetricAliases: Partial<
   Record<RadarDimensionDefinition['key'], readonly (typeof radarMeasurementCodes)[number][]>
 > = {
+  rowing_on_water_time: ['rowing_on_water_time_sec'],
   rowing_erg_2000_time: ['erg_2k_sec'],
+
   rowing_erg_5000_time: ['erg_5000_sec', 'erg_5k_sec'],
+
   rowing_erg_30min_20spm_split: ['erg_30min_20spm_split_sec'],
+
   rowing_erg_peak_power: ['erg_peak_power_w', 'seven_stroke_power_w'],
-  relative_squat: ['squat_kg'],
-  relative_bench_pull: ['bench_pull_kg'],
-  relative_high_pull: ['clean_kg', 'high_pull_kg'],
-  vertical_jump: ['vertical_jump_cm'],
+
+  relative_squat: ['squat_kg', 'squatKg'],
+
+  relative_bench_pull: ['bench_pull_kg', 'benchPullKg'],
+
+  relative_high_pull: ['clean_kg', 'high_pull_kg', 'highPullKg'],
+
+  vertical_jump: ['vertical_jump_cm', 'verticalJumpCm'],
+
   bench_pull_2min: ['bench_pull_2min_reps', 'bench_pull2_min_reps'],
-  front_plank: ['front_plank_sec'],
+
+  front_plank: ['front_plank_sec', 'frontPlankSec'],
 };
 
 type RadarMeasurementRow = {
@@ -7441,11 +7454,9 @@ app.post(
         rows: rows.map(({ memberAthleteIds: _ids, ...row }) => row),
       });
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          message: `无法读取专项训练Excel：${error instanceof Error ? error.message : '文件格式错误'}`,
-        });
+      res.status(400).json({
+        message: `无法读取专项训练Excel：${error instanceof Error ? error.message : '文件格式错误'}`,
+      });
     }
   }
 );
@@ -7528,11 +7539,9 @@ app.post(
       });
     } catch (error) {
       db.exec('ROLLBACK');
-      res
-        .status(500)
-        .json({
-          message: `写入专项训练数据失败：${error instanceof Error ? error.message : '未知错误'}`,
-        });
+      res.status(500).json({
+        message: `写入专项训练数据失败：${error instanceof Error ? error.message : '未知错误'}`,
+      });
     }
   }
 );

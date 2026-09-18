@@ -49,7 +49,7 @@
     "@types/express": "latest",
     "@types/jsonwebtoken": "latest",
     "@types/multer": "latest",
-    "@types/node": "latest",
+    "@types/node": "^26.6.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "^10.10.0",

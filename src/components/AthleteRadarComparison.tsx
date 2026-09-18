@@ -1,8 +1,8 @@
 import type { EChartsOption } from 'echarts';
 import type { ReactNode } from 'react';
 import type { AthleteRadarDimension, AthleteRadarModel } from '../types';
-import { ContentState } from './PageLayout';
 import { EChart } from './EChart';
+import { ContentState } from './PageLayout';
 
 type Props = {
   model: AthleteRadarModel | null;

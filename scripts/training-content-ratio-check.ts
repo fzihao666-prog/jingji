@@ -13,7 +13,7 @@ assert.deepEqual(TRAINING_CONTENT_CATEGORIES, [
   '力量耐力',
   '最大力量',
   '速度力量',
-  '跑步',
+  '有氧',
   '其它',
 ]);
 
@@ -25,7 +25,7 @@ const cases = [
   [{ structureType: '力量耐力', content: '循环力量耐力' }, '力量耐力'],
   [{ structureType: '最大力量', content: '深蹲训练' }, '最大力量'],
   [{ structureType: '速度力量', content: '高拉爆发训练' }, '速度力量'],
-  [{ content: '跑步间歇' }, '跑步'],
+  [{ content: '跑步间歇' }, '有氧'],
   [{ trainingType: '', structureType: '', content: '' }, '其它'],
   [{ content: '未知课次内容' }, '其它'],
 ] as const;
