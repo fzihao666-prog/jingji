@@ -53,7 +53,12 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/**/*.{ts,tsx}', 'server/**/*.{ts,tsx}', 'shared/**/*.{ts,tsx}', 'scripts/**/*.{ts,tsx}'],
+    files: [
+      'src/**/*.{ts,tsx}',
+      'server/**/*.{ts,tsx}',
+      'shared/**/*.{ts,tsx}',
+      'scripts/**/*.{ts,tsx}',
+    ],
     plugins: {
       'react-hooks': reactHooks,
     },
