@@ -21,7 +21,13 @@
     "data-import-check": "tsx scripts/data-import-check.ts",
     "training-content-ratio-check": "tsx scripts/training-content-ratio-check.ts",
     "api-check": "node scripts/api-check.mjs",
-    "visual-check": "node scripts/visual-check.mjs"
+    "visual-check": "node scripts/visual-check.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:styles": "stylelint \"src/**/*.css\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
@@ -45,6 +51,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/d3-geo": "^3.1.0",
     "@types/express": "latest",
     "@types/jsonwebtoken": "latest",
@@ -52,8 +59,10 @@
     "@types/node": "^26.6.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@vitest/coverage-v8": "^5.0.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "knip": "^6.36.0",
     "playwright-core": "latest",
     "prettier": "^3.9.6",
@@ -61,7 +70,9 @@
     "stylelint-config-standard": "^40.0.0",
     "tsx": "latest",
     "typescript": "^5.9.3",
-    "vite": "latest"
+    "typescript-eslint": "^8.70.0",
+    "vite": "latest",
+    "vitest": "^5.0.1"
   },
   "overrides": {
     "uuid": "11.1.1",
