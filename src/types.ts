@@ -21,13 +21,6 @@ export type User = {
   athleteId: number | null;
 };
 
-export type OverviewLayoutState = {
-  version: number;
-  order: string[];
-  hidden: string[];
-  pinned: string[];
-};
-
 export type ProjectTeam = {
   id: number;
   project: Project;

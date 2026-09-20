@@ -215,7 +215,7 @@ sequenceDiagram
 | API 域     | 路径前缀                                                     | 主要职责                             |
 | ---------- | ------------------------------------------------------------ | ------------------------------------ |
 | 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密         |
-| 偏好       | `/api/preferences`                                           | 总览布局持久化                       |
+| 偏好       | `/api/preferences`                                           | 当前项目等应用上下文偏好             |
 | 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理 |
 | 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与绑定             |
 | 专项训练   | `/api/special-training`、`/api/special-tests`                | 训练场次、专项测试和模板导入         |

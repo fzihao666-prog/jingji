@@ -4,22 +4,16 @@ import {
   BarChart3,
   Database,
   Dumbbell,
-  Eye,
-  EyeOff,
   Gauge,
   HeartPulse,
   Layers3,
-  MoreHorizontal,
-  Pin,
   UsersRound,
 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { flushSync } from 'react-dom';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { api } from '../api';
 import type {
   Athlete,
-  OverviewLayoutState,
   OverviewMeasurement,
   OverviewPayload,
   Project,
@@ -70,34 +64,6 @@ type Props = {
 };
 
 type CardSize = 'metric' | 'third' | 'half' | 'wide' | 'full';
-type DropTarget = { id: string; position: 'before' | 'after' };
-type CardRect = {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
-};
-type PointerDragSession = {
-  id: string;
-  pointerId: number;
-  startX: number;
-  startY: number;
-  offsetX: number;
-  offsetY: number;
-  active: boolean;
-  preview: HTMLElement | null;
-  cleanup: () => void;
-};
-
-function stableCardRect(element: HTMLElement, gridRect: DOMRect): CardRect {
-  const left = gridRect.left + element.offsetLeft;
-  const top = gridRect.top + element.offsetTop;
-  const width = element.offsetWidth;
-  const height = element.offsetHeight;
-  return { left, top, right: left + width, bottom: top + height, width, height };
-}
 
 const defaultOrder = [
   'duration',
@@ -135,35 +101,6 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
   'training-content': { title: '训练课占比', size: 'half' },
   'water-land-load': { title: '训练负荷占比', size: 'half' },
 };
-
-function normalizeOverviewLayout(
-  stored: Partial<OverviewLayoutState> | null | undefined
-): OverviewLayoutState {
-  const known = new Set(defaultOrder);
-  const storedOrder = Array.isArray(stored?.order)
-    ? stored.order.filter((id) => known.has(id))
-    : [];
-  const mergedOrder = [...storedOrder];
-  for (const [index, id] of defaultOrder.entries()) {
-    if (mergedOrder.includes(id)) continue;
-    const nextKnown = defaultOrder.slice(index + 1).find((nextId) => mergedOrder.includes(nextId));
-    if (nextKnown) mergedOrder.splice(mergedOrder.indexOf(nextKnown), 0, id);
-    else mergedOrder.push(id);
-  }
-  if ((stored?.version || 0) < 3) {
-    const newProfileCards = ['athlete-profile', 'birthplace-map'];
-    const withoutNewCards = mergedOrder.filter((id) => !newProfileCards.includes(id));
-    const anchor = withoutNewCards.indexOf('recovery-time');
-    withoutNewCards.splice(anchor >= 0 ? anchor + 1 : 0, 0, ...newProfileCards);
-    mergedOrder.splice(0, mergedOrder.length, ...withoutNewCards);
-  }
-  return {
-    version: 6,
-    order: mergedOrder,
-    hidden: Array.isArray(stored?.hidden) ? stored.hidden.filter((id) => known.has(id)) : [],
-    pinned: Array.isArray(stored?.pinned) ? stored.pinned.filter((id) => known.has(id)) : [],
-  };
-}
 
 export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
@@ -377,334 +314,12 @@ export function OverviewPage(props: Props) {
     : `${ROLE_META[props.user.role].label}权限范围 · ${scopeAthleteCount}人`;
   const perAthlete = (value: number) => value / Math.max(1, scopeAthleteCount);
 
-  const layoutScope = isIndividualOverview ? 'self' : 'team';
-  const storageKey = `jingji-overview-layout:${props.user.id}:${props.project}:${layoutScope}`;
-  const [layout, setLayout] = useState<OverviewLayoutState>(() => normalizeOverviewLayout(null));
-  const [layoutReady, setLayoutReady] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const dragSessionRef = useRef<PointerDragSession | null>(null);
-  const lastDropTargetRef = useRef<DropTarget | null>(null);
-  const suppressHandleClickRef = useRef(false);
-  const flipRectsRef = useRef<Map<string, CardRect> | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setLayoutReady(false);
-    const readLocalLayout = () => {
-      try {
-        return normalizeOverviewLayout(
-          JSON.parse(localStorage.getItem(storageKey) || '{}') as Partial<OverviewLayoutState>
-        );
-      } catch {
-        return normalizeOverviewLayout(null);
-      }
-    };
-
-    api
-      .getOverviewLayout(props.project, layoutScope)
-      .then(({ layout: remoteLayout }) => {
-        if (!active) return;
-        setLayout(remoteLayout ? normalizeOverviewLayout(remoteLayout) : readLocalLayout());
-      })
-      .catch(() => {
-        if (active) setLayout(readLocalLayout());
-      })
-      .finally(() => {
-        if (active) setLayoutReady(true);
-      });
-    return () => {
-      active = false;
-    };
-  }, [layoutScope, props.project, storageKey]);
-
-  useEffect(() => {
-    if (!layoutReady) return undefined;
-    localStorage.setItem(storageKey, JSON.stringify(layout));
-    const timeout = window.setTimeout(() => {
-      api.saveOverviewLayout(props.project, layoutScope, layout).catch(() => undefined);
-    }, 350);
-    return () => window.clearTimeout(timeout);
-  }, [layout, layoutReady, layoutScope, props.project, storageKey]);
-
-  useEffect(
-    () => () => {
-      dragSessionRef.current?.cleanup();
-    },
-    []
-  );
-
-  useLayoutEffect(() => {
-    const before = flipRectsRef.current;
-    if (!before) return;
-    flipRectsRef.current = null;
-    const grid = document.querySelector<HTMLElement>('.professional-dashboard-grid');
-    if (!grid) return;
-    const gridRect = grid.getBoundingClientRect();
-    grid.querySelectorAll<HTMLElement>(':scope > .overview-card-shell').forEach((element) => {
-      const id = element.dataset.cardId;
-      const previous = id ? before.get(id) : null;
-      if (!previous || id === dragging) return;
-      element.getAnimations().forEach((animation) => animation.cancel());
-      const current = stableCardRect(element, gridRect);
-      const deltaX = previous.left - current.left;
-      const deltaY = previous.top - current.top;
-      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
-      element.animate(
-        [
-          { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
-          { transform: 'translate3d(0, 0, 0)' },
-        ],
-        { duration: 230, easing: 'cubic-bezier(.2,.8,.2,1)' }
-      );
-    });
-  }, [layout.order, dragging]);
-
-  const togglePin = (id: string) => {
-    setLayout((current) => {
-      const pinned = current.pinned.includes(id)
-        ? current.pinned.filter((item) => item !== id)
-        : [...current.pinned, id];
-      const order = current.pinned.includes(id)
-        ? current.order
-        : [id, ...current.order.filter((item) => item !== id)];
-      return { ...current, pinned, order };
-    });
-    setActiveMenu(null);
-  };
-
-  const hideCard = (id: string) => {
-    setLayout((current) => ({ ...current, hidden: [...new Set([...current.hidden, id])] }));
-    setActiveMenu(null);
-  };
-
-  const restoreCard = (id: string) =>
-    setLayout((current) => ({ ...current, hidden: current.hidden.filter((item) => item !== id) }));
-
-  const captureCardRects = () => {
-    const grid = document.querySelector<HTMLElement>('.professional-dashboard-grid');
-    if (!grid) return new Map<string, CardRect>();
-    const gridRect = grid.getBoundingClientRect();
-    return new Map(
-      Array.from(grid.querySelectorAll<HTMLElement>(':scope > .overview-card-shell')).flatMap(
-        (element) =>
-          element.dataset.cardId
-            ? [[element.dataset.cardId, stableCardRect(element, gridRect)] as const]
-            : []
-      )
-    );
-  };
-
-  const moveCard = (source: string, target: DropTarget) => {
-    if (source === target.id) return;
-    flushSync(() => {
-      setLayout((current) => {
-        const next = current.order.filter((id) => id !== source);
-        const targetIndex = next.indexOf(target.id);
-        const index =
-          targetIndex < 0 ? next.length : targetIndex + (target.position === 'after' ? 1 : 0);
-        next.splice(index, 0, source);
-        if (next.every((id, position) => id === current.order[position])) return current;
-        flipRectsRef.current = captureCardRects();
-        return { ...current, order: next };
-      });
-    });
-  };
-
-  const beginPointerDrag = (event: ReactPointerEvent<HTMLButtonElement>, id: string) => {
-    if (event.button !== 0) return;
-    dragSessionRef.current?.cleanup();
-    const session: PointerDragSession = {
-      id,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      offsetX: 0,
-      offsetY: 0,
-      active: false,
-      preview: null,
-      cleanup: () => undefined,
-    };
-    const finish = () => {
-      if (dragSessionRef.current !== session) return;
-      window.removeEventListener('pointermove', handleMove);
-      window.removeEventListener('pointerup', handleEnd);
-      window.removeEventListener('pointercancel', handleEnd);
-      window.removeEventListener('blur', finish);
-      session.preview?.remove();
-      document.body.classList.remove('overview-reordering');
-      dragSessionRef.current = null;
-      lastDropTargetRef.current = null;
-      setDragging(null);
-      setDropTarget(null);
-      if (session.active)
-        window.setTimeout(() => {
-          suppressHandleClickRef.current = false;
-        }, 0);
-    };
-    const handleEnd = (nativeEvent: PointerEvent) => {
-      if (nativeEvent.pointerId === session.pointerId) finish();
-    };
-    const handleMove = (nativeEvent: PointerEvent) => {
-      if (nativeEvent.pointerId !== session.pointerId) return;
-      if (
-        !session.active &&
-        Math.hypot(nativeEvent.clientX - session.startX, nativeEvent.clientY - session.startY) < 7
-      )
-        return;
-      if (!session.active) {
-        const grid = document.querySelector<HTMLElement>('.professional-dashboard-grid');
-        const shell = Array.from(
-          grid?.querySelectorAll<HTMLElement>(':scope > .overview-card-shell') || []
-        ).find((element) => element.dataset.cardId === session.id);
-        if (!shell) {
-          finish();
-          return;
-        }
-        shell.getAnimations().forEach((animation) => animation.cancel());
-        const rect = shell.getBoundingClientRect();
-        const preview = shell.cloneNode(true) as HTMLElement;
-        preview.classList.remove('is-dragging', 'is-drop-target');
-        preview.classList.add('mobile-card-drag-preview');
-        preview.setAttribute('aria-hidden', 'true');
-        preview.querySelector('.overview-card-controls')?.remove();
-        Object.assign(preview.style, { width: `${rect.width}px`, height: `${rect.height}px` });
-        document.body.appendChild(preview);
-        document.body.classList.add('overview-reordering');
-        session.active = true;
-        session.preview = preview;
-        session.offsetX = nativeEvent.clientX - rect.left;
-        session.offsetY = nativeEvent.clientY - rect.top;
-        suppressHandleClickRef.current = true;
-        setDragging(session.id);
-        setActiveMenu(null);
-      }
-      nativeEvent.preventDefault();
-      if (session.preview) {
-        session.preview.style.transform = `translate3d(${nativeEvent.clientX - session.offsetX}px, ${nativeEvent.clientY - session.offsetY}px, 0) rotate(.35deg) scale(1.015)`;
-      }
-      const target = findDropTarget(nativeEvent.clientX, nativeEvent.clientY, session.id);
-      const previous = lastDropTargetRef.current;
-      if (previous?.id !== target?.id || previous?.position !== target?.position) {
-        lastDropTargetRef.current = target;
-        setDropTarget(target);
-        if (target) moveCard(session.id, target);
-      }
-      const edge = 64;
-      if (nativeEvent.clientY < edge) window.scrollBy({ top: -12, behavior: 'auto' });
-      else if (nativeEvent.clientY > window.innerHeight - edge)
-        window.scrollBy({ top: 12, behavior: 'auto' });
-    };
-    session.cleanup = finish;
-    dragSessionRef.current = session;
-    suppressHandleClickRef.current = false;
-    window.addEventListener('pointermove', handleMove, { passive: false });
-    window.addEventListener('pointerup', handleEnd);
-    window.addEventListener('pointercancel', handleEnd);
-    window.addEventListener('blur', finish);
-  };
-
-  const findDropTarget = (
-    clientX: number,
-    clientY: number,
-    sourceId: string
-  ): DropTarget | null => {
-    const grid = document.querySelector<HTMLElement>('.professional-dashboard-grid');
-    if (!grid) return null;
-    const gridRect = grid.getBoundingClientRect();
-    if (
-      clientX < gridRect.left - 24 ||
-      clientX > gridRect.right + 24 ||
-      clientY < gridRect.top - 24 ||
-      clientY > gridRect.bottom + 24
-    )
-      return null;
-    const candidates = Array.from(
-      grid.querySelectorAll<HTMLElement>(':scope > .overview-card-shell')
-    )
-      .filter((element) => element.dataset.cardId && element.dataset.cardId !== sourceId)
-      .map((element) => ({
-        id: element.dataset.cardId as string,
-        rect: stableCardRect(element, gridRect),
-      }));
-    if (!candidates.length) return null;
-    const target = candidates.reduce<{ id: string; rect: CardRect; distance: number }>(
-      (nearest, candidate) => {
-        const distanceX = Math.max(
-          candidate.rect.left - clientX,
-          0,
-          clientX - candidate.rect.right
-        );
-        const distanceY = Math.max(
-          candidate.rect.top - clientY,
-          0,
-          clientY - candidate.rect.bottom
-        );
-        const distance = Math.hypot(distanceX, distanceY);
-        return distance < nearest.distance ? { ...candidate, distance } : nearest;
-      },
-      { ...candidates[0], distance: Number.POSITIVE_INFINITY }
-    );
-    if (target.distance > 30) return null;
-    const targetCenterY = target.rect.top + target.rect.height / 2;
-    const sharesVisualRow = candidates.some(
-      (candidate) =>
-        candidate.id !== target.id &&
-        Math.abs(candidate.rect.top + candidate.rect.height / 2 - targetCenterY) <
-          Math.min(candidate.rect.height, target.rect.height) * 0.35
-    );
-    const after = sharesVisualRow
-      ? clientX >= target.rect.left + target.rect.width / 2
-      : clientY >= targetCenterY;
-    return { id: target.id, position: after ? 'after' : 'before' };
-  };
-
   const renderShell = (id: string, content: ReactNode) => {
     const meta = cardMeta[id];
-    // 已保存的旧布局可能包含已下线卡片；忽略它们，避免刷新时因读取尺寸配置而中断页面渲染。
     if (!meta) return null;
     const size = id === 'athlete-profile' && isIndividualOverview ? 'half' : meta.size;
-    const pinned = layout.pinned.includes(id);
     return (
-      <div
-        key={id}
-        data-card-id={id}
-        className={`overview-card-shell card-size-${size}${pinned ? ' is-pinned' : ''}${dragging === id ? ' is-dragging' : ''}${dropTarget?.id === id ? ' is-drop-target' : ''}`}
-      >
-        <div className="overview-card-controls" onClick={(event) => event.stopPropagation()}>
-          <button
-            className="card-more-button"
-            type="button"
-            title="点击管理卡片，按住拖动排序"
-            aria-label={`${meta.title}卡片操作与拖动`}
-            onPointerDown={(event) => beginPointerDrag(event, id)}
-            onClick={() => {
-              if (!suppressHandleClickRef.current)
-                setActiveMenu((current) => (current === id ? null : id));
-            }}
-          >
-            <MoreHorizontal size={20} />
-          </button>
-          {activeMenu === id && (
-            <div className="card-action-menu">
-              <button type="button" onClick={() => togglePin(id)}>
-                <Pin size={14} />
-                {pinned ? '取消置顶' : '置顶卡片'}
-              </button>
-              <button type="button" onClick={() => hideCard(id)}>
-                <EyeOff size={14} />
-                隐藏卡片
-              </button>
-            </div>
-          )}
-        </div>
-        {pinned && (
-          <span className="pinned-mark">
-            <Pin size={11} />
-            已置顶
-          </span>
-        )}
+      <div key={id} className={`overview-card-shell card-size-${size}`}>
         {content}
       </div>
     );
@@ -957,7 +572,7 @@ export function OverviewPage(props: Props) {
   };
 
   return (
-    <PageContainer className="professional-overview" onClick={() => setActiveMenu(null)}>
+    <PageContainer className="professional-overview">
       <PageHeader
         variant="dashboard"
         className="overview-page-heading"
@@ -1002,23 +617,8 @@ export function OverviewPage(props: Props) {
         <PageSkeleton />
       ) : (
         <section className="professional-dashboard-grid">
-          {layout.order
-            .filter((id) => cardMeta[id] && !layout.hidden.includes(id))
-            .map((id) => renderShell(id, cards[id]))}
+          {defaultOrder.filter((id) => cardMeta[id]).map((id) => renderShell(id, cards[id]))}
         </section>
-      )}
-      {layout.hidden.filter((id) => cardMeta[id]).length > 0 && (
-        <div className="hidden-card-restore" onClick={(event) => event.stopPropagation()}>
-          <Eye size={15} />
-          <span>已隐藏 {layout.hidden.filter((id) => cardMeta[id]).length} 项</span>
-          {layout.hidden
-            .filter((id) => cardMeta[id])
-            .map((id) => (
-              <button key={id} type="button" onClick={() => restoreCard(id)}>
-                {cardMeta[id].title}
-              </button>
-            ))}
-        </div>
       )}
     </PageContainer>
   );

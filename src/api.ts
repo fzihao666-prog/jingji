@@ -14,7 +14,6 @@ import type {
   DataImportBatchSummary,
   InjuryRecord,
   InjuryStatus,
-  OverviewLayoutState,
   OverviewPayload,
   Project,
   ProjectTeam,
@@ -255,18 +254,6 @@ export const api = {
   async overviewTeams(project: Project) {
     const params = new URLSearchParams({ project });
     return request<{ teams: ProjectTeam[] }>(`/api/overview/teams?${params}`);
-  },
-  async getOverviewLayout(project: Project, scope: 'self' | 'team') {
-    const params = new URLSearchParams({ project, scope });
-    return request<{ layout: OverviewLayoutState | null; updatedAt: string | null }>(
-      `/api/preferences/overview-layout?${params}`
-    );
-  },
-  async saveOverviewLayout(project: Project, scope: 'self' | 'team', layout: OverviewLayoutState) {
-    return request<{ message: string; updatedAt: string }>('/api/preferences/overview-layout', {
-      method: 'PUT',
-      body: JSON.stringify({ project, scope, layout }),
-    });
   },
   async analysisSummary(from: string, to: string, athleteId: number, project: Project) {
     const params = new URLSearchParams({ from, to, athleteId: String(athleteId), project });

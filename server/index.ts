@@ -209,13 +209,6 @@ type StrengthImportRow = {
   warnings: string[];
 };
 
-type OverviewLayoutState = {
-  version: number;
-  order: string[];
-  hidden: string[];
-  pinned: string[];
-};
-
 declare global {
   namespace Express {
     interface Request {
@@ -369,21 +362,6 @@ function requireRole(...roles: Role[]) {
     }
     next();
   };
-}
-
-function isOverviewLayoutState(value: unknown): value is OverviewLayoutState {
-  if (!value || typeof value !== 'object') return false;
-  const layout = value as Record<string, unknown>;
-  return (
-    typeof layout.version === 'number' &&
-    Number.isFinite(layout.version) &&
-    Array.isArray(layout.order) &&
-    Array.isArray(layout.hidden) &&
-    Array.isArray(layout.pinned) &&
-    [layout.order, layout.hidden, layout.pinned].every((items) =>
-      items.every((item) => typeof item === 'string')
-    )
-  );
 }
 
 type AreaPermission = {
@@ -2206,33 +2184,6 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({ user });
 });
 
-app.get('/api/preferences/overview-layout', requireAuth, (req, res) => {
-  const project = cleanString(req.query.project);
-  const scope = cleanString(req.query.scope);
-  if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
-  if (!['self', 'team'].includes(scope))
-    return res.status(400).json({ message: '总览范围参数无效。' });
-
-  const row = db
-    .prepare(
-      `
-    SELECT layout_json AS layoutJson, updated_at AS updatedAt
-    FROM user_dashboard_preferences
-    WHERE user_id = ? AND dashboard = 'overview' AND project = ? AND scope = ?
-  `
-    )
-    .get(req.authUser!.id, project, scope) as { layoutJson: string; updatedAt: string } | undefined;
-
-  if (!row) return res.json({ layout: null, updatedAt: null });
-  try {
-    const layout = JSON.parse(row.layoutJson) as unknown;
-    if (!isOverviewLayoutState(layout)) return res.json({ layout: null, updatedAt: row.updatedAt });
-    res.json({ layout, updatedAt: row.updatedAt });
-  } catch {
-    res.json({ layout: null, updatedAt: row.updatedAt });
-  }
-});
-
 function selectableProjects(user: AuthUser): Project[] {
   if (user.role === 'ATL') {
     const athlete = user.athleteId
@@ -2282,41 +2233,6 @@ app.put('/api/preferences/current-project', requireAuth, (req, res) => {
   `
   ).run(req.authUser!.id, JSON.stringify({ project }));
   res.json({ project });
-});
-
-app.put('/api/preferences/overview-layout', requireAuth, (req, res) => {
-  const project = cleanString(req.body?.project);
-  const scope = cleanString(req.body?.scope);
-  const layout = req.body?.layout as unknown;
-  if (!projectSet.has(project)) return res.status(400).json({ message: '项目参数无效。' });
-  if (!['self', 'team'].includes(scope))
-    return res.status(400).json({ message: '总览范围参数无效。' });
-  if (!isOverviewLayoutState(layout))
-    return res.status(400).json({ message: '卡片布局数据无效。' });
-
-  db.prepare(
-    `
-    INSERT INTO user_dashboard_preferences (user_id, dashboard, project, scope, layout_json, updated_at)
-    VALUES (?, 'overview', ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id, dashboard, project, scope) DO UPDATE SET
-      layout_json = excluded.layout_json,
-      updated_at = CURRENT_TIMESTAMP
-  `
-  ).run(req.authUser!.id, project, scope, JSON.stringify(layout));
-
-  const row = db
-    .prepare(
-      `
-    SELECT updated_at AS updatedAt
-    FROM user_dashboard_preferences
-    WHERE user_id = ? AND dashboard = 'overview' AND project = ? AND scope = ?
-  `
-    )
-    .get(req.authUser!.id, project, scope) as { updatedAt: string } | undefined;
-  res.json({
-    message: '训练总览布局已同步。',
-    updatedAt: row?.updatedAt || new Date().toISOString(),
-  });
 });
 
 app.put('/api/profile/name', requireAuth, (req, res) => {

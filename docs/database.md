@@ -46,21 +46,21 @@ erDiagram
 
 ### 3.1 系统、账号与授权
 
-| 表                           | 职责                               | 关键关系/说明                                           |
-| ---------------------------- | ---------------------------------- | ------------------------------------------------------- |
-| `app_metadata`               | 保存初始化或迁移任务的版本标记     | 用于避免同一初始化任务重复运行。                        |
-| `users`                      | 登录账号、密码哈希、角色、停用状态 | 运动员账号可通过 `athlete_id` 绑定运动员。              |
-| `account_profiles`           | 账号编码与直属上级                 | `parent_user_id` 建立管理链。                           |
-| `coach_profiles`             | 教练类别                           | 仅扩展教练账号。                                        |
-| `registration_requests`      | 注册申请及审批状态                 | 含申请阶段的身份信息，应按敏感数据处理。                |
-| `user_dashboard_preferences` | 用户看板布局偏好                   | 以用户、看板、项目、范围为联合主键。                    |
-| `user_area_permissions`      | 全国/省/市/区县授权                | 是当前区域权限的主模型。                                |
-| `user_project_permissions`   | 项目授权                           | 与区域、队伍授权共同裁剪数据范围。                      |
-| `user_team_permissions`      | 队伍授权                           | 以项目和队伍联合授权。                                  |
-| `regional_manager_regions`   | 区域负责人旧授权关系               | 仍用于兼容迁移，和 `user_area_permissions` 有职能重叠。 |
-| `coach_athletes`             | 教练—运动员多对多关系              | 决定教练是否可管理某位运动员。                          |
-| `project_teams`              | 项目下可用队伍字典                 | `project + name` 唯一。                                 |
-| `audit_logs`                 | 关键操作审计                       | 记录操作者、动作、实体和详情。                          |
+| 表                           | 职责                               | 关键关系/说明                                                    |
+| ---------------------------- | ---------------------------------- | ---------------------------------------------------------------- |
+| `app_metadata`               | 保存初始化或迁移任务的版本标记     | 用于避免同一初始化任务重复运行。                                 |
+| `users`                      | 登录账号、密码哈希、角色、停用状态 | 运动员账号可通过 `athlete_id` 绑定运动员。                       |
+| `account_profiles`           | 账号编码与直属上级                 | `parent_user_id` 建立管理链。                                    |
+| `coach_profiles`             | 教练类别                           | 仅扩展教练账号。                                                 |
+| `registration_requests`      | 注册申请及审批状态                 | 含申请阶段的身份信息，应按敏感数据处理。                         |
+| `user_dashboard_preferences` | 用户应用偏好                       | 以用户、偏好类型、项目、范围为联合主键；当前用于保存项目上下文。 |
+| `user_area_permissions`      | 全国/省/市/区县授权                | 是当前区域权限的主模型。                                         |
+| `user_project_permissions`   | 项目授权                           | 与区域、队伍授权共同裁剪数据范围。                               |
+| `user_team_permissions`      | 队伍授权                           | 以项目和队伍联合授权。                                           |
+| `regional_manager_regions`   | 区域负责人旧授权关系               | 仍用于兼容迁移，和 `user_area_permissions` 有职能重叠。          |
+| `coach_athletes`             | 教练—运动员多对多关系              | 决定教练是否可管理某位运动员。                                   |
+| `project_teams`              | 项目下可用队伍字典                 | `project + name` 唯一。                                          |
+| `audit_logs`                 | 关键操作审计                       | 记录操作者、动作、实体和详情。                                   |
 
 ### 3.2 运动员主数据与健康档案
 

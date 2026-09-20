@@ -29,6 +29,22 @@ import type {
 } from '../types';
 import { formatNumber } from '../utils';
 
+function daysBetweenInclusive(from: string, to: string) {
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const start = Date.UTC(fy, fm - 1, fd);
+  const end = Date.UTC(ty, tm - 1, td);
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function getLoadPeriodLabel(from: string, to: string) {
+  const days = daysBetweenInclusive(from, to);
+  if (days <= 1) return '日负荷';
+  if (days <= 7) return '周负荷';
+  if (days >= 28 && days <= 31) return '月负荷';
+  return '周期负荷';
+}
+
 type Props = {
   user: User;
   records: TrainingRecord[];
@@ -617,7 +633,7 @@ export function PersonalPage(props: Props) {
               </div>
               <section className="personal-header-metrics" aria-label="当前周期训练指标">
                 <article>
-                  <span>月负荷</span>
+                  <span>{getLoadPeriodLabel(props.from, props.to)}</span>
                   <strong>
                     {formatNumber(rangeAnalysis.totalSrpe)}
                     <small>SRPE</small>
