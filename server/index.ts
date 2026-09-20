@@ -27,6 +27,7 @@ import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../shared/coach-categor
 import {
   PROJECTS,
   hasSpecialAnalysis,
+  normalizeProject,
   projectCapability,
   projectLabel,
   type Project,
@@ -5433,9 +5434,8 @@ app.get(
   requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
   async (req, res) => {
     try {
-      const project = cleanString(req.query.project);
-      if (!projectSet.has(project))
-        return res.status(400).json({ message: '请选择有效的运动项目。' });
+      const project = normalizeProject(cleanString(req.query.project));
+      if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
       const scope = dataImportScope(req.authUser!, project);
       if (!scope.allowed) return res.status(403).json({ message: '当前账号无权导出该项目数据。' });
       const athleteIds = strengthImportCandidates(req.authUser!)

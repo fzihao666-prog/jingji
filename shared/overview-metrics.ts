@@ -1,4 +1,4 @@
-import { STRENGTH_METRICS } from './strength-model';
+import { STRENGTH_METRICS } from './strength-model.js';
 
 export type MetricDirection = 'higher_better' | 'lower_better' | 'neutral';
 export type MetricFrequency = 'daily' | 'session' | 'monthly' | 'phase';

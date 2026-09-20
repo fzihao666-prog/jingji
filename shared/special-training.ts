@@ -2,11 +2,11 @@ import {
   trainingContentCategory,
   trainingLoadCategory,
   TRAINING_CONTENT_CATEGORIES,
-} from './training-content-category';
+} from './training-content-category.js';
 import {
   SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
   SPECIAL_TRAINING_PINNED_INTENSITY_ZONES,
-} from './training-intensity';
+} from './training-intensity.js';
 
 export type SpecialSession = {
   id: number;

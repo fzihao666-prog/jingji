@@ -1,4 +1,4 @@
-import type { RowingAnalysisRecord, RowingPeriodAnalysis } from './rowing-model';
+import type { RowingAnalysisRecord, RowingPeriodAnalysis } from './rowing-model.js';
 
 export const CANOE_MODEL_STANDARD = {
   version: 'GJ-CAN-2026.07-R1',

@@ -1,6 +1,6 @@
-import { analyzeCanoePeriod } from './canoe-model';
-import type { RowingAnalysisRecord, RowingPeriodAnalysis } from './rowing-model';
-import type { StrengthMetricKey, StrengthMetricValues } from './strength-model';
+import { analyzeCanoePeriod } from './canoe-model.js';
+import type { RowingAnalysisRecord, RowingPeriodAnalysis } from './rowing-model.js';
+import type { StrengthMetricKey, StrengthMetricValues } from './strength-model.js';
 
 export const SLALOM_MODEL_STANDARD = {
   version: 'GJ-SLA-2026.08-R1',

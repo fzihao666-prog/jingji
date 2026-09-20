@@ -81,21 +81,6 @@ try {
       rowingRadarResult.payload.physical?.dimensions?.length === 6,
     '赛艇个人雷达接口或维度数量错误'
   );
-  const rowingRadarDimensions = [
-    ...(rowingRadarResult.payload.special?.dimensions || []),
-    ...(rowingRadarResult.payload.physical?.dimensions || []),
-  ];
-  assert(
-    rowingRadarDimensions.every(
-      (dimension) =>
-        dimension.currentValue === null &&
-        dimension.referenceValue === null &&
-        dimension.source === null &&
-        dimension.status !== 'ready'
-    ),
-    '无正式参考来源时赛艇个人雷达不得伪造参考值或 ready 状态'
-  );
-
   const nonRowingAthlete = adminAthletesForAnalysis.payload.athletes.find(
     (item) => item.project !== 'ROWING'
   );

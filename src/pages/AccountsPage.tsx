@@ -1,9 +1,9 @@
 import { Check, Clock3, UserCheck, UserRound, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import type { RegistrationRequest } from '../types';
 import { EditableName } from '../components/EditableName';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import type { RegistrationRequest } from '../types';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 
