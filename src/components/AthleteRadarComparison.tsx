@@ -1,6 +1,7 @@
 import type { EChartsOption } from 'echarts';
 import type { ReactNode } from 'react';
 import type { AthleteRadarDimension, AthleteRadarModel } from '../types';
+import { formatNumber } from '../utils';
 import { EChart } from './EChart';
 import { ContentState } from './PageLayout';
 
@@ -19,15 +20,9 @@ function formatMetric(value: number | null, unit: string) {
   return value === null ? '—' : `${metricNumber.format(value)} ${unit}`;
 }
 
-function formatDifference(value: number | null, unit: string) {
-  if (value === null) return '—';
-  const prefix = value > 0 ? '+' : '';
-  return `${prefix}${metricNumber.format(value)} ${unit}`;
-}
-
 function formatAchieved(value: number | null) {
   if (value === null) return '—';
-  return `${metricNumber.format(Math.min(120, value))}%`;
+  return `${metricNumber.format(value)}%`;
 }
 
 function pendingReason(dimension: AthleteRadarDimension) {
@@ -37,46 +32,173 @@ function pendingReason(dimension: AthleteRadarDimension) {
       ? '待参考'
       : null;
 }
+function formatRadarDifference(dimension: AthleteRadarDimension) {
+  const diff = dimension.signedDifference;
 
-function sourceUrl(url: string) {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
-  } catch {
-    return null;
+  if (diff === null) return '--';
+
+  const abs = Math.abs(diff);
+
+  const formattedValue =
+    dimension.unit === 's' || dimension.unit === 's/500m'
+      ? formatRadarValue(abs, dimension.unit)
+      : `${formatNumber(abs, 1)} ${dimension.unit}`.trim();
+
+  if (dimension.direction === 'lower_better') {
+    if (diff > 0) return `慢 ${formattedValue}`;
+    if (diff < 0) return `快 ${formattedValue}`;
+    return '与参考一致';
   }
-}
 
+  if (diff > 0) return `高 ${formattedValue}`;
+  if (diff < 0) return `低 ${formattedValue}`;
+
+  return '与参考一致';
+}
+function formatRadarValue(value: number | null, unit: string) {
+  if (value === null) return '—';
+
+  if (unit === 's' || unit === 's/500m') {
+    const totalSeconds = Math.round(value);
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    const formatted = `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+    return unit === 's/500m' ? `${formatted} /500m` : formatted;
+  }
+
+  return `${formatNumber(value, 1)} ${unit}`.trim();
+}
 function radarOption(title: string, dimensions: AthleteRadarDimension[]): EChartsOption {
+  const athleteValues = dimensions.map((dimension) =>
+    Math.min(120, dimension.achievedPercent ?? 0)
+  );
+
+  const referenceValues = dimensions.map(() => 100);
+
   return {
+    tooltip: {
+      trigger: 'item',
+
+      formatter: () => {
+        return dimensions
+          .map((dimension) => {
+            const current = formatRadarValue(dimension.currentValue, dimension.unit);
+
+            const reference = formatRadarValue(dimension.referenceValue, dimension.unit);
+
+            const difference = formatRadarDifference(dimension);
+
+            const achieved =
+              dimension.achievedPercent === null
+                ? '--'
+                : `${formatNumber(dimension.achievedPercent, 1)}%`;
+
+            return `
+          <div style="margin-bottom:10px;">
+            <strong>${dimension.label}</strong><br/>
+            当前值：${current}<br/>
+            参考值：${reference}<br/>
+            差值：${difference}<br/>
+            达成度：${achieved}
+          </div>
+        `;
+          })
+          .join('');
+      },
+    },
     animation: false,
+
+    legend: {
+      top: 0,
+      right: 4,
+      itemWidth: 10,
+      itemHeight: 6,
+      textStyle: {
+        color: '#52666d',
+        fontSize: 10,
+      },
+    },
+
     radar: {
-      center: ['50%', '52%'],
-      radius: '66%',
+      center: ['50%', '54%'],
+      radius: '54%',
       splitNumber: 4,
-      indicator: dimensions.map((dimension) => ({ name: dimension.label, max: 120 })),
+
+      indicator: dimensions.map((dimension) => ({
+        name: dimension.label,
+        max: 120,
+      })),
+
       axisName: {
         color: '#365660',
-        fontSize: 12,
-        lineHeight: 16,
+        fontSize: 10,
+        lineHeight: 14,
       },
-      axisLine: { lineStyle: { color: '#c8d9dc' } },
-      splitLine: { lineStyle: { color: '#c8d9dc' } },
-      splitArea: { areaStyle: { color: ['#f8fbfb', '#eef6f5'] } },
+
+      axisLine: {
+        lineStyle: {
+          color: '#c8d9dc',
+        },
+      },
+
+      splitLine: {
+        lineStyle: {
+          color: '#c8d9dc',
+        },
+      },
+
+      splitArea: {
+        areaStyle: {
+          color: ['#f8fbfb', '#eef6f5'],
+        },
+      },
     },
+
     series: [
       {
         name: title,
         type: 'radar',
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { width: 2, color: '#176f7f' },
-        itemStyle: { color: '#1b9d95' },
-        areaStyle: { color: 'rgba(27, 157, 149, 0.2)' },
+
         data: [
           {
-            name: title,
-            value: dimensions.map((dimension) => Math.min(120, dimension.achievedPercent ?? 0)),
+            name: '冠军参考模型',
+            value: referenceValues,
+
+            symbol: 'none',
+
+            lineStyle: {
+              width: 2,
+              type: 'dashed',
+              color: '#c59745',
+            },
+
+            areaStyle: {
+              color: 'rgba(197, 151, 69, 0.05)',
+            },
+          },
+
+          {
+            name: '当前运动员',
+            value: athleteValues,
+
+            symbol: 'circle',
+            symbolSize: 6,
+
+            lineStyle: {
+              width: 2,
+              color: '#176f7f',
+            },
+
+            itemStyle: {
+              color: '#1b9d95',
+            },
+
+            areaStyle: {
+              color: 'rgba(27, 157, 149, 0.20)',
+            },
           },
         ],
       },
@@ -89,35 +211,38 @@ function RadarDetails({ dimensions }: { dimensions: AthleteRadarDimension[] }) {
     <dl className="athlete-radar-details">
       {dimensions.map((dimension) => {
         const reason = pendingReason(dimension);
-        const href = dimension.source ? sourceUrl(dimension.source.url) : null;
         return (
-          <div key={dimension.key}>
+          <div key={dimension.key} className={`athlete-radar-detail is-${dimension.status}`}>
             <dt>
               <strong>{dimension.label}</strong>
-              {reason && <span>{reason}</span>}
+
+              {reason && <span className="athlete-radar-detail-status">{reason}</span>}
             </dt>
+
             <dd>
               <span>
-                <small>当前</small>
-                <strong>{formatMetric(dimension.currentValue, dimension.unit)}</strong>
+                <small>当前值</small>
+
+                <strong>{formatRadarValue(dimension.currentValue, dimension.unit)}</strong>
               </span>
+
               <span>
-                <small>参考</small>
-                <strong>{formatMetric(dimension.referenceValue, dimension.unit)}</strong>
+                <small>参考值</small>
+
+                <strong>{formatRadarValue(dimension.referenceValue, dimension.unit)}</strong>
               </span>
+
               <span>
                 <small>差值</small>
-                <strong>{formatDifference(dimension.signedDifference, dimension.unit)}</strong>
+
+                <strong>{formatRadarDifference(dimension)}</strong>
               </span>
+
               <span>
                 <small>达成度</small>
+
                 <strong>{formatAchieved(dimension.achievedPercent)}</strong>
               </span>
-              {dimension.source && href && (
-                <a href={href} target="_blank" rel="noreferrer">
-                  来源：{dimension.source.name}（{dimension.source.year}）
-                </a>
-              )}
             </dd>
           </div>
         );

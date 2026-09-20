@@ -6248,11 +6248,6 @@ type RadarMeasurementRow = {
 
 type RadarReferenceRow = {
   value: number;
-  name: string;
-  url: string;
-  year: number;
-  protocol: string;
-  verifiedAt: string;
 };
 
 const radarModelDateSchema = z.string().trim().pipe(z.iso.date());
@@ -6282,18 +6277,6 @@ function firstRadarMeasurement(
     if (row) return row;
   }
   return null;
-}
-
-function verifiedRadarSource(row: RadarReferenceRow | undefined) {
-  if (!row || !row.name.trim() || !row.protocol.trim() || !row.verifiedAt.trim() || row.year <= 0)
-    return null;
-  try {
-    const url = new URL(row.url);
-    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !url.hostname) return null;
-  } catch {
-    return null;
-  }
-  return { name: row.name, url: row.url, year: row.year, protocol: row.protocol };
 }
 
 app.get('/api/athletes/:id/radar-models', requireAuth, (req, res) => {
@@ -6367,21 +6350,30 @@ app.get('/api/athletes/:id/radar-models', requireAuth, (req, res) => {
     LIMIT 1
   `);
   const referenceStatement = db.prepare(`
-    SELECT rv.value_num AS value, rs.name, rs.url, rs.source_year AS year,
-      rs.protocol, rs.verified_at AS verifiedAt
-    FROM radar_reference_values rv
-    JOIN radar_reference_sources rs ON rs.id = rv.source_id
-    WHERE rv.project = 'ROWING' AND rv.radar_kind = ? AND rv.metric_key = ?
-      AND rv.gender = ? AND rv.unit = ? AND rv.active = 1 AND rs.active = 1
-      AND trim(rs.name) <> '' AND trim(rs.protocol) <> '' AND trim(rs.verified_at) <> ''
-      AND rs.source_year > 0 AND (rs.url LIKE 'https://%' OR rs.url LIKE 'http://%')
-      AND (
-        rv.metric_key <> 'rowing_on_water_time'
-        OR (? <> '' AND (rv.boat_class = ? OR rv.applicability = ?))
+  SELECT
+    rv.value_num AS value
+  FROM radar_reference_values rv
+  WHERE rv.project = 'ROWING'
+    AND rv.radar_kind = ?
+    AND rv.metric_key = ?
+    AND rv.gender = ?
+    AND rv.unit = ?
+    AND rv.active = 1
+
+    AND (
+      rv.metric_key <> 'rowing_on_water_time'
+      OR (
+        ? <> ''
+        AND (
+          rv.boat_class = ?
+          OR rv.applicability = ?
+        )
       )
-    ORDER BY rv.updated_at DESC, rv.id DESC
-    LIMIT 1
-  `);
+    )
+
+  ORDER BY rv.updated_at DESC, rv.id DESC
+  LIMIT 1
+`);
   const gender = athlete.gender?.includes('女')
     ? '女'
     : athlete.gender?.includes('男')
@@ -6417,9 +6409,8 @@ app.get('/api/athletes/:id/radar-models', requireAuth, (req, res) => {
             athlete.currentEvent
           ) as RadarReferenceRow | undefined)
         : undefined;
-      const source = verifiedRadarSource(reference);
-      const referenceValue =
-        source && reference && Number.isFinite(reference.value) ? reference.value : null;
+
+      const referenceValue = reference && Number.isFinite(reference.value) ? reference.value : null;
       const comparison = buildRadarComparison(definition.direction, currentValue, referenceValue);
       return {
         ...definition,
@@ -6433,7 +6424,6 @@ app.get('/api/athletes/:id/radar-models', requireAuth, (req, res) => {
             : comparison.comparable
               ? ('ready' as const)
               : ('reference_pending' as const),
-        source,
       };
     }),
   });

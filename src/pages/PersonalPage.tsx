@@ -1,18 +1,18 @@
+import type { EChartsOption } from 'echarts';
 import { CalendarRange, Save, Search, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
+import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
-import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
-import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
-import { StrengthProfileModule } from '../components/StrengthProfileModule';
-import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
-import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
-import { EChart } from '../components/EChart';
 import { api } from '../api';
 import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
 import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
-import type { EChartsOption } from 'echarts';
+import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
+import { EChart } from '../components/EChart';
+import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
+import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import { StrengthProfileModule } from '../components/StrengthProfileModule';
+import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import type {
   Athlete,
   AthleteRadarModelsPayload,
@@ -410,7 +410,8 @@ export function PersonalPage(props: Props) {
       return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
     };
     const latestRecord = [...bodyCompositionHistory].sort(
-      (left, right) => measurementTimestamp(right.measurementDate) - measurementTimestamp(left.measurementDate)
+      (left, right) =>
+        measurementTimestamp(right.measurementDate) - measurementTimestamp(left.measurementDate)
     )[0];
 
     return [
@@ -653,10 +654,7 @@ export function PersonalPage(props: Props) {
                       description="读取身体成分记录失败，请稍后重试。"
                     />
                   ) : (
-                    <BodyCompositionModelOverview
-                      profiles={bodyCompositionProfiles}
-                      individual
-                    />
+                    <BodyCompositionModelOverview profiles={bodyCompositionProfiles} individual />
                   )}
                 </section>
               </AppCard>
@@ -730,9 +728,6 @@ export function PersonalPage(props: Props) {
                 />
               </AppCard>
             </div>
-
-            <SpecialTestSummary events={specialTests} loading={dossierDataLoading} />
-
             <AppCard
               variant="chart"
               className="professional-panel analysis-feature-panel personal-champion-card"
@@ -902,55 +897,6 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
       },
     ],
   };
-}
-
-function SpecialTestSummary({ events, loading }: { events: SpecialTestEvent[]; loading: boolean }) {
-  return (
-    <AppCard variant="chart" className="professional-panel personal-special-test-card">
-      <header className="personal-analysis-card-heading">
-        <div>
-          <span>
-            <small>SPECIAL TEST</small>
-            <h2>专项测试</h2>
-            <p>仅展示当前运动员作为成员参与的艇组结果。</p>
-          </span>
-        </div>
-      </header>
-      {loading ? (
-        <div className="professional-chart-empty">正在读取专项测试…</div>
-      ) : events.length ? (
-        <div className="personal-special-test-list">
-          {events.slice(0, 3).map((event) =>
-            event.results.map((result) => (
-              <article key={result.id}>
-                <strong>
-                  {event.testDate} · {event.boatClass}
-                </strong>
-                <span>
-                  {result.crewName} · 第 {result.rank} 名
-                </span>
-                <b>{(result.bestMs / 1000).toFixed(2)} 秒</b>
-                <small>
-                  {result.previousBestMs === null
-                    ? '暂无个人历史最佳'
-                    : `较历史最佳 ${result.deltaPreviousMs === null ? '—' : `${result.deltaPreviousMs > 0 ? '+' : ''}${(result.deltaPreviousMs / 1000).toFixed(2)} 秒`}`}
-                </small>
-                {event.dataQuality === 'unverified' && (
-                  <small>来源：历史专项测试，质量待确认</small>
-                )}
-              </article>
-            ))
-          )}
-        </div>
-      ) : (
-        <ContentState
-          kind="empty"
-          title="暂无专项测试结果"
-          description="当前周期内没有包含该运动员的有效专项测试。"
-        />
-      )}
-    </AppCard>
-  );
 }
 
 function AerobicEndurance({

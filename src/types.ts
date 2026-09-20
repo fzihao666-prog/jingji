@@ -1,4 +1,7 @@
 import type { AreaLevel, Role } from '../shared/access';
+import type { RadarDimensionDefinition, RadarDirection } from '../shared/athlete-radar-model';
+import type { ChampionModelStandardType } from '../shared/champion-model';
+import type { Project } from '../shared/projects';
 import type { StrengthMetricValues } from '../shared/strength-model';
 import type {
   StrengthBodyPosition,
@@ -6,13 +9,8 @@ import type {
   StrengthTrainingCategory,
   StrengthTrainingEnvironment,
 } from '../shared/strength-training';
-import type { Project } from '../shared/projects';
-import type { ChampionModelStandardType } from '../shared/champion-model';
-import type { RadarDirection, RadarDimensionDefinition } from '../shared/athlete-radar-model';
 
-export type { AreaLevel, Role };
-export type { Project };
-export type { ChampionModelStandardType };
+export type { AreaLevel, ChampionModelStandardType, Project, Role };
 export type TrainingStatus = 'normal' | 'attention' | 'alert' | 'rest' | 'missing';
 
 export type User = {
@@ -587,7 +585,6 @@ export type AthleteRadarDimension = {
   achievedPercent: number | null;
   signedDifference: number | null;
   status: 'ready' | 'measurement_pending' | 'reference_pending';
-  source: AthleteRadarReferenceSource | null;
 };
 
 export type AthleteRadarModel = {
