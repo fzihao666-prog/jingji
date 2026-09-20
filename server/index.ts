@@ -6180,8 +6180,15 @@ app.get('/api/athletes/:id/profile-comparison', requireAuth, (req, res) => {
     from > to
   )
     return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  const rangeDays =
+    Math.floor((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+  if (rangeDays > 366)
+    return res.status(400).json({ message: '个人档案团队比较最多支持连续366天。' });
+  if (consumeRateLimit(req, 'profile-comparison', 12, 60_000))
+    return res.status(429).json({ message: '团队比较请求过于频繁，请稍后重试。' });
   const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
   if (!scope) return res.status(403).json({ message: '无权查看该运动员团队比较。' });
+  res.setHeader('Cache-Control', 'no-store');
   res.json(buildProfileComparison(scope));
 });
 

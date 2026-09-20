@@ -8,6 +8,7 @@ import type {
   BodyCompositionRecord,
   WellnessTrendsPayload,
   ProfileComparisonPayload,
+  ProfileTrainingStatusPayload,
   ChampionBenchmarkPayload,
   DataImportBatch,
   DataImportBatchSummary,
@@ -166,9 +167,10 @@ export const api = {
     );
   },
   async profileComparison(id: number, from: string, to: string, project: Project) {
-    return request<{ comparison: ProfileComparisonPayload }>(
-      `/api/athletes/${id}/profile-comparison?${new URLSearchParams({ from, to, project })}`
-    );
+    return request<{
+      comparison: ProfileComparisonPayload;
+      trainingStatus: ProfileTrainingStatusPayload;
+    }>(`/api/athletes/${id}/profile-comparison?${new URLSearchParams({ from, to, project })}`);
   },
   async championBenchmark(id: number) {
     return request<{ benchmark: ChampionBenchmarkPayload }>(`/api/athletes/${id}/champion-model`);

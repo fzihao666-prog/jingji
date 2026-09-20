@@ -178,14 +178,89 @@ function latestMeasurements(scope: ProfileScope) {
   >;
 }
 
+type TrainingOverview = ReturnType<typeof buildOverviewPayload>;
+
+function profileTrainingOverviews(scope: ProfileScope) {
+  return new Map<number, TrainingOverview>(
+    [...new Set([scope.athleteId, ...scope.teamAthleteIds])].map((athleteId) => [
+      athleteId,
+      buildOverviewPayload({
+        athleteIds: [athleteId],
+        from: scope.from,
+        to: scope.to,
+        project: scope.project,
+        individual: true,
+      }),
+    ])
+  );
+}
+
+function trainingStatusMetric(input: {
+  key: 'duration' | 'load' | 'sessionCount' | 'distance';
+  label: string;
+  unit: string;
+  personalValue: number | null;
+  teamValues: number[];
+}) {
+  const teamMean = input.teamValues.length >= 2 ? mean(input.teamValues) : null;
+  const differenceValue = difference(input.personalValue, teamMean);
+  return {
+    ...input,
+    teamMean,
+    difference: differenceValue,
+    differencePercent:
+      differenceValue === null || teamMean === null || teamMean === 0
+        ? null
+        : Math.round((differenceValue / teamMean) * 1000) / 10,
+    teamSampleCount: teamMean === null ? null : input.teamValues.length,
+  };
+}
+
+function trainingStatusTrend(input: {
+  label: string;
+  unit: string;
+  athleteId: number;
+  overviews: Map<number, TrainingOverview>;
+  value: (overview: TrainingOverview, date: string) => number | null;
+}) {
+  const dates = [
+    ...new Set(
+      [...input.overviews.values()].flatMap((overview) =>
+        overview.trainingAnalytics.days.map((day) => day.date)
+      )
+    ),
+  ].sort();
+  return {
+    label: input.label,
+    unit: input.unit,
+    points: dates.map((date) => {
+      const personal = input.overviews.get(input.athleteId);
+      const personalValue = personal ? input.value(personal, date) : null;
+      const teamValues = [...input.overviews.values()]
+        .map((overview) => input.value(overview, date))
+        .filter((value): value is number => value !== null && Number.isFinite(value));
+      const teamMean = teamValues.length >= 2 ? mean(teamValues) : null;
+      return {
+        date,
+        personalValue,
+        teamMean,
+        teamSampleCount: teamMean === null ? null : teamValues.length,
+      };
+    }),
+  };
+}
+
+function dailyTrainingValue(
+  overview: TrainingOverview,
+  date: string,
+  key: 'physicalDurationMin' | 'specialDurationMin'
+) {
+  return overview.trainingAnalytics.days.find((day) => day.date === date)?.[key] ?? null;
+}
+
 export function buildProfileComparison(scope: ProfileScope) {
-  const personalOverview = buildOverviewPayload({
-    athleteIds: [scope.athleteId],
-    from: scope.from,
-    to: scope.to,
-    project: scope.project,
-    individual: true,
-  });
+  const overviews = profileTrainingOverviews(scope);
+  const personalOverview = overviews.get(scope.athleteId);
   const teamOverview = buildOverviewPayload({
     athleteIds: scope.teamAthleteIds,
     from: scope.from,
@@ -195,28 +270,16 @@ export function buildProfileComparison(scope: ProfileScope) {
   });
   const weightRows = latestBodyWeight(scope);
   const measurementRows = latestMeasurements(scope);
-  const athleteValues = (
-    select: (overview: ReturnType<typeof buildOverviewPayload>) => number | null
-  ) =>
-    scope.teamAthleteIds
-      .map((athleteId) =>
-        select(
-          buildOverviewPayload({
-            athleteIds: [athleteId],
-            from: scope.from,
-            to: scope.to,
-            project: scope.project,
-            individual: true,
-          })
-        )
-      )
+  const athleteValues = (select: (overview: TrainingOverview) => number | null) =>
+    [...overviews.values()]
+      .map(select)
       .filter((value): value is number => value !== null && Number.isFinite(value));
   const items = [
     comparisonItem({
       key: 'trainingDuration',
       label: '训练时长',
       unit: '分钟',
-      personalValue: personalOverview.trainingVolume.totalDurationMin,
+      personalValue: personalOverview?.trainingVolume.totalDurationMin ?? null,
       teamValues: athleteValues((overview) => overview.trainingVolume.totalDurationMin),
       dateLabel: `${scope.from} 至 ${scope.to}`,
     }),
@@ -224,7 +287,7 @@ export function buildProfileComparison(scope: ProfileScope) {
       key: 'trainingLoad',
       label: '训练负荷',
       unit: 'AU',
-      personalValue: personalOverview.trainingLoadRatio.totalLoad,
+      personalValue: personalOverview?.trainingLoadRatio.totalLoad ?? null,
       teamValues: athleteValues((overview) => overview.trainingLoadRatio.totalLoad),
       dateLabel: `${scope.from} 至 ${scope.to}`,
     }),
@@ -232,7 +295,7 @@ export function buildProfileComparison(scope: ProfileScope) {
       key: 'specialDistance',
       label: '专项距离',
       unit: 'km',
-      personalValue: personalOverview.trainingAnalytics.summary.specialDistanceKm,
+      personalValue: personalOverview?.trainingAnalytics.summary.specialDistanceKm ?? null,
       teamValues: athleteValues((overview) => overview.trainingAnalytics.summary.specialDistanceKm),
       dateLabel: `${scope.from} 至 ${scope.to}`,
     }),
@@ -263,18 +326,101 @@ export function buildProfileComparison(scope: ProfileScope) {
       })
     );
   }
+  const comparisonScope = {
+    athleteId: scope.athleteId,
+    teamId: scope.teamId,
+    project: scope.project,
+    from: scope.from,
+    to: scope.to,
+    athleteCount: scope.teamAthleteIds.length,
+  };
+  const statusMetric = (
+    key: 'duration' | 'load' | 'sessionCount' | 'distance',
+    label: string,
+    unit: string,
+    select: (overview: TrainingOverview) => number | null
+  ) =>
+    trainingStatusMetric({
+      key,
+      label,
+      unit,
+      personalValue: personalOverview ? select(personalOverview) : null,
+      teamValues: athleteValues(select),
+    });
+  const cards = [
+    {
+      kind: 'physical' as const,
+      title: '体能训练',
+      metrics: [
+        statusMetric('duration', '训练时长', 'h', (overview) => {
+          const value = overview.trainingAnalytics.summary.physicalDurationMin;
+          return value === null ? null : Math.round((value / 60) * 10) / 10;
+        }),
+        statusMetric(
+          'load',
+          '训练负荷',
+          'AU',
+          (overview) => overview.trainingAnalytics.summary.physicalLoad
+        ),
+        statusMetric('sessionCount', '训练课次', '课次', (overview) => {
+          const value = overview.trainingAnalytics.summary.physicalSessionCount;
+          return value > 0 ? value : null;
+        }),
+      ],
+      trend: trainingStatusTrend({
+        label: '体能训练时长',
+        unit: 'h',
+        athleteId: scope.athleteId,
+        overviews,
+        value: (overview, date) => {
+          const value = dailyTrainingValue(overview, date, 'physicalDurationMin');
+          return value === null ? null : Math.round((value / 60) * 10) / 10;
+        },
+      }),
+    },
+    {
+      kind: 'special' as const,
+      title: '专项训练',
+      metrics: [
+        statusMetric('duration', '训练时长', 'h', (overview) => {
+          const value = overview.trainingAnalytics.summary.specialDurationMin;
+          return value === null ? null : Math.round((value / 60) * 10) / 10;
+        }),
+        statusMetric(
+          'distance',
+          '训练距离',
+          'km',
+          (overview) => overview.trainingAnalytics.summary.specialDistanceKm
+        ),
+        statusMetric(
+          'load',
+          '训练负荷',
+          'AU',
+          (overview) => overview.trainingAnalytics.summary.specialLoad
+        ),
+        statusMetric('sessionCount', '训练课次', '课次', (overview) => {
+          const value = overview.trainingAnalytics.summary.specialSessionCount;
+          return value > 0 ? value : null;
+        }),
+      ],
+      trend: trainingStatusTrend({
+        label: '专项训练时长',
+        unit: 'h',
+        athleteId: scope.athleteId,
+        overviews,
+        value: (overview, date) => {
+          const value = dailyTrainingValue(overview, date, 'specialDurationMin');
+          return value === null ? null : Math.round((value / 60) * 10) / 10;
+        },
+      }),
+    },
+  ];
   return {
     comparison: {
-      scope: {
-        athleteId: scope.athleteId,
-        teamId: scope.teamId,
-        project: scope.project,
-        from: scope.from,
-        to: scope.to,
-        athleteCount: scope.teamAthleteIds.length,
-      },
+      scope: comparisonScope,
       items,
       teamSessionCount: teamOverview.meta.sessionCount,
     },
+    trainingStatus: { scope: comparisonScope, cards },
   };
 }

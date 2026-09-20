@@ -138,9 +138,160 @@
   font-size: 22px;
 }
 
+.profile-training-status-list {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-training-status-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+}
+
+.profile-training-status-card > header small {
+  color: var(--teal);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.profile-training-status-card h3,
+.profile-training-status-card h4 {
+  margin: 4px 0;
+  color: var(--ink);
+}
+
+.profile-training-status-card h3 {
+  font-size: 20px;
+}
+
+.profile-training-status-card h4 {
+  font-size: 15px;
+}
+
+.profile-training-status-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-training-status-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.profile-training-status-metrics > div {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--mist);
+}
+
+.profile-training-status-metrics dt {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.profile-training-status-metrics dd {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.profile-training-status-metrics dd > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.profile-training-status-metrics small,
+.profile-training-status-metrics em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.profile-training-status-metrics strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.profile-training-status-trend {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-training-status-figure > .app-echart {
+  --chart-height: 250px;
+}
+
+.profile-training-status-figure {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.profile-training-status-figure figcaption {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.profile-training-status-data {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-training-status-data summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.profile-training-status-data summary:focus-visible {
+  outline: 3px solid var(--river);
+  outline-offset: 3px;
+}
+
+.profile-training-status-data table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.profile-training-status-data th,
+.profile-training-status-data td {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-training-status-table-scroll:focus-visible {
+  outline: 3px solid var(--river);
+  outline-offset: 3px;
+}
+
 @media (width <= 720px) {
   .personal-wellness-grid {
     grid-template-columns: 1fr;
+  }
+
+  .profile-training-status-card {
+    padding: 14px;
+  }
+
+  .profile-training-status-metrics dd {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .personal-trend-points {

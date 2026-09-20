@@ -11,6 +11,7 @@ import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { EChart } from '../components/EChart';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import { ProfileTrainingStatus } from '../components/ProfileTrainingStatus';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import type {
@@ -20,6 +21,7 @@ import type {
   ChampionBenchmarkPayload,
   OverviewMeasurement,
   Project,
+  ProfileTrainingStatusPayload,
   SpecialTestEvent,
   TrainingRecord,
   User,
@@ -168,6 +170,8 @@ export function PersonalPage(props: Props) {
   const [dossierDataLoading, setDossierDataLoading] = useState(false);
   const [radarModels, setRadarModels] = useState<AthleteRadarModelsPayload | null>(null);
   const [radarModelsLoading, setRadarModelsLoading] = useState(false);
+  const [trainingStatus, setTrainingStatus] = useState<ProfileTrainingStatusPayload | null>(null);
+  const [trainingStatusLoading, setTrainingStatusLoading] = useState(false);
 
   useEffect(() => {
     let ignored = false;
@@ -204,6 +208,36 @@ export function PersonalPage(props: Props) {
       })
       .finally(() => {
         if (!ignored) setChampionLoading(false);
+      });
+    return () => {
+      ignored = true;
+    };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setTrainingStatus(null);
+      setTrainingStatusLoading(false);
+      return;
+    }
+    setTrainingStatus(null);
+    setTrainingStatusLoading(true);
+    api
+      .profileComparison(
+        selectedAthlete.id,
+        props.from,
+        props.to,
+        selectedAthlete.project as Project
+      )
+      .then((result) => {
+        if (!ignored) setTrainingStatus(result.trainingStatus);
+      })
+      .catch(() => {
+        if (!ignored) setTrainingStatus(null);
+      })
+      .finally(() => {
+        if (!ignored) setTrainingStatusLoading(false);
       });
     return () => {
       ignored = true;
@@ -748,6 +782,15 @@ export function PersonalPage(props: Props) {
                 八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。
               </p>
             </AppCard>
+            <ProfileSection
+              title="训练情况"
+              subtitle="与同项目、同队且在当前授权范围内的团队平均对照；所有数据跟随页面总周期。"
+            >
+              <ProfileTrainingStatus
+                trainingStatus={trainingStatus}
+                loading={trainingStatusLoading}
+              />
+            </ProfileSection>
             <AerobicEndurance measurements={profileMeasurements} loading={profileAnalysisLoading} />
           </section>
 

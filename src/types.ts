@@ -792,6 +792,40 @@ export type ProfileComparisonPayload = {
   teamSessionCount: number;
 };
 
+export type TrainingStatusMetric = {
+  key: 'duration' | 'load' | 'sessionCount' | 'distance';
+  label: string;
+  unit: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  difference: number | null;
+  differencePercent: number | null;
+  teamSampleCount: number | null;
+};
+
+export type TrainingStatusTrendPoint = {
+  date: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  teamSampleCount: number | null;
+};
+
+export type TrainingStatusCard = {
+  kind: 'physical' | 'special';
+  title: string;
+  metrics: TrainingStatusMetric[];
+  trend: {
+    label: string;
+    unit: string;
+    points: TrainingStatusTrendPoint[];
+  };
+};
+
+export type ProfileTrainingStatusPayload = {
+  scope: ProfileComparisonPayload['scope'];
+  cards: TrainingStatusCard[];
+};
+
 export type OverviewAthleteProfile = {
   athleteId: number;
   athleteName: string;
@@ -897,8 +931,11 @@ export type OverviewPayload = {
       recoveryDurationMin: number | null;
       specialDurationMin: number | null;
       specialDistanceKm: number | null;
+      specialLoad: number | null;
+      specialSessionCount: number;
       physicalDurationMin: number | null;
       physicalLoad: number | null;
+      physicalSessionCount: number;
       rpeAverage: number | null;
       rpeHighest: number | null;
       rpeLowest: number | null;

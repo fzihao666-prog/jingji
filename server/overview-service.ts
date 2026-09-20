@@ -306,8 +306,11 @@ function emptyTrainingAnalytics() {
       recoveryDurationMin: null as number | null,
       specialDurationMin: null as number | null,
       specialDistanceKm: null as number | null,
+      specialLoad: null as number | null,
+      specialSessionCount: 0,
       physicalDurationMin: null as number | null,
       physicalLoad: null as number | null,
+      physicalSessionCount: 0,
       rpeAverage: null as number | null,
       rpeHighest: null as number | null,
       rpeLowest: null as number | null,
@@ -362,10 +365,14 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     specialDurationCount: 0,
     specialDistanceKm: 0,
     specialDistanceCount: 0,
+    specialLoad: 0,
+    specialLoadCount: 0,
+    specialSessionCount: 0,
     physicalDurationMin: 0,
     physicalDurationCount: 0,
     physicalLoad: 0,
     physicalLoadCount: 0,
+    physicalSessionCount: 0,
     rpe: [] as number[],
   };
   const getDay = (row: SessionRow) =>
@@ -398,6 +405,8 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
     if (category === 'special' && Number.isFinite(row.srpe)) {
       day.specialLoad += row.srpe;
       day.specialLoadCount += 1;
+      totals.specialLoad += row.srpe;
+      totals.specialLoadCount += 1;
     }
     if (category === 'special' && row.distanceReported) {
       day.specialDistanceKm += row.distanceKm;
@@ -456,12 +465,14 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       totals.physicalDurationMin += row.durationMin;
       totals.physicalDurationCount += 1;
     }
+    if (category === 'physical') totals.physicalSessionCount += 1;
     if (category === 'special' && row.durationReported) {
       day.specialDurationMin += row.durationMin;
       day.specialDurationCount += 1;
       totals.specialDurationMin += row.durationMin;
       totals.specialDurationCount += 1;
     }
+    if (category === 'special') totals.specialSessionCount += 1;
     if (category === 'recovery' && row.durationReported) {
       totals.recoveryDurationMin += row.durationMin;
       totals.recoveryDurationCount += 1;
@@ -476,8 +487,11 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
       recoveryDurationMin: value(totals.recoveryDurationMin, totals.recoveryDurationCount),
       specialDurationMin: value(totals.specialDurationMin, totals.specialDurationCount),
       specialDistanceKm: value(totals.specialDistanceKm, totals.specialDistanceCount),
+      specialLoad: value(totals.specialLoad, totals.specialLoadCount),
+      specialSessionCount: totals.specialSessionCount,
       physicalDurationMin: value(totals.physicalDurationMin, totals.physicalDurationCount),
       physicalLoad: value(totals.physicalLoad, totals.physicalLoadCount),
+      physicalSessionCount: totals.physicalSessionCount,
       rpeAverage: average(totals.rpe) === null ? null : round(average(totals.rpe), 1),
       rpeHighest: totals.rpe.length ? round(Math.max(...totals.rpe), 1) : null,
       rpeLowest: totals.rpe.length ? round(Math.min(...totals.rpe), 1) : null,
