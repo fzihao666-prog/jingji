@@ -1,5 +1,6 @@
 import { db } from './db.ts';
 import { buildOverviewPayload } from './overview-service.ts';
+import { trainingStatusMetric } from '../shared/training-status-metrics.js';
 
 type ProfileScopeInput = {
   athleteId: number;
@@ -193,27 +194,6 @@ function profileTrainingOverviews(scope: ProfileScope) {
       }),
     ])
   );
-}
-
-function trainingStatusMetric(input: {
-  key: 'duration' | 'load' | 'sessionCount' | 'distance';
-  label: string;
-  unit: string;
-  personalValue: number | null;
-  teamValues: number[];
-}) {
-  const teamMean = input.teamValues.length >= 2 ? mean(input.teamValues) : null;
-  const differenceValue = difference(input.personalValue, teamMean);
-  return {
-    ...input,
-    teamMean,
-    difference: differenceValue,
-    differencePercent:
-      differenceValue === null || teamMean === null || teamMean === 0
-        ? null
-        : Math.round((differenceValue / teamMean) * 1000) / 10,
-    teamSampleCount: teamMean === null ? null : input.teamValues.length,
-  };
 }
 
 function trainingStatusTrend(input: {
