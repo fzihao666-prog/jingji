@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api } from '../api';
+import { projectLabel } from '../../shared/projects';
 import type { Project, SpecialTestImportPreview } from '../types';
 import './SpecialDataImportDialog.css';
 
@@ -101,7 +102,7 @@ export function SpecialDataImportDialog({ project, onClose, onCommitted }: Props
         <header>
           <div>
             <span>RESULT INTAKE</span>
-            <h2 id="special-data-import-title">导入{project}专项数据</h2>
+            <h2 id="special-data-import-title">导入{projectLabel(project)}专项数据</h2>
             <p>先预览校验，确认后的成绩才会写入数据库并用于专项分析。</p>
           </div>
           <button
@@ -230,7 +231,7 @@ export function SpecialDataImportDialog({ project, onClose, onCommitted }: Props
                       <td>{row.rowNumber}</td>
                       <td>{row.testDate || '—'}</td>
                       <td>
-                        <strong>{row.project || '未填写'}</strong>
+                        <strong>{row.project ? projectLabel(row.project) : '未填写'}</strong>
                         <small>{row.distanceM ? `${row.distanceM} m` : '距离无效'}</small>
                       </td>
                       <td>

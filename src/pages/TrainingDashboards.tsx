@@ -24,6 +24,7 @@ import {
 import type { Athlete, Project, StrengthTest, StrengthTrainingSession } from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
+import { projectLabel } from '../../shared/projects';
 import {
   STRENGTH_CONTENT_ANALYSIS_CATEGORIES,
   inferStrengthContentAnalysisCategory,
@@ -58,7 +59,7 @@ function PhysicalChampionModelPlaceholder({
   return (
     <ChartCard
       title="冠军模型"
-      description={`${project} · 体能能力参考模型`}
+      description={`${projectLabel(project)} · 体能能力参考模型`}
       actions={
         <button className="dashboard-action-button" onClick={onPlanOpen}>
           查看训练计划 <ArrowRight size={15} />

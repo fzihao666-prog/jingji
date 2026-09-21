@@ -29,6 +29,7 @@ import type {
   User,
 } from '../types';
 import { AREA_LEVEL_META, ROLE_META, ROLES, canManageRole } from '../../shared/access';
+import { projectLabel } from '../../shared/projects';
 
 const blankArea = (): AreaPermission => ({
   areaLevel: 'province',
@@ -46,7 +47,9 @@ function areaLabel(area: AreaPermission) {
 
 function compactScope(account: AccessAccount) {
   const areas = account.areas.map(areaLabel).join('、');
-  const projects = account.projects.includes('*') ? '全部项目' : account.projects.join('、');
+  const projects = account.projects.includes('*')
+    ? '全部项目'
+    : account.projects.map((project) => projectLabel(project)).join('、');
   return `${areas} · ${projects}`;
 }
 
@@ -490,7 +493,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                     }
                   >
                     {payload?.meta.projects.map((project) => (
-                      <option key={project}>{project}</option>
+                      <option key={project} value={project}>{projectLabel(project)}</option>
                     ))}
                   </select>
                 </label>
@@ -748,7 +751,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       className={projects.includes(project) ? 'selected' : ''}
                       onClick={() => toggleProject(project)}
                     >
-                      {project}
+                      {projectLabel(project)}
                     </button>
                   ))}
                 </div>
@@ -768,7 +771,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       >
                         {selected.role !== 'ATL' && <option value="*">全部项目</option>}
                         {payload?.meta.projects.map((project) => (
-                          <option key={project}>{project}</option>
+                          <option key={project} value={project}>{projectLabel(project)}</option>
                         ))}
                       </select>
                       <input

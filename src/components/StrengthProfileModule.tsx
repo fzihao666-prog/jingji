@@ -21,6 +21,7 @@ import {
   type StrengthMetricValues,
 } from '../../shared/strength-model';
 import { api } from '../api';
+import { projectLabel } from '../../shared/projects';
 import { exportPdfSheets } from '../pdf/exportPdf';
 import type { Athlete, StrengthTest, User } from '../types';
 import { formatDate, formatNumber, toIsoDate } from '../utils';
@@ -377,7 +378,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
                   <span>当前运动员</span>
                   <strong>{athlete.name}</strong>
                   <small>
-                    {athlete.project} · {athlete.team}
+                    {projectLabel(athlete.project)} · {athlete.team}
                   </small>
                 </div>
                 <label>
@@ -603,7 +604,7 @@ function ArchiveSheet({
         </div>
         <h2>
           <span>
-            {year}年{athlete.project}体能训练营
+            {year}年{projectLabel(athlete.project)}体能训练营
           </span>
           体能测试档案
         </h2>
@@ -622,7 +623,7 @@ function ArchiveSheet({
           value={athlete.birthDate ? formatDate(athlete.birthDate) : '未录入'}
         />
         <ArchiveBasic label="性别" english="Gender" value={athlete.gender || '未录入'} />
-        <ArchiveBasic label="分项" english="Group" value={`${athlete.project} · ${athlete.team}`} />
+        <ArchiveBasic label="分项" english="Group" value={`${projectLabel(athlete.project)} · ${athlete.team}`} />
         <ArchiveBasic
           label="位置/号位"
           english="Position"

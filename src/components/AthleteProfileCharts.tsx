@@ -21,6 +21,7 @@ import {
 import bodyModel from '../assets/body-composition/body-model.webp';
 import { buildBodyCompositionTrends } from '../../shared/body-composition-trends';
 import type { BodyCompositionTrendKey } from '../../shared/body-composition-trends';
+import { projectLabel } from '../../shared/projects';
 import type { BodyCompositionRecord, OverviewAthleteProfile } from '../types';
 import { formatNumber, percentage } from '../utils';
 
@@ -769,7 +770,7 @@ export function BodyCompositionModelOverview({
             >
               {profiles.map((profile) => (
                 <option key={profile.athleteId} value={profile.athleteId}>
-                  {profile.athleteName} · {profile.project}
+                  {profile.athleteName} · {projectLabel(profile.project)}
                 </option>
               ))}
             </select>
@@ -1572,7 +1573,7 @@ export function BirthplaceMapOverview({
                           {[
                             profile.gender,
                             profile.age === null ? null : `${profile.age}岁`,
-                            profile.project,
+                            projectLabel(profile.project),
                           ]
                             .filter(Boolean)
                             .join(' · ')}

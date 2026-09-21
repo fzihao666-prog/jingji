@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
+import { projectLabel } from '../../shared/projects';
 import { AITrainingPlanGenerator } from '../components/AITrainingPlanGenerator';
 import { StrengthTrainingLoadChart } from '../components/StrengthTrainingLoadChart';
 import {
@@ -672,7 +673,7 @@ export function TrainingPlanPage(props: Props) {
           <span>统计范围</span>
           <strong>全队整体数据</strong>
           <small>
-            {props.athletes[0]?.project} · {props.athletes.length} 名运动员
+            {projectLabel(props.athletes[0]?.project || '')} · {props.athletes.length} 名运动员
           </small>
         </div>
         <dl>

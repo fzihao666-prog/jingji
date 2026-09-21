@@ -25,6 +25,7 @@ import type {
 } from '../types';
 import './DataImportPage.css';
 import { PageContainer, PageHeader } from '../components/PageLayout';
+import { projectLabel } from '../../shared/projects';
 
 type Props = {
   user: User;
@@ -446,7 +447,7 @@ export function DataImportPage({ project, athletes, mode = 'import', onChanged }
             <Clock3 size={20} />
             <div>
               <strong>最近导入批次</strong>
-              <span>当前项目：{project}</span>
+              <span>当前项目：{projectLabel(project)}</span>
             </div>
           </div>
           <div className="data-import-history-list">

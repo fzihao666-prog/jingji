@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
+import { projectLabel } from '../../shared/projects';
 import { api } from '../api';
 import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
 import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
@@ -412,7 +413,7 @@ export function PersonalPage(props: Props) {
           title: '个人信息',
           tone: 'personal',
           fields: [
-            { label: '运动项目', value: selectedAthlete.project },
+            { label: '运动项目', value: projectLabel(selectedAthlete.project) },
             { label: '所属队伍', value: selectedAthlete.team },
             { label: '主管教练', value: selectedAthlete.coaches },
             {
@@ -521,7 +522,7 @@ export function PersonalPage(props: Props) {
             <strong>选择运动员</strong>
             {selectedAthlete && (
               <small>
-                {selectedAthlete.project} · {selectedAthlete.team} · {selectedAthlete.name}
+                {projectLabel(selectedAthlete.project)} · {selectedAthlete.team} · {selectedAthlete.name}
               </small>
             )}
           </div>
@@ -593,7 +594,7 @@ export function PersonalPage(props: Props) {
               </div>
               <div className="personal-identity-copy">
                 <span>
-                  {selectedAthlete.project} · {selectedAthlete.team}
+                  {projectLabel(selectedAthlete.project)} · {selectedAthlete.team}
                 </span>
                 <h2>{selectedAthlete.name}</h2>
                 <p>

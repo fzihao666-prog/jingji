@@ -42,6 +42,7 @@ import {
   SectionHeader,
 } from '../components/PageLayout';
 import type { Project, TrainingRecord } from '../types';
+import { projectLabel } from '../../shared/projects';
 import './SpecialTrainingPage.css';
 
 type Props = {
@@ -621,7 +622,7 @@ function ProjectNotes({ project }: { project: Project }) {
         : ['距离之外增加门区通过质量', '关注逆水门、顺水门耗时', '结合罚分与线路偏差评价'];
   return (
     <div className="project-notes">
-      <span>{project}专项口径</span>
+      <span>{projectLabel(project)}专项口径</span>
       {items.map((item, index) => (
         <div key={item}>
           <b>0{index + 1}</b>
@@ -760,7 +761,7 @@ function AnalysisPage({
           <SectionCard title="距离完成排名" note="连接运动员档案与训练记录" className="span-8">
             <AthleteTable sessions={sessions} metric="distance" />
           </SectionCard>
-          <SectionCard title={`${project}距离模型`} note="项目差异" className="span-4">
+          <SectionCard title={`${projectLabel(project)}距离模型`} note="项目差异" className="span-4">
             <ProjectNotes project={project} />
           </SectionCard>
         </div>
@@ -1009,7 +1010,7 @@ function MetricPage({
         />
       </div>
       <div className="special-grid">
-        <SectionCard title={`${label}趋势`} note={`${project} · ${unit}`} className="span-8">
+        <SectionCard title={`${label}趋势`} note={`${projectLabel(project)} · ${unit}`} className="span-8">
           <TrendChart
             data={days}
             metric={kind}
@@ -1035,7 +1036,7 @@ function MetricPage({
             metric={kind === 'rate' ? 'strokeRate' : kind === 'heart' ? 'heartRate' : 'power'}
           />
         </SectionCard>
-        <SectionCard title={`${project}专项解释`} note="指标随所选运动变化" className="span-4">
+        <SectionCard title={`${projectLabel(project)}专项解释`} note="指标随所选运动变化" className="span-4">
           <ProjectNotes project={project} />
           <div className="technique-note">
             <Sparkles />

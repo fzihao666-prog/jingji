@@ -1,6 +1,7 @@
 import { Activity, ClipboardList, FlaskConical, TrendingUp } from 'lucide-react';
 import { ChartCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import type { Project } from '../types';
+import { projectLabel } from '../../shared/projects';
 import './SpecialTrainingPage.css';
 
 type Props = {
@@ -21,7 +22,7 @@ export function PhysiologyBiochemistryPage({ project, from, to }: Props) {
       <section className="training-dashboard-grid" aria-label="生理生化数据展示区域">
         <ChartCard
           title="生理生化整体概览"
-          description={`${project} · 当前组织范围 · ${from} 至 ${to}`}
+          description={`${projectLabel(project)} · 当前组织范围 · ${from} 至 ${to}`}
           className="dashboard-span-12"
         >
           <ContentState

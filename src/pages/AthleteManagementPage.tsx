@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ROLE_META } from '../../shared/access';
-import { PROJECTS } from '../../shared/projects';
+import { PROJECTS, projectLabel } from '../../shared/projects';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { api } from '../api';
 import type { Athlete, InjuryRecord, InjuryStatus, ProjectTeam, User } from '../types';
@@ -580,7 +580,7 @@ export function AthleteManagementPage({
         >
           <option value="">全部项目</option>
           {projects.map((project) => (
-            <option key={project}>{project}</option>
+            <option key={project} value={project}>{projectLabel(project)}</option>
           ))}
         </select>
         <select
@@ -747,7 +747,7 @@ export function AthleteManagementPage({
                   </td>
                   <td>
                     <div className="athlete-team-cell">
-                      <strong>{athlete.project}</strong>
+                      <strong>{projectLabel(athlete.project)}</strong>
                       <small>{athlete.team || '未分队'}</small>
                     </div>
                   </td>
@@ -1168,7 +1168,7 @@ export function AthleteManagementPage({
                           }
                         >
                           {PROJECTS.map((project) => (
-                            <option key={project}>{project}</option>
+                            <option key={project} value={project}>{projectLabel(project)}</option>
                           ))}
                         </select>
                       </label>
@@ -1645,7 +1645,7 @@ export function AthleteManagementPage({
                 <span>INJURY RECORD</span>
                 <h2 id="athlete-injury-title">新增伤病记录</h2>
                 <p>
-                  {injuryAthlete.name} · {injuryAthlete.project} · {injuryAthlete.team}
+                  {injuryAthlete.name} · {projectLabel(injuryAthlete.project)} · {injuryAthlete.team}
                 </p>
               </div>
               <button

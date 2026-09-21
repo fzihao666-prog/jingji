@@ -1,6 +1,7 @@
 import { CheckCircle2, Clock3, FileSpreadsheet, Medal, RefreshCw, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
+import { projectLabel } from '../../shared/projects';
 import type { Project, SpecialTestEvent } from '../types';
 import './SpecialPerformancePanel.css';
 
@@ -51,7 +52,7 @@ export function SpecialPerformancePanel({ project, from, to }: Props) {
           <span>SPECIAL RESULTS</span>
           <h2>专项距离成绩与排名</h2>
           <p>
-            {project} · {from} 至 {to} · 专项成绩记录
+            {projectLabel(project)} · {from} 至 {to} · 专项成绩记录
           </p>
         </div>
         {loading && <RefreshCw className="spin" />}

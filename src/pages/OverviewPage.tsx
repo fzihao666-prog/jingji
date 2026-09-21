@@ -24,6 +24,7 @@ import type {
 } from '../types';
 import { aggregateRecords, average, formatNumber, percentage } from '../utils';
 import { ROLE_META } from '../../shared/access';
+import { projectLabel } from '../../shared/projects';
 import { PerformanceRadarChart } from '../components/LoadCharts';
 import {
   FmsTeamChart,
@@ -369,7 +370,7 @@ export function OverviewPage(props: Props) {
         value={formatNumber(scopeAthleteCount)}
         unit="人"
         note={
-          isIndividualOverview ? '个人视图 · 本人数据' : `${props.project} · 权限范围内全部运动员`
+          isIndividualOverview ? '个人视图 · 本人数据' : `${projectLabel(props.project)} · 权限范围内全部运动员`
         }
         tone="blue"
       />

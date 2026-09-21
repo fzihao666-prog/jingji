@@ -1,6 +1,6 @@
 import { Layers3, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import { PROJECTS, type Project } from '../../shared/projects';
+import { PROJECTS, projectLabel, type Project } from '../../shared/projects';
 import { api } from '../api';
 import type { ProjectTeam } from '../types';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
@@ -79,7 +79,7 @@ export function TeamsPage() {
             <span>所属项目</span>
             <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
               {canCreateProjects.map((item) => (
-                <option key={item}>{item}</option>
+                <option key={item} value={item}>{projectLabel(item)}</option>
               ))}
             </select>
           </label>
@@ -115,7 +115,7 @@ export function TeamsPage() {
               <article className="team-project-card" key={item}>
                 <header>
                   <div>
-                    <strong>{item}</strong>
+                  <strong>{projectLabel(item)}</strong>
                     <small>{projectTeams.length}支队伍</small>
                   </div>
                 </header>

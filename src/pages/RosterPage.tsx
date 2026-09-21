@@ -15,6 +15,7 @@ import { api } from '../api';
 import type { Athlete, User } from '../types';
 import { PROVINCES } from '../../shared/regions';
 import { ROLE_META } from '../../shared/access';
+import { projectLabel } from '../../shared/projects';
 import { EditableName } from '../components/EditableName';
 import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
 
@@ -228,7 +229,7 @@ export function RosterPage({
             >
               <option value="">全部项目</option>
               {projects.map((project) => (
-                <option key={project}>{project}</option>
+                <option key={project} value={project}>{projectLabel(project)}</option>
               ))}
             </select>
           </div>
@@ -301,7 +302,7 @@ export function RosterPage({
                     />
                   </h2>
                   <p>
-                    {athlete.project} · {athlete.team}
+                    {projectLabel(athlete.project)} · {athlete.team}
                   </p>
                 </div>
                 <span>{athlete.gender}</span>

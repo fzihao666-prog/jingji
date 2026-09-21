@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ROLE_META } from '../../shared/access';
+import { projectLabel } from '../../shared/projects';
 import {
   COACH_CATEGORIES,
   DEFAULT_COACH_CATEGORY,
@@ -458,7 +459,7 @@ export function CoachManagementPage({
           >
             <option value="">全部项目</option>
             {projects.map((project) => (
-              <option key={project}>{project}</option>
+              <option key={project} value={project}>{projectLabel(project)}</option>
             ))}
           </select>
         </label>
@@ -553,7 +554,7 @@ export function CoachManagementPage({
                   <td>
                     <div className="coach-project-tags">
                       {coach.projectNames.length ? (
-                        coach.projectNames.map((project) => <span key={project}>{project}</span>)
+                        coach.projectNames.map((project) => <span key={project}>{projectLabel(project)}</span>)
                       ) : (
                         <em>未设置</em>
                       )}
@@ -678,7 +679,7 @@ export function CoachManagementPage({
             <div className="coach-detail-facts">
               <div>
                 <span>执教项目</span>
-                <strong>{selectedCoach.projectNames.join('、') || '未设置'}</strong>
+                <strong>{selectedCoach.projectNames.map((project) => projectLabel(project)).join('、') || '未设置'}</strong>
               </div>
               <div>
                 <span>关联队伍</span>
@@ -723,7 +724,7 @@ export function CoachManagementPage({
                   selectedGroups.map((group) => (
                     <article key={`${group.project}-${group.team}`}>
                       <header>
-                        <span>{group.project}</span>
+                        <span>{projectLabel(group.project)}</span>
                         <strong>{group.team}</strong>
                         <small>{group.athletes.length} 人</small>
                       </header>
@@ -856,7 +857,7 @@ export function CoachManagementPage({
                   >
                     <option value="">请选择项目</option>
                     {projects.map((project) => (
-                      <option key={project}>{project}</option>
+                      <option key={project} value={project}>{projectLabel(project)}</option>
                     ))}
                   </select>
                 </label>
@@ -962,7 +963,7 @@ export function CoachManagementPage({
                     <span className="coach-scope-person">
                       <strong>{athlete.name}</strong>
                       <small>
-                        {athlete.project} · {athlete.team || '未分队'}
+                        {projectLabel(athlete.project)} · {athlete.team || '未分队'}
                       </small>
                     </span>
                     <span className="coach-scope-region">

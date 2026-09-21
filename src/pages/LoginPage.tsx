@@ -13,7 +13,7 @@ import { api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
 import type { ProjectTeam, User } from '../types';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
-import { PROJECTS } from '../../shared/projects';
+import { PROJECTS, projectLabel } from '../../shared/projects';
 
 type Mode = 'login' | 'register';
 
@@ -591,7 +591,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     >
                       <option value="">请选择项目</option>
                       {PROJECTS.map((item) => (
-                        <option key={item}>{item}</option>
+                        <option key={item} value={item}>{projectLabel(item)}</option>
                       ))}
                     </select>
                   </label>

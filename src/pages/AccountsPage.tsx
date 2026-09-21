@@ -4,6 +4,7 @@ import { api } from '../api';
 import { EditableName } from '../components/EditableName';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import type { RegistrationRequest } from '../types';
+import { projectLabel } from '../../shared/projects';
 
 type Filter = 'pending' | 'approved' | 'rejected';
 
@@ -112,7 +113,7 @@ export function AccountsPage() {
                 </div>
                 <p>
                   @{request.username} · {request.gender} · 籍贯：{request.nativePlace} · 身份证：
-                  {request.identityNumber} · {request.project} · {request.team}
+                  {request.identityNumber} · {projectLabel(request.project || '')} · {request.team}
                 </p>
               </div>
               <time>
