@@ -60,7 +60,14 @@ Expected: FAIL，`buildSpecialTestComparison` 未导出。
 
 ```ts
 export type SpecialTestSample = { athleteId: number; testDate: string; distanceM: number; boatClass: string; bestMs: number };
-export function buildSpecialTestComparison(input: { athleteId: number; tests: SpecialTestSample[] }): SpecialTestComparison { /* 个人最新记录；同日/距离/艇型每人一条成绩均值 */ }
+export function buildSpecialTestComparison(input: { athleteId: number; tests: SpecialTestSample[] }): SpecialTestComparison {
+  const athlete = input.tests.filter((row) => row.athleteId === input.athleteId).sort((left, right) => right.testDate.localeCompare(left.testDate))[0] ?? null;
+  if (!athlete) return { athlete: null, teamAverage: null, deltaMs: null };
+  const samples = input.tests.filter((row) => row.testDate === athlete.testDate && row.distanceM === athlete.distanceM && row.boatClass === athlete.boatClass);
+  const perAthlete = [...new Map(samples.map((row) => [row.athleteId, row])).values()];
+  const teamAverage = perAthlete.length ? perAthlete.reduce((sum, row) => sum + row.bestMs, 0) / perAthlete.length : null;
+  return { athlete, teamAverage, deltaMs: teamAverage === null ? null : athlete.bestMs - teamAverage };
+}
 ```
 
 - [ ] **Step 4: 写入服务端载荷组合与边界失败测试**
@@ -72,8 +79,10 @@ it('个人载荷保留完整团队基准和专项测试比较', () => expect(com
 - [ ] **Step 5: 实现 API 参数与服务端范围校验**
 
 ```ts
-const athleteId = req.query.athleteId === undefined ? null : Number(req.query.athleteId);
-if (athleteId !== null && (!Number.isInteger(athleteId) || athleteId <= 0 || !hasAthleteAccess(user, athleteId))) return res.status(403).json({ message: '无权查看该运动员专项训练。' });
+const overviewQuery = z.object({ athleteId: z.coerce.number().int().positive().optional() }).safeParse(req.query);
+if (!overviewQuery.success) return res.status(400).json({ message: '运动员筛选参数无效。' });
+const athleteId = overviewQuery.data.athleteId ?? null;
+if (athleteId !== null && !hasAthleteAccess(user, athleteId)) return res.status(403).json({ message: '无权查看该运动员专项训练。' });
 ```
 
 读取目标运动员后校验其项目；有 `teamId` 时校验队伍。用完整当前范围计算 `teamTraining`，仅用 `[athleteId]` 计算个人 `training`，只读取当前周期的可见专项测试样本。未选个人时保持当前 `training` 和 `athletes` 响应兼容。
