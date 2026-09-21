@@ -1,0 +1,33 @@
+<view class="page privacy-page">
+  <view class="page-head">
+    <view class="page-title">隐私保护说明</view>
+    <view class="page-description">账号与敏感信息处理说明</view>
+  </view>
+
+  <view class="notice">本页面是产品内置的隐私说明框架。正式发布前，运营主体应补充单位全称、联系方式、保存期限和投诉渠道，并由合规负责人确认。</view>
+
+  <view class="card privacy-section">
+    <view class="card-head-title">我们处理哪些信息</view>
+    <text>账号和组织信息：姓名、账号、角色、项目、队伍与授权区域。</text>
+    <text>训练信息：训练计划、训练时长、距离、强度、RPE、SRPE和完成情况。</text>
+    <text>敏感信息：体测指标、身体成分、生理生化、伤病与恢复记录，以及经授权使用的证件照。</text>
+  </view>
+
+  <view class="card privacy-section">
+    <view class="card-head-title">为什么处理</view>
+    <text>用于制定和执行训练计划、分析训练负荷、展示个人与团队趋势、识别需要教练关注的异常状态。</text>
+    <text>小程序不把健康或训练分析作为医学诊断，也不自动用于运动员选拔、处罚或停训决定。</text>
+  </view>
+
+  <view class="card privacy-section">
+    <view class="card-head-title">如何保护</view>
+    <text>数据仍保存在竞迹网页系统使用的同一服务器和数据库中，不在小程序端复制一套数据库。</text>
+    <text>系统按角色、项目、区域、队伍和教练—运动员关系进行服务端授权；敏感信息仅展示必要字段。</text>
+    <text>小程序不提供批量导出、账号权限配置和原始数据删除能力。</text>
+  </view>
+
+  <view class="card privacy-section">
+    <view class="card-head-title">用户权利</view>
+    <text>用户可以联系系统管理员查阅、更正、删除个人信息或撤回相应授权。涉及不满十四周岁运动员时，应由监护人完成授权。</text>
+  </view>
+</view>

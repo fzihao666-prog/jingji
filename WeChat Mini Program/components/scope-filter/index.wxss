@@ -1,0 +1,42 @@
+.scope-filter { margin-bottom: 20rpx; padding: 14rpx; border: 1rpx solid #d8e3e6; border-radius: 18rpx; background: #ffffff; }
+.scope-picker-row { display: flex; gap: 12rpx; }
+.scope-picker { min-width: 0; flex: 1; }
+.scope-picker-control { height: 66rpx; padding: 0 15rpx; border: 1rpx solid #d5e1e3; border-radius: 13rpx; display: flex; align-items: center; gap: 8rpx; background: #f8fbfb; }
+.scope-picker-control > text:first-child { flex: none; color: #829399; font-size: 18rpx; }
+.scope-picker-value { min-width: 0; flex: 1; overflow: hidden; color: #1d4d58; font-size: 21rpx; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
+.scope-picker-control > text:last-child { color: #6f848b; font-size: 18rpx; }
+.scope-range {
+  margin-top: 13rpx;
+  padding: 5rpx;
+  display: flex;
+  align-items: center;
+  gap: 5rpx;
+  overflow: hidden;
+  border: 1rpx solid #dce7e9;
+  border-radius: 14rpx;
+  background: #edf3f4;
+}
+
+.scope-range button {
+  min-width: 0;
+  height: 52rpx;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  border: 0;
+  border-radius: 10rpx;
+  color: #657b83;
+  background: transparent;
+  box-shadow: none;
+  font-size: 20rpx;
+  font-weight: 700;
+  line-height: 52rpx;
+}
+
+.scope-range button::after { border: 0; }
+
+.scope-range button.active {
+  color: #ffffff;
+  background: #176f7f;
+  box-shadow: 0 5rpx 12rpx rgba(23, 111, 127, .2);
+}

@@ -1,0 +1,33 @@
+<view class="page">
+  <view class="page-head">
+    <view class="page-title">我的</view>
+    <view class="page-description">账号、安全与隐私设置</view>
+  </view>
+
+  <view wx:if="{{user}}" class="card account-card">
+    <view class="account-avatar">{{avatar}}</view>
+    <view class="account-copy">
+      <view>{{user.displayName}}</view>
+      <text>@{{user.username}}</text>
+      <text>{{roleLabel}} · {{project || '项目未选择'}}</text>
+    </view>
+  </view>
+
+  <view class="card settings-list">
+    <button bindtap="togglePasswordForm"><view><text class="setting-title">修改密码</text><text>管理当前账号的登录密码</text></view><text class="setting-arrow {{showPasswordForm ? 'open' : ''}}">›</text></button>
+    <button bindtap="openPrivacy"><view><text class="setting-title">隐私保护说明</text><text>查看敏感信息处理范围与用户权利</text></view><text class="setting-arrow">›</text></button>
+  </view>
+
+  <view wx:if="{{showPasswordForm}}" class="card password-card">
+    <view class="card-head">
+      <view><view class="card-head-title">修改密码</view><view class="card-head-note">至少8位，包含字母和数字</view></view>
+    </view>
+    <view class="field"><text class="field-label">当前密码</text><input class="input" password value="{{currentPassword}}" bindinput="onCurrentPassword" /></view>
+    <view class="field"><text class="field-label">新密码</text><input class="input" password value="{{newPassword}}" placeholder="至少8位，含字母和数字" bindinput="onNewPassword" /></view>
+    <view class="field"><text class="field-label">确认新密码</text><input class="input" password value="{{confirmPassword}}" bindinput="onConfirmPassword" /></view>
+    <view wx:if="{{error}}" class="error-box">{{error}}</view>
+    <button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="changePassword">保存密码</button>
+  </view>
+
+  <button class="danger-button" bindtap="logout">退出登录</button>
+</view>

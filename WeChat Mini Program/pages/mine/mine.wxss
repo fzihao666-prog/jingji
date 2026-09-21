@@ -1,0 +1,15 @@
+.account-card { display: flex; align-items: center; gap: 22rpx; background: linear-gradient(145deg, #164654, #0a303c); color: #fff; }
+.account-avatar { width: 92rpx; height: 92rpx; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #092b39; background: #d8efea; font-size: 34rpx; font-weight: 800; }
+.account-copy { min-width: 0; flex: 1; }
+.account-copy view { font-size: 31rpx; font-weight: 800; }
+.account-copy text { display: block; margin-top: 7rpx; color: rgba(239,250,249,.68); font-size: 21rpx; }
+.settings-list { padding: 0 24rpx; }
+.settings-list button { width: 100%; min-height: 112rpx; padding: 20rpx 0; border-bottom: 1rpx solid #e0e8e9; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; color: #234d57; background: transparent; text-align: left; }
+.settings-list button:last-child { border-bottom: 0; }
+.settings-list text { display: block; }
+.setting-title { color: #234d57; font-size: 24rpx; font-weight: 700; }
+.settings-list view > text { margin-top: 6rpx; color: #7d9097; font-size: 19rpx; line-height: 1.4; }
+.settings-list > button > text { flex: none; color: #6f858c; font-size: 20rpx; }
+.setting-arrow { font-size: 34rpx !important; transition: transform .18s ease; }
+.setting-arrow.open { transform: rotate(90deg); }
+.password-card { margin-top: -2rpx; }

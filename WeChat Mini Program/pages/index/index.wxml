@@ -1,0 +1,71 @@
+<view class="page">
+  <view class="page-head page-head-action">
+    <view class="page-head-copy">
+      <view class="page-title">{{meta.scope === 'individual' ? '我的训练总览' : '训练总览'}}</view>
+      <view class="page-description">{{from}} 至 {{to}} · {{project}}</view>
+    </view>
+    <button wx:if="{{canSelfReport}}" class="quick-entry" hover-class="quick-entry-active" bindtap="openTrainingEntry"><text class="quick-entry-icon">＋</text><text>记录训练</text></button>
+  </view>
+
+  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onProjectChange" bindathletechange="onAthleteChange" bindrangechange="onRangeChange" />
+
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载训练数据</view></view>
+
+  <block wx:if="{{!loading}}">
+    <view wx:if="{{attention.show}}" class="attention-card">
+      <view class="attention-mark">!</view>
+      <view><view class="attention-title">{{attention.title}}</view><text>{{attention.summary}}</text></view>
+    </view>
+
+    <view class="metric-grid">
+      <view wx:for="{{metrics}}" wx:key="label" class="metric-card {{item.tone}}">
+        <view class="metric-label">{{item.label}}</view>
+        <view class="metric-value">{{item.value}}<text>{{item.unit}}</text></view>
+        <text class="metric-note">{{item.note}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{activeInjuries.length}}" class="section-head"><view class="section-head-title">伤病关注</view><view class="section-head-note">点击运动员查看档案</view></view>
+    <view wx:if="{{activeInjuries.length}}" class="card">
+      <view class="list">
+        <view wx:for="{{activeInjuries}}" wx:key="athleteId" class="list-row access" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete">
+          <view class="list-row-main"><view><view class="list-row-title">{{item.athleteName}}</view><text class="list-row-meta">{{item.bodyPart}} · {{item.injuryName || '需关注状态'}}</text></view><view class="list-row-value">疼痛 {{item.painScore}}</view></view>
+          <text class="tag {{item.status === 'observation' ? 'warn' : 'danger'}}">{{item.statusLabel}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">训练量统计</view><view class="section-head-note">最近训练趋势</view></view>
+    <view class="card">
+      <view wx:if="{{trend.length}}" class="chart-meta">
+        <view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />SRPE负荷（AU）</view></view>
+        <text class="chart-hint">点击柱形查看</text>
+      </view>
+      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false">
+        <view class="trend-chart">
+          <view wx:for="{{trend}}" wx:key="date" class="trend-day" data-index="{{index}}" bindtap="showTrendDetail">
+            <view class="trend-bars">
+              <view class="trend-bar" style="height: {{item.durationHeight}}%;" />
+              <view class="trend-bar accent" style="height: {{item.loadHeight}}%;" />
+            </view>
+            <text class="trend-label">{{item.label}}</text>
+          </view>
+        </view>
+      </scroll-view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无训练量数据</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
+    <view class="card">
+      <view wx:if="{{intensity.length}}" class="ratio-list">
+        <view wx:for="{{intensity}}" wx:key="name">
+          <view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view>
+          <view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view>
+        </view>
+      </view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无有效强度数据</view></view>
+    </view>
+
+  </block>
+</view>

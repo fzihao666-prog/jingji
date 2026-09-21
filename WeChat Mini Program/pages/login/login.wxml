@@ -1,0 +1,71 @@
+<view class="login-page">
+  <view class="login-hero">
+    <image class="login-hero-image" src="{{heroUrl}}" mode="aspectFill" />
+    <view class="login-hero-overlay">
+      <image class="login-logo" src="/assets/gfc-logo.png" mode="widthFix" />
+
+      <view class="olympic-panel">
+        <view class="olympic-panel-head">
+          <text>OLYMPIC PICTOGRAMS</text>
+          <text>50 DISCIPLINES</text>
+        </view>
+        <view class="olympic-grid">
+          <view wx:for="{{olympicIcons}}" wx:key="src" class="olympic-item">
+            <image src="{{item.src}}" mode="aspectFill" aria-label="{{item.label}}" />
+          </view>
+        </view>
+      </view>
+
+      <view class="login-hero-copy">
+        <text class="login-eyebrow">OLYMPIC DISCIPLINES</text>
+        <text class="login-slogan">让每一次训练，</text>
+        <text class="login-slogan accent">都成为突破的依据</text>
+      </view>
+    </view>
+  </view>
+
+  <scroll-view class="login-panel" scroll-y>
+    <view class="login-box">
+      <view class="login-heading">
+        <text class="login-kicker">竞技表现管理平台</text>
+        <text class="login-welcome">欢迎回来</text>
+        <text class="login-description">请输入账号和密码进入系统</text>
+      </view>
+
+      <view class="login-form">
+        <view class="field">
+          <text class="field-label">账号</text>
+          <input class="input" value="{{username}}" placeholder="请输入账号" bindinput="onUsernameInput" />
+        </view>
+        <view class="field">
+          <text class="field-label">密码</text>
+          <view class="password-field">
+            <input class="input" value="{{password}}" password="{{!showPassword}}" placeholder="请输入密码" bindinput="onPasswordInput" confirm-type="done" bindconfirm="login" />
+            <view class="password-toggle" aria-role="button" aria-label="{{showPassword ? '隐藏密码' : '显示密码'}}" hover-class="password-toggle-active" bindtap="togglePassword">
+              <image class="visibility-icon" src="{{showPassword ? '/assets/eye.svg' : '/assets/eye-off.svg'}}" mode="aspectFit" />
+            </view>
+          </view>
+        </view>
+
+        <view class="option-list">
+          <view class="option-row">
+            <checkbox-group class="option-group" bindchange="onRememberChange">
+              <label class="check-line"><checkbox value="remember" checked="{{rememberUsername}}" color="#176f7f" /><text>记住账号</text></label>
+            </checkbox-group>
+            <text class="option-link" bindtap="forgotPassword">忘记密码</text>
+          </view>
+
+          <view class="option-row privacy-row">
+            <checkbox-group class="option-group" bindchange="onPrivacyChange">
+              <label class="check-line"><checkbox value="accepted" checked="{{privacyAccepted}}" color="#176f7f" /><text>我已阅读并同意</text></label>
+            </checkbox-group>
+            <text class="option-link" bindtap="openPrivacy">隐私保护说明</text>
+          </view>
+        </view>
+
+        <view wx:if="{{error}}" class="login-error">{{error}}</view>
+        <button class="primary-button login-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="login">{{submitting ? '登录中…' : '登录系统'}}</button>
+      </view>
+    </view>
+  </scroll-view>
+</view>

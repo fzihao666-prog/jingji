@@ -1,0 +1,39 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/index/index",
+    "pages/special/special",
+    "pages/strength/strength",
+    "pages/profile/profile",
+    "pages/profile-edit/profile-edit",
+    "pages/training-entry/training-entry",
+    "pages/mine/mine",
+    "pages/privacy/privacy"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#092b39",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "竞迹",
+    "backgroundColor": "#edf3f4",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#6d8088",
+    "selectedColor": "#176f7f",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "训练总览", "iconPath": "assets/tabbar/overview.png", "selectedIconPath": "assets/tabbar/overview-active.png" },
+      { "pagePath": "pages/special/special", "text": "专项训练", "iconPath": "assets/tabbar/special.png", "selectedIconPath": "assets/tabbar/special-active.png" },
+      { "pagePath": "pages/strength/strength", "text": "体能训练", "iconPath": "assets/tabbar/strength.png", "selectedIconPath": "assets/tabbar/strength-active.png" },
+      { "pagePath": "pages/profile/profile", "text": "档案", "iconPath": "assets/tabbar/profile.png", "selectedIconPath": "assets/tabbar/profile-active.png" },
+      { "pagePath": "pages/mine/mine", "text": "我的", "iconPath": "assets/tabbar/mine.png", "selectedIconPath": "assets/tabbar/mine-active.png" }
+    ]
+  },
+  "usingComponents": {
+    "scope-filter": "/components/scope-filter/index"
+  },
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "sitemap.json"
+}

@@ -1,0 +1,67 @@
+<view class="page">
+  <view class="page-head">
+    <view class="page-title">专项训练</view>
+    <view class="page-description">{{from}} 至 {{to}} · {{project}}</view>
+  </view>
+
+  <scope-filter projects="{{projects}}" project="{{project}}" show-athlete="{{false}}" range="{{range}}" bindprojectchange="onProjectChange" bindrangechange="onRangeChange" />
+  <picker class="team-picker" mode="selector" range="{{teamItems}}" range-key="name" value="{{teamIndex}}" bindchange="onTeamChange">
+    <view class="team-picker-control"><text>队伍</text><text class="team-picker-value">{{teamItems[teamIndex].name}}</text><text>⌄</text></view>
+  </picker>
+
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载专项训练数据</view></view>
+
+  <block wx:if="{{!loading}}">
+    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{project}} · 已配置赛事参考成绩</view></view>
+    <view class="card">
+      <view wx:if="{{championEvents.length}}" class="champion-list">
+        <view wx:for="{{championEvents}}" wx:key="code" class="champion-row">
+          <view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}}</text></view>
+          <view class="champion-value"><text class="champion-performance">{{item.performance}}</text><text wx:if="{{item.pace}}">{{item.pace}}</text></view>
+        </view>
+      </view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">模型数据待配置</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">专项数据概览</view><view class="section-head-note">当前筛选范围</view></view>
+    <view class="compact-grid">
+      <view wx:for="{{metrics}}" wx:key="label" class="compact-stat">
+        <view class="compact-stat-label">{{item.label}}</view>
+        <view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view>
+        <text class="compact-stat-note">{{item.note}}</text>
+      </view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">专项训练量统计</view><view class="section-head-note">青色：训练时长 · 金色：训练距离</view></view>
+    <view class="card">
+      <view wx:if="{{trend.length}}" class="chart-meta">
+        <view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />训练距离（km）</view></view>
+        <text class="chart-hint">点击柱形查看</text>
+      </view>
+      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false">
+        <view class="trend-chart special-trend">
+          <view wx:for="{{trend}}" wx:key="date" class="trend-day" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="height: {{item.durationHeight}}%;" /><view class="trend-bar accent" style="height: {{item.distanceHeight}}%;" /></view><text class="trend-label">{{item.label}}</text></view>
+        </view>
+      </scroll-view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无专项训练量数据</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">专项训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
+    <view class="card"><view wx:if="{{intensity.length}}" class="ratio-list"><view wx:for="{{intensity}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无有效专项强度数据</view></view></view>
+
+    <view class="section-head"><view class="section-head-title">专项训练课占比</view><view class="section-head-note">按训练内容统计课次</view></view>
+    <view class="card"><view wx:if="{{content.length}}" class="ratio-list"><view wx:for="{{content}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill orange" style="width: {{item.width}}%;" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无专项训练内容数据</view></view></view>
+
+    <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
+    <view class="card">
+      <view wx:if="{{athleteRows.length}}" class="list">
+        <view wx:for="{{athleteRows}}" wx:key="id" class="list-row access" hover-class="access-active" data-athlete-id="{{item.id}}" bindtap="goToAthlete">
+          <view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}} · {{item.body}}</text></view><view class="list-row-value">{{item.load}}</view></view>
+          <view class="athlete-summary"><text>课次 {{item.sessionCount}}</text><text>时长 {{item.duration}}</text><text>距离 {{item.distance}}</text></view>
+        </view>
+      </view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无可查看运动员</view></view>
+    </view>
+  </block>
+</view>
