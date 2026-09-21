@@ -1386,42 +1386,64 @@ export function BirthplaceMapOverview({
                 tabIndex={activeAthletes.length > 3 ? 0 : -1}
                 aria-label={`${activeProvince}运动员名单，共${activeAthletes.length}人`}
               >
-                {activeAthletes.map((profile) => (
-                  <div key={profile.athleteId}>
-                    <i>{profile.athleteName.slice(0, 1)}</i>
-                    <span className="birthplace-athlete-identity">
-                      <strong>{individual ? '本人' : profile.athleteName}</strong>
-                      <small>
-                        {[
-                          profile.gender,
-                          profile.age === null ? '' : `${profile.age}岁`,
-                          profile.project,
-                          profile.athletePosition,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </small>
-                    </span>
-                    <span className="birthplace-athlete-unit">
-                      <strong>{profile.team || '代表单位未设置'}</strong>
-                      <small>输送：{profile.originUnit || '未设置'}</small>
-                    </span>
-                    <span className="birthplace-athlete-result">
-                      <small>最好成绩</small>
-                      <strong>{profile.bestResult || '暂无记录'}</strong>
-                    </span>
-                    <span
-                      className={`birthplace-athlete-state state-${profile.competitiveLevel || 'none'}`}
-                    >
-                      <strong>{competitiveStateLabel(profile.competitiveLevel)}</strong>
-                      <small>
-                        {profile.competitiveScore === null
-                          ? '暂无评分'
-                          : `${formatNumber(profile.competitiveScore, 1)}分`}
-                      </small>
-                    </span>
-                  </div>
-                ))}
+                {activeAthletes.map((profile) => {
+                  const trainingYears =
+                    profile.startSportDate && !Number.isNaN(new Date(profile.startSportDate).getTime())
+                      ? Math.max(
+                          0,
+                          Math.floor(
+                            (Date.now() - new Date(profile.startSportDate).getTime()) /
+                              (365.25 * 86400000)
+                          )
+                        )
+                      : null;
+                  return (
+                    <div key={profile.athleteId}>
+                      <i>{profile.athleteName.slice(0, 1)}</i>
+                      <span className="birthplace-athlete-identity">
+                        <strong>{individual ? '本人' : profile.athleteName}</strong>
+                        <small>
+                          {[
+                            profile.gender,
+                            profile.age === null ? null : `${profile.age}岁`,
+                            profile.project,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </small>
+                      </span>
+                      <span className="birthplace-athlete-info">
+                        <small>
+                          {[
+                            profile.athletePosition || null,
+                            profile.heightCm ? `${Math.round(profile.heightCm)}cm` : null,
+                            profile.weightKg ? `${Math.round(profile.weightKg)}kg` : null,
+                            trainingYears !== null ? `${trainingYears}年` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || '—'}
+                        </small>
+                        <small className="birthplace-athlete-unit-text">
+                          {profile.team || '代表单位未设置'}
+                        </small>
+                      </span>
+                      <span className="birthplace-athlete-result">
+                        <strong>{profile.bestResult || '—'}</strong>
+                        <small>输送：{profile.originUnit || '未设置'}</small>
+                      </span>
+                      <span
+                        className={`birthplace-athlete-state state-${profile.competitiveLevel || 'none'}`}
+                      >
+                        <strong>{competitiveStateLabel(profile.competitiveLevel)}</strong>
+                        <small>
+                          {profile.competitiveScore === null
+                            ? '—'
+                            : `${formatNumber(profile.competitiveScore, 1)}分`}
+                        </small>
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </>
