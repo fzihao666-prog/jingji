@@ -52,6 +52,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (options.body && !(options.body instanceof FormData))
     headers.set('Content-Type', 'application/json');
   const response = await fetch(path, { ...options, headers });
+  if (response.status === 401) {
+    setToken(null);
+    window.location.reload();
+    throw new Error('登录已过期，请重新登录。');
+  }
   const isJson = response.headers.get('content-type')?.includes('application/json');
   const payload = isJson ? await response.json() : null;
   if (!response.ok) throw new Error(payload?.message || `请求失败（${response.status}）`);

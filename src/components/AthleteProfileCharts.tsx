@@ -8,6 +8,8 @@ import {
   CartesianGrid,
   Cell,
   LabelList,
+  Line,
+  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -17,11 +19,9 @@ import {
   YAxis,
 } from 'recharts';
 import bodyModel from '../assets/body-composition/body-model.webp';
-import type {
-  BodyCompositionRecord,
-  CompetitiveStateLevel,
-  OverviewAthleteProfile,
-} from '../types';
+import { buildBodyCompositionTrends } from '../../shared/body-composition-trends';
+import type { BodyCompositionTrendKey } from '../../shared/body-composition-trends';
+import type { BodyCompositionRecord, OverviewAthleteProfile } from '../types';
 import { formatNumber, percentage } from '../utils';
 
 function average(values: Array<number | null | undefined>) {
@@ -964,8 +964,10 @@ function LegacyBodyCompositionSimulation({
 type CompositionMetric = {
   id: string;
   label: string;
+  source: '实测';
   value: number | null;
   unit: string;
+  priority: 'primary' | 'secondary';
 };
 
 type BodyCompositionSimulationDesktopProps = {
@@ -985,44 +987,70 @@ function BodyCompositionSimulationDesktop({
 
   const fatFreePercent = total > 0 ? (fatFreeMass / total) * 100 : 0;
 
-  const bmi = profile.heightCm === null ? null : total / (profile.heightCm / 100) ** 2;
-
   const secondaryMetrics: CompositionMetric[] = [
     {
-      id: 'weight',
-      label: '体重',
-      value: total,
+      id: 'muscleMass',
+      label: '肌肉量',
+      source: '实测',
+      value: profile.muscleMassKg,
       unit: 'kg',
-    },
-    {
-      id: 'bmi',
-      label: 'BMI',
-      value: bmi,
-      unit: '',
+      priority: 'primary',
     },
     {
       id: 'skeletalMuscle',
       label: '骨骼肌量',
+      source: '实测',
       value: profile.skeletalMuscleKg,
       unit: 'kg',
-    },
-    {
-      id: 'totalBodyWater',
-      label: '体水分',
-      value: profile.totalBodyWaterKg,
-      unit: 'kg',
+      priority: 'primary',
     },
     {
       id: 'basalMetabolism',
       label: '基础代谢',
+      source: '实测',
       value: profile.basalMetabolismKcal,
       unit: 'kcal',
+      priority: 'primary',
     },
     {
       id: 'visceralFat',
       label: '内脏脂肪等级',
+      source: '实测',
       value: profile.visceralFatLevel,
       unit: '级',
+      priority: 'primary',
+    },
+    {
+      id: 'totalBodyWater',
+      label: '体水分',
+      source: '实测',
+      value: profile.totalBodyWaterKg,
+      unit: 'kg',
+      priority: 'secondary',
+    },
+    {
+      id: 'ecwTbwRatio',
+      label: '细胞外水比',
+      source: '实测',
+      value: profile.ecwTbwRatio,
+      unit: '比值',
+      priority: 'secondary',
+    },
+    {
+      id: 'phaseAngle',
+      label: '相位角',
+      source: '实测',
+      value: profile.phaseAngleDeg,
+      unit: '°',
+      priority: 'secondary',
+    },
+    {
+      id: 'visceralFatArea',
+      label: '内脏脂肪面积',
+      source: '实测',
+      value: profile.visceralFatAreaCm2,
+      unit: 'cm²',
+      priority: 'secondary',
     },
   ];
 
@@ -1041,8 +1069,8 @@ function BodyCompositionSimulationDesktop({
               className="body-composition-guide body-composition-guide-fat"
               viewBox="0 0 140 80"
             >
-              <path d="M 10 20 C 40 20, 45 60, 130 60" />
-              <circle cx="130" cy="60" r="4" />
+              <path d="M 5 8 C 50 8, 90 10, 140 40" />
+              <circle cx="140" cy="40" r="4" />
             </svg>
           </div>
           <img className="body-composition-model-image" src={bodyModel} alt="身体成分人体模型" />
@@ -1056,8 +1084,8 @@ function BodyCompositionSimulationDesktop({
               className="body-composition-guide body-composition-guide-lean"
               viewBox="0 0 140 80"
             >
-              <path d="M 130 20 C 100 20, 95 60, 10 60" />
-              <circle cx="10" cy="60" r="4" />
+              <path d="M 150 10 C 110 5, 20 -35, -40 -50" />
+              <circle cx="-40" cy="-50" r="4" />
             </svg>
           </div>
 
@@ -1078,8 +1106,11 @@ function BodyCompositionSimulationDesktop({
         <div className="body-composition-analysis">
           <dl className="body-composition-secondary-metrics">
             {secondaryMetrics.map((metric) => (
-              <div key={metric.id} className="body-comp-metric-card">
-                <dt>{metric.label}</dt>
+              <div key={metric.id} className={`body-comp-metric-card is-${metric.priority}`}>
+                <dt>
+                  <span>{metric.label}</span>
+                  <small>{metric.value === null ? '未采集' : metric.source}</small>
+                </dt>
                 <dd>
                   <strong>{metric.value === null ? '—' : formatNumber(metric.value, 1)}</strong>
                   {metric.unit && <small>{metric.unit}</small>}
@@ -1087,9 +1118,143 @@ function BodyCompositionSimulationDesktop({
               </div>
             ))}
           </dl>
+          <BodyCompositionMicroTrends records={profile.bodyCompositionHistory} />
         </div>
       </div>
     </div>
+  );
+}
+
+const BODY_COMPOSITION_TREND_COLORS = {
+  skeletalMuscleKg: '#0f766e',
+  bodyFatPct: '#d97706',
+  totalBodyWaterKg: '#2f6f96',
+} as const;
+
+function signedChange(value: number | null, unit: string) {
+  if (value === null) return '暂无对比';
+  const prefix = value > 0 ? '+' : '';
+  return `较上次 ${prefix}${formatNumber(value, 1)} ${unit}`;
+}
+
+function formatTrendDate(measurementDate: string) {
+  const value = new Date(`${measurementDate}T00:00:00Z`);
+  if (Number.isNaN(value.getTime())) return measurementDate;
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'UTC',
+    month: 'numeric',
+    day: 'numeric',
+  }).format(value);
+}
+
+function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecord[] }) {
+  const trends = buildBodyCompositionTrends(records);
+  const [selectedKey, setSelectedKey] = useState<BodyCompositionTrendKey>('skeletalMuscleKg');
+  const selectedTrend = trends.find((trend) => trend.key === selectedKey) ?? trends[0];
+  const hasMeasuredData = trends.some((trend) => trend.latestValue !== null);
+  const hasTrend = selectedTrend.points.length >= 2;
+  const latestDate = selectedTrend.points.at(-1)?.measurementDate ?? null;
+  const firstDate = selectedTrend.points[0]?.measurementDate ?? null;
+
+  return (
+    <section className="body-composition-trends" aria-labelledby="body-composition-trends-title">
+      <header>
+        <strong id="body-composition-trends-title">身体成分近期变化</strong>
+        <small>最近 6 次实测</small>
+      </header>
+      <div className="body-composition-trend-tabs" aria-label="选择身体成分趋势指标">
+        {trends.map((trend) => (
+          <button
+            key={trend.key}
+            type="button"
+            className={trend.key === selectedTrend.key ? 'is-active' : undefined}
+            aria-pressed={trend.key === selectedTrend.key}
+            onClick={() => setSelectedKey(trend.key)}
+          >
+            {trend.label}
+          </button>
+        ))}
+      </div>
+      {hasTrend ? (
+        <figure className="body-composition-trend-figure">
+          <figcaption>
+            <span>
+              {firstDate && latestDate
+                ? `${formatTrendDate(firstDate)}—${formatTrendDate(latestDate)}，共 ${selectedTrend.points.length} 次实测`
+                : '暂无趋势数据'}
+            </span>
+            <strong>
+              {formatNumber(selectedTrend.latestValue ?? 0, 1)} <small>{selectedTrend.unit}</small>
+            </strong>
+            <em>{signedChange(selectedTrend.deltaFromPrevious, selectedTrend.unit)}</em>
+          </figcaption>
+          <div className="body-composition-trend-chart" aria-hidden="true">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={selectedTrend.points} margin={{ top: 12, right: 8, bottom: 0, left: -12 }}>
+                <CartesianGrid vertical={false} stroke="#e5eeee" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="measurementDate"
+                  tickFormatter={formatTrendDate}
+                  tick={{ fill: '#6c8187', fontSize: 8 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  width={34}
+                  tickFormatter={(value: number) => formatNumber(value, 1)}
+                  tick={{ fill: '#6c8187', fontSize: 8 }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke={BODY_COMPOSITION_TREND_COLORS[selectedTrend.key]}
+                  strokeWidth={2.25}
+                  dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 4 }}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </figure>
+      ) : (
+        <p className="body-composition-trend-empty">
+          {selectedTrend.latestValue === null
+            ? `暂无${selectedTrend.label}实测数据`
+            : `${selectedTrend.label}仅有 1 次实测，暂不能形成趋势`}
+        </p>
+      )}
+      {hasMeasuredData && (
+        <table className="visually-hidden">
+          <caption>最近六次身体成分实测明细</caption>
+          <thead>
+            <tr>
+              <th scope="col">日期</th>
+              {trends.map((trend) => (
+                <th key={trend.key} scope="col">
+                  {trend.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...records]
+              .sort((left, right) => left.measurementDate.localeCompare(right.measurementDate))
+              .slice(-6)
+              .map((record) => (
+                <tr key={record.measurementDate}>
+                  <th scope="row">{formatTrendDate(record.measurementDate)}</th>
+                  <td>{record.skeletalMuscleKg === null ? '—' : `${formatNumber(record.skeletalMuscleKg, 1)} kg`}</td>
+                  <td>{record.bodyFatPct === null ? '—' : `${formatNumber(record.bodyFatPct, 1)} %`}</td>
+                  <td>{record.totalBodyWaterKg === null ? '—' : `${formatNumber(record.totalBodyWaterKg, 1)} kg`}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 
@@ -1388,7 +1553,8 @@ export function BirthplaceMapOverview({
               >
                 {activeAthletes.map((profile) => {
                   const trainingYears =
-                    profile.startSportDate && !Number.isNaN(new Date(profile.startSportDate).getTime())
+                    profile.startSportDate &&
+                    !Number.isNaN(new Date(profile.startSportDate).getTime())
                       ? Math.max(
                           0,
                           Math.floor(
@@ -1423,23 +1589,16 @@ export function BirthplaceMapOverview({
                             .filter(Boolean)
                             .join(' · ') || '—'}
                         </small>
-                        <small className="birthplace-athlete-unit-text">
+                      </span>
+                      <span className="birthplace-athlete-unit">
+                        <small>
+                          <span className="visually-hidden">代表队伍：</span>
                           {profile.team || '代表单位未设置'}
                         </small>
                       </span>
                       <span className="birthplace-athlete-result">
                         <strong>{profile.bestResult || '—'}</strong>
                         <small>输送：{profile.originUnit || '未设置'}</small>
-                      </span>
-                      <span
-                        className={`birthplace-athlete-state state-${profile.competitiveLevel || 'none'}`}
-                      >
-                        <strong>{competitiveStateLabel(profile.competitiveLevel)}</strong>
-                        <small>
-                          {profile.competitiveScore === null
-                            ? '—'
-                            : `${formatNumber(profile.competitiveScore, 1)}分`}
-                        </small>
                       </span>
                     </div>
                   );
@@ -1463,14 +1622,6 @@ export function BirthplaceMapOverview({
       </aside>
     </div>
   );
-}
-
-function competitiveStateLabel(level: CompetitiveStateLevel | null) {
-  if (level === 'peak') return '巅峰';
-  if (level === 'good') return '良好';
-  if (level === 'build') return '进阶';
-  if (level === 'adjust') return '调整';
-  return '未知';
 }
 
 type LevelPoint = {
