@@ -1,6 +1,7 @@
 import { Activity } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import { SpecialChampionModel } from '../components/SpecialChampionModel';
 import {
   AppCard,
@@ -58,10 +59,11 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
     null
   );
   const [retry, setRetry] = useState(0);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<number | null>(null);
   const teamId = selection.project === project ? selection.teamId : null;
   const currentTeams = teams?.project === project ? teams.items : [];
   const selectedTeam = currentTeams.find((team) => team.id === teamId);
-  const requestKey = JSON.stringify([project, from, to, teamId, retry]);
+  const requestKey = JSON.stringify([project, from, to, teamId, selectedAthleteId, retry]);
   useEffect(() => {
     let active = true;
     api
@@ -79,7 +81,7 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
   useEffect(() => {
     let active = true;
     api
-      .specialTrainingOverview(from, to, project, teamId)
+      .specialTrainingOverview(from, to, project, teamId, selectedAthleteId)
       .then((payload) => {
         if (active) setResult({ key: requestKey, payload });
       })
@@ -93,11 +95,13 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
     return () => {
       active = false;
     };
-  }, [project, from, to, teamId, requestKey]);
+  }, [project, from, to, teamId, selectedAthleteId, requestKey]);
   const current = result?.key === requestKey ? result : null;
   const payload = current?.payload;
   const training = payload?.training;
+  const teamTraining = payload?.teamTraining;
   const athletes = payload?.athletes || [];
+  const selectedAthlete = payload?.selectedAthlete || null;
   const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
   const metricItems = training
     ? [
@@ -119,6 +123,13 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
         className="overview-page-heading"
         eyebrow="SPECIAL TRAINING"
         title="专项训练"
+        actions={
+          selectedAthlete ? (
+            <button className="dashboard-action-button" onClick={() => setSelectedAthleteId(null)}>
+              当前运动员：{selectedAthlete.name} · 清除
+            </button>
+          ) : undefined
+        }
       />
       <FilterBar label="专项训练页面筛选">
         <label className="physical-athlete-filter special-team-filter">
@@ -131,6 +142,7 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
                 project,
                 teamId: event.target.value ? Number(event.target.value) : null,
               });
+              setSelectedAthleteId(null);
             }}
           >
             <option value="">当前权限范围全部队伍</option>
@@ -172,7 +184,11 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
                     {item.amount}
                     <small>{item.unit}</small>
                   </strong>
-                  <em>同队共同课次去重</em>
+                  <em>
+                    {selectedAthlete && teamTraining
+                      ? `团队均值 ${item.label === '专项训练时长' ? value((teamTraining.summary.durationMin || 0) / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`
+                      : '同队共同课次去重'}
+                  </em>
                 </AppCard>
               ))}
             </section>
@@ -251,68 +267,25 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
                 empty('暂无有效专项训练负荷')
               )}
             </ChartCard>
-            <ChartCard
-              title="运动员"
-              description={`当前范围共 ${athletes.length} 名运动员 · 滚动查看全部名单`}
-            >
-              {athletes.length ? (
-                <div className="special-athlete-list" aria-label="专项训练运动员概览">
-                  {athletes.map((athlete) => {
-                    const age = ageAtDate(athlete.birthDate, to);
-                    return (
-                      <article key={athlete.id} className="special-athlete-row">
-                        <div className="special-athlete-identity">
-                          <strong>{athlete.name}</strong>
-                          <span>
-                            {athlete.gender || '性别未录入'} ·{' '}
-                            {age === null ? '年龄未录入' : `${age}岁`}
-                          </span>
-                        </div>
-                        <div className="special-athlete-meta">
-                          <span>{athlete.team || '未分队'}</span>
-                          <span>
-                            {athlete.weightKg === null
-                              ? '体重未录入'
-                              : `${value(athlete.weightKg)} kg`}
-                          </span>
-                        </div>
-                        <dl className="special-athlete-summary">
-                          <div>
-                            <dt>课次</dt>
-                            <dd>{athlete.summary.sessionCount}</dd>
-                          </div>
-                          <div>
-                            <dt>时长</dt>
-                            <dd>
-                              {athlete.summary.durationMin === null
-                                ? '—'
-                                : `${value(athlete.summary.durationMin / 60)} h`}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>距离</dt>
-                            <dd>
-                              {athlete.summary.distanceKm === null
-                                ? '—'
-                                : `${value(athlete.summary.distanceKm)} km`}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>负荷</dt>
-                            <dd>
-                              {athlete.summary.load === null
-                                ? '—'
-                                : `${value(athlete.summary.load)} AU`}
-                            </dd>
-                          </div>
-                        </dl>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                empty('暂无可查看运动员')
-              )}
+            {selectedAthlete && (
+              <ChartCard title="专项测试表现" description="当前周期最新专项测试与团队均值对照">
+                {payload?.specialTestComparison?.athlete ? (
+                  <p>
+                    {payload.specialTestComparison.athlete.testDate} · {payload.specialTestComparison.athlete.distanceM}m · {payload.specialTestComparison.athlete.boatClass} · 成绩 {value(payload.specialTestComparison.athlete.bestMs / 1000, 2)}s · 团队均值 {value(payload.specialTestComparison.teamAverage === null ? null : payload.specialTestComparison.teamAverage / 1000, 2)}s · 差异 {value(payload.specialTestComparison.deltaMs === null ? null : payload.specialTestComparison.deltaMs / 1000, 2)}s
+                  </p>
+                ) : (
+                  empty('当前周期暂无可对照的专项测试成绩')
+                )}
+              </ChartCard>
+            )}
+            <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
+              <AthleteAnalysisSelector
+                athletes={athletes.map((athlete) => ({ ...athlete, identityNumber: '', specialties: '' }))}
+                selectedAthleteId={selectedAthleteId}
+                onSelect={setSelectedAthleteId}
+                onClear={() => setSelectedAthleteId(null)}
+                renderSummary={(athlete) => <span className="athlete-analysis-selector-meta">课次 {athlete.summary?.sessionCount ?? '—'} · 时长 {athlete.summary?.durationMin == null ? '—' : `${value(athlete.summary.durationMin / 60)} h`} · 距离 {athlete.summary?.distanceKm == null ? '—' : `${value(athlete.summary.distanceKm)} km`} · 负荷 {value(athlete.summary?.load ?? null)} AU</span>}
+              />
             </ChartCard>
           </>
         )

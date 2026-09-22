@@ -323,12 +323,10 @@ export default function App() {
         {page === 'strength-overview' && (
           <StrengthTrainingDashboard
             athletes={projectAthletes}
-            athleteId={athleteId}
             project={project}
             from={from}
             to={to}
             onNavigate={changePage}
-            onAthleteChange={setAthleteId}
           />
         )}
         {page.startsWith('strength-') && page !== 'strength-overview' && (

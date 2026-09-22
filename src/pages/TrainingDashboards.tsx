@@ -13,6 +13,7 @@ import {
   YAxis,
 } from 'recharts';
 import { api } from '../api';
+import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
   AppCard,
   ChartCard,
@@ -104,12 +105,10 @@ function PhysicalChampionModelPlaceholder({
 
 type StrengthProps = {
   athletes: Athlete[];
-  athleteId: number | null;
   project: Project;
   from: string;
   to: string;
   onNavigate: Navigation;
-  onAthleteChange: (athleteId: number | null) => void;
 };
 
 function configuredMetrics(project: Project) {
@@ -548,13 +547,12 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
 
 export function StrengthTrainingDashboard({
   athletes,
-  athleteId,
   project,
   from,
   to,
   onNavigate,
-  onAthleteChange,
 }: StrengthProps) {
+  const [athleteId, setAthleteId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -644,25 +642,7 @@ export function StrengthTrainingDashboard({
         className="overview-page-heading"
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
-        actions={
-          <label className="physical-athlete-filter">
-            运动员
-            <select
-              aria-label="体能训练运动员筛选"
-              value={athleteId ?? ''}
-              onChange={(event) =>
-                onAthleteChange(event.target.value ? Number(event.target.value) : null)
-              }
-            >
-              <option value="">全部运动员（整体分析）</option>
-              {athletes.map((athlete) => (
-                <option key={athlete.id} value={athlete.id}>
-                  {athlete.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        }
+        actions={athleteId ? <button className="dashboard-action-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : undefined}
       />
       <PhysicalChampionModelPlaceholder
         project={project}
@@ -727,6 +707,15 @@ export function StrengthTrainingDashboard({
               <TrainingLoadTrend sessions={periodSessions} />
             </ChartCard>
           </section>
+          <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
+            <AthleteAnalysisSelector
+              athletes={athletes}
+              selectedAthleteId={athleteId}
+              onSelect={setAthleteId}
+              onClear={() => setAthleteId(null)}
+              renderSummary={(athlete) => <span className="athlete-analysis-selector-meta">当前周期体能训练与测试数据将在选择后用于个人分析。</span>}
+            />
+          </ChartCard>
         </>
       )}
     </PageContainer>

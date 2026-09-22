@@ -1,9 +1,27 @@
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import type { Athlete } from '../types';
-import { filterAnalysisAthletes } from '../../shared/athlete-analysis-filter';
+import {
+  filterAnalysisAthletes,
+  type AthleteAnalysisSearchable,
+} from '../../shared/athlete-analysis-filter';
 import './AthleteAnalysisSelector.css';
 
-type Props = { athletes: Athlete[]; selectedAthleteId: number | null; onSelect: (athleteId: number) => void; onClear: () => void; renderSummary: (athlete: Athlete) => ReactNode; };
+type Props = {
+  athletes: Array<
+    AthleteAnalysisSearchable & {
+      gender: string;
+      summary?: {
+        sessionCount: number;
+        durationMin: number | null;
+        distanceKm: number | null;
+        load: number | null;
+      };
+    }
+  >;
+  selectedAthleteId: number | null;
+  onSelect: (athleteId: number) => void;
+  onClear: () => void;
+  renderSummary: (athlete: Props['athletes'][number]) => ReactNode;
+};
 
 export function AthleteAnalysisSelector({ athletes, selectedAthleteId, onSelect, onClear, renderSummary }: Props) {
   const [query, setQuery] = useState('');
