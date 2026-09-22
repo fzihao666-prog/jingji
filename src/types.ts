@@ -760,6 +760,35 @@ export type WellnessTrend = {
 };
 export type WellnessTrendsPayload = { trends: WellnessTrend[] };
 
+export type AerobicEnduranceMetric = {
+  code: string;
+  label: string;
+  unit: string;
+  personalValue: number;
+  teamMean: number | null;
+  difference: number | null;
+  teamSampleCount: number | null;
+  measurementDate: string;
+  unavailableReason: string | null;
+};
+
+export type AerobicEndurancePayload = {
+  metrics: AerobicEnduranceMetric[];
+  trend: {
+    code: string;
+    label: string;
+    unit: string;
+    points: Array<{ date: string; value: number }>;
+  } | null;
+  latestTest: {
+    testType: string;
+    testDate: string;
+    label: string;
+    value: number;
+    unit: string;
+  } | null;
+};
+
 export type ProfileComparisonItem = {
   key: string;
   label: string;

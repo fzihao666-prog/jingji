@@ -1,3 +1,4 @@
+console.log('=== request.js 已加载 ===');
 const { TOKEN_KEY, getApiBaseUrl } = require('../config');
 
 let redirecting = false;
@@ -17,6 +18,7 @@ function redirectToLogin() {
 }
 
 function request(path, options = {}) {
+  console.log('request 被调用了：', path);
   const token = wx.getStorageSync(TOKEN_KEY);
   const headers = Object.assign({}, options.header || {});
   if (token && options.auth !== false) headers.Authorization = `Bearer ${token}`;
@@ -24,6 +26,9 @@ function request(path, options = {}) {
     headers['content-type'] = 'application/json';
   }
 
+  const url = `${getApiBaseUrl()}${path}`;
+  console.log('实际请求地址：', url);
+  console.log('请求方法：', options.method || 'GET');
   return new Promise((resolve, reject) => {
     wx.request({
       url: `${getApiBaseUrl()}${path}`,
@@ -32,6 +37,9 @@ function request(path, options = {}) {
       header: headers,
       timeout: options.timeout || 30000,
       success(response) {
+        console.log('=== wx.request success ===');
+        console.log('状态码：', response.statusCode);
+        console.log('响应数据：', response.data);
         if (response.statusCode >= 200 && response.statusCode < 300) {
           resolve(response.data);
           return;
@@ -43,10 +51,22 @@ function request(path, options = {}) {
         reject(new Error(message));
       },
       fail(error) {
-        const message = error && error.errMsg && error.errMsg.includes('timeout')
-          ? '连接服务器超时，请检查网络和服务器地址。'
-          : '无法连接服务器，请检查服务器地址、HTTPS 和域名配置。';
-        reject(new Error(message));
+        const rawMessage = error && error.errMsg
+          ? error.errMsg
+          : JSON.stringify(error);
+      
+        console.log('wx.request FAIL:', rawMessage);
+      
+        wx.showModal({
+          title: '请求原始错误',
+          content: rawMessage,
+          showCancel: false
+        });
+      
+        reject(new Error(rawMessage));
+      },
+      complete(result) {
+        console.log('wx.request COMPLETE:', result);
       }
     });
   });

@@ -17,6 +17,7 @@ import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import type {
   Athlete,
+  AerobicEndurancePayload,
   AthleteRadarModelsPayload,
   BodyCompositionRecord,
   ChampionBenchmarkPayload,
@@ -177,6 +178,8 @@ export function PersonalPage(props: Props) {
     props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
   const [profileMeasurements, setProfileMeasurements] = useState<OverviewMeasurement[]>([]);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
+  const [aerobicEndurance, setAerobicEndurance] = useState<AerobicEndurancePayload | null>(null);
+  const [aerobicEnduranceLoading, setAerobicEnduranceLoading] = useState(false);
   const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
   const [championLoading, setChampionLoading] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
@@ -225,6 +228,36 @@ export function PersonalPage(props: Props) {
       })
       .finally(() => {
         if (!ignored) setChampionLoading(false);
+      });
+    return () => {
+      ignored = true;
+    };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setAerobicEndurance(null);
+      setAerobicEnduranceLoading(false);
+      return;
+    }
+    setAerobicEndurance(null);
+    setAerobicEnduranceLoading(true);
+    api
+      .aerobicEndurance(
+        selectedAthlete.id,
+        props.from,
+        props.to,
+        selectedAthlete.project as Project
+      )
+      .then((result) => {
+        if (!ignored) setAerobicEndurance(result);
+      })
+      .catch(() => {
+        if (!ignored) setAerobicEndurance(null);
+      })
+      .finally(() => {
+        if (!ignored) setAerobicEnduranceLoading(false);
       });
     return () => {
       ignored = true;
@@ -734,6 +767,10 @@ export function PersonalPage(props: Props) {
                   FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
                 </p>
               </AppCard>
+              <AerobicEndurance
+                data={aerobicEndurance}
+                loading={aerobicEnduranceLoading}
+              />
               <AppCard
                 variant="chart"
                 className="professional-panel analysis-feature-panel athlete-radar-card"
@@ -808,7 +845,6 @@ export function PersonalPage(props: Props) {
                 loading={trainingStatusLoading}
               />
             </ProfileSection>
-            <AerobicEndurance measurements={profileMeasurements} loading={profileAnalysisLoading} />
           </section>
 
           <ProfileSection
@@ -959,54 +995,145 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
   };
 }
 
+function displayAerobicValue(value: number, unit: string) {
+  return `${formatNumber(value, 1)}${unit ? ` ${unit}` : ''}`;
+}
+
+function aerobicTrendOption(data: NonNullable<AerobicEndurancePayload['trend']>): EChartsOption {
+  return {
+    animation: false,
+    tooltip: {
+      trigger: 'axis',
+      renderMode: 'richText',
+      confine: true,
+      valueFormatter: (value) => displayAerobicValue(Number(value), data.unit),
+    },
+    grid: { top: 16, right: 12, bottom: 28, left: 42, containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: data.points.map((point) => point.date.slice(5)),
+      axisTick: { show: false },
+      axisLabel: { color: '#66767c', fontSize: 9 },
+    },
+    yAxis: {
+      type: 'value',
+      scale: true,
+      name: data.unit,
+      nameTextStyle: { color: '#66767c', fontSize: 9 },
+      axisLabel: { color: '#66767c', fontSize: 9 },
+      splitLine: { lineStyle: { color: '#e6eeee' } },
+    },
+    series: [
+      {
+        type: 'line',
+        data: data.points.map((point) => point.value),
+        smooth: true,
+        connectNulls: false,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2 },
+        areaStyle: { color: 'rgb(20 116 111 / 10%)' },
+      },
+    ],
+  };
+}
+
+function aerobicTrendLabel(data: NonNullable<AerobicEndurancePayload['trend']>) {
+  return `${data.label}个人趋势图：${data.points
+    .map((point) => `${point.date} ${displayAerobicValue(point.value, data.unit)}`)
+    .join('；')}`;
+}
+
 function AerobicEndurance({
-  measurements,
+  data,
   loading,
 }: {
-  measurements: OverviewMeasurement[];
+  data: AerobicEndurancePayload | null;
   loading: boolean;
 }) {
-  const aerobic = measurements.filter(
-    (measurement) =>
-      /vo2|aerobic|endurance|耐力|heart|心率/i.test(`${measurement.code} ${measurement.label}`) &&
-      measurement.value !== null &&
-      !measurement.isDemo &&
-      measurement.quality === 'valid'
-  );
+  const status = loading
+    ? '有氧耐力指标读取中。'
+    : data?.metrics.length
+      ? '有氧耐力指标已更新。'
+      : '当前周期暂无有氧耐力测试数据。';
   return (
-    <AppCard variant="chart" className="professional-panel">
+    <AppCard variant="chart" className="professional-panel analysis-feature-panel aerobic-endurance-card">
+      <p className="visually-hidden" aria-live="polite">
+        {status}
+      </p>
       <header className="personal-analysis-card-heading">
         <div>
           <span>
             <small>AEROBIC ENDURANCE</small>
-            <h2>有氧耐力</h2>
-            <p>仅展示指标字典中已有的有效有氧或心率类测试。</p>
+            <h3>有氧耐力</h3>
+            <p>当前周期内的有效测试、个人变化与同条件团队参照。</p>
           </span>
         </div>
       </header>
       {loading ? (
         <div className="professional-chart-empty">正在读取有氧指标…</div>
-      ) : aerobic.length ? (
-        <div className="personal-comparison-grid">
-          {aerobic.map((measurement) => (
-            <article key={measurement.code}>
-              <span>{measurement.label}</span>
-              <strong>
-                {measurement.value} {measurement.unit}
-              </strong>
+      ) : data?.metrics.length ? (
+        <div className="aerobic-endurance-content">
+          <section className="aerobic-metric-grid" aria-label="有氧耐力核心指标">
+            {data.metrics.map((metric) => (
+              <article key={`${metric.code}-${metric.unit}`}>
+                <span>{metric.label}</span>
+                <strong>{displayAerobicValue(metric.personalValue, metric.unit)}</strong>
+                <dl>
+                  <div>
+                    <dt>团队平均</dt>
+                    <dd>
+                      {metric.teamMean === null
+                        ? '—'
+                        : displayAerobicValue(metric.teamMean, metric.unit)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>差值</dt>
+                    <dd>
+                      {metric.difference === null
+                        ? '—'
+                        : `${metric.difference > 0 ? '+' : ''}${displayAerobicValue(metric.difference, metric.unit)}`}
+                    </dd>
+                  </div>
+                </dl>
+                <small>
+                  {metric.teamMean === null
+                    ? metric.unavailableReason
+                    : `样本 ${metric.teamSampleCount} 人 · ${metric.measurementDate}`}
+                </small>
+              </article>
+            ))}
+          </section>
+          {data.trend ? (
+            <section className="aerobic-trend" aria-label={`${data.trend.label}趋势`}>
+              <header>
+                <h4>{data.trend.label}趋势</h4>
+                <span>{data.trend.unit || '无单位'}</span>
+              </header>
+              <EChart
+                option={aerobicTrendOption(data.trend)}
+                label={aerobicTrendLabel(data.trend)}
+              />
+            </section>
+          ) : null}
+          {data.latestTest ? (
+            <section className="aerobic-recent-test" aria-label="最近有氧测试">
+              <span>最近有氧测试</span>
+              <strong>{data.latestTest.testType}</strong>
               <small>
-                {measurement.previous === null
-                  ? '暂无前次对照'
-                  : `较前次 ${measurement.changePct === null ? '—' : `${measurement.changePct > 0 ? '+' : ''}${measurement.changePct}%`}`}
+                {data.latestTest.testDate} · {data.latestTest.label}{' '}
+                {displayAerobicValue(data.latestTest.value, data.latestTest.unit)}
               </small>
-            </article>
-          ))}
+            </section>
+          ) : null}
         </div>
       ) : (
         <ContentState
           kind="empty"
-          title="暂无有效有氧耐力指标"
-          description="当前数据字典和测试记录中没有可展示的有效指标。"
+          title="当前周期暂无有氧耐力测试数据"
+          description="仅展示有效且非演示的真实测试记录。"
         />
       )}
     </AppCard>

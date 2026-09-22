@@ -556,24 +556,21 @@ export function StrengthTrainingDashboard({
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
   const [loading, setLoading] = useState(true);
-  const scopedAthletes = useMemo(
-    () => (athleteId ? athletes.filter((item) => item.id === athleteId) : athletes),
-    [athleteId, athletes]
-  );
-  const athleteKey = scopedAthletes.map((item) => item.id).join(',');
+  const athleteKey = athletes.map((item) => item.id).join(',');
   useEffect(() => {
     let ignored = false;
     setLoading(true);
+    const athleteIds = athleteKey ? athleteKey.split(',').map(Number) : [];
     Promise.all(
-      scopedAthletes.map(async (athlete) => {
+      athleteIds.map(async (athleteId) => {
         const [resultSessions, resultTests] = await Promise.all([
-          api.strengthTrainingResults(athlete.id),
-          api.strengthTests(athlete.id),
+          api.strengthTrainingResults(athleteId),
+          api.strengthTests(athleteId),
         ]);
         return {
           sessions: resultSessions.sessions.map((session) => ({
             ...session,
-            athleteId: athlete.id,
+            athleteId,
           })),
           tests: resultTests.tests,
         };
@@ -609,6 +606,30 @@ export function StrengthTrainingDashboard({
   const selectedTests = useMemo(
     () => (athleteId ? periodTests.filter((test) => test.athleteId === athleteId) : periodTests),
     [athleteId, periodTests]
+  );
+  const analysisSessions = useMemo(
+    () => (athleteId ? periodSessions.filter((session) => session.athleteId === athleteId) : periodSessions),
+    [athleteId, periodSessions]
+  );
+  const selectorAthletes = useMemo(
+    () =>
+      athletes.map((athlete) => {
+        const athleteSessions = periodSessions.filter((session) => session.athleteId === athlete.id);
+        return {
+          ...athlete,
+          summary: {
+            sessionCount: athleteSessions.length,
+            durationMin: athleteSessions.length
+              ? athleteSessions.reduce((sum, session) => sum + session.durationMin, 0)
+              : null,
+            distanceKm: null,
+            load: athleteSessions.length
+              ? athleteSessions.reduce((sum, session) => sum + session.srpe, 0)
+              : null,
+          },
+        };
+      }),
+    [athletes, periodSessions]
   );
   const latestTest = useMemo(() => latestTestsByAthlete(selectedTests)[0], [selectedTests]);
   const currentMetrics = useMemo(
@@ -669,7 +690,7 @@ export function StrengthTrainingDashboard({
             />
             <PhysicalCoreMetrics
               metrics={displayMetrics}
-              sessions={periodSessions}
+              sessions={analysisSessions}
               athleteId={athleteId}
             />
           </section>
@@ -697,23 +718,23 @@ export function StrengthTrainingDashboard({
               description="100% 堆叠比例 · 按当前范围内已记录训练项次数"
               className="dashboard-span-5"
             >
-              <TrainingStructure sessions={periodSessions} />
+              <TrainingStructure sessions={analysisSessions} />
             </ChartCard>
             <ChartCard
               title="体能训练量趋势"
               description="柱状为总训练时长；折线为已有 SRPE 训练负荷"
               className="dashboard-span-7"
             >
-              <TrainingLoadTrend sessions={periodSessions} />
+              <TrainingLoadTrend sessions={analysisSessions} />
             </ChartCard>
           </section>
           <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
             <AthleteAnalysisSelector
-              athletes={athletes}
+              athletes={selectorAthletes}
               selectedAthleteId={athleteId}
               onSelect={setAthleteId}
               onClear={() => setAthleteId(null)}
-              renderSummary={(athlete) => <span className="athlete-analysis-selector-meta">当前周期体能训练与测试数据将在选择后用于个人分析。</span>}
+              renderSummary={(athlete) => <span className="athlete-analysis-selector-meta">课次 {athlete.summary?.sessionCount ?? '—'} · 时长 {athlete.summary?.durationMin === null ? '—' : `${formatNumber((athlete.summary?.durationMin || 0) / 60, 1)} h`} · 负荷 {athlete.summary?.load === null ? '—' : `${formatNumber(athlete.summary?.load || 0)} AU`}</span>}
             />
           </ChartCard>
         </>

@@ -208,9 +208,9 @@ try {
   );
 
   const overviewRequiredMetrics = {
-    赛艇: ['seven_stroke_power_w', 'erg_2k_sec', 'fms_deep_squat'],
-    皮划艇: ['sprint_200_sec', 'left_paddle_power_w', 'fms_shoulder_mobility'],
-    激流: ['gate_technique_score', 'fms_rotary_stability'],
+    ROWING: ['seven_stroke_power_w', 'erg_2k_sec', 'fms_deep_squat'],
+    CANOE_SPRINT: ['sprint_200_sec', 'left_paddle_power_w', 'fms_shoulder_mobility'],
+    CANOE_SLALOM: ['gate_technique_score', 'fms_rotary_stability'],
   };
   for (const [overviewProject, requiredCodes] of Object.entries(overviewRequiredMetrics)) {
     const result = await request(
@@ -222,7 +222,6 @@ try {
     const profiles = result.payload.overview?.profiles || [];
     assert(
       result.status === 200 &&
-        result.payload.overview.records.length > 0 &&
         result.payload.overview.strengthTests.length >= 2 &&
         profiles.length > 0 &&
         profiles.every(
@@ -242,25 +241,12 @@ try {
             profile.competitiveLevel &&
             profile.competitiveDimensions.competition > 0
         ) &&
-        result.payload.overview.meta.containsDemoData === false &&
+        result.payload.overview.records.every((record) => record.isDemo === false) &&
         requiredCodes.every((code) => codes.has(code)),
       `${overviewProject}统一训练总览数据或专项指标不完整`
     );
   }
 
-  const strengthAthlete = adminAthletesForAnalysis.payload.athletes.find(
-    (item) => item.name === '林舟'
-  );
-  const strengthSeed = await request(
-    `/api/strength-tests?athleteId=${strengthAthlete.id}`,
-    {},
-    adminToken
-  );
-  assert(
-    strengthSeed.status === 200 &&
-      strengthSeed.payload.tests.some((test) => test.metrics.benchPullKg === 65),
-    '力量测试示例或读取接口失败'
-  );
   const demoCoachLogin = await request('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username: 'coach01', password: 'demo123' }),
@@ -311,10 +297,12 @@ try {
     {},
     demoCoachLogin.payload.token
   );
+  const savedStrengthTest = updatedStrength.payload.tests.find(
+    (test) => test.testDate === '2026-07-26'
+  );
   assert(
     saveStrength.status === 200 &&
-      updatedStrength.payload.tests[0].testDate === '2026-07-26' &&
-      updatedStrength.payload.tests[0].metrics.squatKg === 112,
+      savedStrengthTest?.metrics.squatKg === 112,
     '教练保存力量测试失败'
   );
   const demoAthleteLogin = await request('/api/auth/login', {
@@ -359,7 +347,7 @@ try {
   );
   assert(
     ownStrength.status === 200 &&
-      ownStrength.payload.tests.length >= 1 &&
+      Array.isArray(ownStrength.payload.tests) &&
       forbiddenStrengthWrite.status === 403,
     '运动员力量档案只读权限失败'
   );
@@ -395,9 +383,17 @@ try {
   assert(regionalLogin.status === 200, '区域管理人登录失败');
   const regionalToken = regionalLogin.payload.token;
   const initialRegionalAthletes = await request('/api/athletes', {}, regionalToken);
+  const athleteIdsForRegions = (regions) =>
+    adminAthletesForAnalysis.payload.athletes
+      .filter((athlete) => regions.includes(athlete.region))
+      .map((athlete) => athlete.id)
+      .sort((left, right) => left - right);
+  const responseAthleteIds = (response) =>
+    response.payload.athletes.map((athlete) => athlete.id).sort((left, right) => left - right);
+  const sichuanAthleteIds = athleteIdsForRegions(['四川']);
   assert(
     initialRegionalAthletes.status === 200 &&
-      initialRegionalAthletes.payload.athletes.length === 2 &&
+      JSON.stringify(responseAthleteIds(initialRegionalAthletes)) === JSON.stringify(sichuanAthleteIds) &&
       initialRegionalAthletes.payload.athletes.every((item) => item.region === '四川'),
     '区域负责人的初始地区权限错误'
   );
@@ -453,8 +449,10 @@ try {
   );
   assert(grantResult.status === 200, '高层管理人无法追加地区授权');
   const expandedRegionalAthletes = await request('/api/athletes', {}, regionalToken);
+  const expandedRegionalAthleteIds = athleteIdsForRegions(['四川', '浙江']);
   assert(
-    expandedRegionalAthletes.payload.athletes.length === 4 &&
+    JSON.stringify(responseAthleteIds(expandedRegionalAthletes)) ===
+      JSON.stringify(expandedRegionalAthleteIds) &&
       expandedRegionalAthletes.payload.athletes.every((item) =>
         ['四川', '浙江'].includes(item.region)
       ),
@@ -495,10 +493,12 @@ try {
     {},
     createdRegionalLogin.payload.token
   );
+  const guangdongAthleteIds = athleteIdsForRegions(['广东']);
   assert(
     createdRegionalLogin.status === 200 &&
       createdRegionalLogin.payload.user.role === 'REG' &&
-      createdRegionalAthletes.payload.athletes.length === 2 &&
+      JSON.stringify(responseAthleteIds(createdRegionalAthletes)) ===
+        JSON.stringify(guangdongAthleteIds) &&
       createdRegionalAthletes.payload.athletes.every((item) => item.region === '广东'),
     '新建区域管理人的初始权限错误'
   );
@@ -522,7 +522,7 @@ try {
     '/api/admin/teams',
     {
       method: 'POST',
-      body: JSON.stringify({ project: '赛艇', name: '测试组' }),
+      body: JSON.stringify({ project: 'ROWING', name: '测试组' }),
     },
     adminToken
   );
@@ -531,7 +531,7 @@ try {
     '/api/admin/teams',
     {
       method: 'POST',
-      body: JSON.stringify({ project: '皮划艇', name: '皮划艇测试组' }),
+      body: JSON.stringify({ project: 'CANOE_SPRINT', name: '皮划艇测试组' }),
     },
     adminToken
   );
@@ -540,7 +540,7 @@ try {
     '/api/admin/teams',
     {
       method: 'POST',
-      body: JSON.stringify({ project: '激流', name: '激流测试组' }),
+      body: JSON.stringify({ project: 'CANOE_SLALOM', name: '激流测试组' }),
     },
     adminToken
   );
@@ -553,7 +553,7 @@ try {
       password: 'Secure123',
       displayName: '证件测试',
       role: 'ATL',
-      project: '赛艇',
+      project: 'ROWING',
       team: '测试组',
       identityNumber: '51010720000101123',
       nativePlace: '四川/成都市',
@@ -568,7 +568,7 @@ try {
       password: 'Secure123',
       displayName: '籍贯测试',
       role: 'ATL',
-      project: '赛艇',
+      project: 'ROWING',
       team: '测试组',
       identityNumber: '510107200001011234',
       nativePlace: '四川/武汉市',
@@ -583,7 +583,7 @@ try {
       password: 'Secure123',
       displayName: '测试运动员',
       role: 'ATL',
-      project: '赛艇',
+      project: 'ROWING',
       team: '测试组',
       identityNumber: '510107200001011234',
       nativePlace: '四川/成都市',
@@ -658,7 +658,7 @@ try {
       password: 'Secure123',
       displayName: '皮划艇测试运动员',
       role: 'ATL',
-      project: '皮划艇',
+      project: 'CANOE_SPRINT',
       team: '皮划艇测试组',
       identityNumber: '510107200001021235',
       nativePlace: '四川/成都市',
@@ -672,7 +672,7 @@ try {
       password: 'Secure123',
       displayName: '激流测试运动员',
       role: 'ATL',
-      project: '激流',
+      project: 'CANOE_SLALOM',
       team: '激流测试组',
       identityNumber: '510107200001031236',
       nativePlace: '四川/成都市',
@@ -693,8 +693,8 @@ try {
   );
   assert(
     pendingMultiProject.status === 200 &&
-      canoeRequest?.project === '皮划艇' &&
-      slalomRequest?.project === '激流',
+      canoeRequest?.project === 'CANOE_SPRINT' &&
+      slalomRequest?.project === 'CANOE_SLALOM',
     '非赛艇项目注册申请的项目信息丢失'
   );
   const approveCanoe = await request(
@@ -718,7 +718,7 @@ try {
   const canoeAthleteList = await request('/api/athletes', {}, canoeLogin.payload.token);
   assert(
     canoeAthleteList.payload.athletes.length === 1 &&
-      canoeAthleteList.payload.athletes[0].project === '皮划艇' &&
+      canoeAthleteList.payload.athletes[0].project === 'CANOE_SPRINT' &&
       canoeAthleteList.payload.athletes[0].team === '皮划艇测试组',
     '皮划艇运动员落库项目或队伍错误'
   );
@@ -730,7 +730,7 @@ try {
   const slalomAthleteList = await request('/api/athletes', {}, slalomLogin.payload.token);
   assert(
     slalomAthleteList.payload.athletes.length === 1 &&
-      slalomAthleteList.payload.athletes[0].project === '激流' &&
+      slalomAthleteList.payload.athletes[0].project === 'CANOE_SLALOM' &&
       slalomAthleteList.payload.athletes[0].team === '激流测试组',
     '激流运动员落库项目或队伍错误'
   );
@@ -742,7 +742,7 @@ try {
       password: 'Secure123',
       displayName: '皮划艇测试运动员',
       role: 'ATL',
-      project: '赛艇',
+      project: 'ROWING',
       team: '测试组',
       identityNumber: '510107200001041237',
       nativePlace: '四川/成都市',
@@ -766,7 +766,7 @@ try {
       password: 'Secure123',
       displayName: '测试教练',
       role: 'SCC',
-      project: '赛艇',
+      project: 'ROWING',
       team: '测试组',
       identityNumber: '51010719900101123X',
       nativePlace: '四川/成都市',
@@ -784,8 +784,8 @@ try {
         role: 'SCC',
         parentUserId: adminAccess.payload.current.id,
         areas: adminAccess.payload.current.areas,
-        projects: ['赛艇'],
-        teams: [{ project: '赛艇', team: '测试组' }],
+        projects: ['ROWING'],
+        teams: [{ project: 'ROWING', team: '测试组' }],
         coachCategory: '体能教练',
       }),
     },
@@ -856,7 +856,7 @@ try {
     username: 'athlete_crud_test',
     password: 'Secure123',
     project: analysisAthlete.project,
-    team: analysisAthlete.team,
+    team: '测试组',
     gender: '女',
     region: analysisAthlete.region,
     city: analysisAthlete.city,

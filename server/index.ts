@@ -63,6 +63,7 @@ import {
 } from '../shared/training-intensity.ts';
 import { TrainingPlanAIService, type AthleteContext } from './ai-service.ts';
 import {
+  buildAerobicEndurance,
   buildProfileComparison,
   buildWellnessTrends,
   resolveProfileScope,
@@ -659,7 +660,7 @@ function accessibleAthleteIds(user: AuthUser): number[] {
           .prepare(
             `
       SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-        a.project, COALESCE(pt.name, '') AS team
+        a.project, COALESCE(pt.name, a.team, '') AS team
       FROM athletes a JOIN coach_athletes ca ON ca.athlete_id = a.id
       LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
       LEFT JOIN project_teams pt ON pt.id = a.team_id
@@ -671,7 +672,7 @@ function accessibleAthleteIds(user: AuthUser): number[] {
           .prepare(
             `
       SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-        a.project, COALESCE(pt.name, '') AS team
+        a.project, COALESCE(pt.name, a.team, '') AS team
       FROM athletes a
       LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
       LEFT JOIN project_teams pt ON pt.id = a.team_id
@@ -2894,7 +2895,7 @@ app.get('/api/athletes', requireAuth, (req, res) => {
   const athletes = db
     .prepare(
       `
-    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
+    SELECT a.id, a.name, a.project, COALESCE(pt.name, a.team, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       a.photo_url AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
       EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
       COALESCE(ap.identity_number, '') AS identityNumber,
@@ -6080,6 +6081,32 @@ app.get('/api/athletes/:id/wellness-trends', requireAuth, (req, res) => {
   const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
   if (!scope) return res.status(403).json({ message: '无权查看该运动员恢复趋势。' });
   res.json(buildWellnessTrends(scope));
+});
+
+app.get('/api/athletes/:id/aerobic-endurance', requireAuth, (req, res) => {
+  const athleteId = Number(req.params.id || 0);
+  const project = cleanString(req.query.project);
+  const from = parseDate(req.query.from);
+  const to = parseDate(req.query.to);
+  if (
+    !projectSet.has(project) ||
+    !from ||
+    !to ||
+    !isValidIsoDate(from) ||
+    !isValidIsoDate(to) ||
+    from > to
+  )
+    return res.status(400).json({ message: '请选择有效项目和日期范围。' });
+  const rangeDays =
+    Math.floor((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+  if (rangeDays > 366)
+    return res.status(400).json({ message: '有氧耐力最多支持连续366天。' });
+  if (consumeRateLimit(req, 'aerobic-endurance', 12, 60_000))
+    return res.status(429).json({ message: '有氧耐力请求过于频繁，请稍后重试。' });
+  const scope = athleteProfileScope(req.authUser!, athleteId, from, to, project);
+  if (!scope) return res.status(403).json({ message: '无权查看该运动员有氧耐力数据。' });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(buildAerobicEndurance(scope));
 });
 
 app.get('/api/athletes/:id/profile-comparison', requireAuth, (req, res) => {

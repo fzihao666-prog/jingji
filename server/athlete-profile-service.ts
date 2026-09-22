@@ -14,6 +14,14 @@ type ProfileScope = ProfileScopeInput & { teamId: number | null; teamAthleteIds:
 
 type NumericRow = { athleteId: number; date: string; value: number };
 
+type AerobicMeasurementRow = NumericRow & {
+  sessionId: number;
+  testType: string;
+  code: string;
+  label: string;
+  unit: string;
+};
+
 const usableSql = (alias: string) => `
   ${alias}.is_demo = 0
   AND ${alias}.quality NOT IN ('insufficient', 'outlier', 'estimated')
@@ -177,6 +185,129 @@ function latestMeasurements(scope: ProfileScope) {
     .all(...scope.teamAthleteIds, scope.to, scope.to) as Array<
     NumericRow & { code: string; label: string; unit: string; domain: string }
   >;
+}
+
+const AEROBIC_METRIC_PATTERN =
+  /vo2|max.?oxygen|aerobic|endurance|lactate|threshold|摄氧|耐力|乳酸|阈值|测功仪|erg(?:ometer)?|long.?distance|长距离|配速|pace/i;
+
+function aerobicMetricPriority(row: Pick<AerobicMeasurementRow, 'code' | 'label'>) {
+  const identifier = `${row.code} ${row.label}`.toLowerCase();
+  if (/vo2|max.?oxygen|摄氧/.test(identifier)) return 0;
+  if (/threshold|阈值|lactate|乳酸/.test(identifier)) return 1;
+  if (/endurance|耐力/.test(identifier)) return 2;
+  if (/erg|测功仪|long.?distance|长距离|pace|配速/.test(identifier)) return 3;
+  return 4;
+}
+
+function aerobicMeasurements(scope: ProfileScope) {
+  if (!scope.teamAthleteIds.length) return [] as AerobicMeasurementRow[];
+  const rows = db
+    .prepare(
+      `
+      SELECT
+        ts.id AS sessionId,
+        ts.athlete_id AS athleteId,
+        ts.test_date AS date,
+        ts.test_type AS testType,
+        tm.value_num AS value,
+        tm.metric_code AS code,
+        COALESCE(md.label, tm.metric_code) AS label,
+        tm.unit AS unit
+      FROM test_measurements tm
+      JOIN test_sessions ts ON ts.id = tm.test_session_id
+      LEFT JOIN metric_definitions md ON md.code = tm.metric_code
+      WHERE ts.athlete_id IN (${scope.teamAthleteIds.map(() => '?').join(',')})
+        AND ts.test_date BETWEEN ? AND ?
+        AND ${usableSql('ts')}
+        AND ${usableSql('tm')}
+      ORDER BY ts.test_date DESC, ts.id DESC
+    `
+    )
+    .all(...scope.teamAthleteIds, scope.from, scope.to) as AerobicMeasurementRow[];
+  return rows.filter((row) => AEROBIC_METRIC_PATTERN.test(`${row.code} ${row.label}`));
+}
+
+function latestRowByAthlete(rows: AerobicMeasurementRow[]) {
+  const latest = new Map<number, AerobicMeasurementRow>();
+  for (const row of rows) {
+    if (!latest.has(row.athleteId)) latest.set(row.athleteId, row);
+  }
+  return [...latest.values()];
+}
+
+function latestRowByDate(rows: AerobicMeasurementRow[]) {
+  const latest = new Map<string, AerobicMeasurementRow>();
+  for (const row of rows) {
+    if (!latest.has(row.date)) latest.set(row.date, row);
+  }
+  return [...latest.values()];
+}
+
+/** 当前周期内的有氧测试摘要；仅返回真实、质量合格的测试记录。 */
+export function buildAerobicEndurance(scope: ProfileScope) {
+  const rows = aerobicMeasurements(scope);
+  const personalRows = rows.filter((row) => row.athleteId === scope.athleteId);
+  const personalLatestByMetric = new Map<string, AerobicMeasurementRow>();
+  for (const row of personalRows) {
+    const key = `${row.code}\u0000${row.unit}`;
+    if (!personalLatestByMetric.has(key)) personalLatestByMetric.set(key, row);
+  }
+  const metrics = [...personalLatestByMetric.values()]
+    .sort(
+      (left, right) =>
+        aerobicMetricPriority(left) - aerobicMetricPriority(right) ||
+        right.date.localeCompare(left.date) ||
+        right.sessionId - left.sessionId
+    )
+    .slice(0, 4)
+    .map((personal) => {
+      const sameCondition = rows.filter(
+        (row) => row.code === personal.code && row.unit === personal.unit && row.date === personal.date
+      );
+      const comparable = latestRowByAthlete(sameCondition);
+      const teamMean = comparable.length >= 2 ? mean(comparable.map((row) => row.value)) : null;
+      return {
+        code: personal.code,
+        label: personal.label,
+        unit: personal.unit,
+        personalValue: personal.value,
+        teamMean,
+        difference: difference(personal.value, teamMean),
+        teamSampleCount: teamMean === null ? null : comparable.length,
+        measurementDate: personal.date,
+        unavailableReason: teamMean === null ? '暂无可比团队数据' : null,
+      };
+    });
+  const trendMetric = metrics[0];
+  const trendRows = trendMetric
+    ? personalRows.filter(
+        (row) => row.code === trendMetric.code && row.unit === trendMetric.unit
+      )
+    : [];
+  const trend = trendMetric
+    ? {
+        code: trendMetric.code,
+        label: trendMetric.label,
+        unit: trendMetric.unit,
+        points: latestRowByDate(trendRows)
+          .sort((left, right) => left.date.localeCompare(right.date))
+          .map((row) => ({ date: row.date, value: row.value })),
+      }
+    : null;
+  const recent = personalRows[0] ?? null;
+  return {
+    metrics,
+    trend,
+    latestTest: recent
+      ? {
+          testType: recent.testType,
+          testDate: recent.date,
+          label: recent.label,
+          value: recent.value,
+          unit: recent.unit,
+        }
+      : null,
+  };
 }
 
 type TrainingOverview = ReturnType<typeof buildOverviewPayload>;

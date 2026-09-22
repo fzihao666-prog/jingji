@@ -10,6 +10,7 @@ import type {
   AthleteRadarModelsPayload,
   AuditLog,
   BodyCompositionRecord,
+  AerobicEndurancePayload,
   WellnessTrendsPayload,
   ProfileComparisonPayload,
   ProfileTrainingStatusPayload,
@@ -172,6 +173,11 @@ export const api = {
   async wellnessTrends(id: number, from: string, to: string, project: Project) {
     return request<WellnessTrendsPayload>(
       `/api/athletes/${id}/wellness-trends?${new URLSearchParams({ from, to, project })}`
+    );
+  },
+  async aerobicEndurance(id: number, from: string, to: string, project: Project) {
+    return request<AerobicEndurancePayload>(
+      `/api/athletes/${id}/aerobic-endurance?${new URLSearchParams({ from, to, project })}`
     );
   },
   async profileComparison(id: number, from: string, to: string, project: Project) {

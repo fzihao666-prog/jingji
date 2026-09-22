@@ -34,21 +34,6 @@ const empty = (title: string) => (
   <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
 );
 
-function ageAtDate(birthDate: string | null, date: string) {
-  if (!birthDate) return null;
-  const birth = new Date(`${birthDate}T12:00:00`);
-  const target = new Date(`${date}T12:00:00`);
-  if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime())) return null;
-  const age =
-    target.getFullYear() -
-    birth.getFullYear() -
-    (target.getMonth() < birth.getMonth() ||
-    (target.getMonth() === birth.getMonth() && target.getDate() < birth.getDate())
-      ? 1
-      : 0);
-  return age >= 0 ? age : null;
-}
-
 export function SpecialTrainingDashboard({ project, from, to }: Props) {
   const [teams, setTeams] = useState<{ project: Project; items: ProjectTeam[] } | null>(null);
   const [selection, setSelection] = useState<{ project: Project; teamId: number | null }>({
