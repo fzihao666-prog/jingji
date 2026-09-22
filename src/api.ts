@@ -1,4 +1,8 @@
-import type { SpecialTrainingAnalytics, SpecialTrainingAthlete } from '../shared/special-training';
+import type {
+  SpecialTestComparison,
+  SpecialTrainingAnalytics,
+  SpecialTrainingAthlete,
+} from '../shared/special-training';
 import type {
   AccessPayload,
   AreaPermission,
@@ -558,10 +562,23 @@ export const api = {
       retiredTables: string[];
     }>('/api/data-management/standards');
   },
-  async specialTrainingOverview(from: string, to: string, project: Project, teamId: number | null) {
+  async specialTrainingOverview(
+    from: string,
+    to: string,
+    project: Project,
+    teamId: number | null,
+    athleteId: number | null = null
+  ) {
     const params = new URLSearchParams({ from, to, project });
     if (teamId) params.set('teamId', String(teamId));
-    return request<{ training: SpecialTrainingAnalytics; athletes: SpecialTrainingAthlete[] }>(
+    if (athleteId) params.set('athleteId', String(athleteId));
+    return request<{
+      training: SpecialTrainingAnalytics;
+      teamTraining: SpecialTrainingAnalytics;
+      athletes: SpecialTrainingAthlete[];
+      selectedAthlete: SpecialTrainingAthlete | null;
+      specialTestComparison: SpecialTestComparison | null;
+    }>(
       `/api/special-training/overview?${params}`
     );
   },

@@ -206,9 +206,15 @@ try {
     token
   );
   assert(wrongProject.status === 403, '专项首页未隔离不同项目队伍');
-  const removedFilter = await request(`${dashboardUrl}&athleteId=${athlete.id}`, {}, token);
-  assert(removedFilter.status === 400, '专项首页仍支持运动员筛选');
-  assert(!('events' in dashboard.payload), '专项首页仍读取专项成绩');
+  const personalDashboard = await request(`${dashboardUrl}&athleteId=${athlete.id}`, {}, token);
+  assert(
+    personalDashboard.status === 200 &&
+      personalDashboard.payload.selectedAthlete?.id === athlete.id &&
+      personalDashboard.payload.teamTraining &&
+      personalDashboard.payload.specialTestComparison,
+    '专项首页未返回个人分析与团队基准'
+  );
+  assert(!('events' in dashboard.payload), '专项首页错误返回专项测试事件明细');
   const unknownTeam = await request(`${dashboardUrl}&teamId=99999999`, {}, token);
   assert(unknownTeam.status === 403, '专项首页未拒绝无权队伍');
   const anonymous = await request(dashboardUrl);

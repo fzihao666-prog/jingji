@@ -7272,16 +7272,23 @@ function readSpecialTestEvents(user: AuthUser, project: string, from: string, to
 
 app.get('/api/special-training/overview', requireAuth, (req, res) => {
   const user = req.authUser!;
-  const project = cleanString(req.query.project);
-  const from = parseDate(req.query.from);
-  const to = parseDate(req.query.to);
-  if (req.query.athleteId !== undefined)
-    return res.status(400).json({ message: '专项首页不支持运动员筛选。' });
-  const teamId = Number(req.query.teamId || 0);
+  const query = z
+    .object({
+      project: z.string().trim().min(1).max(16),
+      from: z.string().trim().min(1).max(10),
+      to: z.string().trim().min(1).max(10),
+      teamId: z.coerce.number().int().nonnegative().optional(),
+      athleteId: z.coerce.number().int().positive().optional(),
+    })
+    .strict()
+    .safeParse(req.query);
+  if (!query.success) return res.status(400).json({ message: '专项训练筛选参数无效。' });
+  const { project, athleteId = null } = query.data;
+  const from = parseDate(query.data.from);
+  const to = parseDate(query.data.to);
+  const teamId = query.data.teamId || 0;
   if (!projectSet.has(project) || !from || !to || from > to)
     return res.status(400).json({ message: '请选择有效项目和日期范围。' });
-  if (!Number.isInteger(teamId) || teamId < 0)
-    return res.status(400).json({ message: '队伍筛选参数无效。' });
   const accessible = accessibleAthleteIds(user);
   let scoped = accessible.length
     ? (db
@@ -7295,8 +7302,32 @@ app.get('/api/special-training/overview', requireAuth, (req, res) => {
       return res.status(403).json({ message: '无权查看该队伍或该队伍不属于当前项目。' });
     scoped = scoped.filter((row) => row.teamId === teamId);
   }
-  const athleteIds = scoped.map((row) => row.id);
-  res.json(buildSpecialTrainingPayload({ athleteIds, from, to, individual: user.role === 'ATL' }));
+  if (athleteId !== null && !scoped.some((row) => row.id === athleteId)) {
+    const athlete = db
+      .prepare('SELECT project FROM athletes WHERE id = ? AND active = 1')
+      .get(athleteId) as { project: string } | undefined;
+    if (athlete && athlete.project !== project)
+      return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+    return res.status(403).json({ message: '无权查看该运动员专项训练。' });
+  }
+  const rosterAthleteIds = scoped.map((row) => row.id);
+  const selectedScope = athleteId === null ? null : scoped.find((row) => row.id === athleteId);
+  const teamAthleteIds =
+    selectedScope && !teamId
+      ? scoped.filter((row) => row.teamId === selectedScope.teamId).map((row) => row.id)
+      : rosterAthleteIds;
+  res.json(
+    buildSpecialTrainingPayload({
+      athleteIds: athleteId === null ? teamAthleteIds : [athleteId],
+      teamAthleteIds,
+      rosterAthleteIds,
+      athleteId,
+      project,
+      from,
+      to,
+      individual: user.role === 'ATL',
+    })
+  );
 });
 
 app.get('/api/special-tests', requireAuth, (req, res) => {

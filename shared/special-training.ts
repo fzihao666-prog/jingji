@@ -113,3 +113,52 @@ export type SpecialTrainingAthlete = {
   weightKg: number | null;
   summary: SpecialTrainingAnalytics['summary'];
 };
+
+export type SpecialTestSample = {
+  athleteId: number;
+  testDate: string;
+  distanceM: number;
+  boatClass: string;
+  bestMs: number;
+};
+
+export type SpecialTestComparison = {
+  athlete: SpecialTestSample | null;
+  teamAverage: number | null;
+  deltaMs: number | null;
+};
+
+export function buildSpecialTestComparison(input: {
+  athleteId: number;
+  tests: SpecialTestSample[];
+}): SpecialTestComparison {
+  const athlete = input.tests
+    .filter((sample) => sample.athleteId === input.athleteId)
+    .sort(
+      (left, right) =>
+        right.testDate.localeCompare(left.testDate) ||
+        left.bestMs - right.bestMs ||
+        left.distanceM - right.distanceM ||
+        left.boatClass.localeCompare(right.boatClass)
+    )[0];
+  if (!athlete) return { athlete: null, teamAverage: null, deltaMs: null };
+
+  const samples = input.tests.filter(
+    (sample) =>
+      sample.testDate === athlete.testDate &&
+      sample.distanceM === athlete.distanceM &&
+      sample.boatClass === athlete.boatClass
+  );
+  const bestByAthlete = new Map<number, SpecialTestSample>();
+  for (const sample of samples) {
+    const current = bestByAthlete.get(sample.athleteId);
+    if (!current || sample.bestMs < current.bestMs) bestByAthlete.set(sample.athleteId, sample);
+  }
+  const values = [...bestByAthlete.values()].map((sample) => sample.bestMs);
+  const teamAverage = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  return {
+    athlete,
+    teamAverage,
+    deltaMs: teamAverage === null ? null : athlete.bestMs - teamAverage,
+  };
+}

@@ -1,11 +1,14 @@
 import {
   aggregateSpecialTraining,
+  buildSpecialTestComparison,
   type SpecialTrainingAthlete,
+  type SpecialTestSample,
 } from '../shared/special-training.ts';
 import { summarizeDailyRpe } from './rpe-statistics.ts';
 import { db } from './db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../shared/strength-training.ts';
 import { trainingLoadCategory } from '../shared/training-content-category.ts';
+import { projectLabel } from '../shared/projects.ts';
 
 const zones = STRENGTH_INTENSITY_ZONES;
 
@@ -800,20 +803,40 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
 
 export function buildSpecialTrainingPayload(input: {
   athleteIds: number[];
+  teamAthleteIds?: number[];
+  rosterAthleteIds?: number[];
+  athleteId?: number | null;
+  project: string;
   from: string;
   to: string;
   individual: boolean;
 }) {
-  if (!input.athleteIds.length)
-    return { training: aggregateSpecialTraining([]), athletes: [] as SpecialTrainingAthlete[] };
-  const sessions = readOverviewSessions(input).filter(
+  const teamAthleteIds = input.teamAthleteIds || input.athleteIds;
+  const rosterAthleteIds = input.rosterAthleteIds || teamAthleteIds;
+  if (!teamAthleteIds.length)
+    return {
+      training: aggregateSpecialTraining([]),
+      teamTraining: aggregateSpecialTraining([]),
+      athletes: [] as SpecialTrainingAthlete[],
+      selectedAthlete: null,
+      specialTestComparison: null,
+    };
+  const teamSessions = readOverviewSessions({
+    athleteIds: teamAthleteIds,
+    from: input.from,
+    to: input.to,
+  }).filter(
     (row) =>
       !row.sessionDemo &&
       !/seed|demo|estimated/i.test(row.sessionSource) &&
       row.sessionQuality !== 'estimated' &&
       trainingLoadCategory(row) === 'special'
   );
-  const placeholders = input.athleteIds.map(() => '?').join(',');
+  const sessions =
+    input.athleteId === null || input.athleteId === undefined
+      ? teamSessions
+      : teamSessions.filter((session) => session.athleteId === input.athleteId);
+  const placeholders = rosterAthleteIds.map(() => '?').join(',');
   const athletes = db
     .prepare(
       `
@@ -828,16 +851,62 @@ export function buildSpecialTrainingPayload(input: {
     ORDER BY team, a.name, a.id
   `
     )
-    .all(input.to, ...input.athleteIds) as Array<Omit<SpecialTrainingAthlete, 'summary'>>;
+    .all(input.to, ...rosterAthleteIds) as Array<Omit<SpecialTrainingAthlete, 'summary'>>;
+  const selectedAthlete =
+    input.athleteId === null || input.athleteId === undefined
+      ? null
+      : athletes.find((athlete) => athlete.id === input.athleteId) || null;
+  const testRows = db
+    .prepare(
+      `
+        SELECT str.member_athlete_ids AS memberAthleteIds, ste.test_date AS testDate,
+          ste.distance_m AS distanceM, ste.boat_class AS boatClass, str.best_ms AS bestMs
+        FROM special_test_events ste
+        JOIN special_test_results str ON str.event_id = ste.id
+        WHERE ste.test_date BETWEEN ? AND ? AND ste.project IN (?, ?)
+      `
+    )
+    .all(input.from, input.to, input.project, projectLabel(input.project)) as Array<{
+    memberAthleteIds: string;
+    testDate: string;
+    distanceM: number;
+    boatClass: string;
+    bestMs: number;
+  }>;
+  const teamIdSet = new Set(teamAthleteIds);
+  const testSamples = testRows.flatMap((row) => {
+    let memberAthleteIds: number[] = [];
+    try {
+      memberAthleteIds = JSON.parse(row.memberAthleteIds) as number[];
+    } catch {
+      return [];
+    }
+    return memberAthleteIds
+      .filter((athleteId) => teamIdSet.has(athleteId))
+      .map<SpecialTestSample>((athleteId) => ({
+        athleteId,
+        testDate: row.testDate,
+        distanceM: row.distanceM,
+        boatClass: row.boatClass,
+        bestMs: row.bestMs,
+      }));
+  });
 
   return {
-    training: aggregateSpecialTraining(teamDurationSessions(sessions, input.individual)),
+    training: aggregateSpecialTraining(
+      input.athleteId === null || input.athleteId === undefined
+        ? teamDurationSessions(sessions, input.individual)
+        : sessions
+    ),
+    teamTraining: aggregateSpecialTraining(teamDurationSessions(teamSessions, input.individual)),
     athletes: athletes.map((athlete) => ({
       ...athlete,
       summary: aggregateSpecialTraining(
-        sessions.filter((session) => session.athleteId === athlete.id)
+        teamSessions.filter((session) => session.athleteId === athlete.id)
       ).summary,
     })),
+    selectedAthlete,
+    specialTestComparison: input.athleteId ? buildSpecialTestComparison({ athleteId: input.athleteId, tests: testSamples }) : null,
   };
 }
 
