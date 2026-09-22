@@ -1,0 +1,61 @@
+<view class="page">
+  <view class="page-head">
+    <view class="page-title">体能训练</view>
+    <view class="page-description">{{athleteName || '选择运动员'}} · {{from}} 至 {{to}}</view>
+  </view>
+
+  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" allow-all="{{false}}" range="{{range}}" bindprojectchange="onProjectChange" bindathletechange="onAthleteChange" bindrangechange="onRangeChange" />
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载体能训练数据</view></view>
+
+  <block wx:if="{{!loading && selectedAthleteId}}">
+    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{project}} · 体能能力参考模型</view></view>
+    <view class="card">
+      <view wx:if="{{metrics.length}}" class="comparison-list">
+        <view wx:for="{{championMetrics}}" wx:key="key" class="comparison-card">
+          <view class="comparison-name">{{item.label}}</view>
+          <view class="comparison-values">
+            <view><text>当前值</text><text>{{item.value}} {{item.unit}}</text></view>
+            <view><text>教练目标</text><text>{{item.target}}</text></view>
+            <view><text>达成率</text><text class="comparison-rate">{{item.rate}}</text></view>
+          </view>
+        </view>
+        <view class="notice">目标值以教练确认的数据为准。</view>
+      </view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">模型数据待配置</view><view class="state-note">请先录入体能测试和教练目标</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">体能核心指标概览</view><view class="section-head-note">当前运动员本时间范围内真实训练结果</view></view>
+    <view class="compact-grid"><view wx:for="{{summaryCards}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view><text class="compact-stat-note">{{item.note}}</text></view></view>
+
+    <view class="section-head"><view class="section-head-title">体能能力画像</view><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view></view>
+    <view class="card">
+      <view wx:if="{{metrics.length}}" class="ratio-list">
+        <view wx:for="{{metrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view>
+      </view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能测试数据</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">体能训练计划</view><view class="section-head-note">查看教练已确认的训练内容</view></view>
+    <view class="card">
+      <block wx:if="{{latestPlan}}">
+        <view class="plan-head"><view><view class="card-head-title">{{latestPlan.title}}</view><text>{{latestPlan.period}}</text></view><text>{{latestPlan.updatedBy}}</text></view>
+        <view class="notice plan-summary">{{latestPlan.summary}}</view>
+        <view class="list plan-list"><view wx:for="{{planExercises}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.category}} · {{item.arrangement}}</text></view><view class="list-row-value">{{item.max}}</view></view></view></view>
+      </block>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练计划</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">体能训练量趋势</view><view class="section-head-note">青色：训练时长 · 金色：SRPE训练负荷</view></view>
+    <view class="card">
+      <view wx:if="{{trend.length}}" class="chart-meta"><view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />SRPE负荷（AU）</view></view><text class="chart-hint">点击柱形查看</text></view>
+      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false"><view class="trend-chart strength-trend"><view wx:for="{{trend}}" wx:key="date" class="trend-day" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="height: {{item.durationHeight}}%;" /><view class="trend-bar accent" style="height: {{item.loadHeight}}%;" /></view><text class="trend-label">{{item.label}}</text></view></view></scroll-view>
+      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练量数据</view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">体能训练记录</view><view class="section-head-note">当前时间范围内最近记录</view></view>
+    <view class="card"><view wx:if="{{recentSessions.length}}" class="list"><view wx:for="{{recentSessions}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.date}} · {{item.meta}}</text></view><view class="list-row-value">{{item.load}}</view></view><text class="tag">{{item.source}}</text></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练记录</view></view></view>
+  </block>
+
+  <view wx:if="{{!loading && !selectedAthleteId}}" class="card state"><view class="state-icon">人</view><view class="state-title">请选择运动员</view><view class="state-note">体能计划和测试按运动员读取</view></view>
+</view>

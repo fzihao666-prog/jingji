@@ -1,0 +1,13 @@
+.team-picker { display: block; margin: -6rpx 0 18rpx; }
+.team-picker-control { height: 66rpx; padding: 0 18rpx; border: 1rpx solid #d5e1e3; border-radius: 15rpx; display: flex; align-items: center; gap: 12rpx; background: #ffffff; }
+.team-picker-control > text:first-child { color: #829399; font-size: 20rpx; }
+.team-picker-value { min-width: 0; flex: 1; overflow: hidden; color: #1d4d58; font-size: 23rpx; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+.team-picker-control > text:last-child { color: #6f848b; }
+.champion-list { display: grid; }
+.champion-row { min-height: 112rpx; padding: 18rpx 0; border-bottom: 1rpx solid #e2eaeb; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
+.champion-row:last-child { border-bottom: 0; }
+.champion-value { flex: none; text-align: right; }
+.champion-performance { display: block; color: #0f5961; font-size: 27rpx; font-weight: 700; }
+.champion-value text { display: block; margin-top: 5rpx; color: #bd7418; font-size: 19rpx; }
+.special-trend { min-width: 690rpx; }
+.athlete-summary { margin-top: 16rpx; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8rpx; color: #5e7780; font-size: 19rpx; }

@@ -1,0 +1,73 @@
+<view class="page form-page">
+  <view class="page-head"><view class="page-title">编辑个人资料</view><view class="page-description">保存后与网页版使用同一份运动员档案</view></view>
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载个人资料</view></view>
+
+  <block wx:if="{{!loading}}">
+    <view class="card photo-card" bindtap="choosePhoto">
+      <view class="edit-photo"><image wx:if="{{photoUrl}}" src="{{photoUrl}}" mode="aspectFill"/><view wx:else>照片</view></view>
+      <view><view class="card-head-title">更换个人照片</view><text class="form-note">支持从相册选择或拍照，保存时同步上传</text></view><text class="chevron">›</text>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">基本信息</view></view>
+    <view class="card form-card">
+      <view class="field"><text class="field-label">姓名 *</text><input class="input" value="{{form.name}}" data-field="name" bindinput="onFieldInput" maxlength="30"/></view>
+      <view class="form-grid">
+        <view class="field"><text class="field-label">项目 *</text><picker range="{{projects}}" value="{{projectIndex}}" bindchange="onProjectChange"><view class="picker-input">{{form.project || '请选择'}}</view></picker></view>
+        <view class="field"><text class="field-label">队伍 *</text><picker range="{{teamOptions}}" value="{{teamIndex}}" bindchange="onTeamChange"><view class="picker-input">{{form.team || '请选择'}}</view></picker></view>
+        <view class="field"><text class="field-label">性别</text><picker range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker-input">{{genderOptions[genderIndex]}}</view></picker></view>
+        <view class="field"><text class="field-label">出生日期</text><input class="input" value="{{form.birthDate}}" placeholder="YYYY-MM-DD" data-field="birthDate" bindinput="onFieldInput"/></view>
+      </view>
+      <view class="form-grid triple"><view class="field"><text class="field-label">省份</text><input class="input" value="{{form.region}}" data-field="region" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">城市</text><input class="input" value="{{form.city}}" data-field="city" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">区县</text><input class="input" value="{{form.county}}" data-field="county" bindinput="onFieldInput"/></view></view>
+      <view class="field"><text class="field-label">身份证号</text><input class="input" type="idcard" value="{{form.identityNumber}}" data-field="identityNumber" bindinput="onFieldInput" maxlength="18"/></view>
+      <view class="form-grid"><view class="field"><text class="field-label">民族</text><input class="input" value="{{form.ethnicity}}" data-field="ethnicity" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">血型</text><input class="input" value="{{form.bloodType}}" data-field="bloodType" bindinput="onFieldInput" placeholder="如 A 型"/></view></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">联系方式</view></view>
+    <view class="card form-card">
+      <view class="field"><text class="field-label">本人手机</text><input class="input" type="number" value="{{form.phone}}" data-field="phone" bindinput="onFieldInput" maxlength="11"/></view>
+      <view class="form-grid"><view class="field"><text class="field-label">紧急联系人</text><input class="input" value="{{form.emergencyContact}}" data-field="emergencyContact" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">紧急联系电话</text><input class="input" type="number" value="{{form.emergencyPhone}}" data-field="emergencyPhone" bindinput="onFieldInput" maxlength="11"/></view></view>
+      <view class="field"><text class="field-label">家庭住址</text><input class="input" value="{{form.homeAddress}}" data-field="homeAddress" bindinput="onFieldInput"/></view>
+      <view class="field"><text class="field-label">籍贯</text><input class="input" value="{{form.nativePlace}}" data-field="nativePlace" bindinput="onFieldInput"/></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">运动信息</view></view>
+    <view class="card form-card">
+      <view class="form-grid"><view class="field"><text class="field-label">健康状态</text><picker range="{{healthOptions}}" value="{{healthIndex}}" bindchange="onHealthChange"><view class="picker-input">{{form.healthStatus}}</view></picker></view><view class="field"><text class="field-label">在训状态</text><picker range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange"><view class="picker-input">{{form.athleteStatus}}</view></picker></view></view>
+      <view class="form-grid"><view class="field"><text class="field-label">技术等级</text><input class="input" value="{{form.technicalLevel}}" data-field="technicalLevel" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">位置/号位</text><input class="input" value="{{form.athletePosition}}" data-field="athletePosition" bindinput="onFieldInput"/></view></view>
+      <view class="form-grid"><view class="field"><text class="field-label">当前小项</text><input class="input" value="{{form.currentEvent}}" data-field="currentEvent" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">训练阶段</text><input class="input" value="{{form.trainingPhase}}" data-field="trainingPhase" bindinput="onFieldInput"/></view></view>
+      <view class="form-grid"><view class="field"><text class="field-label">开始运动日期</text><input class="input" value="{{form.startSportDate}}" placeholder="YYYY-MM-DD" data-field="startSportDate" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">集训周期</text><input class="input" value="{{form.campPeriod}}" data-field="campPeriod" bindinput="onFieldInput"/></view></view>
+      <view class="field"><text class="field-label">训练场地</text><input class="input" value="{{form.trainingVenue}}" data-field="trainingVenue" bindinput="onFieldInput"/></view>
+      <view class="field"><text class="field-label">最好成绩</text><input class="input" value="{{form.bestResult}}" data-field="bestResult" bindinput="onFieldInput"/></view>
+      <view class="field"><text class="field-label">专项特点</text><textarea class="textarea" value="{{form.specialties}}" data-field="specialties" bindinput="onFieldInput" maxlength="300"/></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">培养与来源</view></view>
+    <view class="card form-card">
+      <view class="form-grid"><view class="field"><text class="field-label">学历</text><input class="input" value="{{form.education}}" data-field="education" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">输送地</text><input class="input" value="{{form.originPlace}}" data-field="originPlace" bindinput="onFieldInput"/></view></view>
+      <view class="form-grid"><view class="field"><text class="field-label">输送单位</text><input class="input" value="{{form.originUnit}}" data-field="originUnit" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">启蒙教练</text><input class="input" value="{{form.originCoach}}" data-field="originCoach" bindinput="onFieldInput"/></view></view>
+      <view class="field"><text class="field-label">备注</text><textarea class="textarea" value="{{form.notes}}" data-field="notes" bindinput="onFieldInput" maxlength="500"/></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">身体数据</view><view class="section-head-note">修改后写入网页版现有身体成分记录</view></view>
+    <view class="card form-card">
+      <view class="field"><text class="field-label">测量日期</text><input class="input" value="{{body.measurementDate}}" placeholder="YYYY-MM-DD" data-field="measurementDate" bindinput="onBodyInput"/></view>
+      <view class="form-grid"><view class="field"><text class="field-label">身高 cm</text><input class="input" type="digit" value="{{body.heightCm}}" data-field="heightCm" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">体重 kg</text><input class="input" type="digit" value="{{body.weightKg}}" data-field="weightKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">体脂率 %</text><input class="input" type="digit" value="{{body.bodyFatPct}}" data-field="bodyFatPct" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">骨骼肌 kg</text><input class="input" type="digit" value="{{body.skeletalMuscleKg}}" data-field="skeletalMuscleKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">肌肉量 kg</text><input class="input" type="digit" value="{{body.muscleMassKg}}" data-field="muscleMassKg" bindinput="onBodyInput"/></view></view>
+      <button class="text-button body-more" bindtap="toggleBodyMore">{{showBodyMore ? '收起详细身体数据' : '填写详细身体数据'}}</button>
+      <view wx:if="{{showBodyMore}}" class="form-grid body-extra">
+        <view class="field"><text class="field-label">上肢肌肉 kg</text><input class="input" type="digit" value="{{body.upperLimbMuscleKg}}" data-field="upperLimbMuscleKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">下肢肌肉 kg</text><input class="input" type="digit" value="{{body.lowerLimbMuscleKg}}" data-field="lowerLimbMuscleKg" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">躯干肌肉 kg</text><input class="input" type="digit" value="{{body.trunkMuscleKg}}" data-field="trunkMuscleKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">皮下脂肪 mm</text><input class="input" type="digit" value="{{body.subcutaneousFatMm}}" data-field="subcutaneousFatMm" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">肱三头肌皮褶 mm</text><input class="input" type="digit" value="{{body.tricepsSkinfoldMm}}" data-field="tricepsSkinfoldMm" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">腹部皮褶 mm</text><input class="input" type="digit" value="{{body.abdominalSkinfoldMm}}" data-field="abdominalSkinfoldMm" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">大腿皮褶 mm</text><input class="input" type="digit" value="{{body.thighSkinfoldMm}}" data-field="thighSkinfoldMm" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">小腿皮褶 mm</text><input class="input" type="digit" value="{{body.calfSkinfoldMm}}" data-field="calfSkinfoldMm" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">内脏脂肪等级</text><input class="input" type="digit" value="{{body.visceralFatLevel}}" data-field="visceralFatLevel" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">基础代谢 kcal</text><input class="input" type="digit" value="{{body.basalMetabolismKcal}}" data-field="basalMetabolismKcal" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">总体水 kg</text><input class="input" type="digit" value="{{body.totalBodyWaterKg}}" data-field="totalBodyWaterKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">细胞外水比</text><input class="input" type="digit" value="{{body.ecwTbwRatio}}" data-field="ecwTbwRatio" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">相位角 °</text><input class="input" type="digit" value="{{body.phaseAngleDeg}}" data-field="phaseAngleDeg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">内脏脂肪面积 cm²</text><input class="input" type="digit" value="{{body.visceralFatAreaCm2}}" data-field="visceralFatAreaCm2" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">左臂瘦体重 kg</text><input class="input" type="digit" value="{{body.leftArmLeanKg}}" data-field="leftArmLeanKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">右臂瘦体重 kg</text><input class="input" type="digit" value="{{body.rightArmLeanKg}}" data-field="rightArmLeanKg" bindinput="onBodyInput"/></view>
+        <view class="field"><text class="field-label">躯干瘦体重 kg</text><input class="input" type="digit" value="{{body.trunkLeanKg}}" data-field="trunkLeanKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">左腿瘦体重 kg</text><input class="input" type="digit" value="{{body.leftLegLeanKg}}" data-field="leftLegLeanKg" bindinput="onBodyInput"/></view><view class="field"><text class="field-label">右腿瘦体重 kg</text><input class="input" type="digit" value="{{body.rightLegLeanKg}}" data-field="rightLegLeanKg" bindinput="onBodyInput"/></view>
+      </view>
+      <view class="field"><text class="field-label">测量备注</text><input class="input" value="{{body.note}}" data-field="note" bindinput="onBodyInput"/></view>
+    </view>
+
+    <view class="save-bar"><button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在保存' : '保存并同步'}}</button></view>
+  </block>
+</view>

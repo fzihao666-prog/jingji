@@ -1,0 +1,21 @@
+<view class="scope-filter">
+  <view class="scope-picker-row">
+    <picker class="scope-picker" mode="selector" range="{{projects}}" value="{{projectIndex}}" bindchange="onProjectChange">
+      <view class="scope-picker-control">
+        <text>项目</text>
+        <text class="scope-picker-value">{{project || '选择项目'}}</text>
+        <text>⌄</text>
+      </view>
+    </picker>
+    <picker wx:if="{{showAthlete}}" class="scope-picker athlete-picker" mode="selector" range="{{athleteItems}}" range-key="name" value="{{athleteIndex}}" bindchange="onAthleteChange">
+      <view class="scope-picker-control">
+        <text>运动员</text>
+        <text class="scope-picker-value">{{athleteItems[athleteIndex].name}}</text>
+        <text>⌄</text>
+      </view>
+    </picker>
+  </view>
+  <view class="scope-range" aria-label="时间范围">
+    <button wx:for="{{rangeOptions}}" wx:key="value" class="{{range === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onRangeChange">{{item.label}}</button>
+  </view>
+</view>
