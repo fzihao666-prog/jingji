@@ -21,6 +21,7 @@
     "data-import-check": "tsx scripts/data-import-check.ts",
     "training-content-ratio-check": "tsx scripts/training-content-ratio-check.ts",
     "api-check": "node scripts/api-check.mjs",
+    "daily-todos-example": "tsx scripts/coach-daily-todos-example.ts",
     "visual-check": "node scripts/visual-check.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

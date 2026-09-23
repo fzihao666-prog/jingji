@@ -77,6 +77,7 @@ import {
   updateDataImportItems,
 } from './data-import.ts';
 import { db, upsertAthleteOrigin } from './db.ts';
+import { dailyTodoQuery, readDailyTodos } from './coach-daily-todos.ts';
 import { buildOverviewPayload, buildSpecialTrainingPayload } from './overview-service.ts';
 import { recognizeStrengthImport, type RecognizedStrengthRow } from './strength-import-ai.ts';
 
@@ -713,6 +714,230 @@ function birthDateFromIdentityNumber(identityNumber: string) {
     return '';
   }
   return `${year}-${month}-${day}`;
+}
+
+const REGISTRATION_APPROVAL_KEY = 'registration_approval_enabled';
+
+function registrationApprovalEnabled(): boolean {
+  const row = db
+    .prepare('SELECT value FROM app_metadata WHERE key = ?')
+    .get(REGISTRATION_APPROVAL_KEY) as { value: string } | undefined;
+  return row ? row.value !== '0' : true;
+}
+
+function setRegistrationApprovalEnabled(enabled: boolean): void {
+  db.prepare(
+    `
+    INSERT INTO app_metadata (key, value, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+  `
+  ).run(REGISTRATION_APPROVAL_KEY, enabled ? '1' : '0');
+}
+
+type RegistrationActivationRow = {
+  id: number;
+  username: string;
+  password_hash: string;
+  display_name: string;
+  requested_role: 'ATL' | 'SCC';
+  project: string;
+  team: string;
+  gender: string | null;
+  status: string;
+  identity_number: string | null;
+  native_place: string | null;
+  phone: string | null;
+};
+
+type ActivationOutcome =
+  | { ok: true; userId: number }
+  | { ok: false; status: number; message: string };
+
+function activateRegistrationRequest(requestId: number, reviewer: AuthUser | null): ActivationOutcome {
+  const request = db
+    .prepare(
+      `
+    SELECT id, username, password_hash, display_name, requested_role,
+      project, team, gender, identity_number, native_place, phone, status
+    FROM registration_requests WHERE id = ?
+  `
+    )
+    .get(requestId) as RegistrationActivationRow | undefined;
+  if (!request) return { ok: false, status: 404, message: '注册申请不存在。' };
+  if (request.status !== 'pending')
+    return { ok: false, status: 409, message: '该申请已经处理。' };
+  if (db.prepare('SELECT id FROM users WHERE username = ?').get(request.username)) {
+    return { ok: false, status: 409, message: '账号已存在，无法重复审核。' };
+  }
+  if (reviewer) {
+    if (
+      !canManageRole(reviewer.role, request.requested_role) ||
+      !permissionsAllowProjectTeam(accountPermissions(reviewer.id), request.project, request.team)
+    ) {
+      return { ok: false, status: 403, message: '该申请超出当前账号的管辖范围。' };
+    }
+  } else {
+    const team = db
+      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+      .get(request.project, request.team);
+    if (!team) return { ok: false, status: 400, message: '申请所属队伍不存在或已停用。' };
+  }
+
+  db.exec('BEGIN');
+  try {
+    let athleteId: number | null = null;
+    if (request.requested_role === 'ATL') {
+      const athlete = db
+        .prepare(
+          `SELECT a.id, a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.name = ?`
+        )
+        .get(request.display_name) as { id: number; project: string; team: string } | undefined;
+      if (athlete) {
+        const linkedUser = db
+          .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
+          .get(athlete.id);
+        if (linkedUser) throw new Error('该运动员已有登录账户。');
+        if (athlete.project !== request.project || athlete.team !== request.team) {
+          throw new Error(
+            `该姓名已存在于项目「${athlete.project} / ${athlete.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`
+          );
+        }
+        athleteId = athlete.id;
+      } else {
+        const team = db
+          .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+          .get(request.project, request.team) as { id: number } | undefined;
+        if (!team) throw new Error('申请所属队伍不存在或已停用。');
+        const birthDate =
+          birthDateFromIdentityNumber(request.identity_number || '') || null;
+        const result = db
+          .prepare(
+            `INSERT INTO athletes (name, project, team, team_id, gender, birth_date) VALUES (?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            request.display_name,
+            request.project,
+            request.team,
+            team.id,
+            request.gender,
+            birthDate
+          );
+        athleteId = Number(result.lastInsertRowid);
+      }
+      const profileBirthDate =
+        birthDateFromIdentityNumber(request.identity_number || '') || null;
+      if (athleteId && profileBirthDate) {
+        db.prepare(
+          'UPDATE athletes SET birth_date = COALESCE(birth_date, ?) WHERE id = ?'
+        ).run(profileBirthDate, athleteId);
+      }
+      db.prepare(
+        `
+      INSERT INTO athlete_profiles (athlete_id, identity_number, native_place, phone, created_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(athlete_id) DO UPDATE SET
+        identity_number = COALESCE(NULLIF(excluded.identity_number, ''), athlete_profiles.identity_number),
+        native_place = COALESCE(NULLIF(excluded.native_place, ''), athlete_profiles.native_place),
+        phone = COALESCE(NULLIF(excluded.phone, ''), athlete_profiles.phone),
+        updated_at = CURRENT_TIMESTAMP
+    `
+      ).run(
+        athleteId,
+        request.identity_number || '',
+        request.native_place || '',
+        request.phone || ''
+      );
+      const [originProvince = '', originCity = '', originCounty = ''] = (
+        request.native_place || ''
+      ).split('/');
+      if (athleteId && provinceSet.has(originProvince) && originCity) {
+        upsertAthleteOrigin({
+          athleteId,
+          province: originProvince,
+          city: originCity,
+          county: originCounty,
+          source: 'registration',
+          quality: 'valid',
+        });
+      }
+    }
+
+    const result = db
+      .prepare(
+        `
+      INSERT INTO users (username, password_hash, display_name, role, athlete_id)
+      VALUES (?, ?, ?, ?, ?)
+    `
+      )
+      .run(
+        request.username,
+        request.password_hash,
+        request.display_name,
+        request.requested_role,
+        athleteId
+      );
+    const newUserId = Number(result.lastInsertRowid);
+    if (request.requested_role === 'SCC') {
+      db.prepare('INSERT OR IGNORE INTO coach_profiles (user_id, category) VALUES (?, ?)').run(
+        newUserId,
+        DEFAULT_COACH_CATEGORY
+      );
+    }
+    const inheritedArea = reviewer
+      ? accountPermissions(reviewer.id).areas[0] || {
+          areaLevel: 'national' as AreaLevel,
+          province: '',
+          city: '',
+          county: '',
+        }
+      : {
+          areaLevel: 'national' as AreaLevel,
+          province: '',
+          city: '',
+          county: '',
+        };
+    initializeAccountScope({
+      userId: newUserId,
+      role: request.requested_role,
+      parentUserId: reviewer?.id ?? null,
+      province: inheritedArea.province,
+      city: inheritedArea.city,
+      county: inheritedArea.county,
+      project: request.project,
+      team: request.team,
+      grantedBy: reviewer?.id ?? newUserId,
+      areaLevel: inheritedArea.areaLevel,
+    });
+    if (reviewer && request.requested_role === 'ATL' && reviewer.role === 'SCC' && athleteId) {
+      db.prepare(
+        'INSERT OR IGNORE INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
+      ).run(reviewer.id, athleteId);
+    }
+    db.prepare(
+      `
+      UPDATE registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?
+    `
+    ).run(reviewer?.id ?? null, requestId);
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      reviewer?.id ?? newUserId,
+      reviewer ? 'APPROVE_REGISTRATION' : 'AUTO_APPROVE_REGISTRATION',
+      'user',
+      newUserId,
+      JSON.stringify({ requestId, role: request.requested_role, system: !reviewer })
+    );
+    db.exec('COMMIT');
+    return { ok: true, userId: newUserId };
+  } catch (error) {
+    db.exec('ROLLBACK');
+    return {
+      ok: false,
+      status: 400,
+      message: error instanceof Error ? error.message : '审核失败。',
+    };
+  }
 }
 
 function toLocalIsoDate(value: Date) {
@@ -2068,7 +2293,7 @@ app.post('/api/auth/register', (req, res) => {
   const password = cleanString(req.body?.password);
   const displayName = cleanString(req.body?.displayName);
   const requestedRoleInput = cleanString(req.body?.role);
-  const requestedRole = requestedRoleInput === 'athlete' ? 'ATL' : requestedRoleInput;
+  const requestedRole = requestedRoleInput === 'athlete' ? 'ATL' : requestedRoleInput === 'coach' ? 'SCC' : requestedRoleInput;
   const project = cleanString(req.body?.project);
   const team = cleanString(req.body?.team);
   const identityNumber = cleanString(req.body?.identityNumber).toUpperCase();
@@ -2078,6 +2303,7 @@ app.post('/api/auth/register', (req, res) => {
       : '女'
     : '';
   const nativePlace = cleanString(req.body?.nativePlace);
+  const phone = cleanString(req.body?.phone).replace(/[\s-]/g, '');
   const errors: string[] = [];
   const [nativePlaceProvince = '', nativePlaceCity = '', ...nativePlaceRest] =
     nativePlace.split('/');
@@ -2092,17 +2318,24 @@ app.post('/api/auth/register', (req, res) => {
     errors.push('密码须为8—72位，并同时包含字母和数字');
   }
   if (displayName.length < 2 || displayName.length > 20) errors.push('姓名须为2—20个字符');
-  if (requestedRole !== 'ATL') errors.push('当前仅开放运动员注册');
+  if (requestedRole !== 'ATL' && requestedRole !== 'SCC')
+    errors.push('仅支持注册运动员或教练');
   if (!projectSet.has(project)) errors.push('请选择赛艇、皮划艇或激流');
   const validTeam = db
     .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
     .get(project, team);
   if (!validTeam) errors.push('请选择该项目下的有效队伍');
-  if (!/^\d{17}[\dX]$/.test(identityNumber))
-    errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
-  if (nativePlaceRest.length || !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)) {
-    errors.push('请选择有效且对应的籍贯省市');
+  if (requestedRole === 'ATL') {
+    if (!/^\d{17}[\dX]$/.test(identityNumber))
+      errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
+    if (
+      nativePlaceRest.length ||
+      !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)
+    ) {
+      errors.push('请选择有效且对应的籍贯省市');
+    }
   }
+  if (!/^1[3-9]\d{9}$/.test(phone)) errors.push('手机号须为11位大陆手机号');
   if (errors.length) return res.status(400).json({ message: errors.join('；') });
 
   const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
@@ -2116,11 +2349,12 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(409).json({ message: '该账号已通过审核，请直接登录。' });
 
   const passwordHash = bcrypt.hashSync(password, 11);
+  let registrationId: number;
   if (existingRequest?.status === 'rejected') {
     db.prepare(
       `
       UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
-        project = ?, team = ?, gender = ?, identity_number = ?, native_place = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
+        project = ?, team = ?, gender = ?, identity_number = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
         reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
     `
     ).run(
@@ -2132,28 +2366,48 @@ app.post('/api/auth/register', (req, res) => {
       gender,
       identityNumber,
       nativePlace,
+      phone,
       existingRequest.id
     );
+    registrationId = existingRequest.id;
   } else {
-    db.prepare(
-      `
+    const insertResult = db
+      .prepare(
+        `
       INSERT INTO registration_requests (
-        username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place, phone
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
-    ).run(
-      username,
-      passwordHash,
-      displayName,
-      requestedRole,
-      project,
-      team,
-      gender,
-      identityNumber,
-      nativePlace
-    );
+      )
+      .run(
+        username,
+        passwordHash,
+        displayName,
+        requestedRole,
+        project,
+        team,
+        gender,
+        identityNumber,
+        nativePlace,
+        phone
+      );
+    registrationId = Number(insertResult.lastInsertRowid);
   }
-  res.status(201).json({ message: '申请已提交，审核通过后即可登录。' });
+
+  if (!registrationApprovalEnabled()) {
+    const activation = activateRegistrationRequest(registrationId, null);
+    if (activation.ok) {
+      return res
+        .status(201)
+        .json({ message: '注册成功，可直接登录。', status: 'approved' });
+    }
+    return res
+      .status(201)
+      .json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
+  }
+  res
+    .status(201)
+    .json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -5798,6 +6052,19 @@ app.get(
   }
 );
 
+app.get('/api/coach/daily-todos', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const now = new Date();
+  const parsed = dailyTodoQuery(now).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ message: '请选择有效项目；待办日期仅支持北京时间当天，且不能附加范围参数。' });
+  const user = req.authUser!;
+  if (!selectableProjects(user).includes(parsed.data.project)) {
+    return res.status(403).json({ message: '无权查看该项目的每日待办。' });
+  }
+  const todos = readDailyTodos(db, { athleteIds: accessibleAthleteIds(user), project: parsed.data.project, now });
+  res.json({ todos });
+});
+
 app.get('/api/overview/teams', requireAuth, (req, res) => {
   const user = req.authUser!;
   const project = cleanString(req.query.project);
@@ -7726,6 +7993,41 @@ app.get(
 );
 
 app.get(
+  '/api/admin/registrations/approval',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (_req, res) => {
+    res.json({ enabled: registrationApprovalEnabled() });
+  }
+);
+
+app.put(
+  '/api/admin/registrations/approval',
+  requireAuth,
+  requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+  (req, res) => {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ message: '开关参数无效。' });
+    }
+    const enabled = req.body.enabled as boolean;
+    const previous = registrationApprovalEnabled();
+    setRegistrationApprovalEnabled(enabled);
+    if (previous !== enabled) {
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        req.authUser!.id,
+        'UPDATE_REGISTRATION_APPROVAL',
+        'setting',
+        null,
+        JSON.stringify({ from: previous, to: enabled })
+      );
+    }
+    res.json({ enabled });
+  }
+);
+
+app.get(
   '/api/admin/registrations',
   requireAuth,
   requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
@@ -7738,7 +8040,7 @@ app.get(
       .prepare(
         `
     SELECT id, username, display_name AS displayName, requested_role AS requestedRole,
-      project, team, gender, identity_number AS identityNumber, native_place AS nativePlace, status,
+      project, team, gender, identity_number AS identityNumber, native_place AS nativePlace, phone, status,
       created_at AS createdAt, reviewed_at AS reviewedAt
     FROM registration_requests WHERE status = ? ORDER BY created_at ASC
   `
@@ -7753,6 +8055,7 @@ app.get(
       gender: string | null;
       identityNumber: string | null;
       nativePlace: string | null;
+      phone: string | null;
       status: string;
       createdAt: string;
       reviewedAt: string | null;
@@ -7878,158 +8181,9 @@ app.post(
   requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
   (req, res) => {
     const requestId = Number(req.params.id);
-    const request = db
-      .prepare(
-        `
-    SELECT id, username, password_hash, display_name, requested_role,
-      project, team, gender, identity_number, native_place, status
-    FROM registration_requests WHERE id = ?
-  `
-      )
-      .get(requestId) as
-      | {
-          id: number;
-          username: string;
-          password_hash: string;
-          display_name: string;
-          requested_role: 'ATL' | 'SCC';
-          project: string;
-          team: string;
-          gender: string | null;
-          status: string;
-          identity_number: string | null;
-          native_place: string | null;
-        }
-      | undefined;
-    if (!request) return res.status(404).json({ message: '注册申请不存在。' });
-    if (request.status !== 'pending') return res.status(409).json({ message: '该申请已经处理。' });
-    if (db.prepare('SELECT id FROM users WHERE username = ?').get(request.username)) {
-      return res.status(409).json({ message: '账号已存在，无法重复审核。' });
-    }
-    const reviewer = req.authUser!;
-    if (
-      !canManageRole(reviewer.role, request.requested_role) ||
-      !permissionsAllowProjectTeam(accountPermissions(reviewer.id), request.project, request.team)
-    )
-      return res.status(403).json({ message: '该申请超出当前账号的管辖范围。' });
-
-    db.exec('BEGIN');
-    try {
-      let athleteId: number | null = null;
-      if (request.requested_role === 'ATL') {
-        const athlete = db
-          .prepare(
-            `SELECT a.id, a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.name = ?`
-          )
-          .get(request.display_name) as { id: number; project: string; team: string } | undefined;
-        if (athlete) {
-          const linkedUser = db
-            .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
-            .get(athlete.id);
-          if (linkedUser) throw new Error('该运动员已有登录账户。');
-          if (athlete.project !== request.project || athlete.team !== request.team) {
-            throw new Error(
-              `该姓名已存在于项目「${athlete.project} / ${athlete.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`
-            );
-          }
-          athleteId = athlete.id;
-        } else {
-          const team = db
-            .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
-            .get(request.project, request.team) as { id: number } | undefined;
-          if (!team) throw new Error('申请所属队伍不存在或已停用。');
-          const result = db
-            .prepare(
-              `INSERT INTO athletes (name, project, team, team_id, gender) VALUES (?, ?, ?, ?, ?)`
-            )
-            .run(request.display_name, request.project, request.team, team.id, request.gender);
-          athleteId = Number(result.lastInsertRowid);
-        }
-        db.prepare(
-          `
-        INSERT OR IGNORE INTO athlete_profiles (athlete_id, identity_number, native_place, created_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      `
-        ).run(athleteId, request.identity_number || '', request.native_place || '');
-        const [originProvince = '', originCity = '', originCounty = ''] = (
-          request.native_place || ''
-        ).split('/');
-        if (athleteId && provinceSet.has(originProvince) && originCity) {
-          upsertAthleteOrigin({
-            athleteId,
-            province: originProvince,
-            city: originCity,
-            county: originCounty,
-            source: 'registration',
-            quality: 'valid',
-          });
-        }
-      }
-
-      const result = db
-        .prepare(
-          `
-      INSERT INTO users (username, password_hash, display_name, role, athlete_id)
-      VALUES (?, ?, ?, ?, ?)
-    `
-        )
-        .run(
-          request.username,
-          request.password_hash,
-          request.display_name,
-          request.requested_role,
-          athleteId
-        );
-      const newUserId = Number(result.lastInsertRowid);
-      if (request.requested_role === 'SCC') {
-        db.prepare('INSERT OR IGNORE INTO coach_profiles (user_id, category) VALUES (?, ?)').run(
-          newUserId,
-          DEFAULT_COACH_CATEGORY
-        );
-      }
-      const inheritedArea = accountPermissions(reviewer.id).areas[0] || {
-        areaLevel: 'national' as AreaLevel,
-        province: '',
-        city: '',
-        county: '',
-      };
-      initializeAccountScope({
-        userId: newUserId,
-        role: request.requested_role,
-        parentUserId: reviewer.id,
-        province: inheritedArea.province,
-        city: inheritedArea.city,
-        county: inheritedArea.county,
-        project: request.project,
-        team: request.team,
-        grantedBy: reviewer.id,
-        areaLevel: inheritedArea.areaLevel,
-      });
-      if (request.requested_role === 'ATL' && reviewer.role === 'SCC' && athleteId) {
-        db.prepare(
-          'INSERT OR IGNORE INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
-        ).run(reviewer.id, athleteId);
-      }
-      db.prepare(
-        `
-      UPDATE registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?
-    `
-      ).run(req.authUser!.id, requestId);
-      db.prepare(
-        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
-      ).run(
-        req.authUser!.id,
-        'APPROVE_REGISTRATION',
-        'user',
-        Number(result.lastInsertRowid),
-        JSON.stringify({ requestId, role: request.requested_role })
-      );
-      db.exec('COMMIT');
-      res.json({ message: '账户已开通。' });
-    } catch (error) {
-      db.exec('ROLLBACK');
-      res.status(400).json({ message: error instanceof Error ? error.message : '审核失败。' });
-    }
+    const outcome = activateRegistrationRequest(requestId, req.authUser!);
+    if (!outcome.ok) return res.status(outcome.status).json({ message: outcome.message });
+    res.json({ message: '账户已开通。' });
   }
 );
 

@@ -83,8 +83,18 @@ Page({
   onShow() {
     const pending = wx.getStorageSync('jingji-mini-pending-account');
     if (pending) {
+      const status = wx.getStorageSync('jingji-mini-register-status') || 'pending';
       wx.removeStorageSync('jingji-mini-pending-account');
-      this.setData({ username: pending, password: '', error: '', success: '注册申请已提交，审核通过后即可使用该账号登录。' });
+      wx.removeStorageSync('jingji-mini-register-status');
+      this.setData({
+        username: pending,
+        password: '',
+        error: '',
+        success:
+          status === 'approved'
+            ? '注册成功，可直接登录。'
+            : '注册申请已提交，审核通过后即可使用该账号登录。'
+      });
     }
   },
 

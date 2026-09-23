@@ -1,4 +1,14 @@
 .trend-chart { min-width: 690rpx; }
+.daily-todos .card-head { margin-bottom: 12rpx; }
+.todo-note { color: #46616c; font-size: 24rpx; line-height: 1.65; overflow-wrap: break-word; }
+.todo-summary { margin-top: 16rpx; color: #164751; font-size: 30rpx; font-weight: 700; }
+.todo-heading { margin-top: 26rpx; margin-bottom: 10rpx; color: #164751; font-size: 26rpx; font-weight: 700; }
+.todo-row { display: block; width: 100%; min-height: 88rpx; margin: 12rpx 0 0; padding: 20rpx; border: 1rpx solid #d8e3e6; border-radius: 16rpx; background: #edf3f4; text-align: left; line-height: 1.5; }
+.todo-row-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12rpx; color: #12303b; font-size: 28rpx; font-weight: 700; }
+.todo-link { flex: none; color: #176373; font-size: 24rpx; }
+.todo-reason { margin-top: 10rpx; color: #7a4715; font-size: 24rpx; line-height: 1.65; }
+.todo-refresh { flex: none; min-width: 88rpx; min-height: 88rpx; margin: 0; padding: 16rpx; border: 1rpx solid #d8e3e6; border-radius: 12rpx; color: #176373; background: #edf3f4; font-size: 26rpx; line-height: 2; }
+.todo-row:focus, .todo-refresh:focus { outline: 4rpx solid #176373; outline-offset: 4rpx; }
 .attention-card { margin-bottom: 18rpx; padding: 20rpx 22rpx; border: 1rpx solid #efd2a6; border-radius: 18rpx; display: flex; align-items: center; gap: 16rpx; color: #80521e; background: #fff8ec; }
 .attention-mark { width: 42rpx; height: 42rpx; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #ffffff; background: #cf8428; font-size: 24rpx; font-weight: 800; }
 .attention-title { color: #7a4715; font-size: 24rpx; font-weight: 800; }

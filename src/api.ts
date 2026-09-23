@@ -99,6 +99,7 @@ export const api = {
     team?: string;
     gender?: string;
     identityNumber: string;
+    phone: string;
     nativePlace: string;
   }) {
     return request<{ message: string }>('/api/auth/register', {
@@ -648,6 +649,15 @@ export const api = {
     return request<{ requests: RegistrationRequest[]; pending: number }>(
       `/api/admin/registrations?status=${status}`
     );
+  },
+  async registrationApproval() {
+    return request<{ enabled: boolean }>('/api/admin/registrations/approval');
+  },
+  async setRegistrationApproval(enabled: boolean) {
+    return request<{ enabled: boolean }>('/api/admin/registrations/approval', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
   },
   async reviewRegistration(id: number, action: 'approve' | 'reject') {
     return request<{ message: string }>(`/api/admin/registrations/${id}/${action}`, {

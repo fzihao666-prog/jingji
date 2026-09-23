@@ -310,6 +310,25 @@ function genderFromIdentityNumber(value: string) {
   return /^\d{17}[\dX]$/.test(value) ? (Number(value[16]) % 2 ? '男' : '女') : '';
 }
 
+function birthDateFromIdentityNumber(value: string) {
+  if (!/^\d{17}[\dX]$/.test(value)) return '';
+  const year = value.slice(6, 10);
+  const month = value.slice(10, 12);
+  const day = value.slice(12, 14);
+  const numericMonth = Number(month);
+  const numericDay = Number(day);
+  if (numericMonth < 1 || numericMonth > 12 || numericDay < 1 || numericDay > 31) return '';
+  const candidate = new Date(Date.UTC(Number(year), numericMonth - 1, numericDay));
+  if (
+    candidate.getUTCFullYear() !== Number(year) ||
+    candidate.getUTCMonth() !== numericMonth - 1 ||
+    candidate.getUTCDate() !== numericDay
+  ) {
+    return '';
+  }
+  return `${year}-${month}-${day}`;
+}
+
 export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) => void }) {
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState(
@@ -326,7 +345,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [team, setTeam] = useState('');
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [gender, setGender] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [identityNumber, setIdentityNumber] = useState('');
+  const [phone, setPhone] = useState('');
   const [nativePlaceProvince, setNativePlaceProvince] = useState('');
   const [nativePlaceCity, setNativePlaceCity] = useState('');
   const [error, setError] = useState('');
@@ -381,6 +402,10 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
       setError('身份证号须为18位，前17位为数字，末位为数字或X。');
       return;
     }
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      setError('手机号须为11位大陆手机号。');
+      return;
+    }
     if (!project) {
       setError('请选择运动项目。');
       return;
@@ -400,6 +425,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
         team,
         gender,
         identityNumber,
+        phone,
         nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`,
       });
       setSuccess(result.message);
@@ -574,11 +600,25 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                         const value = event.target.value.replace(/\s/g, '').toUpperCase();
                         setIdentityNumber(value);
                         setGender(genderFromIdentityNumber(value));
+                        setBirthDate(birthDateFromIdentityNumber(value));
                       }}
                       maxLength={18}
                       pattern="[0-9]{17}[0-9X]"
                       title="请输入18位身份证号，末位可以是X"
                       placeholder="18位身份证号"
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>手机号</span>
+                    <input
+                      value={phone}
+                      onChange={(event) => setPhone(event.target.value.replace(/\s/g, ''))}
+                      maxLength={11}
+                      pattern="1[3-9][0-9]{9}"
+                      title="请输入11位大陆手机号"
+                      placeholder="11位手机号"
+                      autoComplete="tel"
                       required
                     />
                   </label>
@@ -624,6 +664,15 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                       readOnly
                       placeholder="填写身份证号后自动确定"
                       aria-label="性别（根据身份证号自动确定）"
+                    />
+                  </label>
+                  <label>
+                    <span>出生日期</span>
+                    <input
+                      value={birthDate}
+                      readOnly
+                      placeholder="填写身份证号后自动确定"
+                      aria-label="出生日期（根据身份证号自动确定）"
                     />
                   </label>
                   <label>

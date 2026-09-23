@@ -21,6 +21,9 @@ export function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState<number | null>(null);
   const [message, setMessage] = useState('');
+  const [approvalEnabled, setApprovalEnabled] = useState(true);
+  const [approvalLoading, setApprovalLoading] = useState(true);
+  const [approvalWorking, setApprovalWorking] = useState(false);
 
   const load = async (nextFilter = filter) => {
     setLoading(true);
@@ -36,6 +39,38 @@ export function AccountsPage() {
   useEffect(() => {
     void load(filter);
   }, [filter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await api.registrationApproval();
+        if (!cancelled) setApprovalEnabled(result.enabled);
+      } catch (error) {
+        if (!cancelled)
+          setMessage(error instanceof Error ? error.message : '注册审核开关加载失败。');
+      } finally {
+        if (!cancelled) setApprovalLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleApproval = async () => {
+    setApprovalWorking(true);
+    setMessage('');
+    try {
+      const result = await api.setRegistrationApproval(!approvalEnabled);
+      setApprovalEnabled(result.enabled);
+      setMessage(result.enabled ? '注册审核已开启，新注册进入待审核。' : '注册审核已关闭，新注册将自动开通。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '注册审核开关更新失败。');
+    } finally {
+      setApprovalWorking(false);
+    }
+  };
 
   const review = async (request: RegistrationRequest, action: 'approve' | 'reject') => {
     if (action === 'reject' && !window.confirm(`确认拒绝 ${request.displayName} 的注册申请？`))
@@ -77,6 +112,30 @@ export function AccountsPage() {
         }
       />
 
+      <section className="registration-approval-panel" aria-label="注册审核开关">
+        <div className="registration-approval-copy">
+          <strong>注册审核</strong>
+          <p>
+            {approvalLoading
+              ? '正在加载开关状态…'
+              : approvalEnabled
+                ? '开启：新注册进入待审核，由有权限的上级在下方通过或拒绝；仅影响开关之后的新申请。'
+                : '关闭：新注册自动开通并可立即登录；历史待审核与已处理申请不受影响。'}
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`registration-approval-toggle ${approvalEnabled ? 'on' : 'off'}`}
+          role="switch"
+          aria-checked={approvalEnabled}
+          aria-label="注册审核开关"
+          disabled={approvalLoading || approvalWorking}
+          onClick={() => void toggleApproval()}
+        >
+          <span className="registration-approval-thumb" />
+        </button>
+      </section>
+
       <div className="account-filters">
         {(Object.keys(filterLabels) as Filter[]).map((item) => (
           <button
@@ -112,7 +171,8 @@ export function AccountsPage() {
                   <span>{request.requestedRole === 'SCC' ? '队伍体能教练' : '运动员'}</span>
                 </div>
                 <p>
-                  @{request.username} · {request.gender} · 籍贯：{request.nativePlace} · 身份证：
+                  @{request.username} · {request.gender} · 手机：
+                  {request.phone || '未填'} · 籍贯：{request.nativePlace} · 身份证：
                   {request.identityNumber} · {projectLabel(request.project || '')} · {request.team}
                 </p>
               </div>

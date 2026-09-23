@@ -78,7 +78,7 @@ erDiagram
 | `user_team_permissions`      | 队伍权限              | 联合 PK：`user_id + project + team`                            | `user_id`, `project`, `team`, `granted_by`, `created_at`                                                                                                                                                              |
 | `regional_manager_regions`   | 区域负责人所属地区    | 联合 PK：`manager_user_id + region`                            | `manager_user_id`, `region`, `granted_by`, `created_at`                                                                                                                                                               |
 | `user_dashboard_preferences` | 用户应用偏好          | 联合 PK：`user_id + dashboard + project + scope`               | `user_id`, `dashboard`, `project`, `scope`, `layout_json`, `updated_at`                                                                                                                                               |
-| `registration_requests`      | 注册申请和审核状态    | `id` PK；`reviewed_by` FK → `users.id`                         | `id`, `username`, `password_hash`, `display_name`, `requested_role`, `project`, `team`, `gender`, `identity_number`, `native_place`, `region`, `city`, `county`, `status`, `reviewed_by`, `reviewed_at`, `created_at` |
+| `registration_requests`      | 注册申请和审核状态    | `id` PK；`reviewed_by` FK → `users.id`                         | `id`, `username`, `password_hash`, `display_name`, `requested_role`, `project`, `team`, `gender`, `identity_number`, `native_place`, `phone`, `region`, `city`, `county`, `status`, `reviewed_by`, `reviewed_at`, `created_at` |
 
 ## 5. 训练、力量与每日恢复
 

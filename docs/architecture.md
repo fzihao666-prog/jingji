@@ -223,7 +223,7 @@ sequenceDiagram
 | 体能训练   | `/api/training-plans`、`/api/strength-training`              | 计划、AI 生成、结果导入和分析        |
 | 测试与模型 | `/api/strength-tests`、`/api/analysis`、冠军模型接口         | 测试、建议、项目模型和个人分析       |
 | 总览与记录 | `/api/overview`、`/api/records`                              | 权限范围内的聚合和场次查询           |
-| 组织治理   | `/api/admin/registrations`、`/api/access`                    | 审核、账号、授权和审计               |
+| 组织治理   | `/api/admin/registrations`、`/api/access`                    | 审核、注册审核开关、账号、授权和审计        |
 
 ## 7. 共享领域模型
 
@@ -478,6 +478,16 @@ Excel / PDF / 图片
 生理生化热力图优先读取 `test_sessions → test_measurements` 的血乳酸、CK、BUN、Hb、HRV 指标及 `daily_wellness.morning_pulse`（RHR）。服务端按每个日期的运动员状态汇总团队风险等级；仅在演示种子范围内对缺失指标返回带 `isEstimated` 标记的 V1 模拟状态，不写入数据库，也不得在生产实测范围内冒充检测结果。
 
 总览接口是聚合读取模型，不应承担业务写入。新看板优先扩展统一聚合结果，避免页面发起大量相互不一致的小查询。
+
+### 10.6 小程序教练每日训练待办
+
+`GET /api/coach/daily-todos` 由 `server/index.ts` 复用认证、管理角色检查、`selectableProjects` 与 `accessibleAthleteIds`；`server/coach-daily-todos.ts` 在 SQL 中再次限定项目和在用运动员，仅返回必要档案标识、队伍与关注摘要。响应禁止缓存。严格查询 schema 仅接受有效 `project` 和可选的北京时间当天 `date`，拒绝额外范围参数及历史/未来日期。
+
+未填报依据当天正式有效 `training_sessions`，正式记录筛选与总览相同。负荷按北京时间 `session_date + start_time` 映射到 UTC 后取闭区间 `[当前时刻−24小时, 当前时刻]`，复用既有持久化 SRPE 和 `trainingLoadCategory`，按个人累计 ≥600 AU 进入关注。没有有效开训时间的今日/昨日课次另列，不按修改时间推断训练发生时间。伤病沿用最新记录口径，以 `created_at`（SQLite UTC）和 `id` 排序、排除未来记录，非健康状态持续关注并标识24小时内变化；最新健康状态解除伤病原因。
+
+小程序通过 `services/api.js` 获取结果，原生运行时不引入 Node/zod 打包依赖，`utils/daily-todos.js` 显式校验响应形状、标识符及数值后生成展示文案。首页独立处理加载、错误、空状态，以请求序号防止旧项目响应覆盖，档案返回时重新拉取。服务端仍是权限唯一依据，不新增待办持久化表或旧训练事实依赖。
+
+`npm run daily-todos-example` 只创建 `tmp/coach-daily-todos-日期.db` 新场景库，不连接默认运行库；样例使用正式事实表、有效质量与非演示标记，保留 `coach_daily_example` 来源以追溯，参与正式统计。未修改数据库迁移或自动初始化路径。
 
 ## 11. 文件、AI 与外部边界
 

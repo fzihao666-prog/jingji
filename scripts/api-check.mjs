@@ -2,6 +2,9 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
+import { checkCoachDailyTodos } from './coach-daily-todos-api-check.mjs';
+import { checkMiniDailyTodoFlow } from './coach-daily-todos-mini-check.mjs';
+import { checkDailyExampleCreation } from './coach-daily-todos-example-check.mjs';
 
 const root = process.cwd();
 const databasePath = resolve(root, 'data', 'api-check.db');
@@ -94,6 +97,8 @@ function ownAthleteProfilePayload(athlete) {
 }
 
 try {
+  await checkMiniDailyTodoFlow(assert);
+  await checkDailyExampleCreation(assert);
   await waitForServer();
   const adminLogin = await request('/api/auth/login', {
     method: 'POST',
@@ -291,6 +296,9 @@ try {
   });
   const demoCoachAthletes = await request('/api/athletes', {}, demoCoachLogin.payload.token);
   const coachAthlete = demoCoachAthletes.payload.athletes[0];
+  await checkCoachDailyTodos({ request, assert, databasePath,
+    coachToken: demoCoachLogin.payload.token, adminToken,
+    coachId: demoCoachLogin.payload.user.id, athletes: demoCoachAthletes.payload.athletes });
   const coachOverview = await request(
     `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(coachAthlete.project)}`,
     {},
@@ -669,10 +677,27 @@ try {
       project: 'ROWING',
       team: '测试组',
       identityNumber: '51010720000101123',
+      phone: '13812345678',
       nativePlace: '四川/成都市',
     }),
   });
   assert(invalidIdentityRegister.status === 400, '不足18位的身份证号不应通过注册校验');
+
+  const invalidPhoneRegister = await request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'invalid_phone_test',
+      password: 'Secure123',
+      displayName: '手机测试',
+      role: 'ATL',
+      project: 'ROWING',
+      team: '测试组',
+      identityNumber: '510107200001011234',
+      phone: '12345',
+      nativePlace: '四川/成都市',
+    }),
+  });
+  assert(invalidPhoneRegister.status === 400, '非法手机号不应通过注册校验');
 
   const invalidNativePlaceRegister = await request('/api/auth/register', {
     method: 'POST',
@@ -684,6 +709,7 @@ try {
       project: 'ROWING',
       team: '测试组',
       identityNumber: '510107200001011234',
+      phone: '13812345678',
       nativePlace: '四川/武汉市',
     }),
   });
@@ -699,6 +725,7 @@ try {
       project: 'ROWING',
       team: '测试组',
       identityNumber: '510107200001011234',
+      phone: '13812345678',
       nativePlace: '四川/成都市',
     }),
   });
@@ -716,6 +743,7 @@ try {
     pending.status === 200 &&
       athleteRequest?.identityNumber === '510107200001011234' &&
       athleteRequest?.nativePlace === '四川/成都市' &&
+      athleteRequest?.phone === '13812345678' &&
       athleteRequest?.gender === '男',
     '管理员未看到完整的注册申请资料'
   );
@@ -774,6 +802,7 @@ try {
       project: 'CANOE_SPRINT',
       team: '皮划艇测试组',
       identityNumber: '510107200001021235',
+      phone: '13912345678',
       nativePlace: '四川/成都市',
     }),
   });
@@ -788,6 +817,7 @@ try {
       project: 'CANOE_SLALOM',
       team: '激流测试组',
       identityNumber: '510107200001031236',
+      phone: '13712345678',
       nativePlace: '四川/成都市',
     }),
   });
@@ -858,6 +888,7 @@ try {
       project: 'ROWING',
       team: '测试组',
       identityNumber: '510107200001041237',
+      phone: '13612345678',
       nativePlace: '四川/成都市',
     }),
   });
@@ -881,11 +912,134 @@ try {
       role: 'SCC',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '51010719900101123X',
+      phone: '13512345678',
+    }),
+  });
+  assert(coachRegister.status === 201, '教练公开注册申请失败');
+  assert(
+    coachRegister.payload.status === 'pending',
+    '开启审核时教练注册应进入待审核'
+  );
+  const coachPendingLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'coach_test', password: 'Secure123' }),
+  });
+  assert(coachPendingLogin.status === 403, '待审核教练不应登录');
+  const coachPendingRow = (
+    await request('/api/admin/registrations?status=pending', {}, adminToken)
+  ).payload.requests.find((item) => item.username === 'coach_test');
+  assert(coachPendingRow?.requestedRole === 'SCC', '管理员未看到教练待审核申请');
+  const approvePublicCoach = await request(
+    `/api/admin/registrations/${coachPendingRow.id}/approve`,
+    { method: 'POST' },
+    adminToken
+  );
+  assert(approvePublicCoach.status === 200, '教练注册审核失败');
+  const approvedCoachLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'coach_test', password: 'Secure123' }),
+  });
+  assert(approvedCoachLogin.status === 200, '获批教练无法登录');
+
+  const approvalGet = await request('/api/admin/registrations/approval', {}, adminToken);
+  assert(approvalGet.status === 200 && approvalGet.payload.enabled === true, '默认应开启注册审核');
+
+  const approvalForbiddenAthlete = await request(
+    '/api/admin/registrations/approval',
+    { method: 'PUT', body: JSON.stringify({ enabled: false }) },
+    athleteToken
+  );
+  assert(approvalForbiddenAthlete.status === 403, '运动员不应修改注册审核开关');
+
+  const historicalPendingBeforeToggle = await request(
+    '/api/auth/register',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        username: 'history_pending_test',
+        password: 'Secure123',
+        displayName: '历史待审',
+        role: 'ATL',
+        project: 'ROWING',
+        team: '测试组',
+        identityNumber: '510107200001051238',
+        phone: '13511112222',
+        nativePlace: '四川/成都市',
+      }),
+    }
+  );
+  assert(historicalPendingBeforeToggle.status === 201, '历史待审核注册失败');
+
+  const approvalOff = await request(
+    '/api/admin/registrations/approval',
+    { method: 'PUT', body: JSON.stringify({ enabled: false }) },
+    adminToken
+  );
+  assert(approvalOff.status === 200 && approvalOff.payload.enabled === false, '关闭注册审核失败');
+
+  const autoApproved = await request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'auto_approve_test',
+      password: 'Secure123',
+      displayName: '自动开通',
+      role: 'ATL',
+      project: 'ROWING',
+      team: '测试组',
+      identityNumber: '510107200001061239',
+      phone: '13611112222',
       nativePlace: '四川/成都市',
     }),
   });
-  assert(coachRegister.status === 400, '公开注册接口不应允许教练注册');
+  assert(
+    autoApproved.status === 201 && autoApproved.payload.status === 'approved',
+    '关闭审核后新注册应自动通过'
+  );
+  const autoApprovedLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'auto_approve_test', password: 'Secure123' }),
+  });
+  assert(autoApprovedLogin.status === 200, '自动开通账号无法登录');
+
+  const historicalStillPending = (
+    await request('/api/admin/registrations?status=pending', {}, adminToken)
+  ).payload.requests.find((item) => item.username === 'history_pending_test');
+  assert(historicalStillPending, '关闭开关后历史待审核申请不应被批量通过');
+
+  const approvalOffAgain = await request('/api/admin/registrations/approval', {}, adminToken);
+  assert(approvalOffAgain.payload.enabled === false, '注册审核开关状态未持久化');
+
+  const approvalOn = await request(
+    '/api/admin/registrations/approval',
+    { method: 'PUT', body: JSON.stringify({ enabled: true }) },
+    adminToken
+  );
+  assert(approvalOn.status === 200 && approvalOn.payload.enabled === true, '重新开启注册审核失败');
+
+  const pendingAfterReopen = await request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'reopen_pending_test',
+      password: 'Secure123',
+      displayName: '重开待审',
+      role: 'ATL',
+      project: 'ROWING',
+      team: '测试组',
+      identityNumber: '510107200001071240',
+      phone: '13711112222',
+      nativePlace: '四川/成都市',
+    }),
+  });
+  assert(
+    pendingAfterReopen.status === 201 && pendingAfterReopen.payload.status === 'pending',
+    '重新开启后新注册应回到待审核'
+  );
+  const reopenPendingLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'reopen_pending_test', password: 'Secure123' }),
+  });
+  assert(reopenPendingLogin.status === 403, '重新开启审核后待审核账户不应登录');
+
   const createCoachInternally = await request(
     '/api/access/accounts',
     {
@@ -1101,6 +1255,7 @@ try {
     JSON.stringify(
       {
         overviewPipeline: 'passed',
+        coachDailyTodos: 'passed',
         rowingAnalysis: 'passed',
         strengthProfile: 'passed',
         registration: 'passed',

@@ -160,6 +160,11 @@
 
 .picker-value.placeholder { color: #9aabaf; }
 
+.teams-retry {
+  color: #176f7f;
+  font-weight: 700;
+}
+
 .register-error {
   margin-top: 6rpx;
   padding: 17rpx 19rpx;

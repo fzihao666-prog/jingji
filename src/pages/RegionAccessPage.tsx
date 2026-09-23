@@ -64,7 +64,9 @@ const auditLabels: Record<string, string> = {
   CREATE_REGIONAL_MANAGER: '创建区域负责人',
   UPDATE_ASSIGNMENT: '调整人员关系',
   APPROVE_REGISTRATION: '通过注册申请',
+  AUTO_APPROVE_REGISTRATION: '注册自动开通',
   REJECT_REGISTRATION: '拒绝注册申请',
+  UPDATE_REGISTRATION_APPROVAL: '调整注册审核开关',
   IMPORT_RECORDS: '导入训练数据',
 };
 

@@ -8,6 +8,7 @@
     "source.removeUnusedImports": "explicit",
     "source.organizeImports": "explicit"
   },
+  "css.validate": false,
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },

@@ -6833,6 +6833,68 @@ p {
   max-width: 1260px;
 }
 
+.registration-approval-panel {
+  margin-bottom: 14px;
+  padding: 15px 17px;
+  border: 1px solid #d9e4e7;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.registration-approval-copy strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.registration-approval-copy p {
+  margin-top: 6px;
+  color: #637982;
+  font-size: 12px;
+  line-height: 1.55;
+  max-width: 720px;
+}
+
+.registration-approval-toggle {
+  flex: none;
+  width: 52px;
+  height: 30px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: #c5d2d6;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s ease;
+}
+
+.registration-approval-toggle:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.registration-approval-toggle.on {
+  background: var(--river, #1b9d95);
+}
+
+.registration-approval-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(9, 43, 57, 0.24);
+  transform: translateX(0);
+  transition: transform 0.15s ease;
+}
+
+.registration-approval-toggle.on .registration-approval-thumb {
+  transform: translateX(22px);
+}
+
 .pending-count {
   display: inline-flex;
   align-items: center;

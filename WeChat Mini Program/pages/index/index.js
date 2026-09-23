@@ -2,6 +2,7 @@ const api = require('../../services/api');
 const { loadContext, projectAthletes } = require('../../utils/context');
 const { periodFor, shortDate } = require('../../utils/date');
 const { number, INJURY_LABELS } = require('../../utils/format');
+const { dailyTodoView } = require('../../utils/daily-todos');
 
 function sum(values) {
   return values.reduce((total, value) => total + (Number.isFinite(Number(value)) ? Number(value) : 0), 0);
@@ -99,16 +100,24 @@ Page({
     activeInjuries: [],
     attention: { show: false, title: '', summary: '' },
     meta: {},
-    canSelfReport: false
+    canSelfReport: false,
+    canViewTodos: false,
+    todos: null,
+    todosLoading: false,
+    todosError: '',
+    todosStatus: ''
   },
 
   onShow() { this.loadPage(); },
   onPullDownRefresh() { this.loadPage(true).finally(() => wx.stopPullDownRefresh()); },
 
   async loadPage(refreshUser = false) {
-    this.setData({ loading: true, error: '' });
+    const pageRequest = this._pageRequest = (this._pageRequest || 0) + 1;
+    this._todoRequest = (this._todoRequest || 0) + 1;
+    this.setData({ loading: true, error: '', todos: null, todosError: '', canViewTodos: false });
     try {
       const context = await loadContext({ refreshUser });
+      if (pageRequest !== this._pageRequest) return;
       const period = periodFor(this.data.range);
       const selectedAthleteId = context.user.athleteId || context.selectedAthleteId || 0;
       const athletes = projectAthletes(context.athletes, context.project);
@@ -118,41 +127,78 @@ Page({
         project: context.project,
         athletes,
         selectedAthleteId,
-        showAthlete: context.user.role !== 'ATL',
+        showAthlete: false,
         canSelfReport: context.user.role === 'ATL',
+        canViewTodos: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'].includes(context.user.role),
         from: period.from,
         to: period.to
       });
-      await this.loadOverview(context.project, selectedAthleteId, period);
+      await Promise.all([
+        this.loadOverview(context.project, selectedAthleteId, period),
+        this.loadTodos(context.project)
+      ]);
     } catch (error) {
-      if (error.message !== '未登录') this.setData({ error: error.message || '训练总览加载失败。' });
+      if (pageRequest === this._pageRequest && error.message !== '未登录') this.setData({ error: error.message || '训练总览加载失败。' });
     } finally {
-      this.setData({ loading: false });
+      if (pageRequest === this._pageRequest) this.setData({ loading: false });
     }
   },
 
   async loadOverview(project, athleteId, period) {
-    const result = await api.overview(period.from, period.to, athleteId, project);
-    this.setData(buildView(result.overview));
+    const result = await api.overview(period.from, period.to, this.data.canSelfReport ? athleteId : 0, project);
+    if (project === this.data.project) this.setData(buildView(result.overview));
+  },
+
+  async loadTodos(project) {
+    if (!this.data.canViewTodos) return;
+    const requestId = this._todoRequest = (this._todoRequest || 0) + 1;
+    this.setData({ todosLoading: true, todosError: '', todos: null, todosStatus: '正在核对今日填报与关注状态…' });
+    try {
+      const result = await api.dailyTodos(project);
+      if (requestId !== this._todoRequest || project !== this.data.project) return;
+      const todos = dailyTodoView(result.todos);
+      const todosStatus = todos.counts.total
+        ? `加载完成，未填报 ${todos.counts.missing} 人，需关注 ${todos.counts.attention} 人。`
+        : '加载完成，当前项目暂无可访问的运动员。';
+      this.setData({ todos, todosStatus });
+    } catch (error) {
+      if (requestId === this._todoRequest && project === this.data.project) {
+        const todosError = error.message || '每日待办加载失败，请重试。';
+        this.setData({ todosError, todosStatus: todosError });
+      }
+    } finally {
+      if (requestId === this._todoRequest) this.setData({ todosLoading: false });
+    }
+  },
+
+  retryTodos() {
+    return this.loadTodos(this.data.project);
   },
 
   async onProjectChange(event) {
+    const pageRequest = this._pageRequest = (this._pageRequest || 0) + 1;
     const project = event.detail.value;
     const app = getApp();
     const athletes = projectAthletes(app.globalData.athletes, project);
     const selectedAthleteId = app.globalData.user.athleteId || 0;
     app.setProject(project);
     app.globalData.selectedAthleteId = selectedAthleteId;
-    this.setData({ project, athletes, selectedAthleteId, loading: true, error: '' });
+    this._todoRequest = (this._todoRequest || 0) + 1;
+    this.setData({ project, athletes, selectedAthleteId, loading: true, error: '', todos: null, todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
+    let projectSaved = false;
     try {
       await api.saveCurrentProject(project);
+      if (pageRequest !== this._pageRequest) return;
+      projectSaved = true;
       const period = periodFor(this.data.range);
       this.setData(period);
-      await this.loadOverview(project, selectedAthleteId, period);
+      await Promise.all([this.loadOverview(project, selectedAthleteId, period), this.loadTodos(project)]);
     } catch (error) {
+      if (pageRequest !== this._pageRequest) return;
       this.setData({ error: error.message || '项目切换失败。' });
+      if (!projectSaved) this.setData({ todosLoading: false, todosError: '项目切换未完成，请刷新重试。', todosStatus: '项目切换未完成，请刷新重试。' });
     } finally {
-      this.setData({ loading: false });
+      if (pageRequest === this._pageRequest) this.setData({ loading: false });
     }
   },
 
@@ -194,7 +240,7 @@ Page({
 
   goToAthlete(event) {
     const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!athleteId) return;
+    if (!athleteId || !this.data.athletes.some((athlete) => Number(athlete.id) === athleteId)) return;
     getApp().globalData.selectedAthleteId = athleteId;
     wx.switchTab({ url: '/pages/profile/profile' });
   },

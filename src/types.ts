@@ -475,6 +475,7 @@ export type RegistrationRequest = {
   gender: string | null;
   identityNumber: string | null;
   nativePlace: string | null;
+  phone: string | null;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   reviewedAt: string | null;

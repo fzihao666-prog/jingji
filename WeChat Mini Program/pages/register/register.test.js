@@ -47,21 +47,55 @@ describe('注册页流程', () => {
   it('提交前校验密码一致、身份证格式与必填项', () => {
     expect(registerSource).toContain("if (password !== confirmPassword) return '两次输入的密码不一致。';");
     expect(registerSource).toContain("/^\\d{17}[\\dX]$/.test(identityNumber)");
+    expect(registerSource).toContain("if (!/^1[3-9]\\d{9}$/.test(phone)) return '手机号须为11位大陆手机号。';");
     expect(registerSource).toContain("if (!project) return '请选择运动项目。';");
     expect(registerSource).toContain("if (!team) return '请选择所属队伍。';");
+    expect(registerSource).toContain("if (!['ATL', 'SCC'].includes(role)) return '请选择注册身份。';");
+    expect(registerSource).toContain("payload.identityNumber = identityNumber;");
+    expect(registerSource).toContain("payload.nativePlace = `${nativePlaceProvince}/${nativePlaceCity}`");
+    expect(registerSource).toContain('phone,');
+    expect(registerSource).toContain("result.status === 'approved'");
+  });
+
+  it('注册页提供运动员/教练身份单选且按身份切换字段', () => {
     expect(registerSource).toContain("role: 'ATL'");
-    expect(registerSource).toContain("nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`");
+    expect(registerSource).toContain("roleCodes: ['ATL', 'SCC']");
+    expect(registerSource).toContain('onRoleChange');
+    expect(registerTemplate).toContain('bindchange="onRoleChange"');
+    expect(registerTemplate).toContain('注册身份');
+    expect(registerTemplate).toContain('wx:if="{{role === \'ATL\'}}"');
+    expect(registerTemplate).not.toContain('role: \'ATL\'');
+  });
+
+  it('队伍选项支持加载失败重试并按项目过滤', () => {
+    expect(registerSource).toContain('async loadTeams()');
+    expect(registerSource).toContain('retryTeams()');
+    expect(registerSource).toContain('teamsLoading');
+    expect(registerSource).toContain('teamsError');
+    expect(registerSource).toContain("item.project === project");
+    expect(registerTemplate).toContain('bindtap="retryTeams"');
+    expect(registerTemplate).toContain('wx:elif="{{project && teamOptions.length}}"');
+    expect(registerTemplate).not.toContain('disabled="{{!project || !teamOptions.length}}"');
+  });
+
+  it('身份证号自动推导性别与出生日期', () => {
+    expect(registerSource).toContain('birthDateFromIdentityNumber');
+    expect(registerTemplate).toContain('value="{{birthDate}}"');
+    expect(registerTemplate).toContain('value="{{phone}}"');
   });
 
   it('防重复提交并在成功后只回填账号、不回填密码', () => {
     expect(registerSource).toContain('if (this.data.submitting || this.data.success) return;');
     expect(registerSource).toContain("wx.setStorageSync('jingji-mini-pending-account', username)");
+    expect(registerSource).toContain("wx.setStorageSync('jingji-mini-register-status', result.status || 'pending')");
     expect(registerSource).not.toContain("setStorageSync('jingji-mini-pending-account', password)");
     expect(loginSource).toContain("wx.getStorageSync('jingji-mini-pending-account')");
     expect(loginSource).toContain('wx.removeStorageSync(\'jingji-mini-pending-account\')');
+    expect(loginSource).toContain("wx.getStorageSync('jingji-mini-register-status')");
+    expect(loginSource).toContain("status === 'approved'");
     expect(loginSource).toContain('password:');
     expect(loginSource).not.toContain('jingji-mini-pending-account\', password');
-    expect(loginTemplate).toContain('wx:if="{{success}}"');
+    expect(registerTemplate).toContain('wx:if="{{success}}"');
     expect(registerTemplate).toContain('bindtap="submit"');
   });
 

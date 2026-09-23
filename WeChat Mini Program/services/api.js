@@ -41,6 +41,9 @@ module.exports = {
     return request(`/api/me/training-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   currentProject() { return request('/api/preferences/current-project'); },
+  dailyTodos(project) {
+    return request(`/api/coach/daily-todos?${query({ project })}`);
+  },
   saveCurrentProject(project) {
     return request('/api/preferences/current-project', { method: 'PUT', data: { project } });
   },
