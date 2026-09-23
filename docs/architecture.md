@@ -75,7 +75,9 @@ Express :8787
 3. 存在 `dist/` 时由 Express 托管静态资源；
 4. 非 API 路径回退到 `dist/index.html`，支持单页应用刷新。
 
-生产部署通常在 Express 前增加 HTTPS 反向代理。数据库、上传目录和 JWT 密钥必须纳入备份。
+生产环境中 Express 默认只监听 `127.0.0.1:8787`，由同机 Nginx 在 HTTPS 域名上统一接入。仓库提供不含真实配置的 `deploy/nginx/jingji.conf.example`：它将 `/api/`、`/uploads/` 与 SPA 静态资源代理到同一 Express 进程，并传递 `Host` 与 `X-Forwarded-*` 头。Nginx 是唯一受信任的本机反向代理；应用仅信任回环来源的转发头，公网不得开放 8787。
+
+微信小程序生产配置必须使用这个 HTTPS 域名作为唯一基础地址。微信公众平台需要将该域名分别登记为 request、uploadFile 和 downloadFile 合法域名，以保证 API、照片上传和照片/背景资源不分流。数据库、上传目录和 JWT 密钥必须纳入备份。
 
 ## 4. 仓库结构与职责
 

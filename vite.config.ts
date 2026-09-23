@@ -6,12 +6,12 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8787',
+      '/api': 'http://127.0.0.1:8787',
     },
   },
   test: {
     environment: 'node',
-    include: ['shared/**/*.test.ts', 'server/**/*.test.ts'],
+    include: ['shared/**/*.test.ts', 'server/**/*.test.ts', 'WeChat Mini Program/**/*.test.js'],
     restoreMocks: true,
   },
 });

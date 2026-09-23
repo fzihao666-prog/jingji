@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
+const { personalProfilePayload } = require('../../utils/profile-payload');
 
 const BODY_FIELDS = [
   'heightCm', 'weightKg', 'bodyFatPct', 'skeletalMuscleKg', 'muscleMassKg',
@@ -46,11 +47,6 @@ Page({
     athleteId: 0,
     form: {},
     body: {},
-    teams: [],
-    projects: [],
-    projectIndex: 0,
-    teamOptions: [],
-    teamIndex: 0,
     genderOptions: ['暂不填写', '男', '女'],
     genderIndex: 0,
     healthOptions: ['健康', '观察', '训练受限', '康复中'],
@@ -67,26 +63,15 @@ Page({
 
   async loadPage() {
     try {
-      const [context, teamResult] = await Promise.all([loadContext({ refreshUser: true }), api.teams()]);
+      const context = await loadContext({ refreshUser: true });
       if (context.user.role !== 'ATL' || !context.user.athleteId) throw new Error('只有运动员本人可以编辑个人资料。');
       const athlete = context.athletes.find((item) => Number(item.id) === Number(context.user.athleteId));
       if (!athlete) throw new Error('未找到当前账号绑定的运动员档案。');
-      const teams = teamResult.teams || [];
-      const projects = [...new Set(teams.map((item) => item.project))];
-      const projectIndex = Math.max(0, projects.indexOf(athlete.project));
-      const teamOptions = teams.filter((item) => item.project === athlete.project).map((item) => item.name);
-      const teamIndex = Math.max(0, teamOptions.indexOf(athlete.team));
       const form = profileForm(athlete);
-      if (!form.team) form.team = teamOptions[teamIndex] || '';
       this.setData({
         athleteId: athlete.id,
         form,
         body: bodyForm(athlete),
-        teams,
-        projects,
-        projectIndex,
-        teamOptions,
-        teamIndex,
         genderIndex: Math.max(0, ['暂不填写', '男', '女'].indexOf(athlete.gender || '暂不填写')),
         healthIndex: Math.max(0, ['健康', '观察', '训练受限', '康复中'].indexOf(athlete.healthStatus || '健康')),
         statusIndex: Math.max(0, ['在训', '集训', '休整', '离队'].indexOf(athlete.athleteStatus || '在训')),
@@ -104,18 +89,6 @@ Page({
 
   onBodyInput(event) {
     this.setData({ [`body.${event.currentTarget.dataset.field}`]: event.detail.value, bodyTouched: true });
-  },
-
-  onProjectChange(event) {
-    const projectIndex = Number(event.detail.value) || 0;
-    const project = this.data.projects[projectIndex];
-    const teamOptions = this.data.teams.filter((item) => item.project === project).map((item) => item.name);
-    this.setData({ projectIndex, teamOptions, teamIndex: 0, 'form.project': project, 'form.team': teamOptions[0] || '' });
-  },
-
-  onTeamChange(event) {
-    const teamIndex = Number(event.detail.value) || 0;
-    this.setData({ teamIndex, 'form.team': this.data.teamOptions[teamIndex] || '' });
   },
 
   onGenderChange(event) {
@@ -150,13 +123,14 @@ Page({
 
   async save() {
     if (this.data.saving) return;
-    if (!this.data.form.name || !this.data.form.project || !this.data.form.team) {
-      wx.showToast({ title: '请填写姓名、项目和队伍', icon: 'none' });
+    if (!this.data.form.name) {
+      wx.showToast({ title: '请填写姓名', icon: 'none' });
       return;
     }
     this.setData({ saving: true, error: '' });
     try {
-      await api.updateMyAthleteProfile(this.data.form);
+      const payload = personalProfilePayload(this.data.form);
+      await api.updateMyAthleteProfile(payload);
       if (this.data.bodyTouched) {
         const body = Object.assign({}, this.data.body);
         BODY_FIELDS.forEach((key) => { body[key] = body[key] === '' ? null : Number(body[key]); });
@@ -165,7 +139,7 @@ Page({
       if (this.data.photoFile) await api.uploadAthletePhoto(this.data.athleteId, this.data.photoFile);
       const app = getApp();
       app.setProject(this.data.form.project);
-      app.globalData.user = Object.assign({}, app.globalData.user, { displayName: this.data.form.name });
+      app.globalData.user = Object.assign({}, app.globalData.user, { displayName: payload.name });
       await loadContext({ refreshUser: true });
       wx.showToast({ title: '已同步到网页端', icon: 'success' });
       setTimeout(() => wx.navigateBack(), 700);

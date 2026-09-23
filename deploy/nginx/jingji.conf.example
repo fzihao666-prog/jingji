@@ -1,0 +1,57 @@
+# 将 api.example.com、证书路径和日志路径替换为服务器上的真实值；不要把这些值提交回仓库。
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.example.com;
+
+    return 301 https://api.example.com$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name api.example.com;
+
+    # 使用由受信任 CA 签发且未过期的证书。
+    ssl_certificate     /etc/ssl/certs/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/ssl/private/api.example.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+
+    # 启用前确认所有子域均长期只支持 HTTPS；不要添加 preload。
+    add_header Strict-Transport-Security "max-age=15552000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    # 比 Multer 的单文件 80 MiB 限制略大，预留 multipart 边界与表单字段开销。
+    client_max_body_size 85m;
+
+    # Express 默认监听 127.0.0.1:8787；不要将该端口暴露到公网。
+    location /api/ {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # 照片上传后会由 Express 在同一域名的 /uploads/ 路径提供。
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # React SPA 的静态资源与刷新回退仍由 Express 提供。
+    location / {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

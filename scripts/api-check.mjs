@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import vm from 'node:vm';
 
 const root = process.cwd();
 const databasePath = resolve(root, 'data', 'api-check.db');
@@ -53,6 +54,43 @@ async function request(path, options = {}, token) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function ownAthleteProfilePayload(athlete) {
+  return {
+    name: athlete.name,
+    project: athlete.project,
+    team: athlete.team,
+    gender: athlete.gender,
+    region: athlete.region,
+    city: athlete.city,
+    county: athlete.county,
+    birthDate: athlete.birthDate || '',
+    identityNumber: athlete.identityNumber || '',
+    ethnicity: athlete.ethnicity || '',
+    phone: athlete.phone || '',
+    bloodType: athlete.bloodType || '',
+    emergencyContact: athlete.emergencyContact || '',
+    emergencyPhone: athlete.emergencyPhone || '',
+    education: athlete.education || '',
+    technicalLevel: athlete.technicalLevel || '',
+    athletePosition: athlete.athletePosition || '',
+    healthStatus: athlete.healthStatus || '健康',
+    bestResult: athlete.bestResult || '',
+    nativePlace: athlete.nativePlace || '',
+    homeAddress: athlete.homeAddress || '',
+    athleteStatus: athlete.athleteStatus || '在训',
+    startSportDate: athlete.startSportDate || '',
+    trainingVenue: athlete.trainingVenue || '',
+    currentEvent: athlete.currentEvent || '',
+    trainingPhase: athlete.trainingPhase || '',
+    campPeriod: athlete.campPeriod || '',
+    originPlace: athlete.originPlace || '',
+    originUnit: athlete.originUnit || '',
+    originCoach: athlete.originCoach || '',
+    specialties: athlete.specialties || '',
+    notes: athlete.notes || '',
+  };
 }
 
 try {
@@ -311,6 +349,78 @@ try {
   });
   const ownAthlete = adminAthletesForAnalysis.payload.athletes.find(
     (item) => item.id === demoAthleteLogin.payload.user.athleteId
+  );
+  const updateOwnProfile = await request(
+    '/api/me/athlete-profile',
+    {
+      method: 'PUT',
+      body: JSON.stringify(ownAthleteProfilePayload(ownAthlete)),
+    },
+    demoAthleteLogin.payload.token
+  );
+  const updatedOwnProfile = await request('/api/me', {}, demoAthleteLogin.payload.token);
+  assert(
+    updateOwnProfile.status === 200 && updatedOwnProfile.payload.user.displayName === ownAthlete.name,
+    '小程序运动员无法保存本人资料'
+  );
+  const { project, team, region, city, county, ...ownPersonalProfile } = ownAthleteProfilePayload(ownAthlete);
+  const updateOwnPersonalProfile = await request(
+    '/api/me/athlete-profile',
+    { method: 'PUT', body: JSON.stringify(ownPersonalProfile) },
+    demoAthleteLogin.payload.token
+  );
+  assert(
+    updateOwnPersonalProfile.status === 200,
+    '运动员保存个人资料不应要求客户端提交组织归属'
+  );
+  const miniProfileModule = { module: { exports: {} } };
+  vm.runInNewContext(
+    readFileSync(resolve(root, 'WeChat Mini Program/utils/profile-payload.js'), 'utf8'),
+    miniProfileModule
+  );
+  const normalizedMiniProfile = miniProfileModule.module.exports.personalProfilePayload({
+    ...ownAthleteProfilePayload(ownAthlete),
+    birthDate: ' 2006-9-3 ',
+    startSportDate: '2024-2-29',
+  });
+  const saveNormalizedMiniProfile = await request(
+    '/api/me/athlete-profile',
+    { method: 'PUT', body: JSON.stringify(normalizedMiniProfile) },
+    demoAthleteLogin.payload.token
+  );
+  assert(saveNormalizedMiniProfile.status === 200, '小程序规范化后的资料应通过后端校验');
+  const persistedMiniProfile = await request('/api/athletes', {}, demoAthleteLogin.payload.token);
+  const persistedOwnAthlete = persistedMiniProfile.payload.athletes.find((item) => item.id === ownAthlete.id);
+  assert(
+    persistedOwnAthlete?.birthDate === '2006-09-03' &&
+      persistedOwnAthlete?.startSportDate === '2024-02-29' &&
+      persistedOwnAthlete?.project === ownAthlete.project &&
+      persistedOwnAthlete?.team === ownAthlete.team,
+    '资料保存应持久化规范日期且保持组织归属不变'
+  );
+  const invalidOwnProfile = await request(
+    '/api/me/athlete-profile',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ ...ownAthleteProfilePayload(ownAthlete), birthDate: '2026-9-3' }),
+    },
+    demoAthleteLogin.payload.token
+  );
+  assert(
+    invalidOwnProfile.status === 400 && invalidOwnProfile.payload.message === '出生日期须使用 YYYY-MM-DD 格式。',
+    '个人资料日期校验未返回可操作提示'
+  );
+  const oversizedNativePlace = await request(
+    '/api/me/athlete-profile',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ ...ownPersonalProfile, nativePlace: '籍贯'.repeat(61) }),
+    },
+    demoAthleteLogin.payload.token
+  );
+  assert(
+    oversizedNativePlace.status === 400 && oversizedNativePlace.payload.message === '籍贯格式无效。',
+    '个人资料文本校验未返回对应字段提示'
   );
   const athleteOverview = await request(
     `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(ownAthlete.project)}`,

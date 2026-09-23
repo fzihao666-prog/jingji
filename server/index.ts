@@ -219,6 +219,8 @@ declare global {
 }
 
 const app = express();
+// 生产环境仅允许本机 Nginx 作为受信任的转发代理，防止公网客户端伪造 X-Forwarded-For。
+app.set('trust proxy', 'loopback');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 const dataImportUpload = multer({
   storage: multer.memoryStorage(),
@@ -246,6 +248,7 @@ const photoUpload = multer({
 });
 
 const port = Number(process.env.PORT || 8787);
+const host = process.env.HOST || '127.0.0.1';
 const jwtSecretPath = resolve(process.cwd(), 'data', '.jwt-secret');
 const jwtSecret = (() => {
   if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
@@ -2455,6 +2458,168 @@ function upsertAthleteProfile(
     payload.notes
   );
 }
+
+const athleteProfileText = (max: number) => z.string().trim().max(max);
+const optionalIsoDate = z.union([z.literal(''), z.iso.date()]);
+const selfAthleteProfileSchema = z.strictObject({
+  name: z.string().trim().min(2).max(20),
+  project: athleteProfileText(16).optional(),
+  team: athleteProfileText(80).optional(),
+  gender: athleteProfileText(2),
+  region: athleteProfileText(80).optional(),
+  city: athleteProfileText(80).optional(),
+  county: athleteProfileText(80).optional(),
+  birthDate: optionalIsoDate,
+  identityNumber: athleteProfileText(18),
+  ethnicity: athleteProfileText(40),
+  phone: athleteProfileText(20),
+  bloodType: athleteProfileText(8),
+  emergencyContact: athleteProfileText(40),
+  emergencyPhone: athleteProfileText(20),
+  education: athleteProfileText(40),
+  technicalLevel: athleteProfileText(40),
+  athletePosition: athleteProfileText(80),
+  healthStatus: athleteProfileText(20),
+  bestResult: athleteProfileText(500),
+  nativePlace: athleteProfileText(120),
+  homeAddress: athleteProfileText(300),
+  athleteStatus: athleteProfileText(20),
+  startSportDate: optionalIsoDate,
+  trainingVenue: athleteProfileText(120),
+  currentEvent: athleteProfileText(120),
+  trainingPhase: athleteProfileText(120),
+  campPeriod: athleteProfileText(120),
+  originPlace: athleteProfileText(120),
+  originUnit: athleteProfileText(120),
+  originCoach: athleteProfileText(80),
+  specialties: athleteProfileText(500),
+  notes: athleteProfileText(1000),
+});
+
+function selfAthleteProfileValidationMessage(error: z.ZodError) {
+  const issue = error.issues[0];
+  const field = String(issue?.path[0] || '');
+  if (issue?.code === 'unrecognized_keys') return '个人资料包含不支持的字段。';
+  if (field === 'birthDate') return '出生日期须使用 YYYY-MM-DD 格式。';
+  if (field === 'startSportDate') return '开始运动日期须使用 YYYY-MM-DD 格式。';
+  const labels: Record<string, string> = {
+    name: '姓名',
+    project: '项目',
+    team: '队伍',
+    gender: '性别',
+    region: '省份',
+    city: '城市',
+    county: '区县',
+    identityNumber: '身份证号',
+    ethnicity: '民族',
+    phone: '本人手机',
+    bloodType: '血型',
+    emergencyContact: '紧急联系人',
+    emergencyPhone: '紧急联系电话',
+    education: '学历',
+    technicalLevel: '技术等级',
+    athletePosition: '位置/号位',
+    healthStatus: '健康状态',
+    bestResult: '最好成绩',
+    nativePlace: '籍贯',
+    homeAddress: '家庭住址',
+    athleteStatus: '在训状态',
+    trainingVenue: '训练场地',
+    currentEvent: '当前小项',
+    trainingPhase: '训练阶段',
+    campPeriod: '集训周期',
+    originPlace: '输送地',
+    originUnit: '输送单位',
+    originCoach: '启蒙教练',
+    specialties: '专项特点',
+    notes: '备注',
+  };
+  return labels[field] ? `${labels[field]}格式无效。` : '个人资料格式无效。';
+}
+
+app.put('/api/me/athlete-profile', requireAuth, (req, res) => {
+  const currentUser = req.authUser!;
+  if (currentUser.role !== 'ATL' || !currentUser.athleteId) {
+    return res.status(403).json({ message: '只有运动员本人可以修改个人资料。' });
+  }
+  const parsed = selfAthleteProfileSchema.safeParse(req.body);
+  if (!parsed.success)
+    return res.status(400).json({ message: selfAthleteProfileValidationMessage(parsed.error) });
+
+  const athleteId = currentUser.athleteId;
+  if (!hasAthleteAccess(currentUser, athleteId)) {
+    return res.status(403).json({ message: '无权修改该运动员资料。' });
+  }
+  const athlete = db
+    .prepare(
+      `
+        SELECT a.id, a.project, COALESCE(pt.name, a.team, '') AS team,
+          COALESCE(ao.province, '未设置') AS region, COALESCE(ao.city, '') AS city,
+          COALESCE(ao.county, '') AS county
+        FROM athletes a
+        LEFT JOIN project_teams pt ON pt.id = a.team_id
+        LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+        WHERE a.id = ? AND a.active = 1
+      `
+    )
+    .get(athleteId) as
+    | { id: number; project: string; team: string; region: string; city: string; county: string }
+    | undefined;
+  if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+
+  const payload = readAthleteAdminPayload({
+    ...parsed.data,
+    project: athlete.project,
+    team: athlete.team,
+    region: athlete.region,
+    city: athlete.city,
+    county: athlete.county,
+  });
+  const errors = athletePayloadErrors(payload);
+  if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+  const selectedTeam = db
+    .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+    .get(payload.project, payload.team) as { id: number } | undefined;
+
+  db.exec('BEGIN');
+  try {
+    db.prepare(
+      `UPDATE athletes SET name = ?, project = ?, team_id = ?, gender = ?, birth_date = ?, profile_status = ? WHERE id = ?`
+    ).run(
+      payload.name,
+      payload.project,
+      selectedTeam!.id,
+      payload.gender,
+      payload.birthDate || null,
+      athleteProfileComplete(payload) ? 'complete' : 'incomplete',
+      athleteId
+    );
+    upsertAthleteOrigin({
+      athleteId,
+      province: payload.region,
+      city: payload.city,
+      county: payload.county,
+    });
+    upsertAthleteProfile(athleteId, payload);
+    db.prepare("UPDATE users SET display_name = ? WHERE id = ? AND role = 'ATL'").run(
+      payload.name,
+      currentUser.id
+    );
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+    ).run(currentUser.id, 'UPDATE_OWN_ATHLETE_PROFILE', 'athlete', athleteId);
+    db.exec('COMMIT');
+    res.json({ message: '个人资料已更新。' });
+  } catch (error) {
+    db.exec('ROLLBACK');
+    res.status(409).json({
+      message:
+        error instanceof Error && error.message.includes('UNIQUE')
+          ? '该姓名已被其他运动员使用。'
+          : '个人资料更新失败。',
+    });
+  }
+});
 
 app.post(
   '/api/admin/athletes',
@@ -8459,8 +8624,8 @@ app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ message: error.message || '服务器发生错误。' });
 });
 
-const server = app.listen(port, () => {
-  console.log(`Training Monitor API running at http://localhost:${port}`);
+const server = app.listen(port, host, () => {
+  console.log(`Training Monitor API running at http://${host}:${port}`);
 });
 
 let shuttingDown = false;

@@ -11,14 +11,15 @@
 
     <view class="section-head"><view class="section-head-title">基本信息</view></view>
     <view class="card form-card">
-      <view class="field"><text class="field-label">姓名 *</text><input class="input" value="{{form.name}}" data-field="name" bindinput="onFieldInput" maxlength="30"/></view>
+      <view class="field"><text class="field-label">姓名 *</text><input class="input" value="{{form.name}}" data-field="name" bindinput="onFieldInput" maxlength="20"/></view>
       <view class="form-grid">
-        <view class="field"><text class="field-label">项目 *</text><picker range="{{projects}}" value="{{projectIndex}}" bindchange="onProjectChange"><view class="picker-input">{{form.project || '请选择'}}</view></picker></view>
-        <view class="field"><text class="field-label">队伍 *</text><picker range="{{teamOptions}}" value="{{teamIndex}}" bindchange="onTeamChange"><view class="picker-input">{{form.team || '请选择'}}</view></picker></view>
+        <view class="field"><text class="field-label">项目</text><view class="readonly-value">{{form.project || '未设置'}}</view></view>
+        <view class="field"><text class="field-label">队伍</text><view class="readonly-value">{{form.team || '未设置'}}</view></view>
         <view class="field"><text class="field-label">性别</text><picker range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker-input">{{genderOptions[genderIndex]}}</view></picker></view>
         <view class="field"><text class="field-label">出生日期</text><input class="input" value="{{form.birthDate}}" placeholder="YYYY-MM-DD" data-field="birthDate" bindinput="onFieldInput"/></view>
       </view>
-      <view class="form-grid triple"><view class="field"><text class="field-label">省份</text><input class="input" value="{{form.region}}" data-field="region" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">城市</text><input class="input" value="{{form.city}}" data-field="city" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">区县</text><input class="input" value="{{form.county}}" data-field="county" bindinput="onFieldInput"/></view></view>
+      <view class="form-grid triple"><view class="field"><text class="field-label">省份</text><view class="readonly-value">{{form.region || '未设置'}}</view></view><view class="field"><text class="field-label">城市</text><view class="readonly-value">{{form.city || '未设置'}}</view></view><view class="field"><text class="field-label">区县</text><view class="readonly-value">{{form.county || '未设置'}}</view></view></view>
+      <text class="form-note">组织归属由管理人员维护，如需调整请联系教练或项目负责人。</text>
       <view class="field"><text class="field-label">身份证号</text><input class="input" type="idcard" value="{{form.identityNumber}}" data-field="identityNumber" bindinput="onFieldInput" maxlength="18"/></view>
       <view class="form-grid"><view class="field"><text class="field-label">民族</text><input class="input" value="{{form.ethnicity}}" data-field="ethnicity" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">血型</text><input class="input" value="{{form.bloodType}}" data-field="bloodType" bindinput="onFieldInput" placeholder="如 A 型"/></view></view>
     </view>
