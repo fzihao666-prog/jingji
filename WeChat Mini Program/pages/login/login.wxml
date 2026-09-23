@@ -63,8 +63,14 @@
           </view>
         </view>
 
+        <view wx:if="{{success}}" class="login-success">{{success}}</view>
         <view wx:if="{{error}}" class="login-error">{{error}}</view>
         <button class="primary-button login-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="login">{{submitting ? '登录中…' : '登录系统'}}</button>
+
+        <view class="register-entry">
+          <text class="register-entry-hint">还没有账号？</text>
+          <text class="register-entry-link" bindtap="goRegister">立即注册</text>
+        </view>
       </view>
     </view>
   </scroll-view>

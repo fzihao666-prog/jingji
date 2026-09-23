@@ -12,6 +12,9 @@ module.exports = {
   login(username, password) {
     return request('/api/auth/login', { method: 'POST', auth: false, data: { username, password } });
   },
+  register(input) {
+    return request('/api/auth/register', { method: 'POST', auth: false, data: input });
+  },
   me() { return request('/api/me'); },
   changePassword(currentPassword, newPassword) {
     return request('/api/auth/change-password', { method: 'POST', data: { currentPassword, newPassword } });

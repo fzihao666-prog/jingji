@@ -1,0 +1,115 @@
+<view class="register-page">
+  <view class="register-topbar">
+    <view class="back-link" aria-role="button" aria-label="返回登录" hover-class="back-link-active" bindtap="goBack">
+      <text>‹ 返回登录</text>
+    </view>
+    <view class="register-brand">
+      <image class="register-logo" src="/assets/gfc-logo.png" mode="widthFix" />
+    </view>
+  </view>
+
+  <scroll-view class="register-scroll" scroll-y>
+    <view class="register-box">
+      <view class="register-heading">
+        <text class="register-kicker">运动员账号准入</text>
+        <text class="register-title">注册账号</text>
+        <text class="register-description">提交资料，审核通过后即可登录</text>
+      </view>
+
+      <view class="register-form">
+        <view class="section-title">
+          <b>01</b>
+          <strong>个人信息</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">姓名</text>
+          <input class="input" value="{{displayName}}" placeholder="请输入真实姓名" bindinput="onDisplayNameInput" />
+        </view>
+
+        <view class="field">
+          <text class="field-label">身份证号</text>
+          <input class="input" value="{{identityNumber}}" placeholder="18位身份证号" maxlength="18" bindinput="onIdentityInput" />
+        </view>
+
+        <view class="field">
+          <text class="field-label">性别</text>
+          <input class="input input-readonly" value="{{gender}}" placeholder="填写身份证号后自动确定" disabled />
+        </view>
+
+        <view class="field-row">
+          <view class="field field-half">
+            <text class="field-label">籍贯省份</text>
+            <picker mode="selector" range="{{provinceOptions}}" value="0" bindchange="onProvinceChange" disabled="{{!provinceOptions.length}}">
+              <view class="picker-value {{nativePlaceProvince ? '' : 'placeholder'}}">
+                {{nativePlaceProvince || '请选择省份'}}
+              </view>
+            </picker>
+          </view>
+          <view class="field field-half">
+            <text class="field-label">籍贯城市</text>
+            <picker mode="selector" range="{{cityOptions}}" bindchange="onCityChange" disabled="{{!cityOptions.length}}">
+              <view class="picker-value {{nativePlaceCity ? '' : 'placeholder'}}">
+                {{nativePlaceCity || (nativePlaceProvince ? '请选择城市' : '请先选择省份')}}
+              </view>
+            </picker>
+          </view>
+        </view>
+
+        <view class="section-title">
+          <b>02</b>
+          <strong>组织 / 项目信息</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">项目</text>
+          <picker mode="selector" range="{{projectOptions}}" bindchange="onProjectChange">
+            <view class="picker-value {{project ? '' : 'placeholder'}}">
+              {{projectLabel || '请选择项目'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="field">
+          <text class="field-label">队伍</text>
+          <picker mode="selector" range="{{teamOptions}}" bindchange="onTeamChange" disabled="{{!project || !teamOptions.length}}">
+            <view class="picker-value {{team ? '' : 'placeholder'}}">
+              {{team || (!project ? '请先选择项目' : (teamOptions.length ? '请选择队伍' : '该项目暂无队伍'))}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="section-title">
+          <b>03</b>
+          <strong>账号设置</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">账号</text>
+          <input class="input" value="{{username}}" placeholder="4-24位字母、数字或下划线" bindinput="onUsernameInput" />
+        </view>
+
+        <view class="field">
+          <text class="field-label">密码</text>
+          <input class="input" password value="{{password}}" placeholder="至少8位，含字母和数字" bindinput="onPasswordInput" />
+        </view>
+
+        <view class="field">
+          <text class="field-label">确认密码</text>
+          <input class="input" password value="{{confirmPassword}}" placeholder="请再次输入密码" bindinput="onConfirmPasswordInput" confirm-type="done" bindconfirm="submit" />
+        </view>
+
+        <view wx:if="{{error}}" class="register-error">{{error}}</view>
+        <view wx:if="{{success}}" class="register-success">{{success}}</view>
+
+        <button class="primary-button register-button" loading="{{submitting}}" disabled="{{submitting || !!success}}" bindtap="submit">
+          {{submitting ? '提交中…' : '提交申请'}}
+        </button>
+
+        <view class="register-footer">
+          <text class="footer-link" bindtap="goBack">返回登录</text>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

@@ -67,6 +67,7 @@ Page({
     privacyAccepted: false,
     submitting: false,
     error: '',
+    success: '',
     heroUrl: ''
   },
 
@@ -77,6 +78,18 @@ Page({
       heroUrl: api.assetUrl('/assets/login-rowing-hero.png')
     });
     if (wx.getStorageSync(TOKEN_KEY)) wx.reLaunch({ url: '/pages/index/index' });
+  },
+
+  onShow() {
+    const pending = wx.getStorageSync('jingji-mini-pending-account');
+    if (pending) {
+      wx.removeStorageSync('jingji-mini-pending-account');
+      this.setData({ username: pending, password: '', error: '', success: '注册申请已提交，审核通过后即可使用该账号登录。' });
+    }
+  },
+
+  goRegister() {
+    wx.navigateTo({ url: '/pages/register/register' });
   },
 
   onUsernameInput(event) { this.setData({ username: event.detail.value.trim(), error: '' }); },

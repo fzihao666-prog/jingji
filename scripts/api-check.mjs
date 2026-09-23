@@ -363,7 +363,10 @@ try {
     updateOwnProfile.status === 200 && updatedOwnProfile.payload.user.displayName === ownAthlete.name,
     '小程序运动员无法保存本人资料'
   );
-  const { project, team, region, city, county, ...ownPersonalProfile } = ownAthleteProfilePayload(ownAthlete);
+  const organizationFields = new Set(['project', 'team', 'region', 'city', 'county']);
+  const ownPersonalProfile = Object.fromEntries(
+    Object.entries(ownAthleteProfilePayload(ownAthlete)).filter(([key]) => !organizationFields.has(key))
+  );
   const updateOwnPersonalProfile = await request(
     '/api/me/athlete-profile',
     { method: 'PUT', body: JSON.stringify(ownPersonalProfile) },

@@ -5,6 +5,7 @@
 ## 已迁移页面
 
 - 登录：沿用网页端品牌、口号和账号密码登录；
+- 注册：登录页提供“立即注册”入口，按网页端同一套字段与校验规则提交运动员注册申请（复用 `POST /api/auth/register`），注册后等待管理员审核，成功返回登录页并自动回填账号、不回填密码；
 - 训练总览：项目、运动员和日/周/月筛选，四项核心指标、疲劳与伤病提醒、训练量和强度；
 - 专项训练：冠军模型、专项数据、训练量、强度、训练课占比和运动员概览；
 - 体能训练：个人体能指标、教练目标、训练计划、训练量和训练记录；
@@ -26,7 +27,8 @@ React 网页端 ─┐
 
 小程序调用的接口全部由同一 Express 服务提供：
 
-- `/api/auth/login`、`/api/me`；
+- `/api/auth/login`、`/api/auth/register`、`/api/me`；
+- `/api/teams`（注册页队伍选项）；
 - `/api/preferences/current-project`、`/api/athletes`；
 - `/api/overview`、`/api/overview/teams`；
 - `/api/special-training/overview`、`/api/special-champion-models`；

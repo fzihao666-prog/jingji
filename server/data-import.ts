@@ -2447,10 +2447,17 @@ function resolvePendingAthletes(input: {
       const result = db
         .prepare(
           `INSERT INTO athletes (
-        name, project, team_id, gender, profile_status, source, data_import_batch_id, active
-      ) VALUES (?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
+        name, project, team, team_id, gender, profile_status, source, data_import_batch_id, active
+      ) VALUES (?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
         )
-        .run(candidate.name, candidate.project, team.id, candidate.gender, input.batch.id);
+        .run(
+          candidate.name,
+          candidate.project,
+          candidate.team,
+          team.id,
+          candidate.gender,
+          input.batch.id
+        );
       athlete = { id: Number(result.lastInsertRowid) };
       db.prepare(
         `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo)

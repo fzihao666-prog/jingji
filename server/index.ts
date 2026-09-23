@@ -696,6 +696,25 @@ function cleanString(value: unknown) {
   return String(value ?? '').trim();
 }
 
+function birthDateFromIdentityNumber(identityNumber: string) {
+  if (!/^\d{17}[\dX]$/.test(identityNumber)) return '';
+  const year = identityNumber.slice(6, 10);
+  const month = identityNumber.slice(10, 12);
+  const day = identityNumber.slice(12, 14);
+  const numericMonth = Number(month);
+  const numericDay = Number(day);
+  if (numericMonth < 1 || numericMonth > 12 || numericDay < 1 || numericDay > 31) return '';
+  const candidate = new Date(Date.UTC(Number(year), numericMonth - 1, numericDay));
+  if (
+    candidate.getUTCFullYear() !== Number(year) ||
+    candidate.getUTCMonth() !== numericMonth - 1 ||
+    candidate.getUTCDate() !== numericDay
+  ) {
+    return '';
+  }
+  return `${year}-${month}-${day}`;
+}
+
 function toLocalIsoDate(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
@@ -2689,13 +2708,14 @@ app.post(
       const athleteResult = db
         .prepare(
           `
-      INSERT INTO athletes (name, project, team_id, gender, birth_date, profile_status, source)
-      VALUES (?, ?, ?, ?, ?, ?, 'manual')
+      INSERT INTO athletes (name, project, team, team_id, gender, birth_date, profile_status, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')
     `
         )
         .run(
           payload.name,
           payload.project,
+          payload.team,
           selectedTeam!.id,
           payload.gender,
           payload.birthDate || null,
@@ -7919,8 +7939,10 @@ app.post(
             .get(request.project, request.team) as { id: number } | undefined;
           if (!team) throw new Error('申请所属队伍不存在或已停用。');
           const result = db
-            .prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
-            .run(request.display_name, request.project, team.id, request.gender);
+            .prepare(
+              `INSERT INTO athletes (name, project, team, team_id, gender) VALUES (?, ?, ?, ?, ?)`
+            )
+            .run(request.display_name, request.project, request.team, team.id, request.gender);
           athleteId = Number(result.lastInsertRowid);
         }
         db.prepare(
@@ -8391,8 +8413,10 @@ app.post(
           .get(project, team) as { id: number } | undefined;
         if (!teamRow) throw new Error('所选队伍不存在或已停用。');
         const athleteResult = db
-          .prepare(`INSERT INTO athletes (name, project, team_id, gender) VALUES (?, ?, ?, ?)`)
-          .run(displayNameResult.name, project, teamRow.id, gender);
+          .prepare(
+            `INSERT INTO athletes (name, project, team, team_id, gender) VALUES (?, ?, ?, ?, ?)`
+          )
+          .run(displayNameResult.name, project, team, teamRow.id, gender);
         athleteId = Number(athleteResult.lastInsertRowid);
         upsertAthleteOrigin({
           athleteId,

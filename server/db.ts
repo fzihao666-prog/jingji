@@ -96,6 +96,7 @@ db.exec(`
     gender TEXT,
     identity_number TEXT,
     native_place TEXT,
+    phone TEXT,
     region TEXT,
     city TEXT,
     county TEXT,
@@ -685,6 +686,9 @@ if (!hasColumn('registration_requests', 'identity_number')) {
 }
 if (!hasColumn('registration_requests', 'native_place')) {
   db.exec('ALTER TABLE registration_requests ADD COLUMN native_place TEXT');
+}
+if (!hasColumn('registration_requests', 'phone')) {
+  db.exec('ALTER TABLE registration_requests ADD COLUMN phone TEXT');
 }
 if (!hasColumn('training_plans', 'start_date')) {
   db.exec("ALTER TABLE training_plans ADD COLUMN start_date TEXT NOT NULL DEFAULT ''");
@@ -1425,7 +1429,7 @@ if (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         project TEXT NOT NULL,
-        team TEXT NOT NULL,
+        team TEXT NOT NULL DEFAULT '',
         gender TEXT,
         region TEXT NOT NULL DEFAULT '未设置',
         city TEXT NOT NULL DEFAULT '未设置',

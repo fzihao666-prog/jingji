@@ -262,6 +262,35 @@
   line-height: 1.5;
 }
 
+.login-success {
+  margin-top: 18rpx;
+  padding: 17rpx 19rpx;
+  border-left: 5rpx solid #1b9d95;
+  color: #0d5f5a;
+  background: #eafaf7;
+  font-size: 21rpx;
+  line-height: 1.5;
+}
+
+.register-entry {
+  margin-top: 22rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.register-entry-hint {
+  color: #778b92;
+  font-size: 21rpx;
+}
+
+.register-entry-link {
+  margin-left: 6rpx;
+  color: #176f7f;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
 .login-button {
   width: 100%;
   min-width: 100%;

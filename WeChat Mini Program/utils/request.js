@@ -256,7 +256,7 @@ function uploadFile(path, filePath, name = 'photo') {
       timeout: 30000,
       success(response) {
         lifecycle.receivedHttpResponse = true;
-        let data = {};
+        let data;
         try { data = JSON.parse(response.data || '{}'); } catch { data = {}; }
         traceNetwork(response.statusCode >= 200 && response.statusCode < 300 ? '响应成功' : '响应异常', {
           traceId,

@@ -46,6 +46,30 @@ export default tseslint.config(
     languageOptions: { globals: browserGlobals },
   },
   {
+    files: ['WeChat Mini Program/**/*.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        ...nodeGlobals,
+        App: 'readonly',
+        Page: 'readonly',
+        Component: 'readonly',
+        Behavior: 'readonly',
+        getApp: 'readonly',
+        getCurrentPages: 'readonly',
+        wx: 'readonly',
+        module: 'writable',
+        require: 'readonly',
+        exports: 'writable',
+        define: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-undef': 'error',
+    },
+  },
+  {
     files: ['server/**/*.{ts,tsx}', 'scripts/**/*.{js,mjs,ts,tsx}'],
     languageOptions: { globals: { ...nodeGlobals, ...browserGlobals } },
     rules: {
