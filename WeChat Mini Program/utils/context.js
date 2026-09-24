@@ -2,6 +2,9 @@ const api = require('../services/api');
 
 async function loadContext(options = {}) {
   const app = getApp();
+  const initialProject = app.globalData.currentProject;
+  const initialPendingProject = app.globalData.pendingProject;
+  const initialAthleteId = app.globalData.selectedAthleteId;
   if (!app.globalData.token) {
     wx.reLaunch({ url: '/pages/login/login' });
     throw new Error('未登录');
@@ -21,7 +24,13 @@ async function loadContext(options = {}) {
   ]);
   const projects = projectResult.projects || [];
   const storedProject = app.globalData.currentProject;
-  const project = projects.includes(projectResult.project)
+  const project = projects.includes(app.globalData.pendingProject)
+    ? app.globalData.pendingProject
+    : storedProject !== initialProject && projects.includes(storedProject)
+    ? storedProject
+    : projects.includes(initialPendingProject)
+    ? initialPendingProject
+    : projects.includes(projectResult.project)
     ? projectResult.project
     : projects.includes(storedProject)
       ? storedProject
@@ -29,9 +38,14 @@ async function loadContext(options = {}) {
   const athletes = athleteResult.athletes || [];
   const projectAthletes = athletes.filter((item) => !item.project || item.project === project);
 
-  let selectedAthleteId = user.athleteId || app.globalData.selectedAthleteId || 0;
+  const preferredAthleteId = app.globalData.selectedAthleteId !== initialAthleteId
+    ? app.globalData.selectedAthleteId : initialAthleteId;
+  let selectedAthleteId = user.role === 'ATL'
+    ? user.athleteId || 0
+    : preferredAthleteId || user.athleteId || 0;
   if (selectedAthleteId && !projectAthletes.some((item) => Number(item.id) === Number(selectedAthleteId))) {
-    selectedAthleteId = user.athleteId || 0;
+    selectedAthleteId = projectAthletes.some((item) => Number(item.id) === Number(user.athleteId))
+      ? user.athleteId : 0;
   }
 
   app.globalData.currentProject = project;

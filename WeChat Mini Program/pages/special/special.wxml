@@ -4,7 +4,7 @@
     <view class="page-description">{{from}} 至 {{to}} · {{project}}</view>
   </view>
 
-  <scope-filter projects="{{projects}}" project="{{project}}" show-athlete="{{false}}" range="{{range}}" bindprojectchange="onProjectChange" bindrangechange="onRangeChange" />
+  <scope-filter projects="{{projects}}" project="{{project}}" show-athlete="{{false}}" range="{{range}}" bindprojectchange="onScopeChange" bindrangechange="onScopeChange" />
   <picker class="team-picker" mode="selector" range="{{teamItems}}" range-key="name" value="{{teamIndex}}" bindchange="onTeamChange">
     <view class="team-picker-control"><text>队伍</text><text class="team-picker-value">{{teamItems[teamIndex].name}}</text><text>⌄</text></view>
   </picker>

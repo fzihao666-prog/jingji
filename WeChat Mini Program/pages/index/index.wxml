@@ -7,7 +7,7 @@
     <button wx:if="{{canSelfReport}}" class="quick-entry" hover-class="quick-entry-active" bindtap="openTrainingEntry"><text class="quick-entry-icon">＋</text><text>记录训练</text></button>
   </view>
 
-  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onProjectChange" bindathletechange="onAthleteChange" bindrangechange="onRangeChange" />
+  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
 
   <view wx:if="{{canViewTodos}}" class="card daily-todos" aria-label="教练每日训练待办">
     <view class="card-head">

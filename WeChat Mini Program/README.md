@@ -15,6 +15,12 @@
 
 五个主页面使用同一套紧凑筛选和卡片样式。训练趋势显示单位并支持点击查看具体数值；首页伤病记录和专项运动员列表可直接进入已有运动员档案，不增加新的业务数据或详情接口。
 
+### 新页面的筛选与加载约定
+
+`utils/page-scope.js` 负责从 `loadContext()` 初始化项目、运动员和日／周／月范围，并通过 `applyScopeChange()` 处理 `scope-filter` 的三个现有事件。ATL 的运动员 ID 固定为本人，其他角色的选择必须属于当前项目的可访问列表。项目切换使用 `saveProjectInOrder()` 按触发顺序保存。
+
+页面只实现业务数据请求和视图转换：`onShow` 先读取上下文并设置 scope，再调用 `loadPageData(scope)`；筛选事件统一绑定 `onScopeChange`。每次异步加载使用 `utils/request-guard.js` 的 `loadWithGuard()`，只允许最新请求更新页面数据、错误和 loading。需要独立刷新的数据（如首页每日待办）使用独立的 `createRequestGuard()`。
+
 小程序刻意不提供账号权限配置、批量 Excel 导入、数据字典维护、批量导出、AI 草案生成和原始数据删除。这些高复杂度或高风险操作继续在网页端完成。
 
 ## 与网页端共用数据

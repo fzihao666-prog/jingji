@@ -1,6 +1,8 @@
 const api = require('../../services/api');
-const { loadContext, projectAthletes } = require('../../utils/context');
-const { periodFor, shortDate } = require('../../utils/date');
+const { loadContext } = require('../../utils/context');
+const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
+const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
+const { shortDate } = require('../../utils/date');
 const { number, strengthMetricRows } = require('../../utils/format');
 
 function planRows(plan) {
@@ -111,80 +113,39 @@ Page({
   onShow() { this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
-  async loadPage() {
-    this.setData({ loading: true, error: '' });
-    try {
+  loadPage() {
+    this._guard = this._guard || createRequestGuard();
+    return loadWithGuard(this, this._guard, async (isLatest) => {
       const context = await loadContext();
-      const athletes = projectAthletes(context.athletes, context.project);
-      const selectedAthleteId = context.user.athleteId || context.selectedAthleteId || (athletes[0] && athletes[0].id) || 0;
-      const period = periodFor(this.data.range);
-      getApp().globalData.selectedAthleteId = selectedAthleteId;
-      this.setData({ user: context.user, projects: context.projects, project: context.project, athletes, selectedAthleteId, showAthlete: context.user.role !== 'ATL', from: period.from, to: period.to });
-      await this.loadAthlete(selectedAthleteId, period);
-    } catch (error) {
-      if (error.message !== '未登录') this.setData({ error: error.message || '体能训练数据加载失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
+      if (!isLatest()) return null;
+      const scope = createInitialScope(context, { range: this.data.range });
+      getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
+      this.setData(scope);
+      return this.loadPageData(scope);
+    }, '体能训练数据加载失败。');
   },
 
-  async loadAthlete(athleteId, period) {
-    if (!athleteId) {
-      this.setData({ athleteName: '', summaryCards: [], metrics: [], championMetrics: [], latestPlan: null, planExercises: [], trend: [], recentSessions: [] });
-      return;
-    }
-    const athlete = this.data.athletes.find((item) => Number(item.id) === Number(athleteId));
+  async loadPageData(scope) {
+    const athleteId = scope.selectedAthleteId;
+    if (!athleteId) return { athleteName: '', summaryCards: [], metrics: [], championMetrics: [], latestPlan: null, planExercises: [], trend: [], recentSessions: [] };
+    const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     const [testResult, sessionResult, planResult] = await Promise.all([
       api.strengthTests(athleteId),
       api.strengthTrainingResults(athleteId),
       api.trainingPlans(athleteId)
     ]);
-    this.setData(buildStrengthView(athlete, testResult.tests, sessionResult.sessions, planResult.plans, period));
+    return buildStrengthView(athlete, testResult.tests, sessionResult.sessions, planResult.plans, scope);
   },
 
-  async onProjectChange(event) {
-    const project = event.detail.value;
-    const app = getApp();
-    const athletes = projectAthletes(app.globalData.athletes, project);
-    const selectedAthleteId = app.globalData.user.athleteId || (athletes[0] && athletes[0].id) || 0;
-    const period = periodFor(this.data.range);
-    app.setProject(project);
-    app.globalData.selectedAthleteId = selectedAthleteId;
-    this.setData({ project, athletes, selectedAthleteId, from: period.from, to: period.to, loading: true, error: '' });
-    try {
-      await api.saveCurrentProject(project);
-      await this.loadAthlete(selectedAthleteId, period);
-    } catch (error) {
-      this.setData({ error: error.message || '项目切换失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
-  },
-
-  async onAthleteChange(event) {
-    const selectedAthleteId = Number(event.detail.value) || 0;
-    getApp().globalData.selectedAthleteId = selectedAthleteId;
-    this.setData({ selectedAthleteId, loading: true, error: '' });
-    try {
-      await this.loadAthlete(selectedAthleteId, { from: this.data.from, to: this.data.to });
-    } catch (error) {
-      this.setData({ error: error.message || '运动员体能数据加载失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
-  },
-
-  async onRangeChange(event) {
-    const range = event.detail.value;
-    const period = periodFor(range);
-    this.setData({ range, from: period.from, to: period.to, loading: true, error: '' });
-    try {
-      await this.loadAthlete(this.data.selectedAthleteId, period);
-    } catch (error) {
-      this.setData({ error: error.message || '时间范围加载失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
+  onScopeChange(event) {
+    const change = applyScopeChange(this, event);
+    if (!change) return Promise.resolve();
+    if (change.field === 'project') this.setData({ athleteName: '', summaryCards: [], metrics: [], championMetrics: [], latestTestDate: '', latestPlan: null, planExercises: [], trend: [], recentSessions: [] });
+    return loadWithGuard(this, this._guard, async (isLatest) => {
+      if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
+      if (!isLatest()) return null;
+      return this.loadPageData(this.data);
+    }, '体能训练数据加载失败。');
   },
 
   showTrendDetail(event) {

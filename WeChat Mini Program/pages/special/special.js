@@ -1,6 +1,8 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
-const { periodFor, shortDate, ageAt } = require('../../utils/date');
+const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
+const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
+const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
 
 function buildTrainingView(training, athletes, to) {
@@ -76,25 +78,26 @@ Page({
   onShow() { this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
-  async loadPage() {
-    this.setData({ loading: true, error: '' });
-    try {
+  loadPage() {
+    this._guard = this._guard || createRequestGuard();
+    return loadWithGuard(this, this._guard, async (isLatest) => {
       const context = await loadContext();
-      const period = periodFor(this.data.range);
-      this.setData({ projects: context.projects, project: context.project, from: period.from, to: period.to, teamId: 0, teamIndex: 0 });
-      await this.loadProject(context.project, period);
-    } catch (error) {
-      if (error.message !== '未登录') this.setData({ error: error.message || '专项训练数据加载失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
+      if (!isLatest()) return null;
+      const scope = createInitialScope(context, { range: this.data.range, showAthlete: false });
+      this.setData({ ...scope, teamId: 0, teamIndex: 0 });
+      return this.loadPageData({ ...scope, teamId: 0 }, true, isLatest);
+    }, '专项训练数据加载失败。');
   },
 
-  async loadProject(project, period) {
+  async loadPageData(scope, full, isLatest) {
+    if (!full) {
+      const result = await api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId);
+      return buildTrainingView(result.training, result.athletes, scope.to);
+    }
     const [teamResult, modelResult, trainingResult] = await Promise.all([
-      api.overviewTeams(project),
-      api.specialChampionModels(project),
-      api.specialTrainingOverview(period.from, period.to, project, 0)
+      api.overviewTeams(scope.project),
+      api.specialChampionModels(scope.project),
+      api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId)
     ]);
     const teamItems = [{ id: 0, name: '全部队伍' }].concat(teamResult.teams || []);
     const championEvents = (modelResult.events || []).slice(0, 12).map((item) => ({
@@ -104,54 +107,30 @@ Page({
       meta: [item.country, item.competition, item.location].filter(Boolean).join(' · ') || '赛事来源待配置',
       pace: item.pace || ''
     }));
-    this.setData(Object.assign({ teamItems, championEvents }, buildTrainingView(trainingResult.training, trainingResult.athletes, period.to)));
+    if (isLatest && isLatest()) this._loadedProject = scope.project;
+    return { teamItems, championEvents, ...buildTrainingView(trainingResult.training, trainingResult.athletes, scope.to) };
   },
 
-  async loadTraining(teamId, period) {
-    const result = await api.specialTrainingOverview(period.from, period.to, this.data.project, teamId);
-    this.setData(buildTrainingView(result.training, result.athletes, period.to));
-  },
-
-  async onProjectChange(event) {
-    const project = event.detail.value;
-    const period = periodFor(this.data.range);
-    getApp().setProject(project);
-    this.setData({ project, from: period.from, to: period.to, teamId: 0, teamIndex: 0, loading: true, error: '' });
-    try {
-      await api.saveCurrentProject(project);
-      await this.loadProject(project, period);
-    } catch (error) {
-      this.setData({ error: error.message || '项目切换失败。' });
-    } finally {
-      this.setData({ loading: false });
+  onScopeChange(event) {
+    const change = applyScopeChange(this, event);
+    if (!change) return Promise.resolve();
+    if (change.field === 'project') {
+      this._loadedProject = '';
+      this.setData({ teamId: 0, teamIndex: 0, teamItems: [{ id: 0, name: '全部队伍' }], championEvents: [], metrics: [], trend: [], intensity: [], content: [], athleteRows: [], athleteTotal: 0 });
     }
+    return loadWithGuard(this, this._guard, async (isLatest) => {
+      if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
+      if (!isLatest()) return null;
+      return this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest);
+    }, '专项训练数据加载失败。');
   },
 
-  async onRangeChange(event) {
-    const range = event.detail.value;
-    const period = periodFor(range);
-    this.setData({ range, from: period.from, to: period.to, loading: true, error: '' });
-    try {
-      await this.loadTraining(this.data.teamId, period);
-    } catch (error) {
-      this.setData({ error: error.message || '时间范围加载失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
-  },
-
-  async onTeamChange(event) {
+  onTeamChange(event) {
     const teamIndex = Number(event.detail.value);
     const team = this.data.teamItems[teamIndex] || this.data.teamItems[0];
     const teamId = Number(team.id) || 0;
-    this.setData({ teamIndex, teamId, loading: true, error: '' });
-    try {
-      await this.loadTraining(teamId, { from: this.data.from, to: this.data.to });
-    } catch (error) {
-      this.setData({ error: error.message || '队伍数据加载失败。' });
-    } finally {
-      this.setData({ loading: false });
-    }
+    this.setData({ teamIndex, teamId });
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest), '队伍数据加载失败。');
   },
 
   showTrendDetail(event) {

@@ -4,7 +4,7 @@
     <view class="page-description">{{athleteName || '选择运动员'}} · {{from}} 至 {{to}}</view>
   </view>
 
-  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" allow-all="{{false}}" range="{{range}}" bindprojectchange="onProjectChange" bindathletechange="onAthleteChange" bindrangechange="onRangeChange" />
+  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" allow-all="{{false}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
   <view wx:if="{{error}}" class="error-box">{{error}}</view>
   <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载体能训练数据</view></view>
 
