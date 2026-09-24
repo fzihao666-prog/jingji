@@ -3441,7 +3441,7 @@ function seedOverviewProfileData() {
       weightKg: 61.1,
       bodyFatPct: 16.6,
       score: 87,
-      origin: ['湖南', '长沙', '岳麓区'],
+      origin: ['四川', '成都', '武侯区'],
     },
     陈屿: {
       birthDate: '1999-06-22',
@@ -3457,7 +3457,7 @@ function seedOverviewProfileData() {
       weightKg: 81.2,
       bodyFatPct: 12.1,
       score: 89,
-      origin: ['山东', '青岛', '市南区'],
+      origin: ['浙江', '杭州', '西湖区'],
     },
     许沐: {
       birthDate: '2003-02-11',
@@ -3473,7 +3473,7 @@ function seedOverviewProfileData() {
       weightKg: 76.9,
       bodyFatPct: 12.4,
       score: 90,
-      origin: ['湖北', '武汉', '洪山区'],
+      origin: ['广东', '广州', '天河区'],
     },
     宋岚: {
       birthDate: '2002-12-06',
@@ -3481,7 +3481,7 @@ function seedOverviewProfileData() {
       weightKg: 59.4,
       bodyFatPct: 18.0,
       score: 85,
-      origin: ['江苏', '南京', '玄武区'],
+      origin: ['贵州', '贵阳', '观山湖区'],
     },
     江跃: {
       birthDate: '1998-05-30',
@@ -3489,7 +3489,7 @@ function seedOverviewProfileData() {
       weightKg: 77.2,
       bodyFatPct: 12.8,
       score: 88,
-      origin: ['辽宁', '大连', '中山区'],
+      origin: ['贵州', '贵阳', '观山湖区'],
     },
   };
   const athletes = db
@@ -3543,7 +3543,12 @@ function seedOverviewProfileData() {
     const existingOrigin = db
       .prepare('SELECT source, is_demo AS isDemo FROM athlete_origins WHERE athlete_id = ?')
       .get(athlete.id) as { source: string; isDemo: number } | undefined;
-    if (!existingOrigin || existingOrigin.isDemo || existingOrigin.source === 'legacy_migration') {
+    if (
+      !existingOrigin ||
+      existingOrigin.isDemo ||
+      existingOrigin.source === 'legacy_migration' ||
+      existingOrigin.source === 'initial_seed'
+    ) {
       upsertAthleteOrigin({
         athleteId: athlete.id,
         province: profile.origin[0],
@@ -3592,7 +3597,7 @@ function seedOverviewProfileData() {
   }
 }
 
-runInitializationOnce('overview_profile_seed_v2', seedOverviewProfileData);
+runInitializationOnce('overview_profile_seed_v3', seedOverviewProfileData);
 
 function seedOverviewExperienceAndCompositionData() {
   const data: Record<
@@ -5744,6 +5749,31 @@ runInitializationOnce(
 
 // 初始化示例与历史迁移完成后再执行一次，确保新库同样写入项目 Code。
 migrateLegacyProjectCodes();
+
+// 幂等修复：历史版本 PUT 接口只更新 team_id / athlete_origins，
+// 未同步 athletes 表上的 team、region、city、county 文本列。
+// team_id 与 athlete_origins 是权威数据源，反向覆盖 athletes 表。
+db.exec(`
+  UPDATE athletes SET team = (
+    SELECT pt.name FROM project_teams pt WHERE pt.id = athletes.team_id AND pt.active = 1
+  )
+  WHERE team_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM project_teams pt
+      WHERE pt.id = athletes.team_id AND pt.active = 1 AND pt.name != athletes.team
+    );
+
+  UPDATE athletes SET
+    region = COALESCE((SELECT ao.province FROM athlete_origins ao WHERE ao.athlete_id = athletes.id), region),
+    city   = COALESCE((SELECT ao.city     FROM athlete_origins ao WHERE ao.athlete_id = athletes.id), city),
+    county = COALESCE((SELECT ao.county   FROM athlete_origins ao WHERE ao.athlete_id = athletes.id), county)
+  WHERE EXISTS (
+    SELECT 1 FROM athlete_origins ao
+    WHERE ao.athlete_id = athletes.id
+      AND (ao.province != athletes.region OR ao.city != athletes.city OR ao.county != athletes.county)
+  );
+`);
+
 const validRegions = new Set<string>(PROVINCES);
 const invalidRegions = (
   db.prepare("SELECT DISTINCT region FROM athletes WHERE region <> '未设置'").all() as {

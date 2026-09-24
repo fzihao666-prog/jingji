@@ -2447,8 +2447,8 @@ function resolvePendingAthletes(input: {
       const result = db
         .prepare(
           `INSERT INTO athletes (
-        name, project, team, team_id, gender, profile_status, source, data_import_batch_id, active
-      ) VALUES (?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
+        name, project, team, team_id, gender, region, city, county, profile_status, source, data_import_batch_id, active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
         )
         .run(
           candidate.name,
@@ -2456,6 +2456,9 @@ function resolvePendingAthletes(input: {
           candidate.team,
           team.id,
           candidate.gender,
+          candidate.region,
+          candidate.city,
+          candidate.county,
           input.batch.id
         );
       athlete = { id: Number(result.lastInsertRowid) };

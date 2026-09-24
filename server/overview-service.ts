@@ -1214,7 +1214,7 @@ export function buildOverviewPayload(input: {
       AND ir.id = (
         SELECT latest.id FROM injury_records latest
         WHERE latest.athlete_id = ir.athlete_id
-        ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+        ORDER BY datetime(latest.created_at) DESC, latest.id DESC LIMIT 1
       )
     ORDER BY ir.pain_score DESC, a.name
   `

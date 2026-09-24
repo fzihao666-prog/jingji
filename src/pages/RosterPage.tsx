@@ -379,7 +379,7 @@ export function RosterPage({
                   ))}
                 </div>
               ) : (
-                <div className="coach-readonly">{athlete.coaches || '尚未绑定教练'}</div>
+                <div className="coach-readonly">{athlete.coaches || '暂无主管教练'}</div>
               )}
               {canManage && (
                 <button

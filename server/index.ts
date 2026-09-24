@@ -658,23 +658,9 @@ function standardAccountName(input: {
 function accessibleAthleteIds(user: AuthUser): number[] {
   if (user.role === 'ATL') return user.athleteId ? [user.athleteId] : [];
   const permissions = accountPermissions(user.id);
-  const candidates =
-    user.role === 'SCC'
-      ? (db
-          .prepare(
-            `
-      SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-        a.project, COALESCE(pt.name, a.team, '') AS team
-      FROM athletes a JOIN coach_athletes ca ON ca.athlete_id = a.id
-      LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
-      LEFT JOIN project_teams pt ON pt.id = a.team_id
-      WHERE ca.coach_user_id = ? AND a.active = 1
-    `
-          )
-          .all(user.id) as ScopeAthlete[])
-      : (db
-          .prepare(
-            `
+  const candidates = db
+    .prepare(
+      `
       SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
         a.project, COALESCE(pt.name, a.team, '') AS team
       FROM athletes a
@@ -682,8 +668,8 @@ function accessibleAthleteIds(user: AuthUser): number[] {
       LEFT JOIN project_teams pt ON pt.id = a.team_id
       WHERE a.active = 1
     `
-          )
-          .all() as ScopeAthlete[]);
+    )
+    .all() as ScopeAthlete[];
   return candidates
     .filter((athlete) => permissionsAllowAthlete(permissions, athlete))
     .map((athlete) => athlete.id);
@@ -2857,13 +2843,17 @@ app.put('/api/me/athlete-profile', requireAuth, (req, res) => {
   db.exec('BEGIN');
   try {
     db.prepare(
-      `UPDATE athletes SET name = ?, project = ?, team_id = ?, gender = ?, birth_date = ?, profile_status = ? WHERE id = ?`
+      `UPDATE athletes SET name = ?, project = ?, team = ?, team_id = ?, gender = ?, birth_date = ?, region = ?, city = ?, county = ?, profile_status = ? WHERE id = ?`
     ).run(
       payload.name,
       payload.project,
+      payload.team,
       selectedTeam!.id,
       payload.gender,
       payload.birthDate || null,
+      payload.region,
+      payload.city,
+      payload.county,
       athleteProfileComplete(payload) ? 'complete' : 'incomplete',
       athleteId
     );
@@ -2962,8 +2952,8 @@ app.post(
       const athleteResult = db
         .prepare(
           `
-      INSERT INTO athletes (name, project, team, team_id, gender, birth_date, profile_status, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'manual')
+      INSERT INTO athletes (name, project, team, team_id, gender, birth_date, region, city, county, profile_status, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual')
     `
         )
         .run(
@@ -2973,6 +2963,9 @@ app.post(
           selectedTeam!.id,
           payload.gender,
           payload.birthDate || null,
+          payload.region,
+          payload.city,
+          payload.county,
           athleteProfileComplete(payload) ? 'complete' : 'incomplete'
         );
       const athleteId = Number(athleteResult.lastInsertRowid);
@@ -3086,13 +3079,17 @@ app.put(
         .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
         .get(payload.project, payload.team) as { id: number } | undefined;
       db.prepare(
-        `UPDATE athletes SET name = ?, project = ?, team_id = ?, gender = ?, birth_date = ?, profile_status = ? WHERE id = ?`
+        `UPDATE athletes SET name = ?, project = ?, team = ?, team_id = ?, gender = ?, birth_date = ?, region = ?, city = ?, county = ?, profile_status = ? WHERE id = ?`
       ).run(
         payload.name,
         payload.project,
+        payload.team,
         selectedTeam!.id,
         payload.gender,
         payload.birthDate || null,
+        payload.region,
+        payload.city,
+        payload.county,
         athleteProfileComplete(payload) ? 'complete' : 'incomplete',
         athleteId
       );
@@ -3351,7 +3348,7 @@ app.get('/api/athletes', requireAuth, (req, res) => {
       COALESCE(ap.origin_coach, '') AS originCoach, COALESCE(ap.specialties, '') AS specialties,
       COALESCE(ap.notes, '') AS notes, COALESCE(ap.created_at, '2026-01-01 00:00:00') AS createdAt,
       COALESCE((SELECT CASE ir.status WHEN 'healthy' THEN '健康' WHEN 'observation' THEN '观察' WHEN 'rehab' THEN '康复中' ELSE '训练受限' END
-        FROM injury_records ir WHERE ir.athlete_id = a.id ORDER BY ir.created_at DESC, ir.id DESC LIMIT 1), ap.health_status, '健康') AS healthStatus,
+        FROM injury_records ir WHERE ir.athlete_id = a.id ORDER BY datetime(ir.created_at) DESC, ir.id DESC LIMIT 1), ap.health_status, '健康') AS healthStatus,
       (SELECT bm.height_cm FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS heightCm,
       (SELECT bm.weight_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS weightKg,
       (SELECT bm.body_fat_pct FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS bodyFatPct,
@@ -3723,7 +3720,7 @@ app.get('/api/athletes/:id/injuries', requireAuth, (req, res) => {
     FROM injury_records ir
     JOIN users u ON u.id = ir.created_by
     WHERE ir.athlete_id = ?
-    ORDER BY ir.created_at DESC, ir.id DESC
+    ORDER BY datetime(ir.created_at) DESC, ir.id DESC
     LIMIT 100
   `
     )
@@ -8545,7 +8542,18 @@ app.post(
         errors.push('运动员必须绑定一个具体队伍');
       if (!['男', '女'].includes(gender)) errors.push('请选择运动员性别');
     }
-    if (role === 'SCC' && !isCoachCategory(coachCategory)) errors.push('请选择有效的教练类别');
+    if (role === 'SCC') {
+      if (!isCoachCategory(coachCategory)) errors.push('请选择有效的教练类别');
+      if (permissions.projects.includes('*'))
+        errors.push('教练必须绑定具体项目，不能使用通配符');
+      if (
+        permissions.teams.some(
+          (team: { project: string; team: string }) =>
+            team.project === '*' || team.team === '*'
+        )
+      )
+        errors.push('教练必须绑定具体队伍，不能使用通配符');
+    }
     const parentResult = Number.isFinite(parentUserId)
       ? resolveParent(currentUser, role, parentUserId, permissions)
       : { error: '请选择上级管理账号。', parent: null };
@@ -8678,6 +8686,19 @@ app.put(
         permissions.teams[0].team === '*'
       ) {
         return res.status(400).json({ message: '运动员必须绑定一个具体区县、项目和队伍。' });
+      }
+    }
+    if (role === 'SCC') {
+      if (permissions.projects.includes('*')) {
+        return res.status(400).json({ message: '教练必须绑定具体项目，不能使用通配符。' });
+      }
+      if (
+        permissions.teams.some(
+          (team: { project: string; team: string }) =>
+            team.project === '*' || team.team === '*'
+        )
+      ) {
+        return res.status(400).json({ message: '教练必须绑定具体队伍，不能使用通配符。' });
       }
     }
 

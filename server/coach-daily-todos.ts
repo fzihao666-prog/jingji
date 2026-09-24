@@ -185,7 +185,7 @@ export function readDailyTodos(
     FROM injury_records ir WHERE ir.athlete_id IN (${placeholders}) AND ir.id = (
       SELECT latest.id FROM injury_records latest WHERE latest.athlete_id = ir.athlete_id
         AND datetime(latest.created_at) <= datetime(?)
-      ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+      ORDER BY datetime(latest.created_at) DESC, latest.id DESC LIMIT 1
     )
   `
     )

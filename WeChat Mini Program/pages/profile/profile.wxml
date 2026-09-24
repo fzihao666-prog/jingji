@@ -37,5 +37,7 @@
     <view class="card"><view wx:if="{{injuries.length}}" class="list"><view wx:for="{{injuries}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.meta}}</text></view><view class="list-row-value">{{item.pain}}</view></view><text class="tag {{item.statusClass}}">{{item.status}}</text><text class="injury-note">{{item.restriction}}</text></view></view><view wx:else class="state"><view class="state-icon">✓</view><view class="state-title">暂无伤病记录</view></view></view>
   </block>
 
-  <view wx:if="{{!loading && !selectedAthleteId}}" class="card state"><view class="state-icon">人</view><view class="state-title">请选择运动员</view></view>
+  <view wx:if="{{!loading && !selectedAthleteId && showAthlete && !athletes.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">当前项目暂无可查看运动员</view><view class="state-note">请联系管理员确认队伍与项目权限</view></view>
+  <view wx:elif="{{!loading && !selectedAthleteId && !showAthlete}}" class="card state"><view class="state-icon">人</view><view class="state-title">当前账号未绑定运动员档案</view></view>
+  <view wx:elif="{{!loading && !selectedAthleteId}}" class="card state"><view class="state-icon">人</view><view class="state-title">请选择运动员</view></view>
 </view>

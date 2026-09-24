@@ -218,7 +218,7 @@ sequenceDiagram
 | 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密         |
 | 偏好       | `/api/preferences`                                           | 当前项目等应用上下文偏好             |
 | 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理 |
-| 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与绑定             |
+| 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与展示用主管教练关系                         |
 | 专项训练   | `/api/special-training`、`/api/special-tests`                | 训练场次、专项测试和模板导入         |
 | 体能训练   | `/api/training-plans`、`/api/strength-training`              | 计划、AI 生成、结果导入和分析        |
 | 测试与模型 | `/api/strength-tests`、`/api/analysis`、冠军模型接口         | 测试、建议、项目模型和个人分析       |
@@ -326,7 +326,7 @@ erDiagram
 
 | 数据域       | 核心表                                                        | 说明                                                                                                     |
 | ------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 身份与组织   | `users`、`account_profiles`、权限表、`coach_athletes`         | 身份、层级和数据范围                                                                                     |
+| 身份与组织   | `users`、`account_profiles`、权限表、`coach_athletes`         | 身份、层级和数据范围；运动员可见性以区域/项目/队伍权限为准         |
 | 运动员主数据 | `athletes`、`athlete_profiles`、`athlete_origins`             | 稳定身份和扩展档案                                                                                       |
 | 训练事实     | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源                                                                             |
 | 训练计划     | `training_plans`                                              | 结构化列与 `plan_data` JSON 并存                                                                         |
@@ -371,10 +371,9 @@ erDiagram
          ∩ 行政区域范围
          ∩ 项目范围
          ∩ 队伍范围
-         ∩ 教练—运动员关系（教练角色）
 ```
 
-区域范围支持全国、省、市、区县；项目和队伍支持明确值或通配范围。账号的权限不得超过其直属上级。
+区域范围支持全国、省、市、区县；项目和队伍支持明确值或通配范围。教练账号必须绑定具体项目和具体队伍，服务端在创建与更新时拒绝通配符范围。账号的权限不得超过其直属上级。
 
 ### 9.2 授权执行
 
@@ -382,7 +381,7 @@ erDiagram
 
 1. `getAuthUser` 验证 JWT，并重新查询数据库确认账号仍启用；
 2. `requireRole` 校验接口级角色能力；
-3. `accessibleAthleteIds` 计算当前用户可访问的运动员集合；
+3. `accessibleAthleteIds` 计算当前用户可访问的运动员集合（角色能力 ∩ 区域 ∩ 项目 ∩ 队伍；不依赖教练—运动员手工绑定）；
 4. `hasAthleteAccess` 或权限包含逻辑校验具体资源；
 5. 查询使用已裁剪的运动员 ID 和项目条件；
 6. 写入前再次校验业务对象归属。

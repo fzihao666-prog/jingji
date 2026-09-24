@@ -740,7 +740,7 @@ export function CoachManagementPage({
                     </article>
                   ))
                 ) : (
-                  <p>尚未关联运动员，可使用“调整”建立责任关系。</p>
+                  <p>尚未关联展示用主管教练关系；本队运动员默认可见，无需逐个添加。</p>
                 )}
               </div>
             </section>
@@ -921,7 +921,7 @@ export function CoachManagementPage({
               <div>
                 <span>RESPONSIBILITY EDITOR</span>
                 <h2 id="coach-scope-title">调整 {selectedCoach.displayName} 的责任范围</h2>
-                <p>选择该教练负责的运动员，不修改运动员的项目、队伍和地区。</p>
+                <p>维护展示用主管教练关系；本队运动员可见性由队伍与项目权限自动决定。</p>
               </div>
               <button
                 className="icon-button"
@@ -974,7 +974,7 @@ export function CoachManagementPage({
               })}
             </div>
             <footer>
-              <p>本次仅更新责任关系，不修改运动员的项目、队伍和地区。</p>
+              <p>本次仅更新展示用主管教练关系，不修改运动员的项目、队伍和地区。</p>
               <button
                 className="secondary-button"
                 onClick={() => setScopeOpen(false)}

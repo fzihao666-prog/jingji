@@ -768,7 +768,7 @@ export function AthleteManagementPage({
                     </span>
                   </td>
                   <td>
-                    <span className="athlete-coach-copy">{athlete.coaches || '未关联'}</span>
+                    <span className="athlete-coach-copy">{athlete.coaches || '暂无主管教练'}</span>
                   </td>
                   <td>
                     <span className="athlete-event-copy">{athlete.currentEvent || '暂无赛事'}</span>

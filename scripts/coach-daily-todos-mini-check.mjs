@@ -42,7 +42,10 @@ export async function checkMiniDailyTodoFlow(assert) {
       },
       require: (path) => modules[path],
       getApp: () => app,
-      wx: { switchTab: (options) => navigation.push(options.url) },
+      wx: {
+        switchTab: (options) => navigation.push(options.url),
+        showToast: () => {},
+      },
     }
   );
   const page = {

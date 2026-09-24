@@ -57,5 +57,6 @@
     <view class="card"><view wx:if="{{recentSessions.length}}" class="list"><view wx:for="{{recentSessions}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.date}} · {{item.meta}}</text></view><view class="list-row-value">{{item.load}}</view></view><text class="tag">{{item.source}}</text></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练记录</view></view></view>
   </block>
 
-  <view wx:if="{{!loading && !selectedAthleteId}}" class="card state"><view class="state-icon">人</view><view class="state-title">请选择运动员</view><view class="state-note">体能计划和测试按运动员读取</view></view>
+  <view wx:if="{{!loading && !selectedAthleteId && showAthlete && !athletes.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">当前项目暂无可查看运动员</view><view class="state-note">请联系管理员确认队伍与项目权限</view></view>
+  <view wx:elif="{{!loading && !selectedAthleteId}}" class="card state"><view class="state-icon">人</view><view class="state-title">请选择运动员</view><view class="state-note">体能计划和测试按运动员读取</view></view>
 </view>

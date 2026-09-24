@@ -201,18 +201,23 @@ export async function checkCoachDailyTodos({
     } finally {
       fixtureDb.prepare('UPDATE athletes SET active = 1 WHERE id = ?').run(target.athleteId);
     }
-    fixtureDb
-      .prepare('DELETE FROM coach_athletes WHERE coach_user_id = ? AND athlete_id = ?')
-      .run(coachId, target.athleteId);
+    const teamGrants = fixtureDb
+      .prepare(
+        'SELECT project, team, granted_by FROM user_team_permissions WHERE user_id = ?'
+      )
+      .all(coachId);
+    fixtureDb.prepare('DELETE FROM user_team_permissions WHERE user_id = ?').run(coachId);
     try {
       assert(
         !allRows((await read()).payload.todos).some((row) => row.athleteId === target.athleteId),
-        '解绑后不得沿用旧权限'
+        '移除队伍权限后不得沿用旧范围'
       );
     } finally {
-      fixtureDb
-        .prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)')
-        .run(coachId, target.athleteId);
+      const restoreTeam = fixtureDb.prepare(
+        'INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (?, ?, ?, ?)'
+      );
+      for (const grant of teamGrants)
+        restoreTeam.run(coachId, grant.project, grant.team, grant.granted_by);
     }
   } finally {
     fixtureDb.close();

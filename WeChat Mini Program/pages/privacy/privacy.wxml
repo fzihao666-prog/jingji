@@ -22,7 +22,7 @@
   <view class="card privacy-section">
     <view class="card-head-title">如何保护</view>
     <text>数据仍保存在竞迹网页系统使用的同一服务器和数据库中，不在小程序端复制一套数据库。</text>
-    <text>系统按角色、项目、区域、队伍和教练—运动员关系进行服务端授权；敏感信息仅展示必要字段。</text>
+    <text>系统按角色、项目、区域和队伍进行服务端授权；敏感信息仅展示必要字段。</text>
     <text>小程序不提供批量导出、账号权限配置和原始数据删除能力。</text>
   </view>
 

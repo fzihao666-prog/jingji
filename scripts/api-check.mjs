@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
+import { DatabaseSync } from 'node:sqlite';
 import { checkCoachDailyTodos } from './coach-daily-todos-api-check.mjs';
 import { checkMiniDailyTodoFlow } from './coach-daily-todos-mini-check.mjs';
 import { checkDailyExampleCreation } from './coach-daily-todos-example-check.mjs';
@@ -318,6 +319,62 @@ try {
       forbiddenCoachIndividualOverview.status === 400,
     '教练训练总览未按负责队员进行团队聚合'
   );
+
+  const coach02Login = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'coach02', password: 'demo123' }),
+  });
+  assert(coach02Login.status === 200, '第二教练账号登录失败');
+  const coach02Athletes = await request('/api/athletes', {}, coach02Login.payload.token);
+  const idsOf = (response) =>
+    response.payload.athletes
+      .map((athlete) => athlete.id)
+      .sort((left, right) => left - right);
+  const coach01Ids = idsOf(demoCoachAthletes);
+  const coach02Ids = idsOf(coach02Athletes);
+  const athleteIdByName = (name) =>
+    adminAthletesForAnalysis.payload.athletes.find((item) => item.name === name)?.id;
+  const shenLanId = athleteIdByName('沈澜');
+  const chenYuId = athleteIdByName('陈屿');
+  const zhouJingId = athleteIdByName('周竞');
+  const xuMuId = athleteIdByName('许沐');
+  assert(shenLanId && chenYuId && zhouJingId && xuMuId, '演示运动员种子数据缺失');
+  assert(
+    coach02Ids.includes(shenLanId) && !coach02Ids.includes(chenYuId) && !coach02Ids.includes(zhouJingId),
+    '教练应通过队伍权限看到未手工绑定的本队运动员，且不能跨队'
+  );
+  assert(
+    coach01Ids.includes(1) &&
+      coach01Ids.includes(2) &&
+      coach01Ids.includes(3) &&
+      coach01Ids.includes(4) &&
+      !coach01Ids.includes(xuMuId) &&
+      coach01Ids.every((id) => [1, 2, 3, 4].includes(id)),
+    '教练可见范围不得扩大到其他队伍'
+  );
+  const fixtureDb = new DatabaseSync(databasePath);
+  try {
+    const manualRows = fixtureDb
+      .prepare('SELECT coach_user_id, athlete_id FROM coach_athletes')
+      .all();
+    fixtureDb.prepare('DELETE FROM coach_athletes').run();
+    try {
+      const coach01AfterClear = await request('/api/athletes', {}, demoCoachLogin.payload.token);
+      const coach02AfterClear = await request('/api/athletes', {}, coach02Login.payload.token);
+      assert(
+        JSON.stringify(idsOf(coach01AfterClear)) === JSON.stringify(coach01Ids) &&
+          JSON.stringify(idsOf(coach02AfterClear)) === JSON.stringify(coach02Ids),
+        '移除 coach_athletes 后教练可见列表不得变化'
+      );
+    } finally {
+      const restore = fixtureDb.prepare(
+        'INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
+      );
+      for (const row of manualRows) restore.run(row.coach_user_id, row.athlete_id);
+    }
+  } finally {
+    fixtureDb.close();
+  }
   const saveStrength = await request(
     '/api/strength-tests',
     {
@@ -1064,6 +1121,46 @@ try {
     body: JSON.stringify({ username: 'coach_internal', password: 'Secure123' }),
   });
   assert(coachLogin.status === 200, '内部创建的教练账号无法登录');
+  const wildcardCoachCreate = await request(
+    '/api/access/accounts',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        username: 'coach_wildcard',
+        password: 'Secure123',
+        displayName: '通配队伍教练',
+        role: 'SCC',
+        parentUserId: adminAccess.payload.current.id,
+        areas: adminAccess.payload.current.areas,
+        projects: ['ROWING'],
+        teams: [{ project: 'ROWING', team: '*' }],
+        coachCategory: '体能教练',
+      }),
+    },
+    adminToken
+  );
+  assert(
+    wildcardCoachCreate.status === 400,
+    '教练账号创建不得接受通配符队伍'
+  );
+  const wildcardCoachUpdate = await request(
+    `/api/access/accounts/${createCoachInternally.payload.id}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        role: 'SCC',
+        parentUserId: adminAccess.payload.current.id,
+        areas: adminAccess.payload.current.areas,
+        projects: ['*'],
+        teams: [{ project: '*', team: '*' }],
+      }),
+    },
+    adminToken
+  );
+  assert(
+    wildcardCoachUpdate.status === 400,
+    '教练账号更新不得接受通配符项目或队伍'
+  );
   const forbiddenRename = await request(
     '/api/admin/athletes/1/name',
     {

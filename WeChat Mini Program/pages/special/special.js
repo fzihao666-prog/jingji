@@ -167,6 +167,10 @@ Page({
   goToAthlete(event) {
     const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
     if (!athleteId) return;
+    if (!this.data.athleteRows.some((athlete) => Number(athlete.id) === athleteId)) {
+      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
+      return;
+    }
     getApp().globalData.selectedAthleteId = athleteId;
     wx.switchTab({ url: '/pages/profile/profile' });
   }
