@@ -1,5 +1,4 @@
-// 与 shared/projects.ts、shared/regions.ts 保持一致的注册静态数据。
-// 小程序端不直接依赖 npm 包；修改网页端字典时需同步更新本文件。
+// 由 scripts/sync-mini-register-data.mjs 从 shared/ 生成，请勿手工修改。
 module.exports = {
   "projects": [
     {

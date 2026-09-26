@@ -79,6 +79,8 @@ Express :8787
 
 微信小程序生产配置必须使用这个 HTTPS 域名作为唯一基础地址。微信公众平台需要将该域名分别登记为 request、uploadFile 和 downloadFile 合法域名，以保证 API、照片上传和照片/背景资源不分流。数据库、上传目录和 JWT 密钥必须纳入备份。
 
+小程序训练填报经 `/api/me/training-sessions` 写入正式 `training_sessions`；服务端从登录账号确定运动员，并只允许修改或删除该账号创建的填报。`/api/teams` 要求登录；注册页面使用 `/api/registration/teams` 获取不含运动员数量的队伍名称。教练每日待办同时校验角色和当前项目授权。
+
 ## 4. 仓库结构与职责
 
 ```text
@@ -202,14 +204,22 @@ sequenceDiagram
 
 ### 6.2 服务端职责划分
 
-- `server/index.ts`：HTTP 适配、认证、权限、输入校验、事务用例、导入缓存、Excel 输出；
-- `server/db.ts`：连接参数、表结构、兼容迁移、初始化锁和初始化数据；
-- `server/overview-service.ts`：以训练场次为中心构建总览结果；
-- `server/athlete-profile-service.ts`：构建个人恢复趋势、专项成员筛选所需数据和同队档案比较；仅输出已授权范围内的有效非演示数据；
-- `server/ai-service.ts`：收集运动员上下文、按优先级调用模型并解析训练计划；
-- `server/strength-import-ai.ts`：把图片/PDF识别为逐组体能训练结果。
+服务端按业务域组织为子目录，每个域包含 `*-routes.ts`（HTTP 适配、认证、权限、输入校验）与 `*-service.ts`/`*-module.ts`（领域逻辑）；跨域共享的基础设施放在 `server/core/`：
 
-当前 `server/index.ts` 同时承担路由、领域服务、仓储查询和文件处理，属于可工作的单体入口，但已经形成明显的“大文件边界”。新增较大功能时，应按业务域拆出路由和服务，而不是继续向入口文件堆叠逻辑。
+| 目录 | 职责 |
+| --- | --- |
+| `server/index.ts` | Express 实例、全局中间件（CSP、body 解析、静态服务）、各域路由注册、优雅关闭；不含业务逻辑 |
+| `server/core/` | `db.ts`（连接参数、表结构、兼容迁移、初始化锁和初始化数据）、`auth.ts`（JWT、限流）、`permissions.ts`（RBAC 与数据范围）、`utils.ts`、`shared-server.ts`、`uploads.ts`、`coach-daily-todos.ts` |
+| `server/access/` | 账号与权限管理路由、认证（登录/注册/改密）路由、注册审批工作流 |
+| `server/athlete/` | 运动员档案路由与档案校验/写入辅助 |
+| `server/training-plan/` | 训练计划路由、计划解析与 Excel 导出、AI 计划生成 |
+| `server/strength/` | 体能训练导入与 AI 识别、力量测试与建议、体能指标编码 |
+| `server/analysis/` | 分析与雷达模型路由、训练总览、个人档案服务、RPE 统计 |
+| `server/data-import/` | 统一数据导入预览/提交路由与解析引擎 |
+| `server/special/` | 专项训练与专项测试路由、Excel 解析 |
+| `server/__tests__/` | 服务端单元测试 |
+
+`server/index.ts` 只负责装配：约 120 行，不再承担领域服务、仓储查询或文件处理。新增较大功能时应扩展对应业务域的 service 文件，而不是向入口堆叠逻辑。
 
 ### 6.3 API 业务域
 
@@ -480,7 +490,7 @@ Excel / PDF / 图片
 
 ### 10.6 小程序教练每日训练待办
 
-`GET /api/coach/daily-todos` 由 `server/index.ts` 复用认证、管理角色检查、`selectableProjects` 与 `accessibleAthleteIds`；`server/coach-daily-todos.ts` 在 SQL 中再次限定项目和在用运动员，仅返回必要档案标识、队伍与关注摘要。响应禁止缓存。严格查询 schema 仅接受有效 `project` 和可选的北京时间当天 `date`，拒绝额外范围参数及历史/未来日期。
+`GET /api/coach/daily-todos` 由 `server/index.ts` 复用认证、管理角色检查、`selectableProjects` 与 `accessibleAthleteIds`；`server/core/coach-daily-todos.ts` 在 SQL 中再次限定项目和在用运动员，仅返回必要档案标识、队伍与关注摘要。响应禁止缓存。严格查询 schema 仅接受有效 `project` 和可选的北京时间当天 `date`，拒绝额外范围参数及历史/未来日期。
 
 未填报依据当天正式有效 `training_sessions`，正式记录筛选与总览相同。负荷按北京时间 `session_date + start_time` 映射到 UTC 后取闭区间 `[当前时刻−24小时, 当前时刻]`，复用既有持久化 SRPE 和 `trainingLoadCategory`，按个人累计 ≥600 AU 进入关注。没有有效开训时间的今日/昨日课次另列，不按修改时间推断训练发生时间。伤病沿用最新记录口径，以 `created_at`（SQLite UTC）和 `id` 排序、排除未来记录，非健康状态持续关注并标识24小时内变化；最新健康状态解除伤病原因。
 
@@ -543,7 +553,7 @@ Web Bluetooth 连接、读取、监听和指令发送全部发生在浏览器。
 
 - SQLite 和本地文件使服务天然偏向单机部署；
 - 进程内导入缓存不支持多实例和任务恢复；
-- `server/index.ts` 职责过重，回归影响面扩大；
+- `server/core/db.ts` 单文件 5700+ 行，表结构、迁移与初始化数据集中在一处，改动回归影响面大；
 - 数据库迁移与初始化数据混在单一文件中；
 - 前端使用 localStorage 保存 Token，需依赖严格的 XSS 防护；
 - 健康和身份数据尚需更细的字段级权限、脱敏和导出审计；

@@ -68,40 +68,13 @@
 }
 
 .olympic-panel-head text:last-child {
-  color: #87969d;
+  color: #425962;
   font-weight: 600;
   letter-spacing: 1rpx;
 }
 
-.olympic-grid {
-  display: flex;
-  flex-wrap: wrap;
-}
-
-.olympic-item {
-  width: 10%;
-  height: 56rpx;
-  flex: none;
-  padding: 2rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 0;
-  color: #21415e;
-  background: transparent;
-}
-
-.olympic-item image {
-  width: 46rpx;
-  height: 46rpx;
-  flex: none;
-  display: block;
-  overflow: hidden;
-  border-radius: 7rpx;
-  background: #ffffff;
-}
+.discipline-list { display: flex; justify-content: space-around; gap: 12rpx; padding: 18rpx 0 4rpx; }
+.discipline-list text { flex: 1; padding: 14rpx 8rpx; border-radius: 12rpx; background: #e4f2f2; color: #0c6973; font-size: 25rpx; font-weight: 700; text-align: center; }
 
 .login-hero-copy {
   margin-top: auto;

@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import * as XLSX from '@e965/xlsx';
-import { db } from '../server/db.ts';
+import { db } from '../server/core/db.ts';
 import {
   analyzeDataImport,
   commitDataImport,
   updateDataImportAthleteCandidates,
-} from '../server/data-import.ts';
-import { buildOverviewPayload } from '../server/overview-service.ts';
+} from '../server/data-import/data-import.ts';
+import { buildOverviewPayload } from '../server/analysis/overview-service.ts';
 import { waterLandTrainingCategory } from '../shared/training-content-category.ts';
 
 const databasePath = process.env.DATABASE_PATH;

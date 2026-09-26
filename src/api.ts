@@ -72,6 +72,9 @@ export const api = {
   async teams() {
     return request<{ teams: ProjectTeam[] }>('/api/teams');
   },
+  async registrationTeams() {
+    return request<{ teams: ProjectTeam[] }>('/api/registration/teams');
+  },
   async adminTeams() {
     return request<{ teams: ProjectTeam[]; canCreateProjects: Project[] }>('/api/admin/teams');
   },

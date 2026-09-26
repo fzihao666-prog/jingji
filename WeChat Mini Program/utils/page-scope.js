@@ -1,4 +1,4 @@
-const { periodFor } = require('./date');
+const { periodFor, todayBeijing } = require('./date');
 const { projectAthletes } = require('./context');
 
 const RANGES = ['day', 'week', 'month'];
@@ -81,4 +81,23 @@ function saveProjectInOrder(page, project, save) {
   return pending;
 }
 
-module.exports = { createInitialScope, resolveProject, resolveAthlete, resolveDateRange, changeScope, scopeField, applyScopeChange, saveProjectInOrder };
+function isPageCacheFresh(page) {
+  const global = getApp().globalData;
+  return Boolean(page._cacheAt && Date.now() - page._cacheAt < 30000
+    && page._cacheDate === todayBeijing()
+    && page._cacheProject === global.currentProject
+    && page._cacheAthleteId === global.selectedAthleteId
+    && page._cacheVersion === (global.dataVersion || 0)
+    && !page.data.error);
+}
+
+function markPageCacheLoaded(page) {
+  const global = getApp().globalData;
+  page._cacheAt = Date.now();
+  page._cacheDate = todayBeijing();
+  page._cacheProject = global.currentProject;
+  page._cacheAthleteId = global.selectedAthleteId;
+  page._cacheVersion = global.dataVersion || 0;
+}
+
+module.exports = { createInitialScope, resolveProject, resolveAthlete, resolveDateRange, changeScope, scopeField, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded };

@@ -357,7 +357,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
 
   useEffect(() => {
     api
-      .teams()
+      .registrationTeams()
       .then((result) => setTeams(result.teams))
       .catch(() => setTeams([]));
   }, []);

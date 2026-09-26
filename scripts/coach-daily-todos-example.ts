@@ -1,6 +1,6 @@
 import { closeSync, mkdirSync, openSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { beijingDate, readDailyTodos } from '../server/coach-daily-todos.ts';
+import { beijingDate, readDailyTodos } from '../server/core/coach-daily-todos.ts';
 
 // 只创建专用的新场景库，不连接或覆盖日常运行数据库。
 const now = new Date();
@@ -16,7 +16,7 @@ try {
   throw error;
 }
 process.env.DATABASE_PATH = output;
-const { db } = await import('../server/db.ts');
+const { db } = await import('../server/core/db.ts');
 try {
   const creator = db.prepare("SELECT id FROM users WHERE username = 'admin01'").get() as {
     id: number;

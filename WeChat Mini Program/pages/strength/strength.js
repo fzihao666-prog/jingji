@@ -1,6 +1,6 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
+const { createInitialScope, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = require('../../utils/page-scope');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const { shortDate } = require('../../utils/date');
 const { number, strengthMetricRows } = require('../../utils/format');
@@ -110,7 +110,7 @@ Page({
     recentSessions: []
   },
 
-  onShow() { this.loadPage(); },
+  onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
@@ -121,7 +121,9 @@ Page({
       const scope = createInitialScope(context, { range: this.data.range });
       getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
       this.setData(scope);
-      return this.loadPageData(scope);
+      const result = await this.loadPageData(scope);
+      if (isLatest()) markPageCacheLoaded(this);
+      return result;
     }, '体能训练数据加载失败。');
   },
 

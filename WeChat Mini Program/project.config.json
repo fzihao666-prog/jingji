@@ -5,6 +5,10 @@
       {
         "value": "README.md",
         "type": "file"
+      },
+      {
+        "value": "assets/olympic-sports",
+        "type": "folder"
       }
     ],
     "include": []

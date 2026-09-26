@@ -19,7 +19,7 @@
 
 `utils/page-scope.js` 负责从 `loadContext()` 初始化项目、运动员和日／周／月范围，并通过 `applyScopeChange()` 处理 `scope-filter` 的三个现有事件。ATL 的运动员 ID 固定为本人，其他角色的选择必须属于当前项目的可访问列表。项目切换使用 `saveProjectInOrder()` 按触发顺序保存。
 
-页面只实现业务数据请求和视图转换：`onShow` 先读取上下文并设置 scope，再调用 `loadPageData(scope)`；筛选事件统一绑定 `onScopeChange`。每次异步加载使用 `utils/request-guard.js` 的 `loadWithGuard()`，只允许最新请求更新页面数据、错误和 loading。需要独立刷新的数据（如首页每日待办）使用独立的 `createRequestGuard()`。
+页面只实现业务数据请求和视图转换：训练总览、专项、体能和档案 Tab 在 30 秒内、项目和北京时间日期未变且没有数据变更时复用现有内容；手动下拉、训练填报和档案保存仍触发刷新。筛选事件统一绑定 `onScopeChange`。每次异步加载使用 `utils/request-guard.js` 的 `loadWithGuard()`，只允许最新请求更新页面数据、错误和 loading。需要独立刷新的数据（如首页每日待办）使用独立的 `createRequestGuard()`。
 
 小程序刻意不提供账号权限配置、批量 Excel 导入、数据字典维护、批量导出、AI 草案生成和原始数据删除。这些高复杂度或高风险操作继续在网页端完成。
 
@@ -34,7 +34,7 @@ React 网页端 ─┐
 小程序调用的接口全部由同一 Express 服务提供：
 
 - `/api/auth/login`、`/api/auth/register`、`/api/me`；
-- `/api/teams`（注册页队伍选项）；
+- `/api/registration/teams`（注册页公开队伍名称）；登录后的 `/api/teams` 才返回队伍统计；
 - `/api/preferences/current-project`、`/api/athletes`；
 - `/api/overview`、`/api/overview/teams`；
 - `/api/coach/daily-todos?project=ROWING`（管理角色的当天待办）；
@@ -45,6 +45,10 @@ React 网页端 ─┐
 - `/api/athletes/:id/body-composition`、`/api/athletes/:id/photo`。
 
 运动员范围、角色、区域、项目和队伍权限仍由服务端判断，小程序页面隐藏不作为授权依据。本人训练接口不接受客户端传入运动员编号，服务端直接使用登录账号绑定的运动员；修改和删除仅限该账号本人创建的手工记录。
+
+照片选择前使用微信隐私授权流程，并展示平台配置的隐私保护指引。日期筛选、训练填报和身体成分测量日统一使用北京时间。注册项目、省市、角色和体能指标字典从 `shared/` 生成：修改共享字典后运行 `npm run mini:dictionary-sync`，使用 `npm run mini:dictionary-check` 校验。登录页不再请求 50 张远程 GIF；未使用的奥运 PNG 在 `project.config.json` 中排除打包。
+
+`npm run mini:typecheck` 对配置、日期和请求竞争工具运行严格 TypeScript `checkJs`。其余原生页面仍逐步迁移，不能把该命令视为全小程序类型检查。
 
 ## 每日训练待办与场景数据
 

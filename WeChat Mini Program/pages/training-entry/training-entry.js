@@ -1,10 +1,9 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
+const { todayBeijing } = require('../../utils/date');
 
 function today() {
-  const date = new Date();
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return todayBeijing();
 }
 
 function emptyForm() {
@@ -83,6 +82,8 @@ Page({
         ? api.updateMyTrainingSession(this.data.editId, form)
         : api.createMyTrainingSession(form);
       const result = await action;
+      getApp().globalData.homeNeedsRefresh = true;
+      getApp().globalData.dataVersion = (getApp().globalData.dataVersion || 0) + 1;
       wx.showToast({ title: this.data.editId ? '记录已更新' : '记录已同步', icon: 'success' });
       this.setData({ editId: 0, form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
       await this.loadPage();
@@ -103,6 +104,8 @@ Page({
         if (!result.confirm) return;
         try {
           await api.deleteMyTrainingSession(id);
+          getApp().globalData.homeNeedsRefresh = true;
+          getApp().globalData.dataVersion = (getApp().globalData.dataVersion || 0) + 1;
           if (this.data.editId === id) this.cancelEdit();
           wx.showToast({ title: '已删除', icon: 'success' });
           await this.loadPage();

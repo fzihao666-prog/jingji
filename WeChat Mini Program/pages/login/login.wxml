@@ -6,14 +6,10 @@
 
       <view class="olympic-panel">
         <view class="olympic-panel-head">
-          <text>OLYMPIC PICTOGRAMS</text>
-          <text>50 DISCIPLINES</text>
+          <text>TRAINING DISCIPLINES</text>
+          <text>竞迹体育</text>
         </view>
-        <view class="olympic-grid">
-          <view wx:for="{{olympicIcons}}" wx:key="src" class="olympic-item">
-            <image src="{{item.src}}" mode="aspectFill" aria-label="{{item.label}}" />
-          </view>
-        </view>
+        <view class="discipline-list"><text>赛艇</text><text>皮划艇</text><text>激流</text></view>
       </view>
 
       <view class="login-hero-copy">

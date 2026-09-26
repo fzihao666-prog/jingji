@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
-const formatContext = { module: { exports: {} } };
+const formatDataContext = { module: { exports: {} } };
+vm.runInNewContext(readFileSync(new URL('../data/format-data.js', import.meta.url), 'utf8'), formatDataContext);
+const formatContext = { module: { exports: {} }, require: () => formatDataContext.module.exports };
 vm.runInNewContext(readFileSync(new URL('./format.js', import.meta.url), 'utf8'), formatContext);
 const context = { module: { exports: {} }, require: () => formatContext.module.exports };
 vm.runInNewContext(readFileSync(new URL('./daily-todos.js', import.meta.url), 'utf8'), context);

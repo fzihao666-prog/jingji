@@ -1,6 +1,6 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
+const { createInitialScope, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = require('../../utils/page-scope');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
@@ -75,7 +75,7 @@ Page({
     athleteTotal: 0
   },
 
-  onShow() { this.loadPage(); },
+  onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
@@ -85,7 +85,9 @@ Page({
       if (!isLatest()) return null;
       const scope = createInitialScope(context, { range: this.data.range, showAthlete: false });
       this.setData({ ...scope, teamId: 0, teamIndex: 0 });
-      return this.loadPageData({ ...scope, teamId: 0 }, true, isLatest);
+      const result = await this.loadPageData({ ...scope, teamId: 0 }, true, isLatest);
+      if (isLatest()) markPageCacheLoaded(this);
+      return result;
     }, '专项训练数据加载失败。');
   },
 

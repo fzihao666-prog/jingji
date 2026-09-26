@@ -1,13 +1,25 @@
 <view class="page form-page">
+  <view wx:if="{{showPrivacyAuthorization}}" class="privacy-mask" catchtouchmove="blockPrivacyTouch">
+    <view class="privacy-dialog" aria-role="dialog" aria-label="个人信息保护提示">
+      <view class="privacy-title">个人信息保护提示</view>
+      <view>选择或拍摄照片前，请阅读并同意《小程序用户隐私保护指引》。照片仅用于运动员个人档案。</view>
+      <navigator open-type="openPrivacyContract" class="privacy-link">查看小程序用户隐私保护指引</navigator>
+      <view class="privacy-actions">
+        <button bindtap="onPrivacyDisagree">暂不同意</button>
+        <button id="agree-privacy" type="primary" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="onPrivacyAgree">同意并继续</button>
+      </view>
+    </view>
+  </view>
+  <view wx:if="{{!showPrivacyAuthorization}}">
   <view class="page-head"><view class="page-title">编辑个人资料</view><view class="page-description">保存后与网页版使用同一份运动员档案</view></view>
   <view wx:if="{{error}}" class="error-box">{{error}}</view>
   <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载个人资料</view></view>
 
   <block wx:if="{{!loading}}">
-    <view class="card photo-card" bindtap="choosePhoto">
+    <button class="card photo-card" aria-label="更换个人照片" bindtap="choosePhoto">
       <view class="edit-photo"><image wx:if="{{photoUrl}}" src="{{photoUrl}}" mode="aspectFill"/><view wx:else>照片</view></view>
       <view><view class="card-head-title">更换个人照片</view><text class="form-note">支持从相册选择或拍照，保存时同步上传</text></view><text class="chevron">›</text>
-    </view>
+    </button>
 
     <view class="section-head"><view class="section-head-title">基本信息</view></view>
     <view class="card form-card">
@@ -71,4 +83,5 @@
 
     <view class="save-bar"><button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在保存' : '保存并同步'}}</button></view>
   </block>
+  </view>
 </view>

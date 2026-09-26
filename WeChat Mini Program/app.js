@@ -7,7 +7,8 @@ App({
     currentProject: '赛艇',
     projects: [],
     athletes: [],
-    selectedAthleteId: 0
+    selectedAthleteId: 0,
+    dataVersion: 0
   },
 
   onLaunch() {
@@ -19,6 +20,7 @@ App({
   setSession(token, user) {
     this.globalData.token = token;
     this.globalData.user = user;
+    this.globalData.dataVersion += 1;
     wx.setStorageSync(TOKEN_KEY, token);
     wx.setStorageSync(USER_KEY, user);
   },
@@ -33,6 +35,7 @@ App({
     this.globalData.user = null;
     this.globalData.athletes = [];
     this.globalData.selectedAthleteId = 0;
+    this.globalData.dataVersion += 1;
     wx.removeStorageSync(TOKEN_KEY);
     wx.removeStorageSync(USER_KEY);
   }

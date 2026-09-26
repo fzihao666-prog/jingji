@@ -1,6 +1,7 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { personalProfilePayload } = require('../../utils/profile-payload');
+const { todayBeijing } = require('../../utils/date');
 
 const BODY_FIELDS = [
   'heightCm', 'weightKg', 'bodyFatPct', 'skeletalMuscleKg', 'muscleMassKg',
@@ -14,9 +15,7 @@ const BODY_FIELDS = [
 function text(value) { return value === null || value === undefined ? '' : String(value); }
 
 function currentDate() {
-  const date = new Date();
-  const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return todayBeijing();
 }
 
 function profileForm(athlete) {
@@ -55,11 +54,41 @@ Page({
     statusIndex: 0,
     photoUrl: '',
     photoFile: '',
+    showPrivacyAuthorization: false,
     bodyTouched: false,
     showBodyMore: false
   },
 
-  onLoad() { this.loadPage(); },
+  onLoad() {
+    if (wx.onNeedPrivacyAuthorization) {
+      this._privacyListener = (resolve) => {
+        this._resolvePrivacyAuthorization = resolve;
+        this.setData({ showPrivacyAuthorization: true });
+        resolve({ event: 'exposureAuthorization' });
+      };
+      wx.onNeedPrivacyAuthorization(this._privacyListener);
+    }
+    this.loadPage();
+  },
+
+  onUnload() {
+    if (this._resolvePrivacyAuthorization) this._resolvePrivacyAuthorization({ event: 'disagree' });
+    if (this._privacyListener && wx.offNeedPrivacyAuthorization) wx.offNeedPrivacyAuthorization(this._privacyListener);
+  },
+
+  onPrivacyAgree() {
+    if (this._resolvePrivacyAuthorization) this._resolvePrivacyAuthorization({ event: 'agree', buttonId: 'agree-privacy' });
+    this._resolvePrivacyAuthorization = null;
+    this.setData({ showPrivacyAuthorization: false });
+  },
+
+  onPrivacyDisagree() {
+    if (this._resolvePrivacyAuthorization) this._resolvePrivacyAuthorization({ event: 'disagree' });
+    this._resolvePrivacyAuthorization = null;
+    this.setData({ showPrivacyAuthorization: false });
+  },
+
+  blockPrivacyTouch() {},
 
   async loadPage() {
     try {
@@ -110,7 +139,7 @@ Page({
   toggleBodyMore() { this.setData({ showBodyMore: !this.data.showBodyMore }); },
 
   choosePhoto() {
-    wx.chooseMedia({
+    const openMedia = () => wx.chooseMedia({
       count: 1,
       mediaType: ['image'],
       sourceType: ['album', 'camera'],
@@ -119,6 +148,9 @@ Page({
         if (file) this.setData({ photoFile: file.tempFilePath, photoUrl: file.tempFilePath });
       }
     });
+    if (wx.requirePrivacyAuthorize) {
+      wx.requirePrivacyAuthorize({ success: openMedia, fail: () => {} });
+    } else openMedia();
   },
 
   async save() {
@@ -138,6 +170,8 @@ Page({
       }
       if (this.data.photoFile) await api.uploadAthletePhoto(this.data.athleteId, this.data.photoFile);
       const app = getApp();
+      app.globalData.homeNeedsRefresh = true;
+      app.globalData.dataVersion = (app.globalData.dataVersion || 0) + 1;
       app.setProject(this.data.form.project);
       app.globalData.user = Object.assign({}, app.globalData.user, { displayName: payload.name });
       await loadContext({ refreshUser: true });

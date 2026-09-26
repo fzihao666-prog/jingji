@@ -9,7 +9,12 @@ export async function checkMiniDailyTodoFlow(assert) {
   const navigation = [];
   const app = { globalData: { selectedAthleteId: 0 } };
   const modules = {};
-  const format = { module: { exports: {} } };
+  const formatData = { module: { exports: {} } };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/data/format-data.js', import.meta.url), 'utf8'),
+    formatData
+  );
+  const format = { module: { exports: {} }, require: () => formatData.module.exports };
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/utils/format.js', import.meta.url), 'utf8'),
     format
@@ -33,7 +38,18 @@ export async function checkMiniDailyTodoFlow(assert) {
   };
   modules['../../services/api'] = api;
   modules['../../utils/context'] = {};
-  modules['../../utils/date'] = {};
+  modules['../../utils/date'] = { todayBeijing: () => '2026-09-23' };
+  modules['../../utils/page-scope'] = {
+    createInitialScope: () => ({}),
+    applyScopeChange: () => null,
+    saveProjectInOrder: async () => {},
+  };
+  const requestGuard = { module: { exports: {} } };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/request-guard.js', import.meta.url), 'utf8'),
+    requestGuard
+  );
+  modules['../../utils/request-guard'] = requestGuard.module.exports;
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/pages/index/index.js', import.meta.url), 'utf8'),
     {
@@ -111,6 +127,16 @@ export async function checkMiniDailyTodoFlow(assert) {
   };
   page.onShow();
   assert(loaded, '档案返回首页必须刷新');
+  loaded = false;
+  page._lastLoadedAt = Date.now();
+  page._loadedProject = 'ROWING';
+  page._loadedDate = '2026-09-23';
+  app.globalData.currentProject = 'ROWING';
+  page.onShow();
+  assert(!loaded, '短时间重复显示首页不应全量重拉');
+  app.globalData.homeNeedsRefresh = true;
+  page.onShow();
+  assert(loaded, '训练或档案变更后必须刷新首页');
   page.data.canViewTodos = false;
   api.dailyTodos = async () => {
     throw new Error('不应为运动员发起请求');

@@ -20,7 +20,7 @@ module.exports = {
     return request('/api/auth/change-password', { method: 'POST', data: { currentPassword, newPassword } });
   },
   athletes() { return request('/api/athletes'); },
-  teams() { return request('/api/teams', { auth: false }); },
+  teams() { return request('/api/registration/teams', { auth: false }); },
   updateMyAthleteProfile(data) {
     return request('/api/me/athlete-profile', { method: 'PUT', data });
   },

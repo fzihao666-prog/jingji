@@ -1,6 +1,6 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
+const { createInitialScope, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = require('../../utils/page-scope');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const { ageAt } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
@@ -102,7 +102,7 @@ Page({
     canEditSelf: false
   },
 
-  onShow() { this.loadPage(); },
+  onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
@@ -116,7 +116,9 @@ Page({
       });
       getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
       this.setData({ ...scope, canEditSelf: scope.user.role === 'ATL' });
-      return this.loadPageData(scope);
+      const result = await this.loadPageData(scope);
+      if (isLatest()) markPageCacheLoaded(this);
+      return result;
     }, '运动员档案加载失败。');
   },
 

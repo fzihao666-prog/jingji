@@ -2,7 +2,7 @@ const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
-const { shortDate } = require('../../utils/date');
+const { shortDate, todayBeijing } = require('../../utils/date');
 const { number, INJURY_LABELS } = require('../../utils/format');
 const { dailyTodoView } = require('../../utils/daily-todos');
 
@@ -110,7 +110,14 @@ Page({
     todosStatus: ''
   },
 
-  onShow() { this.loadPage(); },
+  onShow() {
+    const app = getApp();
+    const fresh = this._lastLoadedAt && Date.now() - this._lastLoadedAt < 30000
+      && this._loadedDate === todayBeijing()
+      && this._loadedProject === app.globalData.currentProject
+      && !app.globalData.homeNeedsRefresh && !this.data.error;
+    if (!fresh) this.loadPage();
+  },
   onPullDownRefresh() { this.loadPage(true).finally(() => wx.stopPullDownRefresh()); },
 
   loadPage(refreshUser = false) {
@@ -129,6 +136,12 @@ Page({
         this.loadPageData({ ...scope, canSelfReport }),
         this.loadTodos(scope.project)
       ]);
+      if (isLatest()) {
+        this._lastLoadedAt = Date.now();
+        this._loadedDate = todayBeijing();
+        this._loadedProject = scope.project;
+        getApp().globalData.homeNeedsRefresh = false;
+      }
       return overview;
     }, '训练总览加载失败。');
   },

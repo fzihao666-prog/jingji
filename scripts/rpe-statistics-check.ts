@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { summarizeDailyRpe } from '../server/rpe-statistics.ts';
+import { summarizeDailyRpe } from '../server/analysis/rpe-statistics.ts';
 
 const row = (athleteId: number, rpe: number | null, sessionDemo = 0) => ({
   athleteId,

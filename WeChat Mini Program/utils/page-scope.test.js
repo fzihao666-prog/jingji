@@ -7,9 +7,10 @@ class FixedDate extends Date {
 }
 const dateContext = { module: { exports: {} }, Date: FixedDate };
 vm.runInNewContext(readFileSync(new URL('./date.js', import.meta.url), 'utf8'), dateContext);
+const miniApp = { globalData: { pendingProject: 'C', currentProject: '赛艇', selectedAthleteId: 1, dataVersion: 0 } };
 const scopeContext = {
   module: { exports: {} },
-  getApp: () => ({ globalData: { pendingProject: 'C' } }),
+  getApp: () => miniApp,
   require: (path) => path === './date' ? dateContext.module.exports : {
     projectAthletes: (list, project) => (list || []).filter((item) => !item.project || item.project === project)
   }
@@ -17,11 +18,19 @@ const scopeContext = {
 vm.runInNewContext(readFileSync(new URL('./page-scope.js', import.meta.url), 'utf8'), scopeContext);
 const scopeModule = scopeContext.module.exports;
 
-const { createInitialScope, changeScope, resolveAthlete, resolveDateRange, saveProjectInOrder } = scopeModule;
+const { createInitialScope, changeScope, resolveAthlete, resolveDateRange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = scopeModule;
 const athletes = [{ id: 1, project: '赛艇' }, { id: 2, project: '皮划艇' }];
 const context = (user) => ({ user, projects: ['赛艇', '皮划艇'], project: '赛艇', athletes, selectedAthleteId: 2 });
 
 describe('page scope', () => {
+  it('短时间切回同一项目和运动员时复用数据', () => {
+    const page = { data: { project: '赛艇', selectedAthleteId: 1, error: '' } };
+    markPageCacheLoaded(page);
+    expect(isPageCacheFresh(page)).toBe(true);
+    miniApp.globalData.dataVersion = 1;
+    expect(isPageCacheFresh(page)).toBe(false);
+    miniApp.globalData.dataVersion = 0;
+  });
   it('ATL 默认且始终锁定本人', () => {
     const scope = createInitialScope(context({ role: 'ATL', athleteId: 1 }), { selectedAthleteId: 2 });
     expect(scope.selectedAthleteId).toBe(1);

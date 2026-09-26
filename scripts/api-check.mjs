@@ -106,6 +106,9 @@ try {
     body: JSON.stringify({ username: 'admin01', password: 'demo123' }),
   });
   const adminToken = adminLogin.payload.token;
+  assert((await request('/api/teams')).status === 401, '队伍统计接口必须要求登录');
+  const publicRegistrationTeams = await request('/api/registration/teams');
+  assert(publicRegistrationTeams.status === 200 && publicRegistrationTeams.payload.teams.every((team) => !('athleteCount' in team)), '注册队伍列表不得公开运动员数量');
   assert(
     adminLogin.status === 200 && adminToken && adminLogin.payload.user.role === 'DMD',
     '数据监控总监登录或角色迁移失败'
@@ -412,9 +415,41 @@ try {
     method: 'POST',
     body: JSON.stringify({ username: 'athlete01', password: 'demo123' }),
   });
+  const athleteSessionToken = demoAthleteLogin.payload.token;
+  const ownSessionsBefore = await request('/api/me/training-sessions', {}, athleteSessionToken);
+  assert(ownSessionsBefore.status === 200 && Array.isArray(ownSessionsBefore.payload.sessions), '运动员应能读取本人训练课次');
+  assert((await request('/api/me/training-sessions')).status === 401, '未登录者不能读取本人训练课次');
+  assert((await request('/api/me/training-sessions', {}, demoCoachLogin.payload.token)).status === 403, '教练不能使用运动员本人训练填报接口');
+  const selfSessionInput = {
+    date: '2026-09-23', startTime: '08:30', trainingType: '专项训练', intensityZone: 'U2',
+    content: '小程序填报回归', duration: '90', distance: '12', rpe: '5',
+    averageHeartRate: '', maxHeartRate: '', averagePowerW: '', strokeRateSpm: '',
+  };
+  const invalidSelfSession = await request('/api/me/training-sessions', {
+    method: 'POST', body: JSON.stringify({ ...selfSessionInput, duration: '-1' }),
+  }, athleteSessionToken);
+  assert(invalidSelfSession.status === 400, '训练填报须拒绝非法时长');
+  const inconsistentHeartRate = await request('/api/me/training-sessions', {
+    method: 'POST', body: JSON.stringify({ ...selfSessionInput, averageHeartRate: '200', maxHeartRate: '100' }),
+  }, athleteSessionToken);
+  assert(inconsistentHeartRate.status === 400, '训练填报须拒绝平均心率高于最高心率');
+  const createdSelfSession = await request('/api/me/training-sessions', {
+    method: 'POST', body: JSON.stringify(selfSessionInput),
+  }, athleteSessionToken);
+  const selfSessionId = createdSelfSession.payload.session?.id;
+  assert(createdSelfSession.status === 201 && selfSessionId, '运动员应能新增本人训练课次');
+  const updatedSelfSession = await request(`/api/me/training-sessions/${selfSessionId}`, {
+    method: 'PUT', body: JSON.stringify({ ...selfSessionInput, content: '已更新的填报' }),
+  }, athleteSessionToken);
+  assert(updatedSelfSession.status === 200 && updatedSelfSession.payload.session?.content === '已更新的填报', '运动员应能更新本人填报');
+  const deletedSelfSession = await request(`/api/me/training-sessions/${selfSessionId}`, { method: 'DELETE' }, athleteSessionToken);
+  assert(deletedSelfSession.status === 200, '运动员应能删除本人填报');
+  assert((await request(`/api/me/training-sessions/${selfSessionId}`, { method: 'DELETE' }, athleteSessionToken)).status === 404, '删除后不能重复操作课次');
   const ownAthlete = adminAthletesForAnalysis.payload.athletes.find(
     (item) => item.id === demoAthleteLogin.payload.user.athleteId
   );
+  const athleteTeams = await request('/api/teams', {}, athleteSessionToken);
+  assert(athleteTeams.status === 200 && athleteTeams.payload.teams.every((team) => team.project === ownAthlete.project && team.athleteCount <= 1), '运动员不能枚举其他项目或队伍的人数');
   const updateOwnProfile = await request(
     '/api/me/athlete-profile',
     {
@@ -1353,6 +1388,7 @@ try {
       {
         overviewPipeline: 'passed',
         coachDailyTodos: 'passed',
+        selfTraining: 'passed',
         rowingAnalysis: 'passed',
         strengthProfile: 'passed',
         registration: 'passed',

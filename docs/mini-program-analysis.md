@@ -2,6 +2,8 @@
 
 > 分析基准日期：2026-09-23。以 `WeChat Mini Program/` 当前源码为准；与主 README、`docs/architecture.md` 不一致时以代码为准并应回写文档。
 
+> 2026-09-27 修复回写：`/api/me/training-sessions` 已接入正式课次表并做本人权限校验；`api-check` 的页面模块映射已补齐，随后发现并修复每日待办的角色与项目授权回归。发布配置已改为 production/关闭网络调试。日期统一为北京时间；四个数据 Tab 短时重访复用数据、写入后刷新。照片选择已接微信隐私授权；登录页移除 50 张远程 GIF，未引用的奥运 PNG 排除打包。注册、角色和体能指标字典从 `shared/` 生成，`/api/teams` 已要求登录，注册改用公开的最小队伍列表。新增 `mini:typecheck` 对配置、日期和请求竞争工具做严格 TypeScript `checkJs`；页面仍是原生 JavaScript，完整迁移尚未实施。真机隐私弹窗与包体结果仍需微信开发者工具验收。
+
 ## 1. 定位与边界
 
 竞迹小程序是训练监控平台的**原生微信客户端**，与 React 网页端共用同一套 Express API、账号权限和 SQLite，**不新建第二套数据库，也不复制训练/测试/档案业务事实**。
@@ -26,7 +28,7 @@ React 网页端 ─┐
 
 | 维度 | 现状 |
 | --- | --- |
-| 运行时 | 原生微信小程序，**无 npm、无 Taro/uni-app、无 TS 编译** |
+| 运行时 | 原生微信小程序，无小程序端 npm/Taro/uni-app；核心工具运行严格 TypeScript `checkJs`，页面尚未迁移 TS |
 | 模块 | CommonJS（`require` / `module.exports`） |
 | 视图 | WXML + WXSS；`app.json` `style: v2`，`lazyCodeLoading: requiredComponents` |
 | 组件 | 仅 1 个自定义组件 `scope-filter`；页面用 `Page()`，组件用 `Component()` |
@@ -34,11 +36,11 @@ React 网页端 ─┐
 | 网络 | 自研 `utils/request.js` 封装 `wx.request` / `wx.uploadFile` |
 | 样式 | 全局 `app.wxss` 色板与卡片；页面局部 WXSS |
 | 图表 | **无图表库**，用 `view` 柱状条 + 内联 `style` 百分比高度/宽度 |
-| 字典 | 注册页 `data/register-data.js` 与 `shared/` 逻辑对齐（测试断言），运行时**不 import** `shared/` |
+| 字典 | `data/register-data.js`、`data/format-data.js` 由 `shared/` 生成并校验，运行时不 import 仓库外文件 |
 | 测试 | 根仓库 Vitest 对小程序做**静态/单元**回归（约 7 个 `*.test.js`） |
-| 图标 | TabBar PNG、登录奥运 GIF（部分走服务器 `assetUrl`）、SVG 若干 |
+| 图标 | TabBar PNG、登录静态项目文字、SVG 若干；未引用奥运 PNG 不参与打包 |
 
-规模（不含测试）：约 **10 页面 + 1 组件 + 1 服务层 + 6 工具**；源码约 **4.5k 行** JS/WXML/WXSS；资源约 **64** 个文件（含 50 张奥运项目图）。
+规模（不含测试）：约 **10 页面 + 1 组件 + 1 服务层 + 6 工具**；源码约 **4.5k 行** JS/WXML/WXSS。仓库仍保留 50 张未引用奥运 PNG，但已在 `project.config.json` 排除上传包。
 
 ## 3. 页面与导航
 
@@ -61,7 +63,7 @@ React 网页端 ─┐
 
 | 页面 | 能力要点 |
 | --- | --- |
-| **登录** | 账号密码；记忆账号；隐私勾选必选；奥运项目装饰图与 hero（`assetUrl`）；忘记密码仅提示找管理员；注册回填账号 |
+| **登录** | 账号密码；记忆账号；隐私勾选必选；三项目静态文字与 hero（`assetUrl`）；忘记密码仅提示找管理员；注册回填账号 |
 | **注册** | 运动员申请：姓名、身份证（推导性别/出生日期）、手机号、籍贯省市、项目、队伍（加载失败可重试）、账号密码；复用 `POST /api/auth/register`；成功只回填账号不回填密码 |
 | **隐私** | 静态说明页，`Page({})` 空逻辑，发布前需运营主体补全 |
 | **我的** | 角色文案、改密表单、隐私入口、确认后退出清会话 |
@@ -124,7 +126,7 @@ WeChat Mini Program/
 ├─ data/register-data.js            # 注册用项目/省份字典（CJS）
 ├─ components/scope-filter/         # 共用筛选
 ├─ pages/*/                         # 页面四件套 + 部分 test
-└─ assets/                          # TabBar、盾牌 SVG、奥运 GIF 等
+└─ assets/                          # TabBar、SVG 等；奥运 PNG 排除打包
 ```
 
 ### 4.1 依赖方向（应保持）
@@ -137,7 +139,7 @@ pages 不直接 wx.request；utils 不 import pages
 
 ### 4.2 数据流惯例
 
-1. `onShow` / `onLoad` → `loadContext`（登录校验、项目、运动员）。
+1. 首次 `onShow` / `onLoad` → `loadContext`（登录校验、项目、运动员）；短时重访满足缓存条件时复用已有视图。
 2. 并行业务请求 → 页面内 `build*View` 纯函数映射为 WXML 友好结构。
 3. 筛选变更：本地 `setData` + 可选 `saveCurrentProject` + 重拉。
 4. 并发防护：首页用 `_pageRequest` / `_todoRequest` 序号丢弃过期响应。
@@ -157,7 +159,8 @@ pages 不直接 wx.request；utils 不 import pages
 | POST | `/api/auth/register` | 注册 |
 | POST | `/api/auth/change-password` | 我的 |
 | GET | `/api/me` | 上下文刷新 |
-| GET | `/api/teams` | 注册队伍（`auth:false`） |
+| GET | `/api/registration/teams` | 注册队伍名称（`auth:false`，不含人数） |
+| GET | `/api/teams` | 登录后队伍统计 |
 | GET/PUT | `/api/preferences/current-project` | 上下文/切换项目 |
 | GET | `/api/athletes` | 运动员列表 |
 | GET | `/api/overview`、`/api/overview/teams` | 总览/专项队伍 |
@@ -182,7 +185,7 @@ pages 不直接 wx.request；utils 不 import pages
 | `project.config.json` | 测试 AppID、`urlCheck:false` 仅工具本地；真机靠公众平台合法域名 |
 | AppID | 仓库内为具体 AppID，发布前需与主体一致并完成备案 |
 
-**当前仓库风险（发布相关）**：分析时 `config.js` 仍为 `API_ENVIRONMENT = 'development'` 且 `NETWORK_DEBUG = true`，与 README「发布前保持 production / 定位完改回 false」不一致，上传前必须改回。
+**当前配置**：`config.js` 为 `API_ENVIRONMENT = 'production'`、`NETWORK_DEBUG = false`；本地联调时需临时切换，上传前检查配置与微信合法域名。
 
 ## 7. 测试与质量
 
@@ -211,14 +214,14 @@ pages 不直接 wx.request；utils 不 import pages
 
 **债务与风险**
 
-1. **`config.js` 开发态残留**（见 §6），发布阻断项。
+1. **发布验收**：生产域名、AppID、隐私保护指引及微信真机行为仍须按实际主体检查。
 2. **筛选/加载样板重复**：index/special/strength/profile 几乎同一套 `onProjectChange`/`onAthleteChange`/`onRangeChange`，易漂移（首页有序号防护，其他页较弱）。
-3. **字典双份**：`register-data.js` / `format.js` 与 `shared/*` 靠测试对齐，改 shared 必须同步。
+3. **字典产物**：注册、角色和体能指标字典从 `shared/*` 生成；共享字典变更后运行 `npm run mini:dictionary-sync` 和 `npm run mini:dictionary-check`。伤病状态文案仍在小程序本地维护。
 4. **无 TS/无组件化页面**：大页 JS 200+ 行，重构成本随功能上升。
 5. **图表表达力有限**：柱状条无法替代网页端 ECharts，复杂分析仍须网页。
 6. **隐私页与未成年人流程**仍为框架，正式上线要产品/法务补全。
 7. **开发者工具 CSS 误报**（`style` + `{{}}`）易被当成真实样式 bug。
-8. 资源体积：奥运 GIF 等偏大，注意小程序包体与分包策略（当前未分包）。
+8. 资源体积：本地未引用奥运 PNG 已排除打包，登录远程 GIF 已移除；实际上传包体需在微信开发者工具核对，当前未分包。
 
 ## 9. 与网页端能力对照（摘要）
 
@@ -236,7 +239,7 @@ pages 不直接 wx.request；utils 不 import pages
 1. **发布清单**：`API_ENVIRONMENT=production`、`NETWORK_DEBUG=false`、合法域名三件套、AppID/备案、演示密码与 `JWT_SECRET`。
 2. **抽取页面加载钩子**：统一 context + range/project/athlete 切换与过期请求丢弃，减少复制粘贴。
 3. **真机回归清单**：登录、总览、待办点选、训练填报、档案编辑、照片上传下载、TLS 1.2/1.3。
-4. **包体**：评估奥运 GIF 是否改为按需/压缩/分包；TabBar 图标保持小图。
+4. **包体**：在微信开发者工具核对 `packOptions.ignore` 后的实际上传体积；TabBar 图标保持小图。
 5. **中期**：若功能继续加，再评估 TS 或构建链；在此之前维持原生 + Vitest 静态回归即可。
 6. **文档同步**：架构文档已有点状小程序章节；大改接口或权限时继续回写 `docs/architecture.md` 与小程序 README。
 
