@@ -46,7 +46,7 @@ React 网页端 ─┐
 
 运动员范围、角色、区域、项目和队伍权限仍由服务端判断，小程序页面隐藏不作为授权依据。本人训练接口不接受客户端传入运动员编号，服务端直接使用登录账号绑定的运动员；修改和删除仅限该账号本人创建的手工记录。
 
-照片选择前使用微信隐私授权流程，并展示平台配置的隐私保护指引。日期筛选、训练填报和身体成分测量日统一使用北京时间。注册项目、省市、角色和体能指标字典从 `shared/` 生成：修改共享字典后运行 `npm run mini:dictionary-sync`，使用 `npm run mini:dictionary-check` 校验。登录页不再请求 50 张远程 GIF；未使用的奥运 PNG 在 `project.config.json` 中排除打包。
+照片选择前使用微信隐私授权流程，并展示平台配置的隐私保护指引。日期筛选、训练填报和身体成分测量日统一使用北京时间。注册项目、省市、角色和体能指标字典从 `shared/` 生成：修改共享字典后运行 `npm run mini:dictionary-sync`，使用 `npm run mini:dictionary-check` 校验。登录页保留原有 50 项奥林匹克运动 GIF 图标；未使用的奥运 PNG 在 `project.config.json` 中排除打包。
 
 `npm run mini:typecheck` 对配置、日期和请求竞争工具运行严格 TypeScript `checkJs`。其余原生页面仍逐步迁移，不能把该命令视为全小程序类型检查。
 
