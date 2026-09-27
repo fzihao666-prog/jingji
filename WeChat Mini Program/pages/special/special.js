@@ -100,7 +100,23 @@ Page({
     let specialTestsData;
     try {
       const st = await api.specialTests(scope.from, scope.to, scope.project);
-      specialTestsData = st.events || [];
+      // WXML 不能调用数组方法，秒数与差值在 JS 侧预先格式化为字符串。
+      specialTestsData = (st.events || []).map((ev) => ({
+        ...ev,
+        results: (ev.results || []).map((r) => {
+          const seconds = (ms) => (Number(ms) / 1000).toFixed(2);
+          return {
+            ...r,
+            attemptsText: Array.isArray(r.attemptsMs) && r.attemptsMs.length
+              ? r.attemptsMs.map(seconds).join(' / ')
+              : '',
+            bestText: r.bestMs != null ? `${seconds(r.bestMs)}s` : '',
+            deltaText: r.deltaPreviousMs != null
+              ? `${r.deltaPreviousMs > 0 ? '+' : ''}${seconds(r.deltaPreviousMs)}s`
+              : ''
+          };
+        })
+      }));
     } catch {
       specialTestsData = [];
     }

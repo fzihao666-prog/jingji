@@ -152,13 +152,13 @@
     <view class="section-head"><view class="section-head-title">生理生化热力图</view><view class="section-head-note">团队指标风险状态</view></view>
     <view wx:if="{{physiologyHeatmap}}" class="card">
       <view class="heat-grid">
-        <view class="heat-header"><view class="heat-cell heat-metric">指标</view><view wx:for="{{physiologyHeatmap.metrics[0]?.days || []}}" wx:key="date" class="heat-cell heat-date">{{item.date.slice(5).replace('-', '/')}}</view></view>
+        <view class="heat-header"><view class="heat-cell heat-metric">指标</view><view wx:for="{{physiologyHeatmap.metrics[0].heatDates || []}}" wx:key="*this" class="heat-cell heat-date">{{item}}</view></view>
         <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="heat-row">
           <view class="heat-cell heat-metric">{{item.label}}</view>
-          <view wx:for="{{item.days}}" wx:key="date" class="heat-cell {{item.status.toLowerCase()}} {{item.isEstimated ? 'estimated' : ''}}" data-median="{{item.median}}" data-sample="{{item.sampleCount}}" data-change="{{item.abnormalRateChange}}"></view>
+          <view wx:for="{{item.days}}" wx:key="date" class="heat-cell {{item.statusClass}} {{item.isEstimated ? 'estimated' : ''}}" data-median="{{item.median}}" data-sample="{{item.sampleCount}}" data-change="{{item.abnormalRateChange}}"></view>
         </view>
       </view>
-      <view wx:if="{{physiologyHeatmap.metrics.some(m => m.days.some(d => d.isEstimated))}}" class="heat-legend">V1 模拟状态（等待实测导入）</view>
+      <view wx:if="{{heatHasEstimated}}" class="heat-legend">V1 模拟状态（等待实测导入）</view>
       <view wx:else class="heat-legend">颜色：绿=正常 黄=波动 橙=关注 红=异常 灰=未监测</view>
     </view>
     <view wx:else class="card state"><view class="state-icon">—</view><view class="state-title">暂无生理生化数据</view></view>

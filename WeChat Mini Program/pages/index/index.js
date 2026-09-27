@@ -78,19 +78,25 @@ function buildView(overview) {
 
   const physiologyHeatmap = overview.physiologyHeatmap
     ? {
-        metrics: (overview.physiologyHeatmap.metrics || []).map(m => ({
-          code: m.code,
-          label: m.label,
-          unit: m.unit,
-          days: (m.days || []).map(d => ({
+        metrics: (overview.physiologyHeatmap.metrics || []).map(m => {
+          const days = (m.days || []).map(d => ({
             date: d.date,
+            dateLabel: String(d.date || '').slice(5).replace('-', '/'),
             status: d.status,
+            statusClass: String(d.status || '').toLowerCase(),
             median: d.median,
             sampleCount: d.sampleCount,
             abnormalRateChange: d.abnormalRateChange,
             isEstimated: d.isEstimated
-          }))
-        }))
+          }));
+          return {
+            code: m.code,
+            label: m.label,
+            unit: m.unit,
+            days,
+            heatDates: days.map((d) => d.dateLabel)
+          };
+        })
       }
     : null;
 
@@ -100,7 +106,7 @@ function buildView(overview) {
     summary: `疲劳偏高 ${highFatigue} 人 · 伤病状态 ${activeInjuries.length} 人`
   };
 
-  return { metrics, trend, intensity, activeInjuries, attention, meta: overview.meta || {}, physiologyHeatmap };
+  return { metrics, trend, intensity, activeInjuries, attention, meta: overview.meta || {}, physiologyHeatmap, heatHasEstimated: Boolean(physiologyHeatmap && physiologyHeatmap.metrics.some((m) => m.days.some((d) => d.isEstimated))) };
 }
 
 Page({

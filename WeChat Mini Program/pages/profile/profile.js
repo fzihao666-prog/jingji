@@ -101,7 +101,11 @@ Page({
     benchmarkSummary: null,
     trainingSummary: [],
     canEditSelf: false,
-    canReportRole: false
+    canReportRole: false,
+    wellnessTrends: [],
+    bodyCompositionHistory: [],
+    profileComparison: null,
+    radarModels: null
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -189,7 +193,11 @@ Page({
     let radarModels;
     try {
       const rm = await api.radarModels(athleteId, scope.from, scope.to);
-      radarModels = rm;
+      // WXML 不支持可选链，拍平后只保留视图需要的维度数组。
+      const pick = (group) => (group && Array.isArray(group.dimensions) ? group.dimensions : []);
+      radarModels = rm
+        ? { specialDimensions: pick(rm.special), physicalDimensions: pick(rm.physical) }
+        : null;
     } catch {
       radarModels = null;
     }
