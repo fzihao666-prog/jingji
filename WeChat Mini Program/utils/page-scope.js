@@ -1,5 +1,6 @@
 const { periodFor, todayBeijing } = require('./date');
-const { projectAthletes } = require('./context');
+const { projectAthletes, loadContext } = require('./context');
+const { createRequestGuard, loadWithGuard } = require('./request-guard');
 
 const RANGES = ['day', 'week', 'month'];
 
@@ -100,4 +101,25 @@ function markPageCacheLoaded(page) {
   page._cacheVersion = global.dataVersion || 0;
 }
 
-module.exports = { createInitialScope, resolveProject, resolveAthlete, resolveDateRange, changeScope, scopeField, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded };
+// 统一页面加载骨架：请求护栏 → loadContext → 初始作用域 → setData → loadPageData → 标记缓存。
+// options.scope 为 createInitialScope 的入参；options.prepare 负责作用域之外的 setData；
+// options.load 覆盖默认的 page.loadPageData(scope)，用于并行加载页面自有数据块。
+function loadPage(page, options) {
+  const settings = options || {};
+  page._guard = page._guard || createRequestGuard();
+  return loadWithGuard(page, page._guard, async (isLatest) => {
+    const context = await loadContext({ refreshUser: Boolean(settings.refreshUser) });
+    if (!isLatest()) return null;
+    const scope = createInitialScope(context, settings.scope || {});
+    if (settings.prepare) settings.prepare(page, scope);
+    else page.setData(scope);
+    if (!isLatest()) return null;
+    const result = await (settings.load
+      ? settings.load(page, scope, isLatest)
+      : page.loadPageData(scope));
+    if (isLatest()) markPageCacheLoaded(page);
+    return result;
+  }, settings.error);
+}
+
+module.exports = { createInitialScope, resolveProject, resolveAthlete, resolveDateRange, changeScope, scopeField, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded, loadPage };

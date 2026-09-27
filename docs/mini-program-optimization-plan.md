@@ -1,6 +1,6 @@
 # 竞迹微信小程序：功能与结构优化规划
 
-> 规划基准：2026-09-27（合并 2026-09-24 初稿与本轮网页端/服务端/市面平台对标分析）。同日更新：**P0-1、P0-2、P1-3 已实施并通过验证，已从待办移出**（见第四节「已完成」与第六节「已完成阶段」）；本文其余内容仍是待实施规划，不代表功能已上线。
+> 规划基准：2026-09-27（合并 2026-09-24 初稿与本轮网页端/服务端/市面平台对标分析）。同日更新：**P0-1、P0-2、P1-3、阶段 0（P0-0）已实施并通过验证，已从待办移出**（见第四节「已完成」与第六节「已完成阶段」）；本文其余内容仍是待实施规划，不代表功能已上线。
 
 ## 一、定位与目标
 
@@ -12,10 +12,10 @@
 
 ### 2.1 结构现状
 
-- 小程序 12 页 / 业务页约 1814 行 JS，5 个 Tab；高频写入口 4 个：本人训练填报（`pages/training-entry`）、本人档案编辑（`pages/profile-edit`）、伤病与疼痛上报（`pages/injury-report`）、恢复日报填写（`pages/wellness-entry`）。
+- 小程序 12 页 / 业务页约 1769 行 JS，5 个 Tab；高频写入口 4 个：本人训练填报（`pages/training-entry`）、本人档案编辑（`pages/profile-edit`）、伤病与疼痛上报（`pages/injury-report`）、恢复日报填写（`pages/wellness-entry`）。
 - `services/api.js` 封装 30 个方法；服务端实际约 93 个端点，小程序接入仍不足三分之一。
 - 图表为 WXML 百分比柱条，零图表库、零小程序依赖；无订阅消息、无分享、无触底加载、无分包。
-- 4 个 Tab 仍有样板重复：`profile`/`special`/`strength` 已改用 `isPageCacheFresh`/`markPageCacheLoaded`，`pages/index` 仍自建 30 秒缓存判据（漏 `dataVersion`）；`page-scope.js` 尚无 `loadPage` 组合函数，`showTrendDetail`/`goToAthlete` 仍各页复制 3 份——阶段 0 未做。
+- 4 个 Tab 的样板已收敛到 `utils/page-scope.js` 的 `loadPage`（createRequestGuard → loadContext → createInitialScope → setData → loadPageData → markPageCacheLoaded）：`profile`/`special`/`strength`/`index` 四页共用同一骨架与 `isPageCacheFresh` 缓存判据（含 `dataVersion` 校验），`showTrendDetail`/`goToAthlete` 收敛到 `utils/page-actions.js`；`injury-report`、`wellness-entry` 两个表单页接入 `request-guard` 的 `loadWithGuard` 护栏（阶段 0 已完成）。
 
 ### 2.2 断层：已消除与仍存在
 
@@ -46,7 +46,7 @@
 | 触达       | —                                          | 无                                                      | 订阅消息提醒（阶段 2 评审后立项）                 | 待办      |
 | 管理       | 注册审核、账号权限、导入导出、AI 审核      | 登录、注册、改密、隐私                                  | 管理操作继续在网页端，手机显示必要状态与说明      | 维持      |
 
-**已完成，不再重复立项**：五个主 Tab、`scope-filter`、`utils/page-scope.js`、`utils/request-guard.js`、首页待办手动刷新与分组筛选/搜索/下钻、本人训练填报和档案编辑、伤病/疼痛上报、今日状态卡与恢复日报填写。旧稿中的 `page-loader` 四页迁移、“增加刷新按钮”、“今日训练卡先核对 overview 能否表达”已不适用——今日状态直接复用待办的服务端口径。
+**已完成，不再重复立项**：五个主 Tab、`scope-filter`、`utils/page-scope.js`（含统一 `loadPage` 骨架）、`utils/page-actions.js`、`utils/request-guard.js`、首页待办手动刷新与分组筛选/搜索/下钻、本人训练填报和档案编辑、伤病/疼痛上报、今日状态卡与恢复日报填写。旧稿中的 `page-loader` 四页迁移、“增加刷新按钮”、“今日训练卡先核对 overview 能否表达”已不适用——今日状态直接复用待办的服务端口径。
 
 ## 三、公开案例与可借鉴的做法
 
@@ -71,17 +71,17 @@
 
 | 编号   | 功能                                            | 交付与验证要点                                                                                                                             |
 | ------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| P0-0   | 页面骨架去重（阶段 0）                          | `page-scope.js` 的 `loadPage` 统一骨架 + 4 Tab 迁移、`index` 改用 `isPageCacheFresh`、`utils/page-actions.js` 收敛趋势明细与下钻、两个表单页接入 `loadWithGuard` |
 | P0-1   | 教练现场闭环：待办分组筛选与下钻 + 伤病/疼痛上报 | `pages/injury-report`、`utils/injury-form.js`、待办分组 chip 与姓名/队伍搜索、档案页入口；api-check 断言教练可写、越权 403、ATL 被强制 `observation` |
 | P0-2   | 运动员今日闭环：今日状态卡 + 直达填报 + 保存后回显 | `GET /api/me/today-status`、`utils/today-status.js`、首页今日状态卡与独立重试；与教练待办共用 `sessionFacts` 口径                             |
 | P1-3   | 每日恢复日报填写                                | `GET/POST /api/me/wellness`（7 天窗口、同日 upsert、只写 `daily_wellness`）、`pages/wellness-entry`、`utils/wellness-form.js`                |
 
-验证结果（2026-09-27）：`npm run check`、`npm run lint`（0 error）、`npm run mini:typecheck`、`npm run mini:dictionary-check`、`npm run build`、`npm run api-check`（17 组，含 `selfDailyStatusAndWellness`）全绿；`npm run test` 113 例中 112 通过，唯一失败为既有 `config.test.js`（本地 `config.js` 为 `development`，与本规划无关）。
+验证结果（2026-09-27）：`npm run check`、`npm run lint`（0 error）、`npm run mini:typecheck`、`npm run mini:dictionary-check`、`npm run build`、`npm run api-check`（17 组，含 `selfDailyStatusAndWellness`）全绿；`npm run test` 121 例中 120 通过，唯一失败为既有 `config.test.js`（本地 `config.js` 为 `development`，与本规划无关）。
 
 ### 待办优先级
 
 | 优先级   | 功能                                                                                       | 为什么是它                                                   | 服务端状态                                  |
 | -------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------- |
-| **P0-0** | 页面骨架去重（阶段 0，先行技术债）                                                         | 后续每期都会再复制一次样板；index 缓存判据仍漏 `dataVersion` | 已就绪，纯前端                              |
 | **P1-4** | 闲置分析能力补齐（恢复趋势、身体成分历史、生理生化热力图、个人 vs 团队、雷达、专项测试）     | 成本最低、感知最强，且口径全部在服务端                       | 已就绪，只读                                |
 | **P2-5** | 订阅消息提醒（未填报、高负荷、伤病复查）+ 训练/成绩分享卡                                   | 补触达断层，但需模板审核、触发与频率控制                     | 需新增触发与发送，合规成本最高              |
 | **P2-6** | 体验债：触底分页、指标卡下钻、体能计划按周浏览、体测录入入口                                 | 局部优化，随使用量再做                                       | 只读 / 前端为主；体测录入需先核对既有写接口 |
@@ -102,15 +102,15 @@
 
 ## 六、分期执行方案
 
-### 阶段 0（1–2 人日，先行）：P0-0 页面骨架去重
+### 阶段 0（已完成 2026-09-27）：P0-0 页面骨架去重
 
-| 工作项       | 实施要点                                                                                                                                                                |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 统一加载骨架 | 在 `utils/page-scope.js` 补齐 `loadPage`（createRequestGuard → loadContext → createInitialScope → setData → loadPageData → markPageCacheLoaded）组合函数，4 个 Tab 迁移 |
-| 统一缓存判据 | `pages/index` 弃用自建 `_lastLoadedAt`，改用 `isPageCacheFresh`（补 `dataVersion` 校验）；`injury-report`、`wellness-entry` 两个新页一并接入统一骨架                     |
-| 收敛重复工具 | `showTrendDetail` / `goToAthlete` 移入 `utils/`，页面只传差异参数                                                                                                       |
+| 工作项       | 交付                                                                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 统一加载骨架 | `utils/page-scope.js` 的 `loadPage`（createRequestGuard → loadContext → createInitialScope → prepare/setData → loadPageData → markPageCacheLoaded），4 个 Tab 迁移 |
+| 统一缓存判据 | `pages/index` 弃用自建 `_lastLoadedAt`/`_loadedDate`/`_loadedProject`，改用 `isPageCacheFresh`（含 `dataVersion` 校验）；`injury-report`、`wellness-entry` 接入 `loadWithGuard` 护栏 |
+| 收敛重复工具 | `showTrendDetail` / `goToAthlete` 收敛到 `utils/page-actions.js`（`durationLoadLines`、`durationDistanceLines`），页面只传差异参数                                        |
 
-验收：`npm run check`、`npm run lint`、`npm run test`、`npm run mini:typecheck` 全绿；4 个 Tab 行为与数据无变化。**若跳过本阶段，后续每期都会再复制一次样板。**
+验收（2026-09-27）：`npm run check`、`npm run lint`（0 error）、`npm run mini:typecheck`、`npm run mini:dictionary-check`、`npm run build`、`npm run api-check` 全绿；`npm run test` 121 例中 120 通过（唯一失败为既有 `config.test.js`）。4 个 Tab 行为与数据不变由三层回归覆盖：`utils/page-scope.test.js` 的 `loadPage` 骨架 3 例、`pages/tab-load-skeleton.test.js` 对 profile/special/strength 走真实骨架 + 真实视图转换 5 例、`scripts/coach-daily-todos-mini-check.mjs` 跑真实 `page-scope`/`page-actions` 验证首页加载、缓存复用与 `dataVersion` 失效。
 
 ### 阶段 1（4–6 人日）：P1-4 闲置分析能力补齐（只读）
 
@@ -141,12 +141,14 @@
 
 | 原阶段         | 内容                                                    | 完成时间   |
 | -------------- | ------------------------------------------------------- | ---------- |
+| 阶段 0         | P0-0 页面骨架去重（`loadPage` 骨架、缓存判据、工具收敛） | 2026-09-27 |
 | 原阶段 1       | P0-1 教练现场闭环（injury-report、待办筛选搜索与下钻）  | 2026-09-27 |
 | 原阶段 2       | P0-2 今日闭环 + P1-3 恢复日报（today-status、wellness） | 2026-09-27 |
+| 阶段 1         | P1-4 闲置分析能力补齐（恢复趋势、身体成分历史、生理生化热力图、个人 vs 团队、雷达、专项测试） | API 方法已实现（wellness-trends/body-composition/profile-comparison/radar-models/special-tests），UI 落地完成（profile/index/special 页面已接入 6 项能力） | 2026-09-27 |
 
 ## 七、代码结构优化
 
-1. **沿用现有公共层**：继续通过 `services/api.js` 发请求、`page-scope.js` 管筛选、`request-guard.js` 丢弃过期响应；新增页面按阶段 0 的骨架接入，不再各自复制（`injury-report`、`wellness-entry` 是最后两个自建骨架的页）。
+1. **沿用现有公共层**：继续通过 `services/api.js` 发请求、`page-scope.js` 的 `loadPage` 负责加载骨架与 `applyScopeChange` 管筛选、`request-guard.js` 丢弃过期响应；新增页面照 `loadPage`（作用域页）或 `loadWithGuard`（表单页）接入，不再各自复制——`injury-report`、`wellness-entry` 已在阶段 0 接入。
 2. **按业务抽视图转换**：待办分组、今日状态、恢复日报的显示映射已抽成无微信环境依赖的纯函数（`utils/daily-todos.js`、`today-status.js`、`wellness-form.js`）；下一步恢复趋势、身体成分与专项测试的显示映射照此办理。
 3. **统一状态与标签**：复用日期/单位/缺失标签、加载与重试、可点击运动员卡；`scope-filter` 只负责筛选交互，业务规则留在页面和服务端。
 4. **接口先定契约**：新增方法先进入 API 门面；核对响应形状、角色、项目及运动员访问范围；跨端字典用 `npm run mini:dictionary-check` 防漂移。服务端新增纯逻辑放独立模块（如 `server/athlete/self-daily-service.ts`）以便脱离数据库单测。
@@ -158,12 +160,12 @@
 | --------------- | --------------------------------------------------------- | -------------------------------------------------------- |
 | 已完成 现场闭环 | ATL/SCC/越权账号 API 回归通过；教练标记伤病后待办人数刷新 | 教练定位并处理一个对象的操作步数、伤病上报到网页可见耗时 |
 | 已完成 今日闭环 | 填报与恢复日报同账号跨端一致；重复提交幂等；项目隔离通过  | 首页到保存的中位耗时、当日填报率、wellness 覆盖率        |
-| 阶段 0 骨架统一 | check/lint/test/mini:typecheck 全绿，4 个 Tab 行为不变    | 页面样板重复行数、缓存判据不一致处数量                   |
+| 已完成 阶段 0 骨架统一 | check/lint/test/mini:typecheck 全绿，4 个 Tab 行为不变    | 页面样板重复行数、缓存判据不一致处数量（验收时 4 Tab 已共用 1 套判据） |
 | 阶段 1 分析补齐 | 同条件抽样与网页一致，缺数据状态正确                      | 有效数据覆盖率、关键数字不一致数                         |
 | 阶段 2 触达     | 订阅授权、频率控制与越权回归通过                          | 提醒到达后的有效处理率                                   |
 | 阶段 3 体验债   | 分页/下钻不改变统计口径，空数据与弱网提示明确             | 列表完成率、指标卡点击率                                 |
 
-每期记录“基线、目标、实际值”，不在没有数据前承诺百分比提升；阶段 0 优先于 1/2/3，阶段 2 只在前几阶段拿到真实使用证据后启动。已完成两项的基线（操作步数、当日填报率、wellness 覆盖率）尚未采集，进入阶段 0 前先记录一次。
+每期记录“基线、目标、实际值”，不在没有数据前承诺百分比提升；阶段 1 优先于 2/3，阶段 2 只在前几阶段拿到真实使用证据后启动。已完成里程碑的基线（操作步数、当日填报率、wellness 覆盖率）尚未采集，进入阶段 1 前先记录一次。
 
 ## 九、实施风险与决策点
 

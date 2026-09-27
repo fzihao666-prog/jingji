@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
+const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const {
   STATUS_OPTIONS,
   SIDE_OPTIONS,
@@ -33,11 +34,12 @@ Page({
     this.loadPage();
   },
 
-  async loadPage() {
-    this.setData({ loading: true, error: '' });
-    try {
+  loadPage() {
+    this._guard = this._guard || createRequestGuard();
+    return loadWithGuard(this, this._guard, async () => {
       const context = await loadContext();
       const isSelfFeedback = context.user.role === 'ATL';
+      // 角色文案要先落地：权限失败时页面仍需按身份显示对应提示。
       this.setData({ isSelfFeedback });
       if (!isSelfFeedback && !MANAGER_ROLES.includes(context.user.role)) {
         throw new Error('当前角色不能在小程序提交伤病记录。');
@@ -49,8 +51,7 @@ Page({
       if (isSelfFeedback && Number(context.user.athleteId) !== this._targetAthleteId) {
         throw new Error('运动员只能提交本人的疼痛反馈。');
       }
-      this.setData({
-        loading: false,
+      return {
         athleteId: this._targetAthleteId,
         athleteName: athlete.name || '',
         athleteMeta: `${athlete.project || '项目未录入'} · ${athlete.team || '未分队'}`,
@@ -58,10 +59,8 @@ Page({
         notice: isSelfFeedback
           ? '运动员提交的是疼痛反馈，提交后状态记为“观察”，由教练确认正式伤病状态。'
           : '记录将写入该运动员档案，并按最新状态进入教练每日待办关注名单。',
-      });
-    } catch (error) {
-      this.setData({ loading: false, error: error.message || '伤病上报页面加载失败。' });
-    }
+      };
+    }, '伤病上报页面加载失败。');
   },
 
   onFieldInput(event) {

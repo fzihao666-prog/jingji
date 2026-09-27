@@ -84,5 +84,24 @@ module.exports = {
   },
   championBenchmark(athleteId) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/champion-model`);
+  },
+  wellnessTrends(athleteId, from, to, project) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/wellness-trends?${query({ from, to, project })}`);
+  },
+  getBodyCompositionHistory(athleteId) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/body-composition`);
+  },
+  profileComparison(athleteId, from, to, project) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/profile-comparison?${query({ from, to, project })}`);
+  },
+  radarModels(athleteId, from, to) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/radar-models?${query({ from, to })}`);
+  },
+  specialTests(from, to, project, athleteId) {
+    const params = { project };
+    if (from) params.from = from;
+    if (to) params.to = to;
+    if (athleteId != null) params.athleteId = athleteId;
+    return request(`/api/special-tests?${query(params)}`);
   }
 };

@@ -6,6 +6,8 @@
 
 > 2026-09-27 P0-1 教练现场闭环回写：新增 `pages/injury-report` 伤病与疼痛上报页（档案页入口），管理角色写入正式伤病记录、ATL 只能提交本人疼痛反馈并由服务端降级为 `feedback/observation`；首页待办增加“全部/未填报/负荷与伤病/时间待补”分组筛选与姓名、队伍搜索，纯视图计算由 `utils/daily-todos.js` 的 `filterDailyTodos` 承担。新增 `utils/injury-form.test.js`、`pages/injury-report/injury-report.test.js`，`api-check` 增加疼痛反馈降级与越权 403 断言。
 
+> 2026-09-27 阶段 0（P0-0 页面骨架去重）回写：`utils/page-scope.js` 新增 `loadPage` 统一加载骨架（createRequestGuard → loadContext → createInitialScope → prepare/setData → loadPageData → markPageCacheLoaded），`index`/`special`/`strength`/`profile` 四个 Tab 迁移并统一走 `isPageCacheFresh`（含 `dataVersion` 校验），首页自建的 `_lastLoadedAt`/`_loadedDate`/`_loadedProject` 已删除；`showTrendDetail`/`goToAthlete` 收敛到新的 `utils/page-actions.js`；`pages/injury-report`、`pages/wellness-entry` 改用 `request-guard` 的 `loadWithGuard` 护栏。新增 `utils/page-scope.test.js` 的 `loadPage` 用例与 `pages/tab-load-skeleton.test.js`（真实跑三个 Tab 的骨架与视图转换），`scripts/coach-daily-todos-mini-check.mjs` 改为加载真实 `page-scope`/`page-actions` 并校验缓存复用与 `dataVersion` 失效。
+
 ## 1. 定位与边界
 
 竞迹小程序是训练监控平台的**原生微信客户端**，与 React 网页端共用同一套 Express API、账号权限和 SQLite，**不新建第二套数据库，也不复制训练/测试/档案业务事实**。
@@ -39,10 +41,10 @@ React 网页端 ─┐
 | 样式 | 全局 `app.wxss` 色板与卡片；页面局部 WXSS |
 | 图表 | **无图表库**，用 `view` 柱状条 + 内联 `style` 百分比高度/宽度 |
 | 字典 | `data/register-data.js`、`data/format-data.js` 由 `shared/` 生成并校验，运行时不 import 仓库外文件 |
-| 测试 | 根仓库 Vitest 对小程序做**静态/单元**回归（约 7 个 `*.test.js`） |
+| 测试 | 根仓库 Vitest 对小程序做**静态/单元**回归（17 个 `*.test.js`） |
 | 图标 | TabBar PNG、登录奥林匹克运动 GIF、SVG 若干；未引用奥运 PNG 不参与打包 |
 
-规模（不含测试）：约 **10 页面 + 1 组件 + 1 服务层 + 6 工具**；源码约 **4.5k 行** JS/WXML/WXSS。仓库仍保留 50 张未引用奥运 PNG，但已在 `project.config.json` 排除上传包。
+规模（不含测试）：约 **12 页面 + 1 组件 + 1 服务层 + 13 工具**；JS/WXML/WXSS 源码约 **5.7k 行**。仓库仍保留 50 张未引用奥运 PNG，但已在 `project.config.json` 排除上传包。
 
 ## 3. 页面与导航
 
@@ -135,7 +137,10 @@ WeChat Mini Program/
 ├─ services/api.js                  # 唯一 API 门面（页面不直接拼 URL）
 ├─ utils/
 │  ├─ request.js                    # 请求/上传、鉴权头、401 跳转、网络诊断
+│  ├─ request-guard.js              # 请求护栏：createRequestGuard / loadWithGuard 丢弃过期响应
 │  ├─ context.js                    # 用户+项目+运动员列表装配
+│  ├─ page-scope.js                 # 作用域初始化与切换、统一 loadPage 加载骨架与缓存判据
+│  ├─ page-actions.js               # 趋势明细弹窗与运动员下钻（各 Tab 共用）
 │  ├─ date.js / format.js           # 区间、脱敏、指标字典
 │  ├─ daily-todos.js                # 待办响应显式校验、文案与分组筛选/搜索
 │  ├─ today-status.js               # 今日状态响应校验与首页文案
@@ -161,11 +166,11 @@ pages 不直接 wx.request；utils 不 import pages
 
 ### 4.2 数据流惯例
 
-1. 首次 `onShow` / `onLoad` → `loadContext`（登录校验、项目、运动员）；短时重访满足缓存条件时复用已有视图。
+1. 首次 `onShow` / `onLoad` → `page-scope.js` 的 `loadPage`：`loadContext`（登录校验、项目、运动员）→ `createInitialScope` → `prepare` → `loadPageData` → `markPageCacheLoaded`；短时重访且项目、北京时间日期、`dataVersion`、所选运动员都没变时由 `isPageCacheFresh` 复用已有视图。表单页（`injury-report`、`wellness-entry`）直接用 `loadWithGuard` 走同一套护栏。
 2. 并行业务请求 → 页面内 `build*View` 纯函数映射为 WXML 友好结构。
 3. 筛选变更：本地 `setData` + 可选 `saveCurrentProject` + 重拉。
-4. 并发防护：首页用 `_pageRequest` / `_todoRequest` 序号丢弃过期响应。
-5. 跳转档案：写 `globalData.selectedAthleteId` 后 `switchTab` 档案页。
+4. 并发防护：`utils/request-guard.js` 的 `createRequestGuard()` 序号丢弃过期响应；首页待办与今日状态各自持有独立护栏。
+5. 跳转档案：`utils/page-actions.js` 的 `goToAthlete` 用候选列表校验后写 `globalData.selectedAthleteId` 再 `switchTab` 档案页。
 
 ### 4.3 样式
 
@@ -217,14 +222,14 @@ pages 不直接 wx.request；utils 不 import pages
 | 类型 | 位置 | 覆盖点 |
 | --- | --- | --- |
 | 单元/静态 | `config.test.js` | 基址解析、生产强制 HTTPS |
-| 单元 | `utils/request.test.js`、`network-error.test.js`、`profile-payload.test.js`、`daily-todos.test.js`、`injury-form.test.js`、`today-status.test.js`、`wellness-form.test.js` | 传输、错误文案、档案校验、待办形状与分组筛选、伤病字典与载荷（比对服务端取值）、今日状态形状与文案、恢复日报回填窗口与载荷 |
-| 静态 | `register.test.js`、`profile-edit.test.js`、`pages/injury-report/injury-report.test.js`、`pages/wellness-entry/wellness-entry.test.js` | 字典与 shared 一致、接口/回填/队伍重试、编辑链路、路由/入口/角色分支与上报页面行为、今日状态与恢复日报入口、填写页保存/校验/角色分支 |
-| 集成 | 根 `scripts/api-check.mjs` | 含注册/审批等服务端回归（非小程序 UI） |
+| 单元 | `utils/request.test.js`、`network-error.test.js`、`profile-payload.test.js`、`daily-todos.test.js`、`injury-form.test.js`、`today-status.test.js`、`wellness-form.test.js`、`page-scope.test.js` | 传输、错误文案、档案校验、待办形状与分组筛选、伤病字典与载荷（比对服务端取值）、今日状态形状与文案、恢复日报回填窗口与载荷、统一 `loadPage` 骨架与缓存判据 |
+| 静态 | `register.test.js`、`profile-edit.test.js`、`pages/injury-report/injury-report.test.js`、`pages/wellness-entry/wellness-entry.test.js`、`pages/tab-load-skeleton.test.js` | 字典与 shared 一致、接口/回填/队伍重试、编辑链路、路由/入口/角色分支与上报页面行为、今日状态与恢复日报入口、填写页保存/校验/角色分支、三个 Tab 走真实骨架与视图转换 |
+| 集成 | 根 `scripts/api-check.mjs` | 含注册/审批等服务端回归；`coach-daily-todos-mini-check.mjs` 跑真实 `page-scope`/`page-actions` 验证首页加载、缓存复用与 `dataVersion` 失效 |
 
 缺口：
 
 - 无微信开发者工具自动化/E2E；`scope-filter`、主 Tab 交互靠人工/真机。
-- 页面 `build*View` 未单测，依赖后续 api-check + 手测。
+- 页面 `build*View` 只在 `pages/tab-load-skeleton.test.js` 以最小数据覆盖 profile/special/strength 的主路径，复杂分支仍靠 api-check + 手测。
 - 开发者工具对 WXML 内联 Mustache 的 CSS 误报需知悉，避免误改「修样式」。
 
 ## 8. 代码质量观察

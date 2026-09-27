@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
+// onShow 触发的加载不返回 Promise，用一个宏任务等它的微任务链跑完。
+const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 // 在 API 检查中验证原生页面控制器的请求竞争和导航，不替代微信真机验收。
 export async function checkMiniDailyTodoFlow(assert) {
   let definition;
@@ -54,19 +57,56 @@ export async function checkMiniDailyTodoFlow(assert) {
     },
   };
   modules['../../services/api'] = api;
-  modules['../../utils/context'] = {};
-  modules['../../utils/date'] = { todayBeijing: () => '2026-09-23' };
-  modules['../../utils/page-scope'] = {
-    createInitialScope: () => ({}),
-    applyScopeChange: () => null,
-    saveProjectInOrder: async () => {},
+  const scopeContext = {
+    user: { role: 'SCC', athleteId: 0 },
+    projects: ['ROWING', 'CANOE_SPRINT'],
+    project: 'ROWING',
+    athletes: [{ id: 1, project: 'ROWING' }],
+    selectedAthleteId: 0,
   };
+  modules['../../utils/context'] = {
+    loadContext: async () => scopeContext,
+    projectAthletes: (list) => list || [],
+  };
+  modules['../../utils/date'] = dateContext.module.exports;
   const requestGuard = { module: { exports: {} } };
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/utils/request-guard.js', import.meta.url), 'utf8'),
     requestGuard
   );
   modules['../../utils/request-guard'] = requestGuard.module.exports;
+  const wxApi = {
+    switchTab: (options) => navigation.push(options.url),
+    showToast: () => {},
+    showModal: () => {},
+  };
+  const pageActions = {
+    module: { exports: {} },
+    require: () => format.module.exports,
+    getApp: () => app,
+    wx: wxApi,
+  };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/page-actions.js', import.meta.url), 'utf8'),
+    pageActions
+  );
+  modules['../../utils/page-actions'] = pageActions.module.exports;
+  // 统一加载骨架直接跑真实实现，避免只测到页面里的分支。
+  const pageScope = {
+    module: { exports: {} },
+    getApp: () => app,
+    require: (path) => {
+      if (path === './date') return dateContext.module.exports;
+      if (path === './context') return modules['../../utils/context'];
+      if (path === './request-guard') return requestGuard.module.exports;
+      throw new Error(`未预期依赖：${path}`);
+    },
+  };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/page-scope.js', import.meta.url), 'utf8'),
+    pageScope
+  );
+  modules['../../utils/page-scope'] = pageScope.module.exports;
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/pages/index/index.js', import.meta.url), 'utf8'),
     {
@@ -75,10 +115,7 @@ export async function checkMiniDailyTodoFlow(assert) {
       },
       require: (path) => modules[path],
       getApp: () => app,
-      wx: {
-        switchTab: (options) => navigation.push(options.url),
-        showToast: () => {},
-      },
+      wx: wxApi,
     }
   );
   const page = {
@@ -145,9 +182,11 @@ export async function checkMiniDailyTodoFlow(assert) {
   page.onShow();
   assert(loaded, '档案返回首页必须刷新');
   loaded = false;
-  page._lastLoadedAt = Date.now();
-  page._loadedProject = 'ROWING';
-  page._loadedDate = '2026-09-23';
+  page._cacheAt = Date.now();
+  page._cacheProject = 'ROWING';
+  page._cacheDate = dateContext.module.exports.todayBeijing();
+  page._cacheAthleteId = app.globalData.selectedAthleteId;
+  page._cacheVersion = app.globalData.dataVersion || 0;
   app.globalData.currentProject = 'ROWING';
   page.onShow();
   assert(!loaded, '短时间重复显示首页不应全量重拉');
@@ -217,4 +256,34 @@ export async function checkMiniDailyTodoFlow(assert) {
   };
   await page.loadToday();
   assert(page.data.todayError === '', '非运动员不应请求本人今日状态');
+
+  // 统一加载骨架：作用域、并行数据块、缓存标记与数据版本失效。
+  page.loadPage = definition.loadPage;
+  let overviewCalls = 0;
+  api.overview = async () => {
+    overviewCalls += 1;
+    return {
+      overview: {
+        records: [],
+        trainingAnalytics: {
+          summary: { totalDurationMin: 60, physicalDurationMin: 60, specialDurationMin: 0 },
+          days: [{ date: '2026-09-23', physicalDurationMin: 60, physicalLoad: 300 }],
+        },
+        meta: {},
+      },
+    };
+  };
+  api.dailyTodos = async () => ({ todos: todos('统一骨架') });
+  await page.loadPage();
+  assert(page.data.error === '' && !page.data.loading, '统一骨架应正常完成首页加载');
+  assert(overviewCalls === 1, '统一骨架只发起一次总览加载');
+  assert(page.data.todos && page.data.todos.missing.length === 1, '待办应随首页骨架并行加载');
+  assert(page.data.metrics.length > 0 && page.data.trend.length === 1, '总览视图应写回指标与趋势');
+  page.onShow();
+  await flushAsync();
+  assert(overviewCalls === 1, '缓存新鲜时二次显示首页不重拉');
+  app.globalData.dataVersion = (app.globalData.dataVersion || 0) + 1;
+  page.onShow();
+  await flushAsync();
+  assert(overviewCalls === 2, '数据版本变化后必须重新加载首页');
 }

@@ -21,7 +21,7 @@
 
 `utils/page-scope.js` 负责从 `loadContext()` 初始化项目、运动员和日／周／月范围，并通过 `applyScopeChange()` 处理 `scope-filter` 的三个现有事件。ATL 的运动员 ID 固定为本人，其他角色的选择必须属于当前项目的可访问列表。项目切换使用 `saveProjectInOrder()` 按触发顺序保存。
 
-页面只实现业务数据请求和视图转换：训练总览、专项、体能和档案 Tab 在 30 秒内、项目和北京时间日期未变且没有数据变更时复用现有内容；手动下拉、训练填报和档案保存仍触发刷新。筛选事件统一绑定 `onScopeChange`。每次异步加载使用 `utils/request-guard.js` 的 `loadWithGuard()`，只允许最新请求更新页面数据、错误和 loading。需要独立刷新的数据（如首页每日待办）使用独立的 `createRequestGuard()`。
+页面只实现业务数据请求和视图转换：四个 Tab 的 `loadPage()` 统一走 `utils/page-scope.js` 的 `loadPage()` 组合骨架（请求护栏 → `loadContext` → 初始作用域 → `setData` → `loadPageData` → `markPageCacheLoaded`），在 30 秒内、项目、所选运动员、北京时间日期与数据版本都未变且没有报错时复用现有内容；手动下拉、训练填报和档案保存仍触发刷新。筛选事件统一绑定 `onScopeChange`。每次异步加载使用 `utils/request-guard.js` 的 `loadWithGuard()`，只允许最新请求更新页面数据、错误和 loading。需要独立刷新的数据（如首页每日待办）使用独立的 `createRequestGuard()`。表单页（伤病上报、恢复日报）不带作用域，直接用 `loadWithGuard` 接入同一套护栏；趋势明细弹窗与运动员下钻由 `utils/page-actions.js` 共用。
 
 小程序刻意不提供账号权限配置、批量 Excel 导入、数据字典维护、批量导出、AI 草案生成和原始数据删除。这些高复杂度或高风险操作继续在网页端完成。
 

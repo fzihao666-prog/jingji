@@ -1,7 +1,6 @@
 const api = require('../../services/api');
-const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = require('../../utils/page-scope');
-const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
+const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
+const { loadWithGuard } = require('../../utils/request-guard');
 const { ageAt } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 
@@ -109,20 +108,21 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
-    this._guard = this._guard || createRequestGuard();
-    return loadWithGuard(this, this._guard, async (isLatest) => {
-      const context = await loadContext();
-      if (!isLatest()) return null;
-      const scope = createInitialScope(context, {
+    return runPageLoad(this, {
+      error: '运动员档案加载失败。',
+      scope: {
         range: this.data.range,
         selectedAthleteId: getApp().globalData.selectedAthleteId
-      });
-      getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
-      this.setData({ ...scope, canEditSelf: scope.user.role === 'ATL', canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role) });
-      const result = await this.loadPageData(scope);
-      if (isLatest()) markPageCacheLoaded(this);
-      return result;
-    }, '运动员档案加载失败。');
+      },
+      prepare: (page, scope) => {
+        getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
+        page.setData({
+          ...scope,
+          canEditSelf: scope.user.role === 'ATL',
+          canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role)
+        });
+      }
+    });
   },
 
   async loadPageData(scope) {
@@ -135,7 +135,65 @@ Page({
       api.personalOverview(athleteId, scope.from, scope.to, scope.project),
       api.championBenchmark(athleteId).catch(() => ({ benchmark: null }))
     ]);
-    return { showMore: false, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope) };
+    let wellnessTrends;
+    try {
+      const wr = await api.wellnessTrends(athleteId, scope.from, scope.to, scope.project);
+      const labelMap = { rpe: 'RPE', sleepHours: '睡眠时长', morningPulse: '晨脉', weightKg: '体重' };
+      const unitMap = { rpe: '', sleepHours: '小时', morningPulse: 'bpm', weightKg: 'kg' };
+      wellnessTrends = (wr.trends || []).map(t => {
+        const personal = t.personalValue ?? null;
+        const team = t.teamMean ?? null;
+        const hasPersonal = personal != null;
+        const label = labelMap[t.key] || t.key;
+        const unit = unitMap[t.key] || '';
+        return { key: t.key, label, personalValue: personal, teamMean: team, hasPersonal, unit };
+      });
+    } catch {
+      wellnessTrends = [];
+    }
+    let bodyCompositionHistory;
+    try {
+      const bc = await api.getBodyCompositionHistory(athleteId);
+      const records = bc.history || [];
+      const labelMap = {
+        heightCm: '身高', weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌',
+        muscleMassKg: '肌肉量', totalBodyWaterKg: '体水分', visceralFatLevel: '内脏脂肪等级',
+        basalMetabolismKcal: '基础代谢'
+      };
+      const unitMap = {
+        heightCm: 'cm', weightKg: 'kg', bodyFatPct: '%', skeletalMuscleKg: 'kg',
+        muscleMassKg: 'kg', totalBodyWaterKg: 'kg', visceralFatLevel: '', basalMetabolismKcal: 'kcal'
+      };
+      bodyCompositionHistory = records.slice(0, 6).map((r, i) => {
+        const prev = records[i + 1] || null;
+        return {
+          measurementDate: r.measurementDate,
+          items: Object.entries(r)
+            .filter(([k]) => labelMap[k] && r[k] != null)
+            .map(([k, v]) => ({
+              key: k, label: labelMap[k], value: v, unit: unitMap[k] || '',
+              delta: prev && prev[k] != null ? Number((v - prev[k]).toFixed(1)) : null
+            }))
+        };
+      });
+    } catch {
+      bodyCompositionHistory = [];
+    }
+    let profileComparison;
+    try {
+      const pc = await api.profileComparison(athleteId, scope.from, scope.to, scope.project);
+      profileComparison = pc.comparison || null;
+    } catch {
+      profileComparison = null;
+    }
+    let radarModels;
+    try {
+      const rm = await api.radarModels(athleteId, scope.from, scope.to);
+      radarModels = rm;
+    } catch {
+      radarModels = null;
+    }
+    return { showMore: false, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, profileComparison, radarModels };
   },
 
   onScopeChange(event) {

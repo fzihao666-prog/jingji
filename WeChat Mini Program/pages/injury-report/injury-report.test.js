@@ -37,6 +37,7 @@ function loadCjs(url, mocks) {
 const injuryForm = loadCjs(new URL('../../utils/injury-form.js', import.meta.url), {
   './date': { todayBeijing: () => '2026-09-27' },
 });
+const requestGuard = loadCjs(new URL('../../utils/request-guard.js', import.meta.url), {});
 
 function createPage({ user, athletes, targetAthleteId }) {
   let definition;
@@ -55,6 +56,7 @@ function createPage({ user, athletes, targetAthleteId }) {
     '../../services/api': { createInjuryRecord },
     '../../utils/context': { loadContext: async () => context },
     '../../utils/injury-form': injuryForm,
+    '../../utils/request-guard': requestGuard,
   };
   vm.runInNewContext(pageSource, {
     Page(value) {

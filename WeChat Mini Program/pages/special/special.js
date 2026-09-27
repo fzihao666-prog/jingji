@@ -1,7 +1,7 @@
 const api = require('../../services/api');
-const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = require('../../utils/page-scope');
-const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
+const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
+const { loadWithGuard } = require('../../utils/request-guard');
+const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
 
@@ -79,16 +79,12 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
-    this._guard = this._guard || createRequestGuard();
-    return loadWithGuard(this, this._guard, async (isLatest) => {
-      const context = await loadContext();
-      if (!isLatest()) return null;
-      const scope = createInitialScope(context, { range: this.data.range, showAthlete: false });
-      this.setData({ ...scope, teamId: 0, teamIndex: 0 });
-      const result = await this.loadPageData({ ...scope, teamId: 0 }, true, isLatest);
-      if (isLatest()) markPageCacheLoaded(this);
-      return result;
-    }, '专项训练数据加载失败。');
+    return runPageLoad(this, {
+      error: '专项训练数据加载失败。',
+      scope: { range: this.data.range, showAthlete: false },
+      prepare: (page, scope) => page.setData({ ...scope, teamId: 0, teamIndex: 0 }),
+      load: (page, scope, isLatest) => page.loadPageData({ ...scope, teamId: 0 }, true, isLatest)
+    });
   },
 
   async loadPageData(scope, full, isLatest) {
@@ -101,6 +97,13 @@ Page({
       api.specialChampionModels(scope.project),
       api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId)
     ]);
+    let specialTestsData;
+    try {
+      const st = await api.specialTests(scope.from, scope.to, scope.project);
+      specialTestsData = st.events || [];
+    } catch {
+      specialTestsData = [];
+    }
     const teamItems = [{ id: 0, name: '全部队伍' }].concat(teamResult.teams || []);
     const championEvents = (modelResult.events || []).slice(0, 12).map((item) => ({
       code: item.eventCode,
@@ -110,7 +113,7 @@ Page({
       pace: item.pace || ''
     }));
     if (isLatest && isLatest()) this._loadedProject = scope.project;
-    return { teamItems, championEvents, ...buildTrainingView(trainingResult.training, trainingResult.athletes, scope.to) };
+    return { teamItems, championEvents, specialTests: specialTestsData, ...buildTrainingView(trainingResult.training, trainingResult.athletes, scope.to) };
   },
 
   onScopeChange(event) {
@@ -136,23 +139,10 @@ Page({
   },
 
   showTrendDetail(event) {
-    const item = this.data.trend[Number(event.currentTarget.dataset.index)];
-    if (!item) return;
-    wx.showModal({
-      title: item.date,
-      content: `训练时长：${number(item.duration)} 分钟\n训练距离：${number(item.distance)} km`,
-      showCancel: false
-    });
+    showTrendModal(this, event, durationDistanceLines);
   },
 
   goToAthlete(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!athleteId) return;
-    if (!this.data.athleteRows.some((athlete) => Number(athlete.id) === athleteId)) {
-      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
-      return;
-    }
-    getApp().globalData.selectedAthleteId = athleteId;
-    wx.switchTab({ url: '/pages/profile/profile' });
+    navigateToAthlete(this, event, this.data.athleteRows);
   }
 });

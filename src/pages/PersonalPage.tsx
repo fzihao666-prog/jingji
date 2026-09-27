@@ -919,48 +919,130 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
         </AppCard>
       ) : (
         <section className="personal-wellness-grid" aria-label="恢复趋势">
-          {trends.map((trend) => (
-            <AppCard
-              key={trend.key}
-              variant="chart"
-              className="professional-panel personal-wellness-card"
-            >
-              <header>
-                <h3>{trend.label}</h3>
-                <small>{trend.unit || '主观评分'}</small>
-              </header>
-              {trend.points.some((point) => point.personalValue !== null) ? (
-                <EChart
-                  option={wellnessTrendOption(trend)}
-                  label={`${trend.label}个人变化趋势，共 ${trend.points.filter((point) => point.personalValue !== null).length} 个有效记录；缺失日期不连线、不以零补齐。`}
-                />
-              ) : (
-                <p>暂无数据</p>
-              )}
-            </AppCard>
-          ))}
+          {trends.map((trend) => {
+            const personalPoints = trend.points.filter(
+              (point): point is typeof point & { personalValue: number } =>
+                point.personalValue !== null
+            );
+            const first = personalPoints[0];
+            const latest = personalPoints.at(-1);
+            const change =
+              first && latest && first !== latest
+                ? latest.personalValue - first.personalValue
+                : null;
+            const axisLabel = wellnessAxisLabel(trend);
+            const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
+            return (
+              <AppCard
+                key={trend.key}
+                variant="chart"
+                className="professional-panel personal-wellness-card"
+              >
+                <header>
+                  <h3>{trend.label}</h3>
+                  <small>{trend.unit || '0–10 分'}</small>
+                </header>
+                {latest ? (
+                  <>
+                    <dl className="personal-wellness-summary">
+                      <div>
+                        <dt>最近记录</dt>
+                        <dd>{wellnessValue(latest.personalValue, trend)}</dd>
+                        <small>{latest.date}</small>
+                      </div>
+                      <div>
+                        <dt>周期变化</dt>
+                        <dd>
+                          {change === null
+                            ? '暂无对比'
+                            : `${change > 0 ? '+' : ''}${wellnessValue(change, trend)}`}
+                        </dd>
+                        <small>{change === null ? '仅 1 次有效记录' : '首条至最近'}</small>
+                      </div>
+                    </dl>
+                    <EChart
+                      option={wellnessTrendOption(trend)}
+                      label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。缺失日期不连线。`}
+                    />
+                    <p className="personal-wellness-axis-note">横轴：日期 · 纵轴：{axisLabel}</p>
+                    <div
+                      className="personal-wellness-data visually-hidden"
+                      role="region"
+                      tabIndex={0}
+                      aria-label={`${trend.label}按日期查看数值，按 Tab 键显示`}
+                    >
+                      <table>
+                        <caption>{trend.label}每日数据</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">日期</th>
+                            <th scope="col">当前运动员</th>
+                            <th scope="col">团队平均</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {trend.points.map((point) => (
+                            <tr key={point.date}>
+                              <td>{point.date}</td>
+                              <td>
+                                {point.personalValue === null
+                                  ? '暂无数据'
+                                  : wellnessValue(point.personalValue, trend)}
+                              </td>
+                              <td>
+                                {point.teamMean === null
+                                  ? '暂无可比数据'
+                                  : wellnessValue(point.teamMean, trend)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <p>暂无数据</p>
+                )}
+              </AppCard>
+            );
+          })}
         </section>
       )}
     </div>
   );
 }
 
+function wellnessAxisLabel(trend: WellnessTrend) {
+  return trend.key === 'rpe' ? 'RPE（分）' : `${trend.label}（${trend.unit}）`;
+}
+
+function wellnessValue(value: number, trend: WellnessTrend) {
+  return `${formatNumber(value, 1)}${trend.unit ? ` ${trend.unit}` : ' 分'}`;
+}
+
 function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
   const dates = trend.points.map((point) => Date.parse(`${point.date}T00:00:00Z`));
+  const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
   return {
     animation: false,
     useUTC: true,
+    textStyle: { color: '#092b39' },
+    legend: {
+      top: 0,
+      data: hasTeamMean ? ['当前运动员', '团队平均'] : ['当前运动员'],
+      selectedMode: false,
+      textStyle: { color: '#092b39' },
+    },
     tooltip: {
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
-      valueFormatter: (value) =>
-        `${formatNumber(Number(value), 1)}${trend.unit ? ` ${trend.unit}` : ''}`,
+      valueFormatter: (value) => wellnessValue(Number(value), trend),
     },
     grid: {
-      top: 24,
+      top: 44,
       right: 20,
-      bottom: 34,
+      bottom: 40,
       left: 46,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
@@ -969,28 +1051,55 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
       type: 'time',
       min: dates[0],
       max: dates.at(-1),
-      axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true },
+      name: '日期',
+      nameLocation: 'middle',
+      nameGap: 26,
+      nameTextStyle: { color: '#092b39' },
+      axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true, color: '#092b39' },
     },
     yAxis: {
       type: 'value',
-      name: trend.unit,
+      name: trend.unit || 'RPE',
       scale: true,
+      ...(trend.key === 'rpe' ? { min: 0, max: 10 } : {}),
+      nameTextStyle: { color: '#092b39' },
+      axisLabel: { color: '#092b39' },
       splitLine: { lineStyle: { color: '#e0e9e9' } },
     },
     series: [
       {
         id: trend.key,
-        name: trend.label,
+        name: '当前运动员',
         type: 'line',
         connectNulls: false,
         symbol: 'circle',
         symbolSize: 7,
-        lineStyle: { width: 2 },
+        lineStyle: { width: 2.5, color: '#176f7f' },
+        itemStyle: { color: '#176f7f' },
+        areaStyle: { color: 'rgb(23 111 127 / 10%)' },
         data: trend.points.map((point) => [
           Date.parse(`${point.date}T00:00:00Z`),
           point.personalValue,
         ]),
       },
+      ...(hasTeamMean
+        ? [
+            {
+              id: `${trend.key}-team`,
+              name: '团队平均',
+              type: 'line' as const,
+              connectNulls: false,
+              symbol: 'emptyCircle',
+              symbolSize: 6,
+              lineStyle: { width: 2, type: 'dashed' as const, color: '#8a651e' },
+              itemStyle: { color: '#8a651e' },
+              data: trend.points.map((point) => [
+                Date.parse(`${point.date}T00:00:00Z`),
+                point.teamMean,
+              ]),
+            },
+          ]
+        : []),
     ],
   };
 }

@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
+const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const {
   METRICS,
   STATUS_OPTIONS,
@@ -27,16 +28,15 @@ Page({
   onLoad() { this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
-  async loadPage() {
+  loadPage() {
     const dates = wellnessDates();
     this.setData({ min: dates.min, max: dates.max });
-    try {
+    this._guard = this._guard || createRequestGuard();
+    return loadWithGuard(this, this._guard, async () => {
       const context = await loadContext({ refreshUser: true });
       if (context.user.role !== 'ATL') throw new Error('只有运动员本人可以填写恢复日报。');
-      await this.loadRecord(this.data.form.date);
-    } catch (error) {
-      this.setData({ loading: false, error: error.message || '恢复日报加载失败。' });
-    }
+      return this.loadRecord(this.data.form.date);
+    }, '恢复日报加载失败。');
   },
 
   async loadRecord(date) {

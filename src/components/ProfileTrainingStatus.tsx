@@ -13,21 +13,14 @@ type Props = {
   loading: boolean;
 };
 
-function formatValue(value: number | null, unit: string) {
-  return value === null ? '--' : `${formatNumber(value, 1)}${unit ? ` ${unit}` : ''}`;
+function formatValue(value: number | null, unit: string, emptyLabel = '暂无数据') {
+  return value === null ? emptyLabel : `${formatNumber(value, 1)}${unit ? ` ${unit}` : ''}`;
 }
 
 function formatDifference(metric: TrainingStatusMetric) {
-  if (metric.difference === null) return '--';
+  if (metric.difference === null) return '暂无可比数据';
   const prefix = metric.difference > 0 ? '+' : '';
   return `${prefix}${formatNumber(metric.difference, 1)}${metric.unit ? ` ${metric.unit}` : ''}`;
-}
-
-function differenceLabel(metric: TrainingStatusMetric) {
-  if (metric.difference === null) return '暂无可比团队数据';
-  if (metric.difference > 0) return '高于团队';
-  if (metric.difference < 0) return '低于团队';
-  return '与团队一致';
 }
 
 function trendOption(card: TrainingStatusCard): EChartsOption {
@@ -36,7 +29,11 @@ function trendOption(card: TrainingStatusCard): EChartsOption {
   return {
     animation: false,
     useUTC: true,
-    legend: { top: 0, data: ['当前运动员', '团队平均'] },
+    legend: {
+      top: 0,
+      data: ['当前运动员', '团队平均'],
+      textStyle: { color: '#092b39' },
+    },
     tooltip: {
       trigger: 'axis',
       renderMode: 'richText',
@@ -82,125 +79,87 @@ function trendOption(card: TrainingStatusCard): EChartsOption {
         connectNulls: false,
         symbol: 'emptyCircle',
         symbolSize: 5,
-        lineStyle: { width: 2, type: 'dashed', color: '#c59745' },
-        itemStyle: { color: '#c59745' },
+        lineStyle: { width: 2, type: 'dashed', color: '#8a651e' },
+        itemStyle: { color: '#8a651e' },
         data: points.map((point) => [Date.parse(`${point.date}T00:00:00Z`), point.teamMean]),
       },
     ],
   };
 }
 
-function trendSummary(card: TrainingStatusCard) {
-  const personalCount = card.trend.points.filter((point) => point.personalValue !== null).length;
-  const teamCount = card.trend.points.filter((point) => point.teamMean !== null).length;
-  const firstDate = card.trend.points.at(0)?.date;
-  const lastDate = card.trend.points.at(-1)?.date;
-  const period = firstDate && lastDate ? `${firstDate}至${lastDate}` : '当前周期';
-  return `${period}内，当前运动员有 ${personalCount} 个有效${card.trend.label}记录，团队有 ${teamCount} 个可比日期；完整数值见下方数据表。`;
-}
-
 function TrainingStatusCard({ card }: { card: TrainingStatusCard }) {
   const hasPersonalTrend = card.trend.points.some((point) => point.personalValue !== null);
-  const summary = trendSummary(card);
   return (
     <section
       className="profile-training-status-card"
       aria-labelledby={`${card.kind}-training-title`}
     >
       <header>
-        <div>
-          <small>{card.kind === 'physical' ? 'PHYSICAL TRAINING' : 'SPECIAL TRAINING'}</small>
-          <h3 id={`${card.kind}-training-title`}>{card.title}</h3>
-          <p>当前运动员与同项目、同队且在授权范围内的有效训练数据对照。</p>
-        </div>
+        <h3 id={`${card.kind}-training-title`}>{card.title}</h3>
       </header>
       <dl className="profile-training-status-metrics">
         {card.metrics.map((metric) => (
           <div key={metric.key}>
             <dt>{metric.label}</dt>
             <dd>
-              <span>
+              <span className="profile-training-status-primary">
                 <small>当前运动员</small>
-                <strong>{formatValue(metric.personalValue, metric.unit)}</strong>
+                <strong className={metric.personalValue === null ? 'is-empty' : undefined}>
+                  {formatValue(metric.personalValue, metric.unit)}
+                </strong>
               </span>
               <span>
                 <small>团队平均</small>
-                <strong>{formatValue(metric.teamMean, metric.unit)}</strong>
+                <strong>{formatValue(metric.teamMean, metric.unit, '暂无可比数据')}</strong>
               </span>
               <span>
                 <small>差异</small>
                 <strong>{formatDifference(metric)}</strong>
-                <em>{differenceLabel(metric)}</em>
               </span>
-              {metric.differencePercent !== null && (
-                <span>
-                  <small>差异率</small>
-                  <strong>
-                    {metric.differencePercent > 0 ? '+' : ''}
-                    {formatNumber(metric.differencePercent, 1)}%
-                  </strong>
-                  <em>团队样本 {metric.teamSampleCount} 人</em>
-                </span>
-              )}
             </dd>
           </div>
         ))}
       </dl>
       <section
         className="profile-training-status-trend"
-        aria-labelledby={`${card.kind}-training-trend`}
+        aria-labelledby={`${card.kind}-training-chart-title`}
       >
-        <header>
-          <div>
-            <h4 id={`${card.kind}-training-trend`}>{card.trend.label}趋势</h4>
-            <p>实线为当前运动员，虚线为团队平均；缺失日期不补零、不连线。</p>
-          </div>
-        </header>
+        <h4 id={`${card.kind}-training-chart-title`}>{card.trend.label}</h4>
         {hasPersonalTrend ? (
           <figure className="profile-training-status-figure">
-            <figcaption>{summary}</figcaption>
             <EChart
               option={trendOption(card)}
-              label={`${card.title}${card.trend.label}趋势：${summary}`}
+              label={`${card.trend.label}：当前运动员与团队平均的每日变化`}
             />
-            <details className="profile-training-status-data">
-              <summary>查看趋势数据表</summary>
-              <div
-                className="table-scroll profile-training-status-table-scroll"
-                tabIndex={0}
-                aria-label={`${card.title}${card.trend.label}趋势数据表，可横向滚动`}
-              >
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">日期</th>
-                      <th scope="col">当前运动员</th>
-                      <th scope="col">团队平均</th>
-                      <th scope="col">团队样本</th>
+            <div
+              className="profile-training-status-accessible-data visually-hidden"
+              role="region"
+              tabIndex={0}
+              aria-label={`${card.trend.label}按日期查看数值，按 Tab 键显示`}
+            >
+              <table>
+                <caption>{card.trend.label}数据</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">日期</th>
+                    <th scope="col">当前运动员</th>
+                    <th scope="col">团队平均</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {card.trend.points.map((point) => (
+                    <tr key={point.date}>
+                      <td>{point.date}</td>
+                      <td>{formatValue(point.personalValue, card.trend.unit)}</td>
+                      <td>{formatValue(point.teamMean, card.trend.unit, '暂无可比数据')}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {card.trend.points.map((point) => (
-                      <tr key={point.date}>
-                        <td>{point.date}</td>
-                        <td>{formatValue(point.personalValue, card.trend.unit)}</td>
-                        <td>{formatValue(point.teamMean, card.trend.unit)}</td>
-                        <td>
-                          {point.teamSampleCount === null ? '--' : `${point.teamSampleCount} 人`}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </figure>
         ) : (
-          <ContentState
-            kind="empty"
-            title="暂无训练趋势数据"
-            description="当前周期未找到有效训练时长。"
-          />
+          <ContentState kind="empty" title="暂无训练时长数据" />
         )}
       </section>
     </section>

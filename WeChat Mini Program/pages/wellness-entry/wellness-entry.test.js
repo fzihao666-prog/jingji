@@ -33,6 +33,7 @@ function loadCjs(url, mocks) {
 }
 
 const dateModule = loadCjs(new URL('../../utils/date.js', import.meta.url), {});
+const requestGuard = loadCjs(new URL('../../utils/request-guard.js', import.meta.url), {});
 const wellnessForm = loadCjs(new URL('../../utils/wellness-form.js', import.meta.url), {
   './date': {
     todayBeijing: () => '2026-09-27',
@@ -50,6 +51,7 @@ function createPage({ user, record = null }) {
     '../../services/api': { myWellness, saveWellness },
     '../../utils/context': { loadContext: async () => ({ user }) },
     '../../utils/wellness-form': wellnessForm,
+    '../../utils/request-guard': requestGuard,
   };
   vm.runInNewContext(pageSource, {
     Page(value) {

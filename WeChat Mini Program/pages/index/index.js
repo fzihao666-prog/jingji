@@ -1,9 +1,9 @@
 const api = require('../../services/api');
-const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('../../utils/page-scope');
+const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
-const { shortDate, todayBeijing } = require('../../utils/date');
+const { shortDate } = require('../../utils/date');
 const { number, INJURY_LABELS } = require('../../utils/format');
+const { durationLoadLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { dailyTodoView, filterDailyTodos } = require('../../utils/daily-todos');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
@@ -76,13 +76,31 @@ function buildView(overview) {
     width: Math.max(1, Math.min(100, Number(item.percentage) || 0))
   }));
 
+  const physiologyHeatmap = overview.physiologyHeatmap
+    ? {
+        metrics: (overview.physiologyHeatmap.metrics || []).map(m => ({
+          code: m.code,
+          label: m.label,
+          unit: m.unit,
+          days: (m.days || []).map(d => ({
+            date: d.date,
+            status: d.status,
+            median: d.median,
+            sampleCount: d.sampleCount,
+            abnormalRateChange: d.abnormalRateChange,
+            isEstimated: d.isEstimated
+          }))
+        }))
+      }
+    : null;
+
   const attention = {
     show: highFatigue > 0 || activeInjuries.length > 0,
     title: '需要关注',
     summary: `疲劳偏高 ${highFatigue} 人 · 伤病状态 ${activeInjuries.length} 人`
   };
 
-  return { metrics, trend, intensity, activeInjuries, attention, meta: overview.meta || {} };
+  return { metrics, trend, intensity, activeInjuries, attention, meta: overview.meta || {}, physiologyHeatmap };
 }
 
 Page({
@@ -121,11 +139,7 @@ Page({
 
   onShow() {
     const app = getApp();
-    const fresh = this._lastLoadedAt && Date.now() - this._lastLoadedAt < 30000
-      && this._loadedDate === todayBeijing()
-      && this._loadedProject === app.globalData.currentProject
-      && !app.globalData.homeNeedsRefresh && !this.data.error;
-    if (!fresh) this.loadPage();
+    if (app.globalData.homeNeedsRefresh || !isPageCacheFresh(this)) this.loadPage();
   },
   onPullDownRefresh() { this.loadPage(true).finally(() => wx.stopPullDownRefresh()); },
 
@@ -139,26 +153,25 @@ Page({
       todos: null, todoView: null, todosError: '', canViewTodos: false,
       todayView: null, wellnessView: null, todayError: '', todayLoading: false
     });
-    return loadWithGuard(this, this._guard, async (isLatest) => {
-      const context = await loadContext({ refreshUser });
-      if (!isLatest()) return null;
-      const scope = createInitialScope(context, { range: this.data.range, showAthlete: false });
-      const canSelfReport = scope.user.role === 'ATL';
-      const canViewTodos = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'].includes(scope.user.role);
-      this.setData({ ...scope, canSelfReport, canViewTodos });
-      const [overview] = await Promise.all([
-        this.loadPageData({ ...scope, canSelfReport }),
-        this.loadTodos(scope.project),
-        this.loadToday()
-      ]);
-      if (isLatest()) {
-        this._lastLoadedAt = Date.now();
-        this._loadedDate = todayBeijing();
-        this._loadedProject = scope.project;
-        getApp().globalData.homeNeedsRefresh = false;
+    return runPageLoad(this, {
+      refreshUser,
+      error: '训练总览加载失败。',
+      scope: { range: this.data.range, showAthlete: false },
+      prepare: (page, scope) => {
+        const canSelfReport = scope.user.role === 'ATL';
+        const canViewTodos = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'].includes(scope.user.role);
+        page.setData({ ...scope, canSelfReport, canViewTodos });
+      },
+      load: async (page, scope, isLatest) => {
+        const [overview] = await Promise.all([
+          page.loadPageData({ ...scope, canSelfReport: page.data.canSelfReport }),
+          page.loadTodos(scope.project),
+          page.loadToday()
+        ]);
+        if (isLatest()) getApp().globalData.homeNeedsRefresh = false;
+        return overview;
       }
-      return overview;
-    }, '训练总览加载失败。');
+    });
   },
 
   async loadPageData(scope) {
@@ -264,24 +277,11 @@ Page({
   },
 
   showTrendDetail(event) {
-    const item = this.data.trend[Number(event.currentTarget.dataset.index)];
-    if (!item) return;
-    wx.showModal({
-      title: item.date,
-      content: `训练时长：${number(item.duration)} 分钟\n训练负荷：${number(item.load, 0)} AU`,
-      showCancel: false
-    });
+    showTrendModal(this, event, durationLoadLines);
   },
 
   goToAthlete(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!athleteId) return;
-    if (!this.data.athletes.some((athlete) => Number(athlete.id) === athleteId)) {
-      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
-      return;
-    }
-    getApp().globalData.selectedAthleteId = athleteId;
-    wx.switchTab({ url: '/pages/profile/profile' });
+    navigateToAthlete(this, event, this.data.athletes);
   },
 
   openTrainingEntry() {

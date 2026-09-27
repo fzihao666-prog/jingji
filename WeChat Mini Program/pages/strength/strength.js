@@ -1,7 +1,7 @@
 const api = require('../../services/api');
-const { loadContext } = require('../../utils/context');
-const { createInitialScope, applyScopeChange, saveProjectInOrder, isPageCacheFresh, markPageCacheLoaded } = require('../../utils/page-scope');
-const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
+const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
+const { loadWithGuard } = require('../../utils/request-guard');
+const { durationLoadLines, showTrendModal } = require('../../utils/page-actions');
 const { shortDate } = require('../../utils/date');
 const { number, strengthMetricRows } = require('../../utils/format');
 
@@ -114,17 +114,14 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
-    this._guard = this._guard || createRequestGuard();
-    return loadWithGuard(this, this._guard, async (isLatest) => {
-      const context = await loadContext();
-      if (!isLatest()) return null;
-      const scope = createInitialScope(context, { range: this.data.range });
-      getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
-      this.setData(scope);
-      const result = await this.loadPageData(scope);
-      if (isLatest()) markPageCacheLoaded(this);
-      return result;
-    }, '体能训练数据加载失败。');
+    return runPageLoad(this, {
+      error: '体能训练数据加载失败。',
+      scope: { range: this.data.range },
+      prepare: (page, scope) => {
+        getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
+        page.setData(scope);
+      }
+    });
   },
 
   async loadPageData(scope) {
@@ -151,12 +148,6 @@ Page({
   },
 
   showTrendDetail(event) {
-    const item = this.data.trend[Number(event.currentTarget.dataset.index)];
-    if (!item) return;
-    wx.showModal({
-      title: item.date,
-      content: `训练时长：${number(item.duration)} 分钟\n训练负荷：${number(item.load, 0)} AU`,
-      showCancel: false
-    });
+    showTrendModal(this, event, durationLoadLines);
   }
 });

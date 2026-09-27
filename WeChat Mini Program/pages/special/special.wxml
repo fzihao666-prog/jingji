@@ -63,5 +63,11 @@
       </view>
       <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无可查看运动员</view></view>
     </view>
+
+    <view class="section-head"><view class="section-head-title">专项测试成绩</view><view class="section-head-note">{{project}} · {{from}} 至 {{to}}</view></view>
+    <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取专项测试</view></view>
+    <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
+    <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无专项测试记录</view></view>
+    <view wx:else class="card"><view wx:for="{{specialTests}}" wx:key="id" class="test-event"><view class="test-event-head"><text class="test-event-title">{{item.title || item.testType || '专项测试'}}</text><text class="test-event-date">{{item.testDate}}</text></view><view class="test-event-results"><view wx:for="{{item.results}}" wx:key="index" class="test-result"><text class="test-crew">{{item.crewName || '单人'}}</text><text class="test-attempts">{{item.attemptsMs ? item.attemptsMs.map(ms => (ms/1000).toFixed(2)).join(' / ') : '无成绩'}}</text><text class="test-best">{{item.bestMs ? (item.bestMs/1000).toFixed(2) + 's' : ''}}</text><text wx:if="{{item.deltaPreviousMs != null}}" class="test-delta">{{item.deltaPreviousMs > 0 ? '+' : ''}}{{(item.deltaPreviousMs/1000).toFixed(2)}s vs 上次</text></view></view></view></view>
   </block>
 </view>
