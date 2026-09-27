@@ -8,7 +8,7 @@ const formatContext = { module: { exports: {} }, require: () => formatDataContex
 vm.runInNewContext(readFileSync(new URL('./format.js', import.meta.url), 'utf8'), formatContext);
 const context = { module: { exports: {} }, require: () => formatContext.module.exports };
 vm.runInNewContext(readFileSync(new URL('./daily-todos.js', import.meta.url), 'utf8'), context);
-const { dailyTodoView } = context.module.exports;
+const { dailyTodoView, filterDailyTodos } = context.module.exports;
 const athlete = { athleteId: 1, athleteName: '样例队员', team: '一队', project: 'ROWING' };
 const payload = () => ({
   date: '2026-09-23', timezone: 'Asia/Shanghai', generatedAt: '2026-09-23T02:00:00Z',
@@ -34,5 +34,57 @@ describe('每日待办响应与文案', () => {
     const data = payload();
     data.missing[0] = { ...athlete, athleteId: '1/../../admin' };
     expect(() => dailyTodoView(data)).toThrow();
+  });
+});
+
+const roster = () => {
+  const first = { athleteId: 1, athleteName: '张三', team: '一队', project: 'ROWING' };
+  const second = { athleteId: 2, athleteName: '李四', team: '二队', project: 'ROWING' };
+  return dailyTodoView({
+    date: '2026-09-23',
+    timezone: 'Asia/Shanghai',
+    generatedAt: '2026-09-23T02:00:00Z',
+    windowStart: '2026-09-22T02:00:00Z',
+    highLoadThreshold: 600,
+    counts: { total: 2, submitted: 0, missing: 2, attention: 1, incompleteTime: 1 },
+    missing: [first, second],
+    attention: [{ ...second, load24h: 700, highLoad: true, timeIncomplete: true, injury: null }],
+    incompleteTime: [second],
+  });
+};
+
+describe('待办分组筛选与姓名搜索', () => {
+  it('默认展示全部分组并给出各组人数', () => {
+    const view = filterDailyTodos(roster(), 'all', '');
+    expect(view.show).toEqual({ missing: true, attention: true, incompleteTime: true });
+    expect(view.counts).toEqual({ missing: 2, attention: 1, incompleteTime: 1 });
+    expect(view.groups.map((group) => group.count)).toEqual([4, 2, 1, 1]);
+    expect(view.groups.every((group) => (group.key === 'all' ? group.active : !group.active))).toBe(
+      true
+    );
+  });
+
+  it('切换分组时隐藏其他分组但不清零其人数', () => {
+    const view = filterDailyTodos(roster(), 'attention', '');
+    expect(view.show).toEqual({ missing: false, attention: true, incompleteTime: false });
+    expect(view.missing).toEqual([]);
+    expect(view.counts.missing).toBe(2);
+    expect(view.groups.find((group) => group.key === 'attention').active).toBe(true);
+  });
+
+  it('姓名或队伍搜索作用于所有分组', () => {
+    const byName = filterDailyTodos(roster(), 'all', '李四');
+    expect(byName.counts).toEqual({ missing: 1, attention: 1, incompleteTime: 1 });
+    const byTeam = filterDailyTodos(roster(), 'all', '一队');
+    expect(byTeam.counts).toEqual({ missing: 1, attention: 0, incompleteTime: 0 });
+    const noMatch = filterDailyTodos(roster(), 'missing', '不存在的人');
+    expect(noMatch.missing).toEqual([]);
+    expect(noMatch.counts.missing).toBe(0);
+    expect(noMatch.keyword).toBe('不存在的人');
+  });
+
+  it('未知分组回退到全部，缺少待办时不产生视图', () => {
+    expect(filterDailyTodos(roster(), 'other', '').filter).toBe('all');
+    expect(filterDailyTodos(null, 'all', '')).toBeNull();
   });
 });

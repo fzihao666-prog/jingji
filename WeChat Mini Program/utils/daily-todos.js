@@ -40,4 +40,71 @@ function dailyTodoView(value) {
   return { ...value, attention };
 }
 
-module.exports = { dailyTodoView };
+const TODO_FILTERS = ['all', 'missing', 'attention', 'incomplete'];
+
+function matchesTodoKeyword(item, keyword) {
+  const needle = String(keyword || '')
+    .trim()
+    .toLowerCase();
+  if (!needle) return true;
+  return [item.athleteName, item.team].some((value) =>
+    String(value || '')
+      .toLowerCase()
+      .includes(needle)
+  );
+}
+
+// 分组筛选与姓名搜索是纯视图逻辑：计数基于筛选后的名单，服务端返回的原始待办保持不变。
+function filterDailyTodos(todos, filter, keyword) {
+  if (!todos) return null;
+  const selected = TODO_FILTERS.includes(filter) ? filter : 'all';
+  const show = {
+    missing: selected === 'all' || selected === 'missing',
+    attention: selected === 'all' || selected === 'attention',
+    incompleteTime: selected === 'all' || selected === 'incomplete',
+  };
+  const pick = (list) => (list || []).filter((item) => matchesTodoKeyword(item, keyword));
+  const matched = {
+    missing: pick(todos.missing),
+    attention: pick(todos.attention),
+    incompleteTime: pick(todos.incompleteTime),
+  };
+  // 计数始终基于筛选后的完整名单，切换分组时其他分组的人数不会被清零。
+  const counts = {
+    missing: matched.missing.length,
+    attention: matched.attention.length,
+    incompleteTime: matched.incompleteTime.length,
+  };
+  return {
+    filter: selected,
+    keyword: String(keyword || '').trim(),
+    show,
+    missing: show.missing ? matched.missing : [],
+    attention: show.attention ? matched.attention : [],
+    incompleteTime: show.incompleteTime ? matched.incompleteTime : [],
+    counts,
+    groups: [
+      {
+        key: 'all',
+        label: '全部',
+        count: counts.missing + counts.attention + counts.incompleteTime,
+        active: selected === 'all',
+      },
+      { key: 'missing', label: '未填报', count: counts.missing, active: selected === 'missing' },
+      {
+        key: 'attention',
+        label: '负荷与伤病',
+        count: counts.attention,
+        active: selected === 'attention',
+      },
+      {
+        key: 'incomplete',
+        label: '时间待补',
+        count: counts.incompleteTime,
+        active: selected === 'incomplete',
+      },
+    ],
+  };
+}
+
+module.exports = { dailyTodoView, filterDailyTodos, TODO_FILTERS };

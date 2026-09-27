@@ -8,6 +8,8 @@
     "pages/profile/profile",
     "pages/profile-edit/profile-edit",
     "pages/training-entry/training-entry",
+    "pages/wellness-entry/wellness-entry",
+    "pages/injury-report/injury-report",
     "pages/mine/mine",
     "pages/privacy/privacy"
   ],

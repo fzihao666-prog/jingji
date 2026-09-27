@@ -450,6 +450,176 @@ try {
   );
   const athleteTeams = await request('/api/teams', {}, athleteSessionToken);
   assert(athleteTeams.status === 200 && athleteTeams.payload.teams.every((team) => team.project === ownAthlete.project && team.athleteCount <= 1), '运动员不能枚举其他项目或队伍的人数');
+  const otherAthleteId = adminAthletesForAnalysis.payload.athletes.find(
+    (item) => item.id !== ownAthlete.id
+  )?.id;
+  const injuryFeedbackInput = {
+    bodyPart: '肩部',
+    injuryName: '划桨时右肩酸痛',
+    side: 'right',
+    painScore: 3,
+    onsetDate: '2026-09-23',
+    note: '小程序疼痛反馈回归',
+    status: 'suspended',
+    restrictions: '不应由运动员写入',
+    rehabPlan: '不应由运动员写入',
+  };
+  const createdInjuryFeedback = await request(
+    `/api/athletes/${ownAthlete.id}/injuries`,
+    { method: 'POST', body: JSON.stringify(injuryFeedbackInput) },
+    athleteSessionToken
+  );
+  assert(
+    createdInjuryFeedback.status === 201 &&
+      createdInjuryFeedback.payload.record?.recordType === 'feedback' &&
+      createdInjuryFeedback.payload.record?.status === 'observation' &&
+      !createdInjuryFeedback.payload.record?.restrictions &&
+      !createdInjuryFeedback.payload.record?.rehabPlan,
+    '运动员疼痛反馈必须降级为待观察记录且不得写入限制或康复计划'
+  );
+  const forbiddenInjuryFeedback = await request(
+    `/api/athletes/${otherAthleteId}/injuries`,
+    { method: 'POST', body: JSON.stringify(injuryFeedbackInput) },
+    athleteSessionToken
+  );
+  assert(forbiddenInjuryFeedback.status === 403, '运动员不能为其他运动员提交疼痛反馈');
+
+  // 运动员今日状态：与教练每日待办同口径，只能由本人读取。
+  const beijingToday = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const wellnessEarliest = new Date(Date.now() + 8 * 60 * 60 * 1000 - 6 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const todayStatus = await request('/api/me/today-status', {}, athleteSessionToken);
+  assert(
+    todayStatus.status === 200 &&
+      todayStatus.payload.date === beijingToday &&
+      todayStatus.payload.timezone === 'Asia/Shanghai' &&
+      typeof todayStatus.payload.submitted === 'boolean' &&
+      typeof todayStatus.payload.timeIncomplete === 'boolean' &&
+      Number.isFinite(todayStatus.payload.load24h) &&
+      todayStatus.payload.load24h >= 0,
+    '运动员应能读取本人今日状态'
+  );
+  assert((await request('/api/me/today-status', {}, demoCoachLogin.payload.token)).status === 403, '教练不能读取运动员今日状态');
+  assert((await request('/api/me/today-status')).status === 401, '未登录者不能读取今日状态');
+
+  const todaySession = await request(
+    '/api/me/training-sessions',
+    { method: 'POST', body: JSON.stringify({ ...selfSessionInput, date: beijingToday, startTime: '08:30' }) },
+    athleteSessionToken
+  );
+  const todaySessionId = todaySession.payload.session?.id;
+  assert(todaySession.status === 201 && todaySessionId, '运动员应能为当天新增训练课次');
+  const submittedStatus = await request('/api/me/today-status', {}, athleteSessionToken);
+  assert(
+    submittedStatus.payload.submitted === true &&
+      submittedStatus.payload.timeIncomplete === false &&
+      submittedStatus.payload.load24h > 0 &&
+      submittedStatus.payload.source === 'athlete_self_report',
+    '当天正式课次应把今日状态标记为已填报并计入24小时负荷'
+  );
+  assert(
+    (await request(`/api/me/training-sessions/${todaySessionId}`, { method: 'DELETE' }, athleteSessionToken)).status === 200,
+    '今日状态回归需要清理当天课次'
+  );
+  const clearedStatus = await request('/api/me/today-status', {}, athleteSessionToken);
+  assert(
+    clearedStatus.payload.submitted === false &&
+      clearedStatus.payload.load24h === 0 &&
+      clearedStatus.payload.source === null,
+    '删除当天课次后今日状态应回到未填报'
+  );
+
+  // 恢复日报：日期窗口、本人权限、只写本人行与同日幂等 upsert。
+  assert((await request('/api/me/wellness', {}, athleteSessionToken)).status === 200, '运动员应能读取本人恢复日报');
+  assert((await request('/api/me/wellness', {}, demoCoachLogin.payload.token)).status === 403, '教练不能读取运动员恢复日报');
+  assert((await request('/api/me/wellness')).status === 401, '未登录者不能读取恢复日报');
+  assert((await request('/api/me/wellness?date=2999-01-01', {}, athleteSessionToken)).status === 400, '恢复日报查询必须拒绝未来日期');
+  assert((await request('/api/me/wellness?date=2000-01-01', {}, athleteSessionToken)).status === 400, '恢复日报查询必须拒绝超窗日期');
+  assert(
+    (await request(`/api/me/wellness?date=${wellnessEarliest}`, {}, athleteSessionToken)).status === 200,
+    '恢复日报查询必须接受最近7天内的日期'
+  );
+  assert(
+    (await request('/api/me/wellness', { method: 'POST', body: JSON.stringify({ date: beijingToday }) }, athleteSessionToken)).status === 400,
+    '空提交的恢复日报必须被拒绝'
+  );
+  assert(
+    (await request('/api/me/wellness', { method: 'POST', body: JSON.stringify({ date: '2999-01-01', sleepHours: 7 }) }, athleteSessionToken)).status === 400,
+    '恢复日报必须拒绝未来日期'
+  );
+  assert(
+    (await request('/api/me/wellness', { method: 'POST', body: JSON.stringify({ date: beijingToday, sleepHours: 999 }) }, athleteSessionToken)).status === 400,
+    '恢复日报必须拒绝越界数值'
+  );
+  assert(
+    (await request('/api/me/wellness', { method: 'POST', body: JSON.stringify({ date: beijingToday, sleepHours: 7, score: 3 }) }, athleteSessionToken)).status === 400,
+    '恢复日报必须拒绝未知字段'
+  );
+  assert(
+    (await request('/api/me/wellness', { method: 'POST', body: JSON.stringify({ date: beijingToday, sleepHours: 7, status: 'alert' }) }, athleteSessionToken)).status === 400,
+    '运动员不能提交系统分类状态'
+  );
+
+  const firstWellness = await request(
+    '/api/me/wellness',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        date: beijingToday,
+        sleepHours: 7,
+        sleepQuality: 8,
+        morningPulse: 58,
+        weightKg: 61.5,
+        fatigueIndex: 4,
+        status: 'normal',
+      }),
+    },
+    athleteSessionToken
+  );
+  assert(
+    firstWellness.status === 200 &&
+      firstWellness.payload.record?.sleepHours === 7 &&
+      firstWellness.payload.record?.morningPulse === 58 &&
+      firstWellness.payload.record?.status === 'normal' &&
+      firstWellness.payload.record?.source === 'athlete_self_report',
+    '运动员应能保存本人恢复日报'
+  );
+  const secondWellness = await request(
+    '/api/me/wellness',
+    {
+      method: 'POST',
+      body: JSON.stringify({ date: beijingToday, sleepHours: 6.5, fatigueIndex: 2, status: 'rest' }),
+    },
+    athleteSessionToken
+  );
+  assert(
+    secondWellness.status === 200 &&
+      secondWellness.payload.record?.sleepHours === 6.5 &&
+      secondWellness.payload.record?.fatigueIndex === 2 &&
+      secondWellness.payload.record?.status === 'rest' &&
+      secondWellness.payload.record?.morningPulse === null,
+    '同日重复提交应整表覆盖恢复日报'
+  );
+  const wellnessReadBack = await request(`/api/me/wellness?date=${beijingToday}`, {}, athleteSessionToken);
+  assert(
+    wellnessReadBack.payload.record?.sleepHours === 6.5 && wellnessReadBack.payload.record?.status === 'rest',
+    '恢复日报读取应回到最新一次提交'
+  );
+
+  const wellnessDb = new DatabaseSync(databasePath, { readOnly: true });
+  const wellnessRowCount = wellnessDb
+    .prepare('SELECT COUNT(*) AS count FROM daily_wellness WHERE athlete_id = ? AND wellness_date = ?')
+    .get(ownAthlete.id, beijingToday);
+  wellnessDb.close();
+  assert(Number(wellnessRowCount.count) === 1, '同一天恢复日报必须只保留一行');
+
+  const wellnessCleanupDb = new DatabaseSync(databasePath);
+  wellnessCleanupDb
+    .prepare('DELETE FROM daily_wellness WHERE athlete_id = ? AND wellness_date = ? AND source = ?')
+    .run(ownAthlete.id, beijingToday, 'athlete_self_report');
+  wellnessCleanupDb.close();
+
   const updateOwnProfile = await request(
     '/api/me/athlete-profile',
     {
@@ -1402,6 +1572,7 @@ try {
         athleteManagementCrud: 'passed',
         removedAIImportRoutes: 'passed',
         passwordChange: 'passed',
+        selfDailyStatusAndWellness: 'passed',
       },
       null,
       2

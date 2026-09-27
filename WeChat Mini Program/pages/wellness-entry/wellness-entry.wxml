@@ -1,0 +1,58 @@
+<view class="page wellness-page">
+  <view class="page-head">
+    <view class="page-title">恢复日报</view>
+    <view class="page-description">本人填写的自评数值 · 最近7天可补填</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载恢复日报</view></view>
+
+  <block wx:if="{{!loading}}">
+    <view class="card form-card">
+      <view class="form-grid">
+        <view class="field">
+          <text class="field-label">填写日期 *</text>
+          <picker mode="date" value="{{form.date}}" start="{{min}}" end="{{max}}" bindchange="onDateChange">
+            <view class="picker-input">{{form.date}}</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="field-label">可填写范围</text>
+          <view class="picker-input static">{{min}} 至 {{max}}</view>
+        </view>
+      </view>
+      <view class="todo-note">切换日期会重新读取当天已保存的内容。</view>
+    </view>
+
+    <view class="card form-card">
+      <view class="card-head"><view><view class="card-head-title">自评数值</view><view class="todo-note">只记录原始数值，留空表示本次不填写</view></view></view>
+      <view class="form-grid">
+        <view wx:for="{{fieldDefs}}" wx:key="key" class="field">
+          <text class="field-label">{{item.label}}（{{item.suffix}}）</text>
+          <input class="input" type="digit" value="{{form[item.key]}}" placeholder="{{item.placeholder}}" data-field="{{item.key}}" bindinput="onInput" aria-label="{{item.label}}{{item.unit}}" />
+        </view>
+      </view>
+    </view>
+
+    <view class="card form-card">
+      <view class="card-head"><view><view class="card-head-title">今日训练状态 *</view><view class="todo-note">本人自评，不生成诊断或评分</view></view></view>
+      <radio-group class="status-group" bindchange="onStatusChange" aria-label="今日训练状态">
+        <label wx:for="{{statusOptions}}" wx:key="value" class="status-option {{form.statusIndex === index ? 'status-option-active' : ''}}">
+          <radio value="{{index}}" checked="{{form.statusIndex === index}}" color="#176f7f" />{{item.label}}
+        </label>
+      </radio-group>
+      <view class="button-row"><button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在保存' : '保存恢复日报'}}</button></view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">该日期已保存</view><view class="section-head-note">保存后首页今日状态会同步更新</view></view>
+    <view wx:if="{{recordView && recordView.filled}}" class="card">
+      <view class="list">
+        <view class="list-row">
+          <view class="list-row-main"><view><view class="list-row-title">{{recordView.filledLabel}} · {{recordView.statusLabel}}</view><text class="list-row-meta">{{recordView.note}}</text></view></view>
+          <text class="wellness-summary">{{recordView.summary}}</text>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="card state"><view class="state-icon">＋</view><view class="state-title">该日期还没有恢复日报</view><text class="state-note">填写后保存即可记录到本人档案</text></view>
+  </block>
+</view>

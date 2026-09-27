@@ -1,0 +1,15 @@
+.wellness-page { padding-bottom: 80rpx; }
+.form-card { width: 100%; padding-bottom: 24rpx; }
+.form-grid { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16rpx; }
+.form-grid > .field { min-width: 0; }
+.field picker { width: 100%; display: block; }
+.picker-input { width: 100%; max-width: 100%; height: 86rpx; padding: 0 22rpx; display: flex; align-items: center; overflow: hidden; border: 1rpx solid #ccdadd; border-radius: 16rpx; background: #fff; font-size: 25rpx; white-space: nowrap; text-overflow: ellipsis; }
+.picker-input.static { color: #6d8088; }
+.form-card .input { width: 100%; max-width: 100%; }
+.status-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-bottom: 22rpx; }
+.status-option { display: flex; align-items: center; gap: 10rpx; padding: 18rpx 20rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; color: #405b65; background: #edf3f4; font-size: 25rpx; line-height: 1.4; }
+.status-option-active { border-color: #176f7f; color: #123f4b; background: #e6f4f1; font-weight: 700; }
+.status-option:focus-within { outline: 4rpx solid #176373; outline-offset: 4rpx; }
+.button-row { display: grid; grid-template-columns: 1fr; gap: 14rpx; margin-top: 4rpx; }
+.wellness-summary { display: block; margin-top: 12rpx; color: #526c75; font-size: 21rpx; line-height: 1.6; overflow-wrap: anywhere; }
+.todo-note { margin-top: 14rpx; color: #46616c; font-size: 24rpx; line-height: 1.65; overflow-wrap: break-word; }

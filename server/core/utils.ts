@@ -74,11 +74,8 @@ export function parseDate(value: unknown): string {
   return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
 }
 
-export function isValidIsoDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
+// 抽到无依赖模块，纯逻辑（如运动员恢复日报 schema）可在不打开数据库的情况下复用。
+export { isValidIsoDate } from './date-utils.ts';
 
 export function pick(row: Record<string, unknown>, aliases: string[]) {
   const normalized = new Map(

@@ -4,6 +4,8 @@
 
 > 2026-09-27 修复回写：`/api/me/training-sessions` 已接入正式课次表并做本人权限校验；`api-check` 的页面模块映射已补齐，随后发现并修复每日待办的角色与项目授权回归。发布配置已改为 production/关闭网络调试。日期统一为北京时间；四个数据 Tab 短时重访复用数据、写入后刷新。照片选择已接微信隐私授权；登录页按原设计保留 50 项奥林匹克运动 GIF，未引用的奥运 PNG 排除打包。注册、角色和体能指标字典从 `shared/` 生成，`/api/teams` 已要求登录，注册改用公开的最小队伍列表。新增 `mini:typecheck` 对配置、日期和请求竞争工具做严格 TypeScript `checkJs`；页面仍是原生 JavaScript，完整迁移尚未实施。真机隐私弹窗与包体结果仍需微信开发者工具验收。
 
+> 2026-09-27 P0-1 教练现场闭环回写：新增 `pages/injury-report` 伤病与疼痛上报页（档案页入口），管理角色写入正式伤病记录、ATL 只能提交本人疼痛反馈并由服务端降级为 `feedback/observation`；首页待办增加“全部/未填报/负荷与伤病/时间待补”分组筛选与姓名、队伍搜索，纯视图计算由 `utils/daily-todos.js` 的 `filterDailyTodos` 承担。新增 `utils/injury-form.test.js`、`pages/injury-report/injury-report.test.js`，`api-check` 增加疼痛反馈降级与越权 403 断言。
+
 ## 1. 定位与边界
 
 竞迹小程序是训练监控平台的**原生微信客户端**，与 React 网页端共用同一套 Express API、账号权限和 SQLite，**不新建第二套数据库，也不复制训练/测试/档案业务事实**。
@@ -75,8 +77,9 @@ React 网页端 ─┐
 - 指标卡：训练时长、负荷（SRPE）、疲劳指数、损伤人数。
 - 近 14 日双序列趋势（时长/负荷）柱状 + 点击 Modal 明细。
 - 强度区间占比进度条；伤病列表可 `switchTab` 进档案。
-- **每日待办**（SCC/PRJ/REG/TD/DMD）：未填报/高负荷/伤病/开训时间缺失；`daily-todos.js` 在网络边界做形状校验；请求序号防串项目。
+- **每日待办**（SCC/PRJ/REG/TD/DMD）：未填报/高负荷/伤病/开训时间缺失；`daily-todos.js` 在网络边界做形状校验；请求序号防串项目；`filterDailyTodos` 支持四组筛选与姓名/队伍搜索（纯视图，计数不随分组切换清零）。
 - ATL 可进入本人训练填报。
+- **今日状态**（ATL）：`loadToday` 与待办并行、独立 guard；`today-status.js` 校验 `GET /api/me/today-status` 后显示已填报/未填报、24 小时负荷与课次来源，`wellnessRecordView` 显示恢复日报状态，两个入口直达训练填报与恢复日报；失败清空过期数据，可单独重试。
 
 #### 专项训练（Tab：专项训练）
 
@@ -95,6 +98,13 @@ React 网页端 ─┐
 - 基础格子资料（主区 + 更多）、训练概览 4 卡、制胜要素摘要、力量测试条、伤病列表。
 - 身份证/手机号默认脱敏；ATL 显示「编辑」进 `profile-edit`。
 - 并行请求伤病、个人 overview、冠军模型（后者失败可降级）。
+- 伤病卡提供「新增伤病记录 / 提交疼痛反馈」入口，进入 `pages/injury-report`（SCC/PRJ/REG/TD/DMD 与 ATL 可见，其余角色与未选中运动员不显示）。
+
+#### 伤病与疼痛上报 `injury-report`
+
+- `?athleteId=` 进入；`loadContext()` 后校验目标运动员属于当前项目权限范围，ATL 还必须是本人，否则直接显示错误且不发请求。
+- 字典与服务端一致：状态/侧别来自 `utils/injury-form.js`，`buildInjuryPayload` 统一裁剪、校验疼痛评分 0–10 整数与 `YYYY-MM-DD` 日期，ATL 模式剔除 `status/restrictions/rehabPlan`。
+- 成功后 `dataVersion += 1`、`homeNeedsRefresh = true`，toast 后 `navigateBack()` 回档案并刷新待办。
 
 #### 本人档案编辑 `profile-edit`
 
@@ -109,6 +119,13 @@ React 网页端 ─┐
 - 新建/编辑/删除：类型、强度区、内容、时长、距离、RPE，可选心率/功率/桨频。
 - 服务端按登录账号绑定运动员，不接受客户端 athleteId。
 
+#### 恢复日报填写 `wellness-entry`
+
+- 仅 ATL；日期选择器限制在最近 7 天至今天（北京时间），切换日期即读取该日已保存记录。
+- 字段来自 `utils/wellness-form.js` 的 `METRICS`/`STATUS_OPTIONS`：睡眠、睡眠质量、晨脉、体重、疲劳、酸痛、心情 + 今日训练状态（正常训练/需要休息）。
+- 提交前用 `wellnessPayload` 校验量纲与“至少一项”，服务端仍以 `z.strictObject` 复校；保存后递增 `homeNeedsRefresh`/`dataVersion` 并展示该日期已保存的原始数值。
+- 不生成评分或诊断，只回显自评数值。
+
 ## 4. 分层与代码结构
 
 ```text
@@ -120,11 +137,16 @@ WeChat Mini Program/
 │  ├─ request.js                    # 请求/上传、鉴权头、401 跳转、网络诊断
 │  ├─ context.js                    # 用户+项目+运动员列表装配
 │  ├─ date.js / format.js           # 区间、脱敏、指标字典
-│  ├─ daily-todos.js                # 待办响应显式校验与文案
+│  ├─ daily-todos.js                # 待办响应显式校验、文案与分组筛选/搜索
+│  ├─ today-status.js               # 今日状态响应校验与首页文案
+│  ├─ wellness-form.js              # 恢复日报字典、回填窗口与提交载荷校验
+│  ├─ injury-form.js                # 伤病上报字典与提交载荷校验
 │  ├─ profile-payload.js            # 档案提交规范化
 │  └─ network-error.js              # 用户可读网络错误
 ├─ data/register-data.js            # 注册用项目/省份字典（CJS）
 ├─ components/scope-filter/         # 共用筛选
+├─ pages/injury-report/             # 伤病与疼痛上报页四件套 + 测试
+├─ pages/wellness-entry/            # 恢复日报填写页四件套 + 测试
 ├─ pages/*/                         # 页面四件套 + 部分 test
 └─ assets/                          # TabBar、SVG 等；奥运 PNG 排除打包
 ```
@@ -168,10 +190,13 @@ pages 不直接 wx.request；utils 不 import pages
 | GET | `/api/special-training/overview`、`/api/special-champion-models` | 专项 |
 | GET | `/api/strength-tests`、`/api/training-plans`、`/api/strength-training/results` | 体能 |
 | GET | `/api/athletes/:id/overview`、`.../injuries`、`.../champion-model` | 档案 |
+| POST | `/api/athletes/:id/injuries` | 伤病记录 / 运动员疼痛反馈（服务端强制 `feedback`+`observation`） |
 | PUT | `/api/me/athlete-profile` | 档案编辑 |
 | PUT | `/api/athletes/:id/body-composition` | 身体成分 |
 | POST | `/api/athletes/:id/photo` | 证件照上传 |
 | GET/POST/PUT/DELETE | `/api/me/training-sessions[...]` | 训练填报 |
+| GET | `/api/me/today-status` | 首页今日状态（ATL 本人） |
+| GET/POST | `/api/me/wellness` | 恢复日报读写（ATL 本人，最近 7 天，同日 upsert） |
 
 **授权**：全部依赖服务端；页面隐藏控件**不是**授权手段。`request.js` 对 401 清会话并 `reLaunch` 登录。
 
@@ -192,8 +217,8 @@ pages 不直接 wx.request；utils 不 import pages
 | 类型 | 位置 | 覆盖点 |
 | --- | --- | --- |
 | 单元/静态 | `config.test.js` | 基址解析、生产强制 HTTPS |
-| 单元 | `utils/request.test.js`、`network-error.test.js`、`profile-payload.test.js`、`daily-todos.test.js` | 传输、错误文案、档案校验、待办形状 |
-| 静态 | `register.test.js`、`profile-edit.test.js` | 字典与 shared 一致、接口/回填/队伍重试、编辑链路 |
+| 单元 | `utils/request.test.js`、`network-error.test.js`、`profile-payload.test.js`、`daily-todos.test.js`、`injury-form.test.js`、`today-status.test.js`、`wellness-form.test.js` | 传输、错误文案、档案校验、待办形状与分组筛选、伤病字典与载荷（比对服务端取值）、今日状态形状与文案、恢复日报回填窗口与载荷 |
+| 静态 | `register.test.js`、`profile-edit.test.js`、`pages/injury-report/injury-report.test.js`、`pages/wellness-entry/wellness-entry.test.js` | 字典与 shared 一致、接口/回填/队伍重试、编辑链路、路由/入口/角色分支与上报页面行为、今日状态与恢复日报入口、填写页保存/校验/角色分支 |
 | 集成 | 根 `scripts/api-check.mjs` | 含注册/审批等服务端回归（非小程序 UI） |
 
 缺口：

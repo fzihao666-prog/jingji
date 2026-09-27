@@ -4,7 +4,9 @@ const { createInitialScope, applyScopeChange, saveProjectInOrder } = require('..
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const { shortDate, todayBeijing } = require('../../utils/date');
 const { number, INJURY_LABELS } = require('../../utils/format');
-const { dailyTodoView } = require('../../utils/daily-todos');
+const { dailyTodoView, filterDailyTodos } = require('../../utils/daily-todos');
+const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
+const { wellnessRecordView } = require('../../utils/wellness-form');
 
 function sum(values) {
   return values.reduce((total, value) => total + (Number.isFinite(Number(value)) ? Number(value) : 0), 0);
@@ -107,7 +109,14 @@ Page({
     todos: null,
     todosLoading: false,
     todosError: '',
-    todosStatus: ''
+    todosStatus: '',
+    todoFilter: 'all',
+    todoKeyword: '',
+    todoView: null,
+    todayLoading: false,
+    todayError: '',
+    todayView: null,
+    wellnessView: null
   },
 
   onShow() {
@@ -123,8 +132,13 @@ Page({
   loadPage(refreshUser = false) {
     this._guard = this._guard || createRequestGuard();
     this._todoGuard = this._todoGuard || createRequestGuard();
+    this._todayGuard = this._todayGuard || createRequestGuard();
     this._todoGuard.next();
-    this.setData({ todos: null, todosError: '', canViewTodos: false });
+    this._todayGuard.next();
+    this.setData({
+      todos: null, todoView: null, todosError: '', canViewTodos: false,
+      todayView: null, wellnessView: null, todayError: '', todayLoading: false
+    });
     return loadWithGuard(this, this._guard, async (isLatest) => {
       const context = await loadContext({ refreshUser });
       if (!isLatest()) return null;
@@ -134,7 +148,8 @@ Page({
       this.setData({ ...scope, canSelfReport, canViewTodos });
       const [overview] = await Promise.all([
         this.loadPageData({ ...scope, canSelfReport }),
-        this.loadTodos(scope.project)
+        this.loadTodos(scope.project),
+        this.loadToday()
       ]);
       if (isLatest()) {
         this._lastLoadedAt = Date.now();
@@ -155,7 +170,7 @@ Page({
     if (!this.data.canViewTodos) return;
     this._todoGuard = this._todoGuard || createRequestGuard();
     const id = this._todoGuard.next();
-    this.setData({ todosLoading: true, todosError: '', todos: null, todosStatus: '正在核对今日填报与关注状态…' });
+    this.setData({ todosLoading: true, todosError: '', todos: null, todoView: null, todosStatus: '正在核对今日填报与关注状态…' });
     try {
       const result = await api.dailyTodos(project);
       if (!this._todoGuard.isLatest(id)) return;
@@ -163,7 +178,7 @@ Page({
       const todosStatus = todos.counts.total
         ? `加载完成，未填报 ${todos.counts.missing} 人，需关注 ${todos.counts.attention} 人。`
         : '加载完成，当前项目暂无可访问的运动员。';
-      this.setData({ todos, todosStatus });
+      this.setData({ todos, todosStatus, todoView: filterDailyTodos(todos, this.data.todoFilter, this.data.todoKeyword) });
     } catch (error) {
       if (this._todoGuard.isLatest(id)) {
         const todosError = error.message || '每日待办加载失败，请重试。';
@@ -178,13 +193,56 @@ Page({
     return this.loadTodos(this.data.project);
   },
 
+  // 运动员本人的今日状态与恢复日报：与教练待办并行加载，各自独立重试。
+  async loadToday() {
+    if (!this.data.canSelfReport) return;
+    this._todayGuard = this._todayGuard || createRequestGuard();
+    const id = this._todayGuard.next();
+    this.setData({ todayLoading: true, todayError: '' });
+    try {
+      const [status, wellness] = await Promise.all([api.todayStatus(), api.myWellness()]);
+      if (!this._todayGuard.isLatest(id)) return;
+      this.setData({
+        todayLoading: false,
+        todayView: todayStatusSummary(todayStatusView(status)),
+        wellnessView: wellnessRecordView(wellness && wellness.record)
+      });
+    } catch (error) {
+      if (this._todayGuard.isLatest(id)) {
+        // 失败时不保留过期的今日状态，避免把旧数据当成当前结果。
+        this.setData({
+          todayLoading: false,
+          todayView: null,
+          wellnessView: null,
+          todayError: error.message || '今日状态加载失败，请重试。'
+        });
+      }
+    }
+  },
+
+  retryToday() {
+    return this.loadToday();
+  },
+
+  onTodoFilter(event) {
+    const todoFilter = event.currentTarget.dataset.filter;
+    if (!todoFilter || todoFilter === this.data.todoFilter || !this.data.todos) return;
+    this.setData({ todoFilter, todoView: filterDailyTodos(this.data.todos, todoFilter, this.data.todoKeyword) });
+  },
+
+  onTodoKeyword(event) {
+    const todoKeyword = event.detail.value;
+    if (!this.data.todos) return;
+    this.setData({ todoKeyword, todoView: filterDailyTodos(this.data.todos, this.data.todoFilter, todoKeyword) });
+  },
+
   onScopeChange(event) {
     const change = applyScopeChange(this, event);
     if (!change) return Promise.resolve();
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
+      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todoView: null, todoKeyword: '', todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
@@ -228,5 +286,9 @@ Page({
 
   openTrainingEntry() {
     wx.navigateTo({ url: '/pages/training-entry/training-entry' });
+  },
+
+  openWellnessEntry() {
+    wx.navigateTo({ url: '/pages/wellness-entry/wellness-entry' });
   }
 });

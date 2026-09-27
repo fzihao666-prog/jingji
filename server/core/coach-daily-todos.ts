@@ -59,21 +59,16 @@ function isOfficialSession(session: TodoSession) {
   );
 }
 
-export function buildDailyTodos(input: {
-  athletes: TodoAthlete[];
-  sessions: TodoSession[];
-  injuries: TodoInjury[];
-  now: Date;
-}) {
-  const { now, athletes } = input;
+// 未填报、开训时间缺失与24小时负荷的唯一计算口径；教练待办与运动员今日状态共用。
+export function sessionFacts(sessions: TodoSession[], athleteIds: number[], now: Date) {
   const date = beijingDate(now);
   const since = now.getTime() - DAY_MS;
   const sinceDate = beijingDate(new Date(since));
-  const ids = new Set(athletes.map((athlete) => athlete.athleteId));
+  const ids = new Set(athleteIds);
   const submitted = new Set<number>();
   const incomplete = new Set<number>();
   const loads = new Map<number, number>();
-  for (const session of input.sessions) {
+  for (const session of sessions) {
     if (!ids.has(session.athleteId) || !isOfficialSession(session)) continue;
     if (session.date < sinceDate || session.date > date) continue;
     if (session.date === date) submitted.add(session.athleteId);
@@ -88,6 +83,24 @@ export function buildDailyTodos(input: {
       loads.set(session.athleteId, (loads.get(session.athleteId) || 0) + session.srpe);
     }
   }
+  return { date, submitted, incomplete, loads };
+}
+
+export function buildDailyTodos(input: {
+  athletes: TodoAthlete[];
+  sessions: TodoSession[];
+  injuries: TodoInjury[];
+  now: Date;
+}) {
+  const { now, athletes } = input;
+  const date = beijingDate(now);
+  const since = now.getTime() - DAY_MS;
+  const ids = new Set(athletes.map((athlete) => athlete.athleteId));
+  const { submitted, incomplete, loads } = sessionFacts(
+    input.sessions,
+    athletes.map((athlete) => athlete.athleteId),
+    now
+  );
   const injuries = new Map<number, TodoInjury & { recent: boolean }>();
   for (const injury of input.injuries) {
     // SQLite CURRENT_TIMESTAMP 为 UTC；无时区后缀时显式按 UTC 解析。
@@ -191,4 +204,50 @@ export function readDailyTodos(
     )
     .all(...ids, input.now.toISOString()) as TodoInjury[];
   return buildDailyTodos({ athletes, sessions, injuries, now: input.now });
+}
+
+// 运动员本人的今日状态：与教练待办同口径，只针对单个运动员。
+export function buildTodayStatus(input: {
+  athleteId: number;
+  sessions: TodoSession[];
+  now: Date;
+}) {
+  const { athleteId, now } = input;
+  const date = beijingDate(now);
+  const { submitted, incomplete, loads } = sessionFacts(input.sessions, [athleteId], now);
+  const latest = input.sessions.find(
+    (session) => session.athleteId === athleteId && session.date === date && isOfficialSession(session)
+  );
+  return {
+    date,
+    timezone: 'Asia/Shanghai',
+    generatedAt: now.toISOString(),
+    submitted: submitted.has(athleteId),
+    timeIncomplete: incomplete.has(athleteId),
+    load24h: Math.round((loads.get(athleteId) || 0) * 10) / 10,
+    source: latest ? latest.source : null,
+  };
+}
+
+export function readTodayStatus(
+  db: DatabaseSync,
+  input: { athleteId: number; now: Date }
+) {
+  const date = beijingDate(input.now);
+  const sessions = db
+    .prepare(
+      `
+    SELECT athlete_id AS athleteId, session_date AS date, start_time AS startTime, srpe,
+      training_type AS trainingType, structure_type AS structureType, content, source, quality, is_demo AS isDemo
+    FROM training_sessions
+    WHERE athlete_id = ? AND session_date BETWEEN ? AND ?
+    ORDER BY session_date DESC, session_order DESC
+  `
+    )
+    .all(
+      input.athleteId,
+      beijingDate(new Date(input.now.getTime() - DAY_MS)),
+      date
+    ) as TodoSession[];
+  return buildTodayStatus({ athleteId: input.athleteId, sessions, now: input.now });
 }

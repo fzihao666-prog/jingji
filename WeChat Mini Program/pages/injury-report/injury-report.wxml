@@ -1,0 +1,99 @@
+<view class="page injury-report-page">
+  <view class="page-head">
+    <view class="page-title">{{isSelfFeedback ? '提交疼痛反馈' : '新增伤病记录'}}</view>
+    <view class="page-description">{{athleteName || '运动员'}} · {{athleteMeta}}</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+
+  <view wx:if="{{loading}}" class="card state">
+    <view class="state-icon">↻</view>
+    <view class="state-title">正在准备上报页面</view>
+  </view>
+
+  <block wx:elif="{{!error}}">
+    <view class="notice report-notice">{{notice}}</view>
+
+    <view class="card form-card">
+      <view class="form-grid">
+        <view class="field">
+          <text class="field-label">伤病部位 *</text>
+          <picker range="{{bodyPartOptions}}" value="{{bodyPartIndex}}" bindchange="onBodyPartChange">
+            <view class="picker-input">{{bodyPartOptions[bodyPartIndex]}}</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="field-label">身体侧别 *</text>
+          <picker range="{{sideOptions}}" value="{{sideIndex}}" bindchange="onSideChange">
+            <view class="picker-input">{{sideOptions[sideIndex]}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <view wx:if="{{bodyPartOptions[bodyPartIndex] === '其他'}}" class="field">
+        <text class="field-label">具体部位 *</text>
+        <input class="input" maxlength="30" value="{{bodyPartCustom}}" data-field="bodyPartCustom" bindinput="onFieldInput" placeholder="如：跟腱、腹股沟" />
+      </view>
+
+      <view class="field">
+        <text class="field-label">{{isSelfFeedback ? '不适情况 *' : '问题名称或诊断 *'}}</text>
+        <input class="input" maxlength="80" value="{{injuryName}}" data-field="injuryName" bindinput="onFieldInput" placeholder="{{isSelfFeedback ? '如：划桨时右肩酸痛' : '如：右肩肩袖损伤'}}" />
+      </view>
+
+      <view class="form-grid">
+        <view class="field">
+          <text class="field-label">疼痛评分（0—10）*</text>
+          <picker range="{{painOptions}}" value="{{painIndex}}" bindchange="onPainChange">
+            <view class="picker-input">{{painOptions[painIndex]}} / 10</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="field-label">首次出现日期 *</text>
+          <picker mode="date" value="{{onsetDate}}" bindchange="onDateChange" data-field="onsetDate">
+            <view class="picker-input">{{onsetDate}}</view>
+          </picker>
+        </view>
+      </view>
+
+      <block wx:if="{{!isSelfFeedback}}">
+        <view class="field">
+          <text class="field-label">健康状态 *</text>
+          <picker range="{{statusOptions}}" value="{{statusIndex}}" bindchange="onStatusChange">
+            <view class="picker-input">{{statusOptions[statusIndex]}}</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="field-label">训练限制</text>
+          <input class="input" maxlength="500" value="{{restrictions}}" data-field="restrictions" bindinput="onFieldInput" placeholder="如：暂停大重量卧拉，可不填" />
+        </view>
+        <view class="field">
+          <text class="field-label">康复计划</text>
+          <input class="input" maxlength="500" value="{{rehabPlan}}" data-field="rehabPlan" bindinput="onFieldInput" placeholder="如：肩袖激活每日2次，可不填" />
+        </view>
+      </block>
+
+      <view class="field">
+        <text class="field-label">复查日期</text>
+        <view class="review-row">
+          <picker mode="date" value="{{reviewDate}}" bindchange="onDateChange" data-field="reviewDate">
+            <view class="picker-input">{{reviewSet ? reviewDate : '暂不设置'}}</view>
+          </picker>
+          <button wx:if="{{reviewSet}}" class="text-button" bindtap="clearReviewDate">清除</button>
+        </view>
+      </view>
+
+      <view class="field">
+        <text class="field-label">备注</text>
+        <textarea class="textarea" maxlength="800" value="{{note}}" data-field="note" bindinput="onFieldInput" placeholder="训练中的诱因、缓解情况等，可不填" />
+      </view>
+
+      <view class="button-row">
+        <button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save" aria-label="提交伤病记录">
+          {{saving ? '正在保存' : (isSelfFeedback ? '提交疼痛反馈' : '保存伤病记录')}}
+        </button>
+      </view>
+    </view>
+
+    <view class="notice report-scope">提交后由服务端按账号权限校验；运动员只能提交本人反馈，跨项目或越权提交会被拒绝。</view>
+  </block>
+</view>

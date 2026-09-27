@@ -26,6 +26,23 @@ export async function checkMiniDailyTodoFlow(assert) {
     viewContext
   );
   modules['../../utils/daily-todos'] = viewContext.module.exports;
+  const todayStatusContext = { module: { exports: {} }, require: () => format.module.exports };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/today-status.js', import.meta.url), 'utf8'),
+    todayStatusContext
+  );
+  modules['../../utils/today-status'] = todayStatusContext.module.exports;
+  const dateContext = { module: { exports: {} } };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/date.js', import.meta.url), 'utf8'),
+    dateContext
+  );
+  const wellnessFormContext = { module: { exports: {} }, require: () => dateContext.module.exports };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/wellness-form.js', import.meta.url), 'utf8'),
+    wellnessFormContext
+  );
+  modules['../../utils/wellness-form'] = wellnessFormContext.module.exports;
   const requests = [];
   const api = {
     dailyTodos: (project) => {
@@ -143,4 +160,61 @@ export async function checkMiniDailyTodoFlow(assert) {
   };
   await page.loadTodos('ROWING');
   assert(requests.length === 2, '请求竞争场景应仅发起两个项目请求');
+
+  // 运动员今日状态卡：本人接口、结果播报与失败时不得保留过期数据。
+  const todayPayload = {
+    date: '2026-09-23',
+    timezone: 'Asia/Shanghai',
+    generatedAt: '2026-09-23T02:00:00Z',
+    submitted: false,
+    timeIncomplete: false,
+    load24h: 0,
+    source: null,
+  };
+  page.data.canSelfReport = true;
+  api.todayStatus = async () => todayPayload;
+  api.myWellness = async () => ({ date: '2026-09-23', record: null });
+  await page.loadToday();
+  assert(
+    page.data.todayView.submittedLabel === '未填报' && page.data.wellnessView.filledLabel === '未填写',
+    '今日状态卡应同时显示训练填报与恢复日报状态'
+  );
+  api.todayStatus = async () => ({
+    ...todayPayload,
+    submitted: true,
+    load24h: 468,
+    source: 'athlete_self_report',
+  });
+  api.myWellness = async () => ({
+    date: '2026-09-23',
+    record: {
+      date: '2026-09-23',
+      sleepHours: 7,
+      morningPulse: 58,
+      fatigueIndex: 4,
+      status: 'normal',
+      source: 'athlete_self_report',
+    },
+  });
+  await page.loadToday();
+  assert(
+    page.data.todayView.submittedLabel === '已填报' && page.data.todayView.loadText === '468',
+    '已填报时今日状态卡应显示服务端计算的负荷'
+  );
+  assert(page.data.wellnessView.filled === true, '已填写恢复日报后应显示已填写');
+  api.todayStatus = async () => {
+    throw new Error('今日状态暂时不可用');
+  };
+  await page.loadToday();
+  assert(
+    page.data.todayView === null && page.data.todayError === '今日状态暂时不可用',
+    '今日状态失败不得保留过期数据'
+  );
+  page.data.canSelfReport = false;
+  page.data.todayError = '';
+  api.todayStatus = async () => {
+    throw new Error('不应为非运动员发起今日状态请求');
+  };
+  await page.loadToday();
+  assert(page.data.todayError === '', '非运动员不应请求本人今日状态');
 }

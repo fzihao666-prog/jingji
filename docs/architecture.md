@@ -225,7 +225,7 @@ sequenceDiagram
 
 | API 域     | 路径前缀                                                     | 主要职责                             |
 | ---------- | ------------------------------------------------------------ | ------------------------------------ |
-| 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密         |
+| 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密，以及本人今日状态与恢复日报         |
 | 偏好       | `/api/preferences`                                           | 当前项目等应用上下文偏好             |
 | 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理 |
 | 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与展示用主管教练关系                         |
@@ -338,7 +338,7 @@ erDiagram
 | ------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | 身份与组织   | `users`、`account_profiles`、权限表、`coach_athletes`         | 身份、层级和数据范围；运动员可见性以区域/项目/队伍权限为准         |
 | 运动员主数据 | `athletes`、`athlete_profiles`、`athlete_origins`             | 稳定身份和扩展档案                                                                                       |
-| 训练事实     | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源                                                                             |
+| 训练事实     | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源；`daily_wellness` 同时承接导入、演示与运动员本人恢复日报                                                                             |
 | 训练计划     | `training_plans`                                              | 结构化列与 `plan_data` JSON 并存                                                                         |
 | 测试评估     | `test_sessions`、`test_measurements`、身体测量、竞技状态      | 统一指标模型；`test_sessions.duration_min` 保存测试批次时长，团队汇总按测试日期与类型去重                |
 | 专项测试     | `special_test_events`、`special_test_results`                 | 事件与参与者成绩                                                                                         |
@@ -497,6 +497,16 @@ Excel / PDF / 图片
 小程序通过 `services/api.js` 获取结果，原生运行时不引入 Node/zod 打包依赖，`utils/daily-todos.js` 显式校验响应形状、标识符及数值后生成展示文案。首页独立处理加载、错误、空状态，以请求序号防止旧项目响应覆盖，档案返回时重新拉取。服务端仍是权限唯一依据，不新增待办持久化表或旧训练事实依赖。
 
 `npm run daily-todos-example` 只创建 `tmp/coach-daily-todos-日期.db` 新场景库，不连接默认运行库；样例使用正式事实表、有效质量与非演示标记，保留 `coach_daily_example` 来源以追溯，参与正式统计。未修改数据库迁移或自动初始化路径。
+
+### 10.7 小程序运动员今日状态与恢复日报
+
+`GET /api/me/today-status`、`GET/POST /api/me/wellness` 由 `server/athlete/self-daily-routes.ts` 注册，沿用 `ownAthleteId` 的本人校验：只允许 ATL 读取或提交本人数据，其他角色或代查他人返回 403，未登录 401，响应禁止缓存。纯校验与窗口逻辑放在不依赖数据库的 `server/athlete/self-daily-service.ts`，便于单元测试直接覆盖。
+
+今日状态不新增口径：`server/core/coach-daily-todos.ts` 抽出 `sessionFacts`（正式课次筛选、当天已填报、开训时间缺失、24小时 SRPE 累计），`buildTodayStatus`/`readTodayStatus` 只针对单个运动员复用同一结果，`source` 取当天最新正式课次的来源；教练待办与运动员卡片因此不会出现两套判定。
+
+恢复日报只写 `daily_wellness`，按 `(athlete_id, wellness_date)` 幂等 upsert，`source = 'athlete_self_report'`、`quality = 'valid'`，同日重复提交整表覆盖且只保留一行。日期缺省为北京时间当天，拒绝未来日期和超出 `WELLNESS_BACKFILL_DAYS = 7` 的回填窗口；字段使用 `z.strictObject` 拒绝未知键、按量纲逐项校验，空字符串与 `null` 视为清空，至少填写一项。`status` 仅接受本人自评的 `normal`/`rest`，服务端不生成诊断、评分或状态推断。
+
+小程序首页在 `loadPage` 中与教练待办并行调用 `loadToday`，`utils/today-status.js` 和 `utils/wellness-form.js` 在网络边界显式校验响应与提交值；`pages/wellness-entry` 保存后递增 `homeNeedsRefresh` 与 `dataVersion`，返回首页即重拉今日状态。验证覆盖 `server/__tests__/self-daily.test.ts`、`utils/today-status.test.js`、`utils/wellness-form.test.js`、`pages/wellness-entry/wellness-entry.test.js` 与 `npm run api-check` 中的今日状态、恢复日报窗口、权限和幂等断言。
 
 ## 11. 文件、AI 与外部边界
 

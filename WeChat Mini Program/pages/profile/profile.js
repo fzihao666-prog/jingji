@@ -5,6 +5,8 @@ const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard
 const { ageAt } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 
+const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+
 function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
   const photoUrl = api.assetUrl(athlete.photoUrl);
@@ -99,7 +101,8 @@ Page({
     latestTestDate: '',
     benchmarkSummary: null,
     trainingSummary: [],
-    canEditSelf: false
+    canEditSelf: false,
+    canReportRole: false
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -115,7 +118,7 @@ Page({
         selectedAthleteId: getApp().globalData.selectedAthleteId
       });
       getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
-      this.setData({ ...scope, canEditSelf: scope.user.role === 'ATL' });
+      this.setData({ ...scope, canEditSelf: scope.user.role === 'ATL', canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role) });
       const result = await this.loadPageData(scope);
       if (isLatest()) markPageCacheLoaded(this);
       return result;
@@ -152,5 +155,11 @@ Page({
 
   editMyProfile() {
     wx.navigateTo({ url: '/pages/profile-edit/profile-edit' });
+  },
+
+  reportInjury() {
+    const athleteId = Number(this.data.selectedAthleteId) || 0;
+    if (!athleteId) return;
+    wx.navigateTo({ url: `/pages/injury-report/injury-report?athleteId=${athleteId}` });
   }
 });
