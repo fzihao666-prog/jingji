@@ -1203,6 +1203,30 @@ try {
   });
   assert(approvedCoachLogin.status === 200, '获批教练无法登录');
   const approvedCoachToken = approvedCoachLogin.payload.token;
+  const createApprovalProjectLead = await request(
+    '/api/access/accounts',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        username: 'approval_prj_test',
+        password: 'Secure123',
+        displayName: '审核范围项目负责人',
+        role: 'PRJ',
+        parentUserId: adminAccess.payload.current.id,
+        areas: adminAccess.payload.current.areas,
+        projects: ['ROWING'],
+        teams: [{ project: 'ROWING', team: '测试组' }],
+      }),
+    },
+    adminToken
+  );
+  assert(createApprovalProjectLead.status === 201, '审核范围项目负责人创建失败');
+  const approvalProjectLeadLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'approval_prj_test', password: 'Secure123' }),
+  });
+  const approvalProjectLeadToken = approvalProjectLeadLogin.payload.token;
+  assert(approvalProjectLeadLogin.status === 200 && approvalProjectLeadToken, '审核范围项目负责人无法登录');
 
   const approvalGet = await request('/api/admin/registrations/approval', {}, adminToken);
   assert(approvalGet.status === 200 && approvalGet.payload.enabled === true, '默认应开启注册审核');
@@ -1219,6 +1243,35 @@ try {
     approvedCoachToken
   );
   assert(approvalForbiddenCoach.status === 403, '教练不应修改全局注册审核开关');
+  const approvalForbiddenManagers = await Promise.all([
+    request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, executiveToken),
+    request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, regionalToken),
+    request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, approvalProjectLeadToken),
+  ]);
+  assert(approvalForbiddenManagers.every((result) => result.status === 403), 'PRJ、REG、TD 不应修改全局注册审核开关');
+
+  const crossScopeCoachRegister = await request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'cross_scope_coach_test',
+      password: 'Secure123',
+      displayName: '跨范围待审教练',
+      role: 'SCC',
+      project: 'CANOE_SPRINT',
+      team: '皮划艇测试组',
+      phone: '13911112222',
+    }),
+  });
+  assert(crossScopeCoachRegister.status === 201 && crossScopeCoachRegister.payload.status === 'pending', '跨范围教练申请应保持待审核');
+  const crossScopeCoachRequest = (
+    await request('/api/admin/registrations?status=pending', {}, adminToken)
+  ).payload.requests.find((item) => item.username === 'cross_scope_coach_test');
+  const crossScopeApproval = await request(
+    `/api/admin/registrations/${crossScopeCoachRequest.id}/approve`,
+    { method: 'POST' },
+    approvalProjectLeadToken
+  );
+  assert(crossScopeApproval.status === 403, '项目负责人不应批准权限范围外的教练申请');
 
   const historicalPendingBeforeToggle = await request(
     '/api/auth/register',
