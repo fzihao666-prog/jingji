@@ -29,7 +29,18 @@
       <view class="form-grid">
         <view wx:for="{{fieldDefs}}" wx:key="key" class="field">
           <text class="field-label">{{item.label}}（{{item.suffix}}）</text>
-          <input class="input" type="digit" value="{{form[item.key]}}" placeholder="{{item.placeholder}}" data-field="{{item.key}}" bindinput="onInput" aria-label="{{item.label}}{{item.unit}}" />
+          <block wx:if="{{quickSelect[item.key]}}">
+            <view class="quick-select-row">
+              <button wx:for="{{quickSelect[item.key]}}" wx:for-item="opt" wx:key="value"
+                class="quick-select-btn {{form[item.key] == opt.value ? 'quick-select-active' : ''}}"
+                data-field="{{item.key}}" data-value="{{opt.value}}" bindtap="onQuickSelect"
+                aria-label="{{item.label}}：{{opt.label}}，{{form[item.key] == opt.value ? '已选中' : '未选中'}}">{{opt.label}}</button>
+            </view>
+            <input class="input" type="digit" value="{{form[item.key]}}" placeholder="{{item.placeholder}}" data-field="{{item.key}}" bindinput="onInput" aria-label="{{item.label}}{{item.unit}}" />
+          </block>
+          <block wx:else>
+            <input class="input" type="digit" value="{{form[item.key]}}" placeholder="{{item.placeholder}}" data-field="{{item.key}}" bindinput="onInput" aria-label="{{item.label}}{{item.unit}}" />
+          </block>
         </view>
       </view>
     </view>

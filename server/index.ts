@@ -1,9 +1,11 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { z } from 'zod';
 import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { db } from './core/db.ts';
-import { dailyTodoQuery, readDailyTodos } from './core/coach-daily-todos.ts';
+import { dailyTodoQuery, readDailyTodos, readTeamOverview } from './core/coach-daily-todos.ts';
+import { PROJECTS } from '../shared/projects.ts';
 import { requireAuth, requireRole } from './core/auth.ts';
 import { accessibleAthleteIds, selectableProjects } from './core/permissions.ts';
 import { registerAnalysisRoutes } from './analysis/analysis-routes.ts';
@@ -73,6 +75,33 @@ app.get('/api/coach/daily-todos', requireAuth, requireRole('SCC', 'PRJ', 'REG', 
     now,
   });
   res.json({ todos });
+});
+
+const teamOverviewQuery = (now: Date) =>
+  z.strictObject({
+    project: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .refine((value) => PROJECTS.includes(value)),
+  });
+
+app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const now = new Date();
+  const parsed = teamOverviewQuery(now).safeParse(req.query);
+  if (!parsed.success)
+    return res.status(400).json({ message: '请选择有效项目。' });
+  const user = req.authUser!;
+  if (!selectableProjects(user).includes(parsed.data.project))
+    return res.status(403).json({ message: '无权查看该项目的队伍总览。' });
+  const overview = readTeamOverview(db, {
+    athleteIds: accessibleAthleteIds(user),
+    project: parsed.data.project,
+    now,
+  });
+  res.json(overview);
 });
 
 const distPath = resolve(process.cwd(), 'dist');

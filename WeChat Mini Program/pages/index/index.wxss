@@ -74,3 +74,24 @@
 .today-entry { flex: 1; min-height: 76rpx; margin: 0; padding: 14rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; color: #176373; background: #edf3f4; font-size: 25rpx; font-weight: 700; line-height: 1.5; }
 .today-entry::after { border: 0; }
 .today-entry:focus { outline: 4rpx solid #176373; outline-offset: 4rpx; }
+/* 今日训练课次列表 */
+.session-row { display: flex; align-items: flex-start; gap: 16rpx; margin-top: 14rpx; padding: 16rpx 18rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; }
+.session-order { flex: none; min-width: 72rpx; padding: 6rpx 12rpx; border-radius: 10rpx; color: #176373; background: rgba(23, 111, 127, .12); font-size: 22rpx; font-weight: 700; text-align: center; }
+.session-info { min-width: 0; flex: 1; }
+.session-type { color: #12303b; font-size: 27rpx; font-weight: 700; line-height: 1.5; }
+/* 队伍总览 */
+.team-overview .card-head { margin-bottom: 12rpx; }
+.team-summary { display: flex; gap: 12rpx; margin-top: 16rpx; }
+.team-stat { flex: 1; padding: 16rpx 10rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; text-align: center; }
+.team-stat-value { color: #164751; font-size: 34rpx; font-weight: 800; }
+.team-stat-ok { color: #176f7f; }
+.team-stat-teal { color: #0d7a72; }
+.team-stat-orange { color: #b06818; }
+.team-stat-label { display: block; margin-top: 4rpx; color: #71868d; font-size: 20rpx; }
+.team-athlete-row { display: block; margin-top: 12rpx; padding: 18rpx 20rpx; border: 1rpx solid #d8e3e6; border-radius: 16rpx; background: #edf3f4; }
+.team-athlete-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10rpx; }
+.team-athlete-name { color: #12303b; font-size: 28rpx; font-weight: 700; }
+.team-athlete-team { color: #71868d; font-size: 22rpx; }
+.team-athlete-link { margin-left: auto; color: #176373; font-size: 24rpx; }
+.team-athlete-tags { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
+.team-athlete-row .todo-note { margin-top: 8rpx; }

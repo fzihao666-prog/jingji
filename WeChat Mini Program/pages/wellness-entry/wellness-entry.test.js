@@ -137,6 +137,13 @@ describe('恢复日报入口接线', () => {
     expect(pageTemplate).toContain('end="{{max}}"');
     expect(pageSource).toContain("context.user.role !== 'ATL'");
   });
+
+  it('疲劳和酸痛提供快捷选择按钮', () => {
+    expect(pageTemplate).toContain('bindtap="onQuickSelect"');
+    expect(pageTemplate).toContain('quickSelect[item.key]');
+    expect(pageSource).toContain('onQuickSelect(event)');
+    expect(pageSource).toContain('QUICK_SELECT');
+  });
 });
 
 describe('恢复日报填写页行为', () => {
@@ -217,5 +224,14 @@ describe('恢复日报填写页行为', () => {
     expect(page.data.error).toBe('恢复日报只能填写最近7天（含今天）的数据。');
     expect(page.data.form.sleepHours).toBe('7');
     expect(page.data.saving).toBe(false);
+  });
+
+  it('快捷选择按钮直接写入对应数值', async () => {
+    const { page } = createPage({ user: { role: 'ATL', athleteId: 7 } });
+    await page.loadPage();
+    page.onQuickSelect({ currentTarget: { dataset: { field: 'fatigueIndex', value: 8 } } });
+    expect(page.data.form.fatigueIndex).toBe('8');
+    page.onQuickSelect({ currentTarget: { dataset: { field: 'sorenessIndex', value: 4 } } });
+    expect(page.data.form.sorenessIndex).toBe('4');
   });
 });

@@ -2,7 +2,7 @@ import type { Express, Request } from 'express';
 import { requireAuth } from '../core/auth.ts';
 import { db } from '../core/db.ts';
 import { hasAthleteAccess } from '../core/permissions.ts';
-import { readTodayStatus } from '../core/coach-daily-todos.ts';
+import { readTodayStatus, beijingDate } from '../core/coach-daily-todos.ts';
 import {
   WELLNESS_SOURCE,
   firstIssueMessage,
@@ -49,6 +49,33 @@ export function registerSelfDailyRoutes(app: Express) {
     if (!athleteId) return res.status(403).json({ message: '只有运动员本人可以查看今日状态。' });
     res.setHeader('Cache-Control', 'no-store');
     res.json(readTodayStatus(db, { athleteId, now: new Date() }));
+  });
+
+  app.get('/api/me/today-sessions', requireAuth, (req, res) => {
+    const athleteId = ownAthleteId(req);
+    if (!athleteId) return res.status(403).json({ message: '只有运动员本人可以查看今日训练。' });
+    const date = beijingDate(new Date());
+    const sessions = db
+      .prepare(
+        `SELECT id, session_order AS sessionOrder, start_time AS startTime,
+          training_type AS trainingType, structure_type AS structureType,
+          intensity_zone AS intensityZone, content,
+          duration_min AS durationMin, distance_km AS distanceKm,
+          rpe, srpe, average_heart_rate AS averageHeartRate,
+          max_heart_rate AS maxHeartRate, source, quality
+         FROM training_sessions
+         WHERE athlete_id = ? AND session_date = ?
+         ORDER BY session_order`
+      )
+      .all(athleteId, date) as Array<{
+        id: number; sessionOrder: number; startTime: string;
+        trainingType: string; structureType: string; intensityZone: string;
+        content: string; durationMin: number; distanceKm: number;
+        rpe: number | null; srpe: number; averageHeartRate: number | null;
+        maxHeartRate: number | null; source: string; quality: string;
+      }>;
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ date, sessions });
   });
 
   app.get('/api/me/wellness', requireAuth, (req, res) => {

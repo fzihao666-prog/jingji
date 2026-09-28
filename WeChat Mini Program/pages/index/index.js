@@ -140,7 +140,15 @@ Page({
     todayLoading: false,
     todayError: '',
     todayView: null,
-    wellnessView: null
+    wellnessView: null,
+    todaySessions: [],
+    sessionsLoading: false,
+    sessionsError: '',
+    teamOverview: null,
+    teamLoading: false,
+    teamError: '',
+    teamKeyword: '',
+    teamView: null
   },
 
   onShow() {
@@ -153,11 +161,17 @@ Page({
     this._guard = this._guard || createRequestGuard();
     this._todoGuard = this._todoGuard || createRequestGuard();
     this._todayGuard = this._todayGuard || createRequestGuard();
+    this._teamGuard = this._teamGuard || createRequestGuard();
+    this._sessionsGuard = this._sessionsGuard || createRequestGuard();
     this._todoGuard.next();
     this._todayGuard.next();
+    this._teamGuard.next();
+    this._sessionsGuard.next();
     this.setData({
       todos: null, todoView: null, todosError: '', canViewTodos: false,
-      todayView: null, wellnessView: null, todayError: '', todayLoading: false
+      todayView: null, wellnessView: null, todayError: '', todayLoading: false,
+      todaySessions: [], sessionsError: '', sessionsLoading: false,
+      teamOverview: null, teamError: '', teamLoading: false, teamView: null
     });
     return runPageLoad(this, {
       refreshUser,
@@ -172,7 +186,9 @@ Page({
         const [overview] = await Promise.all([
           page.loadPageData({ ...scope, canSelfReport: page.data.canSelfReport }),
           page.loadTodos(scope.project),
-          page.loadToday()
+          page.loadToday(),
+          page.loadTodaySessions(),
+          page.loadTeamOverview(scope.project)
         ]);
         if (isLatest()) getApp().globalData.homeNeedsRefresh = false;
         return overview;
@@ -241,6 +257,68 @@ Page({
 
   retryToday() {
     return this.loadToday();
+  },
+
+  // 运动员今日训练明细：按课次展示当天已填报的训练记录。
+  async loadTodaySessions() {
+    if (!this.data.canSelfReport) return;
+    this._sessionsGuard = this._sessionsGuard || createRequestGuard();
+    const id = this._sessionsGuard.next();
+    this.setData({ sessionsLoading: true, sessionsError: '' });
+    try {
+      const result = await api.todaySessions();
+      if (!this._sessionsGuard.isLatest(id)) return;
+      this.setData({ sessionsLoading: false, todaySessions: result.sessions || [] });
+    } catch (error) {
+      if (this._sessionsGuard.isLatest(id)) {
+        this.setData({ sessionsLoading: false, todaySessions: [], sessionsError: error.message || '今日训练加载失败，请重试。' });
+      }
+    }
+  },
+
+  retrySessions() {
+    return this.loadTodaySessions();
+  },
+
+  // 教练队伍总览：聚合全队当日训练完成与恢复日报填报情况。
+  async loadTeamOverview(project) {
+    if (!this.data.canViewTodos) return;
+    this._teamGuard = this._teamGuard || createRequestGuard();
+    const id = this._teamGuard.next();
+    this.setData({ teamLoading: true, teamError: '' });
+    try {
+      const result = await api.teamOverview(project);
+      if (!this._teamGuard.isLatest(id)) return;
+      const teamOverview = result;
+      const teamView = this.buildTeamView(teamOverview, this.data.teamKeyword);
+      this.setData({ teamLoading: false, teamOverview, teamView });
+    } catch (error) {
+      if (this._teamGuard.isLatest(id)) {
+        this.setData({ teamLoading: false, teamOverview: null, teamView: null, teamError: error.message || '队伍总览加载失败，请重试。' });
+      }
+    }
+  },
+
+  buildTeamView(overview, keyword) {
+    if (!overview) return null;
+    const kw = (keyword || '').toLowerCase();
+    const filtered = kw
+      ? overview.athletes.filter((item) =>
+          (item.athleteName || '').toLowerCase().includes(kw) ||
+          (item.team || '').toLowerCase().includes(kw)
+        )
+      : overview.athletes;
+    return { ...overview, athletes: filtered };
+  },
+
+  retryTeam() {
+    return this.loadTeamOverview(this.data.project);
+  },
+
+  onTeamKeyword(event) {
+    const teamKeyword = event.detail.value;
+    if (!this.data.teamOverview) return;
+    this.setData({ teamKeyword, teamView: this.buildTeamView(this.data.teamOverview, teamKeyword) });
   },
 
   onTodoFilter(event) {

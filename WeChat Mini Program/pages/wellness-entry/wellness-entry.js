@@ -4,6 +4,7 @@ const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard
 const {
   METRICS,
   STATUS_OPTIONS,
+  QUICK_SELECT,
   wellnessDates,
   defaultWellnessForm,
   wellnessPayload,
@@ -21,6 +22,7 @@ Page({
     form: defaultWellnessForm(),
     fieldDefs: METRICS,
     statusOptions: STATUS_OPTIONS,
+    quickSelect: QUICK_SELECT,
     record: null,
     recordView: null
   },
@@ -58,6 +60,12 @@ Page({
 
   onInput(event) {
     this.setData({ [`form.${event.currentTarget.dataset.field}`]: event.detail.value });
+  },
+
+  onQuickSelect(event) {
+    const { field, value } = event.currentTarget.dataset;
+    if (!field || value === undefined) return;
+    this.setData({ [`form.${field}`]: String(value) });
   },
 
   onDateChange(event) {

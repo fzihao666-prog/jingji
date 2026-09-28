@@ -206,6 +206,111 @@ export function readDailyTodos(
   return buildDailyTodos({ athletes, sessions, injuries, now: input.now });
 }
 
+type OverviewWellness = {
+  athleteId: number;
+  sleepHours: number | null;
+  morningPulse: number | null;
+  weightKg: number | null;
+  fatigueIndex: number | null;
+  sorenessIndex: number | null;
+  moodIndex: number | null;
+};
+
+// 队伍总览：聚合当日训练提交、24h负荷与恢复日报，供教练快速扫全队状态。
+export function buildTeamOverview(input: {
+  athletes: TodoAthlete[];
+  sessions: TodoSession[];
+  wellness: OverviewWellness[];
+  now: Date;
+}) {
+  const { athletes, now } = input;
+  const date = beijingDate(now);
+  const ids = athletes.map((a) => a.athleteId);
+  const { submitted, loads } = sessionFacts(input.sessions, ids, now);
+  const wellnessMap = new Map(input.wellness.map((w) => [w.athleteId, w]));
+  const rows = athletes.map((athlete) => {
+    const load = loads.get(athlete.athleteId) || 0;
+    const w = wellnessMap.get(athlete.athleteId) || null;
+    return {
+      athleteId: athlete.athleteId,
+      athleteName: athlete.athleteName,
+      team: athlete.team,
+      hasTraining: submitted.has(athlete.athleteId),
+      load24h: Math.round(load * 10) / 10,
+      highLoad: load >= HIGH_LOAD_AU,
+      wellnessReported: Boolean(w),
+      sleepHours: w?.sleepHours ?? null,
+      morningPulse: w?.morningPulse ?? null,
+      weightKg: w?.weightKg ?? null,
+      fatigueIndex: w?.fatigueIndex ?? null,
+      sorenessIndex: w?.sorenessIndex ?? null,
+      moodIndex: w?.moodIndex ?? null,
+    };
+  });
+  const trained = rows.filter((r) => r.hasTraining).length;
+  const wellnessReported = rows.filter((r) => r.wellnessReported).length;
+  const totalLoad = rows.reduce((sum, r) => sum + r.load24h, 0);
+  return {
+    date,
+    timezone: 'Asia/Shanghai',
+    generatedAt: now.toISOString(),
+    summary: {
+      total: rows.length,
+      trained,
+      wellnessReported,
+      averageLoad: rows.length ? Math.round((totalLoad / rows.length) * 10) / 10 : 0,
+    },
+    athletes: rows,
+  };
+}
+
+export function readTeamOverview(
+  db: DatabaseSync,
+  input: { athleteIds: number[]; project: string; now: Date }
+) {
+  if (!input.athleteIds.length) {
+    return buildTeamOverview({ athletes: [], sessions: [], wellness: [], now: input.now });
+  }
+  const athletes = db
+    .prepare(
+      `
+    SELECT a.id AS athleteId, a.name AS athleteName, a.project, COALESCE(pt.name, a.team, '') AS team
+    FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id
+    WHERE a.active = 1 AND a.project = ? AND a.id IN (${input.athleteIds.map(() => '?').join(',')})
+    ORDER BY a.name, a.id
+  `
+    )
+    .all(input.project, ...input.athleteIds) as TodoAthlete[];
+  if (!athletes.length)
+    return buildTeamOverview({ athletes, sessions: [], wellness: [], now: input.now });
+  const ids = athletes.map((a) => a.athleteId);
+  const placeholders = ids.map(() => '?').join(',');
+  const sessions = db
+    .prepare(
+      `
+    SELECT athlete_id AS athleteId, session_date AS date, start_time AS startTime, srpe,
+      training_type AS trainingType, structure_type AS structureType, content, source, quality, is_demo AS isDemo
+    FROM training_sessions WHERE athlete_id IN (${placeholders}) AND session_date BETWEEN ? AND ?
+  `
+    )
+    .all(
+      ...ids,
+      beijingDate(new Date(input.now.getTime() - DAY_MS)),
+      beijingDate(input.now)
+    ) as TodoSession[];
+  const wellness = db
+    .prepare(
+      `
+    SELECT athlete_id AS athleteId, sleep_hours AS sleepHours, morning_pulse AS morningPulse,
+      weight_kg AS weightKg, fatigue_index AS fatigueIndex, soreness_index AS sorenessIndex,
+      mood_index AS moodIndex
+    FROM daily_wellness WHERE athlete_id IN (${placeholders}) AND wellness_date = ?
+  `
+    )
+    .all(...ids, beijingDate(input.now)) as OverviewWellness[];
+  return buildTeamOverview({ athletes, sessions, wellness, now: input.now });
+}
+
 // 运动员本人的今日状态：与教练待办同口径，只针对单个运动员。
 export function buildTodayStatus(input: {
   athleteId: number;

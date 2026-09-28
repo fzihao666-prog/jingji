@@ -303,6 +303,34 @@ try {
   await checkCoachDailyTodos({ request, assert, databasePath,
     coachToken: demoCoachLogin.payload.token, adminToken,
     coachId: demoCoachLogin.payload.user.id, athletes: demoCoachAthletes.payload.athletes });
+
+  // 教练队伍总览：聚合当日训练完成、恢复日报填报与平均负荷。
+  const teamOverviewPath = `/api/coach/team-overview?project=${encodeURIComponent(coachAthlete.project)}`;
+  assert((await request(teamOverviewPath)).status === 401, '队伍总览必须要求登录');
+  assert(
+    (await request(teamOverviewPath, {}, demoCoachLogin.payload.token)).status === 200,
+    '教练应能读取队伍总览'
+  );
+  const teamOverview = await request(teamOverviewPath, {}, demoCoachLogin.payload.token);
+  assert(
+    teamOverview.status === 200 &&
+      teamOverview.payload.date &&
+      teamOverview.payload.summary &&
+      typeof teamOverview.payload.summary.total === 'number' &&
+      typeof teamOverview.payload.summary.trained === 'number' &&
+      typeof teamOverview.payload.summary.wellnessReported === 'number' &&
+      typeof teamOverview.payload.summary.averageLoad === 'number' &&
+      Array.isArray(teamOverview.payload.athletes),
+    '队伍总览应返回汇总与运动员列表'
+  );
+  assert(
+    teamOverview.payload.athletes.every((row) => typeof row.hasTraining === 'boolean' && typeof row.wellnessReported === 'boolean'),
+    '队伍总览运动员行应含训练与填报状态'
+  );
+  assert(
+    (await request('/api/coach/team-overview?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
+    '队伍总览应拒绝无效项目'
+  );
   const coachOverview = await request(
     `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(coachAthlete.project)}`,
     {},
@@ -420,6 +448,10 @@ try {
   assert(ownSessionsBefore.status === 200 && Array.isArray(ownSessionsBefore.payload.sessions), '运动员应能读取本人训练课次');
   assert((await request('/api/me/training-sessions')).status === 401, '未登录者不能读取本人训练课次');
   assert((await request('/api/me/training-sessions', {}, demoCoachLogin.payload.token)).status === 403, '教练不能使用运动员本人训练填报接口');
+  assert(
+    (await request(`/api/coach/team-overview?project=${encodeURIComponent(coachAthlete.project)}`, {}, athleteSessionToken)).status === 403,
+    '运动员不能读取队伍总览'
+  );
   const selfSessionInput = {
     date: '2026-09-23', startTime: '08:30', trainingType: '专项训练', intensityZone: 'U2',
     content: '小程序填报回归', duration: '90', distance: '12', rpe: '5',
@@ -528,6 +560,34 @@ try {
       clearedStatus.payload.load24h === 0 &&
       clearedStatus.payload.source === null,
     '删除当天课次后今日状态应回到未填报'
+  );
+
+  // 运动员今日训练明细：返回当天课次列表，教练与未登录者无权访问。
+  const todaySessionsEmpty = await request('/api/me/today-sessions', {}, athleteSessionToken);
+  assert(
+    todaySessionsEmpty.status === 200 &&
+      todaySessionsEmpty.payload.date === beijingToday &&
+      Array.isArray(todaySessionsEmpty.payload.sessions),
+    '运动员应能读取本人今日训练（空列表）'
+  );
+  assert((await request('/api/me/today-sessions', {}, demoCoachLogin.payload.token)).status === 403, '教练不能读取运动员今日训练');
+  assert((await request('/api/me/today-sessions')).status === 401, '未登录者不能读取今日训练');
+  const sessionForList = await request(
+    '/api/me/training-sessions',
+    { method: 'POST', body: JSON.stringify({ ...selfSessionInput, date: beijingToday, startTime: '10:00' }) },
+    athleteSessionToken
+  );
+  const sessionForListId = sessionForList.payload.session?.id;
+  assert(sessionForList.status === 201 && sessionForListId, '今日训练回归需要创建当天课次');
+  const todaySessionsFilled = await request('/api/me/today-sessions', {}, athleteSessionToken);
+  assert(
+    todaySessionsFilled.status === 200 &&
+      todaySessionsFilled.payload.sessions.some((s) => s.id === sessionForListId && s.sessionOrder >= 1),
+    '今日训练应返回当天已填报的课次明细'
+  );
+  assert(
+    (await request(`/api/me/training-sessions/${sessionForListId}`, { method: 'DELETE' }, athleteSessionToken)).status === 200,
+    '今日训练回归需要清理当天课次'
   );
 
   // 恢复日报：日期窗口、本人权限、只写本人行与同日幂等 upsert。
@@ -1782,6 +1842,7 @@ try {
       {
         overviewPipeline: 'passed',
         coachDailyTodos: 'passed',
+        teamOverview: 'passed',
         selfTraining: 'passed',
         rowingAnalysis: 'passed',
         strengthProfile: 'passed',

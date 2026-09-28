@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDailyTodos, dailyTodoQuery, beijingDate } from '../core/coach-daily-todos.ts';
+import { buildDailyTodos, buildTeamOverview, dailyTodoQuery, beijingDate } from '../core/coach-daily-todos.ts';
 
 const now = new Date('2026-09-23T02:00:00Z');
 const athletes = [
@@ -143,5 +143,55 @@ describe('教练每日训练待办', () => {
       buildDailyTodos({ athletes: [], sessions: [session()], injuries: [injury()], now }).counts
         .total
     ).toBe(0);
+  });
+});
+
+describe('教练队伍总览', () => {
+  it('聚合训练完成、恢复日报填报与平均负荷', () => {
+    const result = buildTeamOverview({
+      athletes,
+      sessions: [session({ athleteId: 1, srpe: 400 }), session({ athleteId: 2, srpe: 600 })],
+      wellness: [
+        { athleteId: 1, sleepHours: 7.5, morningPulse: 52, weightKg: 76.8, fatigueIndex: 3, sorenessIndex: 2, moodIndex: 4 },
+        { athleteId: 2, sleepHours: 6, morningPulse: 58, weightKg: 80, fatigueIndex: 7, sorenessIndex: 5, moodIndex: 3 },
+      ],
+      now,
+    });
+    expect(result.summary).toEqual({
+      total: 2,
+      trained: 2,
+      wellnessReported: 2,
+      averageLoad: 500,
+    });
+    expect(result.athletes[0]).toMatchObject({
+      athleteId: 1,
+      hasTraining: true,
+      load24h: 400,
+      highLoad: false,
+      wellnessReported: true,
+      sleepHours: 7.5,
+      morningPulse: 52,
+    });
+    expect(result.athletes[1]).toMatchObject({
+      athleteId: 2,
+      hasTraining: true,
+      load24h: 600,
+      highLoad: true,
+    });
+  });
+
+  it('未填报恢复日报时字段为 null，空队伍返回空结果', () => {
+    const result = buildTeamOverview({ athletes, sessions: [], wellness: [], now });
+    expect(result.summary).toEqual({ total: 2, trained: 0, wellnessReported: 0, averageLoad: 0 });
+    expect(result.athletes[0]).toMatchObject({
+      hasTraining: false,
+      wellnessReported: false,
+      sleepHours: null,
+      morningPulse: null,
+      weightKg: null,
+    });
+    const empty = buildTeamOverview({ athletes: [], sessions: [], wellness: [], now });
+    expect(empty.summary.total).toBe(0);
+    expect(empty.athletes).toEqual([]);
   });
 });

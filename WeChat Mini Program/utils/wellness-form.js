@@ -19,6 +19,20 @@ const STATUS_OPTIONS = [
   { value: 'rest', label: '需要休息' }
 ];
 
+// 疲劳/酸痛快捷选择：映射到 0-10 数值，加速手机端填写。
+const QUICK_SELECT = {
+  fatigueIndex: [
+    { label: '轻松', value: 2 },
+    { label: '一般', value: 5 },
+    { label: '疲劳', value: 8 }
+  ],
+  sorenessIndex: [
+    { label: '无酸痛', value: 1 },
+    { label: '轻微', value: 4 },
+    { label: '明显', value: 7 }
+  ]
+};
+
 function wellnessDates() {
   const today = todayBeijing();
   const earliest = new Date(`${today}T00:00:00Z`);
@@ -119,6 +133,7 @@ module.exports = {
   WELLNESS_BACKFILL_DAYS,
   METRICS,
   STATUS_OPTIONS,
+  QUICK_SELECT,
   wellnessDates,
   defaultWellnessForm,
   wellnessPayload,

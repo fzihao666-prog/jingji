@@ -52,6 +52,7 @@
     "react": "latest",
     "react-dom": "latest",
     "recharts": "latest",
+    "sharp": "0.35.4",
     "zod": "^4.6.5"
   },
   "devDependencies": {

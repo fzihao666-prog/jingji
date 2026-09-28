@@ -13,3 +13,25 @@
 .button-row { display: grid; grid-template-columns: 1fr; gap: 14rpx; margin-top: 4rpx; }
 .wellness-summary { display: block; margin-top: 12rpx; color: #526c75; font-size: 21rpx; line-height: 1.6; overflow-wrap: anywhere; }
 .todo-note { margin-top: 14rpx; color: #46616c; font-size: 24rpx; line-height: 1.65; overflow-wrap: break-word; }
+/* 疲劳/酸痛快捷选择按钮 */
+.quick-select-row { display: flex; gap: 10rpx; margin-bottom: 10rpx; }
+.quick-select-btn {
+  flex: 1;
+  min-height: 64rpx;
+  margin: 0;
+  padding: 10rpx 8rpx;
+  border: 1rpx solid #d8e3e6;
+  border-radius: 12rpx;
+  color: #405b65;
+  background: #edf3f4;
+  font-size: 22rpx;
+  line-height: 1.4;
+}
+.quick-select-btn::after { border: 0; }
+.quick-select-active {
+  border-color: #176f7f;
+  color: #123f4b;
+  background: #e6f4f1;
+  font-weight: 700;
+}
+.quick-select-btn:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }

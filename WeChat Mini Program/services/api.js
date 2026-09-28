@@ -51,6 +51,7 @@ module.exports = {
     return request(`/api/me/training-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   todayStatus() { return request('/api/me/today-status'); },
+  todaySessions() { return request('/api/me/today-sessions'); },
   myWellness(date) { return request(`/api/me/wellness?${query({ date })}`); },
   saveWellness(data) {
     return request('/api/me/wellness', { method: 'POST', data });
@@ -58,6 +59,9 @@ module.exports = {
   currentProject() { return request('/api/preferences/current-project'); },
   dailyTodos(project) {
     return request(`/api/coach/daily-todos?${query({ project })}`);
+  },
+  teamOverview(project) {
+    return request(`/api/coach/team-overview?${query({ project })}`);
   },
   saveCurrentProject(project) {
     return request('/api/preferences/current-project', { method: 'PUT', data: { project } });

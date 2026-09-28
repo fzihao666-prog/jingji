@@ -41,6 +41,25 @@
     </block>
   </view>
 
+  <view wx:if="{{canSelfReport && (todaySessions.length || sessionsLoading || sessionsError)}}" class="card today-sessions" aria-label="今日训练">
+    <view class="card-head">
+      <view><view class="card-head-title">今日训练</view><view class="todo-note">按课次展示当天训练记录</view></view>
+      <button class="todo-refresh" bindtap="retrySessions" disabled="{{sessionsLoading}}" aria-label="刷新今日训练">刷新</button>
+    </view>
+    <view wx:if="{{sessionsLoading && !todaySessions.length}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取今日训练…</view>
+    <view wx:if="{{sessionsError}}" class="error-box">{{sessionsError}}</view>
+    <view wx:if="{{!sessionsLoading && !sessionsError && !todaySessions.length}}" class="todo-note">今日暂无训练记录</view>
+    <block wx:if="{{todaySessions.length}}">
+      <view wx:for="{{todaySessions}}" wx:key="id" class="session-row">
+        <view class="session-order">{{item.sessionOrder === 1 ? '上午' : item.sessionOrder === 2 ? '下午' : '第' + item.sessionOrder + '次'}}</view>
+        <view class="session-info">
+          <view class="session-type">{{item.trainingType}} · {{item.content}}</view>
+          <view class="todo-note">{{item.startTime || '未填时间'}} · {{item.durationMin}} min{{item.distanceKm ? ' · ' + item.distanceKm + ' km' : ''}} · RPE {{item.rpe || '—'}} · 负荷 {{item.srpe || 0}} AU</view>
+        </view>
+      </view>
+    </block>
+  </view>
+
   <view wx:if="{{canViewTodos}}" class="card daily-todos" aria-label="教练每日训练待办">
     <view class="card-head">
       <view><view class="card-head-title">每日训练待办</view><view class="todo-note">当前项目 · 权限范围内全部运动员</view></view>
@@ -87,6 +106,42 @@
             <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
           </button>
         </block>
+      </block>
+    </block>
+  </view>
+
+  <view wx:if="{{canViewTodos && (teamOverview || teamLoading || teamError)}}" class="card team-overview" aria-label="队伍总览">
+    <view class="card-head">
+      <view><view class="card-head-title">队伍总览</view><view class="todo-note">{{teamOverview ? teamOverview.date + ' · 北京时间' : '当日全队训练与状态'}}</view></view>
+      <button class="todo-refresh" bindtap="retryTeam" disabled="{{teamLoading}}" aria-label="刷新队伍总览">刷新</button>
+    </view>
+    <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取队伍总览…</view>
+    <view wx:if="{{teamError}}" class="error-box">{{teamError}}</view>
+    <block wx:if="{{teamOverview && teamView}}">
+      <view class="team-summary">
+        <view class="team-stat"><view class="team-stat-value">{{teamOverview.summary.total}}</view><text class="team-stat-label">训练人数</text></view>
+        <view class="team-stat"><view class="team-stat-value team-stat-ok">{{teamOverview.summary.trained}}</view><text class="team-stat-label">已完成</text></view>
+        <view class="team-stat"><view class="team-stat-value team-stat-teal">{{teamOverview.summary.wellnessReported}}</view><text class="team-stat-label">已填报</text></view>
+        <view class="team-stat"><view class="team-stat-value team-stat-orange">{{teamOverview.summary.averageLoad}}</view><text class="team-stat-label">平均负荷 AU</text></view>
+      </view>
+      <view class="todo-search-row">
+        <input class="todo-search" type="text" value="{{teamKeyword}}" placeholder="搜索运动员姓名或队伍" bindinput="onTeamKeyword" confirm-type="search" aria-label="搜索运动员" />
+      </view>
+      <view wx:if="{{!teamView.athletes.length}}" class="todo-note">{{teamKeyword ? '没有匹配的运动员。' : '当前项目暂无可访问的运动员。'}}</view>
+      <block wx:else>
+        <view wx:for="{{teamView.athletes}}" wx:key="athleteId" class="team-athlete-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，查看档案">
+          <view class="team-athlete-head">
+            <text class="team-athlete-name">{{item.athleteName}}</text>
+            <text class="team-athlete-team">{{item.team || '未分队'}}</text>
+            <text class="team-athlete-link">查看档案 ›</text>
+          </view>
+          <view class="team-athlete-tags">
+            <text class="tag {{item.hasTraining ? 'ok' : 'warn'}}">{{item.hasTraining ? '已训练' : '未训练'}}</text>
+            <text class="tag {{item.wellnessReported ? 'ok' : 'warn'}}">{{item.wellnessReported ? '已填报' : '未填报'}}</text>
+            <text wx:if="{{item.highLoad}}" class="tag warn">高负荷</text>
+          </view>
+          <view class="todo-note">负荷 {{item.load24h}} AU{{item.sleepHours != null ? ' · 睡眠 ' + item.sleepHours + 'h' : ''}}{{item.morningPulse != null ? ' · 晨脉 ' + item.morningPulse : ''}}{{item.weightKg != null ? ' · 体重 ' + item.weightKg + 'kg' : ''}}</view>
+        </view>
       </block>
     </block>
   </view>
