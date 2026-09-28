@@ -2,6 +2,7 @@ const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { personalProfilePayload } = require('../../utils/profile-payload');
 const { todayBeijing } = require('../../utils/date');
+const { projectLabel } = require('../../utils/project-label');
 
 const BODY_FIELDS = [
   'heightCm', 'weightKg', 'bodyFatPct', 'skeletalMuscleKg', 'muscleMassKg',
@@ -100,6 +101,7 @@ Page({
       this.setData({
         athleteId: athlete.id,
         form,
+        projectLabel: projectLabel(athlete.project),
         body: bodyForm(athlete),
         genderIndex: Math.max(0, ['暂不填写', '男', '女'].indexOf(athlete.gender || '暂不填写')),
         healthIndex: Math.max(0, ['健康', '观察', '训练受限', '康复中'].indexOf(athlete.healthStatus || '健康')),

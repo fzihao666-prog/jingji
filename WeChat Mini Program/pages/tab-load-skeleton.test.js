@@ -70,6 +70,7 @@ const pageScope = loadCjs(
   {
     './date': dateModule,
     './request-guard': requestGuard,
+    './project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
     './context': {
       loadContext: async () => contextData,
       projectAthletes: (list) => list || [],
@@ -88,6 +89,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/request-guard': requestGuard,
     '../../utils/page-actions': pageActions,
     '../../utils/format': formatModule,
+    '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
     '../../utils/date': dateModule,
     ...extraMocks,
   };

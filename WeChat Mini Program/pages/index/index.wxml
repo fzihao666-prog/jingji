@@ -2,7 +2,7 @@
   <view class="page-head page-head-action">
     <view class="page-head-copy">
       <view class="page-title">{{meta.scope === 'individual' ? '我的训练总览' : '训练总览'}}</view>
-      <view class="page-description">{{from}} 至 {{to}} · {{project}}</view>
+      <view class="page-description">{{from}} 至 {{to}} · {{projectLabel}}</view>
     </view>
     <button wx:if="{{canSelfReport}}" class="quick-entry" hover-class="quick-entry-active" bindtap="openTrainingEntry"><text class="quick-entry-icon">＋</text><text>记录训练</text></button>
   </view>

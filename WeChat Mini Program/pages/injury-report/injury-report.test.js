@@ -57,6 +57,7 @@ function createPage({ user, athletes, targetAthleteId }) {
     '../../utils/context': { loadContext: async () => context },
     '../../utils/injury-form': injuryForm,
     '../../utils/request-guard': requestGuard,
+    '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
   };
   vm.runInNewContext(pageSource, {
     Page(value) {

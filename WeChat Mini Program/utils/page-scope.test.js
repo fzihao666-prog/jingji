@@ -19,6 +19,7 @@ const scopeContext = {
   require: (path) => {
     if (path === './date') return dateContext.module.exports;
     if (path === './request-guard') return guardContext.module.exports;
+    if (path === './project-label') return { projectLabel: (project) => project };
     if (path === './context') {
       return {
         loadContext: async (options) => {

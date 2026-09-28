@@ -1,12 +1,13 @@
 const api = require('../../services/api');
 const { ROLE_LABELS } = require('../../utils/format');
+const { projectLabel } = require('../../utils/project-label');
 
 Page({
   data: {
     user: null,
     avatar: '',
     roleLabel: '',
-    project: '',
+    projectLabel: '',
     showPasswordForm: false,
     currentPassword: '',
     newPassword: '',
@@ -26,7 +27,7 @@ Page({
       user,
       avatar: user && user.displayName ? user.displayName.slice(0, 1) : '竞',
       roleLabel: user ? ROLE_LABELS[user.role] || user.role : '',
-      project: app.globalData.currentProject
+      projectLabel: projectLabel(app.globalData.currentProject)
     });
   },
 

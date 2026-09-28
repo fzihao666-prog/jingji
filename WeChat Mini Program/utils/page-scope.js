@@ -1,6 +1,7 @@
 const { periodFor, todayBeijing } = require('./date');
 const { projectAthletes, loadContext } = require('./context');
 const { createRequestGuard, loadWithGuard } = require('./request-guard');
+const { projectLabel } = require('./project-label');
 
 const RANGES = ['day', 'week', 'month'];
 
@@ -32,6 +33,7 @@ function createInitialScope(context, options = {}) {
     user: context.user,
     projects: context.projects || [],
     project,
+    projectLabel: projectLabel(project),
     athletes,
     selectedAthleteId: resolveAthlete(context.user, athletes, options.selectedAthleteId || context.selectedAthleteId),
     showAthlete: options.showAthlete === false ? false : context.user.role !== 'ATL',
@@ -43,7 +45,13 @@ function changeScope(scope, allAthletes, field, value) {
   if (field === 'project') {
     const project = resolveProject(value, scope.projects, scope.project);
     const athletes = projectAthletes(allAthletes, project);
-    return { project, athletes, selectedAthleteId: resolveAthlete(scope.user, athletes, scope.selectedAthleteId), ...resolveDateRange(scope.range) };
+    return {
+      project,
+      projectLabel: projectLabel(project),
+      athletes,
+      selectedAthleteId: resolveAthlete(scope.user, athletes, scope.selectedAthleteId),
+      ...resolveDateRange(scope.range)
+    };
   }
   if (field === 'athleteId') {
     return { selectedAthleteId: resolveAthlete(scope.user, scope.athletes, value) };

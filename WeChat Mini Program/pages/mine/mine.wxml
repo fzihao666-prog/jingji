@@ -9,7 +9,7 @@
     <view class="account-copy">
       <view>{{user.displayName}}</view>
       <text>@{{user.username}}</text>
-      <text>{{roleLabel}} · {{project || '项目未选择'}}</text>
+      <text>{{roleLabel}} · {{projectLabel || '项目未选择'}}</text>
     </view>
   </view>
 

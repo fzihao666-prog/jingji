@@ -1,6 +1,7 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
+const { projectLabel } = require('../../utils/project-label');
 const {
   STATUS_OPTIONS,
   SIDE_OPTIONS,
@@ -54,7 +55,7 @@ Page({
       return {
         athleteId: this._targetAthleteId,
         athleteName: athlete.name || '',
-        athleteMeta: `${athlete.project || '项目未录入'} · ${athlete.team || '未分队'}`,
+        athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '未分队'}`,
         isSelfFeedback,
         notice: isSelfFeedback
           ? '运动员提交的是疼痛反馈，提交后状态记为“观察”，由教练确认正式伤病状态。'

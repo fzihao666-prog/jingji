@@ -1,3 +1,5 @@
+const { projectOptions } = require('../../utils/project-label');
+
 Component({
   properties: {
     projects: { type: Array, value: [] },
@@ -11,6 +13,7 @@ Component({
 
   data: {
     projectIndex: 0,
+    projectItems: [],
     athleteIndex: 0,
     athleteItems: [{ id: 0, name: '全部运动员（整体分析）' }],
     rangeOptions: [
@@ -23,7 +26,7 @@ Component({
   observers: {
     'projects, project': function updateProjectIndex(projects, project) {
       const index = Array.isArray(projects) ? projects.indexOf(project) : -1;
-      this.setData({ projectIndex: index < 0 ? 0 : index });
+      this.setData({ projectItems: projectOptions(projects), projectIndex: index < 0 ? 0 : index });
     },
     'athletes, athleteId, allowAll': function updateAthleteIndex(athletes, athleteId, allowAll) {
       const athleteItems = (allowAll ? [{ id: 0, name: '全部运动员（整体分析）' }] : []).concat(athletes || []);
@@ -35,7 +38,8 @@ Component({
   methods: {
     onProjectChange(event) {
       const index = Number(event.detail.value);
-      this.triggerEvent('projectchange', { value: this.properties.projects[index] });
+      const item = this.data.projectItems[index] || this.data.projectItems[0];
+      this.triggerEvent('projectchange', { value: item ? item.code : '' });
     },
     onAthleteChange(event) {
       const index = Number(event.detail.value);

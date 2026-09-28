@@ -1,6 +1,7 @@
 .scope-filter { margin-bottom: 20rpx; padding: 14rpx; border: 1rpx solid #d8e3e6; border-radius: 18rpx; background: #ffffff; }
 .scope-picker-row { display: flex; gap: 12rpx; }
 .scope-picker { min-width: 0; flex: 1; }
+.scope-picker:focus .scope-picker-control { outline: 4rpx solid #0f5d6d; outline-offset: 2rpx; }
 .scope-picker-control { height: 66rpx; padding: 0 15rpx; border: 1rpx solid #d5e1e3; border-radius: 13rpx; display: flex; align-items: center; gap: 8rpx; background: #f8fbfb; }
 .scope-picker-control > text:first-child { flex: none; color: #829399; font-size: 18rpx; }
 .scope-picker-value { min-width: 0; flex: 1; overflow: hidden; color: #1d4d58; font-size: 21rpx; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
@@ -34,6 +35,7 @@
 }
 
 .scope-range button::after { border: 0; }
+.scope-range button:focus { outline: 4rpx solid #0f5d6d; outline-offset: 2rpx; }
 
 .scope-range button.active {
   color: #ffffff;

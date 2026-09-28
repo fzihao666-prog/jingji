@@ -1,9 +1,9 @@
 <view class="scope-filter">
   <view class="scope-picker-row">
-    <picker class="scope-picker" mode="selector" range="{{projects}}" value="{{projectIndex}}" bindchange="onProjectChange">
+    <picker class="scope-picker" mode="selector" range="{{projectItems}}" range-key="label" value="{{projectIndex}}" bindchange="onProjectChange">
       <view class="scope-picker-control">
         <text>项目</text>
-        <text class="scope-picker-value">{{project || '选择项目'}}</text>
+        <text class="scope-picker-value">{{projectItems[projectIndex].label || '选择项目'}}</text>
         <text>⌄</text>
       </view>
     </picker>
@@ -16,6 +16,6 @@
     </picker>
   </view>
   <view class="scope-range" aria-label="时间范围">
-    <button wx:for="{{rangeOptions}}" wx:key="value" class="{{range === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onRangeChange">{{item.label}}</button>
+    <button wx:for="{{rangeOptions}}" wx:key="value" class="{{range === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onRangeChange" aria-label="时间范围：{{item.label}}，{{range === item.value ? '已选中' : '未选中'}}">{{item.label}}</button>
   </view>
 </view>

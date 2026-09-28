@@ -25,7 +25,7 @@
     <view class="card form-card">
       <view class="field"><text class="field-label">姓名 *</text><input class="input" value="{{form.name}}" data-field="name" bindinput="onFieldInput" maxlength="20"/></view>
       <view class="form-grid">
-        <view class="field"><text class="field-label">项目</text><view class="readonly-value">{{form.project || '未设置'}}</view></view>
+        <view class="field"><text class="field-label">项目</text><view class="readonly-value">{{projectLabel || '未设置'}}</view></view>
         <view class="field"><text class="field-label">队伍</text><view class="readonly-value">{{form.team || '未设置'}}</view></view>
         <view class="field"><text class="field-label">性别</text><picker range="{{genderOptions}}" value="{{genderIndex}}" bindchange="onGenderChange"><view class="picker-input">{{genderOptions[genderIndex]}}</view></picker></view>
         <view class="field"><text class="field-label">出生日期</text><input class="input" value="{{form.birthDate}}" placeholder="YYYY-MM-DD" data-field="birthDate" bindinput="onFieldInput"/></view>

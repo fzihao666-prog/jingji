@@ -9,7 +9,7 @@
   <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载体能训练数据</view></view>
 
   <block wx:if="{{!loading && selectedAthleteId}}">
-    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{project}} · 体能能力参考模型</view></view>
+    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 体能能力参考模型</view></view>
     <view class="card">
       <view wx:if="{{metrics.length}}" class="comparison-list">
         <view wx:for="{{championMetrics}}" wx:key="key" class="comparison-card">

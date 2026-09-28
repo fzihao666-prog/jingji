@@ -3,6 +3,7 @@ const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPag
 const { loadWithGuard } = require('../../utils/request-guard');
 const { ageAt } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
+const { projectLabel } = require('../../utils/project-label');
 
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
 
@@ -10,7 +11,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
   const photoUrl = api.assetUrl(athlete.photoUrl);
   const cells = [
-    ['项目', athlete.project || '未录入'],
+    ['项目', projectLabel(athlete.project)],
     ['队伍', athlete.team || '未分队'],
     ['性别', athlete.gender || '未录入'],
     ['年龄', age == null ? '未录入' : `${age}岁`],
@@ -61,7 +62,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
 
   return {
     athleteName: athlete.name,
-    athleteMeta: `${athlete.project || '项目未录入'} · ${athlete.team || '未分队'}`,
+    athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '未分队'}`,
     athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.currentEvent || '小项未录入'}`,
     athleteInitial: athlete.name ? athlete.name.slice(0, 1) : '运',
     photoUrl,
