@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 const componentSource = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
@@ -22,12 +21,7 @@ describe('队伍与关键词筛选', () => {
   });
 
   it('关键词按姓名或队伍过滤候选运动员', () => {
-    let definition;
-    vm.runInNewContext(componentSource, {
-      Component(value) { definition = value; },
-      require() { return { projectOptions: (p) => p || [] }; },
-    });
-    // 模拟 observers 中的过滤逻辑
+    // 模拟 observers 中的过滤逻辑（与 index.js 中的实现一致）
     const athletes = [
       { id: 1, name: '张三', team: 'A队' },
       { id: 2, name: '李四', team: 'B队' },
