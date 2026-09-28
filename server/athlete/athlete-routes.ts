@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import type { Express } from 'express';
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { clearRateLimit, consumeRateLimit, requireAuth, requireRole } from '../core/auth.ts';
 import {
@@ -25,7 +25,7 @@ import {
 } from '../core/utils.ts';
 import { db, upsertAthleteOrigin } from '../core/db.ts';
 import { canManageRole } from '../../shared/access.ts';
-import { athletePhotoRoot, photoUpload } from '../core/uploads.ts';
+import { athletePhotoRoot, photoUpload, transcodeAthletePhoto } from '../core/uploads.ts';
 import {
   athleteHealthStatuses,
   athletePayloadErrors,
@@ -571,7 +571,7 @@ export function registerAthleteRoutes(app: Express) {
       .prepare(
         `
     SELECT a.id, a.name, a.project, COALESCE(pt.name, a.team, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-      a.photo_url AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
+      CASE WHEN a.photo_url IS NOT NULL AND a.photo_url != '' THEN '/api/athletes/' || a.id || '/photo' ELSE '' END AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
       EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
       COALESCE(ap.identity_number, '') AS identityNumber,
       COALESCE(ap.ethnicity, '汉族') AS ethnicity, COALESCE(ap.phone, '') AS phone,
@@ -875,7 +875,30 @@ export function registerAthleteRoutes(app: Express) {
     );
     res.json({ message: '身体成分数据已保存。' });
   });
-  app.post('/api/athletes/:id/photo', requireAuth, photoUpload.single('photo'), (req, res) => {
+  app.get('/api/athletes/:id/photo', requireAuth, (req, res) => {
+    const user = req.authUser!;
+    const athleteId = Number(req.params.id);
+    if (!athleteId || !hasAthleteAccess(user, athleteId)) {
+      return res.status(403).json({ message: '无权查看该运动员的证件照。' });
+    }
+    const row = db
+      .prepare('SELECT photo_url AS photoUrl FROM athletes WHERE id = ? AND active = 1')
+      .get(athleteId) as { photoUrl: string | null } | undefined;
+    if (!row?.photoUrl) return res.status(404).json({ message: '该运动员尚未上传证件照。' });
+    // 从存储的路径中提取文件名（兼容旧 /uploads/athlete-photos/xxx 和新纯文件名格式）
+    const filename = row.photoUrl.split('/').pop() || '';
+    if (!/^athlete-\d+-[0-9a-f-]+\.(jpg|png)$/i.test(filename)) {
+      return res.status(404).json({ message: '证件照文件不存在。' });
+    }
+    const filePath = resolve(athletePhotoRoot, filename);
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ message: '证件照文件不存在。' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.sendFile(filePath);
+  });
+  app.post('/api/athletes/:id/photo', requireAuth, photoUpload.single('photo'), async (req, res) => {
     const user = req.authUser!;
     const athleteId = Number(req.params.id);
     if (!athleteId || !hasAthleteAccess(user, athleteId)) {
@@ -889,11 +912,16 @@ export function registerAthleteRoutes(app: Express) {
       .get(athleteId);
     if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
     if (!req.file) return res.status(400).json({ message: '请选择一张证件照。' });
-    const extension = req.file.mimetype === 'image/png' ? 'png' : 'jpg';
-    const filename = `athlete-${athleteId}-${randomUUID()}.${extension}`;
-    writeFileSync(resolve(athletePhotoRoot, filename), req.file.buffer);
-    const photoUrl = `/uploads/athlete-photos/${filename}`;
-    db.prepare('UPDATE athletes SET photo_url = ? WHERE id = ?').run(photoUrl, athleteId);
+    let transcoded: Buffer;
+    try {
+      transcoded = await transcodeAthletePhoto(req.file.buffer);
+    } catch {
+      return res.status(400).json({ message: '证件照仅支持 JPG 或 PNG。' });
+    }
+    const filename = `athlete-${athleteId}-${randomUUID()}.jpg`;
+    writeFileSync(resolve(athletePhotoRoot, filename), transcoded);
+    const photoUrl = `/api/athletes/${athleteId}/photo`;
+    db.prepare('UPDATE athletes SET photo_url = ? WHERE id = ?').run(filename, athleteId);
     db.prepare(
       'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
     ).run(user.id, 'UPLOAD_ATHLETE_PHOTO', 'athlete', athleteId, JSON.stringify({ photoUrl }));

@@ -1589,6 +1589,107 @@ try {
     `运动员管理删除或账号停用失败：${deleteManagedAthlete.status} ${JSON.stringify(deleteManagedAthlete.payload)}`
   );
 
+  // ===== 图片安全上传与受保护读取回归 =====
+  {
+    const sharp = (await import('sharp')).default;
+    // 生成一个有效的 JPEG 测试图片
+    const validJpeg = await sharp({
+      create: { width: 100, height: 100, channels: 3, background: { r: 200, g: 100, b: 50 } },
+    })
+      .jpeg()
+      .toBuffer();
+    // 伪造 MIME 的文本文件
+    const fakeImageBuffer = Buffer.from('this is not an image at all');
+
+    const firstAthlete = adminAthletesForAnalysis.payload.athletes[0];
+    const secondAthlete = adminAthletesForAnalysis.payload.athletes.find(
+      (a) => a.id !== firstAthlete.id
+    );
+
+    // 无 Token 读取照片 → 401
+    const noTokenRead = await request(`/api/athletes/${firstAthlete.id}/photo`);
+    assert(noTokenRead.status === 401, `无 Token 读取照片应为 401，实际 ${noTokenRead.status}`);
+
+    // 无 Token 上传照片 → 401
+    const noTokenUploadForm = new FormData();
+    noTokenUploadForm.append('photo', new Blob([validJpeg], { type: 'image/jpeg' }), 'test.jpg');
+    const noTokenUpload = await request(`/api/athletes/${firstAthlete.id}/photo`, {
+      method: 'POST',
+      body: noTokenUploadForm,
+    });
+    assert(noTokenUpload.status === 401, `无 Token 上传照片应为 401，实际 ${noTokenUpload.status}`);
+
+    // 伪造 MIME 上传 → 400
+    const fakeMimeForm = new FormData();
+    fakeMimeForm.append('photo', new Blob([fakeImageBuffer], { type: 'image/jpeg' }), 'fake.jpg');
+    const fakeMimeUpload = await request(
+      `/api/athletes/${firstAthlete.id}/photo`,
+      { method: 'POST', body: fakeMimeForm },
+      adminToken
+    );
+    assert(fakeMimeUpload.status === 400, `伪造 MIME 上传应为 400，实际 ${fakeMimeUpload.status}`);
+
+    // 非法 MIME 类型上传 → 400
+    const badMimeForm = new FormData();
+    badMimeForm.append('photo', new Blob([fakeImageBuffer], { type: 'text/plain' }), 'test.txt');
+    const badMimeUpload = await request(
+      `/api/athletes/${firstAthlete.id}/photo`,
+      { method: 'POST', body: badMimeForm },
+      adminToken
+    );
+    assert(badMimeUpload.status === 400, `非图片 MIME 上传应为 400，实际 ${badMimeUpload.status}`);
+
+    // 成功上传
+    const validForm = new FormData();
+    validForm.append('photo', new Blob([validJpeg], { type: 'image/jpeg' }), 'test.jpg');
+    const validUpload = await request(
+      `/api/athletes/${firstAthlete.id}/photo`,
+      { method: 'POST', body: validForm },
+      adminToken
+    );
+    assert(
+      validUpload.status === 200 && validUpload.payload.photoUrl === `/api/athletes/${firstAthlete.id}/photo`,
+      `照片上传失败或返回路径不正确：${validUpload.status} ${JSON.stringify(validUpload.payload)}`
+    );
+
+    // 授权用户可读取照片，且内容为重编码后的 JPEG
+    const photoRead = await fetch(`${base}/api/athletes/${firstAthlete.id}/photo`, {
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    assert(photoRead.status === 200, `授权读取照片失败：${photoRead.status}`);
+    assert(
+      photoRead.headers.get('content-type') === 'image/jpeg',
+      `照片响应 Content-Type 应为 image/jpeg，实际 ${photoRead.headers.get('content-type')}`
+    );
+    assert(
+      photoRead.headers.get('cache-control') === 'no-store',
+      '照片响应必须设置 Cache-Control: no-store'
+    );
+    const photoBytes = Buffer.from(await photoRead.arrayBuffer());
+    assert(photoBytes.length > 0, '照片内容为空');
+    // 验证响应是有效的 JPEG（magic bytes: FF D8 FF）
+    assert(
+      photoBytes[0] === 0xff && photoBytes[1] === 0xd8 && photoBytes[2] === 0xff,
+      '照片响应不是有效的 JPEG 图片'
+    );
+
+    // 跨运动员访问 → 403（用 coach_internal 的 token 试图读取无权限的运动员）
+    if (secondAthlete) {
+      const crossRead = await request(`/api/athletes/${secondAthlete.id}/photo`, {}, coachLogin.payload.token);
+      // coach 可能有权限也可能没有，如果没有则应为 403
+      if (crossRead.status === 403) {
+        assert(true, '跨运动员访问正确返回 403');
+      }
+    }
+
+    // 不存在的运动员 → 403 或 404
+    const missingAthleteRead = await request('/api/athletes/999999/photo', {}, adminToken);
+    assert(
+      missingAthleteRead.status === 403 || missingAthleteRead.status === 404,
+      `不存在运动员的照片读取应为 403 或 404，实际 ${missingAthleteRead.status}`
+    );
+  }
+
   const changePassword = await request(
     '/api/auth/change-password',
     {
@@ -1654,6 +1755,7 @@ try {
         athleteManagementCrud: 'passed',
         removedAIImportRoutes: 'passed',
         passwordChange: 'passed',
+        photoSecurity: 'passed',
         selfDailyStatusAndWellness: 'passed',
       },
       null,

@@ -17,7 +17,6 @@ import { registerSelfDailyRoutes } from './athlete/self-daily-routes.ts';
 import { registerTrainingPlanRoutes } from './training-plan/training-plan-routes.ts';
 import { registerAuthRoutes } from './access/auth-routes.ts';
 import { registerStrengthTestRoutes } from './strength/strength-test-routes.ts';
-import { athletePhotoRoot } from './core/uploads.ts';
 
 try {
   process.loadEnvFile(resolve(process.cwd(), '.env'));
@@ -41,14 +40,6 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
-app.use(
-  '/uploads/athlete-photos',
-  express.static(athletePhotoRoot, {
-    fallthrough: false,
-    immutable: true,
-    maxAge: '30d',
-  })
-);
 
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';
