@@ -25,6 +25,7 @@ import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { api } from '../api';
 import type { Athlete, InjuryRecord, InjuryStatus, ProjectTeam, User } from '../types';
 import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
+import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 
 const PAGE_SIZE = 6;
 const HEALTH_OPTIONS = ['健康', '观察', '训练受限', '康复中'];
@@ -731,7 +732,11 @@ export function AthleteManagementPage({
                   <td>
                     <div className="athlete-person-cell">
                       {athlete.photoUrl ? (
-                        <img src={athlete.photoUrl} alt="" />
+                        <ProtectedAthletePhoto
+                          athleteId={athlete.id}
+                          photoUrl={athlete.photoUrl}
+                          alt=""
+                        />
                       ) : (
                         <span>{athlete.name.slice(0, 1)}</span>
                       )}

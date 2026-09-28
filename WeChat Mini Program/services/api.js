@@ -1,4 +1,4 @@
-const { request, uploadFile, assetUrl } = require('../utils/request');
+const { request, uploadFile, downloadFile, assetUrl } = require('../utils/request');
 
 function query(params) {
   return Object.keys(params)
@@ -32,6 +32,13 @@ module.exports = {
   },
   uploadAthletePhoto(athleteId, filePath) {
     return uploadFile(`/api/athletes/${encodeURIComponent(athleteId)}/photo`, filePath);
+  },
+  async downloadAthletePhoto(athleteId) {
+    try {
+      return await downloadFile(`/api/athletes/${encodeURIComponent(athleteId)}/photo`);
+    } catch {
+      return '';
+    }
   },
   myTrainingSessions() { return request('/api/me/training-sessions'); },
   createMyTrainingSession(data) {

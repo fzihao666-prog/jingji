@@ -296,10 +296,47 @@ function uploadFile(path, filePath, name = 'photo') {
   });
 }
 
+function downloadFile(path) {
+  const traceId = nextTraceId();
+  const startedAt = Date.now();
+  const token = wx.getStorageSync(TOKEN_KEY);
+  const url = buildRequestUrl(getApiBaseUrl(), path);
+  traceNetwork('下载开始', {
+    traceId,
+    transport: 'wx.downloadFile',
+    url: summarizeUrl(url),
+    hasAuthorization: Boolean(token),
+  });
+  return new Promise((resolve, reject) => {
+    wx.downloadFile({
+      url,
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 30000,
+      success(response) {
+        traceNetwork('下载完成', {
+          traceId,
+          statusCode: response.statusCode,
+          durationMs: durationMs(startedAt),
+        });
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          resolve(response.tempFilePath);
+          return;
+        }
+        if (response.statusCode === 401) redirectToLogin();
+        reject(new Error(`下载失败（${response.statusCode}）`));
+      },
+      fail(error) {
+        traceNetwork('下载失败', { traceId, ...summarizeError(error) });
+        reject(new Error(networkErrorMessage(error)));
+      },
+    });
+  });
+}
+
 function assetUrl(path) {
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return path;
   return buildRequestUrl(getApiBaseUrl(), path);
 }
 
-module.exports = { request, uploadFile, assetUrl, buildRequestUrl };
+module.exports = { request, uploadFile, downloadFile, assetUrl, buildRequestUrl };

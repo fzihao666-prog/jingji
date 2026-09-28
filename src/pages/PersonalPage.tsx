@@ -11,6 +11,7 @@ import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { EChart } from '../components/EChart';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
+import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import { ProfileTrainingStatus } from '../components/ProfileTrainingStatus';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
@@ -620,7 +621,11 @@ export function PersonalPage(props: Props) {
             <header className="personal-dossier-identity">
               <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
                 {selectedAthlete.photoUrl ? (
-                  <img src={selectedAthlete.photoUrl} alt={`${selectedAthlete.name}证件照`} />
+                  <ProtectedAthletePhoto
+                    athleteId={selectedAthlete.id}
+                    photoUrl={selectedAthlete.photoUrl}
+                    alt={`${selectedAthlete.name}证件照`}
+                  />
                 ) : (
                   selectedAthlete.name.slice(0, 1)
                 )}

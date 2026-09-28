@@ -98,6 +98,10 @@ Page({
       const athlete = context.athletes.find((item) => Number(item.id) === Number(context.user.athleteId));
       if (!athlete) throw new Error('未找到当前账号绑定的运动员档案。');
       const form = profileForm(athlete);
+      let photoUrl = '';
+      if (athlete.photoUrl) {
+        photoUrl = await api.downloadAthletePhoto(athlete.id);
+      }
       this.setData({
         athleteId: athlete.id,
         form,
@@ -106,7 +110,7 @@ Page({
         genderIndex: Math.max(0, ['暂不填写', '男', '女'].indexOf(athlete.gender || '暂不填写')),
         healthIndex: Math.max(0, ['健康', '观察', '训练受限', '康复中'].indexOf(athlete.healthStatus || '健康')),
         statusIndex: Math.max(0, ['在训', '集训', '休整', '离队'].indexOf(athlete.athleteStatus || '在训')),
-        photoUrl: api.assetUrl(athlete.photoUrl),
+        photoUrl,
         loading: false
       });
     } catch (error) {

@@ -9,7 +9,6 @@ const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
 
 function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
-  const photoUrl = api.assetUrl(athlete.photoUrl);
   const cells = [
     ['项目', projectLabel(athlete.project)],
     ['队伍', athlete.team || '未分队'],
@@ -65,7 +64,6 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '未分队'}`,
     athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.currentEvent || '小项未录入'}`,
     athleteInitial: athlete.name ? athlete.name.slice(0, 1) : '运',
-    photoUrl,
     primaryCells,
     moreCells,
     injuries,
@@ -202,7 +200,11 @@ Page({
     } catch {
       radarModels = null;
     }
-    return { showMore: false, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, profileComparison, radarModels };
+    let photoUrl = '';
+    if (athlete.photoUrl) {
+      photoUrl = await api.downloadAthletePhoto(athleteId);
+    }
+    return { showMore: false, photoUrl, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, profileComparison, radarModels };
   },
 
   onScopeChange(event) {

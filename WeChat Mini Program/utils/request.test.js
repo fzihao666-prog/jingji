@@ -6,7 +6,7 @@ describe('小程序请求地址', () => {
     const source = readFileSync(new URL('./request.js', import.meta.url), 'utf8');
 
     expect(source).toContain('function buildRequestUrl(baseUrl, path)');
-    expect(source.match(/const url = buildRequestUrl\(getApiBaseUrl\(\), path\);/g)).toHaveLength(2);
+    expect(source.match(/const url = buildRequestUrl\(getApiBaseUrl\(\), path\);/g)).toHaveLength(3);
     expect(source).toContain('url,');
   });
 

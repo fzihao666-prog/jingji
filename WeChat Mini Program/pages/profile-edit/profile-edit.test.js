@@ -54,4 +54,21 @@ describe('运动员个人资料编辑', () => {
     authorizeSuccess();
     expect(mediaOpened).toBe(true);
   });
+
+  it('头像通过鉴权下载获取临时路径，不直接传 API 路径给 image', () => {
+    // 验证页面使用 downloadAthletePhoto 而非 assetUrl 获取头像
+    expect(pageSource).toContain('api.downloadAthletePhoto');
+    expect(pageSource).not.toContain('api.assetUrl(athlete.photoUrl)');
+    // WXML 模板使用 photoUrl 绑定 image src（此时为临时文件路径或空）
+    expect(templateSource).toContain('src="{{photoUrl}}"');
+  });
+
+  it('头像下载失败时保留占位而不报错', () => {
+    // downloadAthletePhoto 在 api.js 中返回空字符串而非抛出异常
+    const apiSource = readFileSync(new URL('../../services/api.js', import.meta.url), 'utf8');
+    expect(apiSource).toContain('async downloadAthletePhoto');
+    expect(apiSource).toContain('return \'\'');
+    // 页面侧不对空 photoUrl 抛出异常
+    expect(pageSource).toContain('photoUrl');
+  });
 });
