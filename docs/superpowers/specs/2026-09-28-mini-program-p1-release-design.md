@@ -20,7 +20,7 @@
 
 ## 架构
 
-照片继续在同一 HTTPS origin 下使用相对 URL，但路径改为 `/api/athletes/:id/photo`，服务端先执行 `requireAuth`、`hasAthleteAccess`，再读取受控文件并返回正确的图像类型与 `Cache-Control: no-store`。上传使用图像解析库的解码结果重编码为服务端选定格式；不再由 MIME 决定磁盘扩展名。
+照片读取路径改为 `/api/athletes/:id/photo`，服务端先执行 `requireAuth`、`hasAthleteAccess`，再读取受控文件并返回正确的图像类型与 `Cache-Control: no-store`。浏览器以带 Authorization 的 fetch 取得 Blob URL；小程序以带 Authorization 的 `wx.downloadFile` 取得临时文件路径，二者都不把 Token 写入 URL，也不直接把受保护路径交给 `<img>` 或 `<image>`。上传使用 `sharp@0.35.4` 的解码结果重编码为服务端选定格式；不再由 MIME 决定磁盘扩展名。
 
 用户数据增加单调递增的 `session_version`。登录签名时包含版本；`getAuthUser` 从数据库读取当前用户和版本并拒绝旧 Token。退出小程序调用受认证的注销接口后清理本地缓存；改密与停用路径也递增版本。
 
