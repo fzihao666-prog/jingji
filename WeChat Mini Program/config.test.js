@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { API_ENVIRONMENT, NETWORK_DEBUG, resolveApiBaseUrl } from './config.js';
+import { API_ENVIRONMENT, NETWORK_DEBUG, getApiBaseUrl, resolveApiBaseUrl } from './config.js';
 
 describe('小程序 API 地址配置', () => {
   it('为开发环境返回本地 Express 地址', () => {
@@ -17,5 +17,6 @@ describe('小程序 API 地址配置', () => {
   it('发布配置关闭开发环境与网络追踪', () => {
     expect(API_ENVIRONMENT).toBe('production');
     expect(NETWORK_DEBUG).toBe(false);
+    expect(getApiBaseUrl()).toMatch(/^https:\/\//);
   });
 });
