@@ -292,7 +292,7 @@ export function registerAuthRoutes(app: Express) {
       registrationId = Number(insertResult.lastInsertRowid);
     }
 
-    if (!registrationApprovalEnabled()) {
+    if (!registrationApprovalEnabled() && requestedRole === 'ATL') {
       const activation = activateRegistrationRequest(registrationId, null);
       if (activation.ok) {
         return res.status(201).json({ message: '注册成功，可直接登录。', status: 'approved' });

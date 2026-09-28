@@ -1202,6 +1202,7 @@ try {
     body: JSON.stringify({ username: 'coach_test', password: 'Secure123' }),
   });
   assert(approvedCoachLogin.status === 200, '获批教练无法登录');
+  const approvedCoachToken = approvedCoachLogin.payload.token;
 
   const approvalGet = await request('/api/admin/registrations/approval', {}, adminToken);
   assert(approvalGet.status === 200 && approvalGet.payload.enabled === true, '默认应开启注册审核');
@@ -1212,6 +1213,12 @@ try {
     athleteToken
   );
   assert(approvalForbiddenAthlete.status === 403, '运动员不应修改注册审核开关');
+  const approvalForbiddenCoach = await request(
+    '/api/admin/registrations/approval',
+    { method: 'PUT', body: JSON.stringify({ enabled: false }) },
+    approvedCoachToken
+  );
+  assert(approvalForbiddenCoach.status === 403, '教练不应修改全局注册审核开关');
 
   const historicalPendingBeforeToggle = await request(
     '/api/auth/register',
@@ -1262,6 +1269,28 @@ try {
     body: JSON.stringify({ username: 'auto_approve_test', password: 'Secure123' }),
   });
   assert(autoApprovedLogin.status === 200, '自动开通账号无法登录');
+
+  const coachWhileApprovalOff = await request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      username: 'coach_auto_approve_test',
+      password: 'Secure123',
+      displayName: '自动开通教练',
+      role: 'SCC',
+      project: 'ROWING',
+      team: '测试组',
+      phone: '13811112222',
+    }),
+  });
+  assert(
+    coachWhileApprovalOff.status === 201 && coachWhileApprovalOff.payload.status === 'pending',
+    '关闭审核时教练注册仍应进入待审核'
+  );
+  const coachWhileApprovalOffLogin = await request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'coach_auto_approve_test', password: 'Secure123' }),
+  });
+  assert(coachWhileApprovalOffLogin.status === 403, '关闭审核时待审核教练不应登录');
 
   const historicalStillPending = (
     await request('/api/admin/registrations?status=pending', {}, adminToken)

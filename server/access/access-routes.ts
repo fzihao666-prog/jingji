@@ -113,7 +113,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/admin/registrations/approval',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('DMD'),
     (req, res) => {
       if (typeof req.body?.enabled !== 'boolean') {
         return res.status(400).json({ message: '开关参数无效。' });

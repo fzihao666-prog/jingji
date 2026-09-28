@@ -99,6 +99,7 @@ export async function checkMiniDailyTodoFlow(assert) {
       if (path === './date') return dateContext.module.exports;
       if (path === './context') return modules['../../utils/context'];
       if (path === './request-guard') return requestGuard.module.exports;
+      if (path === './project-label') return { projectLabel: (project) => project };
       throw new Error(`未预期依赖：${path}`);
     },
   };
