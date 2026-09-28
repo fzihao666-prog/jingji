@@ -19,6 +19,9 @@ module.exports = {
   changePassword(currentPassword, newPassword) {
     return request('/api/auth/change-password', { method: 'POST', data: { currentPassword, newPassword } });
   },
+  logout() {
+    return request('/api/auth/logout', { method: 'POST' });
+  },
   athletes() { return request('/api/athletes'); },
   teams() { return request('/api/registration/teams', { auth: false }); },
   updateMyAthleteProfile(data) {

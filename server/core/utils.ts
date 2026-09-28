@@ -44,7 +44,7 @@ export function userById(userId: number): AuthUser | null {
   const row = db
     .prepare(
       `
-    SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId
+    SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId, session_version AS sessionVersion
     FROM users WHERE id = ?
   `
     )

@@ -312,7 +312,7 @@ export function registerAuthRoutes(app: Express) {
     const password = cleanString(req.body?.password);
     const row = db
       .prepare(
-        'SELECT id, username, password_hash, display_name, role, athlete_id FROM users WHERE username = ? AND active = 1'
+        'SELECT id, username, password_hash, display_name, role, athlete_id, session_version FROM users WHERE username = ? AND active = 1'
       )
       .get(username) as
       | {
@@ -322,6 +322,7 @@ export function registerAuthRoutes(app: Express) {
           display_name: string;
           role: Role;
           athlete_id: number | null;
+          session_version: number;
         }
       | undefined;
 
@@ -344,6 +345,7 @@ export function registerAuthRoutes(app: Express) {
       displayName: row.display_name,
       role: row.role,
       athleteId: row.athlete_id,
+      sessionVersion: row.session_version,
     };
     const token = jwt.sign(user, jwtSecret, { expiresIn: '12h' });
     clearRateLimit(req, 'login');
@@ -354,6 +356,15 @@ export function registerAuthRoutes(app: Express) {
     const user = userById(req.authUser!.id);
     if (!user) return res.status(404).json({ message: '账户不存在。' });
     res.json({ user });
+  });
+
+  app.post('/api/auth/logout', requireAuth, (req, res) => {
+    const userId = req.authUser!.id;
+    db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = ?').run(userId);
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+    ).run(userId, 'LOGOUT', 'user', userId);
+    res.json({ message: '已退出登录。' });
   });
 
   app.get('/api/preferences/current-project', requireAuth, (req, res) => {

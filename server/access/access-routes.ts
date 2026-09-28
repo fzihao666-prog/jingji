@@ -821,7 +821,7 @@ export function registerAccessRoutes(app: Express) {
         return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
       }
       const active = req.body?.active === true;
-      db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, targetId);
+      db.prepare('UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?').run(active ? 1 : 0, targetId);
       db.prepare(
         'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
       ).run(

@@ -455,7 +455,7 @@ export function registerAthleteRoutes(app: Express) {
       try {
         db.prepare(`UPDATE athletes SET active = 0 WHERE id IN (${placeholders})`).run(...ids);
         db.prepare(
-          `UPDATE users SET active = 0 WHERE role = 'ATL' AND athlete_id IN (${placeholders})`
+          `UPDATE users SET active = 0, session_version = session_version + 1 WHERE role = 'ATL' AND athlete_id IN (${placeholders})`
         ).run(...ids);
         for (const id of ids)
           db.prepare(
@@ -480,7 +480,7 @@ export function registerAthleteRoutes(app: Express) {
       db.exec('BEGIN');
       try {
         db.prepare('UPDATE athletes SET active = 0 WHERE id = ?').run(athleteId);
-        db.prepare("UPDATE users SET active = 0 WHERE role = 'ATL' AND athlete_id = ?").run(
+        db.prepare("UPDATE users SET active = 0, session_version = session_version + 1 WHERE role = 'ATL' AND athlete_id = ?").run(
           athleteId
         );
         db.prepare(
@@ -553,10 +553,9 @@ export function registerAthleteRoutes(app: Express) {
     if (!row || !bcrypt.compareSync(currentPassword, row.password_hash)) {
       return res.status(401).json({ message: '当前密码不正确。' });
     }
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
-      bcrypt.hashSync(newPassword, 11),
-      req.authUser!.id
-    );
+    db.prepare(
+      'UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?'
+    ).run(bcrypt.hashSync(newPassword, 11), req.authUser!.id);
     db.prepare(
       'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
     ).run(req.authUser!.id, 'CHANGE_PASSWORD', 'user', req.authUser!.id);

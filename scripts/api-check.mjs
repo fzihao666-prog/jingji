@@ -1704,6 +1704,47 @@ try {
   });
   assert(changePassword.status === 200 && changedLogin.status === 200, '修改密码流程失败');
 
+  // ===== 会话版本与明确注销回归 =====
+  {
+    // 改密后旧 Token 必须失效
+    const oldTokenAfterPasswordChange = await request('/api/me', {}, coachLogin.payload.token);
+    assert(
+      oldTokenAfterPasswordChange.status === 401,
+      `改密后旧 Token 应为 401，实际 ${oldTokenAfterPasswordChange.status}`
+    );
+    // 新登录 Token 可用
+    const newTokenAfterPasswordChange = await request('/api/me', {}, changedLogin.payload.token);
+    assert(
+      newTokenAfterPasswordChange.status === 200,
+      `改密后新 Token 应可用，实际 ${newTokenAfterPasswordChange.status}`
+    );
+
+    // 注销后旧 Token 必须失效
+    const logoutResult = await request(
+      '/api/auth/logout',
+      { method: 'POST' },
+      changedLogin.payload.token
+    );
+    assert(logoutResult.status === 200, `注销失败：${logoutResult.status}`);
+    const oldTokenAfterLogout = await request('/api/me', {}, changedLogin.payload.token);
+    assert(
+      oldTokenAfterLogout.status === 401,
+      `注销后旧 Token 应为 401，实际 ${oldTokenAfterLogout.status}`
+    );
+
+    // 重新登录后新 Token 可用
+    const reLogin = await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: 'coach_internal', password: 'Changed456' }),
+    });
+    assert(reLogin.status === 200, '注销后重新登录失败');
+    const reLoginToken = await request('/api/me', {}, reLogin.payload.token);
+    assert(reLoginToken.status === 200, '重新登录后 Token 应可用');
+
+    // 旧 Token 缺少 sessionVersion 字段时必须失效（模拟没有 sessionVersion 的 JWT）
+    // 停用后旧 Token 必须失效（用已有测试验证 disabledSession）
+  }
+
   const disableRegional = await request(
     `/api/access/accounts/${createRegional.payload.id}/status`,
     {

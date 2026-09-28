@@ -71,6 +71,7 @@ db.exec(`
     role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'PRJ', 'REG', 'TD', 'DMD')),
     athlete_id INTEGER,
     active INTEGER NOT NULL DEFAULT 1,
+    session_version INTEGER NOT NULL DEFAULT 1,
     FOREIGN KEY (athlete_id) REFERENCES athletes(id)
   );
 
@@ -669,6 +670,9 @@ if (hasColumn('special_test_events', 'project') && !specialTestSchema.includes("
 if (!hasColumn('athletes', 'photo_url')) {
   db.exec("ALTER TABLE athletes ADD COLUMN photo_url TEXT NOT NULL DEFAULT ''");
 }
+if (!hasColumn('users', 'session_version')) {
+  db.exec('ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1');
+}
 if (!hasColumn('athletes', 'birth_date')) {
   db.exec('ALTER TABLE athletes ADD COLUMN birth_date TEXT');
 }
@@ -748,9 +752,10 @@ if (usersTable && !usersTable.sql.includes("'DMD'")) {
         role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'PRJ', 'REG', 'TD', 'DMD')),
         athlete_id INTEGER,
         active INTEGER NOT NULL DEFAULT 1,
+        session_version INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (athlete_id) REFERENCES athletes(id)
       );
-      INSERT INTO users_access_v2 (id, username, password_hash, display_name, role, athlete_id, active)
+      INSERT INTO users_access_v2 (id, username, password_hash, display_name, role, athlete_id, active, session_version)
         SELECT id, username, password_hash, display_name,
           CASE role
             WHEN 'athlete' THEN 'ATL'
@@ -765,7 +770,8 @@ if (usersTable && !usersTable.sql.includes("'DMD'")) {
             ELSE role
           END,
           athlete_id,
-          ${activeExpression}
+          ${activeExpression},
+          COALESCE(session_version, 1)
         FROM users;
       DROP TABLE users;
       ALTER TABLE users_access_v2 RENAME TO users;

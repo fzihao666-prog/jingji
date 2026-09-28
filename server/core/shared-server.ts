@@ -24,6 +24,7 @@ export type AuthUser = {
   displayName: string;
   role: Role;
   athleteId: number | null;
+  sessionVersion: number;
 };
 
 export type AreaPermission = {

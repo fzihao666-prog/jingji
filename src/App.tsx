@@ -206,7 +206,12 @@ export default function App() {
     changePage('overview');
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      // 注销接口失败时仍清除本地登录态
+    }
     setToken(null);
     setUser(null);
     setAthletes([]);

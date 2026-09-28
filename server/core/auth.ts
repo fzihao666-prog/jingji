@@ -45,15 +45,17 @@ export function getAuthUser(req: Request): AuthUser | null {
   if (!header?.startsWith('Bearer ')) return null;
   try {
     const tokenUser = jwt.verify(header.slice(7), jwtSecret) as AuthUser;
+    if (typeof tokenUser.sessionVersion !== 'number') return null;
     const current = db
       .prepare(
         `
-      SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId
+      SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId, session_version AS sessionVersion
       FROM users WHERE id = ? AND active = 1
     `
       )
       .get(tokenUser.id) as AuthUser | undefined;
-    return current || null;
+    if (!current || current.sessionVersion !== tokenUser.sessionVersion) return null;
+    return current;
   } catch {
     return null;
   }

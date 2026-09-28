@@ -119,6 +119,9 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     });
   },
+  async logout() {
+    return request<{ message: string }>('/api/auth/logout', { method: 'POST' });
+  },
   async updateProfileName(name: string) {
     return request<{ message: string; user: User }>('/api/profile/name', {
       method: 'PUT',

@@ -71,8 +71,14 @@ Page({
     wx.showModal({
       title: '退出登录',
       content: '确定退出当前账号吗？',
-      success(result) {
+      success: async (result) => {
         if (!result.confirm) return;
+        try {
+          const api = require('../../services/api');
+          await api.logout();
+        } catch {
+          // 注销接口失败时仍清除本地登录态
+        }
         getApp().clearSession();
         wx.reLaunch({ url: '/pages/login/login' });
       }
