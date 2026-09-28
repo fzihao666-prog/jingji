@@ -4,7 +4,7 @@
     <view class="page-description">本人填写的自评数值 · 最近7天可补填</view>
   </view>
 
-  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{error}}" class="error-box">{{error}} <text class="retry-link" bindtap="retryLoad">点按重试</text></view>
   <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载恢复日报</view></view>
 
   <block wx:if="{{!loading}}">

@@ -72,6 +72,8 @@ Page({
     this.loadPage();
   },
 
+  retryLoad() { this.loadPage(); },
+
   onUnload() {
     if (this._resolvePrivacyAuthorization) this._resolvePrivacyAuthorization({ event: 'disagree' });
     if (this._privacyListener && wx.offNeedPrivacyAuthorization) wx.offNeedPrivacyAuthorization(this._privacyListener);

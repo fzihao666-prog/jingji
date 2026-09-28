@@ -27,6 +27,7 @@ Page({
 
   onLoad() { this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
+  retryLoad() { this.loadPage(); },
 
   loadPage() {
     const dates = wellnessDates();

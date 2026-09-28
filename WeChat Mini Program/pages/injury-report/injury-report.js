@@ -35,6 +35,8 @@ Page({
     this.loadPage();
   },
 
+  retryLoad() { this.loadPage(); },
+
   loadPage() {
     this._guard = this._guard || createRequestGuard();
     return loadWithGuard(this, this._guard, async () => {

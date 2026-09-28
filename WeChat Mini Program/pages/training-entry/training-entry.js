@@ -14,6 +14,7 @@ Page({
   data: {
     loading: true,
     saving: false,
+    deletingId: 0,
     error: '',
     editId: 0,
     form: emptyForm(),
@@ -27,6 +28,7 @@ Page({
 
   onLoad() { this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
+  retryLoad() { this.loadPage(); },
 
   async loadPage() {
     try {
@@ -97,11 +99,14 @@ Page({
 
   deleteSession(event) {
     const id = Number(event.currentTarget.dataset.id);
+    if (this.data.deletingId === id) return;
     wx.showModal({
       title: '删除训练记录',
       content: '确认删除这条本人填写的训练记录吗？',
       success: async (result) => {
         if (!result.confirm) return;
+        if (this.data.deletingId === id) return;
+        this.setData({ deletingId: id });
         try {
           await api.deleteMyTrainingSession(id);
           getApp().globalData.homeNeedsRefresh = true;
@@ -111,6 +116,8 @@ Page({
           await this.loadPage();
         } catch (error) {
           this.setData({ error: error.message || '训练记录删除失败。' });
+        } finally {
+          this.setData({ deletingId: 0 });
         }
       }
     });

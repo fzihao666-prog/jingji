@@ -4,7 +4,7 @@
     <view class="page-description">{{athleteName || '运动员'}} · {{athleteMeta}}</view>
   </view>
 
-  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{error}}" class="error-box">{{error}} <text class="retry-link" bindtap="retryLoad">点按重试</text></view>
 
   <view wx:if="{{loading}}" class="card state">
     <view class="state-icon">↻</view>

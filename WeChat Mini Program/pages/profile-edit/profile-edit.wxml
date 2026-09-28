@@ -12,7 +12,7 @@
   </view>
   <view wx:if="{{!showPrivacyAuthorization}}">
   <view class="page-head"><view class="page-title">编辑个人资料</view><view class="page-description">保存后与网页版使用同一份运动员档案</view></view>
-  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{error}}" class="error-box">{{error}} <text class="retry-link" bindtap="retryLoad">点按重试</text></view>
   <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载个人资料</view></view>
 
   <block wx:if="{{!loading}}">
