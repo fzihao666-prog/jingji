@@ -1,5 +1,5 @@
 export type TrainingStatusMetricInput = {
-  key: 'duration' | 'load' | 'sessionCount' | 'distance';
+  key: 'duration' | 'load' | 'sessionCount' | 'distance' | 'intensity';
   label: string;
   unit: string;
   personalValue: number | null;

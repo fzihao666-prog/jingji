@@ -45,6 +45,15 @@ Page({
   },
   openPrivacy() { wx.navigateTo({ url: '/pages/privacy/privacy' }); },
 
+  onAvatarTap() {
+    wx.showActionSheet({
+      itemList: ['退出登录'],
+      success: (result) => {
+        if (result.tapIndex === 0) this.logout();
+      }
+    });
+  },
+
   async changePassword() {
     const { currentPassword, newPassword, confirmPassword } = this.data;
     if (!currentPassword || !newPassword) {

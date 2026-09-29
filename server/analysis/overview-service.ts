@@ -693,73 +693,104 @@ function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) 
   return {
     metrics: physiologyMetricDefinitions.map((definition, metricIndex) => {
       let previousAbnormalRate: number | null = null;
+      const days = dates.map((date, dayIndex) => {
+        const rows = valuesByCell.get(`${definition.code}|${date}`) || [];
+        let normal = 0;
+        let fluctuation = 0;
+        let attention = 0;
+        let abnormal = 0;
+        let valueMedian: number | null = null;
+        let isEstimated = false;
+        if (rows.length) {
+          valueMedian = median(rows.map((row) => row.value));
+          for (const row of rows) {
+            const status = physiologyStatus(definition, row.value);
+            if (status === 'NORMAL') normal += 1;
+            else if (status === 'FLUCTUATION') fluctuation += 1;
+            else if (status === 'ATTENTION') attention += 1;
+            else abnormal += 1;
+          }
+          isEstimated = rows.every(
+            (row) => row.isDemo || /seed|demo|estimated/i.test(row.source)
+          );
+        } else if (demoScope) {
+          const seed = [...`${definition.code}${date}`].reduce(
+            (sum, char) => sum + char.charCodeAt(0),
+            0
+          );
+          ({ normal, fluctuation, attention, abnormal } = simulatedCounts(seed));
+          const shift = ((seed % 7) - 3) / 10;
+          valueMedian = round(
+            definition.baseline * (1 + shift),
+            definition.unit === 'U/L' ? 0 : 1
+          );
+          isEstimated = true;
+        }
+        const sampleCount = normal + fluctuation + attention + abnormal;
+        const abnormalRate = sampleCount ? abnormal / sampleCount : null;
+        const attentionRate = sampleCount ? (attention + abnormal) / sampleCount : null;
+        const status: PhysiologyStatus = !sampleCount
+          ? 'MISSING'
+          : abnormalRate! >= 0.15
+            ? 'ABNORMAL'
+            : attentionRate! >= 0.25
+              ? 'ATTENTION'
+              : (fluctuation + attention + abnormal) / sampleCount >= 0.25
+                ? 'FLUCTUATION'
+                : 'NORMAL';
+        const abnormalRateChange =
+          abnormalRate === null || previousAbnormalRate === null
+            ? null
+            : round((abnormalRate - previousAbnormalRate) * 100, 1);
+        if (abnormalRate !== null) previousAbnormalRate = abnormalRate;
+        return {
+          date,
+          status,
+          median: valueMedian,
+          sampleCount,
+          normal,
+          fluctuation,
+          attention,
+          abnormal,
+          abnormalRateChange,
+          isEstimated,
+        };
+      });
+      // 趋势数据：仅保留有中位数的日期，供前端绘制迷你折线图
+      const trendPoints = days
+        .filter((d) => d.median !== null)
+        .map((d) => ({ date: d.date, value: d.median as number, status: d.status }));
+      // 摘要：最新值、极值、趋势方向
+      const recentValues = trendPoints.slice(-7).map((p) => p.value);
+      const latest = trendPoints.at(-1) ?? null;
+      const prev = trendPoints.at(-2) ?? null;
+      const trendDirection =
+        latest && prev
+          ? latest.value > prev.value
+            ? 'up'
+            : latest.value < prev.value
+              ? 'down'
+              : 'stable'
+          : 'stable';
       return {
         code: definition.code,
         label: definition.label,
         unit: definition.unit,
-        days: dates.map((date, dayIndex) => {
-          const rows = valuesByCell.get(`${definition.code}|${date}`) || [];
-          let normal = 0;
-          let fluctuation = 0;
-          let attention = 0;
-          let abnormal = 0;
-          let valueMedian: number | null = null;
-          let isEstimated = false;
-          if (rows.length) {
-            valueMedian = median(rows.map((row) => row.value));
-            for (const row of rows) {
-              const status = physiologyStatus(definition, row.value);
-              if (status === 'NORMAL') normal += 1;
-              else if (status === 'FLUCTUATION') fluctuation += 1;
-              else if (status === 'ATTENTION') attention += 1;
-              else abnormal += 1;
-            }
-            isEstimated = rows.every(
-              (row) => row.isDemo || /seed|demo|estimated/i.test(row.source)
-            );
-          } else if (demoScope) {
-            const seed = [...`${definition.code}${date}`].reduce(
-              (sum, char) => sum + char.charCodeAt(0),
-              0
-            );
-            ({ normal, fluctuation, attention, abnormal } = simulatedCounts(seed));
-            const shift = ((seed % 7) - 3) / 10;
-            valueMedian = round(
-              definition.baseline * (1 + shift),
-              definition.unit === 'U/L' ? 0 : 1
-            );
-            isEstimated = true;
-          }
-          const sampleCount = normal + fluctuation + attention + abnormal;
-          const abnormalRate = sampleCount ? abnormal / sampleCount : null;
-          const attentionRate = sampleCount ? (attention + abnormal) / sampleCount : null;
-          const status: PhysiologyStatus = !sampleCount
-            ? 'MISSING'
-            : abnormalRate! >= 0.15
-              ? 'ABNORMAL'
-              : attentionRate! >= 0.25
-                ? 'ATTENTION'
-                : (fluctuation + attention + abnormal) / sampleCount >= 0.25
-                  ? 'FLUCTUATION'
-                  : 'NORMAL';
-          const abnormalRateChange =
-            abnormalRate === null || previousAbnormalRate === null
-              ? null
-              : round((abnormalRate - previousAbnormalRate) * 100, 1);
-          if (abnormalRate !== null) previousAbnormalRate = abnormalRate;
-          return {
-            date,
-            status,
-            median: valueMedian,
-            sampleCount,
-            normal,
-            fluctuation,
-            attention,
-            abnormal,
-            abnormalRateChange,
-            isEstimated,
-          };
-        }),
+        direction: definition.direction,
+        thresholds: definition.thresholds,
+        baseline: definition.baseline,
+        days,
+        trend: trendPoints,
+        summary: {
+          latest,
+          trendDirection,
+          minValue: trendPoints.length ? Math.min(...trendPoints.map((p) => p.value)) : null,
+          maxValue: trendPoints.length ? Math.max(...trendPoints.map((p) => p.value)) : null,
+          avgValue: recentValues.length
+            ? round(recentValues.reduce((s, v) => s + v, 0) / recentValues.length, 1)
+            : null,
+          dataDays: trendPoints.length,
+        },
       };
     }),
   };

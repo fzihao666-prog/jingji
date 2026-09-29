@@ -1,0 +1,26 @@
+services:
+  app:
+    # ECS 只从阿里云 ACR 拉取已经由 Colima 构建并推送的镜像。
+    image: crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji:${IMAGE_TAG:?IMAGE_TAG is required}
+    env_file:
+      - ./.env
+    ports:
+      # 仅允许同机 Nginx 访问；不要改成 0.0.0.0:8787。
+      - "127.0.0.1:8787:8787"
+    volumes:
+      # SQLite 数据库、WAL 文件和上传内容跨镜像更新持久化。
+      - ./data:/app/data
+    restart: unless-stopped
+    init: true
+    healthcheck:
+      # 使用 Node 内置 fetch，不依赖镜像内额外安装 curl。
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "20m"
+        max-file: "5"

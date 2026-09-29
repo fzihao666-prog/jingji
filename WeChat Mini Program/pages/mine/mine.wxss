@@ -1,5 +1,6 @@
 .account-card { display: flex; align-items: center; gap: 22rpx; background: linear-gradient(145deg, #164654, #0a303c); color: #fff; }
-.account-avatar { width: 92rpx; height: 92rpx; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #092b39; background: #d8efea; font-size: 34rpx; font-weight: 800; }
+.account-avatar { width: 92rpx; height: 92rpx; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #092b39; background: #d8efea; font-size: 34rpx; font-weight: 800; cursor: pointer; }
+.account-avatar-active { opacity: .75; transform: scale(.95); }
 .account-copy { min-width: 0; flex: 1; }
 .account-copy view { font-size: 31rpx; font-weight: 800; }
 .account-copy text { display: block; margin-top: 7rpx; color: rgba(239,250,249,.68); font-size: 21rpx; }

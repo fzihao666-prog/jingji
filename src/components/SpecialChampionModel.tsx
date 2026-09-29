@@ -126,7 +126,9 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     return '完成时间';
   }
 
+  const label = projectLabel(project);
   const events = model?.events || [];
+  const hasErgometerData = (maleModel?.rows.length ?? 0) > 0 || (femaleModel?.rows.length ?? 0) > 0;
   const content = loading ? (
     <ContentState kind="loading" title="正在读取冠军模型配置" />
   ) : error ? (
@@ -135,7 +137,7 @@ export function SpecialChampionModel({ project }: { project: Project }) {
     <ContentState
       kind="empty"
       title="模型数据待配置"
-      description={`尚未配置${projectLabel(project)}的专项细分项目与标杆成绩。`}
+      description={`尚未配置${label}的专项细分项目与标杆成绩。`}
     />
   ) : (
     <div className="champion-table-scroll">
@@ -259,33 +261,35 @@ export function SpecialChampionModel({ project }: { project: Project }) {
       </div>
       <div className="champion-model-section">
         <div className="champion-model-section-title">
-          <strong>赛艇世界最好成绩</strong>
+          <strong>{label}世界最好成绩</strong>
           <span>最好成绩、配速与赛事来源</span>
         </div>
         {content}
       </div>
-      <div className="ergometer-model-grid">
-        <section className="ergometer-model-card">
-          <div className="ergometer-model-head">
-            <div>
-              <strong>男子陆上赛艇冠军模型</strong>
-              <span>{ergometerValueLabel(maleTestType)}</span>
+      {hasErgometerData && (
+        <div className="ergometer-model-grid">
+          <section className="ergometer-model-card">
+            <div className="ergometer-model-head">
+              <div>
+                <strong>{label}男子陆上冠军模型</strong>
+                <span>{ergometerValueLabel(maleTestType)}</span>
+              </div>
+              <ErgometerTabs value={maleTestType} onChange={setMaleTestType} />
             </div>
-            <ErgometerTabs value={maleTestType} onChange={setMaleTestType} />
-          </div>
-          <ErgometerChampionTable rows={maleTableRows} testType={maleTestType} />
-        </section>
-        <section className="ergometer-model-card">
-          <div className="ergometer-model-head">
-            <div>
-              <strong>女子陆上赛艇冠军模型</strong>
-              <span>{ergometerValueLabel(femaleTestType)}</span>
+            <ErgometerChampionTable rows={maleTableRows} testType={maleTestType} />
+          </section>
+          <section className="ergometer-model-card">
+            <div className="ergometer-model-head">
+              <div>
+                <strong>{label}女子陆上冠军模型</strong>
+                <span>{ergometerValueLabel(femaleTestType)}</span>
+              </div>
+              <ErgometerTabs value={femaleTestType} onChange={setFemaleTestType} />
             </div>
-            <ErgometerTabs value={femaleTestType} onChange={setFemaleTestType} />
-          </div>
-          <ErgometerChampionTable rows={femaleTableRows} testType={femaleTestType} />
-        </section>
-      </div>
+            <ErgometerChampionTable rows={femaleTableRows} testType={femaleTestType} />
+          </section>
+        </div>
+      )}
     </AppCard>
   );
 }

@@ -1,10 +1,7 @@
 <view class="page">
-  <view class="page-head page-head-action">
-    <view class="page-head-copy">
-      <view class="page-title">{{meta.scope === 'individual' ? '我的训练总览' : '训练总览'}}</view>
-      <view class="page-description">{{from}} 至 {{to}} · {{projectLabel}}</view>
-    </view>
-    <button wx:if="{{canSelfReport}}" class="quick-entry" hover-class="quick-entry-active" bindtap="openTrainingEntry"><text class="quick-entry-icon">＋</text><text>记录训练</text></button>
+  <view class="page-head">
+    <view class="page-title">{{meta.scope === 'individual' ? '我的训练总览' : '训练总览'}}</view>
+    <view class="page-description">{{from}} 至 {{to}} · {{projectLabel}}</view>
   </view>
 
   <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
@@ -12,10 +9,9 @@
   <view wx:if="{{canSelfReport && (todayView || todayLoading || todayError)}}" class="card today-status" aria-label="今日状态">
     <view class="card-head">
       <view><view class="card-head-title">今日状态</view><view class="todo-note">{{todayView ? todayView.date + ' · 北京时间' : '北京时间'}}</view></view>
-      <button class="todo-refresh" bindtap="retryToday" disabled="{{todayLoading}}" aria-label="刷新今日状态">刷新</button>
     </view>
     <view wx:if="{{todayLoading && !todayView}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取今日状态…</view>
-    <view wx:if="{{todayError}}" class="error-box">{{todayError}}</view>
+    <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
     <block wx:if="{{todayView}}">
       <view class="today-row">
         <view class="today-main">
@@ -44,10 +40,9 @@
   <view wx:if="{{canSelfReport && (todaySessions.length || sessionsLoading || sessionsError)}}" class="card today-sessions" aria-label="今日训练">
     <view class="card-head">
       <view><view class="card-head-title">今日训练</view><view class="todo-note">按课次展示当天训练记录</view></view>
-      <button class="todo-refresh" bindtap="retrySessions" disabled="{{sessionsLoading}}" aria-label="刷新今日训练">刷新</button>
     </view>
     <view wx:if="{{sessionsLoading && !todaySessions.length}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取今日训练…</view>
-    <view wx:if="{{sessionsError}}" class="error-box">{{sessionsError}}</view>
+    <view wx:if="{{sessionsError}}" class="error-box"><text>{{sessionsError}}</text><button class="error-retry" bindtap="retrySessions">重试</button></view>
     <view wx:if="{{!sessionsLoading && !sessionsError && !todaySessions.length}}" class="todo-note">今日暂无训练记录</view>
     <block wx:if="{{todaySessions.length}}">
       <view wx:for="{{todaySessions}}" wx:key="id" class="session-row">
@@ -63,9 +58,8 @@
   <view wx:if="{{canViewTodos}}" class="card daily-todos" aria-label="教练每日训练待办">
     <view class="card-head">
       <view><view class="card-head-title">每日训练待办</view><view class="todo-note">当前项目 · 权限范围内全部运动员</view></view>
-      <button class="todo-refresh" bindtap="retryTodos" disabled="{{todosLoading}}" aria-label="刷新每日训练待办">刷新</button>
     </view>
-    <view class="{{todosError ? 'error-box' : 'todo-note'}}" aria-role="status" aria-live="polite" aria-atomic="true">{{todosStatus}}</view>
+    <view class="{{todosError ? 'error-box' : 'todo-note'}}" aria-role="status" aria-live="polite" aria-atomic="true"><text>{{todosStatus}}</text><button wx:if="{{todosError}}" class="error-retry" bindtap="retryTodos">重试</button></view>
     <block wx:if="{{!todosLoading && !todosError && todos && todoView}}">
       <view class="todo-note">{{todos.date}} · 北京时间 · 返回首页自动更新</view>
       <view class="todo-summary">未填报 {{todos.counts.missing}} 人 · 需关注 {{todos.counts.attention}} 人</view>
@@ -113,10 +107,9 @@
   <view wx:if="{{canViewTodos && (teamOverview || teamLoading || teamError)}}" class="card team-overview" aria-label="队伍总览">
     <view class="card-head">
       <view><view class="card-head-title">队伍总览</view><view class="todo-note">{{teamOverview ? teamOverview.date + ' · 北京时间' : '当日全队训练与状态'}}</view></view>
-      <button class="todo-refresh" bindtap="retryTeam" disabled="{{teamLoading}}" aria-label="刷新队伍总览">刷新</button>
     </view>
     <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取队伍总览…</view>
-    <view wx:if="{{teamError}}" class="error-box">{{teamError}}</view>
+    <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
     <block wx:if="{{teamOverview && teamView}}">
       <view class="team-summary">
         <view class="team-stat"><view class="team-stat-value">{{teamOverview.summary.total}}</view><text class="team-stat-label">训练人数</text></view>
@@ -150,10 +143,9 @@
   <view wx:if="{{canViewTodos && (loadMgmt || loadMgmtLoading || loadMgmtError)}}" class="card load-mgmt" aria-label="训练负荷管理">
     <view class="card-head">
       <view><view class="card-head-title">负荷管理 ACWR</view><view class="todo-note">急性/慢性负荷比 · 7天 vs 28天</view></view>
-      <button class="todo-refresh" bindtap="retryLoadMgmt" disabled="{{loadMgmtLoading}}" aria-label="刷新负荷管理">刷新</button>
     </view>
     <view wx:if="{{loadMgmtLoading && !loadMgmt}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取负荷数据…</view>
-    <view wx:if="{{loadMgmtError}}" class="error-box">{{loadMgmtError}}</view>
+    <view wx:if="{{loadMgmtError}}" class="error-box"><text>{{loadMgmtError}}</text><button class="error-retry" bindtap="retryLoadMgmt">重试</button></view>
     <block wx:if="{{loadMgmt}}">
       <view class="acwr-summary">
         <view class="acwr-stat"><view class="acwr-stat-value">{{loadMgmt.summary.avgAcwr}}</view><text class="acwr-stat-label">平均 ACWR</text></view>
@@ -181,11 +173,10 @@
   <!-- 恢复状态基线偏离预警 -->
   <view wx:if="{{canViewTodos && (baseline || baselineLoading || baselineError)}}" class="card baseline-alerts" aria-label="恢复状态预警">
     <view class="card-head">
-      <view><view class="card-head-title">恢复状态预警</view><view class="todo-note">近3天 vs 个人28天基线 · &gt;1σ 触发</view></view>
-      <button class="todo-refresh" bindtap="retryBaseline" disabled="{{baselineLoading}}" aria-label="刷新基线预警">刷新</button>
+      <view><view class="card-head-title">恢复状态预警</view><view class="todo-note">近3天与28天基线对比，偏离超1个标准差触发</view></view>
     </view>
     <view wx:if="{{baselineLoading && !baseline}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在分析恢复数据…</view>
-    <view wx:if="{{baselineError}}" class="error-box">{{baselineError}}</view>
+    <view wx:if="{{baselineError}}" class="error-box"><text>{{baselineError}}</text><button class="error-retry" bindtap="retryBaseline">重试</button></view>
     <block wx:if="{{baseline}}">
       <view wx:if="{{!baseline.alerts.length}}" class="todo-note">{{baseline.summary.total ? '近3天未检测到显著偏离。' : '暂无恢复数据可供分析。'}}</view>
       <block wx:else>
@@ -205,10 +196,9 @@
   <view wx:if="{{canViewTodos && (planExec || planExecLoading || planExecError)}}" class="card plan-exec" aria-label="计划执行率">
     <view class="card-head">
       <view><view class="card-head-title">计划执行率</view><view class="todo-note">近7天计划 vs 实际 · {{planExec ? planExec.windowStart + ' 至 ' + planExec.date : ''}}</view></view>
-      <button class="todo-refresh" bindtap="retryPlanExec" disabled="{{planExecLoading}}" aria-label="刷新计划执行">刷新</button>
     </view>
     <view wx:if="{{planExecLoading && !planExec}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取计划执行数据…</view>
-    <view wx:if="{{planExecError}}" class="error-box">{{planExecError}}</view>
+    <view wx:if="{{planExecError}}" class="error-box"><text>{{planExecError}}</text><button class="error-retry" bindtap="retryPlanExec">重试</button></view>
     <block wx:if="{{planExec}}">
       <view class="exec-summary">
         <view class="exec-stat"><view class="exec-stat-value">{{planExec.summary.withPlan}}</view><text class="exec-stat-label">有计划</text></view>
@@ -291,17 +281,47 @@
       <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无有效强度数据</view></view>
     </view>
 
-    <view class="section-head"><view class="section-head-title">生理生化热力图</view><view class="section-head-note">团队指标风险状态</view></view>
-    <view wx:if="{{physiologyHeatmap}}" class="card">
-      <view class="heat-grid">
-        <view class="heat-header"><view class="heat-cell heat-metric">指标</view><view wx:for="{{physiologyHeatmap.metrics[0].heatDates || []}}" wx:key="*this" class="heat-cell heat-date">{{item}}</view></view>
-        <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="heat-row">
-          <view class="heat-cell heat-metric">{{item.label}}</view>
-          <view wx:for="{{item.days}}" wx:key="date" class="heat-cell {{item.statusClass}} {{item.isEstimated ? 'estimated' : ''}}" data-median="{{item.median}}" data-sample="{{item.sampleCount}}" data-change="{{item.abnormalRateChange}}"></view>
+    <view class="section-head"><view class="section-head-title">生理生化监控</view><view class="section-head-note">团队指标风险状态与趋势</view></view>
+    <view wx:if="{{physiologyHeatmap}}">
+      <!-- 指标摘要卡片 + 迷你趋势图 -->
+      <view class="physio-cards">
+        <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="physio-card">
+          <view class="physio-card-head">
+            <text class="physio-card-label">{{item.label}}</text>
+            <text class="physio-card-status {{item.summary.latestStatusClass}}">{{item.summary.latestStatusLabel}}</text>
+          </view>
+          <view class="physio-card-value">
+            <text class="physio-value-num">{{item.summary.latestValue === null ? '—' : item.summary.latestValue}}</text>
+            <text class="physio-value-unit">{{item.unit}}</text>
+            <text class="physio-trend-arrow {{item.summary.trendDirection}}">{{item.summary.trendArrow}}</text>
+          </view>
+          <!-- 迷你趋势图 -->
+          <view wx:if="{{item.hasSpark}}" class="physio-spark">
+            <svg viewBox="0 0 100 30" preserveAspectRatio="none" class="physio-spark-svg">
+              <polyline points="{{item.sparkPoints}}" fill="none" stroke="#5f87c9" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+            </svg>
+          </view>
+          <view wx:else class="physio-spark-empty">暂无趋势数据</view>
+          <view class="physio-card-meta">
+            <text>近{{item.summary.dataDays}}天</text>
+            <text wx:if="{{item.summary.minValue !== null}}">范围 {{item.summary.minValue}}~{{item.summary.maxValue}}</text>
+            <text wx:if="{{item.summary.avgValue !== null}}">均值 {{item.summary.avgValue}}</text>
+          </view>
         </view>
       </view>
-      <view wx:if="{{heatHasEstimated}}" class="heat-legend">V1 模拟状态（等待实测导入）</view>
-      <view wx:else class="heat-legend">颜色：绿=正常 黄=波动 橙=关注 红=异常 灰=未监测</view>
+
+      <!-- 热力图详情 -->
+      <view class="card physio-heat-card">
+        <view class="heat-grid">
+          <view class="heat-header"><view class="heat-cell heat-metric">指标</view><view wx:for="{{physiologyHeatmap.metrics[0].heatDates || []}}" wx:key="*this" class="heat-cell heat-date">{{item}}</view></view>
+          <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="heat-row">
+            <view class="heat-cell heat-metric">{{item.label}}</view>
+            <view wx:for="{{item.days}}" wx:key="date" class="heat-cell {{item.statusClass}} {{item.isEstimated ? 'estimated' : ''}}" data-median="{{item.median}}" data-sample="{{item.sampleCount}}" data-change="{{item.abnormalRateChange}}" bindtap="showPhysioDetail" data-code="{{item.code}}" data-date="{{item.date}}"></view>
+          </view>
+        </view>
+        <view wx:if="{{heatHasEstimated}}" class="heat-legend">V1 模拟状态（等待实测导入）· 点击色块查看详情</view>
+        <view wx:else class="heat-legend">颜色：绿=正常 黄=波动 橙=关注 红=异常 灰=未监测 · 点击色块查看详情</view>
+      </view>
     </view>
     <view wx:else class="card state"><view class="state-icon">—</view><view class="state-title">暂无生理生化数据</view></view>
 

@@ -1,376 +1,252 @@
-# Ubuntu 24.04 生产部署手册
+# Ubuntu 24.04 首次生产部署手册
 
-> 当前推荐采用 [Colima + 阿里云 ACR 部署流程](deployment-ubuntu-24-colima-acr.md)：本地 Mac 构建 `linux/amd64` 镜像并推送 ACR，ECS 只从 ACR 拉取运行。本文其余 Docker 构建流程仅作备用参考。
+本手册采用固定的发布链路：**Mac（Colima）构建 `linux/amd64` 镜像 → 阿里云 ACR → Ubuntu ECS 拉取运行 → Nginx 提供 HTTPS**。服务器不克隆代码、不构建镜像，也不访问 Docker Hub；这样可避开国内 Docker Hub 网络不稳定，并让更新和回滚只需切换镜像标签。
 
-> 当前推荐流程：阅读 [Colima + 阿里云 ACR 部署手册](deployment-ubuntu-24-colima-acr.md)。本地 Mac 构建 `linux/amd64` 镜像并推送 ACR，ECS 只从 ACR 拉取运行；本文旧 Docker 流程保留作参考。
+> 域名：`jingjity.xin`；公网 IPv4：`182.92.6.195`。
+>
+> ACR 镜像：`crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji`。
+>
+> 命令块按身份标注。root 命令不加 `sudo`；日常容器操作使用 `deploy`。命令内以 `#` 开头的是注释。若 macOS zsh 粘贴注释报 `command not found: #`，先执行 `setopt interactivecomments`，或不要复制注释行。
 
-本文将“竞迹”部署为：公网用户 -> 阿里云中国内地 ECS 上的 Nginx（HTTPS）-> 本机 Docker 容器中的 Express。应用容器只映射到 `127.0.0.1:8787`，SQLite 数据库、上传照片和 JWT 密钥保存在宿主机目录。该结构适合当前项目的单体架构，也让日后的发布成为可回滚、不会丢数据的固定流程。
+## 0. 上线前检查
 
-> 本文已将正式域名设为 `jingjity.xin`，ECS 公网 IPv4 为 `182.92.6.195`。`deploy`、Git 仓库地址和 ACR 镜像加速地址仍是占位符，必须替换。命令中的密钥只在服务器交互式终端输入或写入本机权限受限文件，绝不能提交到 Git。
+1. 在 DNS 服务商添加根域名 `@` 的 `A` 记录，值为 `182.92.6.195`。待解析生效后执行 `dig +short jingjity.xin`，结果应为该 IP。
+2. 中国内地阿里云 ECS 对外提供网站前，完成域名实名认证、ICP备案；按当地要求完成公安联网备案。未备案时不要公开上线。
+3. 在阿里云安全组中仅放行：TCP 80、443（公网）；TCP 22（仅办公出口 IP / 堡垒机）。**不要放行 8787**。
+4. 本地先完成项目检查和提交。SQLite 数据库、上传文件、`.env` 都只保留在服务器，不得提交至 Git 或镜像。
 
-> 本次部署以当前的 `root` 会话开始。本文代码块已按实际身份标注；root 命令不使用 `sudo`。第 1 节会创建专用的 `deploy` 用户；完成后请用该用户拉取代码、构建及运行应用。不要让应用进程、Git 工作目录或日常发布长期以 root 身份运行。
+## 1. root：首次初始化系统、账户、Docker 与 Nginx
 
-## 操作身份速览
-
-| 阶段                     | 执行身份 | 负责内容                       |
-| ------------------------ | -------- | ------------------------------ |
-| 0、1、2、5、6、8（备份） | `root`   | 系统、Docker、网络、证书和备份 |
-| 3、4、8（更新/回滚）     | `deploy` | 代码、镜像构建、容器启动与更新 |
-
-每次由 root 切换到应用操作时执行 `su - deploy`；需要返回 root 时执行 `exit`，回到原先保持连接的 root 会话。
-
-> 命令块中以 `#` 开头的内容是注释，不需要单独执行；代码块上方会注明应使用的账户。执行会改变服务器状态的命令前，先确认当前提示符中的用户是对应身份。
-
-## 0. 部署前确认
-
-1. 准备一台有公网 IPv4 的阿里云中国内地 Ubuntu 24.04 ECS、已实名的 `jingjity.xin` 和当前可用的 root 管理会话。
-2. **先在阿里云 ICP 备案系统核验 `jingjity.xin` 是否支持备案并完成 ICP 备案。** 中国内地 ECS 在备案成功前不可将该域名对公网提供网站/API 服务；域名实名认证或过户后通常还要等待实名信息入库。上线后 30 日内还须完成公安联网备案。若域名后缀无法备案，只能更换可备案域名，不能靠变更端口规避。
-3. 备案完成后，在 DNS 服务商处添加根域名 `@` 的 `A` 记录，使 `jingjity.xin` 指向 `182.92.6.195`；使用 `dig +short jingjity.xin` 确认返回该地址。只有已实际配置 IPv6 连通性时才添加 `AAAA`，错误的 AAAA 记录会使部分用户和证书校验失败。
-4. 在 ECS 安全组入方向放行：TCP `80/443` 来源 `0.0.0.0/0`；SSH `22` 仅允许办公网或运维固定 IP。**不要**放行 `8787`。同时确保安全组出方向未拒绝 DNS、HTTPS（软件安装/证书续期）及业务需要的 AI API 出站访问。
-5. 先在开发机对待发布提交运行 `npm run check`、`npm run lint` 和相关测试。服务器不应直接承载未验证的临时代码。
-
-当前应用在生产模式下由 `npm run start` 启动；它同时提供 React 静态文件、`/api/*`、`/uploads/*`，数据库默认是 `data/training-monitor.db`。因此不能把 `data/` 当作可随容器删除的临时目录。
-
-## 1. root：初始化服务器与 deploy 账户
-
-以下命令由当前的 `root` 用户执行，先更新系统、创建低权限的 `deploy` 发布用户、部署目录和防火墙规则：
+保持当前 root SSH 会话不断开，执行：
 
 ```bash
-# 获取安全更新；生产环境建议先确认重启窗口。
+# 安装安全更新与后续命令需要的基础软件。
 apt update && apt upgrade -y
-# 安装部署所需的基础工具与 Nginx。
-apt install -y ca-certificates curl git nginx ufw
-# 用户已存在时不重复创建；新用户禁止密码登录，只允许后续配置 SSH 公钥。
-id deploy || adduser --disabled-password --gecos '' deploy
+apt install -y ca-certificates curl gnupg ufw nginx snapd
 
-# 先放行 SSH，避免启用 UFW 时断开当前远程会话。
-ufw allow OpenSSH
-# 仅开放 Nginx 的 HTTP/HTTPS 服务端口；8787 不在此处开放。
-ufw allow 'Nginx Full'
-ufw enable
-ufw status verbose
+# 创建日常发布账户。已存在时跳过；该账户不设置登录密码。
+id deploy >/dev/null 2>&1 || adduser --disabled-password --gecos '' deploy
 
+# 创建应用与持久化数据目录。数据库和上传文件会放在 /srv/jingji/data。
 install -d -o deploy -g deploy -m 0750 /srv/jingji
 install -d -o deploy -g deploy -m 0700 /srv/jingji/data
+
+# 先允许 SSH，再启用防火墙，避免远程会话被误断开。
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw --force enable
+ufw status verbose
 ```
 
-`deploy` 不需要 sudo 权限：它只负责应用代码、Docker 构建和容器管理；Nginx、证书、系统升级与备份继续由 root（或组织批准的特权运维账号）执行。请按下一节为其配置 SSH 公钥，确认可单独登录前不要关闭现有 root 会话。
+### 1.1 root：为 deploy 配置 SSH 公钥
 
-### 为 `deploy` 配置并验证 SSH 公钥
-
-以下操作由 root 在现有 SSH 会话执行。先取得运维电脑中的 **公钥** 文件内容（通常是 `~/.ssh/id_ed25519.pub`）；它以 `ssh-ed25519`、`ecdsa-sha2-` 或 `ssh-rsa` 开头。不要粘贴私钥文件，也不要在聊天、工单或日志中公开公钥以外的凭据。
-
-若通过 Ghostty 登录并遇到 `Error opening terminal: xterm-ghostty`，先在服务器执行 `export TERM=xterm-256color`；这只影响当前会话。
+本机若还没有密钥，在 **Mac 本地终端** 创建一对密钥（私钥保留在本机，设置口令是推荐做法）：
 
 ```bash
-# 创建 deploy 的专属 SSH 配置目录；700 阻止其他普通用户读取。
-install -d -o deploy -g deploy -m 700 /home/deploy/.ssh
-# Ghostty 连接时可能没有 xterm-ghostty 描述文件，临时切换为通用终端类型。
+ssh-keygen -t ed25519 -a 100 -C 'jingji-production-deploy' -f ~/.ssh/id_ed25519
+# 查看并复制公钥的一整行；只复制 .pub，绝不复制 id_ed25519 私钥。
+cat ~/.ssh/id_ed25519.pub
+```
+
+回到仍保持连接的 **服务器 root** 会话，粘贴该公钥的一整行：
+
+```bash
+# Ghostty 如无法运行 nano，先执行此命令，仅影响当前 SSH 会话。
 export TERM=xterm-256color
-# 编辑后只粘贴本地 id_ed25519.pub 的一整行公钥，绝不能粘贴私钥。
+install -d -o deploy -g deploy -m 700 /home/deploy/.ssh
 nano /home/deploy/.ssh/authorized_keys
-# 固定文件属主和权限；SSH 会拒绝权限过宽的 authorized_keys。
+# 保存后修正 SSH 要求的权限。
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
-chmod 700 /home/deploy/.ssh
 ```
 
-保持当前 root 会话不关闭，在**另一台本地终端**验证只允许公钥登录：
+不要关闭 root 会话；另开一个 **Mac 本地终端** 验证 deploy：
 
 ```bash
-# 禁止回退为密码认证，确认当前测试的是刚配置的公钥。
-ssh -o PreferredAuthentications=publickey -o PasswordAuthentication=no deploy@182.92.6.195 'id && groups'
+# -i 指向 Mac 上的私钥路径，不是服务器中的 /home/deploy/.ssh/ 路径。
+ssh -i ~/.ssh/id_ed25519 -o PreferredAuthentications=publickey -o PasswordAuthentication=no deploy@182.92.6.195 'id && groups'
 ```
 
-命令应显示 `uid=... (deploy)`；Docker 将在第 2 节安装后再验证。若失败，回到仍保持连接的 root 会话执行 `journalctl -u ssh -n 100 --no-pager` 排查权限、密钥行格式与安全组，不要修改 SSH 配置。登录成功后，再在 root 会话验证应用端口未意外暴露：
+验证成功后，按组织堡垒机与账号规范处理 root SSH。至少禁止 root 的密码认证；配置前先保留一个已验证可用的 deploy 会话：
 
 ```bash
-ss -lntp | grep -E ':(80|443|8787)' || true
+# 服务器 root：先检查配置语法，再重载 SSH，不要重启服务器。
+cp -a /etc/ssh/sshd_config /etc/ssh/sshd_config.bak.$(date +%F)
+printf '%s\n' 'PermitRootLogin prohibit-password' 'PasswordAuthentication no' > /etc/ssh/sshd_config.d/99-jingji-hardening.conf
+sshd -t && systemctl reload ssh
 ```
 
-完成全流程并确认 root 密钥登录也可用后，才可创建 `/etc/ssh/sshd_config.d/99-jingji-hardening.conf`：
+### 1.2 root：安装 Docker Engine 与 Compose 插件
 
-```conf
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-PermitRootLogin prohibit-password
-```
-
-先运行 `sshd -t`，仅当输出为空且退出状态为 0 才执行 `systemctl reload ssh`。再次使用新的终端测试 `deploy` 与 root 的密钥登录；出现问题时，仍可用保留的 root 会话删除此文件并再次 `systemctl reload ssh`。只有组织明确允许且已验证其它特权账号可恢复时，才把 `PermitRootLogin` 改为 `no`。
-
-## 2. root：安装 Docker Engine、Compose 与 ACR 加速
-
-使用 Docker 官方 APT 源安装 Docker Engine，而不是 Ubuntu 的旧 `docker.io` 包：
+Ubuntu 仓库中的 Docker 版本可能较旧，使用 Docker 官方仓库安装 Engine 和 Compose 插件：
 
 ```bash
-# Docker 官方 APT 仓库的签名密钥目录。
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  -o /etc/apt/keyrings/docker.asc
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
-
-# 写入与当前 Ubuntu 架构和代号相匹配的 Docker 官方软件源。
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable" | \
-  tee /etc/apt/sources.list.d/docker.list >/dev/null
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
 apt update
 apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-# 授予 deploy 访问 Docker socket 的权限；该组等价于较高系统权限，只限可信发布人员。
-usermod -aG docker deploy
 systemctl enable --now docker
-```
-
-以 root 安装完成后，执行 `su - deploy` 切换到新建的发布用户（或重新以该用户 SSH 登录），使 Docker 用户组生效；之后再确认：
-
-```bash
-docker version
+docker --version
 docker compose version
-docker run --rm hello-world
+
+# 允许 deploy 管理 Docker；随后必须重新登录 deploy，组权限才会生效。
+usermod -aG docker deploy
 ```
 
-Docker 官方支持 Ubuntu 24.04，并明确提醒：容器发布端口的规则可能绕过 UFW。本文的 Compose 文件只发布 `127.0.0.1:8787`，因此不会形成公网端口。
+本手册的 ECS 只访问 ACR，**不要**在服务器配置 Docker Hub 镜像加速器，也不要让 `compose.yaml` 保留 `build:`。如果曾因旧流程写入了可疑的 `/etc/docker/daemon.json`，先由运维确认内容；不要盲目覆盖其他业务的 Docker 配置。
 
-### 中国内地网络：使用 ACR 专属镜像加速器
-
-不要配置来源不明的公共 Docker 镜像加速器。登录与该 ECS 同账号（或已授权 RAM 身份）的阿里云 **容器镜像服务 ACR** 控制台，进入“镜像工具 > 镜像加速器”，复制系统为该账号生成的专属地址。将其填入 `/etc/docker/daemon.json`；若该文件已有其他合法配置，合并 JSON 键而不是覆盖：
-
-```json
-{
-  "registry-mirrors": ["https://26yam3m0.mirror.aliyuncs.com"]
-}
-```
+### 1.3 root：确认 Nginx
 
 ```bash
-# 验证 JSON 格式，不通过时不要重启 Docker。
-dockerd --validate --config-file=/etc/docker/daemon.json
-systemctl restart docker
-docker info | sed -n '/Registry Mirrors/,+3p'
+# 本文使用已购买并手动上传的阿里云证书，不安装或运行 Certbot。
+nginx -v
 ```
 
-此项只加速从 Docker Hub 拉取基础镜像（本项目的 `node:22-bookworm-slim`）；它不替代 Git、npm 或 AI 服务的网络连通性。若 `download.docker.com`、Git 仓库或 npm 访问不稳定，优先把经过评审的代码镜像放到阿里云 Codeup/企业 Git，或在 CI 中构建并推送到私有 ACR，然后由 ECS 只从私有 ACR 拉取已签名/已验证的版本；不要临时改用未知软件源或把密钥放入镜像。
+## 2. deploy：首次在服务器准备运行配置
 
-## 3. deploy：取得代码并创建服务器私有配置
-
-以下命令必须由 `deploy` 用户执行。以专用的只读 deploy key 或受限访问令牌从阿里云 Codeup、企业 Git 或已验证的 Git 远端克隆仓库；不要把个人 SSH 私钥留在服务器。国内生产环境优先使用同地域或稳定可达的代码托管端。
-
-### 配置 Gitee 只读部署密钥
-
-服务器用于拉取 Gitee 的密钥与本地 Mac 登录 ECS 的密钥不同。下列命令创建的私钥只留在 `/home/deploy/.ssh/`，不应复制回本地或提交到仓库。
+从 Mac 重新登录，使 Docker 组权限生效：
 
 ```bash
-# deploy：创建服务器专用 Gitee 部署密钥；无口令便于以后非交互式 git pull。
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_gitee -N '' -C "jingji-production-deploy"
-
-# deploy：复制公钥。只将 .pub 文件的完整单行内容添加到 Gitee。
-cat ~/.ssh/id_ed25519_gitee.pub
+ssh -i ~/.ssh/id_ed25519 deploy@182.92.6.195
+groups   # 输出中必须包含 docker
+docker ps   # 不应出现 /var/run/docker.sock permission denied
 ```
 
-在 Gitee 仓库 `sorenk1n/jingji` 的“管理 > 部署公钥”添加该公钥；标题可填 `jingji-production-182.92.6.195`，并且只授予**只读**权限。
+若没有 `docker` 组，请退出后重新登录；不要执行 `chmod 666 /var/run/docker.sock`。
+
+创建生产环境文件。`.env` 含密钥，权限必须为 600；请按项目的 `.env.example` 填写所有必填项，尤其是生产 JWT 密钥、AI 密钥和数据库路径：
 
 ```bash
-# deploy：强制 gitee.com 使用本部署密钥，避免 SSH 默认寻找不存在的 id_ed25519。
-export TERM=xterm-256color
-nano ~/.ssh/config
+cd /srv/jingji
+nano .env
+chmod 600 .env
 ```
 
-写入以下内容：
-
-```sshconfig
-Host gitee.com
-    HostName gitee.com
-    User git
-    IdentityFile /home/deploy/.ssh/id_ed25519_gitee
-    IdentitiesOnly yes
-```
-
-```bash
-# deploy：私钥及配置文件不可被其他用户读取。
-chmod 600 ~/.ssh/config ~/.ssh/id_ed25519_gitee
-
-# deploy：预期显示 user git、identitiesonly yes 及 id_ed25519_gitee。
-ssh -G gitee.com | grep -E '^(user|hostname|identityfile|identitiesonly) '
-
-# deploy：先认证，再克隆。认证失败时不要重新生成密钥；确认 Gitee 端已保存同一 .pub 公钥。
-ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_gitee -T git@gitee.com
-```
-
-若仍显示 `Permission denied (publickey)`，执行只读诊断命令；不要提供或输出私钥内容：
-
-```bash
-# deploy：应至少看到 Offering public key ... id_ed25519_gitee。
-ssh -vvv -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_gitee -T git@gitee.com 2>&1 \
-  | grep -E 'Offering public key|Server accepts key|Authentications that can continue|Permission denied'
-```
-
-认证通过后，克隆代码：
-
-```bash
-# deploy：仓库目录必须为空；克隆失败后先确认目录没有半成品再重试。
-git clone git@gitee.com:sorenk1n/jingji.git /srv/jingji/app
-cd /srv/jingji/app
-git switch dev
-git rev-parse --short HEAD
-```
-
-创建只在服务器保留的环境文件 `/srv/jingji/.env`：
+`.env` 至少应包含（其余业务配置按 `.env.example` 补齐）：
 
 ```dotenv
-PORT=8787
+NODE_ENV=production
 HOST=0.0.0.0
+PORT=8787
 DATABASE_PATH=/app/data/training-monitor.db
-JWT_SECRET=替换为至少32字节的高熵随机值
-AI_BASE_URL=https://你的兼容OpenAI接口/v1
-AI_API_KEY=仅服务器持有的AI密钥
-AI_MODEL=你的模型名
-AI_TIMEOUT_MS=180000
+JWT_SECRET=替换为足够长的随机密钥
 ```
 
-生成 JWT 密钥可在服务器运行 `openssl rand -base64 48`，将输出粘贴到文件，不要把它写入 shell 历史或工单。然后限制读取权限：
+生成随机密钥的示例（将输出复制到 `.env`，不要把输出发送到聊天或提交 Git）：
 
 ```bash
-chmod 600 /srv/jingji/.env
+openssl rand -base64 48
 ```
 
-`HOST=0.0.0.0` 是容器内部必要配置；对外隔离由下一节的 `127.0.0.1:8787:8787` 完成。若没有 AI 功能需求，可以省略所有 `AI_*` 项；不要以空字符串伪造真实密钥。
+在同一目录创建镜像标签文件。标签必须是已推送到 ACR 的 Git 提交短 SHA，例如 `0c7bd45`：
 
-## 4. deploy：添加容器化文件并首次启动
-
-在 `/srv/jingji/app/` 新建 `Dockerfile`：
-
-```dockerfile
-FROM node:22-bookworm-slim
-
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
-ENV NODE_ENV=production
-EXPOSE 8787
-CMD ["npm", "run", "start"]
+```bash
+printf 'IMAGE_TAG=%s\n' 'replace-with-pushed-git-sha' > .env.compose
+chmod 600 .env.compose
 ```
 
-同时新建 `/srv/jingji/app/.dockerignore`，避免把开发依赖、构建产物、运行数据或意外存在的本地密钥送进镜像构建上下文：
-
-```gitignore
-node_modules
-dist
-data
-.git
-.env
-*.log
-```
-
-再新建 `/srv/jingji/compose.yaml`：
+将仓库中的 `compose.yaml` 上传或复制到 `/srv/jingji/compose.yaml`。它必须只使用 ACR 镜像，关键内容如下；不要添加 `build:`：
 
 ```yaml
 services:
   app:
-    build:
-      context: ./app
-      dockerfile: Dockerfile
+    image: crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji:$IMAGE_TAG
     env_file:
       - ./.env
     ports:
-      - '127.0.0.1:8787:8787'
+      - "127.0.0.1:8787:8787"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
-    init: true
-    logging:
-      driver: local
-      options:
-        max-size: '20m'
-        max-file: '5'
 ```
 
-不要把包含域名或密钥的 Compose 文件、`.env` 或宿主机 `data/` 反向提交。建议将可复用的无秘密 `Dockerfile` 与 Compose 模板经代码评审后纳入仓库；当前模板可先在服务器使用，以避免改动用户现有工作区。
+## 3. Mac：安装 Colima，构建并推送到 ACR
 
-首次构建和启动：
+在 **Mac 本地终端**，进入项目目录。以下步骤只需首次执行一次：
+
+```bash
+setopt interactivecomments
+brew install docker docker-buildx colima
+mkdir -p ~/.docker/cli-plugins
+ln -sf "$(brew --prefix docker-buildx)/bin/docker-buildx" ~/.docker/cli-plugins/docker-buildx
+chmod +x ~/.docker/cli-plugins/docker-buildx
+colima start --cpu 4 --memory 8 --disk 60
+docker context use colima
+docker version
+docker buildx version
+```
+
+若 `docker buildx version` 仍显示 unknown command，关闭并重新打开终端后重试上述软链接命令。不要使用服务器上的 Docker 来构建。
+
+登录 ACR 并构建推送。密码应使用 ACR 控制台“访问凭证”页面生成/重置的**固定密码或临时密码**，不是阿里云网页登录密码。`Login Succeeded` 后出现本地凭据未加密警告不影响推送：
+
+```bash
+cd /Users/firstmac/code/jingji/jingji
+docker login --username=soren_1 crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com
+
+# 以当前 Git 提交作为不可变镜像标签；未提交代码先提交，确保版本可追踪。
+TAG=$(git rev-parse --short HEAD)
+IMAGE=crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji
+
+# 强制产出 ECS 所需的 linux/amd64 镜像，并直接推送 ACR。
+docker buildx build --platform linux/amd64 --tag "$IMAGE:$TAG" --push .
+printf '已推送镜像：%s:%s\n' "$IMAGE" "$TAG"
+```
+
+如果 ACR 登录返回 `unauthorized: authentication required`，在 ACR 控制台重新生成访问凭证，确认用户名是 `soren_1`，并确认命名空间 `docker_soren` 中已创建仓库 `jingji`。不要尝试用阿里云账号网页登录密码。
+
+## 4. deploy：从 ACR 拉取并启动
+
+在服务器的 deploy 会话执行。首次需要登录 ACR；后续凭据仍有效时无需重复登录：
 
 ```bash
 cd /srv/jingji
-docker compose config
-docker compose build --pull
-docker compose up -d
-docker compose ps
+docker login --username=soren_1 crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com
+
+# 填入第 3 节刚刚推送的 TAG；每次发布都要更新这里。
+printf 'IMAGE_TAG=%s\n' 'replace-with-pushed-git-sha' > .env.compose
+chmod 600 .env.compose
+
+# 显式加载标签文件。不要使用裸 docker compose up -d，避免没有标签或误触发构建。
+docker compose --env-file .env.compose pull
+docker compose --env-file .env.compose up -d --remove-orphans
+docker compose --env-file .env.compose ps
+docker compose --env-file .env.compose logs --tail=200 app
+
+# 应用只应在本机回环地址可访问。
 curl --fail http://127.0.0.1:8787/ >/dev/null && echo '应用已就绪'
+ss -lntp | grep ':8787' || true
 ```
 
-如果失败，先查看 `docker compose logs --tail=200 app`，不要贴出 `.env` 内容。首次启动会创建或迁移 SQLite 数据；确认 `ls -la /srv/jingji/data/` 中出现数据库与 `.jwt-secret`（若没有显式 `JWT_SECRET`）后，再继续下一步。
+`ss` 的结果必须是 `127.0.0.1:8787`，不能是 `0.0.0.0:8787` 或 `[::]:8787`。若 `pull` 成功而 `up` 仍试图构建 Node 镜像，说明服务器 `compose.yaml` 仍含 `build:` 或 image 指向错误，先修正文件再重试。
 
-## 5. root：配置 Nginx 反向代理
+## 5. root：配置 Nginx 与已上传的 HTTPS 证书
 
-从 `deploy` 会话退出并回到保留的 root 会话后，执行本节及第 6 节命令。
+本项目使用阿里云个人测试证书，不运行 Certbot。以下配置假定证书已经以 root 权限保存在：`/etc/nginx/ssl/jingjity.xin/jingjity.xin.pem` 与 `/etc/nginx/ssl/jingjity.xin/jingjity.xin.key`。证书中的域名必须覆盖 `jingjity.xin`。
 
-复制仓库模板并替换域名。首次申请证书时先只放 HTTP 配置，避免引用尚不存在的证书文件。
-
-创建 `/etc/nginx/sites-available/jingji`：
-
-```nginx
+```bash
+# HTTP 只负责跳转 HTTPS；不要把应用端口 8787 公开给互联网。
+cat > /etc/nginx/sites-available/jingjity.xin <<'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name jingjity.xin;
+    server_name jingjity.xin www.jingjity.xin;
 
-    location / {
-        proxy_pass http://127.0.0.1:8787;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-启用并验证：
-
-```bash
-ln -s /etc/nginx/sites-available/jingji /etc/nginx/sites-enabled/jingji
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl reload nginx
-curl -I http://jingjity.xin/
-```
-
-应用已限制只信任本机代理传入的 `X-Forwarded-*` 头；不要将 Nginx 改为跨主机代理，也不要把容器端口改为公网发布。
-
-## 6. root：申请并启用 HTTPS 证书
-
-在 DNS 已生效、HTTP 可从公网访问后安装 Certbot。Certbot 官方推荐 Snap 版本：
-
-```bash
-apt-get remove -y certbot
-snap install --classic certbot
-ln -sf /snap/bin/certbot /usr/local/bin/certbot
-certbot certonly --nginx -d jingjity.xin
-```
-
-选择 `certonly` 而非自动改写 Nginx，配置更可审计。成功后将 Nginx 文件替换为下列版本（证书路径按实际域名保留）：
-
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name jingjity.xin;
     return 301 https://$host$request_uri;
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
-    server_name jingjity.xin;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name jingjity.xin www.jingjity.xin;
 
-    ssl_certificate /etc/letsencrypt/live/jingjity.xin/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/jingjity.xin/privkey.pem;
+    ssl_certificate /etc/nginx/ssl/jingjity.xin/jingjity.xin.pem;
+    ssl_certificate_key /etc/nginx/ssl/jingjity.xin/jingjity.xin.key;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_session_timeout 1d;
-    ssl_session_cache shared:SSL:10m;
 
-    add_header Strict-Transport-Security "max-age=15552000" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    client_max_body_size 85m;
+    client_max_body_size 20m;
 
     location / {
         proxy_pass http://127.0.0.1:8787;
@@ -379,128 +255,86 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
     }
 }
+EOF
+ln -sfn /etc/nginx/sites-available/jingjity.xin /etc/nginx/sites-enabled/jingjity.xin
+rm -f /etc/nginx/sites-enabled/gdb.jingjity.xin
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
 ```
+
+验证公网 HTTPS：
 
 ```bash
-nginx -t && systemctl reload nginx
-certbot renew --dry-run
 curl -I https://jingjity.xin/
+curl -I http://jingjity.xin/
 ```
 
-Certbot 会通过 systemd timer 或 cron 自动续期；`renew --dry-run` 是首次上线时必须执行的验证。若使用 CDN、负载均衡或安全策略遮蔽 80 端口，改用 DNS-01 验证，不要临时暴露应用的 8787 端口。
+阿里云个人测试证书无法自动续期；到期前在控制台重新申请、下载并替换 `.pem` 和 `.key`，再执行 `nginx -t && systemctl reload nginx`。同一域名由多台服务器提供服务时，必须在每台服务器上分别安装证书及私钥。
 
-## 7. root + deploy：首次上线验收
+## 6. 日常更新与回滚
 
-1. 浏览器访问 `https://jingjity.xin`，检查地址栏证书、登录、SPA 刷新和图片访问。
-2. 完成一次低风险账号登录与读取操作；有授权测试账号时，验证越权账户仍收到 403。
-3. root 检查端口：`ss -lntp | grep -E ':(80|443|8787)'`。8787 必须只显示 `127.0.0.1`。
-4. deploy 检查容器日志：`docker compose logs --tail=100 app`；root 检查 Nginx：`journalctl -u nginx -n 100 --no-pager`。
-5. 微信小程序使用 `https://jingjity.xin` 作为唯一基础地址，并在微信公众平台把该域名配置为 request、uploadFile、downloadFile 合法域名。
+每次更新都在 Mac 先构建推送，再在服务器切换标签；绝不在 ECS 使用 `docker compose build`。
 
-## 8. root + deploy：备份、更新与回滚
+```bash
+# Mac：提交代码、构建并推送。
+cd /Users/firstmac/code/jingji/jingji
+git status
+TAG=$(git rev-parse --short HEAD)
+IMAGE=crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji
+docker buildx build --platform linux/amd64 --tag "$IMAGE:$TAG" --push .
 
-### 每日备份
+# ECS deploy：拉取新版本并滚动替换容器。
+cd /srv/jingji
+printf 'IMAGE_TAG=%s\n' '上一步输出的TAG' > .env.compose
+chmod 600 .env.compose
+docker compose --env-file .env.compose pull
+docker compose --env-file .env.compose up -d --remove-orphans
+curl --fail http://127.0.0.1:8787/ >/dev/null && echo '更新成功'
+```
 
-SQLite 的 WAL 模式下，不要简单复制单个 `.db` 文件。使用 SQLite 在线备份命令，同时备份上传目录和 `.env`，并把生成的压缩包加密后异地保存。先安装客户端：
+若启动或健康检查失败，使用上一次已验证的标签回滚：
+
+```bash
+cd /srv/jingji
+printf 'IMAGE_TAG=%s\n' 'previous-working-tag' > .env.compose
+docker compose --env-file .env.compose pull
+docker compose --env-file .env.compose up -d --remove-orphans
+docker compose --env-file .env.compose logs --tail=200 app
+```
+
+## 7. 备份、排障与维护
+
+容器更新不会删除 `./data`，但数据仍需异机备份。以下由 root 设置每日 SQLite 一致性备份（先安装 sqlite3）：
 
 ```bash
 apt install -y sqlite3
-```
-
-创建仅 root 可读的 `/usr/local/sbin/backup-jingji`：
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-backup_dir=/var/backups/jingji
-stamp=$(date +%F-%H%M%S)
-install -d -m 0700 "$backup_dir/$stamp"
-sqlite3 /srv/jingji/data/training-monitor.db ".backup '$backup_dir/$stamp/training-monitor.db'"
-cp -a /srv/jingji/data/uploads "$backup_dir/$stamp/uploads"
-cp /srv/jingji/.env "$backup_dir/$stamp/env.backup"
-tar -C "$backup_dir" -czf "$backup_dir/$stamp.tar.gz" "$stamp"
-rm -rf "$backup_dir/$stamp"
-find "$backup_dir" -name '*.tar.gz' -mtime +14 -delete
-```
-
-设置权限并通过 root 的 crontab 每日执行；异地传输应使用受控的加密备份系统：
-
-```bash
-chmod 700 /usr/local/sbin/backup-jingji
+install -d -o deploy -g deploy -m 0700 /srv/jingji/backups
 crontab -e
-# 每日 03:20；请先手动执行一次并验证能解压、能恢复。
-20 3 * * * /usr/local/sbin/backup-jingji
+# 加入下面一行：每天 03:15 生成备份；备份目录应再同步到 OSS 或其他异机位置。
+15 3 * * * sqlite3 /srv/jingji/data/training-monitor.db ".backup '/srv/jingji/backups/training-monitor-$(date +\%F).db'"
 ```
 
-上面脚本会创建可恢复的备份；首次上线必须实际演练一次恢复到隔离目录。备份中含业务数据和密钥，不可放入公开对象存储。
-
-### 标准更新流程
-
-每次更新保留一个已知可用的 Git 提交号和刚更新前的备份：
+常用只读检查（deploy）：
 
 ```bash
-# root：先创建更新前备份。
-/usr/local/sbin/backup-jingji
-
-# 切换至 deploy：仅以低权限用户操作应用代码和 Docker。
-su - deploy
-cd /srv/jingji/app
-git fetch --prune origin
-git switch <稳定分支>
-git pull --ff-only origin <稳定分支>
-git rev-parse --short HEAD
-
 cd /srv/jingji
-docker compose build --pull app
-docker compose up -d --no-deps app
-docker compose ps
-curl --fail http://127.0.0.1:8787/ >/dev/null
+docker compose --env-file .env.compose ps
+docker compose --env-file .env.compose logs --tail=200 app
+docker image ls 'crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji'
+curl --fail http://127.0.0.1:8787/ >/dev/null && echo ok
 ```
 
-随后执行第 7 节的关键验收。Compose 的 `restart: unless-stopped` 能在宿主机重启后自动恢复应用；Nginx 由 systemd 管理。更新前可用 `docker compose --dry-run up --build -d` 预览 Compose 将做的变更。
-
-### 回滚
-
-若新版本验收失败，立即回到前一个已验证提交并重建：
+常用系统与证书检查（root）：
 
 ```bash
-# 以下由 deploy 用户执行。
-cd /srv/jingji/app
-git log --oneline -5
-git switch --detach <上一条已验证提交SHA>
-cd /srv/jingji
-docker compose build --pull app
-docker compose up -d --no-deps app
-```
-
-**不要**在不了解数据迁移影响时恢复旧代码后直接覆盖数据库。若本次版本已写入不可向后兼容的新数据，应先停止写入、保留现场、再按经过演练的数据库恢复方案从更新前备份恢复。
-
-## 9. 运维速查
-
-```bash
-# 运行状态与最近日志
-cd /srv/jingji && docker compose ps
-cd /srv/jingji && docker compose logs --tail=200 app
-
-# 重启应用（不删除数据卷）
-cd /srv/jingji && docker compose restart app
-
-# 检查 Nginx 配置与证书续期
 nginx -t
-certbot renew --dry-run
-
-# 检查磁盘容量（数据库、上传与 Docker 镜像都会增长）
-df -h /srv /var/lib/docker
-docker system df
+systemctl status nginx --no-pager
+journalctl -u docker -n 100 --no-pager
+openssl x509 -in /etc/nginx/ssl/jingjity.xin/jingjity.xin.pem -noout -subject -dates
+ss -lntp | grep -E ':(80|443|8787)\b' || true
 ```
 
-不要使用 `docker compose down -v`、`docker system prune --volumes` 或删除 `/srv/jingji/data`；它们可能永久丢失数据库或上传文件。
-
-## 参考
-
-- [Docker Engine on Ubuntu 官方安装文档](https://docs.docker.com/engine/install/ubuntu/)
-- [Docker Compose 官方参考](https://docs.docker.com/reference/cli/docker/compose/)
-- [Certbot 的 Nginx/Linux 官方说明](https://certbot.eff.org/instructions?ws=nginx&os=snap)
-- 项目现有 [Nginx 配置模板](../deploy/nginx/jingji.conf.example) 与 [架构文档](architecture.md)
+不要执行 `docker compose down -v`，它可能删除命名卷；本项目的数据虽然使用宿主机挂载，仍应避免无必要的破坏性命令。不要把 `.env`、`.env.compose`、数据库、备份或 ACR 密码提交到仓库。

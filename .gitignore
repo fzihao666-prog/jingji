@@ -7,6 +7,7 @@ data/*.db-shm
 data/*.db-wal
 data/.jwt-secret
 .env
+.env.compose
 *.log
 tmp/
 .idea/

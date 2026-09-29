@@ -89,12 +89,52 @@ function buildView(overview) {
             abnormalRateChange: d.abnormalRateChange,
             isEstimated: d.isEstimated
           }));
+          const trend = (m.trend || []).map(p => ({
+            date: p.date,
+            dateLabel: String(p.date || '').slice(5).replace('-', '/'),
+            value: p.value,
+            status: p.status,
+            statusClass: String(p.status || '').toLowerCase()
+          }));
+          // 计算迷你图的折线坐标（viewBox 100x30）
+          let sparkPoints = '';
+          if (trend.length >= 2) {
+            const values = trend.map(p => p.value);
+            const minV = Math.min(...values);
+            const maxV = Math.max(...values);
+            const rangeV = maxV - minV || 1;
+            sparkPoints = trend.map((p, i) => {
+              const x = (i / (trend.length - 1)) * 100;
+              const y = 28 - ((p.value - minV) / rangeV) * 26 + 1;
+              return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(' ');
+          }
+          const summary = m.summary || {};
+          const statusLabelMap = { NORMAL: '正常', FLUCTUATION: '波动', ATTENTION: '关注', ABNORMAL: '异常', MISSING: '未监测' };
+          const latest = summary.latest;
           return {
             code: m.code,
             label: m.label,
             unit: m.unit,
+            direction: m.direction || 'higher',
             days,
-            heatDates: days.map((d) => d.dateLabel)
+            trend,
+            heatDates: days.map((d) => d.dateLabel),
+            sparkPoints,
+            hasSpark: trend.length >= 2,
+            summary: {
+              latestValue: latest ? latest.value : null,
+              latestDate: latest ? String(latest.date).slice(5).replace('-', '/') : null,
+              latestStatus: latest ? latest.status : 'MISSING',
+              latestStatusClass: latest ? String(latest.status).toLowerCase() : 'missing',
+              latestStatusLabel: latest ? (statusLabelMap[latest.status] || latest.status) : '无数据',
+              trendDirection: summary.trendDirection || 'stable',
+              trendArrow: summary.trendDirection === 'up' ? '↑' : summary.trendDirection === 'down' ? '↓' : '→',
+              minValue: summary.minValue,
+              maxValue: summary.maxValue,
+              avgValue: summary.avgValue,
+              dataDays: summary.dataDays || 0
+            }
           };
         })
       }
@@ -446,6 +486,27 @@ Page({
 
   showTrendDetail(event) {
     showTrendModal(this, event, durationLoadLines);
+  },
+
+  showPhysioDetail(event) {
+    const { code, date } = event.currentTarget.dataset;
+    const heatmap = this.data.physiologyHeatmap;
+    if (!heatmap) return;
+    const metric = (heatmap.metrics || []).find((m) => m.code === code);
+    if (!metric) return;
+    const day = (metric.days || []).find((d) => d.date === date);
+    if (!day) return;
+    const statusLabelMap = { NORMAL: '正常', FLUCTUATION: '波动', ATTENTION: '关注', ABNORMAL: '异常', MISSING: '未监测' };
+    const lines = [
+      `${metric.label} · ${String(date).slice(5).replace('-', '/')}`,
+      `状态：${statusLabelMap[day.status] || day.status}`,
+    ];
+    if (day.median !== null) lines.push(`中位数：${day.median} ${metric.unit}`);
+    if (day.sampleCount) lines.push(`样本数：${day.sampleCount}`);
+    if (day.sampleCount) lines.push(`正常 ${day.normal} · 波动 ${day.fluctuation} · 关注 ${day.attention} · 异常 ${day.abnormal}`);
+    if (day.abnormalRateChange !== null) lines.push(`异常率变化：${day.abnormalRateChange > 0 ? '+' : ''}${day.abnormalRateChange}%`);
+    if (day.isEstimated) lines.push('数据来源：模拟（等待实测导入）');
+    wx.showModal({ title: '指标详情', content: lines.join('\n'), showCancel: false, confirmText: '知道了' });
   },
 
   goToAthlete(event) {

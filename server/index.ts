@@ -22,6 +22,18 @@ import { registerSelfDailyRoutes } from './athlete/self-daily-routes.ts';
 import { registerTrainingPlanRoutes } from './training-plan/training-plan-routes.ts';
 import { registerAuthRoutes } from './access/auth-routes.ts';
 import { registerStrengthTestRoutes } from './strength/strength-test-routes.ts';
+import { logger } from './core/logger.ts';
+import { startBackupScheduler } from './core/backup.ts';
+
+// 全局异常捕获：防止未处理的 Promise 拒绝或异常导致进程静默崩溃。
+process.on('uncaughtException', (err) => {
+  logger.error('uncaughtException', { message: err.message, stack: err.stack });
+  // 不退出进程：记录日志后继续运行，避免单次异常导致服务完全不可用。
+});
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  logger.error('unhandledRejection', { message: err.message, stack: err.stack });
+});
 
 try {
   process.loadEnvFile(resolve(process.cwd(), '.env'));
@@ -45,6 +57,37 @@ app.use((_req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
+
+// 请求日志中间件：记录每个请求的方法、路径、状态码、耗时与用户 ID。
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    logger.request({
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - start,
+      userId: req.authUser?.id ?? null,
+      ip: req.ip,
+    });
+  });
+  next();
+});
+
+// 健康检查端点：供 Nginx、负载均衡与外部监控探测服务存活状态。
+app.get('/health', (_req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.json({
+      status: 'ok',
+      uptime: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('health-check failed', { message: (error as Error).message });
+    res.status(503).json({ status: 'degraded', timestamp: new Date().toISOString() });
+  }
+});
 
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';
@@ -177,7 +220,11 @@ app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 const server = app.listen(port, host, () => {
-  console.log(`Training Monitor API running at http://${host}:${port}`);
+  logger.info('server started', { host, port, env: process.env.NODE_ENV || 'development' });
+  // 启动数据库定时备份（每 24 小时一次，保留 30 天）
+  const databasePath = resolve(process.cwd(), 'data', 'jingji.db');
+  const backupDir = resolve(process.cwd(), 'data', 'backups');
+  startBackupScheduler({ databasePath, backupDir, retainDays: 30 });
 });
 
 let shuttingDown = false;
@@ -196,7 +243,7 @@ function shutdown(signal: NodeJS.Signals) {
     } catch {}
     process.exit(0);
   }, 5000).unref();
-  console.log(`收到 ${signal}，正在关闭服务。`);
+  logger.info('server shutting down', { signal });
 }
 
 process.once('SIGINT', () => shutdown('SIGINT'));

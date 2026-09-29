@@ -363,7 +363,7 @@ function trainingStatusTrend(input: {
 function dailyTrainingValue(
   overview: TrainingOverview,
   date: string,
-  key: 'physicalDurationMin' | 'specialDurationMin'
+  key: 'physicalDurationMin' | 'specialDurationMin' | 'averageRpe'
 ) {
   return overview.trainingAnalytics.days.find((day) => day.date === date)?.[key] ?? null;
 }
@@ -445,7 +445,7 @@ export function buildProfileComparison(scope: ProfileScope) {
     athleteCount: scope.teamAthleteIds.length,
   };
   const statusMetric = (
-    key: 'duration' | 'load' | 'sessionCount' | 'distance',
+    key: 'duration' | 'load' | 'sessionCount' | 'distance' | 'intensity',
     label: string,
     unit: string,
     select: (overview: TrainingOverview) => number | null
@@ -466,6 +466,17 @@ export function buildProfileComparison(scope: ProfileScope) {
           const value = overview.trainingAnalytics.summary.physicalDurationMin;
           return value === null ? null : Math.round((value / 60) * 10) / 10;
         }),
+        statusMetric(
+          'intensity',
+          '训练强度',
+          'AU/h',
+          (overview) => {
+            const load = overview.trainingAnalytics.summary.physicalLoad;
+            const durationMin = overview.trainingAnalytics.summary.physicalDurationMin;
+            if (load === null || durationMin === null || durationMin === 0) return null;
+            return Math.round((load / (durationMin / 60)) * 10) / 10;
+          }
+        ),
         statusMetric(
           'load',
           '训练负荷',
@@ -501,6 +512,17 @@ export function buildProfileComparison(scope: ProfileScope) {
           '训练距离',
           'km',
           (overview) => overview.trainingAnalytics.summary.specialDistanceKm
+        ),
+        statusMetric(
+          'intensity',
+          '训练强度',
+          'AU/h',
+          (overview) => {
+            const load = overview.trainingAnalytics.summary.specialLoad;
+            const durationMin = overview.trainingAnalytics.summary.specialDurationMin;
+            if (load === null || durationMin === null || durationMin === 0) return null;
+            return Math.round((load / (durationMin / 60)) * 10) / 10;
+          }
         ),
         statusMetric(
           'load',

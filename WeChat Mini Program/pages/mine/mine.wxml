@@ -5,7 +5,7 @@
   </view>
 
   <view wx:if="{{user}}" class="card account-card">
-    <view class="account-avatar">{{avatar}}</view>
+    <view class="account-avatar" bindtap="onAvatarTap" aria-role="button" aria-label="账号选项" hover-class="account-avatar-active">{{avatar}}</view>
     <view class="account-copy">
       <view>{{user.displayName}}</view>
       <text>@{{user.username}}</text>

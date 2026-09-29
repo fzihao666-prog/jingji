@@ -816,7 +816,7 @@ export type ProfileComparisonPayload = {
 };
 
 export type TrainingStatusMetric = {
-  key: 'duration' | 'load' | 'sessionCount' | 'distance';
+  key: 'duration' | 'load' | 'sessionCount' | 'distance' | 'intensity';
   label: string;
   unit: string;
   personalValue: number | null;
@@ -919,6 +919,9 @@ export type OverviewPayload = {
       code: string;
       label: string;
       unit: string;
+      direction: 'higher' | 'lower';
+      thresholds: [number, number, number];
+      baseline: number;
       days: Array<{
         date: string;
         status: 'NORMAL' | 'FLUCTUATION' | 'ATTENTION' | 'ABNORMAL' | 'MISSING';
@@ -931,6 +934,15 @@ export type OverviewPayload = {
         abnormalRateChange: number | null;
         isEstimated: boolean;
       }>;
+      trend: Array<{ date: string; value: number; status: string }>;
+      summary: {
+        latest: { date: string; value: number; status: string } | null;
+        trendDirection: 'up' | 'down' | 'stable';
+        minValue: number | null;
+        maxValue: number | null;
+        avgValue: number | null;
+        dataDays: number;
+      };
     }>;
   };
   trainingVolume: {
