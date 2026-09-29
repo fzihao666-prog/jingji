@@ -146,6 +146,93 @@
     </block>
   </view>
 
+  <!-- 训练负荷管理（ACWR） -->
+  <view wx:if="{{canViewTodos && (loadMgmt || loadMgmtLoading || loadMgmtError)}}" class="card load-mgmt" aria-label="训练负荷管理">
+    <view class="card-head">
+      <view><view class="card-head-title">负荷管理 ACWR</view><view class="todo-note">急性/慢性负荷比 · 7天 vs 28天</view></view>
+      <button class="todo-refresh" bindtap="retryLoadMgmt" disabled="{{loadMgmtLoading}}" aria-label="刷新负荷管理">刷新</button>
+    </view>
+    <view wx:if="{{loadMgmtLoading && !loadMgmt}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取负荷数据…</view>
+    <view wx:if="{{loadMgmtError}}" class="error-box">{{loadMgmtError}}</view>
+    <block wx:if="{{loadMgmt}}">
+      <view class="acwr-summary">
+        <view class="acwr-stat"><view class="acwr-stat-value">{{loadMgmt.summary.avgAcwr}}</view><text class="acwr-stat-label">平均 ACWR</text></view>
+        <view class="acwr-stat"><view class="acwr-stat-value acwr-under">{{loadMgmt.summary.under}}</view><text class="acwr-stat-label">欠训练</text></view>
+        <view class="acwr-stat"><view class="acwr-stat-value acwr-optimal">{{loadMgmt.summary.optimal}}</view><text class="acwr-stat-label">最佳区间</text></view>
+        <view class="acwr-stat"><view class="acwr-stat-value acwr-danger">{{loadMgmt.summary.danger}}</view><text class="acwr-stat-label">危险区间</text></view>
+      </view>
+      <view class="todo-note">ACWR &lt; 0.8 欠训练 · 0.8-1.3 最佳 · &gt; 1.3 危险</view>
+      <view wx:if="{{!loadMgmt.athletes.length}}" class="todo-note">当前项目暂无可访问的运动员。</view>
+      <block wx:if="{{loadMgmt.athletes.length}}">
+        <view wx:for="{{loadMgmt.athletes}}" wx:key="athleteId" class="acwr-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，ACWR {{item.acwr}}">
+          <view class="acwr-row-head">
+            <text class="acwr-name">{{item.athleteName}}</text>
+            <text class="acwr-zone acwr-zone-{{item.zone}}">{{item.zone === 'under' ? '欠训练' : item.zone === 'optimal' ? '最佳' : '危险'}}</text>
+          </view>
+          <view class="acwr-bar-track">
+            <view class="acwr-bar-fill acwr-bar-{{item.zone}}" style="width: {{item.acwr > 2 ? 100 : item.acwr / 2 * 100}}%;" />
+          </view>
+          <view class="todo-note">ACWR {{item.acwr}} · 急性 {{item.acuteLoad}} AU · 慢性 {{item.chronicLoad}} AU</view>
+        </view>
+      </block>
+    </block>
+  </view>
+
+  <!-- 恢复状态基线偏离预警 -->
+  <view wx:if="{{canViewTodos && (baseline || baselineLoading || baselineError)}}" class="card baseline-alerts" aria-label="恢复状态预警">
+    <view class="card-head">
+      <view><view class="card-head-title">恢复状态预警</view><view class="todo-note">近3天 vs 个人28天基线 · &gt;1σ 触发</view></view>
+      <button class="todo-refresh" bindtap="retryBaseline" disabled="{{baselineLoading}}" aria-label="刷新基线预警">刷新</button>
+    </view>
+    <view wx:if="{{baselineLoading && !baseline}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在分析恢复数据…</view>
+    <view wx:if="{{baselineError}}" class="error-box">{{baselineError}}</view>
+    <block wx:if="{{baseline}}">
+      <view wx:if="{{!baseline.alerts.length}}" class="todo-note">{{baseline.summary.total ? '近3天未检测到显著偏离。' : '暂无恢复数据可供分析。'}}</view>
+      <block wx:else>
+        <view class="todo-summary">{{baseline.summary.alerted}} 人出现指标偏离</view>
+        <view wx:for="{{baseline.alerts}}" wx:key="athleteId+metric" class="baseline-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.message}}">
+          <view class="baseline-row-head">
+            <text class="baseline-name">{{item.athleteName}}</text>
+            <text class="baseline-severity {{item.severity === 'alert' ? 'baseline-sev-alert' : 'baseline-sev-warn'}}">{{item.severity === 'alert' ? '显著' : '注意'}}</text>
+          </view>
+          <view class="todo-reason">{{item.message}}</view>
+        </view>
+      </block>
+    </block>
+  </view>
+
+  <!-- 训练计划执行率 -->
+  <view wx:if="{{canViewTodos && (planExec || planExecLoading || planExecError)}}" class="card plan-exec" aria-label="计划执行率">
+    <view class="card-head">
+      <view><view class="card-head-title">计划执行率</view><view class="todo-note">近7天计划 vs 实际 · {{planExec ? planExec.windowStart + ' 至 ' + planExec.date : ''}}</view></view>
+      <button class="todo-refresh" bindtap="retryPlanExec" disabled="{{planExecLoading}}" aria-label="刷新计划执行">刷新</button>
+    </view>
+    <view wx:if="{{planExecLoading && !planExec}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取计划执行数据…</view>
+    <view wx:if="{{planExecError}}" class="error-box">{{planExecError}}</view>
+    <block wx:if="{{planExec}}">
+      <view class="exec-summary">
+        <view class="exec-stat"><view class="exec-stat-value">{{planExec.summary.withPlan}}</view><text class="exec-stat-label">有计划</text></view>
+        <view class="exec-stat"><view class="exec-stat-value exec-complete">{{planExec.summary.complete}}</view><text class="exec-stat-label">已完成</text></view>
+        <view class="exec-stat"><view class="exec-stat-value exec-partial">{{planExec.summary.partial}}</view><text class="exec-stat-label">部分完成</text></view>
+        <view class="exec-stat"><view class="exec-stat-value exec-missed">{{planExec.summary.missed}}</view><text class="exec-stat-label">未执行</text></view>
+      </view>
+      <view wx:if="{{planExec.summary.avgCompletion !== null}}" class="todo-note">平均执行率 {{planExec.summary.avgCompletion * 100}}%</view>
+      <view wx:if="{{!planExec.athletes.length}}" class="todo-note">当前项目暂无可访问的运动员。</view>
+      <block wx:if="{{planExec.athletes.length}}">
+        <view wx:for="{{planExec.athletes}}" wx:key="athleteId" class="exec-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，执行率 {{item.completionRate}}">
+          <view class="exec-row-head">
+            <text class="exec-name">{{item.athleteName}}</text>
+            <text class="exec-status exec-status-{{item.status}}">{{item.status === 'complete' ? '已完成' : item.status === 'partial' ? '部分' : item.status === 'missed' ? '未执行' : '无计划'}}</text>
+          </view>
+          <view class="todo-note">{{item.hasPlan ? '计划 ' + item.plannedDays + ' 天 · 实际 ' + item.actualDays + ' 天 · ' + item.totalLoad + ' AU' : '本周未创建训练计划'}}</view>
+          <view wx:if="{{item.completionRate !== null}}" class="exec-bar-track">
+            <view class="exec-bar-fill exec-bar-{{item.status}}" style="width: {{item.completionRate * 100}}%;" />
+          </view>
+        </view>
+      </block>
+    </block>
+  </view>
+
   <view wx:if="{{error}}" class="error-box">{{error}}</view>
   <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载训练数据</view></view>
 

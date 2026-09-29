@@ -331,6 +331,52 @@ try {
     (await request('/api/coach/team-overview?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
     '队伍总览应拒绝无效项目'
   );
+
+  // 负荷管理（ACWR）
+  const loadMgmtPath = `/api/coach/load-management?project=${encodeURIComponent(coachAthlete.project)}`;
+  assert((await request(loadMgmtPath)).status === 401, '负荷管理必须要求登录');
+  const loadMgmt = await request(loadMgmtPath, {}, demoCoachLogin.payload.token);
+  assert(
+    loadMgmt.status === 200 &&
+      loadMgmt.payload.summary &&
+      typeof loadMgmt.payload.summary.avgAcwr === 'number' &&
+      Array.isArray(loadMgmt.payload.athletes),
+    '负荷管理应返回 ACWR 汇总'
+  );
+  assert(
+    (await request('/api/coach/load-management?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
+    '负荷管理应拒绝无效项目'
+  );
+
+  // 恢复状态基线偏离预警
+  const baselinePath = `/api/coach/wellness-baseline?project=${encodeURIComponent(coachAthlete.project)}`;
+  assert((await request(baselinePath)).status === 401, '基线预警必须要求登录');
+  const baseline = await request(baselinePath, {}, demoCoachLogin.payload.token);
+  assert(
+    baseline.status === 200 &&
+      baseline.payload.summary &&
+      Array.isArray(baseline.payload.alerts),
+    '基线预警应返回分析结果'
+  );
+  assert(
+    (await request('/api/coach/wellness-baseline?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
+    '基线预警应拒绝无效项目'
+  );
+
+  // 训练计划执行率
+  const planExecPath = `/api/coach/plan-execution?project=${encodeURIComponent(coachAthlete.project)}`;
+  assert((await request(planExecPath)).status === 401, '计划执行必须要求登录');
+  const planExec = await request(planExecPath, {}, demoCoachLogin.payload.token);
+  assert(
+    planExec.status === 200 &&
+      planExec.payload.summary &&
+      Array.isArray(planExec.payload.athletes),
+    '计划执行应返回执行率汇总'
+  );
+  assert(
+    (await request('/api/coach/plan-execution?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
+    '计划执行应拒绝无效项目'
+  );
   const coachOverview = await request(
     `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(coachAthlete.project)}`,
     {},
@@ -1843,6 +1889,9 @@ try {
         overviewPipeline: 'passed',
         coachDailyTodos: 'passed',
         teamOverview: 'passed',
+        loadManagement: 'passed',
+        wellnessBaseline: 'passed',
+        planExecution: 'passed',
         selfTraining: 'passed',
         rowingAnalysis: 'passed',
         strengthProfile: 'passed',

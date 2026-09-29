@@ -95,3 +95,51 @@
 .team-athlete-link { margin-left: auto; color: #176373; font-size: 24rpx; }
 .team-athlete-tags { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
 .team-athlete-row .todo-note { margin-top: 8rpx; }
+/* 训练负荷管理 ACWR */
+.acwr-summary { display: flex; gap: 12rpx; margin-top: 16rpx; }
+.acwr-stat { flex: 1; padding: 16rpx 10rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; text-align: center; }
+.acwr-stat-value { color: #164751; font-size: 34rpx; font-weight: 800; }
+.acwr-under { color: #71868d; }
+.acwr-optimal { color: #176f7f; }
+.acwr-danger { color: #b04030; }
+.acwr-stat-label { display: block; margin-top: 4rpx; color: #71868d; font-size: 20rpx; }
+.acwr-row { margin-top: 14rpx; padding: 16rpx 18rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; }
+.acwr-row-head { display: flex; align-items: center; justify-content: space-between; gap: 10rpx; }
+.acwr-name { color: #12303b; font-size: 27rpx; font-weight: 700; }
+.acwr-zone { flex: none; padding: 4rpx 14rpx; border-radius: 999rpx; font-size: 21rpx; font-weight: 700; }
+.acwr-zone-under { color: #5a6d75; background: rgba(113, 134, 141, .15); }
+.acwr-zone-optimal { color: #0f5c68; background: rgba(23, 111, 127, .15); }
+.acwr-zone-danger { color: #974438; background: rgba(176, 64, 48, .15); }
+.acwr-bar-track { height: 12rpx; margin-top: 10rpx; border-radius: 999rpx; background: #d8e3e6; overflow: hidden; }
+.acwr-bar-fill { height: 100%; border-radius: 999rpx; transition: width .3s; }
+.acwr-bar-under { background: #71868d; }
+.acwr-bar-optimal { background: #176f7f; }
+.acwr-bar-danger { background: #b04030; }
+/* 恢复状态基线偏离预警 */
+.baseline-row { margin-top: 12rpx; padding: 16rpx 18rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; }
+.baseline-row-head { display: flex; align-items: center; gap: 10rpx; }
+.baseline-name { color: #12303b; font-size: 27rpx; font-weight: 700; }
+.baseline-severity { flex: none; padding: 4rpx 14rpx; border-radius: 999rpx; font-size: 21rpx; font-weight: 700; }
+.baseline-sev-warn { color: #7a4715; background: rgba(207, 132, 40, .15); }
+.baseline-sev-alert { color: #974438; background: rgba(176, 64, 48, .15); }
+/* 训练计划执行率 */
+.exec-summary { display: flex; gap: 12rpx; margin-top: 16rpx; }
+.exec-stat { flex: 1; padding: 16rpx 10rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; text-align: center; }
+.exec-stat-value { color: #164751; font-size: 34rpx; font-weight: 800; }
+.exec-complete { color: #176f7f; }
+.exec-partial { color: #b06818; }
+.exec-missed { color: #b04030; }
+.exec-stat-label { display: block; margin-top: 4rpx; color: #71868d; font-size: 20rpx; }
+.exec-row { margin-top: 12rpx; padding: 16rpx 18rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; }
+.exec-row-head { display: flex; align-items: center; justify-content: space-between; gap: 10rpx; }
+.exec-name { color: #12303b; font-size: 27rpx; font-weight: 700; }
+.exec-status { flex: none; padding: 4rpx 14rpx; border-radius: 999rpx; font-size: 21rpx; font-weight: 700; }
+.exec-status-complete { color: #0f5c68; background: rgba(23, 111, 127, .15); }
+.exec-status-partial { color: #7a4715; background: rgba(207, 132, 40, .15); }
+.exec-status-missed { color: #974438; background: rgba(176, 64, 48, .15); }
+.exec-status-no-plan { color: #5a6d75; background: rgba(113, 134, 141, .15); }
+.exec-bar-track { height: 10rpx; margin-top: 10rpx; border-radius: 999rpx; background: #d8e3e6; overflow: hidden; }
+.exec-bar-fill { height: 100%; border-radius: 999rpx; }
+.exec-bar-complete { background: #176f7f; }
+.exec-bar-partial { background: #cf8428; }
+.exec-bar-missed { background: #b04030; }

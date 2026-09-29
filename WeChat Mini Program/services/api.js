@@ -63,6 +63,15 @@ module.exports = {
   teamOverview(project) {
     return request(`/api/coach/team-overview?${query({ project })}`);
   },
+  loadManagement(project) {
+    return request(`/api/coach/load-management?${query({ project })}`);
+  },
+  wellnessBaseline(project) {
+    return request(`/api/coach/wellness-baseline?${query({ project })}`);
+  },
+  planExecution(project) {
+    return request(`/api/coach/plan-execution?${query({ project })}`);
+  },
   saveCurrentProject(project) {
     return request('/api/preferences/current-project', { method: 'PUT', data: { project } });
   },

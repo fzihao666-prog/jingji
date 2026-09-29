@@ -5,6 +5,9 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { db } from './core/db.ts';
 import { dailyTodoQuery, readDailyTodos, readTeamOverview } from './core/coach-daily-todos.ts';
+import { readLoadManagement } from './core/load-management.ts';
+import { readWellnessBaseline } from './core/wellness-baseline.ts';
+import { readPlanExecution } from './core/plan-execution.ts';
 import { PROJECTS } from '../shared/projects.ts';
 import { requireAuth, requireRole } from './core/auth.ts';
 import { accessibleAthleteIds, selectableProjects } from './core/permissions.ts';
@@ -102,6 +105,60 @@ app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'PRJ', 'REG'
     now,
   });
   res.json(overview);
+});
+
+// 训练负荷管理（ACWR）
+app.get('/api/coach/load-management', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const now = new Date();
+  const parsed = teamOverviewQuery(now).safeParse(req.query);
+  if (!parsed.success)
+    return res.status(400).json({ message: '请选择有效项目。' });
+  const user = req.authUser!;
+  if (!selectableProjects(user).includes(parsed.data.project))
+    return res.status(403).json({ message: '无权查看该项目的负荷管理数据。' });
+  const result = readLoadManagement(db, {
+    athleteIds: accessibleAthleteIds(user),
+    project: parsed.data.project,
+    now,
+  });
+  res.json(result);
+});
+
+// 恢复状态基线偏离预警
+app.get('/api/coach/wellness-baseline', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const now = new Date();
+  const parsed = teamOverviewQuery(now).safeParse(req.query);
+  if (!parsed.success)
+    return res.status(400).json({ message: '请选择有效项目。' });
+  const user = req.authUser!;
+  if (!selectableProjects(user).includes(parsed.data.project))
+    return res.status(403).json({ message: '无权查看该项目的基线预警数据。' });
+  const result = readWellnessBaseline(db, {
+    athleteIds: accessibleAthleteIds(user),
+    project: parsed.data.project,
+    now,
+  });
+  res.json(result);
+});
+
+// 训练计划执行率
+app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const now = new Date();
+  const parsed = teamOverviewQuery(now).safeParse(req.query);
+  if (!parsed.success)
+    return res.status(400).json({ message: '请选择有效项目。' });
+  const user = req.authUser!;
+  if (!selectableProjects(user).includes(parsed.data.project))
+    return res.status(403).json({ message: '无权查看该项目的计划执行数据。' });
+  const result = readPlanExecution(db, {
+    athleteIds: accessibleAthleteIds(user),
+    project: parsed.data.project,
+    now,
+  });
+  res.json(result);
 });
 
 const distPath = resolve(process.cwd(), 'dist');

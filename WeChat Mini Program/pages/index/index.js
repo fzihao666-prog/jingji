@@ -148,7 +148,16 @@ Page({
     teamLoading: false,
     teamError: '',
     teamKeyword: '',
-    teamView: null
+    teamView: null,
+    loadMgmt: null,
+    loadMgmtLoading: false,
+    loadMgmtError: '',
+    baseline: null,
+    baselineLoading: false,
+    baselineError: '',
+    planExec: null,
+    planExecLoading: false,
+    planExecError: ''
   },
 
   onShow() {
@@ -163,15 +172,24 @@ Page({
     this._todayGuard = this._todayGuard || createRequestGuard();
     this._teamGuard = this._teamGuard || createRequestGuard();
     this._sessionsGuard = this._sessionsGuard || createRequestGuard();
+    this._loadMgmtGuard = this._loadMgmtGuard || createRequestGuard();
+    this._baselineGuard = this._baselineGuard || createRequestGuard();
+    this._planExecGuard = this._planExecGuard || createRequestGuard();
     this._todoGuard.next();
     this._todayGuard.next();
     this._teamGuard.next();
     this._sessionsGuard.next();
+    this._loadMgmtGuard.next();
+    this._baselineGuard.next();
+    this._planExecGuard.next();
     this.setData({
       todos: null, todoView: null, todosError: '', canViewTodos: false,
       todayView: null, wellnessView: null, todayError: '', todayLoading: false,
       todaySessions: [], sessionsError: '', sessionsLoading: false,
-      teamOverview: null, teamError: '', teamLoading: false, teamView: null
+      teamOverview: null, teamError: '', teamLoading: false, teamView: null,
+      loadMgmt: null, loadMgmtError: '', loadMgmtLoading: false,
+      baseline: null, baselineError: '', baselineLoading: false,
+      planExec: null, planExecError: '', planExecLoading: false
     });
     return runPageLoad(this, {
       refreshUser,
@@ -188,7 +206,10 @@ Page({
           page.loadTodos(scope.project),
           page.loadToday(),
           page.loadTodaySessions(),
-          page.loadTeamOverview(scope.project)
+          page.loadTeamOverview(scope.project),
+          page.loadLoadManagement(scope.project),
+          page.loadBaseline(scope.project),
+          page.loadPlanExecution(scope.project)
         ]);
         if (isLatest()) getApp().globalData.homeNeedsRefresh = false;
         return overview;
@@ -319,6 +340,69 @@ Page({
     const teamKeyword = event.detail.value;
     if (!this.data.teamOverview) return;
     this.setData({ teamKeyword, teamView: this.buildTeamView(this.data.teamOverview, teamKeyword) });
+  },
+
+  // 训练负荷管理（ACWR）
+  async loadLoadManagement(project) {
+    if (!this.data.canViewTodos) return;
+    this._loadMgmtGuard = this._loadMgmtGuard || createRequestGuard();
+    const id = this._loadMgmtGuard.next();
+    this.setData({ loadMgmtLoading: true, loadMgmtError: '' });
+    try {
+      const result = await api.loadManagement(project);
+      if (!this._loadMgmtGuard.isLatest(id)) return;
+      this.setData({ loadMgmtLoading: false, loadMgmt: result });
+    } catch (error) {
+      if (this._loadMgmtGuard.isLatest(id)) {
+        this.setData({ loadMgmtLoading: false, loadMgmt: null, loadMgmtError: error.message || '负荷管理加载失败。' });
+      }
+    }
+  },
+
+  retryLoadMgmt() {
+    return this.loadLoadManagement(this.data.project);
+  },
+
+  // 恢复状态基线偏离预警
+  async loadBaseline(project) {
+    if (!this.data.canViewTodos) return;
+    this._baselineGuard = this._baselineGuard || createRequestGuard();
+    const id = this._baselineGuard.next();
+    this.setData({ baselineLoading: true, baselineError: '' });
+    try {
+      const result = await api.wellnessBaseline(project);
+      if (!this._baselineGuard.isLatest(id)) return;
+      this.setData({ baselineLoading: false, baseline: result });
+    } catch (error) {
+      if (this._baselineGuard.isLatest(id)) {
+        this.setData({ baselineLoading: false, baseline: null, baselineError: error.message || '基线预警加载失败。' });
+      }
+    }
+  },
+
+  retryBaseline() {
+    return this.loadBaseline(this.data.project);
+  },
+
+  // 训练计划执行率
+  async loadPlanExecution(project) {
+    if (!this.data.canViewTodos) return;
+    this._planExecGuard = this._planExecGuard || createRequestGuard();
+    const id = this._planExecGuard.next();
+    this.setData({ planExecLoading: true, planExecError: '' });
+    try {
+      const result = await api.planExecution(project);
+      if (!this._planExecGuard.isLatest(id)) return;
+      this.setData({ planExecLoading: false, planExec: result });
+    } catch (error) {
+      if (this._planExecGuard.isLatest(id)) {
+        this.setData({ planExecLoading: false, planExec: null, planExecError: error.message || '计划执行加载失败。' });
+      }
+    }
+  },
+
+  retryPlanExec() {
+    return this.loadPlanExecution(this.data.project);
   },
 
   onTodoFilter(event) {

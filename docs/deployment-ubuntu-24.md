@@ -1,5 +1,9 @@
 # Ubuntu 24.04 生产部署手册
 
+> 当前推荐采用 [Colima + 阿里云 ACR 部署流程](deployment-ubuntu-24-colima-acr.md)：本地 Mac 构建 `linux/amd64` 镜像并推送 ACR，ECS 只从 ACR 拉取运行。本文其余 Docker 构建流程仅作备用参考。
+
+> 当前推荐流程：阅读 [Colima + 阿里云 ACR 部署手册](deployment-ubuntu-24-colima-acr.md)。本地 Mac 构建 `linux/amd64` 镜像并推送 ACR，ECS 只从 ACR 拉取运行；本文旧 Docker 流程保留作参考。
+
 本文将“竞迹”部署为：公网用户 -> 阿里云中国内地 ECS 上的 Nginx（HTTPS）-> 本机 Docker 容器中的 Express。应用容器只映射到 `127.0.0.1:8787`，SQLite 数据库、上传照片和 JWT 密钥保存在宿主机目录。该结构适合当前项目的单体架构，也让日后的发布成为可回滚、不会丢数据的固定流程。
 
 > 本文已将正式域名设为 `jingjity.xin`，ECS 公网 IPv4 为 `182.92.6.195`。`deploy`、Git 仓库地址和 ACR 镜像加速地址仍是占位符，必须替换。命令中的密钥只在服务器交互式终端输入或写入本机权限受限文件，绝不能提交到 Git。
@@ -131,7 +135,7 @@ Docker 官方支持 Ubuntu 24.04，并明确提醒：容器发布端口的规则
 
 ```json
 {
-  "registry-mirrors": ["https://https://26yam3m0.mirror.aliyuncs.com"]
+  "registry-mirrors": ["https://26yam3m0.mirror.aliyuncs.com"]
 }
 ```
 
@@ -146,12 +150,64 @@ docker info | sed -n '/Registry Mirrors/,+3p'
 
 ## 3. deploy：取得代码并创建服务器私有配置
 
-以下命令必须由 `deploy` 用户执行。以专用的只读 deploy key 或受限访问令牌从阿里云 Codeup、企业 Git 或已验证的 Git 远端克隆仓库；不要把个人 SSH 私钥留在服务器。国内生产环境优先使用同地域或稳定可达的代码托管端。下面以 SSH 地址为例：
+以下命令必须由 `deploy` 用户执行。以专用的只读 deploy key 或受限访问令牌从阿里云 Codeup、企业 Git 或已验证的 Git 远端克隆仓库；不要把个人 SSH 私钥留在服务器。国内生产环境优先使用同地域或稳定可达的代码托管端。
+
+### 配置 Gitee 只读部署密钥
+
+服务器用于拉取 Gitee 的密钥与本地 Mac 登录 ECS 的密钥不同。下列命令创建的私钥只留在 `/home/deploy/.ssh/`，不应复制回本地或提交到仓库。
 
 ```bash
-git clone <仓库 SSH 地址> /srv/jingji/app
+# deploy：创建服务器专用 Gitee 部署密钥；无口令便于以后非交互式 git pull。
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_gitee -N '' -C "jingji-production-deploy"
+
+# deploy：复制公钥。只将 .pub 文件的完整单行内容添加到 Gitee。
+cat ~/.ssh/id_ed25519_gitee.pub
+```
+
+在 Gitee 仓库 `sorenk1n/jingji` 的“管理 > 部署公钥”添加该公钥；标题可填 `jingji-production-182.92.6.195`，并且只授予**只读**权限。
+
+```bash
+# deploy：强制 gitee.com 使用本部署密钥，避免 SSH 默认寻找不存在的 id_ed25519。
+export TERM=xterm-256color
+nano ~/.ssh/config
+```
+
+写入以下内容：
+
+```sshconfig
+Host gitee.com
+    HostName gitee.com
+    User git
+    IdentityFile /home/deploy/.ssh/id_ed25519_gitee
+    IdentitiesOnly yes
+```
+
+```bash
+# deploy：私钥及配置文件不可被其他用户读取。
+chmod 600 ~/.ssh/config ~/.ssh/id_ed25519_gitee
+
+# deploy：预期显示 user git、identitiesonly yes 及 id_ed25519_gitee。
+ssh -G gitee.com | grep -E '^(user|hostname|identityfile|identitiesonly) '
+
+# deploy：先认证，再克隆。认证失败时不要重新生成密钥；确认 Gitee 端已保存同一 .pub 公钥。
+ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_gitee -T git@gitee.com
+```
+
+若仍显示 `Permission denied (publickey)`，执行只读诊断命令；不要提供或输出私钥内容：
+
+```bash
+# deploy：应至少看到 Offering public key ... id_ed25519_gitee。
+ssh -vvv -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_gitee -T git@gitee.com 2>&1 \
+  | grep -E 'Offering public key|Server accepts key|Authentications that can continue|Permission denied'
+```
+
+认证通过后，克隆代码：
+
+```bash
+# deploy：仓库目录必须为空；克隆失败后先确认目录没有半成品再重试。
+git clone git@gitee.com:sorenk1n/jingji.git /srv/jingji/app
 cd /srv/jingji/app
-git switch <稳定分支>
+git switch dev
 git rev-parse --short HEAD
 ```
 
