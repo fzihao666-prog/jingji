@@ -10,6 +10,7 @@ import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts
 import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { EChart } from '../components/EChart';
+import { placeholderTrend } from '../components/chart-placeholder';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
@@ -1006,7 +1007,15 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
                     </div>
                   </>
                 ) : (
-                  <p>暂无数据</p>
+                  <EChart
+                    option={wellnessTrendOption({ ...trend, points: placeholderTrend.map((sample, index) => ({
+                      date: `2026-01-${String(index + 1).padStart(2, '0')}`,
+                      personalValue: trend.key === 'sleepHours' ? 6 + sample / 60 : trend.key === 'morningPulse' ? 55 + sample / 8 : trend.key === 'weightKg' ? 65 + sample / 20 : 3 + sample / 20,
+                      teamMean: null, teamSampleCount: null, hasPersonalValue: false,
+                    })) })}
+                    label={`${trend.label}示例趋势`}
+                    isPlaceholder
+                  />
                 )}
               </AppCard>
             );
@@ -1166,6 +1175,12 @@ function AerobicEndurance({
   data: AerobicEndurancePayload | null;
   loading: boolean;
 }) {
+  const sampleTrend: NonNullable<AerobicEndurancePayload['trend']> = {
+    code: 'sample', label: '有氧能力', unit: '示例',
+    points: placeholderTrend.map((value, index) => ({
+      date: `2026-01-${String(index + 1).padStart(2, '0')}`, value,
+    })),
+  };
   const status = loading
     ? '有氧耐力指标读取中。'
     : data?.metrics.length
@@ -1220,18 +1235,17 @@ function AerobicEndurance({
               </article>
             ))}
           </section>
-          {data.trend ? (
-            <section className="aerobic-trend" aria-label={`${data.trend.label}趋势`}>
+          <section className="aerobic-trend" aria-label={`${data.trend?.label || '有氧能力'}趋势`}>
               <header>
-                <h4>{data.trend.label}趋势</h4>
-                <span>{data.trend.unit || '无单位'}</span>
+                <h4>{data.trend?.label || '有氧能力'}趋势</h4>
+                <span>{data.trend?.unit || '示例'}</span>
               </header>
               <EChart
-                option={aerobicTrendOption(data.trend)}
-                label={aerobicTrendLabel(data.trend)}
+                option={aerobicTrendOption(data.trend || sampleTrend)}
+                label={data.trend ? aerobicTrendLabel(data.trend) : '有氧能力示例趋势'}
+                isPlaceholder={!data.trend}
               />
             </section>
-          ) : null}
           {data.latestTest ? (
             <section className="aerobic-recent-test" aria-label="最近有氧测试">
               <span>最近有氧测试</span>
@@ -1244,11 +1258,10 @@ function AerobicEndurance({
           ) : null}
         </div>
       ) : (
-        <ContentState
-          kind="empty"
-          title="当前周期暂无有氧耐力测试数据"
-          description="仅展示有效且非演示的真实测试记录。"
-        />
+        <section className="aerobic-trend" aria-label="有氧能力示例趋势">
+          <header><h4>有氧能力趋势</h4><span>示例</span></header>
+          <EChart option={aerobicTrendOption(sampleTrend)} label="有氧能力示例趋势" isPlaceholder />
+        </section>
       )}
     </AppCard>
   );

@@ -44,6 +44,7 @@ import {
 import type { Project, TrainingRecord } from '../types';
 import { projectLabel } from '../../shared/projects';
 import './SpecialTrainingPage.css';
+import '../components/EChart.css';
 
 type Props = {
   records: TrainingRecord[];
@@ -415,10 +416,20 @@ function TrendChart({
   color?: string;
   secondary?: 'chronic';
 }) {
+  const isPlaceholder = !data.some((row) => Number(row[metric]) > 0);
+  const scale = { duration: 2, distance: 0.1, load: 5, rate: 0.4, heart: 2, power: 3 }[metric];
+  const chartData = isPlaceholder
+    ? [36, 52, 44, 68, 57, 79, 63].map((value, index) => ({
+        date: `${index + 1}日`, isoDate: `示例第${index + 1}日`, duration: 0, distance: 0, load: 0, rate: 0, heart: 0, power: 0, chronic: value * 4,
+        rateCount: 0, heartCount: 0, powerCount: 0,
+        [metric]: value * scale,
+      }))
+    : data;
   return (
     <div className="special-chart">
+      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
           <defs>
             <linearGradient id={`fill-${metric}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor={color} stopOpacity={0.28} />
@@ -428,7 +439,7 @@ function TrendChart({
           <CartesianGrid stroke="#e8eff0" strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#778b91' }} tickLine={false} />
           <YAxis tick={{ fontSize: 10, fill: '#778b91' }} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={tooltipStyle} />
+          <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => `${isPlaceholder ? '示例数据，仅用于展示图表效果 · ' : ''}${label}`} />
           <Area
             type="monotone"
             dataKey={metric}
@@ -447,6 +458,7 @@ function TrendChart({
           )}
         </AreaChart>
       </ResponsiveContainer>
+      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</p>}
     </div>
   );
 }
@@ -472,27 +484,32 @@ function TypeDonut({
     values.reduce((result, item) => result + item.value, 0),
     1
   );
+  const isPlaceholder = !values.some((item) => item.value > 0);
+  const chartValues = isPlaceholder
+    ? ['水上训练', '测功仪', '技术训练', '恢复训练'].map((name, index) => ({ name, value: [42, 27, 19, 12][index] }))
+    : values;
   return (
     <div className="special-donut-wrap">
+      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="48%" height={210}>
         <PieChart>
           <Pie
-            data={values}
+            data={chartValues}
             dataKey="value"
             nameKey="name"
             innerRadius={58}
             outerRadius={82}
             paddingAngle={2}
           >
-            {values.map((_, index) => (
+            {chartValues.map((_, index) => (
               <Cell key={index} fill={COLORS[index]} />
             ))}
           </Pie>
-          <Tooltip contentStyle={tooltipStyle} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value) => [isPlaceholder ? `${value} · 示例数据，仅用于展示图表效果` : value, '']} />
         </PieChart>
       </ResponsiveContainer>
       <div className="special-legend">
-        {values.map((item, index) => (
+        {chartValues.map((item, index) => (
           <div key={item.name}>
             <i style={{ background: COLORS[index] }} />
             <span>{item.name}</span>
@@ -500,6 +517,7 @@ function TypeDonut({
           </div>
         ))}
       </div>
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实占比数据 · 当前图表为示例效果</p>}
     </div>
   );
 }

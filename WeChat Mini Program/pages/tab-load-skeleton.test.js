@@ -30,6 +30,7 @@ const formatModule = loadCjs(new URL('../utils/format.js', import.meta.url), {
   '../data/format-data': loadCjs(new URL('../data/format-data.js', import.meta.url), {}),
 });
 const requestGuard = loadCjs(new URL('../utils/request-guard.js', import.meta.url), {});
+const chartPlaceholder = loadCjs(new URL('../utils/chart-placeholder.js', import.meta.url), {});
 
 const modals = [];
 const toasts = [];
@@ -91,6 +92,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/format': formatModule,
     '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
     '../../utils/date': dateModule,
+    '../../utils/chart-placeholder': chartPlaceholder,
     ...extraMocks,
   };
   vm.runInNewContext(readFileSync(url, 'utf8'), {

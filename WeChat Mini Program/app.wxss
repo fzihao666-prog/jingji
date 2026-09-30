@@ -55,11 +55,16 @@ button::after { border: 0; }
 .trend-scroll { width: 100%; white-space: nowrap; }
 .trend-chart { height: 330rpx; display: flex; align-items: flex-end; gap: 14rpx; padding: 20rpx 4rpx 4rpx; }
 .trend-day { width: 52rpx; height: 100%; display: inline-flex; flex-direction: column; justify-content: flex-end; align-items: center; vertical-align: bottom; }
+.trend-day { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; line-height: inherit; }
+.trend-day::after { border: 0; }
+.trend-day:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
 .trend-bars { height: 244rpx; display: flex; align-items: flex-end; gap: 5rpx; }
 .trend-bar { width: 15rpx; min-height: 4rpx; border-radius: 8rpx 8rpx 2rpx 2rpx; background: #70b9b2; }
 .trend-bar.accent { background: #e1a42c; }
 .trend-label { margin-top: 10rpx; color: #72868d; font-size: 18rpx; }
 .chart-meta { margin-bottom: 10rpx; display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
+.chart-example { display: inline-block; margin-bottom: 12rpx; padding: 4rpx 12rpx; border: 1rpx solid #b5c9c7; border-radius: 8rpx; color: #41615d; background: #edf5f3; font-size: 22rpx; font-weight: 600; }
+.chart-example-note { margin-top: 14rpx; color: #657b78; font-size: 22rpx; line-height: 1.5; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 16rpx; color: #536c75; font-size: 19rpx; }
 .legend-item { display: flex; align-items: center; gap: 7rpx; }
 .legend-dot { width: 14rpx; height: 14rpx; border-radius: 4rpx; background: #70b9b2; }

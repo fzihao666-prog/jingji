@@ -7,6 +7,7 @@ import type {
 import { formatNumber } from '../utils';
 import { EChart } from './EChart';
 import { ContentState } from './PageLayout';
+import { placeholderTrend } from './chart-placeholder';
 
 type Props = {
   trainingStatus: ProfileTrainingStatusPayload | null;
@@ -23,8 +24,13 @@ function formatDifference(metric: TrainingStatusMetric) {
   return `${prefix}${formatNumber(metric.difference, 1)}${metric.unit ? ` ${metric.unit}` : ''}`;
 }
 
-function trendOption(card: TrainingStatusCard): EChartsOption {
-  const points = card.trend.points;
+function trendOption(card: TrainingStatusCard, isPlaceholder: boolean): EChartsOption {
+  const points = isPlaceholder
+    ? placeholderTrend.map((value, index) => ({
+        date: `2026-01-${String(index + 1).padStart(2, '0')}`,
+        personalValue: value, teamMean: null,
+      }))
+    : card.trend.points;
   const timestamps = points.map((point) => Date.parse(`${point.date}T00:00:00Z`));
   return {
     animation: false,
@@ -125,12 +131,14 @@ function TrainingStatusCard({ card }: { card: TrainingStatusCard }) {
         aria-labelledby={`${card.kind}-training-chart-title`}
       >
         <h4 id={`${card.kind}-training-chart-title`}>{card.trend.label}</h4>
-        {hasPersonalTrend ? (
+        {(
           <figure className="profile-training-status-figure">
             <EChart
-              option={trendOption(card)}
+              option={trendOption(card, !hasPersonalTrend)}
               label={`${card.trend.label}：当前运动员与团队平均的每日变化`}
+              isPlaceholder={!hasPersonalTrend}
             />
+            {hasPersonalTrend && (
             <div
               className="profile-training-status-accessible-data visually-hidden"
               role="region"
@@ -157,9 +165,8 @@ function TrainingStatusCard({ card }: { card: TrainingStatusCard }) {
                 </tbody>
               </table>
             </div>
+            )}
           </figure>
-        ) : (
-          <ContentState kind="empty" title="暂无训练时长数据" />
         )}
       </section>
     </section>

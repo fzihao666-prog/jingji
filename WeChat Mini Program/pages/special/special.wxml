@@ -35,23 +35,24 @@
 
     <view class="section-head"><view class="section-head-title">专项训练量统计</view><view class="section-head-note">青色：训练时长 · 金色：训练距离</view></view>
     <view class="card">
+      <view wx:if="{{trendPlaceholder}}" class="chart-example">示例数据</view>
       <view wx:if="{{trend.length}}" class="chart-meta">
         <view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />训练距离（km）</view></view>
         <text class="chart-hint">点击柱形查看</text>
       </view>
       <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false">
         <view class="trend-chart special-trend">
-          <view wx:for="{{trend}}" wx:key="date" class="trend-day" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="{{'height: ' + item.durationHeight + '%;'}}" /><view class="trend-bar accent" style="{{'height: ' + item.distanceHeight + '%;'}}" /></view><text class="trend-label">{{item.label}}</text></view>
+          <button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="{{'height: ' + item.durationHeight + '%;'}}" /><view class="trend-bar accent" style="{{'height: ' + item.distanceHeight + '%;'}}" /></view><text class="trend-label">{{item.label}}</text></button>
         </view>
       </scroll-view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无专项训练量数据</view></view>
+      <view wx:if="{{trendPlaceholder}}" class="chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</view>
     </view>
 
     <view class="section-head"><view class="section-head-title">专项训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
-    <view class="card"><view wx:if="{{intensity.length}}" class="ratio-list"><view wx:for="{{intensity}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="{{'width: ' + item.width + '%;'}}" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无有效专项强度数据</view></view></view>
+    <view class="card"><view wx:if="{{intensityPlaceholder}}" class="chart-example">示例数据</view><view class="ratio-list"><view wx:for="{{intensity}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="{{'width: ' + item.width + '%;'}}" /></view></view></view><view wx:if="{{intensityPlaceholder}}" class="chart-example-note">暂无真实强度数据 · 当前图表为示例效果</view></view>
 
     <view class="section-head"><view class="section-head-title">专项训练课占比</view><view class="section-head-note">按训练内容统计课次</view></view>
-    <view class="card"><view wx:if="{{content.length}}" class="ratio-list"><view wx:for="{{content}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill orange" style="{{'width: ' + item.width + '%;'}}" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无专项训练内容数据</view></view></view>
+    <view class="card"><view wx:if="{{contentPlaceholder}}" class="chart-example">示例数据</view><view class="ratio-list"><view wx:for="{{content}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill orange" style="{{'width: ' + item.width + '%;'}}" /></view></view></view><view wx:if="{{contentPlaceholder}}" class="chart-example-note">暂无真实课次数据 · 当前图表为示例效果</view></view>
 
     <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
     <view class="card">

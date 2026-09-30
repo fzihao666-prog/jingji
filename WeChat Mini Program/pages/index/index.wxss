@@ -137,11 +137,17 @@
 .heat-cell { flex: none; }
 .heat-metric { width: 160rpx; min-width: 160rpx; display: flex; align-items: center; color: #536c75; font-size: 20rpx; font-weight: 700; line-height: 1.3; }
 .heat-date { width: 52rpx; min-width: 52rpx; height: 36rpx; display: flex; align-items: center; justify-content: center; color: #7b8e95; font-size: 16rpx; }
-.heat-row .heat-cell:not(.heat-metric) { width: 52rpx; min-width: 52rpx; height: 36rpx; border-radius: 6rpx; }
+.heat-row .heat-cell:not(.heat-metric) { width: 52rpx; min-width: 52rpx; height: 52rpx; border-radius: 6rpx; }
+.heat-row button.heat-cell { margin: 0; padding: 0; border: 0; line-height: 1; }
+.heat-row button.heat-cell::after { border: 0; }
+.heat-row button.heat-cell:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
 .heat-cell.normal { background: #5db89a; }
 .heat-cell.fluctuation { background: #e8c44a; }
 .heat-cell.attention { background: #e8944a; }
 .heat-cell.abnormal { background: #d4544a; }
 .heat-cell.missing { background: #d8e3e6; }
 .heat-cell.estimated { opacity: .55; border: 2rpx dashed rgba(255,255,255,.6); }
+.heat-cell.sample-0 { background: #bedad7; }
+.heat-cell.sample-1 { background: #9fc9c3; }
+.heat-cell.sample-2 { background: #d5e7e4; }
 .heat-legend { margin-top: 14rpx; color: #8b9a9f; font-size: 19rpx; line-height: 1.5; }

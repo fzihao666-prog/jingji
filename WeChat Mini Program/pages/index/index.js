@@ -7,6 +7,7 @@ const { durationLoadLines, showTrendModal, goToAthlete: navigateToAthlete } = re
 const { dailyTodoView, filterDailyTodos } = require('../../utils/daily-todos');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
+const { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder } = require('../../utils/chart-placeholder');
 
 function sum(values) {
   return values.reduce((total, value) => total + (Number.isFinite(Number(value)) ? Number(value) : 0), 0);
@@ -64,6 +65,7 @@ function buildView(overview) {
       label: shortDate(item.date),
       duration,
       load,
+      ariaLabel: `${item.date}，训练时长${duration}分钟，训练负荷${load}AU`,
       durationHeight: Math.max(2, Math.round(duration / maxDuration * 100)),
       loadHeight: Math.max(2, Math.round(load / maxLoad * 100))
     };
@@ -75,6 +77,8 @@ function buildView(overview) {
     percentage: number(item.percentage),
     width: Math.max(1, Math.min(100, Number(item.percentage) || 0))
   }));
+  const trendDisplay = displaySeries(trend, trendPlaceholder('overview'), trend.some((item) => item.duration > 0 || item.load > 0));
+  const intensityDisplay = displaySeries(intensity, ratioPlaceholder(['U3', 'U2', 'U1', 'AT'], 'min'));
 
   const physiologyHeatmap = overview.physiologyHeatmap
     ? {
@@ -146,7 +150,12 @@ function buildView(overview) {
     summary: `疲劳偏高 ${highFatigue} 人 · 伤病状态 ${activeInjuries.length} 人`
   };
 
-  return { metrics, trend, intensity, activeInjuries, attention, meta: overview.meta || {}, physiologyHeatmap, heatHasEstimated: Boolean(physiologyHeatmap && physiologyHeatmap.metrics.some((m) => m.days.some((d) => d.isEstimated))) };
+  return { metrics, trend: trendDisplay.data, trendPlaceholder: trendDisplay.isPlaceholder,
+    intensity: intensityDisplay.data, intensityPlaceholder: intensityDisplay.isPlaceholder,
+    activeInjuries, attention, meta: overview.meta || {},
+    physiologyHeatmap: physiologyHeatmap && physiologyHeatmap.metrics.some((m) => m.days.length) ? physiologyHeatmap : physiologyPlaceholder(),
+    physiologyPlaceholder: !physiologyHeatmap || !physiologyHeatmap.metrics.some((m) => m.days.length),
+    heatHasEstimated: Boolean(physiologyHeatmap && physiologyHeatmap.metrics.some((m) => m.days.some((d) => d.isEstimated))) };
 }
 
 Page({
@@ -489,6 +498,10 @@ Page({
   },
 
   showPhysioDetail(event) {
+    if (this.data.physiologyPlaceholder) {
+      wx.showModal({ title: '示例数据', content: '示例数据，仅用于展示图表效果；当前无生理生化实测数据。', showCancel: false });
+      return;
+    }
     const { code, date } = event.currentTarget.dataset;
     const heatmap = this.data.physiologyHeatmap;
     if (!heatmap) return;

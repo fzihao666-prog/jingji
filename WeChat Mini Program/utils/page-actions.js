@@ -18,7 +18,9 @@ function showTrendModal(page, event, buildLines) {
   if (!item) return;
   wx.showModal({
     title: item.date,
-    content: buildLines(item).join('\n'),
+    content: item.isPlaceholder
+      ? '示例数据，仅用于展示图表效果\n' + buildLines(item).join('\n')
+      : buildLines(item).join('\n'),
     showCancel: false,
   });
 }

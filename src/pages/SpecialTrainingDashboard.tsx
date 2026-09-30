@@ -178,16 +178,12 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
               ))}
             </section>
             <ChartCard title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
-              {training.days.some((day) => day.durationMin !== null || day.distanceKm !== null) ? (
-                <EChart option={volumeOption(training, from, to)} label="专项训练时长与距离趋势" />
-              ) : (
-                empty('暂无专项训练量数据')
-              )}
+              <EChart option={volumeOption(training, from, to, !training.days.some((day) => day.durationMin !== null || day.distanceKm !== null))} label="专项训练时长与距离趋势" isPlaceholder={!training.days.some((day) => day.durationMin !== null || day.distanceKm !== null)} />
             </ChartCard>
             <ChartCard title="专项训练强度占比" description="按原始强度分区的有效训练时长统计">
-              {training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0) ? (
-                <>
-                  <EChart option={intensityOption(training)} label="专项训练强度时长占比" />
+              <>
+                  <EChart option={intensityOption(training, !training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0))} label="专项训练强度时长占比" isPlaceholder={!training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0)} />
+                  {training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0) && (
                   <div className="table-scroll">
                     <table className="data-table">
                       <thead>
@@ -208,15 +204,13 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
                       </tbody>
                     </table>
                   </div>
-                </>
-              ) : (
-                empty('暂无有效专项强度数据')
-              )}
+                  )}
+              </>
             </ChartCard>
             <ChartCard title="专项训练课占比" description="按统一训练内容字典统计专项课次">
-              {training.content.length ? (
-                <>
-                  <EChart option={contentOption(training)} label="专项训练内容课次分布" />
+              <>
+                  <EChart option={contentOption(training, !training.content.length)} label="专项训练内容课次分布" isPlaceholder={!training.content.length} />
+                  {!!training.content.length && (
                   <div className="table-scroll">
                     <table className="data-table">
                       <thead>
@@ -237,20 +231,14 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
                       </tbody>
                     </table>
                   </div>
-                </>
-              ) : (
-                empty('暂无专项训练内容数据')
-              )}
+                  )}
+              </>
             </ChartCard>
             <ChartCard
               title="专项训练负荷分析"
               description={`累计专项负荷 ${value(training.summary.load)} AU · 每日既有 SRPE`}
             >
-              {training.days.some((day) => day.load !== null) ? (
-                <EChart option={loadOption(training, from, to)} label="每日专项SRPE负荷趋势" />
-              ) : (
-                empty('暂无有效专项训练负荷')
-              )}
+              <EChart option={loadOption(training, from, to, !training.days.some((day) => day.load !== null))} label="每日专项SRPE负荷趋势" isPlaceholder={!training.days.some((day) => day.load !== null)} />
             </ChartCard>
             {selectedAthlete && (
               <ChartCard title="专项测试表现" description="当前周期最新专项测试与团队均值对照">

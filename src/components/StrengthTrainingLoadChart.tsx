@@ -9,6 +9,8 @@ import {
   YAxis,
 } from 'recharts';
 import type { StrengthTrainingSession } from '../types';
+import { chartDisplay, placeholderTrend } from './chart-placeholder';
+import './EChart.css';
 
 type Props = {
   sessions: StrengthTrainingSession[];
@@ -37,6 +39,10 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
       volume: Math.round(session.volume),
       rpe: sessionRpe(session),
     }));
+  const display = chartDisplay(data, placeholderTrend.map((value, index) => ({
+    id: -(index + 1), label: `示例${index + 1}`, session: '示例数据', volume: value * 20,
+    rpe: 4 + value / 25,
+  })));
 
   return (
     <section className="strength-load-visual" aria-label="训练负荷趋势">
@@ -58,8 +64,9 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
         </div>
       </header>
       <div className="strength-load-chart">
+        {display.isPlaceholder && <span className="app-chart-example">示例数据</span>}
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
+          <ComposedChart data={display.data} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
             <CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false} />
             <XAxis
               dataKey="label"
@@ -87,7 +94,8 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
               width={24}
             />
             <Tooltip
-              labelFormatter={(label, payload) =>
+              labelFormatter={(label, payload) => display.isPlaceholder
+                ? `示例数据，仅用于展示图表效果 · ${label}` :
                 payload?.[0]?.payload?.session
                   ? `${label} · ${payload[0].payload.session}`
                   : String(label)
@@ -126,6 +134,7 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
             />
           </ComposedChart>
         </ResponsiveContainer>
+        {display.isPlaceholder && <p className="app-chart-example-note">暂无真实训练量数据 · 当前图表为示例效果</p>}
       </div>
     </section>
   );

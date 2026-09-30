@@ -5,3 +5,54 @@
   min-width: 0;
   height: var(--chart-height);
 }
+
+.app-echart-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.app-chart-example {
+  display: inline-block;
+  padding: 3px 9px;
+  border: 1px solid #b5c9c7;
+  border-radius: 5px;
+  color: #41615d;
+  background: #edf5f3;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-chart-example-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-wrap:has(> .app-chart-example),
+.performance-radar-layout:has(> .app-chart-example),
+.analysis-chart-medium:has(> .app-chart-example),
+.content-chart-layout:has(> .app-chart-example),
+.fms-personal-chart:has(> .app-chart-example),
+.training-load-energy-grid:has(> .app-chart-example) {
+  position: relative;
+}
+
+.chart-wrap > .app-chart-example,
+.performance-radar-layout > .app-chart-example,
+.analysis-chart-medium > .app-chart-example,
+.content-chart-layout > .app-chart-example,
+.fms-personal-chart > .app-chart-example,
+.training-load-energy-grid > .app-chart-example {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 2;
+}
+
+.chart-wrap > .app-chart-example-note,
+.performance-radar-layout > .app-chart-example-note {
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  z-index: 2;
+}

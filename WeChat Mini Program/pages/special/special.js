@@ -4,6 +4,7 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
+const { displaySeries, trendPlaceholder, ratioPlaceholder } = require('../../utils/chart-placeholder');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
@@ -25,6 +26,7 @@ function buildTrainingView(training, athletes, to) {
     label: shortDate(item.date),
     duration: Number(item.durationMin || 0),
     distance: Number(item.distanceKm || 0),
+    ariaLabel: `${item.date}，训练时长${Number(item.durationMin || 0)}分钟，训练距离${Number(item.distanceKm || 0)}公里`,
     durationHeight: Math.max(2, Math.round(Number(item.durationMin || 0) / maxDuration * 100)),
     distanceHeight: Math.max(2, Math.round(Number(item.distanceKm || 0) / maxDistance * 100))
   }));
@@ -41,6 +43,9 @@ function buildTrainingView(training, athletes, to) {
     percentage: number(item.percentage),
     width: Math.max(1, Math.min(100, Number(item.percentage) || 0))
   }));
+  const trendDisplay = displaySeries(trend, trendPlaceholder('special'), trend.some((item) => item.duration > 0 || item.distance > 0));
+  const intensityDisplay = displaySeries(intensity, ratioPlaceholder(['U3', 'U2', 'U1', 'AT'], 'min'));
+  const contentDisplay = displaySeries(content, ratioPlaceholder(['水上训练', '测功仪', '技术训练', '恢复训练'], '课次'));
   const athleteRows = (athletes || []).slice(0, 30).map((athlete) => {
     const age = ageAt(athlete.birthDate, to);
     return {
@@ -54,7 +59,10 @@ function buildTrainingView(training, athletes, to) {
       load: athlete.summary.load == null ? '—' : `${number(athlete.summary.load)} AU`
     };
   });
-  return { metrics, trend, intensity, content, athleteRows, athleteTotal: (athletes || []).length };
+  return { metrics, trend: trendDisplay.data, trendPlaceholder: trendDisplay.isPlaceholder,
+    intensity: intensityDisplay.data, intensityPlaceholder: intensityDisplay.isPlaceholder,
+    content: contentDisplay.data, contentPlaceholder: contentDisplay.isPlaceholder,
+    athleteRows, athleteTotal: (athletes || []).length };
 }
 
 Page({

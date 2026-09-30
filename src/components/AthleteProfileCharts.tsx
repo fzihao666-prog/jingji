@@ -24,6 +24,7 @@ import type { BodyCompositionTrendKey } from '../../shared/body-composition-tren
 import { projectLabel } from '../../shared/projects';
 import type { BodyCompositionRecord, OverviewAthleteProfile } from '../types';
 import { formatNumber, percentage } from '../utils';
+import './EChart.css';
 
 function average(values: Array<number | null | undefined>) {
   const valid = values.filter(
@@ -148,10 +149,10 @@ export function AthleteProfileOverview({
     null
   );
   if (
-    !profiles.length ||
+    individual && (!profiles.length ||
     !profiles.some(
       (profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null
-    )
+    ))
   ) {
     return (
       <ProfileEmpty
@@ -165,7 +166,7 @@ export function AthleteProfileOverview({
   const weight = average(profiles.map((profile) => profile.weightKg));
   const current = profiles[0];
   const weightChange =
-    current.weightKg !== null && current.previousWeightKg !== null
+    current?.weightKg !== null && current?.weightKg !== undefined && current.previousWeightKg !== null
       ? current.weightKg - current.previousWeightKg
       : null;
 
@@ -212,6 +213,12 @@ export function AthleteProfileOverview({
         ]
       : []
   );
+  const displayScatterData = scatterData.length ? scatterData : [
+    { athleteId: -1, name: '示例点', age: null, height: 172, weight: 68 },
+    { athleteId: -2, name: '示例点', age: null, height: 177, weight: 74 },
+    { athleteId: -3, name: '示例点', age: null, height: 181, weight: 77 },
+    { athleteId: -4, name: '示例点', age: null, height: 185, weight: 82 },
+  ];
   const ageProfiles = profiles.filter(
     (profile): profile is OverviewAthleteProfile & { age: number } =>
       profile.age !== null && Number.isFinite(profile.age)
@@ -241,6 +248,12 @@ export function AthleteProfileOverview({
     }
     return bins.sort((left, right) => right.start - left.start);
   }, [ageProfiles, minAge, maxAge]);
+  const displayAgeBins: AgeBin[] = ageBins.length ? ageBins : [
+    { group: '示例D', male: -2, female: 1, start: 4, end: 5 },
+    { group: '示例C', male: -3, female: 2, start: 3, end: 4 },
+    { group: '示例B', male: -4, female: 3, start: 2, end: 3 },
+    { group: '示例A', male: -2, female: 2, start: 1, end: 2 },
+  ];
   const maxSideCount = useMemo(
     () => ageBins.reduce((max, bin) => Math.max(max, Math.abs(bin.male), bin.female), 0),
     [ageBins]
@@ -306,7 +319,8 @@ export function AthleteProfileOverview({
             <span>{scatterData.length} 名有效运动员</span>
           </header>
           <div className="team-profile-chart-canvas">
-            {scatterData.length ? (
+            {!scatterData.length && <span className="app-chart-example">示例数据</span>}
+            {(
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 18, right: 26, bottom: 27, left: 14 }}>
                   <CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" />
@@ -315,7 +329,7 @@ export function AthleteProfileOverview({
                     dataKey="height"
                     name="身高"
                     domain={chartDomain(
-                      scatterData.map((item) => item.height),
+                      displayScatterData.map((item) => item.height),
                       2
                     )}
                     tick={{ fontSize: 9, fill: '#74888f' }}
@@ -334,7 +348,7 @@ export function AthleteProfileOverview({
                     dataKey="weight"
                     name="体重"
                     domain={chartDomain(
-                      scatterData.map((item) => item.weight),
+                      displayScatterData.map((item) => item.weight),
                       3
                     )}
                     tick={{ fontSize: 9, fill: '#74888f' }}
@@ -377,14 +391,12 @@ export function AthleteProfileOverview({
                     />
                   )}
                   <Tooltip
-                    content={<TeamProfileTooltip />}
+                    content={scatterData.length ? <TeamProfileTooltip /> : <div className="team-profile-tooltip">示例数据，仅用于展示图表效果</div>}
                     cursor={{ stroke: '#a9c5c8', strokeDasharray: '3 4' }}
                   />
-                  <Scatter data={scatterData} fill="#12978f" stroke="#fff" strokeWidth={2} />
+                  <Scatter data={displayScatterData} fill="#12978f" stroke="#fff" strokeWidth={2} />
                 </ScatterChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="team-profile-chart-empty">暂无身高体重配对数据</div>
             )}
           </div>
           {scatterData.length > 0 && (
@@ -429,10 +441,11 @@ export function AthleteProfileOverview({
             <span>按性别分组的人数分布</span>
           </div>
           <div className="team-profile-age-canvas">
-            {ageBins.length ? (
+            {!ageBins.length && <span className="app-chart-example">示例数据</span>}
+            {(
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={ageBins}
+                  data={displayAgeBins}
                   layout="vertical"
                   margin={{ top: 4, right: 14, bottom: 2, left: 4 }}
                   barCategoryGap="16%"
@@ -440,8 +453,8 @@ export function AthleteProfileOverview({
                   <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" horizontal={false} />
                   <XAxis
                     type="number"
-                    domain={[-maxSideCount, maxSideCount]}
-                    tickFormatter={(value) => `${Math.abs(Number(value))}`}
+                    domain={[-(maxSideCount || 4), maxSideCount || 4]}
+                    tickFormatter={(value) => ageBins.length ? `${Math.abs(Number(value))}` : ''}
                     tick={{ fontSize: 8, fill: '#74888f' }}
                     axisLine={{ stroke: '#cad9dc' }}
                     tickLine={false}
@@ -455,7 +468,7 @@ export function AthleteProfileOverview({
                     width={48}
                   />
                   <Tooltip
-                    content={<AgePyramidTooltip />}
+                    content={ageBins.length ? <AgePyramidTooltip /> : <div className="team-profile-tooltip">示例数据，仅用于展示图表效果</div>}
                     cursor={{ fill: 'rgba(17,139,131,.055)' }}
                   />
                   <Bar
@@ -465,14 +478,14 @@ export function AthleteProfileOverview({
                     radius={[3, 0, 0, 3]}
                     minPointSize={2}
                   >
-                    <LabelList
+                    {ageBins.length > 0 && <LabelList
                       dataKey="male"
                       position="left"
                       fill="#4c6870"
                       fontSize={8}
                       fontWeight={800}
                       formatter={(value) => `${Math.abs(Number(value))}人`}
-                    />
+                    />}
                   </Bar>
                   <Bar
                     dataKey="female"
@@ -481,19 +494,17 @@ export function AthleteProfileOverview({
                     radius={[0, 3, 3, 0]}
                     minPointSize={2}
                   >
-                    <LabelList
+                    {ageBins.length > 0 && <LabelList
                       dataKey="female"
                       position="right"
                       fill="#4c6870"
                       fontSize={8}
                       fontWeight={800}
                       formatter={(value) => `${value}人`}
-                    />
+                    />}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="team-profile-chart-empty">暂无年龄数据</div>
             )}
           </div>
           {ageBins.length > 0 && (
@@ -539,6 +550,7 @@ export function AthleteProfileOverview({
             <span>{profiles.length} 名运动员</span>
           </header>
           <div className="composition-status-list">
+            {!profiles.length && <span className="app-chart-example">示例图形 · 暂无真实身体数据</span>}
             {compositionRows.map((row) => (
               <div className="composition-status-row" key={row.label}>
                 <strong>{row.label}</strong>
@@ -554,7 +566,7 @@ export function AthleteProfileOverview({
                         className={`composition-band ${band}`}
                         style={{ width: `${(row[band] / row.sample) * 100}%` }}
                       />
-                    ) : null
+                    ) : band === '未测试' ? <span key={band} className="composition-band sample" style={{ width: '100%' }} /> : null
                   )}
                 </div>
                 <small>{row.sample ? `${row.sample} 人` : '暂无数据'}</small>
@@ -746,7 +758,9 @@ export function BodyCompositionModelOverview({
   }, [athleteKey]);
 
   if (!profiles.length)
-    return <ProfileEmpty detail="选择运动员并录入身体成分实测后，这里会生成结构化评估。" />;
+    return <div className="body-composition-atlas" aria-label="身体成分示例图形">
+      <BodyCompositionSimulationDesktop profile={null} total={0} fatMass={0} fatFreeMass={0} isPlaceholder />
+    </div>;
 
   const activeProfile =
     profiles.find((profile) => profile.athleteId === activeAthleteId) ||
@@ -779,18 +793,13 @@ export function BodyCompositionModelOverview({
       )}
       <div className="body-atlas-grid">
         <section className="body-atlas-panel body-simulation-panel">
-          {activeProfile.weightKg !== null && fatMass !== null && fatFreeMass !== null ? (
-            <>
-              <BodyCompositionSimulationDesktop
-                profile={activeProfile}
-                total={activeProfile.weightKg}
-                fatMass={fatMass}
-                fatFreeMass={fatFreeMass}
-              />
-            </>
-          ) : (
-            <BodyAtlasEmpty detail="需同时录入体重与体脂率后生成成分分层模拟。" />
-          )}
+          <BodyCompositionSimulationDesktop
+            profile={activeProfile}
+            total={activeProfile.weightKg ?? 0}
+            fatMass={fatMass ?? 0}
+            fatFreeMass={fatFreeMass ?? 0}
+            isPlaceholder={activeProfile.weightKg === null || fatMass === null || fatFreeMass === null}
+          />
         </section>
       </div>
       <p className="body-atlas-note">
@@ -972,10 +981,11 @@ type CompositionMetric = {
 };
 
 type BodyCompositionSimulationDesktopProps = {
-  profile: BodyCompositionProfile;
+  profile: BodyCompositionProfile | null;
   total: number;
   fatMass: number;
   fatFreeMass: number;
+  isPlaceholder?: boolean;
 };
 
 function BodyCompositionSimulationDesktop({
@@ -983,6 +993,7 @@ function BodyCompositionSimulationDesktop({
   total,
   fatMass,
   fatFreeMass,
+  isPlaceholder = false,
 }: BodyCompositionSimulationDesktopProps) {
   const fatPercent = total > 0 ? (fatMass / total) * 100 : 0;
 
@@ -993,7 +1004,7 @@ function BodyCompositionSimulationDesktop({
       id: 'muscleMass',
       label: '肌肉量',
       source: '实测',
-      value: profile.muscleMassKg,
+      value: profile?.muscleMassKg ?? null,
       unit: 'kg',
       priority: 'primary',
     },
@@ -1001,7 +1012,7 @@ function BodyCompositionSimulationDesktop({
       id: 'skeletalMuscle',
       label: '骨骼肌量',
       source: '实测',
-      value: profile.skeletalMuscleKg,
+      value: profile?.skeletalMuscleKg ?? null,
       unit: 'kg',
       priority: 'primary',
     },
@@ -1009,7 +1020,7 @@ function BodyCompositionSimulationDesktop({
       id: 'basalMetabolism',
       label: '基础代谢',
       source: '实测',
-      value: profile.basalMetabolismKcal,
+      value: profile?.basalMetabolismKcal ?? null,
       unit: 'kcal',
       priority: 'primary',
     },
@@ -1017,7 +1028,7 @@ function BodyCompositionSimulationDesktop({
       id: 'visceralFat',
       label: '内脏脂肪等级',
       source: '实测',
-      value: profile.visceralFatLevel,
+      value: profile?.visceralFatLevel ?? null,
       unit: '级',
       priority: 'primary',
     },
@@ -1025,7 +1036,7 @@ function BodyCompositionSimulationDesktop({
       id: 'totalBodyWater',
       label: '体水分',
       source: '实测',
-      value: profile.totalBodyWaterKg,
+      value: profile?.totalBodyWaterKg ?? null,
       unit: 'kg',
       priority: 'secondary',
     },
@@ -1033,7 +1044,7 @@ function BodyCompositionSimulationDesktop({
       id: 'ecwTbwRatio',
       label: '细胞外水比',
       source: '实测',
-      value: profile.ecwTbwRatio,
+      value: profile?.ecwTbwRatio ?? null,
       unit: '比值',
       priority: 'secondary',
     },
@@ -1041,7 +1052,7 @@ function BodyCompositionSimulationDesktop({
       id: 'phaseAngle',
       label: '相位角',
       source: '实测',
-      value: profile.phaseAngleDeg,
+      value: profile?.phaseAngleDeg ?? null,
       unit: '°',
       priority: 'secondary',
     },
@@ -1049,7 +1060,7 @@ function BodyCompositionSimulationDesktop({
       id: 'visceralFatArea',
       label: '内脏脂肪面积',
       source: '实测',
-      value: profile.visceralFatAreaCm2,
+      value: profile?.visceralFatAreaCm2 ?? null,
       unit: 'cm²',
       priority: 'secondary',
     },
@@ -1057,13 +1068,14 @@ function BodyCompositionSimulationDesktop({
 
   return (
     <div className="body-composition-simulation body-composition-simulation-v3">
+      {isPlaceholder && <p className="app-chart-example">示例数据 · 暂无完整身体成分实测</p>}
       <div className="body-composition-main">
         {/* 左侧：身体成分模拟图 */}
         <div className="body-composition-figure-panel">
           <div className="body-composition-label body-composition-label-fat">
             <span>脂肪组织</span>
-            <strong>{formatNumber(fatPercent, 1)}%</strong>
-            <small>{formatNumber(fatMass, 1)} kg</small>
+            <strong>{isPlaceholder ? '—' : `${formatNumber(fatPercent, 1)}%`}</strong>
+            <small>{isPlaceholder ? '示例展示' : `${formatNumber(fatMass, 1)} kg`}</small>
 
             <svg
               aria-hidden="true"
@@ -1077,8 +1089,8 @@ function BodyCompositionSimulationDesktop({
           <img className="body-composition-model-image" src={bodyModel} alt="身体成分人体模型" />
           <div className="body-composition-label body-composition-label-lean">
             <span>去脂组织</span>
-            <strong>{formatNumber(fatFreePercent, 1)}%</strong>
-            <small>{formatNumber(fatFreeMass, 1)} kg</small>
+            <strong>{isPlaceholder ? '—' : `${formatNumber(fatFreePercent, 1)}%`}</strong>
+            <small>{isPlaceholder ? '示例展示' : `${formatNumber(fatFreeMass, 1)} kg`}</small>
 
             <svg
               aria-hidden="true"
@@ -1119,7 +1131,7 @@ function BodyCompositionSimulationDesktop({
               </div>
             ))}
           </dl>
-          <BodyCompositionMicroTrends records={profile.bodyCompositionHistory} />
+          <BodyCompositionMicroTrends records={profile?.bodyCompositionHistory ?? []} />
         </div>
       </div>
     </div>
@@ -1153,7 +1165,11 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
   const [selectedKey, setSelectedKey] = useState<BodyCompositionTrendKey>('skeletalMuscleKg');
   const selectedTrend = trends.find((trend) => trend.key === selectedKey) ?? trends[0];
   const hasMeasuredData = trends.some((trend) => trend.latestValue !== null);
-  const hasTrend = selectedTrend.points.length >= 2;
+  const hasTrend = selectedTrend.points.length > 0;
+  const chartPoints = hasTrend ? selectedTrend.points : [36, 52, 44, 68, 57, 79].map((sample, index) => ({
+    measurementDate: `2026-01-${String(index + 1).padStart(2, '0')}`,
+    value: selectedTrend.key === 'bodyFatPct' ? 12 + sample / 20 : selectedTrend.key === 'totalBodyWaterKg' ? 35 + sample / 10 : 25 + sample / 12,
+  }));
   const latestDate = selectedTrend.points.at(-1)?.measurementDate ?? null;
   const firstDate = selectedTrend.points[0]?.measurementDate ?? null;
 
@@ -1176,22 +1192,23 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
           </button>
         ))}
       </div>
-      {hasTrend ? (
+      {(
         <figure className="body-composition-trend-figure">
+          {!hasTrend && <span className="app-chart-example">示例数据</span>}
           <figcaption>
             <span>
-              {firstDate && latestDate
+              {!hasTrend ? '暂无真实趋势 · 当前图表为示例效果' : firstDate && latestDate
                 ? `${formatTrendDate(firstDate)}—${formatTrendDate(latestDate)}，共 ${selectedTrend.points.length} 次实测`
                 : '暂无趋势数据'}
             </span>
             <strong>
-              {formatNumber(selectedTrend.latestValue ?? 0, 1)} <small>{selectedTrend.unit}</small>
+              {hasTrend ? formatNumber(selectedTrend.latestValue ?? 0, 1) : '—'} <small>{selectedTrend.unit}</small>
             </strong>
             <em>{signedChange(selectedTrend.deltaFromPrevious, selectedTrend.unit)}</em>
           </figcaption>
           <div className="body-composition-trend-chart" aria-hidden="true">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={selectedTrend.points} margin={{ top: 12, right: 8, bottom: 0, left: -12 }}>
+              <LineChart data={chartPoints} margin={{ top: 12, right: 8, bottom: 0, left: -12 }}>
                 <CartesianGrid vertical={false} stroke="#e5eeee" strokeDasharray="3 3" />
                 <XAxis
                   dataKey="measurementDate"
@@ -1220,12 +1237,6 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
             </ResponsiveContainer>
           </div>
         </figure>
-      ) : (
-        <p className="body-composition-trend-empty">
-          {selectedTrend.latestValue === null
-            ? `暂无${selectedTrend.label}实测数据`
-            : `${selectedTrend.label}仅有 1 次实测，暂不能形成趋势`}
-        </p>
       )}
       {hasMeasuredData && (
         <table className="visually-hidden">
@@ -1462,13 +1473,12 @@ export function BirthplaceMapOverview({
   ].sort((a, b) => b[1] - a[1]);
   const maxCount = Math.max(1, ...provinces.map((item) => item.count));
 
-  if (!profiles.length) return <ProfileEmpty detail="录入运动员籍贯省市后自动生成生源地图。" />;
-
   return (
     <div
       className="birthplace-map-visual"
       aria-label={individual ? '个人代表和输送单位省份地图' : '队伍代表和输送单位省份分布地图'}
     >
+      {!available.length && <p className="app-chart-example">示例图形 · 暂无真实生源数据</p>}
       <div className="birthplace-map-stage">
         <svg viewBox="0 0 560 410" role="img" aria-label="中国省级代表和输送单位分布图">
           <title>
@@ -1683,38 +1693,10 @@ function TechnicalLevelTooltip({
 }
 
 function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[] }) {
-  if (!profiles.length) {
-    return (
-      <section className="team-profile-chart-card team-competitive-card">
-        <header>
-          <div>
-            <h3>竞技水平</h3>
-            <p>成绩、技术等级与竞技档案完整度</p>
-          </div>
-        </header>
-        <div className="team-profile-chart-empty">暂无运动员数据</div>
-      </section>
-    );
-  }
-
   const gradedProfiles = profiles.filter(
     (profile) => normalizeTechnicalLevel(profile.technicalLevel || '') !== '未定级'
   );
   const gradedCount = gradedProfiles.length;
-
-  if (!profiles.length || !gradedCount) {
-    return (
-      <section className="team-profile-chart-card team-competitive-card">
-        <header>
-          <div>
-            <h3>竞技水平</h3>
-            <p>成绩、技术等级与竞技档案完整度</p>
-          </div>
-        </header>
-        <div className="team-profile-chart-empty">暂无运动员数据</div>
-      </section>
-    );
-  }
 
   const levelCounts = new Map<string, number>();
   for (const profile of gradedProfiles) {
@@ -1727,6 +1709,11 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
       return { level, count, color: LEVEL_COLORS[level], share: (count / gradedCount) * 100 };
     })
     .filter((point) => point.count > 0);
+  const displayLevelData: LevelPoint[] = gradedCount ? levelData : [
+    { level: '示例A', count: 4, color: '#b7d3d0', share: 0 },
+    { level: '示例B', count: 3, color: '#9fc9c3', share: 0 },
+    { level: '示例C', count: 2, color: '#d5e7e4', share: 0 },
+  ];
 
   return (
     <section className="team-profile-chart-card team-competitive-card">
@@ -1744,9 +1731,10 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
         </span>
       </div>
       <div className="team-profile-level-canvas">
+        {!gradedCount && <span className="app-chart-example">示例数据 · 暂无真实技术等级</span>}
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={levelData}
+            data={displayLevelData}
             layout="vertical"
             margin={{ top: 4, right: 28, bottom: 2, left: 4 }}
             barCategoryGap="18%"
@@ -1755,10 +1743,11 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
             <XAxis
               type="number"
               allowDecimals={false}
+              tickFormatter={(value) => gradedCount ? String(value) : ''}
               tick={{ fontSize: 8, fill: '#74888f' }}
               axisLine={{ stroke: '#cad9dc' }}
               tickLine={false}
-              unit="人"
+              unit={gradedCount ? '人' : ''}
             />
             <YAxis
               type="category"
@@ -1769,21 +1758,21 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
               width={75}
             />
             <Tooltip
-              content={<TechnicalLevelTooltip />}
+              content={gradedCount ? <TechnicalLevelTooltip /> : <div className="team-profile-tooltip">示例数据，仅用于展示图表效果</div>}
               cursor={{ fill: 'rgba(17,139,131,.055)' }}
             />
             <Bar dataKey="count" name="人数" radius={[0, 3, 3, 0]} minPointSize={2}>
-              {levelData.map((entry, index) => (
+              {displayLevelData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.color} stroke="#fff" strokeWidth={1} />
               ))}
-              <LabelList
+              {gradedCount > 0 && <LabelList
                 dataKey="count"
                 position="right"
                 fill="#4c6870"
                 fontSize={8}
                 fontWeight={800}
                 formatter={(value) => `${value ?? 0}人`}
-              />
+              />}
             </Bar>
           </BarChart>
         </ResponsiveContainer>

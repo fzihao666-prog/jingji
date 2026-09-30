@@ -3075,6 +3075,22 @@ p {
 
 .training-analytics-canvas {
   min-height: 205px;
+  height: 205px;
+  position: relative;
+}
+
+.training-analytics-canvas > .analysis-empty-note {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 2;
+  width: auto;
+  height: auto;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: #edf5f3;
+  color: #41615d;
+  font-size: 11px;
 }
 
 .training-analytics-chart .analysis-chart-module {
@@ -3104,6 +3120,7 @@ p {
 
 .training-analytics-rpe .training-analytics-canvas {
   min-height: 175px;
+  height: 175px;
 }
 
 .training-analytics-rpe-stats {
@@ -3289,6 +3306,9 @@ p {
 .physiology-cell.normal i {
   background: #7cb9a9;
 }
+.physiology-cell.sample i { background: #bcd8d4; }
+.physiology-heatmap-row:nth-child(3n) .physiology-cell.sample:nth-child(2n) i { background: #9fc9c3; }
+.physiology-heatmap-row:nth-child(2n) .physiology-cell.sample:nth-child(3n) i { background: #d5e7e4; }
 
 .physiology-cell.fluctuation i {
   background: #d8ad59;
@@ -7721,7 +7741,29 @@ p {
 .team-profile-chart-canvas {
   height: 290px;
   padding: 4px 7px 0;
+  position: relative;
 }
+
+.team-profile-chart-canvas > .app-chart-example,
+.team-profile-age-canvas > .app-chart-example,
+.team-profile-level-canvas > .app-chart-example {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 2;
+}
+
+.team-profile-level-canvas {
+  position: relative;
+}
+
+.composition-status-list > .app-chart-example {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+}
+.composition-band.sample { background: repeating-linear-gradient(90deg, #d5e7e4 0 14px, #b7d3d0 14px 28px); }
 
 .team-age-plot-heading,
 .team-competitive-plot-heading {
@@ -7969,6 +8011,7 @@ p {
 }
 
 .composition-status-list {
+  position: relative;
   padding: 13px 14px 10px;
   display: grid;
   gap: 10px;

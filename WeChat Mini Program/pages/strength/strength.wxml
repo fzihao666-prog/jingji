@@ -54,9 +54,10 @@
 
     <view class="section-head"><view class="section-head-title">体能训练量趋势</view><view class="section-head-note">青色：训练时长 · 金色：SRPE训练负荷</view></view>
     <view class="card">
+      <view wx:if="{{trendPlaceholder}}" class="chart-example">示例数据</view>
       <view wx:if="{{trend.length}}" class="chart-meta"><view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />SRPE负荷（AU）</view></view><text class="chart-hint">点击柱形查看</text></view>
-      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false"><view class="trend-chart strength-trend"><view wx:for="{{trend}}" wx:key="date" class="trend-day" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="height: {{item.durationHeight}}%;" /><view class="trend-bar accent" style="height: {{item.loadHeight}}%;" /></view><text class="trend-label">{{item.label}}</text></view></view></scroll-view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练量数据</view></view>
+      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false"><view class="trend-chart strength-trend"><button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="height: {{item.durationHeight}}%;" /><view class="trend-bar accent" style="height: {{item.loadHeight}}%;" /></view><text class="trend-label">{{item.label}}</text></button></view></scroll-view>
+      <view wx:if="{{trendPlaceholder}}" class="chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</view>
     </view>
 
     <view class="section-head"><view class="section-head-title">体能训练记录</view><view class="section-head-note">当前时间范围内最近记录</view></view>

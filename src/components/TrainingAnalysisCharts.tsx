@@ -26,6 +26,8 @@ import {
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
 import { STRENGTH_INTENSITY_ZONES, TRAINING_INTENSITY_META } from '../../shared/strength-training';
+import { placeholderTrend } from './chart-placeholder';
+import './EChart.css';
 
 const colors = [
   '#0b7f7a',
@@ -113,18 +115,22 @@ export function TrainingVolumeChart({
       distanceKm: row.distanceCount ? row.distanceKm : null,
     }));
   }, [data.days, effectiveGranularity]);
+  const hasData = data.totalDurationMin !== null || data.totalDistanceKm !== null;
+  const displayChartData = hasData ? chartData : placeholderTrend.map((sample, index) => ({
+    date: `示例${index + 1}`, label: `${index + 1}日`, durationMin: sample * 2,
+    distanceKm: sample / 10, durationCount: 0, distanceCount: 0,
+  }));
   const xAxisTicks = useMemo(() => {
-    const labels = chartData.map((row) => row.label);
+    const labels = displayChartData.map((row) => row.label);
     const maxTicks = chartWidth > 0 ? Math.max(2, Math.floor(chartWidth / 50)) : 7;
     if (labels.length <= maxTicks) return labels;
     const step = Math.ceil((labels.length - 1) / (maxTicks - 1));
     return labels.filter(
       (_, index) => index === 0 || index === labels.length - 1 || index % step === 0
     );
-  }, [chartData, chartWidth]);
+  }, [displayChartData, chartWidth]);
   const value = (number: number | null, digits = 1) =>
     number === null ? '—' : formatNumber(number, digits);
-  const hasData = data.totalDurationMin !== null || data.totalDistanceKm !== null;
   return (
     <div className="analysis-chart-module training-volume-module">
       <div className="analysis-chart-toolbar">
@@ -184,12 +190,13 @@ export function TrainingVolumeChart({
         </article>
       </div>
       <div className="analysis-chart-medium">
+        {!hasData && <span className="app-chart-example">示例数据</span>}
         <ResponsiveContainer
           width="100%"
           height="100%"
           onResize={(width) => setChartWidth((current) => (current === width ? current : width))}
         >
-          <ComposedChart data={chartData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
+          <ComposedChart data={displayChartData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
             <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
             <XAxis
               dataKey="label"
@@ -213,6 +220,7 @@ export function TrainingVolumeChart({
               tickLine={false}
             />
             <Tooltip
+              labelFormatter={(label) => `${!hasData ? '示例数据，仅用于展示图表效果 · ' : ''}${label}`}
               formatter={(number, name) => [
                 `${formatNumber(Number(number), name === '公里数' ? 1 : 0)} ${name === '公里数' ? 'km' : 'min'}`,
                 name,
@@ -251,7 +259,7 @@ export function TrainingVolumeChart({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      {!hasData && <p className="analysis-empty-note">暂无训练量数据</p>}
+      {!hasData && <p className="analysis-empty-note">暂无当前周期真实数据 · 当前图表为示例效果</p>}
     </div>
   );
 }
@@ -282,15 +290,31 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
     metricIndex: number;
     dayIndex: number;
   } | null>(null);
-  const days = data.metrics[0]?.days || [];
-  const cell = active ? data.metrics[active.metricIndex]?.days[active.dayIndex] : null;
-  const metric = active ? data.metrics[active.metricIndex] : null;
+  const isPlaceholder = !data.metrics.some((item) => item.days.length > 0);
+  const displayMetrics: PhysiologyHeatmap['metrics'] = isPlaceholder
+    ? ['指标一', '指标二', '指标三', '指标四'].map((label, metricIndex) => ({
+        code: `sample-${metricIndex}`, label, unit: '', direction: 'higher' as const,
+        thresholds: [0, 0, 0] as [number, number, number], baseline: 0,
+        days: placeholderTrend.map((_, dayIndex) => ({
+          date: `2026-01-${String(dayIndex + 1).padStart(2, '0')}`,
+          status: 'MISSING' as const, median: null, sampleCount: 0, normal: 0,
+          fluctuation: 0, attention: 0, abnormal: 0, abnormalRateChange: null,
+          isEstimated: false,
+        })),
+        trend: [], summary: { latest: null, trendDirection: 'stable' as const,
+          minValue: null, maxValue: null, avgValue: null, dataDays: 0 },
+      }))
+    : data.metrics;
+  const days = displayMetrics[0]?.days || [];
+  const cell = active ? displayMetrics[active.metricIndex]?.days[active.dayIndex] : null;
+  const metric = active ? displayMetrics[active.metricIndex] : null;
   return (
     <div className="physiology-heatmap">
       <div className="physiology-heatmap-toolbar">
         <span>团队状态趋势</span>
+        {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       </div>
-      {data.metrics.length ? (
+      {displayMetrics.length ? (
         <div
           className="physiology-heatmap-table"
           style={{ '--physiology-days': days.length } as CSSProperties}
@@ -301,15 +325,15 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
               <span key={day.date}>{day.date.slice(5).replace('-', '/')}</span>
             ))}
           </div>
-          {data.metrics.map((item, metricIndex) => (
+          {displayMetrics.map((item, metricIndex) => (
             <div className="physiology-heatmap-row" key={item.code}>
               <span>{item.label}</span>
               {item.days.map((itemDay, dayIndex) => (
                 <button
                   key={itemDay.date}
                   type="button"
-                  className={`physiology-cell ${itemDay.status.toLowerCase()}`}
-                  aria-label={`${item.label} ${itemDay.date} ${physiologyStatusMeta[itemDay.status].label}`}
+                  className={`physiology-cell ${isPlaceholder ? 'sample' : itemDay.status.toLowerCase()}`}
+                  aria-label={isPlaceholder ? `${item.label} ${itemDay.date} 示例数据，仅用于展示图表效果` : `${item.label} ${itemDay.date} ${physiologyStatusMeta[itemDay.status].label}`}
                   onMouseEnter={() => setActive({ metricIndex, dayIndex })}
                   onFocus={() => setActive({ metricIndex, dayIndex })}
                   onClick={() => setActive({ metricIndex, dayIndex })}
@@ -335,6 +359,7 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
       </div>
       {cell && metric && (
         <div className="physiology-heatmap-detail">
+          {isPlaceholder ? <span>示例数据，仅用于展示图表效果；不表示真实监测结果。</span> : <>
           <strong>
             {metric.label} · {cell.date}
           </strong>
@@ -351,8 +376,10 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
               ? ''
               : ` · 较前日异常率 ${cell.abnormalRateChange >= 0 ? '↑' : '↓'} ${formatNumber(Math.abs(cell.abnormalRateChange), 1)}%`}
           </span>
+          </>}
         </div>
       )}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实生理生化数据 · 当前分布为示例效果</p>}
     </div>
   );
 }
@@ -391,6 +418,26 @@ export function TrainingVolumeDashboard({
       physicalLoad: row?.physicalLoad ?? null,
     });
   }
+  const sampleDates = trainingLoadDays.length > 1
+    ? trainingLoadDays.filter((_, index) => index % Math.max(1, Math.ceil(trainingLoadDays.length / 7)) === 0).slice(-7)
+    : [{ date: from, specialLoad: null, physicalLoad: null }];
+  const physicalChartDays = physicalDays.length ? physicalDays.map((row) => ({
+    date: row.date, physicalDurationMin: row.physicalDurationMin, physicalLoad: row.physicalLoad,
+  })) : sampleDates.map((row, index) => ({
+    date: row.date, physicalDurationMin: placeholderTrend[index % placeholderTrend.length] * 2,
+    physicalLoad: placeholderTrend[index % placeholderTrend.length] * 5,
+  }));
+  const specialChartDays = specialDays.length ? specialDays.map((row) => ({
+    date: row.date, specialDurationMin: row.specialDurationMin, specialDistanceKm: row.specialDistanceKm,
+  })) : sampleDates.map((row, index) => ({
+    date: row.date, specialDurationMin: placeholderTrend[index % placeholderTrend.length] * 2,
+    specialDistanceKm: placeholderTrend[index % placeholderTrend.length] / 10,
+  }));
+  const hasTrainingLoad = trainingLoadDays.some((row) => row.specialLoad !== null || row.physicalLoad !== null);
+  const trainingLoadChartDays = hasTrainingLoad ? trainingLoadDays : sampleDates.map((row, index) => ({
+    date: row.date, specialLoad: placeholderTrend[index % placeholderTrend.length] * 5,
+    physicalLoad: placeholderTrend[(index + 2) % placeholderTrend.length] * 4,
+  }));
   const rpeByDate = new Map(days.map((row) => [row.date, row]));
   const rpeDays: Array<{
     date: string;
@@ -410,6 +457,11 @@ export function TrainingVolumeDashboard({
         row?.lowerRpe != null && row?.upperRpe != null ? [row.lowerRpe, row.upperRpe] : null,
     });
   }
+  const hasRpe = rpeDays.some((row) => row.averageRpe !== null);
+  const rpeChartDays = hasRpe ? rpeDays : sampleDates.map((row, index) => ({
+    date: row.date, averageRpe: 4 + placeholderTrend[index % placeholderTrend.length] / 25,
+    stdRpe: null, rpeCount: 0, rpeRange: null,
+  }));
   return (
     <div className="training-analytics-dashboard">
       <section className="training-analytics-summary" aria-label="训练量统计核心摘要">
@@ -490,10 +542,11 @@ export function TrainingVolumeDashboard({
             <small>时长 · 负荷</small>
           </header>
           <div className="training-analytics-canvas">
-            {physicalDays.length ? (
+            {!physicalDays.length && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
+            {(
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
-                  data={physicalDays}
+                  data={physicalChartDays}
                   margin={{ top: 12, right: 10, left: -12, bottom: 0 }}
                 >
                   <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
@@ -518,7 +571,7 @@ export function TrainingVolumeDashboard({
                     tickLine={false}
                   />
                   <Tooltip
-                    labelFormatter={(date) => String(date)}
+                    labelFormatter={(date) => `${!physicalDays.length ? '示例数据，仅用于展示图表效果 · ' : ''}${String(date)}`}
                     formatter={(number, name) => [
                       `${formatNumber(Number(number), 1)} ${name === '训练负荷' ? 'AU' : 'min'}`,
                       name,
@@ -549,8 +602,6 @@ export function TrainingVolumeDashboard({
                   />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : (
-              <TrainingAnalyticsEmpty text="暂无体能训练量数据" />
             )}
           </div>
         </article>
@@ -563,10 +614,11 @@ export function TrainingVolumeDashboard({
             <small>时长 · 距离</small>
           </header>
           <div className="training-analytics-canvas">
-            {specialDays.length ? (
+            {!specialDays.length && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
+            {(
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
-                  data={specialDays}
+                  data={specialChartDays}
                   margin={{ top: 12, right: 10, left: -12, bottom: 0 }}
                 >
                   <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
@@ -591,7 +643,7 @@ export function TrainingVolumeDashboard({
                     tickLine={false}
                   />
                   <Tooltip
-                    labelFormatter={(date) => String(date)}
+                    labelFormatter={(date) => `${!specialDays.length ? '示例数据，仅用于展示图表效果 · ' : ''}${String(date)}`}
                     formatter={(number, name) => [
                       `${formatNumber(Number(number), 1)} ${name === '专项距离' ? 'km' : 'min'}`,
                       name,
@@ -622,8 +674,6 @@ export function TrainingVolumeDashboard({
                   />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : (
-              <TrainingAnalyticsEmpty text="暂无专项训练量数据" />
             )}
           </div>
         </article>
@@ -636,12 +686,11 @@ export function TrainingVolumeDashboard({
             <small>sRPE · AU</small>
           </header>
           <div className="training-analytics-canvas">
-            {trainingLoadDays.some(
-              (row) => row.specialLoad !== null || row.physicalLoad !== null
-            ) ? (
+            {!hasTrainingLoad && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
+            {(
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
-                  data={trainingLoadDays}
+                  data={trainingLoadChartDays}
                   margin={{ top: 12, right: 12, left: 6, bottom: 0 }}
                 >
                   <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
@@ -678,6 +727,7 @@ export function TrainingVolumeDashboard({
                             color: '#3d5c65',
                           }}
                         >
+                          {!hasTrainingLoad && <div>示例数据，仅用于展示图表效果</div>}
                           <div>日期：{String(label).slice(5).replace('-', '/')}</div>
                           <div>专项训练 sRPE：{value(row.specialLoad)} AU</div>
                           <div>体能训练 sRPE：{value(row.physicalLoad)} AU</div>
@@ -718,8 +768,6 @@ export function TrainingVolumeDashboard({
                   />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : (
-              <TrainingAnalyticsEmpty text="暂无专项或体能训练负荷数据" />
             )}
           </div>
         </article>
@@ -741,9 +789,10 @@ export function TrainingVolumeDashboard({
             </div>
           </header>
           <div className="training-analytics-canvas">
-            {rpeDays.some((row) => row.averageRpe !== null) ? (
+            {!hasRpe && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
+            {(
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={rpeDays} margin={{ top: 12, right: 10, left: -12, bottom: 0 }}>
+                <ComposedChart data={rpeChartDays} margin={{ top: 12, right: 10, left: -12, bottom: 0 }}>
                   <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -773,6 +822,7 @@ export function TrainingVolumeDashboard({
                             color: '#3d5c65',
                           }}
                         >
+                          {!hasRpe && <div>示例数据，仅用于展示图表效果</div>}
                           <div>日期：{String(label).slice(5).replace('-', '/')}</div>
                           <div>全队平均 RPE：{value(row.averageRpe)}</div>
                           <div>标准差：{value(row.stdRpe)}</div>
@@ -814,8 +864,6 @@ export function TrainingVolumeDashboard({
                   />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : (
-              <TrainingAnalyticsEmpty text="暂无 RPE 数据" />
             )}
           </div>
         </article>
@@ -840,13 +888,14 @@ export function TrainingContentChart({ records }: { records: TrainingRecord[] })
   const total = data.reduce((sum, row) => sum + row.value, 0);
   const chartData = total
     ? data.filter((row) => row.value > 0)
-    : [{ name: '暂无训练课次', value: 1, fill: '#dce7e9' }];
+    : data.slice(0, 4).map((row, index) => ({ ...row, value: [42, 27, 19, 12][index] }));
   return (
     <div className="analysis-chart-module">
       <div className="analysis-chart-toolbar">
         <span className="analysis-caption">按当前页面时间范围统计；每条课次仅归入一个类别</span>
       </div>
       <div className="content-chart-layout training-ratio-layout">
+        {!total && <span className="app-chart-example">示例数据</span>}
         <div className="content-pie training-ratio-pie">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -864,7 +913,7 @@ export function TrainingContentChart({ records }: { records: TrainingRecord[] })
                 nameKey="name"
                 innerRadius={57}
                 outerRadius={78}
-                paddingAngle={total ? 2 : 0}
+                paddingAngle={2}
                 cornerRadius={5}
               >
                 {chartData.map((row) => (
@@ -873,7 +922,7 @@ export function TrainingContentChart({ records }: { records: TrainingRecord[] })
               </Pie>
               <Tooltip
                 formatter={(value, name) => [
-                  `${formatNumber(Number(value))} 课 · ${percentage(Number(value), total)}%`,
+                  total ? `${formatNumber(Number(value))} 课 · ${percentage(Number(value), total)}%` : '示例数据，仅用于展示图表效果',
                   name,
                 ]}
                 contentStyle={{
@@ -900,7 +949,7 @@ export function TrainingContentChart({ records }: { records: TrainingRecord[] })
           ))}
         </div>
       </div>
-      {!total && <p className="analysis-empty-note">当前筛选条件下无训练记录</p>}
+      {!total && <p className="analysis-empty-note">暂无真实训练课次 · 当前图表为示例效果</p>}
     </div>
   );
 }
@@ -921,14 +970,7 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
   const totalDuration = normalizedData.reduce((sum, row) => sum + row.durationMin, 0);
   const chartData = totalDuration
     ? normalizedData.filter((row) => row.durationMin > 0)
-    : [
-        {
-          zone: '暂无训练强度数据',
-          durationMin: 1,
-          sessionCount: 0,
-          percentage: 0,
-        },
-      ];
+    : normalizedData.slice(0, 4).map((row, index) => ({ ...row, durationMin: [42, 27, 19, 12][index], percentage: [42, 27, 19, 12][index] }));
   return (
     <div className="analysis-chart-module">
       <div className="analysis-chart-toolbar">
@@ -937,6 +979,7 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
         </span>
       </div>
       <div className="content-chart-layout intensity-ratio-layout">
+        {!totalDuration && <span className="app-chart-example">示例数据</span>}
         <div className="content-pie intensity-ratio-pie">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -954,7 +997,7 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
                 nameKey="zone"
                 innerRadius={57}
                 outerRadius={78}
-                paddingAngle={totalDuration ? 2 : 0}
+                paddingAngle={2}
                 cornerRadius={5}
               >
                 {chartData.map((row, index) => (
@@ -967,6 +1010,7 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
                     ? (payload?.[0]?.payload as IntensityDistribution[number] | undefined)
                     : undefined;
                   if (!row || !TRAINING_INTENSITY_META[row.zone]) return null;
+                  if (!totalDuration) return <div className="intensity-tooltip">示例数据，仅用于展示图表效果</div>;
                   const meta = TRAINING_INTENSITY_META[row.zone];
                   return (
                     <div className="intensity-tooltip">
@@ -1052,14 +1096,15 @@ export function TrainingLoadEnergyChart({ data }: { data: TrainingLoadRatio }) {
       </div>
       <div
         className="training-load-energy-grid"
-        aria-label={`专项负荷 ${formatNumber(data.specialLoad)} AU，体能负荷 ${formatNumber(data.physicalLoad)} AU，恢复负荷 ${formatNumber(data.recoveryLoad)} AU`}
+        aria-label={hasLoad ? `专项负荷 ${formatNumber(data.specialLoad)} AU，体能负荷 ${formatNumber(data.physicalLoad)} AU，恢复负荷 ${formatNumber(data.recoveryLoad)} AU` : '示例数据，仅用于展示图表效果'}
       >
-        {segments.map((item) => (
+        {!hasLoad && <span className="app-chart-example">示例数据</span>}
+        {segments.map((item, index) => (
           <div
             key={item.key}
             tabIndex={0}
             className={`training-load-energy-column ${item.key}`}
-            aria-label={`${item.label}训练负荷 ${formatNumber(item.load, 1)} AU，占比 ${formatNumber(item.percentage, 1)}%`}
+            aria-label={hasLoad ? `${item.label}训练负荷 ${formatNumber(item.load, 1)} AU，占比 ${formatNumber(item.percentage, 1)}%` : `${item.label}示例图形，无真实负荷`}
             onMouseEnter={() => setActive(item.key)}
             onMouseLeave={() => setActive(null)}
             onFocus={() => setActive(item.key)}
@@ -1067,13 +1112,13 @@ export function TrainingLoadEnergyChart({ data }: { data: TrainingLoadRatio }) {
           >
             <span className="training-load-energy-label">{item.label}</span>
             <strong className="training-load-energy-percentage">
-              {formatNumber(item.percentage, 1)}
+              {hasLoad ? formatNumber(item.percentage, 1) : '—'}
               <small>%</small>
             </strong>
             <span className="training-load-energy-tank" aria-hidden="true">
               <i
                 style={{
-                  height: `${Math.max(0, Math.min(100, item.percentage))}%`,
+                  height: `${hasLoad ? Math.max(0, Math.min(100, item.percentage)) : [50, 30, 20][index]}%`,
                 }}
               />
             </span>
@@ -1086,9 +1131,11 @@ export function TrainingLoadEnergyChart({ data }: { data: TrainingLoadRatio }) {
       </div>
       {selected && (
         <div className={`training-load-energy-tooltip ${selected.key}`}>
+          {!hasLoad ? <span>示例数据，仅用于展示图表效果</span> : <>
           <strong>{selected.label}</strong>
           <span>训练负荷：{formatNumber(selected.load, 1)} AU</span>
           <span>占比：{formatNumber(selected.percentage, 1)}%</span>
+          </>}
         </div>
       )}
       {!hasLoad && <p className="analysis-empty-note">暂无训练负荷数据</p>}
@@ -1116,6 +1163,10 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
     };
   });
   const available = data.filter((row) => row.score !== null);
+  const isPlaceholder = available.length === 0;
+  const chartData = isPlaceholder
+    ? data.map((row, index) => ({ ...row, score: [1.6, 2.1, 1.8, 2.4, 2.0, 1.7, 2.2][index] }))
+    : data;
   const complete = available.length === keys.length;
   const total = complete ? available.reduce((sum, row) => sum + Number(row.score), 0) : null;
   const achieved = available.filter((row) => Number(row.score) >= 2).length;
@@ -1124,6 +1175,7 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
   return (
     <div className="fms-analysis-layout">
       <div className="analysis-chart-medium fms-team-chart">
+        {isPlaceholder && <span className="app-chart-example">示例数据</span>}
         <div className="fms-team-legend">
           <span>
             <i />
@@ -1137,7 +1189,7 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
         <div className="fms-team-plot">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={data}
+              data={chartData}
               layout="vertical"
               barCategoryGap="14%"
               margin={{ top: 2, right: 26, left: 22, bottom: 0 }}
@@ -1161,17 +1213,17 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
               />
               <Tooltip
                 formatter={(value, name, entry) => [
-                  `${formatNumber(Number(value), 1)} 分 · n=${entry.payload.sampleCount}`,
+                  isPlaceholder ? '示例数据，仅用于展示图表效果' : `${formatNumber(Number(value), 1)} 分 · n=${entry.payload.sampleCount}`,
                   name,
                 ]}
               />
-              <ReferenceLine x={2} stroke="#d89222" strokeWidth={1.6} strokeDasharray="4 3" />
+              {!isPlaceholder && <ReferenceLine x={2} stroke="#d89222" strokeWidth={1.6} strokeDasharray="4 3" />}
               <Bar dataKey="score" name="本次队均" fill="#178e87" radius={[0, 5, 5, 0]}>
-                {data.map((row) => (
+                {chartData.map((row) => (
                   <Cell
                     key={row.name}
                     fill={
-                      row.score === null
+                      isPlaceholder ? '#b7d3d0' : row.score === null
                         ? '#dce6e8'
                         : row.score < 2
                           ? '#df634d'
@@ -1194,15 +1246,15 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
         <span>七项综合队均</span>
         <div className="fms-summary-grid">
           <p>
-            <b>{achieved}</b>
+            <b>{isPlaceholder ? '—' : achieved}</b>
             <small>达标项目</small>
           </p>
           <p>
-            <b>{correction.length}</b>
+            <b>{isPlaceholder ? '—' : correction.length}</b>
             <small>待纠正项目</small>
           </p>
           <p>
-            <b>{available.length}/7</b>
+            <b>{isPlaceholder ? '—' : `${available.length}/7`}</b>
             <small>有效项目</small>
           </p>
         </div>
@@ -1251,6 +1303,10 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
     };
   });
   const available = data.filter((row) => typeof row.score === 'number');
+  const isPlaceholder = available.length === 0;
+  const chartData = isPlaceholder
+    ? data.map((row, index) => ({ ...row, score: [1.8, 2.1, 1.9, 2.3, 2.0, 1.7, 2.2][index] }))
+    : data;
   const total = available.length ? available.reduce((sum, row) => sum + (row.score || 0), 0) : null;
   const weakest = [...available]
     .sort((left, right) => (left.gap || 0) - (right.gap || 0))
@@ -1268,9 +1324,10 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   return (
     <div className="fms-personal-layout">
       <div className="fms-personal-chart">
+        {isPlaceholder && <span className="app-chart-example">示例数据</span>}
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart
-            data={data}
+            data={chartData}
             outerRadius="72%"
             margin={{ top: 28, right: 42, bottom: 28, left: 42 }}
           >
@@ -1295,7 +1352,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
               }}
             />
 
-            <Tooltip formatter={(value, name) => [`${formatNumber(Number(value), 1)} 分`, name]} />
+            <Tooltip formatter={(value, name) => [isPlaceholder ? '示例数据，仅用于展示图表效果' : `${formatNumber(Number(value), 1)} 分`, name]} />
 
             <Radar
               dataKey="score"

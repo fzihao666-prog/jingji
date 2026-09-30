@@ -256,37 +256,40 @@
 
     <view class="section-head"><view class="section-head-title">训练量统计</view><view class="section-head-note">最近训练趋势</view></view>
     <view class="card">
+      <view wx:if="{{trendPlaceholder}}" class="chart-example">示例数据</view>
       <view wx:if="{{trend.length}}" class="chart-meta">
         <view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />SRPE负荷（AU）</view></view>
         <text class="chart-hint">点击柱形查看</text>
       </view>
       <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false">
         <view class="trend-chart">
-          <view wx:for="{{trend}}" wx:key="date" class="trend-day" data-index="{{index}}" bindtap="showTrendDetail">
+          <button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail">
             <view class="trend-bars">
               <view class="trend-bar" style="height: {{item.durationHeight}}%;" />
               <view class="trend-bar accent" style="height: {{item.loadHeight}}%;" />
             </view>
             <text class="trend-label">{{item.label}}</text>
-          </view>
+          </button>
         </view>
       </scroll-view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无训练量数据</view></view>
+      <view wx:if="{{trendPlaceholder}}" class="chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</view>
     </view>
 
     <view class="section-head"><view class="section-head-title">训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
     <view class="card">
+      <view wx:if="{{intensityPlaceholder}}" class="chart-example">示例数据</view>
       <view wx:if="{{intensity.length}}" class="ratio-list">
         <view wx:for="{{intensity}}" wx:key="name">
           <view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view>
           <view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view>
         </view>
       </view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无有效强度数据</view></view>
+      <view wx:if="{{intensityPlaceholder}}" class="chart-example-note">暂无真实强度数据 · 当前图表为示例效果</view>
     </view>
 
     <view class="section-head"><view class="section-head-title">生理生化监控</view><view class="section-head-note">团队指标风险状态与趋势</view></view>
     <view wx:if="{{physiologyHeatmap}}">
+      <view wx:if="{{physiologyPlaceholder}}" class="chart-example">示例数据 · 暂无真实生理生化数据</view>
       <!-- 指标摘要卡片 + 迷你趋势图 -->
       <view class="physio-cards">
         <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="physio-card">
@@ -318,12 +321,13 @@
       <view class="card physio-heat-card">
         <view class="heat-grid">
           <view class="heat-header"><view class="heat-cell heat-metric">指标</view><view wx:for="{{physiologyHeatmap.metrics[0].heatDates || []}}" wx:key="*this" class="heat-cell heat-date">{{item}}</view></view>
-          <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="heat-row">
-            <view class="heat-cell heat-metric">{{item.label}}</view>
-            <view wx:for="{{item.days}}" wx:key="date" class="heat-cell {{item.statusClass}} {{item.isEstimated ? 'estimated' : ''}}" data-median="{{item.median}}" data-sample="{{item.sampleCount}}" data-change="{{item.abnormalRateChange}}" bindtap="showPhysioDetail" data-code="{{item.code}}" data-date="{{item.date}}"></view>
+          <view wx:for="{{physiologyHeatmap.metrics}}" wx:for-item="metric" wx:key="code" class="heat-row">
+            <view class="heat-cell heat-metric">{{metric.label}}</view>
+            <button wx:for="{{metric.days}}" wx:for-item="day" wx:key="date" class="heat-cell {{day.statusClass}} {{day.isEstimated ? 'estimated' : ''}}" aria-label="{{metric.label + ' ' + day.dateLabel + (physiologyPlaceholder ? ' 示例数据，仅用于展示图表效果' : ' 状态 ' + day.status)}}" data-median="{{day.median}}" data-sample="{{day.sampleCount}}" data-change="{{day.abnormalRateChange}}" bindtap="showPhysioDetail" data-code="{{metric.code}}" data-date="{{day.date}}"></button>
           </view>
         </view>
-        <view wx:if="{{heatHasEstimated}}" class="heat-legend">V1 模拟状态（等待实测导入）· 点击色块查看详情</view>
+        <view wx:if="{{physiologyPlaceholder}}" class="heat-legend">示例数据，仅用于展示图表效果；不表示真实监测结果或异常判断。</view>
+        <view wx:elif="{{heatHasEstimated}}" class="heat-legend">V1 模拟状态（等待实测导入）· 点击色块查看详情</view>
         <view wx:else class="heat-legend">颜色：绿=正常 黄=波动 橙=关注 红=异常 灰=未监测 · 点击色块查看详情</view>
       </view>
     </view>

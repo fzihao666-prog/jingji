@@ -4,6 +4,7 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { durationLoadLines, showTrendModal } = require('../../utils/page-actions');
 const { shortDate } = require('../../utils/date');
 const { number, strengthMetricRows } = require('../../utils/format');
+const { displaySeries, trendPlaceholder } = require('../../utils/chart-placeholder');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
@@ -57,9 +58,11 @@ function buildStrengthView(athlete, tests, sessions, plans, period) {
     label: shortDate(item.date),
     duration: item.duration,
     load: item.load,
+    ariaLabel: `${item.date}，训练时长${item.duration}分钟，训练负荷${item.load}AU`,
     durationHeight: Math.max(2, Math.round(item.duration / maxDuration * 100)),
     loadHeight: Math.max(2, Math.round(item.load / maxLoad * 100))
   }));
+  const trendDisplay = displaySeries(trend, trendPlaceholder('strength'), trend.some((item) => item.duration > 0 || item.load > 0));
 
   const recentSessions = [...periodSessions].sort((a, b) => b.trainingDate.localeCompare(a.trainingDate) || b.sessionOrder - a.sessionOrder).slice(0, 12).map((item) => ({
     id: item.id,
@@ -84,7 +87,8 @@ function buildStrengthView(athlete, tests, sessions, plans, period) {
       updatedBy: latestPlan.updatedBy
     } : null,
     planExercises: planRows(latestPlan),
-    trend,
+    trend: trendDisplay.data,
+    trendPlaceholder: trendDisplay.isPlaceholder,
     recentSessions
   };
 }
