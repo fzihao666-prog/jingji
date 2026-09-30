@@ -1,69 +1,133 @@
-<view class="page">
+<view class="page strength-page">
   <view class="page-head">
     <view class="page-title">体能训练</view>
     <view class="page-description">{{athleteName || '选择运动员'}} · {{from}} 至 {{to}}</view>
   </view>
-
   <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" allow-all="{{false}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
+  <view class="strength-nav">
+    <button wx:for="{{sections}}" wx:key="key" class="strength-nav-button {{activeSection === item.key ? 'is-active' : ''}}" data-key="{{item.key}}" bindtap="switchSection" aria-label="{{item.label}}{{activeSection === item.key ? '，当前栏目' : ''}}">{{item.label}}</button>
+  </view>
   <view wx:if="{{error}}" class="error-box">{{error}}</view>
-  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载体能训练数据</view></view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-title">正在加载体能训练数据</view></view>
 
-  <block wx:if="{{!loading && selectedAthleteId}}">
-    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 体能能力参考模型</view></view>
-    <view class="card">
-      <view wx:if="{{metrics.length}}" class="comparison-list">
-        <view wx:for="{{championMetrics}}" wx:key="key" class="comparison-card">
-          <view class="comparison-name">{{item.label}}</view>
-          <view class="comparison-values">
-            <view><text>当前值</text><text>{{item.value}} {{item.unit}}</text></view>
-            <view><text>教练目标</text><text>{{item.target}}</text></view>
-            <view><text>达成率</text><text class="comparison-rate">{{item.rate}}</text></view>
+  <block wx:if="{{!loading && !error && selectedAthleteId}}">
+    <block wx:if="{{activeSection === 'overview'}}">
+      <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 模型数据待配置</view></view>
+      <view wx:if="{{championMetrics.length}}" class="card">
+        <view wx:for="{{championMetrics}}" wx:key="key" class="strength-value-row"><text>{{item.label}}</text><text>当前 {{item.value}} {{item.unit}}</text></view>
+      </view>
+      <view class="section-head"><view class="section-head-title">本周期训练概览</view><view class="section-head-note">时长与负荷仅汇总已填写数值；缺失显示 —</view></view>
+      <view class="compact-grid"><view wx:for="{{summaryCards}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view></view></view>
+
+      <view class="section-head">
+        <view class="section-head-title">体能能力画像</view>
+        <view class="section-head-row"><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view><button wx:if="{{canEnterTest}}" class="mini-button" bindtap="goTestEntry">录入测试</button></view>
+      </view>
+      <view class="card">
+        <view wx:if="{{latestTestOutsidePeriod}}" class="notice">本周期无测试，以下为最近一次历史测试。</view>
+        <view wx:if="{{metrics.length}}" class="ratio-list">
+          <view wx:for="{{metrics}}" wx:key="key">
+            <view class="ratio-row-head"><text>{{item.label}} · {{item.value}} {{item.unit}}</text><text>{{item.rate}}</text></view>
+            <view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view>
+            <view class="section-head-note">教练目标 {{item.target}} {{item.unit}}</view>
           </view>
         </view>
-        <view class="notice">目标值以教练确认的数据为准。</view>
+        <view wx:else class="state"><view class="state-title">暂无体能测试数据</view></view>
       </view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">模型数据待配置</view><view class="state-note">请先录入体能测试和教练目标</view></view>
-    </view>
 
-    <view class="section-head"><view class="section-head-title">体能核心指标概览</view><view class="section-head-note">当前运动员本时间范围内真实训练结果</view></view>
-    <view class="compact-grid"><view wx:for="{{summaryCards}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view><text class="compact-stat-note">{{item.note}}</text></view></view>
-
-    <view class="section-head">
-      <view class="section-head-title">体能能力画像</view>
-      <view class="section-head-row">
-        <view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view>
-        <button wx:if="{{canEnterTest}}" class="mini-button" bindtap="goTestEntry" aria-label="录入体能测试">录入测试</button>
+      <view class="section-head"><view class="section-head-title">关键体能指标变化</view><view class="section-head-note">按日期顺序展示，可切换指标与历史范围</view></view>
+      <view class="card">
+        <block wx:if="{{metricLabels.length}}">
+          <picker mode="selector" range="{{metricLabels}}" value="{{metricIndex}}" bindchange="onMetricChange"><view class="strength-select" aria-label="选择体能指标">指标：{{metricLabels[metricIndex]}} <text>切换 ▾</text></view></picker>
+          <picker mode="selector" range="{{metricRanges}}" value="{{metricRange}}" bindchange="onMetricRange"><view class="strength-select strength-range-select" aria-label="选择测试历史范围">{{metricRanges[metricRange]}} <text>▾</text></view></picker>
+          <view class="strength-value-row"><text>历史最高实测值</text><text>{{metricBest}} {{metricUnit}}</text></view>
+          <view class="strength-value-row"><text>{{metricRange === 1 ? '历史' : '本周期'}}末次 − 首次</text><text>{{metricChange}} {{metricUnit}}</text></view>
+          <view class="section-head-note">最高值仅作历史参照，不代表所有指标越高越好。少于两次测试不计算变化。</view>
+          <scroll-view wx:if="{{metricHistory.length}}" scroll-y class="strength-history">
+            <view wx:for="{{metricHistory}}" wx:key="id" class="strength-history-row">
+              <view class="ratio-row-head"><text>{{item.date}}</text><text>{{item.value}} {{metricUnit}}</text></view>
+              <view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view>
+            </view>
+          </scroll-view>
+          <view wx:else class="state"><view class="state-title">所选范围暂无该指标测试</view><view class="state-note">选择“全部历史”查看更早成绩</view></view>
+        </block>
+        <view wx:else class="state"><view class="state-title">暂无体能测试数据</view></view>
       </view>
-    </view>
-    <view class="card">
-      <view wx:if="{{metrics.length}}" class="ratio-list">
-        <view wx:for="{{metrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view>
-      </view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能测试数据</view></view>
-    </view>
 
-    <view class="section-head"><view class="section-head-title">体能训练计划</view><view class="section-head-note">查看教练已确认的训练内容</view></view>
-    <view class="card">
-      <block wx:if="{{latestPlan}}">
-        <view class="plan-head"><view><view class="card-head-title">{{latestPlan.title}}</view><text>{{latestPlan.period}}</text></view><text>{{latestPlan.updatedBy}}</text></view>
-        <view class="notice plan-summary">{{latestPlan.summary}}</view>
-        <view class="list plan-list"><view wx:for="{{planExercises}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.category}} · {{item.arrangement}}</text></view><view class="list-row-value">{{item.max}}</view></view></view></view>
+      <view class="section-head"><view class="section-head-title">训练内容分布</view><view class="section-head-note">沿用网页端八类训练内容口径</view></view>
+      <view class="card">
+        <view wx:if="{{structure.length}}" class="ratio-list"><view wx:for="{{structure}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}}</text><text>{{item.count}} 项 · {{item.rate}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view></view></view>
+        <view wx:else class="state"><view class="state-title">暂无可归类的训练明细</view></view>
+        <view class="section-head-note">{{structureNote}}</view>
+      </view>
+
+      <view class="section-head"><view class="section-head-title">体能训练量趋势</view><view class="section-head-note">青色：时长（分钟） · 金色：SRPE负荷（AU）</view></view>
+      <view class="card">
+        <block wx:if="{{trend.length}}">
+          <view class="section-head-note">显示当前周期全部有记录日期，点击柱形查看数值；两组柱形分别缩放。</view>
+          <scroll-view class="trend-scroll" scroll-x enhanced show-scrollbar="{{true}}"><view class="trend-chart strength-trend"><button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="height: {{item.durationHeight}}%;" /><view class="trend-bar accent" style="height: {{item.loadHeight}}%;" /></view><text class="trend-label">{{item.label}}</text></button></view></scroll-view>
+        </block>
+        <view wx:else class="state"><view class="state-title">本周期暂无训练量数据</view><view class="state-note">记录真实训练后显示，不使用示例数据</view></view>
+      </view>
+    </block>
+
+    <block wx:if="{{activeSection === 'plan'}}">
+      <view class="section-head"><view class="section-head-title">训练安排</view><view class="section-head-note">读取网页端已保存计划，只读查看；计划周期独立于概览时间范围</view></view>
+      <block wx:if="{{planLabels.length}}">
+        <view class="card">
+          <picker mode="selector" range="{{planLabels}}" value="{{planIndex}}" bindchange="onPlanChange"><view class="strength-select" aria-label="选择训练计划">{{planLabels[planIndex]}} <text>▾</text></view></picker>
+          <view class="section-head-note">{{planPeriod}}</view>
+          <view wx:if="{{planSummary}}" class="notice plan-summary">{{planSummary}}</view>
+          <view class="strength-filter-row">
+            <picker wx:if="{{weekLabels.length}}" mode="selector" range="{{weekLabels}}" value="{{weekIndex}}" bindchange="onWeekChange"><view class="strength-select" aria-label="选择训练周">{{weekLabels[weekIndex]}} ▾</view></picker>
+            <picker mode="selector" range="{{categories}}" value="{{categoryIndex}}" bindchange="onCategoryChange"><view class="strength-select" aria-label="选择动作分类">{{categories[categoryIndex]}} ▾</view></picker>
+          </view>
+        </view>
+        <view wx:for="{{planExercises}}" wx:key="id" class="card strength-detail-card">
+          <button class="strength-disclosure" data-id="{{item.id}}" bindtap="toggleExercise" aria-expanded="{{expandedExercise === item.id}}" aria-label="{{item.name}}，{{expandedExercise === item.id ? '收起' : '展开'}}训练安排">
+            <view class="strength-disclosure-main"><view class="card-head-title">{{item.name}}</view><view class="section-head-note">{{item.category}} · MAX {{item.max}}</view></view><text class="strength-action">{{expandedExercise === item.id ? '收起 −' : '展开 ＋'}}</text>
+          </button>
+          <view wx:if="{{expandedExercise === item.id}}" class="strength-detail-body">
+            <view wx:if="{{item.note}}" class="notice">{{item.note}}</view>
+            <view wx:for="{{item.rows}}" wx:for-item="row" wx:key="id" class="strength-set">
+              <view class="card-head-title">{{row.arrangement}}</view>
+              <view class="strength-value-row"><text>计划组次</text><text>{{row.prescription}}</text></view>
+              <view class="strength-value-row"><text>强度 / 计算重量</text><text>{{row.percentage}} / {{row.weight}}</text></view>
+              <view class="strength-value-row"><text>已记录完成次数</text><text>{{row.completed}}</text></view>
+            </view>
+            <view wx:if="{{!item.rows.length}}" class="section-head-note">本周尚未填写该动作安排</view>
+          </view>
+        </view>
+        <view wx:if="{{!planExercises.length}}" class="card state"><view class="state-title">暂无训练动作</view></view>
       </block>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练计划</view></view>
-    </view>
+      <view wx:else class="card state"><view class="state-title">暂无已保存的训练计划</view><view class="state-note">网页端保存的计划会在这里同步显示</view></view>
+    </block>
 
-    <view class="section-head"><view class="section-head-title">体能训练量趋势</view><view class="section-head-note">青色：训练时长 · 金色：SRPE训练负荷</view></view>
-    <view class="card">
-      <view wx:if="{{trendPlaceholder}}" class="chart-example">示例数据</view>
-      <view wx:if="{{trend.length}}" class="chart-meta"><view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />SRPE负荷（AU）</view></view><text class="chart-hint">点击柱形查看</text></view>
-      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false"><view class="trend-chart strength-trend"><button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="height: {{item.durationHeight}}%;" /><view class="trend-bar accent" style="height: {{item.loadHeight}}%;" /></view><text class="trend-label">{{item.label}}</text></button></view></scroll-view>
-      <view wx:if="{{trendPlaceholder}}" class="chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</view>
-    </view>
-
-    <view class="section-head"><view class="section-head-title">体能训练记录</view><view class="section-head-note">当前时间范围内最近记录</view></view>
-    <view class="card"><view wx:if="{{recentSessions.length}}" class="list"><view wx:for="{{recentSessions}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.date}} · {{item.meta}}</text></view><view class="list-row-value">{{item.load}}</view></view><text class="tag">{{item.source}}</text></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无体能训练记录</view></view></view>
+    <block wx:if="{{activeSection === 'records'}}">
+      <view class="section-head"><view class="section-head-title">训练记录</view><view class="section-head-note">{{recordDate ? recordDate : '当前周期'}}共 {{recordCount}} 条，点击查看动作明细；日期筛选可查询更早历史记录</view></view>
+      <view class="card strength-filter-row">
+        <picker mode="date" value="{{recordDate || to}}" end="{{to}}" bindchange="onRecordDate"><view class="strength-select" aria-label="按日期筛选训练记录">{{recordDate || '按日期筛选'}} ▾</view></picker>
+        <button wx:if="{{recordDate}}" class="mini-button" bindtap="clearRecordDate">清除日期</button>
+      </view>
+      <view wx:for="{{records}}" wx:key="id" class="card strength-detail-card">
+        <button class="strength-disclosure" data-id="{{item.id}}" bindtap="toggleRecord" aria-expanded="{{expandedRecord === item.id}}" aria-label="{{item.date}} {{item.title}}，{{expandedRecord === item.id ? '收起' : '展开'}}动作明细">
+          <view class="strength-disclosure-main"><view class="card-head-title">{{item.title}}</view><view class="section-head-note">{{item.date}} · {{item.source}}</view><view class="section-head-note">{{item.meta}}</view></view>
+          <view class="strength-disclosure-side"><text>{{item.load}}</text><text class="strength-action">{{expandedRecord === item.id ? '收起 −' : '详情 ＋'}}</text></view>
+        </button>
+        <view wx:if="{{expandedRecord === item.id}}" class="strength-detail-body">
+          <view wx:for="{{item.sets}}" wx:for-item="set" wx:key="id" class="strength-set">
+            <view class="card-head-title">{{set.name}}</view>
+            <view class="strength-value-row"><text>计划</text><text>{{set.planned}}</text></view>
+            <view class="strength-value-row"><text>实际</text><text>{{set.actual}}</text></view>
+            <view class="strength-value-row"><text>强度 / 时长</text><text>{{set.intensity}} / {{set.duration}}</text></view>
+            <view class="strength-value-row"><text>RPE / 状态</text><text>{{set.rpe}} / {{set.completed}}</text></view>
+          </view>
+          <view wx:if="{{!item.sets.length}}" class="section-head-note">这条记录仅包含训练课次信息，尚未记录逐组动作数据。</view>
+        </view>
+      </view>
+      <button wx:if="{{hasMoreRecords}}" class="strength-more" bindtap="showMoreRecords">查看更多记录</button>
+      <view wx:if="{{!records.length}}" class="card state"><view class="state-title">所选时间暂无体能训练记录</view><view class="state-note">可清除日期或切换上方时间范围</view></view>
+    </block>
   </block>
-
-  <view wx:if="{{!loading && !selectedAthleteId && showAthlete && !athletes.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">当前项目暂无可查看运动员</view><view class="state-note">请联系管理员确认队伍与项目权限</view></view>
-  <view wx:elif="{{!loading && !selectedAthleteId}}" class="card state"><view class="state-icon">人</view><view class="state-title">请选择运动员</view><view class="state-note">体能计划和测试按运动员读取</view></view>
+  <view wx:if="{{!loading && !error && !selectedAthleteId}}" class="card state"><view class="state-title">{{athletes.length ? '请选择运动员' : '当前范围暂无可查看运动员'}}</view><view class="state-note">按现有账号的项目和运动员权限读取数据</view></view>
 </view>

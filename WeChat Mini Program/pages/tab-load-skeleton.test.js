@@ -30,6 +30,10 @@ const formatModule = loadCjs(new URL('../utils/format.js', import.meta.url), {
   '../data/format-data': loadCjs(new URL('../data/format-data.js', import.meta.url), {}),
 });
 const requestGuard = loadCjs(new URL('../utils/request-guard.js', import.meta.url), {});
+const strengthView = loadCjs(new URL('../utils/strength-view.js', import.meta.url), {
+  './format': formatModule,
+  './date': dateModule,
+});
 const chartPlaceholder = loadCjs(new URL('../utils/chart-placeholder.js', import.meta.url), {});
 const paginationModule = loadCjs(new URL('../utils/pagination.js', import.meta.url), {});
 const dailyTodosModule = loadCjs(new URL('../utils/daily-todos.js', import.meta.url), {
@@ -95,6 +99,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/request-guard': requestGuard,
     '../../utils/page-actions': pageActions,
     '../../utils/format': formatModule,
+    '../../utils/strength-view': strengthView,
     '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
     '../../utils/date': dateModule,
     '../../utils/chart-placeholder': chartPlaceholder,
@@ -229,6 +234,41 @@ describe('三个 Tab 共用统一加载骨架', () => {
     page.onShow();
     await flushAsync();
     expect(api.calls.strengthTests).toBeGreaterThan(first);
+  });
+
+  it('体能页历史筛选可跨越当前周期，清除后回到周期记录', async () => {
+    const api = strengthApi();
+    api.strengthTrainingResults = async () => ({ sessions: [
+      { id: 1, trainingDate: '2000-01-01', sets: [{ id: 11, exerciseName: '深蹲', actualReps: 8, completed: true }] }
+    ] });
+    api.strengthTests = async () => ({ tests: [{ id: 1, testDate: '2000-01-01', metrics: { squatKg: 80 } }] });
+    const { page } = createPageModule(new URL('./strength/strength.js', import.meta.url), api);
+    await page.loadPage();
+    expect(page.data.records).toEqual([]);
+    page.onRecordDate({ detail: { value: '2000-01-01' } });
+    expect(page.data.records).toHaveLength(1);
+    page.toggleRecord({ currentTarget: { dataset: { id: '1' } } });
+    expect(page.data.records[0].sets[0].name).toBe('深蹲');
+    page.clearRecordDate();
+    expect(page.data.records).toEqual([]);
+    expect(page.data.metricHistory).toEqual([]);
+    page.onMetricRange({ detail: { value: '1' } });
+    expect(page.data.metricHistory[0].value).toBe('80');
+    page.onMetricRange({ detail: { value: '0' } });
+    expect(page.data.metricHistory).toEqual([]);
+  });
+
+  it('体能页丢弃过期响应，不把上一运动员的缓存源带入详情', async () => {
+    const api = strengthApi();
+    const { page } = createPageModule(new URL('./strength/strength.js', import.meta.url), api);
+    await page.loadPage();
+    const currentSource = page._source;
+    expect(await page.loadPageData(page.data, () => false)).toBeNull();
+    expect(page._source).toBe(currentSource);
+    api.strengthTrainingResults = async () => { throw new Error('网络不可用'); };
+    await page.loadPage();
+    expect(page._source).toBeNull();
+    expect(page.data.error).toBe('网络不可用');
   });
 
   it('专项训练页完成作用域、视图与缓存标记，二次显示不重拉', async () => {
