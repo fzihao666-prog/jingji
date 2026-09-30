@@ -56,6 +56,24 @@ module.exports = {
   saveWellness(data) {
     return request('/api/me/wellness', { method: 'POST', data });
   },
+  athleteTrainingSessions(athleteId) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`);
+  },
+  createAthleteTrainingSession(athleteId, data) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`, { method: 'POST', data });
+  },
+  updateAthleteTrainingSession(athleteId, sessionId, data) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions/${encodeURIComponent(sessionId)}`, { method: 'PUT', data });
+  },
+  deleteAthleteTrainingSession(athleteId, sessionId) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+  },
+  athleteWellness(athleteId, date) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/wellness?${query({ date })}`);
+  },
+  saveAthleteWellness(athleteId, data) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/wellness`, { method: 'POST', data });
+  },
   currentProject() { return request('/api/preferences/current-project'); },
   dailyTodos(project) {
     return request(`/api/coach/daily-todos?${query({ project })}`);
@@ -89,6 +107,12 @@ module.exports = {
   },
   strengthTests(athleteId) {
     return request(`/api/strength-tests?${query({ athleteId })}`);
+  },
+  createStrengthTest(data) {
+    return request('/api/strength-tests', { method: 'POST', data });
+  },
+  createSpecialTest(data) {
+    return request('/api/special-tests/manual', { method: 'POST', data });
   },
   trainingPlans(athleteId) {
     return request(`/api/training-plans?${query({ athleteId })}`);

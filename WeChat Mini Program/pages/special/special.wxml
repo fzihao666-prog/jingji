@@ -64,7 +64,13 @@
       <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无可查看运动员</view></view>
     </view>
 
-    <view class="section-head"><view class="section-head-title">专项测试成绩</view><view class="section-head-note">{{projectLabel}} · {{from}} 至 {{to}}</view></view>
+    <view class="section-head">
+      <view class="section-head-title">专项测试成绩</view>
+      <view class="section-head-row">
+        <view class="section-head-note">{{projectLabel}} · {{from}} 至 {{to}}</view>
+        <button wx:if="{{canEnterTest}}" class="mini-button" bindtap="goTestEntry" aria-label="录入专项测试">录入测试</button>
+      </view>
+    </view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取专项测试</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
     <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无专项测试记录</view></view>

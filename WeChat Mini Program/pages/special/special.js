@@ -5,6 +5,9 @@ const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } 
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
 
+// 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
+const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+
 function buildTrainingView(training, athletes, to) {
   const summary = training.summary || {};
   const metrics = [
@@ -58,6 +61,8 @@ Page({
   data: {
     loading: true,
     error: '',
+    user: null,
+    canEnterTest: false,
     projects: [],
     project: '',
     range: 'month',
@@ -82,7 +87,7 @@ Page({
     return runPageLoad(this, {
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
-      prepare: (page, scope) => page.setData({ ...scope, teamId: 0, teamIndex: 0 }),
+      prepare: (page, scope) => page.setData({ ...scope, teamId: 0, teamIndex: 0, canEnterTest: MANAGER_ROLES.includes(scope.user.role) }),
       load: (page, scope, isLatest) => page.loadPageData({ ...scope, teamId: 0 }, true, isLatest)
     });
   },
@@ -156,6 +161,12 @@ Page({
 
   showTrendDetail(event) {
     showTrendModal(this, event, durationDistanceLines);
+  },
+
+  goTestEntry() {
+    if (!this.data.canEnterTest) return;
+    const athleteId = Number(this.data.selectedAthleteId) || 0;
+    wx.navigateTo({ url: `/pages/test-entry/test-entry?mode=special&athleteId=${athleteId}` });
   },
 
   goToAthlete(event) {

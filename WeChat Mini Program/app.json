@@ -10,6 +10,7 @@
     "pages/training-entry/training-entry",
     "pages/wellness-entry/wellness-entry",
     "pages/injury-report/injury-report",
+    "pages/test-entry/test-entry",
     "pages/mine/mine",
     "pages/privacy/privacy"
   ],

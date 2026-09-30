@@ -5,6 +5,9 @@ const { durationLoadLines, showTrendModal } = require('../../utils/page-actions'
 const { shortDate } = require('../../utils/date');
 const { number, strengthMetricRows } = require('../../utils/format');
 
+// 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
+const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+
 function planRows(plan) {
   if (!plan || !plan.data) return [];
   return (plan.data.exercises || []).slice(0, 12).map((exercise) => {
@@ -91,6 +94,7 @@ Page({
     loading: true,
     error: '',
     user: null,
+    canEnterTest: false,
     projects: [],
     project: '',
     athletes: [],
@@ -119,7 +123,7 @@ Page({
       scope: { range: this.data.range },
       prepare: (page, scope) => {
         getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
-        page.setData(scope);
+        page.setData({ ...scope, canEnterTest: MANAGER_ROLES.includes(scope.user.role) });
       }
     });
   },
@@ -149,5 +153,11 @@ Page({
 
   showTrendDetail(event) {
     showTrendModal(this, event, durationLoadLines);
+  },
+
+  goTestEntry() {
+    if (!this.data.canEnterTest) return;
+    const athleteId = Number(this.data.selectedAthleteId) || 0;
+    wx.navigateTo({ url: `/pages/test-entry/test-entry?mode=strength&athleteId=${athleteId}` });
   }
 });

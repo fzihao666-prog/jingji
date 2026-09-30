@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from './logger.ts';
 
@@ -20,25 +20,21 @@ export function backupDatabase(databasePath: string, backupDir: string): Promise
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const backupPath = join(backupDir, `jingji-${timestamp}.db`);
   return new Promise<string>((resolvePromise, reject) => {
-    execFile(
-      'sqlite3',
-      [databasePath, `.backup '${backupPath}'`],
-      { timeout: 30_000 },
-      (error) => {
-        if (error) {
-          // sqlite3 CLI 不可用时尝试用 Node 直接复制（安全性较低，但可兜底）
-          logger.warn('sqlite3 CLI 备份失败，尝试文件复制', { error: error.message });
-          try {
-            copyFileSync(databasePath, backupPath);
-            resolvePromise(backupPath);
-          } catch (copyError) {
-            reject(copyError as Error);
-          }
-          return;
+    execFile('sqlite3', [databasePath, `.backup '${backupPath}'`], { timeout: 30_000 }, (error) => {
+      if (error) {
+        logger.error('sqlite3 在线备份失败，未生成有效备份', { message: error.message });
+        try {
+          if (existsSync(backupPath)) unlinkSync(backupPath);
+        } catch (cleanupError) {
+          logger.warn('清理不完整的备份文件失败', {
+            message: (cleanupError as Error).message,
+          });
         }
-        resolvePromise(backupPath);
+        reject(new Error('SQLite 在线备份失败，未生成有效备份。', { cause: error }));
+        return;
       }
-    );
+      resolvePromise(backupPath);
+    });
   });
 }
 

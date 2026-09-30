@@ -1,0 +1,113 @@
+<view class="page test-entry-page">
+  <view class="page-head">
+    <view class="page-title">{{mode === 'special' ? '录入专项测试' : '录入体能测试'}}</view>
+    <view class="page-description">{{athleteName || '运动员'}} · {{athleteMeta}}</view>
+  </view>
+
+  <view wx:if="{{error}}" class="error-box">{{error}} <text class="retry-link" bindtap="retryLoad">点按重试</text></view>
+
+  <view wx:if="{{loading}}" class="card state">
+    <view class="state-icon">↻</view>
+    <view class="state-title">正在准备录入页面</view>
+  </view>
+
+  <block wx:elif="{{!error}}">
+    <view class="card form-card">
+      <view class="form-grid">
+        <view class="field">
+          <text class="field-label">成员/主测运动员 *</text>
+          <picker range="{{athleteOptions}}" value="{{athleteIndex}}" bindchange="onAthleteChange">
+            <view class="picker-input">{{athleteName}}</view>
+          </picker>
+        </view>
+        <view class="field">
+          <text class="field-label">测试日期 *</text>
+          <picker mode="date" value="{{form.testDate}}" bindchange="onDateChange">
+            <view class="picker-input">{{form.testDate || '请选择'}}</view>
+          </picker>
+        </view>
+      </view>
+    </view>
+
+    <block wx:if="{{mode === 'strength'}}">
+      <view class="card form-card">
+        <view class="card-head"><view><view class="card-head-title">实测指标</view><view class="todo-note">至少填写一项，留空表示本次不测</view></view></view>
+        <view class="form-grid">
+          <view wx:for="{{strengthFields}}" wx:key="key" class="field">
+            <text class="field-label">{{item.label}}（{{item.unit}}）</text>
+            <input class="input" type="digit" value="{{form[item.key]}}" data-field="{{item.key}}" bindinput="onFieldInput" placeholder="留空不填" aria-label="{{item.label}}{{item.unit}}" />
+          </view>
+        </view>
+        <view class="field">
+          <text class="field-label">备注</text>
+          <textarea class="textarea" value="{{form.notes}}" data-field="notes" bindinput="onFieldInput" maxlength="200" placeholder="测试条件、状态等（可不填）" />
+        </view>
+        <view class="button-row"><button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在保存' : '保存体能测试'}}</button></view>
+      </view>
+    </block>
+
+    <block wx:else>
+      <view class="card form-card">
+        <view class="card-head"><view><view class="card-head-title">测试信息</view><view class="todo-note">事件按项目、日期、距离、艇型、组别、时段唯一</view></view></view>
+        <view class="form-grid">
+          <view class="field">
+            <text class="field-label">测试距离（米）*</text>
+            <input class="input" type="number" value="{{form.distanceM}}" data-field="distanceM" bindinput="onFieldInput" placeholder="如 2000" />
+          </view>
+          <view class="field">
+            <text class="field-label">艇型</text>
+            <input class="input" type="text" value="{{form.boatClass}}" data-field="boatClass" bindinput="onFieldInput" placeholder="如 八人单桨 / K1" />
+          </view>
+          <view class="field">
+            <text class="field-label">组别</text>
+            <input class="input" type="text" value="{{form.genderGroup}}" data-field="genderGroup" bindinput="onFieldInput" placeholder="如 男子公开" />
+          </view>
+          <view class="field">
+            <text class="field-label">时段</text>
+            <input class="input" type="text" value="{{form.session}}" data-field="session" bindinput="onFieldInput" placeholder="上午 / 下午（可不填）" />
+          </view>
+          <view class="field">
+            <text class="field-label">风况</text>
+            <input class="input" type="text" value="{{form.windConditions}}" data-field="windConditions" bindinput="onFieldInput" placeholder="可不填" />
+          </view>
+          <view class="field">
+            <text class="field-label">地点</text>
+            <input class="input" type="text" value="{{form.location}}" data-field="location" bindinput="onFieldInput" placeholder="可不填" />
+          </view>
+        </view>
+      </view>
+
+      <view class="card form-card">
+        <view class="card-head"><view><view class="card-head-title">运动员/组合 *</view><view class="todo-note">成员需属于{{projectLabel}}且在权限范围内</view></view></view>
+        <view class="field">
+          <text class="field-label">组合名称 *</text>
+          <input class="input" type="text" value="{{form.crewName}}" data-field="crewName" bindinput="onFieldInput" placeholder="如 测试组 / 张三" />
+        </view>
+        <view class="member-list">
+          <view wx:for="{{members}}" wx:key="id" class="member-option {{memberIds.indexOf(item.id) >= 0 ? 'member-option-active' : ''}}" data-id="{{item.id}}" bindtap="onMemberToggle" aria-label="{{item.name}}，{{memberIds.indexOf(item.id) >= 0 ? '已选中' : '未选中'}}" aria-role="checkbox" aria-checked="{{memberIds.indexOf(item.id) >= 0}}">
+            <text>{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="card form-card">
+        <view class="card-head"><view><view class="card-head-title">成绩 *</view><view class="todo-note">格式 0:55.15 或 55.15，至少一轮</view></view></view>
+        <view class="form-grid">
+          <view wx:for="{{attemptIndexes}}" wx:key="*this" class="field">
+            <text class="field-label">第{{index + 1}}轮</text>
+            <input class="input" type="text" value="{{form.attempts[index]}}" data-index="{{index}}" bindinput="onAttemptInput" placeholder="{{index === 0 ? '如 0:55.15' : '可不填'}}" />
+          </view>
+          <view class="field">
+            <text class="field-label">历史最好</text>
+            <input class="input" type="text" value="{{form.previousBestText}}" data-field="previousBestText" bindinput="onFieldInput" placeholder="可不填" />
+          </view>
+        </view>
+        <view class="field">
+          <text class="field-label">备注</text>
+          <textarea class="textarea" value="{{form.note}}" data-field="note" bindinput="onFieldInput" maxlength="200" placeholder="可不填" />
+        </view>
+        <view class="button-row"><button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在保存' : '保存专项测试'}}</button></view>
+      </view>
+    </block>
+  </block>
+</view>

@@ -1,8 +1,31 @@
 # 竞迹数据库现状与优化说明
 
-> 本文依据当前 `server/db.ts` 的表定义、迁移逻辑及调用关系整理，描述的是**模型设计**，不读取或披露任何运行数据库中的真实数据。
+> 本文依据当前 `server/core/db-initialize.ts` 的表定义、迁移逻辑及调用关系整理，描述的是**模型设计**，不读取或披露任何运行数据库中的真实数据。
 >
-> 适用数据库：SQLite。表结构、兼容迁移和演示初始化目前均由 `server/db.ts` 在应用启动时执行。
+> 适用数据库：SQLite。连接入口为 `server/core/db.ts`；表结构、兼容迁移和初始化任务由其调用 `server/core/db-initialize.ts` 执行。
+
+## 数据库路径、启动初始化与维护文件
+
+- 数据库使用 Node.js 内置 `node:sqlite` `DatabaseSync`，默认文件为 `data/training-monitor.db`。
+- `server/core/database-path.ts` 是路径唯一来源。设置 `DATABASE_PATH` 可覆盖默认位置；相对路径按进程工作目录解析。该模块在连接初始化前加载项目 `.env`，并为实际数据库路径准备父目录。
+- `server/core/db-connection.ts` 设置连接 PRAGMA；遇到多个进程首次切换 WAL 的短暂锁冲突时有限重试。
+- 服务启动先打开数据库并设置 `busy_timeout`、外键、WAL 和同步模式，再执行最终表/索引定义、兼容旧库的增列/表重建/数据回填及初始化任务。初始化通过存在性判断和 `app_metadata` 版本标记保证重复启动可执行。
+- 服务定时备份读取同一个正式数据库路径，使用 `sqlite3` CLI 的在线 `.backup`，默认写入数据库所在目录的 `backups/`。CLI 不可用或热备份失败时会记录失败并拒绝生成副本，不会直接复制 WAL 数据库主文件。生产异机备份配置见 `docs/deployment-ubuntu-24.md`。迁移前的 `.before-reconstruction-v1` 副本及正式备份均不得手动清理；恢复前应先停止服务并保留原文件。
+- `data/` 是运行数据目录，不提交或清空其中的 `.db`、WAL/SHM、备份和密钥文件。数据库/API 检查脚本使用隔离数据库或要求显式设置 `DATABASE_PATH`；每日待办场景脚本独占创建 `tmp/coach-daily-todos-日期.db`，不会连接默认库。
+
+### 数据库脚本分类
+
+| 内容 | 用途与处理 |
+| --- | --- |
+| `server/core/db-initialize.ts` | 当前结构、旧库兼容迁移和已版本化初始化任务的运行入口；新库不依赖手动历史脚本。 |
+| `server/core/db-migrations.ts` | 单独封装需明确保留旧表数据的兼容迁移；旧专项冠军模型改名归档，不再直接删除。 |
+| `server/core/db-system-data.ts` | 初始化强度分区和动作字典，只补入缺失项，不覆盖已存在的维护值。 |
+| `scripts/*-check.*`、`scripts/database-lock-check.mjs` | 测试/回归脚本，创建隔离检查库；保留。 |
+| `scripts/coach-daily-todos-example.ts` | 显式创建独立演示场景库；保留，不能指向生产库。 |
+| `scripts/fill-radar-data.sql`、`fill-radar-references.sql`、`fill-radar-remaining.sql` | 历史手工业务数据填充；不是 schema 或启动 seed。引用未发现，因其中含 `DELETE`/替换语句且用途可能涉及恢复，暂保留，执行前需人工核对。 |
+| 仓库内数据库快照与核对报告 | 已清理无代码引用的旧快照、导出 SQL 和一次性报告。生产运行备份应保存在 `data/backups/` 或独立备份存储，不应提交到仓库。 |
+
+`server/core/db-initialize.ts` 目前仍较大，包含早期一次性迁移和若干版本化初始化任务。拆分时必须维持原顺序、事务边界和数据映射，不应把历史业务数据填充脚本并入每次启动。
 
 ## 1. 先看全局：数据库在解决什么问题
 

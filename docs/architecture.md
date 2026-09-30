@@ -95,7 +95,12 @@ jingji/
 │  └─ pdf/                 # 浏览器端 PDF 导出
 ├─ server/
 │  ├─ index.ts             # Express 入口、路由、用例、权限和导入流程
-│  ├─ db.ts                # SQLite 连接、表结构、迁移和初始化数据
+│  ├─ core/db.ts           # SQLite 连接、PRAGMA 与初始化入口
+│  ├─ core/db-connection.ts# SQLite PRAGMA 与 WAL 并发重试
+│  ├─ core/database-path.ts# 数据库路径、目录准备与备份目录
+│  ├─ core/db-initialize.ts# 最终建表、兼容迁移及初始化数据
+│  ├─ core/db-migrations.ts# 有数据保留要求的兼容迁移
+│  ├─ core/db-system-data.ts# 必要的强度分区与动作字典
 │  ├─ overview-service.ts  # 训练总览统一查询与聚合
 │  ├─ ai-service.ts        # 体能训练生成
 │  ├─ strength-import-ai.ts# PDF/图片体能结果识别
@@ -209,9 +214,9 @@ sequenceDiagram
 | 目录 | 职责 |
 | --- | --- |
 | `server/index.ts` | Express 实例、全局中间件（CSP、body 解析、静态服务）、各域路由注册、优雅关闭；不含业务逻辑 |
-| `server/core/` | `db.ts`（连接参数、表结构、兼容迁移、初始化锁和初始化数据）、`auth.ts`（JWT、限流）、`permissions.ts`（RBAC 与数据范围）、`utils.ts`、`shared-server.ts`、`uploads.ts`、`coach-daily-todos.ts` |
+| `server/core/` | `db.ts`、`db-connection.ts`、`database-path.ts`、`db-initialize.ts`、`db-migrations.ts`、`db-system-data.ts`（SQLite 路径、连接、schema、兼容升级与系统字典）、`auth.ts`（JWT、限流）、`permissions.ts`（RBAC 与数据范围）、`utils.ts`、`shared-server.ts`、`uploads.ts`、`coach-daily-todos.ts` |
 | `server/access/` | 账号与权限管理路由、认证（登录/注册/改密）路由、注册审批工作流 |
-| `server/athlete/` | 运动员档案路由与档案校验/写入辅助 |
+| `server/athlete/` | 运动员档案路由与档案校验/写入辅助；本人/教练代填训练课次与恢复日报（`self-training-routes.ts`、`coach-report-routes.ts`、`self-daily-routes.ts`）、训练课次与恢复事实写入（`training-session-service.ts`、`wellness-store.ts`） |
 | `server/training-plan/` | 训练计划路由、计划解析与 Excel 导出、AI 计划生成 |
 | `server/strength/` | 体能训练导入与 AI 识别、力量测试与建议、体能指标编码 |
 | `server/analysis/` | 分析与雷达模型路由、训练总览、个人档案服务、RPE 统计 |
@@ -227,7 +232,7 @@ sequenceDiagram
 | ---------- | ------------------------------------------------------------ | ------------------------------------ |
 | 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密，以及本人今日状态与恢复日报         |
 | 偏好       | `/api/preferences`                                           | 当前项目等应用上下文偏好             |
-| 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理 |
+| 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理，以及教练代填训练课次与恢复日报（`:id/training-sessions`、`:id/wellness`） |
 | 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与展示用主管教练关系                         |
 | 专项训练   | `/api/special-training`、`/api/special-tests`                | 训练场次、专项测试和模板导入         |
 | 体能训练   | `/api/training-plans`、`/api/strength-training`              | 计划、AI 生成、结果导入和分析        |
@@ -291,7 +296,11 @@ PRJ 与 REG 处于同一级，不能互相管理。上下级管理要求管理�
 - WAL 日志模式；
 - `synchronous = NORMAL`。
 
-表结构、兼容迁移和初始化数据都在 `server/db.ts` 中执行。所有当前业务表（含专项目录、专项周计划和专项课次）均在首次建表流程中声明；旧库兼容用的 `ALTER TABLE`、重建表和历史数据回填则与建表定义分开保留，避免新库启动依赖旧备份文件。`app_metadata` 配合 `BEGIN IMMEDIATE` 保证带版本的初始化任务只运行一次。
+`server/core/db.ts` 是连接入口：在打开连接前解析正式数据库路径、准备目录并为已存在的库保留一次迁移前副本；随后设置 SQLite PRAGMA 并调用 `server/core/db-initialize.ts`。初始化模块包含当前建表/索引定义、旧库兼容升级和带版本标记的初始数据任务。字段、表或索引存在性检查让已有库可重复启动，新库也会在同一启动流程中创建当前结构，无需依次执行历史增列脚本。结构与迁移目前仍集中在同一初始化模块，未来可在不改迁移顺序的前提下继续拆分。
+
+正式默认数据库是 `data/training-monitor.db`，由 `server/core/database-path.ts` 统一解析；`DATABASE_PATH` 可指定其他绝对或相对路径。该模块在数据库连接初始化前加载项目 `.env`，因此 `.env` 中设置的路径可以生效。应用定时备份使用同一个实际数据库路径，备份目录为该数据库所在目录下的 `backups/`。部署的异机备份仍按 [Ubuntu 部署说明](deployment-ubuntu-24.md) 配置；`data/`、自定义数据库目录及其 `backups/`、`.before-reconstruction-v1` 文件都是运行数据，不得作为构建产物清理。
+
+初始化中的系统定义与业务演示数据仍通过幂等任务写入，运行期开关/字典使用 `INSERT OR IGNORE` 或版本标记；训练、测试等真实业务记录由业务接口或显式导入流程写入，不应加入通用初始化。`scripts/fill-radar-*.sql` 是历史手动业务数据填充材料，包含非幂等替换/删除语句，不属于启动流程，使用前必须确认目标库与预期影响。
 
 为保证训练总览的六维多要素雷达可展示，初始化会按 `metric_definitions` 中的项目适用范围补齐空缺指标，并为缺少日报的运动员补齐近 28 天恢复监测。补入记录统一标记为 `source=metric_gap_seed`、`quality=estimated`、`is_demo=1`；已有实测值不会被覆盖，后续导入或手工录入的真实数据应作为替换依据。
 
@@ -508,6 +517,17 @@ Excel / PDF / 图片
 
 小程序首页在 `loadPage` 中与教练待办并行调用 `loadToday`，`utils/today-status.js` 和 `utils/wellness-form.js` 在网络边界显式校验响应与提交值；`pages/wellness-entry` 保存后递增 `homeNeedsRefresh` 与 `dataVersion`，返回首页即重拉今日状态。验证覆盖 `server/__tests__/self-daily.test.ts`、`utils/today-status.test.js`、`utils/wellness-form.test.js`、`pages/wellness-entry/wellness-entry.test.js` 与 `npm run api-check` 中的今日状态、恢复日报窗口、权限和幂等断言。
 
+
+### 10.8 小程序教练代填与测试现场录入
+
+教练等管理角色（SCC/PRJ/REG/TD/DMD）可在小程序代运动员填报训练课次与恢复日报：`server/athlete/self-training-routes.ts` 与 `server/athlete/coach-report-routes.ts` 分别挂载 `/api/me/training-sessions`、`/api/athletes/:id/training-sessions` 和 `/api/athletes/:id/wellness`。运动员级写接口必须先经 `requireRole` 与 `hasAthleteAccess` 的访问范围校验，前端候选列表不作为授权依据。代填事实仍只写 `training_sessions` 与 `daily_wellness`，`source` 记为 `coach_report`（本人填报为 `athlete_self_report`）；两者均计入正式统计，恢复日报状态对教练侧允许 `normal/rest/attention/alert`，本人侧仍限自评口径。
+
+测试现场录入由 `POST /api/special-tests/manual`（`server/special/special-training-routes.ts`）提供专项成绩手工入库，按运动员访问范围与项目一致性校验后按运动员、日期、距离和组合幂等 upsert 到 `special_test_events`；体能测试走既有 `POST /api/strength-tests`。小程序 `pages/test-entry` 统一两种模式，纯校验与请求体组装在 `utils/test-entry-form.js`，页面只负责装配与交互。
+
+### 10.9 小程序表单弱网草稿
+
+`utils/form-draft.js` 为训练填报、恢复日报、伤病上报、测试录入四个表单提供本地草稿：以 `jingji-mini-draft:<表单>:<身份>` 为键写入 `wx` 本地存储，身份按“本人 / 目标运动员”隔离（恢复日报再按日期隔离）。仅暂存表单内容本身，不写入任何凭证或身份信息；与默认空表单一致时视为未填写并清除草稿。保存成功即清除；再次进入页面若存在草稿则经 `wx.showModal` 由用户选择恢复或放弃。存储异常静默降级，不影响填写与提交。
+
 ## 11. 文件、AI 与外部边界
 
 ### 11.1 文件边界
@@ -563,8 +583,7 @@ Web Bluetooth 连接、读取、监听和指令发送全部发生在浏览器。
 
 - SQLite 和本地文件使服务天然偏向单机部署；
 - 进程内导入缓存不支持多实例和任务恢复；
-- `server/core/db.ts` 单文件 5700+ 行，表结构、迁移与初始化数据集中在一处，改动回归影响面大；
-- 数据库迁移与初始化数据混在单一文件中；
+- `server/core/db-initialize.ts` 仍包含多代兼容迁移与初始化数据，后续应按 schema、迁移、系统字典及演示数据职责逐步拆分；
 - 前端使用 localStorage 保存 Token，需依赖严格的 XSS 防护；
 - 健康和身份数据尚需更细的字段级权限、脱敏和导出审计；
 - 旧、新训练事实源并存会造成数据一致性风险。

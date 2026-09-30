@@ -28,7 +28,13 @@
     <view class="section-head"><view class="section-head-title">体能核心指标概览</view><view class="section-head-note">当前运动员本时间范围内真实训练结果</view></view>
     <view class="compact-grid"><view wx:for="{{summaryCards}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view><text class="compact-stat-note">{{item.note}}</text></view></view>
 
-    <view class="section-head"><view class="section-head-title">体能能力画像</view><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view></view>
+    <view class="section-head">
+      <view class="section-head-title">体能能力画像</view>
+      <view class="section-head-row">
+        <view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view>
+        <button wx:if="{{canEnterTest}}" class="mini-button" bindtap="goTestEntry" aria-label="录入体能测试">录入测试</button>
+      </view>
+    </view>
     <view class="card">
       <view wx:if="{{metrics.length}}" class="ratio-list">
         <view wx:for="{{metrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view>

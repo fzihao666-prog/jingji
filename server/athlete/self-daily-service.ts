@@ -7,6 +7,7 @@ export const WELLNESS_BACKFILL_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const WELLNESS_SOURCE = 'athlete_self_report';
+export const COACH_REPORT_SOURCE = 'coach_report';
 
 export function wellnessWindow(now: Date) {
   const today = beijingDate(now);
@@ -38,7 +39,7 @@ function metric(min: number, max: number, message: string) {
 }
 
 // 恢复日报只保存原始自评数值：不生成诊断、评分或状态推断，未知字段直接拒绝。
-export function wellnessWriteSchema(now: Date) {
+function wellnessBody<S extends z.ZodTypeAny>(now: Date, status: S) {
   return z
     .strictObject({
       date: wellnessDate(now).optional(),
@@ -49,8 +50,7 @@ export function wellnessWriteSchema(now: Date) {
       fatigueIndex: metric(0, 10, '疲劳程度应为0至10分。'),
       sorenessIndex: metric(0, 10, '酸痛程度应为0至10分。'),
       moodIndex: metric(0, 10, '心情应为0至10分。'),
-      // status 只接受本人自评的两种口径，attention/alert/missing 属于导入与教练侧分类。
-      status: z.enum(['normal', 'rest']).optional(),
+      status,
     })
     .refine(
       (row) =>
@@ -65,6 +65,16 @@ export function wellnessWriteSchema(now: Date) {
         ].some((value) => value !== null),
       { message: '至少填写一项恢复数据。' }
     );
+}
+
+export function wellnessWriteSchema(now: Date) {
+  // status 只接受本人自评的两种口径，attention/alert/missing 属于导入与教练侧分类。
+  return wellnessBody(now, z.enum(['normal', 'rest']).optional());
+}
+
+// 教练代填可标注关注/警示；missing 属导入侧的缺失标记，不用于人工填写。
+export function coachWellnessWriteSchema(now: Date) {
+  return wellnessBody(now, z.enum(['normal', 'rest', 'attention', 'alert']).optional());
 }
 
 export function wellnessQuerySchema(now: Date) {

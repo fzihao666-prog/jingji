@@ -63,7 +63,7 @@ try {
   try {
     const login = await waitForServer(verifier);
     const response = await fetch(
-      'http://127.0.0.1:8797/api/records?from=2020-01-01&to=2100-12-31&project=%E8%B5%9B%E8%89%87',
+      'http://127.0.0.1:8797/api/records?from=2020-01-01&to=2100-12-31&project=ROWING',
       {
         headers: { authorization: `Bearer ${login.token}` },
       }

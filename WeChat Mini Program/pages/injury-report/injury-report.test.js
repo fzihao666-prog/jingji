@@ -38,6 +38,7 @@ const injuryForm = loadCjs(new URL('../../utils/injury-form.js', import.meta.url
   './date': { todayBeijing: () => '2026-09-27' },
 });
 const requestGuard = loadCjs(new URL('../../utils/request-guard.js', import.meta.url), {});
+const formDraft = loadCjs(new URL('../../utils/form-draft.js', import.meta.url), {});
 
 function createPage({ user, athletes, targetAthleteId }) {
   let definition;
@@ -57,6 +58,7 @@ function createPage({ user, athletes, targetAthleteId }) {
     '../../utils/context': { loadContext: async () => context },
     '../../utils/injury-form': injuryForm,
     '../../utils/request-guard': requestGuard,
+    '../../utils/form-draft': formDraft,
     '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
   };
   vm.runInNewContext(pageSource, {

@@ -3492,21 +3492,11 @@ ALTER COLUMN
 
 ---
 
-# 109. 所有迁移前必须备份
+# 109. 历史迁移备份要求
 
-执行：
+> 历史操作记录：当时要求将 `training-monitor.db` 复制为 `training-monitor-before-refactor.db`。该仓库内备份已于 2026-09-29 清理；不要据此在仓库恢复或提交数据库快照。当前数据库路径、升级前保护和正式备份规则见 `docs/database.md`。
 
-```text
-training-monitor.db
-```
-
-复制：
-
-```text
-training-monitor-before-refactor.db
-```
-
-禁止直接在唯一数据库上修改。
+迁移前必须确认正式数据库有可恢复备份，禁止直接在唯一数据库上修改。
 
 ---
 

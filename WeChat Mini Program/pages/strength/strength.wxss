@@ -12,3 +12,8 @@
 .plan-head > text { flex: none; color: #176f7f; }
 .plan-summary { margin: 20rpx 0; }
 .strength-trend { min-width: 690rpx; }
+
+.section-head-row { margin-top: 7rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.section-head-row .section-head-note { margin-top: 0; }
+.section-head-row .mini-button { flex: none; min-width: 108rpx; height: 58rpx; margin: 0; padding: 0 20rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid #cbdadd; border-radius: 14rpx; color: #176f7f; background: #fff; font-size: 21rpx; line-height: 1; }
+.section-head-row .mini-button:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }

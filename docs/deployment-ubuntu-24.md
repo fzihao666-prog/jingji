@@ -288,7 +288,7 @@ docker buildx build --platform linux/amd64 --tag "$IMAGE:$TAG" --push .
 
 # ECS deploy：拉取新版本并滚动替换容器。
 cd /srv/jingji
-printf 'IMAGE_TAG=%s\n' '上一步输出的TAG' > .env.compose
+printf 'IMAGE_TAG=%s\n' '44504f7' > .env.compose
 chmod 600 .env.compose
 docker compose --env-file .env.compose pull
 docker compose --env-file .env.compose up -d --remove-orphans

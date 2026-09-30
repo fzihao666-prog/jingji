@@ -1,0 +1,17 @@
+.member-list { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.member-option {
+  min-height: 68rpx;
+  padding: 12rpx 26rpx;
+  border: 1rpx solid #ccdadd;
+  border-radius: 999rpx;
+  color: #176373;
+  background: #ffffff;
+  font-size: 23rpx;
+  line-height: 1.4;
+}
+.member-option-active {
+  color: #ffffff;
+  border-color: #176f7f;
+  background: #176f7f;
+}
+.member-option:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }

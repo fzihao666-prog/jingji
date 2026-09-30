@@ -19,6 +19,14 @@ const STATUS_OPTIONS = [
   { value: 'rest', label: '需要休息' }
 ];
 
+// 教练代填可标注关注/警示，与服务端 coachWellnessWriteSchema 对齐。
+const COACH_STATUS_OPTIONS = [
+  { value: 'normal', label: '正常训练' },
+  { value: 'rest', label: '需要休息' },
+  { value: 'attention', label: '需要关注' },
+  { value: 'alert', label: '需要警示' }
+];
+
 // 疲劳/酸痛快捷选择：映射到 0-10 数值，加速手机端填写。
 const QUICK_SELECT = {
   fatigueIndex: [
@@ -67,7 +75,8 @@ function metricValue(value, metric) {
 
 // 校验并组装 POST /api/me/wellness 的请求体；校验规则与服务端逐条对应，
 // 但只作为界面提示，最终仍由服务端拒绝非法数据。
-function wellnessPayload(input) {
+function wellnessPayload(input, statusOptions) {
+  const options = statusOptions || STATUS_OPTIONS;
   const form = input || {};
   const { min, max } = wellnessDates();
   const date = String(form.date || '').trim();
@@ -83,14 +92,15 @@ function wellnessPayload(input) {
   });
   if (!filled) throw new Error('至少填写一项恢复数据。');
   const statusIndex = Number(form.statusIndex) || 0;
-  const status = STATUS_OPTIONS[statusIndex] ? STATUS_OPTIONS[statusIndex].value : null;
+  const status = options[statusIndex] ? options[statusIndex].value : null;
   if (!status) throw new Error('请选择今日训练状态。');
   payload.status = status;
   return payload;
 }
 
 // 已有记录回填到表单：数字统一转成字符串，未填写项保持空串。
-function wellnessFormFromRecord(record, date) {
+function wellnessFormFromRecord(record, date, statusOptions) {
+  const options = statusOptions || STATUS_OPTIONS;
   const form = defaultWellnessForm();
   const target = String(date || form.date);
   // 表单日期始终跟随当前查看的日期，不能被默认值（今天）覆盖。
@@ -100,13 +110,14 @@ function wellnessFormFromRecord(record, date) {
     const value = metricText(record[metric.key]);
     form[metric.key] = value;
   });
-  const statusIndex = STATUS_OPTIONS.findIndex((option) => option.value === record.status);
+  const statusIndex = options.findIndex((option) => option.value === record.status);
   form.statusIndex = statusIndex >= 0 ? statusIndex : 0;
   return form;
 }
 
 // 首页与填写页的恢复日报摘要；不生成评分，只汇总已填写的原始数值。
-function wellnessRecordView(record) {
+function wellnessRecordView(record, statusOptions) {
+  const options = statusOptions || STATUS_OPTIONS;
   if (!record) {
     return {
       filled: false,
@@ -119,13 +130,13 @@ function wellnessRecordView(record) {
   const parts = METRICS.filter((metric) => metricText(record[metric.key]) !== '').map(
     (metric) => `${metric.label} ${metricText(record[metric.key])}${metric.unit}`
   );
-  const status = STATUS_OPTIONS.find((option) => option.value === record.status);
+  const status = options.find((option) => option.value === record.status);
   return {
     filled: true,
     filledLabel: '已填写',
     note: `${record.date} 已提交恢复日报`,
     summary: parts.join(' · '),
-    statusLabel: status ? status.label : ''
+    statusLabel: status ? status.label : record.status
   };
 }
 
@@ -133,6 +144,7 @@ module.exports = {
   WELLNESS_BACKFILL_DAYS,
   METRICS,
   STATUS_OPTIONS,
+  COACH_STATUS_OPTIONS,
   QUICK_SELECT,
   wellnessDates,
   defaultWellnessForm,

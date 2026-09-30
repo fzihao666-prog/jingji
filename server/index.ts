@@ -19,11 +19,13 @@ import { registerStrengthTrainingRoutes } from './strength/strength-training-rou
 import { registerAthleteRoutes } from './athlete/athlete-routes.ts';
 import { registerSelfTrainingRoutes } from './athlete/self-training-routes.ts';
 import { registerSelfDailyRoutes } from './athlete/self-daily-routes.ts';
+import { registerCoachReportRoutes } from './athlete/coach-report-routes.ts';
 import { registerTrainingPlanRoutes } from './training-plan/training-plan-routes.ts';
 import { registerAuthRoutes } from './access/auth-routes.ts';
 import { registerStrengthTestRoutes } from './strength/strength-test-routes.ts';
 import { logger } from './core/logger.ts';
 import { startBackupScheduler } from './core/backup.ts';
+import { databaseBackupDirectory, databasePath } from './core/database-path.ts';
 
 // 全局异常捕获：防止未处理的 Promise 拒绝或异常导致进程静默崩溃。
 process.on('uncaughtException', (err) => {
@@ -96,6 +98,7 @@ registerAuthRoutes(app);
 registerAthleteRoutes(app);
 registerSelfTrainingRoutes(app);
 registerSelfDailyRoutes(app);
+registerCoachReportRoutes(app);
 registerTrainingPlanRoutes(app);
 registerStrengthTrainingRoutes(app);
 registerDataImportRoutes(app);
@@ -222,9 +225,7 @@ app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
 const server = app.listen(port, host, () => {
   logger.info('server started', { host, port, env: process.env.NODE_ENV || 'development' });
   // 启动数据库定时备份（每 24 小时一次，保留 30 天）
-  const databasePath = resolve(process.cwd(), 'data', 'jingji.db');
-  const backupDir = resolve(process.cwd(), 'data', 'backups');
-  startBackupScheduler({ databasePath, backupDir, retainDays: 30 });
+  startBackupScheduler({ databasePath, backupDir: databaseBackupDirectory, retainDays: 30 });
 });
 
 let shuttingDown = false;

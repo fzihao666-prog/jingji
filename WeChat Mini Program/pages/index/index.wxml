@@ -134,6 +134,10 @@
             <text wx:if="{{item.highLoad}}" class="tag warn">高负荷</text>
           </view>
           <view class="todo-note">负荷 {{item.load24h}} AU{{item.sleepHours != null ? ' · 睡眠 ' + item.sleepHours + 'h' : ''}}{{item.morningPulse != null ? ' · 晨脉 ' + item.morningPulse : ''}}{{item.weightKg != null ? ' · 体重 ' + item.weightKg + 'kg' : ''}}</view>
+          <view class="team-athlete-actions">
+            <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练">代填训练</button>
+            <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
+          </view>
         </view>
       </block>
     </block>

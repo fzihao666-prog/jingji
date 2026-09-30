@@ -40,18 +40,27 @@ const wellnessForm = loadCjs(new URL('../../utils/wellness-form.js', import.meta
     toDateString: dateModule.toDateString,
   },
 });
+const formDraft = loadCjs(new URL('../../utils/form-draft.js', import.meta.url), {});
 
-function createPage({ user, record = null }) {
+function createPage({ user, record = null, athletes = [] }) {
   let definition;
   const saveWellness = vi.fn(async () => ({ date: '2026-09-27', record }));
   const myWellness = vi.fn(async () => ({ date: '2026-09-27', record }));
   const toasts = [];
   const app = { globalData: { dataVersion: 3, homeNeedsRefresh: false } };
   const pageMocks = {
-    '../../services/api': { myWellness, saveWellness },
-    '../../utils/context': { loadContext: async () => ({ user }) },
+    '../../services/api': {
+      myWellness,
+      saveWellness,
+      athleteWellness: vi.fn(async () => ({ date: '2026-09-27', record })),
+      saveAthleteWellness: vi.fn(async () => ({ date: '2026-09-27', record })),
+    },
+    '../../utils/context': {
+      loadContext: async () => ({ user, projectAthletes: athletes, selectedAthleteId: athletes[0] ? athletes[0].id : 0 }),
+    },
     '../../utils/wellness-form': wellnessForm,
     '../../utils/request-guard': requestGuard,
+    '../../utils/form-draft': formDraft,
   };
   vm.runInNewContext(pageSource, {
     Page(value) {
@@ -206,11 +215,67 @@ describe('恢复日报填写页行为', () => {
     expect(page.data.form.sleepHours).toBe('');
   });
 
-  it('非运动员角色无法填写恢复日报', async () => {
-    const { page, saveWellness } = createPage({ user: { role: 'SCC', athleteId: 0 } });
+  it('教练代填走运动员级接口并支持关注状态', async () => {
+    let definition;
+    const calls = [];
+    const pageMocks = {
+      '../../services/api': {
+        myWellness: async () => { calls.push('my:get'); return { date: '2026-09-27', record: null }; },
+        saveWellness: async () => { calls.push('my:save'); return { record: null }; },
+        athleteWellness: async (id, date) => { calls.push(`athlete:get:${id}:${date}`); return { date, record: null }; },
+        saveAthleteWellness: async (id, data) => { calls.push(`athlete:save:${id}:${data.status}`); return { date: data.date, record: null }; },
+      },
+      '../../utils/context': {
+        loadContext: async () => ({
+          user: { role: 'SCC' },
+          projectAthletes: [{ id: 7, name: '测试' }],
+          selectedAthleteId: 7,
+        }),
+      },
+      '../../utils/wellness-form': wellnessForm,
+      '../../utils/request-guard': requestGuard,
+      '../../utils/form-draft': formDraft,
+    };
+    vm.runInNewContext(pageSource, {
+      Page(value) { definition = value; },
+      require(path) {
+        if (Object.prototype.hasOwnProperty.call(pageMocks, path)) return pageMocks[path];
+        throw new Error(`未预期的依赖：${path}`);
+      },
+      getApp: () => ({ globalData: {} }),
+      wx: { showToast() {}, stopPullDownRefresh() {} },
+      Date, Number, String, Boolean, Array, Object, Error, RegExp, Math,
+    });
+    const page = {
+      ...definition,
+      data: JSON.parse(JSON.stringify(definition.data)),
+      setData(values) {
+        Object.entries(values).forEach(([path, value]) => {
+          const keys = path.split('.');
+          let target = this.data;
+          for (let i = 0; i < keys.length - 1; i += 1) {
+            target[keys[i]] = target[keys[i]] || {};
+            target = target[keys[i]];
+          }
+          target[keys[keys.length - 1]] = value;
+        });
+      },
+    };
+    await page.loadPage();
+    expect(calls).toContain('athlete:get:7:2026-09-27');
+    expect(page.data.isCoach).toBe(true);
+    expect(page.data.statusOptions.map((item) => item.value)).toEqual(['normal', 'rest', 'attention', 'alert']);
+    page.setData({ form: { ...page.data.form, sleepHours: '7', statusIndex: 2 } });
+    await page.save();
+    expect(calls).toContain('athlete:save:7:attention');
+    expect(calls).not.toContain('my:save');
+  });
+
+  it('教练无代填对象时提示且不提交', async () => {
+    const { page, saveWellness } = createPage({ user: { role: 'SCC', athleteId: 0 }, athletes: [] });
     await page.loadPage();
     expect(page.data.loading).toBe(false);
-    expect(page.data.error).toBe('只有运动员本人可以填写恢复日报。');
+    expect(page.data.error).toBe('当前项目暂无可代填的运动员。');
     await page.save();
     expect(saveWellness).not.toHaveBeenCalled();
   });

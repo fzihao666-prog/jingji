@@ -483,6 +483,99 @@ export function registerSpecialTrainingRoutes(app: Express) {
     });
   });
 
+  // 现场手工录入单条专项测试成绩：与 Excel 导入共用事件 upsert 与成员校验口径。
+  const manualResultSchema = z.strictObject({
+    project: z.string().transform((value) => value.trim()),
+    testDate: z.string().refine((value) => isValidIsoDate(value)),
+    distanceM: z.number().int().min(1).max(100000),
+    boatClass: z.string().trim().min(1).max(50),
+    genderGroup: z.string().trim().min(1).max(50),
+    session: z.string().trim().max(50).optional(),
+    windConditions: z.string().trim().max(100).optional(),
+    location: z.string().trim().max(100).optional(),
+    note: z.string().trim().max(500).optional(),
+    crewName: z.string().trim().min(1).max(100),
+    memberAthleteIds: z.array(z.number().int().positive()).min(1).max(8),
+    previousBestText: z.string().trim().max(20).optional(),
+    attemptsText: z.array(z.string().trim().max(20)).min(1).max(3),
+  });
+
+  app.post('/api/special-tests/manual', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+    const user = req.authUser!;
+    const parsed = manualResultSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '专项测试内容格式无效。' });
+    const row = parsed.data;
+    const project = row.project as Project;
+    if (!PROJECTS.includes(project))
+      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    const allowed = new Set(accessibleAthleteIds(user));
+    const memberNames: string[] = [];
+    for (const memberId of row.memberAthleteIds) {
+      const athlete = db
+        .prepare('SELECT id, name, project FROM athletes WHERE id = ? AND active = 1')
+        .get(memberId) as { id: number; name: string; project: string } | undefined;
+      if (!athlete) return res.status(400).json({ message: '成员运动员不存在或已停用。' });
+      if (!allowed.has(athlete.id))
+        return res.status(403).json({ message: `当前账户无权录入运动员“${athlete.name}”的成绩。` });
+      if (athlete.project !== project)
+        return res.status(400).json({ message: `运动员“${athlete.name}”的项目与本次测试不一致。` });
+      memberNames.push(athlete.name);
+    }
+    const attemptsMs = row.attemptsText
+      .map((text) => parseRaceTime(text))
+      .filter((value): value is number => value !== null);
+    if (!attemptsMs.length) return res.status(400).json({ message: '至少填写一轮有效成绩，如0:55.15。' });
+    const previousBestMs = row.previousBestText ? parseRaceTime(row.previousBestText) : null;
+    const averageMs = Math.round(attemptsMs.reduce((sum, value) => sum + value, 0) / attemptsMs.length);
+    const bestMs = Math.min(...attemptsMs);
+    const upsertEvent = db.prepare(`
+      INSERT INTO special_test_events
+        (project, test_date, distance_m, boat_class, gender_group, session, wind_conditions, location, note, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project, test_date, distance_m, boat_class, gender_group, session) DO UPDATE SET
+        wind_conditions = excluded.wind_conditions, location = excluded.location, note = excluded.note
+      RETURNING id
+    `);
+    const saved = upsertEvent.get(
+      projectLabel(project),
+      row.testDate,
+      row.distanceM,
+      row.boatClass,
+      row.genderGroup,
+      row.session || '',
+      row.windConditions || '',
+      row.location || '',
+      row.note || '',
+      user.id
+    ) as { id: number };
+    // 同一事件下同一组合重复录入时覆盖原成绩，保证幂等。
+    db.prepare('DELETE FROM special_test_results WHERE event_id = ? AND crew_name = ?').run(saved.id, row.crewName);
+    const inserted = db.prepare(`
+      INSERT INTO special_test_results
+        (event_id, crew_name, member_athlete_ids, member_names, previous_best_ms, attempts_ms, average_ms, best_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      saved.id,
+      row.crewName,
+      JSON.stringify(row.memberAthleteIds),
+      JSON.stringify(memberNames),
+      previousBestMs,
+      JSON.stringify(attemptsMs),
+      averageMs,
+      bestMs
+    );
+    db.prepare(
+      "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, 'CREATE_SPECIAL_TEST_RESULT', 'special_test_event', ?, ?)"
+    ).run(user.id, saved.id, JSON.stringify({ crewName: row.crewName, testDate: row.testDate }));
+    return res.status(201).json({
+      message: '专项测试成绩已保存。',
+      eventId: saved.id,
+      resultId: Number(inserted.lastInsertRowid),
+      averageMs,
+      bestMs,
+    });
+  });
+
   app.post(
     '/api/special-tests/import/preview',
     requireAuth,

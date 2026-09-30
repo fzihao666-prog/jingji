@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { beijingDate, buildTodayStatus } from '../core/coach-daily-todos.ts';
 import {
   WELLNESS_BACKFILL_DAYS,
+  coachWellnessWriteSchema,
   firstIssueMessage,
   wellnessQuerySchema,
   wellnessWindow,
@@ -146,5 +147,15 @@ describe('恢复日报校验', () => {
       moodIndex: null,
       status: 'normal',
     });
+  });
+
+  it('教练代填允许关注/警示状态，仍拒绝 missing 与未知状态', () => {
+    const schema = coachWellnessWriteSchema(now);
+    expect(schema.safeParse({ sleepHours: 7, status: 'attention' }).success).toBe(true);
+    expect(schema.safeParse({ sleepHours: 7, status: 'alert' }).success).toBe(true);
+    expect(schema.safeParse({ sleepHours: 7, status: 'missing' }).success).toBe(false);
+    expect(schema.safeParse({ sleepHours: 7, status: 'unknown' }).success).toBe(false);
+    // 日期窗口与本人自评一致：只允许最近7天。
+    expect(schema.safeParse({ date: '2026-09-16', sleepHours: 7 }).success).toBe(false);
   });
 });

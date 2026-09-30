@@ -101,6 +101,7 @@ Page({
     trainingSummary: [],
     canEditSelf: false,
     canReportRole: false,
+    canCoachFill: false,
     wellnessTrends: [],
     bodyCompositionHistory: [],
     profileComparison: null,
@@ -122,7 +123,8 @@ Page({
         page.setData({
           ...scope,
           canEditSelf: scope.user.role === 'ATL',
-          canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role)
+          canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role),
+          canCoachFill: MANAGER_ROLES.includes(scope.user.role)
         });
       }
     });
@@ -230,5 +232,17 @@ Page({
     const athleteId = Number(this.data.selectedAthleteId) || 0;
     if (!athleteId) return;
     wx.navigateTo({ url: `/pages/injury-report/injury-report?athleteId=${athleteId}` });
+  },
+
+  fillTraining() {
+    const athleteId = Number(this.data.selectedAthleteId) || 0;
+    if (!athleteId) return;
+    wx.navigateTo({ url: `/pages/training-entry/training-entry?athleteId=${athleteId}` });
+  },
+
+  fillWellness() {
+    const athleteId = Number(this.data.selectedAthleteId) || 0;
+    if (!athleteId) return;
+    wx.navigateTo({ url: `/pages/wellness-entry/wellness-entry?athleteId=${athleteId}` });
   }
 });

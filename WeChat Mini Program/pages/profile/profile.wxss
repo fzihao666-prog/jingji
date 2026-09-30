@@ -15,3 +15,5 @@
 .injury-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
 .injury-head-copy { min-width: 0; flex: 1; }
 .injury-report-entry { flex: none; margin: 0; padding: 8rpx 0; white-space: nowrap; }
+.coach-fill-actions { display: flex; gap: 16rpx; }
+.coach-fill-actions .secondary-button { flex: 1; margin: 0; min-height: 76rpx; font-size: 23rpx; }

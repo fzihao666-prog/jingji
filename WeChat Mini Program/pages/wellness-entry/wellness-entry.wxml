@@ -1,7 +1,7 @@
 <view class="page wellness-page">
   <view class="page-head">
     <view class="page-title">恢复日报</view>
-    <view class="page-description">本人填写的自评数值 · 最近7天可补填</view>
+    <view class="page-description">{{isCoach ? '教练代填的恢复数据 · 最近7天可补填' : '本人填写的自评数值 · 最近7天可补填'}}</view>
   </view>
 
   <view wx:if="{{error}}" class="error-box">{{error}} <text class="retry-link" bindtap="retryLoad">点按重试</text></view>
@@ -9,6 +9,12 @@
 
   <block wx:if="{{!loading}}">
     <view class="card form-card">
+      <view wx:if="{{isCoach}}" class="field">
+        <text class="field-label">代填运动员 *</text>
+        <picker range="{{athleteOptions}}" value="{{athleteIndex}}" bindchange="onAthleteChange">
+          <view class="picker-input">{{athleteName}}</view>
+        </picker>
+      </view>
       <view class="form-grid">
         <view class="field">
           <text class="field-label">填写日期 *</text>
@@ -46,7 +52,7 @@
     </view>
 
     <view class="card form-card">
-      <view class="card-head"><view><view class="card-head-title">今日训练状态 *</view><view class="todo-note">本人自评，不生成诊断或评分</view></view></view>
+      <view class="card-head"><view><view class="card-head-title">今日训练状态 *</view><view class="todo-note">{{isCoach ? '教练代填可标注需要关注或警示' : '本人自评，不生成诊断或评分'}}</view></view></view>
       <radio-group class="status-group" bindchange="onStatusChange" aria-label="今日训练状态">
         <label wx:for="{{statusOptions}}" wx:key="value" class="status-option {{form.statusIndex === index ? 'status-option-active' : ''}}">
           <radio value="{{index}}" checked="{{form.statusIndex === index}}" color="#176f7f" />{{item.label}}

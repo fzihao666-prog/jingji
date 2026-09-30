@@ -513,6 +513,25 @@ Page({
     navigateToAthlete(this, event, this.data.athletes);
   },
 
+  // 代填入口：候选列表即授权边界，服务端还会按访问范围再校验一次。
+  fillTrainingForAthlete(event) {
+    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
+    if (!(this.data.athletes || []).some((item) => Number(item.id) === athleteId)) {
+      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: `/pages/training-entry/training-entry?athleteId=${athleteId}` });
+  },
+
+  fillWellnessForAthlete(event) {
+    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
+    if (!(this.data.athletes || []).some((item) => Number(item.id) === athleteId)) {
+      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: `/pages/wellness-entry/wellness-entry?athleteId=${athleteId}` });
+  },
+
   openTrainingEntry() {
     wx.navigateTo({ url: '/pages/training-entry/training-entry' });
   },

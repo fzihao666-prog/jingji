@@ -40,6 +40,13 @@
       </view>
       <button wx:if="{{selectedAthleteId && canReportRole}}" class="text-button injury-report-entry" bindtap="reportInjury" aria-label="{{canEditSelf ? '提交本人疼痛反馈' : '为当前运动员新增伤病记录'}}">{{canEditSelf ? '提交疼痛反馈' : '新增伤病记录'}}</button>
     </view>
+    <view wx:if="{{selectedAthleteId && canCoachFill}}" class="card coach-fill-card">
+      <view class="card-head"><view><view class="card-head-title">教练代填</view><view class="todo-note">为当前运动员补充训练课次或恢复日报</view></view></view>
+      <view class="coach-fill-actions">
+        <button class="secondary-button" bindtap="fillTraining" aria-label="为当前运动员代填训练记录">代填训练</button>
+        <button class="secondary-button" bindtap="fillWellness" aria-label="为当前运动员代填恢复日报">代填日报</button>
+      </view>
+    </view>
     <view class="card"><view wx:if="{{injuries.length}}" class="list"><view wx:for="{{injuries}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.meta}}</text></view><view class="list-row-value">{{item.pain}}</view></view><text class="tag {{item.statusClass}}">{{item.status}}</text><text class="injury-note">{{item.restriction}}</text></view></view><view wx:else class="state"><view class="state-icon">✓</view><view class="state-title">暂无伤病记录</view></view></view>
     <view class="section-head"><view class="section-head-title">恢复状态</view><view class="section-head-note">{{from}} 至 {{to}}</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取恢复趋势</view></view>

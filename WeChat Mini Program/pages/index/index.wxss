@@ -56,6 +56,9 @@
 .team-athlete-link { margin-left: auto; color: #176373; font-size: 24rpx; }
 .team-athlete-tags { display: flex; flex-wrap: wrap; gap: 10rpx; margin-top: 10rpx; }
 .team-athlete-row .todo-note { margin-top: 8rpx; }
+.team-athlete-actions { display: flex; gap: 14rpx; margin-top: 12rpx; }
+.team-athlete-actions .mini-button { flex: 1; margin: 0; height: 58rpx; padding: 0 20rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid #cbdadd; border-radius: 14rpx; color: #176f7f; background: #fff; font-size: 21rpx; line-height: 1; }
+.team-athlete-actions .mini-button:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
 /* 训练负荷管理 ACWR */
 .acwr-summary { display: flex; gap: 12rpx; margin-top: 16rpx; }
 .acwr-stat { flex: 1; padding: 16rpx 10rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #edf3f4; text-align: center; }
