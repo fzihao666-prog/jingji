@@ -63,6 +63,7 @@
         </view>
       </view>
       <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无可查看运动员</view></view>
+      <pager-nav data-key="athletes" page="{{athletePager.page}}" page-count="{{athletePager.pageCount}}" total="{{athletePager.total}}" label="运动员" bindpagechange="onAthletePagerChange" />
     </view>
 
     <view class="section-head">

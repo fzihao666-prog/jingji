@@ -28,6 +28,7 @@ export async function checkMiniDailyTodoFlow(assert) {
     readFileSync(new URL('../WeChat Mini Program/utils/pagination.js', import.meta.url), 'utf8'),
     paginationContext
   );
+  modules['../../utils/pagination'] = paginationContext.module.exports;
   const viewContext = {
     module: { exports: {} },
     require: (path) => (path === './pagination' ? paginationContext.module.exports : format.module.exports),

@@ -1,0 +1,9 @@
+<view wx:if="{{pageCount > 1}}" class="pager-nav" aria-label="{{label}}翻页">
+  <button class="pager-nav-button" hover-class="access-active" disabled="{{page <= 0}}" bindtap="onPrev" aria-label="查看上一页{{label}}">上一页</button>
+  <view class="pager-nav-indicator" aria-live="polite" aria-atomic="true" aria-label="{{label}}共 {{total}} {{unit}}，当前第 {{page + 1}} 页，共 {{pageCount}} 页">
+    <text class="pager-nav-current">{{page + 1}}</text>
+    <text class="pager-nav-total">/ {{pageCount}} 页</text>
+    <text class="pager-nav-count">· 共 {{total}} {{unit}}</text>
+  </view>
+  <button class="pager-nav-button" hover-class="access-active" disabled="{{page >= pageCount - 1}}" bindtap="onNext" aria-label="查看下一页{{label}}">下一页</button>
+</view>

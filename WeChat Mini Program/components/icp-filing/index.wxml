@@ -1,0 +1,5 @@
+<view class="filing-footer">
+  <button class="filing-number" bindtap="copyQueryUrl" aria-label="京ICP备2026065980号，点按复制工信部备案查询网址">京ICP备2026065980号</button>
+  <text class="filing-hint">点按备案号复制工信部查询网址</text>
+  <text class="filing-url" user-select="true">https://beian.miit.gov.cn/</text>
+</view>

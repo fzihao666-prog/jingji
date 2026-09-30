@@ -86,15 +86,7 @@
               <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
             </view>
           </view>
-          <view wx:if="{{todoView.missingPage.pageCount > 1}}" class="todo-pager">
-            <button class="todo-pager-nav" hover-class="access-active" disabled="{{!todoView.missingPage.hasPrev}}" bindtap="onMissingPrevPage" aria-label="查看上一页未填报运动员">上一页</button>
-            <view class="todo-pager-indicator" aria-live="polite" aria-atomic="true" aria-label="未填报共 {{todoView.missingPage.total}} 人，当前第 {{todoView.missingPage.page + 1}} 页，共 {{todoView.missingPage.pageCount}} 页">
-              <text class="todo-pager-current">{{todoView.missingPage.page + 1}}</text>
-              <text class="todo-pager-total">/ {{todoView.missingPage.pageCount}} 页</text>
-              <text class="todo-pager-count">· 共 {{todoView.missingPage.total}} 人</text>
-            </view>
-            <button class="todo-pager-nav" hover-class="access-active" disabled="{{!todoView.missingPage.hasNext}}" bindtap="onMissingNextPage" aria-label="查看下一页未填报运动员">下一页</button>
-          </view>
+          <pager-nav data-key="missing" page="{{todoView.missingPager.page}}" page-count="{{todoView.missingPager.pageCount}}" total="{{todoView.missingPager.total}}" label="未填报运动员" bindpagechange="onPagerChange" />
         </block>
         <block wx:if="{{todoView.show.attention}}">
           <view class="todo-heading">负荷与伤病关注 · {{todoView.counts.attention}} 人</view>
@@ -111,6 +103,7 @@
               <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
             </view>
           </view>
+          <pager-nav data-key="attention" page="{{todoView.attentionPager.page}}" page-count="{{todoView.attentionPager.pageCount}}" total="{{todoView.attentionPager.total}}" label="关注运动员" bindpagechange="onPagerChange" />
         </block>
         <block wx:if="{{todoView.show.review}}">
           <view class="todo-heading">复查提醒 · {{todoView.counts.review}} 人</view>
@@ -125,6 +118,7 @@
               <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
             </view>
           </view>
+          <pager-nav data-key="review" page="{{todoView.reviewPager.page}}" page-count="{{todoView.reviewPager.pageCount}}" total="{{todoView.reviewPager.total}}" label="复查提醒运动员" bindpagechange="onPagerChange" />
         </block>
         <block wx:if="{{todoView.show.incompleteTime}}">
           <view class="todo-heading">开训时间待补充 · {{todoView.counts.incompleteTime}} 人</view>
@@ -138,8 +132,9 @@
               <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
             </view>
           </view>
+          <pager-nav data-key="incompleteTime" page="{{todoView.incompleteTimePager.page}}" page-count="{{todoView.incompleteTimePager.pageCount}}" total="{{todoView.incompleteTimePager.total}}" label="时间待补运动员" bindpagechange="onPagerChange" />
         </block>
-        <view class="todo-heading">已跟进 · {{todoView.followedUpList.length}} 人</view>
+        <view class="todo-heading">已跟进 · {{todoView.followedPager.total}} 人</view>
         <view wx:if="{{!todoView.followedUpList.length}}" class="todo-note">今日还没有已跟进的运动员。</view>
         <view wx:for="{{todoView.followedUpList}}" wx:key="athleteId" class="todo-card todo-card-followed" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，今日已跟进，点按查看档案">
           <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
@@ -148,6 +143,7 @@
             <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="unmarkFollowedUp" aria-label="撤销{{item.athleteName}}的已跟进标记">撤销跟进</button>
           </view>
         </view>
+        <pager-nav data-key="followed" page="{{todoView.followedPager.page}}" page-count="{{todoView.followedPager.pageCount}}" total="{{todoView.followedPager.total}}" label="已跟进运动员" bindpagechange="onPagerChange" />
       </block>
     </block>
   </view>
@@ -190,6 +186,7 @@
             <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
           </view>
         </view>
+        <pager-nav data-key="team" page="{{teamView.teamPager.page}}" page-count="{{teamView.teamPager.pageCount}}" total="{{teamView.teamPager.total}}" label="队伍成员" bindpagechange="onPagerChange" />
       </block>
     </block>
   </view>
@@ -303,6 +300,7 @@
           <text class="tag {{item.status === 'observation' ? 'warn' : 'danger'}}">{{item.statusLabel}}</text>
         </view>
       </view>
+      <pager-nav data-key="injuries" page="{{injuriesPager.page}}" page-count="{{injuriesPager.pageCount}}" total="{{injuriesPager.total}}" label="伤病关注运动员" bindpagechange="onPagerChange" />
     </view>
 
     <view class="section-head"><view class="section-head-title">训练量统计</view><view class="section-head-note">最近训练趋势</view></view>

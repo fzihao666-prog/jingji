@@ -1,5 +1,4 @@
 const { INJURY_LABELS, number } = require('./format');
-const { buildPagerState } = require('./pagination');
 
 const TODO_FILTERS = ['all', 'missing', 'attention', 'review', 'incomplete'];
 const GROUP_LABELS = {
@@ -8,31 +7,6 @@ const GROUP_LABELS = {
   review: '复查提醒',
   incompleteTime: '时间待补',
 };
-// 未填报名单每页最多展示人数，超出部分通过翻页查看。
-const MISSING_PAGE_SIZE = 5;
-
-// 未填报名单分页是纯视图逻辑：输入完整筛选后的名单，输出当页切片与页码信息；
-// 页码越界时收敛到最后一页，避免筛选/跟进后名单变短导致空白页。
-// 注意：todoMissingPage 在页面内是 0 基，buildPagerState 是 1 基，此处做一次换算。
-function paginateMissing(todoView, page) {
-  if (!todoView) return null;
-  const total = todoView.missing.length;
-  const pageCount = Math.max(1, Math.ceil(total / MISSING_PAGE_SIZE));
-  const state = buildPagerState(Number.isInteger(page) && page >= 0 ? page + 1 : 1, pageCount);
-  const safePage = state.page - 1;
-  return {
-    ...todoView,
-    missing: todoView.missing.slice(safePage * MISSING_PAGE_SIZE, (safePage + 1) * MISSING_PAGE_SIZE),
-    missingPage: {
-      page: safePage,
-      pageCount: state.pageCount,
-      total,
-      pageSize: MISSING_PAGE_SIZE,
-      hasPrev: state.hasPrev,
-      hasNext: state.hasNext,
-    },
-  };
-}
 
 function reviewDueLabel(dueIn) {
   if (!Number.isInteger(dueIn)) return '';
@@ -201,4 +175,4 @@ function filterDailyTodos(todos, filter, keyword) {
   };
 }
 
-module.exports = { dailyTodoView, filterDailyTodos, TODO_FILTERS, reviewDueLabel, GROUP_LABELS, MISSING_PAGE_SIZE, paginateMissing };
+module.exports = { dailyTodoView, filterDailyTodos, TODO_FILTERS, reviewDueLabel, GROUP_LABELS };

@@ -30,4 +30,5 @@
   </view>
 
   <button class="danger-button" bindtap="logout">退出登录</button>
+  <icp-filing />
 </view>

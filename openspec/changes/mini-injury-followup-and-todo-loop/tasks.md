@@ -72,3 +72,12 @@
 - [x] 6.3 Mini 样式硬化：`.todo-pager` 显式限宽 + overflow hidden；按钮最小点击高度 72rpx（=36px @375 设计宽）、`white-space: nowrap`；指示区 `flex: 0 1 auto; min-width: 0` 自适应收缩，窄屏无横向滚动。
 - [x] 6.4 Mini 逻辑复用：新建 `utils/pagination.js`（`clampPage`/`buildPagerState`，与网页端同语义），`daily-todos.js` 的 `paginateMissing` 改为调用它；新增 `utils/pagination.test.js`（3 例）。
 - [x] 6.5 说明：完整页码 + 省略号形态属宽屏（网页端），小程序按 spec §4 采用紧凑形态，不展示页码序列。
+
+## 7. 人员列表统一展示（2026-09-30，按用户 Mini Spec）
+
+- [x] 7.1 `utils/pagination.js` 新增通用 `paginateList`（每页 5 人、越界收敛、末页不补假数据）与 `PAGE_SIZE` 常量；`daily-todos.js` 的 `paginateMissing` 上移删除，页面直接按组调用。
+- [x] 7.2 新建全局组件 `components/pager-nav`（上一页/页号指示/下一页，`pagechange` 事件、页码由父级持有；容器限宽裁剪、按钮 72rpx、nowrap、aria-live 播报），`app.json` 全局注册，index.wxml 内联翻页标记与样式删除。
+- [x] 7.3 index：待办五组（missing/attention/review/incompleteTime/followed）+ 队伍总览 + 伤病关注名单统一接入；`todoPagerPages` 集中持有各列表页码；筛选/搜索/切项目回第一页；伤病名单留存 `activeInjuriesAll` 供翻页重切。
+- [x] 7.4 special：运动员汇总列表接入（保留服务端 30 条上限，队伍/项目筛选变化回第一页）。
+- [x] 7.5 例外记录：今日训练课次、专项测试成绩行、测试录入成员选择器、档案单人记录列表不接入（非人员展示列表或输入控件）。
+- [x] 7.6 并行加入的无障碍契约测试 `pagination-layout.test.js` 迁移至组件模板（aria-live 播报、不依赖 aria-role、页面无内联翻页标记）。

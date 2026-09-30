@@ -144,6 +144,7 @@
           <text class="footer-link" bindtap="goBack">返回登录</text>
         </view>
       </view>
+      <icp-filing />
     </view>
   </scroll-view>
 </view>

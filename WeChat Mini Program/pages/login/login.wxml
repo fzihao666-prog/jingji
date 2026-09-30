@@ -72,6 +72,7 @@
           <text class="register-entry-link" bindtap="goRegister">立即注册</text>
         </view>
       </view>
+      <icp-filing />
     </view>
   </scroll-view>
 </view>

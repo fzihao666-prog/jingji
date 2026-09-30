@@ -13,7 +13,7 @@ const context = {
   require: (path) => (path === './pagination' ? paginationContext.module.exports : formatContext.module.exports),
 };
 vm.runInNewContext(readFileSync(new URL('./daily-todos.js', import.meta.url), 'utf8'), context);
-const { dailyTodoView, filterDailyTodos, reviewDueLabel, paginateMissing, MISSING_PAGE_SIZE } = context.module.exports;
+const { dailyTodoView, filterDailyTodos, reviewDueLabel } = context.module.exports;
 const athlete = { athleteId: 1, athleteName: '样例队员', team: '一队', project: 'ROWING' };
 const payload = () => ({
   date: '2026-09-23', timezone: 'Asia/Shanghai', generatedAt: '2026-09-23T02:00:00Z',
@@ -147,51 +147,6 @@ describe('待办分组筛选与姓名搜索', () => {
   it('未知分组回退到全部，缺少待办时不产生视图', () => {
     expect(filterDailyTodos(roster(), 'other', '').filter).toBe('all');
     expect(filterDailyTodos(null, 'all', '')).toBeNull();
-  });
-});
-
-describe('未填报名单分页', () => {
-  // paginateMissing 必须作用于"完整筛选后的名单"（页面在 filterDailyTodos 之后调用），
-  // 因此夹具返回未分页的完整视图，每个断言独立分页。
-  const fullView = (count) => {
-    const missing = Array.from({ length: count }, (_, i) => ({
-      athleteId: i + 1, athleteName: `队员${i + 1}`, team: '一队', project: 'ROWING',
-    }));
-    return filterDailyTodos(dailyTodoView({
-      date: '2026-09-23', timezone: 'Asia/Shanghai', generatedAt: '2026-09-23T02:00:00Z',
-      windowStart: '2026-09-22T02:00:00Z', highLoadThreshold: 600,
-      counts: { total: count, submitted: 0, missing: count, attention: 0, incompleteTime: 0, reviewDue: 0 },
-      missing, attention: [], incompleteTime: [], reviewDue: [],
-    }), 'all', '');
-  };
-
-  it(`每页最多 ${MISSING_PAGE_SIZE} 人，页码信息完整`, () => {
-    const view = paginateMissing(fullView(12), 0);
-    expect(view.missing).toHaveLength(5);
-    expect(view.missingPage).toEqual({ page: 0, pageCount: 3, total: 12, pageSize: 5, hasPrev: false, hasNext: true });
-    expect(view.missing[0].athleteName).toBe('队员1');
-    expect(view.counts.missing).toBe(12);
-  });
-
-
-  it('翻页切片正确，最后一页返回剩余人数', () => {
-    const last = paginateMissing(fullView(12), 2);
-    expect(last.missing).toHaveLength(2);
-    expect(last.missing[0].athleteName).toBe('队员11');
-    expect(last.missingPage).toMatchObject({ page: 2, hasPrev: true, hasNext: false });
-  });
-
-  it('页码越界收敛到最后一页，非法页码回到第一页', () => {
-    expect(paginateMissing(fullView(6), 9).missingPage.page).toBe(1);
-    expect(paginateMissing(fullView(6), -1).missingPage.page).toBe(0);
-    expect(paginateMissing(fullView(6), 'x').missingPage.page).toBe(0);
-  });
-
-  it('空名单与单页名单不产生翻页控件', () => {
-    const view = paginateMissing(fullView(0), 0);
-    expect(view.missing).toEqual([]);
-    expect(view.missingPage).toMatchObject({ page: 0, pageCount: 1, total: 0, hasPrev: false, hasNext: false });
-    expect(paginateMissing(fullView(5), 0).missingPage.pageCount).toBe(1);
   });
 });
 

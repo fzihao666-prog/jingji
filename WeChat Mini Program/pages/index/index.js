@@ -4,10 +4,14 @@ const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard
 const { shortDate } = require('../../utils/date');
 const { number, INJURY_LABELS } = require('../../utils/format');
 const { durationLoadLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
-const { dailyTodoView, filterDailyTodos, paginateMissing } = require('../../utils/daily-todos');
+const { dailyTodoView, filterDailyTodos } = require('../../utils/daily-todos');
+const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
 const { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder } = require('../../utils/chart-placeholder');
+
+// 待办卡内需要分页的四个分组（已跟进区单独处理）。
+const TODO_PAGED_GROUPS = ['missing', 'attention', 'review', 'incompleteTime'];
 
 function sum(values) {
   return values.reduce((total, value) => total + (Number.isFinite(Number(value)) ? Number(value) : 0), 0);
@@ -186,7 +190,8 @@ Page({
     todoFilter: 'all',
     todoKeyword: '',
     todoView: null,
-    todoMissingPage: 0,
+    // 全部人员列表的翻页状态（0 基页码）：待办四组 + 已跟进 + 队伍总览 + 伤病关注。
+    todoPagerPages: { missing: 0, attention: 0, review: 0, incompleteTime: 0, followed: 0, team: 0, injuries: 0 },
     todayLoading: false,
     todayError: '',
     todayView: null,
@@ -269,7 +274,13 @@ Page({
 
   async loadPageData(scope) {
     const result = await api.overview(scope.from, scope.to, scope.canSelfReport ? scope.selectedAthleteId : 0, scope.project);
-    return buildView(result.overview);
+    const view = buildView(result.overview);
+    // 伤病关注名单按统一分页展示：完整名单留存 activeInjuriesAll，翻页时重新切片。
+    const injuriesModel = paginateList(view.activeInjuries, this.data.todoPagerPages.injuries, PAGE_SIZE);
+    view.activeInjuriesAll = view.activeInjuries;
+    view.activeInjuries = injuriesModel.items;
+    view.injuriesPager = injuriesModel;
+    return view;
   },
 
   async loadTodos(project) {
@@ -370,7 +381,7 @@ Page({
     }
   },
 
-  buildTeamView(overview, keyword) {
+  buildTeamView(overview, keyword, pagerPages) {
     if (!overview) return null;
     const kw = (keyword || '').toLowerCase();
     const filtered = kw
@@ -379,7 +390,8 @@ Page({
           (item.team || '').toLowerCase().includes(kw)
         )
       : overview.athletes;
-    return { ...overview, athletes: filtered };
+    const model = paginateList(filtered, (pagerPages || this.data.todoPagerPages).team, PAGE_SIZE);
+    return { ...overview, athletes: model.items, teamPager: model };
   },
 
   retryTeam() {
@@ -389,7 +401,12 @@ Page({
   onTeamKeyword(event) {
     const teamKeyword = event.detail.value;
     if (!this.data.teamOverview) return;
-    this.setData({ teamKeyword, teamView: this.buildTeamView(this.data.teamOverview, teamKeyword) });
+    const todoPagerPages = { ...this.data.todoPagerPages, team: 0 };
+    this.setData({
+      teamKeyword,
+      todoPagerPages,
+      teamView: this.buildTeamView(this.data.teamOverview, teamKeyword),
+    });
   },
 
   // 训练负荷管理（ACWR）
@@ -455,40 +472,56 @@ Page({
     return this.loadPlanExecution(this.data.project);
   },
 
-  // 待办渲染视图 = 筛选/搜索 + 未填报名单分页；missingPage 为 null 时表示沿用当前页码（越界自动收敛）。
-  composeTodoView(todos, missingPage) {
+  // 统一人员列表分页：先筛选/搜索得到完整名单，再按每页 5 人切片（spec §6）。
+  // pagerPages 覆盖各列表的当前页码（0 基）；缺省沿用现有页码，越界由 paginateList 收敛。
+  composeTodoView(todos, pagerPages) {
     const source = todos === undefined ? this.data.todos : todos;
     if (!source) return null;
-    return paginateMissing(
-      filterDailyTodos(source, this.data.todoFilter, this.data.todoKeyword),
-      missingPage === undefined ? this.data.todoMissingPage : missingPage
-    );
+    const view = filterDailyTodos(source, this.data.todoFilter, this.data.todoKeyword);
+    const pages = pagerPages || this.data.todoPagerPages;
+    for (const key of TODO_PAGED_GROUPS) {
+      const model = paginateList(view[key], pages[key], PAGE_SIZE);
+      view[key] = model.items;
+      view[`${key}Pager`] = model;
+    }
+    const followed = paginateList(view.followedUpList, pages.followed, PAGE_SIZE);
+    view.followedUpList = followed.items;
+    view.followedPager = followed;
+    return view;
   },
 
-  turnMissingPage(delta) {
-    if (!this.data.todos) return;
-    const page = this.data.todoMissingPage + delta;
-    this.setData({ todoMissingPage: page, todoView: this.composeTodoView(undefined, page) });
+  // pager-nav 统一回调：data-key 标识列表，event.detail.page 为目标页（0 基）。
+  onPagerChange(event) {
+    const key = event.currentTarget.dataset.key;
+    const page = Number(event.detail && event.detail.page);
+    const pages = this.data.todoPagerPages;
+    if (!key || !(key in pages) || !Number.isInteger(page) || page === pages[key]) return;
+    const nextPages = { ...pages, [key]: page };
+    const patch = { todoPagerPages: nextPages, todoView: this.composeTodoView(undefined, nextPages) };
+    if (key === 'team') patch.teamView = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, nextPages);
+    if (key === 'injuries' && this.data.activeInjuriesAll) {
+      const model = paginateList(this.data.activeInjuriesAll, page, PAGE_SIZE);
+      patch.activeInjuries = model.items;
+      patch.injuriesPager = model;
+    }
+    this.setData(patch);
   },
 
-  onMissingPrevPage() {
-    this.turnMissingPage(-1);
-  },
-
-  onMissingNextPage() {
-    this.turnMissingPage(1);
+  // 筛选/搜索变化后所有人员列表回到第一页（spec §6）。
+  resetPagerPages() {
+    return { missing: 0, attention: 0, review: 0, incompleteTime: 0, followed: 0, team: 0, injuries: 0 };
   },
 
   onTodoFilter(event) {
     const todoFilter = event.currentTarget.dataset.filter;
     if (!todoFilter || todoFilter === this.data.todoFilter || !this.data.todos) return;
-    this.setData({ todoFilter, todoMissingPage: 0, todoView: this.composeTodoView(undefined, 0) });
+    this.setData({ todoFilter, todoPagerPages: this.resetPagerPages(), todoView: this.composeTodoView(undefined, this.resetPagerPages()) });
   },
 
   onTodoKeyword(event) {
     const todoKeyword = event.detail.value;
     if (!this.data.todos) return;
-    this.setData({ todoKeyword, todoMissingPage: 0, todoView: this.composeTodoView(undefined, 0) });
+    this.setData({ todoKeyword, todoPagerPages: this.resetPagerPages(), todoView: this.composeTodoView(undefined, this.resetPagerPages()) });
   },
 
   onScopeChange(event) {
@@ -497,7 +530,7 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todoView: null, todoKeyword: '', todoMissingPage: 0, todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
+      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todoView: null, todoKeyword: '', todoPagerPages: { missing: 0, attention: 0, review: 0, incompleteTime: 0, followed: 0, team: 0, injuries: 0 }, todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
@@ -608,7 +641,7 @@ Page({
     const todos = { ...this.data.todos, followedUp };
     this.setData({
       todos,
-      // 标记/撤销后名单变短：沿用当前页码，越界由 paginateMissing 收敛到最后一页。
+      // 标记/撤销后名单变短：沿用当前页码，越界由 paginateList 收敛到最后一页。
       todoView: this.composeTodoView(todos),
     });
     wx.showToast({ title: toastTitle, icon: 'none' });

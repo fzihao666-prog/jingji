@@ -5,6 +5,7 @@ const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } 
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
 const { displaySeries, trendPlaceholder, ratioPlaceholder } = require('../../utils/chart-placeholder');
+const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
@@ -62,7 +63,7 @@ function buildTrainingView(training, athletes, to) {
   return { metrics, trend: trendDisplay.data, trendPlaceholder: trendDisplay.isPlaceholder,
     intensity: intensityDisplay.data, intensityPlaceholder: intensityDisplay.isPlaceholder,
     content: contentDisplay.data, contentPlaceholder: contentDisplay.isPlaceholder,
-    athleteRows, athleteTotal: (athletes || []).length };
+    athleteRows, athleteRowsAll: athleteRows, athleteTotal: (athletes || []).length };
 }
 
 Page({
@@ -85,7 +86,8 @@ Page({
     intensity: [],
     content: [],
     athleteRows: [],
-    athleteTotal: 0
+    athleteTotal: 0,
+    athletePager: null
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -103,7 +105,7 @@ Page({
   async loadPageData(scope, full, isLatest) {
     if (!full) {
       const result = await api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId);
-      return buildTrainingView(result.training, result.athletes, scope.to);
+      return this.applyAthletePager(buildTrainingView(result.training, result.athletes, scope.to));
     }
     const [teamResult, modelResult, trainingResult] = await Promise.all([
       api.overviewTeams(scope.project),
@@ -142,7 +144,26 @@ Page({
       pace: item.pace || ''
     }));
     if (isLatest && isLatest()) this._loadedProject = scope.project;
-    return { teamItems, championEvents, specialTests: specialTestsData, ...buildTrainingView(trainingResult.training, trainingResult.athletes, scope.to) };
+    const view = { teamItems, championEvents, specialTests: specialTestsData, ...buildTrainingView(trainingResult.training, trainingResult.athletes, scope.to) };
+    return this.applyAthletePager(view);
+  },
+
+  // 运动员汇总列表统一分页：每页 5 人；队伍/项目筛选变化后回到第一页。
+  applyAthletePager(view) {
+    const teamChanged = this._pagedTeamId !== undefined && this._pagedTeamId !== this.data.teamId;
+    this._pagedTeamId = this.data.teamId;
+    const page = teamChanged ? 0 : this.data.athletePager && this.data.athletePager.page || 0;
+    const model = paginateList(view.athleteRowsAll, page, PAGE_SIZE);
+    view.athleteRows = model.items;
+    view.athletePager = model;
+    return view;
+  },
+
+  onAthletePagerChange(event) {
+    const page = Number(event.detail && event.detail.page);
+    if (!Number.isInteger(page)) return;
+    const model = paginateList(this.data.athleteRowsAll, page, PAGE_SIZE);
+    this.setData({ athleteRows: model.items, athletePager: model });
   },
 
   onScopeChange(event) {
@@ -150,7 +171,7 @@ Page({
     if (!change) return Promise.resolve();
     if (change.field === 'project') {
       this._loadedProject = '';
-      this.setData({ teamId: 0, teamIndex: 0, teamItems: [{ id: 0, name: '全部队伍' }], championEvents: [], metrics: [], trend: [], intensity: [], content: [], athleteRows: [], athleteTotal: 0 });
+      this.setData({ teamId: 0, teamIndex: 0, teamItems: [{ id: 0, name: '全部队伍' }], championEvents: [], metrics: [], trend: [], intensity: [], content: [], athleteRows: [], athleteRowsAll: [], athletePager: null, athleteTotal: 0 });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);

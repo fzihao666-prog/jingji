@@ -1,0 +1,29 @@
+.filing-footer {
+  width: 100%;
+  margin: 24rpx auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #526b74;
+  text-align: center;
+}
+
+.filing-number {
+  min-height: 88rpx;
+  margin: 0;
+  padding: 20rpx 24rpx;
+  color: #176f7f;
+  background: transparent;
+  font-size: 24rpx;
+  line-height: 1.5;
+  text-decoration: underline;
+}
+
+.filing-number::after { border: 0; }
+.filing-number:focus { box-shadow: inset 0 0 0 3rpx #176f7f; }
+
+.filing-hint, .filing-url {
+  display: block;
+  font-size: 20rpx;
+  line-height: 1.6;
+}

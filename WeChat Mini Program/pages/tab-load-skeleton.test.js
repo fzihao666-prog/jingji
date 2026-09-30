@@ -99,6 +99,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/date': dateModule,
     '../../utils/chart-placeholder': chartPlaceholder,
     '../../utils/daily-todos': dailyTodosModule,
+    '../../utils/pagination': paginationModule,
     ...extraMocks,
   };
   vm.runInNewContext(readFileSync(url, 'utf8'), {
