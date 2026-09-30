@@ -23,6 +23,7 @@ import { ROLE_META } from '../../shared/access';
 import { PROJECTS, projectLabel } from '../../shared/projects';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { api } from '../api';
+import { pageRange } from '../utils/pagination';
 import type { Athlete, InjuryRecord, InjuryStatus, ProjectTeam, User } from '../types';
 import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
@@ -319,12 +320,11 @@ export function AthleteManagementPage({
     ]
   );
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pager = pageRange(page, PAGE_SIZE, filtered.length);
+  const paged = filtered.slice((pager.current - 1) * PAGE_SIZE, pager.current * PAGE_SIZE);
   useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
+    if (page > pager.pageCount) setPage(pager.pageCount);
+  }, [page, pager.pageCount]);
 
   const resetFilters = () => {
     setSearch('');
@@ -837,22 +837,28 @@ export function AthleteManagementPage({
         </div>
         <footer>
           <span>
-            显示 {filtered.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}–
-            {Math.min(safePage * PAGE_SIZE, filtered.length)}，共 {filtered.length} 人
+            显示 {pager.start}–{pager.end}，共 {filtered.length} 人
           </span>
           <nav aria-label="运动员分页">
             <button
-              disabled={safePage === 1}
+              type="button"
+              aria-label="上一页"
+              disabled={!pager.hasPrev}
               onClick={() => setPage((value) => Math.max(1, value - 1))}
             >
               <ChevronLeft size={16} />
             </button>
             <span>
-              {safePage} / {pageCount}
+              {pager.current} / {pager.pageCount}
+            </span>
+            <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+              当前第 {pager.current} 页，共 {pager.pageCount} 页
             </span>
             <button
-              disabled={safePage === pageCount}
-              onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+              type="button"
+              aria-label="下一页"
+              disabled={!pager.hasNext}
+              onClick={() => setPage((value) => Math.min(pager.pageCount, value + 1))}
             >
               <ChevronRight size={16} />
             </button>

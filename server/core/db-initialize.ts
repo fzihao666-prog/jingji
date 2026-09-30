@@ -73,6 +73,17 @@ export function initializeDatabase(
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  -- 教练每日待办的"今日已跟进"个人工作流标记：不属于训练事实，不参与任何统计口径。
+  CREATE TABLE IF NOT EXISTS coach_todo_followups (
+    user_id INTEGER NOT NULL,
+    athlete_id INTEGER NOT NULL,
+    followup_date TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, athlete_id, followup_date),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (athlete_id) REFERENCES athletes(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS registration_requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
@@ -191,7 +202,7 @@ export function initializeDatabase(
   CREATE TABLE IF NOT EXISTS special_test_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     test_date TEXT NOT NULL,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     distance_m INTEGER NOT NULL,
     boat_class TEXT NOT NULL,
     gender_group TEXT NOT NULL,
@@ -247,7 +258,7 @@ export function initializeDatabase(
 
   CREATE TABLE IF NOT EXISTS special_training_plans (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     week_start TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('draft', 'active', 'completed')),
@@ -370,7 +381,7 @@ export function initializeDatabase(
       CREATE TABLE special_test_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         test_date TEXT NOT NULL,
-        project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+        project TEXT NOT NULL,
         distance_m INTEGER NOT NULL,
         boat_class TEXT NOT NULL,
         gender_group TEXT NOT NULL,
@@ -415,13 +426,15 @@ export function initializeDatabase(
         const byProject = new Map<string, typeof results>();
         for (const result of results) {
           const athleteId = (JSON.parse(result.memberAthleteIds || '[]') as number[])[0];
+          // 运动员项目可能是旧中文名或新 Code，统一按 Code 归组，避免迁移中途误判。
           const project =
-            (athleteProject.get(athleteId) as { project: string } | undefined)?.project === '皮划艇'
-              ? '皮划艇'
-              : '赛艇';
+            normalizeProject((athleteProject.get(athleteId) as { project: string } | undefined)?.project) ===
+            'CANOE_SPRINT'
+              ? 'CANOE_SPRINT'
+              : 'ROWING';
           byProject.set(project, [...(byProject.get(project) || []), result]);
         }
-        if (!byProject.size) byProject.set('赛艇', []);
+        if (!byProject.size) byProject.set('ROWING', []);
         for (const [project, projectResults] of byProject) {
           const saved = insertEvent.get(
             event.testDate,
@@ -463,7 +476,12 @@ export function initializeDatabase(
         )
         .get() as { sql: string } | undefined
     )?.sql || '';
-  if (hasColumn('special_test_events', 'project') && !specialTestSchema.includes("'激流'")) {
+  // 仅处理“旧中文枚举 CHECK 且尚未包含激流”的历史库；新表结构不含中文 CHECK，不能据此重建。
+  if (
+    hasColumn('special_test_events', 'project') &&
+    specialTestSchema.includes("'赛艇'") &&
+    !specialTestSchema.includes("'激流'")
+  ) {
     const events = db
       .prepare(
         `
@@ -517,7 +535,7 @@ export function initializeDatabase(
       CREATE TABLE special_test_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         test_date TEXT NOT NULL,
-        project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+        project TEXT NOT NULL,
         distance_m INTEGER NOT NULL,
         boat_class TEXT NOT NULL,
         gender_group TEXT NOT NULL,
@@ -962,7 +980,7 @@ export function initializeDatabase(
 
   CREATE TABLE IF NOT EXISTS champion_model_standards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     gender TEXT NOT NULL CHECK(gender IN ('男', '女')),
     metric_code TEXT NOT NULL,
     model_version TEXT NOT NULL DEFAULT 'CHAMPION-2026-R1',
@@ -1108,7 +1126,7 @@ export function initializeDatabase(
     source_filename TEXT NOT NULL,
     source_mimetype TEXT NOT NULL DEFAULT '',
     file_size INTEGER NOT NULL DEFAULT 0,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     parser_version TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'reviewing' CHECK(status IN ('reviewing', 'committed', 'failed', 'rolled_back')),
     sheet_count INTEGER NOT NULL DEFAULT 0,
@@ -1182,7 +1200,7 @@ export function initializeDatabase(
     batch_id TEXT NOT NULL,
     normalized_name TEXT NOT NULL,
     name TEXT NOT NULL,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     team TEXT NOT NULL,
     gender TEXT NOT NULL DEFAULT '',
     region TEXT NOT NULL DEFAULT '未设置',
@@ -1205,7 +1223,7 @@ export function initializeDatabase(
     athlete_id INTEGER NOT NULL,
     alias TEXT NOT NULL,
     normalized_alias TEXT NOT NULL,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT 'manual',
     confirmed_by INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1244,7 +1262,7 @@ export function initializeDatabase(
 
   CREATE TABLE IF NOT EXISTS metric_scoring_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project TEXT NOT NULL CHECK(project IN ('赛艇', '皮划艇', '激流')),
+    project TEXT NOT NULL,
     gender TEXT NOT NULL CHECK(gender IN ('男', '女')),
     metric_code TEXT NOT NULL,
     score REAL NOT NULL,
@@ -1297,6 +1315,70 @@ export function initializeDatabase(
     db.exec('ALTER TABLE test_sessions ADD COLUMN duration_min REAL');
   }
 
+  // SQLite 不能修改 CHECK 约束。历史库中这 7 张表的 project 列带中文枚举 CHECK，
+  // 既与项目 Code 口径冲突，也无法容纳新增项目；此处整表重建为无枚举约束的 project 列，
+  // 行数据（含主键）原样保留，存量中文值随后由 migrateLegacyProjectCodes 统一转换为项目 Code。
+  function rebuildLegacyProjectCheckTables() {
+    const legacyProjectCheck = / CHECK\(project IN \(\s*'赛艇'[^)]*\)\)/;
+    const tables = [
+      'special_test_events',
+      'special_training_plans',
+      'champion_model_standards',
+      'data_import_batches',
+      'data_import_athlete_candidates',
+      'athlete_aliases',
+      'metric_scoring_rules',
+    ];
+    // 重建会连带删除表上索引，此处按现行结构补回；UNIQUE 约束随建表语句保留。
+    const indexSqlByTable: Record<string, string[]> = {
+      special_test_events: [
+        'CREATE INDEX IF NOT EXISTS idx_special_test_events_date ON special_test_events (project, test_date DESC, distance_m, boat_class)',
+      ],
+      champion_model_standards: [
+        'CREATE INDEX IF NOT EXISTS idx_champion_standards_lookup ON champion_model_standards (project, gender, active, metric_code)',
+      ],
+      data_import_batches: [
+        'CREATE INDEX IF NOT EXISTS idx_data_import_batches_created ON data_import_batches (created_at DESC, project, status)',
+      ],
+      data_import_athlete_candidates: [
+        'CREATE INDEX IF NOT EXISTS idx_data_import_candidates_batch ON data_import_athlete_candidates (batch_id, status, normalized_name)',
+      ],
+      athlete_aliases: [
+        'CREATE INDEX IF NOT EXISTS idx_athlete_aliases_lookup ON athlete_aliases (normalized_alias, project)',
+      ],
+    };
+    const targets = tables
+      .map((name) => {
+        const row = db
+          .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+          .get(name) as { sql: string } | undefined;
+        if (!row?.sql) return null;
+        const nextSql = row.sql.replace(legacyProjectCheck, '');
+        return nextSql === row.sql ? null : { name, nextSql };
+      })
+      .filter((item): item is { name: string; nextSql: string } => item !== null);
+    if (!targets.length) return;
+    db.exec('PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON;');
+    try {
+      db.exec('BEGIN IMMEDIATE');
+      for (const { name, nextSql } of targets) {
+        db.exec(`
+          ALTER TABLE ${name} RENAME TO ${name}_legacy_project_check;
+          ${nextSql};
+          INSERT INTO ${name} SELECT * FROM ${name}_legacy_project_check;
+          DROP TABLE ${name}_legacy_project_check;
+          ${(indexSqlByTable[name] || []).join(';\n          ')}
+        `);
+      }
+      db.exec('COMMIT');
+    } catch (error) {
+      if (db.isTransaction) db.exec('ROLLBACK');
+      throw error;
+    } finally {
+      db.exec('PRAGMA legacy_alter_table = OFF; PRAGMA foreign_keys = ON;');
+    }
+  }
+
   // 项目名称曾作为数据库关联值保存。此迁移只转换已有三项目，保留所有业务记录主键与关系；
   // 后续新增项目统一写入稳定 Code，不再以中文展示名作为关联键。
   function migrateLegacyProjectCodes() {
@@ -1312,6 +1394,14 @@ export function initializeDatabase(
       'project_teams',
       'user_project_permissions',
       'user_team_permissions',
+      // 以下表历史上带中文枚举 CHECK，需先由 rebuildLegacyProjectCheckTables 重建后才能改写。
+      'special_test_events',
+      'special_training_plans',
+      'champion_model_standards',
+      'data_import_batches',
+      'data_import_athlete_candidates',
+      'athlete_aliases',
+      'metric_scoring_rules',
     ];
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -5732,6 +5822,8 @@ export function initializeDatabase(
     seedContinuousErgometerChampionModels
   );
 
+  // 先去掉旧库 project 中文枚举 CHECK，存量中文值才能改写为项目 Code。
+  rebuildLegacyProjectCheckTables();
   // 初始化示例与历史迁移完成后再执行一次，确保新库同样写入项目 Code。
   migrateLegacyProjectCodes();
 

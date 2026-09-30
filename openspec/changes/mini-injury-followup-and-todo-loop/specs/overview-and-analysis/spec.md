@@ -50,6 +50,8 @@
 - `attention` 行且 `injury` 非空、`reviewDue` 行：**上报伤病**（跳转 `injury-report?athleteId=`）。
 - 动作按钮 MUST 使用 `catchtap` 阻止冒泡，不触发行主体的档案跳转；每个按钮 MUST 有独立 `aria-label`（含运动员姓名）。
 - 跳转目标页面 MUST 复用既有的目标运动员校验与服务端权限；本需求不新增任何写接口。
+- 动作按钮 MUST 位于待办卡片内部（卡片整体点按为查看档案，按钮 `catchtap` 阻止冒泡），与队伍总览行的交互模式一致。
+- "当天未填报"名单 MUST 支持分页浏览：每页最多展示 5 人（`MISSING_PAGE_SIZE` 常量）；翻页控件为居中的"上一页 · 页号指示 · 下一页"（页号仅作指示不可点按：当前页号高亮显示，并标注"/ y 页 · 共 N 人"；小程序按紧凑形态不展示完整页码序列，无需页码省略）；翻页区域 MUST 限宽且裁剪溢出（width/max-width 100%、overflow hidden）、按钮最小点击高度 72rpx 且文字不换行、指示区可自适应收缩，窄屏不产生横向滚动；仅一页时不渲染翻页控件；筛选、搜索或切换分组后回到第一页；标记/撤销跟进后名单变短时页码自动收敛到有效范围，不出现空白页。
 
 #### Scenario: 从待办直接代填日报
 
@@ -66,7 +68,7 @@
 系统 SHALL 提供按 用户 × 运动员 × 北京日期 的待办"已跟进"工作流标记（独立小表，不属于训练事实），并满足：
 
 - `PUT /api/coach/daily-todos/followups`：请求体 `{ project, athleteIds }`（每项目每请求最多 50 个运动员 ID）；仅限 `SCC/PRJ/REG/TD/DMD`；每个 `athleteId` MUST 属于 `accessibleAthleteIds` 且其 `athletes.project` 等于请求的 `project`，否则 403/400；写入幂等（重复标记不产生重复行）；响应返回当前用户在该项目今日的完整 `followedUp` 名单。
-- `DELETE /api/coach/daily-todos/followups`：同构请求体，撤销标记，幂等。
+- `DELETE /api/coach/daily-todos/followups?project=&athleteIds=`：传参走 query（`athleteIds` 为逗号分隔整数，最多 50 个），因 `wx.request` 对 DELETE 请求体的行为跨端不可靠；其余校验与幂等要求同 PUT。
 - `GET /api/coach/daily-todos` 响应 SHALL 增加 `followedUp: number[]`（当前用户、当前项目、今天的标记）。
 - 标记只对当天生效：昨日及更早的标记 MUST NOT 影响后续日期的待办展示。
 

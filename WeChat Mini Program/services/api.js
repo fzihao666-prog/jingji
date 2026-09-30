@@ -90,6 +90,13 @@ module.exports = {
   planExecution(project) {
     return request(`/api/coach/plan-execution?${query({ project })}`);
   },
+  markTodoFollowups(project, athleteIds) {
+    return request('/api/coach/daily-todos/followups', { method: 'PUT', data: { project, athleteIds } });
+  },
+  unmarkTodoFollowups(project, athleteIds) {
+    // DELETE 传参走 query：wx.request 对 DELETE 请求体的行为跨端不可靠。
+    return request(`/api/coach/daily-todos/followups?${query({ project, athleteIds: athleteIds.join(',') })}`, { method: 'DELETE' });
+  },
   saveCurrentProject(project) {
     return request('/api/preferences/current-project', { method: 'PUT', data: { project } });
   },
@@ -122,6 +129,9 @@ module.exports = {
   },
   injuryRecords(athleteId) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/injuries`);
+  },
+  painTrend(athleteId, days = 30) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/injuries/pain-trend?${query({ days })}`);
   },
   createInjuryRecord(athleteId, data) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/injuries`, { method: 'POST', data });

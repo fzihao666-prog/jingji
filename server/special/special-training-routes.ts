@@ -537,7 +537,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
       RETURNING id
     `);
     const saved = upsertEvent.get(
-      projectLabel(project),
+      project,
       row.testDate,
       row.distanceM,
       row.boatClass,
@@ -656,7 +656,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
         for (const eventRows of grouped.values()) {
           const first = eventRows[0];
           const saved = upsertEvent.get(
-            projectLabel(first.project),
+            first.project,
             first.testDate,
             first.distanceM,
             first.boatClass,

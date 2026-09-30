@@ -214,7 +214,7 @@ sequenceDiagram
 | 目录 | 职责 |
 | --- | --- |
 | `server/index.ts` | Express 实例、全局中间件（CSP、body 解析、静态服务）、各域路由注册、优雅关闭；不含业务逻辑 |
-| `server/core/` | `db.ts`、`db-connection.ts`、`database-path.ts`、`db-initialize.ts`、`db-migrations.ts`、`db-system-data.ts`（SQLite 路径、连接、schema、兼容升级与系统字典）、`auth.ts`（JWT、限流）、`permissions.ts`（RBAC 与数据范围）、`utils.ts`、`shared-server.ts`、`uploads.ts`、`coach-daily-todos.ts` |
+| `server/core/` | `db.ts`、`db-connection.ts`、`database-path.ts`、`db-initialize.ts`、`db-migrations.ts`、`db-system-data.ts`（SQLite 路径、连接、schema、兼容升级与系统字典）、`auth.ts`（JWT、限流）、`permissions.ts`（RBAC 与数据范围）、`utils.ts`、`shared-server.ts`、`uploads.ts`、`coach-daily-todos.ts`、`pain-trend.ts`（伤病疼痛趋势纯聚合） |
 | `server/access/` | 账号与权限管理路由、认证（登录/注册/改密）路由、注册审批工作流 |
 | `server/athlete/` | 运动员档案路由与档案校验/写入辅助；本人/教练代填训练课次与恢复日报（`self-training-routes.ts`、`coach-report-routes.ts`、`self-daily-routes.ts`）、训练课次与恢复事实写入（`training-session-service.ts`、`wellness-store.ts`） |
 | `server/training-plan/` | 训练计划路由、计划解析与 Excel 导出、AI 计划生成 |
@@ -353,6 +353,7 @@ erDiagram
 | 专项测试     | `special_test_events`、`special_test_results`                 | 事件与参与者成绩                                                                                         |
 | 专项冠军模型 | `special_champion_models`                                     | 按项目、分组、标准代码与细分项目维护的赛事标杆配置；成绩与比赛日期作为同一条正式配置保存，不写入模拟成绩 |
 | 健康         | `injury_records`                                              | 疼痛、限制、康复与复查                                                                                   |
+| 工作流状态   | `coach_todo_followups`                                        | 教练每日待办"今日已跟进"个人标记（用户×运动员×北京日期）；不属于训练事实，不参与统计口径                 |
 | 导入与审计   | `data_import_batches`、`data_import_items`、`audit_logs`      | 统一暂存、提交追踪和敏感操作审计                                                                         |
 
 ### 8.4 数据库收敛
@@ -504,6 +505,8 @@ Excel / PDF / 图片
 未填报依据当天正式有效 `training_sessions`，正式记录筛选与总览相同。负荷按北京时间 `session_date + start_time` 映射到 UTC 后取闭区间 `[当前时刻−24小时, 当前时刻]`，复用既有持久化 SRPE 和 `trainingLoadCategory`，按个人累计 ≥600 AU 进入关注。没有有效开训时间的今日/昨日课次另列，不按修改时间推断训练发生时间。伤病沿用最新记录口径，以 `created_at`（SQLite UTC）和 `id` 排序、排除未来记录，非健康状态持续关注并标识24小时内变化；最新健康状态解除伤病原因。
 
 小程序通过 `services/api.js` 获取结果，原生运行时不引入 Node/zod 打包依赖，`utils/daily-todos.js` 显式校验响应形状、标识符及数值后生成展示文案。首页独立处理加载、错误、空状态，以请求序号防止旧项目响应覆盖，档案返回时重新拉取。服务端仍是权限唯一依据，不新增待办持久化表或旧训练事实依赖。
+
+2026-09 起待办扩展为四个分组并支持教练现场闭环：`attention` 分组并入当日恢复日报自评 `status=rest` 的运动员（`restRequested` 标注）；新增 `reviewDue` 复查提醒分组（每名运动员最近一条非健康且填了复查日期的伤病记录，`review_date ≤ 北京今天 + REVIEW_DUE_WINDOW_DAYS=3`，`dueIn` 由服务端按北京日期计算并升序返回；与伤病关注同样排除未来时间戳记录）。待办行提供就地动作（代填训练/代填日报/上报伤病），复用既有跳转入口，不新增写接口。"今日已跟进"是按 用户×运动员×北京日期 存储的个人工作流标记（`coach_todo_followups` 表，不属于训练事实、不参与统计口径）：`PUT/DELETE /api/coach/daily-todos/followups` 幂等读写（DELETE 走 query 传参，因 `wx.request` 对 DELETE 请求体的行为跨端不可靠），逐个校验 `hasAthleteAccess` 与项目匹配，任一越权整批 403；写入时惰性清理 90 天前的过期标记，标记只对当天生效。
 
 `npm run daily-todos-example` 只创建 `tmp/coach-daily-todos-日期.db` 新场景库，不连接默认运行库；样例使用正式事实表、有效质量与非演示标记，保留 `coach_daily_example` 来源以追溯，参与正式统计。未修改数据库迁移或自动初始化路径。
 

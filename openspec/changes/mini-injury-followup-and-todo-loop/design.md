@@ -40,12 +40,17 @@ CREATE TABLE IF NOT EXISTS coach_todo_followups (
 `buildDailyTodos` 输出扩展：
 
 - `attention` 条目增加 `restRequested: boolean`；入选条件改为 `highLoad || injury || restRequested`。
-- 新分组 `reviewDue`：条目 `{athleteId, athleteName, project, team, reviewDate, dueIn, injuryName, bodyPart, status, painScore}`，`dueIn` 在 TS 内用北京日期差计算（逾期为负），按 `dueIn` 升序。
+- 新分组 `reviewDue`：条目 `{athleteId, athleteName, project, team, reviewDate, dueIn, injuryName, bodyPart, status, painScore}`，`dueIn` 在 TS 内用北京日期差计算（逾期为负），按 `dueIn` 升序。实施调整：SQL 只取"最近一条非健康且 `review_date != ''` 且 `created_at <= now`"的候选（未来时间戳记录与伤病关注口径一致地排除，避免演示种子的未来时间戳压住真实记录），`dueIn` 与 3 天窗口过滤在 `buildDailyTodos` 内完成，保证纯函数可单测。
 - `counts` 增加 `reviewDue`。
 - 响应根增加 `followedUp: number[]`（当前用户、当前项目、北京今天的标记，与 `athletes` 同源过滤）。
 - 新导出常量 `REVIEW_DUE_WINDOW_DAYS = 3`；600 AU 口径不动。
 
 `readTeamOverview` 的 wellness 查询补 `status` 列，行输出增加 `wellnessStatus: string | null`。
+
+### 1.2.1 实施期新发现（2026-09-30）
+
+- `injury_records.created_at` 存在两种历史格式：SQLite UTC 文本（`CURRENT_TIMESTAMP`）与演示种子写入的 ISO 毫秒带 `Z` 格式。所有按 `created_at` 的排序/比较 MUST 用 SQL `datetime()`，TS 解析需兼容两种格式（与 `coach-daily-todos.ts` 既有正则口径一致）。
+- DELETE followups 走 query 传参（`wx.request` 对 DELETE 请求体的行为跨端不可靠），query 含额外键，zod 校验需用非 strict 的 `z.object` 只提取 `project`。
 
 兼容性：响应只增字段/分组；现有网页端不消费这些接口，小程序端校验函数同步更新（见 2.1），无破坏面。
 

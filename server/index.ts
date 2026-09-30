@@ -4,7 +4,15 @@ import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { db } from './core/db.ts';
-import { dailyTodoQuery, readDailyTodos, readTeamOverview } from './core/coach-daily-todos.ts';
+import {
+  beijingDate,
+  dailyTodoQuery,
+  markFollowups,
+  readDailyTodos,
+  readFollowedUpAthleteIds,
+  readTeamOverview,
+  unmarkFollowups,
+} from './core/coach-daily-todos.ts';
 import { readLoadManagement } from './core/load-management.ts';
 import { readWellnessBaseline } from './core/wellness-baseline.ts';
 import { readPlanExecution } from './core/plan-execution.ts';
@@ -122,8 +130,92 @@ app.get('/api/coach/daily-todos', requireAuth, requireRole('SCC', 'PRJ', 'REG', 
     athleteIds: accessibleAthleteIds(user),
     project: parsed.data.project,
     now,
+    followUpUserId: user.id,
   });
   res.json({ todos });
+});
+
+// 待办"今日已跟进"标记：教练个人工作流状态，按 用户×运动员×北京日期 存储，与统计口径无关。
+const followupsBody = z.strictObject({
+  project: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .refine((value) => PROJECTS.includes(value)),
+  athleteIds: z.array(z.number().int().positive()).min(1).max(50),
+});
+
+app.put('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  const user = req.authUser!;
+  const parsed = followupsBody.safeParse(req.body);
+  if (!parsed.success)
+    return res.status(400).json({ message: '请选择有效项目，并选择 1 至 50 名要标记的运动员。' });
+  if (!selectableProjects(user).includes(parsed.data.project))
+    return res.status(403).json({ message: '无权操作该项目的待办跟进。' });
+  const athleteIds = [...new Set(parsed.data.athleteIds)];
+  const allowed = new Set(accessibleAthleteIds(user));
+  const rows = db
+    .prepare(
+      `SELECT id, project FROM athletes WHERE id IN (${athleteIds.map(() => '?').join(',')})`
+    )
+    .all(...athleteIds) as { id: number; project: string }[];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  // 任一目标越权或项目不符即整批拒绝，不做部分写入。
+  for (const athleteId of athleteIds) {
+    const row = byId.get(athleteId);
+    if (!allowed.has(athleteId) || !row || row.project !== parsed.data.project) {
+      return res.status(403).json({ message: '存在无权跟进的运动员。' });
+    }
+  }
+  const date = beijingDate(new Date());
+  markFollowups(db, { userId: user.id, athleteIds, date });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    followedUp: readFollowedUpAthleteIds(db, {
+      userId: user.id,
+      athleteIds: accessibleAthleteIds(user),
+      date,
+      project: parsed.data.project,
+    }),
+  });
+});
+
+// DELETE 走 query 传参：wx.request 对 DELETE 的请求体行为跨端不可靠。
+// query 会同时携带 athleteIds 等键，因此用非 strict 的 object 只提取并校验 project。
+const followupsProjectQuery = z.object({
+  project: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .refine((value) => PROJECTS.includes(value)),
+});
+
+app.delete('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  const user = req.authUser!;
+  const parsed = followupsProjectQuery.safeParse(req.query);
+  if (!parsed.success)
+    return res.status(400).json({ message: '请选择有效项目。' });
+  if (!selectableProjects(user).includes(parsed.data.project))
+    return res.status(403).json({ message: '无权操作该项目的待办跟进。' });
+  const athleteIds = String(req.query.athleteIds ?? '')
+    .split(',')
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+  if (!athleteIds.length || athleteIds.length > 50)
+    return res.status(400).json({ message: '请选择 1 至 50 名要撤销的运动员。' });
+  const date = beijingDate(new Date());
+  unmarkFollowups(db, { userId: user.id, athleteIds, date });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    followedUp: readFollowedUpAthleteIds(db, {
+      userId: user.id,
+      athleteIds: accessibleAthleteIds(user),
+      date,
+      project: parsed.data.project,
+    }),
+  });
 });
 
 const teamOverviewQuery = (now: Date) =>

@@ -24,6 +24,7 @@ import {
   validatePersonName,
 } from '../core/utils.ts';
 import { db, upsertAthleteOrigin } from '../core/db.ts';
+import { buildPainTrend, painTrendWindow, type PainTrendRow } from '../core/pain-trend.ts';
 import { canManageRole } from '../../shared/access.ts';
 import { athletePhotoRoot, photoUpload, transcodeAthletePhoto } from '../core/uploads.ts';
 import {
@@ -926,6 +927,42 @@ export function registerAthleteRoutes(app: Express) {
     ).run(user.id, 'UPLOAD_ATHLETE_PHOTO', 'athlete', athleteId, JSON.stringify({ photoUrl }));
     res.json({ message: '证件照已保存，并已绑定到该运动员。', photoUrl });
   });
+  // 疼痛趋势：按部位返回近 N 天每日疼痛评分；只读聚合，不做任何诊断结论。
+  app.get('/api/athletes/:id/injuries/pain-trend', requireAuth, (req, res) => {
+    const athleteId = Number(req.params.id || 0);
+    if (!athleteId || !hasAthleteAccess(req.authUser!, athleteId)) {
+      return res.status(403).json({ message: '无权查看该运动员的疼痛趋势。' });
+    }
+    const days = req.query.days === undefined ? 30 : Number(req.query.days);
+    if (!Number.isInteger(days) || days < 7 || days > 90) {
+      return res.status(400).json({ message: '趋势天数应为7至90的整数。' });
+    }
+    const now = new Date();
+    const { startUtcText } = painTrendWindow(now, days);
+    // 窗口函数按"部位 × 北京日"取最新一条；排序与未来记录过滤都用 datetime()，
+    // 与教练待办口径一致（created_at 存在 UTC 文本与 ISO 两种格式，不能按字符串比）。
+    const rows = db
+      .prepare(
+        `
+    SELECT bodyPart, painScore, recordType, status, createdAt FROM (
+      SELECT ir.body_part AS bodyPart, ir.pain_score AS painScore,
+        ir.record_type AS recordType, ir.status, ir.created_at AS createdAt, ir.id,
+        ROW_NUMBER() OVER (
+          PARTITION BY ir.body_part, date(ir.created_at, '+8 hours')
+          ORDER BY datetime(ir.created_at) DESC, ir.id DESC
+        ) AS rn
+      FROM injury_records ir
+      WHERE ir.athlete_id = ? AND datetime(ir.created_at) >= datetime(?)
+        AND datetime(ir.created_at) <= datetime(?)
+    ) WHERE rn = 1
+    ORDER BY bodyPart ASC, createdAt ASC
+  `
+      )
+      .all(athleteId, startUtcText, now.toISOString()) as PainTrendRow[];
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(buildPainTrend({ athleteId, days, now, rows }));
+  });
+
   app.get('/api/athletes/:id/injuries', requireAuth, (req, res) => {
     const athleteId = Number(req.params.id || 0);
     if (!athleteId || !hasAthleteAccess(req.authUser!, athleteId)) {

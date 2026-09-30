@@ -18,7 +18,6 @@
     "special-training-check": "node scripts/special-training-check.mjs",
     "special-test-check": "node scripts/special-test-check.mjs",
     "database-lock-check": "node scripts/database-lock-check.mjs",
-    "data-import-check": "tsx scripts/data-import-check.ts",
     "training-content-ratio-check": "tsx scripts/training-content-ratio-check.ts",
     "api-check": "node scripts/api-check.mjs",
     "mini:dictionary-sync": "tsx scripts/sync-mini-register-data.mjs",

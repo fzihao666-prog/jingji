@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
+import { buildPagerItems, pageRange } from '../utils/pagination';
 import type { Athlete, User } from '../types';
 import { PROVINCES } from '../../shared/regions';
 import { ROLE_META } from '../../shared/access';
@@ -114,19 +115,18 @@ export function RosterPage({
       );
     });
   }, [shown, searchTerm, projectFilter, teamFilter]);
-  const pageCount = Math.max(1, Math.ceil(filteredAthletes.length / ROSTER_PAGE_SIZE));
-  const safePage = Math.min(currentPage, pageCount);
+  const pager = pageRange(currentPage, ROSTER_PAGE_SIZE, filteredAthletes.length);
   const pagedAthletes = filteredAthletes.slice(
-    (safePage - 1) * ROSTER_PAGE_SIZE,
-    safePage * ROSTER_PAGE_SIZE
+    (pager.current - 1) * ROSTER_PAGE_SIZE,
+    pager.current * ROSTER_PAGE_SIZE
   );
-  const rangeStart = filteredAthletes.length ? (safePage - 1) * ROSTER_PAGE_SIZE + 1 : 0;
-  const rangeEnd = Math.min(safePage * ROSTER_PAGE_SIZE, filteredAthletes.length);
+  const rangeStart = pager.start;
+  const rangeEnd = pager.end;
   const hasActiveFilters = Boolean(searchTerm.trim() || projectFilter || teamFilter);
 
   useEffect(() => {
-    if (currentPage > pageCount) setCurrentPage(pageCount);
-  }, [currentPage, pageCount]);
+    if (currentPage > pager.pageCount) setCurrentPage(pager.pageCount);
+  }, [currentPage, pager.pageCount]);
 
   const changeProjectFilter = (project: string) => {
     setProjectFilter(project);
@@ -405,32 +405,47 @@ export function RosterPage({
           </button>
         </section>
       )}
-      {filteredAthletes.length > ROSTER_PAGE_SIZE && (
+      {pager.pageCount > 1 && (
         <nav className="roster-pagination" aria-label="人员分页">
           <button
             type="button"
             aria-label="上一页"
-            disabled={safePage === 1}
+            disabled={!pager.hasPrev}
             onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
           >
             <ChevronLeft size={16} />
           </button>
-          {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
-            <button
-              type="button"
-              key={page}
-              className={page === safePage ? 'active' : ''}
-              aria-current={page === safePage ? 'page' : undefined}
-              onClick={() => setCurrentPage(page)}
-            >
-              {page}
-            </button>
-          ))}
+          <span className="roster-pagination-summary">
+            {pager.current} / {pager.pageCount}
+          </span>
+          <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+            当前第 {pager.current} 页，共 {pager.pageCount} 页
+          </span>
+          <span className="roster-pagination-pages">
+            {buildPagerItems(pager.current, pager.pageCount).map((item, index) =>
+              item.type === 'page' ? (
+                <button
+                  type="button"
+                  key={item.page}
+                  className={item.current ? 'active' : ''}
+                  aria-label={`第 ${item.page} 页`}
+                  aria-current={item.current ? 'page' : undefined}
+                  onClick={() => setCurrentPage(item.page)}
+                >
+                  {item.page}
+                </button>
+              ) : (
+                <span key={`ellipsis-${index}`} className="roster-pagination-ellipsis" aria-hidden="true">
+                  …
+                </span>
+              )
+            )}
+          </span>
           <button
             type="button"
             aria-label="下一页"
-            disabled={safePage === pageCount}
-            onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}
+            disabled={!pager.hasNext}
+            onClick={() => setCurrentPage((page) => Math.min(pager.pageCount, page + 1))}
           >
             <ChevronRight size={16} />
           </button>

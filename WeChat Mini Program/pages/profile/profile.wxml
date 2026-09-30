@@ -48,6 +48,21 @@
       </view>
     </view>
     <view class="card"><view wx:if="{{injuries.length}}" class="list"><view wx:for="{{injuries}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.meta}}</text></view><view class="list-row-value">{{item.pain}}</view></view><text class="tag {{item.statusClass}}">{{item.status}}</text><text class="injury-note">{{item.restriction}}</text></view></view><view wx:else class="state"><view class="state-icon">✓</view><view class="state-title">暂无伤病记录</view></view></view>
+    <view wx:if="{{painTrend}}" class="card pain-trend" aria-label="疼痛趋势">
+      <view class="card-head"><view><view class="card-title">疼痛趋势 · 近 {{painTrend.days}} 天</view><view class="todo-note">按部位展示每日最新疼痛评分，点击柱体查看明细</view></view></view>
+      <view wx:for="{{painTrend.parts}}" wx:for-item="part" wx:for-index="partIndex" wx:key="bodyPart" class="pain-part">
+        <view class="pain-part-head">
+          <text class="pain-part-name">{{part.bodyPart}}</text>
+          <text class="tag {{part.statusClass}}">{{part.statusLabel}}</text>
+          <text class="pain-part-latest">最新疼痛 {{part.latestPain}}</text>
+        </view>
+        <scroll-view class="pain-bars-scroll" scroll-x enhanced show-scrollbar="false">
+          <view class="pain-bars">
+            <button wx:for="{{part.bars}}" wx:for-item="bar" wx:for-index="barIndex" wx:key="date" class="pain-bar" style="height: {{bar.height}}%;" data-part-index="{{partIndex}}" data-bar-index="{{barIndex}}" bindtap="showPainDetail" aria-label="{{part.bodyPart}}，{{bar.date}}，疼痛 {{bar.pain}} 分，查看明细"></button>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
     <view class="section-head"><view class="section-head-title">恢复状态</view><view class="section-head-note">{{from}} 至 {{to}}</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取恢复趋势</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>

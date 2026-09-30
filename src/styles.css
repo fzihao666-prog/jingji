@@ -6057,11 +6057,15 @@ p {
   align-items: center;
   justify-content: center;
   gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .roster-pagination button {
-  min-width: 32px;
-  height: 32px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0 8px;
   border: 1px solid #d1dfe1;
   border-radius: 8px;
@@ -6073,6 +6077,25 @@ p {
     700 10px Bahnschrift,
     sans-serif;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+.roster-pagination-pages {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.roster-pagination-summary {
+  display: none;
+  min-width: 0;
+  color: #49666d;
+  font:
+    800 12px Bahnschrift,
+    sans-serif;
+  white-space: nowrap;
 }
 
 .roster-pagination button:hover:not(:disabled) {
@@ -6086,6 +6109,16 @@ p {
   color: #fff;
   background: #0e8f87;
   box-shadow: 0 6px 14px rgb(14 143 135 / 18%);
+}
+
+.roster-pagination-ellipsis {
+  min-width: 24px;
+  text-align: center;
+  color: #819399;
+  font:
+    700 12px Bahnschrift,
+    sans-serif;
+  user-select: none;
 }
 
 .roster-pagination button:disabled {
@@ -11782,8 +11815,9 @@ p {
 }
 
 .athlete-directory-card > footer nav button {
-  width: 30px;
-  height: 30px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
   border: 1px solid #c9d8db;
   border-radius: 6px;
   display: grid;
@@ -11791,6 +11825,7 @@ p {
   color: #37606a;
   background: #fff;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .athlete-directory-card > footer nav button:disabled {
@@ -13370,6 +13405,17 @@ p {
     margin-top: 14px;
   }
 
+  .athlete-directory-card > footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .athlete-directory-card > footer nav {
+    width: 100%;
+    justify-content: center;
+  }
+
   .team-create-panel {
     grid-template-columns: 1fr;
   }
@@ -13669,6 +13715,20 @@ p {
 
   .roster-area-fields {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .roster-pagination {
+    gap: 8px;
+  }
+
+  .roster-pagination-pages {
+    display: none;
+  }
+
+  .roster-pagination-summary {
+    display: inline;
   }
 }
 

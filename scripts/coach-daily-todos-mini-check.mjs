@@ -23,7 +23,15 @@ export async function checkMiniDailyTodoFlow(assert) {
     format
   );
   modules['../../utils/format'] = format.module.exports;
-  const viewContext = { module: { exports: {} }, require: () => format.module.exports };
+  const paginationContext = { module: { exports: {} } };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/pagination.js', import.meta.url), 'utf8'),
+    paginationContext
+  );
+  const viewContext = {
+    module: { exports: {} },
+    require: (path) => (path === './pagination' ? paginationContext.module.exports : format.module.exports),
+  };
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/utils/daily-todos.js', import.meta.url), 'utf8'),
     viewContext
@@ -57,6 +65,16 @@ export async function checkMiniDailyTodoFlow(assert) {
     },
   };
   modules['../../services/api'] = api;
+  // index.js 依赖的图表占位模块没有页面外副作用，直接加载真实实现。
+  const chartPlaceholder = { module: { exports: {} } };
+  vm.runInNewContext(
+    readFileSync(
+      new URL('../WeChat Mini Program/utils/chart-placeholder.js', import.meta.url),
+      'utf8'
+    ),
+    chartPlaceholder
+  );
+  modules['../../utils/chart-placeholder'] = chartPlaceholder.module.exports;
   const scopeContext = {
     user: { role: 'SCC', athleteId: 0 },
     projects: ['ROWING', 'CANOE_SPRINT'],
@@ -132,10 +150,11 @@ export async function checkMiniDailyTodoFlow(assert) {
     generatedAt: '2026-09-23T02:00:00Z',
     windowStart: '2026-09-22T02:00:00Z',
     highLoadThreshold: 600,
-    counts: { total: 1, submitted: 0, missing: 1, attention: 0, incompleteTime: 0 },
+    counts: { total: 1, submitted: 0, missing: 1, attention: 0, incompleteTime: 0, reviewDue: 0 },
     missing: [{ athleteId: 1, athleteName: name, team: '一队', project: page.data.project }],
     attention: [],
     incompleteTime: [],
+    reviewDue: [],
   });
   const oldRequest = page.loadTodos('ROWING');
   page.data.project = 'CANOE_SPRINT';
@@ -163,7 +182,7 @@ export async function checkMiniDailyTodoFlow(assert) {
   api.dailyTodos = async () => ({
     todos: {
       ...todos('刷新后'),
-      counts: { total: 1, submitted: 1, missing: 0, attention: 0, incompleteTime: 0 },
+      counts: { total: 1, submitted: 1, missing: 0, attention: 0, incompleteTime: 0, reviewDue: 0 },
       missing: [],
     },
   });
@@ -194,6 +213,84 @@ export async function checkMiniDailyTodoFlow(assert) {
   app.globalData.homeNeedsRefresh = true;
   page.onShow();
   assert(loaded, '训练或档案变更后必须刷新首页');
+
+  // 复查提醒分组与"今日已跟进"标记（走真实页面处理器与视图逻辑）。
+  const followCalls = { mark: [], unmark: [] };
+  const richTodos = () => ({
+    date: '2026-09-23',
+    timezone: 'Asia/Shanghai',
+    generatedAt: '2026-09-23T02:00:00Z',
+    windowStart: '2026-09-22T02:00:00Z',
+    highLoadThreshold: 600,
+    counts: { total: 2, submitted: 0, missing: 2, attention: 1, incompleteTime: 0, reviewDue: 1 },
+    missing: [
+      { athleteId: 1, athleteName: '王休息', team: '一队', project: 'ROWING' },
+      { athleteId: 2, athleteName: '李复查', team: '一队', project: 'ROWING' },
+    ],
+    attention: [
+      {
+        athleteId: 1,
+        athleteName: '王休息',
+        team: '一队',
+        project: 'ROWING',
+        load24h: 0,
+        highLoad: false,
+        timeIncomplete: false,
+        injury: null,
+        restRequested: true,
+      },
+    ],
+    incompleteTime: [],
+    reviewDue: [
+      {
+        athleteId: 2,
+        athleteName: '李复查',
+        team: '一队',
+        project: 'ROWING',
+        reviewDate: '2026-09-24',
+        dueIn: 1,
+        injuryName: '膝部旧伤',
+        bodyPart: '膝部',
+        status: 'rehab',
+        painScore: 2,
+      },
+    ],
+  });
+  api.dailyTodos = async () => ({ todos: richTodos() });
+  api.markTodoFollowups = async (project, athleteIds) => {
+    followCalls.mark.push({ project, athleteIds });
+    return { followedUp: [...athleteIds] };
+  };
+  api.unmarkTodoFollowups = async (project, athleteIds) => {
+    followCalls.unmark.push({ project, athleteIds });
+    return { followedUp: [] };
+  };
+  page.data.project = 'ROWING';
+  await page.retryTodos();
+  assert(page.data.todoView.counts.review === 1, '复查提醒分组应进入视图');
+  assert(page.data.todoView.review[0].dueLabel === '1 天后复查', '复查提醒应给出倒计时文案');
+  assert(
+    page.data.todoView.attention[0].reason.includes('自评需要休息'),
+    '休息自评应拼入关注原因'
+  );
+  await page.markFollowedUp({ currentTarget: { dataset: { athleteId: 2 } } });
+  assert(
+    page.data.todoView.counts.review === 0 && page.data.todoView.followedUpList.length === 1,
+    '已跟进对象应从分组隐藏并收敛'
+  );
+  assert(
+    page.data.todoView.followedUpList[0].groupLabel === '未填报',
+    '已跟进条目保留首个来源分组标签'
+  );
+  assert(
+    followCalls.mark.length === 1 && followCalls.mark[0].project === 'ROWING',
+    '标记应携带当前项目'
+  );
+  await page.unmarkFollowedUp({ currentTarget: { dataset: { athleteId: 2 } } });
+  assert(
+    page.data.todoView.counts.review === 1 && page.data.todoView.followedUpList.length === 0,
+    '撤销跟进后应回到原分组'
+  );
   page.data.canViewTodos = false;
   api.dailyTodos = async () => {
     throw new Error('不应为运动员发起请求');

@@ -107,8 +107,8 @@ describe('训练填报页', () => {
     const api = {
       myTrainingSessions() { calls.push('my:list'); return Promise.resolve({ sessions: [] }); },
       athleteTrainingSessions(id) { calls.push(`athlete:list:${id}`); return Promise.resolve({ sessions: [] }); },
-      createMyTrainingSession(data) { calls.push('my:create'); return Promise.resolve({ session: { id: 1 } }); },
-      createAthleteTrainingSession(id, data) { calls.push(`athlete:create:${id}`); return Promise.resolve({ session: { id: 2 } }); },
+      createMyTrainingSession() { calls.push('my:create'); return Promise.resolve({ session: { id: 1 } }); },
+      createAthleteTrainingSession(id) { calls.push(`athlete:create:${id}`); return Promise.resolve({ session: { id: 2 } }); },
     };
     vm.runInNewContext(pageSource, {
       Page(value) { definition = value; },

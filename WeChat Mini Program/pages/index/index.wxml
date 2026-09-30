@@ -62,7 +62,7 @@
     <view class="{{todosError ? 'error-box' : 'todo-note'}}" aria-role="status" aria-live="polite" aria-atomic="true"><text>{{todosStatus}}</text><button wx:if="{{todosError}}" class="error-retry" bindtap="retryTodos">重试</button></view>
     <block wx:if="{{!todosLoading && !todosError && todos && todoView}}">
       <view class="todo-note">{{todos.date}} · 北京时间 · 返回首页自动更新</view>
-      <view class="todo-summary">未填报 {{todos.counts.missing}} 人 · 需关注 {{todos.counts.attention}} 人</view>
+      <view class="todo-summary">未填报 {{todos.counts.missing}} 人 · 需关注 {{todos.counts.attention}} 人 · 复查提醒 {{todos.counts.reviewDue}} 人</view>
       <view wx:if="{{!todos.counts.total}}" class="todo-note">当前项目暂无可访问的运动员。</view>
       <block wx:else>
         <scroll-view class="todo-chips" scroll-x enhanced show-scrollbar="false">
@@ -75,31 +75,79 @@
         </view>
 
         <block wx:if="{{todoView.show.missing}}">
-          <view class="todo-heading">当天未填报 · {{todoView.counts.missing}} 人</view>
-          <view wx:if="{{!todoView.missing.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '今日全部运动员已填报。'}}</view>
-          <button wx:for="{{todoView.missing}}" wx:key="athleteId" class="todo-row" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，今日未填报，查看档案">
+          <view class="todo-heading">当天未填报 · {{todoView.missingPage.total}} 人</view>
+          <view wx:if="{{!todoView.missingPage.total}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '今日全部运动员已填报。'}}</view>
+          <view wx:for="{{todoView.missing}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，今日未填报，点按查看档案">
             <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
             <view class="todo-note">{{item.team || '未分队'}} · 今日暂无有效训练记录</view>
-          </button>
+            <view class="todo-row-actions">
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练">代填训练</button>
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
+              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
+            </view>
+          </view>
+          <view wx:if="{{todoView.missingPage.pageCount > 1}}" class="todo-pager">
+            <button class="todo-pager-nav" hover-class="access-active" disabled="{{!todoView.missingPage.hasPrev}}" bindtap="onMissingPrevPage" aria-label="查看上一页未填报运动员">上一页</button>
+            <view class="todo-pager-indicator" aria-live="polite" aria-atomic="true" aria-label="未填报共 {{todoView.missingPage.total}} 人，当前第 {{todoView.missingPage.page + 1}} 页，共 {{todoView.missingPage.pageCount}} 页">
+              <text class="todo-pager-current">{{todoView.missingPage.page + 1}}</text>
+              <text class="todo-pager-total">/ {{todoView.missingPage.pageCount}} 页</text>
+              <text class="todo-pager-count">· 共 {{todoView.missingPage.total}} 人</text>
+            </view>
+            <button class="todo-pager-nav" hover-class="access-active" disabled="{{!todoView.missingPage.hasNext}}" bindtap="onMissingNextPage" aria-label="查看下一页未填报运动员">下一页</button>
+          </view>
         </block>
         <block wx:if="{{todoView.show.attention}}">
           <view class="todo-heading">负荷与伤病关注 · {{todoView.counts.attention}} 人</view>
           <view class="todo-note">近24小时 SRPE ≥ {{todos.highLoadThreshold}} AU；伤病按最新状态持续关注。</view>
           <view wx:if="{{!todoView.attention.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '暂无高负荷或伤病关注运动员。'}}</view>
-          <button wx:for="{{todoView.attention}}" wx:key="athleteId" class="todo-row" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.reason}}，查看档案">
+          <view wx:for="{{todoView.attention}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，{{item.reason}}，点按查看档案">
             <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
             <view class="todo-note">{{item.team || '未分队'}}</view>
             <view class="todo-reason">{{item.reason}}</view>
-          </button>
+            <view class="todo-row-actions">
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练">代填训练</button>
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
+              <button wx:if="{{item.injury}}" class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="reportInjuryForTodo" aria-label="为{{item.athleteName}}上报伤病">上报伤病</button>
+              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
+            </view>
+          </view>
+        </block>
+        <block wx:if="{{todoView.show.review}}">
+          <view class="todo-heading">复查提醒 · {{todoView.counts.review}} 人</view>
+          <view class="todo-note">最近伤病记录的复查日期在今天起 3 天内（含已逾期）。</view>
+          <view wx:if="{{!todoView.review.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '暂无临近复查的伤病。'}}</view>
+          <view wx:for="{{todoView.review}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，{{item.dueLabel}}，{{item.injuryName}}，点按查看档案">
+            <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
+            <view class="todo-note">{{item.team || '未分队'}}</view>
+            <view class="todo-reason">{{item.dueLabel}} · {{item.injuryName}}（{{item.bodyPart}}）· 疼痛 {{item.painScore}}</view>
+            <view class="todo-row-actions">
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="reportInjuryForTodo" aria-label="为{{item.athleteName}}记录复查或新增伤病">上报伤病</button>
+              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
+            </view>
+          </view>
         </block>
         <block wx:if="{{todoView.show.incompleteTime}}">
           <view class="todo-heading">开训时间待补充 · {{todoView.counts.incompleteTime}} 人</view>
           <view class="todo-note">今日或昨日存在缺少有效开训时间的记录，未计入24小时负荷；今日记录仍计为已填报。</view>
           <view wx:if="{{!todoView.incompleteTime.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '暂无时间待补充的记录。'}}</view>
-          <button wx:for="{{todoView.incompleteTime}}" wx:key="athleteId" class="todo-row" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，开训时间待补充，查看档案">
+          <view wx:for="{{todoView.incompleteTime}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，开训时间待补充，点按查看档案">
             <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
-          </button>
+            <view class="todo-row-actions">
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练补充时间">代填训练</button>
+              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
+              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
+            </view>
+          </view>
         </block>
+        <view class="todo-heading">已跟进 · {{todoView.followedUpList.length}} 人</view>
+        <view wx:if="{{!todoView.followedUpList.length}}" class="todo-note">今日还没有已跟进的运动员。</view>
+        <view wx:for="{{todoView.followedUpList}}" wx:key="athleteId" class="todo-card todo-card-followed" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，今日已跟进，点按查看档案">
+          <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
+          <view class="todo-note">{{item.groupLabel}} · 今日已跟进</view>
+          <view class="todo-row-actions">
+            <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="unmarkFollowedUp" aria-label="撤销{{item.athleteName}}的已跟进标记">撤销跟进</button>
+          </view>
+        </view>
       </block>
     </block>
   </view>
@@ -132,6 +180,9 @@
             <text class="tag {{item.hasTraining ? 'ok' : 'warn'}}">{{item.hasTraining ? '已训练' : '未训练'}}</text>
             <text class="tag {{item.wellnessReported ? 'ok' : 'warn'}}">{{item.wellnessReported ? '已填报' : '未填报'}}</text>
             <text wx:if="{{item.highLoad}}" class="tag warn">高负荷</text>
+            <text wx:if="{{item.wellnessStatus === 'rest'}}" class="tag warn">需要休息</text>
+            <text wx:elif="{{item.wellnessStatus === 'attention'}}" class="tag warn">需要关注</text>
+            <text wx:elif="{{item.wellnessStatus === 'alert'}}" class="tag danger">需要警示</text>
           </view>
           <view class="todo-note">负荷 {{item.load24h}} AU{{item.sleepHours != null ? ' · 睡眠 ' + item.sleepHours + 'h' : ''}}{{item.morningPulse != null ? ' · 晨脉 ' + item.morningPulse : ''}}{{item.weightKg != null ? ' · 体重 ' + item.weightKg + 'kg' : ''}}</view>
           <view class="team-athlete-actions">

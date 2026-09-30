@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildDailyTodos, buildTeamOverview, dailyTodoQuery, beijingDate } from '../core/coach-daily-todos.ts';
+import {
+  beijingDate,
+  beijingDayDiff,
+  buildDailyTodos,
+  buildTeamOverview,
+  dailyTodoQuery,
+  REVIEW_DUE_WINDOW_DAYS,
+} from '../core/coach-daily-todos.ts';
 
 const now = new Date('2026-09-23T02:00:00Z');
 const athletes = [
@@ -57,6 +64,7 @@ describe('教练每日训练待办', () => {
       missing: 1,
       attention: 1,
       incompleteTime: 0,
+      reviewDue: 0,
     });
   });
 
@@ -152,8 +160,8 @@ describe('教练队伍总览', () => {
       athletes,
       sessions: [session({ athleteId: 1, srpe: 400 }), session({ athleteId: 2, srpe: 600 })],
       wellness: [
-        { athleteId: 1, sleepHours: 7.5, morningPulse: 52, weightKg: 76.8, fatigueIndex: 3, sorenessIndex: 2, moodIndex: 4 },
-        { athleteId: 2, sleepHours: 6, morningPulse: 58, weightKg: 80, fatigueIndex: 7, sorenessIndex: 5, moodIndex: 3 },
+        { athleteId: 1, sleepHours: 7.5, morningPulse: 52, weightKg: 76.8, fatigueIndex: 3, sorenessIndex: 2, moodIndex: 4, status: 'normal' },
+        { athleteId: 2, sleepHours: 6, morningPulse: 58, weightKg: 80, fatigueIndex: 7, sorenessIndex: 5, moodIndex: 3, status: 'rest' },
       ],
       now,
     });
@@ -171,12 +179,14 @@ describe('教练队伍总览', () => {
       wellnessReported: true,
       sleepHours: 7.5,
       morningPulse: 52,
+      wellnessStatus: 'normal',
     });
     expect(result.athletes[1]).toMatchObject({
       athleteId: 2,
       hasTraining: true,
       load24h: 600,
       highLoad: true,
+      wellnessStatus: 'rest',
     });
   });
 
@@ -189,9 +199,101 @@ describe('教练队伍总览', () => {
       sleepHours: null,
       morningPulse: null,
       weightKg: null,
+      wellnessStatus: null,
     });
     const empty = buildTeamOverview({ athletes: [], sessions: [], wellness: [], now });
     expect(empty.summary.total).toBe(0);
     expect(empty.athletes).toEqual([]);
+  });
+});
+
+describe('待办自评休息并入关注分组', () => {
+  it('status=rest 的运动员进入 attention 且 restRequested=true', () => {
+    const result = buildDailyTodos({
+      athletes,
+      sessions: [],
+      injuries: [],
+      restAthleteIds: [1],
+      now,
+    });
+    expect(result.attention).toHaveLength(1);
+    expect(result.attention[0]).toMatchObject({ athleteId: 1, restRequested: true });
+    expect(result.counts.attention).toBe(1);
+  });
+
+  it('无休息标记且无负荷伤病时不产生关注对象，范围外标记被过滤', () => {
+    expect(buildDailyTodos({ athletes, sessions: [], injuries: [], now }).attention).toEqual([]);
+    expect(
+      buildDailyTodos({ athletes, sessions: [], injuries: [], restAthleteIds: [999], now })
+        .attention
+    ).toEqual([]);
+  });
+});
+
+describe('待办复查提醒分组', () => {
+  const reviewInjury = (athleteId: number, reviewDate: string, status = 'rehab') => ({
+    athleteId,
+    status,
+    injuryName: '肩部旧伤',
+    bodyPart: '肩部',
+    painScore: 3,
+    reviewDate,
+  });
+
+  it(`复查日期在今天起 ${REVIEW_DUE_WINDOW_DAYS} 天内进入分组（含当天与逾期），按 dueIn 升序`, () => {
+    const result = buildDailyTodos({
+      athletes,
+      sessions: [],
+      injuries: [],
+      reviewDueInjuries: [reviewInjury(1, '2026-09-24'), reviewInjury(2, '2026-09-20')],
+      now,
+    });
+    expect(result.counts.reviewDue).toBe(2);
+    expect(result.reviewDue.map((item) => [item.athleteId, item.dueIn])).toEqual([
+      [2, -3],
+      [1, 1],
+    ]);
+    expect(result.reviewDue[1]).toMatchObject({
+      athleteName: '样例甲',
+      reviewDate: '2026-09-24',
+      injuryName: '肩部旧伤',
+      bodyPart: '肩部',
+    });
+  });
+
+  it('超出窗口、健康状态、空复查日期与范围外运动员都不进入分组', () => {
+    const result = buildDailyTodos({
+      athletes,
+      sessions: [],
+      injuries: [],
+      reviewDueInjuries: [
+        reviewInjury(1, '2026-09-27'),
+        reviewInjury(2, '2026-09-23', 'healthy'),
+        reviewInjury(999, '2026-09-23'),
+      ],
+      now,
+    });
+    expect(result.reviewDue).toHaveLength(0);
+    expect(result.counts.reviewDue).toBe(0);
+  });
+});
+
+describe('待办已跟进标记', () => {
+  it('followedUp 按待办范围过滤后返回，缺省为空数组', () => {
+    expect(
+      buildDailyTodos({ athletes, sessions: [], injuries: [], followedUpAthleteIds: [1, 999], now })
+        .followedUp
+    ).toEqual([1]);
+    expect(buildDailyTodos({ athletes, sessions: [], injuries: [], now }).followedUp).toEqual([]);
+  });
+});
+
+describe('beijingDayDiff', () => {
+  it('计算北京日期差，逾期为负；非法日期返回 NaN', () => {
+    expect(beijingDayDiff('2026-09-24', '2026-09-23')).toBe(1);
+    expect(beijingDayDiff('2026-09-23', '2026-09-23')).toBe(0);
+    expect(beijingDayDiff('2026-09-20', '2026-09-23')).toBe(-3);
+    expect(Number.isNaN(beijingDayDiff('', '2026-09-23'))).toBe(true);
+    expect(Number.isNaN(beijingDayDiff('2026/09/23', '2026-09-23'))).toBe(true);
   });
 });

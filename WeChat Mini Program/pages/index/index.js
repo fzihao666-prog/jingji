@@ -4,7 +4,7 @@ const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard
 const { shortDate } = require('../../utils/date');
 const { number, INJURY_LABELS } = require('../../utils/format');
 const { durationLoadLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
-const { dailyTodoView, filterDailyTodos } = require('../../utils/daily-todos');
+const { dailyTodoView, filterDailyTodos, paginateMissing } = require('../../utils/daily-todos');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
 const { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder } = require('../../utils/chart-placeholder');
@@ -186,6 +186,7 @@ Page({
     todoFilter: 'all',
     todoKeyword: '',
     todoView: null,
+    todoMissingPage: 0,
     todayLoading: false,
     todayError: '',
     todayView: null,
@@ -283,7 +284,7 @@ Page({
       const todosStatus = todos.counts.total
         ? `加载完成，未填报 ${todos.counts.missing} 人，需关注 ${todos.counts.attention} 人。`
         : '加载完成，当前项目暂无可访问的运动员。';
-      this.setData({ todos, todosStatus, todoView: filterDailyTodos(todos, this.data.todoFilter, this.data.todoKeyword) });
+      this.setData({ todos, todosStatus, todoView: this.composeTodoView(todos) });
     } catch (error) {
       if (this._todoGuard.isLatest(id)) {
         const todosError = error.message || '每日待办加载失败，请重试。';
@@ -454,16 +455,40 @@ Page({
     return this.loadPlanExecution(this.data.project);
   },
 
+  // 待办渲染视图 = 筛选/搜索 + 未填报名单分页；missingPage 为 null 时表示沿用当前页码（越界自动收敛）。
+  composeTodoView(todos, missingPage) {
+    const source = todos === undefined ? this.data.todos : todos;
+    if (!source) return null;
+    return paginateMissing(
+      filterDailyTodos(source, this.data.todoFilter, this.data.todoKeyword),
+      missingPage === undefined ? this.data.todoMissingPage : missingPage
+    );
+  },
+
+  turnMissingPage(delta) {
+    if (!this.data.todos) return;
+    const page = this.data.todoMissingPage + delta;
+    this.setData({ todoMissingPage: page, todoView: this.composeTodoView(undefined, page) });
+  },
+
+  onMissingPrevPage() {
+    this.turnMissingPage(-1);
+  },
+
+  onMissingNextPage() {
+    this.turnMissingPage(1);
+  },
+
   onTodoFilter(event) {
     const todoFilter = event.currentTarget.dataset.filter;
     if (!todoFilter || todoFilter === this.data.todoFilter || !this.data.todos) return;
-    this.setData({ todoFilter, todoView: filterDailyTodos(this.data.todos, todoFilter, this.data.todoKeyword) });
+    this.setData({ todoFilter, todoMissingPage: 0, todoView: this.composeTodoView(undefined, 0) });
   },
 
   onTodoKeyword(event) {
     const todoKeyword = event.detail.value;
     if (!this.data.todos) return;
-    this.setData({ todoKeyword, todoView: filterDailyTodos(this.data.todos, this.data.todoFilter, todoKeyword) });
+    this.setData({ todoKeyword, todoMissingPage: 0, todoView: this.composeTodoView(undefined, 0) });
   },
 
   onScopeChange(event) {
@@ -472,7 +497,7 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todoView: null, todoKeyword: '', todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
+      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todoView: null, todoKeyword: '', todoMissingPage: 0, todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
@@ -543,6 +568,50 @@ Page({
       return;
     }
     wx.navigateTo({ url: `/pages/wellness-entry/wellness-entry?athleteId=${athleteId}` });
+  },
+
+  // 待办行内伤病上报：候选列表仅作 UI 边界，服务端按访问范围再校验一次。
+  reportInjuryForTodo(event) {
+    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
+    if (!(this.data.athletes || []).some((item) => Number(item.id) === athleteId)) {
+      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({ url: `/pages/injury-report/injury-report?athleteId=${athleteId}` });
+  },
+
+  // "今日已跟进"是教练个人工作流标记：只影响本人待办展示，不改变服务端统计口径。
+  async markFollowedUp(event) {
+    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
+    if (!athleteId || !this.data.todos) return;
+    try {
+      const result = await api.markTodoFollowups(this.data.project, [athleteId]);
+      this.applyFollowedUp(result.followedUp, '已标记今日已跟进');
+    } catch (error) {
+      wx.showToast({ title: error.message || '标记失败，请重试', icon: 'none' });
+    }
+  },
+
+  async unmarkFollowedUp(event) {
+    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
+    if (!athleteId || !this.data.todos) return;
+    try {
+      const result = await api.unmarkTodoFollowups(this.data.project, [athleteId]);
+      this.applyFollowedUp(result.followedUp, '已撤销跟进标记');
+    } catch (error) {
+      wx.showToast({ title: error.message || '撤销失败，请重试', icon: 'none' });
+    }
+  },
+
+  applyFollowedUp(followedUp, toastTitle) {
+    if (!Array.isArray(followedUp) || !this.data.todos) return;
+    const todos = { ...this.data.todos, followedUp };
+    this.setData({
+      todos,
+      // 标记/撤销后名单变短：沿用当前页码，越界由 paginateMissing 收敛到最后一页。
+      todoView: this.composeTodoView(todos),
+    });
+    wx.showToast({ title: toastTitle, icon: 'none' });
   },
 
   openTrainingEntry() {

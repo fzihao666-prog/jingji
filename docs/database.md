@@ -228,6 +228,7 @@ erDiagram
 4. 新增或变更表结构必须采用幂等迁移，兼容已有 SQLite 文件，不删除真实数据；迁移与演示初始化应逐步分离。
 5. 批量导入应先预览、再校验、最后在事务中提交；失败不得留下半批正式数据。
 6. 不把密码、JWT、AI 密钥、完整身份证号或生产数据写入审计、错误信息、测试夹具或文档。
+7. `project` 列一律保存项目 Code（如 `ROWING`），中文名仅用于展示（`projectLabel`）；旧库中带中文枚举 CHECK 的 7 张遗留表（`special_test_events`、`special_training_plans`、`champion_model_standards`、`data_import_batches`、`data_import_athlete_candidates`、`athlete_aliases`、`metric_scoring_rules`）由启动迁移重建并把存量中文值转为 Code，不再以中文项目名作为关联键。
 
 ## 8. 数据库边界与部署判断
 

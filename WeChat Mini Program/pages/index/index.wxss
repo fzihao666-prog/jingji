@@ -3,11 +3,27 @@
 .todo-note { color: #46616c; font-size: 24rpx; line-height: 1.65; overflow-wrap: break-word; }
 .todo-summary { margin-top: 16rpx; color: #164751; font-size: 30rpx; font-weight: 700; }
 .todo-heading { margin-top: 26rpx; margin-bottom: 10rpx; color: #164751; font-size: 26rpx; font-weight: 700; }
-.todo-row { display: block; width: 100%; min-height: 88rpx; margin: 12rpx 0 0; padding: 20rpx; border: 1rpx solid #d8e3e6; border-radius: 16rpx; background: #edf3f4; text-align: left; line-height: 1.5; }
 .todo-row-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12rpx; color: #12303b; font-size: 28rpx; font-weight: 700; }
 .todo-link { flex: none; color: #176373; font-size: 24rpx; }
 .todo-reason { margin-top: 10rpx; color: #7a4715; font-size: 24rpx; line-height: 1.65; }
-.todo-row:focus { outline: 4rpx solid #176373; outline-offset: 4rpx; }
+/* 待办卡片：信息与动作按钮同卡（卡片整体点按进档案，按钮 catchtap 阻止冒泡） */
+.todo-card { margin-top: 12rpx; padding: 20rpx; border: 1rpx solid #d8e3e6; border-radius: 16rpx; background: #edf3f4; line-height: 1.5; }
+.todo-card-followed { opacity: .75; }
+.todo-row-actions { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }
+.todo-row-actions .mini-button { flex: 1; min-width: 0; margin: 0; height: 58rpx; padding: 0 20rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid #cbdadd; border-radius: 14rpx; color: #176f7f; background: #fff; font-size: 21rpx; line-height: 1; }
+.todo-row-actions .mini-button:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
+.todo-follow-button { color: #7a4715; border-color: #e3cfa8; }
+/* 未填报名单翻页控件：居中"上一页 · 页号指示 · 下一页"，页号仅作指示不可点按。
+   容器显式限宽并裁剪溢出，按钮与指示区都禁止换行，窄屏不产生横向滚动。 */
+.todo-pager { width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 14rpx; margin-top: 18rpx; }
+.todo-pager-nav { flex: none; margin: 0; min-height: 72rpx; padding: 0 26rpx; display: flex; align-items: center; justify-content: center; white-space: nowrap; border: 1rpx solid #cbdadd; border-radius: 14rpx; color: #176f7f; background: #fff; font-size: 23rpx; line-height: 1; }
+.todo-pager-nav[disabled] { color: #9db3ba; border-color: #dbe5e8; background: #f2f7f8; }
+.todo-pager-nav:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
+.todo-pager-indicator { flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 6rpx; white-space: nowrap; overflow: hidden; }
+.todo-pager-indicator text { white-space: nowrap; }
+.todo-pager-current { color: #176f7f; font-size: 30rpx; font-weight: 800; }
+.todo-pager-total { color: #46616c; font-size: 23rpx; }
+.todo-pager-count { color: #819399; font-size: 21rpx; overflow: hidden; text-overflow: ellipsis; }
 .todo-chips { width: 100%; margin-top: 18rpx; white-space: nowrap; }
 .todo-chip { display: inline-flex; align-items: center; gap: 10rpx; margin-right: 12rpx; padding: 12rpx 20rpx; border: 1rpx solid #d8e3e6; border-radius: 999rpx; color: #176373; background: #edf3f4; font-size: 23rpx; line-height: 1.4; }
 .todo-chip-active { color: #ffffff; border-color: #176f7f; background: #176f7f; }

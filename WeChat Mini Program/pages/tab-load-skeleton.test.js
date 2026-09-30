@@ -31,6 +31,11 @@ const formatModule = loadCjs(new URL('../utils/format.js', import.meta.url), {
 });
 const requestGuard = loadCjs(new URL('../utils/request-guard.js', import.meta.url), {});
 const chartPlaceholder = loadCjs(new URL('../utils/chart-placeholder.js', import.meta.url), {});
+const paginationModule = loadCjs(new URL('../utils/pagination.js', import.meta.url), {});
+const dailyTodosModule = loadCjs(new URL('../utils/daily-todos.js', import.meta.url), {
+  './format': formatModule,
+  './pagination': paginationModule,
+});
 
 const modals = [];
 const toasts = [];
@@ -93,6 +98,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
     '../../utils/date': dateModule,
     '../../utils/chart-placeholder': chartPlaceholder,
+    '../../utils/daily-todos': dailyTodosModule,
     ...extraMocks,
   };
   vm.runInNewContext(readFileSync(url, 'utf8'), {

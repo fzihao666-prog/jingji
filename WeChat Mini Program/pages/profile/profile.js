@@ -1,11 +1,43 @@
 const api = require('../../services/api');
 const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { loadWithGuard } = require('../../utils/request-guard');
-const { ageAt } = require('../../utils/date');
+const { ageAt, todayBeijing } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
+const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
 
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+
+// 复查倒计时按北京日期差本地计算，文案复用待办工具的同一套规则。
+function reviewCountdown(reviewDate, status, today) {
+  if (status === 'healthy' || !/^\d{4}-\d{2}-\d{2}$/.test(reviewDate || '')) return '';
+  const diff = Math.round(
+    (Date.parse(`${reviewDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000
+  );
+  return reviewDueLabel(diff);
+}
+
+const PAIN_SOURCE_LABELS = { formal: '伤病记录', feedback: '疼痛反馈' };
+
+// 疼痛趋势只读视图：柱高为评分占比，点击柱体查看单日明细；不输出趋势结论。
+function painTrendView(trend) {
+  if (!trend || !Array.isArray(trend.parts) || !trend.parts.length) return null;
+  return {
+    days: trend.days,
+    parts: trend.parts.map((part) => ({
+      bodyPart: part.bodyPart,
+      statusLabel: INJURY_LABELS[part.latestStatus] || part.latestStatus,
+      statusClass: part.latestStatus === 'healthy' ? '' : part.latestStatus === 'observation' ? 'warn' : 'danger',
+      latestPain: number(part.latestPainScore, 0),
+      bars: part.series.map((point) => ({
+        date: point.date,
+        pain: point.painScore,
+        height: Math.max(8, Math.round((point.painScore / 10) * 100)),
+        sourceLabel: PAIN_SOURCE_LABELS[point.recordType] || point.recordType,
+      })),
+    })),
+  };
+}
 
 function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
@@ -31,15 +63,19 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));
   const moreCells = cells.filter((item) => !primaryLabels.has(item.label));
 
-  const injuries = [...(injuryRecords || [])].sort((a, b) => String(b.createdAt || b.onsetDate).localeCompare(String(a.createdAt || a.onsetDate))).slice(0, 8).map((item) => ({
-    id: item.id,
-    title: item.injuryName || '伤病与恢复记录',
-    meta: `${item.bodyPart || '部位未录入'} · ${item.onsetDate || '日期未录入'}`,
-    status: INJURY_LABELS[item.status] || item.status,
-    statusClass: item.status === 'healthy' ? '' : item.status === 'observation' ? 'warn' : 'danger',
-    pain: `疼痛 ${number(item.painScore, 0)}`,
-    restriction: item.restrictions || item.rehabPlan || item.note || '暂无补充说明'
-  }));
+  const today = todayBeijing();
+  const injuries = [...(injuryRecords || [])].sort((a, b) => String(b.createdAt || b.onsetDate).localeCompare(String(a.createdAt || a.onsetDate))).slice(0, 8).map((item) => {
+    const reviewLabel = reviewCountdown(item.reviewDate, item.status, today);
+    return {
+      id: item.id,
+      title: item.injuryName || '伤病与恢复记录',
+      meta: `${item.bodyPart || '部位未录入'} · ${item.onsetDate || '日期未录入'}${reviewLabel ? ' · ' + reviewLabel : ''}`,
+      status: INJURY_LABELS[item.status] || item.status,
+      statusClass: item.status === 'healthy' ? '' : item.status === 'observation' ? 'warn' : 'danger',
+      pain: `疼痛 ${number(item.painScore, 0)}`,
+      restriction: item.restrictions || item.rehabPlan || item.note || '暂无补充说明'
+    };
+  });
 
   const tests = [...((overview && overview.strengthTests) || [])].sort((a, b) => b.testDate.localeCompare(a.testDate));
   const latestTest = tests[0] || null;
@@ -102,6 +138,7 @@ Page({
     canEditSelf: false,
     canReportRole: false,
     canCoachFill: false,
+    painTrend: null,
     wellnessTrends: [],
     bodyCompositionHistory: [],
     profileComparison: null,
@@ -132,7 +169,7 @@ Page({
 
   async loadPageData(scope) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [] };
+    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null };
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
     const [injuryResult, overviewResult, benchmarkResult] = await Promise.all([
@@ -140,6 +177,12 @@ Page({
       api.personalOverview(athleteId, scope.from, scope.to, scope.project),
       api.championBenchmark(athleteId).catch(() => ({ benchmark: null }))
     ]);
+    let painTrend;
+    try {
+      painTrend = painTrendView(await api.painTrend(athleteId, 30));
+    } catch {
+      painTrend = null;
+    }
     let wellnessTrends;
     try {
       const wr = await api.wellnessTrends(athleteId, scope.from, scope.to, scope.project);
@@ -206,13 +249,13 @@ Page({
     if (athlete.photoUrl) {
       photoUrl = await api.downloadAthletePhoto(athleteId);
     }
-    return { showMore: false, photoUrl, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, profileComparison, radarModels };
+    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, profileComparison, radarModels };
   },
 
   onScopeChange(event) {
     const change = applyScopeChange(this, event);
     if (!change) return Promise.resolve();
-    if (change.field === 'project') this.setData({ athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [] });
+    if (change.field === 'project') this.setData({ athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null });
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
       if (!isLatest()) return null;
@@ -232,6 +275,21 @@ Page({
     const athleteId = Number(this.data.selectedAthleteId) || 0;
     if (!athleteId) return;
     wx.navigateTo({ url: `/pages/injury-report/injury-report?athleteId=${athleteId}` });
+  },
+
+  // 疼痛趋势柱体点击：展示单日评分与来源，不做趋势解读。
+  showPainDetail(event) {
+    const partIndex = Number(event.currentTarget.dataset.partIndex) || 0;
+    const barIndex = Number(event.currentTarget.dataset.barIndex) || 0;
+    const part = ((this.data.painTrend && this.data.painTrend.parts) || [])[partIndex];
+    const bar = part && part.bars[barIndex];
+    if (!part || !bar) return;
+    wx.showModal({
+      title: `${part.bodyPart} · ${bar.date}`,
+      content: `疼痛评分：${bar.pain} 分\n数据来源：${bar.sourceLabel}`,
+      showCancel: false,
+      confirmText: '知道了'
+    });
   },
 
   fillTraining() {
