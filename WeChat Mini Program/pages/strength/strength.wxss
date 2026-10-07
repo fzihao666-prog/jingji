@@ -12,6 +12,38 @@
 .plan-head > text { flex: none; color: #176f7f; }
 .plan-summary { margin: 20rpx 0; }
 .strength-trend { min-width: 690rpx; }
+.strength-trend .trend-day { flex: 0 0 88rpx; width: 88rpx; }
+.strength-range-select { margin-top: 16rpx; }
+
+/* 沿用小程序原有色彩与间距；所有明细纵向展开，避免手机横向溢出。 */
+.strength-page { --strength-action: #176f7f; --strength-ink: #164751; --strength-muted: #526b74; --strength-border: #d8e3e6; --strength-surface: #f7fafb; }
+.strength-page .section-head-note { color: var(--strength-muted); }
+.strength-nav { display: flex; gap: 8rpx; margin-top: 20rpx; padding: 8rpx; border-radius: 20rpx; background: #fff; border: 1rpx solid var(--strength-border); }
+.strength-nav-button { flex: 1; min-width: 0; min-height: 80rpx; margin: 0; padding: 18rpx 6rpx; color: var(--strength-muted); background: transparent; font-size: 25rpx; line-height: 1.6; border-radius: 14rpx; }
+.strength-nav-button.is-active { color: #fff; background: var(--strength-action); font-weight: 700; }
+.strength-page button:focus { outline: 4rpx solid var(--strength-action); outline-offset: 2rpx; }
+.strength-select { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; min-height: 88rpx; padding: 18rpx; border: 1rpx solid var(--strength-border); border-radius: 14rpx; color: var(--strength-ink); background: var(--strength-surface); font-size: 24rpx; line-height: 1.6; overflow-wrap: anywhere; }
+.strength-select text { flex: none; color: var(--strength-action); }
+.strength-filter-row { display: flex; align-items: center; gap: 16rpx; }
+.strength-filter-row picker { flex: 1; min-width: 0; }
+.strength-filter-row .mini-button { flex: none; margin: 0; padding: 18rpx; min-height: 88rpx; font-size: 24rpx; color: var(--strength-action); background: var(--strength-surface); }
+.strength-value-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; margin-top: 18rpx; font-size: 24rpx; line-height: 1.6; }
+.strength-value-row text:first-child { flex: 1; min-width: 0; color: var(--strength-muted); }
+.strength-value-row text:last-child { flex: 1; min-width: 0; text-align: right; color: var(--strength-ink); font-weight: 600; overflow-wrap: anywhere; }
+.strength-history { max-height: 560rpx; margin-top: 24rpx; }
+.strength-history-row { padding: 14rpx 0; }
+.strength-detail-card { padding: 0; }
+.strength-disclosure { width: 100%; display: flex; align-items: flex-start; gap: 16rpx; margin: 0; padding: 26rpx; border-radius: 24rpx; text-align: left; line-height: 1.6; background: #fff; }
+.strength-disclosure-main { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.strength-disclosure-side { max-width: 32%; text-align: right; font-size: 23rpx; color: var(--strength-ink); overflow-wrap: anywhere; }
+.strength-disclosure-side text { display: block; }
+.strength-action { flex: none; margin-top: 6rpx; font-size: 23rpx; color: var(--strength-action); }
+.strength-detail-body { padding: 0 26rpx 26rpx; }
+.strength-set { border-top: 1rpx solid var(--strength-border); padding: 22rpx 0; overflow-wrap: anywhere; }
+.strength-set:last-child { padding-bottom: 0; }
+.strength-more { min-height: 88rpx; padding: 20rpx; background: #fff; color: var(--strength-action); font-size: 26rpx; line-height: 1.6; border: 1rpx solid var(--strength-border); border-radius: 18rpx; }
+.strength-page .ratio-row-head { gap: 16rpx; }
+.strength-page .ratio-row-head text { min-width: 0; overflow-wrap: anywhere; }
 
 .section-head-row { margin-top: 7rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .section-head-row .section-head-note { margin-top: 0; }
