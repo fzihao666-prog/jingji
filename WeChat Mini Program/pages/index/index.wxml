@@ -1,290 +1,17 @@
 <view class="page">
   <view class="page-head">
-    <view class="page-title">{{meta.scope === 'individual' ? '我的训练总览' : '训练总览'}}</view>
+    <view class="page-title">{{meta.scope === 'individual' ? '个人训练总览' : '训练总览'}}</view>
     <view class="page-description">{{from}} 至 {{to}} · {{projectLabel}}</view>
   </view>
 
-  <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
+  <scope-filter projects="{{projects}}" project="{{project}}" teams="{{teams}}" team-id="{{teamId}}" show-team="{{showTeam}}" athletes="{{scopeAthletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" keyword="{{athleteKeyword}}" range="{{range}}" bindprojectchange="onScopeChange" bindteamchange="onOverviewTeamChange" bindathletechange="onOverviewAthleteChange" bindkeywordchange="onAthleteKeyword" bindrangechange="onScopeChange" />
 
-  <view wx:if="{{canSelfReport && (todayView || todayLoading || todayError)}}" class="card today-status" aria-label="今日状态">
-    <view class="card-head">
-      <view><view class="card-head-title">今日状态</view><view class="todo-note">{{todayView ? todayView.date + ' · 北京时间' : '北京时间'}}</view></view>
-    </view>
-    <view wx:if="{{todayLoading && !todayView}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取今日状态…</view>
-    <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
-    <block wx:if="{{todayView}}">
-      <view class="today-row">
-        <view class="today-main">
-          <view class="today-state {{todayView.submitted ? 'today-state-ok' : 'today-state-warn'}}">{{todayView.submittedLabel}}</view>
-          <view class="todo-note">{{todayView.note}}</view>
-          <view wx:if="{{todayView.timeNote}}" class="todo-note">{{todayView.timeNote}}</view>
-        </view>
-        <view class="today-load">
-          <view class="today-load-value">{{todayView.loadText}}<text class="today-load-unit">AU</text></view>
-          <text class="today-load-label">24小时负荷</text>
-        </view>
-      </view>
-      <view wx:if="{{todayView.sourceText}}" class="todo-note">{{todayView.sourceText}}</view>
-      <view wx:if="{{wellnessView}}" class="today-wellness">
-        <view class="todo-row-head"><text>恢复日报 · {{wellnessView.filledLabel}}</text></view>
-        <view class="todo-note">{{wellnessView.note}}</view>
-        <view wx:if="{{wellnessView.summary}}" class="todo-reason">{{wellnessView.summary}}</view>
-      </view>
-      <view class="today-actions">
-        <button class="today-entry" hover-class="access-active" bindtap="openTrainingEntry">{{todayView.submitted ? '补记训练' : '去记录训练'}} ›</button>
-        <button class="today-entry" hover-class="access-active" bindtap="openWellnessEntry">{{wellnessView && wellnessView.filled ? '修改恢复日报' : '填写恢复日报'}} ›</button>
-      </view>
-    </block>
-  </view>
-
-  <view wx:if="{{canSelfReport && (todaySessions.length || sessionsLoading || sessionsError)}}" class="card today-sessions" aria-label="今日训练">
-    <view class="card-head">
-      <view><view class="card-head-title">今日训练</view><view class="todo-note">按课次展示当天训练记录</view></view>
-    </view>
-    <view wx:if="{{sessionsLoading && !todaySessions.length}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取今日训练…</view>
-    <view wx:if="{{sessionsError}}" class="error-box"><text>{{sessionsError}}</text><button class="error-retry" bindtap="retrySessions">重试</button></view>
-    <view wx:if="{{!sessionsLoading && !sessionsError && !todaySessions.length}}" class="todo-note">今日暂无训练记录</view>
-    <block wx:if="{{todaySessions.length}}">
-      <view wx:for="{{todaySessions}}" wx:key="id" class="session-row">
-        <view class="session-order">{{item.sessionOrder === 1 ? '上午' : item.sessionOrder === 2 ? '下午' : '第' + item.sessionOrder + '次'}}</view>
-        <view class="session-info">
-          <view class="session-type">{{item.trainingType}} · {{item.content}}</view>
-          <view class="todo-note">{{item.startTime || '未填时间'}} · {{item.durationMin}} min{{item.distanceKm ? ' · ' + item.distanceKm + ' km' : ''}} · RPE {{item.rpe || '—'}} · 负荷 {{item.srpe || 0}} AU</view>
-        </view>
-      </view>
-    </block>
-  </view>
-
-  <view wx:if="{{canViewTodos}}" class="card daily-todos" aria-label="教练每日训练待办">
-    <view class="card-head">
-      <view><view class="card-head-title">每日训练待办</view><view class="todo-note">当前项目 · 权限范围内全部运动员</view></view>
-    </view>
-    <view class="{{todosError ? 'error-box' : 'todo-note'}}" aria-role="status" aria-live="polite" aria-atomic="true"><text>{{todosStatus}}</text><button wx:if="{{todosError}}" class="error-retry" bindtap="retryTodos">重试</button></view>
-    <block wx:if="{{!todosLoading && !todosError && todos && todoView}}">
-      <view class="todo-note">{{todos.date}} · 北京时间 · 返回首页自动更新</view>
-      <view class="todo-summary">未填报 {{todos.counts.missing}} 人 · 需关注 {{todos.counts.attention}} 人 · 复查提醒 {{todos.counts.reviewDue}} 人</view>
-      <view wx:if="{{!todos.counts.total}}" class="todo-note">当前项目暂无可访问的运动员。</view>
-      <block wx:else>
-        <scroll-view class="todo-chips" scroll-x enhanced show-scrollbar="false">
-          <view wx:for="{{todoView.groups}}" wx:key="key" class="todo-chip {{item.active ? 'todo-chip-active' : ''}}" data-filter="{{item.key}}" bindtap="onTodoFilter" aria-label="{{item.label}} {{item.count}}人{{item.active ? '，当前已选中' : '，点击筛选'}}">
-            <text>{{item.label}}</text><text class="todo-chip-count">{{item.count}}</text>
-          </view>
-        </scroll-view>
-        <view class="todo-search-row">
-          <input class="todo-search" type="text" value="{{todoKeyword}}" placeholder="搜索运动员姓名或队伍" bindinput="onTodoKeyword" confirm-type="search" aria-label="搜索待办运动员" />
-        </view>
-
-        <block wx:if="{{todoView.show.missing}}">
-          <view class="todo-heading">当天未填报 · {{todoView.missingPage.total}} 人</view>
-          <view wx:if="{{!todoView.missingPage.total}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '今日全部运动员已填报。'}}</view>
-          <view wx:for="{{todoView.missing}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，今日未填报，点按查看档案">
-            <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
-            <view class="todo-note">{{item.team || '未分队'}} · 今日暂无有效训练记录</view>
-            <view class="todo-row-actions">
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练">代填训练</button>
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
-              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
-            </view>
-          </view>
-          <pager-nav data-key="missing" page="{{todoView.missingPager.page}}" page-count="{{todoView.missingPager.pageCount}}" total="{{todoView.missingPager.total}}" label="未填报运动员" bindpagechange="onPagerChange" />
-        </block>
-        <block wx:if="{{todoView.show.attention}}">
-          <view class="todo-heading">负荷与伤病关注 · {{todoView.counts.attention}} 人</view>
-          <view class="todo-note">近24小时 SRPE ≥ {{todos.highLoadThreshold}} AU；伤病按最新状态持续关注。</view>
-          <view wx:if="{{!todoView.attention.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '暂无高负荷或伤病关注运动员。'}}</view>
-          <view wx:for="{{todoView.attention}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，{{item.reason}}，点按查看档案">
-            <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
-            <view class="todo-note">{{item.team || '未分队'}}</view>
-            <view class="todo-reason">{{item.reason}}</view>
-            <view class="todo-row-actions">
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练">代填训练</button>
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
-              <button wx:if="{{item.injury}}" class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="reportInjuryForTodo" aria-label="为{{item.athleteName}}上报伤病">上报伤病</button>
-              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
-            </view>
-          </view>
-          <pager-nav data-key="attention" page="{{todoView.attentionPager.page}}" page-count="{{todoView.attentionPager.pageCount}}" total="{{todoView.attentionPager.total}}" label="关注运动员" bindpagechange="onPagerChange" />
-        </block>
-        <block wx:if="{{todoView.show.review}}">
-          <view class="todo-heading">复查提醒 · {{todoView.counts.review}} 人</view>
-          <view class="todo-note">最近伤病记录的复查日期在今天起 3 天内（含已逾期）。</view>
-          <view wx:if="{{!todoView.review.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '暂无临近复查的伤病。'}}</view>
-          <view wx:for="{{todoView.review}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，{{item.dueLabel}}，{{item.injuryName}}，点按查看档案">
-            <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
-            <view class="todo-note">{{item.team || '未分队'}}</view>
-            <view class="todo-reason">{{item.dueLabel}} · {{item.injuryName}}（{{item.bodyPart}}）· 疼痛 {{item.painScore}}</view>
-            <view class="todo-row-actions">
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="reportInjuryForTodo" aria-label="为{{item.athleteName}}记录复查或新增伤病">上报伤病</button>
-              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
-            </view>
-          </view>
-          <pager-nav data-key="review" page="{{todoView.reviewPager.page}}" page-count="{{todoView.reviewPager.pageCount}}" total="{{todoView.reviewPager.total}}" label="复查提醒运动员" bindpagechange="onPagerChange" />
-        </block>
-        <block wx:if="{{todoView.show.incompleteTime}}">
-          <view class="todo-heading">开训时间待补充 · {{todoView.counts.incompleteTime}} 人</view>
-          <view class="todo-note">今日或昨日存在缺少有效开训时间的记录，未计入24小时负荷；今日记录仍计为已填报。</view>
-          <view wx:if="{{!todoView.incompleteTime.length}}" class="todo-note">{{todoView.keyword ? '没有匹配的运动员。' : '暂无时间待补充的记录。'}}</view>
-          <view wx:for="{{todoView.incompleteTime}}" wx:key="athleteId" class="todo-card" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，开训时间待补充，点按查看档案">
-            <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
-            <view class="todo-row-actions">
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练补充时间">代填训练</button>
-              <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
-              <button class="mini-button todo-follow-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="markFollowedUp" aria-label="标记{{item.athleteName}}今日已跟进">已跟进</button>
-            </view>
-          </view>
-          <pager-nav data-key="incompleteTime" page="{{todoView.incompleteTimePager.page}}" page-count="{{todoView.incompleteTimePager.pageCount}}" total="{{todoView.incompleteTimePager.total}}" label="时间待补运动员" bindpagechange="onPagerChange" />
-        </block>
-        <view class="todo-heading">已跟进 · {{todoView.followedPager.total}} 人</view>
-        <view wx:if="{{!todoView.followedUpList.length}}" class="todo-note">今日还没有已跟进的运动员。</view>
-        <view wx:for="{{todoView.followedUpList}}" wx:key="athleteId" class="todo-card todo-card-followed" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，今日已跟进，点按查看档案">
-          <view class="todo-row-head"><text>{{item.athleteName}}</text><text class="todo-link">查看档案 ›</text></view>
-          <view class="todo-note">{{item.groupLabel}} · 今日已跟进</view>
-          <view class="todo-row-actions">
-            <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="unmarkFollowedUp" aria-label="撤销{{item.athleteName}}的已跟进标记">撤销跟进</button>
-          </view>
-        </view>
-        <pager-nav data-key="followed" page="{{todoView.followedPager.page}}" page-count="{{todoView.followedPager.pageCount}}" total="{{todoView.followedPager.total}}" label="已跟进运动员" bindpagechange="onPagerChange" />
-      </block>
-    </block>
-  </view>
-
-  <view wx:if="{{canViewTodos && (teamOverview || teamLoading || teamError)}}" class="card team-overview" aria-label="队伍总览">
-    <view class="card-head">
-      <view><view class="card-head-title">队伍总览</view><view class="todo-note">{{teamOverview ? teamOverview.date + ' · 北京时间' : '当日全队训练与状态'}}</view></view>
-    </view>
-    <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取队伍总览…</view>
-    <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
-    <block wx:if="{{teamOverview && teamView}}">
-      <view class="team-summary">
-        <view class="team-stat"><view class="team-stat-value">{{teamOverview.summary.total}}</view><text class="team-stat-label">训练人数</text></view>
-        <view class="team-stat"><view class="team-stat-value team-stat-ok">{{teamOverview.summary.trained}}</view><text class="team-stat-label">已完成</text></view>
-        <view class="team-stat"><view class="team-stat-value team-stat-teal">{{teamOverview.summary.wellnessReported}}</view><text class="team-stat-label">已填报</text></view>
-        <view class="team-stat"><view class="team-stat-value team-stat-orange">{{teamOverview.summary.averageLoad}}</view><text class="team-stat-label">平均负荷 AU</text></view>
-      </view>
-      <view class="todo-search-row">
-        <input class="todo-search" type="text" value="{{teamKeyword}}" placeholder="搜索运动员姓名或队伍" bindinput="onTeamKeyword" confirm-type="search" aria-label="搜索运动员" />
-      </view>
-      <view wx:if="{{!teamView.athletes.length}}" class="todo-note">{{teamKeyword ? '没有匹配的运动员。' : '当前项目暂无可访问的运动员。'}}</view>
-      <block wx:else>
-        <view wx:for="{{teamView.athletes}}" wx:key="athleteId" class="team-athlete-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，查看档案">
-          <view class="team-athlete-head">
-            <text class="team-athlete-name">{{item.athleteName}}</text>
-            <text class="team-athlete-team">{{item.team || '未分队'}}</text>
-            <text class="team-athlete-link">查看档案 ›</text>
-          </view>
-          <view class="team-athlete-tags">
-            <text class="tag {{item.hasTraining ? 'ok' : 'warn'}}">{{item.hasTraining ? '已训练' : '未训练'}}</text>
-            <text class="tag {{item.wellnessReported ? 'ok' : 'warn'}}">{{item.wellnessReported ? '已填报' : '未填报'}}</text>
-            <text wx:if="{{item.highLoad}}" class="tag warn">高负荷</text>
-            <text wx:if="{{item.wellnessStatus === 'rest'}}" class="tag warn">需要休息</text>
-            <text wx:elif="{{item.wellnessStatus === 'attention'}}" class="tag warn">需要关注</text>
-            <text wx:elif="{{item.wellnessStatus === 'alert'}}" class="tag danger">需要警示</text>
-          </view>
-          <view class="todo-note">负荷 {{item.load24h}} AU{{item.sleepHours != null ? ' · 睡眠 ' + item.sleepHours + 'h' : ''}}{{item.morningPulse != null ? ' · 晨脉 ' + item.morningPulse : ''}}{{item.weightKg != null ? ' · 体重 ' + item.weightKg + 'kg' : ''}}</view>
-          <view class="team-athlete-actions">
-            <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillTrainingForAthlete" aria-label="为{{item.athleteName}}代填训练">代填训练</button>
-            <button class="mini-button" hover-class="access-active" data-athlete-id="{{item.athleteId}}" catchtap="fillWellnessForAthlete" aria-label="为{{item.athleteName}}代填恢复日报">代填日报</button>
-          </view>
-        </view>
-        <pager-nav data-key="team" page="{{teamView.teamPager.page}}" page-count="{{teamView.teamPager.pageCount}}" total="{{teamView.teamPager.total}}" label="队伍成员" bindpagechange="onPagerChange" />
-      </block>
-    </block>
-  </view>
-
-  <!-- 训练负荷管理（ACWR） -->
-  <view wx:if="{{canViewTodos && (loadMgmt || loadMgmtLoading || loadMgmtError)}}" class="card load-mgmt" aria-label="训练负荷管理">
-    <view class="card-head">
-      <view><view class="card-head-title">负荷管理 ACWR</view><view class="todo-note">急性/慢性负荷比 · 7天 vs 28天</view></view>
-    </view>
-    <view wx:if="{{loadMgmtLoading && !loadMgmt}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取负荷数据…</view>
-    <view wx:if="{{loadMgmtError}}" class="error-box"><text>{{loadMgmtError}}</text><button class="error-retry" bindtap="retryLoadMgmt">重试</button></view>
-    <block wx:if="{{loadMgmt}}">
-      <view class="acwr-summary">
-        <view class="acwr-stat"><view class="acwr-stat-value">{{loadMgmt.summary.avgAcwr}}</view><text class="acwr-stat-label">平均 ACWR</text></view>
-        <view class="acwr-stat"><view class="acwr-stat-value acwr-under">{{loadMgmt.summary.under}}</view><text class="acwr-stat-label">欠训练</text></view>
-        <view class="acwr-stat"><view class="acwr-stat-value acwr-optimal">{{loadMgmt.summary.optimal}}</view><text class="acwr-stat-label">最佳区间</text></view>
-        <view class="acwr-stat"><view class="acwr-stat-value acwr-danger">{{loadMgmt.summary.danger}}</view><text class="acwr-stat-label">危险区间</text></view>
-      </view>
-      <view class="todo-note">ACWR &lt; 0.8 欠训练 · 0.8-1.3 最佳 · &gt; 1.3 危险</view>
-      <view wx:if="{{!loadMgmt.athletes.length}}" class="todo-note">当前项目暂无可访问的运动员。</view>
-      <block wx:if="{{loadMgmt.athletes.length}}">
-        <view wx:for="{{loadMgmt.athletes}}" wx:key="athleteId" class="acwr-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，ACWR {{item.acwr}}">
-          <view class="acwr-row-head">
-            <text class="acwr-name">{{item.athleteName}}</text>
-            <text class="acwr-zone acwr-zone-{{item.zone}}">{{item.zone === 'under' ? '欠训练' : item.zone === 'optimal' ? '最佳' : '危险'}}</text>
-          </view>
-          <view class="acwr-bar-track">
-            <view class="acwr-bar-fill acwr-bar-{{item.zone}}" style="width: {{item.acwr > 2 ? 100 : item.acwr / 2 * 100}}%;" />
-          </view>
-          <view class="todo-note">ACWR {{item.acwr}} · 急性 {{item.acuteLoad}} AU · 慢性 {{item.chronicLoad}} AU</view>
-        </view>
-      </block>
-    </block>
-  </view>
-
-  <!-- 恢复状态基线偏离预警 -->
-  <view wx:if="{{canViewTodos && (baseline || baselineLoading || baselineError)}}" class="card baseline-alerts" aria-label="恢复状态预警">
-    <view class="card-head">
-      <view><view class="card-head-title">恢复状态预警</view><view class="todo-note">近3天与28天基线对比，偏离超1个标准差触发</view></view>
-    </view>
-    <view wx:if="{{baselineLoading && !baseline}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在分析恢复数据…</view>
-    <view wx:if="{{baselineError}}" class="error-box"><text>{{baselineError}}</text><button class="error-retry" bindtap="retryBaseline">重试</button></view>
-    <block wx:if="{{baseline}}">
-      <view wx:if="{{!baseline.alerts.length}}" class="todo-note">{{baseline.summary.total ? '近3天未检测到显著偏离。' : '暂无恢复数据可供分析。'}}</view>
-      <block wx:else>
-        <view class="todo-summary">{{baseline.summary.alerted}} 人出现指标偏离</view>
-        <view wx:for="{{baseline.alerts}}" wx:key="athleteId+metric" class="baseline-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.message}}">
-          <view class="baseline-row-head">
-            <text class="baseline-name">{{item.athleteName}}</text>
-            <text class="baseline-severity {{item.severity === 'alert' ? 'baseline-sev-alert' : 'baseline-sev-warn'}}">{{item.severity === 'alert' ? '显著' : '注意'}}</text>
-          </view>
-          <view class="todo-reason">{{item.message}}</view>
-        </view>
-      </block>
-    </block>
-  </view>
-
-  <!-- 训练计划执行率 -->
-  <view wx:if="{{canViewTodos && (planExec || planExecLoading || planExecError)}}" class="card plan-exec" aria-label="计划执行率">
-    <view class="card-head">
-      <view><view class="card-head-title">计划执行率</view><view class="todo-note">近7天计划 vs 实际 · {{planExec ? planExec.windowStart + ' 至 ' + planExec.date : ''}}</view></view>
-    </view>
-    <view wx:if="{{planExecLoading && !planExec}}" class="todo-note" aria-role="status" aria-live="polite" aria-atomic="true">正在读取计划执行数据…</view>
-    <view wx:if="{{planExecError}}" class="error-box"><text>{{planExecError}}</text><button class="error-retry" bindtap="retryPlanExec">重试</button></view>
-    <block wx:if="{{planExec}}">
-      <view class="exec-summary">
-        <view class="exec-stat"><view class="exec-stat-value">{{planExec.summary.withPlan}}</view><text class="exec-stat-label">有计划</text></view>
-        <view class="exec-stat"><view class="exec-stat-value exec-complete">{{planExec.summary.complete}}</view><text class="exec-stat-label">已完成</text></view>
-        <view class="exec-stat"><view class="exec-stat-value exec-partial">{{planExec.summary.partial}}</view><text class="exec-stat-label">部分完成</text></view>
-        <view class="exec-stat"><view class="exec-stat-value exec-missed">{{planExec.summary.missed}}</view><text class="exec-stat-label">未执行</text></view>
-      </view>
-      <view wx:if="{{planExec.summary.avgCompletion !== null}}" class="todo-note">平均执行率 {{planExec.summary.avgCompletion * 100}}%</view>
-      <view wx:if="{{!planExec.athletes.length}}" class="todo-note">当前项目暂无可访问的运动员。</view>
-      <block wx:if="{{planExec.athletes.length}}">
-        <view wx:for="{{planExec.athletes}}" wx:key="athleteId" class="exec-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，执行率 {{item.completionRate}}">
-          <view class="exec-row-head">
-            <text class="exec-name">{{item.athleteName}}</text>
-            <text class="exec-status exec-status-{{item.status}}">{{item.status === 'complete' ? '已完成' : item.status === 'partial' ? '部分' : item.status === 'missed' ? '未执行' : '无计划'}}</text>
-          </view>
-          <view class="todo-note">{{item.hasPlan ? '计划 ' + item.plannedDays + ' 天 · 实际 ' + item.actualDays + ' 天 · ' + item.totalLoad + ' AU' : '本周未创建训练计划'}}</view>
-          <view wx:if="{{item.completionRate !== null}}" class="exec-bar-track">
-            <view class="exec-bar-fill exec-bar-{{item.status}}" style="width: {{item.completionRate * 100}}%;" />
-          </view>
-        </view>
-      </block>
-    </block>
-  </view>
-
-  <view wx:if="{{error}}" class="error-box">{{error}}</view>
-  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载训练数据</view></view>
+  <view wx:if="{{error}}" class="error-box">{{error}}<button class="error-retry" bindtap="retryOverview">重试</button></view>
+  <view wx:if="{{loading}}" class="card state" aria-role="status" aria-live="polite"><view class="state-title">正在加载训练总览…</view></view>
 
   <block wx:if="{{!loading}}">
-    <view wx:if="{{attention.show}}" class="attention-card">
-      <view class="attention-mark">!</view>
-      <view><view class="attention-title">{{attention.title}}</view><text>{{attention.summary}}</text></view>
-    </view>
-
-    <view class="metric-grid">
+    <view class="section-head"><view class="section-head-title">周期核心数据</view><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
+    <view class="metric-grid overview-metrics">
       <view wx:for="{{metrics}}" wx:key="label" class="metric-card {{item.tone}}">
         <view class="metric-label">{{item.label}}</view>
         <view class="metric-value">{{item.value}}<text>{{item.unit}}</text></view>
@@ -292,95 +19,96 @@
       </view>
     </view>
 
-    <view wx:if="{{activeInjuries.length}}" class="section-head"><view class="section-head-title">伤病关注</view><view class="section-head-note">点击运动员查看档案</view></view>
-    <view wx:if="{{activeInjuries.length}}" class="card">
-      <view class="list">
-        <view wx:for="{{activeInjuries}}" wx:key="athleteId" class="list-row access" hover-class="access-active" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete">
-          <view class="list-row-main"><view><view class="list-row-title">{{item.athleteName}}</view><text class="list-row-meta">{{item.bodyPart}} · {{item.injuryName || '需关注状态'}}</text></view><view class="list-row-value">疼痛 {{item.painScore}}</view></view>
-          <text class="tag {{item.status === 'observation' ? 'warn' : 'danger'}}">{{item.statusLabel}}</text>
-        </view>
+    <view class="section-head"><view class="section-head-title">训练负荷趋势</view><view class="section-head-note">{{range === 'day' ? '今日' : range === 'week' ? '近7天' : '近14天'}} · AU</view></view>
+    <view class="card chart-card">
+      <view class="chart-legend">
+        <view class="legend-item"><view class="legend-dot accent" />{{selectedAthleteId ? '当前运动员' : '队伍训练负荷'}}</view>
+        <view wx:if="{{selectedAthleteId}}" class="legend-item"><view class="legend-dot team-average" />团队参照</view>
       </view>
-      <pager-nav data-key="injuries" page="{{injuriesPager.page}}" page-count="{{injuriesPager.pageCount}}" total="{{injuriesPager.total}}" label="伤病关注运动员" bindpagechange="onPagerChange" />
-    </view>
-
-    <view class="section-head"><view class="section-head-title">训练量统计</view><view class="section-head-note">最近训练趋势</view></view>
-    <view class="card">
-      <view wx:if="{{trendPlaceholder}}" class="chart-example">示例数据</view>
-      <view wx:if="{{trend.length}}" class="chart-meta">
-        <view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />SRPE负荷（AU）</view></view>
-        <text class="chart-hint">点击柱形查看</text>
-      </view>
-      <scroll-view wx:if="{{trend.length}}" class="trend-scroll" scroll-x enhanced show-scrollbar="false">
-        <view class="trend-chart">
-          <button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail">
-            <view class="trend-bars">
-              <view class="trend-bar" style="height: {{item.durationHeight}}%;" />
-              <view class="trend-bar accent" style="height: {{item.loadHeight}}%;" />
-            </view>
-            <text class="trend-label">{{item.label}}</text>
-          </button>
-        </view>
-      </scroll-view>
-      <view wx:if="{{trendPlaceholder}}" class="chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</view>
-    </view>
-
-    <view class="section-head"><view class="section-head-title">训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
-    <view class="card">
-      <view wx:if="{{intensityPlaceholder}}" class="chart-example">示例数据</view>
-      <view wx:if="{{intensity.length}}" class="ratio-list">
-        <view wx:for="{{intensity}}" wx:key="name">
-          <view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view>
-          <view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view>
-        </view>
-      </view>
-      <view wx:if="{{intensityPlaceholder}}" class="chart-example-note">暂无真实强度数据 · 当前图表为示例效果</view>
-    </view>
-
-    <view class="section-head"><view class="section-head-title">生理生化监控</view><view class="section-head-note">团队指标风险状态与趋势</view></view>
-    <view wx:if="{{physiologyHeatmap}}">
-      <view wx:if="{{physiologyPlaceholder}}" class="chart-example">示例数据 · 暂无真实生理生化数据</view>
-      <!-- 指标摘要卡片 + 迷你趋势图 -->
-      <view class="physio-cards">
-        <view wx:for="{{physiologyHeatmap.metrics}}" wx:key="code" class="physio-card">
-          <view class="physio-card-head">
-            <text class="physio-card-label">{{item.label}}</text>
-            <text class="physio-card-status {{item.summary.latestStatusClass}}">{{item.summary.latestStatusLabel}}</text>
+      <view wx:if="{{trendPlaceholder}}" class="chart-empty">最近14天暂无真实专项或体能负荷记录；下方保留日期框架，不显示模拟数值。</view>
+      <view wx:if="{{trend.length}}" class="trend-chart">
+        <button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail">
+          <view class="trend-bars">
+            <view class="trend-bar accent" style="height: {{item.loadHeight}}%;" />
+            <view wx:if="{{selectedAthleteId && item.teamLoad !== null}}" class="trend-bar team-average" style="height: {{item.teamLoadHeight}}%;" />
           </view>
-          <view class="physio-card-value">
-            <text class="physio-value-num">{{item.summary.latestValue === null ? '—' : item.summary.latestValue}}</text>
-            <text class="physio-value-unit">{{item.unit}}</text>
-            <text class="physio-trend-arrow {{item.summary.trendDirection}}">{{item.summary.trendArrow}}</text>
-          </view>
-          <!-- 迷你趋势图 -->
-          <view wx:if="{{item.hasSpark}}" class="physio-spark">
-            <svg viewBox="0 0 100 30" preserveAspectRatio="none" class="physio-spark-svg">
-              <polyline points="{{item.sparkPoints}}" fill="none" stroke="#5f87c9" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
-            </svg>
-          </view>
-          <view wx:else class="physio-spark-empty">暂无趋势数据</view>
-          <view class="physio-card-meta">
-            <text>近{{item.summary.dataDays}}天</text>
-            <text wx:if="{{item.summary.minValue !== null}}">范围 {{item.summary.minValue}}~{{item.summary.maxValue}}</text>
-            <text wx:if="{{item.summary.avgValue !== null}}">均值 {{item.summary.avgValue}}</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- 热力图详情 -->
-      <view class="card physio-heat-card">
-        <view class="heat-grid">
-          <view class="heat-header"><view class="heat-cell heat-metric">指标</view><view wx:for="{{physiologyHeatmap.metrics[0].heatDates || []}}" wx:key="*this" class="heat-cell heat-date">{{item}}</view></view>
-          <view wx:for="{{physiologyHeatmap.metrics}}" wx:for-item="metric" wx:key="code" class="heat-row">
-            <view class="heat-cell heat-metric">{{metric.label}}</view>
-            <button wx:for="{{metric.days}}" wx:for-item="day" wx:key="date" class="heat-cell {{day.statusClass}} {{day.isEstimated ? 'estimated' : ''}}" aria-label="{{metric.label + ' ' + day.dateLabel + (physiologyPlaceholder ? ' 示例数据，仅用于展示图表效果' : ' 状态 ' + day.status)}}" data-median="{{day.median}}" data-sample="{{day.sampleCount}}" data-change="{{day.abnormalRateChange}}" bindtap="showPhysioDetail" data-code="{{metric.code}}" data-date="{{day.date}}"></button>
-          </view>
-        </view>
-        <view wx:if="{{physiologyPlaceholder}}" class="heat-legend">示例数据，仅用于展示图表效果；不表示真实监测结果或异常判断。</view>
-        <view wx:elif="{{heatHasEstimated}}" class="heat-legend">V1 模拟状态（等待实测导入）· 点击色块查看详情</view>
-        <view wx:else class="heat-legend">颜色：绿=正常 黄=波动 橙=关注 红=异常 灰=未监测 · 点击色块查看详情</view>
+          <text class="trend-label">{{item.label}}</text>
+        </button>
       </view>
     </view>
-    <view wx:else class="card state"><view class="state-icon">—</view><view class="state-title">暂无生理生化数据</view></view>
 
+    <view class="section-head"><view class="section-head-title">训练结构</view><view class="section-head-note">按训练负荷 AU</view></view>
+    <view class="card structure-card">
+      <view wx:if="{{!structureHasData}}" class="chart-empty">当前周期暂无可分类的真实训练负荷；保留分类框架，不显示模拟占比。</view>
+      <block>
+        <view class="structure-track" aria-label="专项、体能、恢复训练负荷占比">
+          <view wx:for="{{structure}}" wx:key="key" class="structure-segment {{item.color}}" style="width: {{item.width}}%;" />
+        </view>
+        <view class="structure-list">
+          <view wx:for="{{structure}}" wx:key="key" class="structure-row">
+            <view class="structure-label"><view class="structure-dot {{item.color}}" /><text>{{item.name}}</text></view>
+            <text class="structure-value">{{structureHasData ? item.load + ' AU' : '—'}}</text><text class="structure-percent">{{structureHasData ? item.percentageText + '%' : '—'}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">RPE 状态趋势</view><view class="section-head-note">0–10 分 · 缺失日期留空</view></view>
+    <view class="card chart-card">
+      <view class="chart-legend">
+        <view class="legend-item"><view class="legend-dot accent" />{{selectedAthleteId ? '个人 RPE' : '队伍平均 RPE'}}</view>
+        <view wx:if="{{selectedAthleteId}}" class="legend-item"><view class="legend-dot team-average" />团队平均</view>
+      </view>
+      <view wx:if="{{rpePlaceholder}}" class="chart-empty">当前周期暂无真实 RPE 记录；下方日期轴为空，不以模拟值填充。</view>
+      <view wx:if="{{rpeDays.length}}" class="rpe-chart">
+        <view class="rpe-axis"><text>10</text><text>5</text><text>0</text></view>
+        <button wx:for="{{rpeDays}}" wx:key="date" class="rpe-day" aria-label="{{item.ariaLabel}}，点按查看详情" data-index="{{index}}" bindtap="showRpeDetail">
+          <view class="rpe-plot">
+            <view wx:if="{{item.mean !== null && item.mean !== undefined}}" class="rpe-range" style="bottom: {{item.lowerHeight}}%; height: {{item.rangeHeight}}%;" />
+            <view wx:if="{{item.mean !== null && item.mean !== undefined}}" class="rpe-mark" style="bottom: {{item.meanHeight}}%;" />
+            <view wx:if="{{selectedAthleteId && item.teamMean !== null && item.teamMean !== undefined}}" class="rpe-team-mark" style="bottom: {{item.teamMeanHeight}}%;" />
+          </view>
+          <text class="trend-label">{{item.label}}</text>
+        </button>
+      </view>
+      <view wx:if="{{!rpePlaceholder}}" class="chart-footnote">阴影为队伍每日平均值 ±1 标准差；空白表示无有效记录。</view>
+    </view>
+
+    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">重点人员</view><view class="section-head-note">仅列客观待办 · 最多每页 5 人</view></view>
+    <view wx:if="{{canViewTodos}}" class="card focus-card">
+      <view wx:if="{{todosLoading && !todos}}" class="todo-note" aria-role="status" aria-live="polite">正在核对当日训练状态…</view>
+      <view wx:if="{{todosError}}" class="error-box"><text>{{todosError}}</text><button class="error-retry" bindtap="retryTodos">重试</button></view>
+      <view wx:if="{{!todosLoading && !todosError && focusPager && !focusPager.total}}" class="chart-empty">{{teamId ? '当前队伍暂无重点待办' : '当前授权范围暂无重点待办'}}</view>
+      <block wx:if="{{focusRows.length}}">
+        <view wx:for="{{focusRows}}" wx:key="athleteId" class="focus-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，{{item.focusLabel}}，查看运动员档案">
+          <view class="focus-row-head"><text class="focus-name">{{item.athleteName}}</text><view class="focus-tags"><text wx:for="{{item.focusLabels}}" wx:for-item="label" wx:key="*this" class="focus-tag">{{label}}</text></view></view>
+          <view class="todo-note">{{item.team || '未分队'}} · {{item.focusReason}}</view>
+        </view>
+        <pager-nav data-key="focus" page="{{focusPager.page}}" page-count="{{focusPager.pageCount}}" total="{{focusPager.total}}" label="重点人员" bindpagechange="onPagerChange" />
+      </block>
+    </view>
+
+    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">队伍运动员</view><view class="section-head-note">{{teamView ? teamView.teamPager.total : '—'}} 人 · 每页最多 5 人</view></view>
+    <view wx:if="{{canViewTodos}}" class="card team-overview">
+      <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite">正在读取队伍运动员…</view>
+      <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
+      <input class="todo-search team-search" type="text" value="{{teamKeyword}}" placeholder="搜索运动员姓名" bindinput="onTeamKeyword" confirm-type="search" aria-label="搜索队伍运动员" />
+      <view wx:if="{{!teamLoading && teamView && !teamView.teamPager.total}}" class="chart-empty">当前队伍暂无运动员记录</view>
+      <view wx:for="{{teamView.athletes}}" wx:key="athleteId" class="team-athlete-row" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-role="button" aria-label="{{item.athleteName}}，查看运动员档案">
+        <view class="team-athlete-head"><text class="team-athlete-name">{{item.athleteName}}</text><text class="team-athlete-link">查看档案 ›</text></view>
+        <view class="team-athlete-tags"><text class="tag {{item.hasTraining ? 'ok' : 'warn'}}">{{item.hasTraining ? '已训练' : '未训练'}}</text><text class="tag {{item.wellnessReported ? 'ok' : 'warn'}}">{{item.wellnessReported ? '恢复已填' : '恢复未填'}}</text></view>
+        <view class="todo-note">{{item.load24h}} AU · 24 小时训练负荷</view>
+      </view>
+      <pager-nav wx:if="{{teamView && teamView.teamPager.total > 5}}" data-key="team" page="{{teamView.teamPager.page}}" page-count="{{teamView.teamPager.pageCount}}" total="{{teamView.teamPager.total}}" label="队伍运动员" bindpagechange="onPagerChange" />
+    </view>
+
+    <view wx:if="{{canSelfReport && (todayView || todayLoading || todayError)}}" class="card today-status" aria-label="今日状态">
+      <view class="card-head"><view class="card-head-title">今日状态</view></view>
+      <view wx:if="{{todayLoading && !todayView}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日状态…</view>
+      <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
+      <view wx:if="{{todayView}}" class="today-row"><view class="today-main"><view class="today-state {{todayView.submitted ? 'today-state-ok' : 'today-state-warn'}}">{{todayView.submittedLabel}}</view><view class="todo-note">{{todayView.note}}</view></view><view class="today-load"><view class="today-load-value">{{todayView.loadText}}<text class="today-load-unit">AU</text></view><text class="today-load-label">24 小时负荷</text></view></view>
+      <view wx:if="{{wellnessView}}" class="todo-note today-recovery">恢复日报 · {{wellnessView.filledLabel}} · {{wellnessView.note}}</view>
+      <view wx:if="{{todayView}}" class="today-actions"><button class="today-entry" bindtap="openTrainingEntry">{{todayView.submitted ? '补记训练' : '去记录训练'}}</button><button class="today-entry" bindtap="openWellnessEntry">{{wellnessView && wellnessView.filled ? '修改恢复日报' : '填写恢复日报'}}</button></view>
+    </view>
   </block>
 </view>

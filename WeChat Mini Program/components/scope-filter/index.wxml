@@ -23,7 +23,7 @@
     </picker>
   </view>
   <view wx:if="{{showAthlete}}" class="scope-keyword-row">
-    <input class="scope-keyword-input" value="{{keyword}}" bindinput="onKeywordInput" placeholder="按姓名或队伍筛选" />
+    <input class="scope-keyword-input" value="{{keyword}}" bindinput="onKeywordInput" placeholder="按姓名或队伍筛选" aria-label="按姓名或队伍筛选运动员" />
   </view>
   <view class="scope-range" aria-label="时间范围">
     <button wx:for="{{rangeOptions}}" wx:key="value" class="{{range === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onRangeChange" aria-label="时间范围：{{item.label}}，{{range === item.value ? '已选中' : '未选中'}}">{{item.label}}</button>

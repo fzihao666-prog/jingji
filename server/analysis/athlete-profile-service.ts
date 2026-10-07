@@ -514,17 +514,6 @@ export function buildProfileComparison(scope: ProfileScope) {
           (overview) => overview.trainingAnalytics.summary.specialDistanceKm
         ),
         statusMetric(
-          'intensity',
-          '训练强度',
-          'AU/h',
-          (overview) => {
-            const load = overview.trainingAnalytics.summary.specialLoad;
-            const durationMin = overview.trainingAnalytics.summary.specialDurationMin;
-            if (load === null || durationMin === null || durationMin === 0) return null;
-            return Math.round((load / (durationMin / 60)) * 10) / 10;
-          }
-        ),
-        statusMetric(
           'load',
           '训练负荷',
           'AU',

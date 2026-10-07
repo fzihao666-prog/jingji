@@ -2,164 +2,107 @@ const api = require('../../services/api');
 const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const { shortDate } = require('../../utils/date');
-const { number, INJURY_LABELS } = require('../../utils/format');
-const { durationLoadLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
-const { dailyTodoView, filterDailyTodos } = require('../../utils/daily-todos');
+const { number } = require('../../utils/format');
+const { goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
+const { dailyTodoView } = require('../../utils/daily-todos');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
-const { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder } = require('../../utils/chart-placeholder');
 
-// 待办卡内需要分页的四个分组（已跟进区单独处理）。
-const TODO_PAGED_GROUPS = ['missing', 'attention', 'review', 'incompleteTime'];
-
-function sum(values) {
-  return values.reduce((total, value) => total + (Number.isFinite(Number(value)) ? Number(value) : 0), 0);
+function recentDates(from, to, limit = 14) {
+  const first = new Date(`${from}T00:00:00Z`);
+  const last = new Date(`${to}T00:00:00Z`);
+  if (!Number.isFinite(first.getTime()) || !Number.isFinite(last.getTime()) || first > last) return [];
+  const dates = [];
+  for (const cursor = new Date(first); cursor <= last; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    dates.push(cursor.toISOString().slice(0, 10));
+  }
+  return dates.slice(-limit);
 }
 
-function average(values) {
-  const valid = values.filter((value) => Number.isFinite(Number(value))).map(Number);
-  return valid.length ? sum(valid) / valid.length : null;
-}
-
-function buildView(overview) {
-  const records = overview.records || [];
+function buildView(overview, comparison, from, to) {
   const analytics = overview.trainingAnalytics || { summary: {}, days: [] };
   const summary = analytics.summary || {};
-  const totalDuration = summary.totalDurationMin;
-  const physicalDuration = summary.physicalDurationMin;
-  const specialDuration = summary.specialDurationMin;
-  const fatigue = average(records.map((item) => item.fatigueIndex));
-  const highFatigue = new Set(records.filter((item) => Number(item.fatigueIndex) >= 7).map((item) => item.athleteId)).size;
-  const totalSrpe = sum(records.map((item) => item.srpe));
   const loadRatio = overview.trainingLoadRatio || {};
-  const injuries = overview.injuries || [];
-  const activeInjuries = injuries.filter((item) => item.status !== 'healthy').map((item) => ({
-    ...item,
-    statusLabel: INJURY_LABELS[item.status] || item.status || '需关注'
-  }));
-
+  const valueOrDash = (value, divisor = 1) => value === null || value === undefined ? '—' : number(value / divisor);
   const metrics = [
-    {
-      label: '训练时长', value: totalDuration === null || totalDuration === undefined ? '—' : number(totalDuration / 60), unit: totalDuration == null ? '' : '小时',
-      note: `体能 ${physicalDuration == null ? '—' : number(physicalDuration / 60)}h · 专项 ${specialDuration == null ? '—' : number(specialDuration / 60)}h`, tone: ''
-    },
-    {
-      label: '训练负荷', value: number(loadRatio.totalLoad || totalSrpe, 0), unit: 'AU',
-      note: `体能 ${number(loadRatio.physicalLoad || 0, 0)} · 专项 ${number(loadRatio.specialLoad || 0, 0)}`, tone: 'tone-orange'
-    },
-    {
-      label: '疲劳指数', value: fatigue === null ? '—' : number(fatigue), unit: fatigue === null ? '' : '分',
-      note: fatigue === null ? '暂无疲劳记录' : `疲劳偏高 ${highFatigue} 人`, tone: 'tone-teal'
-    },
-    {
-      label: '损伤情况', value: number(activeInjuries.length, 0), unit: '人',
-      note: activeInjuries.length ? `观察 ${activeInjuries.filter((item) => item.status === 'observation').length}人 · 受限/康复/停训 ${activeInjuries.filter((item) => ['restricted', 'rehab', 'suspended'].includes(item.status)).length}人` : '当前无活动性损伤', tone: 'tone-green'
-    }
+    { label: '累计训练量', value: valueOrDash(summary.totalDurationMin, 60), unit: summary.totalDurationMin == null ? '' : '小时', note: '当前周期', tone: '' },
+    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: summary.specialDurationMin == null ? '' : '小时', note: '训练时长', tone: '' },
+    { label: '体能训练', value: valueOrDash(summary.physicalDurationMin, 60), unit: summary.physicalDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-teal' },
+    { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: summary.recoveryDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-green' },
+    { label: '训练负荷', value: loadRatio.totalLoad == null ? '—' : number(loadRatio.totalLoad, 0), unit: loadRatio.totalLoad == null ? '' : 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' }
   ];
 
-  const days = (analytics.days || []).slice(-14);
-  const maxDuration = Math.max(1, ...days.map((item) => Number(item.physicalDurationMin || 0) + Number(item.specialDurationMin || 0)));
-  const maxLoad = Math.max(1, ...days.map((item) => Number(item.physicalLoad || 0) + Number(item.specialLoad || 0)));
-  const trend = days.map((item) => {
-    const duration = Number(item.physicalDurationMin || 0) + Number(item.specialDurationMin || 0);
-    const load = Number(item.physicalLoad || 0) + Number(item.specialLoad || 0);
+  const dates = recentDates(from, to);
+  const sourceDays = analytics.days || [];
+  const sourceByDate = new Map(sourceDays.map((item) => [item.date, item]));
+  const teamDays = comparison && comparison.trainingAnalytics ? comparison.trainingAnalytics.days || [] : [];
+  const teamByDate = new Map(teamDays.map((item) => [item.date, item]));
+  const dailyRows = dates.map((date) => sourceByDate.get(date) || { date });
+  const teamRangeDays = dates.map((date) => teamByDate.get(date) || null);
+  const loadOf = (day) => day && (day.physicalLoad != null || day.specialLoad != null)
+    ? Number(day.physicalLoad || 0) + Number(day.specialLoad || 0)
+    : null;
+  const maxLoad = Math.max(1,
+    ...dailyRows.map((item) => loadOf(item) || 0),
+    ...teamRangeDays.map((item) => loadOf(item) || 0));
+  const trend = dailyRows.map((item, index) => {
+    const load = loadOf(item);
+    const teamDay = teamRangeDays[index];
+    const teamLoad = loadOf(teamDay);
     return {
       date: item.date,
       label: shortDate(item.date),
-      duration,
+      duration: Number(item.physicalDurationMin || 0) + Number(item.specialDurationMin || 0),
       load,
-      ariaLabel: `${item.date}，训练时长${duration}分钟，训练负荷${load}AU`,
-      durationHeight: Math.max(2, Math.round(duration / maxDuration * 100)),
-      loadHeight: Math.max(2, Math.round(load / maxLoad * 100))
+      teamLoad,
+      ariaLabel: `${item.date}，${load == null ? '暂无专项或体能负荷记录' : `专项与体能负荷 ${number(load, 0)} AU`}${teamLoad == null ? '' : `，团队日均 ${number(teamLoad, 0)} AU`}`,
+      loadHeight: load == null ? 0 : Math.max(load > 0 ? 2 : 0, Math.round(load / maxLoad * 100)),
+      teamLoadHeight: teamLoad == null ? 0 : Math.max(teamLoad > 0 ? 2 : 0, Math.round(teamLoad / maxLoad * 100))
     };
   });
+  const trendHasData = trend.some((item) => item.load !== null);
 
-  const intensity = (overview.intensityDistribution || []).filter((item) => Number(item.durationMin) > 0).map((item) => ({
-    name: item.zone,
-    value: `${number(item.durationMin, 0)} min`,
-    percentage: number(item.percentage),
-    width: Math.max(1, Math.min(100, Number(item.percentage) || 0))
-  }));
-  const trendDisplay = displaySeries(trend, trendPlaceholder('overview'), trend.some((item) => item.duration > 0 || item.load > 0));
-  const intensityDisplay = displaySeries(intensity, ratioPlaceholder(['U3', 'U2', 'U1', 'AT'], 'min'));
+  const structure = [
+    { key: 'special', name: '专项', load: Number(loadRatio.specialLoad || 0), percentage: Number(loadRatio.specialPercentage || 0), color: 'special' },
+    { key: 'physical', name: '体能', load: Number(loadRatio.physicalLoad || 0), percentage: Number(loadRatio.physicalPercentage || 0), color: 'physical' },
+    { key: 'recovery', name: '恢复', load: Number(loadRatio.recoveryLoad || 0), percentage: Number(loadRatio.recoveryPercentage || 0), color: 'recovery' }
+  ].map((item) => ({ ...item, percentageText: number(item.percentage, 0), width: Math.max(0, Math.min(100, item.percentage)) }));
+  const hasStructure = Number(loadRatio.totalLoad) > 0;
 
-  const physiologyHeatmap = overview.physiologyHeatmap
-    ? {
-        metrics: (overview.physiologyHeatmap.metrics || []).map(m => {
-          const days = (m.days || []).map(d => ({
-            date: d.date,
-            dateLabel: String(d.date || '').slice(5).replace('-', '/'),
-            status: d.status,
-            statusClass: String(d.status || '').toLowerCase(),
-            median: d.median,
-            sampleCount: d.sampleCount,
-            abnormalRateChange: d.abnormalRateChange,
-            isEstimated: d.isEstimated
-          }));
-          const trend = (m.trend || []).map(p => ({
-            date: p.date,
-            dateLabel: String(p.date || '').slice(5).replace('-', '/'),
-            value: p.value,
-            status: p.status,
-            statusClass: String(p.status || '').toLowerCase()
-          }));
-          // 计算迷你图的折线坐标（viewBox 100x30）
-          let sparkPoints = '';
-          if (trend.length >= 2) {
-            const values = trend.map(p => p.value);
-            const minV = Math.min(...values);
-            const maxV = Math.max(...values);
-            const rangeV = maxV - minV || 1;
-            sparkPoints = trend.map((p, i) => {
-              const x = (i / (trend.length - 1)) * 100;
-              const y = 28 - ((p.value - minV) / rangeV) * 26 + 1;
-              return `${x.toFixed(1)},${y.toFixed(1)}`;
-            }).join(' ');
-          }
-          const summary = m.summary || {};
-          const statusLabelMap = { NORMAL: '正常', FLUCTUATION: '波动', ATTENTION: '关注', ABNORMAL: '异常', MISSING: '未监测' };
-          const latest = summary.latest;
-          return {
-            code: m.code,
-            label: m.label,
-            unit: m.unit,
-            direction: m.direction || 'higher',
-            days,
-            trend,
-            heatDates: days.map((d) => d.dateLabel),
-            sparkPoints,
-            hasSpark: trend.length >= 2,
-            summary: {
-              latestValue: latest ? latest.value : null,
-              latestDate: latest ? String(latest.date).slice(5).replace('-', '/') : null,
-              latestStatus: latest ? latest.status : 'MISSING',
-              latestStatusClass: latest ? String(latest.status).toLowerCase() : 'missing',
-              latestStatusLabel: latest ? (statusLabelMap[latest.status] || latest.status) : '无数据',
-              trendDirection: summary.trendDirection || 'stable',
-              trendArrow: summary.trendDirection === 'up' ? '↑' : summary.trendDirection === 'down' ? '↓' : '→',
-              minValue: summary.minValue,
-              maxValue: summary.maxValue,
-              avgValue: summary.avgValue,
-              dataDays: summary.dataDays || 0
-            }
-          };
-        })
-      }
-    : null;
-
-  const attention = {
-    show: highFatigue > 0 || activeInjuries.length > 0,
-    title: '需要关注',
-    summary: `疲劳偏高 ${highFatigue} 人 · 伤病状态 ${activeInjuries.length} 人`
+  const rpeDays = dailyRows.map((item) => {
+    const mean = item.averageRpe;
+    const teamDay = teamByDate.get(item.date);
+    const teamMean = teamDay ? teamDay.averageRpe : null;
+    const bandDay = comparison ? (teamDay || {}) : item;
+    return {
+      date: item.date,
+      label: shortDate(item.date),
+      mean,
+      rpeCount: item.rpeCount || 0,
+      stdRpe: bandDay.stdRpe,
+      lowerRpe: bandDay.lowerRpe,
+      upperRpe: bandDay.upperRpe,
+      meanHeight: mean == null ? 0 : Math.max(2, Math.round(Math.min(10, Math.max(0, mean)) * 10)),
+      lowerHeight: bandDay.lowerRpe == null ? 0 : Math.round(Math.min(10, Math.max(0, bandDay.lowerRpe)) * 10),
+      rangeHeight: bandDay.lowerRpe == null || bandDay.upperRpe == null ? 0 : Math.round((Math.min(10, bandDay.upperRpe) - Math.max(0, bandDay.lowerRpe)) * 10),
+      teamMean,
+      teamRpeCount: teamDay ? teamDay.rpeCount || 0 : 0,
+      teamMeanHeight: teamMean == null ? 0 : Math.max(2, Math.round(Math.min(10, Math.max(0, teamMean)) * 10)),
+      ariaLabel: `${item.date}，${mean == null ? '暂无RPE记录' : `RPE均值 ${number(mean)}，有效人数 ${item.rpeCount || 0}`}${teamMean == null ? '' : `，团队均值 ${number(teamMean)}`}`
+    };
+  });
+  const hasRpe = rpeDays.some((item) => item.mean !== null && item.mean !== undefined);
+  return {
+    metrics,
+    trend,
+    trendPlaceholder: !trendHasData,
+    structure,
+    structureHasData: hasStructure,
+    rpeDays,
+    rpePlaceholder: !hasRpe,
+    meta: overview.meta || {}
   };
-
-  return { metrics, trend: trendDisplay.data, trendPlaceholder: trendDisplay.isPlaceholder,
-    intensity: intensityDisplay.data, intensityPlaceholder: intensityDisplay.isPlaceholder,
-    activeInjuries, attention, meta: overview.meta || {},
-    physiologyHeatmap: physiologyHeatmap && physiologyHeatmap.metrics.some((m) => m.days.length) ? physiologyHeatmap : physiologyPlaceholder(),
-    physiologyPlaceholder: !physiologyHeatmap || !physiologyHeatmap.metrics.some((m) => m.days.length),
-    heatHasEstimated: Boolean(physiologyHeatmap && physiologyHeatmap.metrics.some((m) => m.days.some((d) => d.isEstimated))) };
 }
 
 Page({
@@ -170,6 +113,7 @@ Page({
     projects: [],
     project: '',
     athletes: [],
+    scopeAthletes: [],
     selectedAthleteId: 0,
     showAthlete: true,
     range: 'month',
@@ -177,42 +121,33 @@ Page({
     to: '',
     metrics: [],
     trend: [],
-    intensity: [],
-    activeInjuries: [],
-    attention: { show: false, title: '', summary: '' },
+    structure: [],
+    structureHasData: false,
+    rpeDays: [],
+    rpePlaceholder: false,
     meta: {},
     canSelfReport: false,
     canViewTodos: false,
     todos: null,
     todosLoading: false,
     todosError: '',
-    todosStatus: '',
-    todoFilter: 'all',
-    todoKeyword: '',
-    todoView: null,
-    // 全部人员列表的翻页状态（0 基页码）：待办四组 + 已跟进 + 队伍总览 + 伤病关注。
-    todoPagerPages: { missing: 0, attention: 0, review: 0, incompleteTime: 0, followed: 0, team: 0, injuries: 0 },
+    todoPagerPages: { team: 0, focus: 0 },
     todayLoading: false,
     todayError: '',
     todayView: null,
     wellnessView: null,
-    todaySessions: [],
-    sessionsLoading: false,
-    sessionsError: '',
     teamOverview: null,
     teamLoading: false,
     teamError: '',
     teamKeyword: '',
     teamView: null,
-    loadMgmt: null,
-    loadMgmtLoading: false,
-    loadMgmtError: '',
-    baseline: null,
-    baselineLoading: false,
-    baselineError: '',
-    planExec: null,
-    planExecLoading: false,
-    planExecError: ''
+    teams: [],
+    teamId: 0,
+    showTeam: false,
+    showAthlete: false,
+    athleteKeyword: '',
+    focusRows: [],
+    focusPager: null
   },
 
   onShow() {
@@ -226,45 +161,30 @@ Page({
     this._todoGuard = this._todoGuard || createRequestGuard();
     this._todayGuard = this._todayGuard || createRequestGuard();
     this._teamGuard = this._teamGuard || createRequestGuard();
-    this._sessionsGuard = this._sessionsGuard || createRequestGuard();
-    this._loadMgmtGuard = this._loadMgmtGuard || createRequestGuard();
-    this._baselineGuard = this._baselineGuard || createRequestGuard();
-    this._planExecGuard = this._planExecGuard || createRequestGuard();
     this._todoGuard.next();
     this._todayGuard.next();
     this._teamGuard.next();
-    this._sessionsGuard.next();
-    this._loadMgmtGuard.next();
-    this._baselineGuard.next();
-    this._planExecGuard.next();
     this.setData({
-      todos: null, todoView: null, todosError: '', canViewTodos: false,
+      todos: null, todosError: '', canViewTodos: false,
       todayView: null, wellnessView: null, todayError: '', todayLoading: false,
-      todaySessions: [], sessionsError: '', sessionsLoading: false,
       teamOverview: null, teamError: '', teamLoading: false, teamView: null,
-      loadMgmt: null, loadMgmtError: '', loadMgmtLoading: false,
-      baseline: null, baselineError: '', baselineLoading: false,
-      planExec: null, planExecError: '', planExecLoading: false
     });
     return runPageLoad(this, {
       refreshUser,
       error: '训练总览加载失败。',
-      scope: { range: this.data.range, showAthlete: false },
+      scope: { range: this.data.range, showAthlete: true },
       prepare: (page, scope) => {
         const canSelfReport = scope.user.role === 'ATL';
         const canViewTodos = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'].includes(scope.user.role);
-        page.setData({ ...scope, canSelfReport, canViewTodos });
+        page.setData({ ...scope, selectedAthleteId: canSelfReport ? scope.selectedAthleteId : 0,
+          canSelfReport, canViewTodos, showAthlete: canViewTodos, showTeam: canViewTodos });
       },
       load: async (page, scope, isLatest) => {
         const [overview] = await Promise.all([
-          page.loadPageData({ ...scope, canSelfReport: page.data.canSelfReport }),
+          page.loadPageData({ ...scope, canSelfReport: page.data.canSelfReport }, isLatest),
           page.loadTodos(scope.project),
           page.loadToday(),
-          page.loadTodaySessions(),
-          page.loadTeamOverview(scope.project),
-          page.loadLoadManagement(scope.project),
-          page.loadBaseline(scope.project),
-          page.loadPlanExecution(scope.project)
+          page.loadTeamOverview(scope.project)
         ]);
         if (isLatest()) getApp().globalData.homeNeedsRefresh = false;
         return overview;
@@ -272,34 +192,86 @@ Page({
     });
   },
 
-  async loadPageData(scope) {
-    const result = await api.overview(scope.from, scope.to, scope.canSelfReport ? scope.selectedAthleteId : 0, scope.project);
-    const view = buildView(result.overview);
-    // 伤病关注名单按统一分页展示：完整名单留存 activeInjuriesAll，翻页时重新切片。
-    const injuriesModel = paginateList(view.activeInjuries, this.data.todoPagerPages.injuries, PAGE_SIZE);
-    view.activeInjuriesAll = view.activeInjuries;
-    view.activeInjuries = injuriesModel.items;
-    view.injuriesPager = injuriesModel;
+  async loadPageData(scope, isLatest = () => true) {
+    const isManager = this.data.canViewTodos;
+    let teams = this.data.teams || [];
+    if (isManager && this._teamsProject !== scope.project) {
+      const result = await api.overviewTeams(scope.project);
+      if (!isLatest()) return null;
+      teams = result.teams || [];
+      this._teamsProject = scope.project;
+    }
+    const teamExists = teams.some((item) => Number(item.id) === Number(this.data.teamId));
+    const sameProject = this._selectedTeamProject === scope.project;
+    const teamId = isManager
+      ? (sameProject && (Number(this.data.teamId) === 0 || teamExists) ? Number(this.data.teamId) : Number((teams[0] || {}).id) || 0)
+      : 0;
+    this._selectedTeamProject = scope.project;
+    const selectedTeam = teams.find((item) => Number(item.id) === teamId);
+    const scopeAthletes = isManager && selectedTeam
+      ? (scope.athletes || []).filter((item) => item.team === selectedTeam.name)
+      : (scope.athletes || []);
+    let athleteId = isManager ? Number(this.data.selectedAthleteId) || 0 : 0;
+    if (athleteId && !scopeAthletes.some((item) => Number(item.id) === athleteId)) athleteId = 0;
+    const teamPromise = isManager && athleteId
+      ? api.overview(scope.from, scope.to, 0, scope.project, teamId)
+      : Promise.resolve(null);
+    const [personalResult, comparisonResult] = await Promise.all([
+      athleteId
+        ? api.personalOverview(athleteId, scope.from, scope.to, scope.project)
+        : api.overview(scope.from, scope.to, 0, scope.project, teamId),
+      teamPromise
+    ]);
+    if (!isLatest()) return null;
+    const view = buildView(personalResult.overview, athleteId && comparisonResult ? comparisonResult.overview : null, scope.from, scope.to);
+    const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, teams, teamId);
+    const filteredRoster = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, this.data.todoPagerPages, teams, teamId);
+    Object.assign(view, { focusRows: focus.items, focusPager: focus, teamView: filteredRoster });
+    const teamLabel = teamId ? ((teams.find((item) => Number(item.id) === teamId) || {}).name || '当前队伍') : '全部授权队伍';
+    this.setData({ teams, teamId, teamLabel, scopeAthletes, selectedAthleteId: athleteId, ...view });
     return view;
+  },
+
+  buildFocusRows(todos, page, teams, teamId) {
+    if (!todos) return paginateList([], page || 0, PAGE_SIZE);
+    const selectedTeam = (teams || []).find((item) => Number(item.id) === Number(teamId));
+    const rows = new Map();
+    const followed = new Set(todos.followedUp || []);
+    const add = (item, label, reason) => {
+      if (followed.has(item.athleteId)) return;
+      if (selectedTeam && item.team !== selectedTeam.name) return;
+      const existing = rows.get(item.athleteId);
+      if (existing) {
+        if (!existing.focusLabels.includes(label)) existing.focusLabels.push(label);
+        if (!existing.focusReasons.includes(reason)) existing.focusReasons.push(reason);
+        existing.focusLabel = existing.focusLabels.join('、');
+        existing.focusReason = existing.focusReasons.join('；');
+        return;
+      }
+      rows.set(item.athleteId, { ...item, focusLabel: label, focusReason: reason, focusLabels: [label], focusReasons: [reason] });
+    };
+    (todos.missing || []).forEach((item) => add(item, '未填报', '今日暂无有效训练记录'));
+    (todos.attention || []).forEach((item) => add(item, '状态关注', item.reason || '存在待关注状态'));
+    (todos.reviewDue || []).forEach((item) => add(item, '复查提醒', `${item.dueLabel} · ${item.injuryName}`));
+    (todos.incompleteTime || []).forEach((item) => add(item, '时间待补', '训练记录缺少有效开训时间'));
+    return paginateList([...rows.values()], page || 0, PAGE_SIZE);
   },
 
   async loadTodos(project) {
     if (!this.data.canViewTodos) return;
     this._todoGuard = this._todoGuard || createRequestGuard();
     const id = this._todoGuard.next();
-    this.setData({ todosLoading: true, todosError: '', todos: null, todoView: null, todosStatus: '正在核对今日填报与关注状态…' });
+    this.setData({ todosLoading: true, todosError: '', todos: null });
     try {
       const result = await api.dailyTodos(project);
       if (!this._todoGuard.isLatest(id)) return;
       const todos = dailyTodoView(result.todos);
-      const todosStatus = todos.counts.total
-        ? `加载完成，未填报 ${todos.counts.missing} 人，需关注 ${todos.counts.attention} 人。`
-        : '加载完成，当前项目暂无可访问的运动员。';
-      this.setData({ todos, todosStatus, todoView: this.composeTodoView(todos) });
+      const focus = this.buildFocusRows(todos, this.data.todoPagerPages.focus, this.data.teams, this.data.teamId);
+      this.setData({ todos, focusRows: focus.items, focusPager: focus });
     } catch (error) {
       if (this._todoGuard.isLatest(id)) {
         const todosError = error.message || '每日待办加载失败，请重试。';
-        this.setData({ todosError, todosStatus: todosError });
+        this.setData({ todosError });
       }
     } finally {
       if (this._todoGuard.isLatest(id)) this.setData({ todosLoading: false });
@@ -341,27 +313,6 @@ Page({
     return this.loadToday();
   },
 
-  // 运动员今日训练明细：按课次展示当天已填报的训练记录。
-  async loadTodaySessions() {
-    if (!this.data.canSelfReport) return;
-    this._sessionsGuard = this._sessionsGuard || createRequestGuard();
-    const id = this._sessionsGuard.next();
-    this.setData({ sessionsLoading: true, sessionsError: '' });
-    try {
-      const result = await api.todaySessions();
-      if (!this._sessionsGuard.isLatest(id)) return;
-      this.setData({ sessionsLoading: false, todaySessions: result.sessions || [] });
-    } catch (error) {
-      if (this._sessionsGuard.isLatest(id)) {
-        this.setData({ sessionsLoading: false, todaySessions: [], sessionsError: error.message || '今日训练加载失败，请重试。' });
-      }
-    }
-  },
-
-  retrySessions() {
-    return this.loadTodaySessions();
-  },
-
   // 教练队伍总览：聚合全队当日训练完成与恢复日报填报情况。
   async loadTeamOverview(project) {
     if (!this.data.canViewTodos) return;
@@ -372,7 +323,7 @@ Page({
       const result = await api.teamOverview(project);
       if (!this._teamGuard.isLatest(id)) return;
       const teamOverview = result;
-      const teamView = this.buildTeamView(teamOverview, this.data.teamKeyword);
+      const teamView = this.buildTeamView(teamOverview, this.data.teamKeyword, this.data.todoPagerPages, this.data.teams, this.data.teamId);
       this.setData({ teamLoading: false, teamOverview, teamView });
     } catch (error) {
       if (this._teamGuard.isLatest(id)) {
@@ -381,15 +332,17 @@ Page({
     }
   },
 
-  buildTeamView(overview, keyword, pagerPages) {
+  buildTeamView(overview, keyword, pagerPages, teams, teamId) {
     if (!overview) return null;
     const kw = (keyword || '').toLowerCase();
+    const selectedTeam = (teams || this.data.teams || []).find((item) => Number(item.id) === Number(teamId === undefined ? this.data.teamId : teamId));
+    const inTeam = (overview.athletes || []).filter((item) => !selectedTeam || item.team === selectedTeam.name);
     const filtered = kw
-      ? overview.athletes.filter((item) =>
+      ? inTeam.filter((item) =>
           (item.athleteName || '').toLowerCase().includes(kw) ||
           (item.team || '').toLowerCase().includes(kw)
         )
-      : overview.athletes;
+      : inTeam;
     const model = paginateList(filtered, (pagerPages || this.data.todoPagerPages).team, PAGE_SIZE);
     return { ...overview, athletes: model.items, teamPager: model };
   },
@@ -405,89 +358,8 @@ Page({
     this.setData({
       teamKeyword,
       todoPagerPages,
-      teamView: this.buildTeamView(this.data.teamOverview, teamKeyword),
+      teamView: this.buildTeamView(this.data.teamOverview, teamKeyword, undefined, this.data.teams, this.data.teamId),
     });
-  },
-
-  // 训练负荷管理（ACWR）
-  async loadLoadManagement(project) {
-    if (!this.data.canViewTodos) return;
-    this._loadMgmtGuard = this._loadMgmtGuard || createRequestGuard();
-    const id = this._loadMgmtGuard.next();
-    this.setData({ loadMgmtLoading: true, loadMgmtError: '' });
-    try {
-      const result = await api.loadManagement(project);
-      if (!this._loadMgmtGuard.isLatest(id)) return;
-      this.setData({ loadMgmtLoading: false, loadMgmt: result });
-    } catch (error) {
-      if (this._loadMgmtGuard.isLatest(id)) {
-        this.setData({ loadMgmtLoading: false, loadMgmt: null, loadMgmtError: error.message || '负荷管理加载失败。' });
-      }
-    }
-  },
-
-  retryLoadMgmt() {
-    return this.loadLoadManagement(this.data.project);
-  },
-
-  // 恢复状态基线偏离预警
-  async loadBaseline(project) {
-    if (!this.data.canViewTodos) return;
-    this._baselineGuard = this._baselineGuard || createRequestGuard();
-    const id = this._baselineGuard.next();
-    this.setData({ baselineLoading: true, baselineError: '' });
-    try {
-      const result = await api.wellnessBaseline(project);
-      if (!this._baselineGuard.isLatest(id)) return;
-      this.setData({ baselineLoading: false, baseline: result });
-    } catch (error) {
-      if (this._baselineGuard.isLatest(id)) {
-        this.setData({ baselineLoading: false, baseline: null, baselineError: error.message || '基线预警加载失败。' });
-      }
-    }
-  },
-
-  retryBaseline() {
-    return this.loadBaseline(this.data.project);
-  },
-
-  // 训练计划执行率
-  async loadPlanExecution(project) {
-    if (!this.data.canViewTodos) return;
-    this._planExecGuard = this._planExecGuard || createRequestGuard();
-    const id = this._planExecGuard.next();
-    this.setData({ planExecLoading: true, planExecError: '' });
-    try {
-      const result = await api.planExecution(project);
-      if (!this._planExecGuard.isLatest(id)) return;
-      this.setData({ planExecLoading: false, planExec: result });
-    } catch (error) {
-      if (this._planExecGuard.isLatest(id)) {
-        this.setData({ planExecLoading: false, planExec: null, planExecError: error.message || '计划执行加载失败。' });
-      }
-    }
-  },
-
-  retryPlanExec() {
-    return this.loadPlanExecution(this.data.project);
-  },
-
-  // 统一人员列表分页：先筛选/搜索得到完整名单，再按每页 5 人切片（spec §6）。
-  // pagerPages 覆盖各列表的当前页码（0 基）；缺省沿用现有页码，越界由 paginateList 收敛。
-  composeTodoView(todos, pagerPages) {
-    const source = todos === undefined ? this.data.todos : todos;
-    if (!source) return null;
-    const view = filterDailyTodos(source, this.data.todoFilter, this.data.todoKeyword);
-    const pages = pagerPages || this.data.todoPagerPages;
-    for (const key of TODO_PAGED_GROUPS) {
-      const model = paginateList(view[key], pages[key], PAGE_SIZE);
-      view[key] = model.items;
-      view[`${key}Pager`] = model;
-    }
-    const followed = paginateList(view.followedUpList, pages.followed, PAGE_SIZE);
-    view.followedUpList = followed.items;
-    view.followedPager = followed;
-    return view;
   },
 
   // pager-nav 统一回调：data-key 标识列表，event.detail.page 为目标页（0 基）。
@@ -497,31 +369,43 @@ Page({
     const pages = this.data.todoPagerPages;
     if (!key || !(key in pages) || !Number.isInteger(page) || page === pages[key]) return;
     const nextPages = { ...pages, [key]: page };
-    const patch = { todoPagerPages: nextPages, todoView: this.composeTodoView(undefined, nextPages) };
-    if (key === 'team') patch.teamView = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, nextPages);
-    if (key === 'injuries' && this.data.activeInjuriesAll) {
-      const model = paginateList(this.data.activeInjuriesAll, page, PAGE_SIZE);
-      patch.activeInjuries = model.items;
-      patch.injuriesPager = model;
+    const patch = { todoPagerPages: nextPages };
+    if (key === 'team') patch.teamView = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, nextPages, this.data.teams, this.data.teamId);
+    if (key === 'focus') {
+      const model = this.buildFocusRows(this.data.todos, page, this.data.teams, this.data.teamId);
+      patch.focusRows = model.items;
+      patch.focusPager = model;
     }
     this.setData(patch);
   },
 
   // 筛选/搜索变化后所有人员列表回到第一页（spec §6）。
   resetPagerPages() {
-    return { missing: 0, attention: 0, review: 0, incompleteTime: 0, followed: 0, team: 0, injuries: 0 };
+    return { team: 0, focus: 0 };
   },
 
-  onTodoFilter(event) {
-    const todoFilter = event.currentTarget.dataset.filter;
-    if (!todoFilter || todoFilter === this.data.todoFilter || !this.data.todos) return;
-    this.setData({ todoFilter, todoPagerPages: this.resetPagerPages(), todoView: this.composeTodoView(undefined, this.resetPagerPages()) });
+  retryOverview() {
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
   },
 
-  onTodoKeyword(event) {
-    const todoKeyword = event.detail.value;
-    if (!this.data.todos) return;
-    this.setData({ todoKeyword, todoPagerPages: this.resetPagerPages(), todoView: this.composeTodoView(undefined, this.resetPagerPages()) });
+  onOverviewTeamChange(event) {
+    const teamId = Number(event.detail && event.detail.value) || 0;
+    if (!this.data.teams.some((item) => Number(item.id) === teamId) && teamId !== 0) return Promise.resolve();
+    const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0 };
+    this.setData({ teamId, todoPagerPages, teamKeyword: '', athleteKeyword: '', focusRows: [], focusPager: null, teamView: this.buildTeamView(this.data.teamOverview, '', todoPagerPages, this.data.teams, teamId) });
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
+  },
+
+  onOverviewAthleteChange(event) {
+    const athleteId = Number(event.detail && event.detail.value) || 0;
+    const valid = athleteId === 0 || this.data.scopeAthletes.some((item) => Number(item.id) === athleteId && (!item.project || item.project === this.data.project));
+    if (!valid || !this.data.canViewTodos) return Promise.resolve();
+    this.setData({ selectedAthleteId: athleteId });
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
+  },
+
+  onAthleteKeyword(event) {
+    this.setData({ athleteKeyword: event.detail && event.detail.value || '' });
   },
 
   onScopeChange(event) {
@@ -530,121 +414,54 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ metrics: [], trend: [], intensity: [], activeInjuries: [], meta: {}, todos: null, todoView: null, todoKeyword: '', todoPagerPages: { missing: 0, attention: 0, review: 0, incompleteTime: 0, followed: 0, team: 0, injuries: 0 }, todosError: '', todosLoading: true, todosStatus: '正在切换项目…' });
+      this.setData({ metrics: [], trend: [], structure: [], rpeDays: [], meta: {}, todos: null, teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
         try {
           await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
         } catch (error) {
-          if (isLatest()) this.setData({ todosLoading: false, todosError: '项目切换未完成，请刷新重试。', todosStatus: '项目切换未完成，请刷新重试。' });
+          if (isLatest()) this.setData({ todosLoading: false, todosError: '项目切换未完成，请刷新重试。' });
           throw error;
         }
       }
       if (!isLatest()) return null;
       const scope = this.data;
       if (change.field === 'project') {
-        const [overview] = await Promise.all([this.loadPageData(scope), this.loadTodos(scope.project)]);
+        this._teamGuard = this._teamGuard || createRequestGuard();
+        this._teamGuard.next();
+        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: null });
+        const [overview] = await Promise.all([this.loadPageData(scope, isLatest), this.loadTodos(scope.project), this.loadTeamOverview(scope.project)]);
         return overview;
       }
-      return this.loadPageData(scope);
+      return this.loadPageData(scope, isLatest);
     }, '训练总览加载失败。');
   },
 
   showTrendDetail(event) {
-    showTrendModal(this, event, durationLoadLines);
+    const item = this.data.trend[Number(event.currentTarget.dataset.index)];
+    if (!item) return;
+    const lines = [item.load == null ? '暂无有效专项或体能负荷记录' : `专项 + 体能 sRPE：${number(item.load, 0)} AU`];
+    if (item.teamLoad !== null && item.teamLoad !== undefined) lines.push(`团队日均 sRPE：${number(item.teamLoad, 0)} AU`);
+    wx.showModal({ title: item.date, content: lines.join('\n'), showCancel: false, confirmText: '知道了' });
   },
 
-  showPhysioDetail(event) {
-    if (this.data.physiologyPlaceholder) {
-      wx.showModal({ title: '示例数据', content: '示例数据，仅用于展示图表效果；当前无生理生化实测数据。', showCancel: false });
-      return;
+  showRpeDetail(event) {
+    const item = this.data.rpeDays[Number(event.currentTarget.dataset.index)];
+    if (!item) return;
+    const lines = [`日期：${item.date}`];
+    if (item.mean === null || item.mean === undefined) lines.push('当前运动员暂无有效 RPE 记录');
+    else {
+      lines.push(`${this.data.selectedAthleteId ? '个人' : '队伍平均'} RPE：${number(item.mean)}`);
+      lines.push(`有效人数：${item.rpeCount}`);
+      if (item.lowerRpe != null && item.upperRpe != null) lines.push(`队伍均值 ±1 标准差：${number(item.lowerRpe)}–${number(item.upperRpe)}（标准差 ${number(item.stdRpe)}）`);
     }
-    const { code, date } = event.currentTarget.dataset;
-    const heatmap = this.data.physiologyHeatmap;
-    if (!heatmap) return;
-    const metric = (heatmap.metrics || []).find((m) => m.code === code);
-    if (!metric) return;
-    const day = (metric.days || []).find((d) => d.date === date);
-    if (!day) return;
-    const statusLabelMap = { NORMAL: '正常', FLUCTUATION: '波动', ATTENTION: '关注', ABNORMAL: '异常', MISSING: '未监测' };
-    const lines = [
-      `${metric.label} · ${String(date).slice(5).replace('-', '/')}`,
-      `状态：${statusLabelMap[day.status] || day.status}`,
-    ];
-    if (day.median !== null) lines.push(`中位数：${day.median} ${metric.unit}`);
-    if (day.sampleCount) lines.push(`样本数：${day.sampleCount}`);
-    if (day.sampleCount) lines.push(`正常 ${day.normal} · 波动 ${day.fluctuation} · 关注 ${day.attention} · 异常 ${day.abnormal}`);
-    if (day.abnormalRateChange !== null) lines.push(`异常率变化：${day.abnormalRateChange > 0 ? '+' : ''}${day.abnormalRateChange}%`);
-    if (day.isEstimated) lines.push('数据来源：模拟（等待实测导入）');
-    wx.showModal({ title: '指标详情', content: lines.join('\n'), showCancel: false, confirmText: '知道了' });
+    if (item.teamMean !== null && item.teamMean !== undefined) lines.push(`团队平均 RPE：${number(item.teamMean)} · ${item.teamRpeCount} 人`);
+    wx.showModal({ title: 'RPE 日趋势', content: lines.join('\n'), showCancel: false, confirmText: '知道了' });
   },
 
   goToAthlete(event) {
     navigateToAthlete(this, event, this.data.athletes);
-  },
-
-  // 代填入口：候选列表即授权边界，服务端还会按访问范围再校验一次。
-  fillTrainingForAthlete(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!(this.data.athletes || []).some((item) => Number(item.id) === athleteId)) {
-      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
-      return;
-    }
-    wx.navigateTo({ url: `/pages/training-entry/training-entry?athleteId=${athleteId}` });
-  },
-
-  fillWellnessForAthlete(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!(this.data.athletes || []).some((item) => Number(item.id) === athleteId)) {
-      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
-      return;
-    }
-    wx.navigateTo({ url: `/pages/wellness-entry/wellness-entry?athleteId=${athleteId}` });
-  },
-
-  // 待办行内伤病上报：候选列表仅作 UI 边界，服务端按访问范围再校验一次。
-  reportInjuryForTodo(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!(this.data.athletes || []).some((item) => Number(item.id) === athleteId)) {
-      wx.showToast({ title: '该运动员不在当前权限范围', icon: 'none' });
-      return;
-    }
-    wx.navigateTo({ url: `/pages/injury-report/injury-report?athleteId=${athleteId}` });
-  },
-
-  // "今日已跟进"是教练个人工作流标记：只影响本人待办展示，不改变服务端统计口径。
-  async markFollowedUp(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!athleteId || !this.data.todos) return;
-    try {
-      const result = await api.markTodoFollowups(this.data.project, [athleteId]);
-      this.applyFollowedUp(result.followedUp, '已标记今日已跟进');
-    } catch (error) {
-      wx.showToast({ title: error.message || '标记失败，请重试', icon: 'none' });
-    }
-  },
-
-  async unmarkFollowedUp(event) {
-    const athleteId = Number(event.currentTarget.dataset.athleteId) || 0;
-    if (!athleteId || !this.data.todos) return;
-    try {
-      const result = await api.unmarkTodoFollowups(this.data.project, [athleteId]);
-      this.applyFollowedUp(result.followedUp, '已撤销跟进标记');
-    } catch (error) {
-      wx.showToast({ title: error.message || '撤销失败，请重试', icon: 'none' });
-    }
-  },
-
-  applyFollowedUp(followedUp, toastTitle) {
-    if (!Array.isArray(followedUp) || !this.data.todos) return;
-    const todos = { ...this.data.todos, followedUp };
-    this.setData({
-      todos,
-      // 标记/撤销后名单变短：沿用当前页码，越界由 paginateList 收敛到最后一页。
-      todoView: this.composeTodoView(todos),
-    });
-    wx.showToast({ title: toastTitle, icon: 'none' });
   },
 
   openTrainingEntry() {
