@@ -36,6 +36,9 @@ const {
   strengthPayload,
   defaultSpecialForm,
   specialPayload,
+  pickSpecialEventFields,
+  recentValues,
+  resolveCrewName,
 } = testEntryForm;
 
 describe('体能测试录入表单', () => {
@@ -146,5 +149,51 @@ describe('专项测试录入表单', () => {
     expect(specialPayload(base).previousBestText).toBe('');
     expect(() => specialPayload({ ...base, attempts: ['五十五秒', '', ''] })).toThrow('成绩格式应为 0:55.15 或 55.15。');
     expect(() => specialPayload({ ...base, previousBestText: 'abc' })).toThrow('成绩格式应为 0:55.15 或 55.15。');
+  });
+});
+
+describe('专项录入便捷逻辑', () => {
+  it('赛事级条件只取事件 upsert 维度字段并统一为字符串', () => {
+    const fields = pickSpecialEventFields({
+      ...defaultSpecialForm(),
+      project: '赛艇',
+      testDate: '2026-09-27',
+      distanceM: 2000,
+      boatClass: '八人单桨',
+      genderGroup: '男子公开',
+      session: '上午',
+      windConditions: '顺风',
+      location: '千岛湖',
+      note: '水温合适',
+      crewName: '测试组',
+      attempts: ['0:55.15', '', ''],
+      previousBestText: '0:54.90',
+    });
+    expect(fields).toEqual({
+      testDate: '2026-09-27',
+      distanceM: '2000',
+      boatClass: '八人单桨',
+      genderGroup: '男子公开',
+      session: '上午',
+      windConditions: '顺风',
+      location: '千岛湖',
+      note: '水温合适',
+    });
+  });
+
+  it('常用距离新值去重置顶并限制条数', () => {
+    expect(recentValues(['2000', '500'], '1000')).toEqual(['1000', '2000', '500']);
+    expect(recentValues(['2000', '500'], '2000')).toEqual(['2000', '500']);
+    expect(recentValues(null, '')).toEqual([]);
+    expect(recentValues(['1', '2', '3', '4'], '5', 3)).toEqual(['5', '1', '2']);
+    expect(recentValues(undefined, 2000)).toEqual(['2000']);
+  });
+
+  it('组合名仅在空白或仍是上一个自动名时跟随新运动员', () => {
+    expect(resolveCrewName('', '张三', '李四')).toBe('李四');
+    expect(resolveCrewName('张三', '张三', '李四')).toBe('李四');
+    expect(resolveCrewName('测试组', '张三', '李四')).toBe('测试组');
+    expect(resolveCrewName('', '', '李四')).toBe('李四');
+    expect(resolveCrewName('测试组', '', '')).toBe('测试组');
   });
 });

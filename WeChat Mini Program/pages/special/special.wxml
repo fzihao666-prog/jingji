@@ -95,35 +95,53 @@
     <view class="section-head">
       <view class="section-head-title">专项测试成绩</view>
       <view class="section-head-row">
-        <view class="section-head-note">{{projectLabel}} · {{from}} 至 {{to}}</view>
+        <view class="section-head-note">{{projectLabel}} · 共 {{specialTestsTotal}} 场 · {{specialTestsResultTotal}} 条成绩</view>
         <button wx:if="{{canEnterTest}}" class="mini-button" bindtap="goTestEntry" aria-label="录入专项测试">录入测试</button>
       </view>
     </view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取专项测试</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
     <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无专项测试记录</view></view>
-    <view wx:else class="card test-events">
-      <view wx:for="{{specialTests}}" wx:key="id" class="test-event">
-        <view class="test-event-head">
-          <text class="test-event-title">{{item.title}}</text>
-          <text class="test-event-date">{{item.testDate}}</text>
-        </view>
-        <text wx:if="{{item.meta}}" class="test-event-meta">{{item.meta}}</text>
-        <view class="test-event-results">
-          <view wx:for="{{item.results}}" wx:for-item="result" wx:key="key" class="test-result">
-            <text class="test-result-rank">{{result.rank}}</text>
-            <view class="test-result-crew">
-              <text class="test-crew">{{result.crewName}}</text>
-              <text wx:if="{{result.memberText}}" class="test-members">{{result.memberText}}</text>
-            </view>
-            <view class="test-result-detail">
-              <text class="test-best">{{result.bestText}}</text>
-              <text class="test-attempts">{{result.attemptsText}}</text>
-              <text wx:if="{{result.deltaText}}" class="test-delta {{result.deltaTone}}">{{result.deltaText}}</text>
-            </view>
+    <block wx:else>
+      <view class="card test-events">
+        <view wx:for="{{specialTests}}" wx:key="id" class="test-event">
+          <view class="test-event-head">
+            <text class="test-event-title">{{item.title}}</text>
+            <text class="test-event-date">{{item.testDate}}</text>
           </view>
+          <text wx:if="{{item.meta}}" class="test-event-meta">{{item.meta}}</text>
+          <view class="test-event-results">
+            <view wx:for="{{item.results}}" wx:for-item="result" wx:key="key" class="test-result">
+              <text class="test-result-rank">{{result.rank}}</text>
+              <view class="test-result-crew">
+                <text class="test-crew">{{result.crewName}}</text>
+                <text wx:if="{{result.memberText}}" class="test-members">{{result.memberText}}</text>
+              </view>
+              <view class="test-result-detail">
+                <text class="test-best">{{result.bestText}}</text>
+                <text wx:if="{{item.expanded}}" class="test-attempts">{{result.attemptsText}}</text>
+                <text wx:if="{{result.deltaText}}" class="test-delta {{result.deltaTone}}">{{result.deltaText}}</text>
+              </view>
+            </view>
+            <block wx:if="{{item.expanded}}">
+              <view wx:for="{{item.moreResults}}" wx:for-item="result" wx:key="key" class="test-result">
+                <text class="test-result-rank">{{result.rank}}</text>
+                <view class="test-result-crew">
+                  <text class="test-crew">{{result.crewName}}</text>
+                  <text wx:if="{{result.memberText}}" class="test-members">{{result.memberText}}</text>
+                </view>
+                <view class="test-result-detail">
+                  <text class="test-best">{{result.bestText}}</text>
+                  <text class="test-attempts">{{result.attemptsText}}</text>
+                  <text wx:if="{{result.deltaText}}" class="test-delta {{result.deltaTone}}">{{result.deltaText}}</text>
+                </view>
+              </view>
+            </block>
+          </view>
+          <button class="test-expand" data-index="{{index}}" bindtap="onToggleTestEvent" aria-label="{{item.expanded ? '收起成绩明细' : '展开成绩明细'}}">{{item.expanded ? '收起' : item.expandLabel}}</button>
         </view>
       </view>
-    </view>
+      <button wx:if="{{specialTestsMoreCount > 0}}" class="test-more-events" bindtap="onShowMoreTests" aria-label="展开更早的专项测试场次">展开更早 {{specialTestsMoreCount}} 场测试</button>
+    </block>
   </block>
 </view>

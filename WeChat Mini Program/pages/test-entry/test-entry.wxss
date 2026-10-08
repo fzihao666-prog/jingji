@@ -15,3 +15,37 @@
   background: #176f7f;
 }
 .member-option:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
+
+/* 测试距离快捷选择：最近用过的距离置顶，点按直接回填输入框。 */
+.chip-row { margin-top: 12rpx; display: flex; flex-wrap: wrap; gap: 10rpx; }
+.chip {
+  min-height: 56rpx;
+  padding: 8rpx 22rpx;
+  border: 1rpx solid #d5e1e3;
+  border-radius: 999rpx;
+  color: #176373;
+  background: #f8fbfb;
+  font-size: 21rpx;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.chip:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
+
+/* 更多条件折叠：风况/地点/历史最好/备注等低频字段默认收起。 */
+.more-fields-toggle {
+  width: 100%;
+  min-height: 72rpx;
+  margin: 0;
+  padding: 0 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1rpx solid #d5e1e3;
+  border-radius: 14rpx;
+  color: #176f7f;
+  background: #ffffff;
+  font-size: 23rpx;
+  line-height: 1.4;
+}
+.more-fields-toggle:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
+.more-fields-arrow { color: #6f848b; font-size: 22rpx; }
