@@ -10,7 +10,7 @@
   <view wx:if="{{loading}}" class="card state" aria-role="status" aria-live="polite"><view class="state-title">正在加载训练总览…</view></view>
 
   <block wx:if="{{!loading}}">
-    <view class="section-head"><view class="section-head-title">周期核心数据</view><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
+    <view class="section-head"><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
     <view class="metric-grid overview-metrics">
       <view wx:for="{{metrics}}" wx:key="label" class="metric-card {{item.tone}}">
         <view class="metric-label">{{item.label}}</view>
