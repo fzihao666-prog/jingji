@@ -63,11 +63,33 @@
         </scroll-view>
       </view>
     </view>
-    <view class="section-head"><view class="section-head-title">恢复状态</view><view class="section-head-note">{{from}} 至 {{to}}</view></view>
+    <view class="section-head"><view class="section-head-title">恢复状态</view><view class="section-head-note">{{from}} 至 {{to}} · 个人与队均</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取恢复趋势</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
-    <view wx:elif="{{!wellnessTrends.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无恢复趋势数据</view></view>
-    <view wx:else class="card"><view class="card-head"><view class="card-title">恢复趋势</view></view><view class="card-body"><view wx:for="{{wellnessTrends}}" wx:key="label"><view class="card-item"><text class="card-label">{{item.label}}</text><text class="card-value">{{item.hasPersonal ? item.personalValue : '—'}}{{item.unit}}{{item.teamMean != null ? '（队均' + item.teamMean + item.unit + '）' : ''}}</text></view></view></view></view>
+    <view wx:elif="{{!wellnessTrend.metrics.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无恢复趋势数据</view></view>
+    <view wx:else class="card">
+      <view class="card-head"><view><view class="card-title">恢复趋势</view><text class="chart-note">柱高按各指标波动范围归一；横杠为当日队均，点击柱体看当日明细</text></view></view>
+      <view class="radar-legend">
+        <text class="radar-legend-item personal">个人实测</text>
+        <text class="radar-legend-item reference">当日队均</text>
+      </view>
+      <view wx:for="{{wellnessTrend.metrics}}" wx:key="key" class="trend-metric">
+        <view class="trend-metric-head">
+          <text class="trend-metric-name">{{item.label}}</text>
+          <text class="trend-metric-value">{{item.latestText}}<text class="trend-metric-unit">{{item.unit}}</text></text>
+          <text class="trend-delta">{{item.diffText}}{{item.diffText != '—' ? item.unit : ''}}</text>
+        </view>
+        <text class="compare-note">{{item.note}}{{item.latestDate ? ' · ' + item.latestDate : ''}}</text>
+        <scroll-view class="trend-scroll" scroll-x enhanced show-scrollbar="false">
+          <view class="trend-bars">
+            <view wx:for="{{item.points}}" wx:for-item="point" wx:for-index="pointIndex" wx:key="date" class="trend-slot">
+              <view wx:if="{{point.teamPct != null}}" class="trend-team-mark" style="bottom: {{point.teamPct}}%;"></view>
+              <button class="trend-bar {{point.missing ? 'is-missing' : ''}}" style="height: {{point.height}}%;" data-metric-index="{{index}}" data-point-index="{{pointIndex}}" bindtap="showWellnessDetail" aria-label="{{item.label}}，{{point.date}}，个人 {{point.valueText}}{{item.unit}}，{{point.teamText ? '队均 ' + point.teamText + item.unit : '当日队均样本不足'}}，查看明细"></button>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
     <view class="section-head"><view class="section-head-title">身体成分</view><view class="section-head-note">最近 6 次实测 · 分组展开查看</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取身体成分</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>

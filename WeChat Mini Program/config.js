@@ -1,5 +1,5 @@
 // 发布前必须保持为 production；本地开发者工具联调时才改为 development。
-const API_ENVIRONMENT = 'production';
+const API_ENVIRONMENT = 'development';
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:8787';
 const API_BASE_URL = 'https://www.jingjity.xin';
 // 真机问题定位期间开启；定位完成后必须改回 false，日志不会输出 Token、密码或响应正文。

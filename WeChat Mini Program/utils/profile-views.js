@@ -131,4 +131,70 @@ function radarGroupView(group, options) {
   };
 }
 
-module.exports = { bodyCompositionTrendView, trainingComparisonView, radarGroupView };
+// 恢复状态：按指标输出个人趋势柱与当日队均横杠；缺失个人值留空位，不用 0 代替。
+function wellnessTrendsView(trends) {
+  const list = Array.isArray(trends) ? trends : [];
+  return {
+    metrics: list
+      .map((trend) => {
+        const points = Array.isArray(trend.points) ? trend.points : [];
+        const personalValues = points
+          .filter((point) => point.hasPersonalValue && Number.isFinite(Number(point.personalValue)))
+          .map((point) => Number(point.personalValue));
+        const teamValues = points
+          .filter((point) => point.teamMean != null && Number.isFinite(Number(point.teamMean)))
+          .map((point) => Number(point.teamMean));
+        const scaleValues = [...personalValues, ...teamValues];
+        const min = scaleValues.length ? Math.min(...scaleValues) : 0;
+        const max = scaleValues.length ? Math.max(...scaleValues) : 0;
+        const span = max - min;
+        const heightOf = (value) =>
+          span > 0 ? Math.round(14 + ((value - min) / span) * 86) : 55;
+        const rendered = points.map((point) => {
+          const hasPersonal =
+            point.hasPersonalValue && Number.isFinite(Number(point.personalValue));
+          const hasTeam = point.teamMean != null && Number.isFinite(Number(point.teamMean));
+          return {
+            date: point.date,
+            missing: !hasPersonal,
+            valueText: hasPersonal ? number(point.personalValue, 1) : '未测',
+            height: hasPersonal ? heightOf(Number(point.personalValue)) : 8,
+            teamPct: hasTeam ? heightOf(Number(point.teamMean)) : null,
+            teamText: hasTeam ? number(point.teamMean, 1) : '',
+            teamSampleCount: point.teamSampleCount == null ? null : Number(point.teamSampleCount)
+          };
+        });
+        // 行首数值取日期最新的一次个人实测，不依赖接口返回顺序。
+        const latestIndex = rendered.reduce(
+          (best, point, index) =>
+            point.missing ? best : best < 0 || rendered[best].date < point.date ? index : best,
+          -1
+        );
+        const latest = latestIndex >= 0 ? rendered[latestIndex] : null;
+        const latestPoint = latestIndex >= 0 ? points[latestIndex] : null;
+        const diff =
+          latestPoint && latestPoint.personalValue != null && latestPoint.teamMean != null
+            ? Math.round((Number(latestPoint.personalValue) - Number(latestPoint.teamMean)) * 10) / 10
+            : null;
+        return {
+          key: trend.key,
+          label: trend.label,
+          unit: trend.unit || '',
+          recorded: personalValues.length,
+          latestDate: latest ? latest.date : '',
+          latestText: latest ? latest.valueText : '—',
+          diffText: diff == null ? '—' : `${diff > 0 ? '+' : ''}${number(diff, 1)}`,
+          note:
+            latest == null
+              ? '周期内未测'
+              : diff == null
+                ? '最近一次 · 当日队均样本不足'
+                : '最近一次 · 个人 − 队均',
+          points: rendered
+        };
+      })
+      .filter((metric) => metric.points.length)
+  };
+}
+
+module.exports = { bodyCompositionTrendView, trainingComparisonView, radarGroupView, wellnessTrendsView };

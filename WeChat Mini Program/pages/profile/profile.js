@@ -5,7 +5,7 @@ const { ageAt, todayBeijing } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
-const { bodyCompositionTrendView, trainingComparisonView, radarGroupView } = require('../../utils/profile-views');
+const { bodyCompositionTrendView, trainingComparisonView, radarGroupView, wellnessTrendsView } = require('../../utils/profile-views');
 const radarChart = require('../../utils/radar-chart');
 const { bodyCompositionGroups } = require('../../utils/body-composition-groups');
 const { trainingComparisonGroups } = require('../../utils/training-comparison-groups');
@@ -143,7 +143,7 @@ Page({
     canReportRole: false,
     canCoachFill: false,
     painTrend: null,
-    wellnessTrends: [],
+    wellnessTrend: { metrics: [] },
     bodyCompositionHistory: [],
     bodyCompositionTrend: { dates: [], metrics: [] },
     bodyCompositionGroups: [],
@@ -180,7 +180,7 @@ Page({
 
   async loadPageData(scope) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrends: [], bodyCompositionHistory: [], bodyCompositionTrend: { dates: [], metrics: [] }, bodyCompositionGroups: [], profileComparison: null, comparisonView: { items: [] }, trainingComparisonGroups: [], radarGroups: [] };
+    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrend: { metrics: [] }, bodyCompositionHistory: [], bodyCompositionTrend: { dates: [], metrics: [] }, profileComparison: null, comparisonView: { items: [] }, trainingComparisonGroups: [], radarGroups: [] };
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
     const [injuryResult, overviewResult, benchmarkResult] = await Promise.all([
@@ -194,21 +194,12 @@ Page({
     } catch {
       painTrend = null;
     }
-    let wellnessTrends;
+    let wellnessTrend;
     try {
       const wr = await api.wellnessTrends(athleteId, scope.from, scope.to, scope.project);
-      const labelMap = { rpe: 'RPE', sleepHours: '睡眠时长', morningPulse: '晨脉', weightKg: '体重' };
-      const unitMap = { rpe: '', sleepHours: '小时', morningPulse: 'bpm', weightKg: 'kg' };
-      wellnessTrends = (wr.trends || []).map(t => {
-        const personal = t.personalValue ?? null;
-        const team = t.teamMean ?? null;
-        const hasPersonal = personal != null;
-        const label = labelMap[t.key] || t.key;
-        const unit = unitMap[t.key] || '';
-        return { key: t.key, label, personalValue: personal, teamMean: team, hasPersonal, unit };
-      });
+      wellnessTrend = wellnessTrendsView(wr.trends || []);
     } catch {
-      wellnessTrends = [];
+      wellnessTrend = wellnessTrendsView([]);
     }
     let bodyCompositionHistory;
     try {
@@ -263,7 +254,7 @@ Page({
     }
     const bodyCompositionTrend = bodyCompositionTrendView(bodyCompositionHistory);
     const comparisonView = trainingComparisonView(profileComparison);
-    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, bodyCompositionTrend, bodyCompositionGroups: bodyCompositionGroups(bodyCompositionTrend.metrics), profileComparison, comparisonView, trainingComparisonGroups: trainingComparisonGroups(comparisonView.items), radarGroups };
+    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrend, bodyCompositionHistory, bodyCompositionTrend, bodyCompositionGroups: bodyCompositionGroups(bodyCompositionTrend.metrics), profileComparison, comparisonView, trainingComparisonGroups: trainingComparisonGroups(comparisonView.items), radarGroups };
   },
 
   onScopeChange(event) {
@@ -352,6 +343,25 @@ Page({
     wx.showModal({
       title: `${metric.label} · ${point.date}`,
       content: `实测值：${point.value}${metric.unit}\n${deltaText}`,
+      showCancel: false,
+      confirmText: '知道了'
+    });
+  },
+
+  // 恢复趋势柱体点击：展示当日个人实测与队均，不做趋势解读。
+  showWellnessDetail(event) {
+    const metricIndex = Number(event.currentTarget.dataset.metricIndex) || 0;
+    const pointIndex = Number(event.currentTarget.dataset.pointIndex) || 0;
+    const metric = ((this.data.wellnessTrend && this.data.wellnessTrend.metrics) || [])[metricIndex];
+    const point = metric && metric.points[pointIndex];
+    if (!metric || !point) return;
+    const personalLine = point.missing ? '个人实测：未测' : `个人实测：${point.valueText}${metric.unit}`;
+    const teamLine = point.teamText
+      ? `当日队均：${point.teamText}${metric.unit}${point.teamSampleCount != null ? `（${point.teamSampleCount} 人）` : ''}`
+      : '当日队均样本不足';
+    wx.showModal({
+      title: `${metric.label} · ${point.date}`,
+      content: `${personalLine}\n${teamLine}`,
       showCancel: false,
       confirmText: '知道了'
     });
