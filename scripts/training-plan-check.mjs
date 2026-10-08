@@ -88,7 +88,7 @@ try {
   if (!saveResult.response.ok) throw new Error(`教练保存失败：${saveResult.payload?.message}`);
 
   const nineExerciseData = structuredClone(plan.data);
-  while (nineExerciseData.exercises.length < 9) {
+  while (nineExerciseData.exercises.length < 21) {
     const copy = structuredClone(nineExerciseData.exercises[0]);
     copy.id = `limit-${nineExerciseData.exercises.length + 1}`;
     copy.name = `项目${nineExerciseData.exercises.length + 1}`;
@@ -100,7 +100,7 @@ try {
     body: JSON.stringify({ athleteId: 1, data: nineExerciseData }),
   });
   if (nineExerciseResult.response.status !== 400)
-    throw new Error('服务器未拒绝超过8个训练项目的计划。');
+    throw new Error('服务器未拒绝超过20个训练项目的计划。');
 
   const overPercentageData = structuredClone(plan.data);
   overPercentageData.exercises[0].lines[0].weeks['1'].percentage = 100.1;
@@ -112,7 +112,7 @@ try {
     throw new Error('服务器未拒绝超过100%的计划重量。');
 
   const pngBytes = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl3T10AAAAASUVORK5CYII=',
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWM4cenOiUt3GCAUAESmCdkDE22ZAAAAAElFTkSuQmCC',
     'base64'
   );
   const form = new FormData();
@@ -175,7 +175,7 @@ try {
         .replace(/\s{2,}/g, ' ')
     )
     .filter(Boolean)
-    .slice(0, 8)
+    .slice(0, 20)
     .join(' ｜ ');
   if (sheet.getCell('G3').value !== expectedExerciseNames) {
     throw new Error(`Excel顶部未按顺序显示项目名称：${String(sheet.getCell('G3').value)}`);

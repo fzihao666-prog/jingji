@@ -561,11 +561,12 @@ export async function buildTrainingPlanWorkbook(input: {
         .replace(/\s{2,}/g, ' ')
     )
     .filter(Boolean)
-    .slice(0, 8);
-  labelValue('C3:D3', 'E3:F3', '项目数', `${exerciseNames.length} / 8`);
+    .slice(0, 20);
+  labelValue('C3:D3', 'E3:F3', '项目数', `${exerciseNames.length} / 20`);
   sheet.mergeCells('G3:R3');
   const exerciseNamesCell = sheet.getCell('G3');
-  exerciseNamesCell.value = exerciseNames.join(' ｜ ');
+  const exerciseNamesText = exerciseNames.join(' ｜ ');
+  exerciseNamesCell.value = exerciseNamesText;
   exerciseNamesCell.font = {
     name: 'Microsoft YaHei UI',
     size: 9.5,
@@ -573,6 +574,8 @@ export async function buildTrainingPlanWorkbook(input: {
     color: { argb: ink },
   };
   exerciseNamesCell.alignment = center;
+  // 项目名称最多 20 项，按 G3:R3 合并区宽度估算换行行数并加高第 3 行，避免名称被裁切。
+  sheet.getRow(3).height = Math.max(25, Math.ceil(exerciseNamesText.length / 40) * 15);
   sheet.mergeCells('S1:Z3');
   sheet.getCell('S1').value = input.data.title;
   sheet.getCell('S1').font = {

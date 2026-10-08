@@ -260,14 +260,6 @@ export function PhysicalChampionModel({
       },
     ],
   };
-  const comparableRows = rows.flatMap((row) => {
-    const current = athleteId ? row.personal : row.team;
-    return current?.achievedPercent == null ? [] : [{ ...row, current }];
-  });
-  const reachedCount = comparableRows.filter((row) => row.current.achievedPercent! >= 100).length;
-  const priorityRow = [...comparableRows].sort(
-    (a, b) => a.current.achievedPercent! - b.current.achievedPercent!
-  )[0];
   return (
     <ChartCard
       title="体能冠军模型"
@@ -300,80 +292,25 @@ export function PhysicalChampionModel({
       {!showLoading && !error && group && (
         <>
           <div className="physical-champion-toolbar">
-            <div>
-              <label htmlFor={selectorId}>参考分组</label>
-              <select
-                id={selectorId}
-                value={group.id}
-                disabled={Boolean(athleteGroup)}
-                onChange={(event) => setGroupId(event.target.value)}
-              >
-                {payload?.groups.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p>
-              {scopeName} · {group.referenceLevel}
-            </p>
+            <label htmlFor={selectorId}>参考分组</label>
+            <select
+              id={selectorId}
+              value={group.id}
+              disabled={Boolean(athleteGroup)}
+              onChange={(event) => setGroupId(event.target.value)}
+            >
+              {payload?.groups.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <p className="physical-champion-note">
-            {group.gender} · 小项：{group.event === 'open' ? '通用体能' : group.event} · 体重级别：
-            {group.weightClass === 'open' ? '开放组（非轻量级专项标准）' : group.weightClass} ·
-            年龄组：
-            {group.ageGroup === 'adult' ? '成人' : group.ageGroup}
-            。按测试协议和单位匹配；缺测保留为空。
-            {payload?.excludedCount
-              ? ` ${format(payload.excludedCount)} 名运动员因年龄未知、未成年或分组不适用未参与比较。`
-              : ''}
-          </p>
           {athleteId && !personal && (
             <p className="physical-champion-empty" role="status">
               当前运动员在此参考组没有可比较测试成绩，请核对参考组与测试协议。
             </p>
           )}
-          <dl className="physical-champion-summary" aria-label="当前对比摘要">
-            <div>
-              <dt>分析对象</dt>
-              <dd>{scopeName}</dd>
-              <dd className="physical-champion-summary-note">
-                <small>仅比较同分组有效测试</small>
-              </dd>
-            </div>
-            <div>
-              <dt>可比较维度</dt>
-              <dd>
-                {comparableRows.length} / {rows.length}
-              </dd>
-              <dd className="physical-champion-summary-note">
-                <small>缺测不计为零</small>
-              </dd>
-            </div>
-            <div>
-              <dt>已达冠军参考</dt>
-              <dd>{reachedCount} 项</dd>
-              <dd className="physical-champion-summary-note">
-                <small>达成度 ≥ 100%</small>
-              </dd>
-            </div>
-            <div>
-              <dt>
-                {priorityRow && priorityRow.current.achievedPercent! >= 100
-                  ? '相对提升空间'
-                  : '优先提升维度'}
-              </dt>
-              <dd>{priorityRow?.reference.label ?? '待采集'}</dd>
-              <dd className="physical-champion-summary-note">
-                <small>
-                  {priorityRow
-                    ? `当前达成度 ${format(priorityRow.current.achievedPercent)}%`
-                    : '暂无同协议有效测试'}
-                </small>
-              </dd>
-            </div>
-          </dl>
           <div className="physical-champion-section-heading">
             <h3>冠军核心指标</h3>
             <span>参考值 · 当前表现</span>
