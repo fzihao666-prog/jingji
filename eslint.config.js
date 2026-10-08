@@ -37,7 +37,7 @@ const browserGlobals = {
 
 export default tseslint.config(
   {
-    ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'data/**', 'tmp/**'],
+    ignores: ['node_modules/**', 'dist/**', 'coverage/**', 'data/**', 'tmp/**', '.claude/worktrees/**'],
   },
   js.configs.recommended,
   tseslint.configs.recommended,

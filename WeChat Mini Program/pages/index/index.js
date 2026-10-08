@@ -118,7 +118,6 @@ Page({
     athletes: [],
     scopeAthletes: [],
     selectedAthleteId: 0,
-    showAthlete: true,
     range: 'month',
     from: '',
     to: '',

@@ -49,6 +49,28 @@
 .trend-bar.is-missing { border: 1rpx dashed #b9cdd1; background: #eef4f5; }
 .trend-bar:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
 
+/* 身体成分：同类指标并排合并，分组按需展开。 */
+.body-group { padding: 0; overflow: hidden; }
+.body-group-toggle { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; width: 100%; margin: 0; padding: 24rpx 26rpx; border-radius: 24rpx; background: #ffffff; text-align: left; line-height: 1.5; }
+.body-group-heading { min-width: 0; flex: 1; }
+.body-group-title { display: block; color: #164751; font-size: 28rpx; font-weight: 800; }
+.body-group-summary { display: block; margin-top: 6rpx; color: #526b74; font-size: 21rpx; }
+.body-group-action { flex: none; color: #176f7f; font-size: 22rpx; font-weight: 700; }
+.body-group-content { padding: 0 26rpx 24rpx; }
+.body-metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; }
+.body-metric { min-width: 0; padding: 20rpx 16rpx; border: 1rpx solid #d8e3e6; border-radius: 18rpx; background: #f7fbfb; }
+.body-metric-name { display: block; color: #12303b; font-size: 23rpx; font-weight: 700; }
+.body-metric-value { margin-top: 10rpx; color: #0f5961; font-size: 34rpx; font-weight: 800; overflow-wrap: anywhere; }
+.body-metric-unit { margin-left: 6rpx; color: #526b74; font-size: 20rpx; font-weight: 400; }
+.body-metric-delta, .body-metric-date, .body-metric-note { display: block; margin-top: 8rpx; color: #526b74; font-size: 20rpx; line-height: 1.5; }
+.body-metric-scroll { width: 100%; margin-top: 14rpx; }
+.body-metric-bars { display: flex; align-items: flex-end; height: 100rpx; }
+.body-point { display: flex; flex: none; align-items: flex-end; justify-content: center; width: 48rpx; min-width: 24px; height: 100%; margin: 0; padding: 4rpx; border-radius: 8rpx; background: transparent; line-height: inherit; }
+.body-point-fill { width: 26rpx; min-height: 8rpx; border-radius: 8rpx 8rpx 2rpx 2rpx; background: #168f88; }
+.body-point-fill.is-missing { border: 1rpx dashed #526b74; background: #eef4f5; }
+.body-group-toggle:focus, .body-point:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
+.body-group-note { display: block; margin-top: 16rpx; color: #526b74; font-size: 20rpx; line-height: 1.6; }
+
 /* 训练情况对比：个人与队均双条，同指标内归一 */
 .compare-row { margin-top: 18rpx; padding-top: 18rpx; border-top: 1rpx solid #e3edef; }
 .compare-head { display: flex; align-items: baseline; gap: 12rpx; }
@@ -64,6 +86,12 @@
 .compare-fill.team { background: #a8c0c9; }
 .compare-value { width: 128rpx; flex: none; color: #12303b; font-size: 21rpx; text-align: right; }
 .compare-note { display: block; margin-top: 10rpx; color: #819399; font-size: 19rpx; }
+
+/* 训练对比卡片：数值置于条形上方，窄屏下不挤压对比图。 */
+.comparison-difference { margin-top: 10rpx; color: #0f5961; font-size: 26rpx; font-weight: 800; overflow-wrap: anywhere; }
+.comparison-value-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6rpx 10rpx; margin-top: 14rpx; color: #526b74; font-size: 20rpx; line-height: 1.5; }
+.comparison-value { min-width: 0; color: #12303b; font-weight: 700; overflow-wrap: anywhere; }
+.comparison-metric .compare-track { width: 100%; margin-top: 6rpx; }
 
 /* 雷达模型对照：canvas 2d 多边形 + 维度明细兜底 */
 .radar-legend { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }

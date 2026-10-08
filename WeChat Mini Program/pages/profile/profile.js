@@ -7,6 +7,8 @@ const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
 const { bodyCompositionTrendView, trainingComparisonView, radarGroupView } = require('../../utils/profile-views');
 const radarChart = require('../../utils/radar-chart');
+const { bodyCompositionGroups } = require('../../utils/body-composition-groups');
+const { trainingComparisonGroups } = require('../../utils/training-comparison-groups');
 
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
 
@@ -144,8 +146,10 @@ Page({
     wellnessTrends: [],
     bodyCompositionHistory: [],
     bodyCompositionTrend: { dates: [], metrics: [] },
+    bodyCompositionGroups: [],
     profileComparison: null,
     comparisonView: { items: [] },
+    trainingComparisonGroups: [],
     radarGroups: []
   },
 
@@ -176,7 +180,7 @@ Page({
 
   async loadPageData(scope) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrends: [], bodyCompositionHistory: [], bodyCompositionTrend: { dates: [], metrics: [] }, profileComparison: null, comparisonView: { items: [] }, radarGroups: [] };
+    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrends: [], bodyCompositionHistory: [], bodyCompositionTrend: { dates: [], metrics: [] }, bodyCompositionGroups: [], profileComparison: null, comparisonView: { items: [] }, trainingComparisonGroups: [], radarGroups: [] };
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
     const [injuryResult, overviewResult, benchmarkResult] = await Promise.all([
@@ -257,7 +261,9 @@ Page({
     if (athlete.photoUrl) {
       photoUrl = await api.downloadAthletePhoto(athleteId);
     }
-    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, bodyCompositionTrend: bodyCompositionTrendView(bodyCompositionHistory), profileComparison, comparisonView: trainingComparisonView(profileComparison), radarGroups };
+    const bodyCompositionTrend = bodyCompositionTrendView(bodyCompositionHistory);
+    const comparisonView = trainingComparisonView(profileComparison);
+    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, bodyCompositionTrend, bodyCompositionGroups: bodyCompositionGroups(bodyCompositionTrend.metrics), profileComparison, comparisonView, trainingComparisonGroups: trainingComparisonGroups(comparisonView.items), radarGroups };
   },
 
   onScopeChange(event) {
@@ -300,6 +306,26 @@ Page({
       content: `疼痛评分：${bar.pain} 分\n数据来源：${bar.sourceLabel}`,
       showCancel: false,
       confirmText: '知道了'
+    });
+  },
+
+  toggleTrainingComparisonGroup(event) {
+    const key = event.currentTarget.dataset.groupKey;
+    this.setData({
+      trainingComparisonGroups: this.data.trainingComparisonGroups.map((group) => ({
+        ...group,
+        expanded: group.key === key && !group.expanded
+      }))
+    });
+  },
+
+  toggleBodyCompositionGroup(event) {
+    const key = event.currentTarget.dataset.groupKey;
+    this.setData({
+      bodyCompositionGroups: this.data.bodyCompositionGroups.map((group) => ({
+        ...group,
+        expanded: group.key === key && !group.expanded
+      }))
     });
   },
 

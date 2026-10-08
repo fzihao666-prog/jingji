@@ -121,6 +121,8 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/pagination': paginationModule,
     '../../utils/injury-metric': injuryMetricModule,
     '../../utils/profile-views': profileViews,
+    '../../utils/body-composition-groups': loadCjs(new URL('../utils/body-composition-groups.js', import.meta.url)),
+    '../../utils/training-comparison-groups': loadCjs(new URL('../utils/training-comparison-groups.js', import.meta.url)),
     '../../utils/radar-chart': radarChartModule,
     '../../utils/special-test-view': specialTestView,
     ...extraMocks,
