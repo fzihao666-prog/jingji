@@ -5,6 +5,7 @@ import { PROJECT_META, normalizeProject } from '../../shared/projects.ts';
 import { OVERVIEW_METRICS } from '../../shared/overview-metrics.ts';
 import { preserveLegacySpecialChampionModels } from './db-migrations.ts';
 import { initializeSystemData } from './db-system-data.ts';
+import { initializePhysicalChampionReferences } from './physical-champion-references.ts';
 
 export function initializeDatabase(
   db: DatabaseSync,
@@ -5861,5 +5862,6 @@ export function initializeDatabase(
     console.warn(`发现未收录的运动员地区：${invalidRegions.map((item) => item.region).join('、')}`);
   }
 
+  initializePhysicalChampionReferences(db);
   return { upsertAthleteOrigin };
 }

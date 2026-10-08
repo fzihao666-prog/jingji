@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Trophy } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
@@ -13,6 +13,9 @@ import {
   YAxis,
 } from 'recharts';
 import { api } from '../api';
+import { PhysicalChampionModel } from '../components/PhysicalChampionModel';
+import { PhysicalTestModule } from '../components/PhysicalTestModule';
+import { TrainingExecutionModule } from '../components/TrainingExecutionModule';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
   AppCard,
@@ -22,10 +25,15 @@ import {
   PageHeader,
   SectionHeader,
 } from '../components/PageLayout';
-import type { Athlete, Project, StrengthTest, StrengthTrainingSession } from '../types';
+import type {
+  Athlete,
+  Project,
+  StrengthTest,
+  StrengthTrainingSession,
+  TrainingPlan,
+} from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
-import { projectLabel } from '../../shared/projects';
 import { placeholderTrend, placeholderRatio } from '../components/chart-placeholder';
 import '../components/EChart.css';
 import {
@@ -47,63 +55,6 @@ type CurrentMetric = {
   median?: number;
 };
 type ScopedStrengthSession = StrengthTrainingSession & { athleteId: number };
-
-function PhysicalChampionModelPlaceholder({
-  project,
-  onPlanOpen,
-  currentMetrics = [],
-  scopeLabel = '当前运动员',
-}: {
-  project: Project;
-  onPlanOpen: () => void;
-  currentMetrics?: CurrentMetric[];
-  scopeLabel?: string;
-}) {
-  return (
-    <ChartCard
-      title="冠军模型"
-      description={`${projectLabel(project)} · 体能能力参考模型`}
-      actions={
-        <button className="dashboard-action-button" onClick={onPlanOpen}>
-          查看训练计划 <ArrowRight size={15} />
-        </button>
-      }
-      className="training-dashboard-champion"
-    >
-      {currentMetrics.length ? (
-        <div className="champion-current-comparison">
-          <div className="champion-comparison-head">
-            <span>指标</span>
-            <span>冠军模型</span>
-            <span>{scopeLabel}</span>
-            <span>达成率</span>
-          </div>
-          {currentMetrics.slice(0, 4).map((metric) => (
-            <div key={metric.key}>
-              <strong>{metric.label}</strong>
-              <span>--</span>
-              <b>
-                {formatNumber(metric.value, 1)} {metric.unit}
-              </b>
-              <span>--</span>
-            </div>
-          ))}
-          <small>
-            模型数据待配置；当前仅展示已录入的真实
-            {scopeLabel === '当前队伍均值' ? '群体均值' : '测试值'}。
-          </small>
-        </div>
-      ) : (
-        <ContentState
-          kind="empty"
-          title="模型数据待配置"
-          icon={<Trophy size={26} />}
-          description="将按当前项目配置真实冠军表现与能力指标；模型启用后可在此对比当前范围、模型值、差距和达成率。"
-        />
-      )}
-    </ChartCard>
-  );
-}
 
 type StrengthProps = {
   athletes: Athlete[];
@@ -557,6 +508,7 @@ export function StrengthTrainingDashboard({
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
+  const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const athleteKey = athletes.map((item) => item.id).join(',');
   useEffect(() => {
@@ -565,9 +517,10 @@ export function StrengthTrainingDashboard({
     const athleteIds = athleteKey ? athleteKey.split(',').map(Number) : [];
     Promise.all(
       athleteIds.map(async (athleteId) => {
-        const [resultSessions, resultTests] = await Promise.all([
+        const [resultSessions, resultTests, resultPlans] = await Promise.all([
           api.strengthTrainingResults(athleteId),
           api.strengthTests(athleteId),
+          api.trainingPlans(athleteId),
         ]);
         return {
           sessions: resultSessions.sessions.map((session) => ({
@@ -575,6 +528,7 @@ export function StrengthTrainingDashboard({
             athleteId,
           })),
           tests: resultTests.tests,
+          plans: resultPlans.plans,
         };
       })
     )
@@ -582,12 +536,14 @@ export function StrengthTrainingDashboard({
         if (!ignored) {
           setSessions(results.flatMap((item) => item.sessions));
           setTests(results.flatMap((item) => item.tests));
+          setPlans(results.flatMap((item) => item.plans));
         }
       })
       .catch(() => {
         if (!ignored) {
           setSessions([]);
           setTests([]);
+          setPlans([]);
         }
       })
       .finally(() => {
@@ -667,11 +623,13 @@ export function StrengthTrainingDashboard({
         title="体能训练"
         actions={athleteId ? <button className="dashboard-action-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : undefined}
       />
-      <PhysicalChampionModelPlaceholder
+      <PhysicalChampionModel
         project={project}
         onPlanOpen={() => onNavigate('strength-plan')}
-        currentMetrics={displayMetrics}
-        scopeLabel={athleteId ? '当前运动员' : '当前队伍均值'}
+        from={from}
+        to={to}
+        athletes={athletes}
+        athleteId={athleteId}
       />
       {loading ? (
         <ContentState
@@ -730,6 +688,22 @@ export function StrengthTrainingDashboard({
               <TrainingLoadTrend sessions={analysisSessions} />
             </ChartCard>
           </section>
+          <PhysicalTestModule
+            tests={periodTests}
+            project={project}
+            from={from}
+            to={to}
+            athleteId={athleteId}
+            athletes={athletes}
+          />
+          <TrainingExecutionModule
+            plans={plans}
+            sessions={periodSessions}
+            from={from}
+            to={to}
+            athleteId={athleteId}
+            athletes={athletes}
+          />
           <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
             <AthleteAnalysisSelector
               athletes={selectorAthletes}

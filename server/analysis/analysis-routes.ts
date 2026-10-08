@@ -1,3 +1,4 @@
+import { registerPhysicalChampionRoutes } from './physical-champion-routes.ts';
 import { z } from 'zod';
 import type { Express } from 'express';
 import { db } from '../core/db.ts';
@@ -169,6 +170,7 @@ export function firstRadarMeasurement(
 }
 
 export function registerAnalysisRoutes(app: Express) {
+  registerPhysicalChampionRoutes(app);
   app.get('/api/overview/teams', requireAuth, (req, res) => {
     const user = req.authUser!;
     const project = cleanString(req.query.project);
@@ -656,6 +658,8 @@ export function registerAnalysisRoutes(app: Express) {
       AND rv.gender = ?
       AND rv.unit = ?
       AND rv.active = 1
+      -- 新版按协议匹配的体能标准由 physical-champion 接口处理，旧接口不混用。
+      AND rv.protocol = ''
 
       AND (
         rv.metric_key <> 'rowing_on_water_time'

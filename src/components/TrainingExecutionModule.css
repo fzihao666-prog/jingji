@@ -1,0 +1,204 @@
+.training-execution-module {
+  min-width: 0;
+}
+
+.execution-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.execution-banner {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--mist);
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.execution-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(230px, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+
+.execution-chart {
+  min-width: 0;
+}
+
+.execution-note {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.execution-status-panel {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--mist);
+}
+
+.execution-status-panel h3 {
+  margin: 0 0 0.65rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.execution-status-panel dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0 0 0.75rem;
+}
+
+.execution-status-panel dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.execution-status-panel dt,
+.execution-status-panel dd {
+  margin: 0;
+}
+
+.execution-status-panel dd {
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.execution-status-panel small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.execution-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.execution-status-done {
+  color: #0b5d54;
+  background: #d8efea;
+}
+
+.execution-status-partial {
+  color: #8a5c07;
+  background: #f7e8c6;
+}
+
+.execution-status-missed {
+  color: #a2372a;
+  background: #f6dcd6;
+}
+
+.execution-status-pending {
+  color: #5c6f77;
+  background: #e4ebed;
+}
+
+.execution-status-extra {
+  color: #234f8e;
+  background: #dce7f6;
+}
+
+.execution-detail {
+  margin-top: 1.15rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+}
+
+.execution-detail summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.execution-table-scroll {
+  max-height: 320px;
+  margin-top: 0.75rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+}
+
+.execution-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+.execution-table-scroll caption {
+  padding: 0.6rem 0.75rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-align: left;
+}
+
+.execution-table-scroll th,
+.execution-table-scroll td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.execution-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--mist);
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.execution-table-scroll tbody th {
+  color: var(--ink);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.execution-table-scroll td {
+  color: var(--ink);
+}
+
+.execution-table-scroll td:nth-last-child(2) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (width <= 1200px) {
+  .execution-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 960px) {
+  .execution-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 760px) {
+  .execution-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

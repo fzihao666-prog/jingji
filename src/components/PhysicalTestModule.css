@@ -1,0 +1,123 @@
+.physical-test-module {
+  min-width: 0;
+}
+
+.physical-test-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(230px, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.physical-test-chart {
+  min-width: 0;
+}
+
+.physical-test-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.physical-test-toolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.physical-test-toolbar select {
+  max-width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.physical-test-canvas {
+  height: 240px;
+  margin-top: 0.5rem;
+}
+
+.physical-test-note {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.physical-test-standard {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--mist);
+}
+
+.physical-test-standard h3 {
+  margin: 0 0 0.4rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.physical-test-standard-source {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.physical-test-standard dl {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.physical-test-standard dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.physical-test-standard dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.physical-test-standard dd {
+  margin: 0;
+  color: var(--river);
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.physical-test-standard dd small {
+  margin-left: 0.25rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.physical-test-standard-foot {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+@media (width <= 960px) {
+  .physical-test-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

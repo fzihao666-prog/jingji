@@ -679,3 +679,23 @@ route → application service → repository/query service → SQLite
 竞迹当前是一个以 React、Express 和 SQLite 组成的模块化单体，已经具备较完整的组织权限、运动员主数据、专项训练、体能训练、测试评估、AI 辅助和分析展示能力。其优势是部署简单、前后端领域定义可共享、权限范围明确、业务验证贴近用例。
 
 当前最重要的架构问题不是技术栈，而是训练事实双轨、服务端入口过重、计划与执行缺少稳定关联，以及本地状态对多实例扩展的限制。近期演进应先统一数据真相并拆清模块边界，再考虑数据库、对象存储或服务化升级。
+
+## 当前库模拟数据批次（2026-10-08）
+
+本次用户明确要求直接写入当前库并按正常统计显示。本批数据从独立数据集导入，写入前完成在线备份与完整性校验，再以事务追加并重建外键关联，冲突跳过。临时生成、导入和演示服务代码现已移除，数据与备份保留。所有本批事实保留 `source=synthetic_30d_current_v1`，有 `is_demo` 的表设为 0，沿用现有统计筛选而不改变 API、授权或正式环境模式。专项事件通过 `session`、`note` 标识批次，成绩通过事件关联识别。批次 ID 映射存放在 `app_metadata.synthetic_current_30d_v1`，导入时的判重和映射更新均位于同一写事务中。原有事实不改动；已有真实训练日期不叠加模拟课次。
+
+当前库窗口为 2026-09-09 至 2026-10-08，来源标记仍代表模拟，不能据 `is_demo=0` 宣称其为实测。如以后清理，应依据本批映射和来源校验逐条处理，不清空表或直接恢复整库覆盖后续业务写入。
+
+### 体能冠军参考（2026-10-08）
+
+`server/core/physical-champion-references.ts` 对既有 `radar_reference_sources` / `radar_reference_values` 执行事务兼容迁移，扩展项目CHECK到ROWING/CANOE_SPRINT/CANOE_SLALOM，保留历史记录、索引、触发器、外键及自增范围。参考值新增 `source_type`（measured/public_reference/estimated）、`protocol`、`event_group`、`weight_class`、`age_group`、`direction` 和 `revision`；保留旧空协议，不自动认定为新协议。初始化补齐三项目男女成人开放组48项估算基线，已有非空协议标准（含停用及人工修订）优先，不覆盖、不重新启用。未建立第二套冠军标准表。
+
+`GET /api/physical-champion` 接收项目及不超过366天的周期，复用运动员访问范围；`physical-champion-service.ts` 从正式 `test_sessions/test_measurements` 读取有效非演示、非估算成绩，精确匹配协议和单位。相对力量只采用同课次体重。返回分组参考、逐维团队均值、个人达成度及周期内最近有效成绩趋势；成人参考默认排除年龄未知及未成年人，用户授权模拟记录的年龄假定例外见下文。当前仅配置成人开放组通用体能，专项小项和轻量级标准尚未校准；分组字段保留后续扩充能力。
+
+`PUT /api/physical-champion/references/:id` 只允许全国且全部项目、全部队伍权限的DMD，采用严格zod校验、独立修订号和事务冲突检查；独立保存来源说明、协议、来源类型及审计，不写入运动员成绩表。客户端 `src/api.ts` 校验响应后交给 `PhysicalChampionModel`。旧雷达接口继续只读取原空协议参考，防止将新版协议标准无校验套入历史分析。
+
+科研依据仅用于维度和量级，全部初始化数值仍标estimated：赛艇2025力量与2000m表现研究（https://pmc.ncbi.nlm.nih.gov/articles/PMC12538512/）、皮艇竞速2022力量与功率研究（https://pmc.ncbi.nlm.nih.gov/articles/PMC9354820/）、2023中国精英男子激流运动员体能研究（https://www.intjmorphol.com/wp-content/uploads/2023/07/Art_25_414_2023.pdf）。测试设备和协议不同的公开数值未作为实测标准直接混用。
+
+旧版冠军参考表兼容补充：迁移同时识别 `CHECK(project='ROWING')` 和历史 `IN ('ROWING','CANOE','SLALOM')` 约束；保留旧项目编码，查询和补齐时仅将 CANOE 对应 CANOE_SPRINT、SLALOM 对应 CANOE_SLALOM。没有 `source_id` 的参考值表新增可空外键，并在事务内为未关联记录建立明确标注“待人工核实”的占位来源；占位链接不代表原始数据依据，不推断历史测试协议，不覆盖参考数值、启用状态、来源类型或修订号。已部分升级的表也可重复执行。
+
+用户授权的体能模拟补充由本地维护函数 `server/analysis/physical-champion-fill.ts` 执行，无公开写入接口及启动自动补充。写入前校验日期、有效DMD操作人；事务只新增缺失维度，保留已有成绩（含零值）、档案及测试会话，重复执行不新增。会话及测量保存 `user_requested_simulation` 来源、有效质量、非演示标识及批次，并记录审计；这类记录按授权参与正式统计。未知年龄仅允许同条此来源记录明确包含成人参考假定协议时参与成人模型，已知未成年人仍排除；不更改出生日期。

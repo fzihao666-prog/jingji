@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { physicalChampionPayloadSchema } from '../shared/physical-champion';
 import type {
   SpecialTestComparison,
   SpecialTrainingAnalytics,
@@ -69,6 +71,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  async physicalChampion(query: { project: string; from: string; to: string }) {
+    const payload = await request<unknown>(`/api/physical-champion?${new URLSearchParams(query)}`);
+    return physicalChampionPayloadSchema.parse(payload);
+  },
+  async updatePhysicalReference(id: number, body: { value: number; expectedValue: number; expectedRevision: number; protocol: string; sourceType: 'measured' | 'public_reference' | 'estimated'; sourceNote: string }) {
+    const payload = await request<unknown>(`/api/physical-champion/references/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    return z.object({ message: z.string() }).parse(payload);
+  },
+
   async teams() {
     return request<{ teams: ProjectTeam[] }>('/api/teams');
   },
