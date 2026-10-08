@@ -398,12 +398,7 @@ export function TrainingVolumeDashboard({
   const { summary, days } = data;
   const value = (number: number | null, digits = 1) =>
     number === null ? '—' : formatNumber(number, digits);
-  const physicalDays = days.filter(
-    (row) => row.physicalDurationMin !== null || row.physicalLoad !== null
-  );
-  const specialDays = days.filter(
-    (row) => row.specialDurationMin !== null || row.specialDistanceKm !== null
-  );
+  const [hiddenVolumeSeries, setHiddenVolumeSeries] = useState({ physical: false, special: false });
   const loadByDate = new Map(days.map((row) => [row.date, row]));
   const trainingLoadDays: Array<{
     date: string;
@@ -421,17 +416,21 @@ export function TrainingVolumeDashboard({
   const sampleDates = trainingLoadDays.length > 1
     ? trainingLoadDays.filter((_, index) => index % Math.max(1, Math.ceil(trainingLoadDays.length / 7)) === 0).slice(-7)
     : [{ date: from, specialLoad: null, physicalLoad: null }];
-  const physicalChartDays = physicalDays.length ? physicalDays.map((row) => ({
-    date: row.date, physicalDurationMin: row.physicalDurationMin, physicalLoad: row.physicalLoad,
-  })) : sampleDates.map((row, index) => ({
-    date: row.date, physicalDurationMin: placeholderTrend[index % placeholderTrend.length] * 2,
-    physicalLoad: placeholderTrend[index % placeholderTrend.length] * 5,
+  const hasVolumeData = days.some((row) =>
+    row.physicalDurationMin !== null || row.specialDurationMin !== null ||
+    row.specialDistanceKm !== null || row.physicalLoad !== null || row.specialLoad !== null
+  );
+  const volumeChartDays = trainingLoadDays.map(({ date }) => ({
+    date,
+    physicalDurationMin: loadByDate.get(date)?.physicalDurationMin ?? null,
+    specialDurationMin: loadByDate.get(date)?.specialDurationMin ?? null,
+    specialDistanceKm: loadByDate.get(date)?.specialDistanceKm ?? null,
   }));
-  const specialChartDays = specialDays.length ? specialDays.map((row) => ({
-    date: row.date, specialDurationMin: row.specialDurationMin, specialDistanceKm: row.specialDistanceKm,
-  })) : sampleDates.map((row, index) => ({
-    date: row.date, specialDurationMin: placeholderTrend[index % placeholderTrend.length] * 2,
-    specialDistanceKm: placeholderTrend[index % placeholderTrend.length] / 10,
+  const displayVolumeDays = hasVolumeData ? volumeChartDays : sampleDates.map((row, index) => ({
+    date: row.date,
+    physicalDurationMin: placeholderTrend[index % placeholderTrend.length] * 2,
+    specialDurationMin: placeholderTrend[(index + 2) % placeholderTrend.length] * 2,
+    specialDistanceKm: null,
   }));
   const hasTrainingLoad = trainingLoadDays.some((row) => row.specialLoad !== null || row.physicalLoad !== null);
   const trainingLoadChartDays = hasTrainingLoad ? trainingLoadDays : sampleDates.map((row, index) => ({
@@ -533,149 +532,67 @@ export function TrainingVolumeDashboard({
         </article>
       </section>
       <section className="training-analytics-grid" aria-label="训练量统计分析图表">
-        <article className="training-analytics-chart">
+        <article className="training-analytics-chart training-analytics-volume-comparison">
           <header>
             <div>
-              <span>PHYSICAL TRAINING</span>
-              <h3>体能训练量</h3>
+              <span>TRAINING DURATION</span>
+              <h3>体能与专项训练量对比</h3>
             </div>
-            <small>时长 · 负荷</small>
+            <small>训练时长 · 分钟 · 按日</small>
           </header>
-          <div className="training-analytics-canvas">
-            {!physicalDays.length && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
-            {(
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={physicalChartDays}
-                  margin={{ top: 12, right: 10, left: -12, bottom: 0 }}
-                >
-                  <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(date) => String(date).slice(5).replace('-', '/')}
-                    tick={{ fontSize: 9, fill: '#62767d' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="duration"
-                    tick={{ fontSize: 9, fill: '#62767d' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="load"
-                    orientation="right"
-                    tick={{ fontSize: 9, fill: '#b87822' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    labelFormatter={(date) => `${!physicalDays.length ? '示例数据，仅用于展示图表效果 · ' : ''}${String(date)}`}
-                    formatter={(number, name) => [
-                      `${formatNumber(Number(number), 1)} ${name === '训练负荷' ? 'AU' : 'min'}`,
-                      name,
-                    ]}
-                    contentStyle={chartTooltipStyle}
-                  />
-                  <Bar
-                    yAxisId="duration"
-                    dataKey="physicalDurationMin"
-                    name="训练时长"
-                    fill="#64aeb3"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
-                  />
-                  <Line
-                    yAxisId="load"
-                    type="monotone"
-                    dataKey="physicalLoad"
-                    name="训练负荷"
-                    stroke="#d59125"
-                    strokeWidth={2.4}
-                    dot={{
-                      r: 2.5,
-                      fill: '#fff',
-                      stroke: '#d59125',
-                      strokeWidth: 2,
-                    }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
+          <p className="analysis-caption">比较每日体能与专项训练时长；缺失留空，已记录的 0 保留为 0。</p>
+          <div className="training-volume-legend" role="group" aria-label="训练类型图例">
+            <button type="button" aria-pressed={!hiddenVolumeSeries.physical}
+              onClick={() => setHiddenVolumeSeries((current) => ({ ...current, physical: !current.physical }))}>
+              <i className="training-volume-physical-key" aria-hidden="true" />体能训练
+            </button>
+            <button type="button" aria-pressed={!hiddenVolumeSeries.special}
+              onClick={() => setHiddenVolumeSeries((current) => ({ ...current, special: !current.special }))}>
+              <i className="training-volume-special-key" aria-hidden="true" />专项训练
+            </button>
           </div>
-        </article>
-        <article className="training-analytics-chart">
-          <header>
-            <div>
-              <span>SPECIAL TRAINING</span>
-              <h3>专项训练量</h3>
+          <div className="training-analytics-canvas">
+            {!hasVolumeData && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={displayVolumeDays} accessibilityLayer
+                margin={{ top: 12, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+                <XAxis dataKey="date" minTickGap={24}
+                  tickFormatter={(date) => String(date).slice(5).replace('-', '/')}
+                  tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
+                <YAxis unit=" min" domain={[0, 'auto']}
+                  tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
+                <Tooltip content={({ active, label }) => {
+                  const row = displayVolumeDays.find((item) => item.date === String(label));
+                  if (!active || !row) return null;
+                  return <div className="training-volume-tooltip">
+                    <strong>{!hasVolumeData ? '示例数据 · ' : ''}{row.date}</strong>
+                    {!hiddenVolumeSeries.physical && <p>体能训练：{row.physicalDurationMin === null ? '缺失' : `${value(row.physicalDurationMin)} 分钟`}</p>}
+                    {!hiddenVolumeSeries.special && <p>专项训练：{row.specialDurationMin === null ? '缺失' : `${value(row.specialDurationMin)} 分钟`}</p>}
+                    {row.specialDistanceKm !== null && <p>专项距离：{value(row.specialDistanceKm)} km</p>}
+                  </div>;
+                }} />
+                <Bar dataKey="physicalDurationMin" name="体能训练" fill="#64aeb3"
+                  hide={hiddenVolumeSeries.physical} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                <Bar dataKey="specialDurationMin" name="专项训练" fill="#178e87"
+                  hide={hiddenVolumeSeries.special} radius={[4, 4, 0, 0]} maxBarSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <details className="training-volume-data">
+            <summary>查看训练时长数据{!hasVolumeData ? '（示例）' : ''}</summary>
+            <div className="training-volume-table-scroll" tabIndex={0} role="region" aria-label="每日训练量数据表">
+              <table>
+                <caption>{!hasVolumeData ? '示例数据，仅用于展示，不参与统计' : '当前筛选范围的每日训练量；缺失不代表 0'}</caption>
+                <thead><tr><th scope="col">日期</th><th scope="col">体能（分钟）</th><th scope="col">专项（分钟）</th><th scope="col">专项距离（km）</th></tr></thead>
+                <tbody>{displayVolumeDays.map((row) => <tr key={row.date}>
+                  <th scope="row">{row.date}</th><td>{row.physicalDurationMin === null ? '缺失' : value(row.physicalDurationMin)}</td>
+                  <td>{row.specialDurationMin === null ? '缺失' : value(row.specialDurationMin)}</td>
+                  <td>{row.specialDistanceKm === null ? '缺失' : value(row.specialDistanceKm)}</td>
+                </tr>)}</tbody>
+              </table>
             </div>
-            <small>时长 · 距离</small>
-          </header>
-          <div className="training-analytics-canvas">
-            {!specialDays.length && <p className="analysis-empty-note">示例数据 · 暂无当前周期真实数据</p>}
-            {(
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={specialChartDays}
-                  margin={{ top: 12, right: 10, left: -12, bottom: 0 }}
-                >
-                  <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(date) => String(date).slice(5).replace('-', '/')}
-                    tick={{ fontSize: 9, fill: '#62767d' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="duration"
-                    tick={{ fontSize: 9, fill: '#62767d' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    yAxisId="distance"
-                    orientation="right"
-                    tick={{ fontSize: 9, fill: '#14746f' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    labelFormatter={(date) => `${!specialDays.length ? '示例数据，仅用于展示图表效果 · ' : ''}${String(date)}`}
-                    formatter={(number, name) => [
-                      `${formatNumber(Number(number), 1)} ${name === '专项距离' ? 'km' : 'min'}`,
-                      name,
-                    ]}
-                    contentStyle={chartTooltipStyle}
-                  />
-                  <Bar
-                    yAxisId="duration"
-                    dataKey="specialDurationMin"
-                    name="专项时长"
-                    fill="#178e87"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={28}
-                  />
-                  <Line
-                    yAxisId="distance"
-                    type="monotone"
-                    dataKey="specialDistanceKm"
-                    name="专项距离"
-                    stroke="#0b4d59"
-                    strokeWidth={2.4}
-                    dot={{
-                      r: 2.5,
-                      fill: '#fff',
-                      stroke: '#0b4d59',
-                      strokeWidth: 2,
-                    }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+          </details>
         </article>
         <article className="training-analytics-chart training-analytics-load-trend">
           <header>

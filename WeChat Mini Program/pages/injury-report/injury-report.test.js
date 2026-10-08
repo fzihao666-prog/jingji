@@ -40,6 +40,34 @@ const injuryForm = loadCjs(new URL('../../utils/injury-form.js', import.meta.url
 const requestGuard = loadCjs(new URL('../../utils/request-guard.js', import.meta.url), {});
 const formDraft = loadCjs(new URL('../../utils/form-draft.js', import.meta.url), {});
 
+function createOverviewPage(data = {}) {
+  let definition;
+  const dependencies = {
+    '../../services/api': {},
+    '../../utils/page-scope': {},
+    '../../utils/request-guard': requestGuard,
+    '../../utils/date': {},
+    '../../utils/format': {},
+    '../../utils/page-actions': {},
+    '../../utils/daily-todos': {},
+    '../../utils/pagination': loadCjs(new URL('../../utils/pagination.js', import.meta.url), {}),
+    '../../utils/today-status': {},
+    '../../utils/wellness-form': {},
+  };
+  vm.runInNewContext(indexSource, {
+    Page(value) { definition = value; },
+    require(path) {
+      if (Object.prototype.hasOwnProperty.call(dependencies, path)) return dependencies[path];
+      throw new Error(`未预期的依赖：${path}`);
+    },
+  });
+  return {
+    ...definition,
+    data: { ...definition.data, ...data },
+    setData(values) { Object.assign(this.data, values); },
+  };
+}
+
 function createPage({ user, athletes, targetAthleteId }) {
   let definition;
   const createInjuryRecord = vi.fn(async () => ({ record: { id: 1 } }));
@@ -118,13 +146,59 @@ describe('伤病与疼痛上报入口', () => {
     );
   });
 
-  it('首页待办提供分组筛选与姓名搜索', () => {
-    expect(indexSource).toContain('filterDailyTodos');
-    expect(indexSource).toContain('onTodoFilter');
-    expect(indexSource).toContain('onTodoKeyword');
-    expect(indexTemplate).toContain('bindtap="onTodoFilter"');
-    expect(indexTemplate).toContain('bindinput="onTodoKeyword"');
-    expect(indexTemplate).toContain('todoView.missing');
+  it('首页重点人员合并同人多类待办并隔离队伍和已跟进人员', () => {
+    const person = { athleteId: 7, athleteName: '样例队员', team: '一队' };
+    const page = createOverviewPage();
+    const result = page.buildFocusRows({
+      missing: [person, { athleteId: 8, team: '二队' }, { athleteId: 9, team: '一队' }],
+      attention: [{ ...person, reason: '恢复不足' }],
+      reviewDue: [{ ...person, dueLabel: '今日复查', injuryName: '肩部不适' }],
+      incompleteTime: [person],
+      followedUp: [9],
+    }, 0, [{ id: 1, name: '一队' }], 1);
+    expect(result.total).toBe(1);
+    expect(result.items).toEqual([expect.objectContaining({
+      athleteId: 7,
+      focusLabels: ['未填报', '状态关注', '复查提醒', '时间待补'],
+      focusReason: '今日暂无有效训练记录；恢复不足；今日复查 · 肩部不适；训练记录缺少有效开训时间',
+    })]);
+    expect(indexTemplate).toContain('wx:for="{{focusRows}}"');
+  });
+
+  it('首页重点人员每页最多五人且末页不补假数据', () => {
+    const page = createOverviewPage({
+      todos: { missing: [
+        { athleteId: 1 }, { athleteId: 2 }, { athleteId: 3 },
+        { athleteId: 4 }, { athleteId: 5 }, { athleteId: 6 },
+      ] },
+    });
+    const first = page.buildFocusRows(page.data.todos, 0, [], 0);
+    expect(first.items.map((item) => item.athleteId)).toEqual([1, 2, 3, 4, 5]);
+    page.onPagerChange({ currentTarget: { dataset: { key: 'focus' } }, detail: { page: 1 } });
+    expect(page.data.focusRows.map((item) => item.athleteId)).toEqual([6]);
+    expect(page.data.focusPager).toMatchObject({ total: 6, page: 1, pageCount: 2, hasNext: false });
+  });
+
+  it('首页队伍名单按姓名搜索且不显示其他队伍的同名人员', () => {
+    const page = createOverviewPage({
+      teams: [{ id: 1, name: '一队' }],
+      teamId: 1,
+      teamOverview: { athletes: [
+        { athleteId: 7, athleteName: '样例队员', team: '一队' },
+        { athleteId: 8, athleteName: '其他队员', team: '一队' },
+        { athleteId: 9, athleteName: '样例队员', team: '二队' },
+      ] },
+      todoPagerPages: { team: 1, focus: 0 },
+    });
+    page.onTeamKeyword({ detail: { value: '样例' } });
+    expect(page.data.teamView.athletes).toEqual([
+      { athleteId: 7, athleteName: '样例队员', team: '一队' },
+    ]);
+    expect(page.data.teamView.teamPager).toMatchObject({ total: 1, page: 0 });
+    expect(page.data.todoPagerPages.team).toBe(0);
+    page.onTeamKeyword({ detail: { value: '不存在' } });
+    expect(page.data.teamView.athletes).toEqual([]);
+    expect(indexTemplate).toContain('bindinput="onTeamKeyword"');
   });
 
   it('表单页与服务端字段一一对应且按角色切换文案', () => {
