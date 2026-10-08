@@ -1,13 +1,29 @@
-const { NETWORK_DEBUG, TOKEN_KEY, getApiBaseUrl } = require('../config');
+const { NETWORK_DEBUG, API_ENVIRONMENT, TOKEN_KEY, getApiBaseUrl } = require('../config');
 const { networkErrorMessage } = require('./network-error');
 
 let redirecting = false;
 let traceSequence = 0;
 let networkEnvironmentReported = false;
 
+function runtimeVersion() {
+  try {
+    return typeof wx.getAccountInfoSync === 'function' ? wx.getAccountInfoSync().miniProgram.envVersion : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function networkDebugEnabled() {
+  return NETWORK_DEBUG || ['develop', 'trial'].includes(runtimeVersion());
+}
+
 function traceNetwork(stage, detail) {
-  if (!NETWORK_DEBUG) return;
-  console.log(`[网络追踪] ${stage}`, detail);
+  try {
+    if (!networkDebugEnabled()) return;
+    console.log(`[网络追踪] ${stage}`, { time: new Date().toISOString(), ...detail });
+  } catch {
+    // 诊断失败不得中断启动、登录或网络请求。
+  }
 }
 
 function nextTraceId() {
@@ -36,20 +52,28 @@ function summarizePayload(data) {
 function summarizeHeaders(headers) {
   const normalized = headers || {};
   return {
-    contentType: normalized['content-type'] || normalized['Content-Type'] || '',
-    requestId: normalized['x-request-id'] || normalized['X-Request-Id'] || '',
+    contentType: String(normalized['content-type'] || normalized['Content-Type'] || '').match(/^(?:application\/json|text\/html|text\/plain|application\/octet-stream)(?=;|$)/i)?.[0] || 'other',
+    hasRequestId: !!(normalized['x-request-id'] || normalized['X-Request-Id']),
   };
 }
 
 function responseMessage(data) {
   if (!data || typeof data.message !== 'string') return '';
-  return data.message.trim().slice(0, 160);
+  return '[服务端消息已省略，请查看页面错误提示]';
+}
+
+function safeErrorMessage(error) {
+  const message = String((error && error.errMsg) || '');
+  // 只保留网络错误标识，避免原始错误内的 URL、查询参数或服务端文本泄漏。
+  const markers = message.match(/ERR_[A-Z0-9_]+|cronet_error_code:\s*-?\d+|url not in domain list|timeout|certificate|handshake|ssl|connection reset|fail|ok/gi);
+  return markers ? markers.slice(0, 8).join(' · ') : '[原始错误已省略]';
 }
 
 function summarizeError(error) {
+  const code = String((error && error.errCode) || '');
   return {
-    errCode: String((error && error.errCode) || ''),
-    errMsg: String((error && error.errMsg) || 'unknown error').slice(0, 500),
+    errCode: /^-?\d{1,10}$/.test(code) ? code : '',
+    errMsg: safeErrorMessage(error),
   };
 }
 
@@ -111,28 +135,48 @@ function attachHeadersTrace(task, traceId, startedAt, lifecycle) {
     traceNetwork('响应头追踪不可用', { traceId });
     return;
   }
-  task.onHeadersReceived((result) => {
-    lifecycle.receivedResponseHeaders = true;
-    traceNetwork('响应头已收到', {
-      traceId,
-      durationMs: durationMs(startedAt),
-      headers: summarizeHeaders(result.header),
+  try {
+    task.onHeadersReceived((result) => {
+      lifecycle.receivedResponseHeaders = true;
+      traceNetwork('响应头已收到', {
+        traceId,
+        durationMs: durationMs(startedAt),
+        headers: summarizeHeaders(result.header),
+      });
     });
-  });
+  } catch {
+    traceNetwork('响应头追踪注册失败', { traceId });
+  }
 }
 
 function traceNetworkEnvironment() {
-  if (!NETWORK_DEBUG || networkEnvironmentReported || typeof wx.getNetworkType !== 'function') return;
+  if (!networkDebugEnabled() || networkEnvironmentReported || typeof wx.getNetworkType !== 'function') return;
   networkEnvironmentReported = true;
-  traceNetwork('网络环境检查开始', {});
-  wx.getNetworkType({
-    success(result) {
-      traceNetwork('网络环境检查成功', { networkType: result.networkType || 'unknown' });
-    },
-    fail(error) {
-      traceNetwork('网络环境检查失败', summarizeError(error));
-    },
+  let appInfo = {};
+  try {
+    appInfo = typeof wx.getAppBaseInfo === 'function' ? wx.getAppBaseInfo() : {};
+  } catch {
+    // 基础信息获取失败不阻断登录请求。
+  }
+  traceNetwork('网络环境检查开始', {
+    apiEnvironment: API_ENVIRONMENT,
+    baseUrl: summarizeUrl(getApiBaseUrl()),
+    envVersion: runtimeVersion(),
+    SDKVersion: appInfo.SDKVersion || 'unknown',
+    wechatVersion: appInfo.version || 'unknown'
   });
+  try {
+    wx.getNetworkType({
+      success(result) {
+        traceNetwork('网络环境检查成功', { networkType: result.networkType || 'unknown' });
+      },
+      fail(error) {
+        traceNetwork('网络环境检查失败', summarizeError(error));
+      },
+    });
+  } catch {
+    traceNetwork('网络环境检查不可用', {});
+  }
 }
 
 function redirectToLogin() {
@@ -155,7 +199,7 @@ function buildRequestUrl(baseUrl, path) {
 }
 
 function request(path, options = {}) {
-  const traceId = nextTraceId();
+  const traceId = options.traceId || nextTraceId();
   const startedAt = Date.now();
   const lifecycle = { receivedResponseHeaders: false, receivedHttpResponse: false };
   const token = wx.getStorageSync(TOKEN_KEY);
@@ -219,7 +263,7 @@ function request(path, options = {}) {
           traceId,
           durationMs: durationMs(startedAt),
           statusCode: result.statusCode || 0,
-          errMsg: result.errMsg ? String(result.errMsg).slice(0, 500) : '',
+          errMsg: safeErrorMessage(result),
           receivedResponseHeaders: lifecycle.receivedResponseHeaders,
           receivedHttpResponse: lifecycle.receivedHttpResponse,
         });
@@ -285,7 +329,7 @@ function uploadFile(path, filePath, name = 'photo') {
           traceId,
           durationMs: durationMs(startedAt),
           statusCode: result.statusCode || 0,
-          errMsg: result.errMsg ? String(result.errMsg).slice(0, 500) : '',
+          errMsg: safeErrorMessage(result),
           receivedResponseHeaders: lifecycle.receivedResponseHeaders,
           receivedHttpResponse: lifecycle.receivedHttpResponse,
         });
@@ -339,4 +383,4 @@ function assetUrl(path) {
   return buildRequestUrl(getApiBaseUrl(), path);
 }
 
-module.exports = { request, uploadFile, downloadFile, assetUrl, buildRequestUrl };
+module.exports = { request, uploadFile, downloadFile, assetUrl, buildRequestUrl, traceNetwork, nextTraceId, traceNetworkEnvironment };

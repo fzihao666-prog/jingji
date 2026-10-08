@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const { TOKEN_KEY } = require('../../config');
+const { traceNetwork, nextTraceId } = require('../../utils/request');
 
 const OLYMPIC_ICONS = [
   ['射箭', 'archery'],
@@ -111,25 +112,47 @@ Page({
   forgotPassword() { wx.showToast({ title: '请联系系统管理员重置密码', icon: 'none' }); },
 
   async login() {
+    const traceId = nextTraceId();
     const { username, password, privacyAccepted, rememberUsername } = this.data;
+    traceNetwork('登录点击', { traceId, hasUsername: !!username, hasPassword: !!password, privacyAccepted: !!privacyAccepted });
     if (!username || !password) {
+      traceNetwork('登录校验未通过', { traceId, reason: '账号或密码未填写' });
       this.setData({ error: '请输入账号和密码。' });
       return;
     }
     if (!privacyAccepted) {
+      traceNetwork('登录校验未通过', { traceId, reason: '未同意隐私保护说明' });
       this.setData({ error: '请先阅读并同意隐私保护说明。' });
       return;
     }
     this.setData({ submitting: true, error: '' });
+    let stage = '发送登录请求';
     try {
-      const result = await api.login(username, password);
+      traceNetwork('登录请求准备', { traceId });
+      const result = await api.login(username, password, traceId);
+      traceNetwork('登录结果已返回', { traceId, hasToken: !!(result && result.token), hasUser: !!(result && result.user) });
+      stage = '保存登录会话';
+      traceNetwork('登录会话保存开始', { traceId });
       getApp().setSession(result.token, result.user);
+      traceNetwork('登录会话保存成功', { traceId });
+      stage = '保存登录偏好';
       if (rememberUsername) wx.setStorageSync('jingji-mini-remembered-username', username);
       else wx.removeStorageSync('jingji-mini-remembered-username');
-      wx.reLaunch({ url: '/pages/index/index' });
+      stage = '跳转训练总览';
+      traceNetwork('登录跳转开始', { traceId, page: '/pages/index/index' });
+      wx.reLaunch({
+        url: '/pages/index/index',
+        success: () => traceNetwork('登录跳转成功', { traceId }),
+        fail: () => {
+          traceNetwork('登录跳转失败', { traceId, stage: '跳转训练总览' });
+          this.setData({ error: '登录成功，但页面跳转失败，请重新打开小程序。' });
+        }
+      });
     } catch (error) {
+      traceNetwork('登录流程失败', { traceId, stage });
       this.setData({ error: error.message || '登录失败，请稍后重试。' });
     } finally {
+      traceNetwork('登录处理结束', { traceId, stage });
       this.setData({ submitting: false });
     }
   }

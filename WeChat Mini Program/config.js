@@ -2,7 +2,7 @@
 const API_ENVIRONMENT = 'production';
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:8787';
 const API_BASE_URL = 'https://www.jingjity.xin';
-// 真机问题定位期间开启；定位完成后必须改回 false，日志不会输出 Token、密码或响应正文。
+// 正式版默认关闭追踪；开发版、体验版自动启用脱敏诊断，人工排查开关保持 false。
 const NETWORK_DEBUG = false;
 
 const TOKEN_KEY = 'jingji-mini-token';

@@ -1,4 +1,5 @@
 const { TOKEN_KEY, USER_KEY, PROJECT_KEY } = require('./config');
+const { traceNetwork, traceNetworkEnvironment } = require('./utils/request');
 
 App({
   globalData: {
@@ -12,9 +13,12 @@ App({
   },
 
   onLaunch() {
+    traceNetwork('小程序启动', {});
+    traceNetworkEnvironment();
     this.globalData.token = wx.getStorageSync(TOKEN_KEY) || '';
     this.globalData.user = wx.getStorageSync(USER_KEY) || null;
     this.globalData.currentProject = wx.getStorageSync(PROJECT_KEY) || '赛艇';
+    traceNetwork('本地会话读取完成', { hasToken: !!this.globalData.token, hasUser: !!this.globalData.user });
   },
 
   setSession(token, user) {

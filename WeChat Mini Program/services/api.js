@@ -9,8 +9,8 @@ function query(params) {
 
 module.exports = {
   assetUrl,
-  login(username, password) {
-    return request('/api/auth/login', { method: 'POST', auth: false, data: { username, password } });
+  login(username, password, traceId) {
+    return request('/api/auth/login', { method: 'POST', auth: false, traceId, data: { username, password } });
   },
   register(input) {
     return request('/api/auth/register', { method: 'POST', auth: false, data: input });
