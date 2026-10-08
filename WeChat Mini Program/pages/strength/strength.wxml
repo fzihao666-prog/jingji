@@ -54,10 +54,10 @@
         <view wx:else class="state"><view class="state-title">暂无体能测试数据</view></view>
       </view>
 
-      <view class="section-head"><view class="section-head-title">训练内容分布</view><view class="section-head-note">沿用网页端八类训练内容口径</view></view>
+      <view class="section-head"><view class="section-head-title">训练结构</view><view class="section-head-note">五类训练结构 · 按训练项次数</view></view>
       <view class="card">
         <view wx:if="{{structure.length}}" class="ratio-list"><view wx:for="{{structure}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}}</text><text>{{item.count}} 项 · {{item.rate}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view></view></view>
-        <view wx:else class="state"><view class="state-title">暂无可归类的训练明细</view></view>
+        <view wx:else class="state"><view class="state-title">暂无训练明细</view><view class="state-note">记录体能训练后这里展示五类训练结构占比</view></view>
         <view class="section-head-note">{{structureNote}}</view>
       </view>
 

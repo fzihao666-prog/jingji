@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { inferStrengthContentAnalysisCategory } from '../../shared/strength-training';
+import {
+  STRENGTH_TRAINING_CATEGORIES,
+  inferStrengthCategory,
+} from '../../shared/strength-training';
 
 function load(url) {
   const module = { exports: {} };
@@ -10,7 +13,7 @@ function load(url) {
   });
   return module.exports;
 }
-const { planView, recordView, metricView, overviewView, contentCategory } = load(new URL('./strength-view.js', import.meta.url));
+const { planView, recordView, metricView, overviewView, structureCategory } = load(new URL('./strength-view.js', import.meta.url));
 const period = { from: '2026-09-01', to: '2026-09-30' };
 const exercise = { id: 'squat', name: '深蹲', category: '基础力量', maxWeight: 100, lines: [{ id: 'line', weeks: {
   1: { sets: '3', reps: '8', percentage: 70, actualCompleted: '8', arrangement: '周一' },
@@ -63,13 +66,27 @@ describe('体能小程序视图与网页端数据联动', () => {
     expect(view.metricChange).toBe('10');
     expect(metricView(tests, 'squatKg', { from: '2026-09-19', to: '2026-09-30' }).metricChange).toBe('—');
   });
-  it.each(['热身 深蹲', 'crossfit', '泡沫轴', '力量耐力', '卧拉', '抓举', '平板支撑', '药球', '水上划行', '跑步', ''])('分类“%s”与网页共享规则一致', (name) => {
-    const input = { sessionLabel: name, exerciseName: '' };
-    expect(contentCategory(input, input)).toBe(inferStrengthContentAnalysisCategory(input));
+  it.each(['深蹲', '跑步间歇', '平板支撑', '高拉', '药球抛', '水上专项划行', ''])('分类“%s”与共享推断规则一致', (name) => {
+    expect(structureCategory({ exerciseName: name })).toBe(inferStrengthCategory(name));
   });
-  it('训练内容只使用既有动作事实，范围外内容不进入八类占比', () => {
-    const view = overviewView([], [{ trainingDate: '2026-09-01', sets: [{ exerciseName: '卧推' }, { exerciseName: '平板' }, { exerciseName: '跑步' }] }], period);
-    expect(view.structure).toEqual([{ name: '最大力量', count: 1, rate: '50', width: 50 }, { name: '核心力量', count: 1, rate: '50', width: 50 }]);
+  it('训练结构固定五类展示，0 值行保留', () => {
+    const view = overviewView([], [{ trainingDate: '2026-09-01', sets: [
+      { exerciseName: '深蹲', trainingCategory: '基础力量' },
+      { exerciseName: '卧推', trainingCategory: '基础力量' },
+      { exerciseName: '平板支撑', trainingCategory: '核心力量' },
+      { exerciseName: '跑步间歇', trainingCategory: '代谢训练' },
+    ] }], period);
+    expect(view.structure.map((item) => item.name)).toEqual([...STRENGTH_TRAINING_CATEGORIES]);
+    expect(view.structure.map((item) => item.count)).toEqual([2, 0, 1, 0, 1]);
+    expect(view.structure[0]).toMatchObject({ rate: '50', width: 50 });
+    expect(view.structureNote).toContain('共 4 项');
+  });
+  it('训练分类缺失或不在字典时才按动作名推断，明细事实优先', () => {
+    expect(structureCategory({ exerciseName: '高拉速度力量', trainingCategory: '专项力量' })).toBe('专项力量');
+    expect(structureCategory({ exerciseName: '深蹲', trainingCategory: '乱填分类' })).toBe('基础力量');
+    expect(structureCategory({ exerciseName: '跑步间歇' })).toBe('代谢训练');
+    const view = overviewView([], [{ trainingDate: '2026-09-01', sets: [{ exerciseName: '高拉速度力量', trainingCategory: '专项力量' }] }], period);
+    expect(view.structure.find((item) => item.name === '专项力量')).toMatchObject({ count: 1, rate: '100' });
   });
   it('无目标时不计算画像达成率，周期外测试明确标记', () => {
     const view = overviewView([{ testDate: '2026-08-01', metrics: { squatKg: 80 } }], [], period);
