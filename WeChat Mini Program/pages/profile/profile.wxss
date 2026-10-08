@@ -33,7 +33,7 @@
 /* 数据图表通用注记：口径说明直接放在卡片头，避免误读归一柱高 */
 .chart-note { display: block; margin-top: 6rpx; color: #819399; font-size: 20rpx; line-height: 1.5; }
 
-/* 身体成分指标趋势：柱高按指标自身波动范围归一，点击柱体看单点明细 */
+/* 恢复指标趋势：柱高按指标自身波动范围归一，点击柱体看单点明细 */
 .trend-metric { margin-top: 18rpx; padding-top: 18rpx; border-top: 1rpx solid #e3edef; }
 .trend-metric-head { display: flex; align-items: baseline; gap: 12rpx; }
 .trend-metric-name { min-width: 0; flex: 1; color: #12303b; font-size: 25rpx; font-weight: 700; }
@@ -53,49 +53,31 @@
 .trend-slot { position: relative; width: 26rpx; height: 100%; display: flex; align-items: flex-end; }
 .trend-team-mark { position: absolute; left: -3rpx; right: -3rpx; height: 0; border-top: 3rpx solid #d79617; }
 
-/* 身体成分：同类指标并排合并，分组按需展开。 */
-.body-group { padding: 0; overflow: hidden; }
-.body-group-toggle { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; width: 100%; margin: 0; padding: 24rpx 26rpx; border-radius: 24rpx; background: #ffffff; text-align: left; line-height: 1.5; }
-.body-group-heading { min-width: 0; flex: 1; }
-.body-group-title { display: block; color: #164751; font-size: 28rpx; font-weight: 800; }
-.body-group-summary { display: block; margin-top: 6rpx; color: #526b74; font-size: 21rpx; }
-.body-group-action { flex: none; color: #176f7f; font-size: 22rpx; font-weight: 700; }
-.body-group-content { padding: 0 26rpx 24rpx; }
-.body-metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; }
-.body-metric { min-width: 0; padding: 20rpx 16rpx; border: 1rpx solid #d8e3e6; border-radius: 18rpx; background: #f7fbfb; }
-.body-metric-name { display: block; color: #12303b; font-size: 23rpx; font-weight: 700; }
-.body-metric-value { margin-top: 10rpx; color: #0f5961; font-size: 34rpx; font-weight: 800; overflow-wrap: anywhere; }
-.body-metric-unit { margin-left: 6rpx; color: #526b74; font-size: 20rpx; font-weight: 400; }
-.body-metric-delta, .body-metric-date, .body-metric-note { display: block; margin-top: 8rpx; color: #526b74; font-size: 20rpx; line-height: 1.5; }
-.body-metric-scroll { width: 100%; margin-top: 14rpx; }
-.body-metric-bars { display: flex; align-items: flex-end; height: 100rpx; }
-.body-point { display: flex; flex: none; align-items: flex-end; justify-content: center; width: 48rpx; min-width: 24px; height: 100%; margin: 0; padding: 4rpx; border-radius: 8rpx; background: transparent; line-height: inherit; }
-.body-point-fill { width: 26rpx; min-height: 8rpx; border-radius: 8rpx 8rpx 2rpx 2rpx; background: #168f88; }
-.body-point-fill.is-missing { border: 1rpx dashed #526b74; background: #eef4f5; }
-.body-group-toggle:focus, .body-point:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
-.body-group-note { display: block; margin-top: 16rpx; color: #526b74; font-size: 20rpx; line-height: 1.6; }
+/* 身体成分：核心三项对齐展示，其他指标按需展开。 */
+.body-summary-date { display: block; margin-bottom: 22rpx; color: #526b74; font-size: 22rpx; }
+.body-summary-row { padding: 20rpx 0; border-bottom: 1rpx solid #e3edef; }
+.body-change { display: flex; flex-direction: column; min-width: 0; gap: 4rpx; color: #12303b; text-align: right; font-size: 27rpx; overflow-wrap: anywhere; }
+.body-change-unit { color: #526b74; font-size: 20rpx; }
+.body-measurement-date { display: block; margin-top: 10rpx; color: #526b74; font-size: 20rpx; }
+.body-more-toggle { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; margin: 16rpx 0 0; padding: 16rpx 12rpx; color: #0f5961; background: #eef6f5; font-size: 24rpx; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.body-more-toggle:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
 
-/* 训练情况对比：个人与队均双条，同指标内归一 */
-.compare-row { margin-top: 18rpx; padding-top: 18rpx; border-top: 1rpx solid #e3edef; }
-.compare-head { display: flex; align-items: baseline; gap: 12rpx; }
-.compare-name { min-width: 0; flex: 1; color: #12303b; font-size: 25rpx; font-weight: 700; }
-.compare-diff { flex: none; color: #70858c; font-size: 22rpx; font-weight: 700; }
-.compare-diff.up { color: #b26516; }
-.compare-diff.down { color: #168f88; }
-.compare-line { display: flex; align-items: center; gap: 12rpx; margin-top: 12rpx; }
-.compare-tag { width: 58rpx; flex: none; color: #70858c; font-size: 20rpx; }
-.compare-track { min-width: 0; flex: 1; height: 22rpx; overflow: hidden; border-radius: 12rpx; background: #eef4f5; }
-.compare-fill { height: 100%; border-radius: 12rpx; }
-.compare-fill.personal { background: #168f88; }
-.compare-fill.team { background: #a8c0c9; }
-.compare-value { width: 128rpx; flex: none; color: #12303b; font-size: 21rpx; text-align: right; }
+/* 恢复趋势沿用的比较说明。 */
 .compare-note { display: block; margin-top: 10rpx; color: #819399; font-size: 19rpx; }
 
-/* 训练对比卡片：数值置于条形上方，窄屏下不挤压对比图。 */
-.comparison-difference { margin-top: 10rpx; color: #0f5961; font-size: 26rpx; font-weight: 800; overflow-wrap: anywhere; }
-.comparison-value-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6rpx 10rpx; margin-top: 14rpx; color: #526b74; font-size: 20rpx; line-height: 1.5; }
-.comparison-value { min-width: 0; color: #12303b; font-weight: 700; overflow-wrap: anywhere; }
-.comparison-metric .compare-track { width: 100%; margin-top: 6rpx; }
+/* 三项训练参考：统一列对齐，只突出个人值与相对差异。 */
+.comparison-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr)); align-items: center; gap: 14rpx; }
+.comparison-table-head { padding-bottom: 8rpx; color: #526b74; font-size: 21rpx; }
+.comparison-table-head text:not(:first-child) { text-align: right; }
+.comparison-summary-row { padding: 20rpx 0; border-bottom: 1rpx solid #e3edef; }
+.comparison-metric-label { display: flex; flex-direction: column; gap: 6rpx; color: #12303b; font-size: 24rpx; font-weight: 700; }
+.comparison-metric-unit { color: #526b74; font-size: 20rpx; font-weight: 400; }
+.comparison-personal, .comparison-team { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.comparison-personal { color: #0f5961; font-size: 34rpx; font-weight: 800; }
+.comparison-team { color: #526b74; font-size: 28rpx; }
+.comparison-reference { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6rpx 16rpx; margin-top: 12rpx; color: #0f5961; font-size: 21rpx; line-height: 1.5; }
+.comparison-sample { color: #526b74; }
+.comparison-footnote { display: block; margin-top: 16rpx; color: #526b74; font-size: 20rpx; line-height: 1.6; }
 
 /* 雷达模型对照：canvas 2d 多边形 + 维度明细兜底 */
 .radar-legend { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }

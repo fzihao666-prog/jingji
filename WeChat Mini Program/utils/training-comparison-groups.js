@@ -1,29 +1,50 @@
-const TRAINING_KEYS = ['trainingDuration', 'trainingLoad', 'specialDistance'];
+const METRICS = [
+  { key: 'trainingDuration', label: '训练时长', unit: 'h', scale: 1 / 60 },
+  { key: 'trainingLoad', label: '累计负荷', unit: 'AU', scale: 1 },
+  { key: 'specialDistance', label: '专项距离', unit: 'km', scale: 1 }
+];
+const formatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1, useGrouping: false });
 
-// 测试指标数量不固定，每块最多四项，避免折叠组内仍出现过长列表。
-function trainingComparisonGroups(items) {
-  const list = Array.isArray(items) ? items : [];
-  const categories = [
-    { key: 'training', label: '训练量与负荷', metrics: list.filter((item) => TRAINING_KEYS.includes(item.key)) },
-    { key: 'body', label: '身体指标', metrics: list.filter((item) => item.key === 'weightKg') },
-    { key: 'tests', label: '体能测试', metrics: list.filter((item) => item.key.startsWith('measurement:')) },
-    { key: 'other', label: '其他指标', metrics: list.filter((item) => !TRAINING_KEYS.includes(item.key) && item.key !== 'weightKg' && !item.key.startsWith('measurement:')) }
-  ];
-  return categories.flatMap((category) => {
-    const groups = [];
-    for (let start = 0; start < category.metrics.length; start += 4) {
-      const metrics = category.metrics.slice(start, start + 4);
-      const part = start / 4 + 1;
-      const total = Math.ceil(category.metrics.length / 4);
-      groups.push({
-        key: `${category.key}-${part}`,
-        label: total > 1 ? `${category.label} ${part}/${total}` : category.label,
-        summary: metrics.map((metric) => metric.label).join(' · '),
-        metrics
-      });
-    }
-    return groups;
-  }).map((group, index) => ({ ...group, expanded: index === 0 }));
+function validValue(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-module.exports = { trainingComparisonGroups };
+function displayValue(value, scale) {
+  if (value == null) return '—';
+  const scaled = value * scale;
+  return scaled > 0 && scaled < 0.1 ? '＜0.1' : formatter.format(scaled);
+}
+
+// 只展示同周期训练投入、负荷与专项训练量；百分比表示差异，不用于优劣评价。
+function trainingComparisonSummary(comparison) {
+  const items = comparison && Array.isArray(comparison.items) ? comparison.items : [];
+  const metrics = METRICS.map((definition) => {
+    const item = items.find((entry) => entry && entry.key === definition.key) || {};
+    const personal = validValue(item.personalValue);
+    const sample = Number.isInteger(item.teamSampleCount) && item.teamSampleCount >= 2 ? item.teamSampleCount : null;
+    const team = item.teamSampleCount != null && sample == null ? null : validValue(item.teamMean);
+    let referenceText = '暂无可比队均';
+    if (personal == null) referenceText = '个人未记录';
+    else if (team != null) {
+      if (personal === team) referenceText = '与队均持平';
+      else if (team === 0) referenceText = '队均为 0，暂不计算比例';
+      else {
+        const percent = Math.round(Math.abs((personal - team) / team) * 1000) / 10;
+        referenceText = percent === 0 ? '接近队均' : `${personal > team ? '高于' : '低于'}队均 ${formatter.format(percent)}%`;
+      }
+    }
+    return {
+      key: definition.key,
+      label: definition.label,
+      unit: definition.unit,
+      personalText: displayValue(personal, definition.scale),
+      teamText: displayValue(team, definition.scale),
+      referenceText,
+      sampleText: team != null && sample != null ? `${sample} 人参照` : '',
+      hasData: personal != null || team != null
+    };
+  });
+  return { metrics, hasData: metrics.some((metric) => metric.hasData) };
+}
+
+module.exports = { trainingComparisonSummary };

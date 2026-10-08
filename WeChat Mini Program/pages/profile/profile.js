@@ -5,10 +5,10 @@ const { ageAt, todayBeijing } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
-const { bodyCompositionTrendView, trainingComparisonView, radarGroupView, wellnessTrendsView } = require('../../utils/profile-views');
+const { radarGroupView, wellnessTrendsView } = require('../../utils/profile-views');
 const radarChart = require('../../utils/radar-chart');
-const { bodyCompositionGroups } = require('../../utils/body-composition-groups');
-const { trainingComparisonGroups } = require('../../utils/training-comparison-groups');
+const { bodyCompositionSummary } = require('../../utils/body-composition-groups');
+const { trainingComparisonSummary } = require('../../utils/training-comparison-groups');
 
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
 
@@ -145,11 +145,10 @@ Page({
     painTrend: null,
     wellnessTrend: { metrics: [] },
     bodyCompositionHistory: [],
-    bodyCompositionTrend: { dates: [], metrics: [] },
-    bodyCompositionGroups: [],
+    bodyCompositionSummary: { hasData: false, core: [], more: [] },
+    showBodyMore: false,
     profileComparison: null,
-    comparisonView: { items: [] },
-    trainingComparisonGroups: [],
+    comparisonView: { metrics: [], hasData: false },
     radarGroups: []
   },
 
@@ -180,7 +179,7 @@ Page({
 
   async loadPageData(scope) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrend: { metrics: [] }, bodyCompositionHistory: [], bodyCompositionTrend: { dates: [], metrics: [] }, profileComparison: null, comparisonView: { items: [] }, trainingComparisonGroups: [], radarGroups: [] };
+    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrend: { metrics: [] }, bodyCompositionHistory: [], bodyCompositionSummary: { hasData: false, core: [], more: [] }, showBodyMore: false, profileComparison: null, comparisonView: { metrics: [], hasData: false }, radarGroups: [] };
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
     const [injuryResult, overviewResult, benchmarkResult] = await Promise.all([
@@ -214,15 +213,13 @@ Page({
         weightKg: 'kg', bodyFatPct: '%', skeletalMuscleKg: 'kg',
         muscleMassKg: 'kg', totalBodyWaterKg: 'kg', visceralFatLevel: '', basalMetabolismKcal: 'kcal'
       };
-      bodyCompositionHistory = records.slice(0, 6).map((r, i) => {
-        const prev = records[i + 1] || null;
+      bodyCompositionHistory = records.slice(0, 6).map((r) => {
         return {
           measurementDate: r.measurementDate,
           items: Object.entries(r)
             .filter(([k]) => labelMap[k] && r[k] != null)
             .map(([k, v]) => ({
-              key: k, label: labelMap[k], value: v, unit: unitMap[k] || '',
-              delta: prev && prev[k] != null ? Number((v - prev[k]).toFixed(1)) : null
+              key: k, label: labelMap[k], value: v, unit: unitMap[k] || ''
             }))
         };
       });
@@ -252,9 +249,9 @@ Page({
     if (athlete.photoUrl) {
       photoUrl = await api.downloadAthletePhoto(athleteId);
     }
-    const bodyCompositionTrend = bodyCompositionTrendView(bodyCompositionHistory);
-    const comparisonView = trainingComparisonView(profileComparison);
-    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrend, bodyCompositionHistory, bodyCompositionTrend, bodyCompositionGroups: bodyCompositionGroups(bodyCompositionTrend.metrics), profileComparison, comparisonView, trainingComparisonGroups: trainingComparisonGroups(comparisonView.items), radarGroups };
+    const bodySummary = bodyCompositionSummary(bodyCompositionHistory);
+    const comparisonView = trainingComparisonSummary(profileComparison);
+    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrend, bodyCompositionHistory, bodyCompositionSummary: bodySummary, showBodyMore: false, profileComparison, comparisonView, radarGroups };
   },
 
   onScopeChange(event) {
@@ -300,52 +297,8 @@ Page({
     });
   },
 
-  toggleTrainingComparisonGroup(event) {
-    const key = event.currentTarget.dataset.groupKey;
-    this.setData({
-      trainingComparisonGroups: this.data.trainingComparisonGroups.map((group) => ({
-        ...group,
-        expanded: group.key === key && !group.expanded
-      }))
-    });
-  },
-
-  toggleBodyCompositionGroup(event) {
-    const key = event.currentTarget.dataset.groupKey;
-    this.setData({
-      bodyCompositionGroups: this.data.bodyCompositionGroups.map((group) => ({
-        ...group,
-        expanded: group.key === key && !group.expanded
-      }))
-    });
-  },
-
-  // 身体成分趋势柱体点击：展示该日期该指标的实测值与环比，不输出趋势结论。
-  showBodyCompositionDetail(event) {
-    const metricIndex = Number(event.currentTarget.dataset.metricIndex) || 0;
-    const pointIndex = Number(event.currentTarget.dataset.pointIndex) || 0;
-    const metric = ((this.data.bodyCompositionTrend && this.data.bodyCompositionTrend.metrics) || [])[metricIndex];
-    const point = metric && metric.points[pointIndex];
-    if (!metric || !point) return;
-    if (point.missing) {
-      wx.showModal({
-        title: `${metric.label} · ${point.date}`,
-        content: '该日期未测此项指标。',
-        showCancel: false,
-        confirmText: '知道了'
-      });
-      return;
-    }
-    const deltaText =
-      point.delta == null
-        ? '与上一次无可比记录'
-        : `较上一次 ${point.delta > 0 ? '+' : ''}${point.delta}${metric.unit}`;
-    wx.showModal({
-      title: `${metric.label} · ${point.date}`,
-      content: `实测值：${point.value}${metric.unit}\n${deltaText}`,
-      showCancel: false,
-      confirmText: '知道了'
-    });
+  toggleBodyMore() {
+    this.setData({ showBodyMore: !this.data.showBodyMore });
   },
 
   // 恢复趋势柱体点击：展示当日个人实测与队均，不做趋势解读。

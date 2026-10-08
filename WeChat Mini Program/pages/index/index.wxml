@@ -10,6 +10,36 @@
   <view wx:if="{{loading}}" class="card state" aria-role="status" aria-live="polite"><view class="state-title">正在加载训练总览…</view></view>
 
   <block wx:if="{{!loading}}">
+    <view wx:if="{{canSelfReport && (todayView || todayLoading || todayError)}}" class="card today-status" aria-label="今日状态">
+      <view class="today-head">
+        <view><view class="today-title">今日状态</view><text class="today-subtitle">训练与恢复 · 每日记录</text></view>
+        <text wx:if="{{todayView}}" class="today-date">{{todayView.date}} · 北京时间</text>
+      </view>
+      <view class="today-announcement" aria-live="polite" aria-atomic="true">{{todayLoading ? '正在读取今日状态。' : todayError ? '今日状态读取失败，可点击重试。' : todayView ? '今日训练' + todayView.submittedLabel + '，恢复日报' + (wellnessView ? wellnessView.filledLabel : '暂不可用') : ''}}</view>
+      <view wx:if="{{todayLoading && !todayView}}" class="today-feedback">正在读取今日状态…</view>
+      <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
+      <block wx:if="{{todayView}}">
+        <view class="today-load-panel">
+          <view><text class="today-load-label">近 24 小时训练负荷</text><view class="today-load-value">{{todayView.loadText}}<text class="today-load-unit">AU</text></view></view>
+          <text class="today-load-note">滚动统计
+非所选周期累计</text>
+        </view>
+        <view wx:if="{{todayView.timeNote}}" class="today-time-note">{{todayView.timeNote}}</view>
+        <view class="today-task-grid">
+          <view class="today-task">
+            <view class="today-task-head"><text class="today-task-title">训练记录</text><text class="today-badge {{todayView.submitted ? 'is-complete' : 'is-pending'}}">{{todayView.submittedLabel}}</text></view>
+            <text class="today-task-note">{{todayView.note}}</text>
+            <button class="today-entry today-entry-primary" bindtap="openTrainingEntry">{{todayView.submitted ? '补记训练' : '去记录训练'}}</button>
+          </view>
+          <view wx:if="{{wellnessView}}" class="today-task">
+            <view class="today-task-head"><text class="today-task-title">恢复日报</text><text class="today-badge {{wellnessView.filled ? 'is-complete' : 'is-pending'}}">{{wellnessView.filledLabel}}</text></view>
+            <text class="today-task-note">{{wellnessView.filled && wellnessView.statusLabel ? '自评状态：' + wellnessView.statusLabel : wellnessView.note}}</text>
+            <button class="today-entry today-entry-secondary" bindtap="openWellnessEntry">{{wellnessView.filled ? '更新恢复日报' : '填写恢复日报'}}</button>
+          </view>
+        </view>
+      </block>
+    </view>
+
     <view class="section-head"><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
     <view class="metric-grid overview-metrics">
       <view wx:for="{{metrics}}" wx:key="label" class="metric-card {{item.tone}}">
@@ -102,13 +132,5 @@
       <pager-nav wx:if="{{teamView && teamView.teamPager.total > 5}}" data-key="team" page="{{teamView.teamPager.page}}" page-count="{{teamView.teamPager.pageCount}}" total="{{teamView.teamPager.total}}" label="队伍运动员" bindpagechange="onPagerChange" />
     </view>
 
-    <view wx:if="{{canSelfReport && (todayView || todayLoading || todayError)}}" class="card today-status" aria-label="今日状态">
-      <view class="card-head"><view class="card-head-title">今日状态</view></view>
-      <view wx:if="{{todayLoading && !todayView}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日状态…</view>
-      <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
-      <view wx:if="{{todayView}}" class="today-row"><view class="today-main"><view class="today-state {{todayView.submitted ? 'today-state-ok' : 'today-state-warn'}}">{{todayView.submittedLabel}}</view><view class="todo-note">{{todayView.note}}</view></view><view class="today-load"><view class="today-load-value">{{todayView.loadText}}<text class="today-load-unit">AU</text></view><text class="today-load-label">24 小时负荷</text></view></view>
-      <view wx:if="{{wellnessView}}" class="todo-note today-recovery">恢复日报 · {{wellnessView.filledLabel}} · {{wellnessView.note}}</view>
-      <view wx:if="{{todayView}}" class="today-actions"><button class="today-entry" bindtap="openTrainingEntry">{{todayView.submitted ? '补记训练' : '去记录训练'}}</button><button class="today-entry" bindtap="openWellnessEntry">{{wellnessView && wellnessView.filled ? '修改恢复日报' : '填写恢复日报'}}</button></view>
-    </view>
   </block>
 </view>

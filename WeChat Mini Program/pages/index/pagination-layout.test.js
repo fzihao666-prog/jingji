@@ -19,6 +19,15 @@ describe('待办分页无障碍状态', () => {
 });
 
 describe('训练总览移动端布局', () => {
+  it('运动员今日状态优先展示，训练与恢复各有独立入口并说明负荷缺项', () => {
+    expect(overview.indexOf('class="card today-status"')).toBeLessThan(overview.indexOf('class="metric-grid overview-metrics"'));
+    expect(overview).toContain('todayView.date');
+    expect(overview).toContain('todayView.timeNote');
+    expect(overview).toMatch(/<button[^>]*bindtap="openTrainingEntry"/);
+    expect(overview).toMatch(/<button[^>]*bindtap="openWellnessEntry"/);
+    expect(overviewStyle).toContain('.today-task-grid');
+  });
+
   it('按核心数据、负荷趋势、结构、RPE、状态监测、运动员列表排序', () => {
     expect(overview).not.toContain('周期核心数据');
     const headings = ['class="metric-grid overview-metrics"', '训练负荷趋势', '训练结构', 'RPE 状态趋势', '状态监测', '队伍运动员'];

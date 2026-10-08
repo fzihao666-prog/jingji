@@ -90,60 +90,49 @@
         </scroll-view>
       </view>
     </view>
-    <view class="section-head"><view class="section-head-title">身体成分</view><view class="section-head-note">最近 6 次实测 · 分组展开查看</view></view>
+    <view class="section-head"><view class="section-head-title">身体成分</view><view class="section-head-note">最近实测与个人变化</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取身体成分</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
-    <view wx:elif="{{!bodyCompositionHistory.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无身体成分记录</view></view>
-    <view wx:else class="body-composition">
-      <view wx:for="{{bodyCompositionGroups}}" wx:for-item="group" wx:key="key" class="card body-group">
-        <button class="body-group-toggle" data-group-key="{{group.key}}" bindtap="toggleBodyCompositionGroup" aria-expanded="{{group.expanded}}" aria-label="{{group.label}}，{{group.expanded ? '收起' : '展开'}}">
-          <view class="body-group-heading"><text class="body-group-title">{{group.label}}</text><text class="body-group-summary">{{group.summary}}</text></view>
-          <text class="body-group-action">{{group.expanded ? '收起 −' : '展开 +'}}</text>
-        </button>
-        <view wx:if="{{group.expanded}}" class="body-group-content">
-          <view class="body-metric-grid">
-            <view wx:for="{{group.metrics}}" wx:for-item="metric" wx:key="key" class="body-metric">
-              <text class="body-metric-name">{{metric.label}}</text>
-              <view class="body-metric-value">{{metric.latest}}<text class="body-metric-unit">{{metric.unit}}</text></view>
-              <text class="body-metric-delta">较上次 {{metric.delta != null ? (metric.delta > 0 ? '+' : '') + metric.delta + metric.unit : '—'}}</text>
-              <scroll-view wx:if="{{metric.recorded > 1}}" class="body-metric-scroll" scroll-x enhanced show-scrollbar="false">
-                <view class="body-metric-bars">
-                  <button wx:for="{{metric.points}}" wx:for-item="point" wx:for-index="pointIndex" wx:key="date" class="body-point" data-metric-index="{{metric.metricIndex}}" data-point-index="{{pointIndex}}" bindtap="showBodyCompositionDetail" aria-label="{{metric.label}}，{{point.missing ? point.date + '，该日期未测' : point.date + '，实测 ' + point.value + metric.unit}}，查看明细"><view class="body-point-fill {{point.missing ? 'is-missing' : ''}}" style="height: {{point.missing ? 8 : point.height}}%;" /></button>
-                </view>
-              </scroll-view>
-              <text wx:else class="body-metric-note">仅 1 次实测，暂无趋势</text>
-              <text class="body-metric-date">最近实测 {{metric.latestDate}}</text>
-            </view>
+    <view wx:elif="{{!bodyCompositionSummary.hasData}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无身体成分记录</view></view>
+    <view wx:else class="card body-summary">
+      <text class="body-summary-date">测量更新 {{bodyCompositionSummary.latestDate}}</text>
+      <view class="comparison-columns comparison-table-head"><text>指标 / 单位</text><text>最近实测</text><text>较上次实测</text></view>
+        <view wx:for="{{bodyCompositionSummary.core}}" wx:for-item="metric" wx:key="key" class="body-summary-row">
+          <view class="comparison-columns">
+            <view class="comparison-metric-label">{{metric.label}}<text class="comparison-metric-unit">{{metric.unit}}</text></view>
+            <text class="comparison-personal" aria-label="{{metric.label}}，{{metric.latestDate ? metric.latestDate + '实测' : '暂无实测'}}，{{metric.latestText}}{{metric.latestDate ? metric.unit : ''}}">{{metric.latestText}}</text>
+            <view class="body-change" aria-label="{{metric.label}}，{{metric.previousDate ? '较' + metric.previousDate + '实测' : '暂无上次可比实测'}}，{{metric.deltaText}}{{metric.deltaUnit}}"><text>{{metric.deltaText}}</text><text wx:if="{{metric.deltaUnit}}" class="body-change-unit">{{metric.deltaUnit}}</text></view>
           </view>
-          <text class="body-group-note">点击柱体查看明细；柱高按各指标自身波动范围归一，缺测留空。</text>
+          <text wx:if="{{metric.isOlder}}" class="body-measurement-date">最近实测 {{metric.latestDate}}</text>
+        </view>
+      <button wx:if="{{bodyCompositionSummary.more.length}}" class="body-more-toggle" bindtap="toggleBodyMore" aria-expanded="{{showBodyMore}}">{{showBodyMore ? '收起其他指标' : '其他指标（' + bodyCompositionSummary.more.length + '项）'}}</button>
+      <view wx:if="{{showBodyMore}}">
+        <view wx:for="{{bodyCompositionSummary.more}}" wx:for-item="metric" wx:key="key" class="body-summary-row">
+          <view class="comparison-columns">
+            <view class="comparison-metric-label">{{metric.label}}<text class="comparison-metric-unit">{{metric.unit}}</text></view>
+            <text class="comparison-personal" aria-label="{{metric.label}}，{{metric.latestDate ? metric.latestDate + '实测' : '暂无实测'}}，{{metric.latestText}}{{metric.latestDate ? metric.unit : ''}}">{{metric.latestText}}</text>
+            <view class="body-change" aria-label="{{metric.label}}，{{metric.previousDate ? '较' + metric.previousDate + '实测' : '暂无上次可比实测'}}，{{metric.deltaText}}{{metric.deltaUnit}}"><text>{{metric.deltaText}}</text><text wx:if="{{metric.deltaUnit}}" class="body-change-unit">{{metric.deltaUnit}}</text></view>
+          </view>
+          <text wx:if="{{metric.isOlder}}" class="body-measurement-date">最近实测 {{metric.latestDate}}</text>
         </view>
       </view>
+      <text class="comparison-footnote">基于最近 6 次记录，按每项最近两次有效实测比较；— 表示暂无可比记录。</text>
     </view>
     <view class="section-head"><view class="section-head-title">训练情况对比</view><view class="section-head-note">{{from}} 至 {{to}} · 团队平均对照</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取训练对比</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
-    <view wx:elif="{{!comparisonView.items.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无训练对比数据</view></view>
-    <view wx:else class="training-comparison">
-      <view wx:for="{{trainingComparisonGroups}}" wx:for-item="group" wx:key="key" class="card body-group">
-        <button class="body-group-toggle" data-group-key="{{group.key}}" bindtap="toggleTrainingComparisonGroup" aria-expanded="{{group.expanded}}" aria-label="{{group.label}}，{{group.expanded ? '收起' : '展开'}}">
-          <view class="body-group-heading"><text class="body-group-title">{{group.label}}</text><text class="body-group-summary">{{group.summary}}</text></view>
-          <text class="body-group-action">{{group.expanded ? '收起 −' : '展开 +'}}</text>
-        </button>
-        <view wx:if="{{group.expanded}}" class="body-group-content">
-          <view class="body-metric-grid">
-            <view wx:for="{{group.metrics}}" wx:for-item="metric" wx:key="key" class="body-metric comparison-metric">
-              <text class="body-metric-name">{{metric.label}}</text>
-              <view class="comparison-difference">差值 {{metric.diffText}}<text class="body-metric-unit">{{metric.diffText != '—' ? metric.unit : ''}}</text></view>
-              <view class="comparison-value-line"><text>个人</text><text class="comparison-value">{{metric.personalText}}{{metric.personalText != '—' ? metric.unit : ''}}</text></view>
-              <view class="compare-track" aria-hidden="true"><view class="compare-fill personal" style="width: {{metric.personalPct}}%;"></view></view>
-              <view class="comparison-value-line"><text>队均</text><text class="comparison-value">{{metric.teamText}}{{metric.teamText != '—' ? metric.unit : ''}}</text></view>
-              <view class="compare-track" aria-hidden="true"><view class="compare-fill team" style="width: {{metric.teamPct}}%;"></view></view>
-              <text class="body-metric-note">{{metric.note}}</text>
-            </view>
-          </view>
-          <text class="body-group-note">条长按同指标较大值归一；差值 = 个人 − 队均，缺失保留“—”，不代表训练优劣。</text>
+    <view wx:elif="{{!comparisonView.hasData}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无训练对比数据</view></view>
+    <view wx:else class="card comparison-summary">
+      <view class="comparison-columns comparison-table-head"><text>指标 / 单位</text><text>个人</text><text>队均</text></view>
+      <view wx:for="{{comparisonView.metrics}}" wx:for-item="metric" wx:key="key" class="comparison-summary-row">
+        <view class="comparison-columns">
+          <view class="comparison-metric-label"><text>{{metric.label}}</text><text class="comparison-metric-unit">{{metric.unit}}</text></view>
+          <text class="comparison-personal" aria-label="{{metric.label}}，个人 {{metric.personalText}}{{metric.unit}}">{{metric.personalText}}</text>
+          <text class="comparison-team" aria-label="{{metric.label}}，队均 {{metric.teamText}}{{metric.unit}}">{{metric.teamText}}</text>
         </view>
+        <view class="comparison-reference"><text>{{metric.referenceText}}</text><text wx:if="{{metric.sampleText}}" class="comparison-sample">{{metric.sampleText}}</text></view>
       </view>
+      <text class="comparison-footnote">同队、同周期参照；差异不代表训练优劣。</text>
     </view>
     <view class="section-head"><view class="section-head-title">雷达模型对照</view><view class="section-head-note">{{from}} 至 {{to}} · 正式参考标准</view></view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取雷达模型</view></view>
