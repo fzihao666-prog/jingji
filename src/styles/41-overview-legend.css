@@ -1,0 +1,75 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 训练总览：同单位并列比较，图例同时支持键盘操作。 */
+.training-analytics-volume-comparison {
+  grid-column: 1 / -1;
+  grid-template-rows: auto auto auto minmax(240px, 1fr) auto;
+}
+
+.training-volume-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.training-volume-legend button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.training-volume-legend button[aria-pressed="false"] {
+  text-decoration: line-through;
+}
+
+.training-volume-legend i {
+  width: 12px;
+  height: 12px;
+}
+
+.training-volume-physical-key {
+  background: #64aeb3;
+}
+
+.training-volume-special-key {
+  background: #178e87;
+}
+
+.training-volume-tooltip {
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.training-volume-tooltip p {
+  margin: 4px 0;
+}
+
+.training-volume-data {
+  min-width: 0;
+}
+
+.training-volume-data summary {
+  cursor: pointer;
+}
+
+.training-volume-table-scroll {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.training-volume-table-scroll table {
+  width: 100%;
+}
+
+.training-volume-legend button:focus-visible,
+.training-volume-data summary:focus-visible,
+.training-volume-table-scroll:focus-visible,
+.training-analytics-volume-comparison .recharts-wrapper:focus-visible,
+.training-analytics-volume-comparison .recharts-surface:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+

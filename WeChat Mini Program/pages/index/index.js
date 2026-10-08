@@ -8,6 +8,7 @@ const { dailyTodoView } = require('../../utils/daily-todos');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
+const { injuryMetricView } = require('../../utils/injury-metric');
 
 function recentDates(from, to, limit = 14) {
   const first = new Date(`${from}T00:00:00Z`);
@@ -24,13 +25,15 @@ function buildView(overview, comparison, from, to) {
   const analytics = overview.trainingAnalytics || { summary: {}, days: [] };
   const summary = analytics.summary || {};
   const loadRatio = overview.trainingLoadRatio || {};
+  const meta = overview.meta || {};
   const valueOrDash = (value, divisor = 1) => value === null || value === undefined ? '—' : number(value / divisor);
   const metrics = [
     { label: '累计训练量', value: valueOrDash(summary.totalDurationMin, 60), unit: summary.totalDurationMin == null ? '' : '小时', note: '当前周期', tone: '' },
-    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: summary.specialDurationMin == null ? '' : '小时', note: '训练时长', tone: '' },
+    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: summary.specialDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-purple' },
     { label: '体能训练', value: valueOrDash(summary.physicalDurationMin, 60), unit: summary.physicalDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-teal' },
     { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: summary.recoveryDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-green' },
-    { label: '训练负荷', value: loadRatio.totalLoad == null ? '—' : number(loadRatio.totalLoad, 0), unit: loadRatio.totalLoad == null ? '' : 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' }
+    { label: '训练负荷', value: loadRatio.totalLoad == null ? '—' : number(loadRatio.totalLoad, 0), unit: loadRatio.totalLoad == null ? '' : 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' },
+    injuryMetricView(overview.injuries || [], meta.scope === 'individual')
   ];
 
   const dates = recentDates(from, to);
@@ -101,7 +104,7 @@ function buildView(overview, comparison, from, to) {
     structureHasData: hasStructure,
     rpeDays,
     rpePlaceholder: !hasRpe,
-    meta: overview.meta || {}
+    meta
   };
 }
 

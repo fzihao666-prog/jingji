@@ -1,0 +1,41 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Regional access */
+.region-create-form .primary-button {
+  width: 100%;
+}
+
+.region-manager-item.active {
+  color: var(--teal);
+  background: #edf8f6;
+  box-shadow: inset 4px 0 var(--teal);
+}
+
+.region-manager-item.active .region-manager-avatar {
+  color: #fff;
+  background: var(--teal);
+}
+
+.province-board-heading .name-edit-trigger {
+  color: #83dacf;
+}
+
+.province-board-heading .name-edit-trigger:hover {
+  color: #fff;
+  border-color: rgb(255 255 255 / 26%);
+  background: rgb(255 255 255 / 12%);
+}
+
+.province-options button.selected {
+  color: #126c67;
+  border-color: #77bab0;
+  background: #eaf7f4;
+  box-shadow: inset 2px 0 var(--teal);
+}
+
+.province-options button.selected i {
+  color: #fff;
+  border-color: var(--teal);
+  background: var(--teal);
+}
+

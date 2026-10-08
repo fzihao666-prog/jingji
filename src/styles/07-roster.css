@@ -1,0 +1,598 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Roster */
+.roster-control-bar {
+  position: relative;
+  margin-bottom: 10px;
+  padding: 13px 14px 13px 18px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1.25fr) minmax(150px, 0.62fr) minmax(190px, 0.78fr) 120px;
+  gap: 10px;
+  align-items: end;
+  overflow: hidden;
+  border: 1px solid #d4e2e4;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 14px 34px rgb(13 53 66 / 4.5%);
+}
+
+.roster-control-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, #0b8f88, #66b9ad);
+}
+
+.roster-control-bar label > span,
+.roster-filter-summary > small {
+  display: block;
+  margin: 0 0 6px 2px;
+  color: #74888f;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+}
+
+.roster-search-field > div,
+.roster-filter-field > div {
+  height: 39px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfdddf;
+  border-radius: 9px;
+  background: #f9fbfb;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+
+.roster-search-field > div:focus-within,
+.roster-filter-field > div:focus-within {
+  border-color: #62aaa2;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgb(14 143 135 / 9%);
+}
+
+.roster-search-field svg,
+.roster-filter-field svg {
+  flex: 0 0 auto;
+  color: #168f8a;
+}
+
+.roster-search-field input,
+.roster-filter-field select {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.roster-search-field input::placeholder {
+  color: #9aabae;
+  font-weight: 500;
+}
+
+.roster-filter-field select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.roster-filter-summary {
+  height: 57px;
+  padding: 8px 10px 8px 13px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: #073b4c;
+}
+
+.roster-filter-summary > small {
+  grid-column: 1;
+  margin: 0;
+  color: #a9c4cb;
+  font-size: 8px;
+}
+
+.roster-filter-summary strong {
+  grid-column: 1;
+  color: #fff;
+  font:
+    800 18px Bahnschrift,
+    sans-serif;
+}
+
+.roster-filter-summary strong span {
+  color: #b8ced3;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.roster-filter-summary button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  height: 27px;
+  padding: 0 7px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #d8e8eb;
+  background: rgb(255 255 255 / 8%);
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.roster-filter-summary button:hover {
+  background: rgb(255 255 255 / 16%);
+}
+
+.roster-result-line {
+  min-height: 34px;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #70858d;
+}
+
+.roster-result-line span {
+  font-size: 10px;
+}
+
+.roster-result-line strong {
+  color: #176f6d;
+}
+
+.roster-result-line small {
+  font:
+    650 9px Bahnschrift,
+    sans-serif;
+}
+
+.roster-empty {
+  min-height: 280px;
+  margin-top: 2px;
+  padding: 28px;
+  border: 1px dashed #c8dadc;
+  border-radius: 14px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: #81949a;
+  background: rgb(255 255 255 / 64%);
+  text-align: center;
+}
+
+.roster-empty svg {
+  color: #61a9a2;
+}
+
+.roster-empty strong {
+  color: #365660;
+  font-size: 13px;
+}
+
+.roster-empty span {
+  font-size: 10px;
+}
+
+.roster-empty button {
+  margin-top: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #98c8c2;
+  border-radius: 8px;
+  color: #176f6d;
+  background: #edf8f6;
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.roster-pagination {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.roster-pagination button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid #d1dfe1;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #597179;
+  background: #fff;
+  font:
+    700 10px Bahnschrift,
+    sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.roster-pagination-pages {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.roster-pagination-summary {
+  display: none;
+  min-width: 0;
+  color: #49666d;
+  font:
+    800 12px Bahnschrift,
+    sans-serif;
+  white-space: nowrap;
+}
+
+.roster-pagination button:hover:not(:disabled) {
+  border-color: #8ec1bb;
+  color: #106f69;
+  background: #f0f8f7;
+}
+
+.roster-pagination button.active {
+  border-color: #0e8f87;
+  color: #fff;
+  background: #0e8f87;
+  box-shadow: 0 6px 14px rgb(14 143 135 / 18%);
+}
+
+.roster-pagination-ellipsis {
+  min-width: 24px;
+  text-align: center;
+  color: #819399;
+  font:
+    700 12px Bahnschrift,
+    sans-serif;
+  user-select: none;
+}
+
+.roster-pagination button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.athlete-card {
+  padding: 18px;
+  border-radius: 13px;
+  border: 1px solid #d9e4e7;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(14 55 68 / 4%);
+}
+
+.athlete-card-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.record-avatar.large {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  font-size: 14px;
+}
+
+.athlete-card-top > div:nth-child(2) {
+  flex: 1;
+}
+
+.athlete-card h2 {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.athlete-card-top p {
+  color: #7b8f96;
+  margin-top: 4px;
+  font-size: 9px;
+}
+
+.athlete-card-top > span {
+  padding: 4px 7px;
+  border-radius: 99px;
+  color: #5c747c;
+  background: #edf3f4;
+  font-size: 8px;
+}
+
+.team-create-panel {
+  margin-bottom: 14px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 190px minmax(260px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  border: 1px solid #d5e2e4;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgb(14 55 68 / 4%);
+}
+
+.team-create-panel label span {
+  display: block;
+  margin-bottom: 7px;
+  color: #48616a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.team-create-panel input,
+.team-create-panel select {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #cbdadd;
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.team-create-panel .primary-button {
+  height: 42px;
+}
+
+.team-project-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.team-project-card {
+  min-height: 260px;
+  padding: 18px;
+  border: 1px solid #d9e4e7;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(14 55 68 / 4%);
+}
+
+.team-project-card > header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e4ebed;
+}
+
+.team-project-card > header strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.team-project-card > header small {
+  margin-left: 8px;
+  color: #7b8f96;
+  font-size: 10px;
+}
+
+.team-directory-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.team-directory-list > div {
+  min-height: 48px;
+  padding: 8px 9px 8px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #e0e9eb;
+  border-radius: 9px;
+  background: #f9fbfb;
+}
+
+.team-directory-list > div > span {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+}
+
+.team-directory-list svg {
+  color: var(--teal);
+}
+
+.team-directory-list strong {
+  overflow: hidden;
+  color: #294852;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.team-directory-list small {
+  grid-column: 2;
+  margin-top: 3px;
+  color: #81939a;
+  font-size: 9px;
+}
+
+.team-directory-list p {
+  padding: 26px 8px;
+  color: #8a9ba1;
+  text-align: center;
+  font-size: 11px;
+}
+
+.team-directory-list .icon-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.athlete-region-row {
+  margin-top: 14px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f2f7f7;
+}
+
+.athlete-region-row > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #617981;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.athlete-region-row > span svg {
+  color: var(--teal);
+}
+
+.athlete-region-row strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.athlete-region-row select {
+  min-width: 108px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #c9d9dc;
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.assignment-heading {
+  margin: 17px 0 9px;
+  padding-top: 13px;
+  border-top: 1px solid #e3eaec;
+  display: flex;
+  justify-content: space-between;
+  color: #6e828a;
+}
+
+.assignment-heading span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.assignment-heading small {
+  font-size: 8px;
+}
+
+.coach-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.coach-option-item {
+  min-height: 32px;
+  padding: 4px 5px 4px 8px;
+  border: 1px solid #d9e3e5;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #647b83;
+  background: #fff;
+  font-size: 9px;
+}
+
+.coach-option-item.checked {
+  color: #146f6d;
+  border-color: #91c9c2;
+  background: #edf8f6;
+}
+
+.coach-option-item label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.coach-option-item input {
+  display: none;
+}
+
+.coach-option-item label > i {
+  width: 14px;
+  height: 14px;
+  border: 1px solid #b9c8cc;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+}
+
+.coach-option-item.checked label > i {
+  color: #fff;
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.coach-option-item .name-edit-trigger {
+  width: 20px;
+  height: 20px;
+}
+
+.coach-readonly {
+  color: #315560;
+  font-size: 10px;
+}
+
+.save-assignment {
+  width: 100%;
+  height: 34px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
+  background: var(--ink);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.save-assignment:disabled {
+  opacity: 0.5;
+}
+

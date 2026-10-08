@@ -1,0 +1,1903 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 方块高度始终按原30列布局计算：扣除120px指标列与150px间距，再除以30列和1.4宽高比，与实际日期数量无关。 */
+.physiology-heatmap-card {
+  min-height: 360px;
+}
+
+.physiology-heatmap {
+  container-type: inline-size;
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.physiology-heatmap-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #61777e;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.physiology-heatmap-table {
+  min-width: 0;
+  overflow-x: auto;
+  display: grid;
+  gap: 5px;
+}
+
+.physiology-heatmap-head,
+.physiology-heatmap-row {
+  min-width: max-content;
+  display: grid;
+  grid-template-columns: 120px repeat(var(--physiology-days), minmax(21px, 1fr));
+  gap: 5px;
+  align-items: center;
+}
+
+.physiology-heatmap-head {
+  color: #809298;
+  font-size: 7px;
+  text-align: center;
+}
+
+.physiology-heatmap-head span:first-child,
+.physiology-heatmap-row > span {
+  text-align: left;
+}
+
+.physiology-heatmap-row > span {
+  color: #3d5c65;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.physiology-cell {
+  width: 100%;
+  height: max(15px, calc((100cqw - 270px) / 42));
+  min-width: 21px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: #e7edef;
+  cursor: pointer;
+}
+
+.physiology-cell i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.physiology-cell.normal i {
+  background: #7cb9a9;
+}
+.physiology-cell.sample i { background: #bcd8d4; }
+.physiology-heatmap-row:nth-child(3n) .physiology-cell.sample:nth-child(2n) i { background: #9fc9c3; }
+.physiology-heatmap-row:nth-child(2n) .physiology-cell.sample:nth-child(3n) i { background: #d5e7e4; }
+
+.physiology-cell.fluctuation i {
+  background: #d8ad59;
+}
+
+.physiology-cell.attention i {
+  background: #d47d4f;
+}
+
+.physiology-cell.abnormal i {
+  background: #b74e4e;
+}
+
+.physiology-cell:hover,
+.physiology-cell:focus-visible {
+  outline: 2px solid #164d59;
+  outline-offset: 2px;
+}
+
+.physiology-heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #70848b;
+  font-size: 8px;
+}
+
+.physiology-heatmap-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.physiology-heatmap-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.physiology-heatmap-detail {
+  min-height: 51px;
+  padding: 8px 10px;
+  border: 1px solid #dce7e9;
+  border-radius: 8px;
+  display: grid;
+  gap: 2px;
+  color: #71858b;
+  background: #f8fbfb;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.physiology-heatmap-detail strong {
+  color: #173f49;
+  font-size: 9px;
+}
+
+.analysis-granularity {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #71868d;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.analysis-granularity select {
+  height: 27px;
+  padding: 0 7px;
+  border: 1px solid #d6e3e5;
+  border-radius: 7px;
+  color: #18505a;
+  background: #f8fbfb;
+  font:
+    800 8px 'Microsoft YaHei UI',
+    sans-serif;
+  cursor: pointer;
+}
+
+@media (width <= 620px) {
+  .training-volume-kpis,
+  .injury-focus-list-inline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .training-volume-kpis article {
+    min-height: 56px;
+  }
+}
+
+.intensity-ratio-layout {
+  grid-template-columns: minmax(190px, 0.85fr) minmax(210px, 1.15fr);
+}
+
+.intensity-ratio-pie {
+  height: 250px;
+}
+
+.intensity-ratio-legend {
+  gap: 0;
+}
+
+.intensity-ratio-legend > div {
+  min-height: 34px;
+  padding: 2px 3px;
+  grid-template-columns: 7px minmax(0, 1fr) auto auto;
+  gap: 6px;
+}
+
+.intensity-ratio-legend span {
+  display: grid;
+  gap: 1px;
+  font-size: 8px;
+}
+
+.intensity-ratio-legend span b {
+  color: #163f4a;
+  font:
+    850 10px Bahnschrift,
+    sans-serif;
+}
+
+.intensity-ratio-legend em {
+  color: #71868d;
+  font:
+    700 8px Bahnschrift,
+    sans-serif;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.intensity-tooltip {
+  min-width: 172px;
+  padding: 10px 11px;
+  border: 1px solid #d5e3e5;
+  border-radius: 10px;
+  display: grid;
+  gap: 4px;
+  color: #60767d;
+  background: rgb(255 255 255 / 98%);
+  box-shadow: 0 10px 24px rgb(9 54 65 / 12%);
+  font-size: 9px;
+}
+
+.intensity-tooltip strong {
+  color: #123f4a;
+  font-size: 10px;
+}
+
+.intensity-tooltip small {
+  color: #7a8e94;
+  font-size: 8px;
+}
+
+.intensity-tooltip em {
+  margin-top: 2px;
+  color: #168d86;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.training-load-energy-module {
+  position: relative;
+  gap: 12px;
+}
+
+.training-load-total {
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid #dce7e9;
+  display: grid;
+  gap: 1px;
+  text-align: right;
+}
+
+.training-load-total b {
+  color: #71868d;
+  font-size: 8px;
+}
+
+.training-load-total strong {
+  color: #123f4a;
+  font:
+    900 15px/1 Bahnschrift,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-load-total small {
+  color: #6f858c;
+  font-size: 8px;
+}
+
+.training-load-energy-grid {
+  min-height: 236px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(14px, 4vw, 38px);
+  align-items: end;
+  padding: 4px clamp(10px, 3vw, 32px) 0;
+}
+
+.training-load-energy-column {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(118px, 1fr) auto;
+  justify-items: center;
+  gap: 5px;
+  color: #123f4a;
+  background: transparent;
+  font: inherit;
+  cursor: default;
+  outline: 0;
+}
+
+.training-load-energy-label {
+  color: #536d75;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.training-load-energy-percentage {
+  color: #123f4a;
+  font:
+    900 23px/1 Bahnschrift,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-load-energy-percentage small {
+  margin-left: 1px;
+  color: #6c838a;
+  font-size: 10px;
+}
+
+.training-load-energy-tank {
+  width: min(62px, 76%);
+  min-height: 118px;
+  position: relative;
+  border: 1px solid #ccdadd;
+  border-radius: 9px 9px 6px 6px;
+  overflow: hidden;
+  align-self: stretch;
+  background: repeating-linear-gradient(
+    to top,
+    transparent 0,
+    transparent calc(25% - 1px),
+    #dce7e9 calc(25% - 1px),
+    #dce7e9 25%
+  );
+  box-shadow: inset 0 0 0 4px #f7fafb;
+}
+
+.training-load-energy-tank i {
+  width: 100%;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: block;
+  background: var(--energy-color);
+  transition: height 0.32s ease-out;
+}
+
+.training-load-energy-column.special {
+  --energy-color: #128a84;
+}
+
+.training-load-energy-column.physical {
+  --energy-color: #d59125;
+}
+
+.training-load-energy-column.recovery {
+  --energy-color: #6179b8;
+}
+
+.training-load-energy-column:hover .training-load-energy-tank,
+.training-load-energy-column:focus-visible .training-load-energy-tank {
+  border-color: var(--energy-color);
+  box-shadow:
+    inset 0 0 0 4px #f7fafb,
+    0 0 0 3px color-mix(in srgb, var(--energy-color) 14%, transparent);
+}
+
+.training-load-energy-value {
+  display: grid;
+  gap: 1px;
+  color: #163f4a;
+  font:
+    850 13px/1 Bahnschrift,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.training-load-energy-value small {
+  color: #71868d;
+  font:
+    750 8px 'Microsoft YaHei UI',
+    sans-serif;
+  white-space: nowrap;
+}
+
+.training-load-energy-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: 58px;
+  left: 50%;
+  min-width: 156px;
+  padding: 9px 10px;
+  border: 1px solid #d7e4e6;
+  border-radius: 9px;
+  display: grid;
+  gap: 3px;
+  color: #60777e;
+  background: rgb(255 255 255 / 98%);
+  box-shadow: 0 12px 26px rgb(11 57 68 / 15%);
+  font-size: 8.5px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.training-load-energy-tooltip strong {
+  color: #12434e;
+  font-size: 10px;
+}
+
+.training-load-energy-tooltip.special {
+  border-left: 3px solid #128a84;
+}
+
+.training-load-energy-tooltip.physical {
+  border-left: 3px solid #d59125;
+}
+
+.training-load-energy-tooltip.recovery {
+  border-left: 3px solid #6179b8;
+}
+
+@media (width <= 520px) {
+  .training-load-energy-grid {
+    min-height: 206px;
+    gap: 8px;
+    padding-inline: 2px;
+  }
+
+  .training-load-energy-percentage {
+    font-size: 19px;
+  }
+
+  .training-load-energy-tank {
+    width: min(52px, 86%);
+    min-height: 100px;
+  }
+
+  .training-load-energy-label {
+    font-size: 9px;
+  }
+
+  .training-load-total {
+    padding-left: 8px;
+  }
+
+  .training-load-energy-value {
+    font-size: 11px;
+  }
+}
+
+.fms-analysis-layout {
+  min-height: 280px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(170px, 0.72fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.fms-analysis-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.fms-analysis-panel .fms-analysis-layout {
+  flex: 1;
+  min-height: 0;
+}
+
+.fms-analysis-panel .fms-team-chart,
+.fms-analysis-panel .fms-team-plot {
+  min-height: 0;
+}
+
+.fms-team-chart {
+  display: grid;
+  grid-template-rows: 25px minmax(0, 1fr);
+}
+
+.fms-team-plot {
+  min-height: 0;
+}
+
+.fms-team-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 13px;
+  color: #61767d;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.fms-team-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.fms-team-legend i {
+  width: 13px;
+  height: 6px;
+  border-radius: 3px;
+  background: #178e87;
+}
+
+.fms-team-legend span:last-child i {
+  height: 0;
+  border-top: 2px dashed #d89222;
+  border-radius: 0;
+  background: transparent;
+}
+
+.fms-summary {
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  color: #d9efec;
+  background: linear-gradient(145deg, #073f4c, #0d696b);
+}
+
+.fms-summary > strong {
+  color: #fff;
+  font:
+    800 34px Bahnschrift,
+    sans-serif;
+}
+
+.fms-summary > strong small {
+  margin-left: 3px;
+  font-size: 11px;
+}
+
+.fms-summary > span {
+  margin-top: 3px;
+  color: #79d1c6;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.fms-summary-grid {
+  margin-top: 13px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.fms-summary-grid p {
+  min-width: 0;
+  margin: 0;
+  padding: 7px 3px;
+  border-radius: 7px;
+  text-align: center;
+  background: rgb(255 255 255 / 8%);
+}
+
+.fms-summary-grid b,
+.fms-summary-grid small {
+  display: block;
+}
+
+.fms-summary-grid b {
+  color: #fff;
+  font:
+    800 15px Bahnschrift,
+    sans-serif;
+}
+
+.fms-summary-grid small {
+  margin-top: 2px;
+  color: #9ed6cf;
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.fms-summary > em {
+  margin-top: 9px;
+  color: #8dcac3;
+  font-size: 7.5px;
+  font-style: normal;
+}
+
+.fms-summary > p {
+  margin-top: 11px;
+  color: #c4ddda;
+  font-size: 8.5px;
+  line-height: 1.55;
+}
+
+.personal-analysis-card-heading {
+  min-height: 68px;
+  padding: 0 20px;
+  border-bottom: 1px solid #e1eaeb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.personal-analysis-card-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.personal-analysis-card-heading svg {
+  color: var(--teal);
+}
+
+.personal-analysis-card-heading span {
+  display: grid;
+  gap: 3px;
+}
+
+.personal-analysis-card-heading small {
+  color: #536a71;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.personal-analysis-card-heading h2,
+.personal-analysis-card-heading h3 {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.personal-analysis-card-heading p {
+  color: #536a71;
+  font-size: 9px;
+}
+
+.personal-analysis-card-heading > strong {
+  padding: 7px 10px;
+  border-radius: 99px;
+  color: #14746f;
+  background: #e8f6f3;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.fms-personal-layout {
+  min-height: 330px;
+  padding: 14px 16px 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(220px, 1fr) auto;
+  gap: 10px;
+}
+
+.functional-test-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.body-composition-profile-card {
+  grid-column: 1 / -1;
+}
+
+.personal-fms-card {
+  grid-column: 1;
+}
+
+.aerobic-endurance-card {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.personal-fms-card,
+.aerobic-endurance-card {
+  height: 100%;
+}
+
+.aerobic-endurance-content {
+  display: grid;
+  gap: 13px;
+  padding: 14px 16px 16px;
+}
+
+.aerobic-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid #e1eaeb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.aerobic-metric-grid article {
+  min-width: 0;
+  padding: 10px 11px;
+  border-right: 1px solid #e1eaeb;
+  border-bottom: 1px solid #e1eaeb;
+}
+
+.aerobic-metric-grid article:nth-child(2n) {
+  border-right: 0;
+}
+
+.aerobic-metric-grid article:nth-child(1):nth-last-child(2),
+.aerobic-metric-grid article:nth-child(2):last-child,
+.aerobic-metric-grid article:nth-child(3):nth-last-child(2),
+.aerobic-metric-grid article:nth-child(4):last-child,
+.aerobic-metric-grid article:last-child:nth-child(odd) {
+  border-bottom: 0;
+}
+
+.aerobic-metric-grid article > span,
+.aerobic-recent-test > span {
+  display: block;
+  overflow: hidden;
+  color: #536a71;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aerobic-metric-grid article > strong {
+  display: block;
+  margin-top: 4px;
+  color: #173a43;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.aerobic-metric-grid dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 5px;
+}
+
+.aerobic-metric-grid dt,
+.aerobic-metric-grid dd {
+  margin: 0;
+}
+
+.aerobic-metric-grid dt {
+  color: #536a71;
+  font-size: 8px;
+}
+
+.aerobic-metric-grid dd {
+  overflow: hidden;
+  margin-top: 2px;
+  color: #294d55;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aerobic-metric-grid article > small,
+.aerobic-recent-test > small {
+  display: block;
+  color: #536a71;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.aerobic-trend {
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.aerobic-trend > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.aerobic-trend h4 {
+  margin: 0;
+  color: #294d55;
+  font-size: 11px;
+}
+
+.aerobic-trend header span {
+  color: #536a71;
+  font-size: 8px;
+}
+
+.aerobic-trend .app-echart {
+  --chart-height: 128px;
+}
+
+.aerobic-recent-test {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+  padding-top: 10px;
+  border-top: 1px solid #e1eaeb;
+}
+
+.aerobic-recent-test > strong {
+  overflow: hidden;
+  color: #294d55;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aerobic-recent-test > small {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.athlete-radar-card {
+  grid-column: 1 / -1;
+}
+
+.athlete-radar-comparison {
+  min-width: 0;
+  padding: 18px 20px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 58fr) minmax(300px, 42fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.athlete-radar-chart,
+.athlete-radar-copy {
+  min-width: 0;
+}
+
+.athlete-radar-chart .app-echart {
+  --chart-height: 360px;
+}
+
+.athlete-radar-summary {
+  color: #365660;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.athlete-radar-details {
+  min-width: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+
+.athlete-radar-details > div {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfb;
+}
+
+.athlete-radar-details dt {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.athlete-radar-details dt strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.athlete-radar-details dt span {
+  flex: 0 0 auto;
+  color: #8d5d16;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.athlete-radar-details dd {
+  min-width: 0;
+  margin: 6px 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.athlete-radar-details dd > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.athlete-radar-details dd small {
+  color: #365660;
+  font-size: 8px;
+}
+
+.athlete-radar-details dd strong {
+  min-width: 0;
+  color: #24515a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.athlete-radar-comparison.is-incomplete {
+  grid-template-columns: 1fr;
+}
+
+.athlete-radar-comparison.is-incomplete .app-content-state {
+  min-height: 150px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #f8fbfb;
+}
+
+.body-composition-profile-card .body-composition-atlas {
+  gap: 10px;
+}
+
+.body-composition-profile-card .body-atlas-toolbar {
+  min-height: 66px;
+  padding: 11px 13px;
+  gap: 10px;
+}
+
+.body-composition-profile-card .body-atlas-toolbar strong {
+  font-size: 16px;
+}
+
+.body-composition-profile-card .body-atlas-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.body-composition-profile-card .body-atlas-panel {
+  min-height: 0;
+  padding: 12px;
+}
+
+.body-composition-profile-card .body-simulation-panel {
+  min-height: 326px;
+}
+
+@media (width <= 900px) {
+  .functional-test-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .personal-fms-card {
+    grid-column: 1 / -1;
+  }
+
+  .aerobic-endurance-card {
+    grid-column: 1 / -1;
+  }
+
+  .athlete-radar-comparison {
+    grid-template-columns: 1fr;
+  }
+
+  .athlete-radar-chart .app-echart {
+    --chart-height: 250px;
+  }
+}
+
+@media (width <= 560px) {
+  .aerobic-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aerobic-metric-grid article,
+  .aerobic-metric-grid article:nth-child(2n) {
+    border-right: 0;
+    border-bottom: 1px solid #e1eaeb;
+  }
+
+  .aerobic-metric-grid article:last-child {
+    border-bottom: 0;
+  }
+
+  .athlete-radar-comparison {
+    padding: 14px;
+  }
+
+  .athlete-radar-details dd {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fms-personal-chart {
+  position: relative;
+  min-height: 225px;
+  width: 100%;
+}
+
+.fms-radar-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -46%);
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.fms-radar-center span {
+  color: #82979d;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.fms-radar-center strong {
+  margin-top: 2px;
+  color: #123f47;
+  font:
+    900 18px Bahnschrift,
+    sans-serif;
+  line-height: 1;
+}
+
+.fms-personal-summary {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.6fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.fms-personal-summary article {
+  padding: 14px 16px;
+  border-radius: 12px;
+  color: #e1f1ef;
+  background: linear-gradient(145deg, #083f4b, #136c68);
+}
+
+.fms-personal-summary article span,
+.fms-personal-summary article em {
+  display: block;
+  color: #90d8cf;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.fms-personal-summary article strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+  font:
+    900 30px Bahnschrift,
+    sans-serif;
+}
+
+.fms-personal-summary article small {
+  margin-left: 4px;
+  font-size: 11px;
+}
+
+.fms-personal-summary > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fms-personal-summary p {
+  margin: 0;
+  padding: 12px 13px;
+  border: 1px solid #dfebec;
+  border-radius: 9px;
+  display: grid;
+  gap: 4px;
+  background: #f7fbfb;
+}
+
+.fms-personal-summary b {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.fms-personal-summary p span {
+  color: #6f858c;
+  font-size: 9px;
+}
+
+.fms-summary-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fms-status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.fms-status.good {
+  color: #b9f1df;
+  background: rgb(39 181 132 / 18%);
+}
+
+.fms-status.watch {
+  color: #ffe3a8;
+  background: rgb(238 172 61 / 18%);
+}
+
+.fms-status.attention {
+  color: #ffc7c1;
+  background: rgb(220 87 73 / 20%);
+}
+
+.fms-status.pending {
+  color: #c4d5d8;
+  background: rgb(255 255 255 / 8%);
+}
+
+.champion-benchmark-empty {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  color: #738890;
+  font-size: 11px;
+}
+
+.champion-benchmark {
+  padding-bottom: 0;
+}
+
+.champion-benchmark-body {
+  padding: 18px 20px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.8fr);
+  gap: 16px;
+}
+
+.champion-insight-panel {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.champion-insight-panel > div {
+  padding: 12px 13px;
+  border-radius: 10px;
+  display: flex;
+  gap: 9px;
+  color: #275f66;
+  background: #ecf8f6;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.champion-insight-panel > div svg {
+  flex: 0 0 auto;
+  color: var(--teal);
+}
+
+.champion-insight-panel article {
+  padding: 12px 13px;
+  border: 1px solid #e1ebed;
+  border-left: 4px solid var(--champion-row);
+  border-radius: 9px;
+  display: grid;
+  gap: 5px;
+  background: #fbfdfd;
+}
+
+.champion-insight-panel article span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.champion-insight-panel b {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.champion-insight-panel em {
+  color: var(--champion-row);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.champion-insight-panel strong {
+  color: #17404a;
+  font-size: 15px;
+}
+
+.champion-insight-panel small,
+.champion-insight-panel p {
+  color: #6f858c;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.champion-benchmark > footer {
+  padding: 12px 20px;
+  border-top: 1px solid #e1eaeb;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6d858a;
+  background: #f3f7f8;
+  font-size: 10px;
+}
+
+.champion-radar-canvas {
+  height: 430px;
+  padding: 4px 0 8px;
+}
+
+.champion-insight-panel article p b {
+  margin-right: 4px;
+  color: #31545e;
+  font-size: inherit;
+}
+
+.champion-insight-panel article p + p {
+  padding-top: 5px;
+  border-top: 1px solid #e5edef;
+}
+
+.injury-analysis-module {
+  gap: 10px;
+}
+
+.injury-ratio-layout {
+  min-height: 220px;
+}
+
+.injury-focus-list {
+  display: grid;
+  gap: 7px;
+}
+
+.injury-focus-list-inline {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.injury-focus-list > div {
+  min-width: 0;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px solid #dce6e8;
+  border-left: 4px solid #e5a72e;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fbfcfc;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.injury-focus-list > div:hover {
+  transform: translateX(3px);
+  box-shadow: 0 8px 18px rgb(10 55 65 / 8%);
+}
+
+.injury-focus-list span,
+.injury-focus-list strong,
+.injury-focus-list small {
+  min-width: 0;
+  display: block;
+}
+
+.injury-focus-list strong {
+  overflow: hidden;
+  color: #173f49;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.injury-focus-list small {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #72868d;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.injury-focus-list b {
+  flex: 0 0 auto;
+  color: #dc634c;
+  font-size: 13px;
+}
+
+.injury-focus-list p {
+  color: #739087;
+  font-size: 10px;
+}
+
+.strength-chart-card {
+  min-width: 0;
+  min-height: 286px;
+  padding: 13px 14px 5px;
+  border: 1px solid #dbe6e8;
+  border-radius: 13px;
+  background: linear-gradient(180deg, #fbfdfd 0, #fff 42%);
+  box-shadow: 0 10px 25px rgb(11 54 65 / 4%);
+}
+
+.panel-heading {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 13px;
+}
+
+.panel-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.panel-heading h2 {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.panel-heading small {
+  color: #819198;
+  font-size: 9px;
+}
+
+.chart-wrap {
+  height: 252px;
+}
+
+.chart-wrap.compact {
+  height: 245px;
+}
+
+.water-zone-analysis {
+  padding: 2px 20px 18px;
+}
+
+.water-zone-head,
+.water-zone-row {
+  display: grid;
+  grid-template-columns: 58px 1fr 1fr 110px;
+  align-items: center;
+  gap: 16px;
+}
+
+.water-zone-head {
+  min-height: 34px;
+  color: #7a8e94;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.water-zone-row {
+  min-height: 42px;
+  border-top: 1px solid #e0e9ea;
+}
+
+.water-zone-row > strong {
+  font:
+    900 11px Bahnschrift,
+    sans-serif;
+}
+
+.water-zone-bar {
+  position: relative;
+  height: 22px;
+  background: #edf2f3;
+  overflow: hidden;
+}
+
+.water-zone-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 0;
+  opacity: 0.88;
+}
+
+.water-zone-bar span {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  padding: 0 8px;
+  color: #163d48;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font:
+    800 9px Bahnschrift,
+    sans-serif;
+}
+
+.water-zone-bar.time i {
+  opacity: 0.46;
+}
+
+.water-zone-row > b {
+  color: #123c48;
+  font:
+    900 11px Bahnschrift,
+    sans-serif;
+  text-align: right;
+}
+
+.water-zone-row > b small {
+  margin-left: 3px;
+  color: #82949a;
+  font:
+    600 7px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.donut-layout {
+  height: 252px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  align-items: center;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donut-center strong {
+  color: var(--ink);
+  font:
+    800 20px Bahnschrift,
+    sans-serif;
+}
+
+.donut-center span {
+  color: #87979d;
+  margin-top: 2px;
+  font-size: 8px;
+}
+
+.chart-legend {
+  display: grid;
+  gap: 10px;
+}
+
+.chart-legend div {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: #587079;
+  font-size: 9px;
+}
+
+.chart-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.chart-legend strong {
+  color: var(--ink);
+}
+
+.structure-professional {
+  display: grid;
+  gap: 10px;
+}
+
+.structure-primary {
+  min-height: 122px;
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+
+.structure-donut {
+  position: relative;
+  height: 122px;
+  min-width: 0;
+}
+
+.structure-donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.structure-donut-center strong {
+  color: #103e49;
+  font:
+    900 18px Bahnschrift,
+    sans-serif;
+}
+
+.structure-donut-center span {
+  margin-top: 1px;
+  color: #84969b;
+  font-size: 7px;
+}
+
+.structure-primary-list {
+  display: grid;
+  gap: 7px;
+}
+
+.structure-primary-list > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.structure-primary-list i {
+  width: 7px;
+  height: 24px;
+  border-radius: 3px;
+}
+
+.structure-primary-list span,
+.structure-primary-list small {
+  display: block;
+}
+
+.structure-primary-list span {
+  overflow: hidden;
+  color: #49666f;
+  font-size: 8.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.structure-primary-list small {
+  margin-top: 2px;
+  color: #91a0a5;
+  font:
+    600 7px Bahnschrift,
+    sans-serif;
+}
+
+.structure-primary-list strong {
+  color: #153f4a;
+  font:
+    900 11px Bahnschrift,
+    sans-serif;
+}
+
+.structure-stack {
+  height: 7px;
+  border-radius: 99px;
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+  background: #e9eff0;
+}
+
+.structure-stack i {
+  min-width: 2px;
+  height: 100%;
+}
+
+.structure-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #dce7e8;
+  background: #f8fbfa;
+}
+
+.structure-kpis > div {
+  min-width: 0;
+  min-height: 46px;
+  padding: 7px 8px;
+  border-right: 1px solid #dce7e8;
+}
+
+.structure-kpis > div:last-child {
+  border-right: 0;
+}
+
+.structure-kpis span,
+.structure-kpis strong {
+  display: block;
+}
+
+.structure-kpis span {
+  color: #7d9096;
+  font-size: 7px;
+}
+
+.structure-kpis strong {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #126d69;
+  font:
+    900 11px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.structure-purpose {
+  display: grid;
+  gap: 6px;
+}
+
+.structure-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.structure-section-title strong {
+  color: #31545e;
+  font-size: 8.5px;
+}
+
+.structure-section-title span {
+  color: #8b9ba0;
+  font:
+    800 7px Bahnschrift,
+    sans-serif;
+}
+
+.structure-purpose-row {
+  display: grid;
+  grid-template-columns: 65px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 7px;
+}
+
+.structure-purpose-row > span {
+  overflow: hidden;
+  color: #60767e;
+  font-size: 7.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.structure-purpose-row > div {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e8eff0;
+}
+
+.structure-purpose-row i {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+}
+
+.structure-purpose-row > strong {
+  color: #345761;
+  font:
+    800 8px Bahnschrift,
+    sans-serif;
+  text-align: right;
+}
+
+.structure-insight {
+  min-height: 38px;
+  padding: 8px 9px;
+  border-left: 3px solid #15938a;
+  color: #60767e;
+  background: #f0f8f6;
+  font-size: 7.5px;
+  line-height: 1.55;
+}
+
+.structure-insight strong {
+  color: #0c716b;
+}
+
+.status-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.status-orbit {
+  width: 162px;
+  height: 162px;
+  margin: 12px auto 10px;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.status-counts {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-top: 1px solid #e3ebed;
+  padding-top: 13px;
+}
+
+.status-counts div {
+  text-align: center;
+  border-right: 1px solid #e5edef;
+}
+
+.status-counts div:last-child {
+  border-right: 0;
+}
+
+.status-counts span,
+.status-counts strong {
+  display: block;
+}
+
+.status-counts span {
+  color: #7b8d94;
+  font-size: 8px;
+  margin: 4px 0 2px;
+}
+
+.status-counts strong {
+  color: var(--ink);
+  font:
+    700 14px Bahnschrift,
+    sans-serif;
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot.normal,
+.status-bg-normal {
+  background: #18a38f !important;
+}
+
+.dot.attention,
+.status-bg-attention {
+  background: #e2a323 !important;
+}
+
+.dot.alert,
+.status-bg-alert {
+  background: #e4533f !important;
+}
+
+.dot.rest,
+.status-bg-rest {
+  background: #7c8e97 !important;
+}
+
+.dot.missing,
+.status-bg-missing {
+  background: #8d70b8 !important;
+}
+
+.count-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #e9f3f2;
+  color: var(--river);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.count-chip.large {
+  font-size: 11px;
+  padding: 8px 12px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.data-table th {
+  padding: 10px 12px;
+  color: #83939a;
+  background: #f2f6f7;
+  border-bottom: 1px solid #dfe8ea;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e7edef;
+  color: #405b65;
+  font-size: 11px;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table td strong,
+.data-table td small {
+  display: block;
+}
+
+.data-table td strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.data-table td small {
+  color: #87979e;
+  margin-top: 4px;
+  font-size: 8px;
+}
+
+.data-table td .athlete-coach-names {
+  display: flex;
+  align-items: center;
+  gap: 3px 7px;
+  flex-wrap: wrap;
+}
+
+.athlete-coach-names .editable-name {
+  gap: 2px;
+}
+
+.athlete-coach-names .name-edit-trigger {
+  width: 18px;
+  height: 18px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #f0f4f5;
+  color: #4f6871;
+}
+
+.status-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.page-skeleton {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 13px;
+}
+
+.page-skeleton > div,
+.page-skeleton section {
+  height: 120px;
+  border-radius: 13px;
+  background: linear-gradient(90deg, #e1e9eb 25%, #f1f5f6 50%, #e1e9eb 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.3s infinite;
+}
+
+.page-skeleton section {
+  grid-column: 1/-1;
+  height: 360px;
+}
+
+@keyframes skeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+

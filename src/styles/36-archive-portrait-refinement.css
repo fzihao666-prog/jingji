@@ -1,0 +1,197 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* stylelint-disable no-duplicate-selectors -- 后置海报精修必须保留在基础规则之后，不能安全前移。 */
+
+/* Archive portrait refinement: mirrors the reference sheet's stepped table composition. */
+.archive-sheet-web.strength-poster-web {
+  width: min(790px, 100%);
+  min-width: 760px;
+  min-height: 1120px;
+  padding: 30px 28px 26px;
+}
+
+.archive-sheet-header {
+  min-height: 112px;
+  grid-template-columns: 145px minmax(0, 1fr) 150px;
+  gap: 10px;
+}
+
+.archive-institute {
+  padding-top: 8px;
+}
+
+.archive-institute strong {
+  font-size: 20px;
+}
+
+.archive-institute span {
+  margin-top: 7px;
+  font-size: 17px;
+}
+
+.archive-sheet-header h2 {
+  margin-top: 5px;
+  font-size: 24px;
+  line-height: 1.42;
+}
+
+.archive-brand .brand-logo {
+  width: 104px;
+  height: 48px;
+}
+
+.archive-section-title {
+  height: 43px;
+  font-size: 18px;
+}
+
+.archive-basic-grid {
+  min-height: 126px;
+  box-sizing: border-box;
+  padding: 21px 19px 22px;
+  gap: 18px 17px;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 94%), rgb(255 255 255 / 94%)), url('/assets/gfc-mark.png');
+  background-position:
+    0 0,
+    center;
+  background-repeat: repeat, repeat;
+  background-size:
+    auto,
+    145px auto;
+}
+
+.archive-basic-grid > div {
+  min-height: 40px;
+  gap: 7px;
+}
+
+.archive-basic-grid > div > b {
+  padding-bottom: 6px;
+  font-size: 10px;
+}
+
+.archive-score-summary {
+  min-height: 47px;
+  padding: 0 27px;
+  gap: 31px;
+}
+
+.archive-assessment-top {
+  min-height: 323px;
+  padding: 0 23px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(270px, 0.92fr);
+  align-items: center;
+  gap: 15px;
+}
+
+.archive-assessment-bottom {
+  padding: 0 23px 20px;
+}
+
+.archive-score-table-wrap.primary .archive-score-table th,
+.archive-score-table-wrap.primary .archive-score-table td {
+  height: 55px;
+}
+
+.archive-score-table-wrap.detail .archive-score-table th,
+.archive-score-table-wrap.detail .archive-score-table td {
+  height: 60px;
+}
+
+.archive-score-table thead th,
+.archive-score-table-wrap.primary .archive-score-table thead th,
+.archive-score-table-wrap.detail .archive-score-table thead th {
+  height: 27px;
+}
+
+.archive-score-table thead th:nth-child(1) {
+  width: 62px;
+}
+
+.archive-score-table thead th:nth-child(2) {
+  width: 72px;
+}
+
+.archive-score-table-wrap.detail .archive-score-table thead th:nth-child(1) {
+  width: 84px;
+}
+
+.archive-score-table-wrap.detail .archive-score-table thead th:nth-child(2) {
+  width: 118px;
+}
+
+.archive-score-table-wrap.detail .archive-score-table {
+  font-size: 8.5px;
+}
+
+.archive-score-table-wrap.detail .archive-score-table tbody th {
+  font-size: 10px;
+}
+
+.archive-score-table-wrap.detail .archive-score-table td span + span {
+  margin-top: 3px;
+  padding-top: 3px;
+}
+
+.archive-radar svg {
+  max-height: 290px;
+}
+
+.archive-radar figcaption {
+  margin-top: -8px;
+}
+
+.archive-sheet-note {
+  min-height: 39px;
+  padding: 9px 23px 0;
+}
+
+.archive-sheet-pdf .archive-assessment-top {
+  min-height: 68mm;
+  padding: 0 3.5mm 1.5mm;
+  display: grid;
+  grid-template-columns: 1.08fr 0.92fr;
+  align-items: center;
+  gap: 2.5mm;
+}
+
+.archive-sheet-pdf .archive-assessment-bottom {
+  padding: 0 3.5mm 3mm;
+}
+
+.archive-sheet-pdf .archive-score-table-wrap.primary .archive-score-table th,
+.archive-sheet-pdf .archive-score-table-wrap.primary .archive-score-table td {
+  height: 13.5mm;
+}
+
+.archive-sheet-pdf .archive-score-table-wrap.detail .archive-score-table th,
+.archive-sheet-pdf .archive-score-table-wrap.detail .archive-score-table td {
+  height: 13.5mm;
+}
+
+.archive-sheet-pdf .archive-score-table thead th,
+.archive-sheet-pdf .archive-score-table-wrap.primary .archive-score-table thead th,
+.archive-sheet-pdf .archive-score-table-wrap.detail .archive-score-table thead th {
+  height: 5.5mm;
+}
+
+.archive-sheet-pdf .archive-radar svg {
+  max-height: 65mm;
+}
+
+.archive-sheet-pdf .archive-radar figcaption {
+  margin-top: -1mm;
+}
+
+@media (width <= 720px) {
+  .archive-sheet-web.strength-poster-web {
+    width: 760px;
+    min-width: 760px;
+    padding: 28px 26px 24px;
+  }
+}
+
+/* stylelint-enable no-duplicate-selectors */
+

@@ -1,0 +1,204 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Calendar */
+.calendar-panel,
+.day-detail {
+  border: 1px solid #d9e4e7;
+  border-radius: 13px;
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 13px 38px rgb(15 56 69 / 4.5%);
+}
+
+.calendar-heading .icon-button {
+  width: 31px;
+  height: 31px;
+}
+
+.weekday-row,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.weekday-row {
+  margin-top: 8px;
+}
+
+.weekday-row span {
+  padding: 8px;
+  text-align: center;
+  color: #7d8f96;
+  font-size: 9px;
+}
+
+.calendar-cell.selected {
+  z-index: 2;
+  box-shadow: inset 0 0 0 2px var(--teal);
+  background: #f3faf8;
+}
+
+.calendar-cell.empty {
+  background: #f7f9f9;
+  cursor: default;
+}
+
+.day-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.day-detail {
+  padding: 19px;
+  max-height: 720px;
+  overflow: auto;
+}
+
+.day-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2eaec;
+  padding-bottom: 14px;
+}
+
+.day-detail-heading span {
+  color: var(--teal);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.day-detail-heading h2 {
+  color: var(--ink);
+  margin-top: 4px;
+  font-size: 15px;
+}
+
+.record-count {
+  padding: 5px 8px;
+  border-radius: 99px;
+  background: #eff5f5;
+  color: #6b7f87 !important;
+}
+
+.day-record-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.day-record-list article {
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #dde7e9;
+  background: #fff;
+}
+
+.record-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.record-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--river);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.record-top > div:nth-child(2) {
+  flex: 1;
+}
+
+.record-top strong,
+.record-top small {
+  display: block;
+}
+
+.record-top strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.record-top small {
+  color: #89989e;
+  margin-top: 2px;
+  font-size: 7px;
+}
+
+.day-record-list h3 {
+  color: #264a57;
+  margin-top: 12px;
+  font-size: 11px;
+}
+
+.day-record-list h3 small {
+  display: block;
+  color: #829198;
+  margin-top: 4px;
+  font-weight: 400;
+  font-size: 8px;
+}
+
+.record-metrics {
+  margin-top: 11px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 7px;
+}
+
+.record-metrics span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #5f757e;
+  font-size: 8px;
+}
+
+.record-metrics svg {
+  width: 12px;
+  height: 12px;
+  color: var(--teal);
+}
+
+.coach-note {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 7px;
+  color: #956125;
+  background: #fff7e7;
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.message-banner {
+  max-width: 1100px;
+  margin: 12px auto;
+  padding: 12px 14px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.message-banner svg {
+  width: 17px;
+}
+
+.message-banner.error {
+  color: #b94331;
+  background: #fff0ed;
+}
+
+.message-banner.success {
+  color: #207867;
+  background: #e8f7f2;
+}
+

@@ -1,0 +1,333 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 左侧人体模拟图 */
+.body-composition-figure-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 24px 120px 20px;
+}
+
+.body-composition-label {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 110px;
+  padding: 10px 12px;
+  border: 1px solid rgb(15 23 42 / 6%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 72%);
+  box-shadow:
+    0 8px 24px rgb(15 23 42 / 6%),
+    inset 0 1px 0 rgb(255 255 255 / 70%);
+  backdrop-filter: blur(8px);
+  color: #1f2937;
+}
+
+.body-composition-label span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(31 41 55 / 68%);
+}
+
+.body-composition-label strong {
+  font-size: 22px;
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.body-composition-label small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #59636b;
+}
+
+.body-composition-label-fat {
+  top: 88px;
+  left: 12px;
+  text-align: right;
+  border-color: rgb(234 139 49 / 16%);
+}
+
+.body-composition-label-fat strong {
+  color: #d97706;
+}
+
+.body-composition-label-lean {
+  right: 12px;
+  bottom: 104px;
+  text-align: left;
+  border-color: rgb(8 118 111 / 16%);
+}
+
+.body-composition-label-lean strong {
+  color: #0f766e;
+}
+
+.body-composition-guide {
+  position: absolute;
+  width: 140px;
+  height: 80px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.body-composition-guide path {
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.body-composition-guide circle {
+  stroke: none;
+}
+
+.body-composition-guide-fat {
+  top: 44px;
+  right: -128px;
+}
+
+.body-composition-guide-fat path {
+  stroke: #ea8b31;
+}
+
+.body-composition-guide-fat circle {
+  fill: #ea8b31;
+}
+
+.body-composition-guide-lean {
+  top: 42px;
+  left: -128px;
+}
+
+.body-composition-guide-lean path {
+  stroke: #08766f;
+}
+
+.body-composition-guide-lean circle {
+  fill: #08766f;
+}
+
+.body-composition-model-image {
+  display: block;
+  width: 240px;
+  max-height: 390px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 30px rgb(17 94 89 / 10%)) drop-shadow(0 0 18px rgb(45 212 191 / 8%));
+  opacity: 0.96;
+  position: relative;
+  z-index: 1;
+}
+
+.body-composition-figure-panel::before {
+  content: '';
+  position: absolute;
+  inset: 48px 100px 70px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgb(45 212 191 / 8%) 0%,
+    rgb(45 212 191 / 3%) 45%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+
+.body-sim-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: rgb(28 48 58 / 68%);
+}
+
+.body-sim-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.body-sim-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.body-sim-legend-dot.is-lean {
+  background: #08766f;
+}
+
+.body-sim-legend-dot.is-fat {
+  background: #ea8b31;
+}
+
+.body-composition-secondary-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+  align-content: center;
+}
+
+.body-comp-metric-card {
+  min-height: 68px;
+  padding: 8px 10px;
+  border: 1px solid rgb(20 40 60 / 7%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 72%);
+}
+
+.body-comp-metric-card dt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: rgb(28 48 58 / 62%);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.body-comp-metric-card dt small {
+  flex: 0 0 auto;
+  color: rgb(28 48 58 / 42%);
+  font-size: 7px;
+  font-weight: 600;
+}
+
+.body-comp-metric-card dd {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 7px 0 0;
+}
+
+.body-composition-trends {
+  min-width: 0;
+  padding: 10px 11px 8px;
+  border: 1px solid rgb(20 40 60 / 7%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 54%);
+}
+
+.body-composition-trends > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.body-composition-trends > header strong {
+  color: #294850;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.body-composition-trends > header small {
+  color: rgb(28 48 58 / 48%);
+  font-size: 8px;
+}
+
+.body-composition-trend-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.body-composition-trend-tabs button {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid rgb(20 40 60 / 9%);
+  border-radius: 999px;
+  background: rgb(248 251 251 / 88%);
+  color: rgb(28 48 58 / 64%);
+  cursor: pointer;
+  font: 600 8px 'Microsoft YaHei UI', sans-serif;
+  white-space: nowrap;
+}
+
+.body-composition-trend-tabs button.is-active {
+  border-color: rgb(15 118 110 / 28%);
+  background: #eaf6f4;
+  color: #0f766e;
+}
+
+.body-composition-trend-tabs button:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+.body-composition-trend-figure {
+  margin: 8px 0 0;
+}
+
+.body-composition-trend-figure figcaption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+}
+
+.body-composition-trend-figure figcaption > span {
+  overflow: hidden;
+  color: rgb(28 48 58 / 52%);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body-composition-trend-figure figcaption strong {
+  color: #24444d;
+  font-size: 14px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.body-composition-trend-figure figcaption strong small {
+  color: rgb(28 48 58 / 60%);
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.body-composition-trend-figure figcaption em {
+  grid-column: 1 / -1;
+  margin-top: 1px;
+  color: rgb(28 48 58 / 48%);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.body-composition-trend-chart {
+  min-width: 0;
+  height: 136px;
+  margin-top: 3px;
+}
+
+.body-comp-metric-card dd strong {
+  color: #17343f;
+  font-size: clamp(18px, 1.8vw, 24px);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.body-comp-metric-card dd small {
+  color: rgb(28 48 58 / 72%);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.body-comp-metric-card.is-secondary {
+  background: rgb(248 251 251 / 82%);
+}
+
+.body-comp-metric-card.is-secondary dd strong {
+  color: #34545c;
+  font-size: clamp(17px, 1.6vw, 22px);
+}
+

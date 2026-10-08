@@ -40,6 +40,10 @@ const dailyTodosModule = loadCjs(new URL('../utils/daily-todos.js', import.meta.
   './format': formatModule,
   './pagination': paginationModule,
 });
+// 损伤情况卡片与线上共用真实视图模型。
+const injuryMetricModule = loadCjs(new URL('../utils/injury-metric.js', import.meta.url), {
+  './injury-form': loadCjs(new URL('../utils/injury-form.js', import.meta.url), { './date': dateModule }),
+});
 
 const modals = [];
 const toasts = [];
@@ -105,6 +109,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/chart-placeholder': chartPlaceholder,
     '../../utils/daily-todos': dailyTodosModule,
     '../../utils/pagination': paginationModule,
+    '../../utils/injury-metric': injuryMetricModule,
     ...extraMocks,
   };
   vm.runInNewContext(readFileSync(url, 'utf8'), {

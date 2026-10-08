@@ -1,0 +1,25 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 自定义图表提示框样式 */
+.recharts-tooltip-wrapper {
+  outline: none !important;
+}
+
+.recharts-default-tooltip {
+  background: rgb(255 255 255 / 95%) !important;
+  border: 1px solid #e1e8e9 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%) !important;
+  padding: 12px !important;
+}
+
+.recharts-tooltip-label {
+  color: #12303b !important;
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+}
+
+.recharts-tooltip-item {
+  color: #6d8088 !important;
+}
+

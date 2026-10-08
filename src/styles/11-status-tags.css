@@ -1,0 +1,321 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* stylelint-disable selector-class-pattern -- 状态类来自既有的中文领域值。 */
+.composition-band.偏低,
+.composition-legend i.偏低 {
+  background: #77a7d2;
+}
+
+.composition-band.目标范围,
+.composition-legend i.目标范围 {
+  background: #22a18f;
+}
+
+.composition-band.偏高,
+.composition-legend i.偏高 {
+  background: #e8895f;
+}
+
+.composition-band.未测试,
+.composition-legend i.未测试 {
+  background: repeating-linear-gradient(135deg, #d7e1e3 0 3px, #edf2f3 3px 6px);
+}
+/* stylelint-enable selector-class-pattern */
+
+.composition-legend {
+  min-height: 34px;
+  padding: 7px 14px;
+  border-top: 1px solid #e5edef;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 11px;
+  color: #71868c;
+  background: #fbfdfd;
+  font-size: 8px;
+}
+
+.composition-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composition-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.composition-legend em {
+  margin-left: auto;
+  color: #98a8ad;
+  font-size: 7px;
+  font-style: normal;
+}
+
+.training-years-swarm-card {
+  display: grid;
+  grid-template-rows: auto minmax(182px, 1fr) auto;
+}
+
+.training-years-swarm {
+  position: relative;
+  min-height: 182px;
+  padding: 14px 12px 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 43%, rgb(18 143 135 / 8%), transparent 42%),
+    linear-gradient(180deg, #fbfdfd, #f3f8f8);
+}
+
+.training-years-swarm-path {
+  position: absolute;
+  z-index: 0;
+  top: 65px;
+  left: 11%;
+  right: 11%;
+  height: 1px;
+  background: linear-gradient(90deg, #8ccfc7, #1b978f 48%, #d7a33d 74%, #627a8b);
+}
+
+.training-years-swarm-path::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -1px;
+  border-width: 4px 0 4px 7px;
+  border-style: solid;
+  border-color: transparent transparent transparent #627a8b;
+}
+
+.training-years-swarm article {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 14px 16px minmax(70px, 1fr) 18px 14px;
+  place-items: start center;
+  gap: 2px;
+  color: #5e7780;
+  cursor: default;
+  outline: 0;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.training-years-swarm article > span {
+  color: #6c858b;
+  font:
+    850 8px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.training-years-swarm article > strong {
+  color: #174e5a;
+  font-size: 9px;
+}
+
+.training-years-dot-cluster {
+  width: min(76px, 100%);
+  align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  place-content: center center;
+  gap: 4px;
+}
+
+.training-years-dot-cluster > i {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid rgb(255 255 255 / 90%);
+  border-radius: 50%;
+  display: block;
+  background: var(--stage-color);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--stage-color) 23%, transparent);
+}
+
+.training-years-dot-cluster > em {
+  min-width: 22px;
+  height: 18px;
+  border: 1px dashed color-mix(in srgb, var(--stage-color) 45%, white);
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  color: #47666e;
+  background: #fff;
+  font:
+    800 7px Bahnschrift,
+    sans-serif;
+  font-style: normal;
+}
+
+.training-years-swarm article > b {
+  align-self: end;
+  color: #153f49;
+  font:
+    900 18px/1 Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.training-years-swarm article > b small {
+  margin-left: 2px;
+  color: #667f86;
+  font-size: 7px;
+}
+
+.training-years-swarm article > em {
+  color: #667f86;
+  font:
+    800 8px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  font-style: normal;
+}
+
+.training-years-swarm article.is-leading > strong,
+.training-years-swarm article.is-leading > em {
+  color: #087b74;
+}
+
+.training-years-swarm article:hover,
+.training-years-swarm article:focus-visible {
+  transform: translateY(-3px);
+}
+
+.training-years-swarm article:hover .training-years-dot-cluster,
+.training-years-swarm article:focus-visible .training-years-dot-cluster {
+  filter: saturate(1.18);
+  transform: scale(1.06);
+}
+
+.training-years-swarm article:focus-visible {
+  border-radius: 7px;
+  box-shadow: inset 0 0 0 2px rgb(13 140 132 / 58%);
+}
+
+.training-years-swarm.has-active-stage article:not(.is-active) {
+  opacity: 0.3;
+}
+
+.training-years-summary {
+  min-height: 36px;
+  padding: 7px 14px;
+  border-top: 1px solid #e4edef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  color: #71868c;
+  background: #fbfdfd;
+  font-size: 8px;
+}
+
+.training-years-summary strong {
+  margin-left: 3px;
+  color: #315b65;
+  font:
+    800 9px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.training-years-summary i {
+  width: 1px;
+  height: 10px;
+  background: #d3dee0;
+}
+
+.body-composition-model {
+  min-height: 620px;
+  display: grid;
+  gap: 12px;
+}
+
+.body-report-source {
+  text-align: right;
+}
+
+.body-report-source > span {
+  display: block;
+  color: #143f49;
+  font:
+    900 14px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.body-report-source small {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.body-report-source i,
+.body-composition-kpis span i,
+.composition-row span > i,
+.body-gauge span > i,
+.segmental-table-row > span i,
+.skinfold-site-list span i {
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: 1px;
+  background: #2b9b8f;
+}
+
+.body-report-source i {
+  margin: 0 1px 0 5px;
+}
+
+.body-report-source .is-derived,
+.origin-derived {
+  background: #4d86a6 !important;
+}
+
+.body-report-source .is-simulated,
+.origin-simulated {
+  background: #e59a31 !important;
+}
+
+.origin-measured,
+.body-report-source .is-measured {
+  background: #21a387 !important;
+}
+
+.human-model-svg .human-visible-segment.active {
+  stroke: #063f46;
+  stroke-width: 3;
+  filter: drop-shadow(0 3px 5px rgb(10 91 91 / 22%));
+  transform: scale(1.025);
+}
+
+.human-segment-value {
+  fill: #fff;
+  paint-order: stroke;
+  stroke: rgb(8 70 76 / 55%);
+  stroke-width: 2px;
+  font:
+    900 10px Bahnschrift,
+    sans-serif;
+  pointer-events: none;
+}
+
+.body-composition-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+

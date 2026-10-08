@@ -34,6 +34,56 @@ function ratioPlaceholder(names, unit) {
   }));
 }
 
+// —— 演示补全（临时）——
+// 专项训练的强度占比与课次占比中缺失的分类用下列固定模拟值补全，并按真实数据展示（不带“示例数据”标记）。
+// 用户已知悉该临时行为，接入真实数据后整体删除两张补全表与 completeRatioRows 即可。
+const INTENSITY_FILL = [
+  { name: 'U3', value: 30 },
+  { name: 'U2', value: 210 },
+  { name: 'U1', value: 160 },
+  { name: 'AT', value: 110 },
+  { name: 'TPT', value: 70 },
+  { name: 'AN', value: 40 },
+  { name: 'ATP', value: 25 }
+];
+const CONTENT_FILL = [
+  { name: '水上', value: 9 },
+  { name: '测功仪', value: 4 },
+  { name: '功能', value: 2 },
+  { name: '拉伸再生', value: 3 },
+  { name: '力量耐力', value: 3 },
+  { name: '最大力量', value: 2 },
+  { name: '速度力量', value: 2 },
+  { name: '跑步', value: 2 },
+  { name: '其它', value: 1 }
+];
+
+// 真实分类保留真实值，缺失分类取补全表；再按合计重算百分比，让分布完整成100%。
+function completeRatioRows(realRows, fillRows, valueOf, formatValue) {
+  const realByName = new Map((realRows || []).map((row) => [row.name, Number(valueOf(row)) || 0]));
+  const merged = fillRows.map((fill) => ({
+    name: fill.name,
+    value: realByName.get(fill.name) > 0 ? realByName.get(fill.name) : fill.value
+  }));
+  for (const [name, value] of realByName) {
+    if (value > 0 && !merged.some((row) => row.name === name)) merged.push({ name, value });
+  }
+  if (!merged.length) return [];
+  const total = merged.reduce((sum, row) => sum + row.value, 0) || 1;
+  const raw = merged.map((row) => (row.value / total) * 100);
+  const rounded = raw.map((value) => Math.round(value * 10) / 10);
+  // 四舍五入的余数并入占比最大的一行，保证展示百分比合计恰好 100。
+  const maxIndex = rounded.indexOf(Math.max(...rounded));
+  const drift = Math.round((100 - rounded.reduce((sum, value) => sum + value, 0)) * 10) / 10;
+  rounded[maxIndex] = Math.round((rounded[maxIndex] + drift) * 10) / 10;
+  return merged.map((row, index) => ({
+    name: row.name,
+    value: formatValue(row.value),
+    percentage: rounded[index],
+    width: Math.max(0, Math.min(100, raw[index]))
+  }));
+}
+
 function physiologyPlaceholder() {
   const labels = ['指标一', '指标二', '指标三', '指标四'];
   const heatDates = ['1日', '2日', '3日', '4日', '5日', '6日', '7日'];
@@ -50,4 +100,12 @@ function physiologyPlaceholder() {
   })) };
 }
 
-module.exports = { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder };
+module.exports = {
+  displaySeries,
+  trendPlaceholder,
+  ratioPlaceholder,
+  physiologyPlaceholder,
+  INTENSITY_FILL,
+  CONTENT_FILL,
+  completeRatioRows
+};

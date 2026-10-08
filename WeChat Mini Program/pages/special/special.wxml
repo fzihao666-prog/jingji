@@ -26,7 +26,7 @@
 
     <view class="section-head"><view class="section-head-title">专项数据概览</view><view class="section-head-note">当前筛选范围</view></view>
     <view class="compact-grid">
-      <view wx:for="{{metrics}}" wx:key="label" class="compact-stat">
+      <view wx:for="{{metrics}}" wx:key="label" class="compact-stat {{item.tone}}">
         <view class="compact-stat-label">{{item.label}}</view>
         <view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view>
         <text class="compact-stat-note">{{item.note}}</text>
@@ -49,10 +49,10 @@
     </view>
 
     <view class="section-head"><view class="section-head-title">专项训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
-    <view class="card"><view wx:if="{{intensityPlaceholder}}" class="chart-example">示例数据</view><view class="ratio-list"><view wx:for="{{intensity}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="{{'width: ' + item.width + '%;'}}" /></view></view></view><view wx:if="{{intensityPlaceholder}}" class="chart-example-note">暂无真实强度数据 · 当前图表为示例效果</view></view>
+    <view class="card"><view class="ratio-list"><view wx:for="{{intensity}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="{{'width: ' + item.width + '%;'}}" /></view></view></view></view>
 
     <view class="section-head"><view class="section-head-title">专项训练课占比</view><view class="section-head-note">按训练内容统计课次</view></view>
-    <view class="card"><view wx:if="{{contentPlaceholder}}" class="chart-example">示例数据</view><view class="ratio-list"><view wx:for="{{content}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill orange" style="{{'width: ' + item.width + '%;'}}" /></view></view></view><view wx:if="{{contentPlaceholder}}" class="chart-example-note">暂无真实课次数据 · 当前图表为示例效果</view></view>
+    <view class="card"><view class="ratio-list"><view wx:for="{{content}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill orange" style="{{'width: ' + item.width + '%;'}}" /></view></view></view></view>
 
     <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
     <view class="card">
@@ -76,6 +76,28 @@
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取专项测试</view></view>
     <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
     <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无专项测试记录</view></view>
-    <view wx:else class="card"><view wx:for="{{specialTests}}" wx:key="id" class="test-event"><view class="test-event-head"><text class="test-event-title">{{item.title || item.testType || '专项测试'}}</text><text class="test-event-date">{{item.testDate}}</text></view><view class="test-event-results"><view wx:for="{{item.results}}" wx:key="index" class="test-result"><text class="test-crew">{{item.crewName || '单人'}}</text><text class="test-attempts">{{item.attemptsText || '无成绩'}}</text><text class="test-best">{{item.bestText || ''}}</text><text wx:if="{{item.deltaText}}" class="test-delta">{{item.deltaText}} vs 上次</text></view></view></view></view>
+    <view wx:else class="card test-events">
+      <view wx:for="{{specialTests}}" wx:key="id" class="test-event">
+        <view class="test-event-head">
+          <text class="test-event-title">{{item.title}}</text>
+          <text class="test-event-date">{{item.testDate}}</text>
+        </view>
+        <text wx:if="{{item.meta}}" class="test-event-meta">{{item.meta}}</text>
+        <view class="test-event-results">
+          <view wx:for="{{item.results}}" wx:for-item="result" wx:key="key" class="test-result">
+            <text class="test-result-rank">{{result.rank}}</text>
+            <view class="test-result-crew">
+              <text class="test-crew">{{result.crewName}}</text>
+              <text wx:if="{{result.memberText}}" class="test-members">{{result.memberText}}</text>
+            </view>
+            <view class="test-result-detail">
+              <text class="test-best">{{result.bestText}}</text>
+              <text class="test-attempts">{{result.attemptsText}}</text>
+              <text wx:if="{{result.deltaText}}" class="test-delta {{result.deltaTone}}">{{result.deltaText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
   </block>
 </view>

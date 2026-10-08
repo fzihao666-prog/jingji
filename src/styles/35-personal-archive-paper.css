@@ -1,0 +1,568 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Personal archive — paper form based on the supplied training-camp reference */
+.archive-profile-module {
+  background: #f2f4f3;
+}
+
+.archive-profile-module .strength-module-heading {
+  position: relative;
+  z-index: 2;
+  background: #fff;
+}
+
+.archive-profile-module .strength-module-title > svg {
+  border-radius: 3px;
+  background: #b60000;
+}
+
+.archive-import-notice {
+  margin: 14px 18px 0;
+  padding: 10px 13px;
+  border-left: 4px solid #14895f;
+  color: #126548;
+  background: #eaf8f1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.archive-sheet-scroll {
+  padding: 26px;
+  overflow-x: auto;
+  background: #ecefed;
+}
+
+.archive-sheet.strength-poster {
+  box-sizing: border-box;
+  color: #111;
+  background: #fff;
+  background-image: none;
+  font-family: SimSun, 'Songti SC', 'Microsoft YaHei UI', serif;
+}
+
+.archive-sheet-web.strength-poster-web {
+  width: min(920px, 100%);
+  min-width: 820px;
+  margin: 0 auto;
+  padding: 34px 32px 28px;
+  box-shadow: 0 12px 30px rgb(42 38 35 / 12%);
+}
+
+.archive-sheet-header {
+  min-height: 105px;
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) 175px;
+  align-items: start;
+  gap: 12px;
+}
+
+.archive-institute {
+  padding-top: 4px;
+  text-align: center;
+  color: #4f4b48;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 12%);
+}
+
+.archive-institute strong,
+.archive-institute span {
+  display: block;
+}
+
+.archive-institute strong {
+  font-size: 19px;
+  letter-spacing: 0.08em;
+}
+
+.archive-institute span {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.archive-sheet-header h2 {
+  margin: 4px 0 0;
+  color: #111;
+  text-align: center;
+  font:
+    400 25px/1.34 SimSun,
+    'Songti SC',
+    serif;
+  letter-spacing: 0.02em;
+}
+
+.archive-sheet-header h2 span {
+  display: block;
+}
+
+.archive-brand {
+  display: grid;
+  justify-items: end;
+  align-content: start;
+  gap: 4px;
+  color: #181818;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.archive-brand .brand-logo {
+  width: 112px;
+  height: 48px;
+  margin-bottom: 5px;
+  object-fit: contain;
+  object-position: right center;
+}
+
+.archive-brand small {
+  white-space: nowrap;
+}
+
+.archive-section-title {
+  height: 42px;
+  margin: 0;
+  color: #fff;
+  background: #c90000;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 -1px rgb(0 0 0 / 12%);
+}
+
+.archive-basic-grid {
+  padding: 19px 20px 20px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 19px;
+}
+
+.archive-basic-grid > div {
+  min-width: 0;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 8px;
+}
+
+.archive-basic-grid > div > span strong,
+.archive-basic-grid > div > span small {
+  display: block;
+}
+
+.archive-basic-grid > div > span strong {
+  font-size: 10px;
+}
+
+.archive-basic-grid > div > span small {
+  margin-top: 3px;
+  font-size: 8px;
+  font-weight: 400;
+}
+
+.archive-basic-grid > div > b {
+  min-width: 0;
+  padding: 0 2px 5px;
+  border-bottom: 2px solid #111;
+  overflow: hidden;
+  color: #111;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.archive-score-summary {
+  min-height: 44px;
+  padding: 0 29px;
+  display: flex;
+  align-items: center;
+  gap: 38px;
+  font-size: 11px;
+}
+
+.archive-score-summary strong {
+  margin-left: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.archive-score-summary .improved {
+  color: #159562;
+  font-weight: 900;
+}
+
+.archive-score-summary .declined {
+  color: #cf291f;
+  font-weight: 900;
+}
+
+.archive-score-table-wrap {
+  min-width: 0;
+}
+
+.archive-score-table {
+  width: 100%;
+  border: 2px solid #111;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: #111;
+  font-family: 'Microsoft YaHei UI', sans-serif;
+  font-size: 8px;
+}
+
+.archive-score-table th,
+.archive-score-table td {
+  height: 37px;
+  padding: 3px 4px;
+  border: 1px solid #111;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.archive-score-table thead th {
+  height: 25px;
+  background: #fff;
+  font-weight: 800;
+}
+
+.archive-score-table thead th:nth-child(1) {
+  width: 67px;
+}
+
+.archive-score-table thead th:nth-child(2) {
+  width: 80px;
+}
+
+.archive-score-table tbody th {
+  font-size: 9px;
+}
+
+.archive-score-table tbody th small {
+  display: block;
+  margin-top: 2px;
+  color: #5f5f5f;
+  font:
+    5px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.archive-score-table td span {
+  display: block;
+  white-space: nowrap;
+}
+
+.archive-score-table td span + span {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px dotted rgb(0 0 0 / 30%);
+}
+
+.archive-score-table .archive-score-red {
+  color: #111;
+  background: #f11516;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.archive-score-table .archive-score-yellow {
+  color: #111;
+  background: #ffc70b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.archive-score-table .archive-score-green {
+  color: #081b10;
+  background: #10bf58;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.archive-score-table .archive-score-empty {
+  color: #777;
+  background: #f3f3f3;
+}
+
+.archive-radar {
+  min-width: 0;
+  margin: 0;
+}
+
+.archive-radar svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.archive-radar .radar-ring {
+  fill: none;
+  stroke: #cacaca;
+  stroke-width: 0.8;
+}
+
+.archive-radar .radar-ring.outer {
+  stroke: #df1e18;
+  stroke-width: 1.5;
+}
+
+.archive-radar .radar-axis {
+  stroke: #d6d6d6;
+  stroke-width: 0.7;
+}
+
+.archive-radar text {
+  fill: #333;
+  font:
+    700 8px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.archive-radar .radar-before {
+  fill: rgb(42 173 192 / 20%);
+  stroke: #66c7d3;
+  stroke-width: 1.8;
+}
+
+.archive-radar .radar-after {
+  fill: rgb(236 66 64 / 22%);
+  stroke: #ef5652;
+  stroke-width: 2;
+}
+
+.archive-radar circle {
+  fill: #ec3834;
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.archive-radar figcaption {
+  margin-top: -16px;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  color: #4e4e4e;
+  font-size: 8px;
+}
+
+.archive-radar figcaption span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.archive-radar figcaption i {
+  width: 9px;
+  height: 9px;
+  display: inline-block;
+}
+
+.archive-radar figcaption i.full {
+  border: 2px solid #e51b16;
+  background: transparent;
+}
+
+.archive-radar figcaption i.before {
+  border: 1px solid #72c9d3;
+  background: rgb(42 173 192 / 20%);
+}
+
+.archive-radar figcaption i.after {
+  border: 1px solid #ef5652;
+  background: rgb(236 66 64 / 22%);
+}
+
+.archive-sheet-note {
+  min-height: 34px;
+  padding: 8px 25px 0;
+  border-top: 1px solid #bbb;
+  color: #555;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 7px;
+  line-height: 1.5;
+}
+
+.archive-sheet-note span:last-child {
+  white-space: nowrap;
+}
+
+.archive-empty-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.archive-empty-actions button {
+  min-height: 38px;
+}
+
+.archive-import-modal > header .icon-button {
+  color: #fff;
+}
+
+.strength-pdf-sheet:has(.archive-sheet) {
+  padding: 8mm 9mm 7mm;
+}
+
+.archive-sheet-pdf {
+  height: 100%;
+  padding: 0;
+  box-shadow: none;
+}
+
+.archive-sheet-pdf .archive-sheet-header {
+  min-height: 25mm;
+  grid-template-columns: 38mm minmax(0, 1fr) 39mm;
+  gap: 2mm;
+}
+
+.archive-sheet-pdf .archive-institute {
+  padding-top: 1mm;
+}
+
+.archive-sheet-pdf .archive-institute strong {
+  font-size: 11pt;
+}
+
+.archive-sheet-pdf .archive-institute span {
+  margin-top: 1mm;
+  font-size: 9pt;
+}
+
+.archive-sheet-pdf .archive-sheet-header h2 {
+  margin-top: 1mm;
+  font-size: 15pt;
+}
+
+.archive-sheet-pdf .archive-brand {
+  gap: 0.8mm;
+  font-size: 4.8pt;
+}
+
+.archive-sheet-pdf .archive-brand .brand-logo {
+  width: 28mm;
+  height: 10mm;
+  margin-bottom: 1mm;
+}
+
+.archive-sheet-pdf .archive-section-title {
+  height: 10mm;
+  font-size: 11pt;
+}
+
+.archive-sheet-pdf .archive-basic-grid {
+  padding: 4mm 5mm;
+  gap: 3mm 4mm;
+}
+
+.archive-sheet-pdf .archive-basic-grid > div {
+  min-height: 10mm;
+  gap: 2mm;
+}
+
+.archive-sheet-pdf .archive-basic-grid > div > span strong {
+  font-size: 6pt;
+}
+
+.archive-sheet-pdf .archive-basic-grid > div > span small {
+  font-size: 4.5pt;
+}
+
+.archive-sheet-pdf .archive-basic-grid > div > b {
+  padding-bottom: 1mm;
+  border-bottom-width: 0.45mm;
+  font-size: 6pt;
+}
+
+.archive-sheet-pdf .archive-score-summary {
+  min-height: 10mm;
+  padding: 0 6mm;
+  gap: 8mm;
+  font-size: 6pt;
+}
+
+.archive-sheet-pdf .archive-score-summary strong {
+  font-size: 8pt;
+}
+
+.archive-sheet-pdf .archive-assessment-grid {
+  padding: 0 4mm 3mm;
+  grid-template-columns: 1.18fr 0.82fr;
+  gap: 3mm;
+}
+
+.archive-sheet-pdf .archive-score-table {
+  border-width: 0.45mm;
+  font-size: 4.6pt;
+}
+
+.archive-sheet-pdf .archive-score-table th,
+.archive-sheet-pdf .archive-score-table td {
+  height: 8.8mm;
+  padding: 0.6mm;
+  border-width: 0.25mm;
+}
+
+.archive-sheet-pdf .archive-score-table thead th {
+  height: 6mm;
+}
+
+.archive-sheet-pdf .archive-score-table tbody th {
+  font-size: 5.2pt;
+}
+
+.archive-sheet-pdf .archive-score-table tbody th small {
+  font-size: 3.2pt;
+}
+
+.archive-sheet-pdf .archive-score-table .archive-score-red,
+.archive-sheet-pdf .archive-score-table .archive-score-yellow,
+.archive-sheet-pdf .archive-score-table .archive-score-green {
+  font-size: 7pt;
+}
+
+.archive-sheet-pdf .archive-radar figcaption {
+  margin-top: -4mm;
+  gap: 3mm;
+  font-size: 4.5pt;
+}
+
+.archive-sheet-pdf .archive-radar figcaption i {
+  width: 2mm;
+  height: 2mm;
+}
+
+.archive-sheet-pdf .archive-sheet-note {
+  min-height: 8mm;
+  padding: 2mm 4mm 0;
+  font-size: 4.2pt;
+}
+
+@media (width <= 980px) {
+  .archive-sheet-scroll {
+    padding: 18px;
+  }
+
+  .archive-profile-module .strength-module-actions .primary-button {
+    margin-left: 0;
+  }
+}
+
+@media (width <= 720px) {
+  .archive-sheet-scroll {
+    padding: 10px;
+  }
+
+  .archive-sheet-web.strength-poster-web {
+    width: 820px;
+    padding: 30px 28px 25px;
+  }
+
+}
+

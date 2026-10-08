@@ -1,0 +1,978 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Athlete operations: compact status rail + working roster, intentionally distinct from the reference system. */
+.athlete-management-page {
+  max-width: 1480px;
+}
+
+.athlete-management-heading {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.athlete-management-heading > div > span {
+  color: #0b9088;
+  font:
+    800 9px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.17em;
+}
+
+.athlete-management-heading h1 {
+  margin: 5px 0 3px;
+  color: #073744;
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.athlete-primary-action {
+  height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #fff;
+  background: #08746f;
+  box-shadow: 0 8px 18px rgb(8 116 111 / 19%);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.athlete-primary-action:hover {
+  background: #075e5b;
+}
+
+.athlete-pulse-rail {
+  min-height: 92px;
+  margin-bottom: 14px;
+  border: 1px solid #d1dfe1;
+  border-radius: 12px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(7 52 63 / 6%);
+}
+
+.athlete-pulse-rail button {
+  position: relative;
+  padding: 14px 18px;
+  border: 0;
+  border-right: 1px solid #dfe8e9;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-content: center;
+  gap: 3px 12px;
+  color: #6d8289;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.athlete-pulse-rail button:last-child {
+  border-right: 0;
+}
+
+.athlete-pulse-rail button::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+}
+
+.athlete-pulse-rail button:hover {
+  background: #f7faf9;
+}
+
+.athlete-pulse-rail button.active {
+  background: #f1f8f6;
+}
+
+.athlete-pulse-rail button.active::after {
+  background: #15958d;
+}
+
+.athlete-pulse-rail button.active.risk::after {
+  background: #d99a46;
+}
+
+.athlete-pulse-rail small {
+  align-self: end;
+  color: #5e747b;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.athlete-pulse-rail strong {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: #0a4350;
+  font:
+    900 26px Bahnschrift,
+    sans-serif;
+}
+
+.athlete-pulse-rail span {
+  color: #94a3a7;
+  font-size: 8px;
+}
+
+.athlete-directory-toolbar {
+  min-height: 68px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d1dfe1;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgb(7 52 63 / 5%);
+}
+
+.athlete-search {
+  height: 42px;
+  min-width: 260px;
+  flex: 1;
+  padding: 0 11px;
+  border: 1px solid #c9d8db;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #789096;
+  background: #fbfcfc;
+}
+
+.athlete-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  color: #173f49;
+  background: transparent;
+  font-size: 10px;
+}
+
+.athlete-directory-toolbar select {
+  min-width: 125px;
+  height: 42px;
+  padding: 0 28px 0 10px;
+  border: 1px solid #c9d8db;
+  border-radius: 7px;
+  color: #284f59;
+  background: #fbfcfc;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.athlete-filter-button,
+.athlete-refresh-button,
+.athlete-reset-button {
+  height: 42px;
+  padding: 0 11px;
+  border: 1px solid #c7d7d9;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #27636b;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.athlete-refresh-button {
+  width: 42px;
+  padding: 0;
+}
+
+.athlete-reset-button {
+  color: #8a6b38;
+  border-color: #dfd1b8;
+}
+
+.athlete-batch-bar {
+  min-height: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding: 0 14px;
+  border: 0 solid #b9dcd7;
+  border-radius: 9px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #39646b;
+  background: #ecf7f4;
+  opacity: 0;
+  transition: 0.18s ease;
+}
+
+.athlete-batch-bar.visible {
+  min-height: 48px;
+  max-height: 48px;
+  margin-bottom: 12px;
+  border-width: 1px;
+  opacity: 1;
+}
+
+.athlete-batch-bar span {
+  margin-right: auto;
+  font-size: 10px;
+}
+
+.athlete-batch-bar strong {
+  color: #08746f;
+  font-size: 14px;
+}
+
+.athlete-batch-bar button {
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid #99cac4;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #176f69;
+  background: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.athlete-batch-bar button.danger {
+  border-color: #e1b7af;
+  color: #a84a3c;
+}
+
+.athlete-directory-card {
+  border: 1px solid #cfdde0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 14px 34px rgb(7 52 63 / 6%);
+}
+
+.athlete-directory-card > header {
+  min-height: 62px;
+  padding: 13px 17px;
+  border-bottom: 1px solid #dbe5e7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.athlete-directory-card > header strong {
+  color: #123f4a;
+  font-size: 14px;
+}
+
+.athlete-directory-card > header span {
+  margin-left: 8px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: #4e737b;
+  background: #eef4f4;
+  font-size: 8px;
+}
+
+.athlete-directory-card > header small {
+  color: #83969b;
+  font-size: 8px;
+}
+
+.athlete-table-wrap {
+  min-height: 380px;
+  overflow-x: auto;
+}
+
+.athlete-directory-table {
+  width: 100%;
+  min-width: 1160px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.athlete-directory-table th {
+  height: 45px;
+  padding: 0 10px;
+  color: #526e76;
+  background: #f1f6f5;
+  font-size: 8px;
+  text-align: left;
+}
+
+.athlete-directory-table th:first-child {
+  width: 42px;
+}
+
+.athlete-directory-table th:nth-child(2) {
+  width: 155px;
+}
+
+.athlete-directory-table th:nth-child(3) {
+  width: 125px;
+}
+
+.athlete-directory-table th:nth-child(4) {
+  width: 110px;
+}
+
+.athlete-directory-table th:nth-child(5) {
+  width: 90px;
+}
+
+.athlete-directory-table th:nth-child(6) {
+  width: 100px;
+}
+
+.athlete-directory-table th:nth-child(7) {
+  width: 135px;
+}
+
+.athlete-directory-table th:nth-child(8) {
+  width: 80px;
+}
+
+.athlete-directory-table th:last-child {
+  width: 220px;
+}
+
+.athlete-directory-table td {
+  min-height: 64px;
+  padding: 9px 10px;
+  border-bottom: 1px solid #e1e9ea;
+  color: #3f6068;
+  font-size: 9px;
+  vertical-align: middle;
+}
+
+.athlete-directory-table tbody tr:hover {
+  background: #f8fbfa;
+}
+
+.athlete-directory-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.athlete-checkbox {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #b9cacc;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #fff;
+  cursor: pointer;
+}
+
+.athlete-checkbox.checked {
+  border-color: #1b9a91;
+  background: #1b9a91;
+}
+
+.athlete-person-cell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.athlete-person-cell > span,
+.athlete-person-cell > img {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.athlete-person-cell > span {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #0b6970;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.athlete-person-cell strong,
+.athlete-person-cell small,
+.athlete-team-cell strong,
+.athlete-team-cell small {
+  display: block;
+}
+
+.athlete-person-cell strong {
+  color: #173f49;
+  font-size: 10px;
+}
+
+.athlete-person-cell small,
+.athlete-team-cell small {
+  margin-top: 3px;
+  color: #8a9ca1;
+  font-size: 8px;
+}
+
+.athlete-team-cell strong {
+  color: #2d555e;
+  font-size: 9px;
+}
+
+.athlete-level-tag {
+  padding: 4px 6px;
+  border: 1px solid #cbdcde;
+  border-radius: 5px;
+  color: #4d6b72;
+  background: #f8fbfa;
+  font-size: 8px;
+}
+
+.athlete-health-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.athlete-health-tag i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.athlete-health-tag.healthy {
+  color: #27805e;
+}
+
+.athlete-health-tag.healthy i {
+  background: #36bc82;
+  box-shadow: 0 0 0 3px #e0f5eb;
+}
+
+.athlete-health-tag.attention {
+  color: #a66a24;
+}
+
+.athlete-health-tag.attention i {
+  background: #e0a64c;
+  box-shadow: 0 0 0 3px #f8ecd9;
+}
+
+.athlete-coach-copy,
+.athlete-event-copy {
+  overflow: hidden;
+  display: block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.athlete-event-copy {
+  color: #6a7880;
+}
+
+.athlete-training-status {
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: #176f68;
+  background: #e7f4f1;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.athlete-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.athlete-row-actions button {
+  min-height: 28px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #176f76;
+  background: transparent;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.athlete-row-actions button:hover {
+  background: #eaf5f3;
+}
+
+.athlete-row-actions button.danger {
+  color: #a95244;
+}
+
+.athlete-row-actions button.danger:hover {
+  background: #fff0ed;
+}
+
+.athlete-table-state {
+  min-height: 300px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  color: #7b9096;
+  font-size: 10px;
+}
+
+.athlete-table-state.empty strong {
+  color: #345861;
+  font-size: 13px;
+}
+
+.athlete-table-state.empty p {
+  font-size: 9px;
+}
+
+.athlete-table-state.empty button {
+  border: 0;
+  color: #08746f;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.athlete-directory-card > footer {
+  min-height: 52px;
+  padding: 9px 16px;
+  border-top: 1px solid #dce6e7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #7e9196;
+  font-size: 8px;
+  background: #fafcfc;
+}
+
+.athlete-directory-card > footer nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.athlete-directory-card > footer nav button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid #c9d8db;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #37606a;
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.athlete-directory-card > footer nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.athlete-directory-card > footer nav span {
+  color: #49666d;
+  font-weight: 800;
+}
+
+.athlete-modal-backdrop {
+  z-index: 125;
+}
+
+.athlete-compact-modal,
+.athlete-injury-modal {
+  width: min(680px, calc(100vw - 28px));
+  border-radius: 13px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 28px 80px rgb(3 29 38 / 28%);
+}
+
+.athlete-compact-modal > header,
+.athlete-injury-modal > header,
+.athlete-editor-modal > header {
+  min-height: 90px;
+  padding: 17px 21px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  background: linear-gradient(112deg, #073d4b, #0b696b);
+}
+
+.athlete-compact-modal > header span,
+.athlete-injury-modal > header span,
+.athlete-editor-modal > header span {
+  color: #70d8ca;
+  font:
+    800 8px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.16em;
+}
+
+.athlete-compact-modal > header h2,
+.athlete-injury-modal > header h2,
+.athlete-editor-modal > header h2 {
+  margin-top: 3px;
+  font-size: 20px;
+}
+
+.athlete-compact-modal > header p,
+.athlete-injury-modal > header p,
+.athlete-editor-modal > header p {
+  margin-top: 4px;
+  color: rgb(225 246 243 / 65%);
+  font-size: 9px;
+}
+
+.athlete-compact-modal > header .icon-button,
+.athlete-injury-modal > header .icon-button,
+.athlete-editor-modal > header .icon-button {
+  color: #fff;
+}
+
+.athlete-filter-grid,
+.athlete-injury-grid {
+  padding: 20px 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.athlete-filter-grid label > span,
+.athlete-injury-grid label > span,
+.athlete-form-grid label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #49656d;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.athlete-filter-grid input,
+.athlete-filter-grid select,
+.athlete-injury-grid input,
+.athlete-injury-grid select,
+.athlete-injury-grid textarea,
+.athlete-form-grid input,
+.athlete-form-grid select,
+.athlete-form-grid textarea {
+  width: 100%;
+  min-height: 39px;
+  padding: 0 10px;
+  border: 1px solid #cbd9dc;
+  border-radius: 7px;
+  color: #173f49;
+  background: #fff;
+  font-size: 10px;
+}
+
+.athlete-injury-grid textarea,
+.athlete-form-grid textarea {
+  padding-top: 9px;
+  resize: vertical;
+}
+
+.athlete-filter-grid input:focus,
+.athlete-filter-grid select:focus,
+.athlete-injury-grid input:focus,
+.athlete-injury-grid select:focus,
+.athlete-injury-grid textarea:focus,
+.athlete-form-grid input:focus,
+.athlete-form-grid select:focus,
+.athlete-form-grid textarea:focus {
+  outline: 0;
+  border-color: #55a69f;
+  box-shadow: 0 0 0 3px rgb(27 157 149 / 8%);
+}
+
+.athlete-injury-grid .wide,
+.athlete-form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.athlete-compact-modal > footer,
+.athlete-injury-modal form > footer,
+.athlete-editor-modal form > footer {
+  min-height: 68px;
+  padding: 11px 21px;
+  border-top: 1px solid #dce6e7;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.athlete-editor-backdrop {
+  z-index: 130;
+}
+
+.athlete-editor-modal {
+  width: min(1120px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  border-radius: 13px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: 0 30px 90px rgb(3 29 38 / 32%);
+}
+
+.athlete-editor-modal form {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.athlete-editor-scroll {
+  min-height: 0;
+  padding: 18px 20px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 18px;
+  background: #f6f9f8;
+}
+
+.athlete-photo-field {
+  align-self: start;
+  position: sticky;
+  top: 0;
+  padding: 12px;
+  border: 1px solid #d4e1e3;
+  border-radius: 10px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  background: #fff;
+}
+
+.athlete-photo-field > div {
+  width: 110px;
+  height: 130px;
+  border: 1px dashed #b8cdcf;
+  border-radius: 8px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #719096;
+  background: #f2f7f6;
+}
+
+.athlete-photo-field img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.athlete-photo-field label {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid #91c7c1;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #137970;
+  background: #edf8f5;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.athlete-photo-field input {
+  display: none;
+}
+
+.athlete-photo-field small {
+  color: #8a9ca1;
+  font-size: 8px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.athlete-editor-sections {
+  display: grid;
+  gap: 12px;
+}
+
+.athlete-editor-sections > section {
+  padding: 14px 15px 16px;
+  border: 1px solid #d7e3e5;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.athlete-editor-sections h3 {
+  margin-bottom: 13px;
+  color: #204d57;
+  font-size: 11px;
+}
+
+.athlete-editor-sections h3 b {
+  margin-right: 7px;
+  color: #0c948a;
+  font:
+    900 9px Bahnschrift,
+    sans-serif;
+}
+
+.athlete-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.athlete-injury-modal {
+  width: min(760px, calc(100vw - 28px));
+}
+
+@media (width <= 1120px) {
+  .athlete-directory-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .athlete-search {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  .athlete-directory-toolbar select {
+    flex: 1;
+  }
+
+  .athlete-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 720px) {
+  .athlete-management-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .athlete-primary-action {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .athlete-pulse-rail {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .athlete-pulse-rail button:nth-child(2) {
+    border-right: 0;
+  }
+
+  .athlete-pulse-rail button:nth-child(-n + 2) {
+    border-bottom: 1px solid #dfe8e9;
+  }
+
+  .athlete-directory-toolbar select {
+    min-width: calc(50% - 5px);
+  }
+
+  .athlete-filter-button {
+    flex: 1;
+  }
+
+  .athlete-batch-bar.visible {
+    max-height: 100px;
+    padding: 8px 10px;
+    flex-wrap: wrap;
+  }
+
+  .athlete-batch-bar span {
+    width: 100%;
+  }
+
+  .athlete-directory-card > header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .athlete-directory-card > header small {
+    display: none;
+  }
+
+  .athlete-directory-card > footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .athlete-filter-grid,
+  .athlete-injury-grid {
+    grid-template-columns: 1fr;
+    max-height: calc(100vh - 230px);
+    overflow-y: auto;
+  }
+
+  .athlete-injury-grid .wide {
+    grid-column: auto;
+  }
+
+  .athlete-editor-scroll {
+    grid-template-columns: 1fr;
+  }
+
+  .athlete-photo-field {
+    position: static;
+  }
+
+  .athlete-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .athlete-form-grid .wide {
+    grid-column: auto;
+  }
+
+  .athlete-editor-modal form > footer {
+    flex-wrap: wrap;
+  }
+
+  .athlete-editor-modal form > footer button {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-card-shell,
+  .birthplace-map-stage path,
+  .birthplace-detail-heading span i {
+    transition: none;
+    animation: none;
+  }
+}
+

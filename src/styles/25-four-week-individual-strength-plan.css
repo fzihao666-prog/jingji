@@ -1,0 +1,651 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Four-week individual strength plan */
+.plan-kicker {
+  color: #168f88;
+  font:
+    800 9px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.17em;
+}
+
+.plan-heading-actions {
+  max-width: 850px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.plan-athlete-select,
+.plan-history-select {
+  min-width: 190px;
+}
+
+.plan-athlete-select span,
+.plan-history-select span {
+  display: block;
+  margin-bottom: 5px;
+  color: #637b84;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.plan-athlete-select select,
+.plan-history-select select {
+  width: 100%;
+  height: 42px;
+  padding: 0 32px 0 11px;
+  border: 1px solid #c9dadd;
+  border-radius: 9px;
+  color: #0a3442;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  outline: 0;
+}
+
+.plan-empty {
+  min-height: 370px;
+  border: 1px dashed #bcd1d5;
+  color: #6a8189;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+}
+
+.plan-empty svg {
+  color: #1c9b92;
+}
+
+.plan-overview-grid {
+  margin-top: 19px;
+  min-height: 448px;
+  border: 1px solid #d4e1e3;
+  background: #fff;
+  box-shadow: 0 16px 36px rgb(7 47 60 / 6%);
+  display: grid;
+  grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+}
+
+.plan-overview-left {
+  min-width: 0;
+  border-right: 1px solid #dce6e8;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.plan-photo-panel {
+  padding: 19px;
+  border-right: 1px solid #dce6e8;
+  background: linear-gradient(135deg, #082f3d 0 39%, #0c5965 39% 100%);
+  color: #fff;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+}
+
+.plan-photo-frame {
+  width: 84px;
+  height: 108px;
+  border: 3px solid rgb(255 255 255 / 78%);
+  background: #d9e6e7;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 20%);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.plan-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.plan-photo-frame span {
+  color: #0c4c58;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.plan-photo-panel strong,
+.plan-photo-panel small {
+  display: block;
+}
+
+.plan-photo-panel strong {
+  font-size: 20px;
+}
+
+.plan-photo-panel small {
+  margin-top: 5px;
+  color: #b8dad9;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.plan-meta-form {
+  padding: 17px 19px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(105px, 1fr));
+  gap: 11px;
+}
+
+.plan-overview-left .plan-meta-form {
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
+  padding: 21px;
+}
+
+.plan-meta-form label span {
+  display: block;
+  margin-bottom: 5px;
+  color: #617881;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.plan-meta-form input {
+  width: 100%;
+  height: 39px;
+  padding: 0 10px;
+  border: 1px solid #cddcdf;
+  border-radius: 5px;
+  color: #0a3442;
+  background: #fff;
+  font:
+    700 11px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  outline: 0;
+}
+
+.plan-meta-form input:focus {
+  border-color: #17978f;
+  box-shadow: 0 0 0 3px rgb(23 151 143 / 9%);
+}
+
+.plan-meta-form input:disabled {
+  color: #304f59;
+  background: #f3f6f6;
+  opacity: 1;
+}
+
+.plan-meta-title,
+.plan-meta-schedule,
+.plan-meta-wide {
+  grid-column: span 2;
+}
+
+.radar-stage > .recharts-responsive-container {
+  position: relative;
+  z-index: 1;
+}
+
+.training-volume-radar > footer i.planned {
+  background: #e1a300;
+}
+
+.training-volume-radar > footer i.actual {
+  background: #078e87;
+}
+
+.plan-message {
+  margin-top: 12px;
+  padding: 11px 14px;
+  border-left: 4px solid #dc5c45;
+  color: #a83829;
+  background: #fff0ec;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.plan-message.success {
+  border-left-color: #16948c;
+  color: #116e69;
+  background: #edf9f7;
+}
+
+.plan-matrix-shell {
+  margin-top: 15px;
+  border: 1px solid #bfcfd2;
+  background: #fff;
+  box-shadow: 0 18px 42px rgb(7 47 60 / 7%);
+  overflow: hidden;
+}
+
+.matrix-ai-origin {
+  min-height: 38px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #9ccdc8;
+  color: #0a5c5a;
+  background: #e7f6f3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.matrix-ai-origin strong {
+  padding: 4px 7px;
+  color: #fff;
+  background: #138d86;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.matrix-ai-origin span {
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.plan-matrix-title {
+  min-height: 54px;
+  padding: 0 17px;
+  border-bottom: 1px solid #ccdadd;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.plan-matrix-title > div {
+  color: #0a3442;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-matrix-title > div svg {
+  color: #15958e;
+}
+
+.plan-matrix-title > span {
+  color: #687f87;
+  font-size: 9px;
+}
+
+.plan-matrix-scroll {
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+  background: #eef3f4;
+}
+
+.plan-matrix {
+  width: 100%;
+  min-width: 2120px;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  color: #102f3a;
+  background: #fff;
+  font-size: 10px;
+}
+
+.plan-matrix th,
+.plan-matrix td {
+  height: 34px;
+  border-right: 1px solid #1b3138;
+  border-bottom: 1px dotted #6b777a;
+  text-align: center;
+}
+
+.plan-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  border-bottom-style: solid;
+  font-weight: 900;
+}
+
+.plan-matrix thead tr:nth-child(2) th {
+  top: 38px;
+}
+
+.plan-matrix thead tr:first-child th {
+  height: 38px;
+}
+
+.plan-matrix .max-head,
+.plan-matrix .exercise-head {
+  background: #ffc20a;
+}
+
+.plan-matrix .max-head,
+.plan-matrix .max-cell {
+  width: 80px;
+  position: sticky;
+  left: 0;
+  z-index: 9;
+}
+
+.plan-matrix .exercise-head,
+.plan-matrix .exercise-cell {
+  width: 155px;
+  position: sticky;
+  left: 80px;
+  z-index: 9;
+}
+
+.plan-matrix thead .max-head,
+.plan-matrix thead .exercise-head {
+  z-index: 16;
+}
+
+.plan-matrix .tools-head,
+.plan-matrix .line-tools {
+  width: 44px;
+  background: #f2f5f5;
+}
+
+.plan-matrix .week-band {
+  height: 38px;
+  font:
+    900 italic 12px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.plan-matrix .week-1,
+.plan-matrix .week-3 {
+  background: #9ec4e3;
+}
+
+.plan-matrix .week-2,
+.plan-matrix .week-4 {
+  background: #ffe39a;
+}
+
+.plan-matrix .week-body.week-1,
+.plan-matrix .week-body.week-3 {
+  background: #d9eaf6;
+}
+
+.plan-matrix .week-body.week-2,
+.plan-matrix .week-body.week-4 {
+  background: #fff0bc;
+}
+
+.plan-matrix .week-sub {
+  min-width: 52px;
+}
+
+.plan-matrix .week-sub.arrangement-head {
+  width: 140px;
+  min-width: 140px;
+  color: #0b5e69;
+}
+
+.plan-matrix .week-sub.actual-head {
+  min-width: 112px;
+  color: #0f716c;
+}
+
+.plan-matrix .max-cell {
+  background: #ffc20a;
+}
+
+.plan-matrix .exercise-cell {
+  padding: 8px;
+  background: #fff;
+}
+
+.plan-matrix input,
+.plan-matrix textarea {
+  width: 100%;
+  border: 0;
+  color: #102f3a;
+  background: transparent;
+  text-align: center;
+  outline: 0;
+  font:
+    700 10px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.plan-matrix input:focus,
+.plan-matrix textarea:focus {
+  background: rgb(255 255 255 / 72%);
+  box-shadow: inset 0 -2px #15958e;
+}
+
+.plan-matrix input:disabled,
+.plan-matrix textarea:disabled {
+  color: #1a3b45;
+  opacity: 1;
+}
+
+.max-cell input {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.max-cell small {
+  display: block;
+  color: #8b6200;
+  font-size: 8px;
+}
+
+.exercise-cell textarea {
+  min-height: 48px;
+  padding: 4px;
+  resize: vertical;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.exercise-tools {
+  margin-top: 7px;
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.exercise-tools button {
+  border: 0;
+  color: #197b76;
+  background: #eaf5f4;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.times-cell {
+  font-weight: 900;
+}
+
+.percent-cell {
+  position: relative;
+  padding-right: 12px;
+}
+
+.percent-cell span {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  color: #677e85;
+  transform: translateY(-50%);
+  font-size: 8px;
+}
+
+.weight-cell {
+  color: #db4234;
+  font:
+    900 10px Bahnschrift,
+    sans-serif;
+  white-space: nowrap;
+}
+
+.actual-cell input {
+  color: #0e7771;
+  font-family: 'Microsoft YaHei UI', sans-serif;
+  font-weight: 800;
+}
+
+.plan-matrix .arrangement-cell {
+  width: 140px;
+  min-width: 140px;
+  padding: 5px 6px;
+}
+
+.plan-matrix .arrangement-cell textarea {
+  min-height: 48px;
+  resize: vertical;
+  text-align: left;
+  line-height: 1.45;
+  font-family: 'Microsoft YaHei UI', sans-serif;
+  font-weight: 600;
+}
+
+.line-tools button {
+  width: 29px;
+  height: 29px;
+  border: 0;
+  color: #a84b3c;
+  background: #ffeae5;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.plan-add-exercise {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-top: 1px dashed #b8ced2;
+  color: #147c76;
+  background: #f3f9f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.plan-add-exercise:hover {
+  background: #e8f5f3;
+}
+
+.personal-avatar.has-photo {
+  padding: 0;
+  overflow: hidden;
+  background: #dce8e9;
+}
+
+.personal-avatar.has-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+@media (width <= 1180px) {
+  .plan-overview-grid {
+    grid-template-columns: minmax(320px, 0.75fr) minmax(470px, 1.25fr);
+  }
+
+  .plan-photo-panel {
+    grid-template-columns: 70px minmax(0, 1fr);
+    padding: 15px;
+  }
+
+  .plan-photo-frame {
+    width: 70px;
+    height: 92px;
+  }
+
+  .plan-overview-left .plan-meta-form {
+    padding: 16px;
+  }
+
+}
+
+@media (width <= 1180px) {
+  .global-training-filter {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    padding: 18px clamp(24px, 3.3vw, 52px) 0;
+  }
+
+  .global-training-filter .date-toolbar {
+    width: 100%;
+  }
+}
+
+@media (width <= 760px) {
+  .global-training-filter {
+    padding: 14px 12px 0;
+  }
+
+  .global-training-filter .date-toolbar {
+    width: 100%;
+  }
+
+  .training-plan-heading,
+  .plan-heading-actions {
+    width: 100%;
+  }
+
+  .plan-heading-actions {
+    justify-content: stretch;
+  }
+
+  .plan-athlete-select,
+  .plan-history-select {
+    flex: 1;
+    min-width: 160px;
+  }
+
+  .plan-heading-actions button {
+    flex: 1;
+  }
+
+  .plan-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-overview-left {
+    border-right: 0;
+    border-bottom: 1px solid #dce6e8;
+  }
+
+  .plan-photo-panel {
+    border-right: 0;
+  }
+
+  .plan-overview-left .plan-meta-form {
+    grid-template-columns: 1fr 1fr;
+    padding: 14px;
+  }
+
+  .plan-meta-title,
+  .plan-meta-schedule,
+  .plan-meta-wide {
+    grid-column: span 2;
+  }
+
+  .plan-matrix-title {
+    padding: 12px 14px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .plan-matrix-scroll {
+    max-height: 68vh;
+  }
+}
+

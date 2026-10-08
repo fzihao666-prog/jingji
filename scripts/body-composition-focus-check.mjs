@@ -1,8 +1,14 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 
 const page = await readFile('src/pages/PersonalPage.tsx', 'utf8');
 const model = await readFile('src/components/AthleteProfileCharts.tsx', 'utf8');
-const styles = await readFile('src/styles.css', 'utf8');
+const styleFiles = [
+  'src/styles.css',
+  ...(await readdir('src/styles')).map((name) => `src/styles/${name}`),
+];
+const styles = (
+  await Promise.all(styleFiles.map((file) => readFile(file, 'utf8')))
+).join('\n');
 const assert = (value, message) => {
   if (!value) throw new Error(message);
 };

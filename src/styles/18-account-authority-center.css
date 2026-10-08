@@ -1,0 +1,1433 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Account authority center */
+.access-center-page {
+  max-width: 1580px;
+}
+
+.access-heading {
+  align-items: flex-end;
+}
+
+.access-heading h1 {
+  margin-top: 4px;
+}
+
+.authority-formula {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #cddcde;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #3e626c;
+  background: rgb(255 255 255 / 74%);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.authority-formula svg {
+  color: var(--teal);
+}
+
+.authority-formula i {
+  color: #9baaad;
+  font-style: normal;
+}
+
+.access-summary {
+  margin-bottom: 14px;
+  border: 1px solid #d7e3e5;
+  border-radius: 13px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  overflow: hidden;
+  background: #fff;
+}
+
+.access-summary > div {
+  min-height: 78px;
+  padding: 14px 17px;
+  border-right: 1px solid #e0e9ea;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.access-summary > div:last-child {
+  border-right: 0;
+}
+
+.access-summary svg {
+  width: 31px;
+  height: 31px;
+  padding: 7px;
+  border-radius: 9px;
+  color: #16827c;
+  background: #e5f4f1;
+}
+
+.access-summary span,
+.access-summary strong {
+  display: block;
+}
+
+.access-summary span {
+  color: #7a8d94;
+  font-size: 10px;
+}
+
+.access-summary strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font:
+    800 19px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.access-workspace {
+  min-height: 730px;
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.account-tree,
+.access-editor,
+.audit-panel {
+  border: 1px solid #d6e2e4;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(11 54 67 / 4%);
+}
+
+.account-tree {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.account-tree-head {
+  height: 69px;
+  padding: 0 16px;
+  border-bottom: 1px solid #e2eaeb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.account-tree-head span,
+.account-tree-head strong {
+  display: block;
+}
+
+.account-tree-head span {
+  color: #85969b;
+  font-size: 9px;
+}
+
+.account-tree-head strong {
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.account-tree-head > button {
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #fff;
+  background: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-tree-scroll {
+  max-height: 660px;
+  padding: 10px 8px 18px;
+  overflow-y: auto;
+}
+
+.account-level-group + .account-level-group {
+  margin-top: 13px;
+}
+
+.level-label {
+  height: 27px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #83949a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.level-label i {
+  min-width: 19px;
+  height: 19px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  color: #657d84;
+  background: #edf2f3;
+  font:
+    normal 700 9px Bahnschrift,
+    sans-serif;
+}
+
+.account-level-group > button {
+  width: 100%;
+  min-height: 64px;
+  margin-bottom: 4px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: 39px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.account-level-group > button:hover {
+  background: #f4f8f8;
+}
+
+.account-level-group > button.active {
+  border-color: #b8d8d4;
+  background: #eaf5f3;
+  box-shadow: inset 3px 0 var(--teal);
+}
+
+.account-avatar,
+.access-profile-avatar {
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #287b86;
+  font-weight: 800;
+}
+
+.account-avatar {
+  width: 38px;
+  height: 38px;
+  font-size: 13px;
+}
+
+.role-atl {
+  background: #3d8a84;
+}
+
+.role-scc {
+  background: #297487;
+}
+
+.role-prj {
+  background: #655c9b;
+}
+
+.role-reg {
+  background: #8a683c;
+}
+
+.role-td {
+  background: #3d596d;
+}
+
+.role-dmd {
+  background: #092f3d;
+}
+
+.account-list-copy {
+  min-width: 0;
+}
+
+.account-list-copy strong {
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.account-list-copy strong i {
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: #31756e;
+  background: rgb(38 147 137 / 10%);
+  font:
+    normal 700 8px Bahnschrift,
+    sans-serif;
+}
+
+.account-list-copy small {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #809197;
+  font-size: 9px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.account-level-group > button > em {
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: #b64c3b;
+  background: #fff0ed;
+  font:
+    normal 700 8px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.account-level-group > button > svg {
+  color: #9aabad;
+}
+
+.access-empty {
+  min-height: 190px;
+  padding: 30px;
+  display: grid;
+  place-items: center;
+  color: #7d9096;
+  font-size: 11px;
+  text-align: center;
+}
+
+.account-create-card {
+  margin: 10px;
+  padding: 13px;
+  border: 1px solid #bad8d4;
+  border-radius: 10px;
+  background: #f1f8f7;
+  box-shadow: 0 8px 22px rgb(12 70 79 / 8%);
+}
+
+.create-card-title {
+  margin-bottom: 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+}
+
+.create-card-title > svg {
+  color: var(--teal);
+}
+
+.create-card-title strong {
+  font-size: 12px;
+}
+
+.create-card-title button {
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  cursor: pointer;
+}
+
+.create-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.create-grid label.wide {
+  grid-column: 1 / -1;
+}
+
+.create-grid label > span {
+  display: block;
+  margin-bottom: 4px;
+  color: #577078;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.create-grid input,
+.create-grid select {
+  width: 100%;
+  height: 34px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid #cfdddf;
+  border-radius: 6px;
+  color: var(--ink);
+  background: #fff;
+  font-size: 10px;
+}
+
+.account-create-card > .primary-button {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 10px;
+  font-size: 10px;
+}
+
+.access-editor {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.access-profile {
+  min-height: 102px;
+  padding: 18px 21px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 84% 10%, rgb(58 180 168 / 20%), transparent 28%),
+    linear-gradient(110deg, #082c3a, #0b4754);
+}
+
+.access-profile-avatar {
+  width: 55px;
+  height: 55px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  font-size: 19px;
+}
+
+.access-profile > div:nth-child(2) {
+  min-width: 0;
+}
+
+.access-profile > div:nth-child(2) > span {
+  color: #71cfc2;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.access-profile h2 {
+  margin-top: 4px;
+  font-size: 19px;
+}
+
+.access-profile p {
+  margin-top: 4px;
+  color: rgb(236 247 246 / 54%);
+  font:
+    10px Bahnschrift,
+    sans-serif;
+}
+
+.access-profile .name-edit-trigger {
+  color: #79d4c8;
+}
+
+.access-profile .name-edit-trigger:hover {
+  color: #fff;
+  border-color: rgb(255 255 255 / 23%);
+  background: rgb(255 255 255 / 10%);
+}
+
+.status-button {
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #f4b2a5;
+  background: rgb(255 255 255 / 7%);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-button.active {
+  color: #88dcc9;
+}
+
+.status-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.account-signature {
+  margin: 14px 18px 0;
+  padding: 11px 13px;
+  border: 1px solid #d5e4e3;
+  border-left: 3px solid var(--teal);
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: #f3f8f7;
+}
+
+.account-signature > svg {
+  margin-top: 2px;
+  color: var(--teal);
+}
+
+.account-signature span,
+.account-signature strong,
+.account-signature small {
+  display: block;
+}
+
+.account-signature span {
+  color: #7c9095;
+  font-size: 8px;
+}
+
+.account-signature strong {
+  margin-top: 3px;
+  color: var(--ink);
+  font:
+    700 11px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.03em;
+}
+
+.account-signature small {
+  margin-top: 4px;
+  color: #58727a;
+  font-size: 9px;
+}
+
+.coordinate-section {
+  margin: 14px 18px 0;
+  padding: 14px;
+  border: 1px solid #dce6e8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.coordinate-section + .coordinate-section {
+  margin-top: 10px;
+}
+
+.coordinate-title {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.coordinate-title > svg {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  border-radius: 8px;
+  color: #167a74;
+  background: #e8f4f2;
+}
+
+.coordinate-title > div {
+  min-width: 0;
+}
+
+.coordinate-title h3 {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.coordinate-title p {
+  margin-top: 3px;
+  color: #809197;
+  font-size: 9px;
+}
+
+.coordinate-title > button {
+  height: 29px;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid #cddbdd;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #276f6b;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coordinate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.coordinate-grid label > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #536d76;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.coordinate-grid select,
+.area-scope-row select,
+.area-scope-row input,
+.team-scope-row select,
+.team-scope-row input {
+  height: 37px;
+  min-width: 0;
+  padding: 0 9px;
+  border: 1px solid #cfdcdf;
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fbfcfc;
+  font-size: 10px;
+}
+
+.coordinate-grid select {
+  width: 100%;
+}
+
+.coordinate-grid select:disabled,
+.area-scope-row :disabled,
+.team-scope-row :disabled {
+  color: #6f838a;
+  background: #f0f4f4;
+}
+
+.area-scope-list,
+.team-scope-list {
+  display: grid;
+  gap: 7px;
+}
+
+.area-scope-row {
+  display: grid;
+  grid-template-columns: 105px 135px minmax(105px, 1fr) minmax(105px, 1fr) auto;
+  gap: 7px;
+}
+
+.area-scope-row > button,
+.team-scope-row > button {
+  width: 34px;
+  height: 37px;
+  border: 1px solid #e0d4d1;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #b45241;
+  background: #fff;
+  cursor: pointer;
+}
+
+.project-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.project-options button {
+  min-width: 77px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid #d0dcde;
+  border-radius: 7px;
+  color: #637980;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.project-options button.selected {
+  color: #126d67;
+  border-color: #7bbab1;
+  background: #e8f5f2;
+  box-shadow: inset 2px 0 var(--teal);
+}
+
+.project-options button:disabled {
+  cursor: default;
+}
+
+.team-scope-row {
+  display: grid;
+  grid-template-columns: 150px minmax(180px, 1fr) auto;
+  gap: 7px;
+}
+
+.add-team-scope {
+  justify-self: start;
+  height: 29px;
+  padding: 0 9px;
+  border: 1px dashed #a9c8c4;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #26756f;
+  background: #f6fbfa;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.access-editor-footer {
+  position: sticky;
+  bottom: 0;
+  min-height: 67px;
+  margin-top: 15px;
+  padding: 11px 18px;
+  border-top: 1px solid #dbe5e7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgb(255 255 255 / 96%);
+  backdrop-filter: blur(9px);
+}
+
+.access-editor-footer span {
+  color: #72878e;
+  font-size: 9px;
+}
+
+.access-editor-empty {
+  min-height: 650px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  color: #83969c;
+  text-align: center;
+}
+
+.access-editor-empty svg {
+  color: #9fc6c1;
+}
+
+.access-editor-empty strong {
+  color: #547078;
+}
+
+.access-editor-empty p {
+  max-width: 310px;
+  font-size: 10px;
+}
+
+.audit-panel {
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+.audit-head {
+  min-height: 59px;
+  padding: 0 17px;
+  border-bottom: 1px solid #e0e8ea;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.audit-head > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.audit-head svg {
+  color: var(--teal);
+}
+
+.audit-head strong,
+.audit-head small {
+  display: block;
+}
+
+.audit-head strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.audit-head small,
+.audit-head > span {
+  color: #819298;
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.audit-table-wrap {
+  overflow-x: auto;
+}
+
+.audit-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.audit-table-wrap th,
+.audit-table-wrap td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #e4ebec;
+  text-align: left;
+  font-size: 10px;
+}
+
+.audit-table-wrap th {
+  color: #73878e;
+  background: #f4f7f7;
+  font-size: 9px;
+}
+
+.audit-table-wrap td {
+  color: #48636c;
+}
+
+.audit-table-wrap td small {
+  display: block;
+  margin-top: 3px;
+  color: #89989d;
+  font-size: 8px;
+}
+
+.roster-area-fields {
+  display: grid;
+  grid-template-columns: 110px 1fr 1fr;
+  gap: 6px;
+}
+
+.roster-area-fields input,
+.roster-area-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #cedbde;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 10px;
+}
+
+@media (width <= 1180px) {
+  .app-frame {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .overview-page-heading {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .overview-page-heading .date-toolbar {
+    grid-column: 1;
+  }
+
+  .date-toolbar {
+    width: 100%;
+  }
+
+  .select-input,
+  .project-select {
+    margin-left: auto;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .roster-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .roster-control-bar {
+    grid-template-columns: minmax(250px, 1.2fr) minmax(170px, 0.8fr);
+  }
+
+  .roster-filter-summary {
+    height: 52px;
+  }
+
+  .team-project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .access-workspace {
+    grid-template-columns: 290px minmax(0, 1fr);
+  }
+
+  .area-scope-row {
+    grid-template-columns: 95px 120px 1fr 1fr auto;
+  }
+}
+
+@media (width <= 860px) {
+  .login-page {
+    display: block;
+    overflow: visible;
+    background: #fdfdfc;
+  }
+
+  .login-story {
+    min-height: 360px;
+    padding: 28px 32px 32px;
+    background-position:
+      center,
+      center,
+      58% center;
+  }
+
+  .login-page-register .login-story {
+    position: relative;
+    height: auto;
+    min-height: 300px;
+  }
+
+  .training-route,
+  .hero-metric {
+    display: none;
+  }
+
+  .login-story.olympic-story {
+    min-height: 500px;
+    padding: 24px 28px 26px;
+  }
+
+  .login-page-register .login-story.olympic-story {
+    position: relative;
+    height: auto;
+    min-height: 500px;
+  }
+
+  .olympic-story-heading {
+    margin-top: 18px;
+  }
+
+  .olympic-story-heading h1 {
+    font-size: 32px;
+  }
+
+  .olympic-story-heading aside strong {
+    font-size: 50px;
+  }
+
+  .olympic-pictogram-panel {
+    margin-top: 20px;
+    padding: 10px 10px 8px;
+  }
+
+  .olympic-sports-grid {
+    gap: 4px;
+  }
+
+  .olympic-sport {
+    min-height: 53px;
+    padding-block: 3px;
+  }
+
+  .olympic-sport > span:last-child {
+    font-size: 8px;
+  }
+
+  .login-panel {
+    min-height: calc(100svh - 360px);
+    padding: 48px 28px 60px;
+    box-shadow: none;
+  }
+
+  .login-page-register .login-panel {
+    min-height: calc(100svh - 300px);
+  }
+
+  .app-frame {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 254px;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    box-shadow: 20px 0 50px rgb(0 0 0 / 22%);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close {
+    display: grid;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    background: rgb(2 20 27 / 54%);
+    z-index: 20;
+  }
+
+  .mobile-header {
+    height: 58px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink);
+    background: rgb(255 255 255 / 88%);
+    border-bottom: 1px solid #d8e3e6;
+    backdrop-filter: blur(14px);
+    position: sticky;
+    top: 0;
+    z-index: 18;
+  }
+
+  .mobile-header > span {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .page-content {
+    padding: 24px 17px 44px;
+  }
+
+  .day-detail {
+    max-height: none;
+  }
+
+  .access-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .account-tree-scroll {
+    max-height: 360px;
+  }
+
+  .access-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .access-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .access-summary > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #e0e9ea;
+  }
+}
+
+@media (width <= 620px) {
+  .date-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .range-presets {
+    width: 100%;
+  }
+
+  .range-presets button {
+    flex: 1;
+  }
+
+  .date-input {
+    flex: 1;
+    border-left: 0;
+    padding-left: 4px;
+  }
+
+  .project-select {
+    width: 112px;
+    min-width: 112px;
+    margin-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .metric-grid,
+  .dashboard-grid,
+  .roster-grid,
+  .team-project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-card {
+    min-height: 110px;
+  }
+
+  .panel {
+    min-height: 300px;
+  }
+
+  .roster-control-bar {
+    padding: 13px 12px 13px 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .roster-filter-summary {
+    height: 48px;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 8px;
+  }
+
+  .roster-filter-summary > small,
+  .roster-filter-summary strong,
+  .roster-filter-summary button {
+    grid-column: auto;
+    grid-row: 1;
+  }
+
+  .roster-filter-summary strong {
+    font-size: 16px;
+  }
+
+  .roster-result-line {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+    padding: 5px 2px 10px;
+  }
+
+  .roster-pagination {
+    margin-top: 14px;
+  }
+
+  .athlete-directory-card > footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .athlete-directory-card > footer nav {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .team-create-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .weekday-row,
+  .calendar-grid {
+    min-width: 630px;
+  }
+
+  .login-story {
+    min-height: 288px;
+    padding: 21px 20px 24px;
+    background-position:
+      center,
+      center,
+      61% center;
+  }
+
+  .login-story.olympic-story {
+    min-height: 430px;
+    padding: 18px 16px 20px;
+  }
+
+  .login-page-register .login-story {
+    min-height: 250px;
+  }
+
+  .login-page-register .login-story.olympic-story {
+    min-height: 430px;
+  }
+
+  .login-page-register .login-panel {
+    min-height: calc(100svh - 250px);
+  }
+
+  .login-brand .brand-logo-full.large {
+    width: 142px;
+    padding: 7px 9px;
+  }
+
+  .olympic-story-heading {
+    margin-top: 13px;
+    gap: 12px;
+  }
+
+  .olympic-story-heading > div > p {
+    margin-bottom: 5px;
+    font-size: 8px;
+  }
+
+  .olympic-story-heading > div > p span {
+    width: 18px;
+  }
+
+  .olympic-story-heading h1 {
+    font-size: 25px;
+  }
+
+  .olympic-story-heading aside {
+    min-width: 105px;
+    padding-left: 12px;
+    column-gap: 6px;
+  }
+
+  .olympic-story-heading aside strong {
+    font-size: 42px;
+  }
+
+  .olympic-story-heading aside span {
+    font-size: 10px;
+  }
+
+  .olympic-story-heading aside small {
+    font-size: 6px;
+  }
+
+  .olympic-pictogram-panel {
+    margin-top: 14px;
+    padding: 8px 7px 6px;
+    border-radius: 13px;
+  }
+
+  .olympic-sports-grid {
+    gap: 3px;
+  }
+
+  .olympic-sport {
+    min-height: 47px;
+    padding: 2px 1px;
+    border-radius: 6px;
+  }
+
+  .olympic-sport-icon {
+    width: 42px;
+    height: 32px;
+  }
+
+  .olympic-sport > span:last-child {
+    min-height: 9px;
+    font-size: 6.5px;
+  }
+
+  .login-panel {
+    min-height: calc(100svh - 288px);
+    padding: 38px 20px 48px;
+  }
+
+  .login-heading {
+    margin-bottom: 28px;
+  }
+
+  .login-heading h2 {
+    font-size: 34px;
+  }
+
+  .login-heading span {
+    font-size: 12px;
+  }
+
+  .auth-input {
+    height: 56px;
+  }
+
+  .login-submit-stack .login-button,
+  .register-entry {
+    height: 56px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid label {
+    grid-column: auto !important;
+  }
+
+  .account-list article {
+    grid-template-columns: 42px 1fr;
+  }
+
+  .account-list time {
+    grid-column: 2;
+  }
+
+  .review-actions,
+  .review-result {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .review-actions button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .province-board-footer .primary-button {
+    width: 100%;
+  }
+
+  .authority-formula {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .access-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .access-summary > div {
+    min-height: 65px;
+    border-right: 0;
+    border-bottom: 1px solid #e0e9ea;
+  }
+
+  .access-summary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .access-profile {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .access-profile-avatar {
+    width: 46px;
+    height: 46px;
+  }
+
+  .status-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .coordinate-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .area-scope-row,
+  .team-scope-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .area-scope-row > button,
+  .team-scope-row > button {
+    width: 100%;
+  }
+
+  .access-editor-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .create-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .create-grid label.wide {
+    grid-column: auto;
+  }
+
+  .roster-area-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 540px) {
+  .roster-pagination {
+    gap: 8px;
+  }
+
+  .roster-pagination-pages {
+    display: none;
+  }
+
+  .roster-pagination-summary {
+    display: inline;
+  }
+}
+
+@media (width <= 480px) {
+  .login-brand .brand-logo-full.large {
+    width: 124px;
+  }
+
+  .login-story.olympic-story {
+    min-height: 398px;
+    padding-inline: 11px;
+  }
+
+  .olympic-story-heading aside {
+    display: none;
+  }
+
+  .olympic-story-heading h1 {
+    font-size: 23px;
+  }
+
+  .olympic-pictogram-panel {
+    padding-inline: 5px;
+  }
+
+  .olympic-sports-grid {
+    gap: 2px;
+  }
+
+  .olympic-sport {
+    min-height: 44px;
+    border-radius: 5px;
+  }
+
+  .olympic-sport-icon {
+    width: 36px;
+    height: 31px;
+  }
+
+  .olympic-sport > span:last-child {
+    font-size: 5.8px;
+  }
+
+  .registration-form .auth-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .registration-form .auth-actions .login-button {
+    width: 100%;
+  }
+
+  .registration-form .auth-actions .form-link {
+    align-self: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

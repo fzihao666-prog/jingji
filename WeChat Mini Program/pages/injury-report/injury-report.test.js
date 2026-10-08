@@ -39,6 +39,10 @@ const injuryForm = loadCjs(new URL('../../utils/injury-form.js', import.meta.url
 });
 const requestGuard = loadCjs(new URL('../../utils/request-guard.js', import.meta.url), {});
 const formDraft = loadCjs(new URL('../../utils/form-draft.js', import.meta.url), {});
+// 损伤情况卡片与线上共用真实视图模型，保证首页指标组装不被测试桩掩盖。
+const injuryMetric = loadCjs(new URL('../../utils/injury-metric.js', import.meta.url), {
+  './injury-form': injuryForm,
+});
 
 function createOverviewPage(data = {}) {
   let definition;
@@ -53,6 +57,7 @@ function createOverviewPage(data = {}) {
     '../../utils/pagination': loadCjs(new URL('../../utils/pagination.js', import.meta.url), {}),
     '../../utils/today-status': {},
     '../../utils/wellness-form': {},
+    '../../utils/injury-metric': injuryMetric,
   };
   vm.runInNewContext(indexSource, {
     Page(value) { definition = value; },

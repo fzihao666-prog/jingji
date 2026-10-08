@@ -39,6 +39,31 @@ function strengthMetricRows(test) {
   });
 }
 
+// 专项测试成绩按赛艇习惯显示为 m:ss.xx（如 0:55.15、6:30.74），与录入端 parseRaceTime 的口径对称。
+function raceTime(ms) {
+  if (ms == null) return '';
+  const total = Number(ms);
+  if (!Number.isFinite(total) || total < 0) return '';
+  const hours = Math.floor(total / 3600000);
+  const minutes = Math.floor((total % 3600000) / 60000);
+  const seconds = (total % 60000) / 1000;
+  const secondText = seconds.toFixed(2).padStart(5, '0');
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${secondText}`
+    : `${minutes}:${secondText}`;
+}
+
+// 与上次最好成绩的差值：负数代表更快（提升）。按绝对秒数展示，避免把差值套进 m:ss 造成误读。
+function raceDelta(deltaMs) {
+  if (deltaMs == null) return '';
+  const delta = Number(deltaMs);
+  if (!Number.isFinite(delta)) return '';
+  const secondsText = `${(Math.abs(delta) / 1000).toFixed(2)}s`;
+  if (delta < 0) return `较上次快 ${secondsText}`;
+  if (delta > 0) return `较上次慢 ${secondsText}`;
+  return '与上次持平';
+}
+
 module.exports = {
   ROLE_LABELS,
   INJURY_LABELS,
@@ -46,5 +71,7 @@ module.exports = {
   number,
   maskIdentity,
   maskPhone,
-  strengthMetricRows
+  strengthMetricRows,
+  raceTime,
+  raceDelta
 };

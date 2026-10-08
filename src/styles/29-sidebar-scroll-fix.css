@@ -1,0 +1,84 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Sidebar scroll fix */
+.app-shell,
+.shell,
+.dashboard-shell,
+.app-layout {
+  min-height: 100vh;
+}
+
+.sidebar,
+.app-sidebar,
+.side-nav,
+.navigation-sidebar,
+aside {
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar nav,
+.app-sidebar nav,
+.side-nav nav,
+.navigation-sidebar nav,
+.sidebar-menu,
+.nav-menu,
+.app-nav,
+.main-nav,
+.sidebar-scroll,
+aside nav {
+  min-height: 0;
+  max-height: calc(100vh - 250px);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(126 232 220 / 55%) transparent;
+}
+
+.sidebar nav::-webkit-scrollbar,
+.app-sidebar nav::-webkit-scrollbar,
+.side-nav nav::-webkit-scrollbar,
+.navigation-sidebar nav::-webkit-scrollbar,
+.sidebar-menu::-webkit-scrollbar,
+.nav-menu::-webkit-scrollbar,
+.app-nav::-webkit-scrollbar,
+.main-nav::-webkit-scrollbar,
+.sidebar-scroll::-webkit-scrollbar,
+aside nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar nav::-webkit-scrollbar-thumb,
+.app-sidebar nav::-webkit-scrollbar-thumb,
+.side-nav nav::-webkit-scrollbar-thumb,
+.navigation-sidebar nav::-webkit-scrollbar-thumb,
+.sidebar-menu::-webkit-scrollbar-thumb,
+.nav-menu::-webkit-scrollbar-thumb,
+.app-nav::-webkit-scrollbar-thumb,
+.main-nav::-webkit-scrollbar-thumb,
+.sidebar-scroll::-webkit-scrollbar-thumb,
+aside nav::-webkit-scrollbar-thumb {
+  background: rgb(126 232 220 / 50%);
+  border-radius: 999px;
+}
+
+@media (height <= 820px) {
+  .sidebar nav,
+  .app-sidebar nav,
+  .side-nav nav,
+  .navigation-sidebar nav,
+  .sidebar-menu,
+  .nav-menu,
+  .app-nav,
+  .main-nav,
+  .sidebar-scroll,
+  aside nav {
+    max-height: calc(100vh - 190px);
+  }
+}
+
+/* ============================================
+   AI 体能训练模块样式
+   ============================================ */
+

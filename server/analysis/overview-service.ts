@@ -832,6 +832,31 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
     .all(...input.athleteIds, input.from, input.to) as SessionRow[];
 }
 
+// 每名运动员取最新一条伤病记录（含已归档为健康），训练总览与专项概览共用同一口径。
+function readLatestInjuries(athleteIds: number[]) {
+  if (!athleteIds.length) return [];
+  const placeholders = athleteIds.map(() => '?').join(',');
+  return db
+    .prepare(
+      `
+    SELECT ir.athlete_id AS athleteId, a.name AS athleteName,
+      ir.injury_name AS injuryName, ir.body_part AS bodyPart, ir.side, ir.status,
+      ir.pain_score AS painScore, ir.onset_date AS onsetDate, ir.review_date AS reviewDate,
+      CASE WHEN ir.note LIKE '%模拟数据%' THEN 1 ELSE 0 END AS isDemo
+    FROM injury_records ir
+    JOIN athletes a ON a.id = ir.athlete_id
+    WHERE ir.athlete_id IN (${placeholders})
+      AND ir.id = (
+        SELECT latest.id FROM injury_records latest
+        WHERE latest.athlete_id = ir.athlete_id
+        ORDER BY datetime(latest.created_at) DESC, latest.id DESC LIMIT 1
+      )
+    ORDER BY ir.pain_score DESC, a.name
+  `
+    )
+    .all(...athleteIds);
+}
+
 export function buildSpecialTrainingPayload(input: {
   athleteIds: number[];
   teamAthleteIds?: number[];
@@ -851,6 +876,8 @@ export function buildSpecialTrainingPayload(input: {
       athletes: [] as SpecialTrainingAthlete[],
       selectedAthlete: null,
       specialTestComparison: null,
+      injuries: [],
+      injuryIndividual: Boolean(input.athleteId) || input.individual,
     };
   const teamSessions = readOverviewSessions({
     athleteIds: teamAthleteIds,
@@ -940,6 +967,8 @@ export function buildSpecialTrainingPayload(input: {
     specialTestComparison: input.athleteId
       ? buildSpecialTestComparison({ athleteId: input.athleteId, tests: testSamples })
       : null,
+    injuries: readLatestInjuries(input.athleteId ? [input.athleteId] : teamAthleteIds),
+    injuryIndividual: Boolean(input.athleteId) || input.individual,
   };
 }
 
@@ -1234,25 +1263,7 @@ export function buildOverviewPayload(input: {
     };
   });
 
-  const injuries = db
-    .prepare(
-      `
-    SELECT ir.athlete_id AS athleteId, a.name AS athleteName,
-      ir.injury_name AS injuryName, ir.body_part AS bodyPart, ir.side, ir.status,
-      ir.pain_score AS painScore, ir.onset_date AS onsetDate, ir.review_date AS reviewDate,
-      CASE WHEN ir.note LIKE '%模拟数据%' THEN 1 ELSE 0 END AS isDemo
-    FROM injury_records ir
-    JOIN athletes a ON a.id = ir.athlete_id
-    WHERE ir.athlete_id IN (${placeholders})
-      AND ir.id = (
-        SELECT latest.id FROM injury_records latest
-        WHERE latest.athlete_id = ir.athlete_id
-        ORDER BY datetime(latest.created_at) DESC, latest.id DESC LIMIT 1
-      )
-    ORDER BY ir.pain_score DESC, a.name
-  `
-    )
-    .all(...input.athleteIds);
+  const injuries = readLatestInjuries(input.athleteIds);
 
   const measurementRows = db
     .prepare(

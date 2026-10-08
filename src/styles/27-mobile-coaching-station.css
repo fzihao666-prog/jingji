@@ -1,0 +1,699 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Mobile coaching station: the page stays fixed to the viewport; only true data canvases scroll. */
+@media (width <= 760px) {
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    background: #eef4f4;
+  }
+
+  .mobile-header {
+    height: 56px;
+    padding: 0 13px;
+    box-shadow: 0 7px 22px rgb(6 47 59 / 8%);
+  }
+
+  .page-content {
+    width: 100%;
+    min-width: 0;
+    padding: 17px 12px 36px;
+  }
+
+  .page-heading {
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 15px;
+    gap: 11px;
+  }
+
+  .page-heading h1 {
+    margin-top: 2px;
+    font-size: 26px;
+    line-height: 1.12;
+  }
+
+  .date-toolbar {
+    width: 100%;
+    min-width: 0;
+    padding: 7px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+    gap: 7px;
+    border-radius: 14px;
+    background: rgb(255 255 255 / 94%);
+  }
+
+  .range-presets {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .range-presets button {
+    min-width: 0;
+    min-height: 34px;
+  }
+
+  .date-input {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    min-height: 39px;
+    padding: 4px 7px;
+    border: 1px solid #d9e5e7;
+    border-radius: 9px;
+  }
+
+  .date-input input {
+    min-width: 0;
+    width: calc(50% - 17px);
+    font-size: 10px;
+  }
+
+  .project-select,
+  .toolbar-project-segments,
+  .select-input {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .toolbar-project-segments {
+    grid-column: 1 / -1;
+    height: 42px;
+  }
+
+  .toolbar-project-segments button {
+    height: 34px;
+  }
+
+  .project-select {
+    height: 40px;
+    min-width: 0;
+    border: 1px solid #cfe0e1;
+    border-radius: 9px;
+  }
+
+  .project-select-trigger {
+    padding: 0 28px 0 8px;
+  }
+
+  .project-select-chevron {
+    right: 9px;
+  }
+
+  .project-select-menu {
+    right: 0;
+    top: calc(100% + 6px);
+    width: 100%;
+    transform-origin: top center;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 10px;
+  }
+
+  .metric-card {
+    min-height: 104px;
+    padding: 15px 12px;
+    gap: 9px;
+    border-radius: 12px;
+  }
+
+  .metric-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+  }
+
+  .metric-copy > strong {
+    font-size: 22px;
+  }
+
+  .metric-copy p {
+    margin-top: 6px;
+    line-height: 1.35;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .panel,
+  .panel-wide {
+    grid-column: auto;
+    min-width: 0;
+    min-height: 280px;
+    border-radius: 13px;
+  }
+
+  .panel-heading {
+    padding: 16px 16px 8px;
+  }
+
+  .chart-wrap {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .weekday-row,
+  .calendar-grid {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .weekday-row span {
+    min-width: 0;
+    padding: 7px 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  .weekday-row span::after {
+    font-size: 9px;
+  }
+
+  .weekday-row span:nth-child(1)::after {
+    content: '一';
+  }
+
+  .weekday-row span:nth-child(2)::after {
+    content: '二';
+  }
+
+  .weekday-row span:nth-child(3)::after {
+    content: '三';
+  }
+
+  .weekday-row span:nth-child(4)::after {
+    content: '四';
+  }
+
+  .weekday-row span:nth-child(5)::after {
+    content: '五';
+  }
+
+  .weekday-row span:nth-child(6)::after {
+    content: '六';
+  }
+
+  .weekday-row span:nth-child(7)::after {
+    content: '日';
+  }
+
+  .day-detail {
+    min-width: 0;
+    min-height: 250px;
+  }
+
+  .record-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .model-standard-heading,
+  .strength-module-heading {
+    min-height: 0;
+    padding: 15px 13px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .strength-module-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .strength-module-actions > * {
+    flex: 1 1 145px;
+  }
+
+  .strength-history-select select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .strength-poster-web {
+    padding: 13px 10px 16px;
+    overflow: hidden;
+  }
+
+  .strength-poster-header {
+    min-height: 0;
+    padding-bottom: 10px;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+
+  .strength-poster-header > div:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .strength-poster-brand {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .strength-poster-date {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .strength-poster-header h2 {
+    font-size: 17px;
+  }
+
+  .strength-poster-identity {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .strength-poster-identity > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .strength-poster-identity > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #e0e9eb;
+  }
+
+  .strength-body-map {
+    height: 460px;
+    min-height: 460px;
+  }
+
+  .strength-morphology-column {
+    width: 26%;
+  }
+
+  .strength-callout {
+    width: 28%;
+    padding: 2px 3px;
+  }
+
+  .strength-callout span {
+    font-size: 7px;
+  }
+
+  .strength-callout strong {
+    font-size: 9px;
+  }
+
+  .strength-body-figure img {
+    max-width: 66%;
+  }
+
+  .strength-poster-legend {
+    gap: 8px;
+  }
+
+  .strength-poster-legend .legend-rule {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .training-plan-heading,
+  .plan-heading-actions {
+    min-width: 0;
+  }
+
+  .plan-heading-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .plan-athlete-select,
+  .plan-history-select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .plan-athlete-select select,
+  .plan-history-select select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .plan-heading-actions button {
+    min-width: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .plan-overview-grid {
+    min-height: 0;
+    margin-top: 12px;
+  }
+
+  .plan-photo-panel {
+    grid-template-columns: 66px minmax(0, 1fr);
+    padding: 13px;
+  }
+
+  .plan-photo-frame {
+    width: 64px;
+    height: 82px;
+  }
+
+  .plan-overview-left .plan-meta-form {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .plan-matrix-shell {
+    position: relative;
+    min-width: 0;
+  }
+
+  .plan-matrix-title {
+    min-height: 0;
+    padding: 11px 12px;
+  }
+
+  .plan-matrix-title > span::before {
+    content: '左右滑动查看全部训练阶段 · ';
+    color: #11847e;
+    font-weight: 900;
+  }
+
+  .plan-matrix-scroll {
+    width: 100%;
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    scrollbar-color: #16958d #dce8e8;
+  }
+
+  .plan-matrix {
+    min-width: 1830px;
+  }
+
+  .plan-matrix .max-head,
+  .plan-matrix .max-cell {
+    width: 60px;
+  }
+
+  .plan-matrix .exercise-head,
+  .plan-matrix .exercise-cell {
+    width: 112px;
+    left: 60px;
+  }
+
+  .plan-matrix .week-sub {
+    min-width: 46px;
+  }
+
+  .plan-matrix .week-sub.actual-head {
+    min-width: 88px;
+  }
+
+  .strength-advice-head {
+    gap: 12px;
+  }
+
+  .region-access-layout,
+  .access-workspace {
+    min-width: 0;
+  }
+
+  .area-scope-row,
+  .team-scope-row {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-panel,
+  .special-ranking-panel,
+  .special-import-preview {
+    min-width: 0;
+  }
+
+  .audit-table-wrap,
+  .ranking-table-wrap,
+  .special-preview-table {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+  }
+
+  .special-tests-page {
+    gap: 12px;
+  }
+
+}
+
+@media (width <= 380px) {
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-heading-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.slalom-champion-card {
+  background: #fff;
+  border: 1px solid #d7e5e8;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 18px 45px rgb(16 67 79 / 8%);
+}
+
+.slalom-champion-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px;
+  color: #fff;
+  background: linear-gradient(125deg, #073d4a, #087d7d);
+}
+
+.slalom-champion-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.slalom-champion-title > svg {
+  color: #5ce0cf;
+}
+
+.slalom-champion-title span {
+  display: grid;
+  gap: 4px;
+}
+
+.slalom-champion-title small {
+  color: #8de9df;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.slalom-champion-title strong {
+  font-size: 24px;
+}
+
+.slalom-champion-summary {
+  min-width: 280px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 5px 14px;
+}
+
+.slalom-champion-summary > span {
+  font-size: 12px;
+  color: #b9d8dc;
+}
+
+.slalom-champion-summary > strong {
+  font-size: 22px;
+}
+
+.slalom-champion-summary > strong small {
+  font-size: 12px;
+  font-weight: 500;
+  color: #d6ecee;
+}
+
+.slalom-champion-summary > i {
+  grid-column: 1/-1;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 18%);
+}
+
+.slalom-champion-summary > i b {
+  display: block;
+  height: 100%;
+  background: #58dac8;
+}
+
+.slalom-champion-note {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin: 20px 28px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #edf8f7;
+  color: #28656b;
+  font-size: 13px;
+}
+
+.slalom-comparison-groups {
+  padding: 20px 28px 24px;
+  display: grid;
+  gap: 22px;
+}
+
+.slalom-comparison-group {
+  display: grid;
+  gap: 11px;
+}
+
+.slalom-comparison-group h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #083c48;
+}
+
+.slalom-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.slalom-comparison-grid article {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.5fr) minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 15px;
+  border: 1px solid #e1ebed;
+  border-left: 4px solid var(--champion-color);
+  border-radius: 12px;
+  background: #fbfdfd;
+}
+
+.slalom-metric-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.slalom-metric-copy > span {
+  color: #59747a;
+  font-size: 12px;
+}
+
+.slalom-metric-copy strong {
+  color: #073948;
+  font-size: 17px;
+}
+
+.slalom-metric-copy small {
+  color: #82979b;
+  font-size: 11px;
+}
+
+.slalom-metric-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slalom-metric-progress i {
+  flex: 1;
+  min-width: 72px;
+  height: 7px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: #e5edef;
+}
+
+.slalom-metric-progress i b {
+  display: block;
+  height: 100%;
+  background: var(--champion-color);
+}
+
+.slalom-metric-progress span {
+  width: 48px;
+  text-align: right;
+  font-size: 12px;
+  color: #58737a;
+}
+
+.slalom-comparison-grid em {
+  white-space: nowrap;
+  padding: 5px 8px;
+  border-radius: 99px;
+  color: var(--champion-color);
+  background: color-mix(in srgb, var(--champion-color) 10%, white);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.slalom-champion-card > footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 28px;
+  color: #6d858a;
+  background: #f3f7f8;
+  font-size: 12px;
+}
+
+@media (width <= 1050px) {
+  .slalom-comparison-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 700px) {
+  .slalom-champion-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .slalom-champion-summary {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .slalom-champion-note {
+    margin: 14px 14px 0;
+    align-items: flex-start;
+  }
+
+  .slalom-comparison-groups {
+    padding: 16px 14px 20px;
+  }
+
+  .slalom-comparison-grid article {
+    grid-template-columns: 1fr auto;
+    gap: 9px 12px;
+  }
+
+  .slalom-metric-progress {
+    grid-column: 1/-1;
+  }
+
+  .slalom-champion-card > footer {
+    align-items: flex-start;
+    padding: 13px 14px;
+  }
+}
+

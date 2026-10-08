@@ -1,0 +1,196 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 身体成分图谱：整体成分层与分区实测值共同呈现。 */
+
+.body-composition-atlas {
+  display: grid;
+  gap: 14px;
+  color: #173f49;
+}
+
+.body-atlas-toolbar {
+  min-height: 76px;
+  padding: 14px 16px;
+  border: 1px solid #d9e7e8;
+  border-left: 4px solid #0b7773;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(115deg, #eff8f6 0%, #fff 62%);
+}
+
+.body-atlas-toolbar > div {
+  display: grid;
+  gap: 3px;
+}
+
+.body-atlas-toolbar > div > span {
+  color: #486770;
+  font:
+    850 9px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  letter-spacing: 0.1em;
+}
+
+.body-atlas-toolbar strong {
+  font:
+    900 19px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.body-atlas-toolbar small {
+  color: #486770;
+  font-size: 9px;
+}
+
+.body-atlas-toolbar label {
+  min-width: 210px;
+  display: grid;
+  gap: 4px;
+}
+
+.body-atlas-toolbar label span {
+  color: #486770;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.body-atlas-toolbar select {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #cddfe1;
+  border-radius: 6px;
+  color: #123f49;
+  background: #fff;
+  font-size: 10px;
+}
+
+.body-atlas-source {
+  text-align: right;
+}
+
+.body-atlas-source strong {
+  color: #0b6162;
+  font:
+    900 13px Bahnschrift,
+    sans-serif;
+}
+
+.body-atlas-source small {
+  white-space: nowrap;
+}
+
+.body-atlas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.body-atlas-panel {
+  min-width: 0;
+  min-height: 238px;
+  padding: 15px;
+  border: 1px solid #dce8e9;
+  background: #fff;
+}
+
+.body-simulation-panel {
+  min-height: 378px;
+}
+
+.body-composition-simulation {
+  margin-top: 9px;
+}
+
+.body-composition-simulation svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.body-sim-silhouette use {
+  vector-effect: non-scaling-stroke;
+}
+
+.body-sim-fat-shell {
+  fill: rgb(213 126 91 / 34%);
+  stroke: #c96f4d;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-sim-lean-core {
+  fill: #168c84;
+  stroke: #0b6865;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-sim-zone-layer {
+  pointer-events: none;
+}
+
+.body-sim-zone {
+  fill: rgb(16 119 112 / 72%);
+  stroke: rgb(255 255 255 / 84%);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-sim-zone.is-missing {
+  fill: rgb(218 229 229 / 92%);
+  stroke: #789399;
+  stroke-dasharray: 4 3;
+}
+
+.body-sim-center {
+  stroke: rgb(255 255 255 / 70%);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-segment-callout line {
+  stroke: #749499;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-segment-callout text {
+  fill: #486770;
+  font:
+    700 11px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.body-segment-callout .body-chart-missing {
+  fill: #486770;
+  font-weight: 800;
+}
+
+.body-composition-simulation-v2 .body-sim-fat-shell {
+  fill: rgb(215 127 93 / 27%);
+}
+
+.body-composition-simulation-v2 .body-sim-lean-core {
+  fill: url('#body-sim-core');
+}
+
+.body-composition-simulation-v2 .body-sim-zone {
+  fill: rgb(4 102 96 / 54%);
+}
+
+.body-composition-simulation-v3 {
+  display: block;
+}
+
+.body-composition-simulation-v3 .body-composition-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+  gap: clamp(16px, 3vw, 36px);
+  align-items: stretch;
+}
+

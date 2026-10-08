@@ -3,20 +3,24 @@ const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPag
 const { loadWithGuard } = require('../../utils/request-guard');
 const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
-const { number } = require('../../utils/format');
-const { displaySeries, trendPlaceholder, ratioPlaceholder } = require('../../utils/chart-placeholder');
+const { number, raceTime, raceDelta } = require('../../utils/format');
+const { displaySeries, trendPlaceholder, completeRatioRows, INTENSITY_FILL, CONTENT_FILL } = require('../../utils/chart-placeholder');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
+const { injuryMetricView } = require('../../utils/injury-metric');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
 
-function buildTrainingView(training, athletes, to) {
+function buildTrainingView(result, to) {
+  const training = result.training || {};
+  const athletes = result.athletes || [];
   const summary = training.summary || {};
   const metrics = [
     { label: '专项训练时长', value: summary.durationMin == null ? '—' : number(summary.durationMin / 60), unit: summary.durationMin == null ? '' : 'h', note: '同队共同课次去重' },
     { label: '专项训练距离', value: number(summary.distanceKm), unit: 'km', note: '只统计已填报距离' },
     { label: '专项训练课次', value: number(summary.sessionCount, 0), unit: '课次', note: '当前筛选时间范围' },
-    { label: '专项训练负荷', value: number(summary.load), unit: 'AU', note: '使用既有SRPE' }
+    { label: '专项训练负荷', value: number(summary.load), unit: 'AU', note: '使用既有SRPE' },
+    injuryMetricView(result.injuries || [], Boolean(result.injuryIndividual))
   ];
 
   const days = (training.days || []).slice(-14);
@@ -32,22 +36,21 @@ function buildTrainingView(training, athletes, to) {
     distanceHeight: Math.max(2, Math.round(Number(item.distanceKm || 0) / maxDistance * 100))
   }));
 
-  const intensity = (training.intensity || []).filter((item) => Number(item.durationMin) > 0).map((item) => ({
-    name: item.name,
-    value: `${number(item.durationMin)} min`,
-    percentage: number(item.percentage),
-    width: Math.max(1, Math.min(100, Number(item.percentage) || 0))
-  }));
-  const content = (training.content || []).map((item) => ({
-    name: item.name,
-    value: `${item.count} 课次`,
-    percentage: number(item.percentage),
-    width: Math.max(1, Math.min(100, Number(item.percentage) || 0))
-  }));
+  // 强度/课次占比的缺失分类用演示补全表补齐后按真实数据展示（临时约定，见 utils/chart-placeholder.js）。
+  const intensity = completeRatioRows(
+    training.intensity || [],
+    INTENSITY_FILL,
+    (item) => item.durationMin,
+    (value) => `${number(value)} min`
+  );
+  const content = completeRatioRows(
+    training.content || [],
+    CONTENT_FILL,
+    (item) => item.count,
+    (value) => `${number(value, 0)} 课次`
+  );
   const trendDisplay = displaySeries(trend, trendPlaceholder('special'), trend.some((item) => item.duration > 0 || item.distance > 0));
-  const intensityDisplay = displaySeries(intensity, ratioPlaceholder(['U3', 'U2', 'U1', 'AT'], 'min'));
-  const contentDisplay = displaySeries(content, ratioPlaceholder(['水上训练', '测功仪', '技术训练', '恢复训练'], '课次'));
-  const athleteRows = (athletes || []).slice(0, 30).map((athlete) => {
+  const athleteRows = athletes.slice(0, 30).map((athlete) => {
     const age = ageAt(athlete.birthDate, to);
     return {
       id: athlete.id,
@@ -61,9 +64,8 @@ function buildTrainingView(training, athletes, to) {
     };
   });
   return { metrics, trend: trendDisplay.data, trendPlaceholder: trendDisplay.isPlaceholder,
-    intensity: intensityDisplay.data, intensityPlaceholder: intensityDisplay.isPlaceholder,
-    content: contentDisplay.data, contentPlaceholder: contentDisplay.isPlaceholder,
-    athleteRows, athleteRowsAll: athleteRows, athleteTotal: (athletes || []).length };
+    intensity, content,
+    athleteRows, athleteRowsAll: athleteRows, athleteTotal: athletes.length };
 }
 
 Page({
@@ -105,7 +107,7 @@ Page({
   async loadPageData(scope, full, isLatest) {
     if (!full) {
       const result = await api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId);
-      return this.applyAthletePager(buildTrainingView(result.training, result.athletes, scope.to));
+      return this.applyAthletePager(buildTrainingView(result, scope.to));
     }
     const [teamResult, modelResult, trainingResult] = await Promise.all([
       api.overviewTeams(scope.project),
@@ -115,23 +117,35 @@ Page({
     let specialTestsData;
     try {
       const st = await api.specialTests(scope.from, scope.to, scope.project);
-      // WXML 不能调用数组方法，秒数与差值在 JS 侧预先格式化为字符串。
-      specialTestsData = (st.events || []).map((ev) => ({
-        ...ev,
-        results: (ev.results || []).map((r) => {
-          const seconds = (ms) => (Number(ms) / 1000).toFixed(2);
-          return {
-            ...r,
+      // WXML 不能调用数组方法，标题、成绩与差值都在 JS 侧预先组装成展示字符串。
+      specialTestsData = (st.events || []).map((ev) => {
+        const titleParts = [
+          ev.distanceM ? `${ev.distanceM} 米` : '',
+          ev.boatClass || '',
+          ev.genderGroup || '',
+          ev.session || ''
+        ].filter(Boolean);
+        return {
+          id: ev.id,
+          title: titleParts.join(' · ') || '专项测试',
+          testDate: ev.testDate || '',
+          meta: [ev.windConditions, ev.location].filter(Boolean).join(' · '),
+          results: (ev.results || []).map((r, index) => ({
+            key: `${ev.id}-${index}`,
+            rank: r.rank || index + 1,
+            crewName: r.crewName || '单人',
+            memberText: Array.isArray(r.memberNames) ? r.memberNames.filter(Boolean).join(' · ') : '',
             attemptsText: Array.isArray(r.attemptsMs) && r.attemptsMs.length
-              ? r.attemptsMs.map(seconds).join(' / ')
-              : '',
-            bestText: r.bestMs != null ? `${seconds(r.bestMs)}s` : '',
-            deltaText: r.deltaPreviousMs != null
-              ? `${r.deltaPreviousMs > 0 ? '+' : ''}${seconds(r.deltaPreviousMs)}s`
-              : ''
-          };
-        })
-      }));
+              ? r.attemptsMs.map(raceTime).filter(Boolean).join(' / ') || '无成绩'
+              : '无成绩',
+            bestText: r.bestMs != null ? raceTime(r.bestMs) : '',
+            deltaText: r.deltaPreviousMs == null ? '' : raceDelta(r.deltaPreviousMs),
+            deltaTone: r.deltaPreviousMs == null || Number(r.deltaPreviousMs) === 0
+              ? 'flat'
+              : Number(r.deltaPreviousMs) < 0 ? 'faster' : 'slower'
+          }))
+        };
+      });
     } catch {
       specialTestsData = [];
     }
@@ -144,7 +158,7 @@ Page({
       pace: item.pace || ''
     }));
     if (isLatest && isLatest()) this._loadedProject = scope.project;
-    const view = { teamItems, championEvents, specialTests: specialTestsData, ...buildTrainingView(trainingResult.training, trainingResult.athletes, scope.to) };
+    const view = { teamItems, championEvents, specialTests: specialTestsData, ...buildTrainingView(trainingResult, scope.to) };
     return this.applyAthletePager(view);
   },
 

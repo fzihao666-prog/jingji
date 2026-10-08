@@ -1,0 +1,275 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Birthplace live roster: the map stays primary while the right rail exposes a scrollable real-time headcount. */
+
+.birthplace-detail-heading span i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #20ae89;
+  box-shadow: 0 0 0 4px rgb(32 174 137 / 12%);
+  animation: birthplace-live-pulse 2.2s ease-in-out infinite;
+}
+
+.birthplace-detail-heading > div:first-child > strong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #0a5159;
+  font:
+    900 22px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.birthplace-detail-heading strong em {
+  padding: 3px 7px;
+  border-radius: 5px;
+  color: #fff;
+  background: #0b7773;
+  font:
+    900 12px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  font-style: normal;
+}
+
+.birthplace-detail-heading > div:last-child strong small {
+  margin-left: 3px;
+  color: #71878d;
+  font:
+    650 8px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.birthplace-city-list > span {
+  grid-column: 1 / -1;
+  margin-bottom: 1px;
+  color: #70878d;
+  font-size: 8px;
+}
+
+.birthplace-athlete-list > header {
+  min-height: 27px;
+  padding: 0 12px;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.birthplace-athlete-list > header span {
+  color: #385e67;
+  font-size: 8px;
+  font-weight: 850;
+}
+
+.birthplace-athlete-list > header small {
+  color: #84969b;
+  font-size: 7px;
+}
+
+.birthplace-athlete-list > .birthplace-athlete-scroll {
+  min-height: 0;
+  max-height: 205px;
+  padding: 0 6px 4px 10px;
+  border: 0;
+  display: block;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #8fc6bf #eef4f3;
+}
+
+.birthplace-athlete-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.birthplace-athlete-scroll::-webkit-scrollbar-track {
+  background: #eef4f3;
+}
+
+.birthplace-athlete-scroll::-webkit-scrollbar-thumb {
+  border-radius: 6px;
+  background: #8fc6bf;
+}
+
+.birthplace-athlete-scroll > div {
+  min-height: 62px;
+  padding: 6px 3px;
+  border-bottom: 1px solid #e5edee;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1.15fr) minmax(0, 1.35fr);
+  grid-template-areas: 'avatar identity details unit result';
+  align-items: center;
+  gap: 6px;
+}
+
+.birthplace-athlete-scroll > div:last-child {
+  border-bottom: 0;
+}
+
+.birthplace-athlete-scroll > div:hover {
+  background: #f3f9f7;
+}
+
+.birthplace-athlete-scroll > div > i {
+  grid-area: avatar;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #0b6970;
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.birthplace-athlete-scroll > div > span {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.birthplace-athlete-scroll > div > span strong,
+.birthplace-athlete-scroll > div > span small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.birthplace-athlete-scroll > div > span strong {
+  color: #244d57;
+  font-size: 8px;
+  line-height: 1.2;
+}
+
+.birthplace-athlete-scroll > div > span small {
+  margin-top: 2px;
+  color: #788d93;
+  font-size: 7px;
+  line-height: 1.2;
+}
+
+.birthplace-athlete-info small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 7px;
+  line-height: 1.3;
+  color: #607a80;
+}
+
+.birthplace-athlete-identity {
+  grid-area: identity;
+}
+
+.birthplace-athlete-info {
+  grid-area: details;
+}
+
+.birthplace-athlete-unit {
+  grid-area: unit;
+}
+
+.birthplace-athlete-unit small {
+  display: block;
+  overflow: hidden;
+  color: #607a80;
+  font-size: 7px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.birthplace-athlete-result {
+  grid-area: result;
+  min-width: 0;
+}
+
+.birthplace-athlete-result strong {
+  display: block;
+  overflow: hidden;
+  color: #9a6812;
+  font-size: 7.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.birthplace-athlete-result small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #8fa5aa;
+  font-size: 6.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+@keyframes birthplace-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.55;
+    transform: scale(0.78);
+  }
+}
+
+.profile-visual-empty {
+  min-height: 285px;
+  padding: 24px;
+  border: 1px dashed #cedbdd;
+  color: #809197;
+  background: #f7faf9;
+  display: grid;
+  place-content: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.profile-visual-empty strong {
+  color: #34545e;
+  font-size: 12px;
+}
+
+.profile-visual-empty span {
+  max-width: 260px;
+  font-size: 8.5px;
+  line-height: 1.6;
+}
+
+.professional-load-chart {
+  height: 280px !important;
+}
+
+.professional-chart-empty {
+  min-height: 245px;
+  padding: 28px;
+  color: #788b92;
+  background: #f5f8f8;
+  border: 1px dashed #ccdadd;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.professional-chart-empty strong {
+  color: #35545e;
+  font-size: 13px;
+}
+
+.professional-chart-empty p {
+  max-width: 280px;
+  line-height: 1.6;
+}
+

@@ -1,0 +1,593 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 响应式 */
+@media (width <= 900px) {
+  .body-composition-simulation-v3 .body-composition-main {
+    grid-template-columns: 1fr;
+  }
+
+  .body-composition-figure-panel {
+    min-height: 340px;
+  }
+}
+
+.body-sim-metric-card rect {
+  fill: #f7fbfb;
+  stroke: #cfe1e1;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-sim-metric-card.is-primary rect {
+  fill: #edf8f6;
+  stroke: #77bcb5;
+}
+
+.body-sim-metric-value {
+  fill: #124e55;
+  font:
+    900 20px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.body-sim-metric-card.is-primary .body-sim-metric-value {
+  fill: #08746f;
+}
+
+.body-sim-metric-value tspan {
+  font-size: 10px;
+}
+
+.body-sim-metric-source {
+  fill: #486770;
+  font:
+    700 9px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.body-sim-callout-v2 .body-chart-value {
+  font-size: 11px;
+}
+
+.body-composition-simulation-v2 .body-chart-label {
+  font-size: 10px;
+}
+
+.body-mass-strip,
+.body-segment-chart,
+.body-timeline {
+  margin-top: 12px;
+}
+
+.body-mass-strip svg,
+.body-segment-chart svg,
+.body-timeline svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.body-segment-bar {
+  fill: #238f8b;
+}
+
+.body-chart-axis {
+  stroke: #c8d8da;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: crispedges;
+}
+
+.body-chart-unit {
+  fill: #486770;
+  font:
+    850 10px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.08em;
+}
+
+.body-chart-label {
+  fill: #486770;
+  font:
+    700 11px 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.body-chart-value {
+  fill: #0b6967;
+  font:
+    900 11px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.body-chart-date {
+  fill: #486770;
+  font:
+    700 9px Bahnschrift,
+    sans-serif;
+}
+
+.body-segment-chart p {
+  margin: 7px 0 0;
+  color: #486770;
+  font-size: 8px;
+}
+
+.body-timeline-line {
+  fill: none;
+  stroke: #0b7773;
+  stroke-width: 2.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-timeline-point {
+  fill: #fff;
+  stroke: #0b7773;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.body-chart-mobile-list,
+.body-composition-mobile-segment-status {
+  display: none;
+}
+
+.body-timeline-details {
+  margin-top: 10px;
+  color: #607981;
+  font-size: 10px;
+}
+
+.body-timeline-details summary {
+  width: fit-content;
+  color: #0b706d;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.body-timeline-details ol {
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+
+.body-timeline-details li {
+  padding: 6px 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  background: #f2f8f7;
+}
+
+.body-timeline-details strong {
+  color: #174f58;
+  font:
+    900 11px Bahnschrift,
+    sans-serif;
+}
+
+.body-atlas-empty {
+  min-height: 156px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: #7a9095;
+  font-size: 11px;
+  text-align: center;
+}
+
+.body-atlas-note {
+  margin: 0;
+  padding: 9px 12px;
+  border-left: 3px solid #d6a64b;
+  color: #766e61;
+  background: #fffaf0;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+@media (width <= 720px) {
+  .body-atlas-toolbar {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .body-atlas-toolbar label {
+    min-width: 0;
+  }
+
+  .body-atlas-source {
+    text-align: left;
+  }
+
+  .body-atlas-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .body-atlas-panel {
+    min-height: 218px;
+    padding: 13px;
+  }
+
+  .body-composition-simulation svg,
+  .body-segment-chart svg,
+  .body-timeline svg {
+    display: none;
+  }
+
+  .body-chart-mobile-list,
+  .body-composition-mobile-segment-status {
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 7px;
+  }
+
+  .body-chart-mobile-list > div,
+  .body-composition-mobile-segment-status > div {
+    min-height: 38px;
+    padding: 9px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-left: 3px solid #19857f;
+    background: #f2f8f7;
+  }
+
+  .body-chart-mobile-list dt,
+  .body-composition-mobile-segment-status dt {
+    color: #547078;
+    font-size: 11px;
+  }
+
+  .body-chart-mobile-list dt small,
+  .body-composition-mobile-segment-status dt small,
+  .body-composition-mobile-segment-status dd small {
+    display: block;
+    margin-top: 2px;
+    color: #486770;
+    font-size: 8px;
+  }
+
+  .body-chart-mobile-list dd,
+  .body-composition-mobile-segment-status dd {
+    margin: 0;
+    color: #124f56;
+    font:
+      900 13px Bahnschrift,
+      'Microsoft YaHei UI',
+      sans-serif;
+    text-align: right;
+  }
+
+  .body-segment-chart p {
+    font-size: 9px;
+  }
+
+  .body-timeline-details {
+    margin-top: 0;
+  }
+
+  .body-timeline-details summary {
+    min-height: 40px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    background: #f2f8f7;
+  }
+
+  .body-timeline-details ol {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 480px) {
+  .body-composition-figure-panel {
+    min-height: 310px;
+    padding-inline: 88px;
+  }
+
+  .body-composition-label {
+    min-width: 92px;
+    padding: 8px 9px;
+  }
+
+  .body-composition-guide {
+    width: 112px;
+  }
+
+  .body-composition-guide-fat {
+    right: -102px;
+  }
+
+  .body-composition-guide-lean {
+    left: -102px;
+  }
+
+  .body-composition-secondary-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+.birthplace-map-panel {
+  min-height: 510px !important;
+}
+
+.birthplace-map-visual {
+  min-height: 390px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(460px, 1fr);
+  gap: 12px;
+}
+
+.birthplace-map-stage {
+  min-width: 0;
+  min-height: 370px;
+  padding: 0 10px 0 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.birthplace-map-stage svg {
+  width: 100%;
+  height: 340px;
+  overflow: visible;
+  transform: translate(-10px, -5px) scale(0.97);
+  transform-origin: center;
+}
+
+.birthplace-map-stage path {
+  cursor: pointer;
+  fill: #eef3f3;
+  stroke: #fff;
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 0.18s ease,
+    fill 0.18s ease,
+    filter 0.18s ease,
+    stroke 0.18s ease;
+}
+
+.birthplace-map-stage path.has-origin-data {
+  fill: rgb(20 142 134 / var(--origin-opacity));
+}
+
+.birthplace-map-stage path:hover,
+.birthplace-map-stage path:focus-visible {
+  fill: #269b94;
+  stroke: #fff;
+  stroke-width: 1.1;
+  filter: brightness(0.96);
+  outline: none;
+}
+
+.birthplace-map-stage path.is-active {
+  fill: #0b7773;
+  stroke: #fff;
+  stroke-width: 1.1;
+  filter: none;
+  transform: none;
+  outline: none;
+}
+
+.birthplace-map-legend {
+  min-height: 28px;
+  padding: 3px 14px 3px 22px;
+  display: grid;
+  grid-template-columns: auto 112px auto 1fr;
+  align-items: center;
+  gap: 7px;
+  color: #7a8f95;
+  font-size: 8px;
+}
+
+.birthplace-map-legend i {
+  height: 7px;
+  background: linear-gradient(90deg, rgb(20 142 134 / 25%), #0b7773);
+}
+
+.birthplace-map-legend em {
+  color: #58727a;
+  font-style: normal;
+  font-weight: 700;
+  text-align: right;
+}
+
+.birthplace-detail {
+  min-width: 0;
+  min-height: 370px;
+  padding: 0;
+  border: 1px solid #d7e4e5;
+  border-left: 4px solid #0e817b;
+  background: #f8fbfa;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.birthplace-detail-heading {
+  min-height: 82px;
+  padding: 13px 14px 12px;
+  border-bottom: 1px solid #d8e4e5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(118deg, #eef8f5 0%, #fff 68%);
+}
+
+.birthplace-detail-heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.birthplace-detail-heading > div:last-child {
+  justify-items: end;
+}
+
+.birthplace-detail-heading span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #6b8389;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.birthplace-detail-heading strong {
+  color: #0c6263;
+  font:
+    900 23px Bahnschrift,
+    'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.birthplace-detail-heading > div:last-child strong {
+  color: #0b5f63;
+  font:
+    900 22px Bahnschrift,
+    sans-serif;
+}
+
+.birthplace-city-list {
+  margin: 0;
+  padding: 10px 13px 8px;
+  border-bottom: 1px solid #e0e9ea;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  background: #fff;
+}
+
+.birthplace-city-list > span,
+.birthplace-athlete-list > span {
+  color: #789096;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.birthplace-city-list > div {
+  min-height: 24px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: #eef6f4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.birthplace-city-list strong {
+  overflow: hidden;
+  color: #365e67;
+  font-size: 7.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.birthplace-city-list em {
+  color: #12867f;
+  font:
+    800 7.5px Bahnschrift,
+    sans-serif;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.birthplace-athlete-list {
+  margin-top: 12px;
+  display: flex;
+  gap: 7px;
+  flex: 1;
+  min-height: 0;
+  padding: 9px 0 0;
+  flex-direction: column;
+  background: #fff;
+}
+
+.birthplace-athlete-list > div {
+  min-height: 25px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #edf2f2;
+}
+
+.birthplace-athlete-list > div strong {
+  overflow: hidden;
+  color: #244f59;
+  font-size: 8px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.birthplace-athlete-list > div span {
+  overflow: hidden;
+  color: #6e858c;
+  font-size: 7.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.birthplace-athlete-list > div em {
+  padding: 2px 4px;
+  color: #9a6a0e;
+  background: #fff3cf;
+  font-size: 6px;
+  font-style: normal;
+}
+
+.birthplace-athlete-list > p {
+  color: #829499;
+  font-size: 7px;
+}
+
+.birthplace-detail-empty {
+  flex: 1;
+  min-height: 160px;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  color: #819398;
+  text-align: center;
+  background: #fff;
+}
+
+.birthplace-detail-empty strong {
+  color: #46656d;
+  font-size: 10px;
+}
+
+.birthplace-detail-empty span {
+  font-size: 8px;
+}
+
+.birthplace-coverage {
+  min-height: 29px;
+  margin: auto 0 0;
+  padding: 8px 12px 0;
+  border-top: 1px solid #dce7e8;
+  color: #789096;
+  font-size: 8px;
+  background: #f4f8f7;
+}
+
+.birthplace-coverage strong {
+  color: #205d64;
+  font:
+    900 9px Bahnschrift,
+    sans-serif;
+}
+

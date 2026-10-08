@@ -45,8 +45,9 @@ button::after { border: 0; }
 .metric-card.tone-teal { background: linear-gradient(145deg, #19877f, #0c5e60); }
 .metric-card.tone-orange { background: linear-gradient(145deg, #b86b22, #7f3e19); }
 .metric-card.tone-blue { background: linear-gradient(145deg, #2f708a, #17475d); }
-.metric-card.tone-purple { background: linear-gradient(145deg, #67528e, #40335f); }
+.metric-card.tone-purple { background: linear-gradient(145deg, #4d3e6b, #33294c); }
 .metric-card.tone-green { background: linear-gradient(145deg, #32846b, #1d5b4c); }
+.metric-card.tone-red { background: linear-gradient(145deg, #b34a42, #7c2f29); }
 .metric-label { position: relative; color: rgba(239,250,249,.78); font-size: 22rpx; font-weight: 700; }
 .metric-value { position: relative; display: block; margin-top: 16rpx; font-size: 48rpx; font-weight: 800; }
 .metric-value text { margin-left: 5rpx; font-size: 21rpx; font-weight: 600; }
@@ -80,6 +81,11 @@ button::after { border: 0; }
 
 .compact-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; }
 .compact-stat { min-height: 144rpx; padding: 20rpx; border: 1rpx solid #dbe6e8; border-top: 6rpx solid #168f88; background: #f8fbfb; }
+/* 损伤情况卡的独立强调色：与同排青色顶边的指标卡区分，状态另有文字表达。 */
+.compact-stat.tone-blue { border-top-color: #2f708a; }
+.compact-stat.tone-blue .compact-stat-value { color: #17475d; }
+.compact-stat.tone-red { border-top-color: #b34a42; }
+.compact-stat.tone-red .compact-stat-value { color: #7c2f29; }
 .compact-stat-label { color: #70858c; font-size: 20rpx; font-weight: 700; }
 .compact-stat-value { display: block; margin-top: 10rpx; color: #0f5961; font-size: 39rpx; font-weight: 800; }
 .compact-stat-value text { margin-left: 4rpx; color: #71878d; font-size: 19rpx; }
