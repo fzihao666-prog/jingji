@@ -19,8 +19,8 @@ describe('待办分页无障碍状态', () => {
 });
 
 describe('训练总览移动端布局', () => {
-  it('按核心数据、负荷趋势、结构、RPE、重点人员、运动员列表排序', () => {
-    const headings = ['周期核心数据', '训练负荷趋势', '训练结构', 'RPE 状态趋势', '重点人员', '队伍运动员'];
+  it('按核心数据、负荷趋势、结构、RPE、状态监测、运动员列表排序', () => {
+    const headings = ['周期核心数据', '训练负荷趋势', '训练结构', 'RPE 状态趋势', '状态监测', '队伍运动员'];
     const positions = headings.map((heading) => overview.indexOf(heading));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));

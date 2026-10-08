@@ -151,7 +151,7 @@ describe('伤病与疼痛上报入口', () => {
     );
   });
 
-  it('首页重点人员合并同人多类待办并隔离队伍和已跟进人员', () => {
+  it('首页状态监测合并同人多类待办并隔离队伍和已跟进人员', () => {
     const person = { athleteId: 7, athleteName: '样例队员', team: '一队' };
     const page = createOverviewPage();
     const result = page.buildFocusRows({
@@ -170,7 +170,7 @@ describe('伤病与疼痛上报入口', () => {
     expect(indexTemplate).toContain('wx:for="{{focusRows}}"');
   });
 
-  it('首页重点人员每页最多五人且末页不补假数据', () => {
+  it('首页状态监测每页最多五人且末页不补假数据', () => {
     const page = createOverviewPage({
       todos: { missing: [
         { athleteId: 1 }, { athleteId: 2 }, { athleteId: 3 },
