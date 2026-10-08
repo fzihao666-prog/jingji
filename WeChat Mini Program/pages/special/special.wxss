@@ -37,3 +37,31 @@
 .test-delta.faster { background: #e2f0e9; color: #2b6e58; }
 .test-delta.slower { background: #f6e3e1; color: #9c3f37; }
 .test-delta.flat { background: #e8eff0; color: #70858c; }
+
+/* 成绩明细默认折叠：场内展开看每轮与其余组合，卡片外展开更早场次。 */
+.test-expand {
+  width: 100%;
+  height: 60rpx;
+  margin: 12rpx 0 0;
+  padding: 0;
+  border: 1rpx solid #d5e1e3;
+  border-radius: 14rpx;
+  color: #176f7f;
+  background: #ffffff;
+  font-size: 21rpx;
+  line-height: 60rpx;
+}
+.test-expand:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
+.test-more-events {
+  width: 100%;
+  height: 76rpx;
+  margin-top: 16rpx;
+  padding: 0;
+  border: 1rpx solid #cbdadd;
+  border-radius: 16rpx;
+  color: #176f7f;
+  background: #f8fbfb;
+  font-size: 23rpx;
+  line-height: 76rpx;
+}
+.test-more-events:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }

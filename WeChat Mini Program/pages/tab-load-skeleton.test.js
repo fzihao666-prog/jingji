@@ -36,6 +36,10 @@ const strengthView = loadCjs(new URL('../utils/strength-view.js', import.meta.ur
 });
 const chartPlaceholder = loadCjs(new URL('../utils/chart-placeholder.js', import.meta.url), {});
 const paginationModule = loadCjs(new URL('../utils/pagination.js', import.meta.url), {});
+// 专项测试成绩展示视图与线上共用真实实现。
+const specialTestView = loadCjs(new URL('../utils/special-test-view.js', import.meta.url), {
+  './format': formatModule,
+});
 const dailyTodosModule = loadCjs(new URL('../utils/daily-todos.js', import.meta.url), {
   './format': formatModule,
   './pagination': paginationModule,
@@ -110,6 +114,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/daily-todos': dailyTodosModule,
     '../../utils/pagination': paginationModule,
     '../../utils/injury-metric': injuryMetricModule,
+    '../../utils/special-test-view': specialTestView,
     ...extraMocks,
   };
   vm.runInNewContext(readFileSync(url, 'utf8'), {

@@ -2,6 +2,7 @@ const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
 const { projectLabel } = require('../../utils/project-label');
+const { todayBeijing } = require('../../utils/date');
 const { draftIdentity, loadFormDraft, saveFormDraft, clearFormDraft } = require('../../utils/form-draft');
 const {
   STRENGTH_FIELDS,
@@ -9,10 +10,39 @@ const {
   defaultStrengthForm,
   strengthPayload,
   defaultSpecialForm,
-  specialPayload
+  specialPayload,
+  pickSpecialEventFields,
+  recentValues,
+  resolveCrewName
 } = require('../../utils/test-entry-form');
 
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+
+// 赛事条件记忆：按项目保存上次成功提交的赛事级字段与常用距离，本地可清、不存身份信息。
+function testEventKey(project) {
+  return `jingji-mini-test-event:${project || 'default'}`;
+}
+
+function testDistanceKey(project) {
+  return `jingji-mini-test-distance:${project || 'default'}`;
+}
+
+function loadLocal(key) {
+  try {
+    const raw = wx.getStorageSync(key);
+    return raw && raw.data !== undefined ? raw.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLocal(key, data) {
+  try {
+    wx.setStorageSync(key, { savedAt: Date.now(), data });
+  } catch {
+    // 本地存储失败不影响正常填写与提交。
+  }
+}
 
 Page({
   data: {
@@ -31,6 +61,9 @@ Page({
     memberIds: [],
     strengthFields: STRENGTH_FIELDS,
     attemptIndexes: Array.from({ length: SPECIAL_ATTEMPT_COUNT }, (_, index) => index),
+    // 专项模式：常用距离快捷选择与「更多条件」（风况/地点/历史最好/备注）折叠。
+    distanceChips: [],
+    showMoreFields: false,
     form: defaultStrengthForm()
   },
 
@@ -41,6 +74,56 @@ Page({
   },
 
   retryLoad() { this.loadPage(); },
+
+  // 专项首次进入的预填视图：上次赛事条件 + 今日日期 + 主测默认组合 + 常用距离。
+  buildSeedView(project, target) {
+    const defaults = loadLocal(testEventKey(project)) || {};
+    const chips = loadLocal(testDistanceKey(project));
+    return {
+      form: {
+        ...this.defaultFormFor(),
+        ...pickSpecialEventFields(defaults),
+        testDate: defaults.testDate || todayBeijing(),
+        crewName: target.name || ''
+      },
+      memberIds: [Number(target.id)],
+      distanceChips: Array.isArray(chips) ? chips : []
+    };
+  },
+
+  onAthleteChange(event) {
+    const index = Number(event.detail.value) || 0;
+    const candidate = (this._athletes || [])[index];
+    if (!candidate || Number(candidate.id) === Number(this.data.athleteId)) return;
+    const previousName = this.data.athleteName;
+    this._targetAthleteId = Number(candidate.id);
+    // 主测默认进成员：成员仍是纯自动态时跟随切换重置，已手动加人时只补进新主测。
+    const memberId = Number(candidate.id);
+    const currentMembers = this.data.memberIds;
+    const autoState = !currentMembers.length
+      || (currentMembers.length === 1 && currentMembers[0] === Number(this.data.athleteId));
+    const memberIds = autoState
+      ? [memberId]
+      : (currentMembers.includes(memberId) ? currentMembers : currentMembers.concat(memberId));
+    const form = this.data.form || {};
+    this.setData({
+      athleteIndex: index,
+      memberIds,
+      form: { ...form, crewName: resolveCrewName(form.crewName, previousName, candidate.name || `运动员${candidate.id}`) }
+    });
+    this.loadPage();
+  },
+
+  onToggleMoreFields() {
+    this.setData({ showMoreFields: !this.data.showMoreFields });
+  },
+
+  onDistanceChip(event) {
+    const value = String(event.currentTarget.dataset.value || '').trim();
+    if (!value) return;
+    this.setData({ form: { ...this.data.form, distanceM: value } });
+    this.persistDraft();
+  },
 
   loadPage() {
     this._guard = this._guard || createRequestGuard();
@@ -58,28 +141,25 @@ Page({
       this._targetAthleteId = Number(target.id);
       this._athletes = athletes;
       this.restoreDraft();
+      const project = target.project || context.project;
+      // 首次进入专项录入预填上次赛事条件与主测默认组合；切换运动员不重填，保留现场已填内容。
+      const seed = this._mode === 'special' && !this._formSeeded;
+      this._formSeeded = true;
+      const seedView = seed ? this.buildSeedView(project, target) : {};
       return {
         mode: this._mode,
         athleteId: Number(target.id),
         athleteName: target.name || '',
-        athleteMeta: `${projectLabel(target.project || context.project)} · ${target.team || '未分队'}`,
-        project: target.project || context.project,
-        projectLabel: projectLabel(target.project || context.project),
+        athleteMeta: `${projectLabel(project)} · ${target.team || '未分队'}`,
+        project,
+        projectLabel: projectLabel(project),
         athleteOptions: athletes.map((item) => item.name || `运动员${item.id}`),
         athleteIndex: index,
         members: athletes.map((item) => ({ id: Number(item.id), name: item.name || `运动员${item.id}` })),
+        ...seedView,
         loading: false
       };
     }, '测试录入页面加载失败。');
-  },
-
-  onAthleteChange(event) {
-    const index = Number(event.detail.value) || 0;
-    const candidate = (this._athletes || [])[index];
-    if (!candidate || Number(candidate.id) === Number(this.data.athleteId)) return;
-    this._targetAthleteId = Number(candidate.id);
-    this.setData({ athleteIndex: index, memberIds: [] });
-    this.loadPage();
   },
 
   onFieldInput(event) {
@@ -176,12 +256,21 @@ Page({
       getApp().globalData.homeNeedsRefresh = true;
       getApp().globalData.dataVersion = (getApp().globalData.dataVersion || 0) + 1;
       wx.showToast({ title: '成绩已保存', icon: 'success' });
-      // 保存后保留日期与项目，清空成绩，便于连续录入。
-      const reset = this.data.mode === 'special'
-        ? { ...defaultSpecialForm(), testDate: payload.testDate, project: this.data.project }
-        : { ...defaultStrengthForm(), testDate: payload.testDate };
       this.clearDraft();
-      this.setData({ form: reset, memberIds: [] });
+      if (this.data.mode === 'special') {
+        // 保留赛事条件只清成绩：同一场测试连续录入多个组合不用重填；条件按项目记住供下次预填。
+        const eventFields = pickSpecialEventFields(this.data.form);
+        saveLocal(testEventKey(this.data.project), eventFields);
+        saveLocal(testDistanceKey(this.data.project), recentValues(loadLocal(testDistanceKey(this.data.project)), eventFields.distanceM));
+        this.setData({
+          form: { ...this.defaultFormFor(), ...eventFields, crewName: this.data.athleteName || '' },
+          memberIds: this.data.athleteId ? [Number(this.data.athleteId)] : [],
+          distanceChips: loadLocal(testDistanceKey(this.data.project)) || []
+        });
+      } else {
+        // 体能测试：保存后保留日期，清空指标，便于连续录入。
+        this.setData({ form: { ...defaultStrengthForm(), testDate: payload.testDate }, memberIds: [] });
+      }
     } catch (error) {
       this.setData({ error: error.message || '测试成绩保存失败。' });
     } finally {

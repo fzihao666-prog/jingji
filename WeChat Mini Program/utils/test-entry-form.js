@@ -109,11 +109,51 @@ function specialPayload(input) {
   };
 }
 
+// 赛事级条件（事件 upsert 维度：项目/日期/距离/艇型/组别/时段，风况/地点/备注随场）：
+// 保存成功后保留并按项目记住，同一场测试连续录入多个组合时不再重填。
+function pickSpecialEventFields(form) {
+  const source = form || {};
+  return {
+    testDate: String(source.testDate || ''),
+    distanceM: String(source.distanceM == null ? '' : source.distanceM),
+    boatClass: String(source.boatClass || ''),
+    genderGroup: String(source.genderGroup || ''),
+    session: String(source.session || ''),
+    windConditions: String(source.windConditions || ''),
+    location: String(source.location || ''),
+    note: String(source.note || '')
+  };
+}
+
+// 最近用过的取值（如测试距离）：新值去重置顶、限制条数，供快捷选择。
+function recentValues(list, value, max = 4) {
+  const next = String(value == null ? '' : value).trim();
+  const items = (Array.isArray(list) ? list : [])
+    .map((item) => String(item == null ? '' : item).trim())
+    .filter(Boolean);
+  const merged = next ? [next, ...items.filter((item) => item !== next)] : items;
+  const limit = Number.isInteger(max) && max > 0 ? max : 4;
+  return merged.slice(0, limit);
+}
+
+// 切换主测运动员时的组合名默认值：未填或仍是上一个自动名时跟随新运动员，已手改则保留。
+function resolveCrewName(current, previousAthleteName, nextAthleteName) {
+  const name = String(current == null ? '' : current).trim();
+  const previous = String(previousAthleteName == null ? '' : previousAthleteName).trim();
+  const next = String(nextAthleteName == null ? '' : nextAthleteName).trim();
+  if (!next) return name;
+  if (!name || (previous && name === previous)) return next;
+  return name;
+}
+
 module.exports = {
   STRENGTH_FIELDS,
   SPECIAL_ATTEMPT_COUNT,
   defaultStrengthForm,
   strengthPayload,
   defaultSpecialForm,
-  specialPayload
+  specialPayload,
+  pickSpecialEventFields,
+  recentValues,
+  resolveCrewName
 };
