@@ -1,6 +1,8 @@
+import './ProfilePhysiology.css';
+import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import type { EChartsOption } from 'echarts';
-import { CalendarRange, Save, Search, Trophy } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { CalendarRange, Save, Search } from 'lucide-react';
+import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import { analyzeCanoePeriod } from '../../shared/canoe-model';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
 import { analyzeSlalomPeriod } from '../../shared/slalom-model';
@@ -8,7 +10,6 @@ import { projectLabel } from '../../shared/projects';
 import { api } from '../api';
 import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
 import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
-import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { EChart } from '../components/EChart';
 import { placeholderTrend } from '../components/chart-placeholder';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
@@ -22,7 +23,6 @@ import type {
   AerobicEndurancePayload,
   AthleteRadarModelsPayload,
   BodyCompositionRecord,
-  ChampionBenchmarkPayload,
   OverviewMeasurement,
   Project,
   ProfileTrainingStatusPayload,
@@ -179,11 +179,11 @@ export function PersonalPage(props: Props) {
   const canEditOwnPosition =
     props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
   const [profileMeasurements, setProfileMeasurements] = useState<OverviewMeasurement[]>([]);
+  const [physiologyRecords, setPhysiologyRecords] = useState<ProfilePhysiologyRecord[]>([]);
+  const [physiologyError, setPhysiologyError] = useState(false);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
   const [aerobicEndurance, setAerobicEndurance] = useState<AerobicEndurancePayload | null>(null);
   const [aerobicEnduranceLoading, setAerobicEnduranceLoading] = useState(false);
-  const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
-  const [championLoading, setChampionLoading] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
   const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
   const [bodyCompositionHistory, setBodyCompositionHistory] = useState<BodyCompositionRecord[]>([]);
@@ -197,9 +197,10 @@ export function PersonalPage(props: Props) {
 
   useEffect(() => {
     let ignored = false;
+    setPhysiologyRecords([]);
+    setPhysiologyError(false);
     if (!selectedAthlete) {
       setProfileMeasurements([]);
-      setChampionBenchmark(null);
       return;
     }
     setProfileAnalysisLoading(true);
@@ -211,25 +212,19 @@ export function PersonalPage(props: Props) {
         selectedAthlete.project as Project
       )
       .then((result) => {
-        if (!ignored) setProfileMeasurements(result.overview.measurements);
+        if (!ignored) {
+          setProfileMeasurements(result.overview.measurements);
+          setPhysiologyRecords(result.overview.physiologyRecords ?? []);
+        }
       })
       .catch(() => {
-        if (!ignored) setProfileMeasurements([]);
+        if (!ignored) {
+          setProfileMeasurements([]);
+          setPhysiologyError(true);
+        }
       })
       .finally(() => {
         if (!ignored) setProfileAnalysisLoading(false);
-      });
-    setChampionLoading(true);
-    api
-      .championBenchmark(selectedAthlete.id)
-      .then((result) => {
-        if (!ignored) setChampionBenchmark(result.benchmark);
-      })
-      .catch(() => {
-        if (!ignored) setChampionBenchmark(null);
-      })
-      .finally(() => {
-        if (!ignored) setChampionLoading(false);
       });
     return () => {
       ignored = true;
@@ -557,7 +552,8 @@ export function PersonalPage(props: Props) {
             <strong>选择运动员</strong>
             {selectedAthlete && (
               <small>
-                {projectLabel(selectedAthlete.project)} · {selectedAthlete.team} · {selectedAthlete.name}
+                {projectLabel(selectedAthlete.project)} · {selectedAthlete.team} ·{' '}
+                {selectedAthlete.name}
               </small>
             )}
           </div>
@@ -773,10 +769,7 @@ export function PersonalPage(props: Props) {
                   FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
                 </p>
               </AppCard>
-              <AerobicEndurance
-                data={aerobicEndurance}
-                loading={aerobicEnduranceLoading}
-              />
+              <AerobicEndurance data={aerobicEndurance} loading={aerobicEnduranceLoading} />
               <AppCard
                 variant="chart"
                 className="professional-panel analysis-feature-panel athlete-radar-card"
@@ -822,26 +815,6 @@ export function PersonalPage(props: Props) {
                 />
               </AppCard>
             </div>
-            <AppCard
-              variant="chart"
-              className="professional-panel analysis-feature-panel personal-champion-card"
-            >
-              <header className="personal-analysis-card-heading">
-                <div>
-                  <Trophy size={17} />
-                  <span>
-                    <small>CHAMPION RADAR</small>
-                    <h2>冠军模型八维雷达分析</h2>
-                    <p>当前水平、冠军标准、维度差距与补强优先级</p>
-                  </span>
-                </div>
-                <strong>八维雷达</strong>
-              </header>
-              <ChampionModelBenchmark benchmark={championBenchmark} loading={championLoading} />
-              <p className="analysis-method-note">
-                八维雷达聚合身体形态、耐力、VO2Max、不对称性、爆发力、无氧功、最大力量和核心力量；缺失项不按0分处理。
-              </p>
-            </AppCard>
             <ProfileSection
               title="训练情况"
               subtitle="与同项目、同队且在当前授权范围内的团队平均对照；所有数据跟随页面总周期。"
@@ -855,15 +828,15 @@ export function PersonalPage(props: Props) {
 
           <ProfileSection
             title="生理生化与恢复状态"
-            subtitle="恢复趋势包含真实日报；生理生化尚未接入正式数据模型。"
+            subtitle="生理生化读取当前运动员在所选周期内的有效检测记录；恢复趋势跟随同一周期。"
           >
-            <AppCard variant="chart" className="professional-panel">
-              <ContentState
-                kind="empty"
-                title="生理生化数据暂未接入"
-                description="等待正式数据模型接入后展示，不使用模拟结果。"
-              />
-            </AppCard>
+            <ProfilePhysiologyRecords
+              records={physiologyRecords}
+              from={props.from}
+              to={props.to}
+              loading={profileAnalysisLoading}
+              error={physiologyError}
+            />
             <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} />
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
             <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
@@ -1008,11 +981,23 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
                   </>
                 ) : (
                   <EChart
-                    option={wellnessTrendOption({ ...trend, points: placeholderTrend.map((sample, index) => ({
-                      date: `2026-01-${String(index + 1).padStart(2, '0')}`,
-                      personalValue: trend.key === 'sleepHours' ? 6 + sample / 60 : trend.key === 'morningPulse' ? 55 + sample / 8 : trend.key === 'weightKg' ? 65 + sample / 20 : 3 + sample / 20,
-                      teamMean: null, teamSampleCount: null, hasPersonalValue: false,
-                    })) })}
+                    option={wellnessTrendOption({
+                      ...trend,
+                      points: placeholderTrend.map((sample, index) => ({
+                        date: `2026-01-${String(index + 1).padStart(2, '0')}`,
+                        personalValue:
+                          trend.key === 'sleepHours'
+                            ? 6 + sample / 60
+                            : trend.key === 'morningPulse'
+                              ? 55 + sample / 8
+                              : trend.key === 'weightKg'
+                                ? 65 + sample / 20
+                                : 3 + sample / 20,
+                        teamMean: null,
+                        teamSampleCount: null,
+                        hasPersonalValue: false,
+                      })),
+                    })}
                     label={`${trend.label}示例趋势`}
                     isPlaceholder
                   />
@@ -1176,9 +1161,12 @@ function AerobicEndurance({
   loading: boolean;
 }) {
   const sampleTrend: NonNullable<AerobicEndurancePayload['trend']> = {
-    code: 'sample', label: '有氧能力', unit: '示例',
+    code: 'sample',
+    label: '有氧能力',
+    unit: '示例',
     points: placeholderTrend.map((value, index) => ({
-      date: `2026-01-${String(index + 1).padStart(2, '0')}`, value,
+      date: `2026-01-${String(index + 1).padStart(2, '0')}`,
+      value,
     })),
   };
   const status = loading
@@ -1187,7 +1175,10 @@ function AerobicEndurance({
       ? '有氧耐力指标已更新。'
       : '当前周期暂无有氧耐力测试数据。';
   return (
-    <AppCard variant="chart" className="professional-panel analysis-feature-panel aerobic-endurance-card">
+    <AppCard
+      variant="chart"
+      className="professional-panel analysis-feature-panel aerobic-endurance-card"
+    >
       <p className="visually-hidden" aria-live="polite">
         {status}
       </p>
@@ -1236,16 +1227,16 @@ function AerobicEndurance({
             ))}
           </section>
           <section className="aerobic-trend" aria-label={`${data.trend?.label || '有氧能力'}趋势`}>
-              <header>
-                <h4>{data.trend?.label || '有氧能力'}趋势</h4>
-                <span>{data.trend?.unit || '示例'}</span>
-              </header>
-              <EChart
-                option={aerobicTrendOption(data.trend || sampleTrend)}
-                label={data.trend ? aerobicTrendLabel(data.trend) : '有氧能力示例趋势'}
-                isPlaceholder={!data.trend}
-              />
-            </section>
+            <header>
+              <h4>{data.trend?.label || '有氧能力'}趋势</h4>
+              <span>{data.trend?.unit || '示例'}</span>
+            </header>
+            <EChart
+              option={aerobicTrendOption(data.trend || sampleTrend)}
+              label={data.trend ? aerobicTrendLabel(data.trend) : '有氧能力示例趋势'}
+              isPlaceholder={!data.trend}
+            />
+          </section>
           {data.latestTest ? (
             <section className="aerobic-recent-test" aria-label="最近有氧测试">
               <span>最近有氧测试</span>
@@ -1259,7 +1250,10 @@ function AerobicEndurance({
         </div>
       ) : (
         <section className="aerobic-trend" aria-label="有氧能力示例趋势">
-          <header><h4>有氧能力趋势</h4><span>示例</span></header>
+          <header>
+            <h4>有氧能力趋势</h4>
+            <span>示例</span>
+          </header>
           <EChart option={aerobicTrendOption(sampleTrend)} label="有氧能力示例趋势" isPlaceholder />
         </section>
       )}
@@ -1273,4 +1267,193 @@ function analyzerForProject(project: string) {
     : project === '皮划艇'
       ? analyzeCanoePeriod
       : analyzeRowingPeriod;
+}
+
+function ProfilePhysiologyRecords({
+  records,
+  from,
+  to,
+  loading,
+  error,
+}: {
+  records: ProfilePhysiologyRecord[];
+  from: string;
+  to: string;
+  loading: boolean;
+  error: boolean;
+}) {
+  const selectorId = useId();
+  const [selectedKey, setSelectedKey] = useState('');
+  const recordKey = (record: ProfilePhysiologyRecord) =>
+    JSON.stringify([record.code, record.unit, record.protocol ?? '']);
+  const metrics = records.filter(
+    (record, index) => records.findIndex((item) => recordKey(item) === recordKey(record)) === index
+  );
+  const selected = metrics.find((record) => recordKey(record) === selectedKey) ?? metrics[0];
+  const points = selected
+    ? records
+        .filter((record) => recordKey(record) === recordKey(selected))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
+    : [];
+  const latest = points.at(-1);
+  const first = points[0];
+  const change = points.length > 1 && first && latest ? latest.value - first.value : null;
+  const dateValue = (date: string) => Date.parse(`${date}T00:00:00Z`);
+  const option: EChartsOption = {
+    animation: false,
+    useUTC: true,
+    grid: {
+      top: 40,
+      left: 12,
+      right: 20,
+      bottom: 24,
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
+    },
+    tooltip: {
+      trigger: 'axis',
+      renderMode: 'richText',
+      confine: true,
+      valueFormatter: (value) => `${formatNumber(Number(value), 2)} ${selected?.unit ?? ''}`,
+    },
+    xAxis: {
+      type: 'time',
+      min: dateValue(from),
+      max: dateValue(to) + (from === to ? 86400000 : 0),
+      splitNumber: 5,
+      axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true },
+    },
+    yAxis: {
+      type: 'value',
+      name: selected?.unit ?? '',
+      scale: true,
+      splitLine: { lineStyle: { type: 'dashed' } },
+    },
+    series: [
+      {
+        id: 'physiology',
+        name: selected?.label ?? '生理生化',
+        type: 'line',
+        data: points.map((record) => [dateValue(record.date), record.value]),
+        smooth: false,
+        connectNulls: false,
+        showSymbol: true,
+        symbol: 'circle',
+        symbolSize: 8,
+        lineStyle: { width: 3 },
+      },
+    ],
+  };
+  return (
+    <AppCard variant="chart" className="professional-panel">
+      <h3>生理生化</h3>
+      <p className="visually-hidden" role="status">
+        {loading
+          ? '正在读取生理生化检测记录。'
+          : error
+            ? '生理生化检测记录读取失败。'
+            : records.length
+              ? `已加载${records.length}项生理生化检测记录。`
+              : '当前周期暂无有效生理生化检测记录。'}
+      </p>
+      {loading ? (
+        <ContentState kind="loading" title="正在读取生理生化检测记录" />
+      ) : error ? (
+        <ContentState kind="error" title="生理生化数据读取失败" description="请刷新页面重试。" />
+      ) : !records.length ? (
+        <ContentState
+          kind="empty"
+          title="当前周期暂无有效生理生化检测记录"
+          description="可调整页面日期范围查看已有检测；缺测不补零。"
+        />
+      ) : (
+        <>
+          <div className="profile-physiology-toolbar">
+            <label htmlFor={selectorId}>趋势指标</label>
+            <select
+              id={selectorId}
+              value={selected ? recordKey(selected) : ''}
+              onChange={(event) => setSelectedKey(event.target.value)}
+            >
+              {metrics.map((record) => (
+                <option key={recordKey(record)} value={recordKey(record)}>
+                  {record.label} · {record.unit}
+                  {metrics.some(
+                    (item) => item.code === record.code && recordKey(item) !== recordKey(record)
+                  )
+                    ? ` · ${record.protocol || '未注明协议'}`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <dl className="personal-wellness-summary" aria-label="当前指标摘要">
+            <div>
+              <dt>最近检测</dt>
+              <dd>{latest ? `${formatNumber(latest.value, 2)} ${latest.unit}` : '—'}</dd>
+              <dd>{latest?.date}</dd>
+            </div>
+            <div>
+              <dt>周期变化</dt>
+              <dd>
+                {change == null
+                  ? '暂无对比'
+                  : `${change > 0 ? '+' : ''}${formatNumber(change, 2)} ${selected?.unit}`}
+              </dd>
+              <dd>{points.length} 次有效检测</dd>
+            </div>
+          </dl>
+          <EChart
+            option={option}
+            label={`${selected?.label}变化趋势，单位${selected?.unit}，${points.length}次检测。原始数值见下方检测记录。`}
+          />
+          <p className="personal-wellness-axis-note">
+            横轴：检测日期 · 纵轴：{selected?.label}（{selected?.unit}）。
+            {points.length === 1
+              ? '当前周期仅一次检测，显示单点，暂无变化趋势。'
+              : '连线用于观察检测节点间变化，不代表每日测量。'}
+          </p>
+          <details>
+            <summary>查看检测记录（{records.length}项）</summary>
+            <div
+              className="personal-wellness-data profile-physiology-records"
+              role="region"
+              tabIndex={0}
+              aria-label="生理生化检测记录，可横向滚动"
+            >
+              <table>
+                <caption>当前运动员 · 所选周期内的有效检测记录</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">日期</th>
+                    <th scope="col">指标</th>
+                    <th scope="col">结果</th>
+                    <th scope="col">单位</th>
+                    <th scope="col">测试协议</th>
+                    <th scope="col">来源</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((record) => (
+                    <tr key={record.id}>
+                      <th scope="row">{record.date}</th>
+                      <td>{record.label}</td>
+                      <td>{formatNumber(record.value, 2)}</td>
+                      <td>{record.unit}</td>
+                      <td>{record.protocol || '未注明'}</td>
+                      <td>
+                        {/synthetic|simulation|seed|demo|estimated/i.test(record.source)
+                          ? '模拟补充'
+                          : '已记录'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </>
+      )}
+    </AppCard>
+  );
 }

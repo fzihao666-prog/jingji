@@ -1,3 +1,4 @@
+import { profilePhysiologyRecordSchema } from '../shared/profile-physiology';
 import { z } from 'zod';
 import { physicalChampionPayloadSchema } from '../shared/physical-champion';
 import type {
@@ -186,7 +187,18 @@ export const api = {
   },
   async personalOverview(id: number, from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });
-    return request<{ overview: OverviewPayload }>(`/api/athletes/${id}/overview?${params}`);
+    const result = await request<{ overview: OverviewPayload }>(
+      `/api/athletes/${id}/overview?${params}`
+    );
+    return {
+      ...result,
+      overview: {
+        ...result.overview,
+        physiologyRecords: z
+          .array(profilePhysiologyRecordSchema)
+          .parse(result.overview.physiologyRecords ?? []),
+      },
+    };
   },
   async wellnessTrends(id: number, from: string, to: string, project: Project) {
     return request<WellnessTrendsPayload>(

@@ -4,12 +4,17 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number, raceTime, raceDelta } = require('../../utils/format');
-const { displaySeries, trendPlaceholder, completeRatioRows, INTENSITY_FILL, CONTENT_FILL } = require('../../utils/chart-placeholder');
+const { displaySeries, trendPlaceholder, completeRatioRows, INTENSITY_ZONE_NAMES, CONTENT_CATEGORY_NAMES } = require('../../utils/chart-placeholder');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { injuryMetricView } = require('../../utils/injury-metric');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+
+// 占比构成条与明细圆点的分类配色（与页面蓝绿主色协调，按分类顺序循环取用）。
+const RATIO_COLORS = ['#176f7f', '#32846b', '#6c9e4f', '#c97925', '#b34a42', '#67528e', '#2f708a', '#a8843c', '#70858c'];
+const withRatioColors = (rows) =>
+  rows.map((row, index) => ({ ...row, color: RATIO_COLORS[index % RATIO_COLORS.length] }));
 
 function buildTrainingView(result, to) {
   const training = result.training || {};
@@ -36,19 +41,19 @@ function buildTrainingView(result, to) {
     distanceHeight: Math.max(2, Math.round(Number(item.distanceKm || 0) / maxDistance * 100))
   }));
 
-  // 强度/课次占比的缺失分类用演示补全表补齐后按真实数据展示（临时约定，见 utils/chart-placeholder.js）。
-  const intensity = completeRatioRows(
+  // 占比固定展示全部分区/分类，0 值行保留；数据以入库训练记录为准，不再用模拟值顶替。
+  const intensity = withRatioColors(completeRatioRows(
     training.intensity || [],
-    INTENSITY_FILL,
+    INTENSITY_ZONE_NAMES,
     (item) => item.durationMin,
     (value) => `${number(value)} min`
-  );
-  const content = completeRatioRows(
+  ));
+  const content = withRatioColors(completeRatioRows(
     training.content || [],
-    CONTENT_FILL,
+    CONTENT_CATEGORY_NAMES,
     (item) => item.count,
     (value) => `${number(value, 0)} 课次`
-  );
+  ));
   const trendDisplay = displaySeries(trend, trendPlaceholder('special'), trend.some((item) => item.duration > 0 || item.distance > 0));
   const athleteRows = athletes.slice(0, 30).map((athlete) => {
     const age = ageAt(athlete.birthDate, to);

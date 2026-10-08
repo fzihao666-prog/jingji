@@ -141,3 +141,37 @@ frontmatter `description` — when a skill fails to fire, widen its `description
 | Scaffolding a new component (also `/new-component`) | `new-component` |
 | Session retrospective → rule improvements (also `/retro`) | `retro` |
 <!-- codex-frontend-skills:end -->
+
+## Git Commit Rules
+
+当一个明确任务完成后，必须执行以下流程：
+
+1. 运行 `git status --short`
+2. 检查 `git diff`
+3. 只提交本任务产生的修改，不要包含无关文件
+4. 运行与本任务相关的验证：
+   - typecheck
+   - lint
+   - test
+   - build
+     根据项目实际情况选择必要项
+5. 如果验证失败，先修复；无法修复时不要 commit，并说明原因
+6. 根据实际修改内容自动生成 commit message
+7. commit message 使用 Conventional Commits，例如：
+   - feat: 新增功能
+   - fix: 修复问题
+   - refactor: 重构
+   - style: 样式调整
+   - docs: 文档修改
+   - test: 测试
+   - chore: 配置和杂项
+8. 执行 git commit
+9. 默认不要 git push，除非用户明确要求
+
+禁止：
+
+- 使用 `git add .`
+- 提交无关修改
+- 提交 `.env`、密钥、token、凭据
+- `git reset --hard`
+- `git push --force`

@@ -37,3 +37,13 @@
 .test-delta.faster { background: #e2f0e9; color: #2b6e58; }
 .test-delta.slower { background: #f6e3e1; color: #9c3f37; }
 .test-delta.flat { background: #e8eff0; color: #70858c; }
+
+/* 占比构成：顶部 100% 构成条 + 双列完整明细（分类色点、数值、占比一目了然）。 */
+.composition-strip { display: flex; height: 28rpx; overflow: hidden; border-radius: 999rpx; background: #e7eff0; }
+.composition-segment { min-width: 6rpx; height: 100%; }
+.composition-grid { margin-top: 22rpx; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18rpx 24rpx; }
+.composition-item { min-width: 0; padding: 12rpx 14rpx; border-radius: 14rpx; background: #f8fbfb; }
+.composition-item-head { display: flex; align-items: center; gap: 10rpx; min-width: 0; }
+.composition-dot { flex: none; width: 16rpx; height: 16rpx; border-radius: 50%; }
+.composition-item-name { min-width: 0; color: #123f49; font-size: 24rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composition-item-meta { display: block; margin-top: 6rpx; padding-left: 26rpx; color: #526b74; font-size: 20rpx; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

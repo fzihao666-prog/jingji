@@ -1,3 +1,4 @@
+import type { ProfilePhysiologyRecord } from '../shared/profile-physiology';
 import type { AreaLevel, Role } from '../shared/access';
 import type { RadarDimensionDefinition, RadarDirection } from '../shared/athlete-radar-model';
 import type { ChampionModelStandardType } from '../shared/champion-model';
@@ -1008,6 +1009,7 @@ export type OverviewPayload = {
   };
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];
+  physiologyRecords?: ProfilePhysiologyRecord[];
   profiles: OverviewAthleteProfile[];
   injuries: Array<{
     athleteId: number;

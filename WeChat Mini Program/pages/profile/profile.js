@@ -5,6 +5,8 @@ const { ageAt, todayBeijing } = require('../../utils/date');
 const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
+const { bodyCompositionTrendView, trainingComparisonView, radarGroupView } = require('../../utils/profile-views');
+const radarChart = require('../../utils/radar-chart');
 
 const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
 
@@ -141,8 +143,10 @@ Page({
     painTrend: null,
     wellnessTrends: [],
     bodyCompositionHistory: [],
+    bodyCompositionTrend: { dates: [], metrics: [] },
     profileComparison: null,
-    radarModels: null
+    comparisonView: { items: [] },
+    radarGroups: []
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -164,12 +168,15 @@ Page({
           canCoachFill: MANAGER_ROLES.includes(scope.user.role)
         });
       }
+    }).then((result) => {
+      this.scheduleRadarDraw();
+      return result;
     });
   },
 
   async loadPageData(scope) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null };
+    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrends: [], bodyCompositionHistory: [], bodyCompositionTrend: { dates: [], metrics: [] }, profileComparison: null, comparisonView: { items: [] }, radarGroups: [] };
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
     const [injuryResult, overviewResult, benchmarkResult] = await Promise.all([
@@ -204,12 +211,12 @@ Page({
       const bc = await api.getBodyCompositionHistory(athleteId);
       const records = bc.history || [];
       const labelMap = {
-        heightCm: '身高', weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌',
+        weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌',
         muscleMassKg: '肌肉量', totalBodyWaterKg: '体水分', visceralFatLevel: '内脏脂肪等级',
         basalMetabolismKcal: '基础代谢'
       };
       const unitMap = {
-        heightCm: 'cm', weightKg: 'kg', bodyFatPct: '%', skeletalMuscleKg: 'kg',
+        weightKg: 'kg', bodyFatPct: '%', skeletalMuscleKg: 'kg',
         muscleMassKg: 'kg', totalBodyWaterKg: 'kg', visceralFatLevel: '', basalMetabolismKcal: 'kcal'
       };
       bodyCompositionHistory = records.slice(0, 6).map((r, i) => {
@@ -234,22 +241,23 @@ Page({
     } catch {
       profileComparison = null;
     }
-    let radarModels;
+    let radarGroups = [];
     try {
       const rm = await api.radarModels(athleteId, scope.from, scope.to);
-      // WXML 不支持可选链，拍平后只保留视图需要的维度数组。
-      const pick = (group) => (group && Array.isArray(group.dimensions) ? group.dimensions : []);
-      radarModels = rm
-        ? { specialDimensions: pick(rm.special), physicalDimensions: pick(rm.physical) }
-        : null;
+      if (rm) {
+        radarGroups = [
+          radarGroupView(rm.special, { title: '专项测试雷达', canvasId: 'radarSpecial' }),
+          radarGroupView(rm.physical, { title: '体能测试雷达', canvasId: 'radarPhysical' })
+        ].filter((group) => group.dimensions.length);
+      }
     } catch {
-      radarModels = null;
+      radarGroups = [];
     }
     let photoUrl = '';
     if (athlete.photoUrl) {
       photoUrl = await api.downloadAthletePhoto(athleteId);
     }
-    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, profileComparison, radarModels };
+    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrends, bodyCompositionHistory, bodyCompositionTrend: bodyCompositionTrendView(bodyCompositionHistory), profileComparison, comparisonView: trainingComparisonView(profileComparison), radarGroups };
   },
 
   onScopeChange(event) {
@@ -260,7 +268,10 @@ Page({
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
       if (!isLatest()) return null;
       return this.loadPageData(this.data);
-    }, '运动员档案加载失败。');
+    }, '运动员档案加载失败。').then((result) => {
+      this.scheduleRadarDraw();
+      return result;
+    });
   },
 
   toggleMore() {
@@ -290,6 +301,82 @@ Page({
       showCancel: false,
       confirmText: '知道了'
     });
+  },
+
+  // 身体成分趋势柱体点击：展示该日期该指标的实测值与环比，不输出趋势结论。
+  showBodyCompositionDetail(event) {
+    const metricIndex = Number(event.currentTarget.dataset.metricIndex) || 0;
+    const pointIndex = Number(event.currentTarget.dataset.pointIndex) || 0;
+    const metric = ((this.data.bodyCompositionTrend && this.data.bodyCompositionTrend.metrics) || [])[metricIndex];
+    const point = metric && metric.points[pointIndex];
+    if (!metric || !point) return;
+    if (point.missing) {
+      wx.showModal({
+        title: `${metric.label} · ${point.date}`,
+        content: '该日期未测此项指标。',
+        showCancel: false,
+        confirmText: '知道了'
+      });
+      return;
+    }
+    const deltaText =
+      point.delta == null
+        ? '与上一次无可比记录'
+        : `较上一次 ${point.delta > 0 ? '+' : ''}${point.delta}${metric.unit}`;
+    wx.showModal({
+      title: `${metric.label} · ${point.date}`,
+      content: `实测值：${point.value}${metric.unit}\n${deltaText}`,
+      showCancel: false,
+      confirmText: '知道了'
+    });
+  },
+
+  // 雷达 canvas：数据渲染完成后下一帧绘制；画布不存在或维度不足时静默跳过，明细列表兜底。
+  scheduleRadarDraw() {
+    wx.nextTick(() => this.drawRadars());
+  },
+
+  drawRadars() {
+    (this.data.radarGroups || []).forEach((group) => {
+      if (group.hasChart) this.drawRadarCanvas(group);
+    });
+  },
+
+  drawRadarCanvas(group) {
+    const query = wx.createSelectorQuery().in(this);
+    query
+      .select(`#${group.canvasId}`)
+      .fields({ node: true, size: true })
+      .exec((result) => {
+        const target = result && result[0];
+        if (!target || !target.node || !target.width || !target.height) return;
+        const canvas = target.node;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const dpr = wx.getSystemInfoSync().pixelRatio || 1;
+        canvas.width = target.width * dpr;
+        canvas.height = target.height * dpr;
+        ctx.scale(dpr, dpr);
+        const size = Math.min(target.width, target.height);
+        ctx.translate((target.width - size) / 2, (target.height - size) / 2);
+        const layout = radarChart.radarLayout({ size, padding: 26, max: group.maxValue, rings: 4 });
+        const axes = radarChart.radarAxes(group.dimensions.length, layout);
+        radarChart.drawRadar(ctx, layout, axes, [
+          {
+            points: radarChart.radarSeriesPoints(group.referenceValues, axes, layout),
+            stroke: '#d79617',
+            dashed: true,
+            lineWidth: 2
+          },
+          {
+            points: radarChart.radarSeriesPoints(group.personalValues, axes, layout),
+            stroke: '#168f88',
+            fill: 'rgba(22, 143, 136, 0.16)',
+            lineWidth: 3,
+            dot: 3
+          }
+        ]);
+      });
   },
 
   fillTraining() {

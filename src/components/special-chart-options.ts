@@ -107,8 +107,7 @@ export function intensityOption(data: SpecialTrainingAnalytics, isPlaceholder = 
         center: ['50%', '44%'],
         label: { show: false },
         data: isPlaceholder ? ['U3', 'U2', 'U1', 'AT'].map((name, index) => ({ name, value: placeholderRatio[index] })) : data.intensity
-          .filter((row) => row.durationMin !== null && row.durationMin > 0)
-          .map((row) => ({ name: row.name, value: row.durationMin! })),
+          .map((row) => ({ name: row.name, value: row.durationMin || 0 })),
       },
     ],
   };

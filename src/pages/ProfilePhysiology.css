@@ -1,0 +1,37 @@
+.profile-physiology-records {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-top: 0.75rem;
+}
+
+.profile-physiology-records table {
+  min-width: 32rem;
+}
+
+.profile-physiology-records:focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 3px;
+}
+
+.profile-physiology-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+
+.profile-physiology-toolbar select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.profile-physiology-toolbar select:focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 3px;
+}

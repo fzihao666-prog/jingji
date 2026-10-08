@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { aggregateSpecialTraining, type SpecialSession } from '../shared/special-training.ts';
+import { SPECIAL_TRAINING_INTENSITY_ZONE_ORDER } from '../shared/training-intensity.ts';
 
 const row: SpecialSession = {
   id: 1,
@@ -31,12 +32,17 @@ assert.equal(result.summary.sessionCount, 1);
 assert.equal(result.summary.load, 360);
 assert.deepEqual(
   result.intensity.map((item) => item.name),
-  ['UT3', 'UT2', 'AN'],
-  '专项强度表必须固定展示UT3与AN，并保留原始强度'
+  [...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER],
+  '专项强度表必须固定展示全部强度分区维度，未训练分区保留 0 值行'
 );
 assert.deepEqual(
   result.intensity.map((item) => item.percentage),
-  [0, 100, 0]
+  [0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+);
+assert.deepEqual(
+  aggregateSpecialTraining([{ ...row, intensityZone: 'X5' }]).intensity.map((item) => item.name),
+  [...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER, 'X5'],
+  '标准顺序之外的未知分区原样追加在全部标准分区之后'
 );
 assert.deepEqual(result.content, [{ name: '水上', count: 1, percentage: 100 }]);
 const missing = aggregateSpecialTraining([

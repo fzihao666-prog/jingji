@@ -49,10 +49,36 @@
     </view>
 
     <view class="section-head"><view class="section-head-title">专项训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
-    <view class="card"><view class="ratio-list"><view wx:for="{{intensity}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill" style="{{'width: ' + item.width + '%;'}}" /></view></view></view></view>
+    <view class="card">
+      <view class="composition-strip" aria-hidden="true">
+        <view wx:for="{{intensity}}" wx:key="name" class="composition-segment" style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}" />
+      </view>
+      <view class="composition-grid" aria-label="按强度区间统计训练时长的完整占比数据">
+        <view wx:for="{{intensity}}" wx:key="name" class="composition-item">
+          <view class="composition-item-head">
+            <view class="composition-dot" style="{{'background: ' + item.color + ';'}}" />
+            <text class="composition-item-name">{{item.name}}</text>
+          </view>
+          <text class="composition-item-meta">{{item.value}} · {{item.percentage}}%</text>
+        </view>
+      </view>
+    </view>
 
     <view class="section-head"><view class="section-head-title">专项训练课占比</view><view class="section-head-note">按训练内容统计课次</view></view>
-    <view class="card"><view class="ratio-list"><view wx:for="{{content}}" wx:key="name"><view class="ratio-row-head"><text>{{item.name}} · {{item.value}}</text><text>{{item.percentage}}%</text></view><view class="ratio-track"><view class="ratio-fill orange" style="{{'width: ' + item.width + '%;'}}" /></view></view></view></view>
+    <view class="card">
+      <view class="composition-strip" aria-hidden="true">
+        <view wx:for="{{content}}" wx:key="name" class="composition-segment" style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}" />
+      </view>
+      <view class="composition-grid" aria-label="按训练内容统计课次的完整占比数据">
+        <view wx:for="{{content}}" wx:key="name" class="composition-item">
+          <view class="composition-item-head">
+            <view class="composition-dot" style="{{'background: ' + item.color + ';'}}" />
+            <text class="composition-item-name">{{item.name}}</text>
+          </view>
+          <text class="composition-item-meta">{{item.value}} · {{item.percentage}}%</text>
+        </view>
+      </view>
+    </view>
 
     <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
     <view class="card">

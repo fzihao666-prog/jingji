@@ -699,3 +699,5 @@ route → application service → repository/query service → SQLite
 旧版冠军参考表兼容补充：迁移同时识别 `CHECK(project='ROWING')` 和历史 `IN ('ROWING','CANOE','SLALOM')` 约束；保留旧项目编码，查询和补齐时仅将 CANOE 对应 CANOE_SPRINT、SLALOM 对应 CANOE_SLALOM。没有 `source_id` 的参考值表新增可空外键，并在事务内为未关联记录建立明确标注“待人工核实”的占位来源；占位链接不代表原始数据依据，不推断历史测试协议，不覆盖参考数值、启用状态、来源类型或修订号。已部分升级的表也可重复执行。
 
 用户授权的体能模拟补充由本地维护函数 `server/analysis/physical-champion-fill.ts` 执行，无公开写入接口及启动自动补充。写入前校验日期、有效DMD操作人；事务只新增缺失维度，保留已有成绩（含零值）、档案及测试会话，重复执行不新增。会话及测量保存 `user_requested_simulation` 来源、有效质量、非演示标识及批次，并记录审计；这类记录按授权参与正式统计。未知年龄仅允许同条此来源记录明确包含成人参考假定协议时参与成人模型，已知未成年人仍排除；不更改出生日期。
+
+个人overview补充 `physiologyRecords`：从同一授权运动员查询结果中筛选当前周期、physiology/biochemistry域、会话与测量均有效且非演示的检测；按原记录ID、日期、值、单位和来源返回，仅个人模式输出。前端通过Zod验证该字段，档案页展示最新值和明细，不依赖热力图的估算日期或阈值评价，不新增数据写入。

@@ -31,7 +31,6 @@ export const SPECIAL_TRAINING_INTENSITY_ZONE_ORDER = [
   'ATP',
   'REC',
 ] as const;
-export const SPECIAL_TRAINING_PINNED_INTENSITY_ZONES = ['UT3', 'AN'] as const;
 
 export function intensityZoneSystem(zone: string) {
   return INTENSITY_ZONE_SYSTEMS.find((system) => system.zones.includes(zone as never))?.code || '';

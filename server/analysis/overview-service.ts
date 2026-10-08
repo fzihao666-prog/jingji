@@ -1,3 +1,4 @@
+import { selectProfilePhysiologyRecords } from '../../shared/profile-physiology.ts';
 import {
   aggregateSpecialTraining,
   buildSpecialTestComparison,
@@ -55,6 +56,9 @@ type SessionRow = {
 };
 
 type MeasurementRow = {
+  measurementId: number;
+  testQuality: string;
+  testProtocol: string;
   sessionId: number;
   athleteId: number;
   testDate: string;
@@ -1003,6 +1007,7 @@ export function buildOverviewPayload(input: {
       },
       strengthTests: [],
       measurements: [],
+      physiologyRecords: [],
       profiles: [],
       injuries: [],
       meta: {
@@ -1269,7 +1274,7 @@ export function buildOverviewPayload(input: {
     .prepare(
       `
     SELECT ts.id AS sessionId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
-      ts.test_type AS testType, ts.source AS testSource, ts.is_demo AS testDemo,
+      ts.test_type AS testType, ts.source AS testSource, ts.is_demo AS testDemo, ts.quality AS testQuality, ts.protocol AS testProtocol, tm.id AS measurementId,
       tm.metric_code AS code, md.label, md.domain, tm.value_num AS value,
       tm.target_value AS target, tm.unit, tm.quality, tm.source, tm.is_demo AS isDemo
     FROM test_sessions ts
@@ -1399,6 +1404,7 @@ export function buildOverviewPayload(input: {
     trainingLoadRatio,
     strengthTests,
     measurements,
+    physiologyRecords: input.individual ? selectProfilePhysiologyRecords(measurementRows, input.from, input.to) : [],
     profiles,
     injuries,
     meta: {

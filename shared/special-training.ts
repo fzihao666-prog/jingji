@@ -5,7 +5,6 @@ import {
 } from './training-content-category.js';
 import {
   SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
-  SPECIAL_TRAINING_PINNED_INTENSITY_ZONES,
 } from './training-intensity.js';
 
 export type SpecialSession = {
@@ -62,25 +61,24 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
     };
   });
   // 当前系统各项目均保存原始分区；未知分区原样展示，不套用其他项目阈值。
-  // UT3 与 AN 固定展示；其他分区仅在原始训练记录实际出现时展示。
+  // 强度占比固定展示全部标准分区维度：没有数据的分区保留 0 值行，不隐藏；
+  // 标准顺序之外的未知分区原样追加在后面。
   const zoneNames = [
-    ...new Set([
-      ...SPECIAL_TRAINING_PINNED_INTENSITY_ZONES,
-      ...records.map((row) => row.intensityZone).filter(Boolean),
-    ]),
-  ].sort((a, b) => {
-    const left = SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.indexOf(
-      a as (typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER)[number]
-    );
-    const right = SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.indexOf(
-      b as (typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER)[number]
-    );
-    return (left < 0 ? 99 : left) - (right < 0 ? 99 : right) || a.localeCompare(b);
+    ...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
+    ...[...new Set(records.map((row) => row.intensityZone).filter(Boolean))]
+      .filter(
+        (name) => !SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.includes(name as (typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER)[number])
+      )
+      .sort((a, b) => a.localeCompare(b)),
+  ];
+  const zones = zoneNames.map((name) => {
+    const rows = records.filter((row) => row.intensityZone === name);
+    // 未出现该分区的记录时记 0 分钟（没有训练即 0）；有记录但时长未填报时保留缺失，不用 0 代替。
+    return {
+      name,
+      durationMin: rows.length ? total(rows.map(duration)) : 0,
+    };
   });
-  const zones = zoneNames.map((name) => ({
-    name,
-    durationMin: total(records.filter((row) => row.intensityZone === name).map(duration)),
-  }));
   const zoneTotal = total(zones.map((row) => row.durationMin)) || 0;
   const intensity = zones.map((row) => ({
     ...row,

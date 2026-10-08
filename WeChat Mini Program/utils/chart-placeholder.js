@@ -34,54 +34,26 @@ function ratioPlaceholder(names, unit) {
   }));
 }
 
-// —— 演示补全（临时）——
-// 专项训练的强度占比与课次占比中缺失的分类用下列固定模拟值补全，并按真实数据展示（不带“示例数据”标记）。
-// 用户已知悉该临时行为，接入真实数据后整体删除两张补全表与 completeRatioRows 即可。
-const INTENSITY_FILL = [
-  { name: 'U3', value: 30 },
-  { name: 'U2', value: 210 },
-  { name: 'U1', value: 160 },
-  { name: 'AT', value: 110 },
-  { name: 'TPT', value: 70 },
-  { name: 'AN', value: 40 },
-  { name: 'ATP', value: 25 }
-];
-const CONTENT_FILL = [
-  { name: '水上', value: 9 },
-  { name: '测功仪', value: 4 },
-  { name: '功能', value: 2 },
-  { name: '拉伸再生', value: 3 },
-  { name: '力量耐力', value: 3 },
-  { name: '最大力量', value: 2 },
-  { name: '速度力量', value: 2 },
-  { name: '跑步', value: 2 },
-  { name: '其它', value: 1 }
-];
+// 强度占比只展示填报端与总览共用的七类标准区间（与 training-entry 的 intensityOptions 一致）；
+// 内容分类与 shared/training-content-category.ts 的 TRAINING_CONTENT_CATEGORIES 保持一致。
+const INTENSITY_ZONE_NAMES = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'];
+const CONTENT_CATEGORY_NAMES = ['水上', '测功仪', '功能', '拉伸再生', '力量耐力', '最大力量', '速度力量', '跑步', '其它'];
 
-// 真实分类保留真实值，缺失分类取补全表；再按合计重算百分比，让分布完整成100%。
-function completeRatioRows(realRows, fillRows, valueOf, formatValue) {
+// 占比图固定展示选定的分类名单：没有数据的分类保留 0 值行，不隐藏、不用模拟值顶替，
+// 名单之外的分区/分类不展示；百分比按合计重算，合计为 0 时全部为 0。
+function completeRatioRows(realRows, names, valueOf, formatValue) {
   const realByName = new Map((realRows || []).map((row) => [row.name, Number(valueOf(row)) || 0]));
-  const merged = fillRows.map((fill) => ({
-    name: fill.name,
-    value: realByName.get(fill.name) > 0 ? realByName.get(fill.name) : fill.value
-  }));
-  for (const [name, value] of realByName) {
-    if (value > 0 && !merged.some((row) => row.name === name)) merged.push({ name, value });
-  }
-  if (!merged.length) return [];
-  const total = merged.reduce((sum, row) => sum + row.value, 0) || 1;
-  const raw = merged.map((row) => (row.value / total) * 100);
-  const rounded = raw.map((value) => Math.round(value * 10) / 10);
-  // 四舍五入的余数并入占比最大的一行，保证展示百分比合计恰好 100。
-  const maxIndex = rounded.indexOf(Math.max(...rounded));
-  const drift = Math.round((100 - rounded.reduce((sum, value) => sum + value, 0)) * 10) / 10;
-  rounded[maxIndex] = Math.round((rounded[maxIndex] + drift) * 10) / 10;
-  return merged.map((row, index) => ({
-    name: row.name,
-    value: formatValue(row.value),
-    percentage: rounded[index],
-    width: Math.max(0, Math.min(100, raw[index]))
-  }));
+  const total = names.reduce((sum, name) => sum + (realByName.get(name) || 0), 0);
+  return names.map((name) => {
+    const value = realByName.get(name) || 0;
+    const percentage = total ? (value / total) * 100 : 0;
+    return {
+      name,
+      value: formatValue(value),
+      percentage: Math.round(percentage * 10) / 10,
+      width: Math.max(0, Math.min(100, percentage))
+    };
+  });
 }
 
 function physiologyPlaceholder() {
@@ -105,7 +77,7 @@ module.exports = {
   trendPlaceholder,
   ratioPlaceholder,
   physiologyPlaceholder,
-  INTENSITY_FILL,
-  CONTENT_FILL,
+  INTENSITY_ZONE_NAMES,
+  CONTENT_CATEGORY_NAMES,
   completeRatioRows
 };

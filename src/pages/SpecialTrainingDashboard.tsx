@@ -21,6 +21,7 @@ import {
 } from '../components/special-chart-options';
 import type { Project, ProjectTeam } from '../types';
 import { formatNumber } from '../utils';
+import { PRIMARY_INTENSITY_ZONE_CODES } from '../../shared/training-intensity';
 
 type Props = {
   project: Project;
@@ -88,6 +89,16 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
   const athletes = payload?.athletes || [];
   const selectedAthlete = payload?.selectedAthlete || null;
   const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
+  // 强度占比只展示填报端共用的七类标准区间（U3/U2/U1/AT/TPT/AN/ATP）：0 值行保留，名单外维度不展示，占比在展示维度内归一。
+  const intensityRows = (training?.intensity ?? [])
+    .filter((row) => (PRIMARY_INTENSITY_ZONE_CODES as readonly string[]).includes(row.name))
+    .map((row) => ({ ...row, durationMin: row.durationMin ?? 0 }));
+  const intensityTotal = intensityRows.reduce((sum, row) => sum + (row.durationMin || 0), 0);
+  const displayedIntensity = intensityRows.map((row) => ({
+    ...row,
+    percentage: intensityTotal ? (row.durationMin / intensityTotal) * 100 : 0,
+  }));
+  const intensityAnalytics = training ? { ...training, intensity: displayedIntensity } : null;
   const metricItems = training
     ? [
         {
@@ -180,10 +191,10 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
             <ChartCard title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
               <EChart option={volumeOption(training, from, to, !training.days.some((day) => day.durationMin !== null || day.distanceKm !== null))} label="专项训练时长与距离趋势" isPlaceholder={!training.days.some((day) => day.durationMin !== null || day.distanceKm !== null)} />
             </ChartCard>
-            <ChartCard title="专项训练强度占比" description="按原始强度分区的有效训练时长统计">
+            <ChartCard title="专项训练强度占比" description="按原始强度分区的有效训练时长统计 · 固定展示 U3/U2/U1/AT/TPT/AN/ATP 七类标准区间，未训练分区保留 0 值">
               <>
-                  <EChart option={intensityOption(training, !training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0))} label="专项训练强度时长占比" isPlaceholder={!training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0)} />
-                  {training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0) && (
+                  <EChart option={intensityOption(intensityAnalytics ?? training, !displayedIntensity.some((row) => row.durationMin > 0))} label="专项训练强度时长占比" isPlaceholder={!displayedIntensity.some((row) => row.durationMin > 0)} />
+                  {training.summary.sessionCount > 0 && (
                   <div className="table-scroll">
                     <table className="data-table">
                       <thead>
@@ -194,7 +205,7 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
                         </tr>
                       </thead>
                       <tbody>
-                        {training.intensity.map((row) => (
+                        {displayedIntensity.map((row) => (
                           <tr key={row.name}>
                             <td>{row.name}</td>
                             <td>{value(row.durationMin)}</td>

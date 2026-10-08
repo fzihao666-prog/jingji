@@ -44,6 +44,11 @@ const dailyTodosModule = loadCjs(new URL('../utils/daily-todos.js', import.meta.
 const injuryMetricModule = loadCjs(new URL('../utils/injury-metric.js', import.meta.url), {
   './injury-form': loadCjs(new URL('../utils/injury-form.js', import.meta.url), { './date': dateModule }),
 });
+// 档案页图表模块与线上共用真实视图模型与雷达绘制工具。
+const profileViews = loadCjs(new URL('../utils/profile-views.js', import.meta.url), {
+  './format': formatModule,
+}, { Map });
+const radarChartModule = loadCjs(new URL('../utils/radar-chart.js', import.meta.url), {});
 
 const modals = [];
 const toasts = [];
@@ -53,6 +58,7 @@ const wxStub = {
   showToast: (options) => toasts.push(options.title),
   switchTab: (options) => tabs.push(options.url),
   navigateTo: () => {},
+  nextTick: (fn) => fn(),
 };
 // 页面与 page-scope 都直接跑真实实现，只替换网络与小程序全局对象。
 let activeApp = null;
@@ -110,6 +116,8 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/daily-todos': dailyTodosModule,
     '../../utils/pagination': paginationModule,
     '../../utils/injury-metric': injuryMetricModule,
+    '../../utils/profile-views': profileViews,
+    '../../utils/radar-chart': radarChartModule,
     ...extraMocks,
   };
   vm.runInNewContext(readFileSync(url, 'utf8'), {
