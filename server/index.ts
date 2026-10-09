@@ -318,7 +318,7 @@ const server = app.listen(port, host, () => {
   logger.info('server started', { host, port, env: process.env.NODE_ENV || 'development' });
   // 仅生产环境启动自动备份，避免本地开发重启反复生成备份文件。
   if (process.env.NODE_ENV === 'production') {
-    startBackupScheduler({ databasePath, backupDir: databaseBackupDirectory, retainDays: 30 });
+    startBackupScheduler({ databasePath, backupDir: databaseBackupDirectory });
   }
 });
 

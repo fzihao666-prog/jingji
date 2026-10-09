@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { logger } from './logger.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_RETAIN_DAYS = 7;
 
 /**
  * 执行 SQLite 数据库备份。
@@ -70,7 +71,7 @@ export async function runBackup(options: {
   backupDir: string;
   retainDays?: number;
 }): Promise<{ backupPath: string; deletedCount: number }> {
-  const retainDays = options.retainDays ?? 30;
+  const retainDays = options.retainDays ?? DEFAULT_RETAIN_DAYS;
   logger.info('backup started', { db: options.databasePath, dir: options.backupDir });
   const backupPath = await backupDatabase(options.databasePath, options.backupDir);
   const deletedCount = cleanupOldBackups(options.backupDir, retainDays);
@@ -112,7 +113,7 @@ export function startBackupScheduler(options: {
 
   logger.info('backup scheduler started', {
     intervalHours: Math.round(intervalMs / 3600000),
-    retainDays: options.retainDays ?? 30,
+    retainDays: options.retainDays ?? DEFAULT_RETAIN_DAYS,
   });
 
   return () => {

@@ -317,6 +317,8 @@ crontab -e
 15 3 * * * sqlite3 /srv/jingji/data/training-monitor.db ".backup '/srv/jingji/backups/training-monitor-$(date +\%F).db'"
 ```
 
+备份保留底线：至少保留最近 7 天的每日成功备份，不采用“只留最近 2 份”。应用内备份默认保留滚动 7 天，且仅在新备份成功后清理；上述宿主机 cron 使用独立目录，本例未配置自动清理。异机同步及 OSS 生命周期策略也应至少覆盖 7 天，不能将应用目录的清理视为异机备份的保留策略。定期确认每日备份实际生成并验证恢复；服务停机或备份失败时，不能仅凭调度配置认定当天已有备份。
+
 常用只读检查（deploy）：
 
 ```bash
