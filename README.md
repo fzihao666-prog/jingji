@@ -272,7 +272,9 @@ SQLite 单文件数据库，默认路径 `data/training-monitor.db`，由 `serve
 
 ### 6.5 备份
 
-- 应用启动后每 24 小时用 `sqlite3 .backup` 在线热备份到 `data/backups/`，保留 30 天。
+- 仅 `NODE_ENV=production` 启动自动备份：启动 5 分钟后首次执行，之后每 24 小时用 `sqlite3 .backup` 在线热备份，保留 30 天。开发、测试及未设置 `NODE_ENV` 的环境不启动备份调度器。
+- 备份写入实际数据库同级的 `backups/`；默认目录 `data/backups/` 已由 Git 忽略（含 `.db`、`-wal` 和 `-shm` 文件）。忽略规则不删除现有备份。
+- 本次将历史备份从 Git 跟踪列表移除，本机文件继续保留。其他已有检出目录更新到此变更前，应先在仓库外保全其中的备份及辅助文件；Git 更新会移除旧的跟踪路径。
 - 迁移前副本（`*.before-reconstruction-v1`）与既有备份不得清理；生产环境另有每日 cron 备份与异机同步，见 [部署手册](docs/deployment-ubuntu-24.md)。
 
 ### 6.6 真实数据、演示数据与模拟数据
@@ -380,7 +382,7 @@ npm run start
 
 ### 8.4 数据库备份
 
-- 应用内置定时备份：每 24 小时 `sqlite3 .backup` 热备份到 `data/backups/`，保留 30 天（依赖运行环境内 `sqlite3` CLI）。
+- 生产环境（`NODE_ENV=production`）启用内置定时备份：启动 5 分钟后首次执行，之后每 24 小时 `sqlite3 .backup` 热备份到实际数据库同级的 `backups/`（默认 `data/backups/`），保留 30 天；依赖运行环境内 `sqlite3` CLI。
 - 生产环境另配 cron 每日 03:15 备份，并将备份目录同步到 OSS 等异机位置；禁止用 `cp` 直接复制活动中的数据库文件。
 
 ### 8.5 生产环境变量

@@ -300,6 +300,8 @@ PRJ 与 REG 处于同一级，不能互相管理。上下级管理要求管理�
 
 正式默认数据库是 `data/training-monitor.db`，由 `server/core/database-path.ts` 统一解析；`DATABASE_PATH` 可指定其他绝对或相对路径。该模块在数据库连接初始化前加载项目 `.env`，因此 `.env` 中设置的路径可以生效。应用定时备份使用同一个实际数据库路径，备份目录为该数据库所在目录下的 `backups/`。部署的异机备份仍按 [Ubuntu 部署说明](deployment-ubuntu-24.md) 配置；`data/`、自定义数据库目录及其 `backups/`、`.before-reconstruction-v1` 文件都是运行数据，不得作为构建产物清理。
 
+自动备份调度器仅在 `NODE_ENV=production` 时启动：启动 5 分钟后首次备份，之后每 24 小时执行并保留最近 30 天；开发、测试及未设置运行环境时不启动调度器。默认 `data/backups/` 目录（含 SQLite 辅助文件）由 Git 忽略，现有备份保持保留；自定义数据库目录应在部署环境中独立管理并排除 Git 跟踪。
+
 初始化中的系统定义与业务演示数据仍通过幂等任务写入，运行期开关/字典使用 `INSERT OR IGNORE` 或版本标记；训练、测试等真实业务记录由业务接口或显式导入流程写入，不应加入通用初始化。`scripts/fill-radar-*.sql` 是历史手动业务数据填充材料，包含非幂等替换/删除语句，不属于启动流程，使用前必须确认目标库与预期影响。
 
 为保证训练总览的六维多要素雷达可展示，初始化会按 `metric_definitions` 中的项目适用范围补齐空缺指标，并为缺少日报的运动员补齐近 28 天恢复监测。补入记录统一标记为 `source=metric_gap_seed`、`quality=estimated`、`is_demo=1`；已有实测值不会被覆盖，后续导入或手工录入的真实数据应作为替换依据。

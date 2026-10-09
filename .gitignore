@@ -5,6 +5,7 @@ dist/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+/data/backups/
 data/.jwt-secret
 .env
 .env.compose
