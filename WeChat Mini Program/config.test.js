@@ -17,6 +17,6 @@ describe('小程序 API 地址配置', () => {
   it('发布配置关闭开发环境与网络追踪', () => {
     expect(API_ENVIRONMENT).toBe('production');
     expect(NETWORK_DEBUG).toBe(false);
-    expect(getApiBaseUrl()).toBe('https://www.jingjity.xin');
+    expect(getApiBaseUrl()).toBe('https://jingjity.xin');
   });
 });
