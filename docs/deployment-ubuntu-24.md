@@ -156,7 +156,7 @@ services:
     env_file:
       - ./.env
     ports:
-      - "127.0.0.1:8787:8787"
+      - '127.0.0.1:8787:8787'
     volumes:
       - ./data:/app/data
     restart: unless-stopped
@@ -288,7 +288,7 @@ docker buildx build --platform linux/amd64 --tag "$IMAGE:$TAG" --push .
 
 # ECS deploy：拉取新版本并滚动替换容器。
 cd /srv/jingji
-printf 'IMAGE_TAG=%s\n' '44504f7' > .env.compose
+printf 'IMAGE_TAG=%s\n' '896c3e6' > .env.compose
 chmod 600 .env.compose
 docker compose --env-file .env.compose pull
 docker compose --env-file .env.compose up -d --remove-orphans
