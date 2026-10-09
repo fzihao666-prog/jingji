@@ -20,6 +20,7 @@ function loadCjs(url, mocks, globals = {}) {
     Error,
     RegExp,
     Math,
+    Intl: undefined,
     ...globals,
   });
   return module.exports;
@@ -121,8 +122,12 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/pagination': paginationModule,
     '../../utils/injury-metric': injuryMetricModule,
     '../../utils/profile-views': profileViews,
-    '../../utils/body-composition-groups': loadCjs(new URL('../utils/body-composition-groups.js', import.meta.url)),
-    '../../utils/training-comparison-groups': loadCjs(new URL('../utils/training-comparison-groups.js', import.meta.url)),
+    '../../utils/body-composition-groups': loadCjs(new URL('../utils/body-composition-groups.js', import.meta.url), {
+      './format': formatModule,
+    }),
+    '../../utils/training-comparison-groups': loadCjs(new URL('../utils/training-comparison-groups.js', import.meta.url), {
+      './format': formatModule,
+    }),
     '../../utils/radar-chart': radarChartModule,
     '../../utils/special-test-view': specialTestView,
     ...extraMocks,
@@ -146,6 +151,7 @@ function createPageModule(url, api, extraMocks = {}) {
     Error,
     RegExp,
     Math,
+    Intl: undefined,
   });
   const page = {
     ...definition,

@@ -3,7 +3,7 @@ const METRICS = [
   { key: 'trainingLoad', label: '累计负荷', unit: 'AU', scale: 1 },
   { key: 'specialDistance', label: '专项距离', unit: 'km', scale: 1 }
 ];
-const formatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1, useGrouping: false });
+const { number } = require('./format');
 
 function validValue(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
@@ -12,7 +12,7 @@ function validValue(value) {
 function displayValue(value, scale) {
   if (value == null) return '—';
   const scaled = value * scale;
-  return scaled > 0 && scaled < 0.1 ? '＜0.1' : formatter.format(scaled);
+  return scaled > 0 && scaled < 0.1 ? '＜0.1' : number(scaled);
 }
 
 // 只展示同周期训练投入、负荷与专项训练量；百分比表示差异，不用于优劣评价。
@@ -30,7 +30,7 @@ function trainingComparisonSummary(comparison) {
       else if (team === 0) referenceText = '队均为 0，暂不计算比例';
       else {
         const percent = Math.round(Math.abs((personal - team) / team) * 1000) / 10;
-        referenceText = percent === 0 ? '接近队均' : `${personal > team ? '高于' : '低于'}队均 ${formatter.format(percent)}%`;
+        referenceText = percent === 0 ? '接近队均' : `${personal > team ? '高于' : '低于'}队均 ${number(percent)}%`;
       }
     }
     return {

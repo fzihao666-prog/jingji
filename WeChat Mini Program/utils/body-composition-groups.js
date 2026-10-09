@@ -7,7 +7,7 @@ const METRICS = [
   { key: 'visceralFatLevel', label: '内脏脂肪等级', unit: '级' },
   { key: 'basalMetabolismKcal', label: '基础代谢', unit: 'kcal' }
 ];
-const formatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1, useGrouping: false });
+const { number } = require('./format');
 
 // 每项独立寻找最近两次有效实测，缺测不按零处理，也不跨指标比较。
 function bodyCompositionSummary(history) {
@@ -25,10 +25,10 @@ function bodyCompositionSummary(history) {
     const delta = previous ? Number((latest.value - previous.value).toFixed(1)) : null;
     return {
       ...definition,
-      latestText: latest ? formatter.format(latest.value) : '—',
+      latestText: latest ? number(latest.value) : '—',
       latestDate: latest ? latest.date : '',
       previousDate: previous ? previous.date : '',
-      deltaText: delta == null ? '—' : delta === 0 ? '持平' : `${delta > 0 ? '+' : ''}${formatter.format(delta)}`,
+      deltaText: delta == null ? '—' : delta === 0 ? '持平' : `${delta > 0 ? '+' : ''}${number(delta)}`,
       deltaUnit: delta == null || delta === 0 ? '' : definition.key === 'bodyFatPct' ? '个百分点' : definition.unit
     };
   });

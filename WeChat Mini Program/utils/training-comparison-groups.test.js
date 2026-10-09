@@ -4,10 +4,54 @@ import { describe, expect, it } from 'vitest';
 
 const cjsModule = { exports: {} };
 const url = new URL('./training-comparison-groups.js', import.meta.url);
-vm.runInNewContext(readFileSync(url, 'utf8'), { module: cjsModule });
+function loadNumberFormatter() {
+  const dataModule = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('../data/format-data.js', import.meta.url), 'utf8'), { module: dataModule });
+  const formatModule = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('./format.js', import.meta.url), 'utf8'), {
+    module: formatModule,
+    require(path) {
+      if (path === '../data/format-data') return dataModule.exports;
+      throw new Error(`未预期的依赖：${path}`);
+    },
+  });
+  return formatModule.exports.number;
+}
+
+const number = loadNumberFormatter();
+vm.runInNewContext(readFileSync(url, 'utf8'), {
+  module: cjsModule,
+  require(path) {
+    if (path === './format') return { number };
+    throw new Error(`未预期的依赖：${path}`);
+  },
+});
 const { trainingComparisonSummary } = cjsModule.exports;
 
+function loadWithoutIntl() {
+  const module = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('./training-comparison-groups.js', import.meta.url), 'utf8'), {
+    module,
+    exports: module.exports,
+    Intl: undefined,
+    require(path) {
+      if (path === './format') return { number };
+      throw new Error(`未预期的依赖：${path}`);
+    },
+  });
+  return module.exports;
+}
+
 describe('训练对比精简摘要', () => {
+  it('运行环境没有 Intl 时仍可加载并格式化训练对比数值', () => {
+    const { trainingComparisonSummary: summarize } = loadWithoutIntl();
+    const view = summarize({ items: [
+      { key: 'trainingDuration', personalValue: 150, teamMean: 120, teamSampleCount: 3 }
+    ] });
+
+    expect(view.metrics[0].personalText).toBe('2.5');
+  });
+
   it('固定三个可参照维度，时长换算小时，排除身体和测试指标', () => {
     const items = [
       { key: 'weightKg', personalValue: 80, teamMean: 75 },

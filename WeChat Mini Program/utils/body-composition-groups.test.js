@@ -2,9 +2,44 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
+function loadNumberFormatter() {
+  const dataModule = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('../data/format-data.js', import.meta.url), 'utf8'), { module: dataModule });
+  const formatModule = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('./format.js', import.meta.url), 'utf8'), {
+    module: formatModule,
+    require(path) {
+      if (path === '../data/format-data') return dataModule.exports;
+      throw new Error(`未预期的依赖：${path}`);
+    },
+  });
+  return formatModule.exports.number;
+}
+
+const number = loadNumberFormatter();
 const cjsModule = { exports: {} };
-vm.runInNewContext(readFileSync(new URL('./body-composition-groups.js', import.meta.url), 'utf8'), { module: cjsModule });
+vm.runInNewContext(readFileSync(new URL('./body-composition-groups.js', import.meta.url), 'utf8'), {
+  module: cjsModule,
+  require(path) {
+    if (path === './format') return { number };
+    throw new Error(`未预期的依赖：${path}`);
+  },
+});
 const { bodyCompositionSummary } = cjsModule.exports;
+
+function loadWithoutIntl() {
+  const module = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('./body-composition-groups.js', import.meta.url), 'utf8'), {
+    module,
+    exports: module.exports,
+    Intl: undefined,
+    require(path) {
+      if (path === './format') return { number };
+      throw new Error(`未预期的依赖：${path}`);
+    },
+  });
+  return module.exports;
+}
 
 const history = [
   { measurementDate: '2026-09-01', items: [
@@ -18,6 +53,13 @@ const history = [
 ];
 
 describe('身体成分精简摘要', () => {
+  it('运行环境没有 Intl 时仍可加载并格式化档案数值', () => {
+    const { bodyCompositionSummary: summarize } = loadWithoutIntl();
+    const view = summarize([{ measurementDate: '2026-10-08', items: [{ key: 'weightKg', value: 72.4 }] }]);
+
+    expect(view.core[0].latestText).toBe('72.4');
+  });
+
   it('默认三项核心指标，其他实测收进更多指标，按日期选最近记录', () => {
     const view = bodyCompositionSummary(history);
     expect(view.hasData).toBe(true);
