@@ -14,7 +14,7 @@ import {
   UsersRound,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { EditableName } from '../components/EditableName';
 import { PageContainer, PageHeader } from '../components/PageLayout';
@@ -25,11 +25,12 @@ import type {
   AreaPermission,
   AuditLog,
   Role,
+  ProjectTeam,
   TeamPermission,
   User,
 } from '../types';
 import { AREA_LEVEL_META, ROLE_META, ROLES, canManageRole } from '../../shared/access';
-import { projectLabel } from '../../shared/projects';
+import { DEFAULT_PROJECT, normalizeProject, projectLabel } from '../../shared/projects';
 
 const blankArea = (): AreaPermission => ({
   areaLevel: 'province',
@@ -38,7 +39,7 @@ const blankArea = (): AreaPermission => ({
   county: '',
 });
 
-const blankTeam = (): TeamPermission => ({ project: '赛艇', team: '' });
+const blankTeam = (): TeamPermission => ({ project: DEFAULT_PROJECT, team: '' });
 
 function areaLabel(area: AreaPermission) {
   if (area.areaLevel === 'national') return '全国';
@@ -76,8 +77,10 @@ export function RegionAccessPage({ user }: { user: User }) {
   const [role, setRole] = useState<Role>('ATL');
   const [parentUserId, setParentUserId] = useState<number>(user.id);
   const [areas, setAreas] = useState<AreaPermission[]>([blankArea()]);
-  const [projects, setProjects] = useState<string[]>(['赛艇']);
+  const [projects, setProjects] = useState<string[]>([DEFAULT_PROJECT]);
   const [teams, setTeams] = useState<TeamPermission[]>([blankTeam()]);
+  const teamSelectRefs = useRef<Array<HTMLSelectElement | null>>([]);
+  const [teamOptions, setTeamOptions] = useState<ProjectTeam[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -94,7 +97,7 @@ export function RegionAccessPage({ user }: { user: User }) {
     province: '四川',
     city: '成都市',
     county: '武侯区',
-    project: '赛艇',
+    project: DEFAULT_PROJECT as string,
     team: '',
     gender: '男',
   });
@@ -116,7 +119,8 @@ export function RegionAccessPage({ user }: { user: User }) {
     setLoading(true);
     setError('');
     try {
-      const result = await api.accessAccounts();
+      const [result, directory] = await Promise.all([api.accessAccounts(), api.teams()]);
+      setTeamOptions(directory.teams);
       setPayload(result);
       const nextId =
         preferredId && result.accounts.some((account) => account.id === preferredId)
@@ -173,7 +177,7 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const toggleProject = (project: string) => {
     setProjects((current) => {
-      if (project === '*') return current.includes('*') ? ['赛艇'] : ['*'];
+      if (project === '*') return current.includes('*') ? [DEFAULT_PROJECT] : ['*'];
       const withoutAll = current.filter((item) => item !== '*');
       return withoutAll.includes(project)
         ? withoutAll.filter((item) => item !== project)
@@ -181,8 +185,36 @@ export function RegionAccessPage({ user }: { user: User }) {
     });
   };
 
+  const availableTeamNames = (project: string) => [
+    ...new Set(
+      teamOptions
+        .filter((team) => project === '*' || team.project === normalizeProject(project))
+        .map((team) => team.name)
+    ),
+  ];
+
+  const allowsAllTeams = (project: string) =>
+    Boolean(
+      (payload?.current.projects.includes('*') ||
+        payload?.current.projects.some(
+          (allowed) => normalizeProject(allowed) === normalizeProject(project)
+        )) &&
+      payload?.current.teams.some(
+        (scope) =>
+          (scope.project === '*' ||
+            normalizeProject(scope.project) === normalizeProject(project)) &&
+          scope.team === '*'
+      )
+    );
+
   const save = async () => {
     if (!selected) return;
+    const emptyTeamIndex = teams.findIndex((team) => !team.team);
+    if (emptyTeamIndex !== -1) {
+      setError('请为每条队伍范围选择队伍。');
+      teamSelectRefs.current[emptyTeamIndex]?.focus();
+      return;
+    }
     setSaving(true);
     setMessage('');
     setError('');
@@ -332,7 +364,7 @@ export function RegionAccessPage({ user }: { user: User }) {
         </div>
       )}
       {error && (
-        <div className="message-banner error">
+        <div className="message-banner error" id="access-error" role="alert">
           <X size={18} />
           {error}
         </div>
@@ -381,6 +413,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       setCreateForm({
                         ...createForm,
                         role: nextRole,
+                        team: nextRole === 'ATL' && createForm.team === '*' ? '' : createForm.team,
                         areaLevel: nextRole === 'ATL' ? 'county' : createForm.areaLevel,
                         parentUserId: parents[0]?.id || user.id,
                       });
@@ -491,21 +524,39 @@ export function RegionAccessPage({ user }: { user: User }) {
                   <select
                     value={createForm.project}
                     onChange={(event) =>
-                      setCreateForm({ ...createForm, project: event.target.value })
+                      setCreateForm({ ...createForm, project: event.target.value, team: '' })
                     }
                   >
                     {payload?.meta.projects.map((project) => (
-                      <option key={project} value={project}>{projectLabel(project)}</option>
+                      <option key={project} value={project}>
+                        {projectLabel(project)}
+                      </option>
                     ))}
                   </select>
                 </label>
                 <label>
                   <span>队伍</span>
-                  <input
+                  <select
                     value={createForm.team}
                     onChange={(event) => setCreateForm({ ...createForm, team: event.target.value })}
                     required
-                  />
+                    disabled={loading || saving}
+                  >
+                    <option value="">请选择队伍</option>
+                    {createForm.role !== 'ATL' && allowsAllTeams(createForm.project) && (
+                      <option value="*">全部队伍</option>
+                    )}
+                    {availableTeamNames(createForm.project).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                    {!availableTeamNames(createForm.project).length && (
+                      <option disabled value="__empty">
+                        该项目暂无可选队伍
+                      </option>
+                    )}
+                  </select>
                 </label>
                 {createForm.role === 'ATL' && (
                   <label>
@@ -759,25 +810,36 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </div>
                 <div className="team-scope-list">
                   {teams.map((team, index) => (
-                    <div className="team-scope-row" key={`${index}-${team.project}`}>
+                    <div className="team-scope-row" key={index}>
                       <select
                         disabled={!canEditAccess || selected.role === 'ATL'}
+                        aria-label={`队伍范围 ${index + 1} 的项目`}
                         value={team.project}
                         onChange={(event) =>
                           setTeams(
                             teams.map((item, itemIndex) =>
-                              itemIndex === index ? { ...item, project: event.target.value } : item
+                              itemIndex === index
+                                ? { ...item, project: event.target.value, team: '' }
+                                : item
                             )
                           )
                         }
                       >
                         {selected.role !== 'ATL' && <option value="*">全部项目</option>}
                         {payload?.meta.projects.map((project) => (
-                          <option key={project} value={project}>{projectLabel(project)}</option>
+                          <option key={project} value={project}>
+                            {projectLabel(project)}
+                          </option>
                         ))}
                       </select>
-                      <input
-                        disabled={!canEditAccess}
+                      <select
+                        aria-label={`队伍范围 ${index + 1} 的队伍`}
+                        ref={(element) => {
+                          teamSelectRefs.current[index] = element;
+                        }}
+                        aria-invalid={!team.team || undefined}
+                        aria-describedby={!team.team && error ? 'access-error' : undefined}
+                        disabled={!canEditAccess || loading || saving}
                         value={team.team}
                         onChange={(event) =>
                           setTeams(
@@ -786,13 +848,42 @@ export function RegionAccessPage({ user }: { user: User }) {
                             )
                           )
                         }
-                        placeholder="队伍名称；填写 * 代表全部队伍"
-                      />
+                      >
+                        <option value="">请选择队伍</option>
+                        {role !== 'ATL' && allowsAllTeams(team.project) && (
+                          <option value="*">全部队伍</option>
+                        )}
+                        {availableTeamNames(team.project).map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                        {team.team &&
+                          !availableTeamNames(team.project).includes(team.team) &&
+                          !(
+                            team.team === '*' &&
+                            role !== 'ATL' &&
+                            allowsAllTeams(team.project)
+                          ) && (
+                            <option value={team.team} disabled>
+                              {team.team === '*' ? '全部队伍' : team.team}（已有授权，当前不可选）
+                            </option>
+                          )}
+                        {!availableTeamNames(team.project).length && (
+                          <option disabled value="__empty">
+                            该项目暂无可选队伍
+                          </option>
+                        )}
+                      </select>
                       {canEditAccess && selected.role !== 'ATL' && teams.length > 1 && (
                         <button
-                          onClick={() =>
-                            setTeams(teams.filter((_, itemIndex) => itemIndex !== index))
-                          }
+                          aria-label={`删除队伍范围 ${index + 1}`}
+                          onClick={() => {
+                            setTeams(teams.filter((_, itemIndex) => itemIndex !== index));
+                            requestAnimationFrame(() => {
+                              teamSelectRefs.current[Math.min(index, teams.length - 2)]?.focus();
+                            });
+                          }}
                         >
                           <X size={16} />
                         </button>
