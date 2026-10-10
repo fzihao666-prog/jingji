@@ -1,3 +1,4 @@
+<import src="../../templates/training-state.wxml" />
 <view class="page">
   <view class="page-head">
     <view class="page-title">专项训练</view>
@@ -9,10 +10,12 @@
     <view class="team-picker-control"><text>队伍</text><text class="team-picker-value">{{teamItems[teamIndex].name}}</text><text>⌄</text></view>
   </picker>
 
-  <view wx:if="{{error}}" class="error-box">{{error}}</view>
-  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载专项训练数据</view></view>
+  <view class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载训练数据' : (error || trainingError || testError || championError || '按当前筛选范围展示数据')}}</text>
+    <button class="mini-button" disabled="{{loading}}" bindtap="loadPage">{{loading ? '正在加载' : (error || trainingError || testError || championError ? '重试' : '刷新')}}</button>
+  </view>
 
-  <block wx:if="{{!loading}}">
+  <block>
     <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 已配置赛事参考成绩</view></view>
     <view class="card">
       <view wx:if="{{championEvents.length}}" class="champion-list">
@@ -21,7 +24,7 @@
           <view class="champion-value"><text class="champion-performance">{{item.performance}}</text><text wx:if="{{item.pace}}">{{item.pace}}</text></view>
         </view>
       </view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">模型数据待配置</view></view>
+      <block wx:else><template is="training-state" data="{{loading, error: error || championError, message: '暂无参考标准', chart: false}}" /></block>
     </view>
 
     <view class="section-head"><view class="section-head-title">专项数据概览</view><view class="section-head-note">当前筛选范围</view></view>
@@ -35,8 +38,8 @@
 
     <view class="section-head"><view class="section-head-title">专项训练量统计</view><view class="section-head-note">青色：训练时长 · 金色：训练距离</view></view>
     <view class="card">
-      <view wx:if="{{trendPlaceholder}}" class="chart-example">示例数据</view>
-      <view wx:if="{{trend.length}}" class="chart-meta">
+
+      <view class="chart-meta">
         <view class="chart-legend"><view class="legend-item"><view class="legend-dot" />训练时长（分钟）</view><view class="legend-item"><view class="legend-dot accent" />训练距离（km）</view></view>
         <text class="chart-hint">点击柱形查看</text>
       </view>
@@ -45,11 +48,12 @@
           <button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail"><view class="trend-bars"><view class="trend-bar" style="{{'height: ' + item.durationHeight + '%;'}}" /><view class="trend-bar accent" style="{{'height: ' + item.distanceHeight + '%;'}}" /></view><text class="trend-label">{{item.label}}</text></button>
         </view>
       </scroll-view>
-      <view wx:if="{{trendPlaceholder}}" class="chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</view>
+      <block wx:if="{{!trend.length}}"><template is="training-state" data="{{loading, error: error || trainingError, message: '暂无训练数据', chart: true}}" /></block>
     </view>
 
     <view class="section-head"><view class="section-head-title">专项训练强度占比</view><view class="section-head-note">按强度区间统计训练时长</view></view>
     <view class="card">
+      <template wx:if="{{!hasIntensity || trainingError}}" is="training-state" data="{{loading, error: error || trainingError, message: '暂无训练数据'}}" />
       <view class="composition-strip" aria-hidden="true">
         <view wx:for="{{intensity}}" wx:key="name" class="composition-segment" style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}" />
       </view>
@@ -66,6 +70,7 @@
 
     <view class="section-head"><view class="section-head-title">专项训练课占比</view><view class="section-head-note">按训练内容统计课次</view></view>
     <view class="card">
+      <template wx:if="{{!hasContent || trainingError}}" is="training-state" data="{{loading, error: error || trainingError, message: '暂无训练数据'}}" />
       <view class="composition-strip" aria-hidden="true">
         <view wx:for="{{content}}" wx:key="name" class="composition-segment" style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}" />
       </view>
@@ -80,18 +85,6 @@
       </view>
     </view>
 
-    <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
-    <view class="card">
-      <view wx:if="{{athleteRows.length}}" class="list">
-        <view wx:for="{{athleteRows}}" wx:key="id" class="list-row access" hover-class="access-active" data-athlete-id="{{item.id}}" bindtap="goToAthlete">
-          <view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}} · {{item.body}}</text></view><view class="list-row-value">{{item.load}}</view></view>
-          <view class="athlete-summary"><text>课次 {{item.sessionCount}}</text><text>时长 {{item.duration}}</text><text>距离 {{item.distance}}</text></view>
-        </view>
-      </view>
-      <view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无可查看运动员</view></view>
-      <pager-nav data-key="athletes" page="{{athletePager.page}}" page-count="{{athletePager.pageCount}}" total="{{athletePager.total}}" label="运动员" bindpagechange="onAthletePagerChange" />
-    </view>
-
     <view class="section-head">
       <view class="section-head-title">专项测试成绩</view>
       <view class="section-head-row">
@@ -100,8 +93,8 @@
       </view>
     </view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取专项测试</view></view>
-    <view wx:elif="{{error}}" class="card state"><view class="state-icon">⚠</view><view class="state-title">{{error}}</view></view>
-    <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无专项测试记录</view></view>
+    <view wx:elif="{{error || testError}}" class="card"><template is="training-state" data="{{loading, error: error || testError, message: '暂无测试数据', chart: false}}" /></view>
+    <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无测试数据</view></view>
     <block wx:else>
       <view class="card test-events">
         <view wx:for="{{specialTests}}" wx:key="id" class="test-event">
@@ -143,5 +136,18 @@
       </view>
       <button wx:if="{{specialTestsMoreCount > 0}}" class="test-more-events" bindtap="onShowMoreTests" aria-label="展开更早的专项测试场次">展开更早 {{specialTestsMoreCount}} 场测试</button>
     </block>
+    <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
+    <view class="card">
+      <input class="training-athlete-search" value="{{athleteQuery}}" placeholder="搜索运动员" aria-label="搜索运动员姓名" bindinput="onAthleteSearch" />
+      <view wx:if="{{athleteRows.length}}" class="list">
+        <button wx:for="{{athleteRows}}" wx:key="id" class="list-row access training-athlete-row" hover-class="access-active" data-athlete-id="{{item.id}}" bindtap="goToAthlete" aria-label="查看{{item.name}}的运动员档案">
+          <view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}} · {{item.body}}</text></view><view class="list-row-value">{{item.load}}</view></view>
+          <view class="athlete-summary"><text>课次 {{item.sessionCount}}</text><text>时长 {{item.duration}}</text><text>距离 {{item.distance}}</text></view>
+        </button>
+      </view>
+      <block wx:else><template is="training-state" data="{{loading, error: error || trainingError, message: athleteQuery ? '未找到匹配运动员' : '暂无可管理运动员', chart: false}}" /></block>
+      <pager-nav data-key="athletes" page="{{athletePager.page}}" page-count="{{athletePager.pageCount}}" total="{{athletePager.total}}" label="运动员" bindpagechange="onAthletePagerChange" />
+    </view>
+
   </block>
 </view>

@@ -19,7 +19,7 @@ function loadCjs(url, mocks) {
     exports: module.exports,
     require(path) {
       if (Object.prototype.hasOwnProperty.call(mocks, path)) return mocks[path];
-      throw new Error(`未预期的依赖：${path}`);
+      return loadCjs(new URL(`${path}.js`, url), {});
     },
     Date,
     Number,
@@ -58,6 +58,7 @@ function createOverviewPage(data = {}) {
     '../../utils/today-status': {},
     '../../utils/wellness-form': {},
     '../../utils/injury-metric': injuryMetric,
+    '../../utils/training-empty': loadCjs(new URL('../../utils/training-empty.js', import.meta.url), {}),
   };
   vm.runInNewContext(indexSource, {
     Page(value) { definition = value; },
@@ -197,7 +198,7 @@ describe('伤病与疼痛上报入口', () => {
     });
     page.onTeamKeyword({ detail: { value: '样例' } });
     expect(page.data.teamView.athletes).toEqual([
-      { athleteId: 7, athleteName: '样例队员', team: '一队' },
+      { athleteId: 7, athleteName: '样例队员', team: '一队', load24hText: '--' },
     ]);
     expect(page.data.teamView.teamPager).toMatchObject({ total: 1, page: 0 });
     expect(page.data.todoPagerPages.team).toBe(0);

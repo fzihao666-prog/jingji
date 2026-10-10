@@ -27,6 +27,7 @@ import type { Role, User } from '../types';
 import { roleMeta } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { EditableName } from './EditableName';
+import { IcpFooter } from './IcpFooter';
 
 export type SpecialPageKey =
   | 'special-overview'
@@ -465,6 +466,7 @@ export function AppShell({
           <div className="user-avatar small">{user.displayName.slice(0, 1)}</div>
         </header>
         {children}
+        <IcpFooter />
       </main>
     </div>
   );

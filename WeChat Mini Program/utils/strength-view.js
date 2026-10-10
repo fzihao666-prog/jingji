@@ -3,7 +3,7 @@ const { shortDate } = require('./date');
 
 const list = (value) => Array.isArray(value) ? value : [];
 const numeric = (value) => typeof value === 'number' && Number.isFinite(value);
-const display = (value, suffix = '') => numeric(value) ? `${number(value)}${suffix}` : '—';
+const display = (value, suffix = '') => numeric(value) ? `${number(value)}${suffix}` : '--';
 const filled = (value) => value !== null && value !== undefined && value !== '';
 
 // 训练结构固定五类（与 shared/strength-training.ts 的 STRENGTH_TRAINING_CATEGORIES 一致），由对照测试约束。
@@ -56,7 +56,7 @@ function planView(plans, planIndex = 0, weekIndex = 0, category = '全部') {
   return {
     planIndex, weekIndex, categoryIndex: Math.max(0, categories.indexOf(category)), categories,
     planTitle: data ? data.title || '体能训练计划' : '',
-    planPeriod: data ? `${data.startDate || '—'} 至 ${data.endDate || '—'}` : '',
+    planPeriod: data ? `${data.startDate || '--'} 至 ${data.endDate || '--'}` : '',
     planSummary: data ? data.summary || data.scheduleLabel || '' : '',
     weekLabels: weekKeys.map((key) => data.weekLabels && data.weekLabels[key] || `第${key}周`),
     planExercises: exercises.filter((exercise) => category === '全部' || (exercise.category || '未分类') === category).map((exercise, index) => ({
@@ -66,10 +66,10 @@ function planView(plans, planIndex = 0, weekIndex = 0, category = '全部') {
         const entry = line.weeks && line.weeks[selectedWeek];
         if (!entry) return [];
         return [{ id: line.id || String(rowIndex), arrangement: entry.arrangement || '安排未填写',
-          prescription: `${filled(entry.sets) ? entry.sets : '—'} 组 × ${filled(entry.reps) ? entry.reps : '—'} 次`,
+          prescription: `${filled(entry.sets) ? entry.sets : '--'} 组 × ${filled(entry.reps) ? entry.reps : '--'} 次`,
           percentage: display(entry.percentage, '%'),
-          weight: numeric(exercise.maxWeight) && numeric(entry.percentage) ? display(exercise.maxWeight * entry.percentage / 100, ' kg') : '—',
-          completed: filled(entry.actualCompleted) ? entry.actualCompleted : '—'
+          weight: numeric(exercise.maxWeight) && numeric(entry.percentage) ? display(exercise.maxWeight * entry.percentage / 100, ' kg') : '--',
+          completed: filled(entry.actualCompleted) ? entry.actualCompleted : '--'
         }];
       })
     })),
@@ -108,7 +108,7 @@ function metricView(tests, key, period) {
   return {
     metricUnit: definition ? definition[1] : '', metricBest: display(best),
     metricHistory: rows.map((test, index) => ({ id: `${test.id || index}`, date: test.testDate, value: display(test.metrics[key]), width: Math.abs(test.metrics[key]) / max * 100 })),
-    metricChange: rows.length > 1 ? display(rows[rows.length - 1].metrics[key] - rows[0].metrics[key]) : '—'
+    metricChange: rows.length > 1 ? display(rows[rows.length - 1].metrics[key] - rows[0].metrics[key]) : '--'
   };
 }
 
@@ -120,7 +120,7 @@ function totalValue(sessions, key) {
 function overviewView(tests, sessions, scope) {
   const periodTests = tests.filter((test) => test.testDate >= scope.from && test.testDate <= scope.to);
   const latestTest = [...(periodTests.length ? periodTests : tests)].sort((a, b) => b.testDate.localeCompare(a.testDate))[0];
-  const metrics = strengthMetricRows(latestTest).filter((metric) => Number.isFinite(Number(metric.value)));
+  const metrics = strengthMetricRows(latestTest).filter((metric) => Number.isFinite(Number(metric.value))).map((metric) => ({ ...metric, target: metric.target === '—' ? '--' : metric.target, rate: metric.rate === '—' ? '--' : metric.rate }));
   const duration = totalValue(sessions, 'durationMin');
   const load = totalValue(sessions, 'srpe');
   const dates = [...new Set(sessions.map((session) => session.trainingDate))].sort();
@@ -133,7 +133,6 @@ function overviewView(tests, sessions, scope) {
   return {
     metrics, latestTestDate: latestTest ? latestTest.testDate : '',
     latestTestOutsidePeriod: Boolean(latestTest && !periodTests.length),
-    championMetrics: metrics.slice(0, 4),
     summaryCards: [
       { label: '训练次数', value: sessions.length, unit: '场' },
       { label: '训练时长', value: display(duration === null ? null : duration / 60), unit: 'h' },

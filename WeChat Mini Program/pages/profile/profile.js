@@ -10,6 +10,8 @@ const radarChart = require('../../utils/radar-chart');
 const { bodyCompositionSummary } = require('../../utils/body-composition-groups');
 const { trainingComparisonSummary } = require('../../utils/training-comparison-groups');
 
+const { metricValue, completeStrengthMetrics, sectionRequest, displayMissing } = require('../../utils/training-empty');
+
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 // 复查倒计时按北京日期差本地计算，文案复用待办工具的同一套规则。
@@ -32,11 +34,11 @@ function painTrendView(trend) {
       bodyPart: part.bodyPart,
       statusLabel: INJURY_LABELS[part.latestStatus] || part.latestStatus,
       statusClass: part.latestStatus === 'healthy' ? '' : part.latestStatus === 'observation' ? 'warn' : 'danger',
-      latestPain: number(part.latestPainScore, 0),
+      latestPain: metricValue(part.latestPainScore, 0),
       bars: part.series.map((point) => ({
         date: point.date,
-        pain: point.painScore,
-        height: Math.max(8, Math.round((point.painScore / 10) * 100)),
+        pain: metricValue(point.painScore, 0),
+        height: Math.max(0, Math.round((point.painScore / 10) * 100)),
         sourceLabel: PAIN_SOURCE_LABELS[point.recordType] || point.recordType,
       })),
     })),
@@ -46,22 +48,22 @@ function painTrendView(trend) {
 function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
   const cells = [
-    ['项目', projectLabel(athlete.project)],
-    ['队伍', athlete.team || '未分队'],
-    ['性别', athlete.gender || '未录入'],
-    ['年龄', age == null ? '未录入' : `${age}岁`],
-    ['身高', athlete.heightCm == null ? '未测试' : `${number(athlete.heightCm)} cm`],
-    ['体重', athlete.weightKg == null ? '未测试' : `${number(athlete.weightKg)} kg`],
-    ['体脂率', athlete.bodyFatPct == null ? '未测试' : `${number(athlete.bodyFatPct)}%`],
-    ['骨骼肌', athlete.skeletalMuscleKg == null ? '未测试' : `${number(athlete.skeletalMuscleKg)} kg`],
-    ['技术等级', athlete.technicalLevel || '未录入'],
-    ['运动员位置', athlete.athletePosition || '未录入'],
-    ['当前小项', athlete.currentEvent || '未录入'],
-    ['训练阶段', athlete.trainingPhase || '未录入'],
-    ['健康状态', athlete.healthStatus || '未录入'],
-    ['最好成绩', athlete.bestResult || '未录入'],
-    ['联系电话', maskPhone(athlete.phone)],
-    ['身份信息', maskIdentity(athlete.identityNumber)]
+    ['项目', athlete.project ? projectLabel(athlete.project) : '--'],
+    ['队伍', athlete.team || '--'],
+    ['性别', athlete.gender || '--'],
+    ['年龄', age == null ? '--' : `${age}岁`],
+    ['身高', athlete.heightCm == null ? '--' : `${number(athlete.heightCm)} cm`],
+    ['体重', athlete.weightKg == null ? '--' : `${number(athlete.weightKg)} kg`],
+    ['体脂率', athlete.bodyFatPct == null ? '--' : `${number(athlete.bodyFatPct)}%`],
+    ['骨骼肌', athlete.skeletalMuscleKg == null ? '--' : `${number(athlete.skeletalMuscleKg)} kg`],
+    ['技术等级', athlete.technicalLevel || '--'],
+    ['运动员位置', athlete.athletePosition || '--'],
+    ['当前小项', athlete.currentEvent || '--'],
+    ['训练阶段', athlete.trainingPhase || '--'],
+    ['健康状态', athlete.healthStatus || '--'],
+    ['最好成绩', athlete.bestResult || '--'],
+    ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--'],
+    ['身份信息', athlete.identityNumber ? maskIdentity(athlete.identityNumber) : '--']
   ].map(([label, value]) => ({ label, value }));
   const primaryLabels = new Set(['项目', '队伍', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));
@@ -76,32 +78,32 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
       meta: `${item.bodyPart || '部位未录入'} · ${item.onsetDate || '日期未录入'}${reviewLabel ? ' · ' + reviewLabel : ''}`,
       status: INJURY_LABELS[item.status] || item.status,
       statusClass: item.status === 'healthy' ? '' : item.status === 'observation' ? 'warn' : 'danger',
-      pain: `疼痛 ${number(item.painScore, 0)}`,
+      pain: `疼痛 ${metricValue(item.painScore, 0)}`,
       restriction: item.restrictions || item.rehabPlan || item.note || '暂无补充说明'
     };
   });
 
   const tests = [...((overview && overview.strengthTests) || [])].sort((a, b) => b.testDate.localeCompare(a.testDate));
   const latestTest = tests[0] || null;
-  const testMetrics = strengthMetricRows(latestTest).slice(0, 8);
+  const testMetrics = completeStrengthMetrics(strengthMetricRows(latestTest)).slice(0, 8);
   const benchmarkSummary = benchmark && benchmark.summary ? {
-    score: benchmark.summary.score == null ? '—' : number(benchmark.summary.score),
-    achieved: benchmark.summary.achieved || 0,
-    comparable: benchmark.summary.comparable || 0,
+    score: metricValue(benchmark.summary.score),
+    achieved: metricValue(benchmark.summary.achieved, 0),
+    comparable: metricValue(benchmark.summary.comparable, 0),
     primaryGap: benchmark.summary.primaryGap || '暂无可比指标',
     source: benchmark.summary.source || '当前项目模型'
   } : null;
   const overviewMeta = overview && overview.meta ? overview.meta : {};
   const trainingSummary = [
-    { label: '训练课次', value: number(overviewMeta.sessionCount || 0, 0), unit: '次', note: `${period.from} 至 ${period.to}` },
-    { label: '数据覆盖', value: number(overviewMeta.coverage || 0, 0), unit: '%', note: overviewMeta.containsDemoData ? '包含明确标注的演示数据' : '当前范围未标记演示数据' },
-    { label: '测试次数', value: number(overviewMeta.testCount || 0, 0), unit: '次', note: '统一测试指标记录' },
-    { label: '恢复日报', value: number(overviewMeta.wellnessDays || 0, 0), unit: '天', note: '当前时间范围内记录' }
+    { label: '训练课次', value: metricValue(overviewMeta.sessionCount, 0), unit: '次', note: `${period.from} 至 ${period.to}` },
+    { label: '数据覆盖', value: metricValue(overviewMeta.coverage, 0), unit: '%', note: overviewMeta.containsDemoData ? '包含明确标注的演示数据' : '当前范围未标记演示数据' },
+    { label: '测试次数', value: metricValue(overviewMeta.testCount, 0), unit: '次', note: '统一测试指标记录' },
+    { label: '恢复日报', value: metricValue(overviewMeta.wellnessDays, 0), unit: '天', note: '当前时间范围内记录' }
   ];
 
   return {
-    athleteName: athlete.name,
-    athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '未分队'}`,
+    athleteName: athlete.name || '档案资料待补充',
+    athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '--'}`,
     athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.currentEvent || '小项未录入'}`,
     athleteInitial: athlete.name ? athlete.name.slice(0, 1) : '运',
     primaryCells,
@@ -111,6 +113,38 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     latestTestDate: latestTest ? latestTest.testDate : '',
     benchmarkSummary,
     trainingSummary
+  };
+}
+
+// 固定保留服务端已实现的四项恢复趋势，不生成实测点或队均。
+function completeWellnessView(trends) {
+  const sanitized = (trends || []).map((trend) => ({ ...trend, points: (trend.points || []).map((point) => ({ ...point, hasPersonalValue: Boolean(point.hasPersonalValue && typeof point.personalValue === 'number' && Number.isFinite(point.personalValue)) })) }));
+  const view = wellnessTrendsView(sanitized);
+  const definitions = [
+    { key: 'rpe', label: 'RPE', unit: '' }, { key: 'sleepHours', label: '睡眠时长', unit: '小时' },
+    { key: 'morningPulse', label: '晨脉', unit: 'bpm' }, { key: 'weightKg', label: '体重', unit: 'kg' }
+  ];
+  const byKey = new Map(view.metrics.map((metric) => [metric.key, metric]));
+  return displayMissing({ metrics: definitions.map((definition) => byKey.get(definition.key) || {
+    ...definition, latestText: '--', diffText: '--', latestDate: '', points: [], note: '暂无恢复数据'
+  }).map((metric) => ({ ...metric, hasData: metric.points.some((point) => !point.missing || point.teamPct != null) })) });
+}
+
+function profileRadars(models) {
+  return displayMissing([
+    radarGroupView(models && models.special, { title: '专项测试雷达', canvasId: 'radarSpecial' }),
+    radarGroupView(models && models.physical, { title: '体能测试雷达', canvasId: 'radarPhysical' })
+  ]).map((group) => ({ ...group, emptyMessage: group.dimensions.some((dim) => dim.referenceText !== '--') ? (group.dimensions.some((dim) => dim.valueText !== '--') ? '有效维度不足 3 个，暂不绘制雷达多边形' : '暂无测试数据') : '暂无参考标准' }));
+}
+
+function emptyProfileView(athlete = {}, period = { from: '', to: '' }) {
+  return {
+    ...displayMissing(profileView(athlete, [], null, null, period)),
+    athleteName: athlete.name || '暂无可查看运动员', photoUrl: '', showMore: false,
+    painTrend: null, wellnessTrend: completeWellnessView([]), bodyCompositionHistory: [],
+    bodyCompositionSummary: displayMissing(bodyCompositionSummary([])), showBodyMore: false,
+    profileComparison: null, comparisonView: displayMissing(trainingComparisonSummary(null)), radarGroups: profileRadars(null),
+    injuryError: '', overviewError: '', benchmarkError: '', painError: '', wellnessError: '', bodyError: '', comparisonError: '', radarError: '', photoError: '', moduleError: ''
   };
 }
 
@@ -126,30 +160,8 @@ Page({
     range: 'month',
     from: '',
     to: '',
-    athleteName: '',
-    athleteMeta: '',
-    athleteSubline: '',
-    athleteInitial: '运',
-    photoUrl: '',
-    primaryCells: [],
-    moreCells: [],
-    showMore: false,
-    injuries: [],
-    testMetrics: [],
-    latestTestDate: '',
-    benchmarkSummary: null,
-    trainingSummary: [],
-    canEditSelf: false,
-    canReportRole: false,
-    canCoachFill: false,
-    painTrend: null,
-    wellnessTrend: { metrics: [] },
-    bodyCompositionHistory: [],
-    bodyCompositionSummary: { hasData: false, core: [], more: [] },
-    showBodyMore: false,
-    profileComparison: null,
-    comparisonView: { metrics: [], hasData: false },
-    radarGroups: []
+    ...emptyProfileView(),
+    canEditSelf: false, canReportRole: false, canCoachFill: false
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -165,6 +177,7 @@ Page({
       prepare: (page, scope) => {
         getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
         page.setData({
+          ...emptyProfileView(scope.athletes.find((item) => Number(item.id) === Number(scope.selectedAthleteId)), scope),
           ...scope,
           canEditSelf: scope.user.role === 'ATL',
           canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role),
@@ -177,91 +190,49 @@ Page({
     });
   },
 
-  async loadPageData(scope) {
+  async loadPageData(scope, isLatest = () => true) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) return { athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null, wellnessTrend: { metrics: [] }, bodyCompositionHistory: [], bodyCompositionSummary: { hasData: false, core: [], more: [] }, showBodyMore: false, profileComparison: null, comparisonView: { metrics: [], hasData: false }, radarGroups: [] };
+    if (!athleteId) return emptyProfileView();
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
-    const [injuryResult, overviewResult, benchmarkResult] = await Promise.all([
-      api.injuryRecords(athleteId),
-      api.personalOverview(athleteId, scope.from, scope.to, scope.project),
-      api.championBenchmark(athleteId).catch(() => ({ benchmark: null }))
+    const [injury, overview, benchmark, pain, wellness, body, comparison, radar, photo] = await Promise.all([
+      sectionRequest(() => api.injuryRecords(athleteId), '伤病记录加载失败'),
+      sectionRequest(() => api.personalOverview(athleteId, scope.from, scope.to, scope.project), '训练概览加载失败'),
+      sectionRequest(() => api.championBenchmark(athleteId), '冠军模型加载失败'),
+      sectionRequest(() => api.painTrend(athleteId, 30), '疼痛趋势加载失败'),
+      sectionRequest(() => api.wellnessTrends(athleteId, scope.from, scope.to, scope.project), '恢复趋势加载失败'),
+      sectionRequest(() => api.getBodyCompositionHistory(athleteId), '身体成分加载失败'),
+      sectionRequest(() => api.profileComparison(athleteId, scope.from, scope.to, scope.project), '训练对比加载失败'),
+      sectionRequest(() => api.radarModels(athleteId, scope.from, scope.to), '雷达模型加载失败'),
+      athlete.photoUrl ? sectionRequest(() => api.downloadAthletePhoto(athleteId), '照片加载失败') : Promise.resolve({ value: '', error: '' })
     ]);
-    let painTrend;
-    try {
-      painTrend = painTrendView(await api.painTrend(athleteId, 30));
-    } catch {
-      painTrend = null;
-    }
-    let wellnessTrend;
-    try {
-      const wr = await api.wellnessTrends(athleteId, scope.from, scope.to, scope.project);
-      wellnessTrend = wellnessTrendsView(wr.trends || []);
-    } catch {
-      wellnessTrend = wellnessTrendsView([]);
-    }
-    let bodyCompositionHistory;
-    try {
-      const bc = await api.getBodyCompositionHistory(athleteId);
-      const records = bc.history || [];
-      const labelMap = {
-        weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌',
-        muscleMassKg: '肌肉量', totalBodyWaterKg: '体水分', visceralFatLevel: '内脏脂肪等级',
-        basalMetabolismKcal: '基础代谢'
-      };
-      const unitMap = {
-        weightKg: 'kg', bodyFatPct: '%', skeletalMuscleKg: 'kg',
-        muscleMassKg: 'kg', totalBodyWaterKg: 'kg', visceralFatLevel: '', basalMetabolismKcal: 'kcal'
-      };
-      bodyCompositionHistory = records.slice(0, 6).map((r) => {
-        return {
-          measurementDate: r.measurementDate,
-          items: Object.entries(r)
-            .filter(([k]) => labelMap[k] && r[k] != null)
-            .map(([k, v]) => ({
-              key: k, label: labelMap[k], value: v, unit: unitMap[k] || ''
-            }))
-        };
-      });
-    } catch {
-      bodyCompositionHistory = [];
-    }
-    let profileComparison;
-    try {
-      const pc = await api.profileComparison(athleteId, scope.from, scope.to, scope.project);
-      profileComparison = pc.comparison || null;
-    } catch {
-      profileComparison = null;
-    }
-    let radarGroups = [];
-    try {
-      const rm = await api.radarModels(athleteId, scope.from, scope.to);
-      if (rm) {
-        radarGroups = [
-          radarGroupView(rm.special, { title: '专项测试雷达', canvasId: 'radarSpecial' }),
-          radarGroupView(rm.physical, { title: '体能测试雷达', canvasId: 'radarPhysical' })
-        ].filter((group) => group.dimensions.length);
-      }
-    } catch {
-      radarGroups = [];
-    }
-    let photoUrl = '';
-    if (athlete.photoUrl) {
-      photoUrl = await api.downloadAthletePhoto(athleteId);
-    }
-    const bodySummary = bodyCompositionSummary(bodyCompositionHistory);
-    const comparisonView = trainingComparisonSummary(profileComparison);
-    return { showMore: false, photoUrl, painTrend, ...profileView(athlete, injuryResult.records, overviewResult.overview, benchmarkResult.benchmark, scope), wellnessTrend, bodyCompositionHistory, bodyCompositionSummary: bodySummary, showBodyMore: false, profileComparison, comparisonView, radarGroups };
+    if (!isLatest()) return null;
+    const labels = { weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌', muscleMassKg: '肌肉量', totalBodyWaterKg: '体水分', visceralFatLevel: '内脏脂肪等级', basalMetabolismKcal: '基础代谢' };
+    const units = { weightKg: 'kg', bodyFatPct: '%', skeletalMuscleKg: 'kg', muscleMassKg: 'kg', totalBodyWaterKg: 'kg', visceralFatLevel: '', basalMetabolismKcal: 'kcal' };
+    const bodyCompositionHistory = ((body.value || {}).history || []).slice(0, 6).map((record) => ({
+      measurementDate: record.measurementDate,
+      items: Object.entries(record).filter(([key, value]) => labels[key] && value != null).map(([key, value]) => ({ key, label: labels[key], value, unit: units[key] || '' }))
+    }));
+    const profileComparison = (comparison.value || {}).comparison || null;
+    const errors = { injuryError: injury.error, overviewError: overview.error, benchmarkError: benchmark.error, painError: pain.error, wellnessError: wellness.error, bodyError: body.error, comparisonError: comparison.error, radarError: radar.error, photoError: photo.error };
+    return {
+      ...emptyProfileView(athlete, scope),
+      ...displayMissing(profileView(athlete, (injury.value || {}).records, (overview.value || {}).overview, (benchmark.value || {}).benchmark, scope)),
+      photoUrl: photo.value || '', painTrend: painTrendView(pain.value), wellnessTrend: completeWellnessView((wellness.value || {}).trends),
+      bodyCompositionHistory, bodyCompositionSummary: displayMissing(bodyCompositionSummary(bodyCompositionHistory)), profileComparison,
+      comparisonView: displayMissing(trainingComparisonSummary(profileComparison)), radarGroups: profileRadars(radar.value),
+      ...errors, moduleError: Object.values(errors).find(Boolean) || ''
+    };
   },
 
   onScopeChange(event) {
     const change = applyScopeChange(this, event);
     if (!change) return Promise.resolve();
-    if (change.field === 'project') this.setData({ athleteName: '', primaryCells: [], moreCells: [], showMore: false, injuries: [], testMetrics: [], benchmarkSummary: null, trainingSummary: [], painTrend: null });
+    this.setData(emptyProfileView(this.data.athletes.find((item) => Number(item.id) === Number(this.data.selectedAthleteId)), this.data));
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
       if (!isLatest()) return null;
-      return this.loadPageData(this.data);
+      return this.loadPageData(this.data, isLatest);
     }, '运动员档案加载失败。').then((result) => {
       this.scheduleRadarDraw();
       return result;

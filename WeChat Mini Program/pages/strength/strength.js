@@ -4,18 +4,19 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { STRENGTH_METRICS } = require('../../utils/format');
 const { planView, recordView, metricView, overviewView } = require('../../utils/strength-view');
 
+const { emptyStrengthView, completeStrengthMetrics, athleteListView, sectionRequest } = require('../../utils/training-empty');
+const { goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
+
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 Page({
   data: {
+    ...emptyStrengthView(), ...athleteListView([]), athleteQuery: '',
     loading: true, error: '', user: null, canEnterTest: false,
     projects: [], project: '', athletes: [], selectedAthleteId: 0, showAthlete: true,
     range: 'month', from: '', to: '', athleteName: '',
     activeSection: 'overview',
-    sections: [{ key: 'overview', label: '概览' }, { key: 'plan', label: '训练安排' }, { key: 'records', label: '训练记录' }],
-    summaryCards: [], metrics: [], championMetrics: [], trend: [], structure: [],
-    planLabels: [], planExercises: [], weekLabels: [], categories: [],
-    metricLabels: [], metricHistory: [], records: [], recordDate: '', expandedRecord: ''
+    sections: [{ key: 'overview', label: '概览' }, { key: 'plan', label: '训练安排' }, { key: 'records', label: '训练记录' }]
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -28,7 +29,7 @@ Page({
       prepare: (page, scope) => {
         this._source = null;
         getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
-        page.setData({ ...scope, canEnterTest: MANAGER_ROLES.includes(scope.user.role) });
+        page.setData({ ...emptyStrengthView(), ...athleteListView(scope.athletes), athleteQuery: '', ...scope, canEnterTest: MANAGER_ROLES.includes(scope.user.role) });
       },
       load: (page, scope, isLatest) => page.loadPageData(scope, isLatest)
     });
@@ -36,22 +37,29 @@ Page({
 
   async loadPageData(scope, isLatest) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) { this._source = null; return {}; }
+    if (!athleteId) { this._source = null; return { ...emptyStrengthView(), ...athleteListView(scope.athletes) }; }
     const [testResult, sessionResult, planResult] = await Promise.all([
-      api.strengthTests(athleteId), api.strengthTrainingResults(athleteId), api.trainingPlans(athleteId)
+      sectionRequest(() => api.strengthTests(athleteId), '体能测试加载失败'),
+      sectionRequest(() => api.strengthTrainingResults(athleteId), '体能训练加载失败'),
+      sectionRequest(() => api.trainingPlans(athleteId), '训练计划加载失败')
     ]);
     if (!isLatest()) return null;
-    const tests = testResult.tests || [];
-    const sessions = [...(sessionResult.sessions || [])]
+    const tests = (testResult.value || {}).tests || [];
+    const sessions = [...((sessionResult.value || {}).sessions || [])]
       .sort((a, b) => b.trainingDate.localeCompare(a.trainingDate) || b.sessionOrder - a.sessionOrder);
     const periodSessions = sessions.filter((item) => item.trainingDate >= scope.from && item.trainingDate <= scope.to);
-    const plans = [...(planResult.plans || [])].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    const plans = [...((planResult.value || {}).plans || [])].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     const metricKeys = Object.keys(STRENGTH_METRICS).filter((key) => tests.some((test) => test.metrics && typeof test.metrics[key] === 'number' && Number.isFinite(test.metrics[key])));
     this._source = { tests, sessions, periodSessions, plans, metricKeys, scope: { from: scope.from, to: scope.to } };
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
+    const overview = overviewView(tests, periodSessions, scope);
     return {
+      ...athleteListView(scope.athletes),
+      trainingError: sessionResult.error, testError: testResult.error, planError: planResult.error,
       athleteName: athlete ? athlete.name : '',
-      ...overviewView(tests, periodSessions, scope),
+      ...overview,
+      summaryCards: sessionResult.error ? overview.summaryCards.map((row) => ({ ...row, value: '--' })) : overview.summaryCards,
+      metrics: completeStrengthMetrics(overview.metrics),
       planLabels: plans.map((plan) => `${plan.data.title || '体能训练计划'} · ${plan.data.startDate || '日期待补'}`),
       ...planView(plans), ...recordView(periodSessions),
       metricLabels: metricKeys.map((key) => STRENGTH_METRICS[key][0]), metricIndex: 0, metricRange: 0,
@@ -64,12 +72,22 @@ Page({
     const change = applyScopeChange(this, event);
     if (!change) return Promise.resolve();
     this._source = null;
+    this.setData({ ...emptyStrengthView(), ...athleteListView(this.data.athletes), athleteQuery: '' });
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
       if (!isLatest()) return null;
       return this.loadPageData(this.data, isLatest);
     }, '体能训练数据加载失败。');
   },
+
+  onAthleteSearch(event) {
+    const athleteQuery = event.detail.value;
+    this.setData({ athleteQuery, ...athleteListView(this.data.athletes, athleteQuery) });
+  },
+  onAthletePagerChange(event) {
+    this.setData(athleteListView(this.data.athletes, this.data.athleteQuery, Number(event.detail.page)));
+  },
+  goToAthlete(event) { navigateToAthlete(this, event, this.data.athleteRows); },
 
   switchSection(event) {
     const activeSection = event.currentTarget.dataset.key;

@@ -1,13 +1,15 @@
 const api = require('../../services/api');
 const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { loadWithGuard } = require('../../utils/request-guard');
-const { durationDistanceLines, showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
+const { showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
-const { displaySeries, trendPlaceholder, completeRatioRows, INTENSITY_ZONE_NAMES, CONTENT_CATEGORY_NAMES } = require('../../utils/chart-placeholder');
+const { completeRatioRows, INTENSITY_ZONE_NAMES, CONTENT_CATEGORY_NAMES } = require('../../utils/chart-placeholder');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { injuryMetricView } = require('../../utils/injury-metric');
 const { buildSpecialTestView, EVENT_PREVIEW_COUNT } = require('../../utils/special-test-view');
+
+const { metricValue, athleteListView, sectionRequest } = require('../../utils/training-empty');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
@@ -22,24 +24,25 @@ function buildTrainingView(result, to) {
   const athletes = result.athletes || [];
   const summary = training.summary || {};
   const metrics = [
-    { label: '专项训练时长', value: summary.durationMin == null ? '—' : number(summary.durationMin / 60), unit: summary.durationMin == null ? '' : 'h', note: '同队共同课次去重' },
-    { label: '专项训练距离', value: number(summary.distanceKm), unit: 'km', note: '只统计已填报距离' },
-    { label: '专项训练课次', value: number(summary.sessionCount, 0), unit: '课次', note: '当前筛选时间范围' },
-    { label: '专项训练负荷', value: number(summary.load), unit: 'AU', note: '使用既有SRPE' },
-    injuryMetricView(result.injuries || [], Boolean(result.injuryIndividual))
+    { label: '专项训练时长', value: metricValue(summary.durationMin == null ? null : summary.durationMin / 60), unit: 'h', note: '同队共同课次去重' },
+    { label: '专项训练距离', value: metricValue(summary.distanceKm), unit: 'km', note: '只统计已填报距离' },
+    { label: '专项训练课次', value: metricValue(summary.sessionCount, 0), unit: '课次', note: '当前筛选时间范围' },
+    { label: '专项训练负荷', value: metricValue(summary.load), unit: 'AU', note: '使用既有SRPE' },
+    result.injuries ? injuryMetricView(result.injuries, Boolean(result.injuryIndividual)) : { label: '损伤情况', value: '--', unit: '人', note: '暂无伤病数据' }
   ];
 
   const days = (training.days || []).slice(-14);
-  const maxDuration = Math.max(1, ...days.map((item) => Number(item.durationMin || 0)));
-  const maxDistance = Math.max(1, ...days.map((item) => Number(item.distanceKm || 0)));
+  const chartValue = (value) => typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  const maxDuration = Math.max(1, ...days.map((item) => chartValue(item.durationMin)));
+  const maxDistance = Math.max(1, ...days.map((item) => chartValue(item.distanceKm)));
   const trend = days.map((item) => ({
     date: item.date,
     label: shortDate(item.date),
-    duration: Number(item.durationMin || 0),
-    distance: Number(item.distanceKm || 0),
-    ariaLabel: `${item.date}，训练时长${Number(item.durationMin || 0)}分钟，训练距离${Number(item.distanceKm || 0)}公里`,
-    durationHeight: Math.max(2, Math.round(Number(item.durationMin || 0) / maxDuration * 100)),
-    distanceHeight: Math.max(2, Math.round(Number(item.distanceKm || 0) / maxDistance * 100))
+    duration: item.durationMin,
+    distance: item.distanceKm,
+    ariaLabel: `${item.date}，训练时长${metricValue(item.durationMin)}分钟，训练距离${metricValue(item.distanceKm)}公里`,
+    durationHeight: Math.max(0, Math.round(chartValue(item.durationMin) / maxDuration * 100)),
+    distanceHeight: Math.max(0, Math.round(chartValue(item.distanceKm) / maxDistance * 100))
   }));
 
   // 占比固定展示全部分区/分类，0 值行保留；数据以入库训练记录为准，不再用模拟值顶替。
@@ -55,23 +58,25 @@ function buildTrainingView(result, to) {
     (item) => item.count,
     (value) => `${number(value, 0)} 课次`
   ));
-  const trendDisplay = displaySeries(trend, trendPlaceholder('special'), trend.some((item) => item.duration > 0 || item.distance > 0));
-  const athleteRows = athletes.slice(0, 30).map((athlete) => {
+  const athleteRows = athletes.map((athlete) => {
     const age = ageAt(athlete.birthDate, to);
+    const athleteSummary = athlete.summary || {};
     return {
       id: athlete.id,
       name: athlete.name,
       meta: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.team || '未分队'}`,
       body: athlete.weightKg == null ? '体重未录入' : `${number(athlete.weightKg)} kg`,
-      sessionCount: athlete.summary.sessionCount,
-      duration: athlete.summary.durationMin == null ? '—' : `${number(athlete.summary.durationMin / 60)} h`,
-      distance: athlete.summary.distanceKm == null ? '—' : `${number(athlete.summary.distanceKm)} km`,
-      load: athlete.summary.load == null ? '—' : `${number(athlete.summary.load)} AU`
+      sessionCount: metricValue(athleteSummary.sessionCount, 0),
+      duration: athleteSummary.durationMin == null ? '--' : `${number(athleteSummary.durationMin / 60)} h`,
+      distance: athleteSummary.distanceKm == null ? '--' : `${number(athleteSummary.distanceKm)} km`,
+      load: athleteSummary.load == null ? '--' : `${number(athleteSummary.load)} AU`
     };
   });
-  return { metrics, trend: trendDisplay.data, trendPlaceholder: trendDisplay.isPlaceholder,
-    intensity, content,
-    athleteRows, athleteRowsAll: athleteRows, athleteTotal: athletes.length };
+  return { metrics, trend: trend.filter((item) => Number.isFinite(item.duration) || Number.isFinite(item.distance)),
+    intensity: intensity.map((row) => (training.intensity || []).length ? row : { ...row, value: '-- min', percentage: '--' }),
+    content: content.map((row) => (training.content || []).length ? row : { ...row, value: '-- 课次', percentage: '--' }),
+    hasIntensity: (training.intensity || []).length > 0, hasContent: (training.content || []).length > 0,
+    athleteRows, athleteRowsAll: athleteRows, athleteTotal: athletes.length, athletePager: paginateList(athleteRows, 0, PAGE_SIZE) };
 }
 
 Page({
@@ -89,13 +94,9 @@ Page({
     teamIndex: 0,
     teamId: 0,
     championEvents: [],
-    metrics: [],
-    trend: [],
-    intensity: [],
-    content: [],
-    athleteRows: [],
+    ...buildTrainingView({}, ''),
+    athleteQuery: '', trainingError: '', testError: '', championError: '',
     athleteTotal: 0,
-    athletePager: null,
     // 专项测试成绩：默认少列多展开，specialTests 只保存当前可见场次。
     specialTests: [],
     specialTestsTotal: 0,
@@ -107,6 +108,7 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
+    this.setData({ ...buildTrainingView({}, ''), athleteQuery: '', trainingError: '', testError: '', championError: '' });
     return runPageLoad(this, {
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
@@ -116,41 +118,32 @@ Page({
   },
 
   async loadPageData(scope, full, isLatest, withTests = full) {
-    // 专项测试范围只随筛选条件变化：队伍切换不改变测试范围时无需重拉；读取失败按空列表降级。
     const testsTask = withTests
-      ? (async () => {
-          try {
-            return buildSpecialTestView(await api.specialTests(scope.from, scope.to, scope.project));
-          } catch {
-            return buildSpecialTestView(null);
-          }
-        })()
+      ? sectionRequest(() => api.specialTests(scope.from, scope.to, scope.project), '专项测试加载失败')
       : Promise.resolve(null);
-    if (!full) {
-      const [result, testsView] = await Promise.all([
-        api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId),
-        testsTask
-      ]);
-      const view = buildTrainingView(result, scope.to);
-      return this.applyAthletePager(testsView ? this.applyTestView(view, testsView) : view);
-    }
-    const [teamResult, modelResult, trainingResult, testsView] = await Promise.all([
-      api.overviewTeams(scope.project),
-      api.specialChampionModels(scope.project),
-      api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId),
+    const [teams, model, training, tests] = await Promise.all([
+      full ? sectionRequest(() => api.overviewTeams(scope.project), '队伍加载失败') : Promise.resolve(null),
+      full ? sectionRequest(() => api.specialChampionModels(scope.project), '冠军模型加载失败') : Promise.resolve(null),
+      sectionRequest(() => api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId), '专项训练加载失败'),
       testsTask
     ]);
-    const teamItems = [{ id: 0, name: '全部队伍' }].concat(teamResult.teams || []);
-    const championEvents = (modelResult.events || []).slice(0, 12).map((item) => ({
-      code: item.eventCode,
-      name: item.eventName,
-      performance: item.bestPerformance || '待核实',
-      meta: [item.country, item.competition, item.location].filter(Boolean).join(' · ') || '赛事来源待配置',
-      pace: item.pace || ''
-    }));
-    if (isLatest && isLatest()) this._loadedProject = scope.project;
-    const view = { teamItems, championEvents, ...buildTrainingView(trainingResult, scope.to) };
-    return this.applyAthletePager(this.applyTestView(view, testsView || buildSpecialTestView(null)));
+    if (isLatest && !isLatest()) return null;
+    const view = { ...buildTrainingView(training.value || {}, scope.to), trainingError: training.error };
+    if (full) {
+      view.teamItems = [{ id: 0, name: '全部队伍' }].concat((teams.value || {}).teams || []);
+      view.championEvents = ((model.value || {}).events || []).slice(0, 12).map((item) => ({
+        code: item.eventCode, name: item.eventName, performance: item.bestPerformance || '待核实',
+        meta: [item.country, item.competition, item.location].filter(Boolean).join(' · ') || '赛事来源待配置', pace: item.pace || ''
+      }));
+      view.championError = model.error;
+      view.trainingError = training.error || teams.error;
+      if (!model.error && !teams.error) this._loadedProject = scope.project;
+    }
+    if (tests) {
+      view.testError = tests.error;
+      this.applyTestView(view, buildSpecialTestView(tests.value));
+    }
+    return this.applyAthletePager(view);
   },
 
   // 专项测试默认只显示最近 3 场：完整列表留在 _specialTestsAll，按需逐批追加。
@@ -187,16 +180,21 @@ Page({
     const teamChanged = this._pagedTeamId !== undefined && this._pagedTeamId !== this.data.teamId;
     this._pagedTeamId = this.data.teamId;
     const page = teamChanged ? 0 : this.data.athletePager && this.data.athletePager.page || 0;
-    const model = paginateList(view.athleteRowsAll, page, PAGE_SIZE);
+    const model = paginateList(view.athleteRowsAll.filter((row) => row.name.includes(this.data.athleteQuery || '')), page, PAGE_SIZE);
     view.athleteRows = model.items;
     view.athletePager = model;
     return view;
   },
 
+  onAthleteSearch(event) {
+    const athleteQuery = event.detail.value;
+    this.setData({ athleteQuery, ...athleteListView(this.data.athleteRowsAll, athleteQuery) });
+  },
+
   onAthletePagerChange(event) {
     const page = Number(event.detail && event.detail.page);
     if (!Number.isInteger(page)) return;
-    const model = paginateList(this.data.athleteRowsAll, page, PAGE_SIZE);
+    const model = paginateList((this.data.athleteRowsAll || []).filter((row) => row.name.includes(this.data.athleteQuery || '')), page, PAGE_SIZE);
     this.setData({ athleteRows: model.items, athletePager: model });
   },
 
@@ -205,8 +203,9 @@ Page({
     if (!change) return Promise.resolve();
     if (change.field === 'project') {
       this._loadedProject = '';
-      this.setData({ teamId: 0, teamIndex: 0, teamItems: [{ id: 0, name: '全部队伍' }], championEvents: [], metrics: [], trend: [], intensity: [], content: [], athleteRows: [], athleteRowsAll: [], athletePager: null, athleteTotal: 0, specialTests: [], specialTestsTotal: 0, specialTestsResultTotal: 0, specialTestsMoreCount: 0 });
+      this.setData({ teamId: 0, teamIndex: 0, teamItems: [{ id: 0, name: '全部队伍' }], championEvents: [], championError: '' });
     }
+    this.resetTrainingView();
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
       if (!isLatest()) return null;
@@ -220,11 +219,17 @@ Page({
     const team = this.data.teamItems[teamIndex] || this.data.teamItems[0];
     const teamId = Number(team.id) || 0;
     this.setData({ teamIndex, teamId });
+    this.resetTrainingView(false);
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest), '队伍数据加载失败。');
   },
 
+  resetTrainingView(resetTests = true) {
+    const tests = resetTests ? this.applyTestView({}, buildSpecialTestView(null)) : {};
+    this.setData({ ...buildTrainingView({}, ''), athleteQuery: '', trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
+  },
+
   showTrendDetail(event) {
-    showTrendModal(this, event, durationDistanceLines);
+    showTrendModal(this, event, (item) => [`训练时长：${metricValue(item.duration)} 分钟`, `训练距离：${metricValue(item.distance)} km`]);
   },
 
   goTestEntry() {

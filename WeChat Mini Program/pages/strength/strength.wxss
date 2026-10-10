@@ -1,3 +1,4 @@
+@import "../../templates/training-state.wxss";
 .comparison-list { display: grid; gap: 14rpx; }
 .comparison-card { padding: 20rpx; border: 1rpx solid #dce6e8; border-radius: 17rpx; background: #f9fcfc; }
 .comparison-name { color: #234d57; font-size: 24rpx; font-weight: 800; }

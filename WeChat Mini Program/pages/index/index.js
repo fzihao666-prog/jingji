@@ -10,6 +10,10 @@ const { todayStatusView, todayStatusSummary } = require('../../utils/today-statu
 const { wellnessRecordView } = require('../../utils/wellness-form');
 const { injuryMetricView } = require('../../utils/injury-metric');
 
+const { metricValue, sectionRequest } = require('../../utils/training-empty');
+
+const emptyTeamView = () => ({ athletes: [], teamPager: paginateList([], 0, PAGE_SIZE) });
+
 function recentDates(from, to, limit = 14) {
   const first = new Date(`${from}T00:00:00Z`);
   const last = new Date(`${to}T00:00:00Z`);
@@ -26,14 +30,14 @@ function buildView(overview, comparison, from, to) {
   const summary = analytics.summary || {};
   const loadRatio = overview.trainingLoadRatio || {};
   const meta = overview.meta || {};
-  const valueOrDash = (value, divisor = 1) => value === null || value === undefined ? '—' : number(value / divisor);
+  const valueOrDash = (value, divisor = 1) => typeof value === 'number' && Number.isFinite(value) ? metricValue(value / divisor) : '--';
   const metrics = [
-    { label: '累计训练量', value: valueOrDash(summary.totalDurationMin, 60), unit: summary.totalDurationMin == null ? '' : '小时', note: '当前周期', tone: '' },
-    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: summary.specialDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-purple' },
-    { label: '体能训练', value: valueOrDash(summary.physicalDurationMin, 60), unit: summary.physicalDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-teal' },
-    { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: summary.recoveryDurationMin == null ? '' : '小时', note: '训练时长', tone: 'tone-green' },
-    { label: '训练负荷', value: loadRatio.totalLoad == null ? '—' : number(loadRatio.totalLoad, 0), unit: loadRatio.totalLoad == null ? '' : 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' },
-    injuryMetricView(overview.injuries || [], meta.scope === 'individual')
+    { label: '累计训练量', value: valueOrDash(summary.totalDurationMin, 60), unit: '小时', note: '当前周期', tone: '' },
+    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-purple' },
+    { label: '体能训练', value: valueOrDash(summary.physicalDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-teal' },
+    { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-green' },
+    { label: '训练负荷', value: metricValue(loadRatio.totalLoad, 0), unit: 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' },
+    overview.injuries ? injuryMetricView(overview.injuries, meta.scope === 'individual') : { label: '损伤情况', value: '--', unit: '人', note: '暂无伤病数据', tone: '' }
   ];
 
   const dates = recentDates(from, to);
@@ -56,7 +60,7 @@ function buildView(overview, comparison, from, to) {
     return {
       date: item.date,
       label: shortDate(item.date),
-      duration: Number(item.physicalDurationMin || 0) + Number(item.specialDurationMin || 0),
+      duration: item.physicalDurationMin == null && item.specialDurationMin == null ? null : Number(item.physicalDurationMin || 0) + Number(item.specialDurationMin || 0),
       load,
       teamLoad,
       ariaLabel: `${item.date}，${load == null ? '暂无专项或体能负荷记录' : `专项与体能负荷 ${number(load, 0)} AU`}${teamLoad == null ? '' : `，团队日均 ${number(teamLoad, 0)} AU`}`,
@@ -67,11 +71,11 @@ function buildView(overview, comparison, from, to) {
   const trendHasData = trend.some((item) => item.load !== null);
 
   const structure = [
-    { key: 'special', name: '专项', load: Number(loadRatio.specialLoad || 0), percentage: Number(loadRatio.specialPercentage || 0), color: 'special' },
-    { key: 'physical', name: '体能', load: Number(loadRatio.physicalLoad || 0), percentage: Number(loadRatio.physicalPercentage || 0), color: 'physical' },
-    { key: 'recovery', name: '恢复', load: Number(loadRatio.recoveryLoad || 0), percentage: Number(loadRatio.recoveryPercentage || 0), color: 'recovery' }
-  ].map((item) => ({ ...item, percentageText: number(item.percentage, 0), width: Math.max(0, Math.min(100, item.percentage)) }));
-  const hasStructure = Number(loadRatio.totalLoad) > 0;
+    { key: 'special', name: '专项', load: loadRatio.specialLoad, percentage: loadRatio.specialPercentage, color: 'special' },
+    { key: 'physical', name: '体能', load: loadRatio.physicalLoad, percentage: loadRatio.physicalPercentage, color: 'physical' },
+    { key: 'recovery', name: '恢复', load: loadRatio.recoveryLoad, percentage: loadRatio.recoveryPercentage, color: 'recovery' }
+  ].map((item) => ({ ...item, loadText: metricValue(item.load), percentageText: metricValue(item.percentage, 0), width: Number.isFinite(item.percentage) ? Math.max(0, Math.min(100, item.percentage)) : 0 }));
+  const hasStructure = structure.some((item) => Number.isFinite(item.load));
 
   const rpeDays = dailyRows.map((item) => {
     const mean = item.averageRpe;
@@ -86,12 +90,12 @@ function buildView(overview, comparison, from, to) {
       stdRpe: bandDay.stdRpe,
       lowerRpe: bandDay.lowerRpe,
       upperRpe: bandDay.upperRpe,
-      meanHeight: mean == null ? 0 : Math.max(2, Math.round(Math.min(10, Math.max(0, mean)) * 10)),
+      meanHeight: mean == null ? 0 : Math.max(0, Math.round(Math.min(10, Math.max(0, mean)) * 10)),
       lowerHeight: bandDay.lowerRpe == null ? 0 : Math.round(Math.min(10, Math.max(0, bandDay.lowerRpe)) * 10),
       rangeHeight: bandDay.lowerRpe == null || bandDay.upperRpe == null ? 0 : Math.round((Math.min(10, bandDay.upperRpe) - Math.max(0, bandDay.lowerRpe)) * 10),
       teamMean,
       teamRpeCount: teamDay ? teamDay.rpeCount || 0 : 0,
-      teamMeanHeight: teamMean == null ? 0 : Math.max(2, Math.round(Math.min(10, Math.max(0, teamMean)) * 10)),
+      teamMeanHeight: teamMean == null ? 0 : Math.max(0, Math.round(Math.min(10, Math.max(0, teamMean)) * 10)),
       ariaLabel: `${item.date}，${mean == null ? '暂无RPE记录' : `RPE均值 ${number(mean)}，有效人数 ${item.rpeCount || 0}`}${teamMean == null ? '' : `，团队均值 ${number(teamMean)}`}`
     };
   });
@@ -121,13 +125,6 @@ Page({
     range: 'month',
     from: '',
     to: '',
-    metrics: [],
-    trend: [],
-    structure: [],
-    structureHasData: false,
-    rpeDays: [],
-    rpePlaceholder: false,
-    meta: {},
     canSelfReport: false,
     canViewTodos: false,
     todos: null,
@@ -142,14 +139,15 @@ Page({
     teamLoading: false,
     teamError: '',
     teamKeyword: '',
-    teamView: null,
+    teamView: emptyTeamView(),
     teams: [],
     teamId: 0,
     showTeam: false,
     showAthlete: false,
     athleteKeyword: '',
     focusRows: [],
-    focusPager: null
+    focusPager: paginateList([], 0, PAGE_SIZE),
+    ...buildView({}, null, '', ''), overviewError: '', comparisonError: ''
   },
 
   onShow() {
@@ -167,9 +165,10 @@ Page({
     this._todayGuard.next();
     this._teamGuard.next();
     this.setData({
-      todos: null, focusRows: [], focusPager: null, todosError: '', canViewTodos: false,
+      ...buildView({}, null, this.data.from, this.data.to), overviewError: '', comparisonError: '',
+      todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), todosError: '',
       todayView: null, wellnessView: null, todayError: '', todayLoading: false,
-      teamOverview: null, teamError: '', teamLoading: false, teamView: null,
+      teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView(),
     });
     return runPageLoad(this, {
       refreshUser,
@@ -195,13 +194,16 @@ Page({
   },
 
   async loadPageData(scope, isLatest = () => true) {
+    this.setData({ ...buildView({}, null, scope.from, scope.to), overviewError: '', comparisonError: '' });
+    let teamsError = '';
     const isManager = this.data.canViewTodos;
     let teams = this.data.teams || [];
     if (isManager && this._teamsProject !== scope.project) {
-      const result = await api.overviewTeams(scope.project);
+      const result = await sectionRequest(() => api.overviewTeams(scope.project), '队伍加载失败');
       if (!isLatest()) return null;
-      teams = result.teams || [];
-      this._teamsProject = scope.project;
+      teams = (result.value || {}).teams || [];
+      teamsError = result.error;
+      if (!result.error) this._teamsProject = scope.project;
     }
     const teamExists = teams.some((item) => Number(item.id) === Number(this.data.teamId));
     const sameProject = this._selectedTeamProject === scope.project;
@@ -216,16 +218,19 @@ Page({
     let athleteId = isManager ? Number(this.data.selectedAthleteId) || 0 : 0;
     if (athleteId && !scopeAthletes.some((item) => Number(item.id) === athleteId)) athleteId = 0;
     const teamPromise = isManager && athleteId
-      ? api.overview(scope.from, scope.to, 0, scope.project, teamId)
+      ? sectionRequest(() => api.overview(scope.from, scope.to, 0, scope.project, teamId), '团队参照加载失败')
       : Promise.resolve(null);
     const [personalResult, comparisonResult] = await Promise.all([
-      athleteId
+      sectionRequest(() => athleteId
         ? api.personalOverview(athleteId, scope.from, scope.to, scope.project)
-        : api.overview(scope.from, scope.to, 0, scope.project, teamId),
+        : api.overview(scope.from, scope.to, 0, scope.project, teamId), '训练总览加载失败'),
       teamPromise
     ]);
     if (!isLatest()) return null;
-    const view = buildView(personalResult.overview, athleteId && comparisonResult ? comparisonResult.overview : null, scope.from, scope.to);
+    const view = {
+      ...buildView((personalResult.value || {}).overview || {}, athleteId && comparisonResult && comparisonResult.value ? comparisonResult.value.overview : null, scope.from, scope.to),
+      overviewError: personalResult.error || teamsError, comparisonError: comparisonResult ? comparisonResult.error : ''
+    };
     const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, teams, teamId);
     const filteredRoster = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, this.data.todoPagerPages, teams, teamId);
     Object.assign(view, { focusRows: focus.items, focusPager: focus, teamView: filteredRoster });
@@ -263,7 +268,7 @@ Page({
     if (!this.data.canViewTodos) return;
     this._todoGuard = this._todoGuard || createRequestGuard();
     const id = this._todoGuard.next();
-    this.setData({ todosLoading: true, todosError: '', todos: null, focusRows: [], focusPager: null });
+    this.setData({ todosLoading: true, todosError: '', todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE) });
     try {
       const result = await api.dailyTodos(project);
       if (!this._todoGuard.isLatest(id)) return;
@@ -329,13 +334,13 @@ Page({
       this.setData({ teamLoading: false, teamOverview, teamView });
     } catch (error) {
       if (this._teamGuard.isLatest(id)) {
-        this.setData({ teamLoading: false, teamOverview: null, teamView: null, teamError: error.message || '队伍总览加载失败，请重试。' });
+        this.setData({ teamLoading: false, teamOverview: null, teamView: emptyTeamView(), teamError: error.message || '队伍总览加载失败，请重试。' });
       }
     }
   },
 
   buildTeamView(overview, keyword, pagerPages, teams, teamId) {
-    if (!overview) return null;
+    if (!overview) return emptyTeamView();
     const kw = (keyword || '').toLowerCase();
     const selectedTeam = (teams || this.data.teams || []).find((item) => Number(item.id) === Number(teamId === undefined ? this.data.teamId : teamId));
     const inTeam = (overview.athletes || []).filter((item) => !selectedTeam || item.team === selectedTeam.name);
@@ -346,7 +351,7 @@ Page({
         )
       : inTeam;
     const model = paginateList(filtered, (pagerPages || this.data.todoPagerPages).team, PAGE_SIZE);
-    return { ...overview, athletes: model.items, teamPager: model };
+    return { ...overview, athletes: model.items.map((athlete) => ({ ...athlete, load24hText: metricValue(athlete.load24h) })), teamPager: model };
   },
 
   retryTeam() {
@@ -355,12 +360,11 @@ Page({
 
   onTeamKeyword(event) {
     const teamKeyword = event.detail.value;
-    if (!this.data.teamOverview) return;
     const todoPagerPages = { ...this.data.todoPagerPages, team: 0 };
     this.setData({
       teamKeyword,
       todoPagerPages,
-      teamView: this.buildTeamView(this.data.teamOverview, teamKeyword, undefined, this.data.teams, this.data.teamId),
+      teamView: this.buildTeamView(this.data.teamOverview, teamKeyword, todoPagerPages, this.data.teams, this.data.teamId),
     });
   },
 
@@ -394,7 +398,7 @@ Page({
     const teamId = Number(event.detail && event.detail.value) || 0;
     if (!this.data.teams.some((item) => Number(item.id) === teamId) && teamId !== 0) return Promise.resolve();
     const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0 };
-    this.setData({ teamId, todoPagerPages, teamKeyword: '', athleteKeyword: '', focusRows: [], focusPager: null, teamView: this.buildTeamView(this.data.teamOverview, '', todoPagerPages, this.data.teams, teamId) });
+    this.setData({ teamId, todoPagerPages, teamKeyword: '', athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamView: this.buildTeamView(this.data.teamOverview, '', todoPagerPages, this.data.teams, teamId) });
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
   },
 
@@ -416,7 +420,7 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ metrics: [], trend: [], structure: [], rpeDays: [], meta: {}, todos: null, focusRows: [], focusPager: null, teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true });
+      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
@@ -432,7 +436,7 @@ Page({
       if (change.field === 'project') {
         this._teamGuard = this._teamGuard || createRequestGuard();
         this._teamGuard.next();
-        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: null });
+        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView() });
         const [overview] = await Promise.all([this.loadPageData(scope, isLatest), this.loadTodos(scope.project), this.loadTeamOverview(scope.project)]);
         return overview;
       }

@@ -11,6 +11,7 @@ import {
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { ApiRequestError, api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
+import { IcpFooter } from '../components/IcpFooter';
 import type { ProjectTeam, User } from '../types';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { PROJECTS, projectLabel } from '../../shared/projects';
@@ -794,6 +795,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
           )}
         </div>
       </section>
+      <IcpFooter />
     </main>
   );
 }

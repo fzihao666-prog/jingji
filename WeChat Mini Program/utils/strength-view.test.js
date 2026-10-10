@@ -27,7 +27,7 @@ describe('体能小程序视图与网页端数据联动', () => {
     expect(first.weekLabels).toEqual(['第1周', '第2周']);
     expect(first.planExercises[0].rows[0]).toMatchObject({ prescription: '3 组 × 8 次', weight: '70 kg', completed: '8' });
     const second = planView(plans, 0, 1);
-    expect(second.planExercises[0].rows[0]).toMatchObject({ prescription: '4 组 × 6 次', weight: '—', percentage: '—', completed: '—' });
+    expect(second.planExercises[0].rows[0]).toMatchObject({ prescription: '4 组 × 6 次', weight: '--', percentage: '--', completed: '--' });
   });
   it('保留超过12个动作并按网页分类筛选', () => {
     const many = [{ data: { exercises: Array.from({ length: 15 }, (_, i) => ({ ...exercise, id: String(i) })) } }];
@@ -42,15 +42,15 @@ describe('体能小程序视图与网页端数据联动', () => {
     expect(recordView(sessions, '', 24).records).toHaveLength(15);
     const chosen = recordView(sessions, '2026-09-02', 12, '15');
     expect(chosen.recordCount).toBe(1);
-    expect(chosen.records[0]).toMatchObject({ load: '—', sets: [{ actual: '0 次 · — kg', completed: '未完成' }] });
+    expect(chosen.records[0]).toMatchObject({ load: '--', sets: [{ actual: '0 次 · -- kg', completed: '未完成' }] });
     expect(recordView(sessions, '2026-09-03').records).toEqual([]);
   });
   it('无真实数据不显示示例，部分缺失不把空值计为0', () => {
     expect(overviewView([], [], period).trend).toEqual([]);
-    expect(overviewView([], [], period).summaryCards[1].value).toBe('—');
+    expect(overviewView([], [], period).summaryCards[1].value).toBe('--');
     const view = overviewView([], [{ trainingDate: '2026-09-01', durationMin: 30, srpe: null, sets: [] }], period);
-    expect(view.trend[0]).toMatchObject({ durationText: '30', loadText: '—', loadHeight: 0 });
-    expect(view.summaryCards[2].value).toBe('—');
+    expect(view.trend[0]).toMatchObject({ durationText: '30', loadText: '--', loadHeight: 0 });
+    expect(view.summaryCards[2].value).toBe('--');
   });
   it('趋势不再截断到14天，零训练量不替换为示例', () => {
     const sessions = Array.from({ length: 20 }, (_, index) => ({ trainingDate: `2026-09-${String(index + 1).padStart(2, '0')}`, durationMin: 0, srpe: 0 }));
@@ -64,7 +64,7 @@ describe('体能小程序视图与网页端数据联动', () => {
     expect(view.metricHistory.map((item) => item.value)).toEqual(['80', '90']);
     expect(view.metricBest).toBe('110');
     expect(view.metricChange).toBe('10');
-    expect(metricView(tests, 'squatKg', { from: '2026-09-19', to: '2026-09-30' }).metricChange).toBe('—');
+    expect(metricView(tests, 'squatKg', { from: '2026-09-19', to: '2026-09-30' }).metricChange).toBe('--');
   });
   it.each(['深蹲', '跑步间歇', '平板支撑', '高拉', '药球抛', '水上专项划行', ''])('分类“%s”与共享推断规则一致', (name) => {
     expect(structureCategory({ exerciseName: name })).toBe(inferStrengthCategory(name));
@@ -91,6 +91,6 @@ describe('体能小程序视图与网页端数据联动', () => {
   it('无目标时不计算画像达成率，周期外测试明确标记', () => {
     const view = overviewView([{ testDate: '2026-08-01', metrics: { squatKg: 80 } }], [], period);
     expect(view.latestTestOutsidePeriod).toBe(true);
-    expect(view.metrics[0].rate).toBe('—');
+    expect(view.metrics[0].rate).toBe('--');
   });
 });

@@ -1,3 +1,4 @@
+@import "../../templates/training-state.wxss";
 /* 总览按手机纵向阅读组织，图表内容始终受卡片宽度约束。 */
 .overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
 .overview-metrics .metric-card { min-width: 0; box-sizing: border-box; padding: 20rpx 18rpx; }
@@ -90,3 +91,12 @@
   .trend-label { font-size: 15rpx; }
   .rpe-chart { gap: 4rpx; padding-left: 30rpx; }
 }
+
+.overview-chart-stage { position: relative; min-height: 330rpx; border-left: 1rpx solid #cbdadd; border-bottom: 1rpx solid #cbdadd; background: repeating-linear-gradient(to top, transparent 0, transparent 64rpx, #edf2f3 65rpx, transparent 66rpx); }
+.overview-rpe-stage { min-height: 240rpx; }
+.overview-chart-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 1; pointer-events: none; }
+.overview-chart-overlay .state { min-height: 0; padding: 20rpx; background: rgba(255, 255, 255, .9); border-radius: 12rpx; }
+.overview-chart-overlay button { pointer-events: auto; }
+.structure-status { min-height: 64rpx; padding: 12rpx 0; color: #536c75; font-size: 23rpx; line-height: 1.5; }
+.overview-person-button { display: block; box-sizing: border-box; width: 100%; min-width: 0; margin: 0; text-align: left; background: transparent; border-radius: 0; line-height: 1.5; }
+.overview-person-button:focus { outline: 3rpx solid #176373; outline-offset: 1rpx; }

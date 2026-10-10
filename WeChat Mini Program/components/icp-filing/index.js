@@ -1,6 +1,10 @@
-const FILING_QUERY_URL = 'https://beian.miit.gov.cn/';
+const { MINI_PROGRAM_FILING_NUMBER, FILING_QUERY_URL } = require('../../filing');
 
 Component({
+  data: {
+    filingNumber: MINI_PROGRAM_FILING_NUMBER,
+    filingQueryUrl: FILING_QUERY_URL
+  },
   methods: {
     copyQueryUrl() {
       wx.setClipboardData({

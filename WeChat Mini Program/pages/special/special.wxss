@@ -1,3 +1,4 @@
+@import "../../templates/training-state.wxss";
 .team-picker { display: block; margin: -6rpx 0 18rpx; }
 .team-picker-control { height: 66rpx; padding: 0 18rpx; border: 1rpx solid #d5e1e3; border-radius: 15rpx; display: flex; align-items: center; gap: 12rpx; background: #ffffff; }
 .team-picker-control > text:first-child { color: #829399; font-size: 20rpx; }

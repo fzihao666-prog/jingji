@@ -12,7 +12,7 @@ function loadModule(url, mocks = {}) {
     exports: module.exports,
     require(path) {
       if (Object.prototype.hasOwnProperty.call(mocks, path)) return mocks[path];
-      throw new Error(`未预期的依赖：${path}`);
+      return loadModule(new URL(`${path}.js`, url));
     },
     Date,
     Number,
@@ -53,6 +53,7 @@ function loadPage() {
     wx: {},
     require(path) {
       if (path.includes('utils/special-test-view')) return specialTestView;
+      if (path.includes('/utils/')) return loadModule(new URL(`${path}.js`, import.meta.url));
       return {};
     },
     getApp: () => ({ globalData: {} }),

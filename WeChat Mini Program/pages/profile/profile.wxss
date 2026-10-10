@@ -1,3 +1,4 @@
+@import "../../templates/training-state.wxss";
 .privacy-notice { margin: -4rpx 2rpx 18rpx; display: flex; align-items: center; gap: 9rpx; color: #6f858d; font-size: 20rpx; }
 .privacy-notice image { width: 32rpx; height: 32rpx; flex: none; }
 .more-grid { margin-top: 1rpx; }
@@ -86,9 +87,15 @@
 .radar-legend-item.reference { color: #7a4715; background: rgba(215, 150, 23, 0.14); }
 .radar-legend-item.scale { color: #70858c; background: #eef4f5; }
 .radar-canvas { width: 100%; height: 480rpx; margin-top: 12rpx; }
-.radar-fallback { margin-top: 12rpx; padding: 34rpx 20rpx; border: 1rpx dashed #c9dcde; border-radius: 12rpx; color: #70858c; font-size: 21rpx; text-align: center; }
 .radar-dim { display: flex; align-items: center; gap: 10rpx; margin-top: 12rpx; padding-top: 12rpx; border-top: 1rpx solid #e3edef; }
 .radar-dim-values { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12rpx; }
 .radar-dim-value { color: #0f5961; font-size: 23rpx; font-weight: 700; }
 .radar-dim-ref { color: #70858c; font-size: 19rpx; }
 .radar-dim-achieved { color: #168f88; font-size: 21rpx; font-weight: 700; }
+
+/* 空图沿用真实图高度，缺测切换不挤压相邻卡片。 */
+.profile-trend-stage { min-height: 130rpx; border-left: 1rpx solid #cbdadd; border-bottom: 1rpx solid #cbdadd; }
+.profile-trend-stage .state { min-height: 130rpx; padding: 16rpx; }
+.profile-radar-empty .training-chart-empty { min-height: 480rpx; }
+.profile-cell, .profile-hero-info, .trend-metric, .radar-card { min-width: 0; }
+.profile-cell-value, .radar-dim-values { overflow-wrap: anywhere; }

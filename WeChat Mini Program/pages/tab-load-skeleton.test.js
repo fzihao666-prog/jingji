@@ -115,6 +115,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/page-actions': pageActions,
     '../../utils/format': formatModule,
     '../../utils/strength-view': strengthView,
+    '../../utils/training-empty': loadCjs(new URL('../utils/training-empty.js', import.meta.url), { './format': formatModule, './strength-view': strengthView, './pagination': paginationModule }),
     '../../utils/project-label': { projectLabel: (project) => project === 'ROWING' ? '赛艇' : project },
     '../../utils/date': dateModule,
     '../../utils/chart-placeholder': chartPlaceholder,
@@ -293,8 +294,11 @@ describe('三个 Tab 共用统一加载骨架', () => {
     expect(page._source).toBe(currentSource);
     api.strengthTrainingResults = async () => { throw new Error('网络不可用'); };
     await page.loadPage();
-    expect(page._source).toBeNull();
-    expect(page.data.error).toBe('网络不可用');
+    expect(page._source.sessions).toEqual([]);
+    expect(page.data.trainingError).toBe('网络不可用');
+    expect(page.data.error).toBe('');
+    expect(page.data.records).toEqual([]);
+    expect(page.data.summaryCards.every((row) => row.value === '--')).toBe(true);
   });
 
   it('专项训练页完成作用域、视图与缓存标记，二次显示不重拉', async () => {
