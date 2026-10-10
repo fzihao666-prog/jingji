@@ -3,6 +3,10 @@ import {
   getAccountCounties,
   validateAccountAreas,
 } from '../../shared/account-regions';
+import {
+  athleteAccountAreaComplete,
+  athleteAccountAreaForEdit,
+} from '../../shared/athlete-account-area';
 import { ACCOUNT_PASSWORD_HINT, accountPasswordSchema } from '../../shared/account-password';
 import {
   Activity,
@@ -54,7 +58,10 @@ function areaLabel(area: AreaPermission) {
 }
 
 function compactScope(account: AccessAccount) {
-  const areas = account.areas.map(areaLabel).join('、');
+  const areas =
+    account.role === 'ATL' && !athleteAccountAreaComplete(account.areas)
+      ? '行政归属待完善'
+      : account.areas.map(areaLabel).join('、');
   const projects = account.projects.includes('*')
     ? '全部项目'
     : account.projects.map((project) => projectLabel(project)).join('、');
@@ -65,6 +72,7 @@ const auditLabels: Record<string, string> = {
   CREATE_ACCOUNT: '创建账号',
   RESET_ACCOUNT_PASSWORD: '重置账号密码',
   UPDATE_ACCOUNT_ACCESS: '调整账号权限',
+  COMPLETE_ATHLETE_AREA: '完善运动员行政归属',
   ENABLE_ACCOUNT: '启用账号',
   DISABLE_ACCOUNT: '停用账号',
   UPDATE_NAME: '修改姓名',
@@ -177,7 +185,11 @@ export function RegionAccessPage({ user }: { user: User }) {
     setResetError('');
     setRole(account.role);
     setParentUserId(account.parentUserId || user.id);
-    setAreas(account.areas.map((area) => ({ ...area })));
+    setAreas(
+      account.role === 'ATL'
+        ? [athleteAccountAreaForEdit(account.areas)]
+        : account.areas.map((area) => ({ ...area }))
+    );
     setProjects([...account.projects]);
     setTeams(account.teams.map((team) => ({ ...team })));
     setMessage('');
@@ -273,8 +285,8 @@ export function RegionAccessPage({ user }: { user: User }) {
         projects,
         teams,
       });
-      setMessage(result.message);
       await load(selected.id);
+      setMessage(result.message);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '权限保存失败。');
     } finally {
@@ -407,8 +419,13 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const canEditAccess = user.role !== 'SCC';
   const activeCount = payload?.accounts.filter((account) => account.active).length || 0;
-  const areaCount = new Set(payload?.accounts.flatMap((account) => account.areas.map(areaLabel)))
-    .size;
+  const areaCount = new Set(
+    payload?.accounts.flatMap((account) =>
+      account.role === 'ATL' && !athleteAccountAreaComplete(account.areas)
+        ? []
+        : account.areas.map(areaLabel)
+    )
+  ).size;
 
   return (
     <PageContainer className="access-center-page">
@@ -951,7 +968,11 @@ export function RegionAccessPage({ user }: { user: User }) {
                   <MapPinned size={18} />
                   <div>
                     <h3>行政区域范围</h3>
-                    <p>同级区域相互隔离，可为负责人增加多个授权区域</p>
+                    <p>
+                      {selected.role === 'ATL'
+                        ? '运动员绑定一个具体区县，保存后同步本人档案并记录日志'
+                        : '同级区域相互隔离，可为负责人增加多个授权区域'}
+                    </p>
                   </div>
                   {canEditAccess && selected.role !== 'ATL' && (
                     <button onClick={() => setAreas([...areas, blankArea()])}>
@@ -960,6 +981,11 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </button>
                   )}
                 </div>
+                {selected.role === 'ATL' && !athleteAccountAreaComplete(selected.areas) && (
+                  <p className="message-banner" role="status">
+                    行政归属待完善。请有管理权限的上级选择本人实际所属的省、市、区县；历史范围在保存前保持不变。
+                  </p>
+                )}
                 <div className="area-scope-list">
                   {areas.map((area, index) => (
                     <div className="area-scope-row" key={index}>
@@ -973,11 +999,13 @@ export function RegionAccessPage({ user }: { user: User }) {
                         value={area.areaLevel}
                         onChange={(event) => updateArea(index, 'areaLevel', event.target.value)}
                       >
-                        {Object.entries(AREA_LEVEL_META).map(([key, meta]) => (
-                          <option key={key} value={key}>
-                            {meta.label}
-                          </option>
-                        ))}
+                        {Object.entries(AREA_LEVEL_META)
+                          .filter(([key]) => selected.role !== 'ATL' || key === 'county')
+                          .map(([key, meta]) => (
+                            <option key={key} value={key}>
+                              {meta.label}
+                            </option>
+                          ))}
                       </select>
                       {area.areaLevel !== 'national' && (
                         <select
@@ -1082,7 +1110,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                           )}
                         </select>
                       )}
-                      {canEditAccess && areas.length > 1 && (
+                      {canEditAccess && selected.role !== 'ATL' && areas.length > 1 && (
                         <button
                           onClick={() => {
                             if (areaValidationError) setError('');

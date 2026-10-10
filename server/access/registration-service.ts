@@ -1,4 +1,5 @@
-import { db, upsertAthleteOrigin } from '../core/db.ts';
+import { db } from '../core/db.ts';
+import { validateAccountAreas } from '../../shared/account-regions.ts';
 import { canManageRole, type AreaLevel } from '../../shared/access.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import {
@@ -144,19 +145,6 @@ export function activateRegistrationRequest(
         request.native_place || '',
         request.phone || ''
       );
-      const [originProvince = '', originCity = '', originCounty = ''] = (
-        request.native_place || ''
-      ).split('/');
-      if (athleteId && provinceSet.has(originProvince) && originCity) {
-        upsertAthleteOrigin({
-          athleteId,
-          province: originProvince,
-          city: originCity,
-          county: originCounty,
-          source: 'registration',
-          quality: 'valid',
-        });
-      }
     }
 
     const result = db
@@ -180,7 +168,7 @@ export function activateRegistrationRequest(
         DEFAULT_COACH_CATEGORY
       );
     }
-    const inheritedArea = reviewer
+    let accountArea = reviewer
       ? accountPermissions(reviewer.id).areas[0] || {
           areaLevel: 'national' as AreaLevel,
           province: '',
@@ -193,17 +181,31 @@ export function activateRegistrationRequest(
           city: '',
           county: '',
         };
+    if (request.requested_role === 'ATL') {
+      // 籍贯仅保留在资料中，行政归属以运动员档案为准，不继承审核人的权限。
+      const origin = db
+        .prepare('SELECT province, city, county FROM athlete_origins WHERE athlete_id = ?')
+        .get(athleteId) as { province: string; city: string; county: string } | undefined;
+      accountArea = { areaLevel: 'county', province: '', city: '', county: '' };
+      if (origin && provinceSet.has(origin.province)) {
+        accountArea.province = origin.province;
+        const cityArea = { ...accountArea, areaLevel: 'city' as const, city: origin.city };
+        if (!validateAccountAreas([cityArea])) accountArea.city = origin.city;
+        const countyArea = { ...accountArea, county: origin.county };
+        if (!validateAccountAreas([countyArea])) accountArea.county = origin.county;
+      }
+    }
     initializeAccountScope({
       userId: newUserId,
       role: request.requested_role,
       parentUserId: reviewer?.id ?? null,
-      province: inheritedArea.province,
-      city: inheritedArea.city,
-      county: inheritedArea.county,
+      province: accountArea.province,
+      city: accountArea.city,
+      county: accountArea.county,
       project: request.project,
       team: request.team,
       grantedBy: reviewer?.id ?? newUserId,
-      areaLevel: inheritedArea.areaLevel,
+      areaLevel: accountArea.areaLevel,
     });
     if (reviewer && request.requested_role === 'ATL' && reviewer.role === 'SCC' && athleteId) {
       db.prepare(

@@ -9,7 +9,16 @@ const fixture = vi.hoisted(() => {
   return { db: null as DatabaseSync | null };
 });
 vi.mock('../core/db.ts', () => ({
-  upsertAthleteOrigin: vi.fn(),
+  upsertAthleteOrigin: vi.fn(
+    (input: { athleteId: number; province: string; city: string; county: string }) => {
+      fixture
+        .db!.prepare(
+          `INSERT INTO athlete_origins (athlete_id,province,city,county) VALUES (?,?,?,?)
+      ON CONFLICT(athlete_id) DO UPDATE SET province=excluded.province,city=excluded.city,county=excluded.county`
+        )
+        .run(input.athleteId, input.province, input.city, input.county);
+    }
+  ),
   get db() {
     return fixture.db;
   },
@@ -37,6 +46,10 @@ beforeAll(async () => {
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT, updated_at TEXT);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
+    CREATE TABLE athletes (id INTEGER PRIMARY KEY, project TEXT, team TEXT, team_id INTEGER, region TEXT, city TEXT, county TEXT);
+    CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
+    CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER);
   `);
   const { registerAccessRoutes } = await import('./access-routes.ts');
   const auth = await import('../core/auth.ts');
@@ -55,7 +68,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   db.exec(
-    'DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM audit_logs;'
+    'DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM audit_logs; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM project_teams; DELETE FROM coach_athletes; DELETE FROM account_profiles;'
   );
   for (const [id, role, province, project, team] of [
     [1, 'PRJ', '四川', 'ROWING', 'A队'],
@@ -86,6 +99,13 @@ beforeEach(() => {
   db.prepare(
     "UPDATE user_area_permissions SET area_level='national', province='',city='',county='' WHERE user_id=8"
   ).run();
+  db.exec(`
+    INSERT INTO project_teams VALUES (1,'ROWING','A队',1);
+    INSERT INTO athletes VALUES (2,'ROWING','A队',1,'四川','成都市','武侯区');
+    INSERT INTO athlete_origins VALUES (2,'四川','成都市','武侯区');
+    UPDATE users SET athlete_id=2 WHERE id=2;
+    INSERT INTO account_profiles VALUES (2,8,'test-account-code',NULL);
+  `);
 });
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -144,5 +164,152 @@ describe('账号接口行政区域从属校验', () => {
     expect((await updateArea([legacy])).status).toBe(200);
     expect((await createArea([legacy])).status).toBe(400);
     expect((await updateArea([{ ...legacy, city: '成都市' }])).status).toBe(400);
+  });
+});
+
+async function updateAthlete(body: unknown, actor = 8, id = '2') {
+  return fetch(`${baseUrl}/api/access/accounts/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(actor)}` },
+    body: JSON.stringify(body),
+  });
+}
+const nationalArea = { areaLevel: 'national', province: '', city: '', county: '' };
+describe('运动员待完善行政归属', () => {
+  it('历史全国仅转换展示，不修改数据库，补全后同步档案并记录前后范围', async () => {
+    db.exec(
+      "UPDATE user_area_permissions SET area_level='national',province='',city='',county='' WHERE user_id=2"
+    );
+    const response = await fetch(`${baseUrl}/api/access/accounts`, {
+      headers: { Authorization: `Bearer ${token(8)}` },
+    });
+    const payload = (await response.json()) as {
+      accounts: Array<{ id: number; areaPending: boolean; standardName: string }>;
+    };
+    expect(payload.accounts.find((account) => account.id === 2)).toMatchObject({
+      areaPending: true,
+    });
+    expect(payload.accounts.find((account) => account.id === 2)?.standardName).toContain(
+      '行政归属待完善'
+    );
+    expect(
+      db.prepare('SELECT area_level FROM user_area_permissions WHERE user_id=2').get()
+    ).toEqual({ area_level: 'national' });
+    expect((await updateAthlete(input([validArea], 'ATL'))).status).toBe(200);
+    expect(
+      db
+        .prepare(
+          'SELECT area_level,province,city,county FROM user_area_permissions WHERE user_id=2'
+        )
+        .get()
+    ).toEqual({ area_level: 'county', province: '四川', city: '成都市', county: '武侯区' });
+    expect(db.prepare('SELECT region,city,county,team FROM athletes WHERE id=2').get()).toEqual({
+      region: '四川',
+      city: '成都市',
+      county: '武侯区',
+      team: 'A队',
+    });
+    expect(
+      db.prepare('SELECT province,city,county FROM athlete_origins WHERE athlete_id=2').get()
+    ).toEqual({ province: '四川', city: '成都市', county: '武侯区' });
+    const audit = db.prepare('SELECT action,detail FROM audit_logs').get() as {
+      action: string;
+      detail: string;
+    };
+    expect(audit.action).toBe('COMPLETE_ATHLETE_AREA');
+    expect(JSON.parse(audit.detail)).toMatchObject({
+      previousAreas: [nationalArea],
+      permissions: { areas: [validArea] },
+    });
+  });
+  it('未知归属允许全国范围上级补全，不扩大其他管理者的原有权限', async () => {
+    db.exec(
+      "UPDATE user_area_permissions SET area_level='county',province='',city='',county='' WHERE user_id=2"
+    );
+    expect((await updateAthlete(input([validArea], 'ATL'), 1)).status).toBe(404);
+    expect((await updateAthlete(input([validArea], 'ATL'))).status).toBe(200);
+  });
+  it('已知省市的待完善账号可由覆盖该范围的上级补全', async () => {
+    db.exec(
+      "UPDATE user_area_permissions SET area_level='county',city='成都市',county='' WHERE user_id=2"
+    );
+    expect((await updateAthlete({ ...input([validArea], 'ATL'), parentUserId: 1 }, 1)).status).toBe(
+      200
+    );
+  });
+  it('历史全国展示不改变运动员仅访问本人的限制', async () => {
+    db.exec(
+      "UPDATE user_area_permissions SET area_level='national',province='',city='',county='' WHERE user_id=2"
+    );
+    const { accessibleAthleteIds } = await import('../core/permissions.ts');
+    expect(
+      accessibleAthleteIds({
+        id: 2,
+        username: 'test2',
+        displayName: '测试2',
+        role: 'ATL',
+        athleteId: 2,
+        sessionVersion: 0,
+      })
+    ).toEqual([2]);
+  });
+  it('拒绝运动员全国、省级、多区域、错误区县和额外字段', async () => {
+    expect((await updateAthlete(input([nationalArea], 'ATL'))).status).toBe(400);
+    expect(
+      (await updateAthlete(input([{ ...validArea, areaLevel: 'province' }], 'ATL'))).status
+    ).toBe(400);
+    expect((await updateAthlete(input([validArea, validArea], 'ATL'))).status).toBe(400);
+    expect((await updateAthlete(input([{ ...validArea, county: '西湖区' }], 'ATL'))).status).toBe(
+      400
+    );
+    expect((await updateAthlete({ ...input([validArea], 'ATL'), areaPending: false })).status).toBe(
+      400
+    );
+    expect((await updateAthlete(input([validArea], 'ATL'), 8, '2.5')).status).toBe(400);
+    expect(db.prepare('SELECT * FROM audit_logs').all()).toHaveLength(0);
+  });
+  it('已有归属不可移到管理者范围之外', async () => {
+    db.exec(
+      "UPDATE user_area_permissions SET area_level='county',city='成都市',county='武侯区' WHERE user_id=2"
+    );
+    expect(
+      (
+        await updateAthlete(
+          {
+            ...input([{ ...validArea, province: '浙江', city: '杭州市', county: '西湖区' }], 'ATL'),
+            parentUserId: 1,
+          },
+          1
+        )
+      ).status
+    ).toBe(403);
+    expect(db.prepare('SELECT * FROM audit_logs').all()).toHaveLength(0);
+  });
+  it('审计写入失败时账号范围、运动员归属和上级一起回滚', async () => {
+    db.exec(
+      "UPDATE user_area_permissions SET area_level='national',province='',city='',county='' WHERE user_id=2"
+    );
+    db.exec(
+      "CREATE TEMP TRIGGER reject_area_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT,'测试审计失败'); END"
+    );
+    try {
+      const next = { ...validArea, county: '青羊区' };
+      expect((await updateAthlete(input([next], 'ATL'))).status).toBe(500);
+      expect(
+        db.prepare('SELECT area_level FROM user_area_permissions WHERE user_id=2').get()
+      ).toEqual({ area_level: 'national' });
+      expect(db.prepare('SELECT county FROM athlete_origins WHERE athlete_id=2').get()).toEqual({
+        county: '武侯区',
+      });
+      expect(db.prepare('SELECT county FROM athletes WHERE id=2').get()).toEqual({
+        county: '武侯区',
+      });
+      expect(db.prepare('SELECT account_code FROM account_profiles WHERE user_id=2').get()).toEqual(
+        { account_code: 'test-account-code' }
+      );
+      expect(db.prepare('SELECT * FROM audit_logs').all()).toHaveLength(0);
+    } finally {
+      db.exec('DROP TRIGGER reject_area_audit');
+    }
   });
 });

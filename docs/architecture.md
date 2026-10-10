@@ -261,6 +261,8 @@ PRJ 与 REG 处于同一级，不能互相管理。上下级管理要求管理�
 
 账号行政区域候选通过 `shared/account-regions.ts` 复用共享省份及直辖单位汇总名称，并读取带版本的省地县代码快照。创建和编辑均级联选择；服务端校验省市区县从属关系，只有与目标已有授权完全相同的历史区域可原样保留。字典更新不自动修改已有账号或运动员数据。全国基线、2026 增量及官方接口不可用时的复核限制记录在 `shared/region-data/README.md`，不得将核查日期当成数据有效日期。
 
+运动员注册不继承审核人区域，也不将 `athlete_profiles.native_place`（籍贯）写入行政归属。账号区域取自本人 `athlete_origins`，按当前字典保留有效的省、市、区县；未知字段留空，仍使用 `county` 行表示待完善，不新增权限级别或伪造“全国”授权。`areaPending` 是派生展示状态，不参与放行权限；历史非具体区县范围仅调整展示，不自动迁移原始数据。上级补全仍须通过旧目标的 `canManageAccount`、新范围的 `permissionsContain` 以及 `resolveParent` 校验，因此未确认省份或历史全国范围账号只能由覆盖项目与队伍的全国范围上级首次补全。保存原子同步账号范围、`athletes` 兼容字段、`athlete_origins` 与教练关系，并以 `COMPLETE_ATHLETE_AREA` 记录原范围及新范围；后续正常调整使用 `UPDATE_ACCOUNT_ACCESS`。运动员本人访问仍强制绑定 `athleteId`。
+
 ### 7.2 项目模型
 
 系统支持三个相互隔离的项目空间：

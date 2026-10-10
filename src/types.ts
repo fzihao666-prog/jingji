@@ -507,6 +507,7 @@ export type AccessAccount = {
   parentName: string | null;
   accountCode: string;
   standardName: string;
+  areaPending?: boolean;
   areas: AreaPermission[];
   projects: string[];
   teams: TeamPermission[];

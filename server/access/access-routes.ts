@@ -1,5 +1,7 @@
 import { validateAccountAreas } from '../../shared/account-regions.ts';
+import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { registerResetPasswordRoutes } from './reset-password-routes.ts';
 import type { Express } from 'express';
 import { db, upsertAthleteOrigin } from '../core/db.ts';
@@ -45,6 +47,32 @@ export type AccountRow = AuthUser & {
   accountCode: string;
 };
 
+const accountAccessUpdateSchema = z.strictObject({
+  role: z.enum(ROLES),
+  parentUserId: z.number().int().positive(),
+  areas: z
+    .array(
+      z.strictObject({
+        areaLevel: z.enum(['national', 'province', 'city', 'county']),
+        province: z.string().trim().max(80),
+        city: z.string().trim().max(120),
+        county: z.string().trim().max(120),
+      })
+    )
+    .min(1)
+    .max(100),
+  projects: z.array(z.string().trim().min(1).max(100)).min(1).max(100),
+  teams: z
+    .array(
+      z.strictObject({
+        project: z.string().trim().min(1).max(100),
+        team: z.string().trim().min(1).max(160),
+      })
+    )
+    .min(1)
+    .max(1000),
+});
+
 export function allAccountRows() {
   return db
     .prepare(
@@ -71,6 +99,7 @@ export function serializeAccount(row: AccountRow) {
     ...row,
     roleLabel: ROLE_META[row.role].label,
     roleLevel: ROLE_META[row.role].level,
+    areaPending: row.role === 'ATL' && !athleteAccountAreaComplete(permissions.areas),
     standardName: standardAccountName({
       displayName: row.displayName,
       role: row.role,
@@ -706,17 +735,21 @@ export function registerAccessRoutes(app: Express) {
     requireRole('PRJ', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
-      const targetId = Number(req.params.id);
+      const targetIdResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      const input = accountAccessUpdateSchema.safeParse(req.body);
+      if (!targetIdResult.success || !input.success) {
+        return res.status(400).json({ message: '账号权限参数无效，请核对区域、项目和队伍。' });
+      }
+      const targetId = targetIdResult.data;
       const target = userById(targetId);
       if (!target || !canManageAccount(currentUser, target)) {
         return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
       }
-      const role = cleanString(req.body?.role) as Role;
-      const parentUserId = Number(req.body?.parentUserId);
-      const permissions = parseScopePayload(req.body);
+      const { role, parentUserId } = input.data;
+      const permissions = parseScopePayload(input.data);
+      const previousAreas = accountPermissions(targetId).areas;
       const scopeError =
-        validateScopePayload(permissions) ||
-        validateAccountAreas(permissions.areas, accountPermissions(targetId).areas);
+        validateScopePayload(permissions) || validateAccountAreas(permissions.areas, previousAreas);
       if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) {
         return res.status(400).json({ message: '目标角色层级无效。' });
       }
@@ -774,11 +807,9 @@ export function registerAccessRoutes(app: Express) {
             .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
             .get(project, team) as { id: number } | undefined;
           if (!teamRow) throw new Error('所选队伍不存在或已停用。');
-          db.prepare(`UPDATE athletes SET project = ?, team_id = ? WHERE id = ?`).run(
-            project,
-            teamRow.id,
-            target.athleteId
-          );
+          db.prepare(
+            `UPDATE athletes SET project = ?, team_id = ?, team = ?, region = ?, city = ?, county = ? WHERE id = ?`
+          ).run(project, teamRow.id, team, area.province, area.city, area.county, target.athleteId);
           upsertAthleteOrigin({
             athleteId: target.athleteId,
             province: area.province,
@@ -799,10 +830,12 @@ export function registerAccessRoutes(app: Express) {
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
         ).run(
           currentUser.id,
-          'UPDATE_ACCOUNT_ACCESS',
+          target.role === 'ATL' && !athleteAccountAreaComplete(previousAreas)
+            ? 'COMPLETE_ATHLETE_AREA'
+            : 'UPDATE_ACCOUNT_ACCESS',
           'user',
           targetId,
-          JSON.stringify({ role, parentUserId, permissions })
+          JSON.stringify({ role, parentUserId, previousAreas, permissions })
         );
         db.exec('COMMIT');
         res.json({ message: '角色、上级账号和数据范围已更新。' });
@@ -827,7 +860,9 @@ export function registerAccessRoutes(app: Express) {
         return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
       }
       const active = req.body?.active === true;
-      db.prepare('UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?').run(active ? 1 : 0, targetId);
+      db.prepare(
+        'UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?'
+      ).run(active ? 1 : 0, targetId);
       db.prepare(
         'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
       ).run(

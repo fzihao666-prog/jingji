@@ -10,6 +10,7 @@ import {
 } from '../../shared/access.ts';
 import { PROJECTS, type Project } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
+import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import { db } from './db.ts';
 import type { AreaPermission, AuthUser, ScopeAthlete } from './shared-server.ts';
 import { cleanString } from './utils.ts';
@@ -277,9 +278,11 @@ export function standardAccountName(input: {
 }) {
   const area = input.areas[0];
   const areaLabel =
-    area?.areaLevel === 'national'
-      ? '全国'
-      : [area?.province, area?.city, area?.county].filter(Boolean).join('·') || '未设置区域';
+    input.role === 'ATL' && !athleteAccountAreaComplete(input.areas)
+      ? '行政归属待完善'
+      : area?.areaLevel === 'national'
+        ? '全国'
+        : [area?.province, area?.city, area?.county].filter(Boolean).join('·') || '未设置区域';
   const projectLabel = input.projects.includes('*') ? '全部项目' : input.projects.join('、');
   const teamLabel = input.teams.some((team) => team.team === '*')
     ? ''
