@@ -1,6 +1,7 @@
 const api = require('../../services/api');
 const { TOKEN_KEY } = require('../../config');
 const { traceNetwork, nextTraceId } = require('../../utils/request');
+const { LOGIN_ERROR_MESSAGES, loginFailureMessage } = require('../../utils/login-errors');
 
 const OLYMPIC_ICONS = [
   ['射箭', 'archery'],
@@ -112,12 +113,13 @@ Page({
   forgotPassword() { wx.showToast({ title: '请联系系统管理员重置密码', icon: 'none' }); },
 
   async login() {
+    if (this.data.submitting) return;
     const traceId = nextTraceId();
     const { username, password, privacyAccepted, rememberUsername } = this.data;
     traceNetwork('登录点击', { traceId, hasUsername: !!username, hasPassword: !!password, privacyAccepted: !!privacyAccepted });
     if (!username || !password) {
       traceNetwork('登录校验未通过', { traceId, reason: '账号或密码未填写' });
-      this.setData({ error: '请输入账号和密码。' });
+      this.setData({ error: LOGIN_ERROR_MESSAGES.MISSING_CREDENTIALS });
       return;
     }
     if (!privacyAccepted) {
@@ -150,7 +152,16 @@ Page({
       });
     } catch (error) {
       traceNetwork('登录流程失败', { traceId, stage });
-      this.setData({ error: error.message || '登录失败，请稍后重试。' });
+      // 按服务端错误码映射提示；5xx 与内部错误不向用户展示原始内容。
+      this.setData({
+        error: loginFailureMessage({
+          code: error && error.code,
+          status: error && error.statusCode,
+          serverMessage: error && error.serverMessage,
+          timedOut: !!(error && error.kind === 'timeout'),
+          networkError: !!(error && error.kind === 'network')
+        })
+      });
     } finally {
       traceNetwork('登录处理结束', { traceId, stage });
       this.setData({ submitting: false });

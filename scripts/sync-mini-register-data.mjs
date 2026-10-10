@@ -4,6 +4,7 @@ import { PROJECT_DEFINITIONS } from '../shared/projects.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import { ROLE_META } from '../shared/access.ts';
 import { STRENGTH_METRICS } from '../shared/strength-model.ts';
+import { LOGIN_ERROR_MESSAGES } from '../shared/login-errors.ts';
 
 const target = fileURLToPath(new URL('../WeChat Mini Program/data/register-data.js', import.meta.url));
 const payload = {
@@ -24,7 +25,8 @@ const formatPayload = {
   strengthMetrics: Object.fromEntries(STRENGTH_METRICS.filter((metric) => miniStrengthMetricKeys.has(metric.key))
     .map((metric) => [metric.key, [metric.label, metric.unit]])),
 };
-for (const [path, data] of [[target, payload], [formatTarget, formatPayload]]) {
+const loginErrorsTarget = fileURLToPath(new URL('../WeChat Mini Program/data/login-errors.js', import.meta.url));
+for (const [path, data] of [[target, payload], [formatTarget, formatPayload], [loginErrorsTarget, LOGIN_ERROR_MESSAGES]]) {
   const output = `// 由 scripts/sync-mini-register-data.mjs 从 shared/ 生成，请勿手工修改。\nmodule.exports = ${JSON.stringify(data, null, 2)};\n`;
   if (process.argv.includes('--check')) {
     if (readFileSync(path, 'utf8') !== output) {

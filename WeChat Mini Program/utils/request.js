@@ -185,11 +185,19 @@ function redirectToLogin() {
   wx.removeStorageSync(TOKEN_KEY);
   const app = getApp();
   if (app && app.clearSession) app.clearSession();
+  const done = () => {
+    setTimeout(() => { redirecting = false; }, 400);
+  };
+  // 已在登录页时只清理会话，不再 reLaunch，避免登录页循环跳转。
+  const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+  const currentRoute = pages.length ? pages[pages.length - 1].route : '';
+  if (currentRoute === 'pages/login/login') {
+    done();
+    return;
+  }
   wx.reLaunch({
     url: '/pages/login/login',
-    complete() {
-      setTimeout(() => { redirecting = false; }, 400);
-    }
+    complete: done
   });
 }
 
@@ -246,7 +254,12 @@ function request(path, options = {}) {
         const message = response.data && response.data.message
           ? response.data.message
           : `请求失败（${response.statusCode}）`;
-        reject(new Error(message));
+        // 附带业务错误码、状态码与服务端原文，供登录等流程按码映射稳定提示。
+        const failure = new Error(message);
+        failure.code = response.data && typeof response.data.code === 'string' ? response.data.code : '';
+        failure.serverMessage = response.data && typeof response.data.message === 'string' ? response.data.message : '';
+        failure.statusCode = response.statusCode;
+        reject(failure);
       },
       fail(error) {
         traceNetwork('请求失败', {
@@ -256,7 +269,9 @@ function request(path, options = {}) {
           diagnosis: classifyNetworkFailure(error, lifecycle),
         });
 
-        reject(new Error(networkErrorMessage(error)));
+        const failure = new Error(networkErrorMessage(error));
+        failure.kind = /timeout/i.test(String((error && error.errMsg) || '')) ? 'timeout' : 'network';
+        reject(failure);
       },
       complete(result) {
         traceNetwork('请求完成', {

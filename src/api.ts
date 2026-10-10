@@ -2,6 +2,7 @@ import {
   resetAccountPasswordSchema,
   resetAccountPasswordResponseSchema,
 } from '../shared/account-password';
+import { LOGIN_ERROR_MESSAGES } from '../shared/login-errors';
 import { profilePhysiologyRecordSchema } from '../shared/profile-physiology';
 import { z } from 'zod';
 import { physicalChampionPayloadSchema } from '../shared/physical-champion';
@@ -57,21 +58,97 @@ export function setToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
+/** 携带结构化信息的请求错误：业务错误码、HTTP 状态与失败类别，供登录等流程按码映射提示。 */
+export class ApiRequestError extends Error {
+  readonly code?: string;
+  readonly status?: number;
+  readonly timedOut: boolean;
+  readonly networkError: boolean;
+  readonly serverMessage: string;
+
+  constructor(
+    message: string,
+    detail: {
+      code?: string;
+      status?: number;
+      timedOut?: boolean;
+      networkError?: boolean;
+      serverMessage?: string;
+    } = {}
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.code = detail.code;
+    this.status = detail.status;
+    this.timedOut = detail.timedOut ?? false;
+    this.networkError = detail.networkError ?? false;
+    this.serverMessage = detail.serverMessage ?? '';
+  }
+}
+
+type ApiRequestOptions = RequestInit & {
+  /** 为 false 时不附加令牌，401 也不触发会话清理与刷新（登录、注册等免登录接口）。 */
+  auth?: boolean;
+  /** 请求超时毫秒数；仅对需要快速失败的接口（如登录）启用。 */
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { auth = true, timeoutMs, ...init } = options;
+  const headers = new Headers(init.headers);
   const token = getToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (options.body && !(options.body instanceof FormData))
+  if (token && auth !== false) headers.set('Authorization', `Bearer ${token}`);
+  if (init.body && !(init.body instanceof FormData))
     headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, { ...options, headers });
-  if (response.status === 401) {
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      signal: controller?.signal ?? init.signal,
+    });
+  } catch {
+    const timedOut = controller?.signal.aborted ?? false;
+    throw new ApiRequestError(
+      timedOut ? LOGIN_ERROR_MESSAGES.TIMEOUT : LOGIN_ERROR_MESSAGES.NETWORK_ERROR,
+      { timedOut, networkError: !timedOut }
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  // 仅已登录会话的 401 视为 Token 失效；登录接口自身的 401 是认证失败，不得刷新页面。
+  if (response.status === 401 && auth !== false && token) {
     setToken(null);
     window.location.reload();
-    throw new Error('登录已过期，请重新登录。');
+    throw new ApiRequestError('登录已过期，请重新登录。', {
+      status: 401,
+      code: 'SESSION_EXPIRED',
+    });
   }
   const isJson = response.headers.get('content-type')?.includes('application/json');
-  const payload = isJson ? await response.json() : null;
-  if (!response.ok) throw new Error(payload?.message || `请求失败（${response.status}）`);
+  let payload: unknown = null;
+  if (isJson) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  }
+  const body = payload as { message?: unknown; code?: unknown } | null;
+  const code = typeof body?.code === 'string' ? body.code : undefined;
+  const serverMessage = typeof body?.message === 'string' ? body.message : '';
+  if (!response.ok) {
+    throw new ApiRequestError(serverMessage || `请求失败（${response.status}）`, {
+      code,
+      status: response.status,
+      serverMessage,
+    });
+  }
+  if (isJson && payload === null) {
+    throw new ApiRequestError('服务响应异常，请稍后重试', { status: response.status });
+  }
   return payload as T;
 }
 
@@ -89,7 +166,7 @@ export const api = {
     return request<{ teams: ProjectTeam[] }>('/api/teams');
   },
   async registrationTeams() {
-    return request<{ teams: ProjectTeam[] }>('/api/registration/teams');
+    return request<{ teams: ProjectTeam[] }>('/api/registration/teams', { auth: false });
   },
   async adminTeams() {
     return request<{ teams: ProjectTeam[]; canCreateProjects: Project[] }>('/api/admin/teams');
@@ -107,6 +184,8 @@ export const api = {
     return request<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+      auth: false,
+      timeoutMs: 30000,
     });
   },
   async register(input: {
@@ -124,6 +203,7 @@ export const api = {
     return request<{ message: string }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
+      auth: false,
     });
   },
   async me() {

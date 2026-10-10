@@ -63,7 +63,10 @@ export function getAuthUser(req: Request): AuthUser | null {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const user = getAuthUser(req);
-  if (!user) return res.status(401).json({ message: '登录状态已失效，请重新登录。' });
+  if (!user)
+    return res
+      .status(401)
+      .json({ message: '登录状态已失效，请重新登录。', code: 'SESSION_EXPIRED' });
   req.authUser = user;
   next();
 }

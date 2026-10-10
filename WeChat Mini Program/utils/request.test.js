@@ -103,3 +103,109 @@ describe('真机网络诊断', () => {
     expect(logs).toEqual([]);
   });
 });
+
+function errorClient({ success, fail, route = 'pages/index/index' }) {
+  const calls = { reLaunch: [], removedKeys: [] };
+  const module = { exports: {} };
+  const wx = {
+    getAccountInfoSync: () => ({ miniProgram: { envVersion: 'release' } }),
+    getAppBaseInfo: () => ({ SDKVersion: '3.0.0', version: '8.0.0' }),
+    getNetworkType: ({ success: done }) => done({ networkType: 'wifi' }),
+    getStorageSync: () => 'stored-token',
+    removeStorageSync: (key) => calls.removedKeys.push(key),
+    reLaunch(options) {
+      calls.reLaunch.push(options.url);
+      if (options.complete) options.complete();
+    },
+    request(options) {
+      if (fail) options.fail(fail);
+      else options.success(success);
+      options.complete(fail || { statusCode: success.statusCode });
+      return {};
+    }
+  };
+  vm.runInNewContext(readFileSync(new URL('./request.js', import.meta.url), 'utf8'), {
+    module, wx, console: { log: () => {} },
+    getApp: () => ({ clearSession: () => {} }),
+    getCurrentPages: () => [{ route }],
+    setTimeout: (callback) => callback(),
+    require: (path) => path === '../config'
+      ? { NETWORK_DEBUG: false, API_ENVIRONMENT: 'production', TOKEN_KEY: 'token', getApiBaseUrl: () => 'https://www.jingjity.xin' }
+      : { networkErrorMessage: () => '网络连接失败，请检查网络后重试' }
+  });
+  return { client: module.exports, calls };
+}
+
+function rejected(promise) {
+  return promise.then(() => null, (error) => error);
+}
+
+describe('登录失败与会话失效的区分', () => {
+  it('登录接口返回 401 时不清理会话、不跳转，并携带业务错误码', async () => {
+    const { client, calls } = errorClient({
+      success: {
+        statusCode: 401,
+        header: { 'content-type': 'application/json' },
+        data: { message: '账号或密码错误，请重新输入', code: 'INVALID_CREDENTIALS' }
+      }
+    });
+    const error = await rejected(client.request('/api/auth/login', { method: 'POST', auth: false, data: { username: 'u', password: 'p' } }));
+    expect(error.message).toBe('账号或密码错误，请重新输入');
+    expect(error.code).toBe('INVALID_CREDENTIALS');
+    expect(error.serverMessage).toBe('账号或密码错误，请重新输入');
+    expect(error.statusCode).toBe(401);
+    expect(calls.reLaunch).toEqual([]);
+    expect(calls.removedKeys).toEqual([]);
+  });
+
+  it('已登录请求返回 401 时清理会话并跳转登录页', async () => {
+    const { client, calls } = errorClient({
+      success: {
+        statusCode: 401,
+        header: { 'content-type': 'application/json' },
+        data: { message: '登录状态已失效，请重新登录。', code: 'SESSION_EXPIRED' }
+      }
+    });
+    const error = await rejected(client.request('/api/me'));
+    expect(error.code).toBe('SESSION_EXPIRED');
+    expect(calls.removedKeys).toEqual(['token']);
+    expect(calls.reLaunch).toEqual(['/pages/login/login']);
+  });
+
+  it('已在登录页时只清理会话，不重复 reLaunch', async () => {
+    const { client, calls } = errorClient({
+      route: 'pages/login/login',
+      success: {
+        statusCode: 401,
+        header: { 'content-type': 'application/json' },
+        data: { message: '登录状态已失效，请重新登录。', code: 'SESSION_EXPIRED' }
+      }
+    });
+    await rejected(client.request('/api/me'));
+    expect(calls.removedKeys).toEqual(['token']);
+    expect(calls.reLaunch).toEqual([]);
+  });
+
+  it('网络失败与超时分别标记失败类别', async () => {
+    const network = errorClient({ fail: { errMsg: 'request:fail net::ERR_CONNECTION_RESET' } });
+    const networkError = await rejected(network.client.request('/api/auth/login', { auth: false }));
+    expect(networkError.kind).toBe('network');
+
+    const timeout = errorClient({ fail: { errMsg: 'request:fail timeout' } });
+    const timeoutError = await rejected(timeout.client.request('/api/auth/login', { auth: false }));
+    expect(timeoutError.kind).toBe('timeout');
+  });
+
+  it('服务端 5xx 保留状态码供上层统一提示', async () => {
+    const { client } = errorClient({
+      success: {
+        statusCode: 500,
+        header: { 'content-type': 'application/json' },
+        data: { message: 'SQLITE_BUSY: database is locked', code: 'SERVER_ERROR' }
+      }
+    });
+    const error = await rejected(client.request('/api/auth/login', { method: 'POST', auth: false, data: {} }));
+    expect(error.statusCode).toBe(500);
+    expect(error.code).toBe('SERVER_ERROR');
+  });
+});

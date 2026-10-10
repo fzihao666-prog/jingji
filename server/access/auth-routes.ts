@@ -25,8 +25,10 @@ import {
   validatePersonName,
 } from '../core/utils.ts';
 import { db } from '../core/db.ts';
+import { logger } from '../core/logger.ts';
 import { PROVINCE_CITIES } from '../../shared/regions.ts';
 import { PROJECTS } from '../../shared/projects.ts';
+import { LOGIN_ERROR_MESSAGES } from '../../shared/login-errors.ts';
 
 import type { AuthUser, Project } from '../core/shared-server.ts';
 import type { Role } from '../../shared/access.ts';
@@ -305,51 +307,86 @@ export function registerAuthRoutes(app: Express) {
   });
 
   app.post('/api/auth/login', (req, res) => {
-    if (consumeRateLimit(req, 'login', 12, 15 * 60 * 1000)) {
-      return res.status(429).json({ message: '登录尝试过多，请稍后再试。' });
-    }
-    const username = cleanString(req.body?.username).toLowerCase();
-    const password = cleanString(req.body?.password);
-    const row = db
-      .prepare(
-        'SELECT id, username, password_hash, display_name, role, athlete_id, session_version FROM users WHERE username = ? AND active = 1'
-      )
-      .get(username) as
-      | {
-          id: number;
-          username: string;
-          password_hash: string;
-          display_name: string;
-          role: Role;
-          athlete_id: number | null;
-          session_version: number;
-        }
-      | undefined;
+    try {
+      if (consumeRateLimit(req, 'login', 12, 15 * 60 * 1000)) {
+        return res.status(429).json({
+          message: LOGIN_ERROR_MESSAGES.RATE_LIMITED,
+          code: 'RATE_LIMITED',
+        });
+      }
+      const username = cleanString(req.body?.username).toLowerCase();
+      const password = cleanString(req.body?.password);
+      if (!username || !password) {
+        return res.status(400).json({
+          message: LOGIN_ERROR_MESSAGES.MISSING_CREDENTIALS,
+          code: 'MISSING_CREDENTIALS',
+        });
+      }
+      const row = db
+        .prepare(
+          'SELECT id, username, password_hash, display_name, role, athlete_id, session_version, active FROM users WHERE username = ?'
+        )
+        .get(username) as
+        | {
+            id: number;
+            username: string;
+            password_hash: string;
+            display_name: string;
+            role: Role;
+            athlete_id: number | null;
+            session_version: number;
+            active: number;
+          }
+        | undefined;
 
-    if (!row) {
-      const request = db
-        .prepare('SELECT status FROM registration_requests WHERE username = ?')
-        .get(username) as { status: string } | undefined;
-      if (request?.status === 'pending')
-        return res.status(403).json({ message: '账户正在审核中。' });
-      if (request?.status === 'rejected')
-        return res.status(403).json({ message: '注册申请未通过，请联系管理员。' });
-    }
-    if (!row || !bcrypt.compareSync(password, row.password_hash)) {
-      return res.status(401).json({ message: '账号或密码不正确。' });
-    }
+      if (!row) {
+        const request = db
+          .prepare('SELECT status FROM registration_requests WHERE username = ?')
+          .get(username) as { status: string } | undefined;
+        if (request?.status === 'pending')
+          return res.status(403).json({
+            message: LOGIN_ERROR_MESSAGES.ACCOUNT_PENDING,
+            code: 'ACCOUNT_PENDING',
+          });
+        if (request?.status === 'rejected')
+          return res.status(403).json({
+            message: LOGIN_ERROR_MESSAGES.ACCOUNT_REJECTED,
+            code: 'ACCOUNT_REJECTED',
+          });
+      }
+      // 账号不存在与密码错误统一提示，避免泄露账号是否存在；停用状态只在密码校验通过后返回。
+      if (!row || !bcrypt.compareSync(password, row.password_hash)) {
+        return res.status(401).json({
+          message: LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS,
+          code: 'INVALID_CREDENTIALS',
+        });
+      }
+      if (!row.active) {
+        return res.status(403).json({
+          message: LOGIN_ERROR_MESSAGES.ACCOUNT_DISABLED,
+          code: 'ACCOUNT_DISABLED',
+        });
+      }
 
-    const user: AuthUser = {
-      id: row.id,
-      username: row.username,
-      displayName: row.display_name,
-      role: row.role,
-      athleteId: row.athlete_id,
-      sessionVersion: row.session_version,
-    };
-    const token = jwt.sign(user, jwtSecret, { expiresIn: '12h' });
-    clearRateLimit(req, 'login');
-    res.json({ token, user });
+      const user: AuthUser = {
+        id: row.id,
+        username: row.username,
+        displayName: row.display_name,
+        role: row.role,
+        athleteId: row.athlete_id,
+        sessionVersion: row.session_version,
+      };
+      const token = jwt.sign(user, jwtSecret, { expiresIn: '12h' });
+      clearRateLimit(req, 'login');
+      res.json({ token, user });
+    } catch (error) {
+      // 数据库或内部错误只记录在服务端，不把原始错误内容返回给用户。
+      logger.error('login failed', { error: error instanceof Error ? error.message : String(error) });
+      return res.status(500).json({
+        message: LOGIN_ERROR_MESSAGES.SERVER_ERROR,
+        code: 'SERVER_ERROR',
+      });
+    }
   });
 
   app.get('/api/me', requireAuth, (req, res) => {

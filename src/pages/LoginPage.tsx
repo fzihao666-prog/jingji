@@ -9,11 +9,12 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
-import { api } from '../api';
+import { ApiRequestError, api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
 import type { ProjectTeam, User } from '../types';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { PROJECTS, projectLabel } from '../../shared/projects';
+import { LOGIN_ERROR_MESSAGES, loginFailureMessage } from '../../shared/login-errors';
 
 type Mode = 'login' | 'register';
 
@@ -377,15 +378,32 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
 
   const login = async (event: FormEvent) => {
     event.preventDefault();
-    setSubmitting(true);
+    if (submitting) return;
     setError('');
+    if (!username.trim() || !password) {
+      setError(LOGIN_ERROR_MESSAGES.MISSING_CREDENTIALS);
+      return;
+    }
+    setSubmitting(true);
     try {
       const result = await api.login(username, password);
       if (rememberUsername) localStorage.setItem('jingji.rememberedUsername', username);
       else localStorage.removeItem('jingji.rememberedUsername');
       onLogin(result.token, result.user);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : '登录失败。');
+      // 按服务端错误码映射提示；5xx 与内部错误不向用户展示原始内容。
+      setError(
+        requestError instanceof ApiRequestError
+          ? loginFailureMessage({
+              code: requestError.code,
+              status: requestError.status,
+              serverMessage: requestError.serverMessage,
+              timedOut: requestError.timedOut,
+              networkError: requestError.networkError,
+            })
+          : (requestError instanceof Error && requestError.message) ||
+              LOGIN_ERROR_MESSAGES.LOGIN_FAILED
+      );
     } finally {
       setSubmitting(false);
     }
@@ -393,6 +411,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
 
   const register = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting) return;
     setError('');
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致。');
@@ -501,10 +520,13 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                   <UserRound size={18} />
                   <input
                     value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    onChange={(event) => {
+                      setUsername(event.target.value);
+                      setError('');
+                    }}
                     autoComplete="username"
                     placeholder="请输入账号"
-                    required
+                    aria-required="true"
                   />
                 </div>
               </label>
@@ -515,10 +537,13 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setError('');
+                    }}
                     autoComplete="current-password"
                     placeholder="请输入密码"
-                    required
+                    aria-required="true"
                   />
                   <button
                     type="button"
@@ -548,7 +573,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                 </button>
               </div>
               {error && (
-                <p className="form-error">
+                <p className="form-error" role="alert">
                   <AlertCircle size={16} />
                   {error}
                 </p>
