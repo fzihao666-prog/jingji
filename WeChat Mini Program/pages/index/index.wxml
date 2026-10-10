@@ -104,7 +104,7 @@
       <view wx:if="{{!rpePlaceholder}}" class="chart-footnote">阴影为队伍每日平均值 ±1 标准差；空白表示无有效记录。</view>
     </view>
 
-    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">状态监测</view><view class="section-head-note">仅列客观待办 · 最多每页 5 人</view></view>
+    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">状态监测</view><view class="section-head-note">仅列客观待办</view></view>
     <view wx:if="{{canViewTodos}}" class="card focus-card">
       <view wx:if="{{todosLoading && !todos}}" class="todo-note" aria-role="status" aria-live="polite">正在核对当日训练状态…</view>
       <view wx:if="{{todosError}}" class="error-box"><text>{{todosError}}</text><button class="error-retry" bindtap="retryTodos">重试</button></view>
@@ -118,7 +118,7 @@
       </block>
     </view>
 
-    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">队伍运动员</view><view class="section-head-note">{{teamView ? teamView.teamPager.total : '—'}} 人 · 每页最多 5 人</view></view>
+    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">队伍运动员</view><view class="section-head-note">{{teamView ? teamView.teamPager.total : '—'}} 人</view></view>
     <view wx:if="{{canViewTodos}}" class="card team-overview">
       <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite">正在读取队伍运动员…</view>
       <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
