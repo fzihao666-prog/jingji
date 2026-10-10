@@ -815,25 +815,28 @@ export function RegionAccessPage({ user }: { user: User }) {
                   className="coordinate-section account-password-section"
                   aria-label="账号密码管理"
                 >
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    ref={resetTriggerRef}
-                    aria-expanded={resetOpen}
-                    aria-controls="account-password-reset"
-                    disabled={saving || resetBusy || loading}
-                    onClick={() => {
-                      if (resetOpen) {
-                        closeReset();
-                        return;
-                      }
-                      setResetOpen(true);
-                      setResetError('');
-                      requestAnimationFrame(() => resetInputRef.current?.focus());
-                    }}
-                  >
-                    <KeyRound size={16} aria-hidden="true" /> 重置密码
-                  </button>
+                  <div className="account-password-toolbar">
+                    <p className="account-password-username">用户名：{selected.username}</p>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      ref={resetTriggerRef}
+                      aria-expanded={resetOpen}
+                      aria-controls="account-password-reset"
+                      disabled={saving || resetBusy || loading}
+                      onClick={() => {
+                        if (resetOpen) {
+                          closeReset();
+                          return;
+                        }
+                        setResetOpen(true);
+                        setResetError('');
+                        requestAnimationFrame(() => resetInputRef.current?.focus());
+                      }}
+                    >
+                      <KeyRound size={16} aria-hidden="true" /> 重置密码
+                    </button>
+                  </div>
                   {resetOpen && (
                     <form
                       id="account-password-reset"

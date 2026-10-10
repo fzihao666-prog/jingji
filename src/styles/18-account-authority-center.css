@@ -1470,3 +1470,20 @@
 .account-password-form .coordinate-grid label > span {
   font-size: inherit;
 }
+
+.account-password-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-password-username {
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.account-password-toolbar > button {
+  flex-shrink: 0;
+}
