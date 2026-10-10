@@ -707,6 +707,22 @@
   font-size: 9px;
 }
 
+.access-editor-footer-feedback {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.access-editor-footer-feedback .message-banner {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 7px 11px;
+  font-size: 10px;
+}
+
 .access-editor-empty {
   min-height: 650px;
   display: grid;

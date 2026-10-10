@@ -476,6 +476,7 @@ export function RegionAccessPage({ user }: { user: User }) {
     payload?.possibleParents.filter((parent) => canManageRole(parent.role, targetRole)) || [];
 
   const canEditAccess = user.role !== 'SCC';
+  const feedbackInFooter = canEditAccess && Boolean(selected);
   const activeCount = payload?.accounts.filter((account) => account.active).length || 0;
   const areaCount = new Set(
     payload?.accounts.flatMap((account) =>
@@ -531,19 +532,23 @@ export function RegionAccessPage({ user }: { user: User }) {
         </div>
       </section>
 
-      <div role="status" aria-live="polite">
-        {message && (
-          <div className="message-banner success">
-            <Check size={18} aria-hidden="true" />
-            {message}
+      {!feedbackInFooter && (
+        <>
+          <div role="status" aria-live="polite">
+            {message && (
+              <div className="message-banner success">
+                <Check size={18} aria-hidden="true" />
+                {message}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      {error && (
-        <div className="message-banner error" id="access-error" role="alert">
-          <X size={18} />
-          {error}
-        </div>
+          {error && (
+            <div className="message-banner error" id="access-error" role="alert">
+              <X size={18} />
+              {error}
+            </div>
+          )}
+        </>
       )}
 
       <div className="access-workspace">
@@ -1401,7 +1406,25 @@ export function RegionAccessPage({ user }: { user: User }) {
 
               {canEditAccess && (
                 <footer className="access-editor-footer">
-                  <span>保存后，服务端查询会立即应用新的权限条件。</span>
+                  <div className="access-editor-footer-feedback">
+                    <div role="status" aria-live="polite">
+                      {message && (
+                        <div className="message-banner success">
+                          <Check size={18} aria-hidden="true" />
+                          {message}
+                        </div>
+                      )}
+                    </div>
+                    {error && (
+                      <div className="message-banner error" id="access-error" role="alert">
+                        <X size={18} />
+                        {error}
+                      </div>
+                    )}
+                    {!message && !error && (
+                      <span>保存后，服务端查询会立即应用新的权限条件。</span>
+                    )}
+                  </div>
                   <button className="primary-button" disabled={saving || resetBusy} onClick={save}>
                     <Save size={16} />
                     {saving ? '保存中…' : '保存账号权限'}
