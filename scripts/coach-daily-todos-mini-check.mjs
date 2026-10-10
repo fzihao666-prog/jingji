@@ -76,6 +76,24 @@ export async function checkMiniDailyTodoFlow(assert) {
     chartPlaceholder
   );
   modules['../../utils/chart-placeholder'] = chartPlaceholder.module.exports;
+  // index.js 依赖的伤情指标视图模块没有页面外副作用，直接加载真实实现。
+  const injuryFormContext = {
+    module: { exports: {} },
+    require: (path) => (path === './date' ? dateContext.module.exports : undefined),
+  };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/injury-form.js', import.meta.url), 'utf8'),
+    injuryFormContext
+  );
+  const injuryMetricContext = {
+    module: { exports: {} },
+    require: (path) => (path === './injury-form' ? injuryFormContext.module.exports : undefined),
+  };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/injury-metric.js', import.meta.url), 'utf8'),
+    injuryMetricContext
+  );
+  modules['../../utils/injury-metric'] = injuryMetricContext.module.exports;
   const scopeContext = {
     user: { role: 'SCC', athleteId: 0 },
     projects: ['ROWING', 'CANOE_SPRINT'],
