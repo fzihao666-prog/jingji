@@ -1,3 +1,8 @@
+import {
+  getAccountCities,
+  getAccountCounties,
+  validateAccountAreas,
+} from '../../shared/account-regions';
 import { ACCOUNT_PASSWORD_HINT, accountPasswordSchema } from '../../shared/account-password';
 import {
   Activity,
@@ -82,6 +87,13 @@ export function RegionAccessPage({ user }: { user: User }) {
   const [areas, setAreas] = useState<AreaPermission[]>([blankArea()]);
   const [projects, setProjects] = useState<string[]>([DEFAULT_PROJECT]);
   const [teams, setTeams] = useState<TeamPermission[]>([blankTeam()]);
+  const [areaValidationError, setAreaValidationError] = useState<{
+    index: number;
+    field: 'province' | 'city' | 'county';
+  } | null>(null);
+  const areaSelectRefs = useRef<
+    Array<Partial<Record<keyof AreaPermission, HTMLSelectElement | null>>>
+  >([]);
   const teamSelectRefs = useRef<Array<HTMLSelectElement | null>>([]);
   const [teamOptions, setTeamOptions] = useState<ProjectTeam[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -158,6 +170,7 @@ export function RegionAccessPage({ user }: { user: User }) {
   }, []);
 
   const applyAccount = (account: AccessAccount) => {
+    setAreaValidationError(null);
     setResetOpen(false);
     setResetPassword('');
     setResetConfirm('');
@@ -178,10 +191,14 @@ export function RegionAccessPage({ user }: { user: User }) {
   };
 
   const updateArea = (index: number, key: keyof AreaPermission, value: string) => {
+    if (areaValidationError) setError('');
+    setAreaValidationError(null);
     setAreas((current) =>
       current.map((area, itemIndex) => {
         if (itemIndex !== index) return area;
         const next = { ...area, [key]: value } as AreaPermission;
+        if (key === 'province') return { ...next, city: '', county: '' };
+        if (key === 'city') return { ...next, county: '' };
         if (key === 'areaLevel' && value === 'national')
           return { areaLevel: 'national', province: '', city: '', county: '' };
         if (key === 'areaLevel' && value === 'province') return { ...next, city: '', county: '' };
@@ -225,6 +242,20 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const save = async () => {
     if (!selected) return;
+    const areaError = validateAccountAreas(areas, selected.areas);
+    if (areaError) {
+      setError(areaError);
+      const index = areas.findIndex((area) => validateAccountAreas([area], selected.areas));
+      const area = areas[index];
+      const field = !payload?.meta.provinces.includes(area.province)
+        ? 'province'
+        : !getAccountCities(area.province).includes(area.city)
+          ? 'city'
+          : 'county';
+      setAreaValidationError({ index, field });
+      areaSelectRefs.current[index]?.[field]?.focus();
+      return;
+    }
     const emptyTeamIndex = teams.findIndex((team) => !team.team);
     if (emptyTeamIndex !== -1) {
       setError('请为每条队伍范围选择队伍。');
@@ -267,6 +298,12 @@ export function RegionAccessPage({ user }: { user: User }) {
       county:
         createForm.areaLevel === 'county' || createForm.role === 'ATL' ? createForm.county : '',
     };
+    const areaError = validateAccountAreas([createArea]);
+    if (areaError) {
+      setError(areaError);
+      setSaving(false);
+      return;
+    }
     try {
       const result = await api.createAccessAccount({
         username: createForm.username,
@@ -448,7 +485,11 @@ export function RegionAccessPage({ user }: { user: User }) {
           </div>
 
           {createOpen && (
-            <form className="account-create-card" onSubmit={createAccount}>
+            <form
+              className="account-create-card"
+              aria-label="创建下级账号"
+              onSubmit={createAccount}
+            >
               <div className="create-card-title">
                 <UserRoundPlus size={18} />
                 <strong>创建下级账号</strong>
@@ -532,7 +573,17 @@ export function RegionAccessPage({ user }: { user: User }) {
                     <select
                       value={createForm.areaLevel}
                       onChange={(event) =>
-                        setCreateForm({ ...createForm, areaLevel: event.target.value as AreaLevel })
+                        setCreateForm({
+                          ...createForm,
+                          areaLevel: event.target.value as AreaLevel,
+                          ...(event.target.value === 'national'
+                            ? { province: '', city: '', county: '' }
+                            : event.target.value === 'province'
+                              ? { city: '', county: '' }
+                              : event.target.value === 'city'
+                                ? { county: '' }
+                                : {}),
+                        })
                       }
                     >
                       {Object.entries(AREA_LEVEL_META).map(([key, meta]) => (
@@ -547,11 +598,19 @@ export function RegionAccessPage({ user }: { user: User }) {
                   <label>
                     <span>省份</span>
                     <select
+                      required
+                      aria-label="创建账号省份"
                       value={createForm.province}
                       onChange={(event) =>
-                        setCreateForm({ ...createForm, province: event.target.value })
+                        setCreateForm({
+                          ...createForm,
+                          province: event.target.value,
+                          city: '',
+                          county: '',
+                        })
                       }
                     >
+                      <option value="">请选择省份</option>
                       {payload?.meta.provinces.map((province) => (
                         <option key={province}>{province}</option>
                       ))}
@@ -562,25 +621,46 @@ export function RegionAccessPage({ user }: { user: User }) {
                   createForm.role === 'ATL') && (
                   <label>
                     <span>城市</span>
-                    <input
+                    <select
+                      aria-label="创建账号城市"
                       value={createForm.city}
                       onChange={(event) =>
-                        setCreateForm({ ...createForm, city: event.target.value })
+                        setCreateForm({ ...createForm, city: event.target.value, county: '' })
                       }
                       required
-                    />
+                      disabled={!createForm.province}
+                    >
+                      <option value="">请选择城市</option>
+                      {getAccountCities(createForm.province).map((city) => (
+                        <option key={city}>{city}</option>
+                      ))}
+                    </select>
                   </label>
                 )}
                 {(createForm.areaLevel === 'county' || createForm.role === 'ATL') && (
                   <label>
                     <span>区县</span>
-                    <input
+                    <select
+                      aria-label="创建账号区县"
                       value={createForm.county}
                       onChange={(event) =>
                         setCreateForm({ ...createForm, county: event.target.value })
                       }
                       required
-                    />
+                      disabled={!createForm.city}
+                    >
+                      <option value="">请选择区县</option>
+                      {getAccountCounties(createForm.province, createForm.city).map((county) => (
+                        <option key={county.name} value={county.name}>
+                          {county.wholeCity ? '全市（不设区县）' : county.name}
+                          {county.code ? ` · ${county.code}` : ''}
+                        </option>
+                      ))}
+                      {createForm.city &&
+                        !getAccountCounties(createForm.province, createForm.city).length && (
+                          <option disabled>暂无可选区县</option>
+                        )}
+                    </select>
                   </label>
                 )}
                 <label>
@@ -866,7 +946,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </div>
               </section>
 
-              <section className="coordinate-section">
+              <section className="coordinate-section" aria-label="行政区域范围">
                 <div className="coordinate-title">
                   <MapPinned size={18} />
                   <div>
@@ -882,9 +962,14 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </div>
                 <div className="area-scope-list">
                   {areas.map((area, index) => (
-                    <div className="area-scope-row" key={`${index}-${area.areaLevel}`}>
+                    <div className="area-scope-row" key={index}>
                       <select
                         disabled={!canEditAccess || selected.role === 'ATL'}
+                        aria-label={`区域范围 ${index + 1} 的级别`}
+                        ref={(element) => {
+                          areaSelectRefs.current[index] ||= {};
+                          areaSelectRefs.current[index].areaLevel = element;
+                        }}
                         value={area.areaLevel}
                         onChange={(event) => updateArea(index, 'areaLevel', event.target.value)}
                       >
@@ -897,36 +982,119 @@ export function RegionAccessPage({ user }: { user: User }) {
                       {area.areaLevel !== 'national' && (
                         <select
                           disabled={!canEditAccess}
+                          aria-label={`区域范围 ${index + 1} 的省份`}
+                          aria-invalid={
+                            (areaValidationError?.index === index &&
+                              areaValidationError.field === 'province') ||
+                            undefined
+                          }
+                          aria-describedby={
+                            areaValidationError?.index === index &&
+                            areaValidationError.field === 'province'
+                              ? 'access-error'
+                              : undefined
+                          }
+                          ref={(element) => {
+                            areaSelectRefs.current[index] ||= {};
+                            areaSelectRefs.current[index].province = element;
+                          }}
                           value={area.province}
                           onChange={(event) => updateArea(index, 'province', event.target.value)}
                         >
+                          <option value="">请选择省份</option>
                           {payload?.meta.provinces.map((province) => (
                             <option key={province}>{province}</option>
                           ))}
                         </select>
                       )}
                       {['city', 'county'].includes(area.areaLevel) && (
-                        <input
-                          disabled={!canEditAccess}
+                        <select
+                          disabled={!canEditAccess || !area.province}
+                          aria-label={`区域范围 ${index + 1} 的城市`}
+                          aria-invalid={
+                            (areaValidationError?.index === index &&
+                              areaValidationError.field === 'city') ||
+                            undefined
+                          }
+                          aria-describedby={
+                            areaValidationError?.index === index &&
+                            areaValidationError.field === 'city'
+                              ? 'access-error'
+                              : undefined
+                          }
+                          ref={(element) => {
+                            areaSelectRefs.current[index] ||= {};
+                            areaSelectRefs.current[index].city = element;
+                          }}
                           value={area.city}
                           onChange={(event) => updateArea(index, 'city', event.target.value)}
-                          placeholder="城市"
-                        />
+                        >
+                          <option value="">请选择城市</option>
+                          {getAccountCities(area.province).map((city) => (
+                            <option key={city}>{city}</option>
+                          ))}
+                          {area.city && !getAccountCities(area.province).includes(area.city) && (
+                            <option value={area.city} disabled>
+                              {area.city}（已有授权，待核对）
+                            </option>
+                          )}
+                        </select>
                       )}
                       {area.areaLevel === 'county' && (
-                        <input
-                          disabled={!canEditAccess}
+                        <select
+                          disabled={!canEditAccess || !area.city}
+                          aria-label={`区域范围 ${index + 1} 的区县`}
+                          aria-invalid={
+                            (areaValidationError?.index === index &&
+                              areaValidationError.field === 'county') ||
+                            undefined
+                          }
+                          aria-describedby={
+                            areaValidationError?.index === index &&
+                            areaValidationError.field === 'county'
+                              ? 'access-error'
+                              : undefined
+                          }
+                          ref={(element) => {
+                            areaSelectRefs.current[index] ||= {};
+                            areaSelectRefs.current[index].county = element;
+                          }}
                           value={area.county}
                           onChange={(event) => updateArea(index, 'county', event.target.value)}
-                          placeholder="区县"
-                        />
+                        >
+                          <option value="">请选择区县</option>
+                          {getAccountCounties(area.province, area.city).map((county) => (
+                            <option key={county.name} value={county.name}>
+                              {county.wholeCity ? '全市（不设区县）' : county.name}
+                              {county.code ? ` · ${county.code}` : ''}
+                            </option>
+                          ))}
+                          {area.county &&
+                            !getAccountCounties(area.province, area.city).some(
+                              (county) => county.name === area.county
+                            ) && (
+                              <option value={area.county} disabled>
+                                {area.county}（已有授权，待核对）
+                              </option>
+                            )}
+                          {area.city && !getAccountCounties(area.province, area.city).length && (
+                            <option disabled>暂无可选区县</option>
+                          )}
+                        </select>
                       )}
                       {canEditAccess && areas.length > 1 && (
                         <button
-                          onClick={() =>
-                            setAreas(areas.filter((_, itemIndex) => itemIndex !== index))
-                          }
-                          aria-label="移除区域"
+                          onClick={() => {
+                            if (areaValidationError) setError('');
+                            setAreaValidationError(null);
+                            setAreas(areas.filter((_, itemIndex) => itemIndex !== index));
+                            requestAnimationFrame(() =>
+                              areaSelectRefs.current[
+                                Math.min(index, areas.length - 2)
+                              ]?.areaLevel?.focus()
+                            );
+                          }}
+                          aria-label={`移除区域范围 ${index + 1}`}
                         >
                           <X size={16} />
                         </button>

@@ -1,3 +1,4 @@
+import { validateAccountAreas } from '../../shared/account-regions.ts';
 import bcrypt from 'bcryptjs';
 import { registerResetPasswordRoutes } from './reset-password-routes.ts';
 import type { Express } from 'express';
@@ -581,7 +582,8 @@ export function registerAccessRoutes(app: Express) {
       if (displayNameResult.error) errors.push(displayNameResult.error);
       if (!ROLES.includes(role) || !canManageRole(currentUser.role, role))
         errors.push('不能创建该层级的账号');
-      const scopeError = validateScopePayload(permissions);
+      const scopeError =
+        validateScopePayload(permissions) || validateAccountAreas(permissions.areas);
       if (scopeError) errors.push(scopeError);
       if (!permissionsContain(accountPermissions(currentUser.id), permissions))
         errors.push('账号权限范围不能超出当前账号');
@@ -712,7 +714,9 @@ export function registerAccessRoutes(app: Express) {
       const role = cleanString(req.body?.role) as Role;
       const parentUserId = Number(req.body?.parentUserId);
       const permissions = parseScopePayload(req.body);
-      const scopeError = validateScopePayload(permissions);
+      const scopeError =
+        validateScopePayload(permissions) ||
+        validateAccountAreas(permissions.areas, accountPermissions(targetId).areas);
       if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) {
         return res.status(400).json({ message: '目标角色层级无效。' });
       }
