@@ -106,11 +106,16 @@
 
 .account-tree {
   min-width: 0;
+  min-height: 0;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .account-tree-head {
   height: 69px;
+  flex-shrink: 0;
   padding: 0 16px;
   border-bottom: 1px solid #e2eaeb;
   display: flex;
@@ -151,7 +156,8 @@
 }
 
 .account-tree-scroll {
-  max-height: 660px;
+  min-height: 0;
+  flex: 1 1 0;
   padding: 10px 8px 18px;
   overflow-y: auto;
 }
@@ -308,6 +314,7 @@
 }
 
 .account-create-card {
+  flex-shrink: 0;
   margin: 10px;
   padding: 13px;
   border: 1px solid #bad8d4;
@@ -1024,6 +1031,7 @@
   }
 
   .account-tree-scroll {
+    flex: 0 1 auto;
     max-height: 360px;
   }
 
