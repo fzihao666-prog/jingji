@@ -4,7 +4,7 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { STRENGTH_METRICS } = require('../../utils/format');
 const { planView, recordView, metricView, overviewView } = require('../../utils/strength-view');
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 Page({
   data: {

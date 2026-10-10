@@ -10,7 +10,7 @@ const radarChart = require('../../utils/radar-chart');
 const { bodyCompositionSummary } = require('../../utils/body-composition-groups');
 const { trainingComparisonSummary } = require('../../utils/training-comparison-groups');
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 // 复查倒计时按北京日期差本地计算，文案复用待办工具的同一套规则。
 function reviewCountdown(reviewDate, status, today) {

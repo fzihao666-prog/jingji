@@ -614,7 +614,7 @@ export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-import/template',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (_req, res) => {
       // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
       const templatePath = unifiedTemplatePath();
@@ -627,7 +627,7 @@ export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-import/export',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     async (req, res) => {
       try {
         const project = normalizeProject(cleanString(req.query.project));
@@ -661,7 +661,7 @@ export function registerDataImportRoutes(app: Express) {
   app.post(
     '/api/data-import/analyze',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     dataImportUpload.single('file'),
     (req, res) => {
       try {
@@ -697,7 +697,7 @@ export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-import/batches',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const project = cleanString(req.query.project);
       if (!PROJECTS.includes(project))
@@ -711,7 +711,7 @@ export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-import/batches/:id',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
         res.json({ batch: getDataImportBatch(cleanString(req.params.id), req.authUser!.id) });
@@ -726,7 +726,7 @@ export function registerDataImportRoutes(app: Express) {
   app.put(
     '/api/data-import/batches/:id/items',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
         const corrections = Array.isArray(req.body?.corrections)
@@ -750,7 +750,7 @@ export function registerDataImportRoutes(app: Express) {
   app.put(
     '/api/data-import/batches/:id/athletes',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
@@ -778,7 +778,7 @@ export function registerDataImportRoutes(app: Express) {
   app.post(
     '/api/data-import/batches/:id/commit',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
         const conflictPolicy =
@@ -809,7 +809,7 @@ export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-management/metrics',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (_req, res) => {
       const metrics = db
         .prepare(
@@ -879,7 +879,7 @@ export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-management/standards',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (_req, res) => {
       res.json({
         athlete: ['athletes', 'athlete_profiles', 'athlete_origins', 'athlete_aliases'],

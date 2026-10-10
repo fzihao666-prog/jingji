@@ -56,7 +56,7 @@ export function registerStrengthTestRoutes(app: Express) {
   app.post(
     '/api/strength-tests',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const user = req.authUser!;
       const athleteId = Number(req.body?.athleteId || 0);
@@ -139,7 +139,7 @@ export function registerStrengthTestRoutes(app: Express) {
   app.post(
     '/api/strength-tests/:id/advice/generate',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     async (req, res, next) => {
       try {
         const user = req.authUser!;
@@ -212,7 +212,7 @@ export function registerStrengthTestRoutes(app: Express) {
   app.put(
     '/api/strength-tests/:id/advice/:adviceId',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const user = req.authUser!;
       const strengthTestId = Number(req.params.id || 0);
@@ -255,7 +255,7 @@ export function registerStrengthTestRoutes(app: Express) {
   app.post(
     '/api/strength-tests/:id/advice/:adviceId/approve',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const user = req.authUser!;
       const strengthTestId = Number(req.params.id || 0);

@@ -84,9 +84,9 @@ beforeEach(() => {
     'DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM audit_logs;'
   );
   for (const [id, role, province, project, team] of [
-    [1, 'PRJ', '四川', 'ROWING', 'A队'],
+    [1, 'REG', '四川', 'ROWING', 'A队'],
     [2, 'ATL', '四川', 'ROWING', 'A队'],
-    [3, 'PRJ', '四川', 'ROWING', 'A队'],
+    [3, 'REG', '四川', 'ROWING', 'A队'],
     [4, 'SCC', '四川', 'ROWING', 'A队'],
     [5, 'ATL', '浙江', 'ROWING', 'A队'],
     [6, 'ATL', '四川', 'CANOE_SPRINT', 'A队'],

@@ -4,7 +4,7 @@
 
 ## 教练每日待办
 
-`GET /api/coach/daily-todos`（限 `SCC/PRJ/REG/TD/DMD`，按 `selectableProjects` 与 `accessibleAthleteIds` 过滤，仅支持北京时间当天）返回四个分组与计数：
+`GET /api/coach/daily-todos`（限 `SCC/REG/TD/DMD`，按 `selectableProjects` 与 `accessibleAthleteIds` 过滤，仅支持北京时间当天）返回四个分组与计数：
 
 - `missing`：当天未提交正式训练；
 - `attention`：24 小时 SRPE ≥ 600 AU，或存在未痊愈伤病（最新记录口径，近 24 小时更新单独标注），或当日恢复日报自评 `status=rest`（条目携带 `restRequested: true`，原因文案"自评需要休息"）；

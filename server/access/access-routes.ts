@@ -85,8 +85,7 @@ export function allAccountRows() {
     LEFT JOIN account_profiles ap ON ap.user_id = u.id
     LEFT JOIN users parent ON parent.id = ap.parent_user_id
     ORDER BY CASE u.role
-      WHEN 'DMD' THEN 5 WHEN 'TD' THEN 4 WHEN 'PRJ' THEN 3
-      WHEN 'REG' THEN 3 WHEN 'SCC' THEN 2 ELSE 1 END DESC,
+      WHEN 'DMD' THEN 5 WHEN 'TD' THEN 4 WHEN 'REG' THEN 3 WHEN 'SCC' THEN 2 ELSE 1 END DESC,
       u.display_name, u.id
   `
     )
@@ -136,7 +135,7 @@ export function registerAccessRoutes(app: Express) {
   app.get(
     '/api/admin/registrations/approval',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (_req, res) => {
       res.json({ enabled: registrationApprovalEnabled() });
     }
@@ -171,7 +170,7 @@ export function registerAccessRoutes(app: Express) {
   app.get(
     '/api/admin/registrations',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const requestedStatus = cleanString(req.query.status);
       const status = ['pending', 'approved', 'rejected'].includes(requestedStatus)
@@ -232,7 +231,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/admin/registrations/:id/name',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const requestId = Number(req.params.id);
       const registration = db
@@ -322,7 +321,7 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/admin/registrations/:id/approve',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const requestId = Number(req.params.id);
       const outcome = activateRegistrationRequest(requestId, req.authUser!);
@@ -334,7 +333,7 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/admin/registrations/:id/reject',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const requestId = Number(req.params.id);
       const registration = db
@@ -380,7 +379,7 @@ export function registerAccessRoutes(app: Express) {
   app.get(
     '/api/admin/assignments',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const ids = accessibleAthleteIds(req.authUser!);
       if (!ids.length) return res.json({ athletes: [], coaches: [] });
@@ -422,7 +421,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/admin/coaches/:id/category',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const coachId = Number(req.params.id);
@@ -448,7 +447,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/admin/assignments/:athleteId',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const athleteId = Number(req.params.athleteId);
       const coachIds = Array.isArray(req.body?.coachIds)
@@ -550,7 +549,7 @@ export function registerAccessRoutes(app: Express) {
   app.get(
     '/api/access/accounts',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const rows = allAccountRows();
@@ -587,13 +586,15 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/access/accounts',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const username = cleanString(req.body?.username).toLowerCase();
       const password = cleanString(req.body?.password);
       const displayNameResult = validatePersonName(req.body?.displayName);
-      const role = cleanString(req.body?.role) as Role;
+      const roleResult = z.enum(ROLES).safeParse(cleanString(req.body?.role));
+      if (!roleResult.success) return res.status(400).json({ message: '请选择有效的账号角色。' });
+      const role = roleResult.data;
       const parentUserId = Number(req.body?.parentUserId);
       const gender = cleanString(req.body?.gender);
       const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
@@ -609,7 +610,7 @@ export function registerAccessRoutes(app: Express) {
         errors.push('密码须为8—72位，并同时包含字母和数字');
       }
       if (displayNameResult.error) errors.push(displayNameResult.error);
-      if (!ROLES.includes(role) || !canManageRole(currentUser.role, role))
+      if (!canManageRole(currentUser.role, role))
         errors.push('不能创建该层级的账号');
       const scopeError =
         validateScopePayload(permissions) || validateAccountAreas(permissions.areas);
@@ -732,7 +733,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/access/accounts/:id',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const targetIdResult = z.coerce.number().int().positive().safeParse(req.params.id);
@@ -851,7 +852,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/access/accounts/:id/status',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const targetId = Number(req.params.id);

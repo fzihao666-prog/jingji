@@ -79,7 +79,7 @@ React 网页端 ─┐
 - 指标卡：训练时长、负荷（SRPE）、疲劳指数、损伤人数。
 - 近 14 日双序列趋势（时长/负荷）柱状 + 点击 Modal 明细。
 - 强度区间占比进度条；伤病列表可 `switchTab` 进档案。
-- **每日待办**（SCC/PRJ/REG/TD/DMD）：未填报/高负荷/伤病/开训时间缺失；`daily-todos.js` 在网络边界做形状校验；请求序号防串项目；`filterDailyTodos` 支持四组筛选与姓名/队伍搜索（纯视图，计数不随分组切换清零）。
+- **每日待办**（SCC/REG/TD/DMD）：未填报/高负荷/伤病/开训时间缺失；`daily-todos.js` 在网络边界做形状校验；请求序号防串项目；`filterDailyTodos` 支持四组筛选与姓名/队伍搜索（纯视图，计数不随分组切换清零）。
 - ATL 可进入本人训练填报。
 - **今日状态**（ATL）：`loadToday` 与待办并行、独立 guard；`today-status.js` 校验 `GET /api/me/today-status` 后显示已填报/未填报、24 小时负荷与课次来源，`wellnessRecordView` 显示恢复日报状态，两个入口直达训练填报与恢复日报；失败清空过期数据，可单独重试。
 
@@ -100,7 +100,7 @@ React 网页端 ─┐
 - 基础格子资料（主区 + 更多）、训练概览 4 卡、制胜要素摘要、力量测试条、伤病列表。
 - 身份证/手机号默认脱敏；ATL 显示「编辑」进 `profile-edit`。
 - 并行请求伤病、个人 overview、冠军模型（后者失败可降级）。
-- 伤病卡提供「新增伤病记录 / 提交疼痛反馈」入口，进入 `pages/injury-report`（SCC/PRJ/REG/TD/DMD 与 ATL 可见，其余角色与未选中运动员不显示）。
+- 伤病卡提供「新增伤病记录 / 提交疼痛反馈」入口，进入 `pages/injury-report`（SCC/REG/TD/DMD 与 ATL 可见，其余角色与未选中运动员不显示）。
 
 #### 伤病与疼痛上报 `injury-report`
 

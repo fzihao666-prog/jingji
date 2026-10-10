@@ -1,9 +1,6 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-// onShow 触发的加载不返回 Promise，用一个宏任务等它的微任务链跑完。
-const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 // 在 API 检查中验证原生页面控制器的请求竞争和导航，不替代微信真机验收。
 export async function checkMiniDailyTodoFlow(assert) {
   let definition;
@@ -184,20 +181,22 @@ export async function checkMiniDailyTodoFlow(assert) {
   await oldRequest;
   assert(page.data.todos.missing[0].athleteName === '当前项目', '旧项目响应不得覆盖当前待办');
   assert(
-    page.data.todosStatus.includes('加载完成') && page.data.todosStatus.includes('未填报 1 人'),
-    '加载完成必须提供可播报的结果摘要'
+    page.data.focusRows[0].athleteName === '当前项目' && page.data.focusPager.total === 1,
+    '当前项目的关注名单和人数应同步更新'
   );
   assert(!page.data.todosLoading && !page.data.todosError, '成功加载应结束等待状态');
 
   api.dailyTodos = async () => {
     throw new Error('待办暂时不可用');
   };
-  await page.retryTodos();
+  const failedRetry = page.retryTodos();
+  assert(page.data.focusRows.length === 0 && page.data.focusPager === null, '重新加载必须立即清空旧关注名单与分页');
+  await failedRetry;
   assert(
     page.data.todos === null && page.data.todosError === '待办暂时不可用',
     '失败不得显示旧名单或全部完成'
   );
-  assert(page.data.todosStatus === '待办暂时不可用', '失败状态应可播报');
+  assert(page.data.focusRows.length === 0 && page.data.focusPager === null && !page.data.todosLoading, '待办失败不得保留旧关注名单与分页');
   api.dailyTodos = async () => ({
     todos: {
       ...todos('刷新后'),
@@ -233,8 +232,7 @@ export async function checkMiniDailyTodoFlow(assert) {
   page.onShow();
   assert(loaded, '训练或档案变更后必须刷新首页');
 
-  // 复查提醒分组与"今日已跟进"标记（走真实页面处理器与视图逻辑）。
-  const followCalls = { mark: [], unmark: [] };
+  // 首页按人员合并关注原因；已跟进状态来自服务端，不模拟已移除的标记按钮。
   const richTodos = () => ({
     date: '2026-09-23',
     timezone: 'Asia/Shanghai',
@@ -276,45 +274,43 @@ export async function checkMiniDailyTodoFlow(assert) {
     ],
   });
   api.dailyTodos = async () => ({ todos: richTodos() });
-  api.markTodoFollowups = async (project, athleteIds) => {
-    followCalls.mark.push({ project, athleteIds });
-    return { followedUp: [...athleteIds] };
-  };
-  api.unmarkTodoFollowups = async (project, athleteIds) => {
-    followCalls.unmark.push({ project, athleteIds });
-    return { followedUp: [] };
-  };
   page.data.project = 'ROWING';
   await page.retryTodos();
-  assert(page.data.todoView.counts.review === 1, '复查提醒分组应进入视图');
-  assert(page.data.todoView.review[0].dueLabel === '1 天后复查', '复查提醒应给出倒计时文案');
-  assert(
-    page.data.todoView.attention[0].reason.includes('自评需要休息'),
-    '休息自评应拼入关注原因'
-  );
-  await page.markFollowedUp({ currentTarget: { dataset: { athleteId: 2 } } });
-  assert(
-    page.data.todoView.counts.review === 0 && page.data.todoView.followedUpList.length === 1,
-    '已跟进对象应从分组隐藏并收敛'
-  );
-  assert(
-    page.data.todoView.followedUpList[0].groupLabel === '未填报',
-    '已跟进条目保留首个来源分组标签'
-  );
-  assert(
-    followCalls.mark.length === 1 && followCalls.mark[0].project === 'ROWING',
-    '标记应携带当前项目'
-  );
-  await page.unmarkFollowedUp({ currentTarget: { dataset: { athleteId: 2 } } });
-  assert(
-    page.data.todoView.counts.review === 1 && page.data.todoView.followedUpList.length === 0,
-    '撤销跟进后应回到原分组'
-  );
+  assert(page.data.focusPager.total === 2, '同一运动员的多个关注来源应合并为一行');
+  assert(page.data.focusRows[0].focusLabel === '未填报、状态关注', '关注名单应合并来源标签');
+  assert(page.data.focusRows[0].focusReason.includes('自评需要休息'), '休息自评应拼入关注原因');
+  assert(page.data.focusRows[1].focusReason.includes('1 天后复查'), '复查提醒应给出倒计时文案');
+  api.dailyTodos = async () => ({ todos: { ...richTodos(), followedUp: [2] } });
+  await page.retryTodos();
+  assert(page.data.focusPager.total === 1 && page.data.focusRows[0].athleteId === 1, '服务端已跟进人员应从关注名单隐藏');
+  api.dailyTodos = async () => ({ todos: { ...richTodos(), followedUp: [] } });
+  await page.retryTodos();
+  assert(page.data.focusPager.total === 2, '服务端撤销跟进后应重新进入关注名单');
+  const pagedTodos = {
+    ...todos('分页'),
+    counts: { total: 6, submitted: 0, missing: 6, attention: 0, incompleteTime: 0, reviewDue: 0 },
+    missing: Array.from({ length: 6 }, (_, index) => ({ athleteId: index + 1, athleteName: `测试人员${index + 1}`, team: index === 5 ? '二队' : '一队', project: 'ROWING' })),
+  };
+  api.dailyTodos = async () => ({ todos: pagedTodos });
+  await page.retryTodos();
+  assert(page.data.focusRows.length === 5 && page.data.focusPager.total === 6 && page.data.focusPager.hasNext, '关注名单每页最多展示五人');
+  page.onPagerChange({ currentTarget: { dataset: { key: 'focus' } }, detail: { page: 1 } });
+  assert(page.data.focusRows.length === 1 && page.data.focusRows[0].athleteId === 6 && !page.data.focusPager.hasNext, '末页展示真实剩余人员');
+  page.data.teams = [{ id: 10, name: '一队' }, { id: 20, name: '二队' }];
+  page.data.teamId = 20;
+  await page.retryTodos();
+  assert(page.data.focusPager.total === 1 && page.data.focusPager.page === 0 && page.data.focusRows[0].athleteId === 6, '队伍筛选应只保留对应人员并收敛页码');
+  page.data.teams = [];
+  page.data.teamId = 0;
+  page.data.todoPagerPages = { team: 0, focus: 0 };
   page.data.canViewTodos = false;
+  let forbiddenTodoCalls = 0;
   api.dailyTodos = async () => {
+    forbiddenTodoCalls += 1;
     throw new Error('不应为运动员发起请求');
   };
   await page.loadTodos('ROWING');
+  assert(forbiddenTodoCalls === 0, '无待办权限时不得发起待办请求');
   assert(requests.length === 2, '请求竞争场景应仅发起两个项目请求');
 
   // 运动员今日状态卡：本人接口、结果播报与失败时不得保留过期数据。
@@ -390,17 +386,26 @@ export async function checkMiniDailyTodoFlow(assert) {
       },
     };
   };
+  api.overviewTeams = async () => ({ teams: [] });
+  api.teamOverview = async () => ({ athletes: [] });
   api.dailyTodos = async () => ({ todos: todos('统一骨架') });
-  await page.loadPage();
+  const fullLoad = page.loadPage();
+  assert(page.data.focusRows.length === 0 && page.data.focusPager === null, '全量重新加载必须立即清空旧关注名单与分页');
+  await fullLoad;
   assert(page.data.error === '' && !page.data.loading, '统一骨架应正常完成首页加载');
   assert(overviewCalls === 1, '统一骨架只发起一次总览加载');
   assert(page.data.todos && page.data.todos.missing.length === 1, '待办应随首页骨架并行加载');
-  assert(page.data.metrics.length > 0 && page.data.trend.length === 1, '总览视图应写回指标与趋势');
+  assert(page.data.metrics.length > 0 && page.data.trend.length === 14, '总览视图应写回指标与趋势');
   page.onShow();
-  await flushAsync();
   assert(overviewCalls === 1, '缓存新鲜时二次显示首页不重拉');
   app.globalData.dataVersion = (app.globalData.dataVersion || 0) + 1;
+  let reloaded;
+  page.loadPage = (...args) => {
+    reloaded = definition.loadPage.apply(page, args);
+    return reloaded;
+  };
   page.onShow();
-  await flushAsync();
+  assert(reloaded && typeof reloaded.then === 'function', '缓存失效应触发真实首页加载');
+  await reloaded;
   assert(overviewCalls === 2, '数据版本变化后必须重新加载首页');
 }

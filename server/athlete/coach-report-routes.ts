@@ -19,7 +19,7 @@ import {
 } from './self-daily-service.ts';
 import { readWellness, upsertWellness } from './wellness-store.ts';
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] as const;
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'] as const;
 
 function targetAthleteId(req: Request): number | null {
   const athleteId = Number(req.params.id || 0);

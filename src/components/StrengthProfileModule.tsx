@@ -87,7 +87,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
   const [dataNotice, setDataNotice] = useState('');
   const [draftNotice, setDraftNotice] = useState('');
   const pdfRef = useRef<HTMLDivElement>(null);
-  const canEdit = (['SCC', 'PRJ', 'REG', 'TD', 'DMD'] as User['role'][]).includes(user.role);
+  const canEdit = (['SCC', 'REG', 'TD', 'DMD'] as User['role'][]).includes(user.role);
 
   const loadTests = async (preferredId?: number) => {
     setLoading(true);

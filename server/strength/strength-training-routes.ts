@@ -501,7 +501,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
   app.get(
     '/api/strength-training/import/template',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     async (_req, res) => {
       const templatePath = resolve(
         process.cwd(),
@@ -518,7 +518,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
   app.post(
     '/api/strength-training/import/preview',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     upload.single('file'),
     async (req, res, next) => {
       try {
@@ -559,7 +559,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
   app.post(
     '/api/strength-training/import/commit',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const token = cleanString(req.body?.token);
       const cached = strengthImportCache.get(token);

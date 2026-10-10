@@ -16,7 +16,7 @@ const {
   resolveCrewName
 } = require('../../utils/test-entry-form');
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 // 赛事条件记忆：按项目保存上次成功提交的赛事级字段与常用距离，本地可清、不存身份信息。
 function testEventKey(project) {

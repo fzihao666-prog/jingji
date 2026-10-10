@@ -286,7 +286,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
   app.post(
     '/api/special-training/sessions',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const user = req.authUser!;
       const rows = Array.isArray(req.body?.sessions) ? req.body.sessions.slice(0, 1000) : [];
@@ -500,7 +500,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
     attemptsText: z.array(z.string().trim().max(20)).min(1).max(3),
   });
 
-  app.post('/api/special-tests/manual', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+  app.post('/api/special-tests/manual', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     const user = req.authUser!;
     const parsed = manualResultSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '专项测试内容格式无效。' });
@@ -579,7 +579,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
   app.post(
     '/api/special-tests/import/preview',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     upload.single('file'),
     async (req, res) => {
       if (!req.file) return res.status(400).json({ message: '请选择Excel文件。' });
@@ -618,7 +618,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
   app.post(
     '/api/special-tests/import/commit',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const importId = cleanString(req.body?.importId);
       const cached = specialTestImportCache.get(importId);
@@ -703,7 +703,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
   app.get(
     '/api/special-tests/import/template',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     async (_req, res, next) => {
       const templateName = '竞迹专项训练导入模板.xlsx';
       const templatePath = resolve(process.cwd(), 'public', 'templates', templateName);

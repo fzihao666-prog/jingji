@@ -66,7 +66,7 @@ export function registerAuthRoutes(app: Express) {
   app.get(
     '/api/admin/teams',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const permissions = accountPermissions(currentUser.id);
@@ -116,7 +116,7 @@ export function registerAuthRoutes(app: Express) {
   app.post(
     '/api/admin/teams',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const project = cleanString(req.body?.project);
       const name = cleanString(req.body?.name);
@@ -149,7 +149,7 @@ export function registerAuthRoutes(app: Express) {
   app.delete(
     '/api/admin/teams/:id',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const id = Number(req.params.id);
       const team = db

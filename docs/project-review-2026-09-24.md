@@ -37,7 +37,7 @@ React 网页端（Vite + React 19 + TS strict）  ─┐
 
 ### 1.3 领域模型要点
 
-- 五级六角色：ATL 运动员、SCC 队伍体能教练、PRJ 项目负责人、REG 区域负责人、TD 训练总监、DMD 数据监控总监。
+- 五级五角色：ATL 运动员、SCC 队伍体能教练、REG 业务负责人、TD 训练总监、DMD 数据监控总监。
 - 账号同时绑定上级、行政区域（国/省/市/区县）、项目（赛艇/皮划艇/激流回旋）与队伍；权限判定统一走 `server/permissions.ts` 的 `accountPermissions → permissionsAllowAthlete` 与 `hasAthleteAccess`。
 - 训练事实只写入 `training_sessions`、`daily_wellness`、`strength_result_sets`；演示数据以 `is_demo` / `quality` / `source` 标记隔离，正式统计排除。
 
@@ -112,7 +112,7 @@ components/scope-filter（只做筛选交互，不含业务规则）
 
 - `PUT /api/me/athlete-profile`（index.ts:2167）：仅 ATL 且必须 `hasAthleteAccess`，组织归属字段由服务端从库里重读覆盖，**小程序无法越权改项目/队伍/区域**——设计正确。
 - `PUT /api/athletes/:id/body-composition`（index.ts:2949）：`hasAthleteAccess` + ATL 只能本人 + 逐字段合理区间校验。
-- `GET /api/coach/daily-todos`（index.ts:5420）：`requireRole('SCC','PRJ','REG','TD','DMD')`，与小程序 `canViewTodos` 白名单一致。
+- `GET /api/coach/daily-todos`（index.ts:5420）：`requireRole('SCC','REG','TD','DMD')`，与小程序 `canViewTodos` 白名单一致。
 
 ### 4.3 ❌ 断链：训练填报接口服务端不存在
 

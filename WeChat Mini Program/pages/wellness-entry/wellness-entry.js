@@ -14,7 +14,7 @@ const {
   wellnessRecordView
 } = require('../../utils/wellness-form');
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 Page({
   data: {

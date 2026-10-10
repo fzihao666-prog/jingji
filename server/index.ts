@@ -115,7 +115,7 @@ registerAccessRoutes(app);
 registerAnalysisRoutes(app);
 registerStrengthTestRoutes(app);
 
-app.get('/api/coach/daily-todos', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.get('/api/coach/daily-todos', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const now = new Date();
   const parsed = dailyTodoQuery(now).safeParse(req.query);
@@ -146,7 +146,7 @@ const followupsBody = z.strictObject({
   athleteIds: z.array(z.number().int().positive()).min(1).max(50),
 });
 
-app.put('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.put('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   const user = req.authUser!;
   const parsed = followupsBody.safeParse(req.body);
   if (!parsed.success)
@@ -192,7 +192,7 @@ const followupsProjectQuery = z.object({
     .refine((value) => PROJECTS.includes(value)),
 });
 
-app.delete('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.delete('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   const user = req.authUser!;
   const parsed = followupsProjectQuery.safeParse(req.query);
   if (!parsed.success)
@@ -228,7 +228,7 @@ const teamOverviewQuery = (now: Date) =>
       .refine((value) => PROJECTS.includes(value)),
   });
 
-app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const now = new Date();
   const parsed = teamOverviewQuery(now).safeParse(req.query);
@@ -246,7 +246,7 @@ app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'PRJ', 'REG'
 });
 
 // 训练负荷管理（ACWR）
-app.get('/api/coach/load-management', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.get('/api/coach/load-management', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const now = new Date();
   const parsed = teamOverviewQuery(now).safeParse(req.query);
@@ -264,7 +264,7 @@ app.get('/api/coach/load-management', requireAuth, requireRole('SCC', 'PRJ', 'RE
 });
 
 // 恢复状态基线偏离预警
-app.get('/api/coach/wellness-baseline', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.get('/api/coach/wellness-baseline', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const now = new Date();
   const parsed = teamOverviewQuery(now).safeParse(req.query);
@@ -282,7 +282,7 @@ app.get('/api/coach/wellness-baseline', requireAuth, requireRole('SCC', 'PRJ', '
 });
 
 // 训练计划执行率
-app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'), (req, res) => {
+app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const now = new Date();
   const parsed = teamOverviewQuery(now).safeParse(req.query);

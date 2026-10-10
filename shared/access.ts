@@ -11,17 +11,11 @@ export const ROLE_META = {
     level: 2,
     scope: '本人负责队伍',
   },
-  PRJ: {
-    code: 'PRJ',
-    label: '项目负责人',
-    level: 3,
-    scope: '授权区域内本项目',
-  },
   REG: {
     code: 'REG',
-    label: '区域负责人',
+    label: '业务负责人',
     level: 3,
-    scope: '本区域授权项目',
+    scope: '授权区域、项目与队伍',
   },
   TD: {
     code: 'TD',
@@ -41,7 +35,7 @@ export type Role = keyof typeof ROLE_META;
 
 export const ROLES = Object.keys(ROLE_META) as Role[];
 
-export const ROLE_HIERARCHY: Role[][] = [['DMD'], ['TD'], ['PRJ', 'REG'], ['SCC'], ['ATL']];
+export const ROLE_HIERARCHY: Role[][] = [['DMD'], ['TD'], ['REG'], ['SCC'], ['ATL']];
 
 export const AREA_LEVEL_META = {
   national: { label: '全国', rank: 4 },
@@ -56,25 +50,4 @@ export const AREA_LEVELS = Object.keys(AREA_LEVEL_META) as AreaLevel[];
 
 export function canManageRole(manager: Role, target: Role) {
   return ROLE_META[manager].level > ROLE_META[target].level;
-}
-
-export function legacyRoleToCode(role: string): Role | null {
-  const map: Record<string, Role> = {
-    athlete: 'ATL',
-    coach: 'SCC',
-    project: 'PRJ',
-    project_lead: 'PRJ',
-    regional: 'REG',
-    executive: 'TD',
-    training_director: 'TD',
-    admin: 'DMD',
-    data_director: 'DMD',
-    ATL: 'ATL',
-    SCC: 'SCC',
-    PRJ: 'PRJ',
-    REG: 'REG',
-    TD: 'TD',
-    DMD: 'DMD',
-  };
-  return map[role] || null;
 }

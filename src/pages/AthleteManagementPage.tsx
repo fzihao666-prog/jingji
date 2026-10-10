@@ -208,8 +208,8 @@ export function AthleteManagementPage({
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'success' | 'error'>('success');
 
-  const canEdit = user.role === 'SCC' || ROLE_META[user.role].level >= ROLE_META.PRJ.level;
-  const canAdmin = ROLE_META[user.role].level >= ROLE_META.PRJ.level;
+  const canEdit = user.role === 'SCC' || ROLE_META[user.role].level >= ROLE_META.REG.level;
+  const canAdmin = ROLE_META[user.role].level >= ROLE_META.REG.level;
 
   const load = async () => {
     setLoading(true);

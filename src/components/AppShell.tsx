@@ -62,9 +62,9 @@ export type PageKey =
 
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
   { key: 'bluetooth', label: '设备管理' },
-  { key: 'data-import', label: '数据导入', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
-  { key: 'data-import-history', label: '导入记录', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
-  { key: 'data-management', label: '指标与标准', roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'data-import', label: '数据导入', roles: ['SCC', 'REG', 'TD', 'DMD'] },
+  { key: 'data-import-history', label: '导入记录', roles: ['SCC', 'REG', 'TD', 'DMD'] },
+  { key: 'data-management', label: '指标与标准', roles: ['SCC', 'REG', 'TD', 'DMD'] },
 ];
 
 const directNavItems: Array<{
@@ -88,10 +88,10 @@ const organizationGroups: Array<{
     key: 'athletes',
     label: '运动员管理',
     icon: UsersRound,
-    roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'],
+    roles: ['SCC', 'REG', 'TD', 'DMD'],
   },
-  { key: 'coaches', label: '教练管理', icon: Network, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
-  { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'coaches', label: '教练管理', icon: Network, roles: ['SCC', 'REG', 'TD', 'DMD'] },
+  { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'REG', 'TD', 'DMD'] },
 ];
 
 const systemGroups: Array<{
@@ -100,12 +100,12 @@ const systemGroups: Array<{
   icon: typeof ChartNoAxesCombined;
   roles: Role[];
 }> = [
-  { key: 'regions', label: '账号权限', icon: MapPinned, roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'] },
+  { key: 'regions', label: '账号权限', icon: MapPinned, roles: ['SCC', 'REG', 'TD', 'DMD'] },
   {
     key: 'accounts',
     label: '账户审核',
     icon: UserCheck,
-    roles: ['SCC', 'PRJ', 'REG', 'TD', 'DMD'],
+    roles: ['SCC', 'REG', 'TD', 'DMD'],
   },
 ];
 

@@ -167,7 +167,7 @@ Page({
     this._todayGuard.next();
     this._teamGuard.next();
     this.setData({
-      todos: null, todosError: '', canViewTodos: false,
+      todos: null, focusRows: [], focusPager: null, todosError: '', canViewTodos: false,
       todayView: null, wellnessView: null, todayError: '', todayLoading: false,
       teamOverview: null, teamError: '', teamLoading: false, teamView: null,
     });
@@ -177,7 +177,7 @@ Page({
       scope: { range: this.data.range, showAthlete: true },
       prepare: (page, scope) => {
         const canSelfReport = scope.user.role === 'ATL';
-        const canViewTodos = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'].includes(scope.user.role);
+        const canViewTodos = ['SCC', 'REG', 'TD', 'DMD'].includes(scope.user.role);
         page.setData({ ...scope, selectedAthleteId: canSelfReport ? scope.selectedAthleteId : 0,
           canSelfReport, canViewTodos, showAthlete: canViewTodos, showTeam: canViewTodos });
       },
@@ -263,7 +263,7 @@ Page({
     if (!this.data.canViewTodos) return;
     this._todoGuard = this._todoGuard || createRequestGuard();
     const id = this._todoGuard.next();
-    this.setData({ todosLoading: true, todosError: '', todos: null });
+    this.setData({ todosLoading: true, todosError: '', todos: null, focusRows: [], focusPager: null });
     try {
       const result = await api.dailyTodos(project);
       if (!this._todoGuard.isLatest(id)) return;
@@ -416,7 +416,7 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ metrics: [], trend: [], structure: [], rpeDays: [], meta: {}, todos: null, teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true });
+      this.setData({ metrics: [], trend: [], structure: [], rpeDays: [], meta: {}, todos: null, focusRows: [], focusPager: null, teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {

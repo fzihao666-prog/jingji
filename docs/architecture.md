@@ -249,13 +249,12 @@ sequenceDiagram
 ```text
 DMD 数据监控总监      level 5
   └─ TD 训练总监      level 4
-      ├─ PRJ 项目负责人 level 3
-      └─ REG 区域负责人 level 3
+      └─ REG 业务负责人 level 3
           └─ SCC 队伍体能教练 level 2
               └─ ATL 运动员 level 1
 ```
 
-PRJ 与 REG 处于同一级，不能互相管理。上下级管理要求管理者角色级别严格高于目标角色。
+业务负责人统一使用 REG，通过区域、项目与队伍授权配置管理范围，同级账号不能互相管理。上下级管理要求管理者角色级别严格高于目标角色。
 
 账号密码重置使用 `POST /api/access/accounts/:id/reset-password`，只允许通过 `canManageAccount` 校验的上级操作下级（包括 SCC 对范围内 ATL）。接口使用严格请求结构、正整数账号 ID 和密码强度/字节长度校验，并独立限制操作人和来源 IP 的重置频率（每 15 分钟分别最多 6 次、20 次请求）。密码哈希更新、`session_version` 递增及 `RESET_ACCOUNT_PASSWORD` 审计事件在同一事务中完成；事件仅保存操作人、目标账号、动作与时间，不包含密码或哈希。重置不改变账号启停状态，原令牌在后续请求时失效。
 
@@ -531,7 +530,7 @@ Excel / PDF / 图片
 
 ### 10.8 小程序教练代填与测试现场录入
 
-教练等管理角色（SCC/PRJ/REG/TD/DMD）可在小程序代运动员填报训练课次与恢复日报：`server/athlete/self-training-routes.ts` 与 `server/athlete/coach-report-routes.ts` 分别挂载 `/api/me/training-sessions`、`/api/athletes/:id/training-sessions` 和 `/api/athletes/:id/wellness`。运动员级写接口必须先经 `requireRole` 与 `hasAthleteAccess` 的访问范围校验，前端候选列表不作为授权依据。代填事实仍只写 `training_sessions` 与 `daily_wellness`，`source` 记为 `coach_report`（本人填报为 `athlete_self_report`）；两者均计入正式统计，恢复日报状态对教练侧允许 `normal/rest/attention/alert`，本人侧仍限自评口径。
+教练等管理角色（SCC/REG/TD/DMD）可在小程序代运动员填报训练课次与恢复日报：`server/athlete/self-training-routes.ts` 与 `server/athlete/coach-report-routes.ts` 分别挂载 `/api/me/training-sessions`、`/api/athletes/:id/training-sessions` 和 `/api/athletes/:id/wellness`。运动员级写接口必须先经 `requireRole` 与 `hasAthleteAccess` 的访问范围校验，前端候选列表不作为授权依据。代填事实仍只写 `training_sessions` 与 `daily_wellness`，`source` 记为 `coach_report`（本人填报为 `athlete_self_report`）；两者均计入正式统计，恢复日报状态对教练侧允许 `normal/rest/attention/alert`，本人侧仍限自评口径。
 
 测试现场录入由 `POST /api/special-tests/manual`（`server/special/special-training-routes.ts`）提供专项成绩手工入库，按运动员访问范围与项目一致性校验后按运动员、日期、距离和组合幂等 upsert 到 `special_test_events`；体能测试走既有 `POST /api/strength-tests`。小程序 `pages/test-entry` 统一两种模式，纯校验与请求体组装在 `utils/test-entry-form.js`，页面只负责装配与交互。
 
@@ -710,6 +709,6 @@ route → application service → repository/query service → SQLite
 
 个人overview补充 `physiologyRecords`：从同一授权运动员查询结果中筛选当前周期、physiology/biochemistry域、会话与测量均有效且非演示的检测；按原记录ID、日期、值、单位和来源返回，仅个人模式输出。前端通过Zod验证该字段，档案页展示最新值和明细，不依赖热力图的估算日期或阈值评价，不新增数据写入。
 
-### 账号角色约束兼容
+### 账号角色合并迁移
 
-启动迁移同时检查 `users` 表是否支持 `DMD` 与项目负责人 `PRJ`，兼容已有 `DMD` 但缺少 `PRJ` 的五角色旧库。升级复用事务迁移，保留账号 ID、密码哈希、启停状态、会话版本和外部关联；重复启动不重复重建。部署此修复后需重启 API 服务以执行迁移。
+启动迁移将旧项目负责人角色合并到 `REG`，移除六角色表中的旧角色约束，同时兼容早期英文角色。账号 ID、密码哈希、启停状态、会话版本、账号编码、上下级及区域/项目/队伍授权保持不变；业务权限仍由原授权范围裁剪，不因合并扩大；首次演示授权初始化跳过合并账号和已有授权的账号，无授权的合并账号保持默认拒绝。迁移保护标记与角色变更在同一事务写入 `app_metadata`，即使启动中断后恢复也不会追加授权。已有五角色表不重复重建，新库不再创建单独的项目负责人演示账号。更新后需重启 API 服务执行迁移。

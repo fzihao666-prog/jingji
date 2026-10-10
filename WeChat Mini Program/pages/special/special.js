@@ -10,7 +10,7 @@ const { injuryMetricView } = require('../../utils/injury-metric');
 const { buildSpecialTestView, EVENT_PREVIEW_COUNT } = require('../../utils/special-test-view');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 // 占比构成条与明细圆点的分类配色（与页面蓝绿主色协调，按分类顺序循环取用）。
 const RATIO_COLORS = ['#176f7f', '#32846b', '#6c9e4f', '#c97925', '#b34a42', '#67528e', '#2f708a', '#a8843c', '#70858c'];

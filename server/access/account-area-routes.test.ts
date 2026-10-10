@@ -71,9 +71,9 @@ beforeEach(() => {
     'DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM audit_logs; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM project_teams; DELETE FROM coach_athletes; DELETE FROM account_profiles;'
   );
   for (const [id, role, province, project, team] of [
-    [1, 'PRJ', '四川', 'ROWING', 'A队'],
+    [1, 'REG', '四川', 'ROWING', 'A队'],
     [2, 'ATL', '四川', 'ROWING', 'A队'],
-    [3, 'PRJ', '四川', 'ROWING', 'A队'],
+    [3, 'REG', '四川', 'ROWING', 'A队'],
     [4, 'SCC', '四川', 'ROWING', 'A队'],
     [5, 'ATL', '浙江', 'ROWING', 'A队'],
     [6, 'ATL', '四川', 'CANOE_SPRINT', 'A队'],
@@ -135,7 +135,7 @@ async function createArea(areas: unknown[]) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
     body: JSON.stringify({
-      ...input(areas, 'PRJ'),
+      ...input(areas, 'REG'),
       username: 'newtest',
       password: initialPassword,
       displayName: '新建测试',
@@ -143,6 +143,19 @@ async function createArea(areas: unknown[]) {
   });
 }
 describe('账号接口行政区域从属校验', () => {
+  it('创建接口拒绝已合并的旧项目角色', async () => {
+    const response = await fetch(`${baseUrl}/api/access/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
+      body: JSON.stringify({
+        ...input([validArea]), role: 'PRJ', username: 'old_role_test',
+        password: initialPassword, displayName: '旧角色测试',
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(db.prepare("SELECT id FROM users WHERE username = 'old_role_test'").get()).toBeUndefined();
+  });
+
   it.each([
     { ...validArea, city: '杭州市' },
     { ...validArea, county: '西湖区' },

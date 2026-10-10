@@ -3,8 +3,7 @@ module.exports = {
   "roleLabels": {
     "ATL": "运动员",
     "SCC": "队伍体能教练",
-    "PRJ": "项目负责人",
-    "REG": "区域负责人",
+    "REG": "业务负责人",
     "TD": "训练总监",
     "DMD": "数据监控总监"
   },

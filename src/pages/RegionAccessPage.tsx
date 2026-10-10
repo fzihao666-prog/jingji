@@ -78,7 +78,7 @@ const auditLabels: Record<string, string> = {
   UPDATE_NAME: '修改姓名',
   UPDATE_ATHLETE_NAME: '修改运动员姓名',
   UPDATE_REGIONAL_ACCESS: '调整区域权限',
-  CREATE_REGIONAL_MANAGER: '创建区域负责人',
+  CREATE_REGIONAL_MANAGER: '创建业务负责人',
   UPDATE_ASSIGNMENT: '调整人员关系',
   APPROVE_REGISTRATION: '通过注册申请',
   AUTO_APPROVE_REGISTRATION: '注册自动开通',

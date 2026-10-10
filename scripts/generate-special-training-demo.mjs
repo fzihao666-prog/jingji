@@ -41,7 +41,7 @@ const TEMPLATES = [
 
 const athletes = db.prepare('SELECT id FROM athletes WHERE active = 1 ORDER BY id').all();
 const creator = db
-  .prepare("SELECT id FROM users WHERE role IN ('SCC', 'PRJ', 'REG', 'TD', 'DMD') ORDER BY id LIMIT 1")
+  .prepare("SELECT id FROM users WHERE role IN ('SCC', 'REG', 'TD', 'DMD') ORDER BY id LIMIT 1")
   .get();
 const insert = db.prepare(`
   INSERT INTO training_sessions (

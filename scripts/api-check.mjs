@@ -884,7 +884,7 @@ try {
     initialRegionalAthletes.status === 200 &&
       JSON.stringify(responseAthleteIds(initialRegionalAthletes)) === JSON.stringify(sichuanAthleteIds) &&
       initialRegionalAthletes.payload.athletes.every((item) => item.region === '四川'),
-    '区域负责人的初始地区权限错误'
+    '业务负责人的初始地区权限错误'
   );
 
   const executiveLogin = await request('/api/auth/login', {
@@ -903,20 +903,20 @@ try {
       managerResult.payload.current.role === 'TD' &&
       demoManager?.role === 'REG' &&
       demoManager.accountCode.includes('-REG-'),
-    '训练总监无法读取区域负责人或账号编码错误'
+    '训练总监无法读取业务负责人或账号编码错误'
   );
   const renameManager = await request(
     `/api/users/${demoManager.id}/name`,
     {
       method: 'PUT',
-      body: JSON.stringify({ name: '四川区域负责人' }),
+      body: JSON.stringify({ name: '四川业务负责人' }),
     },
     executiveToken
   );
   const renamedRegionalProfile = await request('/api/me', {}, regionalToken);
   assert(
     renameManager.status === 200 &&
-      renamedRegionalProfile.payload.user.displayName === '四川区域负责人',
+      renamedRegionalProfile.payload.user.displayName === '四川业务负责人',
     '高层管理人修改区域管理人姓名失败'
   );
   const grantResult = await request(
@@ -959,7 +959,7 @@ try {
       body: JSON.stringify({
         username: 'regional_test',
         password: 'Secure123',
-        displayName: '华南区域负责人',
+        displayName: '华南业务负责人',
         role: 'REG',
         parentUserId: directorAccount.id,
         areas: [{ areaLevel: 'province', province: '广东', city: '', county: '' }],
@@ -1005,7 +1005,7 @@ try {
     },
     createdRegionalLogin.payload.token
   );
-  assert(forbiddenCrossLevel.status === 404, '区域负责人不应能管理训练总监');
+  assert(forbiddenCrossLevel.status === 404, '业务负责人不应能管理训练总监');
 
   const createRegistrationTeam = await request(
     '/api/admin/teams',
@@ -1309,15 +1309,15 @@ try {
   });
   assert(approvedCoachLogin.status === 200, '获批教练无法登录');
   const approvedCoachToken = approvedCoachLogin.payload.token;
-  const createApprovalProjectLead = await request(
+  const createApprovalScopedManager = await request(
     '/api/access/accounts',
     {
       method: 'POST',
       body: JSON.stringify({
-        username: 'approval_prj_test',
+        username: 'approval_scope_test',
         password: 'Secure123',
-        displayName: '审核范围项目负责人',
-        role: 'PRJ',
+        displayName: '审核范围业务负责人',
+        role: 'REG',
         parentUserId: adminAccess.payload.current.id,
         areas: adminAccess.payload.current.areas,
         projects: ['ROWING'],
@@ -1326,13 +1326,13 @@ try {
     },
     adminToken
   );
-  assert(createApprovalProjectLead.status === 201, '审核范围项目负责人创建失败');
-  const approvalProjectLeadLogin = await request('/api/auth/login', {
+  assert(createApprovalScopedManager.status === 201, '审核范围业务负责人创建失败');
+  const approvalScopedManagerLogin = await request('/api/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username: 'approval_prj_test', password: 'Secure123' }),
+    body: JSON.stringify({ username: 'approval_scope_test', password: 'Secure123' }),
   });
-  const approvalProjectLeadToken = approvalProjectLeadLogin.payload.token;
-  assert(approvalProjectLeadLogin.status === 200 && approvalProjectLeadToken, '审核范围项目负责人无法登录');
+  const approvalScopedManagerToken = approvalScopedManagerLogin.payload.token;
+  assert(approvalScopedManagerLogin.status === 200 && approvalScopedManagerToken, '审核范围业务负责人无法登录');
 
   const approvalGet = await request('/api/admin/registrations/approval', {}, adminToken);
   assert(approvalGet.status === 200 && approvalGet.payload.enabled === true, '默认应开启注册审核');
@@ -1352,9 +1352,9 @@ try {
   const approvalForbiddenManagers = await Promise.all([
     request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, executiveToken),
     request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, regionalToken),
-    request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, approvalProjectLeadToken),
+    request('/api/admin/registrations/approval', { method: 'PUT', body: JSON.stringify({ enabled: false }) }, approvalScopedManagerToken),
   ]);
-  assert(approvalForbiddenManagers.every((result) => result.status === 403), 'PRJ、REG、TD 不应修改全局注册审核开关');
+  assert(approvalForbiddenManagers.every((result) => result.status === 403), 'REG、TD 不应修改全局注册审核开关');
 
   const crossScopeCoachRegister = await request('/api/auth/register', {
     method: 'POST',
@@ -1375,9 +1375,9 @@ try {
   const crossScopeApproval = await request(
     `/api/admin/registrations/${crossScopeCoachRequest.id}/approve`,
     { method: 'POST' },
-    approvalProjectLeadToken
+    approvalScopedManagerToken
   );
-  assert(crossScopeApproval.status === 403, '项目负责人不应批准权限范围外的教练申请');
+  assert(crossScopeApproval.status === 403, '业务负责人不应批准权限范围外的教练申请');
 
   const historicalPendingBeforeToggle = await request(
     '/api/auth/register',
@@ -1898,7 +1898,7 @@ try {
         registration: 'passed',
         approval: 'passed',
         roleProtection: 'passed',
-        sixRoleAccess: 'passed',
+        fiveRoleAccess: 'passed',
         regionalIsolation: 'passed',
         accountLifecycle: 'passed',
         auditLog: 'passed',

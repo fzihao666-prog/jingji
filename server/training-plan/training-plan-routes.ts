@@ -55,7 +55,7 @@ export function registerTrainingPlanRoutes(app: Express) {
   app.post(
     '/api/training-plans',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const user = req.authUser!;
       const athleteId = Number(req.body?.athleteId || 0);
@@ -143,7 +143,7 @@ export function registerTrainingPlanRoutes(app: Express) {
   app.delete(
     '/api/training-plans/:id',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const planId = Number(req.params.id);
       const row = db
@@ -193,7 +193,7 @@ export function registerTrainingPlanRoutes(app: Express) {
   app.post(
     '/api/training-plans/ai/analyze',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     upload.none(),
     async (req, res) => {
       try {
@@ -251,7 +251,7 @@ export function registerTrainingPlanRoutes(app: Express) {
   app.post(
     '/api/training-plans/ai/save',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
         const { athleteId, plan, aiMetadata } = req.body;

@@ -80,7 +80,7 @@ erDiagram
 | `user_area_permissions`      | 全国/省/市/区县授权                | 是当前区域权限的主模型。                                         |
 | `user_project_permissions`   | 项目授权                           | 与区域、队伍授权共同裁剪数据范围。                               |
 | `user_team_permissions`      | 队伍授权                           | 以项目和队伍联合授权。                                           |
-| `regional_manager_regions`   | 区域负责人旧授权关系               | 仍用于兼容迁移，和 `user_area_permissions` 有职能重叠。          |
+| `regional_manager_regions`   | 业务负责人旧授权关系               | 仍用于兼容迁移，和 `user_area_permissions` 有职能重叠。          |
 | `coach_athletes`             | 教练—运动员多对多关系              | 仅作主管教练展示与上级关系兼容；运动员可见性由区域/项目/队伍权限决定。 |
 | `project_teams`              | 项目下可用队伍字典                 | `project + name` 唯一。                                          |
 | `audit_logs`                 | 关键操作审计                       | 记录操作者、动作、实体和详情。                                   |

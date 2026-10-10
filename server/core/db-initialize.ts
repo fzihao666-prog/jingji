@@ -56,7 +56,7 @@ export function initializeDatabase(
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'PRJ', 'REG', 'TD', 'DMD')),
+    role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'REG', 'TD', 'DMD')),
     athlete_id INTEGER,
     active INTEGER NOT NULL DEFAULT 1,
     session_version INTEGER NOT NULL DEFAULT 1,
@@ -680,19 +680,23 @@ export function initializeDatabase(
   const usersTable = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'")
     .get() as { sql: string } | undefined;
-  // 五角色版本已有 DMD，但仍缺少项目负责人 PRJ，必须继续升级约束。
-  if (usersTable && (!usersTable.sql.includes("'DMD'") || !usersTable.sql.includes("'PRJ'"))) {
+  // 合并旧项目角色为业务负责人，保留账号及原有授权关联。
+  if (usersTable && (!usersTable.sql.includes("'DMD'") || usersTable.sql.includes("'PRJ'"))) {
     const activeExpression = hasColumn('users', 'active') ? 'active' : '1';
     db.exec('PRAGMA foreign_keys = OFF');
     try {
       db.exec(`
       BEGIN;
+      -- 与角色迁移同时提交保护标记，启动中断后仍禁止自动扩大授权。
+      INSERT OR IGNORE INTO app_metadata (key, value)
+        SELECT 'account_role_merge_v1:' || id, 'preserve_scope'
+        FROM users WHERE role IN ('PRJ', 'project', 'project_lead');
       CREATE TABLE users_access_v2 (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         display_name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'PRJ', 'REG', 'TD', 'DMD')),
+        role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'REG', 'TD', 'DMD')),
         athlete_id INTEGER,
         active INTEGER NOT NULL DEFAULT 1,
         session_version INTEGER NOT NULL DEFAULT 1,
@@ -703,8 +707,9 @@ export function initializeDatabase(
           CASE role
             WHEN 'athlete' THEN 'ATL'
             WHEN 'coach' THEN 'SCC'
-            WHEN 'project' THEN 'PRJ'
-            WHEN 'project_lead' THEN 'PRJ'
+            WHEN 'project' THEN 'REG'
+            WHEN 'project_lead' THEN 'REG'
+            WHEN 'PRJ' THEN 'REG'
             WHEN 'regional' THEN 'REG'
             WHEN 'executive' THEN 'TD'
             WHEN 'training_director' THEN 'TD'
@@ -1701,7 +1706,7 @@ export function initializeDatabase(
     const regionalResult = insertUser.run(
       'regional01',
       passwordHash,
-      '四川区域负责人',
+      '四川业务负责人',
       'REG',
       null
     );
@@ -1888,7 +1893,7 @@ export function initializeDatabase(
       const passwordHash = bcrypt.hashSync('demo123', 10);
       const result = db
         .prepare(
-          "INSERT INTO users (username, password_hash, display_name, role, athlete_id) VALUES ('regional01', ?, '四川区域负责人', 'REG', NULL)"
+          "INSERT INTO users (username, password_hash, display_name, role, athlete_id) VALUES ('regional01', ?, '四川业务负责人', 'REG', NULL)"
         )
         .run(passwordHash);
       regional = { id: Number(result.lastInsertRowid) };
@@ -1971,23 +1976,8 @@ export function initializeDatabase(
       "UPDATE users SET display_name = '全国训练总监' WHERE username = 'executive01' AND display_name IN ('高层管理者', '训练总监')"
     ).run();
     db.prepare(
-      "UPDATE users SET display_name = '四川区域负责人' WHERE username = 'regional01' AND display_name IN ('四川区域管理人', '四川区域负责人')"
+      "UPDATE users SET display_name = '四川业务负责人' WHERE username = 'regional01' AND display_name IN ('四川区域管理人', '四川业务负责人')"
     ).run();
-
-    let projectLead = db.prepare("SELECT id FROM users WHERE username = 'project01'").get() as
-      { id: number } | undefined;
-    if (!projectLead) {
-      const passwordHash = bcrypt.hashSync('demo123', 10);
-      const result = db
-        .prepare(
-          `
-      INSERT INTO users (username, password_hash, display_name, role, athlete_id)
-      VALUES ('project01', ?, '四川赛艇项目负责人', 'PRJ', NULL)
-    `
-        )
-        .run(passwordHash);
-      projectLead = { id: Number(result.lastInsertRowid) };
-    }
 
     const users = db
       .prepare(
@@ -1999,7 +1989,7 @@ export function initializeDatabase(
       .all() as Array<{
       id: number;
       username: string;
-      role: 'ATL' | 'SCC' | 'PRJ' | 'REG' | 'TD' | 'DMD';
+      role: 'ATL' | 'SCC' | 'REG' | 'TD' | 'DMD';
       athleteId: number | null;
     }>;
     const insertProfile = db.prepare(`
@@ -2020,6 +2010,13 @@ export function initializeDatabase(
     VALUES (?, ?, ?, ?)
   `);
 
+    const mergedAccount = db.prepare('SELECT 1 FROM app_metadata WHERE key = ?');
+    const existingScope = db.prepare(`
+      SELECT 1 FROM user_area_permissions WHERE user_id = ?
+      UNION ALL SELECT 1 FROM user_project_permissions WHERE user_id = ?
+      UNION ALL SELECT 1 FROM user_team_permissions WHERE user_id = ?
+      LIMIT 1
+    `);
     for (const user of users) {
       const athlete = user.athleteId
         ? (db
@@ -2056,7 +2053,7 @@ export function initializeDatabase(
       let parentId: number | null = admin.id;
       if (user.role === 'DMD') parentId = null;
       else if (user.role === 'TD') parentId = admin.id;
-      else if (user.role === 'PRJ' || user.role === 'REG') parentId = director.id;
+      else if (user.role === 'REG') parentId = director.id;
       else if (user.role === 'SCC') parentId = director.id;
       else if (user.role === 'ATL') {
         const coach = db
@@ -2074,12 +2071,14 @@ export function initializeDatabase(
         primaryProject = '*';
       }
       if (user.role === 'REG') primaryProvince = '四川';
-      if (user.role === 'PRJ') {
-        primaryProvince = '四川';
-        primaryProject = '赛艇';
-      }
       const code = `${areaCode(primaryProvince)}-${projectCode(primaryProject)}-${user.role}-${String(user.id).padStart(4, '0')}`;
       insertProfile.run(user.id, parentId, code);
+
+      // 演示初始化不得扩展已有授权；旧项目账号没有授权时保持默认拒绝。
+      if (
+        mergedAccount.get(`account_role_merge_v1:${user.id}`) ||
+        existingScope.get(user.id, user.id, user.id)
+      ) continue;
 
       if (user.role === 'DMD' || user.role === 'TD') {
         insertArea.run(user.id, 'national', '', '', '', admin.id);
@@ -2094,10 +2093,6 @@ export function initializeDatabase(
           insertArea.run(user.id, 'province', province, '', '', admin.id);
         insertProject.run(user.id, '*', admin.id);
         insertTeam.run(user.id, '*', '*', admin.id);
-      } else if (user.role === 'PRJ') {
-        insertArea.run(user.id, 'province', primaryProvince, '', '', admin.id);
-        insertProject.run(user.id, primaryProject, admin.id);
-        insertTeam.run(user.id, primaryProject, '*', admin.id);
       } else if (user.role === 'SCC') {
         const rows = assigned.length
           ? assigned
@@ -3713,7 +3708,7 @@ export function initializeDatabase(
 
   function seedOverviewInjuryData() {
     const creator = db
-      .prepare("SELECT id FROM users WHERE role IN ('DMD', 'TD', 'PRJ', 'SCC') ORDER BY id LIMIT 1")
+      .prepare("SELECT id FROM users WHERE role IN ('DMD', 'TD', 'REG', 'SCC') ORDER BY id LIMIT 1")
       .get() as { id: number } | undefined;
     const athletes = db
       .prepare('SELECT id, name FROM athletes WHERE active = 1 ORDER BY id')
@@ -4026,7 +4021,7 @@ export function initializeDatabase(
       .prepare(
         `
     SELECT id FROM users
-    WHERE role IN ('DMD', 'SCC', 'PRJ', 'TD')
+    WHERE role IN ('DMD', 'SCC', 'REG', 'TD')
     ORDER BY CASE role WHEN 'DMD' THEN 0 ELSE 1 END, id
     LIMIT 1
   `

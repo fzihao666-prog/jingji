@@ -32,7 +32,7 @@ export function registerResetPasswordRoutes(app: Express) {
   app.post(
     '/api/access/accounts/:id/reset-password',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const actor = req.authUser!;
       if (

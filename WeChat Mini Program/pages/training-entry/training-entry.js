@@ -3,7 +3,7 @@ const { loadContext } = require('../../utils/context');
 const { todayBeijing } = require('../../utils/date');
 const { draftIdentity, loadFormDraft, saveFormDraft, clearFormDraft } = require('../../utils/form-draft');
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 function today() {
   return todayBeijing();

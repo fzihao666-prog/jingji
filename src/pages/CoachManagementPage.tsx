@@ -81,7 +81,7 @@ export function CoachManagementPage({
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<'success' | 'error'>('success');
 
-  const canManage = ROLE_META[user.role].level >= ROLE_META.PRJ.level;
+  const canManage = ROLE_META[user.role].level >= ROLE_META.REG.level;
   const canRename = ROLE_META[user.role].level > ROLE_META.SCC.level;
 
   const load = async () => {

@@ -12,7 +12,7 @@ const {
   defaultInjuryForm,
 } = require('../../utils/injury-form');
 
-const MANAGER_ROLES = ['SCC', 'PRJ', 'REG', 'TD', 'DMD'];
+const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
 Page({
   data: {

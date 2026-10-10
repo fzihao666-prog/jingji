@@ -134,7 +134,7 @@ export function registerAthleteRoutes(app: Express) {
   app.post(
     '/api/admin/athletes',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const payload = readAthleteAdminPayload(req.body || {});
@@ -288,7 +288,7 @@ export function registerAthleteRoutes(app: Express) {
   app.put(
     '/api/admin/athletes/:id',
     requireAuth,
-    requireRole('SCC', 'PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const athleteId = Number(req.params.id);
@@ -390,7 +390,7 @@ export function registerAthleteRoutes(app: Express) {
   app.put(
     '/api/admin/athletes/bulk/profile',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const ids = Array.isArray(req.body?.ids)
         ? ([...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[])
@@ -444,7 +444,7 @@ export function registerAthleteRoutes(app: Express) {
   app.post(
     '/api/admin/athletes/bulk/delete',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const ids = Array.isArray(req.body?.ids)
         ? ([...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[])
@@ -473,7 +473,7 @@ export function registerAthleteRoutes(app: Express) {
   app.delete(
     '/api/admin/athletes/:id',
     requireAuth,
-    requireRole('PRJ', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const athleteId = Number(req.params.id);
       if (!hasAthleteAccess(req.authUser!, athleteId))
