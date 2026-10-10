@@ -1,3 +1,7 @@
+import {
+  resetAccountPasswordSchema,
+  resetAccountPasswordResponseSchema,
+} from '../shared/account-password';
 import { profilePhysiologyRecordSchema } from '../shared/profile-physiology';
 import { z } from 'zod';
 import { physicalChampionPayloadSchema } from '../shared/physical-champion';
@@ -736,6 +740,15 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(input),
     });
+  },
+  async resetAccessAccountPassword(id: number, newPassword: string) {
+    const body = resetAccountPasswordSchema.parse({ newPassword });
+    return resetAccountPasswordResponseSchema.parse(
+      await request<unknown>(`/api/access/accounts/${id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
   },
   async setAccessAccountStatus(id: number, active: boolean) {
     return request<{ message: string; active: boolean }>(`/api/access/accounts/${id}/status`, {

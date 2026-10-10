@@ -1,3 +1,4 @@
+import { ACCOUNT_PASSWORD_HINT, accountPasswordSchema } from '../../shared/account-password';
 import {
   Activity,
   Check,
@@ -6,6 +7,7 @@ import {
   FileClock,
   Fingerprint,
   GitBranch,
+  KeyRound,
   MapPinned,
   Plus,
   Save,
@@ -56,6 +58,7 @@ function compactScope(account: AccessAccount) {
 
 const auditLabels: Record<string, string> = {
   CREATE_ACCOUNT: '创建账号',
+  RESET_ACCOUNT_PASSWORD: '重置账号密码',
   UPDATE_ACCOUNT_ACCESS: '调整账号权限',
   ENABLE_ACCOUNT: '启用账号',
   DISABLE_ACCOUNT: '停用账号',
@@ -84,6 +87,14 @@ export function RegionAccessPage({ user }: { user: User }) {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const resetTriggerRef = useRef<HTMLButtonElement>(null);
+  const resetInputRef = useRef<HTMLInputElement>(null);
+  const resetConfirmRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -147,6 +158,10 @@ export function RegionAccessPage({ user }: { user: User }) {
   }, []);
 
   const applyAccount = (account: AccessAccount) => {
+    setResetOpen(false);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError('');
     setRole(account.role);
     setParentUserId(account.parentUserId || user.id);
     setAreas(account.areas.map((area) => ({ ...area })));
@@ -157,6 +172,7 @@ export function RegionAccessPage({ user }: { user: User }) {
   };
 
   const chooseAccount = (account: AccessAccount) => {
+    if (resetBusy) return;
     setSelectedId(account.id);
     applyAccount(account);
   };
@@ -280,6 +296,52 @@ export function RegionAccessPage({ user }: { user: User }) {
     }
   };
 
+  const closeReset = () => {
+    setResetOpen(false);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError('');
+    requestAnimationFrame(() => resetTriggerRef.current?.focus());
+  };
+
+  const resetSelectedPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selected || resetBusy) return;
+    setResetError('');
+    if (!accountPasswordSchema.safeParse(resetPassword).success) {
+      setResetError(ACCOUNT_PASSWORD_HINT);
+      resetInputRef.current?.focus();
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError('两次输入的新密码不一致。');
+      resetConfirmRef.current?.focus();
+      return;
+    }
+    setResetBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await api.resetAccessAccountPassword(selected.id, resetPassword);
+      setResetBusy(false);
+      closeReset();
+      setMessage(result.message);
+      if (user.role === 'DMD') {
+        try {
+          setLogs((await api.auditLogs()).logs);
+        } catch {
+          setError('密码已重置，但日志列表刷新失败，请刷新页面查看。');
+        }
+      }
+    } catch (resetFailure) {
+      setResetError(
+        resetFailure instanceof Error ? resetFailure.message : '密码重置失败，请重试。'
+      );
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   const setStatus = async () => {
     if (!selected) return;
     const nextActive = !selected.active;
@@ -357,12 +419,14 @@ export function RegionAccessPage({ user }: { user: User }) {
         </div>
       </section>
 
-      {message && (
-        <div className="message-banner success">
-          <Check size={18} />
-          {message}
-        </div>
-      )}
+      <div role="status" aria-live="polite">
+        {message && (
+          <div className="message-banner success">
+            <Check size={18} aria-hidden="true" />
+            {message}
+          </div>
+        )}
+      </div>
       {error && (
         <div className="message-banner error" id="access-error" role="alert">
           <X size={18} />
@@ -573,7 +637,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                   </label>
                 )}
               </div>
-              <button className="primary-button" disabled={saving}>
+              <button className="primary-button" disabled={saving || resetBusy}>
                 {saving ? '创建中…' : '创建并绑定权限'}
               </button>
             </form>
@@ -593,6 +657,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                     <button
                       key={account.id}
                       className={selectedId === account.id ? 'active' : ''}
+                      disabled={resetBusy}
                       onClick={() => chooseAccount(account)}
                     >
                       <span className={`account-avatar role-${account.role.toLowerCase()}`}>
@@ -641,12 +706,104 @@ export function RegionAccessPage({ user }: { user: User }) {
                 <button
                   className={selected.active ? 'status-button active' : 'status-button'}
                   onClick={setStatus}
-                  disabled={!canEditAccess || saving}
+                  disabled={!canEditAccess || saving || resetBusy}
                 >
                   <CirclePower size={16} />
                   {selected.active ? '正常启用' : '已停用'}
                 </button>
               </header>
+
+              {canManageRole(user.role, selected.role) && (
+                <section
+                  className="coordinate-section account-password-section"
+                  aria-label="账号密码管理"
+                >
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    ref={resetTriggerRef}
+                    aria-expanded={resetOpen}
+                    aria-controls="account-password-reset"
+                    disabled={saving || resetBusy || loading}
+                    onClick={() => {
+                      if (resetOpen) {
+                        closeReset();
+                        return;
+                      }
+                      setResetOpen(true);
+                      setResetError('');
+                      requestAnimationFrame(() => resetInputRef.current?.focus());
+                    }}
+                  >
+                    <KeyRound size={16} aria-hidden="true" /> 重置密码
+                  </button>
+                  {resetOpen && (
+                    <form
+                      id="account-password-reset"
+                      onSubmit={resetSelectedPassword}
+                      className="account-password-form"
+                    >
+                      <p>
+                        为 {selected.displayName}（@{selected.username}
+                        ）设置新密码。确认后，该账号当前登录会话将失效，请将新密码告知本人。
+                      </p>
+                      <p id="reset-password-hint">{ACCOUNT_PASSWORD_HINT}</p>
+                      <div className="coordinate-grid">
+                        <label htmlFor="reset-new-password">
+                          <span>新密码</span>
+                        </label>
+                        <input
+                          id="reset-new-password"
+                          ref={resetInputRef}
+                          type="password"
+                          autoComplete="new-password"
+                          value={resetPassword}
+                          disabled={resetBusy}
+                          required
+                          minLength={8}
+                          maxLength={72}
+                          aria-describedby="reset-password-hint reset-password-error"
+                          aria-invalid={Boolean(resetError)}
+                          onChange={(event) => setResetPassword(event.target.value)}
+                        />
+                        <label htmlFor="reset-confirm-password">
+                          <span>确认新密码</span>
+                        </label>
+                        <input
+                          id="reset-confirm-password"
+                          ref={resetConfirmRef}
+                          type="password"
+                          autoComplete="new-password"
+                          value={resetConfirm}
+                          disabled={resetBusy}
+                          required
+                          minLength={8}
+                          maxLength={72}
+                          aria-describedby="reset-password-error"
+                          aria-invalid={Boolean(resetError)}
+                          onChange={(event) => setResetConfirm(event.target.value)}
+                        />
+                      </div>
+                      <p id="reset-password-error" role="alert">
+                        {resetError}
+                      </p>
+                      <div className="account-password-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={resetBusy}
+                          onClick={closeReset}
+                        >
+                          取消
+                        </button>
+                        <button type="submit" className="primary-button" disabled={resetBusy}>
+                          {resetBusy ? '重置中…' : '确认重置密码'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </section>
+              )}
 
               <div className="account-signature">
                 <Fingerprint size={18} />
@@ -905,7 +1062,7 @@ export function RegionAccessPage({ user }: { user: User }) {
               {canEditAccess && (
                 <footer className="access-editor-footer">
                   <span>保存后，服务端查询会立即应用新的权限条件。</span>
-                  <button className="primary-button" disabled={saving} onClick={save}>
+                  <button className="primary-button" disabled={saving || resetBusy} onClick={save}>
                     <Save size={16} />
                     {saving ? '保存中…' : '保存账号权限'}
                   </button>

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { registerResetPasswordRoutes } from './reset-password-routes.ts';
 import type { Express } from 'express';
 import { db, upsertAthleteOrigin } from '../core/db.ts';
 import {
@@ -101,6 +102,7 @@ export function resolveParent(
 }
 
 export function registerAccessRoutes(app: Express) {
+  registerResetPasswordRoutes(app);
   app.get(
     '/api/admin/registrations/approval',
     requireAuth,

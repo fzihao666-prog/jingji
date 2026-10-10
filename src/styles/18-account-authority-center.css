@@ -1431,3 +1431,34 @@
   }
 }
 
+.account-password-form {
+  margin-top: 12px;
+  color: var(--ink);
+}
+
+.account-password-form .coordinate-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.account-password-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.account-password-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.account-password-form .coordinate-grid label > span {
+  font-size: inherit;
+}
