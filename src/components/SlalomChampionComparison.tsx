@@ -13,8 +13,8 @@ const statusMeta = {
   target: { label: '冠军区间', color: '#168f8a' },
   improve: { label: '接近区间', color: '#d9a326' },
   practice: { label: '重点补强', color: '#e87a35' },
-  missing: { label: '未测试', color: '#87979d' },
-  'no-standard': { label: '暂无同性别标准', color: '#87979d' },
+  missing: { label: '待采集', color: '#87979d' },
+  'no-standard': { label: '待参考', color: '#87979d' },
 } as const;
 
 export function SlalomChampionComparison({ athlete, test }: Props) {
@@ -59,7 +59,7 @@ export function SlalomChampionComparison({ athlete, test }: Props) {
         <Activity size={16} />
         <span>
           实测数据来自本次力量测试档案；卧推、卧拉相对力量由实测重量 ÷
-          体重自动计算。未测试项目不记0分。
+          体重自动计算。待采集项目不记0分。
         </span>
       </div>
 
@@ -83,7 +83,7 @@ export function SlalomChampionComparison({ athlete, test }: Props) {
                         <span>{metric.label}</span>
                         <strong>
                           {comparison.value === null
-                            ? '未测试'
+                            ? '待采集'
                             : `${formatNumber(comparison.value, metric.unit.includes('倍') || metric.unit.includes('/kg') ? 2 : 1)} ${metric.unit}`}
                         </strong>
                         <small>

@@ -7,7 +7,7 @@ export const SLALOM_MODEL_STANDARD = {
   title: '激流回旋冠军模型',
   decision: '激流独立项目口径',
   decisionNote: '训练数据、运动员、队伍、测试与报告均与赛艇、皮划艇分开查询。',
-  missingDataRule: '未测试项目显示“未测试”，不按0分处理，也不参与完成率。',
+  missingDataRule: '未采集项目显示“待采集”，不按0分处理，也不参与完成率。',
   zones: [
     { key: 'target', label: '冠军区间', color: '#168f8a', automation: '达到参考区间下限或更优' },
     { key: 'improve', label: '接近区间', color: '#d9a326', automation: '达到参考下限的85%—99.9%' },

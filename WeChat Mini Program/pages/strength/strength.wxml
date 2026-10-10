@@ -15,8 +15,8 @@
 
   <block>
     <block wx:if="{{activeSection === 'overview'}}">
-      <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 模型数据待配置</view></view>
-      <view class="card"><template is="training-state" data="{{loading, error: error, message: '暂无参考标准', chart: false}}" /></view>
+      <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 待配置</view></view>
+      <view class="card"><template is="training-state" data="{{loading, error: error, message: '待配置', chart: false}}" /></view>
       <view class="section-head"><view class="section-head-title">本周期训练概览</view><view class="section-head-note">时长与负荷仅汇总已填写数值；缺失显示 --</view></view>
       <template wx:if="{{trainingError}}" is="training-state" data="{{loading, error: trainingError}}" />
       <view class="compact-grid"><view wx:for="{{summaryCards}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view></view></view>
@@ -26,7 +26,7 @@
         <view class="section-head-row"><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view><button wx:if="{{canEnterTest}}" class="mini-button" bindtap="goTestEntry">录入测试</button></view>
       </view>
       <view class="card">
-        <template wx:if="{{!latestTestDate || testError}}" is="training-state" data="{{loading, error: error || testError, message: '暂无测试数据'}}" />
+        <template wx:if="{{!latestTestDate || testError}}" is="training-state" data="{{loading, error: error || testError, message: '待采集'}}" />
         <view wx:if="{{latestTestOutsidePeriod}}" class="notice">本周期无测试，以下为最近一次历史测试。</view>
         <view class="ratio-list">
           <view wx:for="{{metrics}}" wx:key="key">
@@ -51,9 +51,9 @@
               <view class="ratio-track"><view class="ratio-fill" style="width: {{item.width}}%;" /></view>
             </view>
           </scroll-view>
-          <block wx:else><template is="training-state" data="{{loading, error: error || testError, message: '暂无测试数据', chart: true}}" /></block>
+          <block wx:else><template is="training-state" data="{{loading, error: error || testError, message: '待采集', chart: true}}" /></block>
         </block>
-        <block wx:else><template is="training-state" data="{{loading, error: error || testError, message: '暂无测试数据', chart: true}}" /></block>
+        <block wx:else><template is="training-state" data="{{loading, error: error || testError, message: '待采集', chart: true}}" /></block>
       </view>
 
       <view class="section-head"><view class="section-head-title">训练结构</view><view class="section-head-note">五类训练结构 · 按训练项次数</view></view>

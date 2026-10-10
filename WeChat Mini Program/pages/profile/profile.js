@@ -134,7 +134,7 @@ function profileRadars(models) {
   return displayMissing([
     radarGroupView(models && models.special, { title: '专项测试雷达', canvasId: 'radarSpecial' }),
     radarGroupView(models && models.physical, { title: '体能测试雷达', canvasId: 'radarPhysical' })
-  ]).map((group) => ({ ...group, emptyMessage: group.dimensions.some((dim) => dim.referenceText !== '--') ? (group.dimensions.some((dim) => dim.valueText !== '--') ? '有效维度不足 3 个，暂不绘制雷达多边形' : '暂无测试数据') : '暂无参考标准' }));
+  ]).map((group) => ({ ...group, emptyMessage: group.dimensions.some((dim) => dim.referenceText !== '--') ? (group.dimensions.some((dim) => dim.valueText !== '--') ? '有效维度不足 3 个，暂不绘制雷达多边形' : '待采集') : '待参考' }));
 }
 
 function emptyProfileView(athlete = {}, period = { from: '', to: '' }) {

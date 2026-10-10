@@ -42,7 +42,7 @@ function splitDimensionLabel(label: string) {
 }
 
 function dimensionState(dimension: ChampionBenchmarkDimension) {
-  if (dimension.current === null) return { label: '待补测', color: '#87979d' };
+  if (dimension.current === null) return { label: '待采集', color: '#87979d' };
   if (dimension.current >= 100) return { label: '冠军区间', color: '#178f86' };
   if (dimension.current >= 90) return { label: '接近冠军', color: '#d5a02b' };
   return { label: '优先补强', color: '#df7040' };
@@ -67,7 +67,7 @@ export function ChampionModelBenchmark({
   if (loading)
     return <div className="champion-benchmark-empty">正在读取冠军模型标准与个人测试数据…</div>;
   if (!benchmark || !rows.length || !radarData.length)
-    return <div className="champion-benchmark-empty">模型数据待配置</div>;
+    return <div className="champion-benchmark-empty">待配置</div>;
   const validDimensions = dimensions.filter((dimension) => dimension.current !== null);
   const weakDimensions = [...validDimensions]
     .sort((left, right) => (right.priorityIndex || 0) - (left.priorityIndex || 0))
@@ -164,12 +164,12 @@ export function ChampionModelBenchmark({
                   const range =
                     row.targetMin !== null && row.targetMax !== null
                       ? `${formatNumber(row.targetMin, 1)}-${formatNumber(row.targetMax, 1)} ${row.unit}`
-                      : '未设区间';
+                      : '未设区间（待参考）';
                   return (
                     <p key={row.code}>
                       <b>{row.label}</b> 当前{' '}
                       {row.value === null
-                        ? '未测试'
+                        ? '待采集'
                         : `${formatNumber(row.value, row.unit === 's' || row.unit === '秒' ? 1 : 1)} ${row.unit}`}
                       ，冠军参考 {range}。
                     </p>

@@ -24,7 +24,7 @@
           <view class="champion-value"><text class="champion-performance">{{item.performance}}</text><text wx:if="{{item.pace}}">{{item.pace}}</text></view>
         </view>
       </view>
-      <block wx:else><template is="training-state" data="{{loading, error: error || championError, message: '暂无参考标准', chart: false}}" /></block>
+      <block wx:else><template is="training-state" data="{{loading, error: error || championError, message: '待配置', chart: false}}" /></block>
     </view>
 
     <view class="section-head"><view class="section-head-title">专项数据概览</view><view class="section-head-note">当前筛选范围</view></view>
@@ -93,8 +93,8 @@
       </view>
     </view>
     <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在读取专项测试</view></view>
-    <view wx:elif="{{error || testError}}" class="card"><template is="training-state" data="{{loading, error: error || testError, message: '暂无测试数据', chart: false}}" /></view>
-    <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">暂无测试数据</view></view>
+    <view wx:elif="{{error || testError}}" class="card"><template is="training-state" data="{{loading, error: error || testError, message: '待采集', chart: false}}" /></view>
+    <view wx:elif="{{!specialTests.length}}" class="card state"><view class="state-icon">—</view><view class="state-title">待采集</view></view>
     <block wx:else>
       <view class="card test-events">
         <view wx:for="{{specialTests}}" wx:key="id" class="test-event">

@@ -287,7 +287,7 @@ export function PhysicalChampionModel({
         )}
       </div>
       {!showLoading && !error && !group && (
-        <ContentState kind="empty" title="当前项目暂无适用参考模型" />
+        <ContentState kind="empty" title="待参考" description="当前项目尚未配置适用参考模型" />
       )}
       {!showLoading && !error && group && (
         <>
@@ -308,7 +308,7 @@ export function PhysicalChampionModel({
           </div>
           {athleteId && !personal && (
             <p className="physical-champion-empty" role="status">
-              当前运动员在此参考组没有可比较测试成绩，请核对参考组与测试协议。
+              待采集：当前运动员在此参考组没有可比较测试成绩，请核对参考组与测试协议。
             </p>
           )}
           <div className="physical-champion-section-heading">
@@ -393,7 +393,7 @@ export function PhysicalChampionModel({
             >
               <table className="physical-champion-table">
                 <caption>
-                  差值为当前值减冠军值；达成度已按比较方向计算。— 表示缺少同协议有效测试。
+                  差值为当前值减冠军值；达成度已按比较方向计算。— 表示待采集（缺少同协议有效测试）。
                 </caption>
                 <thead>
                   <tr>
@@ -517,7 +517,7 @@ export function PhysicalChampionModel({
                 </details>
               </>
             ) : (
-              <p className="physical-champion-empty">当前周期暂无可比较趋势数据。</p>
+              <p className="physical-champion-empty">待采集：当前周期暂无可比较趋势数据。</p>
             )}
           </section>
         </>
