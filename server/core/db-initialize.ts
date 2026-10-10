@@ -680,7 +680,8 @@ export function initializeDatabase(
   const usersTable = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'")
     .get() as { sql: string } | undefined;
-  if (usersTable && !usersTable.sql.includes("'DMD'")) {
+  // 五角色版本已有 DMD，但仍缺少项目负责人 PRJ，必须继续升级约束。
+  if (usersTable && (!usersTable.sql.includes("'DMD'") || !usersTable.sql.includes("'PRJ'"))) {
     const activeExpression = hasColumn('users', 'active') ? 'active' : '1';
     db.exec('PRAGMA foreign_keys = OFF');
     try {
