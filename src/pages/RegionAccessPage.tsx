@@ -1,4 +1,9 @@
 import {
+  accountCredentialsSchema,
+  ACCOUNT_USERNAME_HINT,
+  INITIAL_ACCOUNT_PASSWORD_HINT,
+} from '../../shared/account-credentials';
+import {
   getAccountCities,
   getAccountCounties,
   validateAccountAreas,
@@ -106,6 +111,17 @@ export function RegionAccessPage({ user }: { user: User }) {
   const [teamOptions, setTeamOptions] = useState<ProjectTeam[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createInvalid, setCreateInvalid] = useState<'username' | 'password' | 'confirm' | null>(
+    null
+  );
+  const restoreCreateFocusRef = useRef(false);
+  const [createConfirm, setCreateConfirm] = useState('');
+  const createNameRef = useRef<HTMLInputElement>(null);
+  const createUsernameRef = useRef<HTMLInputElement>(null);
+  const createPasswordRef = useRef<HTMLInputElement>(null);
+  const createConfirmRef = useRef<HTMLInputElement>(null);
+  const createTriggerRef = useRef<HTMLButtonElement>(null);
   const [loading, setLoading] = useState(true);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
@@ -125,13 +141,20 @@ export function RegionAccessPage({ user }: { user: User }) {
     role: 'ATL' as Role,
     parentUserId: user.id,
     areaLevel: 'county' as AreaLevel,
-    province: '四川',
-    city: '成都市',
-    county: '武侯区',
+    province: '',
+    city: '',
+    county: '',
     project: DEFAULT_PROJECT as string,
     team: '',
     gender: '男',
   });
+
+  useEffect(() => {
+    if (!createOpen && !saving && !loading && restoreCreateFocusRef.current) {
+      restoreCreateFocusRef.current = false;
+      createTriggerRef.current?.focus();
+    }
+  }, [createOpen, saving, loading]);
 
   const selected = payload?.accounts.find((account) => account.id === selectedId) || null;
   const manageableRoles = ROLES.filter((item) => canManageRole(user.role, item));
@@ -294,8 +317,40 @@ export function RegionAccessPage({ user }: { user: User }) {
     }
   };
 
+  const closeCreate = () => {
+    if (saving) return;
+    setCreateOpen(false);
+    setCreateConfirm('');
+    setCreateError('');
+    setCreateInvalid(null);
+    setCreateForm((current) => ({ ...current, displayName: '', username: '', password: '' }));
+    restoreCreateFocusRef.current = true;
+  };
+
   const createAccount = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving || resetBusy) return;
+    setCreateError('');
+    setCreateInvalid(null);
+    const credentials = accountCredentialsSchema.safeParse({
+      username: createForm.username,
+      password: createForm.password,
+    });
+    if (!credentials.success) {
+      const usernameInvalid = credentials.error.issues.some(
+        (issue) => issue.path[0] === 'username'
+      );
+      setCreateInvalid(usernameInvalid ? 'username' : 'password');
+      setCreateError(usernameInvalid ? ACCOUNT_USERNAME_HINT : INITIAL_ACCOUNT_PASSWORD_HINT);
+      (usernameInvalid ? createUsernameRef : createPasswordRef).current?.focus();
+      return;
+    }
+    if (createForm.password !== createConfirm) {
+      setCreateInvalid('confirm');
+      setCreateError('两次输入的初始密码不一致。');
+      createConfirmRef.current?.focus();
+      return;
+    }
     setSaving(true);
     setMessage('');
     setError('');
@@ -312,14 +367,14 @@ export function RegionAccessPage({ user }: { user: User }) {
     };
     const areaError = validateAccountAreas([createArea]);
     if (areaError) {
-      setError(areaError);
+      setCreateError(areaError);
       setSaving(false);
       return;
     }
     try {
       const result = await api.createAccessAccount({
-        username: createForm.username,
-        password: createForm.password,
+        username: credentials.data.username,
+        password: credentials.data.password,
         displayName: createForm.displayName,
         role: createForm.role,
         parentUserId: createForm.parentUserId,
@@ -330,6 +385,9 @@ export function RegionAccessPage({ user }: { user: User }) {
       });
       setMessage(result.message);
       setCreateOpen(false);
+      setCreateConfirm('');
+      setCreateError('');
+      restoreCreateFocusRef.current = true;
       setCreateForm((current) => ({
         ...current,
         displayName: '',
@@ -339,7 +397,7 @@ export function RegionAccessPage({ user }: { user: User }) {
       }));
       await load(result.id);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : '账号创建失败。');
+      setCreateError(createError instanceof Error ? createError.message : '账号创建失败。');
     } finally {
       setSaving(false);
     }
@@ -495,7 +553,30 @@ export function RegionAccessPage({ user }: { user: User }) {
               <span>组织账号</span>
               <strong>本级及下级</strong>
             </div>
-            <button onClick={() => setCreateOpen((current) => !current)}>
+            <button
+              ref={createTriggerRef}
+              type="button"
+              disabled={loading || saving || resetBusy || !manageableRoles.length}
+              aria-expanded={createOpen}
+              aria-controls="account-create-form"
+              onClick={() => {
+                if (createOpen) {
+                  closeCreate();
+                  return;
+                }
+                setCreateForm((current) => ({
+                  ...current,
+                  displayName: '',
+                  username: '',
+                  password: '',
+                }));
+                setCreateConfirm('');
+                setCreateError('');
+                setCreateInvalid(null);
+                setCreateOpen(true);
+                requestAnimationFrame(() => createNameRef.current?.focus());
+              }}
+            >
               <Plus size={16} />
               新增
             </button>
@@ -503,21 +584,37 @@ export function RegionAccessPage({ user }: { user: User }) {
 
           {createOpen && (
             <form
+              id="account-create-form"
               className="account-create-card"
+              autoComplete="off"
               aria-label="创建下级账号"
               onSubmit={createAccount}
             >
               <div className="create-card-title">
                 <UserRoundPlus size={18} />
                 <strong>创建下级账号</strong>
-                <button type="button" onClick={() => setCreateOpen(false)}>
+                <button
+                  type="button"
+                  onClick={closeCreate}
+                  disabled={saving}
+                  aria-label="关闭新增账号"
+                >
                   <X size={15} />
                 </button>
               </div>
-              <div className="create-grid">
+              {createError && (
+                <p id="account-create-error" className="message-banner error" role="alert">
+                  {createError}
+                </p>
+              )}
+              <fieldset className="create-grid" disabled={saving}>
+                <legend className="visually-hidden">账号信息与授权范围</legend>
                 <label>
                   <span>姓名</span>
                   <input
+                    ref={createNameRef}
+                    autoComplete="off"
+                    maxLength={80}
                     value={createForm.displayName}
                     onChange={(event) =>
                       setCreateForm({ ...createForm, displayName: event.target.value })
@@ -548,9 +645,20 @@ export function RegionAccessPage({ user }: { user: User }) {
                     ))}
                   </select>
                 </label>
-                <label>
+                <label className="wide">
                   <span>登录账号</span>
                   <input
+                    ref={createUsernameRef}
+                    name="new-account-username"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    minLength={4}
+                    maxLength={24}
+                    pattern="[a-zA-Z0-9_]{4,24}"
+                    placeholder="请设置新的登录账号"
+                    aria-invalid={createInvalid === 'username' || undefined}
+                    aria-describedby={`account-username-hint${createInvalid === 'username' ? ' account-create-error' : ''}`}
                     value={createForm.username}
                     onChange={(event) =>
                       setCreateForm({ ...createForm, username: event.target.value.toLowerCase() })
@@ -558,10 +666,21 @@ export function RegionAccessPage({ user }: { user: User }) {
                     required
                   />
                 </label>
+                <p id="account-username-hint" className="wide create-field-hint">
+                  {ACCOUNT_USERNAME_HINT}
+                </p>
                 <label>
                   <span>初始密码</span>
                   <input
                     type="password"
+                    ref={createPasswordRef}
+                    name="new-account-password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    maxLength={72}
+                    placeholder="请设置初始密码"
+                    aria-invalid={createInvalid === 'password' || undefined}
+                    aria-describedby={`account-initial-password-hint${createInvalid === 'password' ? ' account-create-error' : ''}`}
                     value={createForm.password}
                     onChange={(event) =>
                       setCreateForm({ ...createForm, password: event.target.value })
@@ -569,6 +688,28 @@ export function RegionAccessPage({ user }: { user: User }) {
                     required
                   />
                 </label>
+                <label>
+                  <span>确认初始密码</span>
+                  <input
+                    type="password"
+                    ref={createConfirmRef}
+                    aria-invalid={createInvalid === 'confirm' || undefined}
+                    aria-describedby={
+                      createInvalid === 'confirm' ? 'account-create-error' : undefined
+                    }
+                    name="new-account-password-confirm"
+                    autoComplete="new-password"
+                    value={createConfirm}
+                    onChange={(event) => setCreateConfirm(event.target.value)}
+                    minLength={8}
+                    maxLength={72}
+                    placeholder="再次输入初始密码"
+                    required
+                  />
+                </label>
+                <p id="account-initial-password-hint" className="wide create-field-hint">
+                  {INITIAL_ACCOUNT_PASSWORD_HINT}
+                </p>
                 <label className="wide">
                   <span>上级账号</span>
                   <select
@@ -733,8 +874,8 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </select>
                   </label>
                 )}
-              </div>
-              <button className="primary-button" disabled={saving || resetBusy}>
+              </fieldset>
+              <button className="primary-button" disabled={loading || saving || resetBusy}>
                 {saving ? '创建中…' : '创建并绑定权限'}
               </button>
             </form>

@@ -143,6 +143,23 @@ async function createArea(areas: unknown[]) {
   });
 }
 describe('账号接口行政区域从属校验', () => {
+  it.each([
+    { username: '', password: 'Secure123' },
+    { username: 'invalid@name', password: 'Secure123' },
+    { username: 'newtest', password: '' },
+    { username: 'newtest', password: ' Secure123' },
+    { username: 'newtest', password: 'abc123汉'.repeat(9) },
+  ])('创建接口拒绝无效凭据 %#，不写入账号', async (credentials) => {
+    const before = db.prepare('SELECT COUNT(*) AS count FROM users').get();
+    const response = await fetch(`${baseUrl}/api/access/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
+      body: JSON.stringify({ ...input([validArea], 'REG'), ...credentials, displayName: '新建测试' }),
+    });
+    expect(response.status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM users').get()).toEqual(before);
+  });
+
   it('创建接口拒绝已合并的旧项目角色', async () => {
     const response = await fetch(`${baseUrl}/api/access/accounts`, {
       method: 'POST',

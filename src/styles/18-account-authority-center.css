@@ -1483,3 +1483,19 @@
 .account-password-toolbar > button {
   flex-shrink: 0;
 }
+
+fieldset.create-grid {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.create-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.create-field-hint {
+  color: var(--ink);
+  line-height: 1.5;
+}

@@ -1,3 +1,8 @@
+import {
+  accountCredentialsSchema,
+  ACCOUNT_USERNAME_HINT,
+  INITIAL_ACCOUNT_PASSWORD_HINT,
+} from '../../shared/account-credentials.ts';
 import { validateAccountAreas } from '../../shared/account-regions.ts';
 import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import bcrypt from 'bcryptjs';
@@ -589,8 +594,17 @@ export function registerAccessRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
-      const username = cleanString(req.body?.username).toLowerCase();
-      const password = cleanString(req.body?.password);
+      const credentials = accountCredentialsSchema.safeParse({
+        username: req.body?.username,
+        password: req.body?.password,
+      });
+      if (!credentials.success) {
+        const usernameInvalid = credentials.error.issues.some((issue) => issue.path[0] === 'username');
+        return res.status(400).json({
+          message: usernameInvalid ? ACCOUNT_USERNAME_HINT : INITIAL_ACCOUNT_PASSWORD_HINT,
+        });
+      }
+      const { username, password } = credentials.data;
       const displayNameResult = validatePersonName(req.body?.displayName);
       const roleResult = z.enum(ROLES).safeParse(cleanString(req.body?.role));
       if (!roleResult.success) return res.status(400).json({ message: '请选择有效的账号角色。' });
@@ -600,15 +614,6 @@ export function registerAccessRoutes(app: Express) {
       const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
       const permissions = parseScopePayload(req.body);
       const errors: string[] = [];
-      if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
-      if (
-        password.length < 8 ||
-        password.length > 72 ||
-        !/[A-Za-z]/.test(password) ||
-        !/\d/.test(password)
-      ) {
-        errors.push('密码须为8—72位，并同时包含字母和数字');
-      }
       if (displayNameResult.error) errors.push(displayNameResult.error);
       if (!canManageRole(currentUser.role, role))
         errors.push('不能创建该层级的账号');
