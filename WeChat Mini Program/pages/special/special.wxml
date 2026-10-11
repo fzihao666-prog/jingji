@@ -136,18 +136,20 @@
       </view>
       <button wx:if="{{specialTestsMoreCount > 0}}" class="test-more-events" bindtap="onShowMoreTests" aria-label="展开更早的专项测试场次">展开更早 {{specialTestsMoreCount}} 场测试</button>
     </block>
-    <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
-    <view class="card">
-      <input class="training-athlete-search" value="{{athleteQuery}}" placeholder="搜索运动员" aria-label="搜索运动员姓名" bindinput="onAthleteSearch" />
-      <view wx:if="{{athleteRows.length}}" class="list">
-        <button wx:for="{{athleteRows}}" wx:key="id" class="list-row access training-athlete-row" hover-class="access-active" data-athlete-id="{{item.id}}" bindtap="goToAthlete" aria-label="查看{{item.name}}的运动员档案">
-          <view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}} · {{item.body}}</text></view><view class="list-row-value">{{item.load}}</view></view>
-          <view class="athlete-summary"><text>课次 {{item.sessionCount}}</text><text>时长 {{item.duration}}</text><text>距离 {{item.distance}}</text></view>
-        </button>
+    <block wx:if="{{user && user.role !== 'ATL'}}">
+      <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 名运动员</view></view>
+      <view class="card">
+        <input class="training-athlete-search" value="{{athleteQuery}}" placeholder="搜索运动员" aria-label="搜索运动员姓名" bindinput="onAthleteSearch" />
+        <view wx:if="{{athleteRows.length}}" class="list">
+          <button wx:for="{{athleteRows}}" wx:key="id" class="list-row access training-athlete-row" hover-class="access-active" data-athlete-id="{{item.id}}" bindtap="goToAthlete" aria-label="查看{{item.name}}的运动员档案">
+            <view class="list-row-main"><view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}} · {{item.body}}</text></view><view class="list-row-value">{{item.load}}</view></view>
+            <view class="athlete-summary"><text>课次 {{item.sessionCount}}</text><text>时长 {{item.duration}}</text><text>距离 {{item.distance}}</text></view>
+          </button>
+        </view>
+        <block wx:else><template is="training-state" data="{{loading, error: error || trainingError, message: athleteQuery ? '未找到匹配运动员' : '暂无可管理运动员', chart: false}}" /></block>
+        <pager-nav data-key="athletes" page="{{athletePager.page}}" page-count="{{athletePager.pageCount}}" total="{{athletePager.total}}" label="运动员" bindpagechange="onAthletePagerChange" />
       </view>
-      <block wx:else><template is="training-state" data="{{loading, error: error || trainingError, message: athleteQuery ? '未找到匹配运动员' : '暂无可管理运动员', chart: false}}" /></block>
-      <pager-nav data-key="athletes" page="{{athletePager.page}}" page-count="{{athletePager.pageCount}}" total="{{athletePager.total}}" label="运动员" bindpagechange="onAthletePagerChange" />
-    </view>
+    </block>
 
   </block>
 </view>

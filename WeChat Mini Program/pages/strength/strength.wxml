@@ -131,5 +131,5 @@
       <view wx:if="{{!records.length}}" class="card"><template is="training-state" data="{{loading, error: error || trainingError, message: '暂无训练数据', chart: false}}" /></view>
     </block>
   </block>
-  <template is="training-athletes" data="{{loading, error, athleteRows, athletePager, athleteTotal, athleteQuery}}" />
+  <template wx:if="{{user && user.role !== 'ATL'}}" is="training-athletes" data="{{loading, error, athleteRows, athletePager, athleteTotal, athleteQuery}}" />
 </view>
