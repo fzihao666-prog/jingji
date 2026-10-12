@@ -2,7 +2,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { z } from 'zod';
 import multer from 'multer';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { db } from './core/db.ts';
 import {
   beijingDate,
@@ -301,8 +301,30 @@ app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD'
 
 const distPath = resolve(process.cwd(), 'dist');
 if (existsSync(distPath)) {
-  app.use(express.static(distPath));
-  app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(resolve(distPath, 'index.html')));
+  // 带内容 hash 的构建产物可长期缓存；无 hash 文件与 HTML 必须每次重新验证，否则发布后拿不到新版本。
+  const hashedAssetPattern = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
+  app.use(
+    '/assets',
+    express.static(resolve(distPath, 'assets'), {
+      setHeaders: (res, filePath) => {
+        res.setHeader(
+          'Cache-Control',
+          hashedAssetPattern.test(basename(filePath))
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache',
+        );
+      },
+    }),
+  );
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+    }),
+  );
+  app.get(/^(?!\/api).*/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(resolve(distPath, 'index.html'));
+  });
 }
 
 app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {

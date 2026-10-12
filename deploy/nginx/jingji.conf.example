@@ -25,6 +25,15 @@ server {
     # 比 Multer 的单文件 80 MiB 限制略大，预留 multipart 边界与表单字段开销。
     client_max_body_size 85m;
 
+    # Express 不压缩响应，JS/CSS 的 gzip 必须在 Nginx 层完成；默认 gzip_types 只含 text/html，
+    # 不覆盖类型时 /assets/*.js、*.css 会以明文传输，首屏体积放大约 3 倍。
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
     # Express 默认监听 127.0.0.1:8787；不要将该端口暴露到公网。
     location /api/ {
         proxy_pass http://127.0.0.1:8787;

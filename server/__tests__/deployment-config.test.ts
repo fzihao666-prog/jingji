@@ -25,4 +25,25 @@ describe('Nginx 发布示例', () => {
     expect(serverSource).toContain("const host = process.env.HOST || '127.0.0.1';");
     expect(serverSource).toContain('app.listen(port, host');
   });
+
+  it('在 Nginx 层压缩 JS/CSS，避免明文传输放大首屏体积', () => {
+    const config = readFileSync(resolve(process.cwd(), 'deploy/nginx/jingji.conf.example'), 'utf8');
+
+    expect(config).toContain('gzip on;');
+    expect(config).toContain('gzip_proxied any;');
+    expect(config).toMatch(/gzip_types[^;]*text\/css/);
+    expect(config).toMatch(/gzip_types[^;]*text\/javascript/);
+    expect(config).toMatch(/gzip_types[^;]*application\/javascript/);
+    expect(config).toMatch(/gzip_types[^;]*application\/json/);
+  });
+
+  it('静态资源缓存策略：带内容 hash 的资产长缓存，HTML 与无 hash 文件每次重新验证', () => {
+    const serverSource = readFileSync(resolve(process.cwd(), 'server/index.ts'), 'utf8');
+
+    expect(serverSource).toContain('public, max-age=31536000, immutable');
+    // 顶层 express.static 与 SPA 回退都必须发 no-cache，否则发布后浏览器拿不到新版本。
+    const noCacheCount = serverSource.split("res.setHeader('Cache-Control', 'no-cache')").length - 1;
+    expect(noCacheCount).toBeGreaterThanOrEqual(2);
+    expect(serverSource).toMatch(/hashedAssetPattern\.test\(basename\(filePath\)\)/);
+  });
 });

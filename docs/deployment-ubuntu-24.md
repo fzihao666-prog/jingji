@@ -251,6 +251,13 @@ server {
 
     client_max_body_size 20m;
 
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
     location / {
         proxy_pass http://127.0.0.1:8787;
         proxy_http_version 1.1;
@@ -267,6 +274,8 @@ rm -f /etc/nginx/sites-enabled/gdb.jingjity.xin
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 ```
+
+gzip 配置必须覆盖 `text/javascript`/`application/javascript` 与 `text/css`：Nginx 默认只压缩 `text/html`，而 Express 不压缩响应，缺了它 `/assets/*.js`、`*.css` 会以明文传输，首屏体积放大约 3 倍。静态资源的 `Cache-Control` 由应用发出（带内容 hash 的 `/assets` 文件一年 `immutable`，HTML 与无 hash 文件 `no-cache`），Nginx 不要再叠加 `expires`/`add_header Cache-Control`，避免重复响应头。
 
 验证公网 HTTPS：
 
