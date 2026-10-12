@@ -278,6 +278,26 @@ curl -I http://jingjity.xin/
 
 每次更新都在 Mac 先构建推送，再在服务器切换标签；绝不在 ECS 使用 `docker compose build`。
 
+### 6.1 一键脚本（推荐）
+
+`scripts/release.sh` 封装了下面的手动命令，在 Mac 本地执行：
+
+```bash
+# 日常发布：构建推送当前 HEAD 短 SHA 并部署（工作区有未提交改动会被拦截）
+bash scripts/release.sh
+
+# 回滚 / 重新部署已推送的旧标签（跳过构建）
+bash scripts/release.sh --tag 896c3e6
+
+# 只构建推送镜像，不部署；或先预览将执行的命令
+bash scripts/release.sh --build-only
+bash scripts/release.sh --dry-run
+```
+
+脚本行为：校验标签必须是十六进制 Git 短 SHA，`docker buildx build --platform linux/amd64 --push` 推送后 SSH 到服务器更新 `.env.compose`、`pull && up -d`，最后做 `curl 127.0.0.1:8787` 健康检查；失败时自动打印容器最近日志并提示回滚命令。镜像地址、服务器与 SSH 私钥可通过环境变量 `IMAGE`、`DEPLOY_USER`、`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`REMOTE_DIR` 覆盖。
+
+### 6.2 手动命令
+
 ```bash
 # Mac：提交代码、构建并推送。
 cd /Users/firstmac/code/jingji/jingji
