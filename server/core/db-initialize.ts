@@ -1,4 +1,3 @@
-import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import { PROVINCES } from '../../shared/regions.ts';
@@ -96,7 +95,6 @@ export function initializeDatabase(
     team TEXT,
     gender TEXT,
     birth_date TEXT,
-    identity_number TEXT,
     native_place TEXT,
     phone TEXT,
     region TEXT,
@@ -632,9 +630,6 @@ export function initializeDatabase(
   if (!hasColumn('registration_requests', 'county')) {
     db.exec('ALTER TABLE registration_requests ADD COLUMN county TEXT');
   }
-  if (!hasColumn('registration_requests', 'identity_number')) {
-    db.exec('ALTER TABLE registration_requests ADD COLUMN identity_number TEXT');
-  }
   if (!hasColumn('registration_requests', 'native_place')) {
     db.exec('ALTER TABLE registration_requests ADD COLUMN native_place TEXT');
   }
@@ -760,7 +755,6 @@ export function initializeDatabase(
         team TEXT,
         gender TEXT,
         birth_date TEXT,
-        identity_number TEXT,
         native_place TEXT,
         phone TEXT,
         region TEXT,
@@ -773,12 +767,12 @@ export function initializeDatabase(
         FOREIGN KEY (reviewed_by) REFERENCES users(id)
       );
       INSERT INTO registration_requests_access_v2 (
-        id, username, password_hash, display_name, requested_role, project, team, gender, birth_date, identity_number, native_place, phone,
+        id, username, password_hash, display_name, requested_role, project, team, gender, birth_date, native_place, phone,
         region, city, county, status, reviewed_by, reviewed_at, created_at
       )
       SELECT id, username, password_hash, display_name,
         CASE requested_role WHEN 'athlete' THEN 'ATL' WHEN 'coach' THEN 'SCC' ELSE requested_role END,
-        project, team, gender, birth_date, identity_number, native_place, phone, region, city, county, status, reviewed_by, reviewed_at, created_at
+        project, team, gender, birth_date, native_place, phone, region, city, county, status, reviewed_by, reviewed_at, created_at
       FROM registration_requests;
       DROP TABLE registration_requests;
       ALTER TABLE registration_requests_access_v2 RENAME TO registration_requests;
@@ -791,21 +785,6 @@ export function initializeDatabase(
       throw error;
     } finally {
       db.exec('PRAGMA foreign_keys = ON');
-    }
-  }
-
-  // 只在迁移中为历史待审核申请补生日；新注册与审核不依赖身份证。
-  const legacyRegistrations = db.prepare(
-    "SELECT id, identity_number FROM registration_requests WHERE status = 'pending' AND (birth_date IS NULL OR birth_date = '') AND identity_number IS NOT NULL"
-  ).all() as Array<{ id: number; identity_number: string }>;
-  const migrationToday = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const fillLegacyBirthDate = db.prepare('UPDATE registration_requests SET birth_date = ? WHERE id = ?');
-  for (const request of legacyRegistrations) {
-    if (!/^\d{17}[\dX]$/i.test(request.identity_number)) continue;
-    const digits = request.identity_number.slice(6, 14);
-    const birthDate = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
-    if (!validateRegistrationDemographics({ gender: '男', birthDate }, migrationToday).birthDate) {
-      fillLegacyBirthDate.run(birthDate, request.id);
     }
   }
 
@@ -840,7 +819,6 @@ export function initializeDatabase(
 
   CREATE TABLE IF NOT EXISTS athlete_profiles (
     athlete_id INTEGER PRIMARY KEY,
-    identity_number TEXT NOT NULL DEFAULT '',
     ethnicity TEXT NOT NULL DEFAULT '汉族',
     phone TEXT NOT NULL DEFAULT '',
     blood_type TEXT NOT NULL DEFAULT '',
@@ -2113,7 +2091,8 @@ export function initializeDatabase(
       if (
         mergedAccount.get(`account_role_merge_v1:${user.id}`) ||
         existingScope.get(user.id, user.id, user.id)
-      ) continue;
+      )
+        continue;
 
       if (user.role === 'DMD' || user.role === 'TD') {
         insertArea.run(user.id, 'national', '', '', '', admin.id);

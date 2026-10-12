@@ -1,5 +1,5 @@
 const PERSONAL_FIELDS = [
-  'name', 'gender', 'birthDate', 'identityNumber', 'ethnicity', 'phone', 'bloodType',
+  'name', 'gender', 'birthDate', 'ethnicity', 'phone', 'bloodType',
   'emergencyContact', 'emergencyPhone', 'education', 'technicalLevel', 'athletePosition',
   'healthStatus', 'bestResult', 'nativePlace', 'homeAddress', 'athleteStatus',
   'startSportDate', 'trainingVenue', 'currentEvent', 'trainingPhase', 'campPeriod',

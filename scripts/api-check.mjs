@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
+import * as XLSX from '@e965/xlsx';
 import { DatabaseSync } from 'node:sqlite';
 import { checkCoachDailyTodos } from './coach-daily-todos-api-check.mjs';
 import { checkMiniDailyTodoFlow } from './coach-daily-todos-mini-check.mjs';
@@ -70,7 +71,6 @@ function ownAthleteProfilePayload(athlete) {
     city: athlete.city,
     county: athlete.county,
     birthDate: athlete.birthDate || '',
-    identityNumber: athlete.identityNumber || '',
     ethnicity: athlete.ethnicity || '',
     phone: athlete.phone || '',
     bloodType: athlete.bloodType || '',
@@ -225,6 +225,52 @@ try {
       unifiedExportBuffer.byteLength > 2048,
     '统一数据导出接口失败'
   );
+
+  // 仅使用隔离验收库和合成字段，验证旧模板敏感列不会再次进入暂存或导出。
+  const exportedWorkbook = XLSX.read(unifiedExportBuffer, { type: 'array' });
+  assert(
+    exportedWorkbook.SheetNames.every((name) =>
+      !JSON.stringify(XLSX.utils.sheet_to_json(exportedWorkbook.Sheets[name], { header: 1 })).includes('身份证')
+    ),
+    '统一导出仍存在身份证列'
+  );
+  assert(
+    adminAthletesForAnalysis.payload.athletes.every((athlete) => !('identityNumber' in athlete)),
+    '运动员接口仍返回身份证字段'
+  );
+  const downloadedTemplate = await fetch(`${base}/api/data-import/template`, { headers: { authorization: `Bearer ${adminToken}` } });
+  assert(downloadedTemplate.status === 200, '统一模板下载失败');
+  const templateWorkbook = XLSX.read(await downloadedTemplate.arrayBuffer(), { type: 'array' });
+  assert(templateWorkbook.SheetNames.every((name) => !JSON.stringify(XLSX.utils.sheet_to_json(templateWorkbook.Sheets[name], { header: 1 })).includes('身份证')), '下载模板仍含身份证字段');
+  const legacyWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(legacyWorkbook, XLSX.utils.aoa_to_sheet([
+    ['姓名', '运动项目', '所属队伍', '性别', '出生日期', '身份证号'],
+    ['清理回归', 'ROWING', analysisAthlete.team, '女', '1996-02-29', 'LEGACY_IDENTIFIER_MUST_NOT_BE_STORED'],
+  ]), '运动员信息');
+  const legacyForm = new FormData();
+  legacyForm.append('project', 'ROWING');
+  legacyForm.append('file', new Blob([XLSX.write(legacyWorkbook, { type: 'buffer', bookType: 'xlsx' })], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }), 'synthetic-legacy-profile.xlsx');
+  const legacyImport = await request('/api/data-import/analyze', { method: 'POST', body: legacyForm }, adminToken);
+  assert(
+    legacyImport.status === 200 && legacyImport.payload.batch.items.length === 1 &&
+      legacyImport.payload.batch.items[0].payload.birthDate === '1996-02-29' &&
+      legacyImport.payload.batch.items[0].payload.gender === '女' &&
+      !JSON.stringify(legacyImport.payload).includes('LEGACY_IDENTIFIER_MUST_NOT_BE_STORED') &&
+      !JSON.stringify(legacyImport.payload).includes('identityNumber'),
+    '旧模板身份证列未被忽略或独立生日性别未保存'
+  );
+  const verificationDb = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    for (const table of ['registration_requests', 'athlete_profiles']) {
+      assert(!verificationDb.prepare(`PRAGMA table_info(${table})`).all().some((column) => column.name === 'identity_number'), '新数据库仍创建身份证字段');
+    }
+    assert(!verificationDb.prepare('SELECT payload_json FROM data_import_items').all().some((row) => String(row.payload_json).includes('LEGACY_IDENTIFIER_MUST_NOT_BE_STORED')), '导入暂存仍保存旧身份证值');
+    assert(verificationDb.prepare('PRAGMA foreign_key_check').all().length === 0 && verificationDb.prepare('PRAGMA integrity_check').get().integrity_check === 'ok', '验收数据库完整性失败');
+  } finally {
+    verificationDb.close();
+  }
 
   const forbiddenAdminIndividualOverview = await request(
     `/api/overview?from=2020-01-01&to=2100-12-31&athleteId=${analysisAthlete.id}&project=${encodeURIComponent(analysisAthlete.project)}`,

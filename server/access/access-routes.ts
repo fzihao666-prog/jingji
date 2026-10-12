@@ -185,7 +185,7 @@ export function registerAccessRoutes(app: Express) {
         .prepare(
           `
       SELECT id, username, display_name AS displayName, requested_role AS requestedRole,
-        project, team, gender, birth_date AS birthDate, identity_number AS identityNumber, native_place AS nativePlace, phone, status,
+        project, team, gender, birth_date AS birthDate, native_place AS nativePlace, phone, status,
         created_at AS createdAt, reviewed_at AS reviewedAt
       FROM registration_requests WHERE status = ? ORDER BY created_at ASC
     `
@@ -198,7 +198,6 @@ export function registerAccessRoutes(app: Express) {
         project: string;
         team: string;
         gender: string | null;
-        identityNumber: string | null;
         birthDate: string | null;
         nativePlace: string | null;
         phone: string | null;

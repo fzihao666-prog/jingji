@@ -117,7 +117,7 @@ git commit -m "feat: support personal special training analysis"
 - [ ] **Step 1: 写入失败搜索测试**
 
 ```ts
-it('按姓名、队伍、编号和小项归一化过滤', () => { const athletes = [{ id: 7, name: '张 三', team: '一队', identityNumber: 'A-07', specialties: '单人艇' }]; expect(filterAnalysisAthletes(athletes, '张三')).toHaveLength(1); expect(filterAnalysisAthletes(athletes, ' a-07 ')).toHaveLength(1); expect(filterAnalysisAthletes(athletes, '单人艇')).toHaveLength(1); });
+it('按姓名、队伍和小项归一化过滤', () => { const athletes = [{ id: 7, name: '张 三', team: '一队', specialties: '单人艇' }]; expect(filterAnalysisAthletes(athletes, '张三')).toHaveLength(1); expect(filterAnalysisAthletes(athletes, '单人艇')).toHaveLength(1); });
 ```
 
 - [ ] **Step 2: 运行并确认搜索函数不存在**

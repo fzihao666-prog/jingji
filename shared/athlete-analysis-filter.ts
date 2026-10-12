@@ -2,7 +2,6 @@ export type AthleteAnalysisSearchable = {
   id: number;
   name: string;
   team: string;
-  identityNumber?: string;
   specialties?: string;
 };
 
@@ -17,7 +16,7 @@ export function filterAnalysisAthletes<T extends AthleteAnalysisSearchable>(
   const keyword = normalized(query.trim());
   if (!keyword) return athletes;
   return athletes.filter((athlete) =>
-    [athlete.name, athlete.team, athlete.identityNumber || '', athlete.specialties || '']
+    [athlete.name, athlete.team, athlete.specialties || '']
       .map(normalized)
       .some((value) => value.includes(keyword))
   );

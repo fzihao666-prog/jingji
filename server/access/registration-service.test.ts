@@ -26,14 +26,14 @@ beforeAll(async () => {
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
     CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT);
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT, source TEXT, quality TEXT);
-    CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, identity_number TEXT, native_place TEXT, phone TEXT, created_at TEXT, updated_at TEXT);
+    CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, native_place TEXT, phone TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE user_area_permissions (user_id INTEGER, area_level TEXT, province TEXT, city TEXT, county TEXT, granted_by INTEGER);
     CREATE TABLE user_project_permissions (user_id INTEGER, project TEXT, granted_by INTEGER);
     CREATE TABLE user_team_permissions (user_id INTEGER, project TEXT, team TEXT, granted_by INTEGER);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER, category TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER, UNIQUE(coach_user_id,athlete_id));
-    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT, birth_date TEXT, status TEXT, identity_number TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT);
+    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT, birth_date TEXT, status TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT);
   `);
   activate = (await import('./registration-service.ts')).activateRegistrationRequest;

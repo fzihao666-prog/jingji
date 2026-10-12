@@ -129,15 +129,14 @@ export function activateRegistrationRequest(
       }
       db.prepare(
         `
-      INSERT INTO athlete_profiles (athlete_id, identity_number, native_place, phone, created_at)
-      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO athlete_profiles (athlete_id, native_place, phone, created_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(athlete_id) DO UPDATE SET
-        identity_number = COALESCE(NULLIF(excluded.identity_number, ''), athlete_profiles.identity_number),
         native_place = COALESCE(NULLIF(excluded.native_place, ''), athlete_profiles.native_place),
         phone = COALESCE(NULLIF(excluded.phone, ''), athlete_profiles.phone),
         updated_at = CURRENT_TIMESTAMP
     `
-      ).run(athleteId, '', request.native_place || '', request.phone || '');
+      ).run(athleteId, request.native_place || '', request.phone || '');
     }
 
     const result = db

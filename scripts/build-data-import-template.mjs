@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SpreadsheetFile, Workbook } from '@oai/artifact-tool';
-import * as XLSX from '@e965/xlsx';
 
 const root = process.cwd();
 const outputDir = path.join(root, 'outputs', '01a01fe6-6dc2-7c31-84c4-8e5b342a602a');
@@ -13,6 +12,7 @@ const filledFilename = '竞迹统一数据导入模板_已修复.xlsx';
 // 直接从国家赛艇队原始测试表抽取运动员和测试指标，避免依赖曾损坏表头的中间文件。
 const filledRowsBySheet = new Map();
 if (filledMode) {
+  const XLSX = await import('@e965/xlsx');
   const files = [
     'E:/Code_Project/sport/文档/data/国家赛艇队力量素质测试数据统计表20260214.xlsx',
     'E:/Code_Project/sport/文档/data/国家赛艇队力量素质测试数据统计表.xlsx',
@@ -187,7 +187,6 @@ if (filledMode) {
       group,
       athlete.gender,
       `${birthYear}-${String((index % 12) + 1).padStart(2, '0')}-${String((index % 27) + 1).padStart(2, '0')}`,
-      '',
       ...place,
       '汉族',
       '',
@@ -456,7 +455,7 @@ function dataSheet(name, headers, note, validations = {}) {
         : 12;
     if (/日期/.test(header))
       sheet.getRangeByIndexes(3, index, 997, 1).setNumberFormat('yyyy-mm-dd');
-    if (/身份证号|手机号|紧急电话/.test(header))
+    if (/手机号|紧急电话/.test(header))
       sheet.getRangeByIndexes(3, index, 997, 1).setNumberFormat('@');
     const values = validations[header];
     if (values)
@@ -518,7 +517,7 @@ instructions.getRange('A4:F8').values = [
     '红色错误必须修正',
     '在新运动员审核区批量或逐人选择队伍',
     '黄色警告允许人工确认后提交',
-    '身份证为18位，末位可为X',
+    '出生日期和性别请独立填写',
   ],
   [
     '5',
@@ -567,7 +566,6 @@ dataSheet(
     '所属队伍',
     '性别',
     '出生日期',
-    '身份证号',
     '省份',
     '城市',
     '区县',
@@ -878,6 +876,7 @@ dictionary.getRange('A:G').format.columnWidth = 18;
 dictionary.freezePanes.freezeRows(3);
 
 await fs.mkdir(outputDir, { recursive: true });
+workbook.recalculate();
 const output = await SpreadsheetFile.exportXlsx(workbook);
 const outputFilename = filledMode ? filledFilename : filename;
 await output.save(path.join(outputDir, outputFilename));

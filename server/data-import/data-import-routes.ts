@@ -66,7 +66,6 @@ export const unifiedExportHeaders: Array<[string, string[]]> = [
       '所属队伍',
       '性别',
       '出生日期',
-      '身份证号',
       '省份',
       '城市',
       '区县',
@@ -341,7 +340,7 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
     .prepare(
       `
     SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, a.birth_date, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-      ap.identity_number, ap.ethnicity, ap.phone, ap.blood_type, ap.emergency_contact, ap.emergency_phone,
+      ap.ethnicity, ap.phone, ap.blood_type, ap.emergency_contact, ap.emergency_phone,
       ap.education, ap.technical_level, ap.position, ap.health_status, ap.best_result, ap.native_place,
       ap.home_address, ap.athlete_status, ap.start_sport_date, ap.training_venue, ap.current_event,
       ap.training_phase, ap.camp_period, ap.origin_place, ap.origin_unit, ap.origin_coach, ap.specialties, ap.notes
@@ -363,7 +362,6 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
       row.team,
       row.gender,
       row.birth_date,
-      row.identity_number,
       row.region,
       row.city,
       row.county,

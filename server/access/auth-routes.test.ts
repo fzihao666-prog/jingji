@@ -50,7 +50,7 @@ beforeAll(async () => {
       role TEXT, athlete_id INTEGER, active INTEGER DEFAULT 1, session_version INTEGER DEFAULT 0);
     CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT UNIQUE, status TEXT DEFAULT 'pending',
       password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT,
-      birth_date TEXT, identity_number TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
+      birth_date TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
     INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
@@ -288,11 +288,9 @@ describe('独立注册人口信息', () => {
     expect(response.status).toBe(201);
     expect(
       db
-        .prepare(
-          'SELECT gender,birth_date,identity_number FROM registration_requests WHERE username=?'
-        )
+        .prepare('SELECT gender,birth_date FROM registration_requests WHERE username=?')
         .get(registrationInput.username)
-    ).toEqual({ gender: '女', birth_date: '2000-02-29', identity_number: null });
+    ).toEqual({ gender: '女', birth_date: '2000-02-29' });
   });
   it.each([
     { gender: undefined },
@@ -307,25 +305,23 @@ describe('独立注册人口信息', () => {
   });
 });
 
-it('旧客户端身份证被忽略且不改变主动填写的生日性别', async () => {
-  const response = await registerInput({
-    ...registrationInput,
-    role: 'ATL',
-    identityNumber: '510107200101011234',
-  });
-  expect(response.status).toBe(201);
-  expect(
-    db
-      .prepare(
-        'SELECT gender,birth_date,identity_number FROM registration_requests WHERE username=?'
-      )
-      .get(registrationInput.username)
-  ).toEqual({ gender: '女', birth_date: '2000-02-29', identity_number: null });
-});
-it('拒绝申请重提保留历史身份证并独立更新生日性别', async () => {
-  db.exec(
-    "UPDATE registration_requests SET identity_number='510107200101011234' WHERE username='rejected_user'"
-  );
+it.each(['identityNumber', 'identity_number'])(
+  '拒绝历史证件字段 %s 且不创建申请',
+  async (field) => {
+    const response = await registerInput({
+      ...registrationInput,
+      role: 'ATL',
+      [field]: '不应采集',
+    });
+    expect(response.status).toBe(400);
+    expect(
+      db
+        .prepare('SELECT id FROM registration_requests WHERE username=?')
+        .get(registrationInput.username)
+    ).toBeUndefined();
+  }
+);
+it('拒绝申请重提独立更新生日性别', async () => {
   const response = await registerInput({
     ...registrationInput,
     role: 'SCC',
@@ -334,9 +330,7 @@ it('拒绝申请重提保留历史身份证并独立更新生日性别', async (
   expect(response.status).toBe(201);
   expect(
     db
-      .prepare(
-        "SELECT gender,birth_date,identity_number FROM registration_requests WHERE username='rejected_user'"
-      )
+      .prepare("SELECT gender,birth_date FROM registration_requests WHERE username='rejected_user'")
       .get()
-  ).toEqual({ gender: '女', birth_date: '2000-02-29', identity_number: '510107200101011234' });
+  ).toEqual({ gender: '女', birth_date: '2000-02-29' });
 });

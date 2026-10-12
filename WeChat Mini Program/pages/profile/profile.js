@@ -2,7 +2,7 @@ const api = require('../../services/api');
 const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { loadWithGuard } = require('../../utils/request-guard');
 const { ageAt, todayBeijing } = require('../../utils/date');
-const { number, maskIdentity, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
+const { number, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
 const { radarGroupView, wellnessTrendsView } = require('../../utils/profile-views');
@@ -62,8 +62,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['训练阶段', athlete.trainingPhase || '--'],
     ['健康状态', athlete.healthStatus || '--'],
     ['最好成绩', athlete.bestResult || '--'],
-    ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--'],
-    ['身份信息', athlete.identityNumber ? maskIdentity(athlete.identityNumber) : '--']
+    ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--']
   ].map(([label, value]) => ({ label, value }));
   const primaryLabels = new Set(['项目', '队伍', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));

@@ -26,6 +26,19 @@ describe('个人资料提交格式', () => {
     expect(result).not.toHaveProperty('isAdmin');
   });
 
+  it('仅提交个人资料允许的字段，生日与性别独立保留', () => {
+    const result = personalProfilePayload({ name: '测试姓名', gender: '女', birthDate: '2006-9-3' });
+    expect(Object.keys(result)).toEqual([
+      'name', 'gender', 'birthDate', 'ethnicity', 'phone', 'bloodType',
+      'emergencyContact', 'emergencyPhone', 'education', 'technicalLevel', 'athletePosition',
+      'healthStatus', 'bestResult', 'nativePlace', 'homeAddress', 'athleteStatus',
+      'startSportDate', 'trainingVenue', 'currentEvent', 'trainingPhase', 'campPeriod',
+      'originPlace', 'originUnit', 'originCoach', 'specialties', 'notes'
+    ]);
+    expect(result.gender).toBe('女');
+    expect(result.birthDate).toBe('2006-09-03');
+  });
+
   it.each([' ', '测', '测'.repeat(21)])('提前拒绝不符合服务端长度的姓名：%s', (name) => {
     expect(() => personalProfilePayload({ name })).toThrow('姓名须为2—20个字符。');
   });

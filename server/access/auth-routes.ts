@@ -199,7 +199,12 @@ export function registerAuthRoutes(
             : requestedRoleInput;
       const project = cleanString(req.body?.project);
       const team = cleanString(req.body?.team);
-      // 兼容旧客户端的多余字段，但身份证不参与注册校验或持久化。
+      if (
+        Object.hasOwn(req.body || {}, 'identityNumber') ||
+        Object.hasOwn(req.body || {}, 'identity_number')
+      ) {
+        return res.status(400).json({ message: '注册申请包含不支持的字段。' });
+      }
       const demographicInput = z
         .object({ gender: z.string().max(1), birthDate: z.string().max(10) })
         .safeParse(req.body);

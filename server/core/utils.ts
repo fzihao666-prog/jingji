@@ -21,25 +21,6 @@ export function cleanString(value: unknown) {
   return String(value ?? '').trim();
 }
 
-export function birthDateFromIdentityNumber(identityNumber: string) {
-  if (!/^\d{17}[\dX]$/.test(identityNumber)) return '';
-  const year = identityNumber.slice(6, 10);
-  const month = identityNumber.slice(10, 12);
-  const day = identityNumber.slice(12, 14);
-  const numericMonth = Number(month);
-  const numericDay = Number(day);
-  if (numericMonth < 1 || numericMonth > 12 || numericDay < 1 || numericDay > 31) return '';
-  const candidate = new Date(Date.UTC(Number(year), numericMonth - 1, numericDay));
-  if (
-    candidate.getUTCFullYear() !== Number(year) ||
-    candidate.getUTCMonth() !== numericMonth - 1 ||
-    candidate.getUTCDate() !== numericDay
-  ) {
-    return '';
-  }
-  return `${year}-${month}-${day}`;
-}
-
 export function userById(userId: number): AuthUser | null {
   const row = db
     .prepare(

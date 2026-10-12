@@ -22,7 +22,7 @@ function currentDate() {
 function profileForm(athlete) {
   const fields = [
     'name', 'project', 'team', 'gender', 'region', 'city', 'county', 'birthDate',
-    'identityNumber', 'ethnicity', 'phone', 'bloodType', 'emergencyContact',
+    'ethnicity', 'phone', 'bloodType', 'emergencyContact',
     'emergencyPhone', 'education', 'technicalLevel', 'athletePosition', 'healthStatus',
     'bestResult', 'nativePlace', 'homeAddress', 'athleteStatus', 'startSportDate',
     'trainingVenue', 'currentEvent', 'trainingPhase', 'campPeriod', 'originPlace',
@@ -49,6 +49,7 @@ Page({
     body: {},
     genderOptions: ['暂不填写', '男', '女'],
     genderIndex: 0,
+    today: '',
     healthOptions: ['健康', '观察', '训练受限', '康复中'],
     healthIndex: 0,
     statusOptions: ['在训', '集训', '休整', '离队'],
@@ -61,6 +62,7 @@ Page({
   },
 
   onLoad() {
+    this.setData({ today: currentDate() });
     if (wx.onNeedPrivacyAuthorization) {
       this._privacyListener = (resolve) => {
         this._resolvePrivacyAuthorization = resolve;
@@ -126,6 +128,10 @@ Page({
 
   onBodyInput(event) {
     this.setData({ [`body.${event.currentTarget.dataset.field}`]: event.detail.value, bodyTouched: true });
+  },
+
+  onBirthDateChange(event) {
+    this.setData({ 'form.birthDate': event.detail.value });
   },
 
   onGenderChange(event) {

@@ -15,12 +15,6 @@ function number(value, digits = 1) {
   return digits ? rounded.replace(/\.0+$/, '') : rounded;
 }
 
-function maskIdentity(value) {
-  if (!value) return '未录入';
-  if (value.length < 8) return '已保护';
-  return `${value.slice(0, 3)}***********${value.slice(-4)}`;
-}
-
 function maskPhone(value) {
   if (!value) return '未录入';
   if (value.length < 7) return '已保护';
@@ -69,7 +63,6 @@ module.exports = {
   INJURY_LABELS,
   STRENGTH_METRICS,
   number,
-  maskIdentity,
   maskPhone,
   strengthMetricRows,
   raceTime,

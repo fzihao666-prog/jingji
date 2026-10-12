@@ -38,7 +38,6 @@ type AthleteForm = {
   name: string;
   gender: string;
   birthDate: string;
-  identityNumber: string;
   ethnicity: string;
   phone: string;
   bloodType: string;
@@ -77,7 +76,6 @@ const blankForm: AthleteForm = {
   name: '',
   gender: '',
   birthDate: '',
-  identityNumber: '',
   ethnicity: '汉族',
   phone: '',
   bloodType: '',
@@ -1065,19 +1063,6 @@ export function AthleteManagementPage({
                           type="date"
                           value={form.birthDate}
                           onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
-                        />
-                      </label>
-                      <label>
-                        <span>身份证号</span>
-                        <input
-                          value={form.identityNumber}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              identityNumber: event.target.value.toUpperCase(),
-                            })
-                          }
-                          maxLength={18}
                         />
                       </label>
                       <label>

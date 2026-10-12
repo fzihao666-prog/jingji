@@ -15,7 +15,6 @@ import {
   accessibleAthleteIds,
 } from '../core/permissions.ts';
 import {
-  birthDateFromIdentityNumber,
   cleanString,
   isValidIsoDate,
   numberOrNull,
@@ -573,7 +572,6 @@ export function registerAthleteRoutes(app: Express) {
     SELECT a.id, a.name, a.project, COALESCE(pt.name, a.team, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       CASE WHEN a.photo_url IS NOT NULL AND a.photo_url != '' THEN '/api/athletes/' || a.id || '/photo' ELSE '' END AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
       EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
-      COALESCE(ap.identity_number, '') AS identityNumber,
       COALESCE(ap.ethnicity, '汉族') AS ethnicity, COALESCE(ap.phone, '') AS phone,
       COALESCE(ap.blood_type, '') AS bloodType, COALESCE(ap.emergency_contact, '') AS emergencyContact,
       COALESCE(ap.emergency_phone, '') AS emergencyPhone, COALESCE(ap.education, '') AS education,
@@ -666,7 +664,6 @@ export function registerAthleteRoutes(app: Express) {
       rightLegLeanKg: number | null;
       bodyMeasurementDate: string | null;
       bodyMeasurementNote: string;
-      identityNumber: string;
       ethnicity: string;
       phone: string;
       bloodType: string;

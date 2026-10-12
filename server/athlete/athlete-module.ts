@@ -18,12 +18,7 @@ import {
   permissionsAllowProjectTeam,
 } from '../core/permissions.ts';
 import type { AreaPermission, AuthUser, ScopeAthlete } from '../core/shared-server.ts';
-import {
-  birthDateFromIdentityNumber,
-  cleanString,
-  userById,
-  validatePersonName,
-} from '../core/utils.ts';
+import { cleanString, userById, validatePersonName } from '../core/utils.ts';
 
 export const athleteHealthStatuses = new Set(['健康', '观察', '训练受限', '康复中']);
 export const athleteTrainingStatuses = new Set(['在训', '集训', '休整', '离队']);
@@ -38,7 +33,6 @@ export function readAthleteAdminPayload(body: Record<string, unknown>) {
     city: cleanString(body.city) || '未设置',
     county: cleanString(body.county) || '未设置',
     birthDate: cleanString(body.birthDate),
-    identityNumber: cleanString(body.identityNumber).toUpperCase(),
     ethnicity: cleanString(body.ethnicity) || '汉族',
     phone: cleanString(body.phone),
     bloodType: cleanString(body.bloodType),
@@ -79,8 +73,6 @@ export function athletePayloadErrors(payload: ReturnType<typeof readAthleteAdmin
     errors.push('请选择有效的所属队伍');
   if (payload.gender && !['男', '女'].includes(payload.gender))
     errors.push('运动员性别应为男、女或暂不填写');
-  if (payload.identityNumber && !/^\d{17}[\dX]$/.test(payload.identityNumber))
-    errors.push('身份证号格式不正确');
   if (payload.phone && !/^1\d{10}$/.test(payload.phone)) errors.push('手机号须为11位');
   if (payload.emergencyPhone && !/^1\d{10}$/.test(payload.emergencyPhone))
     errors.push('紧急联系电话须为11位');
@@ -123,13 +115,13 @@ export function upsertAthleteProfile(
   db.prepare(
     `
     INSERT INTO athlete_profiles (
-      athlete_id, identity_number, ethnicity, phone, blood_type, emergency_contact, emergency_phone,
+      athlete_id, ethnicity, phone, blood_type, emergency_contact, emergency_phone,
       education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status,
       start_sport_date, training_venue, current_event, training_phase, camp_period, origin_place,
       origin_unit, origin_coach, specialties, notes, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(athlete_id) DO UPDATE SET
-      identity_number = excluded.identity_number, ethnicity = excluded.ethnicity, phone = excluded.phone,
+      ethnicity = excluded.ethnicity, phone = excluded.phone,
       blood_type = excluded.blood_type, emergency_contact = excluded.emergency_contact,
       emergency_phone = excluded.emergency_phone, education = excluded.education,
       technical_level = excluded.technical_level, position = excluded.position, health_status = excluded.health_status,
@@ -143,7 +135,6 @@ export function upsertAthleteProfile(
   `
   ).run(
     athleteId,
-    payload.identityNumber,
     payload.ethnicity,
     payload.phone,
     payload.bloodType,
@@ -181,7 +172,6 @@ export const selfAthleteProfileSchema = z.strictObject({
   city: athleteProfileText(80).optional(),
   county: athleteProfileText(80).optional(),
   birthDate: optionalIsoDate,
-  identityNumber: athleteProfileText(18),
   ethnicity: athleteProfileText(40),
   phone: athleteProfileText(20),
   bloodType: athleteProfileText(8),
@@ -221,7 +211,6 @@ export function selfAthleteProfileValidationMessage(error: z.ZodError) {
     region: '省份',
     city: '城市',
     county: '区县',
-    identityNumber: '身份证号',
     ethnicity: '民族',
     phone: '本人手机',
     bloodType: '血型',

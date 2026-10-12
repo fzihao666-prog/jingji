@@ -89,7 +89,6 @@ export type Athlete = {
   rightLegLeanKg: number | null;
   bodyMeasurementDate: string | null;
   bodyMeasurementNote: string;
-  identityNumber: string;
   ethnicity: string;
   phone: string;
   bloodType: string;
@@ -474,7 +473,6 @@ export type RegistrationRequest = {
   project: string | null;
   team: string | null;
   gender: string | null;
-  identityNumber: string | null;
   birthDate: string | null;
   nativePlace: string | null;
   phone: string | null;

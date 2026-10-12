@@ -21,6 +21,50 @@ describe('运动员个人资料编辑', () => {
     expect(templateSource).toContain('组织归属由管理人员维护');
   });
 
+  it('独立日期选择后保存生日，并保留性别', async () => {
+    const payloadModule = { exports: {} };
+    vm.runInNewContext(readFileSync(new URL('../../utils/profile-payload.js', import.meta.url), 'utf8'), { module: payloadModule });
+    let definition;
+    let saved;
+    const app = { globalData: {}, setProject() {} };
+    const api = { async updateMyAthleteProfile(payload) { saved = payload; } };
+    vm.runInNewContext(pageSource, {
+      Page(value) { definition = value; },
+      wx: { showToast() {} },
+      getApp() { return app; },
+      setTimeout() {},
+      require(path) {
+        if (path === '../../services/api') return api;
+        if (path === '../../utils/profile-payload') return payloadModule.exports;
+        if (path === '../../utils/date') return { todayBeijing() { return '2026-10-12'; } };
+        if (path === '../../utils/context') return { async loadContext() { return {}; } };
+        return {};
+      },
+    });
+    const page = {
+      ...definition,
+      data: { ...definition.data, form: { name: '测试姓名', gender: '女', birthDate: '2006-09-03' } },
+      setData(values) {
+        const { 'form.birthDate': birthDate, ...rest } = values;
+        Object.assign(this.data, rest);
+        if (birthDate !== undefined) this.data.form.birthDate = birthDate;
+      },
+      loadPage() {},
+    };
+    page.onLoad();
+    expect(page.data.today).toBe('2026-10-12');
+    page.onBirthDateChange({ detail: { value: '2007-10-01' } });
+    await page.save();
+    expect(saved.birthDate).toBe('2007-10-01');
+    expect(saved.gender).toBe('女');
+    expect(page.data.error).toBe('');
+    expect(templateSource).toContain('mode="date"');
+    expect(templateSource).toContain('end="{{today}}"');
+    expect(templateSource).toContain('bindchange="onBirthDateChange"');
+    expect(templateSource).toContain('aria-label="出生日期，{{form.birthDate');
+    expect(templateSource).toContain('aria-label="性别，{{genderOptions[genderIndex]}}"');
+  });
+
   it('保存本人资料不依赖可能过期的地区授权副本', () => {
     const routeStart = serverSource.indexOf("app.put('/api/me/athlete-profile'");
     expect(routeStart).toBeGreaterThanOrEqual(0);
@@ -40,7 +84,7 @@ describe('运动员个人资料编辑', () => {
     };
     vm.runInNewContext(pageSource, {
       Page(value) { definition = value; }, wx,
-      require() { return {}; },
+      require(path) { return path === '../../utils/date' ? { todayBeijing() { return '2026-10-12'; } } : {}; },
     });
     const page = { ...definition, data: { ...definition.data }, setData(values) { Object.assign(this.data, values); }, loadPage() {} };
     page.onLoad();

@@ -1,14 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
 import { db } from '../core/db.ts';
+import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
 import {
   inferStrengthBodyPosition,
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v6：训练课次保留时长、距离的缺失语义，避免空单元格被写成真实 0。
+// v7：忽略旧模板中的证件列，不再将证件资料写入待审核数据。
 // 同一文件重新上传时会按新版本重新解析，而不是复用旧的待审核批次。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v6-training-volume-presence';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v7-profile-data-minimization';
 
 export type ImportAthlete = {
   id: number;
@@ -226,6 +227,28 @@ function parseDate(value: unknown, yearHint: number): string {
   match = raw.match(/^(\d{1,2})-(\d{1,2})$/);
   if (match) return `${yearHint}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
   return '';
+}
+
+export function parseImportBirthDate(
+  value: unknown,
+  today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
+): string {
+  let candidate = '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    candidate = dateToIso(value);
+  } else if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) {
+      candidate = `${String(parsed.y).padStart(4, '0')}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    }
+  } else {
+    const normalized = text(value).replace(/年|\//g, '-').replace(/月|\./g, '-').replace(/日/g, '');
+    const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (match) candidate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  }
+  return validateRegistrationDemographics({ gender: '男', birthDate: candidate }, today).birthDate
+    ? ''
+    : candidate;
 }
 
 function dateFromName(value: string, yearHint: number) {
@@ -804,17 +827,17 @@ function parseStandardSheet(
       messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
 
     if (sheet === '运动员信息') {
-      const identityNumber = standardText(row, header.columns, '身份证号');
       const gender = standardText(row, header.columns, '性别');
-      if (identityNumber && !/^\d{17}[\dXx]$/.test(identityNumber))
-        messages.push('错误：身份证号应为18位，末位可为X');
+      const rawBirthDate = standardValue(row, header.columns, '出生日期');
+      const birthDate = parseImportBirthDate(rawBirthDate);
+      if (text(rawBirthDate) && !birthDate)
+        messages.push('错误：出生日期须为有效日期且不能晚于今天');
       if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
       const payload = {
         project: standardText(row, header.columns, '运动项目') || project,
         team: standardText(row, header.columns, '所属队伍'),
         gender,
-        birthDate: parseDate(standardValue(row, header.columns, '出生日期'), year),
-        identityNumber,
+        birthDate,
         region: standardText(row, header.columns, '省份'),
         city: standardText(row, header.columns, '城市'),
         county: standardText(row, header.columns, '区县'),
@@ -1596,7 +1619,7 @@ export function analyzeDataImport(input: {
         candidate.city || text(input.defaultArea?.city) || '未设置',
         candidate.county || text(input.defaultArea?.county) || '未设置',
         candidate.sourceSheet,
-        JSON.stringify(['将创建无登录账号的运动员档案，身份证、出生日期、联系方式等资料可稍后补充'])
+        JSON.stringify(['将创建无登录账号的运动员档案，出生日期、联系方式等资料可稍后补充'])
       );
     }
     db.exec('COMMIT');
@@ -2191,12 +2214,11 @@ function upsertAthleteProfileItem(item: DataImportItemView, batchId: string) {
     item.athleteId
   );
   db.prepare(
-    `INSERT INTO athlete_profiles (athlete_id, identity_number, ethnicity, phone, blood_type, emergency_contact, emergency_phone, education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status, start_sport_date, training_venue, current_event, training_phase, camp_period, origin_place, origin_unit, origin_coach, specialties, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(athlete_id) DO UPDATE SET identity_number=COALESCE(NULLIF(excluded.identity_number,''),athlete_profiles.identity_number), ethnicity=COALESCE(NULLIF(excluded.ethnicity,''),athlete_profiles.ethnicity), phone=COALESCE(NULLIF(excluded.phone,''),athlete_profiles.phone), blood_type=COALESCE(NULLIF(excluded.blood_type,''),athlete_profiles.blood_type), emergency_contact=COALESCE(NULLIF(excluded.emergency_contact,''),athlete_profiles.emergency_contact), emergency_phone=COALESCE(NULLIF(excluded.emergency_phone,''),athlete_profiles.emergency_phone), education=COALESCE(NULLIF(excluded.education,''),athlete_profiles.education), technical_level=COALESCE(NULLIF(excluded.technical_level,''),athlete_profiles.technical_level), position=COALESCE(NULLIF(excluded.position,''),athlete_profiles.position), health_status=COALESCE(NULLIF(excluded.health_status,''),athlete_profiles.health_status), best_result=COALESCE(NULLIF(excluded.best_result,''),athlete_profiles.best_result), native_place=COALESCE(NULLIF(excluded.native_place,''),athlete_profiles.native_place), home_address=COALESCE(NULLIF(excluded.home_address,''),athlete_profiles.home_address), athlete_status=COALESCE(NULLIF(excluded.athlete_status,''),athlete_profiles.athlete_status), start_sport_date=COALESCE(NULLIF(excluded.start_sport_date,''),athlete_profiles.start_sport_date), training_venue=COALESCE(NULLIF(excluded.training_venue,''),athlete_profiles.training_venue), current_event=COALESCE(NULLIF(excluded.current_event,''),athlete_profiles.current_event), training_phase=COALESCE(NULLIF(excluded.training_phase,''),athlete_profiles.training_phase), camp_period=COALESCE(NULLIF(excluded.camp_period,''),athlete_profiles.camp_period), origin_place=COALESCE(NULLIF(excluded.origin_place,''),athlete_profiles.origin_place), origin_unit=COALESCE(NULLIF(excluded.origin_unit,''),athlete_profiles.origin_unit), origin_coach=COALESCE(NULLIF(excluded.origin_coach,''),athlete_profiles.origin_coach), specialties=COALESCE(NULLIF(excluded.specialties,''),athlete_profiles.specialties), notes=COALESCE(NULLIF(excluded.notes,''),athlete_profiles.notes), updated_at=CURRENT_TIMESTAMP`
+    `INSERT INTO athlete_profiles (athlete_id, ethnicity, phone, blood_type, emergency_contact, emergency_phone, education, technical_level, position, health_status, best_result, native_place, home_address, athlete_status, start_sport_date, training_venue, current_event, training_phase, camp_period, origin_place, origin_unit, origin_coach, specialties, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(athlete_id) DO UPDATE SET ethnicity=COALESCE(NULLIF(excluded.ethnicity,''),athlete_profiles.ethnicity), phone=COALESCE(NULLIF(excluded.phone,''),athlete_profiles.phone), blood_type=COALESCE(NULLIF(excluded.blood_type,''),athlete_profiles.blood_type), emergency_contact=COALESCE(NULLIF(excluded.emergency_contact,''),athlete_profiles.emergency_contact), emergency_phone=COALESCE(NULLIF(excluded.emergency_phone,''),athlete_profiles.emergency_phone), education=COALESCE(NULLIF(excluded.education,''),athlete_profiles.education), technical_level=COALESCE(NULLIF(excluded.technical_level,''),athlete_profiles.technical_level), position=COALESCE(NULLIF(excluded.position,''),athlete_profiles.position), health_status=COALESCE(NULLIF(excluded.health_status,''),athlete_profiles.health_status), best_result=COALESCE(NULLIF(excluded.best_result,''),athlete_profiles.best_result), native_place=COALESCE(NULLIF(excluded.native_place,''),athlete_profiles.native_place), home_address=COALESCE(NULLIF(excluded.home_address,''),athlete_profiles.home_address), athlete_status=COALESCE(NULLIF(excluded.athlete_status,''),athlete_profiles.athlete_status), start_sport_date=COALESCE(NULLIF(excluded.start_sport_date,''),athlete_profiles.start_sport_date), training_venue=COALESCE(NULLIF(excluded.training_venue,''),athlete_profiles.training_venue), current_event=COALESCE(NULLIF(excluded.current_event,''),athlete_profiles.current_event), training_phase=COALESCE(NULLIF(excluded.training_phase,''),athlete_profiles.training_phase), camp_period=COALESCE(NULLIF(excluded.camp_period,''),athlete_profiles.camp_period), origin_place=COALESCE(NULLIF(excluded.origin_place,''),athlete_profiles.origin_place), origin_unit=COALESCE(NULLIF(excluded.origin_unit,''),athlete_profiles.origin_unit), origin_coach=COALESCE(NULLIF(excluded.origin_coach,''),athlete_profiles.origin_coach), specialties=COALESCE(NULLIF(excluded.specialties,''),athlete_profiles.specialties), notes=COALESCE(NULLIF(excluded.notes,''),athlete_profiles.notes), updated_at=CURRENT_TIMESTAMP`
   ).run(
     item.athleteId,
-    text(p.identityNumber).toUpperCase(),
     text(p.ethnicity),
     text(p.phone),
     text(p.bloodType),

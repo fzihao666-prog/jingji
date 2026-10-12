@@ -13,3 +13,9 @@ data/.jwt-secret
 tmp/
 .idea/
 **/.DS_Store
+
+/outputs/01a01fe6-6dc2-7c31-84c4-8e5b342a602a/竞迹统一数据导入模板.xlsx
+
+/outputs/01a01fe6-6dc2-7c31-84c4-8e5b342a602a/竞迹统一数据导入模板_已修复.xlsx
+
+/data/identity-removal-backups/

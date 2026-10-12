@@ -264,7 +264,7 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
             )}
             <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
               <AthleteAnalysisSelector
-                athletes={athletes.map((athlete) => ({ ...athlete, identityNumber: '', specialties: '' }))}
+                athletes={athletes.map((athlete) => ({ ...athlete, specialties: '' }))}
                 selectedAthleteId={selectedAthleteId}
                 onSelect={setSelectedAthleteId}
                 onClear={() => setSelectedAthleteId(null)}
