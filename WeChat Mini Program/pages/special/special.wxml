@@ -12,7 +12,7 @@
 
   <view class="training-page-status" aria-live="polite">
     <text>{{loading ? '正在加载训练数据' : (error || trainingError || testError || championError || '按当前筛选范围展示数据')}}</text>
-    <button class="mini-button" disabled="{{loading}}" bindtap="loadPage">{{loading ? '正在加载' : (error || trainingError || testError || championError ? '重试' : '刷新')}}</button>
+    <button wx:if="{{!loading && (error || trainingError || testError || championError)}}" class="mini-button" bindtap="loadPage">重试</button>
   </view>
 
   <block>

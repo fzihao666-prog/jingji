@@ -9,7 +9,7 @@
   <view class="privacy-notice"><image src="/assets/shield-check.svg" mode="aspectFit" />敏感信息已按权限脱敏展示</view>
   <view class="training-page-status" aria-live="polite">
     <text>{{loading ? '正在加载运动员档案' : (error || moduleError || (!selectedAthleteId ? '暂无可查看运动员' : '按当前筛选范围展示数据'))}}</text>
-    <button class="mini-button" disabled="{{loading}}" bindtap="loadPage">{{loading ? '正在加载' : (error || moduleError ? '重试' : '刷新')}}</button>
+    <button wx:if="{{!loading && (error || moduleError)}}" class="mini-button" bindtap="loadPage">重试</button>
   </view>
 
   <block>
