@@ -490,7 +490,7 @@ export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
               tick={{ fill: '#829399', fontSize: 8 }}
               axisLine={false}
             />
-            <Tooltip formatter={(value) => isPlaceholder ? '示例数据，仅用于展示图表效果' : value === null ? '未测试' : `${value}分`} />
+            <Tooltip formatter={(value) => isPlaceholder ? '示例数据，仅用于展示图表效果' : value === null ? '待采集' : `${value}分`} />
             <Radar
               dataKey="score"
               name="指标评分"
@@ -507,7 +507,7 @@ export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
         {data.map((item) => (
           <div key={item.key}>
             <span>{item.label}</span>
-            <strong>{item.score === null ? '未测试' : `${item.score}分`}</strong>
+            <strong>{item.score === null ? '待采集' : `${item.score}分`}</strong>
             <small>{item.basis}</small>
           </div>
         ))}

@@ -5,7 +5,7 @@ export const CANOE_MODEL_STANDARD = {
   title: '皮划艇训练负荷监测标准',
   decision: '独立项目口径',
   decisionNote: '皮划艇与赛艇分别统计；当前仅依据训练负荷、恢复状态和教练标记进行周期判断。',
-  missingDataRule: '未采集的数据统一显示“未测试”，不按0分处理。',
+  missingDataRule: '未采集的数据统一显示“待采集”，不按0分处理。',
   zones: [
     { key: 'target', label: '目标区', color: '#168f8a', automation: '正常状态' },
     { key: 'improve', label: '可改善区', color: '#d9a326', automation: '关注状态' },

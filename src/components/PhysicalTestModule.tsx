@@ -324,7 +324,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                           )}
                           <p>有效测试人数：{isPlaceholder ? '—' : `${row.count} 人`}</p>
                           <p>
-                            参考标准（{standard?.label ?? '暂无适用标准'}）：
+                            参考标准（{standard?.label ?? '待参考'}）：
                             {standard ? `${formatNumber(standard.value, 1)} ${unit}` : '—'}
                           </p>
                           <p>
@@ -381,7 +381,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
           <aside className="physical-test-standard">
             <h3>标准对比</h3>
             <p className="physical-test-standard-source">
-              {definition.label}（{unit}）· {standard ? standard.note : '暂无适用标准'}
+              {definition.label}（{unit}）· {standard ? standard.note : '待参考'}
             </p>
             <dl>
               <div>

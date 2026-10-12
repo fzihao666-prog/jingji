@@ -136,7 +136,7 @@ export function SpecialChampionModel({ project }: { project: Project }) {
   ) : !events.length ? (
     <ContentState
       kind="empty"
-      title="模型数据待配置"
+      title="待配置"
       description={`尚未配置${label}的专项细分项目与标杆成绩。`}
     />
   ) : (

@@ -16,8 +16,8 @@
   background: #e8895f;
 }
 
-.composition-band.未测试,
-.composition-legend i.未测试 {
+.composition-band.待采集,
+.composition-legend i.待采集 {
   background: repeating-linear-gradient(135deg, #d7e1e3 0 3px, #edf2f3 3px 6px);
 }
 /* stylelint-enable selector-class-pattern */

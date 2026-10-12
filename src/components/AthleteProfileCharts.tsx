@@ -57,10 +57,10 @@ function chartDomain(values: number[], minimumPadding: number): [number, number]
 }
 
 type AgeBin = { group: string; male: number; female: number; start: number; end: number };
-type CompositionBand = '偏低' | '目标范围' | '偏高' | '未测试';
+type CompositionBand = '偏低' | '目标范围' | '偏高' | '待采集';
 
 function compositionBand(value: number | null, lower: number, upper: number): CompositionBand {
-  if (value === null || !Number.isFinite(value)) return '未测试';
+  if (value === null || !Number.isFinite(value)) return '待采集';
   if (value < lower) return '偏低';
   if (value > upper) return '偏高';
   return '目标范围';
@@ -267,7 +267,7 @@ export function AthleteProfileOverview({
   const maxWeight = weights.length ? Math.max(...weights) : null;
   const compositionRows = ['体重', 'BMI', '体脂率', '脂肪量', '骨骼肌量', '去脂体重'].map(
     (label) => {
-      const counts: Record<CompositionBand, number> = { 偏低: 0, 目标范围: 0, 偏高: 0, 未测试: 0 };
+      const counts: Record<CompositionBand, number> = { 偏低: 0, 目标范围: 0, 偏高: 0, 待采集: 0 };
       for (const profile of profiles) {
         const band =
           bodyCompositionStatus(profile)[label as keyof ReturnType<typeof bodyCompositionStatus>];
@@ -557,16 +557,16 @@ export function AthleteProfileOverview({
                 <div
                   className="composition-stack"
                   role="img"
-                  aria-label={`${row.label}：偏低${row.偏低}人，目标范围${row.目标范围}人，偏高${row.偏高}人，未测试${row.未测试}人`}
+                  aria-label={`${row.label}：偏低${row.偏低}人，目标范围${row.目标范围}人，偏高${row.偏高}人，待采集${row.待采集}人`}
                 >
-                  {(['偏低', '目标范围', '偏高', '未测试'] as CompositionBand[]).map((band) =>
+                  {(['偏低', '目标范围', '偏高', '待采集'] as CompositionBand[]).map((band) =>
                     row.sample ? (
                       <span
                         key={band}
                         className={`composition-band ${band}`}
                         style={{ width: `${(row[band] / row.sample) * 100}%` }}
                       />
-                    ) : band === '未测试' ? <span key={band} className="composition-band sample" style={{ width: '100%' }} /> : null
+                    ) : band === '待采集' ? <span key={band} className="composition-band sample" style={{ width: '100%' }} /> : null
                   )}
                 </div>
                 <small>{row.sample ? `${row.sample} 人` : '暂无数据'}</small>
@@ -587,8 +587,8 @@ export function AthleteProfileOverview({
               偏高
             </span>
             <span>
-              <i className="未测试" />
-              未测试
+              <i className="待采集" />
+              待采集
             </span>
             <em>体重按 BMI 区间判定</em>
           </footer>

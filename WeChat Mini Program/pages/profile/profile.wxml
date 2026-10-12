@@ -31,11 +31,11 @@
     <view class="section-head"><view class="section-head-title">制胜要素分析</view><view class="section-head-note">目标达成制，不用于选材或伤病诊断</view></view>
     <view class="card">
       <block wx:if="{{benchmarkSummary}}"><view class="benchmark-score"><view><text>综合结果</text><text class="benchmark-value">{{benchmarkSummary.score}}</text></view><view><text>达成指标</text><text class="benchmark-value">{{benchmarkSummary.achieved}}/{{benchmarkSummary.comparable}}</text></view></view><view class="notice"><text>主要差距：{{benchmarkSummary.primaryGap}}</text><text class="notice-line">数据来源：{{benchmarkSummary.source}}</text></view></block>
-      <block wx:else><template is="training-state" data="{{loading, error: error || benchmarkError, message: '暂无参考标准', chart: false}}" /></block>
+      <block wx:else><template is="training-state" data="{{loading, error: error || benchmarkError, message: '待配置', chart: false}}" /></block>
     </view>
 
     <view class="section-head"><view class="section-head-title">力量测试个人评价</view><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view></view>
-    <view class="card"><template wx:if="{{!latestTestDate || overviewError}}" is="training-state" data="{{loading, error: error || overviewError, message: '暂无测试数据'}}" /><view wx:if="{{testMetrics.length}}" class="ratio-list"><view wx:for="{{testMetrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">暂无力量测试数据</view></view></view>
+    <view class="card"><template wx:if="{{!latestTestDate || overviewError}}" is="training-state" data="{{loading, error: error || overviewError, message: '待采集'}}" /><view wx:if="{{testMetrics.length}}" class="ratio-list"><view wx:for="{{testMetrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">待采集</view></view></view>
 
     <view class="section-head injury-head">
       <view class="injury-head-copy">

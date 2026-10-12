@@ -456,7 +456,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
                                     }));
                                     setDraftNotice('');
                                   }}
-                                  placeholder="未测试"
+                                  placeholder="待采集"
                                 />
                                 <span>{metric.unit}</span>
                               </div>
@@ -529,7 +529,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
                   />
                   <p className="archive-preview-rule">
                     <ShieldCheck size={15} />
-                    空白项目保持“未测试”，不会记为0分；雷达图随输入实时更新。
+                    空白项目保持“待采集”，不会记为0分；雷达图随输入实时更新。
                   </p>
                 </aside>
               </div>
@@ -689,7 +689,7 @@ function ArchiveSheet({
         />
       </section>
       <footer className="archive-sheet-note">
-        <span>评分说明：单项按实测值与满分标准／教练目标折算，满分10分；未测试不记0分。</span>
+        <span>评分说明：单项按实测值与满分标准／教练目标折算，满分10分；待采集不记0分。</span>
         <span>数据更新：{test.updatedBy}</span>
       </footer>
     </div>
@@ -937,7 +937,7 @@ function scoreClass(score: number | null) {
 function metricBasicValue(test: StrengthTest, key: StrengthMetricKey, fallback?: number | null) {
   const metric = STRENGTH_METRIC_MAP[key];
   const value = test.metrics[key] ?? fallback;
-  return typeof value === 'number' ? `${formatNumber(value, 1)}${metric.unit}` : '未测试';
+  return typeof value === 'number' ? `${formatNumber(value, 1)}${metric.unit}` : '待采集';
 }
 function blankForm() {
   return Object.fromEntries(STRENGTH_METRICS.map((metric) => [metric.key, ''])) as FormValues;

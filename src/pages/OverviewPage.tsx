@@ -459,7 +459,7 @@ export function OverviewPage(props: Props) {
           <PerformanceRadarChart data={radar} />
         )}
         <p className="analysis-method-note">
-          评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；未测试项不计0分。
+          评分只反映教练目标达成、双侧差异和本周期恢复记录，不用于选材或伤病诊断；待采集项不计0分。
         </p>
       </AppCard>
     ),
@@ -737,7 +737,7 @@ function MovementMatrix({
             <strong>{row.label}</strong>
             <small>{row.detail}</small>
           </span>
-          <b>{row.value || '待补测'}</b>
+          <b>{row.value || '待采集'}</b>
         </div>
       ))}
     </div>

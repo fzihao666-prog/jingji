@@ -51,7 +51,7 @@ export const ROWING_MODEL_STANDARD = {
   title: '国家赛艇队数据分析模型体系',
   decision: '保留原分级，新增监测项',
   decisionNote: '截至2026年7月，未发现可公开验证、可直接替换现有国家队阈值的统一数值分级表。',
-  missingDataRule: '未采集的数据统一显示“未测试”，不按0分处理。',
+  missingDataRule: '未采集的数据统一显示“待采集”，不按0分处理。',
   zones: [
     { key: 'target', label: '目标区', color: '#1a9b83', automation: '现有正常状态可自动归入' },
     { key: 'improve', label: '可改善区', color: '#d9a326', automation: '现有关注状态可自动归入' },
