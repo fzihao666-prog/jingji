@@ -33,7 +33,7 @@ function buildView(overview, comparison, from, to) {
   const valueOrDash = (value, divisor = 1) => typeof value === 'number' && Number.isFinite(value) ? metricValue(value / divisor) : '--';
   const metrics = [
     { label: '累计训练量', value: valueOrDash(summary.totalDurationMin, 60), unit: '小时', note: '当前周期', tone: '' },
-    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-purple' },
+    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-blue' },
     { label: '体能训练', value: valueOrDash(summary.physicalDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-teal' },
     { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-green' },
     { label: '训练负荷', value: metricValue(loadRatio.totalLoad, 0), unit: 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' },
