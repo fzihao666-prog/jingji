@@ -48,14 +48,7 @@
 .focus-tags { min-width: 0; max-width: 60%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6rpx; }
 .focus-tag { flex: none; padding: 4rpx 12rpx; border-radius: 999rpx; color: #7a4715; background: #fff1d8; font-size: 19rpx; }
 .focus-row .todo-note { margin-top: 7rpx; }
-.focus-card .todo-note, .team-overview .todo-note { color: #536c75; font-size: 22rpx; line-height: 1.5; overflow-wrap: break-word; }
-.team-search { box-sizing: border-box; margin-bottom: 10rpx; }
-.team-athlete-row { margin-top: 10rpx; padding: 14rpx 16rpx; background: transparent; border-radius: 0; }
-.team-athlete-head { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; }
-.team-athlete-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.team-athlete-tags { display: flex; flex-wrap: wrap; gap: 8rpx; margin-top: 8rpx; }
-.team-athlete-row .todo-note { margin-top: 6rpx; }
-.team-overview pager-nav { display: block; margin-top: 12rpx; }
+.focus-card .todo-note { color: #536c75; font-size: 22rpx; line-height: 1.5; overflow-wrap: break-word; }
 /* 运动员今日状态：负荷摘要优先，训练与恢复分别呈现状态和操作。 */
 .today-status { margin-top: 20rpx; padding: 24rpx; }
 .today-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12rpx; margin-bottom: 20rpx; }

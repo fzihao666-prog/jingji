@@ -42,7 +42,19 @@ describe('训练总览移动端布局', () => {
     expect(overviewStyle).not.toMatch(/\.trend-chart\s*\{[^}]*min-width\s*:/);
     expect(overviewStyle).toContain('width: 100%');
     expect(overview).toContain('data-key="focus"');
-    expect(overview).toContain('data-key="team"');
+    expect(overview).toContain('athlete-selector');
+    expect(overview).toContain('bind:select="onTeamAthleteSelect"');
+    expect(overview).toContain('bind:detail="onTeamAthleteDetail"');
+    expect(overview).toContain('返回团队视角');
+  });
+
+  it('训练趋势展示专项/体能并列时长柱且负荷独立成图', () => {
+    expect(overview).toContain('专项/体能训练时长');
+    expect(overview).toContain('durationTrend');
+    expect(overview).toContain('bindtap="showDurationDetail"');
+    expect(overview).toContain('训练负荷趋势');
+    expect(overview.indexOf('专项/体能训练时长')).toBeLessThan(overview.indexOf('训练负荷趋势'));
+    expect(overview.indexOf('训练负荷趋势')).toBeLessThan(overview.indexOf('训练结构'));
   });
 
   it('无真实数据时明确显示空状态，不把示例值渲染进训练总览', () => {

@@ -62,7 +62,8 @@
   "usingComponents": {
     "scope-filter": "/components/scope-filter/index",
     "pager-nav": "/components/pager-nav/index",
-    "icp-filing": "/components/icp-filing/index"
+    "icp-filing": "/components/icp-filing/index",
+    "athlete-selector": "/components/athlete-selector/index"
   },
   "style": "v2",
   "__usePrivacyCheck__": true,

@@ -28,9 +28,35 @@ button::after { border: 0; }
 .page-head { margin: 6rpx 2rpx 20rpx; }
 .page-title { color: var(--ink); font-size: 44rpx; font-weight: 800; letter-spacing: -2rpx; }
 .page-description { margin-top: 8rpx; color: var(--muted); font-size: 23rpx; line-height: 1.6; }
-.page-meta { margin-top: 10rpx; display: flex; flex-wrap: wrap; align-items: center; gap: 8rpx 16rpx; color: var(--muted); font-size: 21rpx; line-height: 1.5; }
-.page-meta .page-meta-item { display: inline-flex; align-items: center; gap: 6rpx; }
-.page-meta .page-meta-item text:first-child { color: var(--river); font-weight: 700; }
+.page-meta { margin-top: 10rpx; display: flex; flex-wrap: wrap; align-items: center; gap: 8rpx 14rpx; color: var(--muted); font-size: 21rpx; line-height: 1.5; }
+.page-meta-strong { color: var(--river); font-weight: 700; }
+.view-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 0 2rpx 16rpx;
+  padding: 14rpx 18rpx;
+  border: 1rpx solid var(--line);
+  border-radius: var(--radius-item);
+  background: var(--paper);
+}
+.view-mode-label { min-width: 0; color: var(--river); font-size: 21rpx; font-weight: 700; line-height: 1.4; }
+.view-mode-button {
+  flex: none;
+  min-height: 64rpx;
+  margin: 0;
+  padding: 0 24rpx;
+  border: 1rpx solid var(--river);
+  border-radius: 999rpx;
+  color: var(--river);
+  background: var(--paper);
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 62rpx;
+}
+.view-mode-button::after { border: 0; }
+.view-mode-button:focus { outline: 4rpx solid var(--river); outline-offset: 2rpx; }
 
 .card {
   margin-bottom: 20rpx;

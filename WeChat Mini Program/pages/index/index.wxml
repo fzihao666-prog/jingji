@@ -2,10 +2,21 @@
 <view class="page">
   <view class="page-head">
     <view class="page-title">{{meta.scope === 'individual' ? '个人训练总览' : '训练总览'}}</view>
-    <view class="page-description">{{from}} 至 {{to}} · {{projectLabel}}</view>
+    <view class="page-meta">
+      <text class="page-meta-strong">{{projectLabel}}</text>
+      <text>·</text>
+      <text>{{teamLabel || '全部授权队伍'}}</text>
+      <text>·</text>
+      <text>{{from}} 至 {{to}}</text>
+    </view>
   </view>
 
   <scope-filter projects="{{projects}}" project="{{project}}" teams="{{teams}}" team-id="{{teamId}}" show-team="{{showTeam}}" athletes="{{scopeAthletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" keyword="{{athleteKeyword}}" range="{{range}}" bindprojectchange="onScopeChange" bindteamchange="onOverviewTeamChange" bindathletechange="onOverviewAthleteChange" bindkeywordchange="onAthleteKeyword" bindrangechange="onScopeChange" />
+
+  <view wx:if="{{canViewTodos && selectedAthleteId}}" class="view-mode-bar">
+    <text class="view-mode-label">个人分析视图 · 团队趋势参照保留</text>
+    <button class="view-mode-button" bindtap="onBackToTeam" aria-label="返回团队视角">返回团队视角</button>
+  </view>
 
   <view wx:if="{{loading || error || overviewError || comparisonError}}" class="training-page-status" aria-live="polite">
     <text>{{loading ? '正在加载训练总览' : (error || overviewError || comparisonError || '')}}</text>
@@ -44,7 +55,7 @@
       </block>
     </view>
 
-    <view class="section-head"><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
+    <view class="section-head"><view class="section-head-title">核心指标</view><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
     <view class="metric-grid overview-metrics">
       <view wx:for="{{metrics}}" wx:key="label" class="metric-card {{item.tone}}">
         <view class="metric-label">{{item.label}}</view>
@@ -53,8 +64,31 @@
       </view>
     </view>
 
-    <view class="section-head"><view class="section-head-title">训练负荷趋势</view><view class="section-head-note">{{range === 'day' ? '今日' : range === 'week' ? '近7天' : '近14天'}} · AU</view></view>
+    <view class="section-head"><view class="section-head-title">训练趋势</view><view class="section-head-note">{{range === 'day' ? '今日' : range === 'week' ? '近7天' : '近14天'}} · 训练时长（小时）与训练负荷（AU）分列展示</view></view>
     <view class="card chart-card">
+      <view class="card-head">
+        <view><view class="card-head-title">专项/体能训练时长</view><view class="card-head-note">同日期并列柱状 · 小时</view></view>
+      </view>
+      <view class="chart-legend">
+        <view class="legend-item"><view class="legend-dot special" />专项训练</view>
+        <view class="legend-item"><view class="legend-dot physical" />体能训练</view>
+      </view>
+      <view class="overview-chart-stage"><view wx:if="{{durationPlaceholder || overviewError || error}}" class="overview-chart-overlay"><template is="training-state" data="{{loading, error: error || overviewError, message: '当前周期暂无真实专项或体能训练时长记录'}}" /></view>
+      <view class="trend-chart">
+        <button wx:for="{{durationTrend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showDurationDetail">
+          <view class="trend-bars">
+            <view class="trend-bar special" style="height: {{item.specialHeight}}%;" />
+            <view class="trend-bar physical" style="height: {{item.physicalHeight}}%;" />
+          </view>
+          <text class="trend-label">{{item.label}}</text>
+        </button>
+      </view>
+      </view>
+    </view>
+    <view class="card chart-card">
+      <view class="card-head">
+        <view><view class="card-head-title">训练负荷趋势</view><view class="card-head-note">sRPE · AU，与训练时长不同轴</view></view>
+      </view>
       <view class="chart-legend">
         <view class="legend-item"><view class="legend-dot accent" />{{selectedAthleteId ? '当前运动员' : '队伍训练负荷'}}</view>
         <view wx:if="{{selectedAthleteId}}" class="legend-item"><view class="legend-dot team-average" />团队参照</view>
@@ -69,9 +103,9 @@
           <text class="trend-label">{{item.label}}</text>
         </button>
       </view>
+      </view>
     </view>
 
-    </view>
     <view class="section-head"><view class="section-head-title">训练结构</view><view class="section-head-note">按训练负荷 AU</view></view>
     <view class="card structure-card">
       <view class="structure-status">{{loading ? '正在加载数据' : (error || overviewError || (!structureHasData ? '暂无可分类的训练负荷数据' : '专项、体能与恢复训练负荷'))}}</view>
@@ -124,19 +158,20 @@
       </block>
     </view>
 
-    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">队伍运动员</view><view class="section-head-note">{{teamView ? teamView.teamPager.total : 0}} 人</view></view>
-    <view wx:if="{{canViewTodos}}" class="card team-overview">
+    <block wx:if="{{canViewTodos}}">
       <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite">正在读取队伍运动员…</view>
       <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
-      <input class="todo-search team-search" type="text" value="{{teamKeyword}}" placeholder="搜索运动员姓名" bindinput="onTeamKeyword" confirm-type="search" aria-label="搜索队伍运动员" />
-      <template wx:if="{{!teamView.teamPager.total}}" is="training-state" data="{{loading: teamLoading, error: teamError || error, message: teamKeyword ? '未找到匹配运动员' : '暂无可管理运动员'}}" />
-      <button wx:for="{{teamView.athletes}}" wx:key="athleteId" class="team-athlete-row overview-person-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.hasTraining ? '已训练' : '未训练'}}，{{item.wellnessReported ? '恢复已填' : '恢复未填'}}，24 小时训练负荷 {{item.load24hText}} AU，查看运动员档案">
-        <view class="team-athlete-head"><text class="team-athlete-name">{{item.athleteName}}</text><text class="team-athlete-link">查看档案 ›</text></view>
-        <view class="team-athlete-tags"><text class="tag {{item.hasTraining ? 'ok' : 'warn'}}">{{item.hasTraining ? '已训练' : '未训练'}}</text><text class="tag {{item.wellnessReported ? 'ok' : 'warn'}}">{{item.wellnessReported ? '恢复已填' : '恢复未填'}}</text></view>
-        <view class="todo-note">{{item.load24hText}} AU · 24 小时训练负荷</view>
-      </button>
-      <pager-nav data-key="team" page="{{teamView.teamPager.page}}" page-count="{{teamView.teamPager.pageCount}}" total="{{teamView.teamPager.total}}" label="队伍运动员" bindpagechange="onPagerChange" />
-    </view>
+      <athlete-selector
+        title="队伍运动员"
+        items="{{teamView.athletes}}"
+        selected-id="{{selectedAthleteId}}"
+        loading="{{teamLoading}}"
+        error="{{teamError}}"
+        label="队伍运动员"
+        bind:select="onTeamAthleteSelect"
+        bind:detail="onTeamAthleteDetail"
+      />
+    </block>
 
   </block>
 </view>
