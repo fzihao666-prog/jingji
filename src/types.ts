@@ -480,6 +480,7 @@ export type RegistrationRequest = {
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   reviewedAt: string | null;
+  teamVerification?: 'pending' | 'verified' | null;
 };
 
 export type AreaPermission = {

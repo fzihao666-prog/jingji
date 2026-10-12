@@ -23,6 +23,7 @@ import {
   validatePersonName,
 } from '../core/utils.ts';
 import { db, upsertAthleteOrigin } from '../core/db.ts';
+import { resolveAthleteParent } from '../core/athlete-parent.ts';
 import { buildPainTrend, painTrendWindow, type PainTrendRow } from '../core/pain-trend.ts';
 import { canManageRole } from '../../shared/access.ts';
 import { athletePhotoRoot, photoUpload, transcodeAthletePhoto } from '../core/uploads.ts';
@@ -368,7 +369,12 @@ export function registerAthleteRoutes(app: Express) {
           replaceAccountScope({
             userId: athleteUser.id,
             role: 'ATL',
-            parentUserId: athleteUser.parentUserId || currentUser.id,
+            parentUserId: resolveAthleteParent({
+              athleteId,
+              parentUserId: athleteUser.parentUserId,
+              currentUser,
+              permissions,
+            }),
             permissions,
             grantedBy: currentUser.id,
           });

@@ -280,7 +280,13 @@ DMD 数据监控总监      level 5
 
 运动员注册激活在事务内处理：人工审核按姓名、项目和 `team_id` 精确匹配既有档案，拒绝已有 ATL 账号及非空性别、生日冲突，仅补齐空字段；系统自动开通只新建档案，身份唯一索引冲突时回滚并返回明确的人工核对提示，注册申请保持 pending，不能关联历史训练数据。教练始终需要人工审核。
 
-运动员注册不继承审核人区域，也不将 `athlete_profiles.native_place`（籍贯）写入行政归属。账号区域取自本人 `athlete_origins`，按当前字典保留有效的省、市、区县；未知字段留空，仍使用 `county` 行表示待完善，不新增权限级别或伪造“全国”授权。`areaPending` 是派生展示状态，不参与放行权限；历史非具体区县范围仅调整展示，不自动迁移原始数据。上级补全仍须通过旧目标的 `canManageAccount`、新范围的 `permissionsContain` 以及 `resolveParent` 校验，因此未确认省份或历史全国范围账号只能由覆盖项目与队伍的全国范围上级首次补全。保存原子同步账号范围、`athletes` 兼容字段、`athlete_origins` 与教练关系，并以 `COMPLETE_ATHLETE_AREA` 记录原范围及新范围；后续正常调整使用 `UPDATE_ACCOUNT_ACCESS`。运动员本人访问仍强制绑定 `athleteId`。
+自注册入队状态复用已有无枚举限制的 `athletes.source`，不新增表或执行数据迁移：自动开通新档案为 `self_registered`，人工新建或确认入队为 `registration_verified`，既有档案人工关联保留原来源并以审核审计作为确认依据。审核页面的“已开通”列表展示待核实记录；名册可按来源筛选。`PUT /api/admin/registrations/:id/team` 仅允许待审核申请，校验原、新项目队伍均在操作者范围并记录更正审计；正式开户仍重新核验身份与区域。`POST /api/admin/registrations/:id/verify-team` 仅处理已自动开通且待核实的 ATL，确认时绑定合法审核人为上级；拒绝时将来源置为 `self_registration_rejected`，停用账号和运动员档案、递增会话版本，保留全部历史数据。状态变化与审计同事务，失败整体回滚。入队核实不将推测行政归属升级为 valid；正式统计暂沿用既有在用运动员口径，待核实成员可被纳入，未自动排除。
+
+已开通运动员的审核列表、姓名维护与入队核实均按当前档案的项目队伍授权，转队后新队可继续核实，旧队不再获得记录。运动员资料转队在同一事务校验旧父级的启用状态、角色层级及新范围：SCC 按项目队伍覆盖，管理岗保留行政范围包含规则；不合法时回退至覆盖新范围的当前操作者并记录 `UPDATE_ATHLETE_PARENT`，没有合法回退则整次回滚。账户权限入口要求显式提交合法父级，停用或范围不覆盖的上级一律拒绝。
+
+`coach_athletes` 保持历史存档，本轮不恢复逐人指定主管或清理历史行。分配兼容入口继续仅接受与当前队伍派生集合一致的教练 ID，否则 409；转队和教练撤权在下一次查询即时反映，避免引入第二套同步事实源。
+
+运动员注册不继承审核人区域。开通事务将有效籍贯省市写为 `athlete_origins.source=registration`、`quality=estimated`，缺少或无效资料明确留空；不覆盖已有 `quality=valid` 归属，并同步 `athletes.region/city/county`。推测信息不是正式确认，区县缺失仍待完善。人工开通与后续入队核实除角色、项目、队伍外，还检查审核人行政范围是否覆盖目标归属（已有正式归属优先）。账号区域取自本人 `athlete_origins`，按当前字典保留有效的省、市、区县；未知字段留空，仍使用 `county` 行表示待完善，不新增权限级别或伪造“全国”授权。`areaPending` 是派生展示状态，不参与放行权限；历史非具体区县范围仅调整展示，不自动迁移原始数据。上级补全仍须通过旧目标的 `canManageAccount`、新范围的 `permissionsContain` 以及 `resolveParent` 校验，因此未确认省份或历史全国范围账号只能由覆盖项目与队伍的全国范围上级首次补全。保存原子同步账号范围、`athletes` 兼容字段、`athlete_origins` 与教练关系，并以 `COMPLETE_ATHLETE_AREA` 记录原范围及新范围；后续正常调整使用 `UPDATE_ACCOUNT_ACCESS`。运动员本人访问仍强制绑定 `athleteId`。
 
 ### 7.2 项目模型
 

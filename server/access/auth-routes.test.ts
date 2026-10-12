@@ -54,8 +54,15 @@ beforeAll(async () => {
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
     INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
-    CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT);
+    CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT, source TEXT DEFAULT 'manual', profile_status TEXT DEFAULT 'complete',region TEXT,city TEXT,county TEXT,active INTEGER DEFAULT 1);
     CREATE UNIQUE INDEX idx_athletes_identity ON athletes (name,project,team);
+    CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY,province TEXT,city TEXT,county TEXT,source TEXT,quality TEXT);
+    CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY,native_place TEXT,phone TEXT,created_at TEXT,updated_at TEXT);
+    CREATE TABLE user_area_permissions (user_id INTEGER,area_level TEXT,province TEXT,city TEXT,county TEXT,granted_by INTEGER);
+    CREATE TABLE user_project_permissions (user_id INTEGER,project TEXT,granted_by INTEGER);
+    CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER);
+    CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY,parent_user_id INTEGER,account_code TEXT);
+    CREATE TABLE audit_logs (user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,detail TEXT);
     CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT);
   `);
   const { registerAuthRoutes } = await import('./auth-routes.ts');
@@ -86,7 +93,7 @@ beforeEach(() => {
   afterCompare = undefined;
   passwordFailure = undefined;
   db.exec(
-    'DELETE FROM users; DELETE FROM registration_requests; DELETE FROM athletes; DELETE FROM app_metadata;'
+    'DELETE FROM users; DELETE FROM registration_requests; DELETE FROM athletes; DELETE FROM app_metadata; DELETE FROM athlete_origins; DELETE FROM athlete_profiles; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;'
   );
   const passwordHash = bcrypt.hashSync(correctPassword, 4);
   const insertUser = db.prepare(
@@ -341,14 +348,9 @@ it('拒绝申请重提独立更新生日性别', async () => {
 
 it('关闭审核时已有档案冲突明确返回错误，申请保留待人工核对', async () => {
   db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
-  db.prepare('INSERT INTO athletes VALUES (10,?,?,?,?,?,?)').run(
-    registrationInput.displayName,
-    'ROWING',
-    '测试队伍',
-    1,
-    '女',
-    '2000-02-29'
-  );
+  db.prepare(
+    'INSERT INTO athletes (id,name,project,team,team_id,gender,birth_date) VALUES (10,?,?,?,?,?,?)'
+  ).run(registrationInput.displayName, 'ROWING', '测试队伍', 1, '女', '2000-02-29');
   const response = await registerInput({ ...registrationInput, role: 'ATL' });
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({
@@ -368,4 +370,23 @@ it('关闭审核时教练申请仍保持待审核', async () => {
   const response = await registerInput({ ...registrationInput, role: 'SCC' });
   expect(response.status).toBe(201);
   expect(await response.json()).toMatchObject({ status: 'pending' });
+});
+
+it('关闭审核时运动员账号可登录，但入队来源保持待核实且归属为推测', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'ATL' });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'approved' });
+  expect(db.prepare('SELECT source,region,city,county FROM athletes').get()).toEqual({
+    source: 'self_registered',
+    region: '浙江',
+    city: '杭州市',
+    county: '',
+  });
+  expect(db.prepare('SELECT source,quality FROM athlete_origins').get()).toEqual({
+    source: 'registration',
+    quality: 'estimated',
+  });
+  const result = await login(registrationInput.username, correctPassword);
+  expect(result.status).toBe(200);
 });

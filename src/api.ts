@@ -783,6 +783,18 @@ export const api = {
       method: 'POST',
     });
   },
+  async verifyRegistrationTeam(id: number, approved: boolean) {
+    return request<{ message: string }>(`/api/admin/registrations/${id}/verify-team`, {
+      method: 'POST',
+      body: JSON.stringify({ approved }),
+    });
+  },
+  async updateRegistrationTeam(id: number, project: string, team: string) {
+    return request<{ message: string }>(`/api/admin/registrations/${id}/team`, {
+      method: 'PUT',
+      body: JSON.stringify({ project, team }),
+    });
+  },
   async renameRegistration(id: number, name: string) {
     return request<{ message: string; displayName: string }>(
       `/api/admin/registrations/${id}/name`,

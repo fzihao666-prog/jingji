@@ -4,6 +4,7 @@ import { canManageRole, type AreaLevel } from '../../shared/access.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import {
   accountPermissions,
+  areaAllowsAthlete,
   initializeAccountScope,
   permissionsAllowProjectTeam,
 } from '../core/permissions.ts';
@@ -11,7 +12,14 @@ import { DEFAULT_COACH_CATEGORY } from '../../shared/coach-categories.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 
 // 仅业务错误允许返回客户端，数据库等内部异常使用统一提示。
-class RegistrationActivationError extends Error {}
+class RegistrationActivationError extends Error {
+  constructor(
+    message: string,
+    readonly status = 400
+  ) {
+    super(message);
+  }
+}
 
 const provinceSet = new Set<string>(PROVINCES);
 
@@ -51,6 +59,36 @@ export type RegistrationActivationRow = {
 
 export type ActivationOutcome =
   { ok: true; userId: number } | { ok: false; status: number; message: string };
+
+type Origin = { province: string; city: string; county: string };
+
+function registrationOrigin(nativePlace: string | null): Origin {
+  const [province = '', city = '', ...rest] = (nativePlace || '').split('/');
+  if (rest.length || validateAccountAreas([{ areaLevel: 'city', province, city, county: '' }])) {
+    return { province: '', city: '', county: '' };
+  }
+  return { province, city, county: '' };
+}
+
+function assertReviewerArea(reviewer: AuthUser, origin: Origin, project: string, team: string) {
+  if (
+    !accountPermissions(reviewer.id).areas.some((area) =>
+      areaAllowsAthlete(area, {
+        id: 0,
+        region: origin.province,
+        city: origin.city,
+        county: origin.county,
+        project,
+        team,
+      })
+    )
+  ) {
+    throw new RegistrationActivationError(
+      '运动员行政归属超出当前账号的管辖范围，请由覆盖该区域的上级核对。',
+      403
+    );
+  }
+}
 
 export function activateRegistrationRequest(
   requestId: number,
@@ -111,7 +149,9 @@ export function activateRegistrationRequest(
           (athlete.gender && request.gender && athlete.gender !== request.gender) ||
           (athlete.birth_date && request.birth_date && athlete.birth_date !== request.birth_date)
         ) {
-          throw new RegistrationActivationError('姓名与既有档案身份信息不一致，请联系管理员核对档案或申请信息。');
+          throw new RegistrationActivationError(
+            '姓名与既有档案身份信息不一致，请联系管理员核对档案或申请信息。'
+          );
         }
         athleteId = athlete.id;
       } else {
@@ -133,7 +173,7 @@ export function activateRegistrationRequest(
         try {
           const result = db
             .prepare(
-              `INSERT INTO athletes (name, project, team, team_id, gender, birth_date) VALUES (?, ?, ?, ?, ?, ?)`
+              `INSERT INTO athletes (name, project, team, team_id, gender, birth_date, source, profile_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'incomplete')`
             )
             .run(
               request.display_name,
@@ -141,7 +181,8 @@ export function activateRegistrationRequest(
               request.team,
               team.id,
               request.gender,
-              request.birth_date || null
+              request.birth_date || null,
+              reviewer ? 'registration_verified' : 'self_registered'
             );
           athleteId = Number(result.lastInsertRowid);
         } catch (error) {
@@ -149,16 +190,40 @@ export function activateRegistrationRequest(
             error instanceof Error &&
             'errcode' in error &&
             error.errcode === 2067 && // SQLITE_CONSTRAINT_UNIQUE
-
             db
               .prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team = ?')
               .get(request.display_name, request.project, request.team)
           ) {
-            throw new RegistrationActivationError('同名同队的运动员档案已存在，已暂停开通，请联系管理员核对身份后审核。');
+            throw new RegistrationActivationError(
+              '同名同队的运动员档案已存在，已暂停开通，请联系管理员核对身份后审核。'
+            );
           }
           throw error;
         }
       }
+      const estimated = registrationOrigin(request.native_place);
+      // 籍贯只能提供推测归属；已确认的正式归属永不被注册资料覆盖。
+      db.prepare(
+        `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality)
+        VALUES (?, ?, ?, ?, 'registration', 'estimated')
+        ON CONFLICT(athlete_id) DO UPDATE SET province=excluded.province, city=excluded.city,
+          county=excluded.county, source=excluded.source, quality=excluded.quality
+        WHERE athlete_origins.quality <> 'valid'`
+      ).run(athleteId, estimated.province, estimated.city, estimated.county);
+      const origin = db
+        .prepare('SELECT province,city,county FROM athlete_origins WHERE athlete_id=?')
+        .get(athleteId) as Origin;
+      if (reviewer) assertReviewerArea(reviewer, origin, request.project, request.team);
+      db.prepare('UPDATE athletes SET region=?,city=?,county=? WHERE id=?').run(
+        origin.province,
+        origin.city,
+        origin.county,
+        athleteId
+      );
+      if (reviewer)
+        db.prepare(
+          "UPDATE athletes SET source='registration_verified' WHERE id=? AND source='self_registered'"
+        ).run(athleteId);
       const profileBirthDate = request.birth_date || null;
       if (athleteId && profileBirthDate) {
         db.prepare(
@@ -212,7 +277,7 @@ export function activateRegistrationRequest(
           county: '',
         };
     if (request.requested_role === 'ATL') {
-      // 籍贯仅保留在资料中，行政归属以运动员档案为准，不继承审核人的权限。
+      // 账号范围取正式归属或注册推测归属；缺失区县仍明确标记待完善。
       const origin = db
         .prepare('SELECT province, city, county FROM athlete_origins WHERE athlete_id = ?')
         .get(athleteId) as { province: string; city: string; county: string } | undefined;
@@ -257,8 +322,84 @@ export function activateRegistrationRequest(
     db.exec('ROLLBACK');
     return {
       ok: false,
-      status: 400,
-      message: error instanceof RegistrationActivationError ? error.message : '审核失败，请联系管理员。',
+      status: error instanceof RegistrationActivationError ? error.status : 400,
+      message:
+        error instanceof RegistrationActivationError ? error.message : '审核失败，请联系管理员。',
+    };
+  }
+}
+
+export function verifyRegistrationTeam(
+  requestId: number,
+  reviewer: AuthUser,
+  approved: boolean
+): ActivationOutcome {
+  const candidate = db
+    .prepare(
+      `SELECT u.id AS userId, a.id AS athleteId, a.project, pt.name AS team,
+      COALESCE(ao.province, '') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county
+    FROM registration_requests r JOIN users u ON u.username=r.username AND u.role='ATL'
+    JOIN athletes a ON a.id=u.athlete_id JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
+    LEFT JOIN athlete_origins ao ON ao.athlete_id=a.id
+    WHERE r.id=? AND r.status='approved' AND a.source='self_registered' AND a.active=1 AND pt.active=1`
+    )
+    .get(requestId) as
+    (Origin & { userId: number; athleteId: number; project: string; team: string }) | undefined;
+  if (!candidate) return { ok: false, status: 409, message: '该申请没有待核实的入队记录。' };
+  if (
+    !canManageRole(reviewer.role, 'ATL') ||
+    !permissionsAllowProjectTeam(accountPermissions(reviewer.id), candidate.project, candidate.team)
+  ) {
+    return { ok: false, status: 403, message: '该申请超出当前账号的管辖范围。' };
+  }
+  db.exec('BEGIN');
+  try {
+    assertReviewerArea(reviewer, candidate, candidate.project, candidate.team);
+    if (approved) {
+      db.prepare("UPDATE athletes SET source='registration_verified' WHERE id=?").run(
+        candidate.athleteId
+      );
+      db.prepare('UPDATE account_profiles SET parent_user_id=? WHERE user_id=?').run(
+        reviewer.id,
+        candidate.userId
+      );
+    } else {
+      // 拒绝入队只停用账号及档案，保留历史训练事实，便于追溯和恢复。
+      db.prepare("UPDATE athletes SET source='self_registration_rejected',active=0 WHERE id=?").run(
+        candidate.athleteId
+      );
+      db.prepare('UPDATE users SET active=0,session_version=session_version+1 WHERE id=?').run(
+        candidate.userId
+      );
+    }
+    db.prepare(
+      `UPDATE registration_requests SET status=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?`
+    ).run(approved ? 'approved' : 'rejected', reviewer.id, requestId);
+    db.prepare(
+      'INSERT INTO audit_logs (user_id,action,entity_type,entity_id,detail) VALUES (?,?,?,?,?)'
+    ).run(
+      reviewer.id,
+      approved ? 'VERIFY_REGISTRATION_TEAM' : 'REJECT_REGISTRATION_TEAM',
+      'athlete',
+      candidate.athleteId,
+      JSON.stringify({
+        requestId,
+        userId: candidate.userId,
+        project: candidate.project,
+        team: candidate.team,
+      })
+    );
+    db.exec('COMMIT');
+    return { ok: true, userId: candidate.userId };
+  } catch (error) {
+    db.exec('ROLLBACK');
+    return {
+      ok: false,
+      status: error instanceof RegistrationActivationError ? error.status : 500,
+      message:
+        error instanceof RegistrationActivationError
+          ? error.message
+          : '入队核实失败，请联系管理员。',
     };
   }
 }

@@ -7,6 +7,7 @@ import { validateAccountAreas } from '../../shared/account-regions.ts';
 import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { parentCoversAthleteScope } from '../core/athlete-parent.ts';
 import { registerResetPasswordRoutes } from './reset-password-routes.ts';
 import type { Express } from 'express';
 import { db, upsertAthleteOrigin } from '../core/db.ts';
@@ -42,6 +43,7 @@ import {
   registrationApprovalEnabled,
   setRegistrationApprovalEnabled,
   activateRegistrationRequest,
+  verifyRegistrationTeam,
 } from './registration-service.ts';
 import type { AuthUser, AreaPermission } from '../core/shared-server.ts';
 import {
@@ -139,12 +141,20 @@ export function resolveParent(
   targetPermissions: ReturnType<typeof parseScopePayload>
 ) {
   const parent = userById(parentUserId);
-  if (!parent || !canManageRole(parent.role, targetRole))
+  if (
+    !parent ||
+    !db.prepare('SELECT id FROM users WHERE id=? AND active=1').get(parentUserId) ||
+    !canManageRole(parent.role, targetRole)
+  )
     return { error: '上级账号层级不符合要求。', parent: null };
   if (parent.id !== currentUser.id && !canManageAccount(currentUser, parent)) {
     return { error: '不能选择权限范围外的上级账号。', parent: null };
   }
-  if (!permissionsContain(accountPermissions(parent.id), targetPermissions)) {
+  if (
+    !(targetRole === 'ATL'
+      ? parentCoversAthleteScope(parent.id, targetPermissions)
+      : permissionsContain(accountPermissions(parent.id), targetPermissions))
+  ) {
     return { error: '账号权限范围不能超出上级账号。', parent: null };
   }
   return { error: '', parent };
@@ -199,10 +209,16 @@ export function registerAccessRoutes(app: Express) {
       const allRequests = db
         .prepare(
           `
-      SELECT id, username, display_name AS displayName, requested_role AS requestedRole,
-        project, team, gender, birth_date AS birthDate, native_place AS nativePlace, phone, status,
-        created_at AS createdAt, reviewed_at AS reviewedAt
-      FROM registration_requests WHERE status = ? ORDER BY created_at ASC
+      SELECT r.id, r.username, r.display_name AS displayName, r.requested_role AS requestedRole,
+        CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
+        CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team, r.gender, r.birth_date AS birthDate, r.native_place AS nativePlace, r.phone, r.status,
+        r.created_at AS createdAt, r.reviewed_at AS reviewedAt,
+        CASE WHEN a.source='self_registered' THEN 'pending'
+          WHEN r.status='approved' AND r.requested_role='ATL' AND r.reviewed_by IS NOT NULL THEN 'verified' ELSE NULL END AS teamVerification
+      FROM registration_requests r LEFT JOIN users u ON u.username=r.username AND u.role='ATL'
+      LEFT JOIN athletes a ON a.id=u.athlete_id
+      LEFT JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
+      WHERE r.status = ? ORDER BY r.created_at ASC
     `
         )
         .all(status) as Array<{
@@ -274,8 +290,13 @@ export function registerAccessRoutes(app: Express) {
       const registrationScope = db
         .prepare(
           `
-      SELECT requested_role AS requestedRole, project, team
-      FROM registration_requests WHERE id = ?
+      SELECT r.requested_role AS requestedRole,
+        CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
+        CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team
+      FROM registration_requests r LEFT JOIN users u ON u.username=r.username AND u.role='ATL'
+      LEFT JOIN athletes a ON a.id=u.athlete_id
+      LEFT JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
+      WHERE r.id = ?
     `
         )
         .get(requestId) as { requestedRole: Role; project: string; team: string };
@@ -338,6 +359,83 @@ export function registerAccessRoutes(app: Express) {
     }
   );
 
+  app.put(
+    '/api/admin/registrations/:id/team',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const id = z.coerce.number().int().positive().safeParse(req.params.id);
+      const input = z
+        .strictObject({ project: z.enum(PROJECTS), team: z.string().trim().min(1).max(160) })
+        .safeParse(req.body);
+      if (!id.success || !input.success)
+        return res.status(400).json({ message: '项目或队伍参数无效。' });
+      const request = db
+        .prepare(
+          'SELECT requested_role AS role,project,team,status FROM registration_requests WHERE id=?'
+        )
+        .get(id.data) as { role: Role; project: string; team: string; status: string } | undefined;
+      if (!request) return res.status(404).json({ message: '注册申请不存在。' });
+      if (request.status !== 'pending')
+        return res.status(409).json({ message: '只能更正待审核申请的队伍。' });
+      const reviewer = req.authUser!;
+      const permissions = accountPermissions(reviewer.id);
+      if (
+        !canManageRole(reviewer.role, request.role) ||
+        !permissionsAllowProjectTeam(permissions, request.project, request.team) ||
+        !permissionsAllowProjectTeam(permissions, input.data.project, input.data.team)
+      ) {
+        return res.status(403).json({ message: '原队伍或新队伍超出当前账号的管辖范围。' });
+      }
+      if (
+        !db
+          .prepare('SELECT id FROM project_teams WHERE project=? AND name=? AND active=1')
+          .get(input.data.project, input.data.team)
+      ) {
+        return res.status(400).json({ message: '所选队伍不存在或已停用。' });
+      }
+      db.exec('BEGIN');
+      try {
+        db.prepare(
+          "UPDATE registration_requests SET project=?,team=? WHERE id=? AND status='pending'"
+        ).run(input.data.project, input.data.team, id.data);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id,action,entity_type,entity_id,detail) VALUES (?,?,?,?,?)'
+        ).run(
+          reviewer.id,
+          'UPDATE_REGISTRATION_TEAM',
+          'registration_request',
+          id.data,
+          JSON.stringify({ from: { project: request.project, team: request.team }, to: input.data })
+        );
+        db.exec('COMMIT');
+        res.json({ message: '申请队伍已更正，请核对身份与行政归属后审核。' });
+      } catch {
+        db.exec('ROLLBACK');
+        res.status(500).json({ message: '申请队伍更正失败。' });
+      }
+    }
+  );
+
+  app.post(
+    '/api/admin/registrations/:id/verify-team',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const id = z.coerce.number().int().positive().safeParse(req.params.id);
+      const input = z.strictObject({ approved: z.boolean() }).safeParse(req.body);
+      if (!id.success || !input.success)
+        return res.status(400).json({ message: '入队核实参数无效。' });
+      const outcome = verifyRegistrationTeam(id.data, req.authUser!, input.data.approved);
+      if (!outcome.ok) return res.status(outcome.status).json({ message: outcome.message });
+      res.json({
+        message: input.data.approved
+          ? '入队已核实。'
+          : '已拒绝入队并停用账号和档案，历史数据已保留。',
+      });
+    }
+  );
+
   app.post(
     '/api/admin/registrations/:id/approve',
     requireAuth,
@@ -380,19 +478,28 @@ export function registerAccessRoutes(app: Express) {
         )
       )
         return res.status(403).json({ message: '无权处理该注册申请。' });
-      const result = db
-        .prepare(
-          `
-      UPDATE registration_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND status = 'pending'
-    `
-        )
-        .run(req.authUser!.id, requestId);
-      if (!result.changes) return res.status(409).json({ message: '申请不存在或已经处理。' });
-      db.prepare(
-        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
-      ).run(req.authUser!.id, 'REJECT_REGISTRATION', 'registration_request', requestId);
-      res.json({ message: '申请已拒绝。' });
+      db.exec('BEGIN');
+      try {
+        const result = db
+          .prepare(
+            `UPDATE registration_requests
+          SET status='rejected',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP
+          WHERE id=? AND status='pending'`
+          )
+          .run(req.authUser!.id, requestId);
+        if (!result.changes) {
+          db.exec('ROLLBACK');
+          return res.status(409).json({ message: '申请不存在或已经处理。' });
+        }
+        db.prepare(
+          'INSERT INTO audit_logs (user_id,action,entity_type,entity_id) VALUES (?,?,?,?)'
+        ).run(req.authUser!.id, 'REJECT_REGISTRATION', 'registration_request', requestId);
+        db.exec('COMMIT');
+        res.json({ message: '申请已拒绝。' });
+      } catch {
+        db.exec('ROLLBACK');
+        res.status(500).json({ message: '拒绝申请失败。' });
+      }
     }
   );
 

@@ -334,7 +334,7 @@ export function registerAuthRoutes(
       if (!registrationApprovalEnabled() && requestedRole === 'ATL') {
         const activation = activateRegistrationRequest(registrationId, null);
         if (activation.ok) {
-          return res.status(201).json({ message: '注册成功，可直接登录。', status: 'approved' });
+          return res.status(201).json({ message: '注册成功，可登录；入队归属待管理员核实。', status: 'approved' });
         }
         return res
           .status(activation.status)
