@@ -325,6 +325,37 @@ docker compose --env-file .env.compose up -d --remove-orphans
 docker compose --env-file .env.compose logs --tail=200 app
 ```
 
+### 6.3 deploy：停止、启动与重启服务
+
+以下命令在 **ECS 服务器的 deploy 会话**中执行，先进入部署目录：
+
+```bash
+cd /srv/jingji
+
+# 停止应用服务，保留容器、数据库和上传文件。
+docker compose --env-file .env.compose stop app
+
+# 启动之前停止的已有容器。
+docker compose --env-file .env.compose start app
+
+# 重启应用服务。
+docker compose --env-file .env.compose restart app
+```
+
+按需选择其中一条操作命令，停止后网站暂时不可用。`start` 仅启动已有容器；首次启动、容器已被移除，或修改了镜像标签、环境变量、Compose 配置时，使用：
+
+```bash
+cd /srv/jingji
+docker compose --env-file .env.compose up -d app
+```
+
+更新镜像版本前仍需按 6.2 节执行 `pull`；`restart` 不会应用新的环境变量或 Compose 配置。启动或重启后检查状态，待应用就绪后确认 HTTP 响应：
+
+```bash
+docker compose --env-file .env.compose ps -a
+curl --fail http://127.0.0.1:8787/ >/dev/null && echo '服务正常'
+```
+
 ## 7. 备份、排障与维护
 
 容器更新不会删除 `./data`，但数据仍需异机备份。以下由 root 设置每日 SQLite 一致性备份（先安装 sqlite3）：
