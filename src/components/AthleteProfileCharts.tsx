@@ -259,12 +259,6 @@ export function AthleteProfileOverview({
     [ageBins]
   );
 
-  const heights = scatterData.map((item) => item.height);
-  const weights = scatterData.map((item) => item.weight);
-  const minHeight = heights.length ? Math.min(...heights) : null;
-  const maxHeight = heights.length ? Math.max(...heights) : null;
-  const minWeight = weights.length ? Math.min(...weights) : null;
-  const maxWeight = weights.length ? Math.max(...weights) : null;
   const compositionRows = ['体重', 'BMI', '体脂率', '脂肪量', '骨骼肌量', '去脂体重'].map(
     (label) => {
       const counts: Record<CompositionBand, number> = { 偏低: 0, 目标范围: 0, 偏高: 0, 待采集: 0 };
@@ -406,23 +400,7 @@ export function AthleteProfileOverview({
               </span>
               <i>｜</i>
               <span>
-                最小身高 <strong>{formatNumber(minHeight ?? 0, 1)} cm</strong>
-              </span>
-              <i>｜</i>
-              <span>
-                最大身高 <strong>{formatNumber(maxHeight ?? 0, 1)} cm</strong>
-              </span>
-              <i>｜</i>
-              <span>
                 平均体重 <strong>{formatNumber(weight ?? 0, 1)} kg</strong>
-              </span>
-              <i>｜</i>
-              <span>
-                最小体重 <strong>{formatNumber(minWeight ?? 0, 1)} kg</strong>
-              </span>
-              <i>｜</i>
-              <span>
-                最大体重 <strong>{formatNumber(maxWeight ?? 0, 1)} kg</strong>
               </span>
             </div>
           )}
