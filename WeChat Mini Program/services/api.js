@@ -107,8 +107,8 @@ module.exports = {
   overviewTeams(project) {
     return request(`/api/overview/teams?${query({ project })}`);
   },
-  specialTrainingOverview(from, to, project, teamId) {
-    return request(`/api/special-training/overview?${query({ from, to, project, teamId: teamId || null })}`);
+  specialTrainingOverview(from, to, project, teamId, athleteId) {
+    return request(`/api/special-training/overview?${query({ from, to, project, teamId: teamId || null, athleteId: athleteId || null })}`);
   },
   specialChampionModels(project) {
     return request(`/api/special-champion-models?${query({ project })}`);

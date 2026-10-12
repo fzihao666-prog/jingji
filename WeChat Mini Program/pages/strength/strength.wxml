@@ -131,5 +131,18 @@
       <view wx:if="{{!records.length}}" class="card"><template is="training-state" data="{{loading, error: error || trainingError, message: '暂无训练数据', chart: false}}" /></view>
     </block>
   </block>
-  <template wx:if="{{user && user.role !== 'ATL'}}" is="training-athletes" data="{{loading, error, athleteRows, athletePager, athleteTotal, athleteQuery}}" />
+  <block wx:if="{{user && user.role !== 'ATL'}}">
+    <view wx:if="{{!selectedAthleteId}}" class="notice">请先选择运动员，再查看体能分析。</view>
+    <athlete-selector
+      title="运动员"
+      note="点选切换当前体能分析对象"
+      items="{{athleteItems}}"
+      selected-id="{{selectedAthleteId}}"
+      loading="{{loading}}"
+      error="{{error}}"
+      label="运动员"
+      bind:select="onAthleteSelect"
+      bind:detail="onAthleteDetail"
+    />
+  </block>
 </view>

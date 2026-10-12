@@ -9,7 +9,7 @@ const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { injuryMetricView } = require('../../utils/injury-metric');
 const { buildSpecialTestView, EVENT_PREVIEW_COUNT } = require('../../utils/special-test-view');
 
-const { metricValue, athleteListView, sectionRequest } = require('../../utils/training-empty');
+const { metricValue, sectionRequest } = require('../../utils/training-empty');
 
 // 与服务端管理角色口径一致；仅这些角色可现场录入测试成绩。
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
@@ -58,25 +58,35 @@ function buildTrainingView(result, to) {
     (item) => item.count,
     (value) => `${number(value, 0)} 课次`
   ));
-  const athleteRows = athletes.map((athlete) => {
+  // 运动员条目归一化为 athlete-selector 形状；汇总字段保留供明细展示。
+  const athleteItems = athletes.map((athlete) => {
     const age = ageAt(athlete.birthDate, to);
     const athleteSummary = athlete.summary || {};
+    const meta = `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.team || '未分队'}`;
+    const body = athlete.weightKg == null ? '体重未录入' : `${number(athlete.weightKg)} kg`;
+    const sessionCount = metricValue(athleteSummary.sessionCount, 0);
+    const duration = athleteSummary.durationMin == null ? '--' : `${number(athleteSummary.durationMin / 60)} h`;
+    const distance = athleteSummary.distanceKm == null ? '--' : `${number(athleteSummary.distanceKm)} km`;
+    const load = athleteSummary.load == null ? '--' : `${number(athleteSummary.load)} AU`;
     return {
       id: athlete.id,
       name: athlete.name,
-      meta: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.team || '未分队'}`,
-      body: athlete.weightKg == null ? '体重未录入' : `${number(athlete.weightKg)} kg`,
-      sessionCount: metricValue(athleteSummary.sessionCount, 0),
-      duration: athleteSummary.durationMin == null ? '--' : `${number(athleteSummary.durationMin / 60)} h`,
-      distance: athleteSummary.distanceKm == null ? '--' : `${number(athleteSummary.distanceKm)} km`,
-      load: athleteSummary.load == null ? '--' : `${number(athleteSummary.load)} AU`
+      meta,
+      body,
+      sessionCount,
+      duration,
+      distance,
+      load,
+      value: load,
+      summary: [`课次 ${sessionCount}`, `时长 ${duration}`, `距离 ${distance}`],
+      searchText: `${athlete.name || ''} ${meta}`,
     };
   });
   return { metrics, trend: trend.filter((item) => Number.isFinite(item.duration) || Number.isFinite(item.distance)),
     intensity: intensity.map((row) => (training.intensity || []).length ? row : { ...row, value: '-- min', percentage: '--' }),
     content: content.map((row) => (training.content || []).length ? row : { ...row, value: '-- 课次', percentage: '--' }),
     hasIntensity: (training.intensity || []).length > 0, hasContent: (training.content || []).length > 0,
-    athleteRows, athleteRowsAll: athleteRows, athleteTotal: athletes.length, athletePager: paginateList(athleteRows, 0, PAGE_SIZE) };
+    athleteItems, athleteTotal: athletes.length, athletePager: paginateList(athleteItems, 0, PAGE_SIZE) };
 }
 
 Page({
@@ -95,7 +105,7 @@ Page({
     teamId: 0,
     championEvents: [],
     ...buildTrainingView({}, ''),
-    athleteQuery: '', trainingError: '', testError: '', championError: '',
+    viewAthleteId: 0, viewAthleteName: '', trainingError: '', testError: '', championError: '',
     athleteTotal: 0,
     // 专项测试成绩：默认少列多展开，specialTests 只保存当前可见场次。
     specialTests: [],
@@ -108,7 +118,7 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
-    this.setData({ ...buildTrainingView({}, ''), athleteQuery: '', trainingError: '', testError: '', championError: '' });
+    this.setData({ ...buildTrainingView({}, ''), viewAthleteId: 0, trainingError: '', testError: '', championError: '' });
     return runPageLoad(this, {
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
@@ -124,7 +134,7 @@ Page({
     const [teams, model, training, tests] = await Promise.all([
       full ? sectionRequest(() => api.overviewTeams(scope.project), '队伍加载失败') : Promise.resolve(null),
       full ? sectionRequest(() => api.specialChampionModels(scope.project), '冠军模型加载失败') : Promise.resolve(null),
-      sectionRequest(() => api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId), '专项训练加载失败'),
+      sectionRequest(() => api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId, scope.viewAthleteId || 0), '专项训练加载失败'),
       testsTask
     ]);
     if (isLatest && !isLatest()) return null;
@@ -143,7 +153,7 @@ Page({
       view.testError = tests.error;
       this.applyTestView(view, buildSpecialTestView(tests.value));
     }
-    return this.applyAthletePager(view);
+    return view;
   },
 
   // 专项测试默认只显示最近 3 场：完整列表留在 _specialTestsAll，按需逐批追加。
@@ -175,27 +185,23 @@ Page({
     this.setData({ specialTests: all.slice(0, this.data.specialTests.length) });
   },
 
-  // 运动员汇总列表统一分页：每页 5 人；队伍/项目筛选变化后回到第一页。
-  applyAthletePager(view) {
-    const teamChanged = this._pagedTeamId !== undefined && this._pagedTeamId !== this.data.teamId;
-    this._pagedTeamId = this.data.teamId;
-    const page = teamChanged ? 0 : this.data.athletePager && this.data.athletePager.page || 0;
-    const model = paginateList(view.athleteRowsAll.filter((row) => row.name.includes(this.data.athleteQuery || '')), page, PAGE_SIZE);
-    view.athleteRows = model.items;
-    view.athletePager = model;
-    return view;
+  // 运动员模块由 athlete-selector 承担搜索与 5 人分页；选中切换本页个人专项视图。
+  onAthleteSelect(event) {
+    const id = Number(event.detail && event.detail.id) || 0;
+    const item = (this.data.athleteItems || []).find((row) => Number(row.id) === id);
+    if (id && !item) return Promise.resolve();
+    if (id === (Number(this.data.viewAthleteId) || 0)) return Promise.resolve();
+    this.setData({ viewAthleteId: id, viewAthleteName: id ? (item.name || '') : '' });
+    this.resetTrainingView(false);
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest), '专项训练数据加载失败。');
   },
 
-  onAthleteSearch(event) {
-    const athleteQuery = event.detail.value;
-    this.setData({ athleteQuery, ...athleteListView(this.data.athleteRowsAll, athleteQuery) });
+  onBackToTeam() {
+    return this.onAthleteSelect({ detail: { id: 0 } });
   },
 
-  onAthletePagerChange(event) {
-    const page = Number(event.detail && event.detail.page);
-    if (!Number.isInteger(page)) return;
-    const model = paginateList((this.data.athleteRowsAll || []).filter((row) => row.name.includes(this.data.athleteQuery || '')), page, PAGE_SIZE);
-    this.setData({ athleteRows: model.items, athletePager: model });
+  onAthleteDetail(event) {
+    navigateToAthlete(this, { currentTarget: { dataset: { athleteId: event.detail && event.detail.id } } }, this.data.athleteItems);
   },
 
   onScopeChange(event) {
@@ -225,7 +231,7 @@ Page({
 
   resetTrainingView(resetTests = true) {
     const tests = resetTests ? this.applyTestView({}, buildSpecialTestView(null)) : {};
-    this.setData({ ...buildTrainingView({}, ''), athleteQuery: '', trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
+    this.setData({ ...buildTrainingView({}, ''), trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
   },
 
   showTrendDetail(event) {
@@ -234,11 +240,7 @@ Page({
 
   goTestEntry() {
     if (!this.data.canEnterTest) return;
-    const athleteId = Number(this.data.selectedAthleteId) || 0;
+    const athleteId = Number(this.data.viewAthleteId) || Number(this.data.selectedAthleteId) || 0;
     wx.navigateTo({ url: `/pages/test-entry/test-entry?mode=special&athleteId=${athleteId}` });
-  },
-
-  goToAthlete(event) {
-    navigateToAthlete(this, event, this.data.athleteRows);
   }
 });

@@ -11,7 +11,7 @@
 .champion-performance { display: block; color: #0f5961; font-size: 27rpx; font-weight: 700; }
 .champion-value text { display: block; margin-top: 5rpx; color: #bd7418; font-size: 19rpx; }
 .special-trend { min-width: 690rpx; }
-.athlete-summary { margin-top: 16rpx; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8rpx; color: #5e7780; font-size: 19rpx; }
+.athlete-summary { margin-top: 8rpx; display: flex; flex-wrap: wrap; gap: 16rpx; color: #5e7780; font-size: 20rpx; }
 
 .section-head-row { margin-top: 7rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .section-head-row .section-head-note { margin-top: 0; }

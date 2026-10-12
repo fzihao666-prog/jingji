@@ -54,7 +54,7 @@ describe('训练页空数据与独立失败回归', () => {
     expect(view.summaryCards[1].value).toBe('0');
     expect(view.metrics.every((row) => row.value === '--')).toBe(true);
   });
-  it('专项冠军和测试失败不影响训练与超30人分页', async () => {
+  it('专项冠军和测试失败不影响训练与超30人名单', async () => {
     const athletes = Array.from({ length: 32 }, (_, i) => ({ id: i + 1, name: `运动员${i + 1}` }));
     const page = createPage('special', {
       overviewTeams: async () => ({ teams: [] }), specialChampionModels: fail, specialTests: fail,
@@ -66,15 +66,11 @@ describe('训练页空数据与独立失败回归', () => {
     expect(view.trend[0]).toMatchObject({ duration: 0, distance: null, durationHeight: 0 });
     expect(view.championError).toContain('加载失败');
     expect(view.testError).toContain('加载失败');
-    expect(view.athleteRows).toHaveLength(5);
-    expect(view.athleteRows[0].sessionCount).toBe('--');
-    expect(view.athleteRowsAll).toHaveLength(32);
-    page.setData(view);
-    page.onAthletePagerChange({ detail: { page: 6 } });
-    expect(page.data.athleteRows).toHaveLength(2);
-    page.onAthleteSearch({ detail: { value: '运动员32' } });
-    expect(page.data.athleteRows).toHaveLength(1);
-    expect(page.data.athletePager.page).toBe(0);
+    // 人员模块交给 athlete-selector：全量条目 + 汇总分页模型（每页 5 人由组件切片）。
+    expect(view.athleteItems).toHaveLength(32);
+    expect(view.athleteItems[0].sessionCount).toBe('--');
+    expect(view.athleteItems[0].summary[0]).toContain('课次');
+    expect(view.athletePager).toMatchObject({ total: 32, pageCount: 7, hasNext: true });
   });
   it('专项全接口失败仍有指标、分类和错误状态，旧请求不覆盖新筛选', async () => {
     const page = createPage('special', { overviewTeams: fail, specialChampionModels: fail, specialTests: fail, specialTrainingOverview: fail });

@@ -4,14 +4,3 @@
     <button wx:if="{{error || loading}}" class="mini-button" disabled="{{loading}}" bindtap="loadPage" aria-label="{{loading ? '正在加载训练数据' : (error ? '重试加载训练数据' : '刷新训练数据')}}">{{loading ? '正在加载' : (error ? '重试' : '刷新')}}</button>
   </view>
 </template>
-<template name="training-athletes">
-  <view class="section-head"><view class="section-head-title">运动员</view><view class="section-head-note">当前范围共 {{athleteTotal}} 人</view></view>
-  <view class="card">
-    <input class="training-athlete-search" value="{{athleteQuery}}" placeholder="搜索运动员" aria-label="搜索运动员姓名" bindinput="onAthleteSearch" />
-    <view wx:for="{{athleteRows}}" wx:key="id" class="list-row">
-      <button class="training-athlete-button" data-athlete-id="{{item.id}}" bindtap="goToAthlete" aria-label="查看{{item.name}}的运动员档案">{{item.name}}<text class="list-row-meta">{{item.meta || item.team}}</text></button>
-    </view>
-    <template wx:if="{{!athleteRows.length}}" is="training-state" data="{{loading, error, message: athleteQuery ? '未找到匹配运动员' : '暂无可管理运动员'}}" />
-    <pager-nav page="{{athletePager.page}}" page-count="{{athletePager.pageCount}}" total="{{athletePager.total}}" label="运动员" bindpagechange="onAthletePagerChange" />
-  </view>
-</template>
