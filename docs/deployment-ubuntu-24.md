@@ -306,7 +306,15 @@ bash scripts/release.sh --build-only
 bash scripts/release.sh --dry-run
 ```
 
-脚本行为：校验标签必须是十六进制 Git 短 SHA，`docker buildx build --platform linux/amd64 --push` 推送后 SSH 到服务器更新 `.env.compose`、`pull && up -d`，最后做 `curl 127.0.0.1:8787` 健康检查；失败时自动打印容器最近日志并提示回滚命令。镜像地址、服务器与 SSH 私钥可通过环境变量 `IMAGE`、`DEPLOY_USER`、`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`REMOTE_DIR` 覆盖。
+脚本行为：校验标签必须是十六进制 Git 短 SHA，`docker buildx build --platform linux/amd64 --push` 推送后 SSH 到服务器更新 `.env.compose`、拉取镜像并启动，最多等待 120 秒让容器健康检查通过，再做 `curl 127.0.0.1:8787` 检查；失败时自动打印容器最近日志并提示回滚命令，不清理镜像或覆盖成功历史。需要支持 `up --wait --wait-timeout` 的 Docker Compose 插件。镜像地址、服务器与 SSH 私钥可通过环境变量 `IMAGE`、`DEPLOY_USER`、`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`REMOTE_DIR` 覆盖。
+
+**成功发布后自动清理旧镜像，无需额外定时任务：**
+
+- 保留当前版本和发布前健康的版本；若发布前容器不健康，则从部署目录的 `.release-successful-images` 读取上一成功版本。该文件仅记录通过检查的镜像引用，不包含密钥。
+- 重复发布当前版仍保留上一成功版；回滚成功后同样保留回滚前健康的版本。首次接入且无法确认上一成功版时，记录本次成功版本并跳过清理，下次成功发布再清理。
+- 只删除本仓库中其余十六进制 Git SHA 标签，不清理 ACR 中的镜像、其他仓库、命名标签、数据库、上传文件或备份。容器仍引用的镜像及与保留版本共用镜像 ID 的标签会跳过，因此特殊情况下可能超过两版。
+- 清理失败只给提示，不影响已成功的部署；`--build-only`、`--dry-run` 不执行清理。手动部署不触发这一步。
+- 同一部署目录用 `.release.lock` 与 Ubuntu 自带的 `flock` 串行执行脚本发布；手动运维也应避免同时修改容器和镜像。
 
 ### 6.2 手动命令
 

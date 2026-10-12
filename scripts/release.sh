@@ -128,19 +128,98 @@ if [ "$DRY_RUN" -eq 0 ] && [ ! -f "$DEPLOY_SSH_KEY" ]; then
   exit 1
 fi
 
-run_remote "cd $REMOTE_DIR && printf 'IMAGE_TAG=%s\n' '$TAG' > .env.compose && chmod 600 .env.compose"
+# 参数作为独立参数传给远程 Bash，不把目录或镜像地址插入脚本正文。
+printf -v remote_command 'bash -s -- %q %q %q' "$REMOTE_DIR" "$IMAGE" "$TAG"
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo '[dry-run] 部署成功且健康检查通过后，保留当前版和上一成功版，清理本仓库其他 SHA 镜像。'
+fi
+if ! run_remote "$remote_command" <<'REMOTE_RELEASE'
+set -euo pipefail
+cd -- "$1"
+image="$2"
+tag="$3"
+target="$image:$tag"
+history='.release-successful-images'
+previous=''
+umask 077
 
-if ! run_remote "cd $REMOTE_DIR && docker compose --env-file .env.compose pull && docker compose --env-file .env.compose up -d --remove-orphans"; then
-  echo "错误：拉取或启动失败，最近日志如下。回滚可执行：scripts/release.sh --tag <上一个可用标签>" >&2
-  run_remote "cd $REMOTE_DIR && docker compose --env-file .env.compose logs --tail=200 app" || true
+# 同一部署目录只允许一个发布进程，覆盖切换、检查和清理全过程。
+exec 9>.release.lock
+flock -n 9 || { echo '错误：已有发布任务执行中。' >&2; exit 1; }
+
+is_version() {
+  [[ "$1" == "$image:"* && "${1#"$image:"}" =~ ^[0-9a-fA-F]+$ ]]
+}
+
+# 优先保存发布前已健康的实际容器镜像，不根据 .env.compose 猜测。
+if [ -f .env.compose ]; then
+  container=$(docker compose --env-file .env.compose ps -aq app)
+  if [ -n "$container" ]; then
+    health=$(docker container inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container")
+    candidate=$(docker container inspect --format '{{.Config.Image}}' "$container")
+    if [ "$health" = healthy ] && is_version "$candidate" && [ "$candidate" != "$target" ]; then
+      previous="$candidate"
+    fi
+  fi
+fi
+
+# 失败后的重试、回滚或重复发布，沿用此前通过检查的成功版本。
+if [ -z "$previous" ] && [ -f "$history" ]; then
+  while IFS= read -r candidate; do
+    if is_version "$candidate" && [ "$candidate" != "$target" ]; then
+      previous="$candidate"
+      break
+    fi
+  done < "$history"
+fi
+
+printf 'IMAGE_TAG=%s\n' "$tag" > .env.compose
+chmod 600 .env.compose
+if ! docker compose --env-file .env.compose pull ||
+   ! docker compose --env-file .env.compose up -d --wait --wait-timeout 120 --remove-orphans ||
+   ! curl --fail --silent --max-time 15 http://127.0.0.1:8787/ >/dev/null; then
+  echo '错误：拉取、启动或健康检查失败；保留全部镜像及成功历史。' >&2
+  docker compose --env-file .env.compose logs --tail=200 app || true
+  exit 1
+fi
+docker compose --env-file .env.compose ps
+
+# 仅在新版本通过检查后更新记录；临时文件与目标同目录，原子替换。
+temporary=$(mktemp .release-successful-images.XXXXXX)
+trap 'rm -f -- "$temporary"' EXIT
+printf '%s\n' "$target" > "$temporary"
+if [ -n "$previous" ]; then printf '%s\n' "$previous" >> "$temporary"; fi
+mv -- "$temporary" "$history"
+
+cleanup_images() {
+  if [ -z "$previous" ]; then
+    echo '提示：尚无可确认的上一成功版，本次保留旧镜像并跳过清理。'
+    return 0
+  fi
+  current_id=$(docker image inspect --format '{{.Id}}' "$target") || return 1
+  previous_id=$(docker image inspect --format '{{.Id}}' "$previous") || return 1
+  versions=$(docker image ls --format '{{.Repository}}:{{.Tag}}' "$image") || return 1
+  echo "保留镜像：${target}、${previous}"
+  while IFS= read -r version; do
+    # 只处理精确匹配的仓库及 SHA 标签；不删除其他仓库或命名标签。
+    is_version "$version" || continue
+    id=$(docker image inspect --format '{{.Id}}' "$version") || return 1
+    if [ "$id" = "$current_id" ] || [ "$id" = "$previous_id" ]; then continue; fi
+    references=$(docker container ls -aq --filter "ancestor=$id") || return 1
+    if [ -n "$references" ]; then
+      echo "提示：镜像仍被容器引用，跳过：$version"
+    elif ! docker image rm "$version"; then
+      echo "提示：未能清理镜像，稍后重试：$version" >&2
+    fi
+  done <<< "$versions"
+}
+
+# 清理失败不影响已经成功的部署；不使用强制删除或全局 prune。
+cleanup_images || echo '提示：镜像清理未完成，已保留剩余镜像。' >&2
+REMOTE_RELEASE
+then
+  echo '部署未完成；回滚可执行：scripts/release.sh --tag <上一个可用标签>' >&2
   exit 1
 fi
 
-if ! run_remote "curl --fail --silent --max-time 15 http://127.0.0.1:8787/ >/dev/null"; then
-  echo "错误：容器已启动但健康检查失败，最近日志如下。" >&2
-  run_remote "cd $REMOTE_DIR && docker compose --env-file .env.compose logs --tail=200 app" || true
-  exit 1
-fi
-
-run_remote "cd $REMOTE_DIR && docker compose --env-file .env.compose ps"
 echo "发布成功：$IMAGE:$TAG"
