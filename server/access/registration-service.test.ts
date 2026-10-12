@@ -25,6 +25,7 @@ beforeAll(async () => {
     CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, role TEXT, athlete_id INTEGER);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
     CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT);
+    CREATE UNIQUE INDEX idx_athletes_identity ON athletes (name, project, team);
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT, source TEXT, quality TEXT);
     CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, native_place TEXT, phone TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE user_area_permissions (user_id INTEGER, area_level TEXT, province TEXT, city TEXT, county TEXT, granted_by INTEGER);
@@ -143,12 +144,98 @@ it.each([reviewer, null])('开通保存申请生日性别 %#', (actor) => {
     birth_date: '2000-02-29',
   });
 });
-it('已有运动员非空生日和性别保持', () => {
+it('已有运动员生日或性别不一致时拒绝关联', () => {
   existingOrigin();
   db.exec("UPDATE athletes SET birth_date='1999-01-01',gender='女'");
-  expect(activate(1, reviewer).ok).toBe(true);
+  expect(activate(1, reviewer).ok).toBe(false);
   expect(db.prepare('SELECT gender,birth_date FROM athletes').get()).toEqual({
     gender: '女',
     birth_date: '1999-01-01',
+  });
+});
+
+describe('注册身份绑定加固', () => {
+  it('人工审核精确匹配身份后关联，不新建且保留已有字段', () => {
+    existingOrigin();
+    db.exec("UPDATE athletes SET birth_date='2000-02-29'");
+    const result = activate(1, reviewer);
+    expect(result.ok).toBe(true);
+    expect(db.prepare("SELECT athlete_id FROM users WHERE username='newathlete'").get()).toEqual({
+      athlete_id: 10,
+    });
+    expect(db.prepare('SELECT id FROM athletes').all()).toEqual([{ id: 10 }]);
+  });
+  it.each([
+    { gender: '女', birth: '2000-02-29' },
+    { gender: '男', birth: '1999-01-01' },
+  ])('身份字段冲突时人工和自动开通均不绑定 %#', ({ gender, birth }) => {
+    existingOrigin();
+    db.prepare('UPDATE athletes SET gender=?,birth_date=?').run(gender, birth);
+    expect(activate(1, reviewer)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('身份信息不一致'),
+    });
+    expect(activate(1, null)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('联系管理员'),
+    });
+    expect(db.prepare("SELECT id FROM users WHERE username='newathlete'").get()).toBeUndefined();
+    expect(db.prepare('SELECT id FROM athletes').all()).toEqual([{ id: 10 }]);
+    expect(db.prepare('SELECT status FROM registration_requests WHERE id=1').get()).toEqual({
+      status: 'pending',
+    });
+    expect(db.prepare('SELECT * FROM audit_logs').all()).toEqual([]);
+    expect(db.prepare('SELECT * FROM athlete_profiles').all()).toEqual([]);
+  });
+  it('自动开通即使身份一致也不得认领已有档案', () => {
+    existingOrigin();
+    db.exec("UPDATE athletes SET birth_date='2000-02-29'");
+    expect(activate(1, null)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('暂停开通'),
+    });
+    expect(db.prepare("SELECT id FROM users WHERE username='newathlete'").get()).toBeUndefined();
+  });
+  it('已有登录账号时拒绝人工绑定', () => {
+    existingOrigin();
+    db.exec("INSERT INTO users (id,username,role,athlete_id) VALUES (2,'linked','ATL',10)");
+    expect(activate(1, reviewer)).toMatchObject({ ok: false, message: '该运动员已有登录账户。' });
+  });
+  it.each([
+    ['ROWING', '其他队'],
+    ['CANOE', '测试队'],
+  ])('同名仅存在于其他项目队伍时拒绝人工关联 %s %s', (project, team) => {
+    db.prepare('INSERT INTO project_teams VALUES (2,?,?,1)').run(project, team);
+    db.prepare('INSERT INTO athletes VALUES (9,?,?,?,?,?,?)').run(
+      '测试运动员',
+      project,
+      team,
+      2,
+      '男',
+      '2000-02-29'
+    );
+    expect(activate(1, reviewer)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining(`${project} / ${team}`),
+    });
+  });
+  it('跨队同名优先精确匹配申请队伍，不受先插入的其他队影响', () => {
+    db.exec(
+      "INSERT INTO project_teams VALUES (2,'ROWING','其他队',1); INSERT INTO athletes VALUES (9,'测试运动员','ROWING','其他队',2,'女','1999-01-01');"
+    );
+    existingOrigin();
+    expect(activate(1, reviewer).ok).toBe(true);
+    expect(db.prepare("SELECT athlete_id FROM users WHERE username='newathlete'").get()).toEqual({
+      athlete_id: 10,
+    });
+  });
+  it('人工审核补齐空生日性别', () => {
+    existingOrigin();
+    db.exec("UPDATE athletes SET gender=''");
+    expect(activate(1, reviewer).ok).toBe(true);
+    expect(db.prepare('SELECT gender,birth_date FROM athletes').get()).toEqual({
+      gender: '男',
+      birth_date: '2000-02-29',
+    });
   });
 });

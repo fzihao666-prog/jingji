@@ -337,8 +337,8 @@ export function registerAuthRoutes(
           return res.status(201).json({ message: '注册成功，可直接登录。', status: 'approved' });
         }
         return res
-          .status(201)
-          .json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
+          .status(activation.status)
+          .json({ message: activation.message, status: 'pending' });
       }
       res.status(201).json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
     } catch (error) {

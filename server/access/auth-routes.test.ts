@@ -54,6 +54,8 @@ beforeAll(async () => {
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
     INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
+    CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT);
+    CREATE UNIQUE INDEX idx_athletes_identity ON athletes (name,project,team);
     CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT);
   `);
   const { registerAuthRoutes } = await import('./auth-routes.ts');
@@ -83,7 +85,9 @@ beforeAll(async () => {
 beforeEach(() => {
   afterCompare = undefined;
   passwordFailure = undefined;
-  db.exec('DELETE FROM users; DELETE FROM registration_requests;');
+  db.exec(
+    'DELETE FROM users; DELETE FROM registration_requests; DELETE FROM athletes; DELETE FROM app_metadata;'
+  );
   const passwordHash = bcrypt.hashSync(correctPassword, 4);
   const insertUser = db.prepare(
     'INSERT INTO users (id, username, password_hash, display_name, role, athlete_id, active, session_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
@@ -333,4 +337,35 @@ it('拒绝申请重提独立更新生日性别', async () => {
       .prepare("SELECT gender,birth_date FROM registration_requests WHERE username='rejected_user'")
       .get()
   ).toEqual({ gender: '女', birth_date: '2000-02-29' });
+});
+
+it('关闭审核时已有档案冲突明确返回错误，申请保留待人工核对', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  db.prepare('INSERT INTO athletes VALUES (10,?,?,?,?,?,?)').run(
+    registrationInput.displayName,
+    'ROWING',
+    '测试队伍',
+    1,
+    '女',
+    '2000-02-29'
+  );
+  const response = await registerInput({ ...registrationInput, role: 'ATL' });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    status: 'pending',
+    message: expect.stringContaining('联系管理员'),
+  });
+  expect(db.prepare('SELECT id FROM users WHERE athlete_id=10').get()).toBeUndefined();
+  expect(
+    db
+      .prepare('SELECT status FROM registration_requests WHERE username=?')
+      .get(registrationInput.username)
+  ).toEqual({ status: 'pending' });
+});
+
+it('关闭审核时教练申请仍保持待审核', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'SCC' });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'pending' });
 });

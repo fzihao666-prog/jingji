@@ -10,6 +10,9 @@ import {
 import { DEFAULT_COACH_CATEGORY } from '../../shared/coach-categories.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 
+// 仅业务错误允许返回客户端，数据库等内部异常使用统一提示。
+class RegistrationActivationError extends Error {}
+
 const provinceSet = new Set<string>(PROVINCES);
 
 const REGISTRATION_APPROVAL_KEY = 'registration_approval_enabled';
@@ -85,41 +88,76 @@ export function activateRegistrationRequest(
   try {
     let athleteId: number | null = null;
     if (request.requested_role === 'ATL') {
-      const athlete = db
-        .prepare(
-          `SELECT a.id, a.project, COALESCE(pt.name, '') AS team FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.name = ?`
-        )
-        .get(request.display_name) as { id: number; project: string; team: string } | undefined;
+      const team = db
+        .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+        .get(request.project, request.team) as { id: number } | undefined;
+      if (!team) throw new RegistrationActivationError('申请所属队伍不存在或已停用。');
+      // 系统自动开通只允许新建，绝不认领已有训练档案。
+      const athlete = reviewer
+        ? (db
+            .prepare(
+              `SELECT a.id, a.gender, a.birth_date FROM athletes a
+            WHERE a.name = ? AND a.project = ? AND a.team_id = ?`
+            )
+            .get(request.display_name, request.project, team.id) as
+            { id: number; gender: string | null; birth_date: string | null } | undefined)
+        : undefined;
       if (athlete) {
         const linkedUser = db
           .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
           .get(athlete.id);
-        if (linkedUser) throw new Error('该运动员已有登录账户。');
-        if (athlete.project !== request.project || athlete.team !== request.team) {
-          throw new Error(
-            `该姓名已存在于项目「${athlete.project} / ${athlete.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`
-          );
+        if (linkedUser) throw new RegistrationActivationError('该运动员已有登录账户。');
+        if (
+          (athlete.gender && request.gender && athlete.gender !== request.gender) ||
+          (athlete.birth_date && request.birth_date && athlete.birth_date !== request.birth_date)
+        ) {
+          throw new RegistrationActivationError('姓名与既有档案身份信息不一致，请联系管理员核对档案或申请信息。');
         }
         athleteId = athlete.id;
       } else {
-        const team = db
-          .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
-          .get(request.project, request.team) as { id: number } | undefined;
-        if (!team) throw new Error('申请所属队伍不存在或已停用。');
-        const birthDate = request.birth_date || null;
-        const result = db
-          .prepare(
-            `INSERT INTO athletes (name, project, team, team_id, gender, birth_date) VALUES (?, ?, ?, ?, ?, ?)`
-          )
-          .run(
-            request.display_name,
-            request.project,
-            request.team,
-            team.id,
-            request.gender,
-            birthDate
-          );
-        athleteId = Number(result.lastInsertRowid);
+        if (reviewer) {
+          const other = db
+            .prepare(
+              `SELECT a.project, COALESCE(pt.name, a.team, '') AS team
+            FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id
+            WHERE a.name = ? AND (a.project <> ? OR COALESCE(a.team_id, -1) <> ?)
+            ORDER BY a.id LIMIT 1`
+            )
+            .get(request.display_name, request.project, team.id) as
+            { project: string; team: string } | undefined;
+          if (other)
+            throw new RegistrationActivationError(
+              `该姓名已存在于项目「${other.project} / ${other.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`
+            );
+        }
+        try {
+          const result = db
+            .prepare(
+              `INSERT INTO athletes (name, project, team, team_id, gender, birth_date) VALUES (?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+              request.display_name,
+              request.project,
+              request.team,
+              team.id,
+              request.gender,
+              request.birth_date || null
+            );
+          athleteId = Number(result.lastInsertRowid);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            'errcode' in error &&
+            error.errcode === 2067 && // SQLITE_CONSTRAINT_UNIQUE
+
+            db
+              .prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team = ?')
+              .get(request.display_name, request.project, request.team)
+          ) {
+            throw new RegistrationActivationError('同名同队的运动员档案已存在，已暂停开通，请联系管理员核对身份后审核。');
+          }
+          throw error;
+        }
       }
       const profileBirthDate = request.birth_date || null;
       if (athleteId && profileBirthDate) {
@@ -220,7 +258,7 @@ export function activateRegistrationRequest(
     return {
       ok: false,
       status: 400,
-      message: error instanceof Error ? error.message : '审核失败。',
+      message: error instanceof RegistrationActivationError ? error.message : '审核失败，请联系管理员。',
     };
   }
 }
