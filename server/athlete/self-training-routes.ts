@@ -3,13 +3,14 @@ import { requireAuth } from '../core/auth.ts';
 import { db } from '../core/db.ts';
 import { hasAthleteAccess } from '../core/permissions.ts';
 import {
-  insertSession,
   listSessions,
   parseSessionId,
   readSession,
   sessionSchema,
   updateSession,
 } from './training-session-service.ts';
+
+import { idempotencyKeySchema, submitSelfTraining, TrainingSubmissionConflict } from './training-submission-service.ts';
 
 function ownAthleteId(req: Request): number | null {
   const user = req.authUser!;
@@ -30,9 +31,14 @@ export function registerSelfTrainingRoutes(app: Express) {
     if (!athleteId) return res.status(403).json({ message: '只有运动员本人可以填写训练记录。' });
     const parsed = sessionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '训练内容、日期或数值格式无效。' });
-    const id = insertSession(athleteId, parsed.data, 'athlete_self_report', req.authUser!.id);
-    const session = readSession(athleteId, id);
-    return res.status(201).json({ session: { ...session, editable: true } });
+    const key = idempotencyKeySchema.safeParse(req.get('Idempotency-Key'));
+    if (!key.success) return res.status(400).json({ message: '提交标识格式无效。' });
+    try {
+      return res.status(201).json(submitSelfTraining(athleteId, req.authUser!.id, parsed.data, key.data));
+    } catch (error) {
+      if (error instanceof TrainingSubmissionConflict) return res.status(409).json({ message: error.message });
+      throw error;
+    }
   });
 
   app.put('/api/me/training-sessions/:id', requireAuth, (req, res) => {

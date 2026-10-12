@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import type { Server } from 'node:http';
+import { passwordPool, PasswordPoolError } from '../core/password-pool.ts';
 import { LOGIN_ERROR_MESSAGES } from '../../shared/login-errors.ts';
 
 const fixture = vi.hoisted(() => {
@@ -18,6 +19,8 @@ vi.mock('../core/db.ts', () => ({
 let server: Server;
 let baseUrl: string;
 let db: DatabaseSync;
+let afterCompare: (() => void) | undefined;
+let passwordFailure: PasswordPoolError | undefined;
 
 const correctPassword = 'Secure123';
 
@@ -28,6 +31,7 @@ function login(username: string, password: string) {
     body: JSON.stringify({ username, password }),
   }).then(async (response) => ({
     status: response.status,
+    retryAfter: response.headers.get('Retry-After'),
     body: (await response.json()) as {
       message: string;
       code?: string;
@@ -44,13 +48,30 @@ beforeAll(async () => {
   db.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT,
       role TEXT, athlete_id INTEGER, active INTEGER DEFAULT 1, session_version INTEGER DEFAULT 0);
-    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, status TEXT);
+    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT UNIQUE, status TEXT DEFAULT 'pending',
+      password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT,
+      identity_number TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
+      reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
+    INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
+    CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT);
   `);
   const { registerAuthRoutes } = await import('./auth-routes.ts');
   const app = express();
   app.set('trust proxy', 'loopback');
   app.use(express.json());
-  registerAuthRoutes(app);
+  registerAuthRoutes(app, {
+    hash: async (password) => {
+      if (passwordFailure) throw passwordFailure;
+      return passwordPool.hash(password);
+    },
+    compare: async (password, hash) => {
+      if (passwordFailure) throw passwordFailure;
+      const result = await passwordPool.compare(password, hash);
+      afterCompare?.();
+      return result;
+    },
+  });
   server = await new Promise<Server>((resolve) => {
     const result = app.listen(0, '127.0.0.1', () => resolve(result));
   });
@@ -60,6 +81,8 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  afterCompare = undefined;
+  passwordFailure = undefined;
   db.exec('DELETE FROM users; DELETE FROM registration_requests;');
   const passwordHash = bcrypt.hashSync(correctPassword, 4);
   const insertUser = db.prepare(
@@ -146,4 +169,86 @@ describe('登录接口错误码', () => {
     const body = (await response.json()) as { message: string; code?: string };
     expect(body.code).toBe('SESSION_EXPIRED');
   });
+});
+
+describe('异步密码校验期间账户变化', () => {
+  it('密码计算期间停用账号后不得签发令牌', async () => {
+    afterCompare = () => {
+      db.prepare('UPDATE users SET active = 0 WHERE id = 1').run();
+    };
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(403);
+    expect(result.body.token).toBeUndefined();
+  });
+
+  it('密码计算期间会话版本变化后不得签发令牌', async () => {
+    afterCompare = () => {
+      db.prepare('UPDATE users SET session_version = 1 WHERE id = 1').run();
+    };
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(401);
+    expect(result.body.token).toBeUndefined();
+  });
+
+  it('密码计算期间改密后不得签发令牌', async () => {
+    afterCompare = () => {
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = 1').run('changed-hash');
+    };
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(401);
+    expect(result.body.token).toBeUndefined();
+  });
+});
+
+describe('异步密码接口容量与并发', () => {
+  it('工作池拒绝时返回可重试的503且不泄露内部失败原因', async () => {
+    passwordFailure = new PasswordPoolError('OVERLOADED');
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(503);
+    expect(result.retryAfter).toBe('1');
+    expect(result.body.code).toBe('SERVICE_BUSY');
+    expect(result.body.token).toBeUndefined();
+  });
+
+  it('同账号并发注册只有一个申请成功且保持cost11', async () => {
+    const submit = () =>
+      fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: 'new_coach',
+          password: correctPassword,
+          displayName: '测试教练',
+          role: 'SCC',
+          project: 'ROWING',
+          team: '测试队伍',
+          phone: '13800000000',
+        }),
+      });
+    const responses = await Promise.all([submit(), submit()]);
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    const records = db
+      .prepare('SELECT password_hash FROM registration_requests WHERE username = ?')
+      .all('new_coach') as Array<{ password_hash: string }>;
+    expect(records).toHaveLength(1);
+    expect(records[0].password_hash).toMatch(/^\$2[aby]\$11\$/);
+  });
+});
+
+
+it('超长登录密码返回凭据错误且不占用密码池', async () => {
+  passwordFailure = new PasswordPoolError('OVERLOADED');
+  const result = await login('active_user', 'A1'.repeat(37));
+  expect(result.status).toBe(401);
+  expect(result.body.code).toBe('INVALID_CREDENTIALS');
+});
+
+it('注册快速查重不占用已满的密码池', async () => {
+  passwordFailure = new PasswordPoolError('OVERLOADED');
+  const response = await fetch(`${baseUrl}/api/auth/register`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'pending_user', password: correctPassword, displayName: '测试教练',
+      role: 'SCC', project: 'ROWING', team: '测试队伍', phone: '13800000000' }),
+  });
+  expect(response.status).toBe(409);
 });

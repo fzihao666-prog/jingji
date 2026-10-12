@@ -41,8 +41,9 @@ module.exports = {
     }
   },
   myTrainingSessions() { return request('/api/me/training-sessions'); },
-  createMyTrainingSession(data) {
-    return request('/api/me/training-sessions', { method: 'POST', data });
+  createMyTrainingSession(data, idempotencyKey) {
+    return request('/api/me/training-sessions', { method: 'POST', data,
+      ...(idempotencyKey ? { header: { 'Idempotency-Key': idempotencyKey } } : {}) });
   },
   updateMyTrainingSession(id, data) {
     return request(`/api/me/training-sessions/${encodeURIComponent(id)}`, { method: 'PUT', data });

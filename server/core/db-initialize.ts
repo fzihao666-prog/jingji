@@ -939,6 +939,19 @@ export function initializeDatabase(
     FOREIGN KEY (created_by) REFERENCES users(id)
   );
 
+  -- 保留首次提交快照；不关联训练外键，确保编辑或删除训练后重试仍不会重复写入。
+  CREATE TABLE IF NOT EXISTS training_submission_keys (
+    user_id INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    athlete_id INTEGER NOT NULL,
+    training_session_id INTEGER NOT NULL,
+    response_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, operation, idempotency_key)
+  );
+
   CREATE TABLE IF NOT EXISTS strength_result_sets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     training_session_id INTEGER NOT NULL,

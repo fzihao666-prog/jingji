@@ -2,6 +2,7 @@ const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { todayBeijing } = require('../../utils/date');
 const { draftIdentity, loadFormDraft, saveFormDraft, clearFormDraft } = require('../../utils/form-draft');
+const { submissionKey, completeSubmission, isCompletedSubmission } = require('../../utils/submission-key');
 
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
@@ -123,6 +124,12 @@ Page({
     this._draftPromptedFor = identity;
     const draft = loadFormDraft(wx, 'training-entry', identity);
     if (!draft) return;
+    const user = getApp().globalData.user;
+    // 保存已成功但草稿清理失败时，不把旧内容再次恢复成一份新填报。
+    if (!this.data.isCoach && user && isCompletedSubmission(wx, user.id, draft)) {
+      clearFormDraft(wx, 'training-entry', identity);
+      return;
+    }
     wx.showModal({
       title: '恢复未保存的内容',
       content: '检测到上次未提交的训练记录，是否恢复继续填写？',
@@ -166,9 +173,11 @@ Page({
         ? api.updateAthleteTrainingSession(this.data.athleteId, this.data.editId, form)
         : api.createAthleteTrainingSession(this.data.athleteId, form);
     }
-    return this.data.editId
-      ? api.updateMyTrainingSession(this.data.editId, form)
-      : api.createMyTrainingSession(form);
+    if (this.data.editId) return api.updateMyTrainingSession(this.data.editId, form);
+    const user = getApp().globalData.user;
+    this._submissionUserId = user && user.id;
+    this._submissionKey = submissionKey(wx, this._submissionUserId, form);
+    return api.createMyTrainingSession(form, this._submissionKey);
   },
 
   async save() {
@@ -180,7 +189,11 @@ Page({
     }
     this.setData({ saving: true, error: '' });
     try {
+      this.persistDraft();
       const result = await this.saveAction(form);
+      if (!this.data.isCoach && !this.data.editId) {
+        completeSubmission(wx, this._submissionUserId, this._submissionKey);
+      }
       getApp().globalData.homeNeedsRefresh = true;
       getApp().globalData.dataVersion = (getApp().globalData.dataVersion || 0) + 1;
       wx.showToast({ title: this.data.editId ? '记录已更新' : '记录已同步', icon: 'success' });

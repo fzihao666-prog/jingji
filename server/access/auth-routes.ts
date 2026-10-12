@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+import { passwordPool, PasswordPoolError } from '../core/password-pool.ts';
 import type { Express } from 'express';
 import jwt from 'jsonwebtoken';
 import {
@@ -37,7 +37,10 @@ import {
   activateRegistrationRequest,
 } from './registration-service.ts';
 
-export function registerAuthRoutes(app: Express) {
+export function registerAuthRoutes(
+  app: Express,
+  passwords: Pick<typeof passwordPool, 'hash' | 'compare'> = passwordPool
+) {
   app.get('/api/registration/teams', (_req, res) => {
     const teams = db.prepare('SELECT id, project, name FROM project_teams WHERE active = 1 ORDER BY project, name').all();
     res.json({ teams });
@@ -181,106 +184,105 @@ export function registerAuthRoutes(app: Express) {
     }
   );
 
-  app.post('/api/auth/register', (req, res) => {
-    if (consumeRateLimit(req, 'register', 30, 15 * 60 * 1000)) {
-      return res.status(429).json({ message: '申请次数过多，请稍后再试。' });
-    }
-    const username = cleanString(req.body?.username).toLowerCase();
-    const password = cleanString(req.body?.password);
-    const displayName = cleanString(req.body?.displayName);
-    const requestedRoleInput = cleanString(req.body?.role);
-    const requestedRole =
-      requestedRoleInput === 'athlete'
-        ? 'ATL'
-        : requestedRoleInput === 'coach'
-          ? 'SCC'
-          : requestedRoleInput;
-    const project = cleanString(req.body?.project);
-    const team = cleanString(req.body?.team);
-    const identityNumber = cleanString(req.body?.identityNumber).toUpperCase();
-    const gender = /^\d{17}[\dX]$/.test(identityNumber)
-      ? Number(identityNumber[16]) % 2
-        ? '男'
-        : '女'
-      : '';
-    const nativePlace = cleanString(req.body?.nativePlace);
-    const phone = cleanString(req.body?.phone).replace(/[\s-]/g, '');
-    const errors: string[] = [];
-    const [nativePlaceProvince = '', nativePlaceCity = '', ...nativePlaceRest] =
-      nativePlace.split('/');
-
-    if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
-    if (
-      password.length < 8 ||
-      password.length > 72 ||
-      !/[A-Za-z]/.test(password) ||
-      !/\d/.test(password)
-    ) {
-      errors.push('密码须为8—72位，并同时包含字母和数字');
-    }
-    if (displayName.length < 2 || displayName.length > 20) errors.push('姓名须为2—20个字符');
-    if (requestedRole !== 'ATL' && requestedRole !== 'SCC') errors.push('仅支持注册运动员或教练');
-    if (!PROJECTS.includes(project)) errors.push('请选择赛艇、皮划艇或激流');
-    const validTeam = db
-      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
-      .get(project, team);
-    if (!validTeam) errors.push('请选择该项目下的有效队伍');
-    if (requestedRole === 'ATL') {
-      if (!/^\d{17}[\dX]$/.test(identityNumber))
-        errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
-      if (
-        nativePlaceRest.length ||
-        !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)
-      ) {
-        errors.push('请选择有效且对应的籍贯省市');
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      if (consumeRateLimit(req, 'register', 30, 15 * 60 * 1000)) {
+        return res.status(429).json({ message: '申请次数过多，请稍后再试。' });
       }
-    }
-    if (!/^1[3-9]\d{9}$/.test(phone)) errors.push('手机号须为11位大陆手机号');
-    if (errors.length) return res.status(400).json({ message: errors.join('；') });
+      const username = cleanString(req.body?.username).toLowerCase();
+      const password = cleanString(req.body?.password);
+      const displayName = cleanString(req.body?.displayName);
+      const requestedRoleInput = cleanString(req.body?.role);
+      const requestedRole =
+        requestedRoleInput === 'athlete'
+          ? 'ATL'
+          : requestedRoleInput === 'coach'
+            ? 'SCC'
+            : requestedRoleInput;
+      const project = cleanString(req.body?.project);
+      const team = cleanString(req.body?.team);
+      const identityNumber = cleanString(req.body?.identityNumber).toUpperCase();
+      const gender = /^\d{17}[\dX]$/.test(identityNumber)
+        ? Number(identityNumber[16]) % 2
+          ? '男'
+          : '女'
+        : '';
+      const nativePlace = cleanString(req.body?.nativePlace);
+      const phone = cleanString(req.body?.phone).replace(/[\s-]/g, '');
+      const errors: string[] = [];
+      const [nativePlaceProvince = '', nativePlaceCity = '', ...nativePlaceRest] =
+        nativePlace.split('/');
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    if (existingUser) return res.status(409).json({ message: '该账号已存在。' });
-    const existingRequest = db
-      .prepare('SELECT id, status FROM registration_requests WHERE username = ?')
-      .get(username) as { id: number; status: string } | undefined;
-    if (existingRequest?.status === 'pending')
-      return res.status(409).json({ message: '该账号正在审核中。' });
-    if (existingRequest?.status === 'approved')
-      return res.status(409).json({ message: '该账号已通过审核，请直接登录。' });
+      if (!/^[a-z0-9_]{4,24}$/.test(username)) errors.push('账号须为4—24位字母、数字或下划线');
+      if (
+        password.length < 8 ||
+        password.length > 72 ||
+        !/[A-Za-z]/.test(password) ||
+        !/\d/.test(password)
+      ) {
+        errors.push('密码须为8—72位，并同时包含字母和数字');
+      }
+      if (displayName.length < 2 || displayName.length > 20) errors.push('姓名须为2—20个字符');
+      if (requestedRole !== 'ATL' && requestedRole !== 'SCC') errors.push('仅支持注册运动员或教练');
+      if (!PROJECTS.includes(project)) errors.push('请选择赛艇、皮划艇或激流');
+      const validTeam = db
+        .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+        .get(project, team);
+      if (!validTeam) errors.push('请选择该项目下的有效队伍');
+      if (requestedRole === 'ATL') {
+        if (!/^\d{17}[\dX]$/.test(identityNumber))
+          errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
+        if (
+          nativePlaceRest.length ||
+          !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)
+        ) {
+          errors.push('请选择有效且对应的籍贯省市');
+        }
+      }
+      if (!/^1[3-9]\d{9}$/.test(phone)) errors.push('手机号须为11位大陆手机号');
+      if (errors.length) return res.status(400).json({ message: errors.join('；') });
 
-    const passwordHash = bcrypt.hashSync(password, 11);
-    let registrationId: number;
-    if (existingRequest?.status === 'rejected') {
-      db.prepare(
-        `
+      // 已存在账号和已提交申请直接返回，避免重复请求占用密码计算容量。
+      if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) {
+        return res.status(409).json({ message: '该账号已存在。' });
+      }
+      const initialRequest = db
+        .prepare('SELECT status FROM registration_requests WHERE username = ?')
+        .get(username) as { status: string } | undefined;
+      if (initialRequest?.status === 'pending') {
+        return res.status(409).json({ message: '该账号正在审核中。' });
+      }
+      if (initialRequest?.status === 'approved') {
+        return res.status(409).json({ message: '该账号已通过审核，请直接登录。' });
+      }
+      const passwordHash = await passwords.hash(password);
+      // 密码计算让出主线程后，重新检查账号、申请和队伍，避免并发申请覆盖已提交状态。
+      if (
+        !db
+          .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+          .get(project, team)
+      ) {
+        return res.status(400).json({ message: '请选择该项目下的有效队伍。' });
+      }
+      const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+      if (existingUser) return res.status(409).json({ message: '该账号已存在。' });
+      const existingRequest = db
+        .prepare('SELECT id, status FROM registration_requests WHERE username = ?')
+        .get(username) as { id: number; status: string } | undefined;
+      if (existingRequest?.status === 'pending')
+        return res.status(409).json({ message: '该账号正在审核中。' });
+      if (existingRequest?.status === 'approved')
+        return res.status(409).json({ message: '该账号已通过审核，请直接登录。' });
+
+      let registrationId: number;
+      if (existingRequest?.status === 'rejected') {
+        db.prepare(
+          `
         UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
           project = ?, team = ?, gender = ?, identity_number = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
           reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
       `
-      ).run(
-        passwordHash,
-        displayName,
-        requestedRole,
-        project,
-        team,
-        gender,
-        identityNumber,
-        nativePlace,
-        phone,
-        existingRequest.id
-      );
-      registrationId = existingRequest.id;
-    } else {
-      const insertResult = db
-        .prepare(
-          `
-        INSERT INTO registration_requests (
-          username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place, phone
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `
-        )
-        .run(
-          username,
+        ).run(
           passwordHash,
           displayName,
           requestedRole,
@@ -289,24 +291,63 @@ export function registerAuthRoutes(app: Express) {
           gender,
           identityNumber,
           nativePlace,
-          phone
+          phone,
+          existingRequest.id
         );
-      registrationId = Number(insertResult.lastInsertRowid);
-    }
-
-    if (!registrationApprovalEnabled() && requestedRole === 'ATL') {
-      const activation = activateRegistrationRequest(registrationId, null);
-      if (activation.ok) {
-        return res.status(201).json({ message: '注册成功，可直接登录。', status: 'approved' });
+        registrationId = existingRequest.id;
+      } else {
+        const insertResult = db
+          .prepare(
+            `
+        INSERT INTO registration_requests (
+          username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place, phone
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+          )
+          .run(
+            username,
+            passwordHash,
+            displayName,
+            requestedRole,
+            project,
+            team,
+            gender,
+            identityNumber,
+            nativePlace,
+            phone
+          );
+        registrationId = Number(insertResult.lastInsertRowid);
       }
-      return res
-        .status(201)
-        .json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
+
+      if (!registrationApprovalEnabled() && requestedRole === 'ATL') {
+        const activation = activateRegistrationRequest(registrationId, null);
+        if (activation.ok) {
+          return res.status(201).json({ message: '注册成功，可直接登录。', status: 'approved' });
+        }
+        return res
+          .status(201)
+          .json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
+      }
+      res.status(201).json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
+    } catch (error) {
+      if (error instanceof PasswordPoolError) {
+        res.setHeader('Retry-After', '1');
+        return res.status(503).json({ message: '服务繁忙，请稍后重试。', code: 'SERVICE_BUSY' });
+      }
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        typeof error.code === 'string' &&
+        error.code.startsWith('SQLITE_CONSTRAINT')
+      ) {
+        return res.status(409).json({ message: '该账号已存在或正在审核中。' });
+      }
+      logger.error('registration failed');
+      return res.status(500).json({ message: '注册暂时不可用，请稍后重试。' });
     }
-    res.status(201).json({ message: '申请已提交，审核通过后即可登录。', status: 'pending' });
   });
 
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     try {
       if (consumeRateLimit(req, 'login', 12, 15 * 60 * 1000)) {
         return res.status(429).json({
@@ -322,7 +363,7 @@ export function registerAuthRoutes(app: Express) {
           code: 'MISSING_CREDENTIALS',
         });
       }
-      const row = db
+      let row = db
         .prepare(
           'SELECT id, username, password_hash, display_name, role, athlete_id, session_version, active FROM users WHERE username = ?'
         )
@@ -354,13 +395,30 @@ export function registerAuthRoutes(app: Express) {
             code: 'ACCOUNT_REJECTED',
           });
       }
+      if (row && typeof row.password_hash !== 'string') throw new Error('账户凭据无效');
       // 账号不存在与密码错误统一提示，避免泄露账号是否存在；停用状态只在密码校验通过后返回。
-      if (!row || !bcrypt.compareSync(password, row.password_hash)) {
+      if (!row || password.length > 72 || !(await passwords.compare(password, row.password_hash))) {
         return res.status(401).json({
           message: LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS,
           code: 'INVALID_CREDENTIALS',
         });
       }
+      // 计算期间可能发生停用、改密或注销，签发前必须使用最新账号状态。
+      const current = db
+        .prepare(
+          'SELECT id, username, password_hash, display_name, role, athlete_id, session_version, active FROM users WHERE id = ?'
+        )
+        .get(row.id) as typeof row | undefined;
+      if (
+        !current ||
+        current.password_hash !== row.password_hash ||
+        current.session_version !== row.session_version
+      ) {
+        return res
+          .status(401)
+          .json({ message: LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS, code: 'INVALID_CREDENTIALS' });
+      }
+      row = current;
       if (!row.active) {
         return res.status(403).json({
           message: LOGIN_ERROR_MESSAGES.ACCOUNT_DISABLED,
@@ -380,8 +438,12 @@ export function registerAuthRoutes(app: Express) {
       clearRateLimit(req, 'login');
       res.json({ token, user });
     } catch (error) {
-      // 数据库或内部错误只记录在服务端，不把原始错误内容返回给用户。
-      logger.error('login failed', { error: error instanceof Error ? error.message : String(error) });
+      if (error instanceof PasswordPoolError) {
+        res.setHeader('Retry-After', '1');
+        return res.status(503).json({ message: '服务繁忙，请稍后重试。', code: 'SERVICE_BUSY' });
+      }
+      // 只记录固定诊断信息，避免异常携带密码或个人信息。
+      logger.error('login failed');
       return res.status(500).json({
         message: LOGIN_ERROR_MESSAGES.SERVER_ERROR,
         code: 'SERVER_ERROR',

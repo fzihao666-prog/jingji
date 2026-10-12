@@ -201,3 +201,138 @@ describe('训练填报页', () => {
     expect(templateSource).toContain('bindtap="retryLoad"');
   });
 });
+
+function submissionPage(storage = createDraftStorage(), options = {}) {
+  let definition;
+  const calls = [];
+  const app = { globalData: { user: { id: options.userId || 1 } } };
+  const wx = {
+    ...storage,
+    showToast() {},
+    showModal({ success }) { success({ confirm: true }); },
+  };
+  const api = {
+    async createMyTrainingSession(form, key) {
+      calls.push({ form: JSON.parse(JSON.stringify(form)), key });
+      if (options.fail) throw new Error('模拟响应丢失');
+      return { session: { id: 1 } };
+    },
+  };
+  const submission = () => {
+    const module = { exports: {} };
+    vm.runInNewContext(readFileSync(new URL('../../utils/submission-key.js', import.meta.url), 'utf8'), {
+      module, require: () => formDraft,
+    });
+    return module.exports;
+  };
+  vm.runInNewContext(pageSource, {
+    Page(value) { definition = value; }, wx, getApp: () => app,
+    require(path) {
+      if (path.includes('services/api')) return api;
+      if (path.includes('utils/form-draft')) return formDraft;
+      if (path.includes('utils/submission-key')) return submission();
+      if (path.includes('utils/date')) return { todayBeijing: () => '2026-01-01' };
+      return {};
+    },
+  });
+  const page = {
+    ...definition,
+    data: { ...JSON.parse(JSON.stringify(definition.data)), form: { ...emptyTrainingForm(), content: '水上训练', duration: '90' } },
+    setData(values) { Object.assign(this.data, values); },
+    loadPage() { return Promise.resolve(); },
+  };
+  return { page, calls, storage };
+}
+
+describe('训练填报请求编号', () => {
+  it('响应丢失后重试复用同一请求编号', async () => {
+    const { page, calls } = submissionPage(undefined, { fail: true });
+    await page.save();
+    await page.save();
+    expect(calls).toHaveLength(2);
+    expect(calls[0].key).toMatch(/^[A-Za-z0-9_-]{16,128}$/);
+    expect(calls[1].key).toBe(calls[0].key);
+  });
+
+  it('页面重建并恢复草稿后仍复用原编号', async () => {
+    const first = submissionPage(undefined, { fail: true });
+    await first.page.save();
+    const restored = submissionPage(first.storage, { fail: true });
+    restored.page.data.form = emptyTrainingForm();
+    restored.page.restoreDraft();
+    expect(restored.page.data.form.content).toBe('水上训练');
+    await restored.page.save();
+    expect(restored.calls[0].key).toBe(first.calls[0].key);
+  });
+
+  it('修改内容及切换登录账号使用新的编号', async () => {
+    const first = submissionPage(undefined, { fail: true });
+    await first.page.save();
+    first.page.data.form.content = '修改后的训练';
+    await first.page.save();
+    expect(first.calls[1].key).not.toBe(first.calls[0].key);
+    const other = submissionPage(first.storage, { userId: 2, fail: true });
+    other.page.data.form.content = '修改后的训练';
+    await other.page.save();
+    expect(other.calls[0].key).not.toBe(first.calls[1].key);
+  });
+
+  it('成功保存后新的相同内容填报使用新编号', async () => {
+    const { page, calls } = submissionPage();
+    const form = JSON.parse(JSON.stringify(page.data.form));
+    await page.save();
+    page.data.form = form;
+    await page.save();
+    expect(calls).toHaveLength(2);
+    expect(calls[1].key).not.toBe(calls[0].key);
+  });
+
+  it('无法持久保存请求编号时不发送写请求', async () => {
+    const storage = createDraftStorage();
+    storage.setStorageSync = () => { throw new Error('模拟存储空间不足'); };
+    const { page, calls } = submissionPage(storage);
+    await page.save();
+    expect(calls).toHaveLength(0);
+    expect(page.data.error).toContain('存储');
+  });
+
+  it('请求编号通过请求头发送，不混入训练内容', () => {
+    const calls = [];
+    const module = { exports: {} };
+    vm.runInNewContext(readFileSync(new URL('../../services/api.js', import.meta.url), 'utf8'), {
+      module, require: () => ({ request(path, options) { calls.push({ path, options }); } }),
+    });
+    const form = { content: '水上训练' };
+    module.exports.createMyTrainingSession(form, 'training-request-0001');
+    expect(calls[0].options.header).toEqual({ 'Idempotency-Key': 'training-request-0001' });
+    expect(calls[0].options.data).toEqual(form);
+  });
+
+  it('成功后即使旧草稿未清除也不会提示恢复成新填报', async () => {
+    const storage = createDraftStorage();
+    storage.removeStorageSync = () => { throw new Error('模拟草稿清理失败'); };
+    const first = submissionPage(storage);
+    await first.page.save();
+    const restored = submissionPage(storage);
+    restored.page.data.form = emptyTrainingForm();
+    restored.page.restoreDraft();
+    expect(restored.page.data.form.content).toBe('');
+  });
+
+  it('已保存但完成标记写入失败时保留原编号供安全重试', async () => {
+    const storage = createDraftStorage();
+    const originalWrite = storage.setStorageSync;
+    let rejectCompleted = true;
+    storage.setStorageSync = (key, value) => {
+      if (value.completed && rejectCompleted) throw new Error('模拟存储故障');
+      originalWrite(key, value);
+    };
+    const { page, calls } = submissionPage(storage);
+    await page.save();
+    expect(page.data.form.content).toBe('水上训练');
+    rejectCompleted = false;
+    await page.save();
+    expect(calls).toHaveLength(2);
+    expect(calls[1].key).toBe(calls[0].key);
+  });
+});
