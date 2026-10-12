@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import vm from 'node:vm';
+import { describe, expect, it, vi } from 'vitest';
 import { PROVINCES, PROVINCE_CITIES } from '../../../shared/regions.js';
 import { PROJECT_DEFINITIONS as SHARED_PROJECTS } from '../../../shared/projects.js';
 
@@ -44,14 +45,12 @@ describe('注册页流程', () => {
     expect(loginSource).toContain("wx.navigateTo({ url: '/pages/register/register' })");
   });
 
-  it('提交前校验密码一致、身份证格式与必填项', () => {
+  it('提交前校验密码一致与必填项', () => {
     expect(registerSource).toContain("if (password !== confirmPassword) return '两次输入的密码不一致。';");
-    expect(registerSource).toContain("/^\\d{17}[\\dX]$/.test(identityNumber)");
     expect(registerSource).toContain("if (!/^1[3-9]\\d{9}$/.test(phone)) return '手机号须为11位大陆手机号。';");
     expect(registerSource).toContain("if (!project) return '请选择运动项目。';");
     expect(registerSource).toContain("if (!team) return '请选择所属队伍。';");
     expect(registerSource).toContain("if (!['ATL', 'SCC'].includes(role)) return '请选择注册身份。';");
-    expect(registerSource).toContain("payload.identityNumber = identityNumber;");
     expect(registerSource).toContain("payload.nativePlace = `${nativePlaceProvince}/${nativePlaceCity}`");
     expect(registerSource).toContain('phone,');
     expect(registerSource).toContain("result.status === 'approved'");
@@ -78,10 +77,14 @@ describe('注册页流程', () => {
     expect(registerTemplate).not.toContain('disabled="{{!project || !teamOptions.length}}"');
   });
 
-  it('身份证号自动推导性别与出生日期', () => {
-    expect(registerSource).toContain('birthDateFromIdentityNumber');
-    expect(registerTemplate).toContain('value="{{birthDate}}"');
-    expect(registerTemplate).toContain('value="{{phone}}"');
+  it('生日和性别使用独立原生选择器并展示字段错误', () => {
+    expect(registerSource).not.toContain('identityNumber');
+    expect(registerTemplate).not.toContain('身份证');
+    expect(registerTemplate).toContain('mode="date"');
+    expect(registerTemplate).toContain('end="{{today}}"');
+    expect(registerTemplate).toContain('bindchange="onGenderChange"');
+    expect(registerTemplate).toContain('{{fieldErrors.birthDate}}');
+    expect(registerTemplate).toContain('{{fieldErrors.gender}}');
   });
 
   it('防重复提交并在成功后只回填账号、不回填密码', () => {
@@ -104,10 +107,97 @@ describe('注册页流程', () => {
       readFileSync(new URL('./register.json', import.meta.url), 'utf8')
     );
     expect(registerJson.navigationStyle).toBe('custom');
-    expect(registerTemplate).toContain('bindinput="onIdentityInput"');
+
     expect(registerTemplate).toContain('bindchange="onProjectChange"');
     expect(registerTemplate).toContain('bindchange="onTeamChange"');
     expect(registerTemplate).toContain('bindchange="onProvinceChange"');
     expect(registerTemplate).toContain('bindchange="onCityChange"');
+  });
+});
+
+function createPage(api = {}) {
+  function load(url) {
+    const module = { exports: {} };
+    vm.runInNewContext(readFileSync(url, 'utf8'), {
+      module, require: (path) => load(new URL(`${path}.js`, url))
+    });
+    return module.exports;
+  }
+  let definition;
+  const showToast = vi.fn();
+  const url = new URL('./register.js', import.meta.url);
+  vm.runInNewContext(registerSource, {
+    Page: (value) => { definition = value; },
+    require: (path) => path === '../../services/api' ? api : load(new URL(`${path}.js`, url)),
+    wx: { setStorageSync: vi.fn(), showToast }, setTimeout: vi.fn()
+  });
+  return { ...definition, showToast, data: { ...JSON.parse(JSON.stringify(definition.data)),
+    displayName: '测试用户', username: 'test_user', password: 'test12345', confirmPassword: 'test12345',
+    phone: '13800000000', project: 'rowing', team: '测试队',
+    nativePlaceProvince: '北京市', nativePlaceCity: '北京市', birthDate: '2000-02-29', gender: '女'
+  }, setData(value, callback) { Object.assign(this.data, value); callback?.(); } };
+}
+
+describe('注册资料提交与纠错', () => {
+  it.each(['ATL', 'SCC'])('%s 提交独立生日性别且不含身份证', async (role) => {
+    const register = vi.fn().mockResolvedValue({ status: 'pending' });
+    const page = createPage({ register });
+    page.data.role = role;
+    await page.submit();
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ role, birthDate: '2000-02-29', gender: '女' }));
+    expect(register.mock.calls[0][0]).not.toHaveProperty('identityNumber');
+  });
+  it.each(['', '2026-02-30', '9999-01-01'])('拒绝无效生日 %s 并就近提供错误', async (birthDate) => {
+    const register = vi.fn();
+    const page = createPage({ register });
+    page.data.birthDate = birthDate;
+    await page.submit();
+    expect(register).not.toHaveBeenCalled();
+    expect(page.data.fieldErrors.birthDate).toBeTruthy();
+  });
+  it('性别未选时拒绝提交', async () => {
+    const register = vi.fn();
+    const page = createPage({ register });
+    page.data.gender = '';
+    await page.submit();
+    expect(register).not.toHaveBeenCalled();
+    expect(page.data.fieldErrors.gender).toBeTruthy();
+  });
+  it('服务端字段错误回显且修改对应字段后清除', async () => {
+    const register = vi.fn().mockRejectedValue(Object.assign(new Error('资料不合法'), {
+      fieldErrors: { birthDate: '生日不合法', gender: '请选择性别' }
+    }));
+    const page = createPage({ register });
+    await page.submit();
+    expect(page.data.fieldErrors).toEqual({ birthDate: '生日不合法', gender: '请选择性别' });
+    expect(page.data.errorTarget).toBe('birth-date-field');
+    page.onBirthDateChange({ detail: { value: '2001-01-01' } });
+    expect(page.data.fieldErrors.birthDate).toBeUndefined();
+    expect(page.data.fieldErrors.gender).toBe('请选择性别');
+    page.onGenderChange({ detail: { value: '0' } });
+    expect(page.data.gender).toBe('男');
+    expect(page.data.fieldErrors.gender).toBeUndefined();
+  });
+});
+
+describe('注册错误可感知性', () => {
+  it('失败时滚到首个生日错误，重复提交仍可重新定位', async () => {
+    const page = createPage({ register: vi.fn() });
+    page.data.birthDate = '';
+    await page.submit();
+    expect(page.data.errorTarget).toBe('birth-date-field');
+    expect(page.showToast).toHaveBeenCalledWith(expect.objectContaining({ title: '请选择有效出生日期', icon: 'none' }));
+    page.data.errorTarget = 'other';
+    await page.submit();
+    expect(page.data.errorTarget).toBe('birth-date-field');
+  });
+  it('性别错误有独立滚动目标，picker名称包含错误说明', async () => {
+    const page = createPage({ register: vi.fn() });
+    page.data.gender = '';
+    await page.submit();
+    expect(page.data.errorTarget).toBe('gender-field');
+    expect(registerTemplate).toContain('scroll-into-view="{{errorTarget}}"');
+    expect(registerTemplate).toContain("fieldErrors.birthDate || ''");
+    expect(registerTemplate).toContain("fieldErrors.gender || ''");
   });
 });

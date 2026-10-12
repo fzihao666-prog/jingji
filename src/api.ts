@@ -65,6 +65,7 @@ export class ApiRequestError extends Error {
   readonly timedOut: boolean;
   readonly networkError: boolean;
   readonly serverMessage: string;
+  readonly fieldErrors?: Partial<Record<'gender' | 'birthDate', string>>;
 
   constructor(
     message: string,
@@ -74,6 +75,7 @@ export class ApiRequestError extends Error {
       timedOut?: boolean;
       networkError?: boolean;
       serverMessage?: string;
+      fieldErrors?: Partial<Record<'gender' | 'birthDate', string>>;
     } = {}
   ) {
     super(message);
@@ -83,6 +85,7 @@ export class ApiRequestError extends Error {
     this.timedOut = detail.timedOut ?? false;
     this.networkError = detail.networkError ?? false;
     this.serverMessage = detail.serverMessage ?? '';
+    this.fieldErrors = detail.fieldErrors;
   }
 }
 
@@ -136,7 +139,7 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
       payload = null;
     }
   }
-  const body = payload as { message?: unknown; code?: unknown } | null;
+  const body = payload as { message?: unknown; code?: unknown; fieldErrors?: unknown } | null;
   const code = typeof body?.code === 'string' ? body.code : undefined;
   const serverMessage = typeof body?.message === 'string' ? body.message : '';
   if (!response.ok) {
@@ -144,6 +147,15 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
       code,
       status: response.status,
       serverMessage,
+      fieldErrors: (() => {
+        const parsed = z
+          .object({
+            gender: z.string().max(200).optional(),
+            birthDate: z.string().max(200).optional(),
+          })
+          .safeParse(body?.fieldErrors);
+        return parsed.success ? parsed.data : undefined;
+      })(),
     });
   }
   if (isJson && payload === null) {
@@ -192,11 +204,11 @@ export const api = {
     username: string;
     password: string;
     displayName: string;
-    role: 'ATL';
+    role: 'ATL' | 'SCC';
     project?: string;
     team?: string;
-    gender?: string;
-    identityNumber: string;
+    gender: string;
+    birthDate: string;
     phone: string;
     nativePlace: string;
   }) {

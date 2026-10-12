@@ -171,9 +171,10 @@ export function AccountsPage() {
                   <span>{request.requestedRole === 'SCC' ? '队伍体能教练' : '运动员'}</span>
                 </div>
                 <p>
-                  @{request.username} · {request.gender} · 手机：
-                  {request.phone || '未填'} · 籍贯：{request.nativePlace} · 身份证：
-                  {request.identityNumber} · {projectLabel(request.project || '')} · {request.team}
+                  @{request.username} · 性别：{request.gender || '未录入'} · 出生日期：
+                  {request.birthDate || '未录入'} · 手机：
+                  {request.phone || '未填'} · 籍贯：{request.nativePlace || '未填'} ·{' '}
+                  {projectLabel(request.project || '')} · {request.team}
                 </p>
               </div>
               <time>

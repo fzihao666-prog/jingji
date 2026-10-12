@@ -46,6 +46,33 @@ export async function checkMiniDailyTodoFlow(assert) {
     readFileSync(new URL('../WeChat Mini Program/utils/date.js', import.meta.url), 'utf8'),
     dateContext
   );
+  // 首页新增缺测展示依赖，加载真实模块，避免测试桩遗漏新导出。
+  const strengthViewContext = {
+    module: { exports: {} },
+    require: (path) => {
+      if (path === './format') return format.module.exports;
+      if (path === './date') return dateContext.module.exports;
+      throw new Error(`未预期依赖：${path}`);
+    },
+  };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/strength-view.js', import.meta.url), 'utf8'),
+    strengthViewContext
+  );
+  const trainingEmptyContext = {
+    module: { exports: {} },
+    require: (path) => {
+      if (path === './format') return format.module.exports;
+      if (path === './strength-view') return strengthViewContext.module.exports;
+      if (path === './pagination') return paginationContext.module.exports;
+      throw new Error(`未预期依赖：${path}`);
+    },
+  };
+  vm.runInNewContext(
+    readFileSync(new URL('../WeChat Mini Program/utils/training-empty.js', import.meta.url), 'utf8'),
+    trainingEmptyContext
+  );
+  modules['../../utils/training-empty'] = trainingEmptyContext.module.exports;
   const wellnessFormContext = { module: { exports: {} }, require: () => dateContext.module.exports };
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/utils/wellness-form.js', import.meta.url), 'utf8'),
@@ -190,13 +217,13 @@ export async function checkMiniDailyTodoFlow(assert) {
     throw new Error('待办暂时不可用');
   };
   const failedRetry = page.retryTodos();
-  assert(page.data.focusRows.length === 0 && page.data.focusPager === null, '重新加载必须立即清空旧关注名单与分页');
+  assert(page.data.focusRows.length === 0 && page.data.focusPager.total === 0, '重新加载必须立即清空旧关注名单与分页');
   await failedRetry;
   assert(
     page.data.todos === null && page.data.todosError === '待办暂时不可用',
     '失败不得显示旧名单或全部完成'
   );
-  assert(page.data.focusRows.length === 0 && page.data.focusPager === null && !page.data.todosLoading, '待办失败不得保留旧关注名单与分页');
+  assert(page.data.focusRows.length === 0 && page.data.focusPager.total === 0 && !page.data.todosLoading, '待办失败不得保留旧关注名单与分页');
   api.dailyTodos = async () => ({
     todos: {
       ...todos('刷新后'),
@@ -390,7 +417,7 @@ export async function checkMiniDailyTodoFlow(assert) {
   api.teamOverview = async () => ({ athletes: [] });
   api.dailyTodos = async () => ({ todos: todos('统一骨架') });
   const fullLoad = page.loadPage();
-  assert(page.data.focusRows.length === 0 && page.data.focusPager === null, '全量重新加载必须立即清空旧关注名单与分页');
+  assert(page.data.focusRows.length === 0 && page.data.focusPager.total === 0, '全量重新加载必须立即清空旧关注名单与分页');
   await fullLoad;
   assert(page.data.error === '' && !page.data.loading, '统一骨架应正常完成首页加载');
   assert(overviewCalls === 1, '统一骨架只发起一次总览加载');

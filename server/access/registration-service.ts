@@ -8,7 +8,6 @@ import {
   permissionsAllowProjectTeam,
 } from '../core/permissions.ts';
 import { DEFAULT_COACH_CATEGORY } from '../../shared/coach-categories.ts';
-import { birthDateFromIdentityNumber } from '../core/utils.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 
 const provinceSet = new Set<string>(PROVINCES);
@@ -42,7 +41,7 @@ export type RegistrationActivationRow = {
   team: string;
   gender: string | null;
   status: string;
-  identity_number: string | null;
+  birth_date: string | null;
   native_place: string | null;
   phone: string | null;
 };
@@ -58,7 +57,7 @@ export function activateRegistrationRequest(
     .prepare(
       `
     SELECT id, username, password_hash, display_name, requested_role,
-      project, team, gender, identity_number, native_place, phone, status
+      project, team, gender, birth_date, native_place, phone, status
     FROM registration_requests WHERE id = ?
   `
     )
@@ -107,7 +106,7 @@ export function activateRegistrationRequest(
           .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
           .get(request.project, request.team) as { id: number } | undefined;
         if (!team) throw new Error('申请所属队伍不存在或已停用。');
-        const birthDate = birthDateFromIdentityNumber(request.identity_number || '') || null;
+        const birthDate = request.birth_date || null;
         const result = db
           .prepare(
             `INSERT INTO athletes (name, project, team, team_id, gender, birth_date) VALUES (?, ?, ?, ?, ?, ?)`
@@ -122,12 +121,11 @@ export function activateRegistrationRequest(
           );
         athleteId = Number(result.lastInsertRowid);
       }
-      const profileBirthDate = birthDateFromIdentityNumber(request.identity_number || '') || null;
+      const profileBirthDate = request.birth_date || null;
       if (athleteId && profileBirthDate) {
-        db.prepare('UPDATE athletes SET birth_date = COALESCE(birth_date, ?) WHERE id = ?').run(
-          profileBirthDate,
-          athleteId
-        );
+        db.prepare(
+          "UPDATE athletes SET birth_date = COALESCE(NULLIF(birth_date, ''), ?), gender = COALESCE(NULLIF(gender, ''), ?) WHERE id = ?"
+        ).run(profileBirthDate, request.gender, athleteId);
       }
       db.prepare(
         `
@@ -139,12 +137,7 @@ export function activateRegistrationRequest(
         phone = COALESCE(NULLIF(excluded.phone, ''), athlete_profiles.phone),
         updated_at = CURRENT_TIMESTAMP
     `
-      ).run(
-        athleteId,
-        request.identity_number || '',
-        request.native_place || '',
-        request.phone || ''
-      );
+      ).run(athleteId, '', request.native_place || '', request.phone || '');
     }
 
     const result = db

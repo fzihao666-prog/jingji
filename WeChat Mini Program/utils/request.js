@@ -259,6 +259,16 @@ function request(path, options = {}) {
         failure.code = response.data && typeof response.data.code === 'string' ? response.data.code : '';
         failure.serverMessage = response.data && typeof response.data.message === 'string' ? response.data.message : '';
         failure.statusCode = response.statusCode;
+        // 只保留注册页可纠正的字段提示，不携带完整响应或额外个人资料。
+        if (path === '/api/auth/register') {
+          failure.fieldErrors = {};
+          const fields = response.data && response.data.fieldErrors;
+          for (const field of ['birthDate', 'gender']) {
+            if (fields && typeof fields[field] === 'string' && fields[field].length <= 200) {
+              failure.fieldErrors[field] = fields[field];
+            }
+          }
+        }
         reject(failure);
       },
       fail(error) {

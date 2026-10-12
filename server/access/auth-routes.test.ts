@@ -50,7 +50,7 @@ beforeAll(async () => {
       role TEXT, athlete_id INTEGER, active INTEGER DEFAULT 1, session_version INTEGER DEFAULT 0);
     CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT UNIQUE, status TEXT DEFAULT 'pending',
       password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT,
-      identity_number TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
+      birth_date TEXT, identity_number TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
     INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
@@ -223,6 +223,8 @@ describe('异步密码接口容量与并发', () => {
           project: 'ROWING',
           team: '测试队伍',
           phone: '13800000000',
+          gender: '男',
+          birthDate: '2000-02-29',
         }),
       });
     const responses = await Promise.all([submit(), submit()]);
@@ -235,7 +237,6 @@ describe('异步密码接口容量与并发', () => {
   });
 });
 
-
 it('超长登录密码返回凭据错误且不占用密码池', async () => {
   passwordFailure = new PasswordPoolError('OVERLOADED');
   const result = await login('active_user', 'A1'.repeat(37));
@@ -246,9 +247,96 @@ it('超长登录密码返回凭据错误且不占用密码池', async () => {
 it('注册快速查重不占用已满的密码池', async () => {
   passwordFailure = new PasswordPoolError('OVERLOADED');
   const response = await fetch(`${baseUrl}/api/auth/register`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ username: 'pending_user', password: correctPassword, displayName: '测试教练',
-      role: 'SCC', project: 'ROWING', team: '测试队伍', phone: '13800000000' }),
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      username: 'pending_user',
+      password: correctPassword,
+      displayName: '测试教练',
+      role: 'SCC',
+      project: 'ROWING',
+      team: '测试队伍',
+      phone: '13800000000',
+      gender: '男',
+      birthDate: '2000-02-29',
+    }),
   });
   expect(response.status).toBe(409);
+});
+
+const registrationInput = {
+  username: 'new_person',
+  password: correctPassword,
+  displayName: '测试人员',
+  project: 'ROWING',
+  team: '测试队伍',
+  phone: '13800000000',
+  gender: '女',
+  birthDate: '2000-02-29',
+  nativePlace: '浙江/杭州市',
+};
+async function registerInput(input: Record<string, unknown>) {
+  return fetch(`${baseUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+describe('独立注册人口信息', () => {
+  it.each(['ATL', 'SCC'])('角色%s不需要身份证并保存性别生日', async (role) => {
+    const response = await registerInput({ ...registrationInput, role });
+    expect(response.status).toBe(201);
+    expect(
+      db
+        .prepare(
+          'SELECT gender,birth_date,identity_number FROM registration_requests WHERE username=?'
+        )
+        .get(registrationInput.username)
+    ).toEqual({ gender: '女', birth_date: '2000-02-29', identity_number: null });
+  });
+  it.each([
+    { gender: undefined },
+    { gender: '未知' },
+    { birthDate: undefined },
+    { birthDate: '2001-02-29' },
+    { birthDate: '9999-01-01' },
+  ])('非法人口信息返回字段错误 %#', async (invalid) => {
+    const response = await registerInput({ ...registrationInput, role: 'SCC', ...invalid });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ fieldErrors: expect.any(Object) });
+  });
+});
+
+it('旧客户端身份证被忽略且不改变主动填写的生日性别', async () => {
+  const response = await registerInput({
+    ...registrationInput,
+    role: 'ATL',
+    identityNumber: '510107200101011234',
+  });
+  expect(response.status).toBe(201);
+  expect(
+    db
+      .prepare(
+        'SELECT gender,birth_date,identity_number FROM registration_requests WHERE username=?'
+      )
+      .get(registrationInput.username)
+  ).toEqual({ gender: '女', birth_date: '2000-02-29', identity_number: null });
+});
+it('拒绝申请重提保留历史身份证并独立更新生日性别', async () => {
+  db.exec(
+    "UPDATE registration_requests SET identity_number='510107200101011234' WHERE username='rejected_user'"
+  );
+  const response = await registerInput({
+    ...registrationInput,
+    role: 'SCC',
+    username: 'rejected_user',
+  });
+  expect(response.status).toBe(201);
+  expect(
+    db
+      .prepare(
+        "SELECT gender,birth_date,identity_number FROM registration_requests WHERE username='rejected_user'"
+      )
+      .get()
+  ).toEqual({ gender: '女', birth_date: '2000-02-29', identity_number: '510107200101011234' });
 });

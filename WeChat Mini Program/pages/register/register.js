@@ -1,28 +1,8 @@
 const api = require('../../services/api');
 const { projects, provinces, provinceCities } = require('../../data/register-data');
 
-function genderFromIdentityNumber(value) {
-  return /^\d{17}[\dX]$/.test(value) ? (Number(value[16]) % 2 ? '男' : '女') : '';
-}
-
-function birthDateFromIdentityNumber(value) {
-  if (!/^\d{17}[\dX]$/.test(value)) return '';
-  const year = value.slice(6, 10);
-  const month = value.slice(10, 12);
-  const day = value.slice(12, 14);
-  const numericMonth = Number(month);
-  const numericDay = Number(day);
-  if (numericMonth < 1 || numericMonth > 12 || numericDay < 1 || numericDay > 31) return '';
-  const candidate = new Date(Date.UTC(Number(year), numericMonth - 1, numericDay));
-  if (
-    candidate.getUTCFullYear() !== Number(year) ||
-    candidate.getUTCMonth() !== numericMonth - 1 ||
-    candidate.getUTCDate() !== numericDay
-  ) {
-    return '';
-  }
-  return `${year}-${month}-${day}`;
-}
+const { todayBeijing } = require('../../utils/date');
+const { validateRegistrationDemographics } = require('../../utils/registration-demographics');
 
 Page({
   data: {
@@ -33,8 +13,11 @@ Page({
     password: '',
     confirmPassword: '',
     displayName: '',
-    identityNumber: '',
     gender: '',
+    genderOptions: ['男', '女'],
+    today: todayBeijing(),
+    fieldErrors: {},
+    errorTarget: '',
     birthDate: '',
     phone: '',
     project: '',
@@ -61,6 +44,7 @@ Page({
   },
 
   onShow() {
+    this.setData({ today: todayBeijing() });
     if (wx.getStorageSync('jingji-mini-token')) wx.reLaunch({ url: '/pages/index/index' });
   },
 
@@ -114,14 +98,16 @@ Page({
   onPhoneInput(event) {
     this.setData({ phone: event.detail.value.replace(/\s/g, ''), error: '' });
   },
-  onIdentityInput(event) {
-    const value = event.detail.value.replace(/\s/g, '').toUpperCase();
-    this.setData({
-      identityNumber: value,
-      gender: genderFromIdentityNumber(value),
-      birthDate: birthDateFromIdentityNumber(value),
-      error: ''
-    });
+  onBirthDateChange(event) {
+    const fieldErrors = { ...this.data.fieldErrors };
+    delete fieldErrors.birthDate;
+    this.setData({ birthDate: event.detail.value, fieldErrors, error: '' });
+  },
+
+  onGenderChange(event) {
+    const fieldErrors = { ...this.data.fieldErrors };
+    delete fieldErrors.gender;
+    this.setData({ gender: this.data.genderOptions[Number(event.detail.value)] || '', fieldErrors, error: '' });
   },
 
   onProjectChange(event) {
@@ -187,7 +173,6 @@ Page({
       password,
       confirmPassword,
       displayName,
-      identityNumber,
       phone,
       project,
       team,
@@ -198,9 +183,6 @@ Page({
     if (!displayName) return '请填写姓名。';
     if (displayName.length < 2 || displayName.length > 20) return '姓名应为2至20个字符。';
     if (role === 'ATL') {
-      if (!identityNumber) return '请填写身份证号。';
-      if (!/^\d{17}[\dX]$/.test(identityNumber))
-        return '身份证号须为18位，前17位为数字，末位为数字或X。';
       if (!nativePlaceProvince) return '请选择籍贯省份。';
       if (!nativePlaceCity) return '请选择籍贯城市。';
     }
@@ -217,11 +199,24 @@ Page({
     return '';
   },
 
+  showValidationError(error, fieldErrors) {
+    const errorTarget = fieldErrors.birthDate ? 'birth-date-field'
+      : fieldErrors.gender ? 'gender-field' : 'register-error';
+    // 先清空定位，保证连续提交同一错误时仍能滚回提示。
+    this.setData({ error, fieldErrors, errorTarget: '' }, () => {
+      this.setData({ errorTarget });
+    });
+    wx.showToast({ title: error, icon: 'none', duration: 2500 });
+  },
+
   async submit() {
     if (this.data.submitting || this.data.success) return;
-    const error = this.validate();
+    const today = todayBeijing();
+    const fieldErrors = validateRegistrationDemographics(this.data, today);
+    this.setData({ today, fieldErrors });
+    const error = fieldErrors.birthDate || fieldErrors.gender || this.validate();
     if (error) {
-      this.setData({ error });
+      this.showValidationError(error, fieldErrors);
       return;
     }
     const {
@@ -233,7 +228,7 @@ Page({
       project,
       team,
       gender,
-      identityNumber,
+      birthDate,
       nativePlaceProvince,
       nativePlaceCity
     } = this.data;
@@ -246,11 +241,11 @@ Page({
         role,
         project,
         team,
-        phone
+        phone,
+        gender,
+        birthDate
       };
       if (role === 'ATL') {
-        payload.gender = gender;
-        payload.identityNumber = identityNumber;
         payload.nativePlace = `${nativePlaceProvince}/${nativePlaceCity}`;
       }
       const result = await api.register(payload);
@@ -269,7 +264,13 @@ Page({
         wx.navigateBack();
       }, 1500);
     } catch (requestError) {
-      this.setData({ error: requestError.message || '注册失败，请稍后重试。' });
+      const fieldErrors = {};
+      for (const field of ['birthDate', 'gender']) {
+        const message = requestError.fieldErrors?.[field];
+        if (typeof message === 'string' && message.length <= 200) fieldErrors[field] = message;
+      }
+      const error = fieldErrors.birthDate || fieldErrors.gender || requestError.message || '注册失败，请稍后重试。';
+      this.showValidationError(error, fieldErrors);
     } finally {
       this.setData({ submitting: false });
     }

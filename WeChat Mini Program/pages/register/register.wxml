@@ -8,7 +8,7 @@
     </view>
   </view>
 
-  <scroll-view class="register-scroll" scroll-y>
+  <scroll-view class="register-scroll" scroll-y scroll-into-view="{{errorTarget}}">
     <view class="register-box">
       <view class="register-heading">
         <text class="register-kicker">运动员 / 教练账号准入</text>
@@ -41,25 +41,24 @@
           <input class="input" value="{{displayName}}" placeholder="请输入真实姓名" bindinput="onDisplayNameInput" />
         </view>
 
+        <view id="birth-date-field" class="field">
+          <text class="field-label">出生日期（必填）</text>
+          <picker mode="date" value="{{birthDate}}" end="{{today}}" bindchange="onBirthDateChange" aria-label="出生日期，必填，{{birthDate || '请选择出生日期'}}，{{fieldErrors.birthDate || ''}}">
+            <view class="picker-value {{birthDate ? '' : 'placeholder'}}">{{birthDate || '请选择出生日期'}}</view>
+          </picker>
+          <text wx:if="{{fieldErrors.birthDate}}" class="field-error">{{fieldErrors.birthDate}}</text>
+        </view>
+        <view id="gender-field" class="field">
+          <text class="field-label">性别（必填）</text>
+          <picker mode="selector" range="{{genderOptions}}" value="{{gender === '女' ? 1 : 0}}" bindchange="onGenderChange" aria-label="性别，必填，{{gender || '请选择性别'}}，{{fieldErrors.gender || ''}}">
+            <view class="picker-value {{gender ? '' : 'placeholder'}}">{{gender || '请选择性别'}}</view>
+          </picker>
+          <text wx:if="{{fieldErrors.gender}}" class="field-error">{{fieldErrors.gender}}</text>
+        </view>
+
         <block wx:if="{{role === 'ATL'}}">
-          <view class="field">
-            <text class="field-label">身份证号</text>
-            <input class="input" value="{{identityNumber}}" placeholder="18位身份证号" maxlength="18" bindinput="onIdentityInput" />
-          </view>
-
-          <view class="field-row">
-            <view class="field field-half">
-              <text class="field-label">性别</text>
-              <input class="input input-readonly" value="{{gender}}" placeholder="自动确定" disabled />
-            </view>
-            <view class="field field-half">
-              <text class="field-label">出生日期</text>
-              <input class="input input-readonly" value="{{birthDate}}" placeholder="自动确定" disabled />
-            </view>
-          </view>
-
-          <view class="field-row">
-            <view class="field field-half">
+          <view class="field-column">
+            <view class="field">
               <text class="field-label">籍贯省份</text>
               <picker mode="selector" range="{{provinceOptions}}" value="0" bindchange="onProvinceChange" disabled="{{!provinceOptions.length}}">
                 <view class="picker-value {{nativePlaceProvince ? '' : 'placeholder'}}">
@@ -67,7 +66,7 @@
                 </view>
               </picker>
             </view>
-            <view class="field field-half">
+            <view class="field">
               <text class="field-label">籍贯城市</text>
               <picker mode="selector" range="{{cityOptions}}" bindchange="onCityChange" disabled="{{!cityOptions.length}}">
                 <view class="picker-value {{nativePlaceCity ? '' : 'placeholder'}}">
@@ -133,7 +132,7 @@
           <input class="input" password value="{{confirmPassword}}" placeholder="请再次输入密码" bindinput="onConfirmPasswordInput" confirm-type="done" bindconfirm="submit" />
         </view>
 
-        <view wx:if="{{error}}" class="register-error">{{error}}</view>
+        <view id="register-error" wx:if="{{error}}" class="register-error">{{error}}</view>
         <view wx:if="{{success}}" class="register-success">{{success}}</view>
 
         <button class="primary-button register-button" loading="{{submitting}}" disabled="{{submitting || !!success}}" bindtap="submit">

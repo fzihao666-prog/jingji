@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
+import { beijingDate } from '../core/coach-daily-todos.ts';
 import { passwordPool, PasswordPoolError } from '../core/password-pool.ts';
 import type { Express } from 'express';
 import jwt from 'jsonwebtoken';
@@ -18,12 +21,7 @@ import {
   replaceAccountScope,
   selectableProjects,
 } from '../core/permissions.ts';
-import {
-  birthDateFromIdentityNumber,
-  cleanString,
-  userById,
-  validatePersonName,
-} from '../core/utils.ts';
+import { cleanString, userById, validatePersonName } from '../core/utils.ts';
 import { db } from '../core/db.ts';
 import { logger } from '../core/logger.ts';
 import { PROVINCE_CITIES } from '../../shared/regions.ts';
@@ -201,12 +199,23 @@ export function registerAuthRoutes(
             : requestedRoleInput;
       const project = cleanString(req.body?.project);
       const team = cleanString(req.body?.team);
-      const identityNumber = cleanString(req.body?.identityNumber).toUpperCase();
-      const gender = /^\d{17}[\dX]$/.test(identityNumber)
-        ? Number(identityNumber[16]) % 2
-          ? '男'
-          : '女'
-        : '';
+      // 兼容旧客户端的多余字段，但身份证不参与注册校验或持久化。
+      const demographicInput = z
+        .object({ gender: z.string().max(1), birthDate: z.string().max(10) })
+        .safeParse(req.body);
+      const fieldErrors = validateRegistrationDemographics(
+        { gender: req.body?.gender, birthDate: req.body?.birthDate },
+        beijingDate(new Date())
+      );
+      if (!demographicInput.success || Object.keys(fieldErrors).length) {
+        return res
+          .status(400)
+          .json({
+            message: Object.values(fieldErrors).join('；') || '请填写有效性别和出生日期',
+            fieldErrors,
+          });
+      }
+      const { gender, birthDate } = demographicInput.data;
       const nativePlace = cleanString(req.body?.nativePlace);
       const phone = cleanString(req.body?.phone).replace(/[\s-]/g, '');
       const errors: string[] = [];
@@ -230,8 +239,6 @@ export function registerAuthRoutes(
         .get(project, team);
       if (!validTeam) errors.push('请选择该项目下的有效队伍');
       if (requestedRole === 'ATL') {
-        if (!/^\d{17}[\dX]$/.test(identityNumber))
-          errors.push('身份证号须为18位，前17位为数字，末位为数字或X');
         if (
           nativePlaceRest.length ||
           !PROVINCE_CITIES[nativePlaceProvince]?.includes(nativePlaceCity)
@@ -279,7 +286,7 @@ export function registerAuthRoutes(
         db.prepare(
           `
         UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
-          project = ?, team = ?, gender = ?, identity_number = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
+          project = ?, team = ?, gender = ?, birth_date = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
           reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
       `
         ).run(
@@ -289,7 +296,7 @@ export function registerAuthRoutes(
           project,
           team,
           gender,
-          identityNumber,
+          birthDate,
           nativePlace,
           phone,
           existingRequest.id
@@ -300,7 +307,7 @@ export function registerAuthRoutes(
           .prepare(
             `
         INSERT INTO registration_requests (
-          username, password_hash, display_name, requested_role, project, team, gender, identity_number, native_place, phone
+          username, password_hash, display_name, requested_role, project, team, gender, birth_date, native_place, phone
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
           )
@@ -312,7 +319,7 @@ export function registerAuthRoutes(
             project,
             team,
             gender,
-            identityNumber,
+            birthDate,
             nativePlace,
             phone
           );

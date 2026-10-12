@@ -33,7 +33,7 @@ beforeAll(async () => {
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER, category TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER, UNIQUE(coach_user_id,athlete_id));
-    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT, status TEXT, identity_number TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT);
+    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT, birth_date TEXT, status TEXT, identity_number TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT);
   `);
   activate = (await import('./registration-service.ts')).activateRegistrationRequest;
@@ -45,7 +45,7 @@ beforeEach(() => {
     INSERT INTO user_area_permissions VALUES (1,'national','','','',1);
     INSERT INTO user_project_permissions VALUES (1,'ROWING',1);
     INSERT INTO user_team_permissions VALUES (1,'ROWING','测试队',1);
-    INSERT INTO registration_requests (id,username,password_hash,display_name,requested_role,project,team,gender,status,native_place) VALUES (1,'newathlete','test-only-hash','测试运动员','ATL','ROWING','测试队','男','pending','浙江/杭州市');
+    INSERT INTO registration_requests (id,username,password_hash,display_name,requested_role,project,team,gender,birth_date,status,native_place) VALUES (1,'newathlete','test-only-hash','测试运动员','ATL','ROWING','测试队','男','2000-02-29','pending','浙江/杭州市');
   `);
 });
 afterAll(() => db.close());
@@ -133,5 +133,22 @@ describe('运动员注册行政归属', () => {
     db.exec("UPDATE user_team_permissions SET team='其他队'");
     expect(activate(1, reviewer)).toMatchObject({ ok: false, status: 403 });
     expect(db.prepare('SELECT * FROM account_profiles').all()).toHaveLength(0);
+  });
+});
+
+it.each([reviewer, null])('开通保存申请生日性别 %#', (actor) => {
+  expect(activate(1, actor).ok).toBe(true);
+  expect(db.prepare('SELECT gender,birth_date FROM athletes').get()).toEqual({
+    gender: '男',
+    birth_date: '2000-02-29',
+  });
+});
+it('已有运动员非空生日和性别保持', () => {
+  existingOrigin();
+  db.exec("UPDATE athletes SET birth_date='1999-01-01',gender='女'");
+  expect(activate(1, reviewer).ok).toBe(true);
+  expect(db.prepare('SELECT gender,birth_date FROM athletes').get()).toEqual({
+    gender: '女',
+    birth_date: '1999-01-01',
   });
 });

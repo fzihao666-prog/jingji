@@ -250,7 +250,8 @@ try {
       modelResult.payload.standard.version === 'GJ-ROW-2026.07-R1' &&
       analysisResult.status === 200 &&
       analysisResult.payload.analysis.status.label &&
-      analysisResult.payload.standard.missingDataRule.includes('未测试'),
+      analysisResult.payload.standard.missingDataRule.includes('待采集') &&
+      analysisResult.payload.standard.missingDataRule.includes('不按0分处理'),
     '赛艇分析标准或个人分析接口失败'
   );
 
@@ -858,6 +859,8 @@ try {
       password: 'Secure123',
       displayName: '测试区域',
       role: 'regional',
+      birthDate: '2000-01-01',
+      gender: '男',
     }),
   });
   assert(invalidRole.status === 400, '公开注册不应允许区域管理人角色');
@@ -1035,21 +1038,22 @@ try {
   );
   assert(createSlalomTeam.status === 201, '队伍管理接口无法创建激流注册测试队伍');
 
-  const invalidIdentityRegister = await request('/api/auth/register', {
+  const invalidBirthDateRegister = await request('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({
       username: 'invalid_id_test',
       password: 'Secure123',
-      displayName: '证件测试',
+      displayName: '日期测试',
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '51010720000101123',
+      birthDate: '2000-02-30',
+      gender: '男',
       phone: '13812345678',
       nativePlace: '四川/成都市',
     }),
   });
-  assert(invalidIdentityRegister.status === 400, '不足18位的身份证号不应通过注册校验');
+  assert(invalidBirthDateRegister.status === 400, '不存在的出生日期不应通过注册校验');
 
   const invalidPhoneRegister = await request('/api/auth/register', {
     method: 'POST',
@@ -1060,7 +1064,8 @@ try {
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '510107200001011234',
+      birthDate: '2000-01-01',
+      gender: '男',
       phone: '12345',
       nativePlace: '四川/成都市',
     }),
@@ -1076,7 +1081,8 @@ try {
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '510107200001011234',
+      birthDate: '2000-01-01',
+      gender: '男',
       phone: '13812345678',
       nativePlace: '四川/武汉市',
     }),
@@ -1092,7 +1098,8 @@ try {
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '510107200001011234',
+      birthDate: '2000-01-01',
+      gender: '男',
       phone: '13812345678',
       nativePlace: '四川/成都市',
     }),
@@ -1109,7 +1116,8 @@ try {
   const athleteRequest = pending.payload.requests.find((item) => item.username === 'athlete_test');
   assert(
     pending.status === 200 &&
-      athleteRequest?.identityNumber === '510107200001011234' &&
+      !athleteRequest?.identityNumber &&
+      athleteRequest?.birthDate === '2000-01-01' &&
       athleteRequest?.nativePlace === '四川/成都市' &&
       athleteRequest?.phone === '13812345678' &&
       athleteRequest?.gender === '男',
@@ -1141,7 +1149,9 @@ try {
   assert(
     athleteLogin.payload.user.displayName === '测试运动员修订' &&
       athleteList.payload.athletes.length === 1 &&
-      athleteList.payload.athletes[0].name === '测试运动员修订',
+      athleteList.payload.athletes[0].name === '测试运动员修订' &&
+      athleteList.payload.athletes[0].birthDate === '2000-01-01' &&
+      athleteList.payload.athletes[0].gender === '男',
     '注册姓名修改或运动员数据范围错误'
   );
   const renameOwnAthlete = await request(
@@ -1169,7 +1179,8 @@ try {
       role: 'ATL',
       project: 'CANOE_SPRINT',
       team: '皮划艇测试组',
-      identityNumber: '510107200001021235',
+      birthDate: '2000-01-02',
+      gender: '男',
       phone: '13912345678',
       nativePlace: '四川/成都市',
     }),
@@ -1184,7 +1195,8 @@ try {
       role: 'ATL',
       project: 'CANOE_SLALOM',
       team: '激流测试组',
-      identityNumber: '510107200001031236',
+      birthDate: '2000-01-03',
+      gender: '男',
       phone: '13712345678',
       nativePlace: '四川/成都市',
     }),
@@ -1255,7 +1267,8 @@ try {
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '510107200001041237',
+      birthDate: '2000-01-04',
+      gender: '男',
       phone: '13612345678',
       nativePlace: '四川/成都市',
     }),
@@ -1278,6 +1291,8 @@ try {
       password: 'Secure123',
       displayName: '测试教练',
       role: 'SCC',
+      birthDate: '2000-01-01',
+      gender: '男',
       project: 'ROWING',
       team: '测试组',
       phone: '13512345678',
@@ -1296,7 +1311,7 @@ try {
   const coachPendingRow = (
     await request('/api/admin/registrations?status=pending', {}, adminToken)
   ).payload.requests.find((item) => item.username === 'coach_test');
-  assert(coachPendingRow?.requestedRole === 'SCC', '管理员未看到教练待审核申请');
+  assert(coachPendingRow?.requestedRole === 'SCC' && coachPendingRow.birthDate === '2000-01-01' && coachPendingRow.gender === '男' && !coachPendingRow.identityNumber, '管理员未看到教练独立生日、性别或误收集身份证');
   const approvePublicCoach = await request(
     `/api/admin/registrations/${coachPendingRow.id}/approve`,
     { method: 'POST' },
@@ -1363,6 +1378,8 @@ try {
       password: 'Secure123',
       displayName: '跨范围待审教练',
       role: 'SCC',
+      birthDate: '2000-01-01',
+      gender: '男',
       project: 'CANOE_SPRINT',
       team: '皮划艇测试组',
       phone: '13911112222',
@@ -1390,7 +1407,8 @@ try {
         role: 'ATL',
         project: 'ROWING',
         team: '测试组',
-        identityNumber: '510107200001051238',
+        birthDate: '2000-01-05',
+        gender: '男',
         phone: '13511112222',
         nativePlace: '四川/成都市',
       }),
@@ -1414,7 +1432,8 @@ try {
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '510107200001061239',
+      birthDate: '2000-01-06',
+      gender: '男',
       phone: '13611112222',
       nativePlace: '四川/成都市',
     }),
@@ -1436,6 +1455,8 @@ try {
       password: 'Secure123',
       displayName: '自动开通教练',
       role: 'SCC',
+      birthDate: '2000-01-01',
+      gender: '男',
       project: 'ROWING',
       team: '测试组',
       phone: '13811112222',
@@ -1475,7 +1496,8 @@ try {
       role: 'ATL',
       project: 'ROWING',
       team: '测试组',
-      identityNumber: '510107200001071240',
+      birthDate: '2000-01-07',
+      gender: '女',
       phone: '13711112222',
       nativePlace: '四川/成都市',
     }),

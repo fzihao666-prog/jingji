@@ -131,19 +131,12 @@
   font-size: 26rpx;
 }
 
-.input-readonly {
-  color: #778b92;
-  background: #f1f5f6;
-}
-
-.field-row {
-  display: flex;
-  gap: 16rpx;
-}
-
-.field-half {
-  flex: 1;
-  min-width: 0;
+.field-error {
+  display: block;
+  margin-top: 10rpx;
+  color: #9a4639;
+  font-size: 22rpx;
+  line-height: 1.5;
 }
 
 .picker-value {

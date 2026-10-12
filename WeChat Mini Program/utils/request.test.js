@@ -209,3 +209,20 @@ describe('登录失败与会话失效的区分', () => {
     expect(error.code).toBe('SERVER_ERROR');
   });
 });
+
+describe('注册字段错误透传', () => {
+  it('仅透传生日性别的有限字符串错误，不泄漏额外字段', async () => {
+    const { client } = errorClient({ success: { statusCode: 400, data: {
+      message: '资料不合法', fieldErrors: { birthDate: '请选择有效出生日期', gender: '请选择性别', identityNumber: '不应透传' }
+    } } });
+    const error = await rejected(client.request('/api/auth/register', { method: 'POST', auth: false }));
+    expect(error.fieldErrors).toEqual({ birthDate: '请选择有效出生日期', gender: '请选择性别' });
+  });
+  it('忽略非字符串与过长字段错误', async () => {
+    const { client } = errorClient({ success: { statusCode: 400, data: {
+      message: '资料不合法', fieldErrors: { birthDate: { message: '错误' }, gender: '错'.repeat(201) }
+    } } });
+    const error = await rejected(client.request('/api/auth/register', { method: 'POST', auth: false }));
+    expect(error.fieldErrors).toEqual({});
+  });
+});

@@ -8,7 +8,7 @@ import {
   LockKeyhole,
   UserRound,
 } from 'lucide-react';
-import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { ApiRequestError, api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
 import { IcpFooter } from '../components/IcpFooter';
@@ -16,6 +16,11 @@ import type { ProjectTeam, User } from '../types';
 import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { PROJECTS, projectLabel } from '../../shared/projects';
 import { LOGIN_ERROR_MESSAGES, loginFailureMessage } from '../../shared/login-errors';
+
+import {
+  REGISTRATION_GENDERS,
+  validateRegistrationDemographics,
+} from '../../shared/registration-demographics';
 
 type Mode = 'login' | 'register';
 
@@ -308,29 +313,6 @@ const OLYMPIC_DISCIPLINES = [
 
 const OLYMPIC_SPRITE_ROW_Y = [-16, -73, -131, -186, -246, -300, -358, -408] as const;
 
-function genderFromIdentityNumber(value: string) {
-  return /^\d{17}[\dX]$/.test(value) ? (Number(value[16]) % 2 ? '男' : '女') : '';
-}
-
-function birthDateFromIdentityNumber(value: string) {
-  if (!/^\d{17}[\dX]$/.test(value)) return '';
-  const year = value.slice(6, 10);
-  const month = value.slice(10, 12);
-  const day = value.slice(12, 14);
-  const numericMonth = Number(month);
-  const numericDay = Number(day);
-  if (numericMonth < 1 || numericMonth > 12 || numericDay < 1 || numericDay > 31) return '';
-  const candidate = new Date(Date.UTC(Number(year), numericMonth - 1, numericDay));
-  if (
-    candidate.getUTCFullYear() !== Number(year) ||
-    candidate.getUTCMonth() !== numericMonth - 1 ||
-    candidate.getUTCDate() !== numericDay
-  ) {
-    return '';
-  }
-  return `${year}-${month}-${day}`;
-}
-
 export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) => void }) {
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState(
@@ -348,7 +330,14 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [gender, setGender] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [identityNumber, setIdentityNumber] = useState('');
+  const [role, setRole] = useState<'ATL' | 'SCC'>('ATL');
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'gender' | 'birthDate', string>>>(
+    {}
+  );
+  const registerFormRef = useRef<HTMLFormElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const successHeadingRef = useRef<HTMLHeadingElement>(null);
+  const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [phone, setPhone] = useState('');
   const [nativePlaceProvince, setNativePlaceProvince] = useState('');
   const [nativePlaceCity, setNativePlaceCity] = useState('');
@@ -372,9 +361,11 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     setMode(next);
     setError('');
     setSuccess('');
+    setFieldErrors({});
     setPassword('');
     setConfirmPassword('');
     setShowPassword(false);
+    requestAnimationFrame(() => headingRef.current?.focus());
   };
 
   const login = async (event: FormEvent) => {
@@ -410,28 +401,41 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     }
   };
 
+  const reportRegistrationError = (message: string) => {
+    setError(message);
+    requestAnimationFrame(() => {
+      const form = registerFormRef.current;
+      (
+        form?.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+        form?.querySelector<HTMLElement>('[role="alert"]')
+      )?.focus();
+    });
+  };
+
   const register = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
     setError('');
     if (password !== confirmPassword) {
-      setError('两次输入的密码不一致。');
+      reportRegistrationError('两次输入的密码不一致。');
       return;
     }
-    if (!/^\d{17}[\dX]$/.test(identityNumber)) {
-      setError('身份证号须为18位，前17位为数字，末位为数字或X。');
+    const demographicErrors = validateRegistrationDemographics({ gender, birthDate }, today);
+    setFieldErrors(demographicErrors);
+    if (Object.keys(demographicErrors).length) {
+      reportRegistrationError('请检查性别和出生日期。');
       return;
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) {
-      setError('手机号须为11位大陆手机号。');
+      reportRegistrationError('手机号须为11位大陆手机号。');
       return;
     }
     if (!project) {
-      setError('请选择运动项目。');
+      reportRegistrationError('请选择运动项目。');
       return;
     }
     if (!team) {
-      setError('请选择所属队伍。');
+      reportRegistrationError('请选择所属队伍。');
       return;
     }
     setSubmitting(true);
@@ -440,19 +444,25 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
         username,
         password,
         displayName,
-        role: 'ATL',
+        role,
         project,
         team,
         gender,
-        identityNumber,
+        birthDate,
         phone,
-        nativePlace: `${nativePlaceProvince}/${nativePlaceCity}`,
+        nativePlace: role === 'ATL' ? `${nativePlaceProvince}/${nativePlaceCity}` : '',
       });
       setSuccess(result.message);
+      requestAnimationFrame(() => successHeadingRef.current?.focus());
       setPassword('');
       setConfirmPassword('');
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : '注册申请提交失败。');
+      if (requestError instanceof ApiRequestError && requestError.status === 400) {
+        setFieldErrors(requestError.fieldErrors ?? {});
+      }
+      reportRegistrationError(
+        requestError instanceof Error ? requestError.message : '注册申请提交失败。'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -500,8 +510,8 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
       <section className="login-panel">
         <div className={`login-box login-box-${mode}`}>
           <div className="login-heading">
-            <p>{mode === 'login' ? '竞技表现管理平台' : '运动员账号准入'}</p>
-            <h2>{mode === 'login' ? '欢迎回来' : '运动员注册'}</h2>
+            <p>{mode === 'login' ? '竞技表现管理平台' : '账号准入'}</p>
+            <h2 ref={headingRef} tabIndex={-1}>{mode === 'login' ? '欢迎回来' : '账号注册'}</h2>
             <span>
               {mode === 'login' ? '请输入账号和密码进入系统' : '提交资料，审核通过后即可登录'}
             </span>
@@ -588,14 +598,14 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                   className="secondary-button register-entry"
                   onClick={() => switchMode('register')}
                 >
-                  运动员注册
+                  账号注册
                 </button>
               </div>
             </form>
           ) : success ? (
-            <div className="registration-complete">
+            <div className="registration-complete" role="status" aria-live="polite">
               <CheckCircle2 size={42} />
-              <h3>申请已提交</h3>
+              <h3 ref={successHeadingRef} tabIndex={-1}>申请已提交</h3>
               <p>{success}</p>
               <button className="primary-button" onClick={() => switchMode('login')}>
                 <ArrowLeft size={17} />
@@ -603,7 +613,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
               </button>
             </div>
           ) : (
-            <form onSubmit={register} className="registration-form">
+            <form ref={registerFormRef} onSubmit={register} className="registration-form">
               <section className="register-section">
                 <div className="register-section-title">
                   <b>01</b>
@@ -619,21 +629,15 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     />
                   </label>
                   <label>
-                    <span>身份证号</span>
-                    <input
-                      value={identityNumber}
-                      onChange={(event) => {
-                        const value = event.target.value.replace(/\s/g, '').toUpperCase();
-                        setIdentityNumber(value);
-                        setGender(genderFromIdentityNumber(value));
-                        setBirthDate(birthDateFromIdentityNumber(value));
-                      }}
-                      maxLength={18}
-                      pattern="[0-9]{17}[0-9X]"
-                      title="请输入18位身份证号，末位可以是X"
-                      placeholder="18位身份证号"
+                    <span>注册身份</span>
+                    <select
+                      value={role}
+                      onChange={(event) => setRole(event.target.value === 'SCC' ? 'SCC' : 'ATL')}
                       required
-                    />
+                    >
+                      <option value="ATL">运动员</option>
+                      <option value="SCC">教练员</option>
+                    </select>
                   </label>
                   <label>
                     <span>手机号</span>
@@ -657,7 +661,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     >
                       <option value="">请选择项目</option>
                       {PROJECTS.map((item) => (
-                        <option key={item} value={item}>{projectLabel(item)}</option>
+                        <option key={item} value={item}>
+                          {projectLabel(item)}
+                        </option>
                       ))}
                     </select>
                   </label>
@@ -684,55 +690,89 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     </select>
                   </label>
                   <label>
-                    <span>性别</span>
-                    <input
+                    <span>性别（必填）</span>
+                    <select
                       value={gender}
-                      readOnly
-                      placeholder="填写身份证号后自动确定"
-                      aria-label="性别（根据身份证号自动确定）"
-                    />
-                  </label>
-                  <label>
-                    <span>出生日期</span>
-                    <input
-                      value={birthDate}
-                      readOnly
-                      placeholder="填写身份证号后自动确定"
-                      aria-label="出生日期（根据身份证号自动确定）"
-                    />
-                  </label>
-                  <label>
-                    <span>籍贯省份</span>
-                    <select
-                      value={nativePlaceProvince}
                       onChange={(event) => {
-                        setNativePlaceProvince(event.target.value);
-                        setNativePlaceCity('');
+                        setGender(event.target.value);
+                        setFieldErrors((current) => ({ ...current, gender: undefined }));
                       }}
-                      required
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.gender)}
+                      aria-describedby={fieldErrors.gender ? 'register-gender-error' : undefined}
                     >
-                      <option value="">请选择省份</option>
-                      {PROVINCES.map((province) => (
-                        <option key={province}>{province}</option>
+                      <option value="">请选择性别</option>
+                      {REGISTRATION_GENDERS.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
+                        </option>
                       ))}
                     </select>
+                    {fieldErrors.gender && (
+                      <span className="form-error" id="register-gender-error">
+                        {fieldErrors.gender}
+                      </span>
+                    )}
                   </label>
                   <label>
-                    <span>籍贯城市</span>
-                    <select
-                      value={nativePlaceCity}
-                      onChange={(event) => setNativePlaceCity(event.target.value)}
-                      disabled={!nativePlaceProvince}
-                      required
-                    >
-                      <option value="">
-                        {nativePlaceProvince ? '请选择城市' : '请先选择省份'}
-                      </option>
-                      {(PROVINCE_CITIES[nativePlaceProvince] || []).map((cityName) => (
-                        <option key={cityName}>{cityName}</option>
-                      ))}
-                    </select>
+                    <span>出生日期（必填）</span>
+                    <input
+                      type="date"
+                      value={birthDate}
+                      max={today}
+                      onChange={(event) => {
+                        setBirthDate(event.target.value);
+                        setFieldErrors((current) => ({ ...current, birthDate: undefined }));
+                      }}
+                      autoComplete="bday"
+                      aria-required="true"
+                      aria-invalid={Boolean(fieldErrors.birthDate)}
+                      aria-describedby={
+                        fieldErrors.birthDate ? 'register-birth-date-error' : undefined
+                      }
+                    />
+                    {fieldErrors.birthDate && (
+                      <span className="form-error" id="register-birth-date-error">
+                        {fieldErrors.birthDate}
+                      </span>
+                    )}
                   </label>
+                  {role === 'ATL' && (
+                    <>
+                      <label>
+                        <span>籍贯省份</span>
+                        <select
+                          value={nativePlaceProvince}
+                          onChange={(event) => {
+                            setNativePlaceProvince(event.target.value);
+                            setNativePlaceCity('');
+                          }}
+                          required
+                        >
+                          <option value="">请选择省份</option>
+                          {PROVINCES.map((province) => (
+                            <option key={province}>{province}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>籍贯城市</span>
+                        <select
+                          value={nativePlaceCity}
+                          onChange={(event) => setNativePlaceCity(event.target.value)}
+                          disabled={!nativePlaceProvince}
+                          required
+                        >
+                          <option value="">
+                            {nativePlaceProvince ? '请选择城市' : '请先选择省份'}
+                          </option>
+                          {(PROVINCE_CITIES[nativePlaceProvince] || []).map((cityName) => (
+                            <option key={cityName}>{cityName}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  )}
                 </div>
               </section>
 
@@ -777,7 +817,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
               </section>
 
               {error && (
-                <p className="form-error">
+                <p className="form-error" role="alert" tabIndex={-1}>
                   <AlertCircle size={16} />
                   {error}
                 </p>
