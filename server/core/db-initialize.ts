@@ -1408,10 +1408,11 @@ export function initializeDatabase(
       ['激流', 'CANOE_SLALOM'],
     ] as const;
     const projectTables = [
+      // 先转换队伍项目，避免运动员项目更新触发器查不到新 Code 而清空 team_id。
+      'project_teams',
       'athletes',
       'user_dashboard_preferences',
       'registration_requests',
-      'project_teams',
       'user_project_permissions',
       'user_team_permissions',
       // 以下表历史上带中文枚举 CHECK，需先由 rebuildLegacyProjectCheckTables 重建后才能改写。
@@ -1731,11 +1732,32 @@ export function initializeDatabase(
       'INSERT INTO regional_manager_regions (manager_user_id, region, granted_by) VALUES (?, ?, ?)'
     ).run(regionalId, '四川', adminId);
 
-    const assign = db.prepare(
-      'INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
-    );
-    for (const athleteId of [1, 2, 3, 4]) assign.run(2, athleteId);
-    for (const athleteId of [1, 5, 6, 7, 8]) assign.run(3, athleteId);
+    // 新演示账号直接绑定负责队伍，不生成逐人关系。
+    const demoCoachScope = db.prepare(`
+      INSERT OR IGNORE INTO user_team_permissions (user_id, project, team, granted_by)
+      VALUES (?, ?, ?, ?)
+    `);
+    const demoCoachProject = db.prepare(`
+      INSERT OR IGNORE INTO user_project_permissions (user_id, project, granted_by) VALUES (?, ?, ?)
+    `);
+    const demoCoachArea = db.prepare(`
+      INSERT OR IGNORE INTO user_area_permissions
+        (user_id, area_level, province, city, county, granted_by) VALUES (?, 'province', ?, '', '', ?)
+    `);
+    for (const [username, projects, provinces] of [
+      ['coach01', ['赛艇'], ['四川', '浙江']],
+      ['coach02', ['赛艇', '皮划艇', '激流'], ['四川', '广东', '贵州']],
+    ] as const) {
+      const coachId = (db.prepare('SELECT id FROM users WHERE username = ?').get(username) as { id: number }).id;
+      for (const province of provinces) demoCoachArea.run(coachId, province, adminId);
+      for (const project of projects) {
+        demoCoachProject.run(coachId, project, adminId);
+        for (const athlete of athletes.filter((row) => row[1] === project)) {
+          if (username === 'coach02' && project === '赛艇' && athlete[2] !== '女子双桨组') continue;
+          demoCoachScope.run(coachId, project, athlete[2], adminId);
+        }
+      }
+    }
 
     const insertSession = db.prepare(`
     INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone,
@@ -2044,41 +2066,15 @@ export function initializeDatabase(
               }
             | undefined)
         : undefined;
-      const assigned =
-        user.role === 'SCC'
-          ? (db
-              .prepare(
-                `
-        SELECT DISTINCT a.region, a.city, a.county, a.project, a.team
-        FROM coach_athletes ca JOIN athletes a ON a.id = ca.athlete_id
-        WHERE ca.coach_user_id = ?
-      `
-              )
-              .all(user.id) as Array<{
-              region: string;
-              city: string;
-              county: string;
-              project: string;
-              team: string;
-            }>)
-          : [];
-
       let parentId: number | null = admin.id;
       if (user.role === 'DMD') parentId = null;
       else if (user.role === 'TD') parentId = admin.id;
       else if (user.role === 'REG') parentId = director.id;
       else if (user.role === 'SCC') parentId = director.id;
-      else if (user.role === 'ATL') {
-        const coach = db
-          .prepare(
-            'SELECT coach_user_id AS id FROM coach_athletes WHERE athlete_id = ? ORDER BY coach_user_id LIMIT 1'
-          )
-          .get(user.athleteId) as { id: number } | undefined;
-        parentId = coach?.id || admin.id;
-      }
+      else if (user.role === 'ATL') parentId = admin.id;
 
-      let primaryProvince = athlete?.region || assigned[0]?.region || '';
-      let primaryProject = athlete?.project || assigned[0]?.project || '*';
+      let primaryProvince = athlete?.region || '';
+      let primaryProject = athlete?.project || '*';
       if (user.role === 'DMD' || user.role === 'TD') {
         primaryProvince = '';
         primaryProject = '*';
@@ -2108,14 +2104,8 @@ export function initializeDatabase(
         insertProject.run(user.id, '*', admin.id);
         insertTeam.run(user.id, '*', '*', admin.id);
       } else if (user.role === 'SCC') {
-        const rows = assigned.length
-          ? assigned
-          : [{ region: '未设置', city: '', county: '', project: '未设置', team: '未设置' }];
-        for (const row of rows) {
-          insertArea.run(user.id, 'province', row.region, '', '', admin.id);
-          insertProject.run(user.id, row.project, admin.id);
-          insertTeam.run(user.id, row.project, row.team, admin.id);
-        }
+        // 缺少队伍授权的历史教练保持默认拒绝，由管理员显式补齐。
+        continue;
       } else if (athlete) {
         insertArea.run(user.id, 'county', athlete.region, athlete.city, athlete.county, admin.id);
         insertProject.run(user.id, athlete.project, admin.id);

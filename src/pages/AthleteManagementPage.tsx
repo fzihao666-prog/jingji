@@ -33,7 +33,6 @@ const HEALTH_OPTIONS = ['健康', '观察', '训练受限', '康复中'];
 const ATHLETE_STATUS_OPTIONS = ['在训', '集训', '休整', '离队'];
 const TECHNICAL_LEVELS = ['国际级运动健将', '运动健将', '一级运动员', '二级运动员', '三级运动员'];
 
-type CoachOption = { id: number; displayName: string };
 type AthleteForm = {
   name: string;
   gender: string;
@@ -66,7 +65,6 @@ type AthleteForm = {
   originCoach: string;
   specialties: string;
   notes: string;
-  coachId: string;
   username: string;
   password: string;
   createAccount: boolean;
@@ -104,7 +102,6 @@ const blankForm: AthleteForm = {
   originCoach: '',
   specialties: '',
   notes: '',
-  coachId: '',
   username: '',
   password: '',
   createAccount: false,
@@ -116,7 +113,6 @@ function formFromAthlete(athlete: Athlete): AthleteForm {
     ...Object.fromEntries(
       Object.keys(blankForm).map((key) => [key, String(athlete[key as keyof Athlete] ?? '')])
     ),
-    coachId: String(athlete.coachUsers?.[0]?.id || ''),
     username: '',
     password: '',
     createAccount: false,
@@ -157,7 +153,6 @@ export function AthleteManagementPage({
 }) {
   const [athletes, setAthletes] = useState(initialAthletes);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
-  const [coaches, setCoaches] = useState<CoachOption[]>([]);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
@@ -212,14 +207,9 @@ export function AthleteManagementPage({
   const load = async () => {
     setLoading(true);
     try {
-      const [athleteResult, teamResult, assignmentResult] = await Promise.all([
-        api.athletes(),
-        api.adminTeams(),
-        api.assignments(),
-      ]);
+      const [athleteResult, teamResult] = await Promise.all([api.athletes(), api.adminTeams()]);
       setAthletes(athleteResult.athletes);
       setTeams(teamResult.teams);
-      setCoaches(assignmentResult.coaches);
     } catch (error) {
       setMessageTone('error');
       setMessage(error instanceof Error ? error.message : '运动员名册加载失败。');
@@ -771,7 +761,7 @@ export function AthleteManagementPage({
                     </span>
                   </td>
                   <td>
-                    <span className="athlete-coach-copy">{athlete.coaches || '暂无主管教练'}</span>
+                    <span className="athlete-coach-copy">{athlete.coaches || '暂无负责教练'}</span>
                   </td>
                   <td>
                     <span className="athlete-event-copy">{athlete.currentEvent || '暂无赛事'}</span>
@@ -1183,21 +1173,17 @@ export function AthleteManagementPage({
                       </label>
                       <label>
                         <span>负责教练</span>
-                        {user.role === 'SCC' ? (
-                          <input value={user.displayName} disabled />
-                        ) : (
-                          <select
-                            value={form.coachId}
-                            onChange={(event) => setForm({ ...form, coachId: event.target.value })}
-                          >
-                            <option value="">暂不关联</option>
-                            {coaches.map((coach) => (
-                              <option key={coach.id} value={coach.id}>
-                                {coach.displayName}
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                        <input
+                          value={
+                            editingAthlete &&
+                            form.project === editingAthlete.project &&
+                            form.team === editingAthlete.team
+                              ? editingAthlete.coaches || '暂无负责教练'
+                              : '保存后按所属队伍自动确定'
+                          }
+                          readOnly
+                        />
+                        <small>负责运动员由负责队伍自动确定</small>
                       </label>
                       <label>
                         <span>位置/号位</span>
@@ -1641,7 +1627,8 @@ export function AthleteManagementPage({
                 <span>INJURY RECORD</span>
                 <h2 id="athlete-injury-title">新增伤病记录</h2>
                 <p>
-                  {injuryAthlete.name} · {projectLabel(injuryAthlete.project)} · {injuryAthlete.team}
+                  {injuryAthlete.name} · {projectLabel(injuryAthlete.project)} ·{' '}
+                  {injuryAthlete.team}
                 </p>
               </div>
               <button

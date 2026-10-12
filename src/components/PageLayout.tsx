@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { useEffect, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 
 type ClassNameProps = { className?: string; children?: ReactNode };
 
@@ -31,13 +31,20 @@ export function PageHeader({
   className = '',
   children,
 }: PageHeaderProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true });
+  }, []);
+
   return (
     <header
       className={`page-heading app-page-header app-page-header-${variant} ${className}`.trim()}
     >
       <div className="app-page-header-copy">
         <span className="app-page-header-eyebrow">{eyebrow}</span>
-        <h1>{title}</h1>
+        <h1 ref={headingRef} tabIndex={-1}>
+          {title}
+        </h1>
         {supportingContent}
       </div>
       {(actions || children) && (

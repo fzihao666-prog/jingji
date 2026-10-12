@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../core/db.ts', () => ({ db: {}, upsertAthleteOrigin: vi.fn() }));
-import { readAthleteAdminPayload, selfAthleteProfileSchema } from './athlete-module.ts';
+import {
+  adminAthleteProfileSchema,
+  readAthleteAdminPayload,
+  selfAthleteProfileSchema,
+} from './athlete-module.ts';
 
 const input = {
   name: '测试运动员',
@@ -22,5 +26,28 @@ describe('运动员资料数据最小化', () => {
     expect(selfAthleteProfileSchema.safeParse({ ...payload, [field]: '不应采集' }).success).toBe(
       false
     );
+  });
+});
+
+describe('旧运动员教练字段兼容校验', () => {
+  const profile = { ...input, project: 'ROWING', team: '回归队' };
+
+  it.each([undefined, null, '', 0, '0'])('未指定教练 %s 规范化为 0', (coachId) => {
+    expect(adminAthleteProfileSchema.parse({ ...profile, coachId }).coachId).toBe(0);
+  });
+
+  it('兼容旧表单数字字符串且不裁剪其他合法档案字段', () => {
+    expect(adminAthleteProfileSchema.parse({ ...profile, coachId: '12' })).toMatchObject({
+      ...profile,
+      coachId: 12,
+    });
+  });
+
+  it.each(['NaN', '1e2', true, -1, 1.5, {}, []])('拒绝非法教练 ID %s', (coachId) => {
+    expect(adminAthleteProfileSchema.safeParse({ ...profile, coachId }).success).toBe(false);
+  });
+
+  it('拒绝未知字段以防止绕过责任关系校验', () => {
+    expect(adminAthleteProfileSchema.safeParse({ ...profile, coachIds: [1] }).success).toBe(false);
   });
 });

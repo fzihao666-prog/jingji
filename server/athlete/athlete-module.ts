@@ -19,6 +19,7 @@ import {
 } from '../core/permissions.ts';
 import type { AreaPermission, AuthUser, ScopeAthlete } from '../core/shared-server.ts';
 import { cleanString, userById, validatePersonName } from '../core/utils.ts';
+import { legacyCoachIdSchema } from '../core/coach-team-responsibility.ts';
 
 export const athleteHealthStatuses = new Set(['健康', '观察', '训练受限', '康复中']);
 export const athleteTrainingStatuses = new Set(['在训', '集训', '休整', '离队']);
@@ -95,6 +96,7 @@ export function athleteScopeError(
   const permissions = accountPermissions(user.id);
   if (!permissionsAllowProjectTeam(permissions, payload.project, payload.team))
     return '运动员项目或队伍不能超出当前账号权限';
+  if (user.role === 'SCC') return '';
   if ([payload.region, payload.city, payload.county].some((value) => !value || value === '未设置'))
     return '';
   const athlete: ScopeAthlete = {
@@ -195,6 +197,16 @@ export const selfAthleteProfileSchema = z.strictObject({
   originCoach: athleteProfileText(80),
   specialties: athleteProfileText(500),
   notes: athleteProfileText(1000),
+});
+
+export const adminAthleteProfileSchema = selfAthleteProfileSchema.partial().extend({
+  name: z.string().trim().min(2).max(20),
+  project: z.string().trim().min(1).max(16),
+  team: z.string().trim().min(1).max(80),
+  coachId: legacyCoachIdSchema,
+  createAccount: z.boolean().optional(),
+  username: athleteProfileText(24).optional(),
+  password: z.string().max(72).optional(),
 });
 
 export function selfAthleteProfileValidationMessage(error: z.ZodError) {

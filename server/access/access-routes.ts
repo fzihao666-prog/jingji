@@ -44,6 +44,21 @@ import {
   activateRegistrationRequest,
 } from './registration-service.ts';
 import type { AuthUser, AreaPermission } from '../core/shared-server.ts';
+import {
+  coachScopeConflict,
+  readCoachAthleteRelations,
+  sameCoachIds,
+} from '../core/coach-team-responsibility.ts';
+
+const assignmentUpdateSchema = z.strictObject({
+  coachIds: z.array(z.number().int().positive()).max(1000).optional(),
+  region: z.string().trim().min(1).max(80),
+  city: z.string().trim().min(2).max(120),
+  county: z.string().trim().min(2).max(120),
+});
+const assignmentParamsSchema = z.strictObject({
+  athleteId: z.string().regex(/^[1-9]\d{0,11}$/).transform(Number),
+});
 
 export type AccountRow = AuthUser & {
   active: number;
@@ -387,24 +402,31 @@ export function registerAccessRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const ids = accessibleAthleteIds(req.authUser!);
-      if (!ids.length) return res.json({ athletes: [], coaches: [] });
       const placeholders = ids.map(() => '?').join(',');
-      const athletes = db
+      const athleteRows = ids.length ? db
         .prepare(
           `
-      SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-        COALESCE(GROUP_CONCAT(u.display_name, '、'), '') AS coaches,
-        COALESCE(GROUP_CONCAT(u.id, ','), '') AS coachIds
+      SELECT a.id, a.name, a.project, a.team_id AS teamId, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county
       FROM athletes a
       LEFT JOIN project_teams pt ON pt.id = a.team_id
       LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
-      LEFT JOIN coach_athletes ca ON ca.athlete_id = a.id
-      LEFT JOIN users u ON u.id = ca.coach_user_id
       WHERE a.id IN (${placeholders}) AND a.active = 1
       GROUP BY a.id ORDER BY a.project, pt.name, a.name
     `
         )
-        .all(...ids);
+        .all(...ids) : [];
+      const relations = readCoachAthleteRelations(db, ids);
+      const athletes = athleteRows.map((athlete) => {
+        const coachUsers = relations
+          .filter((coach) => coach.athleteId === athlete.id)
+          .map(({ id, displayName }) => ({ id, displayName }));
+        return {
+          ...athlete,
+          coachUsers,
+          coaches: coachUsers.map((coach) => coach.displayName).join('、'),
+          coachIds: coachUsers.map((coach) => coach.id).join(','),
+        };
+      });
       const allCoaches = db
         .prepare(
           `
@@ -454,30 +476,16 @@ export function registerAccessRoutes(app: Express) {
     requireAuth,
     requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
-      const athleteId = Number(req.params.athleteId);
-      const coachIds = Array.isArray(req.body?.coachIds)
-        ? req.body.coachIds.map(Number).filter(Number.isFinite)
-        : [];
-      const region = cleanString(req.body?.region);
-      const city = cleanString(req.body?.city);
-      const county = cleanString(req.body?.county);
+      const parsedParams = assignmentParamsSchema.safeParse(req.params);
+      const parsed = assignmentUpdateSchema.safeParse(req.body);
+      if (!parsedParams.success || !parsed.success)
+        return res.status(400).json({ message: '运动员或行政归属信息格式无效。' });
+      const { athleteId } = parsedParams.data;
+      const { coachIds, region, city, county } = parsed.data;
       const currentUser = req.authUser!;
-      const validCoaches = new Set(
-        (
-          db
-            .prepare(
-              `
-        SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId
-        FROM users WHERE role = 'SCC' AND active = 1
-      `
-            )
-            .all() as AuthUser[]
-        )
-          .filter((coach) => canManageAccount(currentUser, coach))
-          .map((row) => row.id)
-      );
       const athlete = db
-        .prepare('SELECT id, project, team FROM athletes WHERE id = ?')
+        .prepare(`SELECT a.id, a.project, COALESCE(pt.name, '') AS team
+          FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id = ?`)
         .get(athleteId) as
         | {
             id: number;
@@ -496,14 +504,16 @@ export function registerAccessRoutes(app: Express) {
       if (
         !athlete ||
         !hasAthleteAccess(currentUser, athleteId) ||
-        coachIds.some((id: number) => !validCoaches.has(id)) ||
         !(PROVINCES as readonly string[]).includes(region) ||
         city.length < 2 ||
         county.length < 2 ||
         !permissionsAllowAthlete(accountPermissions(currentUser.id), targetScope)
       ) {
-        return res.status(400).json({ message: '运动员或教练信息无效。' });
+        return res.status(400).json({ message: '运动员或行政归属信息无效。' });
       }
+      const derivedCoachIds = readCoachAthleteRelations(db, [athleteId]).map((coach) => coach.id);
+      if (coachIds && !sameCoachIds(coachIds, derivedCoachIds))
+        return res.status(409).json(coachScopeConflict);
       db.exec('BEGIN');
       try {
         upsertAthleteOrigin({
@@ -526,26 +536,21 @@ export function registerAccessRoutes(app: Express) {
         `
           ).run(athleteUser.id, region, city, county, currentUser.id);
         }
-        db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
-        const insert = db.prepare(
-          'INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
-        );
-        for (const coachId of coachIds) insert.run(coachId, athleteId);
         db.prepare(
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
         ).run(
           currentUser.id,
-          'UPDATE_ASSIGNMENT',
+          'UPDATE_ATHLETE_ORIGIN',
           'athlete',
           athleteId,
-          JSON.stringify({ coachIds, region, city, county })
+          JSON.stringify({ region, city, county })
         );
         db.exec('COMMIT');
         res.json({ updated: true });
-      } catch (error) {
+      } catch {
         db.exec('ROLLBACK');
         res.status(500).json({
-          message: `更新关系失败：${error instanceof Error ? error.message : '未知错误'}`,
+          message: '行政归属更新失败，请稍后重试。',
         });
       }
     }
@@ -705,12 +710,6 @@ export function registerAccessRoutes(app: Express) {
       `
         ).run(userId, parentUserId, accountCodeFor(userId, role, area.province, project));
         replaceAccountScope({ userId, role, parentUserId, permissions, grantedBy: currentUser.id });
-        if (role === 'ATL' && athleteId && parentResult.parent?.role === 'SCC') {
-          db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
-            parentUserId,
-            athleteId
-          );
-        }
         db.prepare(
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
         ).run(
@@ -824,13 +823,6 @@ export function registerAccessRoutes(app: Express) {
             source: 'manual',
             quality: 'valid',
           });
-          db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(target.athleteId);
-          if (parentResult.parent?.role === 'SCC') {
-            db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
-              parentUserId,
-              target.athleteId
-            );
-          }
         }
         db.prepare(
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'

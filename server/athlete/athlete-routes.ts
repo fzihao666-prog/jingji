@@ -38,9 +38,15 @@ import {
   injurySides,
   readAthleteAdminPayload,
   selfAthleteProfileSchema,
+  adminAthleteProfileSchema,
   selfAthleteProfileValidationMessage,
   upsertAthleteProfile,
 } from './athlete-module.ts';
+import {
+  coachScopeConflict,
+  readCoachAthleteRelations,
+  readTeamCoaches,
+} from '../core/coach-team-responsibility.ts';
 
 export function registerAthleteRoutes(app: Express) {
   app.put('/api/me/athlete-profile', requireAuth, (req, res) => {
@@ -136,10 +142,12 @@ export function registerAthleteRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
-      const payload = readAthleteAdminPayload(req.body || {});
-      const username = cleanString(req.body?.username).toLowerCase();
-      const password = cleanString(req.body?.password);
-      const createAccount = req.body?.createAccount === true;
+      const parsed = adminAthleteProfileSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: '运动员资料格式无效。' });
+      const payload = readAthleteAdminPayload(parsed.data);
+      const username = cleanString(parsed.data.username).toLowerCase();
+      const password = parsed.data.password || '';
+      const createAccount = parsed.data.createAccount === true;
       const errors = athletePayloadErrors(payload);
       if (createAccount && currentUser.role === 'SCC')
         errors.push('教练可创建和维护运动员档案，但不能直接创建登录账号');
@@ -192,6 +200,9 @@ export function registerAthleteRoutes(app: Express) {
       )
         errors.push('请选择可管理范围内的教练');
       if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+      if (payload.coachId && !readTeamCoaches(db, payload.project, payload.team)
+        .some((teamCoach) => teamCoach.id === payload.coachId))
+        return res.status(409).json(coachScopeConflict);
 
       db.exec('BEGIN');
       try {
@@ -245,12 +256,6 @@ export function registerAthleteRoutes(app: Express) {
             grantedBy: currentUser.id,
           });
         }
-        const assignedCoachId = currentUser.role === 'SCC' ? currentUser.id : payload.coachId;
-        if (assignedCoachId)
-          db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
-            assignedCoachId,
-            athleteId
-          );
         db.prepare(
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
         ).run(
@@ -293,7 +298,9 @@ export function registerAthleteRoutes(app: Express) {
       const athleteId = Number(req.params.id);
       if (!hasAthleteAccess(currentUser, athleteId))
         return res.status(404).json({ message: '运动员不存在或不在可管理范围内。' });
-      const payload = readAthleteAdminPayload(req.body || {});
+      const parsed = adminAthleteProfileSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: '运动员资料格式无效。' });
+      const payload = readAthleteAdminPayload(parsed.data);
       const errors = athletePayloadErrors(payload);
       const permissions = {
         areas: [
@@ -317,6 +324,9 @@ export function registerAthleteRoutes(app: Express) {
       )
         errors.push('请选择可管理范围内的教练');
       if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+      if (payload.coachId && !readTeamCoaches(db, payload.project, payload.team)
+        .some((teamCoach) => teamCoach.id === payload.coachId))
+        return res.status(409).json(coachScopeConflict);
 
       db.exec('BEGIN');
       try {
@@ -362,14 +372,6 @@ export function registerAthleteRoutes(app: Express) {
             permissions,
             grantedBy: currentUser.id,
           });
-        if (currentUser.role !== 'SCC') {
-          db.prepare('DELETE FROM coach_athletes WHERE athlete_id = ?').run(athleteId);
-          if (payload.coachId)
-            db.prepare('INSERT INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)').run(
-              payload.coachId,
-              athleteId
-            );
-        }
         db.prepare(
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
         ).run(currentUser.id, 'UPDATE_ATHLETE_PROFILE', 'athlete', athleteId);
@@ -569,7 +571,7 @@ export function registerAthleteRoutes(app: Express) {
     const athletes = db
       .prepare(
         `
-    SELECT a.id, a.name, a.project, COALESCE(pt.name, a.team, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
+    SELECT a.id, a.name, a.project, a.team_id AS teamId, COALESCE(pt.name, a.team, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
       CASE WHEN a.photo_url IS NOT NULL AND a.photo_url != '' THEN '/api/athletes/' || a.id || '/photo' ELSE '' END AS photoUrl, a.birth_date AS birthDate, a.profile_status AS profileStatus, a.source,
       EXISTS(SELECT 1 FROM users athlete_user WHERE athlete_user.role = 'ATL' AND athlete_user.athlete_id = a.id AND athlete_user.active = 1) AS hasAccount,
       COALESCE(ap.ethnicity, '汉族') AS ethnicity, COALESCE(ap.phone, '') AS phone,
@@ -612,13 +614,11 @@ export function registerAthleteRoutes(app: Express) {
       (SELECT bm.right_leg_lean_kg FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS rightLegLeanKg,
       (SELECT bm.measurement_date FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1) AS bodyMeasurementDate,
       COALESCE((SELECT bm.note FROM athlete_body_measurements bm WHERE bm.athlete_id = a.id ORDER BY bm.measurement_date DESC, bm.id DESC LIMIT 1), '') AS bodyMeasurementNote,
-      GROUP_CONCAT(u.display_name, '、') AS coaches
+      '' AS coaches
     FROM athletes a
     LEFT JOIN project_teams pt ON pt.id = a.team_id
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
-    LEFT JOIN coach_athletes ca ON ca.athlete_id = a.id
-    LEFT JOIN users u ON u.id = ca.coach_user_id
     WHERE a.id IN (${placeholders}) AND a.active = 1
     GROUP BY a.id ORDER BY a.project, pt.name, a.name
   `
@@ -690,21 +690,12 @@ export function registerAthleteRoutes(app: Express) {
       createdAt: string;
       coaches: string | null;
     }>;
-    const coachRows = db
-      .prepare(
-        `
-    SELECT ca.athlete_id AS athleteId, u.id, u.display_name AS displayName
-    FROM coach_athletes ca
-    JOIN users u ON u.id = ca.coach_user_id
-    WHERE ca.athlete_id IN (${placeholders})
-    ORDER BY u.display_name
-  `
-      )
-      .all(...ids) as Array<{ athleteId: number; id: number; displayName: string }>;
+    const coachRows = readCoachAthleteRelations(db, ids);
     res.json({
       athletes: athletes.map((athlete) => ({
         ...athlete,
-        coaches: athlete.coaches || '',
+        coaches: coachRows.filter((coach) => coach.athleteId === athlete.id)
+          .map((coach) => coach.displayName).join('、'),
         coachUsers: coachRows
           .filter((coach) => coach.athleteId === athlete.id)
           .map(({ id, displayName }) => ({ id, displayName })),

@@ -199,11 +199,6 @@ export function activateRegistrationRequest(
       grantedBy: reviewer?.id ?? newUserId,
       areaLevel: accountArea.areaLevel,
     });
-    if (reviewer && request.requested_role === 'ATL' && reviewer.role === 'SCC' && athleteId) {
-      db.prepare(
-        'INSERT OR IGNORE INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
-      ).run(reviewer.id, athleteId);
-    }
     db.prepare(
       `
       UPDATE registration_requests SET status = 'approved', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?

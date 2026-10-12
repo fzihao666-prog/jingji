@@ -758,16 +758,10 @@ export const api = {
       coaches: Array<{ id: number; displayName: string; category: CoachCategory }>;
     }>('/api/admin/assignments');
   },
-  async updateAssignment(
-    athleteId: number,
-    coachIds: number[],
-    region: string,
-    city: string,
-    county: string
-  ) {
+  async updateAssignment(athleteId: number, region: string, city: string, county: string) {
     return request<{ updated: boolean }>(`/api/admin/assignments/${athleteId}`, {
       method: 'PUT',
-      body: JSON.stringify({ coachIds, region, city, county }),
+      body: JSON.stringify({ region, city, county }),
     });
   },
   async registrations(status: 'pending' | 'approved' | 'rejected' = 'pending') {

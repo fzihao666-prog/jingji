@@ -25,7 +25,6 @@ const ROSTER_PAGE_SIZE = 6;
 
 export function RosterPage({
   user,
-  athletes: visibleAthletes,
   onChanged,
 }: {
   user: User;
@@ -33,8 +32,6 @@ export function RosterPage({
   onChanged: () => void;
 }) {
   const [athletes, setAthletes] = useState<AssignmentAthlete[]>([]);
-  const [coaches, setCoaches] = useState<Array<{ id: number; displayName: string }>>([]);
-  const [editing, setEditing] = useState<Record<number, number[]>>({});
   const [regionEditing, setRegionEditing] = useState<Record<number, string>>({});
   const [cityEditing, setCityEditing] = useState<Record<number, string>>({});
   const [countyEditing, setCountyEditing] = useState<Record<number, string>>({});
@@ -48,15 +45,6 @@ export function RosterPage({
   const loadAssignments = async () => {
     const result = await api.assignments();
     setAthletes(result.athletes);
-    setCoaches(result.coaches);
-    setEditing(
-      Object.fromEntries(
-        result.athletes.map((athlete) => [
-          athlete.id,
-          athlete.coachIds ? athlete.coachIds.split(',').map(Number) : [],
-        ])
-      )
-    );
     setRegionEditing(
       Object.fromEntries(result.athletes.map((athlete) => [athlete.id, athlete.region]))
     );
@@ -73,7 +61,7 @@ export function RosterPage({
   }, [user.role]);
 
   const canManage = ROLE_META[user.role].level >= 3;
-  const shown = athletes.length ? athletes : visibleAthletes;
+  const shown = athletes;
   const projects = useMemo(
     () =>
       [...new Set(shown.map((athlete) => athlete.project).filter(Boolean))].sort((left, right) =>
@@ -84,20 +72,27 @@ export function RosterPage({
   const teams = useMemo(
     () =>
       [
-        ...new Set(
+        ...new Map(
           shown
-            .filter((athlete) => !projectFilter || athlete.project === projectFilter)
-            .map((athlete) => athlete.team)
-            .filter(Boolean)
-        ),
-      ].sort((left, right) => left.localeCompare(right, 'zh-CN')),
+            .filter(
+              (athlete) => athlete.teamId && (!projectFilter || athlete.project === projectFilter)
+            )
+            .map((athlete) => [
+              athlete.teamId,
+              {
+                id: athlete.teamId,
+                label: `${projectLabel(athlete.project)} · ${athlete.team}`,
+              },
+            ])
+        ).values(),
+      ].sort((left, right) => left.label.localeCompare(right.label, 'zh-CN')),
     [shown, projectFilter]
   );
   const filteredAthletes = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase();
     return shown.filter((athlete) => {
       if (projectFilter && athlete.project !== projectFilter) return false;
-      if (teamFilter && athlete.team !== teamFilter) return false;
+      if (teamFilter && String(athlete.teamId) !== teamFilter) return false;
       if (!query) return true;
       return [
         athlete.name,
@@ -141,26 +136,16 @@ export function RosterPage({
     setCurrentPage(1);
   };
 
-  const toggleCoach = (athleteId: number, coachId: number) => {
-    const current = editing[athleteId] || [];
-    setEditing({
-      ...editing,
-      [athleteId]: current.includes(coachId)
-        ? current.filter((id) => id !== coachId)
-        : [...current, coachId],
-    });
-  };
   const save = async (athleteId: number) => {
     setSaving(athleteId);
     try {
       await api.updateAssignment(
         athleteId,
-        editing[athleteId] || [],
         regionEditing[athleteId],
         cityEditing[athleteId],
         countyEditing[athleteId]
       );
-      setMessage('人员关系和所属地区已更新。');
+      setMessage('行政归属已更新。');
       await loadAssignments();
       onChanged();
     } catch (error) {
@@ -174,13 +159,6 @@ export function RosterPage({
     await api.renameAthlete(athleteId, name);
     await loadAssignments();
     setMessage('运动员姓名已修改。');
-    onChanged();
-  };
-
-  const renameCoach = async (coachId: number, name: string) => {
-    await api.renameUser(coachId, name);
-    await loadAssignments();
-    setMessage('教练姓名已修改。');
     onChanged();
   };
 
@@ -229,7 +207,9 @@ export function RosterPage({
             >
               <option value="">全部项目</option>
               {projects.map((project) => (
-                <option key={project} value={project}>{projectLabel(project)}</option>
+                <option key={project} value={project}>
+                  {projectLabel(project)}
+                </option>
               ))}
             </select>
           </div>
@@ -248,7 +228,9 @@ export function RosterPage({
             >
               <option value="">全部队伍</option>
               {teams.map((team) => (
-                <option key={team}>{team}</option>
+                <option key={team.id ?? ''} value={team.id ?? ''}>
+                  {team.label}
+                </option>
               ))}
             </select>
           </div>
@@ -271,7 +253,7 @@ export function RosterPage({
         <span>
           {teamFilter ? (
             <>
-              <strong>{teamFilter}</strong>队伍成员
+              <strong>{teams.find((team) => String(team.id) === teamFilter)?.label}</strong>队伍成员
             </>
           ) : projectFilter ? (
             <>
@@ -287,7 +269,6 @@ export function RosterPage({
       </div>
       <section className="roster-grid">
         {pagedAthletes.map((athlete) => {
-          const assigned = editing[athlete.id] || [];
           return (
             <article className="athlete-card" key={athlete.id}>
               <div className="athlete-card-top">
@@ -315,6 +296,7 @@ export function RosterPage({
                 {canManage ? (
                   <div className="roster-area-fields">
                     <select
+                      aria-label={`${athlete.name}的省份`}
                       value={regionEditing[athlete.id] || ''}
                       onChange={(event) =>
                         setRegionEditing({ ...regionEditing, [athlete.id]: event.target.value })
@@ -331,6 +313,7 @@ export function RosterPage({
                         setCityEditing({ ...cityEditing, [athlete.id]: event.target.value })
                       }
                       placeholder="城市"
+                      aria-label={`${athlete.name}的城市`}
                     />
                     <input
                       value={countyEditing[athlete.id] || ''}
@@ -338,6 +321,7 @@ export function RosterPage({
                         setCountyEditing({ ...countyEditing, [athlete.id]: event.target.value })
                       }
                       placeholder="区县"
+                      aria-label={`${athlete.name}的区县`}
                     />
                   </div>
                 ) : (
@@ -352,35 +336,9 @@ export function RosterPage({
                   <Link2 size={15} />
                   负责教练
                 </span>
-                {canManage && <small>可多选</small>}
+                <small>由负责队伍自动确定</small>
               </div>
-              {canManage ? (
-                <div className="coach-options">
-                  {coaches.map((coach) => (
-                    <div
-                      key={coach.id}
-                      className={`coach-option-item ${assigned.includes(coach.id) ? 'checked' : ''}`}
-                    >
-                      <label aria-label={`选择${coach.displayName}`}>
-                        <input
-                          type="checkbox"
-                          checked={assigned.includes(coach.id)}
-                          onChange={() => toggleCoach(athlete.id, coach.id)}
-                        />
-                        <i>{assigned.includes(coach.id) && <Check size={13} />}</i>
-                      </label>
-                      <EditableName
-                        value={coach.displayName}
-                        canEdit={ROLE_META[user.role].level > ROLE_META.SCC.level}
-                        onSave={(name) => renameCoach(coach.id, name)}
-                        label="教练姓名"
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="coach-readonly">{athlete.coaches || '暂无主管教练'}</div>
-              )}
+              <div className="coach-readonly">{athlete.coaches || '暂无负责教练'}</div>
               {canManage && (
                 <button
                   className="save-assignment"
@@ -388,7 +346,7 @@ export function RosterPage({
                   onClick={() => save(athlete.id)}
                 >
                   <Save size={15} />
-                  {saving === athlete.id ? '保存中…' : '保存关系'}
+                  {saving === athlete.id ? '保存中…' : '保存行政归属'}
                 </button>
               )}
             </article>
@@ -435,7 +393,11 @@ export function RosterPage({
                   {item.page}
                 </button>
               ) : (
-                <span key={`ellipsis-${index}`} className="roster-pagination-ellipsis" aria-hidden="true">
+                <span
+                  key={`ellipsis-${index}`}
+                  className="roster-pagination-ellipsis"
+                  aria-hidden="true"
+                >
                   …
                 </span>
               )

@@ -4,11 +4,9 @@ import {
   Eye,
   Filter,
   LockKeyhole,
-  PencilLine,
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   UserRoundCheck,
   X,
 } from 'lucide-react';
@@ -54,7 +52,6 @@ function uniqueById<T extends { id: number }>(items: T[]) {
 
 export function CoachManagementPage({
   user,
-  athletes: visibleAthletes,
   onChanged,
 }: {
   user: User;
@@ -71,9 +68,6 @@ export function CoachManagementPage({
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [detailOpen, setDetailOpen] = useState(false);
-  const [scopeOpen, setScopeOpen] = useState(false);
-  const [scopeSearch, setScopeSearch] = useState('');
-  const [draftAthleteIds, setDraftAthleteIds] = useState<Set<number>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
   const [coachForm, setCoachForm] = useState(emptyCoachForm);
   const [loading, setLoading] = useState(true);
@@ -136,13 +130,7 @@ export function CoachManagementPage({
     void load();
   }, [user.id]);
 
-  const shownAthletes = useMemo<AssignmentAthlete[]>(() => {
-    if (athletes.length || !visibleAthletes.length) return athletes;
-    return visibleAthletes.map((athlete) => ({
-      ...athlete,
-      coachIds: athlete.coachUsers?.map((coach) => coach.id).join(',') || '',
-    }));
-  }, [athletes, visibleAthletes]);
+  const shownAthletes = athletes;
 
   const coachProfiles = useMemo(
     () =>
@@ -158,17 +146,23 @@ export function CoachManagementPage({
             ].filter(Boolean)
           ),
         ];
-        const teamNames = [
-          ...new Set(
-            [
-              ...ownedAthletes.map((athlete) => athlete.team),
-              ...coach.teams.filter((team) => team.team !== '*').map((team) => team.team),
-            ].filter(Boolean)
-          ),
-        ];
-        return { ...coach, athletes: ownedAthletes, projectNames, teamNames };
+        const responsibilityTeams = teamDirectory.filter(
+          (team) =>
+            ownedAthletes.some((athlete) => athlete.teamId === team.id) ||
+            (coach.active &&
+              coach.projects.some((project) => project === '*' || project === team.project) &&
+              coach.teams.some(
+                (scope) =>
+                  (scope.project === '*' || scope.project === team.project) &&
+                  (scope.team === '*' || scope.team === team.name)
+              ))
+        );
+        const teamNames = responsibilityTeams.map(
+          (team) => `${projectLabel(team.project)} · ${team.name}`
+        );
+        return { ...coach, athletes: ownedAthletes, projectNames, teamNames, responsibilityTeams };
       }),
-    [coaches, shownAthletes]
+    [coaches, shownAthletes, teamDirectory]
   );
 
   const projects = useMemo(
@@ -197,7 +191,9 @@ export function CoachManagementPage({
 
   const selectedCoach = coachProfiles.find((coach) => coach.id === selectedCoachId) || null;
   const activeCount = coachProfiles.filter((coach) => coach.active).length;
-  const coveredTeams = new Set(coachProfiles.flatMap((coach) => coach.teamNames)).size;
+  const coveredTeams = new Set(
+    coachProfiles.flatMap((coach) => coach.responsibilityTeams.map((team) => team.id))
+  ).size;
   const coveredAthletes = new Set(
     coachProfiles.flatMap((coach) => coach.athletes.map((athlete) => athlete.id))
   ).size;
@@ -209,7 +205,7 @@ export function CoachManagementPage({
       { project: string; team: string; athletes: AssignmentAthlete[] }
     >();
     selectedCoach.athletes.forEach((athlete) => {
-      const key = `${athlete.project}::${athlete.team || '未分队'}`;
+      const key = String(athlete.teamId);
       const group = groups.get(key) || {
         project: athlete.project,
         team: athlete.team || '未分队',
@@ -221,29 +217,6 @@ export function CoachManagementPage({
     return [...groups.values()];
   }, [selectedCoach]);
 
-  const scopeAthletes = useMemo(() => {
-    const query = scopeSearch.trim().toLocaleLowerCase();
-    return [...shownAthletes]
-      .filter(
-        (athlete) =>
-          !query ||
-          [athlete.name, athlete.project, athlete.team, athlete.region, athlete.coaches].some(
-            (value) =>
-              String(value || '')
-                .toLocaleLowerCase()
-                .includes(query)
-          )
-      )
-      .sort(
-        (left, right) =>
-          Number(draftAthleteIds.has(right.id)) - Number(draftAthleteIds.has(left.id)) ||
-          `${left.project}${left.team}${left.name}`.localeCompare(
-            `${right.project}${right.team}${right.name}`,
-            'zh-CN'
-          )
-      );
-  }, [shownAthletes, scopeSearch, draftAthleteIds]);
-
   const formTeams = teamDirectory.filter(
     (team) => !coachForm.project || team.project === coachForm.project
   );
@@ -251,64 +224,6 @@ export function CoachManagementPage({
     setSelectedCoachId(coachId);
     setDetailOpen(true);
   };
-  const openScope = () => {
-    if (!selectedCoach) return;
-    setScopeSearch('');
-    setDraftAthleteIds(new Set(selectedCoach.athletes.map((athlete) => athlete.id)));
-    setDetailOpen(false);
-    setScopeOpen(true);
-  };
-  const toggleDraftAthlete = (athleteId: number) =>
-    setDraftAthleteIds((current) => {
-      const next = new Set(current);
-      if (next.has(athleteId)) next.delete(athleteId);
-      else next.add(athleteId);
-      return next;
-    });
-
-  const saveScope = async () => {
-    if (!selectedCoach) return;
-    const changed = shownAthletes.filter(
-      (athlete) =>
-        assignedCoachIds(athlete).includes(selectedCoach.id) !== draftAthleteIds.has(athlete.id)
-    );
-    if (!changed.length) {
-      setScopeOpen(false);
-      return;
-    }
-    setSaving(true);
-    let updated = 0;
-    try {
-      for (const athlete of changed) {
-        const currentCoachIds = assignedCoachIds(athlete);
-        const nextCoachIds = draftAthleteIds.has(athlete.id)
-          ? [...new Set([...currentCoachIds, selectedCoach.id])]
-          : currentCoachIds.filter((coachId) => coachId !== selectedCoach.id);
-        await api.updateAssignment(
-          athlete.id,
-          nextCoachIds,
-          athlete.region,
-          athlete.city,
-          athlete.county
-        );
-        updated += 1;
-      }
-      await load();
-      onChanged();
-      setMessageTone('success');
-      setMessage(`已更新 ${selectedCoach.displayName} 的责任范围，共同步 ${updated} 名运动员。`);
-      setScopeOpen(false);
-    } catch (error) {
-      setMessageTone('error');
-      setMessage(
-        `${updated ? `已完成 ${updated} 项，` : ''}${error instanceof Error ? error.message : '责任范围保存失败。'}`
-      );
-      if (updated) await load();
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const renameCoach = async (coachId: number, name: string) => {
     await api.renameUser(coachId, name);
     await load();
@@ -422,7 +337,7 @@ export function CoachManagementPage({
               <strong>{coveredTeams}</strong>
             </div>
             <div>
-              <span>覆盖运动员</span>
+              <span>覆盖运动员（当前权限内）</span>
               <strong>{coveredAthletes}</strong>
             </div>
           </div>
@@ -434,6 +349,11 @@ export function CoachManagementPage({
           {message}
         </div>
       )}
+
+      <p>
+        负责运动员由负责队伍自动确定；名单和人数仅展示当前权限内的运动员。
+        {canManage && <a href="#/regions">前往账号权限调整负责队伍</a>}
+      </p>
 
       <FilterBar className="coach-directory-toolbar" label="教练筛选与操作">
         <label className="coach-directory-search">
@@ -459,7 +379,9 @@ export function CoachManagementPage({
           >
             <option value="">全部项目</option>
             {projects.map((project) => (
-              <option key={project} value={project}>{projectLabel(project)}</option>
+              <option key={project} value={project}>
+                {projectLabel(project)}
+              </option>
             ))}
           </select>
         </label>
@@ -531,7 +453,7 @@ export function CoachManagementPage({
                 <th>教练类别</th>
                 <th>执教项目</th>
                 <th>关联队伍</th>
-                <th>负责运动员</th>
+                <th>负责运动员（当前权限内）</th>
                 <th>状态</th>
                 <th>操作</th>
               </tr>
@@ -554,7 +476,9 @@ export function CoachManagementPage({
                   <td>
                     <div className="coach-project-tags">
                       {coach.projectNames.length ? (
-                        coach.projectNames.map((project) => <span key={project}>{projectLabel(project)}</span>)
+                        coach.projectNames.map((project) => (
+                          <span key={project}>{projectLabel(project)}</span>
+                        ))
                       ) : (
                         <em>未设置</em>
                       )}
@@ -562,7 +486,7 @@ export function CoachManagementPage({
                   </td>
                   <td>
                     <div className="coach-team-copy">
-                      <strong>{coach.teamNames[0] || '未关联队伍'}</strong>
+                      <strong>{coach.teamNames[0] || '未绑定负责队伍'}</strong>
                       {coach.teamNames.length > 1 && (
                         <small>另有 {coach.teamNames.length - 1} 支队伍</small>
                       )}
@@ -593,21 +517,6 @@ export function CoachManagementPage({
                         <Eye size={15} />
                         查看
                       </button>
-                      {canManage && (
-                        <button
-                          onClick={() => {
-                            setSelectedCoachId(coach.id);
-                            setDraftAthleteIds(
-                              new Set(coach.athletes.map((athlete) => athlete.id))
-                            );
-                            setScopeSearch('');
-                            setScopeOpen(true);
-                          }}
-                        >
-                          <SlidersHorizontal size={15} />
-                          调配
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -626,7 +535,7 @@ export function CoachManagementPage({
         </div>
         <footer>
           <span>共 {filteredCoaches.length} 条</span>
-          <span>教练停用后无法登录，已有训练数据和责任记录仍会保留。</span>
+          <span>教练停用后无法登录，已有训练数据仍会保留。</span>
         </footer>
       </section>
 
@@ -679,14 +588,17 @@ export function CoachManagementPage({
             <div className="coach-detail-facts">
               <div>
                 <span>执教项目</span>
-                <strong>{selectedCoach.projectNames.map((project) => projectLabel(project)).join('、') || '未设置'}</strong>
+                <strong>
+                  {selectedCoach.projectNames.map((project) => projectLabel(project)).join('、') ||
+                    '未设置'}
+                </strong>
               </div>
               <div>
                 <span>关联队伍</span>
                 <strong>{selectedCoach.teamNames.length} 支</strong>
               </div>
               <div>
-                <span>负责运动员</span>
+                <span>负责运动员（当前权限内）</span>
                 <strong>{selectedCoach.athletes.length} 人</strong>
               </div>
             </div>
@@ -712,12 +624,6 @@ export function CoachManagementPage({
                   <span>RESPONSIBILITY</span>
                   <h3>责任队伍与运动员</h3>
                 </div>
-                {canManage && (
-                  <button onClick={openScope}>
-                    <PencilLine size={14} />
-                    调整
-                  </button>
-                )}
               </header>
               <div className="coach-detail-groups">
                 {selectedGroups.length ? (
@@ -740,7 +646,7 @@ export function CoachManagementPage({
                     </article>
                   ))
                 ) : (
-                  <p>尚未关联展示用主管教练关系；本队运动员默认可见，无需逐个添加。</p>
+                  <p>当前权限内暂无负责运动员。</p>
                 )}
               </div>
             </section>
@@ -857,7 +763,9 @@ export function CoachManagementPage({
                   >
                     <option value="">请选择项目</option>
                     {projects.map((project) => (
-                      <option key={project} value={project}>{projectLabel(project)}</option>
+                      <option key={project} value={project}>
+                        {projectLabel(project)}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -899,93 +807,6 @@ export function CoachManagementPage({
                 </button>
               </footer>
             </form>
-          </section>
-        </div>
-      )}
-
-      {scopeOpen && selectedCoach && (
-        <div
-          className="modal-backdrop coach-scope-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !saving) setScopeOpen(false);
-          }}
-        >
-          <section
-            className="coach-scope-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="coach-scope-title"
-          >
-            <header>
-              <div>
-                <span>RESPONSIBILITY EDITOR</span>
-                <h2 id="coach-scope-title">调整 {selectedCoach.displayName} 的责任范围</h2>
-                <p>维护展示用主管教练关系；本队运动员可见性由队伍与项目权限自动决定。</p>
-              </div>
-              <button
-                className="icon-button"
-                onClick={() => setScopeOpen(false)}
-                disabled={saving}
-                aria-label="关闭"
-              >
-                <X size={19} />
-              </button>
-            </header>
-            <div className="coach-scope-toolbar">
-              <label>
-                <Search size={16} />
-                <input
-                  value={scopeSearch}
-                  onChange={(event) => setScopeSearch(event.target.value)}
-                  placeholder="搜索姓名、项目、队伍或地区"
-                  aria-label="搜索运动员责任范围"
-                />
-              </label>
-              <div>
-                <span>已选择</span>
-                <strong>{draftAthleteIds.size}</strong>
-                <small>人</small>
-              </div>
-            </div>
-            <div className="coach-scope-list">
-              {scopeAthletes.map((athlete) => {
-                const checked = draftAthleteIds.has(athlete.id);
-                return (
-                  <label key={athlete.id} className={checked ? 'selected' : ''}>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleDraftAthlete(athlete.id)}
-                    />
-                    <i>{checked && <Check size={13} />}</i>
-                    <span className="coach-scope-avatar">{athlete.name.slice(0, 1)}</span>
-                    <span className="coach-scope-person">
-                      <strong>{athlete.name}</strong>
-                      <small>
-                        {projectLabel(athlete.project)} · {athlete.team || '未分队'}
-                      </small>
-                    </span>
-                    <span className="coach-scope-region">
-                      {[athlete.region, athlete.city].filter(Boolean).join(' / ') || '地区未填'}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <footer>
-              <p>本次仅更新展示用主管教练关系，不修改运动员的项目、队伍和地区。</p>
-              <button
-                className="secondary-button"
-                onClick={() => setScopeOpen(false)}
-                disabled={saving}
-              >
-                取消
-              </button>
-              <button className="primary-button" onClick={() => void saveScope()} disabled={saving}>
-                {saving ? '正在同步…' : '保存责任范围'}
-              </button>
-            </footer>
           </section>
         </div>
       )}

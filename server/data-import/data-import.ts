@@ -2500,11 +2500,6 @@ function resolvePendingAthletes(input: {
       db.prepare('UPDATE athletes SET active = 1 WHERE id = ?').run(athlete.id);
       db.prepare('INSERT OR IGNORE INTO athlete_profiles (athlete_id) VALUES (?)').run(athlete.id);
     }
-    if (input.creatorRole === 'SCC') {
-      db.prepare(
-        'INSERT OR IGNORE INTO coach_athletes (coach_user_id, athlete_id) VALUES (?, ?)'
-      ).run(input.userId, athlete.id);
-    }
     db.prepare(
       `UPDATE data_import_athlete_candidates SET status = ?, created_athlete_id = ?, matched_athlete_id = ? WHERE id = ?`
     ).run(

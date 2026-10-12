@@ -12,6 +12,7 @@ import { PROJECTS, type Project } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import { db } from './db.ts';
+import { coachAthleteIds } from './coach-team-responsibility.ts';
 import type { AreaPermission, AuthUser, ScopeAthlete } from './shared-server.ts';
 import { cleanString } from './utils.ts';
 
@@ -94,6 +95,18 @@ export function canManageAccount(manager: AuthUser, target: AuthUser) {
   if (!canManageRole(manager.role, target.role)) return false;
   const managerPermissions = accountPermissions(manager.id);
   const targetPermissions = accountPermissions(target.id);
+  if (target.role === 'SCC' && !targetPermissions.teams.length) {
+    // 无归属历史账号仅允许完整全国授权的上级修复，不能猜测其组织范围。
+    const globalManager = managerPermissions.areas.some((area) => area.areaLevel === 'national') &&
+      managerPermissions.projects.includes('*') &&
+      managerPermissions.teams.some((team) => team.project === '*' && team.team === '*');
+    if (globalManager) return true;
+    // 已有区域/项目但尚未绑队的教练，须由覆盖其区域和项目全部队伍的上级管理。
+    return permissionsContain(managerPermissions, {
+      ...targetPermissions,
+      teams: targetPermissions.projects.map((project) => ({ project, team: '*' })),
+    });
+  }
   return permissionsContain(managerPermissions, targetPermissions);
 }
 
@@ -292,6 +305,7 @@ export function standardAccountName(input: {
 
 export function accessibleAthleteIds(user: AuthUser): number[] {
   if (user.role === 'ATL') return user.athleteId ? [user.athleteId] : [];
+  if (user.role === 'SCC') return coachAthleteIds(db, user.id);
   const permissions = accountPermissions(user.id);
   const candidates = db
     .prepare(

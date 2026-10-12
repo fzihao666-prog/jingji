@@ -49,6 +49,7 @@ export type TrainingBreakdown = {
 
 export type Athlete = {
   id: number;
+  teamId?: number | null;
   name: string;
   project: string;
   team: string;

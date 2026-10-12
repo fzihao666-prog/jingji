@@ -241,7 +241,7 @@ sequenceDiagram
 | 认证与资料 | `/api/auth`、`/api/me`、`/api/profile`                       | 登录、注册、会话、改名、改密，以及本人今日状态与恢复日报         |
 | 偏好       | `/api/preferences`                                           | 当前项目等应用上下文偏好             |
 | 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理，以及教练代填训练课次与恢复日报（`:id/training-sessions`、`:id/wellness`） |
-| 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类与展示用主管教练关系                         |
+| 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类、按队伍派生的教练关系与行政归属编辑         |
 | 专项训练   | `/api/special-training`、`/api/special-tests`                | 训练场次、专项测试和模板导入         |
 | 体能训练   | `/api/training-plans`、`/api/strength-training`              | 计划、AI 生成、结果导入和分析        |
 | 测试与模型 | `/api/strength-tests`、`/api/analysis`、冠军模型接口         | 测试、建议、项目模型和个人分析       |
@@ -249,6 +249,14 @@ sequenceDiagram
 | 组织治理   | `/api/admin/registrations`、`/api/access`                    | 审核、注册审核开关、账号、授权和审计        |
 
 ## 7. 共享领域模型
+
+教练责任关系由 `server/core/coach-team-responsibility.ts` 统一查询：有效 SCC 账号的项目授权与队伍授权按“项目 + 队名”解析到有效 `project_teams.id`，再以 `athletes.team_id` 关联同项目有效运动员。通配授权沿用既有语义，最终按 ID 去重；不通过逐人关联、账号上下级或导入操作人确定负责教练。`accessibleAthleteIds` 对 SCC 使用该集合，不按队员生源行政区二次过滤；管理角色保留区域、项目、队伍交集，ATL 保留本人限制，具体操作仍按角色能力授权。运动员响应中的 `coaches`、`coachUsers` 和 assignments 的 `coachIds` 同源，响应仅包含请求者可访问成员。
+
+`coach_athletes` 仅保留历史表及数据，在线查询、注册审核、账号变更、档案保存、导入及新演示初始化均不再读写它。初始化不再据此推导队伍授权或账号上级；缺少队伍授权的历史教练保持无范围，由有权限管理员显式补齐，重复启动不得恢复撤权。
+
+未绑队 SCC 的账号管理修复集中在 `canManageAccount`：已有区域及项目时，上级须覆盖其区域、项目及项目全部队伍；区域或项目缺失时，仅拥有全国、全部项目、全部队伍授权的上级可管理。仍校验角色层级和新授权委派范围，具体队伍管理者不得接管无归属教练。此管理权包括原有启停、改名、改密及类别维护，不授予未绑队教练任何运动员访问权。
+
+过渡期保留 `GET /api/admin/assignments` 和行政归属更新 `PUT /api/admin/assignments/:athleteId`。PUT 可省略旧 `coachIds`；如提交的规范化集合与派生教练集合不同，整次返回 HTTP 409、`COACH_SCOPE_DERIVED_FROM_TEAM`，不部分更新行政归属。运动员创建/编辑兼容省略、空值或 0 的旧 `coachId`，非空值须为目标队伍的合法派生教练并通过原有可管理性校验，否则拒绝保存；新客户端不再发送个人分配字段。队伍变更或撤权后的下一次请求直接读取当前关系，无须同步旧表。
 
 `shared/` 是前后端共同依赖的领域语言层。它应只放无运行环境依赖、可确定性执行的定义和纯函数。
 
