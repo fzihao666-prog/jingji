@@ -10,8 +10,8 @@
     <view class="team-picker-control"><text>队伍</text><text class="team-picker-value">{{teamItems[teamIndex].name}}</text><text>⌄</text></view>
   </picker>
 
-  <view class="training-page-status" aria-live="polite">
-    <text>{{loading ? '正在加载训练数据' : (error || trainingError || testError || championError || '按当前筛选范围展示数据')}}</text>
+  <view wx:if="{{loading || error || trainingError || testError || championError}}" class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载训练数据' : (error || trainingError || testError || championError || '')}}</text>
     <button wx:if="{{!loading && (error || trainingError || testError || championError)}}" class="mini-button" bindtap="loadPage">重试</button>
   </view>
 

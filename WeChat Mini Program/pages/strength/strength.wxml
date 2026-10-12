@@ -8,8 +8,8 @@
   <view class="strength-nav">
     <button wx:for="{{sections}}" wx:key="key" class="strength-nav-button {{activeSection === item.key ? 'is-active' : ''}}" data-key="{{item.key}}" bindtap="switchSection" aria-label="{{item.label}}{{activeSection === item.key ? '，当前栏目' : ''}}">{{item.label}}</button>
   </view>
-  <view class="training-page-status" aria-live="polite">
-    <text>{{loading ? '正在加载训练数据' : (error || trainingError || testError || planError || '按当前筛选范围展示数据')}}</text>
+  <view wx:if="{{loading || error || trainingError || testError || planError}}" class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载训练数据' : (error || trainingError || testError || planError || '')}}</text>
     <button wx:if="{{!loading && (error || trainingError || testError || planError)}}" class="mini-button" bindtap="loadPage">重试</button>
   </view>
 

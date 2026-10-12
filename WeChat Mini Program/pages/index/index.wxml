@@ -7,8 +7,8 @@
 
   <scope-filter projects="{{projects}}" project="{{project}}" teams="{{teams}}" team-id="{{teamId}}" show-team="{{showTeam}}" athletes="{{scopeAthletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" keyword="{{athleteKeyword}}" range="{{range}}" bindprojectchange="onScopeChange" bindteamchange="onOverviewTeamChange" bindathletechange="onOverviewAthleteChange" bindkeywordchange="onAthleteKeyword" bindrangechange="onScopeChange" />
 
-  <view class="training-page-status" aria-live="polite">
-    <text>{{loading ? '正在加载训练总览' : (error || overviewError || comparisonError || '按当前筛选范围展示数据')}}</text>
+  <view wx:if="{{loading || error || overviewError || comparisonError}}" class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载训练总览' : (error || overviewError || comparisonError || '')}}</text>
     <button wx:if="{{!loading && (error || overviewError || comparisonError)}}" class="mini-button" bindtap="loadPage">重试</button>
   </view>
 

@@ -7,8 +7,8 @@
 
   <scope-filter projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" allow-all="{{false}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
   <view class="privacy-notice"><image src="/assets/shield-check.svg" mode="aspectFit" />敏感信息已按权限脱敏展示</view>
-  <view class="training-page-status" aria-live="polite">
-    <text>{{loading ? '正在加载运动员档案' : (error || moduleError || (!selectedAthleteId ? '暂无可查看运动员' : '按当前筛选范围展示数据'))}}</text>
+  <view wx:if="{{loading || error || moduleError || !selectedAthleteId}}" class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载运动员档案' : (error || moduleError || (!selectedAthleteId ? '暂无可查看运动员' : ''))}}</text>
     <button wx:if="{{!loading && (error || moduleError)}}" class="mini-button" bindtap="loadPage">重试</button>
   </view>
 
