@@ -172,7 +172,8 @@ brew install docker docker-buildx colima
 mkdir -p ~/.docker/cli-plugins
 ln -sf "$(brew --prefix docker-buildx)/bin/docker-buildx" ~/.docker/cli-plugins/docker-buildx
 chmod +x ~/.docker/cli-plugins/docker-buildx
-colima start --cpu 4 --memory 8 --disk 60
+# --vz-rosetta 让 linux/amd64 构建步骤走 Rosetta 2（比 qemu 模拟快 5~10 倍）；CPU/内存按 Mac 配置调整。
+colima start --cpu 8 --memory 10 --disk 60 --vz-rosetta
 docker context use colima
 docker version
 docker buildx version
@@ -196,6 +197,8 @@ printf '已推送镜像：%s:%s\n' "$IMAGE" "$TAG"
 ```
 
 如果 ACR 登录返回 `unauthorized: authentication required`，在 ACR 控制台重新生成访问凭证，确认用户名是 `soren_1`，并确认命名空间 `docker_soren` 中已创建仓库 `jingji`。不要尝试用阿里云账号网页登录密码。
+
+Dockerfile 采用多阶段构建：构建阶段（`tsc -b && vite build`）跑在 Mac 原生 arm64 上（快），运行阶段才产出 linux/amd64 镜像（dist 产物与架构无关，amd64 的 `node_modules` 照常安装）。注意：**不要在 Apple Silicon 本机运行 linux/amd64 镜像做启动冒烟**——Rosetta 与 qemu 模拟执行 tsx/esbuild（Go 二进制）并发负载都会随机崩溃，这是模拟器限制而非镜像问题；启动验证以部署后 ECS 的 `curl --fail http://127.0.0.1:8787/` 为准，或临时构建原生架构镜像（去掉 `--platform`）验证应用行为。
 
 ## 4. deploy：从 ACR 拉取并启动
 

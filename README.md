@@ -383,7 +383,7 @@ npm run dev
 
 - 架构：Mac 端用 Colima + `docker buildx` 构建 `linux/amd64` 镜像并推送阿里云 ACR → Ubuntu ECS 拉取镜像经 `compose.yaml` 运行 → Nginx 提供 HTTPS 反向代理到 `127.0.0.1:8787`。服务器不克隆代码、不构建镜像。
 - 安全组仅放行 80/443（公网）与 22（限办公 IP），严禁公开 8787；域名需完成 ICP 备案。
-- 容器：`compose.yaml` 固定端口映射 `127.0.0.1:8787:8787`、数据卷 `./data:/app/data`（数据库与上传跨更新持久化）、健康检查与日志轮转；镜像由 `Dockerfile` 构建（`npm ci` → `npm run build` → `npm run start`）。
+- 容器：`compose.yaml` 固定端口映射 `127.0.0.1:8787:8787`、数据卷 `./data:/app/data`（数据库与上传跨更新持久化）、健康检查与日志轮转；镜像由 `Dockerfile` 多阶段构建（构建阶段原生架构跑 `tsc -b && vite build`，运行阶段产出 linux/amd64 镜像并安装完整依赖，`npm run start` 经 tsx 运行服务端）。
 - 更新与回滚：以 Git 提交短哈希为镜像标签，ECS 端更新 `IMAGE_TAG` 后 `docker compose pull && up -d`；回滚即换回旧标签。日常发布与回滚推荐直接用 `scripts/release.sh`（封装 Mac 构建推送与 ECS 标签切换，详见部署手册第 6 节）。
 
 ### 8.2 构建与启动
