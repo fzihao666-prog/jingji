@@ -13,6 +13,13 @@ const {
   wellnessFormFromRecord,
   wellnessRecordView
 } = require('../../utils/wellness-form');
+const {
+  TREND_METRICS,
+  statusMetricCards,
+  buildStatusTrend,
+  buildStatusHistory,
+  buildTeamStatusView
+} = require('../../utils/status-detection');
 
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
@@ -33,7 +40,19 @@ Page({
     statusOptions: STATUS_OPTIONS,
     quickSelect: QUICK_SELECT,
     record: null,
-    recordView: null
+    recordView: null,
+    // 状态检测：指标卡、单指标趋势、历史记录与教练队伍概览。
+    todayDate: '',
+    statusCards: statusMetricCards(null, null),
+    trendMetrics: TREND_METRICS,
+    activeTrendKey: TREND_METRICS[0].key,
+    statusTrend: buildStatusTrend([], TREND_METRICS[0].key),
+    statusHistory: [],
+    trendLoading: false,
+    trendError: '',
+    teamStatus: null,
+    teamStatusLoading: false,
+    teamStatusError: ''
   },
 
   onLoad(options) {
@@ -50,12 +69,13 @@ Page({
 
   loadPage() {
     const dates = wellnessDates();
-    this.setData({ min: dates.min, max: dates.max });
+    this.setData({ min: dates.min, max: dates.max, todayDate: dates.max });
     this._guard = this._guard || createRequestGuard();
     return loadWithGuard(this, this._guard, async () => {
       const context = await loadContext({ refreshUser: true });
       const isCoach = MANAGER_ROLES.includes(context.user.role);
       if (!isCoach && context.user.role !== 'ATL') throw new Error('只有运动员本人或教练可以填写恢复日报。');
+      this._project = context.project;
       if (isCoach) {
         const athletes = context.projectAthletes || [];
         if (!athletes.length) throw new Error('当前项目暂无可代填的运动员。');
@@ -74,10 +94,96 @@ Page({
           statusOptions: this.statusOptionsFor(true)
         });
       } else {
-        this.setData({ isCoach: false, statusOptions: this.statusOptionsFor(false) });
+        this._targetAthleteId = Number(context.user.athleteId) || 0;
+        this.setData({ isCoach: false, athleteId: this._targetAthleteId, statusOptions: this.statusOptionsFor(false) });
       }
-      return this.loadRecord(this.data.form.date);
+      const recordPromise = this.loadRecord(this.data.form.date);
+      await Promise.all([recordPromise, this.loadStatusTrends(), this.loadTeamStatus()]);
+      return recordPromise;
     }, '恢复日报加载失败。');
+  },
+
+  // 近期趋势与历史记录：本人/代填对象的 wellness-trends（含疲劳项），一次只画一个指标。
+  async loadStatusTrends() {
+    const athleteId = this._targetAthleteId;
+    const project = this._project;
+    if (!athleteId || !project) return;
+    this._trendGuard = this._trendGuard || createRequestGuard();
+    const id = this._trendGuard.next();
+    this.setData({ trendLoading: true, trendError: '' });
+    try {
+      const dates = wellnessDates();
+      const fromDate = new Date(`${dates.max}T00:00:00Z`);
+      fromDate.setUTCDate(fromDate.getUTCDate() - 13);
+      const from = fromDate.toISOString().slice(0, 10);
+      const result = await api.wellnessTrends(athleteId, from, dates.max, project);
+      if (!this._trendGuard.isLatest(id)) return;
+      const trends = (result && result.trends) || [];
+      this._trends = trends;
+      this.applyStatusViews(this.data.record);
+    } catch (error) {
+      if (this._trendGuard.isLatest(id)) {
+        this._trends = [];
+        this.setData({
+          trendLoading: false,
+          trendError: error.message || '恢复趋势加载失败，请重试。',
+          statusTrend: buildStatusTrend([], this.data.activeTrendKey),
+          statusHistory: []
+        });
+        this.applyStatusViews(this.data.record);
+      }
+      return;
+    }
+    if (this._trendGuard.isLatest(id)) this.setData({ trendLoading: false });
+  },
+
+  // 教练队伍概览：应填/已填/未填与需要关注名单（自评异常或 24 小时高负荷）。
+  async loadTeamStatus() {
+    if (!this.data.isCoach || !this._project) return;
+    this._teamStatusGuard = this._teamStatusGuard || createRequestGuard();
+    const id = this._teamStatusGuard.next();
+    this.setData({ teamStatusLoading: true, teamStatusError: '' });
+    try {
+      const result = await api.teamOverview(this._project);
+      if (!this._teamStatusGuard.isLatest(id)) return;
+      this.setData({ teamStatusLoading: false, teamStatus: buildTeamStatusView(result) });
+    } catch (error) {
+      if (this._teamStatusGuard.isLatest(id)) {
+        this.setData({ teamStatusLoading: false, teamStatus: null, teamStatusError: error.message || '队伍状态加载失败，请重试。' });
+      }
+    }
+  },
+
+  applyStatusViews(record) {
+    const trends = this._trends || [];
+    const rpeSeries = trends.find((item) => item.key === 'rpe');
+    const rpePoint = ((rpeSeries && rpeSeries.points) || []).find((point) => point.date === this.data.form.date);
+    this.setData({
+      statusCards: statusMetricCards(record, rpePoint ? rpePoint.personalValue : null),
+      statusTrend: buildStatusTrend(trends, this.data.activeTrendKey),
+      statusHistory: buildStatusHistory(trends, 7)
+    });
+  },
+
+  onTrendMetricChange(event) {
+    const key = event.currentTarget.dataset.key;
+    if (!TREND_METRICS.some((item) => item.key === key) || key === this.data.activeTrendKey) return;
+    this.setData({
+      activeTrendKey: key,
+      statusTrend: buildStatusTrend(this._trends || [], key)
+    });
+  },
+
+  retryTrends() {
+    return this.loadStatusTrends();
+  },
+
+  retryTeamStatus() {
+    return this.loadTeamStatus();
+  },
+
+  scrollToForm() {
+    wx.pageScrollTo({ selector: '#wellness-form', duration: 200 });
   },
 
   onAthleteChange(event) {
@@ -103,6 +209,7 @@ Page({
         recordView: wellnessRecordView(record, options),
         form: wellnessFormFromRecord(record, date, options)
       });
+      this.applyStatusViews(record);
       this.restoreDraft(date);
     } catch (error) {
       this.setData({ loading: false, error: error.message || '恢复日报加载失败。' });
@@ -198,6 +305,7 @@ Page({
         recordView: wellnessRecordView(record, options),
         form: wellnessFormFromRecord(record, payload.date, options)
       });
+      this.applyStatusViews(record);
       wx.showToast({ title: '恢复日报已保存', icon: 'success' });
     } catch (error) {
       this.setData({ saving: false, error: error.message || '恢复日报保存失败。' });
