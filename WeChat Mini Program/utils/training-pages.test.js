@@ -24,6 +24,30 @@ function createPage(name, api = {}) {
 const scope = { selectedAthleteId: 1, athletes: [{ id: 1, name: '测试运动员' }], from: '2026-10-01', to: '2026-10-10', project: 'rowing', teamId: 0 };
 const fail = () => Promise.reject(new Error('加载失败，请重试'));
 
+describe('公共运动员模块与训练页选择联动', () => {
+  it.each(['strength', 'special'])('%s 仅选择当前名单成员，刷新正确对象且重复选择不请求', async (name) => {
+    const page = createPage(name);
+    const field = name === 'special' ? 'viewAthleteId' : 'selectedAthleteId';
+    page.data = { ...page.data, ...scope, athleteItems: scope.athletes, [field]: 0 };
+    page._guard = { next: () => 1, isLatest: () => true };
+    const requested = [];
+    page.loadPageData = async (current) => { requested.push(current[field]); return {}; };
+    await page.onAthleteSelect({ detail: { id: 99 } });
+    expect(requested).toEqual([]);
+    expect(page.data[field]).toBe(0);
+    await page.onAthleteSelect({ detail: { id: 1 } });
+    expect(page.data[field]).toBe(1);
+    expect(requested).toEqual([1]);
+    await page.onAthleteSelect({ detail: { id: 1 } });
+    expect(requested).toEqual([1]);
+    if (name === 'special') {
+      await page.onBackToTeam();
+      expect(page.data.viewAthleteId).toBe(0);
+      expect(requested).toEqual([1, 0]);
+    }
+  });
+});
+
 describe('训练页空数据与独立失败回归', () => {
   it.each(['strength', 'special'])('%s 首屏保留核心指标和人员分页模型', (name) => {
     const page = createPage(name);

@@ -14,7 +14,7 @@ Component({
     items: { type: Array, value: [] },
     selectedId: { type: Number, value: 0 },
     // 右上角详情入口文案；空字符串表示不展示详情入口。
-    detailLabel: { type: String, value: '档案 ›' },
+    detailLabel: { type: String, value: '档案' },
     emptyText: { type: String, value: '暂无可管理运动员' },
     searchPlaceholder: { type: String, value: '搜索运动员姓名' },
     label: { type: String, value: '运动员' },

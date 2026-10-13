@@ -143,7 +143,6 @@
       </view>
       <athlete-selector
         title="运动员"
-        note="当前范围共 {{athleteTotal}} 名运动员 · 点选切换个人专项分析"
         items="{{athleteItems}}"
         selected-id="{{viewAthleteId}}"
         loading="{{loading}}"

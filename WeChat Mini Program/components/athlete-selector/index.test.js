@@ -39,6 +39,18 @@ function createSelector(items) {
 }
 
 describe('运动员组件数据监听', () => {
+  it('三个页面统一复用运动员组件默认展示及独立选择、档案事件', () => {
+    for (const page of ['index', 'special', 'strength']) {
+      const source = readFileSync(new URL(`../../pages/${page}/${page}.wxml`, import.meta.url), 'utf8');
+      const selectors = source.match(/<athlete-selector\b[\s\S]*?\/>/g);
+      expect(selectors).toHaveLength(1);
+      expect(selectors[0]).toContain('title="运动员"');
+      expect(selectors[0]).toContain('bind:select=');
+      expect(selectors[0]).toContain('bind:detail=');
+      expect(selectors[0]).not.toMatch(/\b(?:note|detail-label)=/);
+    }
+  });
+
   it('空列表初始化后结束刷新，不循环写入监听字段', () => {
     const component = createSelector([]);
     expect(component.data.isEmpty).toBe(true);

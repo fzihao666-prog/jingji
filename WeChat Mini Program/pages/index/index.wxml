@@ -168,7 +168,6 @@
         loading="{{teamLoading}}"
         error="{{teamError}}"
         label="运动员"
-        detail-label="档案"
         bind:select="onTeamAthleteSelect"
         bind:detail="onTeamAthleteDetail"
       />

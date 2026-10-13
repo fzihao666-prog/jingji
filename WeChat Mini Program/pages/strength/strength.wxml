@@ -135,7 +135,6 @@
     <view wx:if="{{!selectedAthleteId}}" class="notice">请先选择运动员，再查看体能分析。</view>
     <athlete-selector
       title="运动员"
-      note="点选切换当前体能分析对象"
       items="{{athleteItems}}"
       selected-id="{{selectedAthleteId}}"
       loading="{{loading}}"
