@@ -116,7 +116,7 @@ function loadPage(page, options) {
   const settings = options || {};
   page._guard = page._guard || createRequestGuard();
   return loadWithGuard(page, page._guard, async (isLatest) => {
-    const context = await loadContext({ refreshUser: Boolean(settings.refreshUser) });
+    const context = await loadContext({ refreshUser: settings.refreshUser === true });
     if (!isLatest()) return null;
     const scope = createInitialScope(context, settings.scope || {});
     if (settings.prepare) settings.prepare(page, scope);

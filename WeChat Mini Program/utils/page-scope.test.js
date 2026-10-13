@@ -109,6 +109,17 @@ describe('page scope', () => {
     expect(isPageCacheFresh(page)).toBe(true);
   });
 
+  it('重试按钮的事件对象不触发用户信息刷新，仅显式 true 才刷新', async () => {
+    nextContext = context({ role: 'SCC' });
+    for (const refreshUser of [{ type: 'tap', currentTarget: { dataset: {} } }, undefined, false, true]) {
+      const page = createLoadPage({ loadPageData: async () => ({}) });
+      await scopeModule.loadPage(page, { refreshUser });
+      expect(contextCalls[contextCalls.length - 1]).toEqual({ refreshUser: refreshUser === true });
+      expect(page.data.error).toBe('');
+      expect(page.data.loading).toBe(false);
+    }
+  });
+
   it('加载失败时回填错误且不标记缓存', async () => {
     nextContext = context({ role: 'SCC' });
     const page = createLoadPage({
