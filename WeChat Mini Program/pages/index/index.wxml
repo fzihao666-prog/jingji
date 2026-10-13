@@ -162,12 +162,13 @@
       <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite">正在读取队伍运动员…</view>
       <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
       <athlete-selector
-        title="队伍运动员"
+        title="运动员"
         items="{{teamView.athletes}}"
         selected-id="{{selectedAthleteId}}"
         loading="{{teamLoading}}"
         error="{{teamError}}"
-        label="队伍运动员"
+        label="运动员"
+        detail-label="档案"
         bind:select="onTeamAthleteSelect"
         bind:detail="onTeamAthleteDetail"
       />

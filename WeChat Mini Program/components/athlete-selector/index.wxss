@@ -5,7 +5,7 @@
 
 .athlete-card {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 8rpx;
   overflow: hidden;
   border: 1rpx solid var(--line, #d8e3e6);
@@ -19,8 +19,10 @@
   box-shadow: inset 0 0 0 1rpx var(--river, #176f7f);
 }
 
-.athlete-card-main {
-  flex: 1;
+.athlete-card .athlete-card-main {
+  flex: 1 1 0%;
+  box-sizing: border-box;
+  width: auto;
   min-width: 0;
   display: flex;
   align-items: flex-start;
@@ -72,17 +74,17 @@
 .athlete-summary { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 8rpx; color: var(--muted, #6d8088); font-size: 20rpx; }
 .athlete-value { flex: none; align-self: center; color: var(--river, #176f7f); font-size: 23rpx; font-weight: 800; }
 
-.athlete-card-detail {
+.athlete-card .athlete-card-detail {
   flex: none;
-  align-self: stretch;
-  min-width: 112rpx;
-  margin: 0;
-  padding: 0 16rpx;
-  border: 0;
-  border-left: 1rpx solid var(--line, #d8e3e6);
-  border-radius: 0;
+  box-sizing: border-box;
+  width: auto;
+  min-width: 96rpx;
+  margin: 16rpx 20rpx 16rpx 0;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid #c6dedf;
+  border-radius: 12rpx;
   color: var(--river, #176f7f);
-  background: transparent;
+  background: #e6f4f1;
   font-size: 21rpx;
   font-weight: 700;
   line-height: 1.3;
