@@ -56,7 +56,7 @@ const OLYMPIC_ICONS = [
   ['摔跤', 'wrestling']
 ].map(([label, name]) => ({
   label,
-  src: `/assets/olympic-sports/${name.toLowerCase().replace(/ /g, '-')}.png`
+  src: `/assets/olympic-sports-login-v1/${name}.gif`
 }));
 
 Page({

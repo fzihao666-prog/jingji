@@ -17,12 +17,12 @@ describe('小程序登录图片预算与降级', () => {
     const page = loadPage();
     expect(page.data.olympicIcons).toHaveLength(50);
     for (const icon of page.data.olympicIcons) {
-      expect(icon.src).toMatch(/^\/assets\/olympic-sports\/.+\.png$/);
+      expect(icon.src).toMatch(/^\/assets\/olympic-sports-login-v1\/.+\.gif$/);
       expect(statSync(new URL(icon.src.slice(1), root)).size).toBeGreaterThan(0);
     }
     expect(statSync(new URL(page.data.heroUrl.slice(1), root)).size).toBeLessThan(200 * 1024);
     const config = JSON.parse(readFileSync(new URL('project.config.json', root), 'utf8'));
-    expect(config.packOptions.ignore.some((entry) => entry.value === 'assets/olympic-sports')).toBe(false);
+    expect(config.packOptions.ignore.some((entry) => entry.value === 'assets/olympic-sports-login-v1')).toBe(false);
   });
 
   it('图片失败切换到静态兜底，不重试请求', () => {

@@ -369,7 +369,6 @@
   display: block;
   object-fit: cover;
   object-position: center;
-  transform: scale(1.5);
 }
 
 .olympic-sport > span:last-child {
