@@ -420,6 +420,16 @@ npm run start
 - `main`/`dev` 的 push 与 PR 触发 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：静态检查、单元测试、接口冒烟、类型检查与构建；`main` 分支 CI 通过后自动触发 [`deploy.yml`](.github/workflows/deploy.yml)，复用 `scripts/release.sh` 走同一条发布链路。
 - 手动发布仍然有效：Mac 本地 `bash scripts/release.sh`，或在 Actions 手动运行 `deploy.yml`（填 `tag` 即回滚到已推送的旧镜像）。所需密钥与变量见 [部署手册第 6.4 节](docs/deployment-ubuntu-24.md)。
 
+#### Gitee Go 发布配置
+
+[`deploy/gitee-go-pipeline.yml`](deploy/gitee-go-pipeline.yml) 先执行与 GitHub CI 对齐的阻断检查，再构建前端并归档本次提交源码。上传的 `dist` 仅供下载；手动确认 Docker 发布阶段后，Agent 直接读取本次构建的 `RELEASE_SOURCE`，校验摘要，在专用发布主机上构建 `linux/amd64` 完整镜像并推送 ACR，使用完整提交 SHA 作为标签，随后调用 `scripts/release.sh --tag` 发布到 ECS。只有构建时与 `origin/main` 一致的提交允许发布；无法确认分支时拒绝发布。Gitee 不再使用 PM2 或制品仓库的 `latest`。
+
+首次使用前必须在 Gitee Go 配置发布阶段的真实 `hostGroupID`，选择**专用发布主机**，不要选择生产 ECS。该主机需要 Bash、Git、Docker Buildx、`flock`、`sha256sum`、SSH 和可访问 ACR 的网络；生产 ECS 沿用现有 Compose、数据卷和配置，不在生产主机上构建。
+
+Agent 环境需提供 `IMAGE`（必须与 ECS 的 `compose.yaml` 镜像仓库一致）、`DEPLOY_HOST`、`DEPLOY_USER`、`REMOTE_DIR`、`DEPLOY_SSH_KEY`（主机上的私钥文件路径）。提前校验并登记 ECS 的 SSH 主机公钥到 Agent 用户的 `known_hosts`，并用该用户登录 ACR；也可通过 Gitee 的秘密变量同时提供 `ACR_USERNAME`、`ACR_PASSWORD`，脚本使用标准输入登录，不输出密码。不要把凭据写入 YAML 或提交到仓库。
+
+发布主机使用锁避免同时构建发布；ECS 继续使用现有发布锁与成功版本保留策略。发布检查使用 `/health` 并设置超时和有限重试。失败不会自动恢复数据库；按现有 `scripts/release.sh --tag <上一成功标签>` 流程回滚应用镜像，数据库迁移仍需独立评估兼容性与备份。首次运行需核对 Gitee 当前插件支持的 Node 版本、直接制品引用与解压目录。
+
 > 根目录 [DEPLOY_UBUNTU24.md](DEPLOY_UBUNTU24.md) 是早期“服务器克隆代码 + PM2 + Certbot”部署路线的记录，与现行 Docker/ACR 链路不同，仅作历史参考。
 
 ## 9. 当前状态与已知限制

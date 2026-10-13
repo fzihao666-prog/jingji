@@ -79,6 +79,8 @@ Express :8787
 
 微信小程序生产配置必须使用这个 HTTPS 域名作为唯一基础地址。微信公众平台需要将该域名分别登记为 request、uploadFile 和 downloadFile 合法域名，以保证 API、照片上传和照片/背景资源不分流。数据库、上传目录和 JWT 密钥必须纳入备份。
 
+Gitee Go 的 `deploy/gitee-go-pipeline.yml` 执行静态检查、小程序契约、单元测试、接口冒烟和构建，随后归档本次提交源码。手动确认发布阶段后，专用构建主机的 Agent 校验本次构建制品与主分支标记，以完整提交 SHA 构建并推送 ACR 镜像，再经 `scripts/gitee-release.sh` 调用既有 `scripts/release.sh --tag` 部署到 ECS；生产 ECS 不接收源码或执行镜像构建。Gitee 不再通过 PM2 单独替换前端；凭据、主机组与 SSH 主机公钥在平台或发布主机配置。发布后的 HTTP 检查访问 `/health` 验证数据库连接，并设置超时和有限重试。
+
 生产发布脚本 `scripts/release.sh` 在服务器部署目录持有 `flock` 发布锁，等待 Compose 健康状态与 HTTP 检查通过后，原子更新 `.release-successful-images` 成功版本记录，再保留当前版与上一成功版并清理本仓库其余未被容器引用的 SHA 镜像。发布失败不更新成功记录、不清理；无法确认上一成功版时跳过清理。清理仅作用于 ECS 镜像标签，不涉及 ACR、数据目录、备份或其它服务；清理失败不改变部署成功状态。
 
 小程序训练填报经 `/api/me/training-sessions` 写入正式 `training_sessions`；服务端从登录账号确定运动员，并只允许修改或删除该账号创建的填报。`/api/teams` 要求登录；注册页面使用 `/api/registration/teams` 获取不含运动员数量的队伍名称。教练每日待办同时校验角色和当前项目授权。
