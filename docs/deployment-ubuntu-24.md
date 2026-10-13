@@ -376,6 +376,26 @@ docker compose --env-file .env.compose ps -a
 curl --fail http://127.0.0.1:8787/ >/dev/null && echo '服务正常'
 ```
 
+### 6.4 GitHub Actions 自动发布
+
+仓库内置两个工作流（`.github/workflows/`）。它们与本节手动链路共用同一个 `scripts/release.sh`，不新增第二套发布逻辑。
+
+| 工作流 | 触发 | 作用 |
+| --- | --- | --- |
+| `ci.yml` | `main`/`dev` 的 push 与 PR、手动 | 静态检查（ESLint、小程序类型检查、字典同步校验）、Vitest、接口冒烟 `npm run api-check`、`npm run check` 与 `npm run build`；Prettier 与 Stylelint 暂为非阻断作业 |
+| `deploy.yml` | `main` 分支 CI 通过后自动；也可手动 | 构建 `linux/amd64` 镜像推送 ACR，再 SSH 到 ECS 切换镜像标签、等待健康检查；支持 `--tag` 回滚、`--build-only`、`--dry-run` |
+
+配置（Settings → Secrets and variables → Actions）：
+
+- Secrets：`ACR_USERNAME`、`ACR_PASSWORD`（ACR 访问凭证，不是阿里云网页登录密码）、`DEPLOY_SSH_KEY`（`deploy` 账户 ed25519 私钥全文）。
+- Variables（均可省略，使用工作流内默认值）：`ACR_IMAGE`、`DEPLOY_HOST`、`DEPLOY_USER`、`REMOTE_DIR`。
+
+注意事项：
+
+- GitHub Actions 的出口 IP 不固定，ECS 安全组需放行其 TCP 22。不放行时改用手动触发，或继续在 Mac 上执行 `scripts/release.sh`。
+- 未配置上述密钥时 `deploy.yml` 只打印警告并跳过发布，不会让工作流失败，便于先合并再补凭据。
+- 运行器是原生 `linux/amd64`，不需要 Rosetta/QEMU；请勿用 Apple Silicon 本机运行 amd64 镜像做启动冒烟（见第 3 节说明）。
+
 ## 7. 备份、排障与维护
 
 容器更新不会删除 `./data`，但数据仍需异机备份。以下由 root 设置每日 SQLite 一致性备份（先安装 sqlite3）：

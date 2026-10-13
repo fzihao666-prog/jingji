@@ -415,6 +415,11 @@ npm run start
 - 发布前将 `WeChat Mini Program/config.js` 的 `API_ENVIRONMENT` 改为 `production`，`NETWORK_DEBUG` 保持 `false`，并核对小程序备案信息。
 - 真机网络问题的 TLS 检查与验收步骤见 [小程序说明](WeChat%20Mini%20Program/README.md#资料保存与真机网络排障)。
 
+### 8.7 持续集成与自动发布
+
+- `main`/`dev` 的 push 与 PR 触发 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)：静态检查、单元测试、接口冒烟、类型检查与构建；`main` 分支 CI 通过后自动触发 [`deploy.yml`](.github/workflows/deploy.yml)，复用 `scripts/release.sh` 走同一条发布链路。
+- 手动发布仍然有效：Mac 本地 `bash scripts/release.sh`，或在 Actions 手动运行 `deploy.yml`（填 `tag` 即回滚到已推送的旧镜像）。所需密钥与变量见 [部署手册第 6.4 节](docs/deployment-ubuntu-24.md)。
+
 > 根目录 [DEPLOY_UBUNTU24.md](DEPLOY_UBUNTU24.md) 是早期“服务器克隆代码 + PM2 + Certbot”部署路线的记录，与现行 Docker/ACR 链路不同，仅作历史参考。
 
 ## 9. 当前状态与已知限制
