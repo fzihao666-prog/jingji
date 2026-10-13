@@ -4,8 +4,6 @@
     <view class="page-description">账号与敏感信息处理说明</view>
   </view>
 
-  <view class="notice">本页面是产品内置的隐私说明框架。正式发布前，运营主体应补充单位全称、联系方式、保存期限和投诉渠道，并由合规负责人确认。</view>
-
   <view class="card privacy-section">
     <view class="card-head-title">我们处理哪些信息</view>
     <text>账号和组织信息：姓名、账号、角色、项目、队伍与授权区域。</text>
