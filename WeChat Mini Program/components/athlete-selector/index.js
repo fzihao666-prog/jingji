@@ -28,7 +28,8 @@ Component({
     isEmpty: true,
   },
   observers: {
-    'items, keyword': function onItemsKeywordChange() {
+    // 搜索事件已主动刷新；不监听 refreshView 写回的 keyword，避免 setData 递归。
+    items: function onItemsChange() {
       this.refreshView(this.data.keyword, 0);
     },
   },
