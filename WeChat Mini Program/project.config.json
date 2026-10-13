@@ -3,6 +3,10 @@
   "packOptions": {
     "ignore": [
       {
+        "value": ".test.js",
+        "type": "suffix"
+      },
+      {
         "value": "README.md",
         "type": "file"
       },
