@@ -59,7 +59,7 @@ Page({
     if (!isLatest()) return null;
     const tests = (testResult.value || {}).tests || [];
     const sessions = [...((sessionResult.value || {}).sessions || [])]
-      .sort((a, b) => b.trainingDate.localeCompare(a.trainingDate) || b.sessionOrder - a.sessionOrder);
+      .sort((a, b) => String(b.trainingDate || '').localeCompare(String(a.trainingDate || '')) || b.sessionOrder - a.sessionOrder);
     const periodSessions = sessions.filter((item) => item.trainingDate >= scope.from && item.trainingDate <= scope.to);
     const plans = [...((planResult.value || {}).plans || [])].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     const metricKeys = Object.keys(STRENGTH_METRICS).filter((key) => tests.some((test) => test.metrics && typeof test.metrics[key] === 'number' && Number.isFinite(test.metrics[key])));

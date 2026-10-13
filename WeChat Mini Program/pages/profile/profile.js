@@ -82,7 +82,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     };
   });
 
-  const tests = [...((overview && overview.strengthTests) || [])].sort((a, b) => b.testDate.localeCompare(a.testDate));
+  const tests = [...((overview && overview.strengthTests) || [])].sort((a, b) => String(b.testDate || '').localeCompare(String(a.testDate || '')));
   const latestTest = tests[0] || null;
   const testMetrics = completeStrengthMetrics(strengthMetricRows(latestTest)).slice(0, 8);
   const benchmarkSummary = benchmark && benchmark.summary ? {
