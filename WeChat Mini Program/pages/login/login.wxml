@@ -1,6 +1,6 @@
 <view class="login-page">
   <view class="login-hero">
-    <image class="login-hero-image" src="{{heroUrl}}" mode="aspectFill" />
+    <image wx:if="{{!heroFailed}}" class="login-hero-image" src="{{heroUrl}}" mode="aspectFill" binderror="onHeroError" />
     <view class="login-hero-overlay">
       <image class="login-logo" src="/assets/gfc-logo.png" mode="widthFix" />
 
@@ -11,7 +11,8 @@
         </view>
         <view class="olympic-grid">
           <view wx:for="{{olympicIcons}}" wx:key="src" class="olympic-item">
-            <image src="{{item.src}}" mode="aspectFill" aria-label="{{item.label}}" />
+            <image wx:if="{{!item.failed}}" src="{{item.src}}" mode="aspectFill" lazy-load binderror="onIconError" data-index="{{index}}" aria-label="{{item.label}}" />
+            <text wx:else class="olympic-fallback">{{item.label}}</text>
           </view>
         </view>
       </view>

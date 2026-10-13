@@ -301,3 +301,9 @@
   background: linear-gradient(105deg, #075364, #0b686a);
   box-shadow: 0 14rpx 28rpx rgba(6, 75, 85, .2);
 }
+
+.olympic-fallback {
+  font-size: 12rpx;
+  line-height: 1.2;
+  text-align: center;
+}

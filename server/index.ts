@@ -301,7 +301,7 @@ app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD'
 
 const distPath = resolve(process.cwd(), 'dist');
 if (existsSync(distPath)) {
-  // 带内容 hash 的构建产物可长期缓存；无 hash 文件与 HTML 必须每次重新验证，否则发布后拿不到新版本。
+  // 带内容 hash 的资源缓存一年；其他资产缓存 30 天，更新时须更换文件名或 URL 版本。HTML 每次重新验证。
   const hashedAssetPattern = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
   app.use(
     '/assets',
@@ -311,7 +311,7 @@ if (existsSync(distPath)) {
           'Cache-Control',
           hashedAssetPattern.test(basename(filePath))
             ? 'public, max-age=31536000, immutable'
-            : 'no-cache',
+            : 'public, max-age=2592000',
         );
       },
     }),

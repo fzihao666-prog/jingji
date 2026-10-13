@@ -56,7 +56,7 @@ const OLYMPIC_ICONS = [
   ['摔跤', 'wrestling']
 ].map(([label, name]) => ({
   label,
-  src: api.assetUrl(`/assets/olympic-sports/${encodeURIComponent(name)}.gif`)
+  src: `/assets/olympic-sports/${name.toLowerCase().replace(/ /g, '-')}.png`
 }));
 
 Page({
@@ -70,14 +70,14 @@ Page({
     submitting: false,
     error: '',
     success: '',
-    heroUrl: ''
+    heroUrl: '/assets/login-rowing-hero.jpg',
+    heroFailed: false
   },
 
   onLoad() {
     const remembered = wx.getStorageSync('jingji-mini-remembered-username') || '';
     this.setData({
-      username: remembered,
-      heroUrl: api.assetUrl('/assets/login-rowing-hero.png')
+      username: remembered
     });
     if (wx.getStorageSync(TOKEN_KEY)) wx.reLaunch({ url: '/pages/index/index' });
   },
@@ -98,6 +98,16 @@ Page({
             : '注册申请已提交，审核通过后即可使用该账号登录。'
       });
     }
+  },
+
+  onHeroError() {
+    this.setData({ heroFailed: true });
+  },
+
+  onIconError(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    if (!Number.isInteger(index) || index < 0 || index >= this.data.olympicIcons.length) return;
+    this.setData({ [`olympicIcons[${index}].failed`]: true });
   },
 
   goRegister() {
