@@ -107,6 +107,7 @@ jingji/
 │  ├─ core/db-connection.ts# SQLite PRAGMA 与 WAL 并发重试
 │  ├─ core/database-path.ts# 数据库路径、目录准备与备份目录
 │  ├─ core/db-initialize.ts# 最终建表、兼容迁移及初始化数据
+│  ├─ core/db-project-teams.ts # 部署启动补齐固定队伍，按项目与名称判重且保留已有状态
 │  ├─ core/db-migrations.ts# 有数据保留要求的兼容迁移
 │  ├─ core/db-system-data.ts# 必要的强度分区与动作字典
 │  ├─ overview-service.ts  # 训练总览统一查询与聚合

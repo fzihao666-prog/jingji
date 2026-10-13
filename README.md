@@ -263,6 +263,7 @@ SQLite 单文件数据库，默认路径 `data/training-monitor.db`，由 `serve
 
 - 启动入口 `server/core/db.ts`：连接数据库 → 旧库首次升级前保留 `*.before-reconstruction-v1` 原始副本 → `initializeDatabase()` 建表建索引。
 - `server/core/db-initialize.ts` 通过“表存在性检查 + `app_metadata` 版本标记”保证**幂等**，新库旧库走同一流程，无需手工运行历史 SQL；`db-migrations.ts` 承载需保留旧数据的兼容迁移；`db-system-data.ts` 只补缺失的字典数据（强度分区、动作字典等）。
+- 部署启动时按 `server/core/db-project-teams.ts` 中的 24 支启用队伍清单补齐 `project_teams`，按“项目 + 名称”判重；已有记录直接跳过，保留 ID、创建时间和启停状态，不恢复停用队伍，不依赖目标库已有运动员。每次启动均检查缺失项。
 - 服务启动时自动执行兼容迁移与体能冠军参考补全；迁移只增不删，不删除真实数据。
 
 ### 6.3 核心数据表

@@ -5,6 +5,7 @@ import { PROJECT_META, normalizeProject } from '../../shared/projects.ts';
 import { OVERVIEW_METRICS } from '../../shared/overview-metrics.ts';
 import { preserveLegacySpecialChampionModels } from './db-migrations.ts';
 import { initializeSystemData } from './db-system-data.ts';
+import { initializeProjectTeams } from './db-project-teams.ts';
 import { initializePhysicalChampionReferences } from './physical-champion-references.ts';
 
 export function initializeDatabase(
@@ -5827,6 +5828,9 @@ export function initializeDatabase(
   rebuildLegacyProjectCheckTables();
   // 初始化示例与历史迁移完成后再执行一次，确保新库同样写入项目 Code。
   migrateLegacyProjectCodes();
+
+  // 项目 Code 收敛完成后再补齐队伍，避免与历史中文项目的同名队伍冲突。
+  initializeProjectTeams(db);
 
   // 幂等修复：历史版本 PUT 接口只更新 team_id / athlete_origins，
   // 未同步 athletes 表上的 team、region、city、county 文本列。
