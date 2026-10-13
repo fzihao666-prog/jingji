@@ -7,19 +7,23 @@ stages:
   strategy: naturally
   trigger: auto
   steps:
-  - step: ut@nodejs
+  # 注意：不要改回 ut@nodejs。该步骤固定跑在 Node 8~10 老运行时上（不认 nodeVersion），
+  # 且强制要求 mochawesome 测试报告目录，本项目（ESM + Vitest + node:sqlite）跑不了。
+  # 这里复用 build@nodejs：它支持 nodeVersion，且不依赖测试报告。
+  - step: build@nodejs
     name: ""
     displayName: Nodejs 单元测试（Vitest）
     # 项目依赖 node:sqlite 内置模块，必须 Node >= 22.5；与 Dockerfile / CI 同版本。
+    # 若 Gitee Go 版本下拉没有 22.x，请选下拉中 >= 22.5 的最高版本并同步改这里。
     nodeVersion: 22.23.2
     commands:
     - '# 设置NPM源，提升安装速度'
     - npm config set registry https://registry.npmmirror.com
-    - '# 安装依赖并运行 Vitest 单元测试（与 .github/workflows/ci.yml 测试作业同口径）'
-    - npm ci --no-audit --no-fund
-    - npm run test
-    - '# 服务端接口冒烟：独立端口 8791 + 临时数据库，不触碰正式数据'
-    - npm run api-check
+    - '# 快速失败：Node 版本不对时给出明确报错，而不是后面莫名的 import 语法错误'
+    - node -e "const major=+process.versions.node.split('.')[0]; console.log('Node', process.version, '/ npm', process.env.npm_config_user_agent||''); if(major<22){console.error('本项目需要 Node >= 22.5（node:sqlite），当前 '+process.version+'；请在步骤 nodeVersion 中选择 22.x'); process.exit(1);}"
+    - '# 安装依赖并跑 Vitest 单元测试 + 服务端接口冒烟（与 .github/workflows/ci.yml 测试作业同口径）；'
+    - '# 合成一条命令链，避免依赖未安装时后续命令在无 node_modules 状态下误跑'
+    - npm ci --no-audit --no-fund && npm run test && npm run api-check
     checkpoints: {}
     caches:
     - "~/.npm"
@@ -44,10 +48,10 @@ stages:
     - '# 设置NPM源，提升安装速度'
     - npm config set registry https://registry.npmmirror.com
     - ""
+    - '# 快速失败：Node 版本不对时给出明确报错'
+    - node -e "const major=+process.versions.node.split('.')[0]; console.log('Node', process.version); if(major<22){console.error('本项目需要 Node >= 22.5（node:sqlite），当前 '+process.version+'；请在步骤 nodeVersion 中选择 22.x'); process.exit(1);}"
     - '# 全量类型检查后构建前端产物到 dist/（tsc -b && vite build）'
-    - npm ci --no-audit --no-fund
-    - npm run check
-    - npm run build
+    - npm ci --no-audit --no-fund && npm run check && npm run build
     artifacts:
     - name: BUILD_ARTIFACT
       path:
