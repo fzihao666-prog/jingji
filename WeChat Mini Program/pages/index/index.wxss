@@ -42,10 +42,10 @@
 .rpe-mark, .rpe-team-mark { position: absolute; left: 10%; width: 80%; height: 6rpx; border-radius: 999rpx; background: #176f7f; transform: translateY(50%); }
 .rpe-team-mark { left: 22%; width: 56%; height: 4rpx; background: #cf8428; }
 .chart-footnote { margin-top: 12rpx; color: #71868d; font-size: 19rpx; line-height: 1.45; }
-.focus-row { margin-top: 12rpx; padding: 16rpx 18rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
-.focus-row-head { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; }
+.focus-card .focus-row { display: block; box-sizing: border-box; width: 100%; max-width: 100%; margin: 12rpx 0 0; padding: 20rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
+.focus-row-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12rpx; }
 .focus-name { min-width: 0; color: #12303b; font-size: 25rpx; font-weight: 700; overflow-wrap: break-word; }
-.focus-tags { min-width: 0; max-width: 60%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6rpx; }
+.focus-tags { min-width: 0; max-width: 100%; margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6rpx; }
 .focus-tag { flex: none; padding: 4rpx 12rpx; border-radius: 999rpx; color: #7a4715; background: #fff1d8; font-size: 19rpx; }
 .focus-row .todo-note { margin-top: 7rpx; }
 .focus-card .todo-note { color: #536c75; font-size: 22rpx; line-height: 1.5; overflow-wrap: break-word; }
