@@ -1,0 +1,141 @@
+version: "1.0"
+name: 竞迹：测试、构建、上传、发布、部署到自有主机
+displayName: 竞迹：测试、构建、上传、发布、部署到自有主机
+stages:
+- name: 测试
+  displayName: 测试
+  strategy: naturally
+  trigger: auto
+  steps:
+  # 注意：不要改回 ut@nodejs。该步骤固定跑在 Node 8~10 老运行时上（不认 nodeVersion），
+  # 且强制要求 mochawesome 测试报告目录，本项目（ESM + Vitest + node:sqlite）跑不了。
+  # 这里复用 build@nodejs：它支持 nodeVersion，且不依赖测试报告。
+  - step: build@nodejs
+    name: ""
+    displayName: Nodejs 单元测试（Vitest）
+    # 项目依赖 node:sqlite 内置模块，必须 Node >= 22.5；与 Dockerfile / CI 同版本。
+    # 若 Gitee Go 版本下拉没有 22.x，请选下拉中 >= 22.5 的最高版本并同步改这里。
+    nodeVersion: 22.23.2
+    commands:
+    - '# 设置NPM源，提升安装速度'
+    - npm config set registry https://registry.npmmirror.com
+    - '# 快速失败：Node 版本不对时给出明确报错，而不是后面莫名的 import 语法错误'
+    - node -e "const major=+process.versions.node.split('.')[0]; console.log('Node', process.version, '/ npm', process.env.npm_config_user_agent||''); if(major<22){console.error('本项目需要 Node >= 22.5（node:sqlite），当前 '+process.version+'；请在步骤 nodeVersion 中选择 22.x'); process.exit(1);}"
+    - '# 安装依赖并跑 Vitest 单元测试 + 服务端接口冒烟（与 .github/workflows/ci.yml 测试作业同口径）；'
+    - '# 合成一条命令链，避免依赖未安装时后续命令在无 node_modules 状态下误跑'
+    - npm ci --no-audit --no-fund && npm run test && npm run api-check
+    checkpoints: {}
+    caches:
+    - "~/.npm"
+    - "~/.yarn"
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: 构建
+  displayName: 构建
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@nodejs
+    name: ""
+    displayName: Nodejs 构建
+    # 必须 Node >= 22.5（node:sqlite）；模板默认的 14.16.0 无法构建本项目。
+    nodeVersion: 22.23.2
+    commands:
+    - '# 设置NPM源，提升安装速度'
+    - npm config set registry https://registry.npmmirror.com
+    - ""
+    - '# 快速失败：Node 版本不对时给出明确报错'
+    - node -e "const major=+process.versions.node.split('.')[0]; console.log('Node', process.version); if(major<22){console.error('本项目需要 Node >= 22.5（node:sqlite），当前 '+process.version+'；请在步骤 nodeVersion 中选择 22.x'); process.exit(1);}"
+    - '# 全量类型检查后构建前端产物到 dist/（tsc -b && vite build）'
+    - npm ci --no-audit --no-fund && npm run check && npm run build
+    artifacts:
+    - name: BUILD_ARTIFACT
+      path:
+      - ./dist
+      type: .tar.gz
+    caches:
+    - "~/.npm"
+    - "~/.yarn"
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: 上传
+  displayName: 上传
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: publish@general_artifacts
+    name: ""
+    displayName: 上传制品
+    dependArtifact: BUILD_ARTIFACT
+    artifactName: output
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: 发布
+  displayName: 发布
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: publish@release_artifacts
+    name: ""
+    displayName: 发布
+    dependArtifact: output
+    version: 1.0.0.0
+    autoIncrement: true
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: 部署
+  displayName: 部署
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: deploy@agent
+    name: ""
+    displayName: 主机部署
+    deployArtifact:
+    - name: output
+      target: "~/gitee_go/deploy"
+      source: artifact
+      dependArtifact: ""
+      artifactRepository: default
+      artifactName: output
+      artifactVersion: latest
+    script: |-
+      # 竞迹主机部署：Gitee Go 已把制品（dist/）解压到 ~/gitee_go/deploy。
+      # 注意：制品仅含前端 dist；服务端代码与依赖需在主机上另行更新
+      # （git pull && npm ci），或继续使用 scripts/release.sh 的 Docker 镜像链路发布。
+      set -e
+      APP_DIR="${APP_DIR:-/srv/jingji}"
+      # 主机上的应用目录，按 DEPLOY_UBUNTU24.md / run-server.sh 的实际路径修改。
+      rsync -a --delete ~/gitee_go/deploy/dist/ "$APP_DIR/dist/"
+      cd "$APP_DIR"
+      # PM2 管理进程时重载服务，进程名按 pm2 list 实际情况修改。
+      pm2 reload jingji --update-env || pm2 restart jingji
+      # 健康检查：服务默认监听 8787（与 compose.yaml 一致）。
+      curl -fsS "http://127.0.0.1:${PORT:-8787}/" >/dev/null
+      echo "竞迹部署完成"
+    # 在 Gitee Go 中配置自有主机分组后填入分组 ID。
+    hostGroupID: {}
+    notify: []
+    strategy:
+      retry: "0"
+triggers:
+  trigger: manual
+notify: []
+strategy:
+  blocking: true
