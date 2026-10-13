@@ -63,7 +63,10 @@ export function resolveProfileScope(input: ProfileScopeInput): ProfileScope | nu
   return { ...input, teamId: athlete.teamId, teamAthleteIds: teamAthleteIds.map((row) => row.id) };
 }
 
-function queryWellness(scope: ProfileScope, column: 'sleep_hours' | 'morning_pulse' | 'weight_kg') {
+function queryWellness(
+  scope: ProfileScope,
+  column: 'sleep_hours' | 'morning_pulse' | 'weight_kg' | 'fatigue_index'
+) {
   if (!scope.teamAthleteIds.length) return [] as NumericRow[];
   return db
     .prepare(
@@ -121,6 +124,7 @@ export function buildWellnessTrends(scope: ProfileScope) {
       trend('sleepHours', '睡眠时长', '小时', queryWellness(scope, 'sleep_hours'), scope.athleteId),
       trend('morningPulse', '晨脉', 'bpm', queryWellness(scope, 'morning_pulse'), scope.athleteId),
       trend('weightKg', '体重', 'kg', queryWellness(scope, 'weight_kg'), scope.athleteId),
+      trend('fatigue', '疲劳', '', queryWellness(scope, 'fatigue_index'), scope.athleteId),
     ],
   };
 }

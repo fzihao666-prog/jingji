@@ -9,9 +9,19 @@ const { goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
+// 运动员条目归一化为 athlete-selector 形状（姓名/队伍/可检索文本）。
+function athleteItems(athletes) {
+  return (athletes || []).map((athlete) => ({
+    id: athlete.id,
+    name: athlete.name,
+    meta: athlete.team || '未分队',
+    searchText: `${athlete.name || ''} ${athlete.team || ''} ${athlete.project || ''}`,
+  }));
+}
+
 Page({
   data: {
-    ...emptyStrengthView(), ...athleteListView([]), athleteQuery: '',
+    ...emptyStrengthView(), ...athleteListView([]), athleteItems: [],
     loading: true, error: '', user: null, canEnterTest: false,
     projects: [], project: '', athletes: [], selectedAthleteId: 0, showAthlete: true,
     range: 'month', from: '', to: '', athleteName: '',
@@ -29,7 +39,7 @@ Page({
       prepare: (page, scope) => {
         this._source = null;
         getApp().globalData.selectedAthleteId = scope.selectedAthleteId;
-        page.setData({ ...emptyStrengthView(), ...athleteListView(scope.athletes), athleteQuery: '', ...scope, canEnterTest: MANAGER_ROLES.includes(scope.user.role) });
+        page.setData({ ...emptyStrengthView(), ...athleteListView(scope.athletes), athleteItems: athleteItems(scope.athletes), ...scope, canEnterTest: MANAGER_ROLES.includes(scope.user.role) });
       },
       load: (page, scope, isLatest) => page.loadPageData(scope, isLatest)
     });
@@ -37,7 +47,10 @@ Page({
 
   async loadPageData(scope, isLatest) {
     const athleteId = scope.selectedAthleteId;
-    if (!athleteId) { this._source = null; return { ...emptyStrengthView(), ...athleteListView(scope.athletes) }; }
+    if (!athleteId) {
+      this._source = null;
+      return { ...emptyStrengthView(), ...athleteListView(scope.athletes), athleteItems: athleteItems(scope.athletes) };
+    }
     const [testResult, sessionResult, planResult] = await Promise.all([
       sectionRequest(() => api.strengthTests(athleteId), '体能测试加载失败'),
       sectionRequest(() => api.strengthTrainingResults(athleteId), '体能训练加载失败'),
@@ -55,6 +68,7 @@ Page({
     const overview = overviewView(tests, periodSessions, scope);
     return {
       ...athleteListView(scope.athletes),
+      athleteItems: athleteItems(scope.athletes),
       trainingError: sessionResult.error, testError: testResult.error, planError: planResult.error,
       athleteName: athlete ? athlete.name : '',
       ...overview,
@@ -72,7 +86,7 @@ Page({
     const change = applyScopeChange(this, event);
     if (!change) return Promise.resolve();
     this._source = null;
-    this.setData({ ...emptyStrengthView(), ...athleteListView(this.data.athletes), athleteQuery: '' });
+    this.setData({ ...emptyStrengthView(), ...athleteListView(this.data.athletes), athleteItems: athleteItems(this.data.athletes) });
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') await saveProjectInOrder(this, change.patch.project, api.saveCurrentProject);
       if (!isLatest()) return null;
@@ -80,14 +94,20 @@ Page({
     }, '体能训练数据加载失败。');
   },
 
-  onAthleteSearch(event) {
-    const athleteQuery = event.detail.value;
-    this.setData({ athleteQuery, ...athleteListView(this.data.athletes, athleteQuery) });
+  // 运动员模块由 athlete-selector 承担搜索与 5 人分页；点选切换本页体能分析。
+  onAthleteSelect(event) {
+    const id = Number(event.detail && event.detail.id) || 0;
+    if (!id || !(this.data.athletes || []).some((item) => Number(item.id) === id)) return Promise.resolve();
+    if (id === (Number(this.data.selectedAthleteId) || 0)) return Promise.resolve();
+    this._source = null;
+    getApp().globalData.selectedAthleteId = id;
+    this.setData({ ...emptyStrengthView(), selectedAthleteId: id });
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '体能训练数据加载失败。');
   },
-  onAthletePagerChange(event) {
-    this.setData(athleteListView(this.data.athletes, this.data.athleteQuery, Number(event.detail.page)));
+
+  onAthleteDetail(event) {
+    navigateToAthlete(this, { currentTarget: { dataset: { athleteId: event.detail && event.detail.id } } }, this.data.athletes);
   },
-  goToAthlete(event) { navigateToAthlete(this, event, this.data.athleteRows); },
 
   switchSection(event) {
     const activeSection = event.currentTarget.dataset.key;

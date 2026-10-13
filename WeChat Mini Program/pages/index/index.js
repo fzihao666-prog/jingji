@@ -31,12 +31,13 @@ function buildView(overview, comparison, from, to) {
   const loadRatio = overview.trainingLoadRatio || {};
   const meta = overview.meta || {};
   const valueOrDash = (value, divisor = 1) => typeof value === 'number' && Number.isFinite(value) ? metricValue(value / divisor) : '--';
+  // 核心指标 2×2：累计/专项/体能时长与训练负荷；恢复时长与损伤情况为次级行（规格 §三.2）。
   const metrics = [
     { label: '累计训练量', value: valueOrDash(summary.totalDurationMin, 60), unit: '小时', note: '当前周期', tone: '' },
-    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-purple' },
+    { label: '专项训练', value: valueOrDash(summary.specialDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-blue' },
     { label: '体能训练', value: valueOrDash(summary.physicalDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-teal' },
-    { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-green' },
     { label: '训练负荷', value: metricValue(loadRatio.totalLoad, 0), unit: 'AU', note: '专项 + 体能 + 恢复 sRPE', tone: 'tone-orange' },
+    { label: '恢复训练', value: valueOrDash(summary.recoveryDurationMin, 60), unit: '小时', note: '训练时长', tone: 'tone-green' },
     overview.injuries ? injuryMetricView(overview.injuries, meta.scope === 'individual') : { label: '损伤情况', value: '--', unit: '人', note: '暂无伤病数据', tone: '' }
   ];
 
@@ -69,6 +70,26 @@ function buildView(overview, comparison, from, to) {
     };
   });
   const trendHasData = trend.some((item) => item.load !== null);
+
+  // 专项/体能训练时长并列柱状图：同日期、同单位（小时），与负荷图分列不混轴（规格 §三.3）。
+  const maxDurationMin = Math.max(1,
+    ...dailyRows.map((item) => Math.max(Number(item.specialDurationMin || 0), Number(item.physicalDurationMin || 0))));
+  const durationTrend = dailyRows.map((item) => {
+    const specialMin = item.specialDurationMin == null ? null : Number(item.specialDurationMin);
+    const physicalMin = item.physicalDurationMin == null ? null : Number(item.physicalDurationMin);
+    const specialHours = specialMin == null ? null : specialMin / 60;
+    const physicalHours = physicalMin == null ? null : physicalMin / 60;
+    return {
+      date: item.date,
+      label: shortDate(item.date),
+      specialHours,
+      physicalHours,
+      ariaLabel: `${item.date}，${specialHours == null ? '暂无专项训练时长' : `专项 ${number(specialHours, 1)} 小时`}，${physicalHours == null ? '暂无体能训练时长' : `体能 ${number(physicalHours, 1)} 小时`}`,
+      specialHeight: specialMin == null ? 0 : Math.max(specialMin > 0 ? 2 : 0, Math.round(specialMin / maxDurationMin * 100)),
+      physicalHeight: physicalMin == null ? 0 : Math.max(physicalMin > 0 ? 2 : 0, Math.round(physicalMin / maxDurationMin * 100))
+    };
+  });
+  const durationHasData = durationTrend.some((item) => item.specialHours !== null || item.physicalHours !== null);
 
   const structure = [
     { key: 'special', name: '专项', load: loadRatio.specialLoad, percentage: loadRatio.specialPercentage, color: 'special' },
@@ -104,6 +125,8 @@ function buildView(overview, comparison, from, to) {
     metrics,
     trend,
     trendPlaceholder: !trendHasData,
+    durationTrend,
+    durationPlaceholder: !durationHasData,
     structure,
     structureHasData: hasStructure,
     rpeDays,
@@ -138,7 +161,6 @@ Page({
     teamOverview: null,
     teamLoading: false,
     teamError: '',
-    teamKeyword: '',
     teamView: emptyTeamView(),
     teams: [],
     teamId: 0,
@@ -232,7 +254,7 @@ Page({
       overviewError: personalResult.error || teamsError, comparisonError: comparisonResult ? comparisonResult.error : ''
     };
     const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, teams, teamId);
-    const filteredRoster = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, this.data.todoPagerPages, teams, teamId);
+    const filteredRoster = this.buildTeamView(this.data.teamOverview, teams, teamId);
     Object.assign(view, { focusRows: focus.items, focusPager: focus, teamView: filteredRoster });
     const teamLabel = teamId ? ((teams.find((item) => Number(item.id) === teamId) || {}).name || '当前队伍') : '全部授权队伍';
     this.setData({ teams, teamId, teamLabel, scopeAthletes, selectedAthleteId: athleteId, ...view });
@@ -330,7 +352,7 @@ Page({
       const result = await api.teamOverview(project);
       if (!this._teamGuard.isLatest(id)) return;
       const teamOverview = result;
-      const teamView = this.buildTeamView(teamOverview, this.data.teamKeyword, this.data.todoPagerPages, this.data.teams, this.data.teamId);
+      const teamView = this.buildTeamView(teamOverview, this.data.teams, this.data.teamId);
       this.setData({ teamLoading: false, teamOverview, teamView });
     } catch (error) {
       if (this._teamGuard.isLatest(id)) {
@@ -339,36 +361,30 @@ Page({
     }
   },
 
-  buildTeamView(overview, keyword, pagerPages, teams, teamId) {
+  // 队伍运动员归一化为 athlete-selector 条目；搜索与 5 人分页由组件承担。
+  buildTeamView(overview, teams, teamId) {
     if (!overview) return emptyTeamView();
-    const kw = (keyword || '').toLowerCase();
     const selectedTeam = (teams || this.data.teams || []).find((item) => Number(item.id) === Number(teamId === undefined ? this.data.teamId : teamId));
     const inTeam = (overview.athletes || []).filter((item) => !selectedTeam || item.team === selectedTeam.name);
-    const filtered = kw
-      ? inTeam.filter((item) =>
-          (item.athleteName || '').toLowerCase().includes(kw) ||
-          (item.team || '').toLowerCase().includes(kw)
-        )
-      : inTeam;
-    const model = paginateList(filtered, (pagerPages || this.data.todoPagerPages).team, PAGE_SIZE);
-    return { ...overview, athletes: model.items.map((athlete) => ({ ...athlete, load24hText: metricValue(athlete.load24h) })), teamPager: model };
+    const athletes = inTeam.map((athlete) => ({
+      id: athlete.athleteId,
+      name: athlete.athleteName,
+      meta: athlete.team || '未分队',
+      tags: [
+        { text: athlete.hasTraining ? '已训练' : '未训练', tone: athlete.hasTraining ? 'ok' : 'warn' },
+        { text: athlete.wellnessReported ? '恢复已填' : '恢复未填', tone: athlete.wellnessReported ? 'ok' : 'warn' }
+      ],
+      value: `${metricValue(athlete.load24h)} AU`,
+      searchText: `${athlete.athleteName || ''} ${athlete.team || ''}`,
+    }));
+    return { athletes, teamPager: paginateList(athletes, 0, PAGE_SIZE) };
   },
 
   retryTeam() {
     return this.loadTeamOverview(this.data.project);
   },
 
-  onTeamKeyword(event) {
-    const teamKeyword = event.detail.value;
-    const todoPagerPages = { ...this.data.todoPagerPages, team: 0 };
-    this.setData({
-      teamKeyword,
-      todoPagerPages,
-      teamView: this.buildTeamView(this.data.teamOverview, teamKeyword, todoPagerPages, this.data.teams, this.data.teamId),
-    });
-  },
-
-  // pager-nav 统一回调：data-key 标识列表，event.detail.page 为目标页（0 基）。
+  // pager-nav 统一回调：状态监测分页；队伍运动员分页由 athlete-selector 组件内承担。
   onPagerChange(event) {
     const key = event.currentTarget.dataset.key;
     const page = Number(event.detail && event.detail.page);
@@ -376,7 +392,6 @@ Page({
     if (!key || !(key in pages) || !Number.isInteger(page) || page === pages[key]) return;
     const nextPages = { ...pages, [key]: page };
     const patch = { todoPagerPages: nextPages };
-    if (key === 'team') patch.teamView = this.buildTeamView(this.data.teamOverview, this.data.teamKeyword, nextPages, this.data.teams, this.data.teamId);
     if (key === 'focus') {
       const model = this.buildFocusRows(this.data.todos, page, this.data.teams, this.data.teamId);
       patch.focusRows = model.items;
@@ -398,16 +413,33 @@ Page({
     const teamId = Number(event.detail && event.detail.value) || 0;
     if (!this.data.teams.some((item) => Number(item.id) === teamId) && teamId !== 0) return Promise.resolve();
     const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0 };
-    this.setData({ teamId, todoPagerPages, teamKeyword: '', athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamView: this.buildTeamView(this.data.teamOverview, '', todoPagerPages, this.data.teams, teamId) });
+    this.setData({ teamId, todoPagerPages, athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamView: this.buildTeamView(this.data.teamOverview, this.data.teams, teamId) });
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
+  },
+
+  // 个人周期视图下钻/返回团队：scope-filter 运动员选择与队伍运动员卡片共用同一入口。
+  selectOverviewAthlete(athleteId) {
+    const valid = athleteId === 0 || this.data.scopeAthletes.some((item) => Number(item.id) === athleteId && (!item.project || item.project === this.data.project));
+    if (!valid || !this.data.canViewTodos) return Promise.resolve();
+    if (athleteId === (Number(this.data.selectedAthleteId) || 0)) return Promise.resolve();
+    this.setData({ selectedAthleteId: athleteId });
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
   },
 
   onOverviewAthleteChange(event) {
-    const athleteId = Number(event.detail && event.detail.value) || 0;
-    const valid = athleteId === 0 || this.data.scopeAthletes.some((item) => Number(item.id) === athleteId && (!item.project || item.project === this.data.project));
-    if (!valid || !this.data.canViewTodos) return Promise.resolve();
-    this.setData({ selectedAthleteId: athleteId });
-    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
+    return this.selectOverviewAthlete(Number(event.detail && event.detail.value) || 0);
+  },
+
+  onTeamAthleteSelect(event) {
+    return this.selectOverviewAthlete(Number(event.detail && event.detail.id) || 0);
+  },
+
+  onBackToTeam() {
+    return this.selectOverviewAthlete(0);
+  },
+
+  onTeamAthleteDetail(event) {
+    navigateToAthlete(this, { currentTarget: { dataset: { athleteId: event.detail && event.detail.id } } }, this.data.athletes);
   },
 
   onAthleteKeyword(event) {
@@ -449,6 +481,16 @@ Page({
     if (!item) return;
     const lines = [item.load == null ? '暂无有效专项或体能负荷记录' : `专项 + 体能 sRPE：${number(item.load, 0)} AU`];
     if (item.teamLoad !== null && item.teamLoad !== undefined) lines.push(`团队日均 sRPE：${number(item.teamLoad, 0)} AU`);
+    wx.showModal({ title: item.date, content: lines.join('\n'), showCancel: false, confirmText: '知道了' });
+  },
+
+  showDurationDetail(event) {
+    const item = this.data.durationTrend[Number(event.currentTarget.dataset.index)];
+    if (!item) return;
+    const lines = [
+      item.specialHours == null ? '专项训练时长：待采集' : `专项训练时长：${number(item.specialHours, 1)} 小时`,
+      item.physicalHours == null ? '体能训练时长：待采集' : `体能训练时长：${number(item.physicalHours, 1)} 小时`
+    ];
     wx.showModal({ title: item.date, content: lines.join('\n'), showCancel: false, confirmText: '知道了' });
   },
 

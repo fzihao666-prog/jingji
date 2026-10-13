@@ -760,6 +760,35 @@ try {
     '恢复日报读取应回到最新一次提交'
   );
 
+  // 恢复趋势：含疲劳项，形状与既有趋势项一致，既有键不被挤掉。
+  const wellnessTrendsResult = await request(
+    `/api/athletes/${ownAthlete.id}/wellness-trends?project=${ownAthlete.project}&from=${wellnessEarliest}&to=${beijingToday}`,
+    {},
+    athleteSessionToken
+  );
+  const wellnessTrendKeys = (wellnessTrendsResult.payload.trends || []).map((item) => item.key);
+  assert(
+    wellnessTrendsResult.status === 200 &&
+      wellnessTrendKeys.includes('fatigue') &&
+      ['rpe', 'sleepHours', 'morningPulse', 'weightKg'].every((key) => wellnessTrendKeys.includes(key)),
+    '恢复趋势接口应包含疲劳项且保留既有趋势项'
+  );
+  const fatigueTrend = (wellnessTrendsResult.payload.trends || []).find((item) => item.key === 'fatigue');
+  const fatigueTodayPoint = fatigueTrend?.points?.find((point) => point.date === beijingToday);
+  assert(
+    fatigueTrend?.label === '疲劳' &&
+      Array.isArray(fatigueTrend.points) &&
+      fatigueTrend.points.every(
+        (point) => typeof point.date === 'string' && 'personalValue' in point && 'teamMean' in point
+      ) &&
+      fatigueTodayPoint?.personalValue === 2,
+    '疲劳趋势项应与既有趋势项同形状并读到当日填报值'
+  );
+  assert(
+    (await request(`/api/athletes/${ownAthlete.id}/wellness-trends?project=${ownAthlete.project}`, {}, athleteSessionToken)).status === 400,
+    '恢复趋势接口必须要求完整日期范围'
+  );
+
   const wellnessDb = new DatabaseSync(databasePath, { readOnly: true });
   const wellnessRowCount = wellnessDb
     .prepare('SELECT COUNT(*) AS count FROM daily_wellness WHERE athlete_id = ? AND wellness_date = ?')

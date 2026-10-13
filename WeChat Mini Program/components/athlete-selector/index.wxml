@@ -1,0 +1,66 @@
+<view class="athlete-selector">
+  <view class="section-head">
+    <view class="section-head-title">{{title}}</view>
+    <view class="section-head-note">{{note || (pager.total ? '当前范围共 ' + pager.total + ' 人' : '')}}</view>
+  </view>
+  <view class="card">
+    <input
+      class="input athlete-search"
+      type="text"
+      value="{{keyword}}"
+      placeholder="{{searchPlaceholder}}"
+      confirm-type="search"
+      bindinput="onSearchInput"
+      aria-label="{{searchPlaceholder}}"
+    />
+    <view wx:if="{{error}}" class="error-box"><text>{{error}}</text></view>
+    <view wx:if="{{!error && isEmpty && !loading}}" class="state athlete-empty" aria-live="polite">
+      <view class="state-title">{{keyword ? '未找到匹配运动员' : emptyText}}</view>
+    </view>
+    <view wx:if="{{!error && !isEmpty}}" class="athlete-list">
+      <view
+        wx:for="{{pageItems}}"
+        wx:key="id"
+        class="athlete-card {{selectedId === item.id ? 'selected' : ''}}"
+      >
+        <button
+          class="athlete-card-main"
+          hover-class="access-active"
+          data-athlete-id="{{item.id}}"
+          bindtap="onSelectItem"
+          aria-label="选择{{item.name}}{{selectedId === item.id ? '，已选中' : ''}}"
+        >
+          <view class="athlete-avatar" aria-hidden="true">{{item.name[0]}}</view>
+          <view class="athlete-info">
+            <view class="athlete-name-row">
+              <text class="athlete-name">{{item.name}}</text>
+              <text wx:if="{{selectedId === item.id}}" class="athlete-selected-mark">已选中</text>
+            </view>
+            <text wx:if="{{item.meta}}" class="list-row-meta">{{item.meta}}</text>
+            <view wx:if="{{item.tags && item.tags.length}}" class="athlete-tags">
+              <text wx:for="{{item.tags}}" wx:for-item="tag" wx:for-index="tagIndex" wx:key="tagIndex" class="tag {{tag.tone || ''}}">{{tag.text}}</text>
+            </view>
+            <view wx:if="{{item.summary && item.summary.length}}" class="athlete-summary">
+              <text wx:for="{{item.summary}}" wx:for-item="chip" wx:for-index="chipIndex" wx:key="chipIndex">{{chip}}</text>
+            </view>
+          </view>
+          <view wx:if="{{item.value}}" class="athlete-value">{{item.value}}</view>
+        </button>
+        <button
+          wx:if="{{detailLabel}}"
+          class="athlete-card-detail"
+          data-athlete-id="{{item.id}}"
+          catchtap="onOpenDetail"
+          aria-label="查看{{item.name}}的运动员档案"
+        >{{detailLabel}}</button>
+      </view>
+      <pager-nav
+        page="{{pager.page}}"
+        page-count="{{pager.pageCount}}"
+        total="{{pager.total}}"
+        label="{{label}}"
+        bindpagechange="onPageChange"
+      />
+    </view>
+  </view>
+</view>

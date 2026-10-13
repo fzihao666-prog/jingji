@@ -1,0 +1,94 @@
+/* 公共运动员模块：搜索 + 每页 5 人卡片 + 翻页 + 选中高亮。
+   只使用 app.wxss 品牌变量；整卡可点，详情入口独立按钮不嵌套。 */
+.athlete-search { margin-bottom: 16rpx; }
+.athlete-list { display: grid; gap: 14rpx; }
+
+.athlete-card {
+  display: flex;
+  align-items: stretch;
+  gap: 8rpx;
+  overflow: hidden;
+  border: 1rpx solid var(--line, #d8e3e6);
+  border-radius: 18rpx;
+  background: #fbfdfd;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+.athlete-card.selected {
+  border-color: var(--river, #176f7f);
+  background: #eef7f6;
+  box-shadow: inset 0 0 0 1rpx var(--river, #176f7f);
+}
+
+.athlete-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+  margin: 0;
+  padding: 20rpx 12rpx 20rpx 20rpx;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  line-height: 1.45;
+}
+.athlete-card-main::after { border: 0; }
+
+.athlete-avatar {
+  flex: none;
+  width: 76rpx;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--river, #176f7f);
+  background: #e6f4f1;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+.athlete-info { flex: 1; min-width: 0; }
+.athlete-name-row { display: flex; align-items: center; gap: 12rpx; }
+.athlete-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ink-soft, #164751);
+  font-size: 27rpx;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.athlete-selected-mark {
+  flex: none;
+  padding: 2rpx 12rpx;
+  border-radius: 999rpx;
+  color: #ffffff;
+  background: var(--river, #176f7f);
+  font-size: 18rpx;
+  font-weight: 700;
+}
+.athlete-tags { display: flex; flex-wrap: wrap; }
+.athlete-summary { display: flex; flex-wrap: wrap; gap: 16rpx; margin-top: 8rpx; color: var(--muted, #6d8088); font-size: 20rpx; }
+.athlete-value { flex: none; align-self: center; color: var(--river, #176f7f); font-size: 23rpx; font-weight: 800; }
+
+.athlete-card-detail {
+  flex: none;
+  align-self: stretch;
+  min-width: 112rpx;
+  margin: 0;
+  padding: 0 16rpx;
+  border: 0;
+  border-left: 1rpx solid var(--line, #d8e3e6);
+  border-radius: 0;
+  color: var(--river, #176f7f);
+  background: transparent;
+  font-size: 21rpx;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: normal;
+}
+.athlete-card-detail::after { border: 0; }
+.athlete-card-detail:focus { outline: 4rpx solid var(--river, #176f7f); outline-offset: -4rpx; }
+
+.athlete-empty { min-height: 160rpx; }

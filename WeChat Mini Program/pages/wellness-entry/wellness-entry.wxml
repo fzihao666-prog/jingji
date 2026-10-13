@@ -1,13 +1,116 @@
 <view class="page wellness-page">
   <view class="page-head">
-    <view class="page-title">恢复日报</view>
+    <view class="page-title">状态检测</view>
     <view class="page-description">{{isCoach ? '教练代填的恢复数据 · 最近7天可补填' : '本人填写的自评数值 · 最近7天可补填'}}</view>
   </view>
 
   <view wx:if="{{error}}" class="error-box">{{error}} <text class="retry-link" bindtap="retryLoad">点按重试</text></view>
-  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载恢复日报</view></view>
+  <view wx:if="{{loading}}" class="card state"><view class="state-icon">↻</view><view class="state-title">正在加载状态检测</view></view>
 
   <block wx:if="{{!loading}}">
+    <!-- 今日状态 -->
+    <view class="card today-status" aria-label="今日状态">
+      <view class="card-head">
+        <view><view class="card-head-title">{{form.date === todayDate ? '今日状态' : '当日状态'}}</view><view class="card-head-note">{{form.date}} · 北京时间</view></view>
+        <text class="today-badge {{recordView && recordView.filled ? 'is-complete' : 'is-pending'}}">{{recordView && recordView.filled ? '已填报' : '未填报'}}</text>
+      </view>
+      <view class="today-announcement" aria-live="polite">{{recordView && recordView.filled ? '恢复日报已保存' + (recordView.statusLabel ? ' · 自评：' + recordView.statusLabel : '') : '当日还没有恢复日报'}}</view>
+      <button class="primary-button today-entry" bindtap="scrollToForm">{{recordView && recordView.filled ? '修改今日记录' : '今日填报'}}</button>
+    </view>
+
+    <!-- 状态指标 -->
+    <view class="section-head"><view class="section-head-title">状态指标</view><view class="section-head-note">{{form.date}} · 缺失显 --，0 为真实值</view></view>
+    <view class="compact-grid">
+      <view wx:for="{{statusCards}}" wx:key="key" class="compact-stat">
+        <text class="compact-stat-label">{{item.label}}</text>
+        <text class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></text>
+        <text class="compact-stat-note">{{item.note}}</text>
+      </view>
+    </view>
+
+    <!-- 近期趋势 -->
+    <view class="section-head"><view class="section-head-title">近期趋势</view><view class="section-head-note">近 14 天 · 一次展示一个指标</view></view>
+    <view class="card chart-card">
+      <view class="segment-control" role="tablist" aria-label="趋势指标切换">
+        <button
+          wx:for="{{trendMetrics}}"
+          wx:key="key"
+          class="segment-item {{activeTrendKey === item.key ? 'active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onTrendMetricChange"
+          aria-label="查看{{item.label}}趋势，{{activeTrendKey === item.key ? '已选中' : '未选中'}}"
+        >{{item.label}}</button>
+      </view>
+      <view class="chart-meta">
+        <view class="chart-legend">
+          <view class="legend-item"><view class="legend-dot" />{{statusTrend.label}}（{{statusTrend.unit || '分'}}）</view>
+        </view>
+        <text wx:if="{{statusTrend.scaleNote}}" class="chart-hint">{{statusTrend.scaleNote}}</text>
+      </view>
+      <view wx:if="{{trendError}}" class="error-box"><text>{{trendError}}</text><button class="error-retry" bindtap="retryTrends">重试</button></view>
+      <view class="overview-chart-stage">
+        <view wx:if="{{trendLoading && !statusTrend.points.length}}" class="overview-chart-overlay"><view class="state"><view class="state-title">正在加载趋势…</view></view></view>
+        <view wx:elif="{{!trendLoading && statusTrend.empty}}" class="overview-chart-overlay"><view class="state"><view class="state-title">{{trendError ? '趋势加载失败' : '暂无该指标的实测数据'}}</view></view></view>
+        <view class="trend-chart">
+          <view wx:for="{{statusTrend.points}}" wx:key="date" class="trend-day">
+            <view class="trend-bars">
+              <view class="trend-bar" style="height: {{item.height}}%;" />
+            </view>
+            <text class="trend-label">{{item.date}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 历史记录 -->
+    <view class="section-head"><view class="section-head-title">历史记录</view><view class="section-head-note">近 7 日有数据的记录</view></view>
+    <view class="card">
+      <view wx:if="{{!statusHistory.length}}" class="state"><view class="state-title">暂无历史记录</view><text class="state-note">保存恢复日报或完成训练后会出现在这里</text></view>
+      <view wx:else class="list">
+        <view wx:for="{{statusHistory}}" wx:key="date" class="list-row">
+          <view class="list-row-main">
+            <view>
+              <view class="list-row-title">{{item.date}}</view>
+              <text class="list-row-meta">睡眠 {{item.values.sleepHours || '--'}} 小时 · 晨脉 {{item.values.morningPulse || '--'}} bpm · 体重 {{item.values.weightKg || '--'}} kg</text>
+              <text class="list-row-meta">疲劳 {{item.values.fatigueIndex || '--'}} 分 · RPE {{item.values.rpe || '--'}} 分</text>
+            </view>
+            <text wx:if="{{item.date === form.date}}" class="list-row-value">当日</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 教练视角：队伍状态概览 -->
+    <block wx:if="{{isCoach}}">
+      <view class="section-head"><view class="section-head-title">队伍状态概览</view><view class="section-head-note">应填报 · 已填报 · 未填报</view></view>
+      <view wx:if="{{teamStatusError}}" class="error-box"><text>{{teamStatusError}}</text><button class="error-retry" bindtap="retryTeamStatus">重试</button></view>
+      <view class="card">
+        <view wx:if="{{teamStatusLoading && !teamStatus}}" class="state"><view class="state-title">正在读取队伍状态…</view></view>
+        <block wx:elif="{{teamStatus}}">
+          <view class="compact-grid">
+            <view class="compact-stat"><text class="compact-stat-label">应填报</text><text class="compact-stat-value">{{teamStatus.total}}<text>人</text></text></view>
+            <view class="compact-stat"><text class="compact-stat-label">已填报</text><text class="compact-stat-value">{{teamStatus.reported}}<text>人</text></text></view>
+            <view class="compact-stat"><text class="compact-stat-label">未填报</text><text class="compact-stat-value">{{teamStatus.missing}}<text>人</text></text></view>
+            <view class="compact-stat"><text class="compact-stat-label">需要关注</text><text class="compact-stat-value">{{teamStatus.attentionRows.length}}<text>人</text></text><text class="compact-stat-note">自评异常或高负荷</text></view>
+          </view>
+          <view wx:if="{{teamStatus.attentionRows.length}}" class="list" style="margin-top: 16rpx;">
+            <view wx:for="{{teamStatus.attentionRows}}" wx:key="athleteId" class="list-row">
+              <view class="list-row-main">
+                <view>
+                  <view class="list-row-title">{{item.name}}</view>
+                  <text class="list-row-meta">{{item.team}} · {{item.reasons[0]}}</text>
+                </view>
+                <text class="list-row-value">需关注</text>
+              </view>
+            </view>
+          </view>
+          <view wx:elif="{{!teamStatus.attentionRows.length}}" class="state"><view class="state-title">当前无需关注人员</view></view>
+        </block>
+      </view>
+    </block>
+
+    <!-- 填报表单 -->
+    <view id="wellness-form" class="section-head"><view class="section-head-title">{{recordView && recordView.filled ? '修改记录' : '今日填报'}}</view><view class="section-head-note">留空表示本次不填写 · 保存后首页今日状态同步更新</view></view>
     <view class="card form-card">
       <view wx:if="{{isCoach}}" class="field">
         <text class="field-label">代填运动员 *</text>

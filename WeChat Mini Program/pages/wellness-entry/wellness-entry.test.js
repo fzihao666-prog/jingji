@@ -41,6 +41,7 @@ const wellnessForm = loadCjs(new URL('../../utils/wellness-form.js', import.meta
   },
 });
 const formDraft = loadCjs(new URL('../../utils/form-draft.js', import.meta.url), {});
+const statusDetection = loadCjs(new URL('../../utils/status-detection.js', import.meta.url), {});
 
 function createPage({ user, record = null, athletes = [] }) {
   let definition;
@@ -61,6 +62,7 @@ function createPage({ user, record = null, athletes = [] }) {
     '../../utils/wellness-form': wellnessForm,
     '../../utils/request-guard': requestGuard,
     '../../utils/form-draft': formDraft,
+    '../../utils/status-detection': statusDetection,
   };
   vm.runInNewContext(pageSource, {
     Page(value) {
@@ -235,6 +237,7 @@ describe('恢复日报填写页行为', () => {
       '../../utils/wellness-form': wellnessForm,
       '../../utils/request-guard': requestGuard,
       '../../utils/form-draft': formDraft,
+      '../../utils/status-detection': statusDetection,
     };
     vm.runInNewContext(pageSource, {
       Page(value) { definition = value; },
