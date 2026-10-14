@@ -26,7 +26,12 @@ import { db, upsertAthleteOrigin } from '../core/db.ts';
 import { resolveAthleteParent } from '../core/athlete-parent.ts';
 import { buildPainTrend, painTrendWindow, type PainTrendRow } from '../core/pain-trend.ts';
 import { canManageRole } from '../../shared/access.ts';
-import { athletePhotoRoot, photoUpload, transcodeAthletePhoto } from '../core/uploads.ts';
+import {
+  athletePhotoRoot,
+  photoUpload,
+  removeAthletePhotoFile,
+  transcodeAthletePhoto,
+} from '../core/uploads.ts';
 import {
   athleteHealthStatuses,
   athletePayloadErrors,
@@ -902,8 +907,8 @@ export function registerAthleteRoutes(app: Express) {
       return res.status(403).json({ message: '运动员只能上传本人的证件照。' });
     }
     const athlete = db
-      .prepare('SELECT id FROM athletes WHERE id = ? AND active = 1')
-      .get(athleteId);
+      .prepare('SELECT id, photo_url AS photoUrl FROM athletes WHERE id = ? AND active = 1')
+      .get(athleteId) as { id: number; photoUrl: string } | undefined;
     if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
     if (!req.file) return res.status(400).json({ message: '请选择一张证件照。' });
     let transcoded: Buffer;
@@ -915,10 +920,19 @@ export function registerAthleteRoutes(app: Express) {
     const filename = `athlete-${athleteId}-${randomUUID()}.jpg`;
     writeFileSync(resolve(athletePhotoRoot, filename), transcoded);
     const photoUrl = `/api/athletes/${athleteId}/photo`;
-    db.prepare('UPDATE athletes SET photo_url = ? WHERE id = ?').run(filename, athleteId);
-    db.prepare(
-      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
-    ).run(user.id, 'UPLOAD_ATHLETE_PHOTO', 'athlete', athleteId, JSON.stringify({ photoUrl }));
+    try {
+      db.exec('BEGIN');
+      db.prepare('UPDATE athletes SET photo_url = ? WHERE id = ?').run(filename, athleteId);
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(user.id, 'UPLOAD_ATHLETE_PHOTO', 'athlete', athleteId, JSON.stringify({ photoUrl }));
+      db.exec('COMMIT');
+    } catch (error) {
+      if (db.isTransaction) db.exec('ROLLBACK');
+      removeAthletePhotoFile(filename);
+      throw error;
+    }
+    removeAthletePhotoFile(athlete.photoUrl);
     res.json({ message: '证件照已保存，并已绑定到该运动员。', photoUrl });
   });
   // 疼痛趋势：按部位返回近 N 天每日疼痛评分；只读聚合，不做任何诊断结论。

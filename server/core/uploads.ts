@@ -1,12 +1,26 @@
 import multer from 'multer';
 import sharp from 'sharp';
-import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, unlinkSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
 
 export const athletePhotoRoot = resolve(
   process.env.ATHLETE_PHOTO_ROOT || resolve(process.cwd(), 'data', 'uploads', 'athlete-photos')
 );
 mkdirSync(athletePhotoRoot, { recursive: true });
+
+export function removeAthletePhotoFile(
+  storedPath: string | null | undefined,
+  root = athletePhotoRoot
+) {
+  if (!storedPath) return;
+  const filename = basename(storedPath);
+  if (!/^athlete-\d+-[0-9a-f-]+\.(jpg|png)$/i.test(filename)) return;
+  try {
+    unlinkSync(resolve(root, filename));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+}
 
 /**
  * 安全转码：只接受 JPEG/PNG Buffer，解码后重编码为 JPEG。
