@@ -126,7 +126,11 @@ export function TeamsPage() {
                         <span>
                           <UsersRound size={15} />
                           <strong>{team.name}</strong>
-                          <small>{team.athleteCount}名运动员</small>
+                          <small>
+                            {team.athleteCount > 0
+                              ? `${team.athleteCount}名运动员 · 仍有运动员，不能删除`
+                              : `${team.athleteCount}名运动员`}
+                          </small>
                         </span>
                         {team.canDelete && (
                           <button

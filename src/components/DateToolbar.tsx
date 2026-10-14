@@ -39,8 +39,8 @@ export function DateToolbar({
     const close = (event: MouseEvent) => {
       if (!projectRef.current?.contains(event.target as Node)) setProjectOpen(false);
     };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
   }, []);
   const today = toIsoDate(new Date());
   const presetRanges =

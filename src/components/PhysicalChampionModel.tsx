@@ -197,7 +197,7 @@ export function PhysicalChampionModel({
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     },
-    legend: { top: 0, left: 'center', selectedMode: false },
+    legend: { top: 0, left: 'center', type: 'scroll', selectedMode: false },
     tooltip: {
       trigger: 'axis',
       renderMode: 'richText',

@@ -351,7 +351,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
         <div
           className="modal-backdrop strength-editor-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) closeEditor();
           }}
         >

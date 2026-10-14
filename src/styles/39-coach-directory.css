@@ -291,6 +291,27 @@
   background: #f6faf9;
 }
 
+/* 横向滚动时固定首列 */
+.coach-directory-table th:first-child,
+.coach-directory-table td:first-child {
+  position: sticky;
+  left: 0;
+}
+
+.coach-directory-table th:first-child {
+  z-index: 2;
+  background: #f2f7f7;
+}
+
+.coach-directory-table td:first-child {
+  z-index: 1;
+  background: #fff;
+}
+
+.coach-directory-table tbody tr:hover td:first-child {
+  background: #f6faf9;
+}
+
 .coach-directory-table tbody tr.inactive {
   opacity: 0.66;
   background: #fafafa;
@@ -471,8 +492,8 @@
 }
 
 .coach-row-actions button {
-  min-height: 31px;
-  padding: 0 7px;
+  min-height: 36px;
+  padding: 0 8px;
   border: 0;
   border-radius: 6px;
   display: inline-flex;

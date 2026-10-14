@@ -322,6 +322,10 @@
 
 .athlete-directory-table th:first-child {
   width: 42px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #f1f6f5;
 }
 
 .athlete-directory-table th:nth-child(2) {
@@ -366,6 +370,18 @@
 }
 
 .athlete-directory-table tbody tr:hover {
+  background: #f8fbfa;
+}
+
+/* 横向滚动时固定首列 */
+.athlete-directory-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+
+.athlete-directory-table tbody tr:hover td:first-child {
   background: #f8fbfa;
 }
 
@@ -508,8 +524,8 @@
 }
 
 .athlete-row-actions button {
-  min-height: 28px;
-  padding: 0 5px;
+  min-height: 36px;
+  padding: 0 8px;
   border: 0;
   border-radius: 5px;
   display: inline-flex;

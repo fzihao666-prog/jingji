@@ -49,7 +49,7 @@ export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
     <div className="chart-wrap" aria-label="每日训练负荷趋势图">
       {display.isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={display.data} margin={{ top: 8, right: 6, left: -18, bottom: 0 }}>
+        <AreaChart data={display.data} margin={{ top: 8, right: 6, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="loadFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#1f9f9a" stopOpacity={0.28} />
@@ -314,7 +314,7 @@ export function IntensityChart({ records }: { records: TrainingRecord[] }) {
     <div className="chart-wrap compact" aria-label="训练强度分布图">
       {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={displayData} margin={{ top: 8, right: 2, left: -24, bottom: 0 }}>
+        <BarChart data={displayData} margin={{ top: 8, right: 2, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="zone"
@@ -417,7 +417,7 @@ export function ProfessionalLoadChart({
     <div className="chart-wrap professional-load-chart" aria-label="每日SRPE与SMVL训练负荷响应图">
       {display.isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={display.data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+        <ComposedChart data={display.data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="label"
@@ -556,7 +556,7 @@ export function StrengthChangeChart({
     <div className="chart-wrap" aria-label="力量与爆发指标前后测变化柱状图">
       {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={displayComparable} margin={{ top: 18, right: 4, left: -16, bottom: 0 }}>
+        <BarChart data={displayComparable} margin={{ top: 18, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="label"
@@ -601,7 +601,7 @@ export function RelativeStrengthChart({
     <div className="chart-wrap" aria-label="相对力量倍体重对比图">
       {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData} margin={{ top: 10, right: 5, left: -12, bottom: 0 }}>
+        <BarChart data={chartData} margin={{ top: 10, right: 5, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="label"

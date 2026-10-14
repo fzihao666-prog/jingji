@@ -444,7 +444,7 @@
 }
 
 .status-button {
-  height: 34px;
+  min-height: 44px;
   padding: 0 11px;
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 8px;

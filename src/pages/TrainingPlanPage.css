@@ -219,7 +219,7 @@
 
 .strength-button,
 .strength-icon-button {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 13px;
   border: 1px solid #cbdadc;
   border-radius: 8px;
@@ -288,7 +288,7 @@
 }
 
 .strength-icon-button {
-  width: 38px;
+  width: 44px;
   padding: 0;
 }
 
@@ -442,7 +442,7 @@
 }
 
 .strength-view-tabs button {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 15px;
   border: 0;
   border-radius: 7px;
@@ -561,8 +561,8 @@
 }
 
 .strength-mini-week button {
-  width: 32px;
-  height: 28px;
+  min-width: 36px;
+  min-height: 36px;
   border: 1px solid #d4e1e2;
   border-radius: 7px;
   color: #647a82;
@@ -1010,7 +1010,7 @@
 }
 
 .strength-record-browser button {
-  height: 34px;
+  min-height: 44px;
   padding: 0 11px;
   border: 1px solid #b8d4d1;
   border-radius: 7px;

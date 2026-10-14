@@ -253,7 +253,7 @@ export function InjuryRecoveryModule({ athlete, user, asOfDate }: Props) {
         <div
           className="injury-dialog-overlay"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget && !saving) setDialogOpen(false);
           }}
         >

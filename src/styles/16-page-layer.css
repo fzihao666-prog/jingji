@@ -90,6 +90,7 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   display: flex;
+  flex-wrap: wrap;
   align-items: end;
   justify-content: space-between;
   gap: 15px;

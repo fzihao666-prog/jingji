@@ -399,7 +399,7 @@ export function AppShell({
         <div
           className="modal-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) setPasswordOpen(false);
           }}
         >

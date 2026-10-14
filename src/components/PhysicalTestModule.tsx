@@ -375,7 +375,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
             <p className="physical-test-note">
               {isPlaceholder
                 ? '当前周期暂无真实体能测试数据，图形仅为示例效果，不参与任何统计与达标计算。'
-                : `团队平均按测试日期汇总当日有效测试记录，不对无测试日期补值；有效测试人数见悬停提示。`}
+                : `团队平均按测试日期汇总当日有效测试记录，不对无测试日期补值；点按柱形可查看含有效测试人数的明细。`}
             </p>
           </div>
           <aside className="physical-test-standard">

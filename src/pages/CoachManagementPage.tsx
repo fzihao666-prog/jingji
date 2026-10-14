@@ -543,7 +543,7 @@ export function CoachManagementPage({
         <div
           className="coach-detail-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) setDetailOpen(false);
           }}
         >
@@ -673,7 +673,7 @@ export function CoachManagementPage({
         <div
           className="modal-backdrop coach-create-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget && !saving) setCreateOpen(false);
           }}
         >

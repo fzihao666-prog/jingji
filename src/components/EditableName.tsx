@@ -85,7 +85,7 @@ export function EditableName({
           <div
             className="modal-backdrop name-modal-backdrop"
             role="presentation"
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
               if (event.target === event.currentTarget) close();
             }}
           >

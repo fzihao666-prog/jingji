@@ -89,7 +89,7 @@ export function SpecialDataImportDialog({ project, onClose, onCommitted }: Props
     <div
       className="special-data-dialog-backdrop"
       role="presentation"
-      onMouseDown={(event) => {
+      onPointerDown={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
     >

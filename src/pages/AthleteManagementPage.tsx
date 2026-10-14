@@ -876,7 +876,7 @@ export function AthleteManagementPage({
         <div
           className="modal-backdrop athlete-modal-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) setAdvancedOpen(false);
           }}
         >

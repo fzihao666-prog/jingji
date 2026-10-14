@@ -1522,7 +1522,7 @@
   margin-top: 12px;
   border: 1px solid var(--strength-line);
   border-radius: 13px;
-  overflow: hidden;
+  overflow: auto;
   background: #fff;
 }
 
@@ -1587,7 +1587,7 @@
 }
 
 .strength-category-tabs button {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 12px;
   border: 0;
   border-radius: 9px;

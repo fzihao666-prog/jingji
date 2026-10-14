@@ -236,6 +236,27 @@
   background: #fff5f2;
 }
 
+/* 横向滚动时固定首列 */
+.special-data-table th:first-child,
+.special-data-table td:first-child {
+  position: sticky;
+  left: 0;
+}
+
+.special-data-table th:first-child {
+  z-index: 2;
+  background: #f3f7f7;
+}
+
+.special-data-table td:first-child {
+  z-index: 1;
+  background: #fff;
+}
+
+.special-data-table tr.invalid td:first-child {
+  background: #fff5f2;
+}
+
 .special-data-table td small {
   display: block;
   margin-top: 2px;

@@ -234,7 +234,7 @@
 
 .primary-nav .special-nav-tree button {
   position: relative;
-  min-height: 29px;
+  min-height: 36px;
   padding: 5px 8px;
   border-radius: 6px;
   gap: 7px;
@@ -576,6 +576,7 @@
   border: 1px solid #d7e2e5;
   background: rgb(255 255 255 / 72%);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   box-shadow: 0 8px 24px rgb(18 61 74 / 4%);
@@ -587,7 +588,7 @@
 }
 
 .range-presets button {
-  height: 32px;
+  min-height: 44px;
   border: 0;
   border-radius: 7px;
   background: transparent;
@@ -841,7 +842,7 @@
 
 .toolbar-project-segments button {
   min-width: 0;
-  height: 30px;
+  min-height: 44px;
   padding: 0 7px;
   border: 0;
   border-radius: 7px;

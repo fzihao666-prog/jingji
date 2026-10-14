@@ -1194,7 +1194,7 @@ export function TrainingPlanPage(props: Props) {
         <div
           className="strength-dialog-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) setAiOpen(false);
           }}
         >

@@ -352,7 +352,7 @@
   }
 }
 
-@media (width <= 820px) {
+@media (width <= 900px) {
   .archive-entry-modal {
     width: calc(100vw - 14px);
     max-height: 97vh;

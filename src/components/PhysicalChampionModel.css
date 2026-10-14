@@ -216,6 +216,23 @@
   background: var(--mist);
 }
 
+/* 横向滚动时固定首列 */
+.physical-champion-table th:first-child,
+.physical-champion-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--paper);
+}
+
+.physical-champion-table thead th:first-child {
+  z-index: 2;
+  background: var(--mist);
+}
+
+.physical-champion-table tbody tr:hover td:first-child {
+  background: var(--mist);
+}
+
 @media (width <= 520px) {
   .physical-champion-toolbar select {
     width: 100%;
