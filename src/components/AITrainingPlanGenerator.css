@@ -1190,7 +1190,7 @@
 }
 
 /* 响应式 */
-@media (width <= 768px) {
+@media (width <= 820px) {
   .ai-training-container {
     padding: 16px;
   }

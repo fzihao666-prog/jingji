@@ -1,7 +1,7 @@
 /* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
 
 /* Mobile coaching station: the page stays fixed to the viewport; only true data canvases scroll. */
-@media (width <= 760px) {
+@media (width <= 820px) {
   html,
   body,
   #root {

@@ -1509,7 +1509,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .strength-workbench {
     padding: 14px 10px 28px;
   }

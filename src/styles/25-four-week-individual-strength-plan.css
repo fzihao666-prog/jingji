@@ -571,6 +571,17 @@
 
 }
 
+@media (width <= 1100px) {
+  .plan-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-overview-left {
+    border-right: 0;
+    border-bottom: 1px solid #dce6e8;
+  }
+}
+
 @media (width <= 1180px) {
   .global-training-filter {
     position: relative;
@@ -585,7 +596,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .global-training-filter {
     padding: 14px 12px 0;
   }
@@ -611,15 +622,6 @@
 
   .plan-heading-actions button {
     flex: 1;
-  }
-
-  .plan-overview-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .plan-overview-left {
-    border-right: 0;
-    border-bottom: 1px solid #dce6e8;
   }
 
   .plan-photo-panel {

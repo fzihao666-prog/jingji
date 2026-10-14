@@ -785,7 +785,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .training-dashboard-metrics,
   .training-dashboard-grid {
     grid-template-columns: 1fr;
@@ -1515,7 +1515,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .special-metrics {
     grid-template-columns: 1fr;
   }

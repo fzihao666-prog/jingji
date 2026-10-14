@@ -197,7 +197,7 @@
   }
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .execution-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

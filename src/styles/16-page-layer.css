@@ -138,7 +138,7 @@
   color: #9e4033;
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .app-page-header {
     align-items: start;
   }

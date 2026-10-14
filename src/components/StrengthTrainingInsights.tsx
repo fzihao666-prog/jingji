@@ -22,7 +22,7 @@ import {
   YAxis,
 } from 'recharts';
 import { useMemo, useState } from 'react';
-import type { CSSProperties, MouseEvent } from 'react';
+import type { CSSProperties, PointerEvent } from 'react';
 import {
   STRENGTH_BODY_POSITIONS,
   STRENGTH_CONTENT_ANALYSIS_CATEGORIES,
@@ -217,12 +217,14 @@ function RoundRatioChart({
   center: string;
   unit: string;
 }) {
-  const [active, setActive] = useState<{
+  type OrbSegment = {
     name: string;
     value: number;
     percent: number;
     color: string;
-  } | null>(null);
+  };
+  const [active, setActive] = useState<OrbSegment | null>(null);
+  const [pinned, setPinned] = useState<OrbSegment | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   const total = items.reduce((sum, item) => sum + item.value, 0);
   if (!total) return <EmptyChart text="暂无可统计数据" />;
@@ -231,32 +233,67 @@ function RoundRatioChart({
     percent: round((item.value / total) * 100, 1),
     color: colors[index % colors.length],
   }));
-  const onOrbMove = (event: MouseEvent<HTMLDivElement>) => {
+  const segmentAt = (event: PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - bounds.left - bounds.width / 2;
     const y = event.clientY - bounds.top - bounds.height / 2;
     const angle = ((Math.atan2(y, x) * 180) / Math.PI + 450) % 360;
     let cursor = 0;
-    const matched =
+    return (
       segments.find((segment) => {
         const next = cursor + (segment.value / total) * 360;
         const hit = angle >= cursor && angle <= next;
         cursor = next;
         return hit;
-      }) || segments[segments.length - 1];
+      }) || segments[segments.length - 1]
+    );
+  };
+  const tooltipAt = (event: PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+  };
+  const onOrbPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (pinned) return;
+    const matched = segmentAt(event);
     setActive(matched);
-    setTooltip({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    setTooltip(tooltipAt(event));
+  };
+  const onOrbPointerLeave = () => {
+    if (pinned) return;
+    setActive(null);
+    setTooltip(null);
+  };
+  const onOrbPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const matched = segmentAt(event);
+    if (pinned?.name === matched.name) {
+      setPinned(null);
+      setActive(null);
+      setTooltip(null);
+      return;
+    }
+    setPinned(matched);
+    setActive(matched);
+    setTooltip(tooltipAt(event));
+  };
+  const togglePinned = (item: OrbSegment) => {
+    if (pinned?.name === item.name) {
+      setPinned(null);
+      setActive(null);
+      setTooltip(null);
+      return;
+    }
+    setPinned(item);
+    setActive(item);
+    setTooltip(null);
   };
   return (
     <div className="strength-round-chart">
       <div
         className="strength-ratio-orb"
         style={{ background: conicGradient(items, colors) }}
-        onMouseMove={onOrbMove}
-        onMouseLeave={() => {
-          setActive(null);
-          setTooltip(null);
-        }}
+        onPointerMove={onOrbPointerMove}
+        onPointerDown={onOrbPointerDown}
+        onPointerLeave={onOrbPointerLeave}
       >
         <i>
           <strong>{active?.name || center}</strong>
@@ -277,8 +314,13 @@ function RoundRatioChart({
           <div
             className={active?.name === item.name ? 'active' : ''}
             key={item.name}
-            onMouseEnter={() => setActive(item)}
-            onMouseLeave={() => setActive(null)}
+            onClick={() => togglePinned(item)}
+            onMouseEnter={() => {
+              if (!pinned) setActive(item);
+            }}
+            onMouseLeave={() => {
+              if (!pinned) setActive(null);
+            }}
           >
             <span>
               <i style={{ background: item.color }} />

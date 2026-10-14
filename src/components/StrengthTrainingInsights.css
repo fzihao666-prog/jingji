@@ -260,6 +260,7 @@
   position: relative;
   justify-self: center;
   width: 168px;
+  cursor: pointer;
   aspect-ratio: 1;
   border-radius: 50%;
   box-shadow:
@@ -379,7 +380,7 @@
   gap: 8px;
   color: #637a81;
   font-size: 9px;
-  cursor: default;
+  cursor: pointer;
 }
 
 .strength-round-list > div.active,
@@ -1609,7 +1610,7 @@
   box-shadow: 0 7px 16px rgb(13 148 136 / 20%);
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .category-execution-list {
     grid-template-columns: 1fr;
   }
@@ -1648,9 +1649,13 @@
   .strength-dashboard-grid.assessment {
     grid-template-columns: 1fr;
   }
+
+  .strength-body-position-map {
+    grid-template-columns: 1fr;
+  }
 }
 
-@media (width <= 760px) {
+@media (width <= 820px) {
   .strength-kpi-grid,
   .strength-assessment-cards {
     grid-template-columns: 1fr 1fr;
