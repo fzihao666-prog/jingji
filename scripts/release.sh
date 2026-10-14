@@ -177,7 +177,7 @@ printf 'IMAGE_TAG=%s\n' "$tag" > .env.compose
 chmod 600 .env.compose
 if ! docker compose --env-file .env.compose pull ||
    ! docker compose --env-file .env.compose up -d --wait --wait-timeout 120 --remove-orphans ||
-   ! curl --fail --silent --show-error --connect-timeout 3 --max-time 10 --retry 5 --retry-delay 2 --retry-connrefused --retry-max-time 70 http://127.0.0.1:8787/health >/dev/null; then
+   ! curl --fail --silent --show-error --connect-timeout 3 --max-time 10 --retry 5 --retry-delay 2 --retry-all-errors --retry-max-time 70 http://127.0.0.1:8787/health >/dev/null; then
   echo '错误：拉取、启动或健康检查失败；保留全部镜像及成功历史。' >&2
   docker compose --env-file .env.compose logs --tail=200 app || true
   exit 1

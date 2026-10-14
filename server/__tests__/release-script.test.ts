@@ -1,7 +1,9 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 const repository = 'registry.example.com/team/jingji';
@@ -125,6 +127,33 @@ if (command.includes(' compose ') || args[0] === 'compose') {
 }
 
 describe('发布后的镜像保留', () => {
+  it('健康检查首次连接重置后重试真实 HTTP 请求', async () => {
+    let requests = 0;
+    const server = createServer((request, response) => {
+      requests += 1;
+      if (requests === 1) request.socket.resetAndDestroy();
+      else response.end('{"status":"ok"}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('未取得测试服务端口');
+      const script = readFileSync(resolve('scripts/release.sh'), 'utf8');
+      const command = script.match(/! (curl[^\n]+); then/)?.[1];
+      if (!command) throw new Error('未找到发布脚本健康检查命令');
+      await promisify(execFile)(
+        'bash',
+        ['-c', command.replace('http://127.0.0.1:8787/health', `http://127.0.0.1:${address.port}/health`)],
+        { timeout: 5000, env: { ...process.env, NO_PROXY: '127.0.0.1' } }
+      );
+      expect(requests).toBe(2);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      );
+    }
+  });
+
   it('成功后仅删除本仓库的旧 SHA 版本，保留当前版和发布前健康版', () => {
     const result = release();
     expect(result.status, result.output).toBe(0);

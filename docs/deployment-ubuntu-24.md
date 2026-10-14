@@ -155,12 +155,17 @@ services:
     image: crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji:$IMAGE_TAG
     env_file:
       - ./.env
+    environment:
+      HOST: 0.0.0.0
+      PORT: '8787'
     ports:
       - '127.0.0.1:8787:8787'
     volumes:
       - ./data:/app/data
     restart: unless-stopped
 ```
+
+`environment` 固定容器内监听 `0.0.0.0:8787`，覆盖 `.env` 中的同名配置；宿主机仍只绑定 `127.0.0.1:8787`。若容器健康而宿主机 curl 报连接重置，先检查这两层监听地址。更新仓库的 `compose.yaml` 后须同步到服务器；发布脚本只切换镜像标签，不上传 Compose 配置。
 
 ## 3. Mac：安装 Colima，构建并推送到 ACR
 
@@ -306,7 +311,7 @@ bash scripts/release.sh --build-only
 bash scripts/release.sh --dry-run
 ```
 
-脚本行为：校验标签必须是十六进制 Git 短 SHA，`docker buildx build --platform linux/amd64 --push` 推送后 SSH 到服务器更新 `.env.compose`、拉取镜像并启动，最多等待 120 秒让容器健康检查通过，再做 `curl 127.0.0.1:8787` 检查；失败时自动打印容器最近日志并提示回滚命令，不清理镜像或覆盖成功历史。需要支持 `up --wait --wait-timeout` 的 Docker Compose 插件。镜像地址、服务器与 SSH 私钥可通过环境变量 `IMAGE`、`DEPLOY_USER`、`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`REMOTE_DIR` 覆盖。
+脚本行为：校验标签必须是十六进制 Git 短 SHA，`docker buildx build --platform linux/amd64 --push` 推送后 SSH 到服务器更新 `.env.compose`、拉取镜像并启动，最多等待 120 秒让容器健康检查通过，再检查 `http://127.0.0.1:8787/health`。HTTP 检查最多重试 5 次，包含连接重置错误；失败时自动打印容器最近日志并提示回滚命令，不清理镜像或覆盖成功历史。需要支持 `up --wait --wait-timeout` 的 Docker Compose 插件及支持 `--retry-all-errors` 的 curl（7.71.0 及以上，Ubuntu 24.04 自带版本满足）。镜像地址、服务器与 SSH 私钥可通过环境变量 `IMAGE`、`DEPLOY_USER`、`DEPLOY_HOST`、`DEPLOY_SSH_KEY`、`REMOTE_DIR` 覆盖。
 
 **成功发布后自动清理旧镜像，无需额外定时任务：**
 

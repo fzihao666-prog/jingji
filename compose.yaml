@@ -4,6 +4,10 @@ services:
     image: crpi-0mzy172e4og0xh7s.cn-hangzhou.personal.cr.aliyuncs.com/docker_soren/jingji:${IMAGE_TAG:?IMAGE_TAG is required}
     env_file:
       - ./.env
+    # 容器必须监听网卡地址才能接收端口转发，不依赖 .env 中的本机开发配置。
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
     ports:
       # 仅允许同机 Nginx 访问；不要改成 0.0.0.0:8787。
       - "127.0.0.1:8787:8787"
@@ -14,7 +18,7 @@ services:
     init: true
     healthcheck:
       # 使用 Node 内置 fetch，不依赖镜像内额外安装 curl。
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

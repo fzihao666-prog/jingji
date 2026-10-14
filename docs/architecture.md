@@ -77,6 +77,8 @@ Express :8787
 
 生产环境中 Express 默认只监听 `127.0.0.1:8787`，由同机 Nginx 在 HTTPS 域名上统一接入。仓库提供不含真实配置的 `deploy/nginx/jingji.conf.example`：它将 `/api/`、`/uploads/` 与 SPA 静态资源代理到同一 Express 进程，并传递 `Host` 与 `X-Forwarded-*` 头。Nginx 是唯一受信任的本机反向代理；应用仅信任回环来源的转发头，公网不得开放 8787。
 
+Docker 部署时，`compose.yaml` 显式覆盖 `HOST=0.0.0.0` 与 `PORT=8787`，让容器网卡接收 Docker 转发；宿主机发布端口仍限制为 `127.0.0.1:8787`。容器内部和宿主机发布检查均访问 `/health`，验证服务与数据库可用；内部健康不代表宿主机端口转发可用。Compose 配置须单独同步到服务器。
+
 微信小程序生产配置必须使用这个 HTTPS 域名作为唯一基础地址。微信公众平台需要将该域名分别登记为 request、uploadFile 和 downloadFile 合法域名，以保证 API、照片上传和照片/背景资源不分流。数据库、上传目录和 JWT 密钥必须纳入备份。
 
 Gitee Go 的 `deploy/gitee-go-pipeline.yml` 执行静态检查、小程序契约、单元测试、接口冒烟和构建，随后归档本次提交源码。手动确认发布阶段后，专用构建主机的 Agent 校验本次构建制品与主分支标记，以完整提交 SHA 构建并推送 ACR 镜像，再经 `scripts/gitee-release.sh` 调用既有 `scripts/release.sh --tag` 部署到 ECS；生产 ECS 不接收源码或执行镜像构建。Gitee 不再通过 PM2 单独替换前端；凭据、主机组与 SSH 主机公钥在平台或发布主机配置。发布后的 HTTP 检查访问 `/health` 验证数据库连接，并设置超时和有限重试。

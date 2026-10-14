@@ -3,6 +3,13 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('Nginx 发布示例', () => {
+  it('容器固定监听映射端口并检查真实健康端点，宿主机端口仍仅对本机开放', () => {
+    const compose = readFileSync(resolve(process.cwd(), 'compose.yaml'), 'utf8');
+    expect(compose).toMatch(/environment:\s+HOST: 0\.0\.0\.0\s+PORT: ['"]8787['"]/);
+    expect(compose).toContain('127.0.0.1:8787:8787');
+    expect(compose).toContain("fetch('http://127.0.0.1:8787/health')");
+  });
+
   it('将 API、上传和 SPA 请求代理到同一个本机 Express 服务', () => {
     const configPath = resolve(process.cwd(), 'deploy/nginx/jingji.conf.example');
 
