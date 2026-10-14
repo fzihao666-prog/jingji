@@ -136,6 +136,7 @@
   border: 1px solid #d1dfe1;
   border-radius: 11px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   background: #fff;

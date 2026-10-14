@@ -96,12 +96,12 @@
   position: relative;
   z-index: 1;
   min-width: 0;
+  cursor: pointer;
   display: grid;
   grid-template-rows: 14px 16px minmax(70px, 1fr) 18px 14px;
   place-items: start center;
   gap: 2px;
   color: #5e7780;
-  cursor: default;
   outline: 0;
   transition:
     opacity 0.18s ease,

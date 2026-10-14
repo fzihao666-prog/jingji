@@ -148,6 +148,9 @@ export function AthleteProfileOverview({
   const [activeTrainingYearsBand, setActiveTrainingYearsBand] = useState<TrainingYearsBand | null>(
     null
   );
+  const [pinnedTrainingYearsBand, setPinnedTrainingYearsBand] = useState<TrainingYearsBand | null>(
+    null
+  );
   if (
     individual && (!profiles.length ||
     !profiles.some(
@@ -600,10 +603,27 @@ export function AthleteProfileOverview({
                 style={{ '--stage-color': band.fill } as CSSProperties}
                 tabIndex={0}
                 aria-label={`${band.label}${band.phase}，${band.athletes}人，占比${formatNumber(band.percentage, 1)}%`}
-                onMouseEnter={() => setActiveTrainingYearsBand(band)}
-                onMouseLeave={() => setActiveTrainingYearsBand(null)}
-                onFocus={() => setActiveTrainingYearsBand(band)}
-                onBlur={() => setActiveTrainingYearsBand(null)}
+                onMouseEnter={() => {
+                  if (!pinnedTrainingYearsBand) setActiveTrainingYearsBand(band);
+                }}
+                onMouseLeave={() => {
+                  if (!pinnedTrainingYearsBand) setActiveTrainingYearsBand(null);
+                }}
+                onFocus={() => {
+                  if (!pinnedTrainingYearsBand) setActiveTrainingYearsBand(band);
+                }}
+                onBlur={() => {
+                  if (!pinnedTrainingYearsBand) setActiveTrainingYearsBand(null);
+                }}
+                onClick={() => {
+                  if (pinnedTrainingYearsBand?.label === band.label) {
+                    setPinnedTrainingYearsBand(null);
+                    setActiveTrainingYearsBand(null);
+                  } else {
+                    setPinnedTrainingYearsBand(band);
+                    setActiveTrainingYearsBand(band);
+                  }
+                }}
               >
                 <span>{band.label}</span>
                 <strong>{band.phase}</strong>

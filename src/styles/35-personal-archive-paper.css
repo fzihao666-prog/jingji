@@ -45,7 +45,7 @@
 
 .archive-sheet-web.strength-poster-web {
   width: min(920px, 100%);
-  min-width: 820px;
+  min-width: min(820px, 100%);
   margin: 0 auto;
   padding: 34px 32px 28px;
   box-shadow: 0 12px 30px rgb(42 38 35 / 12%);

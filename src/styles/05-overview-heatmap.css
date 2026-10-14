@@ -55,14 +55,22 @@
 }
 
 .physiology-cell {
+  position: relative;
   width: 100%;
-  height: max(15px, calc((100cqw - 270px) / 42));
+  height: max(22px, calc((100cqw - 270px) / 42));
   min-width: 21px;
   border: 0;
   border-radius: 4px;
   padding: 0;
   background: #e7edef;
   cursor: pointer;
+}
+
+/* 外扩触摸热区（利用 5px 格间隙，不遮挡相邻格） */
+.physiology-cell::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
 }
 
 .physiology-cell i {
@@ -200,6 +208,14 @@
     sans-serif;
 }
 
+.intensity-ratio-legend span small {
+  overflow: hidden;
+  color: #819198;
+  font-size: 7px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .intensity-ratio-legend em {
   color: #71868d;
   font:
@@ -285,6 +301,7 @@
   min-width: 0;
   padding: 0;
   border: 0;
+  cursor: pointer;
   display: grid;
   grid-template-rows: auto auto minmax(118px, 1fr) auto;
   justify-items: center;
@@ -292,7 +309,6 @@
   color: #123f4a;
   background: transparent;
   font: inherit;
-  cursor: default;
   outline: 0;
 }
 
@@ -963,7 +979,7 @@
   }
 
   .athlete-radar-chart .app-echart {
-    --chart-height: 250px;
+    --chart-height: 280px;
   }
 }
 
@@ -1218,6 +1234,16 @@
 .champion-radar-canvas {
   height: 430px;
   padding: 4px 0 8px;
+}
+
+@media (width <= 1100px) {
+  .champion-benchmark-body {
+    grid-template-columns: 1fr;
+  }
+
+  .champion-radar-canvas {
+    height: 340px;
+  }
 }
 
 .champion-insight-panel article p b {

@@ -5,7 +5,7 @@
 /* Archive portrait refinement: mirrors the reference sheet's stepped table composition. */
 .archive-sheet-web.strength-poster-web {
   width: min(790px, 100%);
-  min-width: 760px;
+  min-width: min(760px, 100%);
   min-height: 1120px;
   padding: 30px 28px 26px;
 }

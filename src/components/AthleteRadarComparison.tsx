@@ -118,13 +118,13 @@ function radarOption(title: string, dimensions: AthleteRadarDimension[]): EChart
       itemHeight: 6,
       textStyle: {
         color: '#52666d',
-        fontSize: 10,
+        fontSize: 9,
       },
     },
 
     radar: {
       center: ['50%', '54%'],
-      radius: '54%',
+      radius: '50%',
       splitNumber: 4,
 
       indicator: dimensions.map((dimension) => ({
@@ -134,8 +134,8 @@ function radarOption(title: string, dimensions: AthleteRadarDimension[]): EChart
 
       axisName: {
         color: '#365660',
-        fontSize: 10,
-        lineHeight: 14,
+        fontSize: 9,
+        lineHeight: 13,
       },
 
       axisLine: {

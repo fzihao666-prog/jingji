@@ -955,14 +955,14 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
           {normalizedData.map((row, index) => {
             const meta = TRAINING_INTENSITY_META[row.zone];
             return (
-              <div
-                key={row.zone}
-                title={`${meta.label}｜桨频：${meta.strokeRate}｜血乳酸：${meta.lactate}｜目的：${meta.purpose}`}
-              >
+              <div key={row.zone}>
                 <i style={{ background: colors[index % colors.length] }} />
                 <span>
                   <b>{row.zone}</b>
                   {meta.label}
+                  <small>
+                    桨频：{meta.strokeRate} · 血乳酸：{meta.lactate} · 目的：{meta.purpose}
+                  </small>
                 </span>
                 <em>{formatNumber(row.durationMin, 1)} 分</em>
                 <strong>{formatNumber(row.percentage, 1)}%</strong>
@@ -978,6 +978,7 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
 
 export function TrainingLoadEnergyChart({ data }: { data: TrainingLoadRatio }) {
   const [active, setActive] = useState<'special' | 'physical' | 'recovery' | null>(null);
+  const [pinned, setPinned] = useState<'special' | 'physical' | 'recovery' | null>(null);
   const hasLoad = data.totalLoad > 0;
   const segments = [
     {
@@ -1022,10 +1023,27 @@ export function TrainingLoadEnergyChart({ data }: { data: TrainingLoadRatio }) {
             tabIndex={0}
             className={`training-load-energy-column ${item.key}`}
             aria-label={hasLoad ? `${item.label}训练负荷 ${formatNumber(item.load, 1)} AU，占比 ${formatNumber(item.percentage, 1)}%` : `${item.label}示例图形，无真实负荷`}
-            onMouseEnter={() => setActive(item.key)}
-            onMouseLeave={() => setActive(null)}
-            onFocus={() => setActive(item.key)}
-            onBlur={() => setActive(null)}
+            onMouseEnter={() => {
+              if (!pinned) setActive(item.key);
+            }}
+            onMouseLeave={() => {
+              if (!pinned) setActive(null);
+            }}
+            onFocus={() => {
+              if (!pinned) setActive(item.key);
+            }}
+            onBlur={() => {
+              if (!pinned) setActive(null);
+            }}
+            onClick={() => {
+              if (pinned === item.key) {
+                setPinned(null);
+                setActive(null);
+              } else {
+                setPinned(item.key);
+                setActive(item.key);
+              }
+            }}
           >
             <span className="training-load-energy-label">{item.label}</span>
             <strong className="training-load-energy-percentage">

@@ -4,10 +4,10 @@ import { addDays } from '../utils';
 import { placeholderTrend, placeholderRatio } from './chart-placeholder';
 
 const chartMetrics = {
-  top: 56,
-  right: 64,
-  bottom: 36,
-  left: 60,
+  top: 40,
+  right: 32,
+  bottom: 28,
+  left: 36,
   barWidth: 24,
   lineWidth: 2,
   symbolSize: 6,
@@ -126,9 +126,9 @@ export function contentOption(data: SpecialTrainingAnalytics, isPlaceholder = fa
     },
     grid: {
       top: 16,
-      right: 32,
+      right: 24,
       bottom: 28,
-      left: 80,
+      left: 52,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     },
