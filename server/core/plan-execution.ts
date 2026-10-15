@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { beijingDate } from './coach-daily-todos.ts';
+import { extractTodayPlanDay, summarizeTodayPlans, type TodayPlanDay } from './plan-today.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // 统计窗口：近 7 天（含今天）。
@@ -27,6 +28,14 @@ type SessionRecord = {
   source: string;
   quality: string;
   isDemo: number;
+  // 今日执行情况扩展字段：旧调用方缺省时不参与今日汇总。
+  distanceKm?: number;
+  durationReported?: number;
+  distanceReported?: number;
+  rpe?: number | null;
+  trainingType?: string;
+  content?: string;
+  structureType?: string;
 };
 
 // 与教练待办同口径的正式训练筛选。
@@ -131,6 +140,15 @@ export function buildPlanExecution(input: {
     const actual = actualDays.size;
     const completionRate = planned > 0 ? Math.min(1, actual / planned) : null;
 
+    // 今日执行事实：只用当天正式课次；无记录先记待确认，不判定未完成。
+    const todaySessions = sessions.filter((s) => s.date === today);
+    const todayPlan = readTodayPlanFrom(plansByAthlete.get(athlete.athleteId) || [], today);
+    const todayRecorded = todaySessions.length > 0;
+    // 未填报的时长/距离不计 0；全程无人填报保持 null。
+    const durationSessions = todaySessions.filter((s) => s.durationReported);
+    const distanceSessions = todaySessions.filter((s) => s.distanceReported);
+    const todayRpe = todaySessions.some((s) => s.rpe !== null && s.rpe !== undefined);
+
     return {
       athleteId: athlete.athleteId,
       athleteName: athlete.athleteName,
@@ -143,8 +161,32 @@ export function buildPlanExecution(input: {
       totalDurationMin: Math.round(totalDuration),
       completionRate: completionRate !== null ? Math.round(completionRate * 100) / 100 : null,
       status: planned === 0 ? 'no-plan' : actual >= planned ? 'complete' : actual > 0 ? 'partial' : 'missed',
+      hasPlanToday: todayPlan !== null,
+      todayFocus: todayPlan ? todayPlan.focus : null,
+      todayStatus: todayRecorded ? 'recorded' : todayPlan ? 'pending' : 'no-plan',
+      todayDurationMin: durationSessions.length
+        ? Math.round(durationSessions.reduce((sum, s) => sum + (s.durationMin || 0), 0) * 10) / 10
+        : null,
+      todayDistanceKm: distanceSessions.length
+        ? Math.round(distanceSessions.reduce((sum, s) => sum + (s.distanceKm || 0), 0) * 10) / 10
+        : null,
+      todayRpeReported: todayRpe,
     };
   });
+
+  // 今日队伍汇总：计划量来自各运动员当日课表，实际量来自当日正式课次（未填报的量不计 0）。
+  const todayPlans = rows.map((row) =>
+    readTodayPlanFrom(plansByAthlete.get(row.athleteId) || [], today)
+  );
+  const todaySessions = rows.flatMap((row) =>
+    (sessionsByAthlete.get(row.athleteId) || []).filter((s) => s.date === today)
+  );
+  const recordedIds = new Set(
+    rows.filter((row) => row.todayStatus === 'recorded').map((row) => row.athleteId)
+  );
+  const planSummary = summarizeTodayPlans(todayPlans);
+  const reportedDurations = todaySessions.filter((s) => s.durationReported);
+  const reportedDistances = todaySessions.filter((s) => s.distanceReported);
 
   const withPlan = rows.filter((r) => r.hasPlan);
   const avgCompletion = withPlan.length
@@ -169,7 +211,37 @@ export function buildPlanExecution(input: {
       avgCompletion,
     },
     athletes: rows,
+    // 今日计划与执行反馈：执行率仍只用上方现有算法结果，此处只汇总当日事实。
+    today: {
+      summary: {
+        planned: rows.filter((r) => r.hasPlanToday).length,
+        recorded: recordedIds.size,
+        confirmed: rows.filter((r) => r.hasPlanToday && r.todayStatus === 'recorded').length,
+        pending: rows.filter((r) => r.todayStatus === 'pending').length,
+        rpeReported: rows.filter((r) => r.todayRpeReported).length,
+        actualDurationMin: reportedDurations.length
+          ? Math.round(reportedDurations.reduce((sum, s) => sum + (s.durationMin || 0), 0) * 10) / 10
+          : null,
+        actualDistanceKm: reportedDistances.length
+          ? Math.round(reportedDistances.reduce((sum, s) => sum + (s.distanceKm || 0), 0) * 10) / 10
+          : null,
+      },
+      plan: planSummary,
+    },
   };
+}
+
+// 从运动员的计划中取当日课表；优先精确日期命中的计划，其次周期内当周星期命中的计划。
+function readTodayPlanFrom(plans: PlanRecord[], today: string): TodayPlanDay | null {
+  for (const plan of plans) {
+    const day = extractTodayPlanDay(plan.planData, today, {
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      title: plan.title,
+    });
+    if (day) return day;
+  }
+  return null;
 }
 
 export function readPlanExecution(
@@ -212,7 +284,10 @@ export function readPlanExecution(
     .prepare(
       `
     SELECT athlete_id AS athleteId, session_date AS date,
-      duration_min AS durationMin, srpe, source, quality, is_demo AS isDemo
+      duration_min AS durationMin, distance_km AS distanceKm,
+      duration_reported AS durationReported, distance_reported AS distanceReported,
+      rpe, training_type AS trainingType, structure_type AS structureType, content,
+      srpe, source, quality, is_demo AS isDemo
     FROM training_sessions
     WHERE athlete_id IN (${placeholders}) AND session_date BETWEEN ? AND ?
   `

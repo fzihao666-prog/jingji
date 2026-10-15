@@ -61,6 +61,7 @@ function createOverviewPage(data = {}) {
     '../../utils/wellness-form': {},
     '../../utils/injury-metric': injuryMetric,
     '../../utils/morning-check': loadCjs(new URL('../../utils/morning-check.js', import.meta.url), {}),
+    '../../utils/today-plan': loadCjs(new URL('../../utils/today-plan.js', import.meta.url), {}),
     '../../utils/training-empty': loadCjs(new URL('../../utils/training-empty.js', import.meta.url), {}),
   };
   vm.runInNewContext(indexSource, {

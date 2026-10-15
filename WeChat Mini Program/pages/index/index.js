@@ -10,12 +10,16 @@ const { todayStatusView, todayStatusSummary } = require('../../utils/today-statu
 const { wellnessRecordView } = require('../../utils/wellness-form');
 const { injuryMetricView } = require('../../utils/injury-metric');
 const { morningCheckView, trainingSituationView } = require('../../utils/morning-check');
+const { todayPlanView, todayExecutionView, todayTrainingCardView } = require('../../utils/today-plan');
 
 const { metricValue, sectionRequest } = require('../../utils/training-empty');
 
 const emptyTeamView = () => ({ athletes: [], teamPager: paginateList([], 0, PAGE_SIZE) });
 const emptyMorningView = () => morningCheckView([], 'all', 0);
 const emptyTrainingSituation = () => trainingSituationView([]);
+const emptyCoachPlanView = () => todayPlanView(null);
+const emptyExecutionView = () => todayExecutionView([], { page: 0 });
+const emptyTodayTraining = () => todayTrainingCardView(null, []);
 
 function recentDates(from, to, limit = 14) {
   const first = new Date(`${from}T00:00:00Z`);
@@ -156,11 +160,12 @@ Page({
     todos: null,
     todosLoading: false,
     todosError: '',
-    todoPagerPages: { team: 0, focus: 0, morning: 0 },
+    todoPagerPages: { team: 0, focus: 0, morning: 0, exec: 0 },
     todayLoading: false,
     todayError: '',
     todayView: null,
     wellnessView: null,
+    todayTraining: emptyTodayTraining(),
     teamOverview: null,
     teamLoading: false,
     teamError: '',
@@ -168,6 +173,11 @@ Page({
     morningView: emptyMorningView(),
     morningTraining: emptyTrainingSituation(),
     morningFilter: 'all',
+    planExecution: null,
+    coachPlanView: emptyCoachPlanView(),
+    coachExecutionView: emptyExecutionView(),
+    planLoading: false,
+    planError: '',
     teams: [],
     teamId: 0,
     showTeam: false,
@@ -195,9 +205,10 @@ Page({
     this.setData({
       ...buildView({}, null, this.data.from, this.data.to), overviewError: '', comparisonError: '',
       todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), todosError: '',
-      todayView: null, wellnessView: null, todayError: '', todayLoading: false,
+      todayView: null, wellnessView: null, todayError: '', todayLoading: false, todayTraining: emptyTodayTraining(),
       teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView(),
       morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all',
+      planExecution: null, coachPlanView: emptyCoachPlanView(), coachExecutionView: emptyExecutionView(), planError: '', planLoading: false,
     });
     return runPageLoad(this, {
       refreshUser,
@@ -214,7 +225,8 @@ Page({
           page.loadPageData({ ...scope, canSelfReport: page.data.canSelfReport }, isLatest),
           page.loadTodos(scope.project),
           page.loadToday(),
-          page.loadTeamOverview(scope.project)
+          page.loadTeamOverview(scope.project),
+          page.loadPlanExecution(scope.project)
         ]);
         if (isLatest()) getApp().globalData.homeNeedsRefresh = false;
         return overview;
@@ -263,6 +275,7 @@ Page({
     const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, teams, teamId);
     const filteredRoster = this.buildTeamView(this.data.teamOverview, teams, teamId);
     Object.assign(view, { focusRows: focus.items, focusPager: focus, teamView: filteredRoster, ...this.buildMorningViews(this.data.teamOverview, teams, teamId) });
+    Object.assign(view, this.buildCoachPlanViews(this.data.planExecution, teams, teamId));
     const teamLabel = teamId ? ((teams.find((item) => Number(item.id) === teamId) || {}).name || '当前队伍') : '全部授权队伍';
     this.setData({ teams, teamId, teamLabel, scopeAthletes, selectedAthleteId: athleteId, ...view });
     return view;
@@ -328,10 +341,12 @@ Page({
     try {
       const [status, wellness] = await Promise.all([api.todayStatus(), api.myWellness()]);
       if (!this._todayGuard.isLatest(id)) return;
+      const statusView = todayStatusView(status);
       this.setData({
         todayLoading: false,
-        todayView: todayStatusSummary(todayStatusView(status)),
-        wellnessView: wellnessRecordView(wellness && wellness.record)
+        todayView: todayStatusSummary(statusView),
+        wellnessView: wellnessRecordView(wellness && wellness.record),
+        todayTraining: todayTrainingCardView(statusView.plan, statusView.sessions)
       });
     } catch (error) {
       if (this._todayGuard.isLatest(id)) {
@@ -340,6 +355,7 @@ Page({
           todayLoading: false,
           todayView: null,
           wellnessView: null,
+          todayTraining: emptyTodayTraining(),
           todayError: error.message || '今日状态加载失败，请重试。'
         });
       }
@@ -409,6 +425,50 @@ Page({
     return this.loadTeamOverview(this.data.project);
   },
 
+  // 教练今日训练计划与执行情况：执行率复用服务端 plan-execution 结果，不在客户端重算。
+  async loadPlanExecution(project) {
+    if (!this.data.canViewTodos) return;
+    this._planGuard = this._planGuard || createRequestGuard();
+    const id = this._planGuard.next();
+    this.setData({ planLoading: true, planError: '' });
+    try {
+      const result = await api.planExecution(project);
+      if (!this._planGuard.isLatest(id)) return;
+      this.setData({ planLoading: false, planExecution: result, ...this.buildCoachPlanViews(result) });
+    } catch (error) {
+      if (this._planGuard.isLatest(id)) {
+        this.setData({
+          planLoading: false, planExecution: null,
+          coachPlanView: emptyCoachPlanView(), coachExecutionView: emptyExecutionView(),
+          planError: error.message || '今日训练计划加载失败，请重试。'
+        });
+      }
+    }
+  },
+
+  retryPlan() {
+    return this.loadPlanExecution(this.data.project);
+  },
+
+  // 计划卡片与执行情况：队伍筛选后人数、名单与顶部统计同口径更新。
+  // teams/teamId/page 显式传入，避免与 setData 同批更新时读到旧的筛选与页码。
+  buildCoachPlanViews(result, teams, teamId, page) {
+    const source = result || {};
+    const roster = teams === undefined ? this.data.teams : teams;
+    const activeTeamId = teamId === undefined ? this.data.teamId : teamId;
+    const rows = ((source.athletes || []).filter((row) => {
+      const selectedTeam = (roster || []).find((item) => Number(item.id) === Number(activeTeamId));
+      return !selectedTeam || row.team === selectedTeam.name;
+    }));
+    return {
+      coachPlanView: todayPlanView((source.today && source.today.plan) || null),
+      coachExecutionView: todayExecutionView(rows, {
+        page: Number.isInteger(page) ? page : this.data.todoPagerPages.exec,
+        avgCompletion: source.summary ? source.summary.avgCompletion : null
+      })
+    };
+  },
+
   // pager-nav 统一回调：状态监测与晨检人员分页；队伍运动员分页由 athlete-selector 组件内承担。
   onPagerChange(event) {
     const key = event.currentTarget.dataset.key;
@@ -424,6 +484,9 @@ Page({
     }
     if (key === 'morning') {
       Object.assign(patch, this.buildMorningViews(this.data.teamOverview, this.data.teams, this.data.teamId, page));
+    }
+    if (key === 'exec') {
+      Object.assign(patch, this.buildCoachPlanViews(this.data.planExecution, this.data.teams, this.data.teamId, page));
     }
     this.setData(patch);
   },
@@ -442,7 +505,7 @@ Page({
 
   // 筛选/搜索变化后所有人员列表回到第一页（spec §6）。
   resetPagerPages() {
-    return { team: 0, focus: 0, morning: 0 };
+    return { team: 0, focus: 0, morning: 0, exec: 0 };
   },
 
   retryOverview() {
@@ -452,12 +515,13 @@ Page({
   onOverviewTeamChange(event) {
     const teamId = Number(event.detail && event.detail.value) || 0;
     if (!this.data.teams.some((item) => Number(item.id) === teamId) && teamId !== 0) return Promise.resolve();
-    const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0, morning: 0 };
+    const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0, morning: 0, exec: 0 };
     this.setData({
       teamId, todoPagerPages, athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE),
       teamView: this.buildTeamView(this.data.teamOverview, this.data.teams, teamId),
       // 队伍筛选变化后晨检人数与名单同步更新，保持同一口径。
       ...this.buildMorningViews(this.data.teamOverview, this.data.teams, teamId, 0),
+      ...this.buildCoachPlanViews(this.data.planExecution, this.data.teams, teamId, 0),
     });
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
   },
@@ -497,7 +561,7 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true, morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all' });
+      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true, morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all', planExecution: null, coachPlanView: emptyCoachPlanView(), coachExecutionView: emptyExecutionView(), planError: '', planLoading: true });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
@@ -513,8 +577,8 @@ Page({
       if (change.field === 'project') {
         this._teamGuard = this._teamGuard || createRequestGuard();
         this._teamGuard.next();
-        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView(), morningView: emptyMorningView(), morningTraining: emptyTrainingSituation() });
-        const [overview] = await Promise.all([this.loadPageData(scope, isLatest), this.loadTodos(scope.project), this.loadTeamOverview(scope.project)]);
+        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView(), morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), coachPlanView: emptyCoachPlanView(), coachExecutionView: emptyExecutionView() });
+        const [overview] = await Promise.all([this.loadPageData(scope, isLatest), this.loadTodos(scope.project), this.loadTeamOverview(scope.project), this.loadPlanExecution(scope.project)]);
         return overview;
       }
       return this.loadPageData(scope, isLatest);

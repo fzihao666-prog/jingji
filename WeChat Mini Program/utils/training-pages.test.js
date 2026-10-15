@@ -254,3 +254,89 @@ describe('教练首页晨检概览与未填报口径', () => {
     expect(teamView.athletes[2].tags.map((tag) => tag.text)).toEqual(['有训练记录', '晨检未填']);
   });
 });
+
+describe('教练今日训练计划与执行情况', () => {
+  const planExecution = {
+    summary: { avgCompletion: 0.8 },
+    athletes: [
+      { athleteId: 1, athleteName: '运动员A', team: '一队', hasPlanToday: true, todayFocus: '有氧', todayStatus: 'recorded', todayDurationMin: 90, todayDistanceKm: 12, todayRpeReported: true },
+      { athleteId: 2, athleteName: '运动员B', team: '一队', hasPlanToday: true, todayFocus: '力量', todayStatus: 'pending', todayDurationMin: null, todayDistanceKm: null, todayRpeReported: false },
+      { athleteId: 3, athleteName: '运动员C', team: '二队', hasPlanToday: true, todayFocus: '技术', todayStatus: 'pending', todayDurationMin: null, todayDistanceKm: null, todayRpeReported: false },
+    ],
+    today: {
+      summary: { planned: 3, recorded: 1, confirmed: 1, pending: 2, rpeReported: 1, actualDurationMin: 90, actualDistanceKm: 12 },
+      plan: {
+        hasPlan: true,
+        focus: ['有氧', '力量', '技术'],
+        specialItems: ['水上技术划'],
+        physicalItems: ['深蹲'],
+        items: [{ name: '深蹲', detail: '4×8 · 75%' }],
+        plannedDurationMin: 120,
+        plannedDistanceKm: 12,
+      },
+    },
+  };
+
+  it('计划卡片取 today.plan，执行情况与队伍筛选同口径', () => {
+    const page = createPage('index');
+    page.data.planExecution = planExecution;
+    page.data.teams = [{ id: 1, name: '一队' }];
+    const all = page.buildCoachPlanViews(planExecution);
+    expect(all.coachPlanView).toMatchObject({
+      hasPlan: true,
+      focusText: '有氧、力量、技术',
+      specialText: '水上技术划',
+      physicalText: '深蹲',
+      durationText: '120 分钟',
+      distanceText: '12 km',
+    });
+    expect(all.coachExecutionView.rows.items.map((row) => row.athleteId)).toEqual([2, 3]);
+    const teamOnly = page.buildCoachPlanViews(planExecution, page.data.teams, 0);
+    const filtered = page.buildCoachPlanViews(planExecution, page.data.teams, 1);
+    expect(filtered.coachExecutionView.rows.items.map((row) => row.athleteId)).toEqual([2]);
+    const tiles = Object.fromEntries(filtered.coachExecutionView.tiles.map((tile) => [tile.key, tile]));
+    expect(tiles.planned.value).toBe('2');
+    expect(tiles.confirmed.value).toBe('1');
+    expect(tiles.rate.value).toBe('80%');
+    expect(teamOnly.coachExecutionView.rows.items).toHaveLength(2);
+  });
+
+  it('无计划时卡片保留空状态，执行率缺失显示 --', () => {
+    const page = createPage('index');
+    const views = page.buildCoachPlanViews({ summary: {}, athletes: [], today: { summary: {}, plan: { hasPlan: false, focus: [], specialItems: [], physicalItems: [], items: [], plannedDurationMin: null, plannedDistanceKm: null } } });
+    expect(views.coachPlanView.hasPlan).toBe(false);
+    expect(views.coachPlanView.focusText).toBe('--');
+    expect(views.coachExecutionView.listEmpty).toBe(true);
+    expect(views.coachExecutionView.tiles.every((tile) => tile.value === '0' || tile.value === '--')).toBe(true);
+  });
+
+  it('执行情况分页走 pager 回调并回到第一页，失败清空不残留旧数据', async () => {
+    const pendingRows = Array.from({ length: 6 }, (_, index) => ({
+      athleteId: index + 1, athleteName: `待确认${index + 1}`, team: '一队',
+      hasPlanToday: true, todayFocus: '有氧', todayStatus: 'pending',
+      todayDurationMin: null, todayDistanceKm: null, todayRpeReported: false,
+    }));
+    const page = createPage('index', {
+      planExecution: async () => ({ summary: { avgCompletion: null }, athletes: pendingRows, today: { plan: { hasPlan: false, focus: [], specialItems: [], physicalItems: [], items: [] } } }),
+    });
+    page.data.canViewTodos = true;
+    page.data.teams = [{ id: 1, name: '一队' }, { id: 2, name: '二队' }];
+    page.data.teamId = 0;
+    page._guard = { next: () => 1, isLatest: () => true };
+    page.loadPageData = async () => null;
+    await page.loadPlanExecution('rowing');
+    expect(page.data.coachExecutionView.rows.items).toHaveLength(5);
+    page.onPagerChange({ currentTarget: { dataset: { key: 'exec' } }, detail: { page: 1 } });
+    expect(page.data.coachExecutionView.rows).toMatchObject({ page: 1, total: 6, pageCount: 2 });
+    page.onOverviewTeamChange({ detail: { value: 2 } });
+    // 队伍切换后回到第一页且名单同步（二队无待确认人员）。
+    expect(page.data.coachExecutionView.rows.items).toEqual([]);
+    expect(page.data.coachExecutionView.listEmpty).toBe(true);
+    expect(page.data.todoPagerPages.exec).toBe(0);
+    const failing = createPage('index', { planExecution: () => Promise.reject(new Error('加载失败，请重试')) });
+    failing.data.canViewTodos = true;
+    await failing.loadPlanExecution('rowing');
+    expect(failing.data.planError).toContain('加载失败');
+    expect(failing.data.coachPlanView.hasPlan).toBe(false);
+  });
+});

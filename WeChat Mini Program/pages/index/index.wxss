@@ -30,6 +30,32 @@
 .morning-head .morning-col-metric:first-of-type { text-align: center; }
 .morning-row { box-sizing: border-box; width: 100%; max-width: 100%; margin: 10rpx 0 0; padding: 16rpx 12rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
 .morning-name { min-width: 0; color: #12303b; font-size: 24rpx; font-weight: 700; overflow-wrap: break-word; }
+/* 今日训练计划：重点/内容行 + 计划量 + 安排详情；教练与运动员卡片共用。 */
+.plan-focus-row { display: flex; align-items: baseline; gap: 14rpx; padding: 10rpx 4rpx; border-bottom: 1rpx solid #edf2f3; }
+.plan-focus-row:last-of-type { border-bottom: 0; }
+.plan-label { flex: none; color: #71868d; font-size: 20rpx; }
+.plan-value { min-width: 0; flex: 1; color: #12303b; font-size: 23rpx; line-height: 1.5; overflow-wrap: anywhere; }
+.plan-volume-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; margin-top: 12rpx; }
+.plan-volume { min-width: 0; padding: 14rpx 16rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
+.plan-volume-value { display: block; margin-top: 6rpx; color: #164751; font-size: 28rpx; font-weight: 800; overflow-wrap: anywhere; }
+.plan-detail { margin-top: 16rpx; }
+.plan-detail-title { margin: 16rpx 0 8rpx; color: #536c75; font-size: 21rpx; font-weight: 700; }
+.plan-detail-row { display: flex; align-items: baseline; gap: 12rpx; padding: 8rpx 4rpx; }
+.plan-detail-name { flex: none; max-width: 40%; color: #12303b; font-size: 22rpx; font-weight: 600; overflow-wrap: anywhere; }
+.plan-detail-note { min-width: 0; flex: 1; color: #536c75; font-size: 20rpx; line-height: 1.5; overflow-wrap: anywhere; }
+/* 今日执行情况：紧凑数字块 + 待确认人员列表。 */
+.exec-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
+.exec-tile { min-width: 0; padding: 14rpx 16rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
+.exec-tile-value { color: #164751; font-size: 32rpx; line-height: 1.2; font-weight: 800; overflow-wrap: anywhere; }
+.exec-tile-unit { margin-left: 6rpx; color: #536c75; font-size: 18rpx; font-weight: 400; }
+.exec-tile-label { margin-top: 6rpx; color: #536c75; font-size: 20rpx; line-height: 1.4; }
+.exec-tile-note { margin-top: 4rpx; color: #71868d; font-size: 17rpx; line-height: 1.4; }
+.exec-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr) minmax(0, 1fr); gap: 8rpx; align-items: center; box-sizing: border-box; width: 100%; max-width: 100%; margin: 10rpx 0 0; padding: 16rpx 12rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
+.exec-row-team, .exec-row-focus { min-width: 0; color: #536c75; font-size: 20rpx; overflow-wrap: anywhere; }
+.exec-row-focus { color: #12303b; }
+.exec-session-row { margin-top: 10rpx; padding: 14rpx 16rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
+.exec-session-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12rpx; }
+.exec-session-rpe { flex: none; color: #164751; font-size: 21rpx; font-weight: 700; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 18rpx; margin-bottom: 14rpx; }
 .legend-item { display: flex; align-items: center; gap: 8rpx; color: #536c75; font-size: 20rpx; }
 .legend-dot { width: 16rpx; height: 16rpx; border-radius: 50%; background: #176f7f; }

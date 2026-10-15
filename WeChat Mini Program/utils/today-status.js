@@ -14,6 +14,33 @@ function todayStatusView(value) {
   };
   const isObject = (item) => item !== null && typeof item === 'object' && !Array.isArray(item);
   const isSource = (item) => item === null || (typeof item === 'string' && item.length <= 100);
+  const isText = (item, max) => typeof item === 'string' && item.length <= max;
+  const isNullableNumber = (item) => item === null || (typeof item === 'number' && Number.isFinite(item) && item >= 0);
+  // 今日安排：字段缺失视为无计划，存在时逐项校验，数值 0 有效。
+  const isPlanItem = (item) => isObject(item) && isText(item.name, 80) && isText(item.detail, 500);
+  const isPlan = (item) =>
+    item === null ||
+    (isObject(item) &&
+      isText(item.title, 100) &&
+      isText(item.focus, 200) &&
+      Array.isArray(item.specialItems) &&
+      item.specialItems.every((name) => isText(name, 80)) &&
+      Array.isArray(item.physicalItems) &&
+      item.physicalItems.every((name) => isText(name, 80)) &&
+      isNullableNumber(item.plannedDurationMin) &&
+      isNullableNumber(item.plannedDistanceKm) &&
+      Array.isArray(item.items) &&
+      item.items.every(isPlanItem));
+  const isSessionRow = (item) =>
+    isObject(item) &&
+    Number.isInteger(item.id) &&
+    item.id >= 0 &&
+    isText(item.content, 200) &&
+    isText(item.trainingType, 40) &&
+    isText(item.startTime, 10) &&
+    isNullableNumber(item.durationMin) &&
+    isNullableNumber(item.distanceKm) &&
+    (item.rpe === null || (typeof item.rpe === 'number' && Number.isFinite(item.rpe) && item.rpe >= 0 && item.rpe <= 10));
   if (
     !isObject(value) ||
     !isIsoDate(value.date) ||
@@ -23,7 +50,9 @@ function todayStatusView(value) {
     typeof value.timeIncomplete !== 'boolean' ||
     !Number.isFinite(value.load24h) ||
     value.load24h < 0 ||
-    !isSource(value.source)
+    !isSource(value.source) ||
+    (value.plan !== undefined && !isPlan(value.plan)) ||
+    (value.sessions !== undefined && (!Array.isArray(value.sessions) || !value.sessions.every(isSessionRow)))
   ) {
     fail();
   }
@@ -32,7 +61,9 @@ function todayStatusView(value) {
     submitted: value.submitted,
     timeIncomplete: value.timeIncomplete,
     load24h: value.load24h,
-    source: value.source
+    source: value.source,
+    plan: value.plan === undefined ? null : value.plan,
+    sessions: value.sessions === undefined ? [] : value.sessions
   };
 }
 
@@ -45,7 +76,8 @@ function todayStatusSummary(view) {
     : '今日还没有有效训练记录。';
   return {
     ...view,
-    submittedLabel: view.submitted ? '已填报' : '未填报',
+    // “未填报”保留给晨检；训练记录只说已记录/暂无记录。
+    submittedLabel: view.submitted ? '已记录' : '暂无记录',
     note,
     timeNote: view.timeIncomplete ? '缺少开训时间的记录暂不计入24小时负荷。' : '',
     loadText: number(view.load24h, 0),

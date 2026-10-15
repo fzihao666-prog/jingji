@@ -90,6 +90,65 @@ describe('运动员今日状态', () => {
     expect(result.load24h).toBe(768);
     expect(result.submitted).toBe(true);
   });
+
+  it('今日安排与本人实际记录一并返回，未报量保持 null', () => {
+    const result = buildTodayStatus({
+      athleteId: 7,
+      sessions: [
+        session({
+          id: 11,
+          durationMin: 90,
+          durationReported: 1,
+          distanceKm: 0,
+          distanceReported: 1,
+          rpe: 0,
+        }),
+      ],
+      plans: [
+        {
+          planData: JSON.stringify({
+            weeklyPlans: [{ days: [{ date: '2026-09-23', focus: '技术', items: [{ name: '技术划', duration: '80' }] }] }],
+          }),
+          startDate: '2026-09-21',
+          endDate: '2026-09-27',
+          title: '本周计划',
+        },
+      ],
+      now,
+    });
+    expect(result.plan).toMatchObject({ title: '本周计划', focus: '技术', plannedDurationMin: 80 });
+    expect(result.sessions).toEqual([
+      {
+        id: 11,
+        content: '水上',
+        trainingType: '专项训练',
+        startTime: '08:00',
+        durationMin: 90,
+        distanceKm: 0,
+        rpe: 0,
+      },
+    ]);
+  });
+
+  it('不返回历史计划冒充今日安排，今日无记录时记录列表为空', () => {
+    const result = buildTodayStatus({
+      athleteId: 7,
+      sessions: [session({ date: '2026-09-22' })],
+      plans: [
+        {
+          planData: JSON.stringify({
+            weeklyPlans: [{ days: [{ date: '2026-09-20', items: [{ name: '深蹲' }] }] }],
+          }),
+          startDate: '2026-09-14',
+          endDate: '2026-09-20',
+          title: '上周计划',
+        },
+      ],
+      now,
+    });
+    expect(result.plan).toBeNull();
+    expect(result.sessions).toEqual([]);
+  });
 });
 
 describe('恢复日报校验', () => {

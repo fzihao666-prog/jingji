@@ -128,7 +128,8 @@ describe('恢复日报入口接线', () => {
     expect(indexTemplate).toContain('今日状态');
     expect(indexTemplate).toContain('todayView.submittedLabel');
     expect(indexTemplate).toContain('wellnessView.filledLabel');
-    expect(indexSource).toContain('todayStatusSummary(todayStatusView(status))');
+    expect(indexSource).toContain('todayStatusSummary(statusView)');
+    expect(indexSource).toContain('todayTrainingCardView(statusView.plan, statusView.sessions)');
     expect(indexSource).toContain('wellnessRecordView(wellness && wellness.record)');
     expect(indexSource).toContain("wx.navigateTo({ url: '/pages/wellness-entry/wellness-entry' })");
   });

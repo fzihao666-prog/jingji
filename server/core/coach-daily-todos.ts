@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { PROJECTS } from '../../shared/projects.ts';
 import { trainingLoadCategory } from '../../shared/training-content-category.ts';
+import { extractTodayPlanDay, type TodayPlanDay } from './plan-today.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const HIGH_LOAD_AU = 600;
@@ -49,6 +50,13 @@ type TodoSession = {
   source: string;
   quality: string;
   isDemo: number;
+  // 今日训练执行反馈扩展字段：旧查询缺省时不参与展示。
+  id?: number;
+  durationMin?: number;
+  distanceKm?: number;
+  durationReported?: number;
+  distanceReported?: number;
+  rpe?: number | null;
 };
 type TodoInjury = {
   athleteId: number;
@@ -467,14 +475,26 @@ export function readTeamOverview(
 export function buildTodayStatus(input: {
   athleteId: number;
   sessions: TodoSession[];
+  plans?: { planData: string; startDate: string; endDate: string; title: string }[];
   now: Date;
 }) {
   const { athleteId, now } = input;
   const date = beijingDate(now);
   const { submitted, incomplete, loads } = sessionFacts(input.sessions, [athleteId], now);
-  const latest = input.sessions.find(
+  const todaySessions = input.sessions.filter(
     (session) => session.athleteId === athleteId && session.date === date && isOfficialSession(session)
   );
+  const latest = todaySessions[0];
+  // 今日安排与教练端共用同一提取口径；无覆盖今日的计划时为 null，不拿旧计划冒充。
+  let plan: TodayPlanDay | null = null;
+  for (const planRecord of input.plans || []) {
+    plan = extractTodayPlanDay(planRecord.planData, date, {
+      startDate: planRecord.startDate,
+      endDate: planRecord.endDate,
+      title: planRecord.title,
+    });
+    if (plan) break;
+  }
   return {
     date,
     timezone: 'Asia/Shanghai',
@@ -483,6 +503,16 @@ export function buildTodayStatus(input: {
     timeIncomplete: incomplete.has(athleteId),
     load24h: Math.round((loads.get(athleteId) || 0) * 10) / 10,
     source: latest ? latest.source : null,
+    plan,
+    sessions: todaySessions.map((session) => ({
+      id: session.id ?? 0,
+      content: session.content,
+      trainingType: session.trainingType,
+      startTime: session.startTime,
+      durationMin: session.durationReported ? session.durationMin ?? null : null,
+      distanceKm: session.distanceReported ? session.distanceKm ?? null : null,
+      rpe: session.rpe ?? null,
+    })),
   };
 }
 
@@ -494,8 +524,10 @@ export function readTodayStatus(
   const sessions = db
     .prepare(
       `
-    SELECT athlete_id AS athleteId, session_date AS date, start_time AS startTime, srpe,
-      training_type AS trainingType, structure_type AS structureType, content, source, quality, is_demo AS isDemo
+    SELECT id, athlete_id AS athleteId, session_date AS date, start_time AS startTime, srpe,
+      training_type AS trainingType, structure_type AS structureType, content, source, quality, is_demo AS isDemo,
+      duration_min AS durationMin, distance_km AS distanceKm,
+      duration_reported AS durationReported, distance_reported AS distanceReported, rpe
     FROM training_sessions
     WHERE athlete_id = ? AND session_date BETWEEN ? AND ?
     ORDER BY session_date DESC, session_order DESC
@@ -506,5 +538,20 @@ export function readTodayStatus(
       beijingDate(new Date(input.now.getTime() - DAY_MS)),
       date
     ) as TodoSession[];
-  return buildTodayStatus({ athleteId: input.athleteId, sessions, now: input.now });
+  const plans = db
+    .prepare(
+      `
+    SELECT plan_data AS planData, start_date AS startDate, end_date AS endDate, title
+    FROM training_plans
+    WHERE athlete_id = ? AND start_date <= ? AND end_date >= ?
+    ORDER BY start_date DESC, id DESC
+  `
+    )
+    .all(input.athleteId, date, date) as {
+    planData: string;
+    startDate: string;
+    endDate: string;
+    title: string;
+  }[];
+  return buildTodayStatus({ athleteId: input.athleteId, sessions, plans, now: input.now });
 }

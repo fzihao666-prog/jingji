@@ -86,5 +86,67 @@ describe('训练计划执行率', () => {
   it('空数据返回空结果', () => {
     const result = buildPlanExecution({ athletes: [], plans: [], sessions: [], now });
     expect(result.summary.total).toBe(0);
+    expect(result.today.summary.planned).toBe(0);
+    expect(result.today.plan.hasPlan).toBe(false);
+  });
+
+  it('今日计划与执行事实分开统计，训练前不判定未完成', () => {
+    // 今天是周一，计划里有周一课表；实际有一条正式课次（含 RPE）。
+    const plans = [plan()];
+    const sessions = [
+      session({
+        durationMin: 90,
+        durationReported: 1,
+        distanceKm: 12,
+        distanceReported: 1,
+        rpe: 6,
+      }),
+    ];
+    const result = buildPlanExecution({ athletes, plans, sessions, now });
+    const row = result.athletes[0];
+    expect(row.hasPlanToday).toBe(true);
+    expect(row.todayStatus).toBe('recorded');
+    expect(row.todayDurationMin).toBe(90);
+    expect(row.todayDistanceKm).toBe(12);
+    expect(row.todayRpeReported).toBe(true);
+    expect(result.today.summary).toMatchObject({
+      planned: 1,
+      recorded: 1,
+      confirmed: 1,
+      pending: 0,
+      rpeReported: 1,
+      actualDurationMin: 90,
+      actualDistanceKm: 12,
+    });
+    expect(result.today.plan.focus).toEqual(['有氧']);
+    expect(result.today.plan.physicalItems).toContain('跑步');
+  });
+
+  it('今日有计划无记录只记待确认，未报量不计 0', () => {
+    const result = buildPlanExecution({ athletes, plans: [plan()], sessions: [], now });
+    expect(result.athletes[0].todayStatus).toBe('pending');
+    expect(result.athletes[0].todayDurationMin).toBeNull();
+    expect(result.athletes[0].todayDistanceKm).toBeNull();
+    expect(result.today.summary).toMatchObject({ planned: 1, recorded: 0, confirmed: 0, pending: 1 });
+    expect(result.today.summary.actualDurationMin).toBeNull();
+    expect(result.today.summary.actualDistanceKm).toBeNull();
+  });
+
+  it('无今日计划但有训练记录时计入已记录，不算计划内完成', () => {
+    const result = buildPlanExecution({
+      athletes,
+      plans: [],
+      sessions: [session({ durationMin: 60, durationReported: 1, rpe: null })],
+      now,
+    });
+    expect(result.athletes[0].todayStatus).toBe('recorded');
+    expect(result.athletes[0].hasPlanToday).toBe(false);
+    expect(result.today.summary).toMatchObject({
+      planned: 0,
+      recorded: 1,
+      confirmed: 0,
+      rpeReported: 0,
+      actualDurationMin: 60,
+    });
   });
 });
