@@ -729,7 +729,12 @@ export const api = {
     });
   },
   async commitSpecialTests(importId: string) {
-    return request<{ imported: number; events: number; skipped: number }>(
+    return request<{
+      imported: number;
+      events: number;
+      skipped: number;
+      conflicts?: Array<{ rowNumber: number; crewName: string }>;
+    }>(
       '/api/special-tests/import/commit',
       {
         method: 'POST',

@@ -76,7 +76,13 @@ export function SpecialDataImportDialog({ project, onClose, onCommitted }: Props
     try {
       const result = await api.commitSpecialTests(preview.importId);
       await onCommitted();
-      setMessage(`已保存 ${result.imported} 条成绩，形成 ${result.events} 个专项训练批次。`);
+      const conflictCount = result.conflicts?.length ?? 0;
+      setMessage(
+        `已保存 ${result.imported} 条成绩，形成 ${result.events} 个专项训练批次。` +
+          (conflictCount
+            ? `另有 ${conflictCount} 条因同名组合已有范围外队伍成绩而未保存，请修改组合名称后重新导入。`
+            : '')
+      );
       window.setTimeout(onClose, 700);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '专项数据保存失败。');

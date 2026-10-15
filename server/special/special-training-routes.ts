@@ -536,6 +536,32 @@ export function registerSpecialTrainingRoutes(app: Express) {
         wind_conditions = excluded.wind_conditions, location = excluded.location, note = excluded.note
       RETURNING id
     `);
+    // 同一事件下同一组合重复录入时覆盖原成绩，保证幂等；只允许覆盖当前账户范围内的既有成绩，
+    // 同名既有成绩属于范围外成员时拒绝本次录入，不改动他人成绩。
+    const existingEvent = db
+      .prepare(
+        `SELECT id FROM special_test_events
+       WHERE project = ? AND test_date = ? AND distance_m = ? AND boat_class = ? AND gender_group = ? AND session = ?`
+      )
+      .get(project, row.testDate, row.distanceM, row.boatClass, row.genderGroup, row.session || '') as
+      | { id: number }
+      | undefined;
+    if (existingEvent) {
+      const sameCrew = db
+        .prepare(
+          'SELECT member_athlete_ids AS memberAthleteIds FROM special_test_results WHERE event_id = ? AND crew_name = ?'
+        )
+        .all(existingEvent.id, row.crewName) as Array<{ memberAthleteIds: string }>;
+      const withinScope = sameCrew.every((item) =>
+        (JSON.parse(item.memberAthleteIds || '[]') as number[]).every((id) => allowed.has(id))
+      );
+      if (!withinScope) {
+        return res.status(409).json({
+          code: 'SPECIAL_TEST_CREW_CONFLICT',
+          message: '同名组合已有范围外队伍录入的成绩，本次未保存。请修改组合名称或联系管理员处理。',
+        });
+      }
+    }
     const saved = upsertEvent.get(
       project,
       row.testDate,
@@ -651,6 +677,17 @@ export function registerSpecialTrainingRoutes(app: Express) {
         (event_id, crew_name, member_athlete_ids, member_names, previous_best_ms, attempts_ms, average_ms, best_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
+      // 只覆盖当前账户范围内的同名组合成绩：不整事件删除，未提及的既有成绩保留；
+      // 同名既有成绩属于范围外成员、或本行成员已不在范围时跳过该行并提示，绝不删除他人成绩。
+      const allowed = new Set(accessibleAthleteIds(req.authUser!));
+      const readCrewMembers = db.prepare(
+        'SELECT member_athlete_ids AS memberAthleteIds FROM special_test_results WHERE event_id = ? AND crew_name = ?'
+      );
+      const deleteCrewResults = db.prepare(
+        'DELETE FROM special_test_results WHERE event_id = ? AND crew_name = ?'
+      );
+      const conflicts: Array<{ rowNumber: number; crewName: string }> = [];
+      let imported = 0;
       db.exec('BEGIN');
       try {
         for (const eventRows of grouped.values()) {
@@ -667,8 +704,22 @@ export function registerSpecialTrainingRoutes(app: Express) {
             first.note,
             req.authUser!.id
           ) as { id: number };
-          db.prepare('DELETE FROM special_test_results WHERE event_id = ?').run(saved.id);
           for (const row of eventRows) {
+            const sameCrew = readCrewMembers.all(saved.id, row.crewName) as Array<{
+              memberAthleteIds: string;
+            }>;
+            const withinScope =
+              row.memberAthleteIds.every((id) => allowed.has(id)) &&
+              sameCrew.every((item) =>
+                (JSON.parse(item.memberAthleteIds || '[]') as number[]).every((id) =>
+                  allowed.has(id)
+                )
+              );
+            if (!withinScope) {
+              conflicts.push({ rowNumber: row.rowNumber, crewName: row.crewName });
+              continue;
+            }
+            deleteCrewResults.run(saved.id, row.crewName);
             insertResult.run(
               saved.id,
               row.crewName,
@@ -679,17 +730,22 @@ export function registerSpecialTrainingRoutes(app: Express) {
               row.averageMs,
               row.bestMs
             );
+            imported += 1;
           }
         }
         db.prepare(
           "INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, 'IMPORT_SPECIAL_TEST', 'special_test_event', ?)"
-        ).run(req.authUser!.id, JSON.stringify({ events: grouped.size, results: rows.length }));
+        ).run(
+          req.authUser!.id,
+          JSON.stringify({ events: grouped.size, results: imported, conflicts: conflicts.length })
+        );
         db.exec('COMMIT');
         specialTestImportCache.delete(importId);
         res.json({
-          imported: rows.length,
+          imported,
           events: grouped.size,
           skipped: cached.rows.length - rows.length,
+          conflicts,
         });
       } catch (error) {
         db.exec('ROLLBACK');
