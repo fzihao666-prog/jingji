@@ -181,3 +181,76 @@ describe('档案与训练总览空数据', () => {
     expect(view.comparisonError).toContain('加载失败');
   });
 });
+
+describe('教练首页晨检概览与未填报口径', () => {
+  const overview = {
+    date: '2026-10-15',
+    athletes: [
+      { athleteId: 1, athleteName: '运动员A', team: '一队', hasTraining: true, wellnessReported: true, sleepHours: 7.5, morningPulse: 54, fatigueIndex: 3 },
+      { athleteId: 2, athleteName: '运动员B', team: '一队', hasTraining: false, wellnessReported: true, sleepHours: 6.2, morningPulse: 61, fatigueIndex: 6 },
+      { athleteId: 3, athleteName: '运动员C', team: '二队', hasTraining: true, wellnessReported: false, sleepHours: null, morningPulse: null, fatigueIndex: null },
+      { athleteId: 4, athleteName: '运动员D', team: '二队', hasTraining: false, wellnessReported: true, sleepHours: 0, morningPulse: 0, fatigueIndex: 0 },
+    ],
+  };
+
+  it('晨检人数与名单同源于晨检标记，训练情况按训练记录单独统计', () => {
+    const page = createPage('index');
+    const views = page.buildMorningViews(overview, [], 0);
+    expect(views.morningView.counts).toEqual({ total: 4, reported: 3, missing: 1 });
+    expect(views.morningView.rows.items).toHaveLength(4);
+    expect(views.morningView.rows.items[0]).toMatchObject({ sleepText: '7.5h', pulseText: '54', fatigueText: '3' });
+    expect(views.morningView.rows.items[2]).toMatchObject({ reported: false, sleepText: '--', pulseText: '--', fatigueText: '--' });
+    expect(views.morningView.rows.items[3]).toMatchObject({ sleepText: '0h', pulseText: '0', fatigueText: '0' });
+    expect(views.morningTraining).toEqual({ total: 4, trained: 2, noTraining: 2 });
+  });
+
+  it('队伍筛选后晨检人数和名单同步更新，保持同一口径', () => {
+    const page = createPage('index');
+    page.data.teams = [{ id: 1, name: '一队' }];
+    const views = page.buildMorningViews(overview, page.data.teams, 1);
+    expect(views.morningView.counts).toEqual({ total: 2, reported: 2, missing: 0 });
+    expect(views.morningView.rows.items.map((row) => row.athleteId)).toEqual([1, 2]);
+    expect(views.morningTraining).toEqual({ total: 2, trained: 1, noTraining: 1 });
+  });
+
+  it('仅看未填报筛选后回到第一页，翻页每页最多 5 人', () => {
+    const page = createPage('index');
+    page.data.teamOverview = overview;
+    page.data.todoPagerPages = { team: 2, focus: 1, morning: 1 };
+    page.onMorningFilterChange({ currentTarget: { dataset: { filter: 'missing' } } });
+    expect(page.data.morningFilter).toBe('missing');
+    expect(page.data.todoPagerPages.morning).toBe(0);
+    expect(page.data.morningView.rows.items.map((row) => row.athleteId)).toEqual([3]);
+    expect(page.data.morningView.listEmpty).toBe(false);
+    page.onMorningFilterChange({ currentTarget: { dataset: { filter: 'all' } } });
+    page.data.todoPagerPages = { ...page.data.todoPagerPages, morning: 0 };
+    const many = { athletes: Array.from({ length: 6 }, (_, index) => ({ athleteId: index + 1, athleteName: `队员${index + 1}`, team: '', hasTraining: false, wellnessReported: false, sleepHours: null, morningPulse: null, fatigueIndex: null })) };
+    page.data.teamOverview = many;
+    page.onPagerChange({ currentTarget: { dataset: { key: 'morning' } }, detail: { page: 1 } });
+    expect(page.data.morningView.rows.items).toHaveLength(1);
+    expect(page.data.morningView.rows).toMatchObject({ page: 1, pageCount: 2, total: 6 });
+  });
+
+  it('队伍切换与焦点待办沿用晨检口径，训练缺失只写暂无训练记录', async () => {
+    const page = createPage('index');
+    page.data.canViewTodos = true;
+    page.data.teamOverview = overview;
+    page.data.teams = [{ id: 1, name: '一队' }, { id: 2, name: '二队' }];
+    page.data.teamId = 0;
+    page._guard = { next: () => 1, isLatest: () => true };
+    page.loadPageData = async () => null;
+    await page.onOverviewTeamChange({ detail: { value: 2 } });
+    expect(page.data.morningView.counts).toEqual({ total: 2, reported: 1, missing: 1 });
+    expect(page.data.morningTraining).toEqual({ total: 2, trained: 1, noTraining: 1 });
+    const focus = page.buildFocusRows({
+      followedUp: [],
+      missing: [{ athleteId: 1, athleteName: '运动员A', team: '一队', project: 'rowing' }],
+      attention: [], reviewDue: [], incompleteTime: [],
+    }, 0, [], 0);
+    expect(focus.items[0].focusLabel).toBe('暂无训练记录');
+    expect(focus.items[0].focusReason).toBe('今日暂无有效训练记录');
+    const teamView = page.buildTeamView(overview, [], 0);
+    expect(teamView.athletes[0].tags.map((tag) => tag.text)).toEqual(['有训练记录', '晨检已填']);
+    expect(teamView.athletes[2].tags.map((tag) => tag.text)).toEqual(['有训练记录', '晨检未填']);
+  });
+});

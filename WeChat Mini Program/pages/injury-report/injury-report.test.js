@@ -60,6 +60,7 @@ function createOverviewPage(data = {}) {
     '../../utils/today-status': {},
     '../../utils/wellness-form': {},
     '../../utils/injury-metric': injuryMetric,
+    '../../utils/morning-check': loadCjs(new URL('../../utils/morning-check.js', import.meta.url), {}),
     '../../utils/training-empty': loadCjs(new URL('../../utils/training-empty.js', import.meta.url), {}),
   };
   vm.runInNewContext(indexSource, {
@@ -167,7 +168,7 @@ describe('伤病与疼痛上报入口', () => {
     expect(result.total).toBe(1);
     expect(result.items).toEqual([expect.objectContaining({
       athleteId: 7,
-      focusLabels: ['未填报', '状态关注', '复查提醒', '时间待补'],
+      focusLabels: ['暂无训练记录', '状态关注', '复查提醒', '时间待补'],
       focusReason: '今日暂无有效训练记录；恢复不足；今日复查 · 肩部不适；训练记录缺少有效开训时间',
     })]);
     expect(indexTemplate).toContain('wx:for="{{focusRows}}"');

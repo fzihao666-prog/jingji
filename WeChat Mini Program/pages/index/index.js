@@ -9,10 +9,13 @@ const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { todayStatusView, todayStatusSummary } = require('../../utils/today-status');
 const { wellnessRecordView } = require('../../utils/wellness-form');
 const { injuryMetricView } = require('../../utils/injury-metric');
+const { morningCheckView, trainingSituationView } = require('../../utils/morning-check');
 
 const { metricValue, sectionRequest } = require('../../utils/training-empty');
 
 const emptyTeamView = () => ({ athletes: [], teamPager: paginateList([], 0, PAGE_SIZE) });
+const emptyMorningView = () => morningCheckView([], 'all', 0);
+const emptyTrainingSituation = () => trainingSituationView([]);
 
 function recentDates(from, to, limit = 14) {
   const first = new Date(`${from}T00:00:00Z`);
@@ -153,7 +156,7 @@ Page({
     todos: null,
     todosLoading: false,
     todosError: '',
-    todoPagerPages: { team: 0, focus: 0 },
+    todoPagerPages: { team: 0, focus: 0, morning: 0 },
     todayLoading: false,
     todayError: '',
     todayView: null,
@@ -162,6 +165,9 @@ Page({
     teamLoading: false,
     teamError: '',
     teamView: emptyTeamView(),
+    morningView: emptyMorningView(),
+    morningTraining: emptyTrainingSituation(),
+    morningFilter: 'all',
     teams: [],
     teamId: 0,
     showTeam: false,
@@ -191,6 +197,7 @@ Page({
       todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), todosError: '',
       todayView: null, wellnessView: null, todayError: '', todayLoading: false,
       teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView(),
+      morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all',
     });
     return runPageLoad(this, {
       refreshUser,
@@ -255,7 +262,7 @@ Page({
     };
     const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, teams, teamId);
     const filteredRoster = this.buildTeamView(this.data.teamOverview, teams, teamId);
-    Object.assign(view, { focusRows: focus.items, focusPager: focus, teamView: filteredRoster });
+    Object.assign(view, { focusRows: focus.items, focusPager: focus, teamView: filteredRoster, ...this.buildMorningViews(this.data.teamOverview, teams, teamId) });
     const teamLabel = teamId ? ((teams.find((item) => Number(item.id) === teamId) || {}).name || '当前队伍') : '全部授权队伍';
     this.setData({ teams, teamId, teamLabel, scopeAthletes, selectedAthleteId: athleteId, ...view });
     return view;
@@ -279,7 +286,8 @@ Page({
       }
       rows.set(item.athleteId, { ...item, focusLabel: label, focusReason: reason, focusLabels: [label], focusReasons: [reason] });
     };
-    (todos.missing || []).forEach((item) => add(item, '未填报', '今日暂无有效训练记录'));
+    // 训练记录缺失只表述为“暂无训练记录”，“未填报”保留给晨检，两者口径彻底分开。
+    (todos.missing || []).forEach((item) => add(item, '暂无训练记录', '今日暂无有效训练记录'));
     (todos.attention || []).forEach((item) => add(item, '状态关注', item.reason || '存在待关注状态'));
     (todos.reviewDue || []).forEach((item) => add(item, '复查提醒', `${item.dueLabel} · ${item.injuryName}`));
     (todos.incompleteTime || []).forEach((item) => add(item, '时间待补', '训练记录缺少有效开训时间'));
@@ -353,26 +361,31 @@ Page({
       if (!this._teamGuard.isLatest(id)) return;
       const teamOverview = result;
       const teamView = this.buildTeamView(teamOverview, this.data.teams, this.data.teamId);
-      this.setData({ teamLoading: false, teamOverview, teamView });
+      this.setData({ teamLoading: false, teamOverview, teamView, ...this.buildMorningViews(teamOverview, this.data.teams, this.data.teamId) });
     } catch (error) {
       if (this._teamGuard.isLatest(id)) {
-        this.setData({ teamLoading: false, teamOverview: null, teamView: emptyTeamView(), teamError: error.message || '队伍总览加载失败，请重试。' });
+        this.setData({ teamLoading: false, teamOverview: null, teamView: emptyTeamView(), morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), teamError: error.message || '队伍总览加载失败，请重试。' });
       }
     }
+  },
+
+  // 队伍筛选后的运动员行：晨检概览、今日训练情况与人员列表共用同一过滤结果。
+  teamAthletes(overview, teams, teamId) {
+    if (!overview) return [];
+    const selectedTeam = (teams || this.data.teams || []).find((item) => Number(item.id) === Number(teamId === undefined ? this.data.teamId : teamId));
+    return (overview.athletes || []).filter((item) => !selectedTeam || item.team === selectedTeam.name);
   },
 
   // 队伍运动员归一化为 athlete-selector 条目；搜索与 5 人分页由组件承担。
   buildTeamView(overview, teams, teamId) {
     if (!overview) return emptyTeamView();
-    const selectedTeam = (teams || this.data.teams || []).find((item) => Number(item.id) === Number(teamId === undefined ? this.data.teamId : teamId));
-    const inTeam = (overview.athletes || []).filter((item) => !selectedTeam || item.team === selectedTeam.name);
-    const athletes = inTeam.map((athlete) => ({
+    const athletes = this.teamAthletes(overview, teams, teamId).map((athlete) => ({
       id: athlete.athleteId,
       name: athlete.athleteName,
       meta: athlete.team || '未分队',
       tags: [
-        { text: athlete.hasTraining ? '已训练' : '未训练', tone: athlete.hasTraining ? 'ok' : 'warn' },
-        { text: athlete.wellnessReported ? '恢复已填' : '恢复未填', tone: athlete.wellnessReported ? 'ok' : 'warn' }
+        { text: athlete.hasTraining ? '有训练记录' : '暂无训练记录', tone: athlete.hasTraining ? 'ok' : 'warn' },
+        { text: athlete.wellnessReported ? '晨检已填' : '晨检未填', tone: athlete.wellnessReported ? 'ok' : 'warn' }
       ],
       value: `${metricValue(athlete.load24h)} AU`,
       searchText: `${athlete.athleteName || ''} ${athlete.team || ''}`,
@@ -380,11 +393,23 @@ Page({
     return { athletes, teamPager: paginateList(athletes, 0, PAGE_SIZE) };
   },
 
+  // 晨检概览与今日训练情况：人数、名单同源于 readTeamOverview 当日晨检标记，与训练记录分开统计。
+  // filter/page 显式传入，避免与 setData 同批更新时读到旧的筛选与页码。
+  buildMorningViews(overview, teams, teamId, page, filter) {
+    const rows = this.teamAthletes(overview, teams, teamId);
+    const morningPage = Number.isInteger(page) ? page : this.data.todoPagerPages.morning;
+    const morningFilter = filter === undefined ? this.data.morningFilter : filter;
+    return {
+      morningView: morningCheckView(rows, morningFilter, morningPage),
+      morningTraining: trainingSituationView(rows),
+    };
+  },
+
   retryTeam() {
     return this.loadTeamOverview(this.data.project);
   },
 
-  // pager-nav 统一回调：状态监测分页；队伍运动员分页由 athlete-selector 组件内承担。
+  // pager-nav 统一回调：状态监测与晨检人员分页；队伍运动员分页由 athlete-selector 组件内承担。
   onPagerChange(event) {
     const key = event.currentTarget.dataset.key;
     const page = Number(event.detail && event.detail.page);
@@ -397,12 +422,27 @@ Page({
       patch.focusRows = model.items;
       patch.focusPager = model;
     }
+    if (key === 'morning') {
+      Object.assign(patch, this.buildMorningViews(this.data.teamOverview, this.data.teams, this.data.teamId, page));
+    }
     this.setData(patch);
+  },
+
+  // 晨检名单筛选：全部 / 仅看未填报；切换后回到第一页，人数与名单口径不变。
+  onMorningFilterChange(event) {
+    const filter = event.currentTarget.dataset.filter;
+    if (filter !== 'all' && filter !== 'missing') return;
+    if (filter === this.data.morningFilter) return;
+    this.setData({
+      morningFilter: filter,
+      todoPagerPages: { ...this.data.todoPagerPages, morning: 0 },
+      ...this.buildMorningViews(this.data.teamOverview, this.data.teams, this.data.teamId, 0, filter),
+    });
   },
 
   // 筛选/搜索变化后所有人员列表回到第一页（spec §6）。
   resetPagerPages() {
-    return { team: 0, focus: 0 };
+    return { team: 0, focus: 0, morning: 0 };
   },
 
   retryOverview() {
@@ -412,8 +452,13 @@ Page({
   onOverviewTeamChange(event) {
     const teamId = Number(event.detail && event.detail.value) || 0;
     if (!this.data.teams.some((item) => Number(item.id) === teamId) && teamId !== 0) return Promise.resolve();
-    const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0 };
-    this.setData({ teamId, todoPagerPages, athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamView: this.buildTeamView(this.data.teamOverview, this.data.teams, teamId) });
+    const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0, morning: 0 };
+    this.setData({
+      teamId, todoPagerPages, athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE),
+      teamView: this.buildTeamView(this.data.teamOverview, this.data.teams, teamId),
+      // 队伍筛选变化后晨检人数与名单同步更新，保持同一口径。
+      ...this.buildMorningViews(this.data.teamOverview, this.data.teams, teamId, 0),
+    });
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');
   },
 
@@ -452,7 +497,7 @@ Page({
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true });
+      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true, morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all' });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {
@@ -468,7 +513,7 @@ Page({
       if (change.field === 'project') {
         this._teamGuard = this._teamGuard || createRequestGuard();
         this._teamGuard.next();
-        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView() });
+        this.setData({ teamOverview: null, teamError: '', teamLoading: false, teamView: emptyTeamView(), morningView: emptyMorningView(), morningTraining: emptyTrainingSituation() });
         const [overview] = await Promise.all([this.loadPageData(scope, isLatest), this.loadTodos(scope.project), this.loadTeamOverview(scope.project)]);
         return overview;
       }

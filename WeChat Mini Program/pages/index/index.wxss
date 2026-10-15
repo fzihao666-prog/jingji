@@ -6,6 +6,30 @@
 .overview-metrics .metric-value text { margin-left: 6rpx; font-size: 19rpx; }
 .overview-metrics .metric-note { display: block; margin-top: 8rpx; font-size: 20rpx; line-height: 1.4; }
 .chart-card, .structure-card, .focus-card, .team-overview { box-sizing: border-box; width: 100%; max-width: 100%; overflow: hidden; }
+/* 今日队伍晨检：人数卡片与紧凑人员状态列表优先于训练图表，适配手机纵向阅读。 */
+.morning-card { box-sizing: border-box; width: 100%; max-width: 100%; padding: 20rpx; overflow: hidden; }
+.morning-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14rpx; }
+.morning-stats-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.morning-stat { min-width: 0; padding: 18rpx 14rpx; border: 1rpx solid #d8e3e6; border-radius: 16rpx; background: #f6f9f9; text-align: center; }
+.morning-stat.tone-ok { border-color: #cfe0d8; background: #eef6f1; }
+.morning-stat.tone-warn { border-color: #f0d9b0; background: #fff1d8; }
+.morning-stat-value { color: #164751; font-size: 40rpx; line-height: 1.2; font-weight: 800; overflow-wrap: anywhere; }
+.morning-stat.tone-warn .morning-stat-value { color: #7a4715; }
+.morning-stat-unit { margin-left: 6rpx; color: #536c75; font-size: 19rpx; font-weight: 400; }
+.morning-stat-label { margin-top: 8rpx; color: #536c75; font-size: 20rpx; line-height: 1.4; }
+.morning-filters { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 14rpx; }
+.morning-filter { flex: none; margin: 0; padding: 8rpx 22rpx; border: 1rpx solid #d8e3e6; border-radius: 999rpx; color: #536c75; background: #ffffff; font-size: 21rpx; line-height: 1.5; }
+.morning-filter::after { border: 0; }
+.morning-filter.is-active { color: #ffffff; border-color: #176f7f; background: #176f7f; }
+.morning-filter:focus { outline: 3rpx solid #176373; outline-offset: 1rpx; }
+.morning-head, .morning-row { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 0.75fr)); gap: 8rpx; align-items: center; }
+.morning-head { padding: 8rpx 12rpx; color: #71868d; font-size: 19rpx; }
+.morning-col-name { min-width: 0; display: flex; align-items: center; gap: 8rpx; }
+.morning-col-metric { min-width: 0; color: #12303b; font-size: 22rpx; text-align: center; overflow-wrap: anywhere; }
+.morning-head .morning-col-name, .morning-head .morning-col-metric { color: #71868d; font-size: 19rpx; }
+.morning-head .morning-col-metric:first-of-type { text-align: center; }
+.morning-row { box-sizing: border-box; width: 100%; max-width: 100%; margin: 10rpx 0 0; padding: 16rpx 12rpx; border: 1rpx solid #d8e3e6; border-radius: 14rpx; background: #f6f9f9; }
+.morning-name { min-width: 0; color: #12303b; font-size: 24rpx; font-weight: 700; overflow-wrap: break-word; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 18rpx; margin-bottom: 14rpx; }
 .legend-item { display: flex; align-items: center; gap: 8rpx; color: #536c75; font-size: 20rpx; }
 .legend-dot { width: 16rpx; height: 16rpx; border-radius: 50%; background: #176f7f; }

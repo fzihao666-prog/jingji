@@ -157,8 +157,8 @@ describe('今日已跟进标记', () => {
     const view = filterDailyTodos(todos, 'all', '');
     expect(view.counts).toEqual({ missing: 2, attention: 1, review: 0, incompleteTime: 1 });
     expect(view.followedUpList).toHaveLength(1);
-    // 王五同时属于未填报与复查提醒分组，去重后保留首个分组标签。
-    expect(view.followedUpList[0]).toMatchObject({ athleteId: 3, groupLabel: '未填报' });
+    // 王五同时属于暂无训练记录与复查提醒分组，去重后保留首个分组标签。
+    expect(view.followedUpList[0]).toMatchObject({ athleteId: 3, groupLabel: '暂无训练记录' });
     expect(view.groups.find((group) => group.key === 'all').count).toBe(4);
     const reviewOnly = filterDailyTodos(todos, 'review', '');
     expect(reviewOnly.review).toEqual([]);

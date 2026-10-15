@@ -1,8 +1,9 @@
 const { INJURY_LABELS, number } = require('./format');
 
 const TODO_FILTERS = ['all', 'missing', 'attention', 'review', 'incomplete'];
+// “未填报”保留给晨检；训练记录缺失一律表述为“暂无训练记录”。
 const GROUP_LABELS = {
-  missing: '未填报',
+  missing: '暂无训练记录',
   attention: '负荷与伤病',
   review: '复查提醒',
   incompleteTime: '时间待补',
@@ -118,7 +119,7 @@ function filterDailyTodos(todos, filter, keyword) {
     review: parts.review.active,
     incompleteTime: parts.incompleteTime.active,
   };
-  // 同一运动员可能同时在多个分组（如未填报且临近复查），已跟进列表按人去重，保留首个分组标签。
+  // 同一运动员可能同时在多个分组（如暂无训练记录且临近复查），已跟进列表按人去重，保留首个分组标签。
   const followedUpList = [];
   const seenFollowed = new Set();
   for (const key of ['missing', 'attention', 'review', 'incompleteTime']) {
@@ -152,7 +153,7 @@ function filterDailyTodos(todos, filter, keyword) {
         count: counts.missing + counts.attention + counts.review + counts.incompleteTime,
         active: selected === 'all',
       },
-      { key: 'missing', label: '未填报', count: counts.missing, active: selected === 'missing' },
+      { key: 'missing', label: '暂无训练记录', count: counts.missing, active: selected === 'missing' },
       {
         key: 'attention',
         label: '负荷与伤病',
