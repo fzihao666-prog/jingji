@@ -29,7 +29,6 @@ Page({
     sections: [{ key: 'overview', label: '概览' }, { key: 'plan', label: '训练安排' }, { key: 'records', label: '训练记录' }]
   },
 
-  openTeamPlans() { wx.navigateTo({ url: '/pages/team-plans/team-plans' }); },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },

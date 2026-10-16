@@ -73,7 +73,10 @@
         </view>
       </view>
 
-      <view class="section-head"><view class="section-head-title">今日训练计划</view><view class="section-head-note">来自训练计划表 · {{teamOverview.date || '今日'}}</view></view>
+      <view class="section-head plan-section-head">
+        <view class="plan-section-copy"><view class="section-head-title">今日训练计划</view><view class="section-head-note">来自训练计划表 · {{teamOverview.date || '今日'}}</view></view>
+        <button id="open-training-plans" class="plan-section-entry" bindtap="openTeamPlans" aria-label="打开训练计划">训练计划</button>
+      </view>
       <view class="card morning-card">
         <view wx:if="{{planLoading && !planExecution}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日训练计划…</view>
         <view wx:if="{{planError}}" class="error-box"><text>{{planError}}</text><button class="error-retry" bindtap="retryPlan">重试</button></view>
@@ -154,7 +157,10 @@
     </view>
 
     <block wx:if="{{canSelfReport}}">
-      <view class="section-head"><view class="section-head-title">今日训练</view><view class="section-head-note">今日安排与本人执行</view></view>
+      <view class="section-head plan-section-head">
+        <view class="plan-section-copy"><view class="section-head-title">今日训练</view><view class="section-head-note">今日安排与本人执行</view></view>
+        <button id="open-training-plans-athlete" class="plan-section-entry" bindtap="openTeamPlans" aria-label="打开训练计划">训练计划</button>
+      </view>
       <view class="card morning-card">
         <view wx:if="{{todayLoading && !todayView}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日训练…</view>
         <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>

@@ -43,7 +43,6 @@ Page({
       error: ''
     });
   },
-  openTeamPlans() { wx.navigateTo({ url: '/pages/team-plans/team-plans' }); },
   openPrivacy() { wx.navigateTo({ url: '/pages/privacy/privacy' }); },
 
   onAvatarTap() {

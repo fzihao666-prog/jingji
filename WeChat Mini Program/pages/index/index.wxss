@@ -153,3 +153,8 @@
 .focus-actions button { margin: 0; padding: 8rpx 16rpx; min-height: 80rpx; font-size: 22rpx; line-height: 2.6; color: #176373; background: #fff; }
 .focus-actions button:focus { outline: 3rpx solid #176373; outline-offset: 2rpx; }
 .focus-filters button[aria-pressed="true"] { color: #fff; background: #176373; }
+
+/* 计划入口紧邻今日安排标题，窄屏下优先保留按钮点击区域。 */
+.plan-section-head { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.plan-section-copy { min-width: 0; flex: 1; }
+.plan-section-entry { flex: none; margin: 0; min-height: 64rpx; padding: 12rpx 22rpx; border: 1rpx solid var(--line); border-radius: 12rpx; background: #fff; color: var(--river); font-size: 24rpx; line-height: 1.5; }

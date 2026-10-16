@@ -666,6 +666,8 @@ Page({
     navigateToAthlete(this, event, this.data.athletes);
   },
 
+  openTeamPlans() { wx.navigateTo({ url: '/pages/team-plans/team-plans' }); },
+
   openTrainingEntry() {
     wx.navigateTo({ url: '/pages/training-entry/training-entry' });
   },
