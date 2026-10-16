@@ -37,27 +37,24 @@
         </view>
       </view>
 
-      <view class="section-head"><view class="section-head-title">今日运动员状态</view><view class="section-head-note">睡眠(h) · 晨脉(bpm) · 疲劳(分)</view></view>
+      <view class="section-head"><view class="section-head-title">今日运动员状态</view><view class="section-head-note">当日晨检 · 点按查看档案</view></view>
       <view class="card morning-card">
         <view class="morning-filters" aria-label="晨检名单筛选">
           <button wx:for="{{morningView.filters}}" wx:key="key" class="morning-filter {{item.active ? 'is-active' : ''}}" data-filter="{{item.key}}" bindtap="onMorningFilterChange" aria-label="{{item.label}}，{{item.count}} 人">{{item.label}} · {{item.count}}</button>
         </view>
         <view wx:if="{{!teamLoading && !teamError && morningView.listEmpty}}" class="chart-empty">{{morningView.filter === 'missing' ? '全员已完成晨检' : '暂无可管理运动员'}}</view>
         <block wx:if="{{morningView.rows.items.length}}">
-          <view class="morning-head">
-            <text class="morning-col-name">姓名</text>
-            <text class="morning-col-metric">睡眠</text>
-            <text class="morning-col-metric">晨脉</text>
-            <text class="morning-col-metric">疲劳</text>
-          </view>
-          <button wx:for="{{morningView.rows.items}}" wx:key="athleteId" class="morning-row overview-person-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.reported ? '晨检已填报，睡眠 ' + item.sleepText + '，晨脉 ' + item.pulseText + '，疲劳 ' + item.fatigueText : '晨检未填报'}}，查看运动员档案">
-            <view class="morning-col-name">
-              <text class="morning-name">{{item.athleteName}}</text>
-              <text wx:if="{{!item.reported}}" class="today-badge is-pending">未填报</text>
+          <button wx:for="{{morningView.rows.items}}" wx:key="athleteId" class="morning-row overview-person-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.reported ? '晨检已填报，睡眠 ' + item.sleepText + '，晨脉 ' + item.pulseText + ' bpm，疲劳 ' + item.fatigueText + ' 分，横线表示单项暂无数据' : '晨检未填报'}}，查看运动员档案">
+            <view class="morning-person">
+              <view class="morning-identity"><text class="morning-name">{{item.athleteName}}</text><text class="morning-team">{{item.team}}</text></view>
+              <text class="today-badge {{item.reported ? 'is-complete' : 'is-pending'}}">{{item.reported ? '已填报' : '未填报'}}</text>
             </view>
-            <text class="morning-col-metric">{{item.sleepText}}</text>
-            <text class="morning-col-metric">{{item.pulseText}}</text>
-            <text class="morning-col-metric">{{item.fatigueText}}</text>
+            <view class="morning-measures">
+              <view class="morning-measure"><text class="morning-measure-label">睡眠</text><text class="morning-measure-value {{item.sleepText === '--' ? 'is-empty' : ''}}">{{item.sleepText}}</text></view>
+              <view class="morning-measure"><text class="morning-measure-label">晨脉 <text class="morning-measure-unit">bpm</text></text><text class="morning-measure-value {{item.pulseText === '--' ? 'is-empty' : ''}}">{{item.pulseText}}</text></view>
+              <view class="morning-measure"><text class="morning-measure-label">疲劳 <text class="morning-measure-unit">分</text></text><text class="morning-measure-value {{item.fatigueText === '--' ? 'is-empty' : ''}}">{{item.fatigueText}}</text></view>
+            </view>
+            <view wx:if="{{!item.reported || item.sleepText === '--' || item.pulseText === '--' || item.fatigueText === '--'}}" class="morning-missing-note">{{item.reported ? '— 表示单项暂无数据' : '今日尚未填报恢复日报'}}</view>
           </button>
           <pager-nav data-key="morning" page="{{morningView.rows.page}}" page-count="{{morningView.rows.pageCount}}" total="{{morningView.rows.total}}" label="今日运动员状态" bindpagechange="onPagerChange" />
         </block>
