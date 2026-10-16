@@ -1,5 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import {
+  readTeamPlansForAthlete,
+  resolveTeamPlanSessions,
+} from '../training-plan/team-plan-service.ts';
 import { PROJECTS } from '../../shared/projects.ts';
 import { trainingLoadCategory } from '../../shared/training-content-category.ts';
 import { extractTodayPlanDay, type TodayPlanDay } from './plan-today.ts';
@@ -482,7 +486,8 @@ export function buildTodayStatus(input: {
   const date = beijingDate(now);
   const { submitted, incomplete, loads } = sessionFacts(input.sessions, [athleteId], now);
   const todaySessions = input.sessions.filter(
-    (session) => session.athleteId === athleteId && session.date === date && isOfficialSession(session)
+    (session) =>
+      session.athleteId === athleteId && session.date === date && isOfficialSession(session)
   );
   const latest = todaySessions[0];
   // 今日安排与教练端共用同一提取口径；无覆盖今日的计划时为 null，不拿旧计划冒充。
@@ -509,17 +514,14 @@ export function buildTodayStatus(input: {
       content: session.content,
       trainingType: session.trainingType,
       startTime: session.startTime,
-      durationMin: session.durationReported ? session.durationMin ?? null : null,
-      distanceKm: session.distanceReported ? session.distanceKm ?? null : null,
+      durationMin: session.durationReported ? (session.durationMin ?? null) : null,
+      distanceKm: session.distanceReported ? (session.distanceKm ?? null) : null,
       rpe: session.rpe ?? null,
     })),
   };
 }
 
-export function readTodayStatus(
-  db: DatabaseSync,
-  input: { athleteId: number; now: Date }
-) {
+export function readTodayStatus(db: DatabaseSync, input: { athleteId: number; now: Date }) {
   const date = beijingDate(input.now);
   const sessions = db
     .prepare(
@@ -538,12 +540,15 @@ export function readTodayStatus(
       beijingDate(new Date(input.now.getTime() - DAY_MS)),
       date
     ) as TodoSession[];
+  const hasTeamSchema = (
+    db.prepare('PRAGMA table_info(training_plans)').all() as { name: string }[]
+  ).some((column) => column.name === 'model');
   const plans = db
     .prepare(
       `
     SELECT plan_data AS planData, start_date AS startDate, end_date AS endDate, title
     FROM training_plans
-    WHERE athlete_id = ? AND start_date <= ? AND end_date >= ?
+    WHERE ${hasTeamSchema ? "model='legacy' AND" : ''} athlete_id = ? AND start_date <= ? AND end_date >= ?
     ORDER BY start_date DESC, id DESC
   `
     )
@@ -553,5 +558,19 @@ export function readTodayStatus(
     endDate: string;
     title: string;
   }[];
+  if (hasTeamSchema) {
+    for (const plan of readTeamPlansForAthlete(db, input.athleteId, false)) {
+      if (plan.publishedAt && beijingDate(new Date(plan.publishedAt)) <= date)
+        plans.unshift({
+          title: plan.title,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          planData: JSON.stringify({
+            sessions: resolveTeamPlanSessions(plan, input.athleteId),
+            focus: plan.data.focus,
+          }),
+        });
+    }
+  }
   return buildTodayStatus({ athleteId: input.athleteId, sessions, plans, now: input.now });
 }

@@ -1,3 +1,4 @@
+import type { TeamPlan } from '../shared/team-plan';
 import type { CatalogPlan, PlanExecutionRow } from '../shared/training-plan-catalog';
 import {
   resetAccountPasswordSchema,
@@ -40,7 +41,6 @@ import type {
   StrengthTrainingSession,
   TeamPermission,
   TrainingPlan,
-  TrainingPlanData,
   TrainingRecord,
   User,
   ErgometerChampionModelPayload,
@@ -170,8 +170,21 @@ export const api = {
     const payload = await request<unknown>(`/api/physical-champion?${new URLSearchParams(query)}`);
     return physicalChampionPayloadSchema.parse(payload);
   },
-  async updatePhysicalReference(id: number, body: { value: number; expectedValue: number; expectedRevision: number; protocol: string; sourceType: 'measured' | 'public_reference' | 'estimated'; sourceNote: string }) {
-    const payload = await request<unknown>(`/api/physical-champion/references/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+  async updatePhysicalReference(
+    id: number,
+    body: {
+      value: number;
+      expectedValue: number;
+      expectedRevision: number;
+      protocol: string;
+      sourceType: 'measured' | 'public_reference' | 'estimated';
+      sourceNote: string;
+    }
+  ) {
+    const payload = await request<unknown>(`/api/physical-champion/references/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
     return z.object({ message: z.string() }).parse(payload);
   },
 
@@ -419,6 +432,16 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
+  async teamPlans(params: { athleteId?: number; project?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.athleteId !== undefined) query.set('athleteId', String(params.athleteId));
+    if (params.project) query.set('project', params.project);
+    return request<{
+      plans: TeamPlan[];
+      teams: Pick<ProjectTeam, 'id' | 'project' | 'name'>[];
+      athletes: Pick<Athlete, 'id' | 'name' | 'teamId' | 'project'>[];
+    }>(`/api/team-plans?${query}`);
+  },
   async trainingPlanCatalog() {
     return request<{ plans: CatalogPlan[] }>('/api/training-plans/catalog');
   },
@@ -455,84 +478,6 @@ export const api = {
         body: JSON.stringify(input),
       }
     );
-  },
-  async saveTrainingPlan(athleteId: number, data: TrainingPlanData, planId?: number | null) {
-    return request<{ message: string; id: number }>('/api/training-plans', {
-      method: 'POST',
-      body: JSON.stringify({ athleteId, data, planId: planId || undefined }),
-    });
-  },
-  // AI 体能训练 API
-  async analyzeAITrainingPlan(formData: FormData) {
-    return request<{
-      plan: {
-        title: string;
-        summary: string;
-        durationWeeks: number;
-        startDate: string;
-        endDate: string;
-        scheduleLabel: string;
-        bodyWeight: number | null;
-        age: number | null;
-        weeklyPlans: Array<{
-          weekNumber: number;
-          focus: string;
-          totalLoad: number;
-          days: Array<{
-            dayOfWeek: string;
-            exercises: Array<{
-              name: string;
-              sets: string;
-              reps: string;
-              percentage: number;
-              notes?: string;
-            }>;
-          }>;
-        }>;
-        exercises: Array<{
-          id: string;
-          name: string;
-          maxWeight: number | null;
-          unitNote: string;
-        }>;
-      };
-      aiMetadata: {
-        inputType: 'text';
-        inputContent: string;
-        fileMetadata?: {
-          filename: string;
-          mimetype: string;
-          size: number;
-        };
-        modelUsed: string;
-        attempts: number;
-        generatedAt: string;
-      };
-    }>('/api/training-plans/ai/analyze', {
-      method: 'POST',
-      body: formData,
-    });
-  },
-  async saveAITrainingPlan(params: { athleteId: number; plan: unknown; aiMetadata: unknown }) {
-    return request<{
-      message: string;
-      id: number;
-      created: number;
-      replaced: number;
-      skipped: number;
-      results: Array<{
-        athleteId: number;
-        athleteName: string;
-        status: 'created' | 'replaced' | 'skipped';
-        planId: number;
-      }>;
-    }>('/api/training-plans/ai/save', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    });
-  },
-  async deleteTrainingPlan(planId: number) {
-    return request<{ message: string }>(`/api/training-plans/${planId}`, { method: 'DELETE' });
   },
   async uploadAthletePhoto(athleteId: number, file: File) {
     const body = new FormData();
@@ -719,9 +664,7 @@ export const api = {
       athletes: SpecialTrainingAthlete[];
       selectedAthlete: SpecialTrainingAthlete | null;
       specialTestComparison: SpecialTestComparison | null;
-    }>(
-      `/api/special-training/overview?${params}`
-    );
+    }>(`/api/special-training/overview?${params}`);
   },
   async specialTests(from: string, to: string, project: Project, athleteId?: number) {
     const params = new URLSearchParams({ from, to, project });
@@ -743,13 +686,10 @@ export const api = {
       events: number;
       skipped: number;
       conflicts?: Array<{ rowNumber: number; crewName: string }>;
-    }>(
-      '/api/special-tests/import/commit',
-      {
-        method: 'POST',
-        body: JSON.stringify({ importId }),
-      }
-    );
+    }>('/api/special-tests/import/commit', {
+      method: 'POST',
+      body: JSON.stringify({ importId }),
+    });
   },
   async downloadSpecialTestTemplate() {
     const response = await fetch('/api/special-tests/import/template', {

@@ -18,6 +18,7 @@ function fixture() {
     INSERT INTO training_plans VALUES(1,101,'体能','2026-10-01','2026-10-31',1,'{}'),(2,102,'综合','2026-10-01','2026-10-31',1,'{}'),(3,201,'其他项目','2026-10-01','2026-10-31',1,'{}'),(4,103,'停用人员','2026-10-01','2026-10-31',1,'{}');
     INSERT INTO special_training_plans VALUES(1,'ROWING','2026-10-12','专项周计划','active',1),(2,'CANOE_SPRINT','2026-10-12','越权计划','active',2);
     INSERT INTO special_training_plan_sessions VALUES(1,1,'2026-10-16',1,'水上训练','{"distanceKm":0}');`);
+  db.exec("ALTER TABLE training_plans ADD COLUMN model TEXT NOT NULL DEFAULT 'legacy'");
   db.prepare('UPDATE training_plans SET plan_data=? WHERE id=2').run(
     JSON.stringify({
       weeklyPlans: [

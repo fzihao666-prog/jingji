@@ -1,3 +1,5 @@
+import { migrateTeamPlans } from './team-plan-migration.ts';
+import { initializeTrainingPlanLinks } from './training-plan-links.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 import { PROVINCES } from '../../shared/regions.ts';
@@ -5863,5 +5865,8 @@ export function initializeDatabase(
   }
 
   initializePhysicalChampionReferences(db);
+  migrateTeamPlans(db);
+  initializeTrainingPlanLinks(db);
   return { upsertAthleteOrigin };
+
 }

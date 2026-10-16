@@ -61,7 +61,7 @@ export function readTrainingPlanCatalog(
       COALESCE(u.display_name, '') AS createdBy, tp.plan_data AS dataJson
       FROM training_plans tp JOIN athletes a ON a.id=tp.athlete_id
       LEFT JOIN project_teams pt ON pt.id=a.team_id LEFT JOIN users u ON u.id=tp.created_by
-      WHERE a.active=1 AND a.id IN (${scope.athleteIds.map(() => '?').join(',')}) ORDER BY tp.id`
+      WHERE tp.model='legacy' AND a.active=1 AND a.id IN (${scope.athleteIds.map(() => '?').join(',')}) ORDER BY tp.id`
       )
       .all(...scope.athleteIds) as Array<
       Omit<CatalogPlan, 'key' | 'source' | 'kind' | 'sourceStatus' | 'data'> & { dataJson: string }

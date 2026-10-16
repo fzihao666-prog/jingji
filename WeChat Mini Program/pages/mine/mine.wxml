@@ -14,6 +14,7 @@
   </view>
 
   <view class="card settings-list">
+    <button bindtap="openTeamPlans"><view><text class="setting-title">训练计划</text><text>队伍安排、个人调整与发布计划</text></view><text class="setting-arrow">›</text></button>
     <button bindtap="togglePasswordForm"><view><text class="setting-title">修改密码</text><text>管理当前账号的登录密码</text></view><text class="setting-arrow {{showPasswordForm ? 'open' : ''}}">›</text></button>
     <button bindtap="openPrivacy"><view><text class="setting-title">隐私保护说明</text><text>查看敏感信息处理范围与用户权利</text></view><text class="setting-arrow">›</text></button>
   </view>

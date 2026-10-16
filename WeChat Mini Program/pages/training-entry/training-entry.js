@@ -38,6 +38,8 @@ Page({
   onLoad(options) {
     // 教练代填入口可携带目标运动员；本人填报忽略该参数。
     this._targetAthleteId = Number(options && options.athleteId) || 0;
+    this._planRequest = options && options.teamPlanId && options.planSessionId
+      ? { teamPlanId: Number(options.teamPlanId), planSessionId: options.planSessionId } : null;
     this.loadPage();
   },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
@@ -68,15 +70,36 @@ Page({
           loading: false,
           error: ''
         });
+        await this.applyRequestedPlan();
         this.restoreDraft();
         return;
       }
       const result = await api.myTrainingSessions();
       this.setData({ isCoach: false, sessions: result.sessions || [], loading: false, error: '' });
+      await this.applyRequestedPlan();
       this.restoreDraft();
     } catch (error) {
       this.setData({ loading: false, error: error.message || '训练记录加载失败。' });
     }
+  },
+
+  async applyRequestedPlan() {
+    if (!this._planRequest) return;
+    const request = this._planRequest;
+    const result = await api.teamPlans(this.data.isCoach ? { athleteId: this.data.athleteId } : {});
+    const plan = result.plans.find((row) => row.id === request.teamPlanId && ['published', 'archived'].includes(row.status));
+    const base = plan && plan.data.sessions.find((row) => row.id === request.planSessionId);
+    if (!base) throw new Error('训练课已变更，请返回队伍计划重新选择。');
+    const user = getApp().globalData.user;
+    const athleteId = this.data.isCoach ? this.data.athleteId : user.athleteId;
+    const override = plan.data.overrides.find((row) => row.sessionId === base.id && row.athleteId === athleteId);
+    const target = { ...base, ...(override ? override.changes : {}) };
+    const trainingType = { special: '专项训练', physical: '体能训练', recovery: '恢复训练' }[target.category];
+    // 只带入任务信息；实际时长、距离与RPE由填报人确认。
+    this.setData({ form: { ...emptyForm(), ...request, date: target.date, trainingType, content: target.content, rpe: '' },
+      typeIndex: this.data.typeOptions.indexOf(trainingType), planLabel: `${plan.title} V${plan.version} · ${target.period || target.date}` });
+    this._planRequest = null;
+    this._draftPromptedFor = this.draftKeyFor();
   },
 
   onAthleteChange(event) {
@@ -86,7 +109,7 @@ Page({
     if (!candidate) return;
     if (Number(candidate.id) === Number(this.data.athleteId)) return;
     this._targetAthleteId = Number(candidate.id);
-    this.setData({ athleteIndex: index, editId: 0, form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
+    this.setData({ athleteIndex: index, editId: 0, planLabel: '', form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
     this.loadPage();
   },
 
@@ -157,7 +180,8 @@ Page({
     Object.keys(emptyForm()).forEach((key) => { form[key] = session[key] === null || session[key] === undefined ? '' : String(session[key]); });
     this.setData({
       editId: session.id,
-      form,
+      form: { ...form, ...(session.teamPlanId ? { teamPlanId: session.teamPlanId, planSessionId: session.planSessionId } : {}) },
+      planLabel: session.teamPlanId ? `关联计划版本 #${session.teamPlanId} · ${session.planSessionId}` : '',
       typeIndex: Math.max(0, this.data.typeOptions.indexOf(session.trainingType)),
       intensityIndex: Math.max(0, this.data.intensityOptions.indexOf(session.intensityZone)),
       showAdvanced: Boolean(session.averageHeartRate || session.maxHeartRate || session.averagePowerW || session.strokeRateSpm)
@@ -165,7 +189,7 @@ Page({
     wx.pageScrollTo({ scrollTop: 0, duration: 250 });
   },
 
-  cancelEdit() { this.clearDraft(); this.setData({ editId: 0, form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false }); },
+  cancelEdit() { this.clearDraft(); this.setData({ editId: 0, planLabel: '', form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false }); },
 
   saveAction(form) {
     if (this.data.isCoach) {
@@ -198,7 +222,7 @@ Page({
       getApp().globalData.dataVersion = (getApp().globalData.dataVersion || 0) + 1;
       wx.showToast({ title: this.data.editId ? '记录已更新' : '记录已同步', icon: 'success' });
       this.clearDraft();
-      this.setData({ editId: 0, form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
+      this.setData({ editId: 0, planLabel: '', form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
       await this.loadPage();
       if (result && result.message) this.setData({ error: '' });
     } catch (error) {

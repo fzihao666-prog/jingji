@@ -13,7 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "plan-check": "node scripts/training-plan-check.mjs",
-    "plan-visual-check": "node scripts/training-plan-visual-check.mjs",
+    "plan-visual-check": "node scripts/unified-training-plans-visual-check.mjs",
     "strength-training-check": "node scripts/strength-training-check.mjs",
     "special-training-check": "node scripts/special-training-check.mjs",
     "special-test-check": "node scripts/special-test-check.mjs",

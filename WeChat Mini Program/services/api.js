@@ -9,6 +9,10 @@ function query(params) {
 
 module.exports = {
   assetUrl,
+  teamPlans(params = {}) { return request(`/api/team-plans?${query(params)}`); },
+  createTeamPlan(data) { return request('/api/team-plans', { method: 'POST', data }); },
+  updateTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}`, { method: 'PUT', data }); },
+  transitionTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}/transition`, { method: 'POST', data }); },
   login(username, password, traceId) {
     return request('/api/auth/login', { method: 'POST', auth: false, traceId, data: { username, password } });
   },

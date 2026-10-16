@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initializeDatabase } from '../core/db-initialize.ts';
+import { readPlanExecution } from '../core/plan-execution.ts';
 import { idempotencyKeySchema } from './training-submission-service.ts';
 
 const fixture = vi.hoisted(() => ({ db: null as DatabaseSync | null }));
@@ -133,4 +134,26 @@ describe('训练填报幂等接口', () => {
     expect(await (await post()).json()).toEqual(first);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
+  it('实际填报原子关联发布课与个人目标，修订后保留快照，失败不写事实', async () => {
+    db.exec("DELETE FROM training_plan_execution_links; INSERT OR IGNORE INTO project_teams(id,project,name) VALUES(9001,'ROWING','合成计划队'); UPDATE athletes SET team_id=9001 WHERE id=9001");
+    const data = {goal:'',focus:'',sessions:[{id:'am',date:payload.date,category:'special',period:'上午',content:'水上',durationMin:90,distanceKm:16,intensity:'U2',sets:null,reps:null,load:null,notes:''}],overrides:[{athleteId:9001,sessionId:'am',changes:{durationMin:60,distanceKm:10},reason:'合成减量'}]};
+    const inserted = db.prepare(`INSERT INTO training_plans(athlete_id,plan_date,start_date,end_date,title,plan_data,created_by,updated_by,model,team_id,status,published_at)
+      VALUES(9001,'synthetic_link',?,?, '合成队伍计划',?,9001,9001,'team',9001,'published','2026-10-09T00:00:00Z')`).run(payload.date,payload.date,JSON.stringify(data));
+    const teamPlanId=Number(inserted.lastInsertRowid);
+    db.prepare('UPDATE training_plans SET root_id=id WHERE id=?').run(teamPlanId);
+    const body={...payload,distance:10,teamPlanId,planSessionId:'am'};
+    const response=await post(body);expect(response.status).toBe(201);
+    const saved=z.object({session:z.object({id:z.number(),teamPlanId:z.number(),planSessionId:z.string()})}).parse(await response.json());
+    expect(saved.session.teamPlanId).toBe(teamPlanId);
+    expect((await post({...body,planSessionId:'unknown'},'synthetic_bad_link_key')).status).toBe(400);
+    expect(count('training_sessions')).toBe(1);
+    db.prepare("UPDATE training_plans SET status='archived',archived_at='2026-10-11T00:00:00Z' WHERE id=?").run(teamPlanId);
+    expect((await post(body)).status).toBe(201);
+    const execution=readPlanExecution(db,{athleteIds:[9001],project:'ROWING',now:new Date('2026-10-10T02:00:00Z')});
+    expect(execution.athletes[0].lessonExecution[0].target.durationMin).toBe(60);
+    expect(execution.athletes[0].lessonExecution[0].completionRate).toBe(1);
+    const changed=await fetch(`${baseUrl}/api/me/training-sessions/${saved.session.id}`,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${jwt.sign({id:9001,sessionVersion:1},secret)}`},body:JSON.stringify({...body,date:'2026-10-11'})});
+    expect(changed.status).toBe(400);
+  });
+
 });

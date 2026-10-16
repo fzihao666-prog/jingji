@@ -1,0 +1,45 @@
+<view class="page">
+  <view class="page-head"><view class="page-title">训练计划</view><view class="page-description">队伍统一安排 · 个人差异调整 · 教练确认发布</view></view>
+  <view wx:if="{{loading}}" class="card">正在加载…</view><view wx:if="{{error}}" class="error-box" aria-role="alert">{{error}}</view>
+  <button wx:if="{{canManage && !editor}}" class="primary-button" bindtap="create">创建队伍计划</button>
+  <view wx:if="{{!loading && !plans.length}}" class="card">暂无可查看的计划</view>
+  <button wx:for="{{plans}}" wx:key="id" class="card plan-list" data-id="{{item.id}}" bindtap="select">{{item.title}} · V{{item.version}} · {{statusLabels[item.status]}}<view>{{item.team}}｜{{item.startDate}} 至 {{item.endDate}}</view></button>
+  <view wx:if="{{editor}}" class="card">
+    <view class="card-head-title">{{editor.id ? '编辑草稿' : '新建队伍计划'}}</view>
+    <picker wx:if="{{!editor.id}}" range="{{teams}}" range-key="name" value="{{teamIndex}}" bindchange="teamChange"><view class="input">队伍：{{teams[teamIndex].name}}</view></picker>
+    <view class="field"><text>计划名称</text><input aria-label="计划名称" class="input" value="{{editor.title}}" data-field="title" bindinput="input" /></view>
+    <view class="field"><text>开始日期</text><input aria-label="开始日期" class="input" placeholder="YYYY-MM-DD" value="{{editor.startDate}}" data-field="startDate" bindinput="input" /></view>
+    <view class="field"><text>结束日期</text><input aria-label="结束日期" class="input" placeholder="YYYY-MM-DD" value="{{editor.endDate}}" data-field="endDate" bindinput="input" /></view>
+    <view class="field"><text>训练目标</text><input aria-label="训练目标" class="input" value="{{editor.data.goal}}" data-field="data.goal" bindinput="input" /></view>
+    <view class="field"><text>训练重点</text><input aria-label="训练重点" class="input" value="{{editor.data.focus}}" data-field="data.focus" bindinput="input" /></view>
+    <view wx:for="{{editor.data.sessions}}" wx:key="id" class="lesson"><view>{{item.date}} {{item.period}} · {{item.content}}</view><button size="mini" data-index="{{index}}" bindtap="editLesson">编辑训练课</button><button size="mini" data-index="{{index}}" bindtap="adjust">调整运动员</button><button size="mini" data-index="{{index}}" bindtap="removeLesson">移除训练课</button></view>
+    <button bindtap="addLesson">增加训练课</button>
+    <view wx:if="{{lesson}}" class="lesson-editor">
+      <view>{{overrideAthleteId ? overrideName + ' · 差异调整' : '训练课编辑'}}</view>
+      <picker wx:if="{{!overrideAthleteId}}" range="{{categories}}" bindchange="categoryChange"><view class="input">类别：{{lesson.category === 'special' ? '专项' : lesson.category === 'physical' ? '体能' : '恢复'}}</view></picker>
+      <view wx:for="{{sessionFields}}" wx:key="key" wx:if="{{!overrideAthleteId || item.key !== 'date'}}" class="field"><text>{{item.label}}</text><input aria-label="{{item.label}}" class="input" value="{{lesson[item.key]}}" data-field="{{item.key}}" bindinput="lessonInput" /></view>
+      <view wx:if="{{overrideAthleteId}}"><text>未改变字段继续继承队伍安排，以下为最终安排预览。</text><view>{{lesson.date}} {{lesson.period}}｜{{lesson.content}}｜{{lesson.durationMin}}分钟 / {{lesson.distanceKm}}公里</view><input aria-label="调整原因（必填）" class="input" placeholder="调整原因（必填）" value="{{overrideReason}}" bindinput="reasonInput" /><button bindtap="revokeOverride">撤销该运动员调整</button></view>
+      <button bindtap="saveLesson">保存训练课{{overrideAthleteId ? '调整' : ''}}</button>
+    </view>
+    <button class="primary-button" disabled="{{saving || lesson}}" loading="{{saving}}" bindtap="save">保存草稿</button><button bindtap="cancel">取消编辑</button>
+  </view>
+  <view wx:if="{{selected && !editor}}" class="card">
+    <view class="card-head-title">{{selected.title}} · V{{selected.version}} · {{statusLabels[selected.status]}}</view><view>{{selected.team}}｜{{selected.startDate}} 至 {{selected.endDate}}</view><view>目标：{{selected.data.goal}}</view><view>重点：{{selected.data.focus}}</view>
+    <picker wx:if="{{canManage && teamAthletes.length}}" range="{{teamAthletes}}" range-key="name" bindchange="preview"><view class="input">预览个人最终安排：{{previewName || '选择运动员'}}</view></picker>
+    <view wx:for="{{sessions}}" wx:key="id" class="lesson"><view>{{item.date}} {{item.period}}｜{{item.category === 'special' ? '专项' : item.category === 'physical' ? '体能' : '恢复'}}</view><view>{{item.content}}</view><view>{{item.durationMin === null ? '时长未设置' : item.durationMin + '分钟'}} / {{item.distanceKm === null ? '距离不适用' : item.distanceKm + '公里'}} · {{item.intensity}}</view><view>{{item.sets}} 组 · {{item.reps}} 次 · {{item.load}}｜{{item.notes}}</view><view wx:if="{{item.reason}}">个人调整：{{item.reason}}</view><view wx:if="{{canManage}}">个人调整：{{item.adjustmentCount}} 人</view><button wx:if="{{!canManage && (selected.status === 'published' || selected.status === 'archived')}}" size="mini" data-id="{{item.id}}" bindtap="enterTraining">{{selected.status === 'archived' ? '补填历史实际训练' : '填写实际训练'}}</button></view>
+    <view wx:if="{{canManage}}" class="lesson">
+      <view class="card-head-title">执行情况</view>
+      <view wx:if="{{executionLoading}}">正在加载执行情况…</view>
+      <view wx:if="{{executionError}}" aria-role="alert">{{executionError}}</view>
+      <view>本队近 7 天汇总（{{executionStart}} 至 {{executionEnd}}）</view>
+      <view>以下汇总涵盖该队窗口内适用计划，不代表所选计划整体执行率。</view>
+      <view wx:for="{{teamExecution}}" wx:key="athleteId">{{item.athleteName}}｜{{item.statusLabel}}｜{{item.rateText}}｜待确认 {{item.pendingSessions}} 课</view>
+      <view wx:if="{{!executionLoading && !teamExecution.length}}">窗口内暂无本队执行数据</view>
+      <view class="card-head-title">所选 V{{selected.version}} · 窗口内逐课结果</view>
+      <view wx:for="{{lessonExecution}}" wx:key="key">{{item.athleteName}}｜{{item.date}} {{item.content}}｜{{item.statusLabel}}｜{{item.rateText}}</view>
+      <view wx:if="{{!executionLoading && !lessonExecution.length}}">窗口内暂无该版本的逐课结果；无记录不直接判定未完成。</view>
+    </view>
+    <view wx:if="{{!sessions.length}}">尚未安排训练课</view>
+    <view wx:if="{{canManage}}"><view class="lesson">个人调整清单（{{selected.data.overrides.length}} 项）<view wx:for="{{adjustmentRows}}" wx:key="key">{{item.name}}｜{{item.date}} {{item.content}}｜{{item.reason}}｜{{item.changes}}</view></view><view>变更摘要：{{changeSummary}}</view><button wx:if="{{selected.status === 'draft'}}" bindtap="edit">编辑草稿与个人调整</button><button wx:if="{{selected.status === 'draft'}}" data-action="submit" bindtap="transition" disabled="{{saving}}">提交教练审核</button><button wx:if="{{selected.status === 'pending'}}" data-action="return" bindtap="transition" disabled="{{saving}}">退回修改</button><button wx:if="{{selected.status === 'pending'}}" class="primary-button" data-action="publish" bindtap="transition" disabled="{{saving}}">确认发布</button><button wx:if="{{selected.status === 'published'}}" data-action="revise" bindtap="transition" disabled="{{saving}}">创建修订草稿</button><button wx:if="{{selected.status === 'published'}}" data-action="archive" bindtap="transition" disabled="{{saving}}">归档计划</button></view>
+  </view>
+</view>

@@ -9,8 +9,6 @@ import {
   isStrengthTrainingCategory,
 } from '../../shared/strength-training.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../../shared/strength-model.ts';
-import { SLALOM_CHAMPION_METRICS, slalomComparison } from '../../shared/slalom-model.ts';
-import { TrainingPlanAIService, type AthleteContext } from './ai-service.ts';
 import { db } from '../core/db.ts';
 import { athletePhotoRoot } from '../core/uploads.ts';
 import {
@@ -267,7 +265,7 @@ export function recentTrainingPlanMaxWeights(athleteId: number) {
     .prepare(
       `
     SELECT plan_data AS dataJson FROM training_plans
-    WHERE athlete_id = ? ORDER BY start_date DESC, id DESC LIMIT 12
+    WHERE model = 'legacy' AND athlete_id = ? ORDER BY start_date DESC, id DESC LIMIT 12
   `
     )
     .all(athleteId) as Array<{ dataJson: string }>;
@@ -737,114 +735,4 @@ export async function buildTrainingPlanWorkbook(input: {
   sheet.pageSetup.printArea = `A1:Z${Math.max(7, rowCursor - 1)}`;
   sheet.headerFooter.oddFooter = '&L竞迹训练数据中心&C第 &P / &N 页&R' + input.athleteName;
   return workbook;
-}
-
-export function getAthleteContext(athleteId: number): AthleteContext {
-  // 获取运动员基本信息
-  const athlete = db
-    .prepare(
-      `
-    SELECT id, name, project, team, gender, region
-    FROM athletes WHERE id = ?
-  `
-    )
-    .get(athleteId) as {
-    id: number;
-    name: string;
-    project: string;
-    team: string;
-    gender: string;
-    region: string;
-  };
-
-  // 获取最近6个月的体能训练
-  const recentPlans = db
-    .prepare(
-      `
-    SELECT plan_date as date, plan_data as dataJson
-    FROM training_plans
-    WHERE athlete_id = ? AND plan_date >= date('now', '-6 months')
-    ORDER BY plan_date DESC
-    LIMIT 3
-  `
-    )
-    .all(athleteId) as Array<{ date: string; dataJson: string }>;
-
-  const parsedPlans = recentPlans
-    .map((plan) => {
-      try {
-        const data = JSON.parse(plan.dataJson);
-        return {
-          date: plan.date,
-          duration: data.durationWeeks || 4,
-          title: data.title || '',
-          exercises: data.exercises?.map((e: { name: string }) => e.name) || [],
-          maxWeights:
-            data.exercises?.reduce(
-              (acc: Record<string, number>, e: { name: string; maxWeight: number | null }) => {
-                if (e.maxWeight) acc[e.name] = e.maxWeight;
-                return acc;
-              },
-              {} as Record<string, number>
-            ) || {},
-        };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
-
-  // 训练与恢复分别来自权威表，按训练课次返回；恢复状态按日期关联。
-  const recentRecords = db
-    .prepare(
-      `
-    SELECT ts.session_date AS date, ts.training_type AS trainingType, ts.duration_min AS durationMin, ts.rpe,
-      dw.fatigue_index AS fatigueIndex, COALESCE(dw.status, 'missing') AS status
-    FROM training_sessions ts
-    LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
-    WHERE ts.athlete_id = ? AND ts.session_date >= date('now', '-28 days')
-    ORDER BY ts.session_date DESC, ts.session_order DESC
-  `
-    )
-    .all(athleteId) as Array<{
-    date: string;
-    trainingType: string;
-    durationMin: number;
-    rpe: number | null;
-    fatigueIndex: number | null;
-    status: string;
-  }>;
-
-  // 力量测试聚合自测试事件与指标明细，不再读取旧 JSON 宽字段。
-  const strengthTests = db
-    .prepare(
-      `
-    SELECT ts.id, ts.test_date AS date
-    FROM test_sessions ts
-    WHERE ts.athlete_id = ? AND ts.test_type = '力量素质测试'
-    ORDER BY ts.test_date DESC, ts.id DESC
-    LIMIT 3
-  `
-    )
-    .all(athleteId) as Array<{ id: number; date: string }>;
-
-  const parsedTests = strengthTests.map((test) => ({
-    date: test.date,
-    metrics: Object.fromEntries(
-      (
-        db
-          .prepare(
-            `SELECT metric_code AS code, value_num AS value FROM test_measurements WHERE test_session_id = ?`
-          )
-          .all(test.id) as Array<{ code: string; value: number }>
-      ).map((item) => [item.code, item.value])
-    ),
-  }));
-
-  return {
-    athlete,
-    recentPlans: parsedPlans as AthleteContext['recentPlans'],
-    recentRecords,
-    strengthTests: parsedTests as AthleteContext['strengthTests'],
-  };
 }

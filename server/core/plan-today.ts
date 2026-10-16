@@ -6,7 +6,10 @@ import { trainingLoadCategory } from '../../shared/training-content-category.ts'
 // 与 core/utils.ts 的 strengthImportNumber 同口径；本模块保持纯逻辑，不引入数据库依赖。
 function strengthImportNumber(value: unknown) {
   if (value === '' || value === null || value === undefined) return null;
-  const match = String(value).trim().replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  const match = String(value)
+    .trim()
+    .replace(',', '.')
+    .match(/-?\d+(?:\.\d+)?/);
   const number = match ? Number(match[0]) : Number.NaN;
   return Number.isFinite(number) ? Math.round(number * 10) / 10 : null;
 }
@@ -41,7 +44,11 @@ function text(value: unknown) {
 }
 
 function itemsOf(day: PlanDaySource): PlanItemSource[] {
-  const list = Array.isArray(day.exercises) ? day.exercises : Array.isArray(day.items) ? day.items : [];
+  const list = Array.isArray(day.exercises)
+    ? day.exercises
+    : Array.isArray(day.items)
+      ? day.items
+      : [];
   return list.map(record).filter((item) => text(item.name));
 }
 
@@ -142,7 +149,26 @@ export function extractTodayPlanDay(
   } catch {
     return null;
   }
-  const weeks = Array.isArray(record(raw).weeklyPlans) ? (record(raw).weeklyPlans as unknown[]) : [];
+  const teamSessions = record(raw).sessions;
+  if (Array.isArray(teamSessions)) {
+    const lessons = teamSessions.map(record).filter((item) => item.date === today);
+    if (!lessons.length) return null;
+    return buildDay(
+      title,
+      text(record(raw).focus),
+      lessons.map((item) => ({
+        ...item,
+        name: text(item.content),
+        duration: item.durationMin == null ? '' : String(item.durationMin),
+        distance: item.distanceKm == null ? '' : String(item.distanceKm),
+        sets: item.sets == null ? '' : String(item.sets),
+        reps: item.reps == null ? '' : String(item.reps),
+      }))
+    );
+  }
+  const weeks = Array.isArray(record(raw).weeklyPlans)
+    ? (record(raw).weeklyPlans as unknown[])
+    : [];
   const todayLabel = weekdayLabel(today);
   let weekdayMatch: { day: PlanDaySource; weekFocus: string } | null = null;
   for (const weekValue of weeks) {
@@ -153,7 +179,8 @@ export function extractTodayPlanDay(
       const day = record(dayValue);
       // 有内容才算计划日，与 countPlannedDays 一致。
       if (!itemsOf(day).length && !text(day.focus)) continue;
-      if (dayDate(day) === today) return buildDay(title, text(day.focus) || weekFocus, itemsOf(day));
+      if (dayDate(day) === today)
+        return buildDay(title, text(day.focus) || weekFocus, itemsOf(day));
       if (!weekdayMatch && matchesWeekday(dayWeekLabel(day), today)) {
         weekdayMatch = { day, weekFocus };
       }
@@ -166,21 +193,29 @@ export function extractTodayPlanDay(
     const matchInWeek = currentWeek.find(
       (day) => itemsOf(day).length && matchesWeekday(dayWeekLabel(day), today)
     );
-    if (matchInWeek) return buildDay(title, text(matchInWeek.focus) || weekdayMatch.weekFocus, itemsOf(matchInWeek));
+    if (matchInWeek)
+      return buildDay(
+        title,
+        text(matchInWeek.focus) || weekdayMatch.weekFocus,
+        itemsOf(matchInWeek)
+      );
     return null;
   }
-  return buildDay(title, text(weekdayMatch.day.focus) || weekdayMatch.weekFocus, itemsOf(weekdayMatch.day));
+  return buildDay(
+    title,
+    text(weekdayMatch.day.focus) || weekdayMatch.weekFocus,
+    itemsOf(weekdayMatch.day)
+  );
 }
 
 // 当周天列表：按周序号（weekNumber）优先，退化为数组下标。
 function currentWeekDays(weeks: unknown[], today: string, startDate: string): PlanDaySource[] {
   if (!startDate || today < startDate) return [];
   const weekIndex = Math.floor(
-    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / (7 * 24 * 60 * 60 * 1000)
+    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) /
+      (7 * 24 * 60 * 60 * 1000)
   );
-  const byNumber = weeks
-    .map(record)
-    .find((week) => Number(week.weekNumber) === weekIndex + 1);
+  const byNumber = weeks.map(record).find((week) => Number(week.weekNumber) === weekIndex + 1);
   const week = byNumber || (weeks[weekIndex] ? record(weeks[weekIndex]) : null);
   return week && Array.isArray(week.days) ? (week.days as unknown[]).map(record) : [];
 }
@@ -200,7 +235,8 @@ export function summarizeTodayPlans(days: (TodayPlanDay | null)[]) {
     if (!day) continue;
     if (day.focus && !focus.includes(day.focus)) focus.push(day.focus);
     for (const name of day.specialItems) if (!specialItems.includes(name)) specialItems.push(name);
-    for (const name of day.physicalItems) if (!physicalItems.includes(name)) physicalItems.push(name);
+    for (const name of day.physicalItems)
+      if (!physicalItems.includes(name)) physicalItems.push(name);
     for (const item of day.items) {
       const key = `${item.name}|${item.detail}`;
       if (itemKeys.has(key)) continue;

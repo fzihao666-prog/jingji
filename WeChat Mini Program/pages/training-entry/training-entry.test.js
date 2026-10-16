@@ -205,13 +205,14 @@ describe('训练填报页', () => {
 function submissionPage(storage = createDraftStorage(), options = {}) {
   let definition;
   const calls = [];
-  const app = { globalData: { user: { id: options.userId || 1 } } };
+  const app = { globalData: { user: { id: options.userId || 1, athleteId: options.athleteId || 1 } } };
   const wx = {
     ...storage,
     showToast() {},
     showModal({ success }) { success({ confirm: true }); },
   };
   const api = {
+    async teamPlans() { return { plans: options.plans || [] }; },
     async createMyTrainingSession(form, key) {
       calls.push({ form: JSON.parse(JSON.stringify(form)), key });
       if (options.fail) throw new Error('模拟响应丢失');
@@ -334,5 +335,26 @@ describe('训练填报请求编号', () => {
     await page.save();
     expect(calls).toHaveLength(2);
     expect(calls[1].key).toBe(calls[0].key);
+  });
+});
+
+
+describe('已发布训练课填报入口', () => {
+  it('个人差异仅带入任务信息，实际数值需重新填写，提交保留版本和课ID', async () => {
+    const plan = { id: 10, title: '队伍计划', version: 2, status: 'archived', data: {
+      sessions: [{ id: 'am', date: '2026-01-01', category: 'special', period: '上午', content: '队伍水上', durationMin: 90, distanceKm: 16 }],
+      overrides: [{ athleteId: 1, sessionId: 'am', changes: { content: '减量水上', durationMin: 60 } }]
+    } };
+    const { page, calls } = submissionPage(undefined, { plans: [plan] });
+    page._planRequest = { teamPlanId: 10, planSessionId: 'am' };
+    await page.applyRequestedPlan();
+    expect(page.data.form).toMatchObject({ teamPlanId: 10, planSessionId: 'am', content: '减量水上', duration: '', distance: '', rpe: '' });
+    await page.saveAction({ ...page.data.form, duration: '60', rpe: '5' });
+    expect(calls[0].form).toMatchObject({ teamPlanId: 10, planSessionId: 'am' });
+  });
+  it('草稿和已移除的训练课不能进入正式关联填报', async () => {
+    const { page } = submissionPage(undefined, { plans: [{ id: 10, status: 'draft', data: { sessions: [], overrides: [] } }] });
+    page._planRequest = { teamPlanId: 10, planSessionId: 'am' };
+    await expect(page.applyRequestedPlan()).rejects.toThrow('训练课已变更');
   });
 });

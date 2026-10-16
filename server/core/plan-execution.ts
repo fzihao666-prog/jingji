@@ -1,4 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
+import {
+  readTeamPlansForAthlete,
+  resolveTeamPlanSessions,
+} from '../training-plan/team-plan-service.ts';
+import type { TeamPlanSession } from '../../shared/team-plan.ts';
 import { beijingDate } from './coach-daily-todos.ts';
 import { extractTodayPlanDay, summarizeTodayPlans, type TodayPlanDay } from './plan-today.ts';
 
@@ -18,6 +23,11 @@ type PlanRecord = {
   endDate: string;
   title: string;
   planData: string;
+  teamPlanId?: number;
+  rootId?: number;
+  publishedAt?: string;
+  archivedAt?: string;
+  targetSessions?: TeamPlanSession[];
 };
 
 type SessionRecord = {
@@ -36,6 +46,10 @@ type SessionRecord = {
   trainingType?: string;
   content?: string;
   structureType?: string;
+  teamPlanId?: number;
+  planSessionId?: string;
+  target?: TeamPlanSession;
+  sessionOrder?: number;
 };
 
 // 与教练待办同口径的正式训练筛选。
@@ -61,7 +75,11 @@ function countPlannedDays(planData: string): Set<string> {
     for (const week of weeks) {
       const days = Array.isArray(week?.days) ? week.days : [];
       for (const day of days) {
-        const items = Array.isArray(day?.exercises) ? day.exercises : Array.isArray(day?.items) ? day.items : [];
+        const items = Array.isArray(day?.exercises)
+          ? day.exercises
+          : Array.isArray(day?.items)
+            ? day.items
+            : [];
         const hasContent = items.length > 0 || (day?.focus && String(day.focus).trim());
         if (!hasContent) continue;
         // 尝试提取日期
@@ -136,9 +154,110 @@ export function buildPlanExecution(input: {
     const totalLoad = sessions.reduce((s, r) => s + (r.srpe || 0), 0);
     const totalDuration = sessions.reduce((s, r) => s + (r.durationMin || 0), 0);
 
-    const planned = plannedDays.size;
+    // 队伍计划按训练课与发布版本计算，旧个人计划继续沿用历史按天口径。
+    const teamPlans = activePlans.filter((plan) => plan.teamPlanId && plan.targetSessions);
+    const targets = new Map<string, { planId: number; target: TeamPlanSession }>();
+    for (const plan of teamPlans) {
+      for (const target of plan.targetSessions || []) {
+        if (target.date < windowStart || target.date > today) continue;
+        const eligible = teamPlans
+          .filter(
+            (candidate) =>
+              candidate.rootId === plan.rootId &&
+              candidate.startDate <= target.date &&
+              candidate.endDate >= target.date &&
+              candidate.publishedAt &&
+              beijingDate(new Date(candidate.publishedAt)) <= target.date &&
+              (!candidate.archivedAt || target.date < beijingDate(new Date(candidate.archivedAt)))
+          )
+          .sort(
+            (a, b) =>
+              (b.publishedAt || '').localeCompare(a.publishedAt || '') ||
+              (b.teamPlanId || 0) - (a.teamPlanId || 0)
+          );
+        if (eligible[0]?.teamPlanId === plan.teamPlanId)
+          targets.set(`${plan.rootId}:${target.id}`, { planId: plan.teamPlanId!, target });
+      }
+    }
+    // 已记录的执行快照优先，后续修订不能改变这节训练的个人目标。
+    for (const session of sessions) {
+      if (!session.target || !session.teamPlanId || !session.planSessionId) continue;
+      const plan = teamPlans.find((plan) => plan.teamPlanId === session.teamPlanId);
+      targets.set(`${plan?.rootId || session.teamPlanId}:${session.planSessionId}`, {
+        planId: session.teamPlanId,
+        target: session.target,
+      });
+    }
+    const lessonExecution = [...targets.values()].map(({ planId, target }) => {
+      const records = sessions.filter(
+        (session) => session.teamPlanId === planId && session.planSessionId === target.id
+      );
+      if (!records.length)
+        return {
+          planId,
+          sessionId: target.id,
+          date: target.date,
+          category: target.category,
+          target,
+          status: 'pending',
+          completionRate: null,
+        };
+      const ratios: number[] = [];
+      if (
+        target.durationMin !== null &&
+        target.durationMin > 0 &&
+        records.some((record) => record.durationReported)
+      )
+        ratios.push(
+          records
+            .filter((record) => record.durationReported)
+            .reduce((sum, record) => sum + record.durationMin, 0) / target.durationMin
+        );
+      if (
+        target.distanceKm !== null &&
+        target.distanceKm > 0 &&
+        records.some((record) => record.distanceReported)
+      )
+        ratios.push(
+          records
+            .filter((record) => record.distanceReported)
+            .reduce((sum, record) => sum + (record.distanceKm || 0), 0) / target.distanceKm
+        );
+      const numericTarget = (target.durationMin || 0) > 0 || (target.distanceKm || 0) > 0;
+      const missingTargetMeasurement =
+        ((target.durationMin || 0) > 0 && !records.some((record) => record.durationReported)) ||
+        ((target.distanceKm || 0) > 0 && !records.some((record) => record.distanceReported));
+      const ratio = missingTargetMeasurement
+        ? null
+        : ratios.length
+          ? Math.min(1, ...ratios)
+          : numericTarget
+            ? null
+            : 1;
+      return {
+        planId,
+        sessionId: target.id,
+        date: target.date,
+        category: target.category,
+        target,
+        status: ratio === null ? 'recorded' : ratio >= 1 ? 'complete' : 'partial',
+        completionRate: ratio === null ? null : Math.round(ratio * 100) / 100,
+      };
+    });
+    const hasTeamTargets = teamPlans.length > 0 || lessonExecution.length > 0;
+    const knownLessons = lessonExecution.filter((lesson) => lesson.completionRate !== null);
+    const planned = hasTeamTargets
+      ? new Set(lessonExecution.map((lesson) => lesson.date)).size
+      : plannedDays.size;
     const actual = actualDays.size;
-    const completionRate = planned > 0 ? Math.min(1, actual / planned) : null;
+    const completionRate = hasTeamTargets
+      ? knownLessons.length && knownLessons.length === lessonExecution.length
+        ? knownLessons.reduce((sum, lesson) => sum + (lesson.completionRate || 0), 0) /
+          knownLessons.length
+        : null
+      : planned > 0
+        ? Math.min(1, actual / planned)
+        : null;
 
     // 今日执行事实：只用当天正式课次；无记录先记待确认，不判定未完成。
     const todaySessions = sessions.filter((s) => s.date === today);
@@ -160,7 +279,24 @@ export function buildPlanExecution(input: {
       totalLoad: Math.round(totalLoad * 10) / 10,
       totalDurationMin: Math.round(totalDuration),
       completionRate: completionRate !== null ? Math.round(completionRate * 100) / 100 : null,
-      status: planned === 0 ? 'no-plan' : actual >= planned ? 'complete' : actual > 0 ? 'partial' : 'missed',
+      status: hasTeamTargets
+        ? !lessonExecution.length
+          ? 'no-plan'
+          : lessonExecution.every((lesson) => lesson.status === 'complete')
+            ? 'complete'
+            : knownLessons.length
+              ? 'partial'
+              : 'pending'
+        : planned === 0
+          ? 'no-plan'
+          : actual >= planned
+            ? 'complete'
+            : actual > 0
+              ? 'partial'
+              : 'missed',
+      lessonExecution,
+      plannedSessions: lessonExecution.length,
+      pendingSessions: lessonExecution.filter((lesson) => lesson.status === 'pending').length,
       hasPlanToday: todayPlan !== null,
       todayFocus: todayPlan ? todayPlan.focus : null,
       todayStatus: todayRecorded ? 'recorded' : todayPlan ? 'pending' : 'no-plan',
@@ -189,9 +325,10 @@ export function buildPlanExecution(input: {
   const reportedDistances = todaySessions.filter((s) => s.distanceReported);
 
   const withPlan = rows.filter((r) => r.hasPlan);
-  const avgCompletion = withPlan.length
+  const measured = withPlan.filter((row) => row.completionRate !== null);
+  const avgCompletion = measured.length
     ? Math.round(
-        (withPlan.reduce((s, r) => s + (r.completionRate || 0), 0) / withPlan.length) * 100
+        (measured.reduce((s, r) => s + (r.completionRate || 0), 0) / measured.length) * 100
       ) / 100
     : null;
 
@@ -208,6 +345,7 @@ export function buildPlanExecution(input: {
       complete: rows.filter((r) => r.status === 'complete').length,
       partial: rows.filter((r) => r.status === 'partial').length,
       missed: rows.filter((r) => r.status === 'missed').length,
+      pending: rows.filter((r) => r.status === 'pending').length,
       avgCompletion,
     },
     athletes: rows,
@@ -220,7 +358,8 @@ export function buildPlanExecution(input: {
         pending: rows.filter((r) => r.todayStatus === 'pending').length,
         rpeReported: rows.filter((r) => r.todayRpeReported).length,
         actualDurationMin: reportedDurations.length
-          ? Math.round(reportedDurations.reduce((sum, s) => sum + (s.durationMin || 0), 0) * 10) / 10
+          ? Math.round(reportedDurations.reduce((sum, s) => sum + (s.durationMin || 0), 0) * 10) /
+            10
           : null,
         actualDistanceKm: reportedDistances.length
           ? Math.round(reportedDistances.reduce((sum, s) => sum + (s.distanceKm || 0), 0) * 10) / 10
@@ -233,7 +372,20 @@ export function buildPlanExecution(input: {
 
 // 从运动员的计划中取当日课表；优先精确日期命中的计划，其次周期内当周星期命中的计划。
 function readTodayPlanFrom(plans: PlanRecord[], today: string): TodayPlanDay | null {
-  for (const plan of plans) {
+  const current = plans
+    .filter(
+      (plan) =>
+        !plan.teamPlanId ||
+        (plan.publishedAt &&
+          beijingDate(new Date(plan.publishedAt)) <= today &&
+          (!plan.archivedAt || today < beijingDate(new Date(plan.archivedAt))))
+    )
+    .sort(
+      (a, b) =>
+        Number(Boolean(b.teamPlanId)) - Number(Boolean(a.teamPlanId)) ||
+        (b.publishedAt || '').localeCompare(a.publishedAt || '')
+    );
+  for (const plan of current) {
     const day = extractTodayPlanDay(plan.planData, today, {
       startDate: plan.startDate,
       endDate: plan.endDate,
@@ -269,21 +421,56 @@ export function readPlanExecution(
   const windowStart = beijingDate(new Date(input.now.getTime() - (WINDOW_DAYS - 1) * DAY_MS));
   const today = beijingDate(input.now);
 
-  const plans = db
+  const hasTeamSchema = (
+    db.prepare('PRAGMA table_info(training_plans)').all() as { name: string }[]
+  ).some((column) => column.name === 'model');
+  const plans: PlanRecord[] = db
     .prepare(
       `
     SELECT athlete_id AS athleteId, start_date AS startDate, end_date AS endDate,
       title, plan_data AS planData
     FROM training_plans
-    WHERE athlete_id IN (${placeholders}) AND start_date <= ? AND end_date >= ?
+    WHERE ${hasTeamSchema ? "model='legacy' AND" : ''} athlete_id IN (${placeholders}) AND start_date <= ? AND end_date >= ?
   `
     )
-    .all(...ids, today, windowStart) as PlanRecord[];
+    .all(...ids, today, windowStart) as Array<{
+    athleteId: number;
+    startDate: string;
+    endDate: string;
+    title: string;
+    planData: string;
+  }>;
 
-  const sessions = db
+  if (hasTeamSchema) {
+    for (const athlete of athletes) {
+      for (const plan of readTeamPlansForAthlete(db, athlete.athleteId)) {
+        const targetSessions = resolveTeamPlanSessions(plan, athlete.athleteId);
+        plans.unshift({
+          athleteId: athlete.athleteId,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          title: plan.title,
+          planData: JSON.stringify({ sessions: targetSessions, focus: plan.data.focus }),
+          teamPlanId: plan.id,
+          rootId: plan.rootId,
+          publishedAt: plan.publishedAt || undefined,
+          archivedAt: plan.archivedAt || undefined,
+          targetSessions,
+        });
+      }
+    }
+  }
+  const hasLinks = Boolean(
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='training_plan_execution_links'"
+      )
+      .get()
+  );
+  const sessions: SessionRecord[] = db
     .prepare(
       `
-    SELECT athlete_id AS athleteId, session_date AS date,
+    SELECT athlete_id AS athleteId, session_date AS date, session_order AS sessionOrder,
       duration_min AS durationMin, distance_km AS distanceKm,
       duration_reported AS durationReported, distance_reported AS distanceReported,
       rpe, training_type AS trainingType, structure_type AS structureType, content,
@@ -292,7 +479,36 @@ export function readPlanExecution(
     WHERE athlete_id IN (${placeholders}) AND session_date BETWEEN ? AND ?
   `
     )
-    .all(...ids, windowStart, today) as SessionRecord[];
+    .all(...ids, windowStart, today) as Array<Omit<SessionRecord, 'target'>>;
 
+  if (hasLinks) {
+    const links = db
+      .prepare(
+        `SELECT l.plan_id AS planId,l.session_id AS sessionId,l.target_json AS targetJson,
+      t.athlete_id AS athleteId,t.session_date AS date,t.session_order AS sessionOrder
+      FROM training_plan_execution_links l JOIN training_sessions t ON t.id=l.training_session_id
+      WHERE t.athlete_id IN (${placeholders}) AND t.session_date BETWEEN ? AND ?`
+      )
+      .all(...ids, windowStart, today) as {
+      planId: number;
+      sessionId: string;
+      targetJson: string;
+      athleteId: number;
+      date: string;
+      sessionOrder: number;
+    }[];
+    // 同日多课只按数据库稳定课次对应，不按内容或时间猜测计划。
+    for (const session of sessions) {
+      const ordered = links.filter(
+        (link) => link.athleteId === session.athleteId && link.date === session.date
+      );
+      const link = ordered.find((link) => link.sessionOrder === session.sessionOrder);
+      if (link) {
+        session.teamPlanId = link.planId;
+        session.planSessionId = link.sessionId;
+        session.target = JSON.parse(link.targetJson) as TeamPlanSession;
+      }
+    }
+  }
   return buildPlanExecution({ athletes, plans, sessions, now: input.now });
 }

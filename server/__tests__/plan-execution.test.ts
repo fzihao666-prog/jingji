@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPlanExecution } from '../core/plan-execution.ts';
 
 const now = new Date('2026-09-28T02:00:00Z');
-const athletes = [
-  { athleteId: 1, athleteName: '样例甲', team: '一队' },
-];
+const athletes = [{ athleteId: 1, athleteName: '样例甲', team: '一队' }];
 
 function plan(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -43,10 +41,7 @@ function session(overrides: Partial<Record<string, unknown>> = {}) {
 describe('训练计划执行率', () => {
   it('对比计划天数与实际天数计算执行率', () => {
     const plans = [plan()];
-    const sessions = [
-      session({ date: '2026-09-22' }),
-      session({ date: '2026-09-24' }),
-    ];
+    const sessions = [session({ date: '2026-09-22' }), session({ date: '2026-09-24' })];
     const result = buildPlanExecution({ athletes, plans, sessions, now });
     expect(result.athletes[0].hasPlan).toBe(true);
     expect(result.athletes[0].plannedDays).toBeGreaterThan(0);
@@ -75,9 +70,7 @@ describe('训练计划执行率', () => {
   });
 
   it('计划超出统计窗口时不计入', () => {
-    const plans = [
-      plan({ startDate: '2026-08-01', endDate: '2026-08-31' }),
-    ];
+    const plans = [plan({ startDate: '2026-08-01', endDate: '2026-08-31' })];
     const result = buildPlanExecution({ athletes, plans, sessions: [], now });
     expect(result.athletes[0].hasPlan).toBe(false);
     expect(result.summary.withoutPlan).toBe(1);
@@ -127,7 +120,12 @@ describe('训练计划执行率', () => {
     expect(result.athletes[0].todayStatus).toBe('pending');
     expect(result.athletes[0].todayDurationMin).toBeNull();
     expect(result.athletes[0].todayDistanceKm).toBeNull();
-    expect(result.today.summary).toMatchObject({ planned: 1, recorded: 0, confirmed: 0, pending: 1 });
+    expect(result.today.summary).toMatchObject({
+      planned: 1,
+      recorded: 0,
+      confirmed: 0,
+      pending: 1,
+    });
     expect(result.today.summary.actualDurationMin).toBeNull();
     expect(result.today.summary.actualDistanceKm).toBeNull();
   });
@@ -148,5 +146,93 @@ describe('训练计划执行率', () => {
       rpeReported: 0,
       actualDurationMin: 60,
     });
+  });
+});
+
+describe('队伍计划逐课执行与版本快照', () => {
+  const lesson = {
+    id: 'am',
+    date: '2026-09-28',
+    category: 'special' as const,
+    period: '上午',
+    content: '水上',
+    durationMin: 60,
+    distanceKm: 10,
+    intensity: 'U2',
+    sets: null,
+    reps: null,
+    load: null,
+    notes: '',
+  };
+  const teamPlan = () => ({
+    ...plan(),
+    teamPlanId: 10,
+    rootId: 10,
+    publishedAt: '2026-09-27T01:00:00Z',
+    targetSessions: [
+      lesson,
+      { ...lesson, id: 'pm', category: 'physical' as const, distanceKm: null },
+    ],
+  });
+  it('上午与下午独立计算，未关联实际记录不会猜测完成，缺记录待确认', () => {
+    const result = buildPlanExecution({
+      athletes,
+      plans: [teamPlan()],
+      sessions: [
+        session({
+          teamPlanId: 10,
+          planSessionId: 'am',
+          target: lesson,
+          durationReported: 1,
+          distanceReported: 1,
+          distanceKm: 10,
+          durationMin: 60,
+        }),
+      ],
+      now,
+    });
+    expect(result.athletes[0].lessonExecution.map((row) => row.status)).toEqual([
+      'complete',
+      'pending',
+    ]);
+    expect(result.athletes[0].pendingSessions).toBe(1);
+    const unrelated = buildPlanExecution({
+      athletes,
+      plans: [teamPlan()],
+      sessions: [session()],
+      now,
+    });
+    expect(unrelated.athletes[0].completionRate).toBeNull();
+    expect(unrelated.athletes[0].status).toBe('pending');
+  });
+  it('修订保留原个人目标快照且缺失测量不当作真实0', () => {
+    const revised = {
+      ...teamPlan(),
+      teamPlanId: 11,
+      publishedAt: '2026-09-28T01:00:00Z',
+      targetSessions: [{ ...lesson, durationMin: 120 }],
+    };
+    const result = buildPlanExecution({
+      athletes,
+      plans: [teamPlan(), revised],
+      sessions: [
+        session({
+          teamPlanId: 10,
+          planSessionId: 'am',
+          target: lesson,
+          durationReported: 1,
+          distanceReported: 1,
+          distanceKm: 10,
+          durationMin: 60,
+        }),
+      ],
+      now,
+    });
+    expect(
+      result.athletes[0].lessonExecution.find((row) => row.sessionId === 'am')?.target.durationMin
+    ).toBe(60);
+    expect(
+      result.athletes[0].lessonExecution.find((row) => row.sessionId === 'am')?.completionRate
+    ).toBe(1);
   });
 });

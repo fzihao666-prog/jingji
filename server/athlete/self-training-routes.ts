@@ -1,3 +1,4 @@
+import { TrainingPlanLinkError } from '../core/training-plan-links.ts';
 import type { Express, Request } from 'express';
 import { requireAuth } from '../core/auth.ts';
 import { db } from '../core/db.ts';
@@ -10,11 +11,16 @@ import {
   updateSession,
 } from './training-session-service.ts';
 
-import { idempotencyKeySchema, submitSelfTraining, TrainingSubmissionConflict } from './training-submission-service.ts';
+import {
+  idempotencyKeySchema,
+  submitSelfTraining,
+  TrainingSubmissionConflict,
+} from './training-submission-service.ts';
 
 function ownAthleteId(req: Request): number | null {
   const user = req.authUser!;
-  if (user.role !== 'ATL' || !user.athleteId || !hasAthleteAccess(user, user.athleteId)) return null;
+  if (user.role !== 'ATL' || !user.athleteId || !hasAthleteAccess(user, user.athleteId))
+    return null;
   return user.athleteId;
 }
 
@@ -23,7 +29,12 @@ export function registerSelfTrainingRoutes(app: Express) {
     const athleteId = ownAthleteId(req);
     if (!athleteId) return res.status(403).json({ message: '只有运动员本人可以查看训练填报。' });
     const rows = listSessions(athleteId);
-    res.json({ sessions: rows.map((row) => ({ ...row, editable: row.source === 'athlete_self_report' && row.createdBy === req.authUser!.id })) });
+    res.json({
+      sessions: rows.map((row) => ({
+        ...row,
+        editable: row.source === 'athlete_self_report' && row.createdBy === req.authUser!.id,
+      })),
+    });
   });
 
   app.post('/api/me/training-sessions', requireAuth, (req, res) => {
@@ -34,9 +45,14 @@ export function registerSelfTrainingRoutes(app: Express) {
     const key = idempotencyKeySchema.safeParse(req.get('Idempotency-Key'));
     if (!key.success) return res.status(400).json({ message: '提交标识格式无效。' });
     try {
-      return res.status(201).json(submitSelfTraining(athleteId, req.authUser!.id, parsed.data, key.data));
+      return res
+        .status(201)
+        .json(submitSelfTraining(athleteId, req.authUser!.id, parsed.data, key.data));
     } catch (error) {
-      if (error instanceof TrainingSubmissionConflict) return res.status(409).json({ message: error.message });
+      if (error instanceof TrainingPlanLinkError)
+        return res.status(400).json({ message: error.message });
+      if (error instanceof TrainingSubmissionConflict)
+        return res.status(409).json({ message: error.message });
       throw error;
     }
   });
@@ -52,7 +68,13 @@ export function registerSelfTrainingRoutes(app: Express) {
       return res.status(403).json({ message: '只能修改本人填报的训练记录。' });
     const parsed = sessionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '训练内容、日期或数值格式无效。' });
-    updateSession(athleteId, id, parsed.data, existing);
+    try {
+      updateSession(athleteId, id, parsed.data, existing);
+    } catch (error) {
+      if (error instanceof TrainingPlanLinkError)
+        return res.status(400).json({ message: error.message });
+      throw error;
+    }
     return res.json({ session: { ...readSession(athleteId, id), editable: true } });
   });
 

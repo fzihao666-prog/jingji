@@ -12,7 +12,8 @@
     "pages/injury-report/injury-report",
     "pages/test-entry/test-entry",
     "pages/mine/mine",
-    "pages/privacy/privacy"
+    "pages/privacy/privacy",
+    "pages/team-plans/team-plans"
   ],
   "window": {
     "navigationBarBackgroundColor": "#092b39",

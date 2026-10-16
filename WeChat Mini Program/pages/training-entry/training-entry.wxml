@@ -1,3 +1,4 @@
+<view wx:if="{{planLabel}}" class="card"><text>当前训练任务：{{planLabel}}</text><text>请填写实际完成的时长、公里数与 RPE。</text></view>
 <view class="page training-form-page">
   <view class="page-head"><view class="page-title">{{editId ? '修改训练记录' : '填写训练记录'}}</view><view class="page-description">{{isCoach ? '教练代填数据与本人填报进入同一份训练统计' : '本人填写的数据直接进入网页版训练统计'}}</view></view>
   <view wx:if="{{error}}" class="error-box">{{error}}</view>

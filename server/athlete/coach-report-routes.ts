@@ -1,3 +1,4 @@
+import { TrainingPlanLinkError } from '../core/training-plan-links.ts';
 import type { Express, Request } from 'express';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { db } from '../core/db.ts';
@@ -54,7 +55,12 @@ export function registerCoachReportRoutes(app: Express) {
     if (!athleteId) return res.status(403).json({ message: '无权为该运动员填写训练记录。' });
     const parsed = sessionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '训练内容、日期或数值格式无效。' });
-    const id = insertSession(athleteId, parsed.data, COACH_REPORT_SOURCE, user.id);
+    let id: number;
+    try { id = insertSession(athleteId, parsed.data, COACH_REPORT_SOURCE, user.id); }
+    catch (error) {
+      if (error instanceof TrainingPlanLinkError) return res.status(400).json({ message: error.message });
+      throw error;
+    }
     audit(user.id, 'CREATE_COACH_TRAINING_SESSION', 'training_session', id, {
       athleteId,
       date: parsed.data.date,
@@ -74,7 +80,11 @@ export function registerCoachReportRoutes(app: Express) {
       return res.status(403).json({ message: '只能修改教练代填的训练记录。' });
     const parsed = sessionSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: '训练内容、日期或数值格式无效。' });
-    updateSession(athleteId, id, parsed.data, existing);
+    try { updateSession(athleteId, id, parsed.data, existing); }
+    catch (error) {
+      if (error instanceof TrainingPlanLinkError) return res.status(400).json({ message: error.message });
+      throw error;
+    }
     audit(user.id, 'UPDATE_COACH_TRAINING_SESSION', 'training_session', id, {
       athleteId,
       date: parsed.data.date,

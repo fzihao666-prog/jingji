@@ -229,7 +229,7 @@ sequenceDiagram
 | `server/core/` | `db.ts`、`db-connection.ts`、`database-path.ts`、`db-initialize.ts`、`db-migrations.ts`、`db-system-data.ts`（SQLite 路径、连接、schema、兼容升级与系统字典）、`auth.ts`（JWT、限流）、`permissions.ts`（RBAC 与数据范围）、`utils.ts`、`shared-server.ts`、`uploads.ts`、`coach-daily-todos.ts`、`pain-trend.ts`（伤病疼痛趋势纯聚合） |
 | `server/access/` | 账号与权限管理路由、认证（登录/注册/改密）路由、注册审批工作流 |
 | `server/athlete/` | 运动员档案路由与档案校验/写入辅助；本人/教练代填训练课次与恢复日报（`self-training-routes.ts`、`coach-report-routes.ts`、`self-daily-routes.ts`）、训练课次与恢复事实写入（`training-session-service.ts`、`wellness-store.ts`） |
-| `server/training-plan/` | 训练计划路由、计划解析与 Excel 导出、AI 计划生成 |
+| `server/training-plan/` | 队伍计划版本、审核发布、历史计划解析与 Excel 导出 |
 | `server/strength/` | 体能训练导入与 AI 识别、力量测试与建议、体能指标编码 |
 | `server/analysis/` | 分析与雷达模型路由、训练总览、个人档案服务、RPE 统计 |
 | `server/data-import/` | 统一数据导入预览/提交路由与解析引擎 |
@@ -247,14 +247,22 @@ sequenceDiagram
 | 运动员     | `/api/athletes`、`/api/admin/athletes`                       | 档案、身体成分、照片、伤病、批量管理，以及教练代填训练课次与恢复日报（`:id/training-sessions`、`:id/wellness`） |
 | 队伍与人员 | `/api/teams`、`/api/admin/assignments`、`/api/admin/coaches` | 队伍目录、教练分类、按队伍派生的教练关系与行政归属编辑         |
 | 专项训练   | `/api/special-training`、`/api/special-tests`                | 训练场次、专项测试和模板导入         |
-| 体能训练   | `/api/training-plans`、`/api/strength-training`              | 计划、AI 生成、结果导入和分析        |
+| 体能训练   | `/api/training-plans`、`/api/strength-training`              | 历史计划读取、结果导入和分析        |
 | 测试与模型 | `/api/strength-tests`、`/api/analysis`、冠军模型接口         | 测试、建议、项目模型和个人分析       |
 | 总览与记录 | `/api/overview`、`/api/records`                              | 权限范围内的聚合和场次查询           |
 | 组织治理   | `/api/admin/registrations`、`/api/access`                    | 审核、注册审核开关、账号、授权和审计        |
 
 ## 7. 共享领域模型
 
-统一训练计划只读入口 `GET /api/training-plans/catalog` 使用 `server/training-plan/training-plan-catalog.ts` 适配 `training_plans` 与 `special_training_plans` / `special_training_plan_sessions`，不合表、不迁移数据。目录键为“来源表名:原 ID”；个人计划按 `accessibleAthleteIds` 限制，复用 `readStoredTrainingPlanData` 兼容历史矩阵格式并保留原始 `weeklyPlans`。旧专项计划无队伍及人员关联，明确展示为项目级；仅授权项目内的原创建人或具有全国行政范围及该项目全部队伍权限的管理者可读取，ATL 不读取此类项目级计划。不能按队名推断归属或借项目授权暴露其他队伍课表。Web 详情的执行分析继续调用 `GET /api/coach/plan-execution`，展示其固有近 7 天运动员汇总，不引入计划级完成率算法；无可靠人员关联时显示不可关联说明。
+统一队伍计划复用 `training_plans` 和 `plan_data`，兼容增加 `model`（旧行默认 `legacy`）、`team_id`、`root_id`、`version`、`revision`、`status`、`published_at`、`archived_at` 和 `reviewed_by`。每个版本独立一行，JSON 统一存储具有稳定 ID 的 `sessions`、仅差异字段的 `overrides`、目标与重点。旧表的 `athlete_id NOT NULL` 暂作为技术锚点保留，队伍归属只以 `team_id` 为准；锚点不代表创建独立个人计划。触发器阻断删除锚点运动员导致队伍历史级联丢失，运动员可停用。空队伍暂不能创建计划，避免伪造运动员。迁移只增加列、索引、触发器及关联表，不删除旧数据、不重建表。无法确定归属的旧个人和项目级专项计划维持历史只读，不按当前队名猜测迁移。
+
+`/api/team-plans` 由 Web 与小程序共用：GET 返回权限内计划，POST 创建草稿，PUT 携带 `revision` 更新草稿，`/:id/transition` 处理提交、退回、确认发布、归档和修订。教练维护计划须拥有整支队伍的访问范围；运动员不得读取草稿或他人 Override。运动员可读取本人执行关联的旧发布版本，转队不会丢失已关联历史。保存、发布、修订及审计使用写事务与 revision 检查，重复发布和并发覆盖返回冲突。修订发布归档原版本，保留原始 JSON 与发布时间。旧个人写入及 AI 计划接口返回 410；历史 `/api/training-plans`、目录和导出明确排除 `model='team'`，防止通过旧接口绕过审核或泄漏差异。
+
+`training_plan_execution_links` 是最小执行关联表，按实际 `training_session_id` 关联计划版本行、稳定训练课 ID 与当时合并 Override 的目标快照；不复制训练事实。训练填报和教练代填共用权限、日期、类别及已发布版本校验，写入事实及关联同事务提交；已关联记录可以修正实际数值，但不能静默改绑版本、日期或类别。合法无关联历史记录保留。`server/core/plan-execution.ts` 复用原汇总流程，新队伍计划逐课对照时长和距离，专项与体能独立计算；无记录或必需量未填报为待确认，不推断 0 或未完成。聚合执行率在任一训练课尚待确认时为空，返回逐课结果及待确认数；旧个人计划继续原按天统计口径。今日课表复用 `plan-today.ts`，正式任务只来自适用的发布版本。
+
+历史目录 `GET /api/training-plans/catalog` 继续适配旧 `training_plans` 与 `special_training_plans` / `special_training_plan_sessions`，保留来源键、原 ID、历史矩阵格式与 `weeklyPlans`。项目级专项计划仍采用原创建人或完整全国及项目全部队伍权限规则，ATL 不读取。历史数据与正式训练事实、结果、RPE、档案统计均不清空。
+
+部署与回退：发布前停写并使用既有数据库备份流程保留一致性备份；本变更不执行生产迁移或删除。启动时幂等添加兼容结构。需要回退时先停用队伍写入口，保留带 `model` 过滤的历史只读实现和新增列/表，以保全升级后新产生的执行数据；不能直接部署未过滤队伍行的旧个人接口。恢复升级前备份会丢失升级后的写入，须先导出并核对新增事实，不能自动恢复或 DROP 新结构。
 
 教练责任关系由 `server/core/coach-team-responsibility.ts` 统一查询：有效 SCC 账号的项目授权与队伍授权按“项目 + 队名”解析到有效 `project_teams.id`，再以 `athletes.team_id` 关联同项目有效运动员。通配授权沿用既有语义，最终按 ID 去重；不通过逐人关联、账号上下级或导入操作人确定负责教练。`accessibleAthleteIds` 对 SCC 使用该集合，不按队员生源行政区二次过滤；管理角色保留区域、项目、队伍交集，ATL 保留本人限制，具体操作仍按角色能力授权。运动员响应中的 `coaches`、`coachUsers` 和 assignments 的 `coachIds` 同源，响应仅包含请求者可访问成员。
 
@@ -387,7 +395,7 @@ erDiagram
 | 身份与组织   | `users`、`account_profiles`、权限表、`coach_athletes`         | 身份、层级和数据范围；运动员可见性以区域/项目/队伍权限为准         |
 | 运动员主数据 | `athletes`、`athlete_profiles`、`athlete_origins`             | 稳定身份和扩展档案                                                                                       |
 | 训练事实     | `training_sessions`、`daily_wellness`、`strength_result_sets` | 当前总览和记录页的主要事实源；`daily_wellness` 同时承接导入、演示与运动员本人恢复日报                                                                             |
-| 训练计划     | `training_plans`                                              | 结构化列与 `plan_data` JSON 并存                                                                         |
+| 训练计划     | `training_plans`                                              | 队伍版本列与 `plan_data` JSON 并存，旧行保留只读                                                                         |
 | 测试评估     | `test_sessions`、`test_measurements`、身体测量、竞技状态      | 统一指标模型；`test_sessions.duration_min` 保存测试批次时长，团队汇总按测试日期与类型去重                |
 | 专项测试     | `special_test_events`、`special_test_results`                 | 事件与参与者成绩                                                                                         |
 | 专项冠军模型 | `special_champion_models`                                     | 按项目、分组、标准代码与细分项目维护的赛事标杆配置；成绩与比赛日期作为同一条正式配置保存，不写入模拟成绩 |
@@ -588,7 +596,7 @@ AI 服务支持主模型和多个备用配置，并按顺序失败切换。API �
 
 AI 适合：
 
-- 生成可编辑的训练计划草案；
+- 未来生成队伍计划草稿（本期尚未接入）；
 - 从图片或 PDF 提取结构化训练结果；
 - 提供有明确输入依据的建议文本。
 
