@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useId, useState, type FormEvent } from 'react';
-import { ArrowRight } from 'lucide-react';
 import {
   Legend,
   PolarAngleAxis,
@@ -26,7 +25,6 @@ type Props = {
   to: string;
   athletes: Athlete[];
   athleteId: number | null;
-  onPlanOpen: () => void;
 };
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 3 });
 const format = (value: number | null | undefined) =>
@@ -124,7 +122,6 @@ export function PhysicalChampionModel({
   to,
   athletes,
   athleteId,
-  onPlanOpen,
 }: Props) {
   const [payload, setPayload] = useState<PhysicalChampionPayload | null>(null);
   const [error, setError] = useState('');
@@ -265,11 +262,7 @@ export function PhysicalChampionModel({
       title="体能冠军模型"
       description={`${projectLabel(project)} · ${from} — ${to}`}
       className="physical-champion"
-      actions={
-        <button type="button" className="dashboard-action-button" onClick={onPlanOpen}>
-          查看训练计划 <ArrowRight size={15} aria-hidden="true" />
-        </button>
-      }
+
     >
       <div aria-live="polite">
         {showLoading && <ContentState kind="loading" title="正在加载冠军参考模型" />}

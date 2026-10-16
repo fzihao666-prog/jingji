@@ -618,7 +618,6 @@ export function StrengthTrainingDashboard({
       />
       <PhysicalChampionModel
         project={project}
-        onPlanOpen={() => onNavigate('strength-plan')}
         from={from}
         to={to}
         athletes={athletes}
