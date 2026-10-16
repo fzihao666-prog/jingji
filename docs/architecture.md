@@ -254,6 +254,8 @@ sequenceDiagram
 
 ## 7. 共享领域模型
 
+统一训练计划只读入口 `GET /api/training-plans/catalog` 使用 `server/training-plan/training-plan-catalog.ts` 适配 `training_plans` 与 `special_training_plans` / `special_training_plan_sessions`，不合表、不迁移数据。目录键为“来源表名:原 ID”；个人计划按 `accessibleAthleteIds` 限制，复用 `readStoredTrainingPlanData` 兼容历史矩阵格式并保留原始 `weeklyPlans`。旧专项计划无队伍及人员关联，明确展示为项目级；仅授权项目内的原创建人或具有全国行政范围及该项目全部队伍权限的管理者可读取，ATL 不读取此类项目级计划。不能按队名推断归属或借项目授权暴露其他队伍课表。Web 详情的执行分析继续调用 `GET /api/coach/plan-execution`，展示其固有近 7 天运动员汇总，不引入计划级完成率算法；无可靠人员关联时显示不可关联说明。
+
 教练责任关系由 `server/core/coach-team-responsibility.ts` 统一查询：有效 SCC 账号的项目授权与队伍授权按“项目 + 队名”解析到有效 `project_teams.id`，再以 `athletes.team_id` 关联同项目有效运动员。通配授权沿用既有语义，最终按 ID 去重；不通过逐人关联、账号上下级或导入操作人确定负责教练。`accessibleAthleteIds` 对 SCC 使用该集合，不按队员生源行政区二次过滤；管理角色保留区域、项目、队伍交集，ATL 保留本人限制，具体操作仍按角色能力授权。运动员响应中的 `coaches`、`coachUsers` 和 assignments 的 `coachIds` 同源，响应仅包含请求者可访问成员。
 
 `coach_athletes` 仅保留历史表及数据，在线查询、注册审核、账号变更、档案保存、导入及新演示初始化均不再读写它。初始化不再据此推导队伍授权或账号上级；缺少队伍授权的历史教练保持无范围，由有权限管理员显式补齐，重复启动不得恢复撤权。

@@ -57,6 +57,9 @@ beforeAll(async () => {
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER PRIMARY KEY, category TEXT, updated_at TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER);
+    CREATE TABLE training_plans (id INTEGER, athlete_id INTEGER, title TEXT, start_date TEXT, end_date TEXT, created_by INTEGER, plan_data TEXT);
+    CREATE TABLE special_training_plans (id INTEGER, project TEXT, week_start TEXT, title TEXT, status TEXT, created_by INTEGER);
+    CREATE TABLE special_training_plan_sessions (id INTEGER, plan_id INTEGER, session_date TEXT, session_order INTEGER, content TEXT, target_json TEXT);
   `);
   const { registerAccessRoutes } = await import('./access-routes.ts');
   secret = (await import('../core/auth.ts')).jwtSecret;
@@ -65,6 +68,9 @@ beforeAll(async () => {
   registerAccessRoutes(app);
   const { registerAuthRoutes } = await import('./auth-routes.ts');
   registerAuthRoutes(app);
+  const { registerTrainingPlanCatalogRoutes } =
+    await import('../training-plan/training-plan-catalog-routes.ts');
+  registerTrainingPlanCatalogRoutes(app);
   server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, '127.0.0.1', () => resolve(listening));
   });
@@ -79,6 +85,7 @@ beforeEach(() => {
     DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;
     DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins;
     DELETE FROM coach_profiles; DELETE FROM coach_athletes;
+    DELETE FROM training_plans; DELETE FROM special_training_plans; DELETE FROM special_training_plan_sessions;
     INSERT INTO users (id,username,display_name,role,athlete_id) VALUES
       (1,'manager','全国管理者','DMD',NULL), (2,'coach2','教练甲','SCC',NULL),
       (3,'coach3','教练乙','SCC',NULL), (4,'empty','空队教练','SCC',NULL),
@@ -147,12 +154,44 @@ describe('队伍责任范围 HTTP 集成', () => {
     expect(payload.coaches.map((coach) => coach.id)).toEqual([2]);
   });
 
+  it('统一计划接口覆盖无账号队员，并隔离跨队、跨项目及项目级计划', async () => {
+    database.exec(`INSERT INTO training_plans VALUES
+      (1,101,'甲计划','2026-10-01','2026-10-31',2,'{}'),
+      (2,102,'乙计划','2026-10-01','2026-10-31',2,'{}'),
+      (3,103,'无账号计划','2026-10-01','2026-10-31',2,'{}'),
+      (4,104,'其他队计划','2026-10-01','2026-10-31',2,'{}'),
+      (5,201,'其他项目计划','2026-10-01','2026-10-31',2,'{}');
+      INSERT INTO special_training_plans VALUES
+      (1,'ROWING','2026-10-12','本人项目计划','active',2),
+      (2,'ROWING','2026-10-12','他人项目计划','active',3),
+      (3,'CANOE_SPRINT','2026-10-12','其他项目','active',2);`);
+    const read = async (actor: number) => {
+      const response = await fetch(`${baseUrl}/api/training-plans/catalog`, {
+        headers: headers(actor),
+      });
+      expect(response.status).toBe(200);
+      return (await response.json()) as { plans: Array<{ key: string }> };
+    };
+    expect((await read(2)).plans.map((plan) => plan.key)).toEqual([
+      'training_plans:1',
+      'training_plans:2',
+      'training_plans:3',
+      'special_training_plans:1',
+    ]);
+    expect((await read(6)).plans.map((plan) => plan.key)).toEqual(['training_plans:1']);
+    expect((await read(5)).plans.map((plan) => plan.key)).toEqual(['training_plans:1']);
+    expect((await read(1)).plans).toHaveLength(8);
+    expect((await fetch(`${baseUrl}/api/training-plans/catalog`)).status).toBe(401);
+  });
+
   it('队伍人数和教练名单包含无登录账号队员，账号停用或删除不改变档案责任范围', async () => {
     const expectFullTeam = async () => {
       for (const path of ['/api/teams', '/api/admin/teams']) {
         const response = await fetch(`${baseUrl}${path}`, { headers: headers(2) });
         expect(response.status).toBe(200);
-        const payload = await response.json() as { teams: Array<{ id: number; athleteCount: number }> };
+        const payload = (await response.json()) as {
+          teams: Array<{ id: number; athleteCount: number }>;
+        };
         expect(payload.teams.find((team) => team.id === 10)?.athleteCount).toBe(3);
         expect(payload.teams.some((team) => team.id === 11 || team.id === 20)).toBe(false);
       }

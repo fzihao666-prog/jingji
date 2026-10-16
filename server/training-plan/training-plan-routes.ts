@@ -1,3 +1,4 @@
+import { registerTrainingPlanCatalogRoutes } from './training-plan-catalog-routes.ts';
 import type { Express } from 'express';
 import { upload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
@@ -14,6 +15,7 @@ import {
 } from './training-plan-service.ts';
 
 export function registerTrainingPlanRoutes(app: Express) {
+  registerTrainingPlanCatalogRoutes(app);
   app.get('/api/training-plans', requireAuth, (req, res) => {
     const user = req.authUser!;
     const athleteId = Number(req.query.athleteId || user.athleteId || 0);

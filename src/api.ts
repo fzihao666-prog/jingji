@@ -1,3 +1,4 @@
+import type { CatalogPlan, PlanExecutionRow } from '../shared/training-plan-catalog';
 import {
   resetAccountPasswordSchema,
   resetAccountPasswordResponseSchema,
@@ -417,6 +418,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  },
+  async trainingPlanCatalog() {
+    return request<{ plans: CatalogPlan[] }>('/api/training-plans/catalog');
+  },
+  async planExecution(project: string) {
+    return request<{ date: string; athletes: PlanExecutionRow[] }>(
+      `/api/coach/plan-execution?${new URLSearchParams({ project })}`
+    );
   },
   async trainingPlans(athleteId: number) {
     return request<{ plans: TrainingPlan[] }>(`/api/training-plans?athleteId=${athleteId}`);

@@ -27,8 +27,15 @@ const SpecialTrainingDashboard = lazy(() =>
 const SpecialTestsPage = lazy(() =>
   import('./pages/SpecialTestsPage').then((module) => ({ default: module.SpecialTestsPage }))
 );
-const TrainingPlanPage = lazy(() =>
-  import('./pages/TrainingPlanPage').then((module) => ({ default: module.TrainingPlanPage }))
+const StrengthTrainingAnalysisPage = lazy(() =>
+  import('./pages/StrengthTrainingAnalysisPage').then((module) => ({
+    default: module.StrengthTrainingAnalysisPage,
+  }))
+);
+const UnifiedTrainingPlansPage = lazy(() =>
+  import('./pages/UnifiedTrainingPlansPage').then((module) => ({
+    default: module.UnifiedTrainingPlansPage,
+  }))
 );
 const PersonalPage = lazy(() =>
   import('./pages/PersonalPage').then((module) => ({ default: module.PersonalPage }))
@@ -60,6 +67,7 @@ const DataManagementPage = lazy(() =>
 const today = toIsoDate(new Date());
 const pageKeys: PageKey[] = [
   'overview',
+  'training-plans',
   'special-overview',
   'special-volume',
   'special-time',
@@ -89,7 +97,10 @@ const pageKeys: PageKey[] = [
 ];
 
 function pageFromHash(): PageKey {
-  const key = window.location.hash.replace(/^#\/?/, '');
+  const key =
+    window.location.hash.replace(/^#\/?/, '').split('?')[0] ||
+    (window.location.pathname === '/training-plans' ? 'training-plans' : '');
+  if (key === 'special-schedule' || key === 'strength-plan') return 'training-plans';
   return pageKeys.includes(key as PageKey) ? (key as PageKey) : 'overview';
 }
 
@@ -107,6 +118,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
   const [page, setPage] = useState<PageKey>(() => pageFromHash());
+  const [routeHash, setRouteHash] = useState(() => window.location.hash);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
   const [from, setFrom] = useState(addDays(today, -29));
@@ -119,14 +131,30 @@ export default function App() {
   const [globalError, setGlobalError] = useState('');
 
   useEffect(() => {
-    const syncPageFromHash = () => setPage(pageFromHash());
+    const syncPageFromHash = () => {
+      setPage(pageFromHash());
+      setRouteHash(window.location.hash);
+    };
     window.addEventListener('hashchange', syncPageFromHash);
     return () => window.removeEventListener('hashchange', syncPageFromHash);
   }, []);
 
   const changePage = (nextPage: PageKey) => {
+    if (nextPage === 'special-schedule' || nextPage === 'strength-plan') {
+      const kind = nextPage === 'special-schedule' ? 'special' : 'physical';
+      const source =
+        page.startsWith('special-') || page.startsWith('strength-')
+          ? page
+          : kind === 'special'
+            ? 'special-overview'
+            : 'strength-overview';
+      window.location.hash = `/training-plans?type=${kind}&source=${source}`;
+      setPage('training-plans');
+      return;
+    }
     setPage(nextPage);
     writePageHash(nextPage);
+    setRouteHash(window.location.hash);
   };
 
   useEffect(() => {
@@ -174,7 +202,7 @@ export default function App() {
       setAthleteId(user.role === 'ATL' ? user.athleteId : null);
       return;
     }
-    if (page === 'overview' || page === 'special-overview') {
+    if (page === 'overview' || page === 'special-overview' || page === 'training-plans') {
       setRecords([]);
       setLoading(false);
       return;
@@ -314,13 +342,43 @@ export default function App() {
           </div>
         }
       >
+        {page === 'training-plans' && (
+          <UnifiedTrainingPlansPage
+            key={routeHash}
+            user={user}
+            athletes={athletes}
+            project={project}
+            from={from}
+            to={to}
+            initialKind={
+              new URLSearchParams(routeHash.split('?')[1]).get('type') ||
+              (routeHash.includes('special-schedule')
+                ? 'special'
+                : routeHash.includes('strength-plan')
+                  ? 'physical'
+                  : '')
+            }
+            onBack={(() => {
+              const source = new URLSearchParams(routeHash.split('?')[1]).get('source');
+              return source && pageKeys.includes(source as PageKey) && source !== 'training-plans'
+                ? () => changePage(source as PageKey)
+                : undefined;
+            })()}
+          />
+        )}
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
         {page === 'special-overview' && (
-          <SpecialTrainingDashboard project={project} from={from} to={to} />
+          <SpecialTrainingDashboard
+            project={project}
+            from={from}
+            to={to}
+            onPlanOpen={() => changePage('special-schedule')}
+          />
         )}
         {page.startsWith('special-') && page !== 'special-overview' && (
           <SpecialTestsPage
             {...shared}
+            onPlanOpen={() => changePage('special-schedule')}
             section={page as Exclude<SpecialPageKey, 'special-overview'>}
             onSectionChange={changePage}
           />
@@ -335,7 +393,8 @@ export default function App() {
           />
         )}
         {page.startsWith('strength-') && page !== 'strength-overview' && (
-          <TrainingPlanPage
+          <StrengthTrainingAnalysisPage
+            onPlanOpen={() => changePage('strength-plan')}
             section={page as Exclude<StrengthPageKey, 'strength-overview'>}
             user={user}
             athletes={projectAthletes}

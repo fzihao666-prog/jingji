@@ -24,8 +24,7 @@
 
 .strength-comparison-panel header > div > span,
 .strength-results-panel > header > div > span,
-.strength-import-dialog > header span,
-.strength-ai-drawer > header span {
+.strength-import-dialog > header span {
   color: var(--strength-teal);
   font:
     800 9px Bahnschrift,
@@ -114,9 +113,7 @@
   min-width: 230px;
 }
 
-.strength-command-controls label > span,
-.strength-plan-meta label > span,
-.strength-exercise-card label > span {
+.strength-command-controls label > span {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -127,8 +124,6 @@
 }
 
 .strength-command-controls select,
-.strength-plan-meta input,
-.strength-exercise-card input,
 .strength-import-table input,
 .strength-import-table select {
   width: 100%;
@@ -178,8 +173,6 @@
 }
 
 .strength-command-controls select:focus,
-.strength-plan-meta input:focus,
-.strength-exercise-card input:focus,
 .strength-import-table input:focus,
 .strength-import-table select:focus {
   border-color: #62aaa2;
@@ -522,8 +515,7 @@
 }
 
 .strength-comparison-panel,
-.strength-results-panel,
-.strength-week-editor {
+.strength-results-panel {
   min-width: 0;
   margin-top: 14px;
   border: 1px solid var(--line);
@@ -646,133 +638,12 @@
   font-style: normal;
 }
 
-.strength-plan-meta {
-  min-width: 0;
-  margin-bottom: 12px;
-  padding: 16px;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(110px, 1fr));
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: 15px;
-  background: var(--paper);
-  box-shadow: var(--shadow);
-}
-
-.strength-plan-meta label.wide {
-  grid-column: span 2;
-}
-
-.strength-week-editor {
-  margin-top: 0;
-  overflow: hidden;
-}
-
-.strength-week-editor > header {
-  padding: 12px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid #dce6e7;
-  background: #f7fafa;
-}
-
-.strength-week-tabs {
-  display: flex;
-  gap: 5px;
-  overflow-x: auto;
-}
-
-.strength-week-tabs button {
-  min-width: 112px;
-  min-height: 45px;
-  padding: 7px 11px;
-  border: 1px solid #d6e2e3;
-  border-radius: 8px;
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  align-items: center;
-  text-align: left;
-  color: #577078;
-  background: #fff;
-  cursor: pointer;
-}
-
-.strength-week-tabs button small {
-  color: #8b9da2;
-  font:
-    800 8px Bahnschrift,
-    sans-serif;
-}
-
-.strength-week-tabs button strong {
-  font-size: 9px;
-}
-
-.strength-week-tabs button.active {
-  border-color: var(--strength-teal);
-  color: #fff;
-  background: var(--strength-teal);
-  box-shadow: 0 6px 14px rgb(14 143 135 / 14%);
-}
-
-.strength-week-tabs button.active small {
-  color: #c9ece8;
-}
-
-.strength-exercise-list {
-  padding: 14px;
-  display: grid;
-  gap: 10px;
-}
-
-.strength-exercise-card {
-  border: 1px solid #d8e4e5;
-  border-radius: 11px;
-  overflow: hidden;
-  background: #fff;
-}
-
-.strength-exercise-card > header {
-  padding: 11px 12px;
-  display: grid;
-  grid-template-columns: minmax(210px, 1fr) 150px auto;
-  align-items: end;
-  gap: 10px;
-  background: #f4f8f8;
-}
-
-.strength-exercise-card > header label > input {
-  height: 36px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.strength-exercise-card label.max > div {
-  position: relative;
-}
-
-.strength-exercise-card label.max input {
-  padding-right: 35px;
-}
-
-.strength-exercise-card label.max em {
-  position: absolute;
-  right: 10px;
-  top: 11px;
-  color: #7b8f95;
-  font-size: 8px;
-  font-style: normal;
-}
-
 .exercise-actions {
   display: flex;
   gap: 5px;
 }
 
-.exercise-actions button,
-.strength-prescription-row > button {
+.exercise-actions button {
   height: 36px;
   padding: 0 9px;
   border: 1px solid #d1dfe0;
@@ -787,45 +658,11 @@
   cursor: pointer;
 }
 
-.exercise-actions button:last-child,
-.strength-prescription-row > button {
+.exercise-actions button:last-child {
   width: 36px;
   padding: 0;
   justify-content: center;
   color: var(--strength-danger);
-}
-
-.strength-prescription-head,
-.strength-prescription-row {
-  padding: 0 12px;
-  display: grid;
-  grid-template-columns: minmax(180px, 1.6fr) 0.55fr 0.65fr 0.75fr 0.85fr 36px;
-  gap: 8px;
-  align-items: center;
-}
-
-.strength-prescription-head {
-  min-height: 30px;
-  color: #84969b;
-  background: #fbfcfc;
-  font-size: 8px;
-  font-weight: 750;
-}
-
-.strength-prescription-row {
-  min-height: 52px;
-  border-top: 1px solid #edf1f2;
-}
-
-.strength-prescription-row input {
-  height: 34px;
-}
-
-.strength-prescription-row > strong {
-  color: var(--strength-teal);
-  font:
-    800 10px Bahnschrift,
-    sans-serif;
 }
 
 .percent-input {
@@ -1189,19 +1026,7 @@
   background: #fff1ee;
 }
 
-.strength-dialog-backdrop {
-  position: fixed;
-  z-index: 100;
-  inset: 0;
-  padding: 24px;
-  display: grid;
-  place-items: center;
-  background: rgb(4 35 45 / 56%);
-  backdrop-filter: blur(3px);
-}
-
-.strength-import-dialog,
-.strength-ai-drawer {
+.strength-import-dialog {
   width: min(1180px, 96vw);
   max-height: calc(100vh - 48px);
   border: 1px solid rgb(255 255 255 / 40%);
@@ -1211,8 +1036,7 @@
   box-shadow: 0 28px 80px rgb(3 33 43 / 28%);
 }
 
-.strength-import-dialog > header,
-.strength-ai-drawer > header {
+.strength-import-dialog > header {
   min-height: 74px;
   padding: 14px 18px;
   display: flex;
@@ -1223,8 +1047,7 @@
   background: #fff;
 }
 
-.strength-import-dialog h2,
-.strength-ai-drawer h2 {
+.strength-import-dialog h2 {
   margin-top: 3px;
   font-size: 18px;
 }
@@ -1432,40 +1255,6 @@
   gap: 5px;
 }
 
-.strength-ai-scroll {
-  max-height: calc(100vh - 122px);
-  overflow: auto;
-}
-
-.strength-ai-drawer .ai-training-container {
-  max-width: none;
-  padding: 18px;
-}
-
-.strength-ai-drawer .ai-header {
-  margin-bottom: 14px;
-  padding: 18px 22px;
-  border-radius: 11px;
-  text-align: left;
-  box-shadow: none;
-}
-
-.strength-ai-drawer .ai-header h2 {
-  font-size: 20px;
-}
-
-.strength-ai-drawer .input-section {
-  padding: 18px;
-  border-radius: 11px;
-  box-shadow: none;
-  border: 1px solid var(--strength-line);
-}
-
-.strength-ai-drawer .text-input-wrapper textarea {
-  min-height: 150px;
-  border-width: 1px;
-}
-
 @media (width <= 1180px) {
   .strength-filter-bar {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1502,10 +1291,6 @@
 
   .strength-training-context dl > div:nth-child(n + 4) {
     border-bottom: 0;
-  }
-
-  .strength-plan-meta {
-    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -1645,52 +1430,8 @@
     width: 100%;
   }
 
-  .strength-plan-meta {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .strength-plan-meta label.wide {
-    grid-column: 1 / -1;
-  }
-
-  .strength-week-editor > header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .strength-week-tabs {
-    width: 100%;
-  }
-
-  .strength-week-tabs button {
-    min-width: 96px;
-  }
-
-  .strength-exercise-card > header {
-    grid-template-columns: 1fr 105px;
-  }
-
   .exercise-actions {
     grid-column: 1 / -1;
-  }
-
-  .strength-prescription-head {
-    display: none;
-  }
-
-  .strength-prescription-row {
-    padding: 10px;
-    grid-template-columns: 1.4fr 0.55fr 0.65fr;
-    gap: 6px;
-  }
-
-  .strength-prescription-row .percent-input,
-  .strength-prescription-row > strong {
-    grid-column: span 1;
-  }
-
-  .strength-prescription-row > button {
-    justify-self: end;
   }
 
   .strength-import-summary {
@@ -1702,12 +1443,7 @@
     justify-self: start;
   }
 
-  .strength-dialog-backdrop {
-    padding: 8px;
-  }
-
-  .strength-import-dialog,
-  .strength-ai-drawer {
+  .strength-import-dialog {
     width: 100%;
     max-height: calc(100vh - 16px);
   }
@@ -1720,8 +1456,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .strength-workbench *,
-  .strength-dialog-backdrop * {
+  .strength-workbench * {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;

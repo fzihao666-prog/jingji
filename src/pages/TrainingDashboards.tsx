@@ -15,7 +15,6 @@ import {
 import { api } from '../api';
 import { PhysicalChampionModel } from '../components/PhysicalChampionModel';
 import { PhysicalTestModule } from '../components/PhysicalTestModule';
-import { TrainingExecutionModule } from '../components/TrainingExecutionModule';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
   AppCard,
@@ -30,7 +29,6 @@ import type {
   Project,
   StrengthTest,
   StrengthTrainingSession,
-  TrainingPlan,
 } from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
@@ -508,7 +506,6 @@ export function StrengthTrainingDashboard({
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
-  const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const athleteKey = athletes.map((item) => item.id).join(',');
   useEffect(() => {
@@ -517,10 +514,9 @@ export function StrengthTrainingDashboard({
     const athleteIds = athleteKey ? athleteKey.split(',').map(Number) : [];
     Promise.all(
       athleteIds.map(async (athleteId) => {
-        const [resultSessions, resultTests, resultPlans] = await Promise.all([
+        const [resultSessions, resultTests] = await Promise.all([
           api.strengthTrainingResults(athleteId),
           api.strengthTests(athleteId),
-          api.trainingPlans(athleteId),
         ]);
         return {
           sessions: resultSessions.sessions.map((session) => ({
@@ -528,7 +524,6 @@ export function StrengthTrainingDashboard({
             athleteId,
           })),
           tests: resultTests.tests,
-          plans: resultPlans.plans,
         };
       })
     )
@@ -536,14 +531,12 @@ export function StrengthTrainingDashboard({
         if (!ignored) {
           setSessions(results.flatMap((item) => item.sessions));
           setTests(results.flatMap((item) => item.tests));
-          setPlans(results.flatMap((item) => item.plans));
         }
       })
       .catch(() => {
         if (!ignored) {
           setSessions([]);
           setTests([]);
-          setPlans([]);
         }
       })
       .finally(() => {
@@ -618,10 +611,10 @@ export function StrengthTrainingDashboard({
     <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
       <PageHeader
         variant="dashboard"
-        className="overview-page-heading"
+        className="overview-page-heading training-plan-entry-heading"
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
-        actions={athleteId ? <button className="dashboard-action-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : undefined}
+        actions={<><button className="dashboard-action-button" onClick={() => onNavigate('strength-plan')}>训练计划</button>{athleteId ? <button className="dashboard-action-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : null}</>}
       />
       <PhysicalChampionModel
         project={project}
@@ -691,14 +684,6 @@ export function StrengthTrainingDashboard({
           <PhysicalTestModule
             tests={periodTests}
             project={project}
-            from={from}
-            to={to}
-            athleteId={athleteId}
-            athletes={athletes}
-          />
-          <TrainingExecutionModule
-            plans={plans}
-            sessions={periodSessions}
             from={from}
             to={to}
             athleteId={athleteId}

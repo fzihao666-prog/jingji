@@ -24,6 +24,7 @@ import { formatNumber } from '../utils';
 import { PRIMARY_INTENSITY_ZONE_CODES } from '../../shared/training-intensity';
 
 type Props = {
+  onPlanOpen: () => void;
   project: Project;
   from: string;
   to: string;
@@ -35,7 +36,7 @@ const empty = (title: string) => (
   <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
 );
 
-export function SpecialTrainingDashboard({ project, from, to }: Props) {
+export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Props) {
   const [teams, setTeams] = useState<{ project: Project; items: ProjectTeam[] } | null>(null);
   const [selection, setSelection] = useState<{ project: Project; teamId: number | null }>({
     project,
@@ -116,15 +117,15 @@ export function SpecialTrainingDashboard({ project, from, to }: Props) {
     <PageContainer className="professional-overview training-dashboard-page">
       <PageHeader
         variant="dashboard"
-        className="overview-page-heading"
+        className="overview-page-heading training-plan-entry-heading"
         eyebrow="SPECIAL TRAINING"
         title="专项训练"
         actions={
-          selectedAthlete ? (
+          <><button className="dashboard-action-button" onClick={onPlanOpen}>训练计划</button>{selectedAthlete ? (
             <button className="dashboard-action-button" onClick={() => setSelectedAthleteId(null)}>
               当前运动员：{selectedAthlete.name} · 清除
             </button>
-          ) : undefined
+          ) : null}</>
         }
       />
       <FilterBar label="专项训练页面筛选">

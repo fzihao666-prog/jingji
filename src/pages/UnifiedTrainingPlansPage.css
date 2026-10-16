@@ -1,0 +1,113 @@
+.unified-plans-page {
+  display: grid;
+  gap: 20px;
+}
+.unified-plans-page > .app-card {
+  min-width: 0;
+  padding: 24px;
+}
+.unified-plan-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.unified-plan-tabs [aria-pressed='true'] {
+  color: var(--river);
+  border-color: currentColor;
+}
+.unified-plan-stats,
+.unified-plan-info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+.unified-plan-stats span,
+.unified-plan-stats strong {
+  display: block;
+}
+.unified-plan-stats strong {
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.unified-plans-page .table-scroll {
+  overflow: auto;
+}
+.unified-plans-page table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.unified-plans-page th,
+.unified-plans-page td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.unified-plans-page small {
+  display: block;
+  margin-top: 6px;
+}
+.unified-plan-info dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.unified-plan-day {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 720px) {
+  .unified-plan-stats,
+  .unified-plan-info {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .unified-plans-page > .app-card {
+    padding: 16px;
+  }
+}
+
+.unified-plans-page .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.unified-plans-page button:focus-visible,
+.unified-plans-page select:focus-visible,
+.unified-plans-page input:focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 3px;
+}
+
+.unified-plans-page table {
+  min-width: 860px;
+}
+.unified-plan-day table {
+  min-width: 680px;
+}
+
+.unified-plans-page > .app-card {
+  min-height: 0;
+}
+.unified-plans-page .app-filter-bar label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.unified-plans-page select,
+.unified-plans-page input[type='date'] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}

@@ -54,6 +54,7 @@ type Props = {
   loading: boolean;
   section: Exclude<SpecialPageKey, 'special-overview'>;
   onSectionChange: (section: SpecialPageKey) => void;
+  onPlanOpen: () => void;
 };
 
 type Session = {
@@ -148,13 +149,6 @@ function dateOffset(iso: string, offset: number) {
   const date = new Date(`${iso}T12:00:00`);
   date.setDate(date.getDate() + offset);
   return date.toISOString().slice(0, 10);
-}
-function isoWeekNumber(iso: string) {
-  const date = new Date(`${iso}T12:00:00Z`);
-  const day = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 function round(value: number, digits = 1) {
   return Number(value.toFixed(digits));
@@ -1066,177 +1060,6 @@ function MetricPage({
   );
 }
 
-function SchedulePage({
-  sessions,
-  to,
-  project,
-}: {
-  sessions: Session[];
-  to: string;
-  project: Project;
-}) {
-  const monday = useMemo(() => {
-    const d = new Date(`${to}T12:00:00`);
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() - day + 1);
-    return d.toISOString().slice(0, 10);
-  }, [to]);
-  const types = ['技术训练', '战术训练', '体能训练', '恢复训练'];
-  const plans = Array.from({ length: 7 }, (_, day) => ({
-    date: dateOffset(monday, day),
-    day: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][day],
-    sessions:
-      day === 6
-        ? []
-        : Array.from({ length: day % 2 ? 2 : 3 }, (_, index) => ({
-            type: types[(day + index) % 4],
-            time: index === 0 ? '06:30–09:00' : index === 1 ? '15:00–17:30' : '18:30–20:00',
-            content:
-              index === 0
-                ? project === '激流'
-                  ? '门区线路 + 起航反应'
-                  : '2000m 节奏划行 + 起航技术'
-                : index === 1
-                  ? '专项间歇 + 技术录像复盘'
-                  : '主动恢复 + 拉伸放松',
-          })),
-  }));
-  const plannedSessions = plans.flatMap((plan) => plan.sessions);
-  const planCount = plannedSessions.length;
-  const countType = (type: string) => plannedSessions.filter((item) => item.type === type).length;
-  const weekEnd = dateOffset(monday, 6);
-  const weekSessions = sessions.filter((item) => item.date >= monday && item.date <= weekEnd);
-  const completedCount = Math.min(
-    planCount,
-    new Set(weekSessions.map((item) => `${item.date}|${item.type}`)).size
-  );
-  const completion = planCount ? Math.round((completedCount / planCount) * 100) : 0;
-  const selectedDayIndex = Math.max(
-    0,
-    Math.min(
-      6,
-      Math.round(
-        (new Date(`${to}T12:00:00`).getTime() - new Date(`${monday}T12:00:00`).getTime()) / 86400000
-      )
-    )
-  );
-  const selectedPlan = plans[selectedDayIndex];
-  const riskAdvice = loadRiskInsights(weekSessions)[0];
-  return (
-    <>
-      <div className="special-metrics">
-        <MetricCard
-          icon={<CalendarDays />}
-          label="计划场次"
-          value={planCount}
-          unit="场"
-          change={`${monday.slice(5)} 至 ${weekEnd.slice(5)}`}
-        />
-        <MetricCard
-          icon={<Waves />}
-          label="技术训练占比"
-          value={round((countType('技术训练') / Math.max(planCount, 1)) * 100)}
-          unit="%"
-          change={`${countType('技术训练')} 场专项技术课`}
-          tone="blue"
-        />
-        <MetricCard
-          icon={<Activity />}
-          label="体能训练占比"
-          value={round((countType('体能训练') / Math.max(planCount, 1)) * 100)}
-          unit="%"
-          change={`${countType('体能训练')} 场体能训练`}
-          tone="orange"
-        />
-        <MetricCard
-          icon={<CheckCircle2 />}
-          label="计划完成率"
-          value={completion}
-          unit="%"
-          change={`已匹配 ${completedCount} / ${planCount} 场`}
-          tone="purple"
-        />
-      </div>
-      <div className="special-grid">
-        <SectionCard title="当前安排" note={`${monday} — ${weekEnd}`} className="span-12">
-          <div className="week-schedule">
-            {plans.map((plan) => (
-              <article key={plan.date}>
-                <header>
-                  <strong>{plan.date.slice(5).replace('-', '/')}</strong>
-                  <span>{plan.day}</span>
-                </header>
-                <div>
-                  {plan.sessions.map((session, index) => (
-                    <div
-                      className={`schedule-event type-${types.indexOf(session.type)}`}
-                      key={index}
-                    >
-                      <b>{session.type}</b>
-                      <span>{session.time}</span>
-                      <p>{session.content}</p>
-                    </div>
-                  ))}
-                  {!plan.sessions.length && <p className="rest-day">休息 / 自主恢复</p>}
-                </div>
-              </article>
-            ))}
-          </div>
-        </SectionCard>
-        <SectionCard
-          title={`${selectedPlan.day}训练安排`}
-          note="按当前结束日期定位"
-          className="span-7"
-        >
-          <div className="today-sessions">
-            {selectedPlan.sessions.map((item, index) => (
-              <div key={index}>
-                <time>{item.time}</time>
-                <i className={`type-${types.indexOf(item.type)}`}>{item.type}</i>
-                <strong>{item.content}</strong>
-                <span>{index === 0 ? '水上训练场' : index === 1 ? '专项训练区' : '康复中心'}</span>
-              </div>
-            ))}
-            {!selectedPlan.sessions.length && <p className="rest-day">休息 / 自主恢复</p>}
-          </div>
-        </SectionCard>
-        <SectionCard title="计划完成进度" note={`第 ${isoWeekNumber(to)} 周`} className="span-5">
-          <div className="progress-steps">
-            {[
-              '训练安排已生成',
-              `训练执行中（第${selectedDayIndex + 1}天/共7天）`,
-              '周期总结',
-              '数据分析与反馈',
-            ].map((item, index) => (
-              <div className={index === 0 ? 'done' : index === 1 ? 'current' : ''} key={item}>
-                <i>{index + 1}</i>
-                <span>
-                  <strong>{item}</strong>
-                  <small>
-                    {index === 0 ? '已完成' : index === 1 ? `${completion}%` : '待开始'}
-                  </small>
-                </span>
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-        <SectionCard title="训练类别构成" note="当前安排已执行记录" className="span-5">
-          <TypeDonut sessions={weekSessions} />
-        </SectionCard>
-        <SectionCard title="安排建议" note="来自当前负荷记录" className="span-7">
-          <InsightList
-            items={[
-              '高强度训练后安排恢复课，保留至少 24 小时调整窗口。',
-              riskAdvice,
-              '专项技术课后预留 20 分钟视频复盘，强化动作反馈。',
-            ]}
-          />
-        </SectionCard>
-      </div>
-    </>
-  );
-}
-
 export function SpecialTestsPage({
   records,
   project,
@@ -1245,6 +1068,7 @@ export function SpecialTestsPage({
   loading,
   section,
   onSectionChange,
+  onPlanOpen,
 }: Props) {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -1276,9 +1100,10 @@ export function SpecialTestsPage({
     <PageContainer className="professional-overview special-training-page">
       <PageHeader
         variant="dashboard"
-        className="overview-page-heading special-page-heading"
+        className="overview-page-heading special-page-heading training-plan-entry-heading"
         eyebrow={meta.english}
         title="专项训练"
+        actions={<button className="dashboard-action-button" onClick={onPlanOpen}>训练计划</button>}
       />
       {pageTabs.length > 0 && (
         <nav className="special-page-tabs" aria-label={`${meta.group}指标切换`}>
@@ -1301,7 +1126,7 @@ export function SpecialTestsPage({
           icon={<RefreshCw className="spin" />}
           title="正在同步训练数据…"
         />
-      ) : !sessions.length && section !== 'special-schedule' ? (
+      ) : !sessions.length ? (
         <ContentState
           kind="empty"
           className="special-empty"
@@ -1322,8 +1147,7 @@ export function SpecialTestsPage({
         <MetricPage section={section} sessions={sessions} days={days} project={project} />
       ) : section === 'special-records' ? (
         <RecordPage sessions={sessions} />
-      ) : section === 'special-schedule' ? (
-        <SchedulePage sessions={sessions} to={to} project={project} />
+
       ) : null}
     </PageContainer>
   );

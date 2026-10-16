@@ -50,6 +50,7 @@ export type DataCollectionPageKey =
   'bluetooth' | 'data-import' | 'data-import-history' | 'data-management';
 export type PageKey =
   | 'overview'
+  | 'training-plans'
   | SpecialPageKey
   | StrengthPageKey
   | 'physiology-biochemistry'
@@ -75,6 +76,7 @@ const directNavItems: Array<{
   roles?: Role[];
 }> = [
   { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
+  { key: 'training-plans', label: '训练计划', icon: ClipboardList },
   { key: 'physiology-biochemistry', label: '生理生化', icon: FlaskConical },
   { key: 'personal', label: '运动员档案', icon: UserRound },
 ];

@@ -782,3 +782,9 @@
   transition: width 0.38s ease;
 }
 
+
+/* 计划入口放在标题区第二行，避开顶部全局日期筛选器。 */
+.training-plan-entry-heading .app-page-header-actions {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
