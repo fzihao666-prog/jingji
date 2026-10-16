@@ -65,7 +65,7 @@ ${JSON.stringify(athleteDirectory)}
   try {
     const result = await chatCompletion({
       messages: [
-        { role: 'system', content: '只识别已完成的体能训练结果，并严格输出JSON。' },
+        { role: 'system', content: '只识别已完成的体能训练结果，并严格输出 json 格式。' },
         { role: 'user', content: [{ type: 'text', text: prompt }, attachment] },
       ],
     });

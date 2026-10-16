@@ -83,7 +83,8 @@ export async function chatCompletion(options: AiChatOptions): Promise<AiChatResu
         body: JSON.stringify({
           model: model.model,
           temperature: options.temperature ?? 0,
-          max_completion_tokens: options.maxCompletionTokens ?? 12_000,
+          // DeepSeek 等 OpenAI 兼容服务以 max_tokens 为准（DashScope/Gemini 兼容层亦支持）。
+          max_tokens: options.maxCompletionTokens ?? 12_000,
           ...(options.responseFormat === undefined || options.responseFormat === 'json_object'
             ? { response_format: { type: 'json_object' } }
             : {}),
