@@ -2,6 +2,14 @@
   <view class="page-head"><view class="page-title">训练计划</view><view class="page-description">队伍统一安排 · 个人差异调整 · 教练确认发布</view></view>
   <view wx:if="{{loading}}" class="card">正在加载…</view><view wx:if="{{error}}" class="error-box" aria-role="alert">{{error}}</view>
   <button wx:if="{{canManage && !editor}}" class="primary-button" bindtap="create">创建队伍计划</button>
+  <button wx:if="{{canManage && !editor}}" bindtap="toggleAi">{{aiOpen ? '收起AI生成' : 'AI 生成计划'}}</button>
+  <view wx:if="{{canManage && aiOpen && !editor}}" class="card">
+    <view class="card-head-title">AI 生成计划草稿</view>
+    <view class="field"><text>目标训练日</text><input aria-label="目标训练日" class="input" placeholder="YYYY-MM-DD" value="{{aiDate}}" data-field="aiDate" bindinput="aiField" /></view>
+    <view class="field"><text>教练约束（场地、设备、比赛安排等）</text><input aria-label="教练约束" class="input" value="{{aiConstraints}}" data-field="aiConstraints" bindinput="aiField" /></view>
+    <button class="primary-button" loading="{{aiBusy}}" disabled="{{aiBusy}}" bindtap="generateAi">AI 生成计划</button>
+    <view>AI 草稿须经教练审核后才会发布；未审核草稿不会下发给运动员。</view>
+  </view>
   <view wx:if="{{!loading && !plans.length}}" class="card">暂无可查看的计划</view>
   <button wx:for="{{plans}}" wx:key="id" class="card plan-list" data-id="{{item.id}}" bindtap="select">{{item.title}} · V{{item.version}} · {{statusLabels[item.status]}}<view>{{item.team}}｜{{item.startDate}} 至 {{item.endDate}}</view></button>
   <view wx:if="{{editor}}" class="card">
@@ -25,8 +33,35 @@
   </view>
   <view wx:if="{{selected && !editor}}" class="card">
     <view class="card-head-title">{{selected.title}} · V{{selected.version}} · {{statusLabels[selected.status]}}</view><view>{{selected.team}}｜{{selected.startDate}} 至 {{selected.endDate}}</view><view>目标：{{selected.data.goal}}</view><view>重点：{{selected.data.focus}}</view>
+    <view wx:if="{{aiNotes.length || aiWarnings.length || aiConversation.length}}" class="lesson">
+      <view class="card-head-title">AI 生成信息</view>
+      <view wx:for="{{aiNotes}}" wx:key="*this">依据说明：{{item}}</view>
+      <view wx:for="{{aiWarnings}}" wx:key="*this">提示：{{item}}</view>
+      <view wx:for="{{aiConversation}}" wx:key="index">{{item.role === 'coach' ? '教练要求' : 'AI回复'}}：{{item.text}}</view>
+    </view>
+    <view wx:if="{{canManage && selected.status === 'draft' && (aiConversation.length || selected.aiMetadata)}}" class="lesson">
+      <view class="card-head-title">教练调整要求</view>
+      <input aria-label="教练调整要求" class="input" placeholder="例如：上午训练量减少20%，下午增加核心稳定" value="{{aiInstruction}}" data-field="aiInstruction" bindinput="aiField" />
+      <button loading="{{aiBusy}}" disabled="{{aiBusy}}" bindtap="reviseAi">发送给AI并生成修订方案</button>
+      <button wx:if="{{aiDiff}}" bindtap="undoAi" disabled="{{aiBusy}}">撤销上一次修改</button>
+      <view wx:if="{{aiDiff}}" class="lesson"><view class="card-head-title">本次修改差异</view><view wx:for="{{aiDiff}}" wx:key="key">{{item.text}}</view><view wx:if="{{!aiDiff.length}}">无内容变化</view></view>
+    </view>
     <picker wx:if="{{canManage && teamAthletes.length}}" range="{{teamAthletes}}" range-key="name" bindchange="preview"><view class="input">预览个人最终安排：{{previewName || '选择运动员'}}</view></picker>
-    <view wx:for="{{sessions}}" wx:key="id" class="lesson"><view>{{item.date}} {{item.period}}｜{{item.category === 'special' ? '专项' : item.category === 'physical' ? '体能' : '恢复'}}</view><view>{{item.content}}</view><view>{{item.durationMin === null ? '时长未设置' : item.durationMin + '分钟'}} / {{item.distanceKm === null ? '距离不适用' : item.distanceKm + '公里'}} · {{item.intensity}}</view><view>{{item.sets}} 组 · {{item.reps}} 次 · {{item.load}}｜{{item.notes}}</view><view wx:if="{{item.reason}}">个人调整：{{item.reason}}</view><view wx:if="{{canManage}}">个人调整：{{item.adjustmentCount}} 人</view><button wx:if="{{!canManage && (selected.status === 'published' || selected.status === 'archived')}}" size="mini" data-id="{{item.id}}" bindtap="enterTraining">{{selected.status === 'archived' ? '补填历史实际训练' : '填写实际训练'}}</button></view>
+    <view wx:for="{{sessions}}" wx:key="id" class="lesson"><view>{{item.date}} {{item.period}}｜{{item.category === 'special' ? '专项' : item.category === 'physical' ? '体能' : '恢复'}}</view><view>{{item.content}}</view><view>{{item.durationMin === null ? '时长未设置' : item.durationMin + '分钟'}} / {{item.distanceKm === null ? '距离不适用' : item.distanceKm + '公里'}} · {{item.intensity}}</view><view>{{item.sets}} 组 · {{item.reps}} 次 · {{item.load}}｜{{item.notes}}</view>
+      <view wx:for="{{item.items}}" wx:for-item="contentItem" wx:key="id">①{{contentItem.title}}｜{{contentItem.description}}</view>
+      <view wx:if="{{item.reason}}">个人调整：{{item.reason}}</view><view wx:if="{{canManage}}">个人调整：{{item.adjustmentCount}} 人</view><button wx:if="{{!canManage && (selected.status === 'published' || selected.status === 'archived')}}" size="mini" data-id="{{item.id}}" bindtap="enterTraining">{{selected.status === 'archived' ? '补填历史实际训练' : '填写实际训练'}}</button></view>
+    <view wx:if="{{checks.length}}" class="lesson">
+      <view class="card-head-title">训练实施确认（教练确认队伍已组织实施）</view>
+      <view>勾选仅代表队伍已组织实施，不代表每名运动员完成计划量；个人完成情况以实际训练记录为准。</view>
+      <view wx:for="{{checks}}" wx:key="key">
+        <view>{{item.isItem ? '　' : ''}}{{item.label}}｜{{item.statusLabel}}<text wx:if="{{item.reason}}">（{{item.reason}}）</text></view>
+        <block wx:if="{{canManage && (selected.status === 'published' || selected.status === 'archived') && !checkBusy}}">
+          <button size="mini" wx:if="{{item.status !== 'executed'}}" data-session="{{item.sessionId}}" data-item="{{item.itemId}}" data-status="executed" bindtap="markCheck">确认已执行</button>
+          <button size="mini" wx:if="{{item.status === 'executed'}}" data-session="{{item.sessionId}}" data-item="{{item.itemId}}" data-status="revert" bindtap="markCheck">取消勾选</button>
+          <button size="mini" wx:if="{{item.status !== 'cancelled'}}" data-session="{{item.sessionId}}" data-item="{{item.itemId}}" data-status="cancelled" bindtap="markCheck">取消安排</button>
+        </block>
+      </view>
+    </view>
     <view wx:if="{{canManage}}" class="lesson">
       <view class="card-head-title">执行情况</view>
       <view wx:if="{{executionLoading}}">正在加载执行情况…</view>

@@ -21,12 +21,20 @@ const fields = {
   load: metric,
   notes: z.string().max(4000).default(''),
 };
+const item = z
+  .object({
+    id: z.string().trim().min(1).max(100),
+    title: z.string().trim().min(1).max(200),
+    description: z.string().max(2000).default(''),
+  })
+  .strict();
 const session = z
   .object({
     id: z.string().trim().min(1).max(100),
     date,
     category: z.enum(['special', 'physical', 'recovery']),
     ...fields,
+    items: z.array(item).max(50).optional(),
   })
   .strict();
 const changes = z
@@ -40,6 +48,7 @@ const changes = z
     reps: metric.unwrap().optional(),
     load: metric.unwrap().optional(),
     notes: fields.notes.unwrap().optional(),
+    items: z.array(item).max(50).optional(),
   })
   .strict();
 export const teamPlanInput = z
@@ -96,12 +105,29 @@ export const teamPlanInput = z
     }
   });
 export function readTeamPlans(db: DatabaseSync): TeamPlan[] {
+  // 兼容缺省 ai_metadata 列的旧库/测试表（生产迁移会补列）。
+  const hasAiMetadata = (
+    db.prepare('PRAGMA table_info(training_plans)').all() as { name: string }[]
+  ).some((column) => column.name === 'ai_metadata');
   const rows = db
     .prepare(
-      `SELECT p.id,p.root_id AS rootId,p.version,p.revision,p.status,p.team_id AS teamId,t.project,t.name AS team,p.title,p.start_date AS startDate,p.end_date AS endDate,p.plan_data AS data,p.published_at AS publishedAt,p.archived_at AS archivedAt FROM training_plans p JOIN project_teams t ON t.id=p.team_id WHERE p.model='team' ORDER BY p.start_date DESC,p.version DESC`
+      `SELECT p.id,p.root_id AS rootId,p.version,p.revision,p.status,p.team_id AS teamId,t.project,t.name AS team,p.title,p.start_date AS startDate,p.end_date AS endDate,p.plan_data AS data,${hasAiMetadata ? 'p.ai_metadata AS aiMetadata' : 'NULL AS aiMetadata'},p.published_at AS publishedAt,p.archived_at AS archivedAt FROM training_plans p JOIN project_teams t ON t.id=p.team_id WHERE p.model='team' ORDER BY p.start_date DESC,p.version DESC`
     )
-    .all() as unknown as Array<Omit<TeamPlan, 'data'> & { data: string }>;
-  return rows.map((row) => ({ ...row, data: JSON.parse(row.data) as TeamPlanData }));
+    .all() as unknown as Array<Omit<TeamPlan, 'data' | 'aiMetadata'> & {
+    data: string;
+    aiMetadata: string | null;
+  }>;
+  return rows.map((row) => {
+    let aiMetadata: TeamPlan['aiMetadata'] = null;
+    if (row.aiMetadata) {
+      try {
+        aiMetadata = JSON.parse(row.aiMetadata) as TeamPlan['aiMetadata'];
+      } catch {
+        aiMetadata = null;
+      }
+    }
+    return { ...row, data: JSON.parse(row.data) as TeamPlanData, aiMetadata };
+  });
 }
 export function readTeamPlansForAthlete(
   db: DatabaseSync,

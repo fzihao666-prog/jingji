@@ -153,18 +153,33 @@ export function extractTodayPlanDay(
   if (Array.isArray(teamSessions)) {
     const lessons = teamSessions.map(record).filter((item) => item.date === today);
     if (!lessons.length) return null;
-    return buildDay(
-      title,
-      text(record(raw).focus),
-      lessons.map((item) => ({
-        ...item,
-        name: text(item.content),
-        duration: item.durationMin == null ? '' : String(item.durationMin),
-        distance: item.distanceKm == null ? '' : String(item.distanceKm),
-        sets: item.sets == null ? '' : String(item.sets),
-        reps: item.reps == null ? '' : String(item.reps),
-      }))
-    );
+    // 队伍计划：训练课带内容项时逐项展示（热身/主训练/整理放松），否则按整节训练课展示。
+    const items: PlanItemSource[] = [];
+    for (const lesson of lessons) {
+      const metrics = {
+        duration: lesson.durationMin == null ? '' : String(lesson.durationMin),
+        distance: lesson.distanceKm == null ? '' : String(lesson.distanceKm),
+        sets: lesson.sets == null ? '' : String(lesson.sets),
+        reps: lesson.reps == null ? '' : String(lesson.reps),
+        intensity: text(lesson.intensity),
+        load: lesson.load == null ? '' : String(lesson.load),
+      };
+      const contentItems = Array.isArray(lesson.items)
+        ? (lesson.items as unknown[]).map(record).filter((item) => text(item.title))
+        : [];
+      if (contentItems.length) {
+        for (const item of contentItems) {
+          items.push({
+            name: text(item.title),
+            notes: [text(item.description), text(lesson.content)].filter(Boolean).join(' · '),
+            ...metrics,
+          });
+        }
+      } else {
+        items.push({ ...lesson, name: text(lesson.content), ...metrics });
+      }
+    }
+    return buildDay(title, text(record(raw).focus), items);
   }
   const weeks = Array.isArray(record(raw).weeklyPlans)
     ? (record(raw).weeklyPlans as unknown[])

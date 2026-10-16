@@ -1,4 +1,5 @@
 import { registerTeamPlanRoutes } from './team-plan-routes.ts';
+import { registerTeamPlanAiRoutes } from './team-plan-ai-routes.ts';
 import { registerTrainingPlanCatalogRoutes } from './training-plan-catalog-routes.ts';
 import type { Express } from 'express';
 import { requireAuth } from '../core/auth.ts';
@@ -13,6 +14,7 @@ import {
 export function registerTrainingPlanRoutes(app: Express) {
   registerTrainingPlanCatalogRoutes(app);
   registerTeamPlanRoutes(app);
+  registerTeamPlanAiRoutes(app);
   app.get('/api/training-plans', requireAuth, (req, res) => {
     const user = req.authUser!;
     const athleteId = Number(req.query.athleteId || user.athleteId || 0);

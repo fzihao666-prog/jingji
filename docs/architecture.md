@@ -114,8 +114,10 @@ jingji/
 │  ├─ core/db-migrations.ts# 有数据保留要求的兼容迁移
 │  ├─ core/db-system-data.ts# 必要的强度分区与动作字典
 │  ├─ overview-service.ts  # 训练总览统一查询与聚合
-│  ├─ ai-service.ts        # 体能训练生成
-│  ├─ strength-import-ai.ts# PDF/图片体能结果识别
+│  ├─ core/ai-client.ts    # OpenAI 兼容模型统一调用与多供应商回退
+│  ├─ prompts/             # 固定业务 Prompt（training-plan-system.md）
+│  ├─ training-plan/       # 队伍计划、AI 草稿生成/修订、执行确认接口
+│  ├─ strength/            # 体能训练生成与 PDF/图片结果识别
 │  └─ dev.ts               # 本地双进程开发编排
 ├─ shared/                 # 前后端共享的稳定领域定义
 │  ├─ access.ts            # 角色和区域层级
@@ -257,6 +259,10 @@ sequenceDiagram
 统一队伍计划复用 `training_plans` 和 `plan_data`，兼容增加 `model`（旧行默认 `legacy`）、`team_id`、`root_id`、`version`、`revision`、`status`、`published_at`、`archived_at` 和 `reviewed_by`。每个版本独立一行，JSON 统一存储具有稳定 ID 的 `sessions`、仅差异字段的 `overrides`、目标与重点。旧表的 `athlete_id NOT NULL` 暂作为技术锚点保留，队伍归属只以 `team_id` 为准；锚点不代表创建独立个人计划。触发器阻断删除锚点运动员导致队伍历史级联丢失，运动员可停用。空队伍暂不能创建计划，避免伪造运动员。迁移只增加列、索引、触发器及关联表，不删除旧数据、不重建表。无法确定归属的旧个人和项目级专项计划维持历史只读，不按当前队名猜测迁移。
 
 `/api/team-plans` 由 Web 与小程序共用：GET 返回权限内计划，POST 创建草稿，PUT 携带 `revision` 更新草稿，`/:id/transition` 处理提交、退回、确认发布、归档和修订。教练维护计划须拥有整支队伍的访问范围；运动员不得读取草稿或他人 Override。运动员可读取本人执行关联的旧发布版本，转队不会丢失已关联历史。保存、发布、修订及审计使用写事务与 revision 检查，重复发布和并发覆盖返回冲突。修订发布归档原版本，保留原始 JSON 与发布时间。旧个人写入及 AI 计划接口返回 410；历史 `/api/training-plans`、目录和导出明确排除 `model='team'`，防止通过旧接口绕过审核或泄漏差异。
+
+AI 训练计划草稿复用队伍计划结构与发布流程：`/api/team-plans/ai/generate` 读取队伍真实数据摘要（近 28 天负荷、昨日计划/勾选/实际、RPE、晨检、测试）并按固定 Prompt（`server/prompts/training-plan-system.md`）生成单日草稿，`/revise` 按教练自然语言要求修改并返回差异，`/undo` 从服务端历史快照撤销；草稿写 `training_plans`（`status='draft'`）与 `ai_metadata`（模型、Prompt 版本、对话摘要、撤销历史），同队同日只维护一份单日草稿。AI 输出按竞迹强度字典与计划 Schema 校验后才保存，生成失败保留上一版有效草稿；发布必须走既有 transition 审核链路，未审核草稿不进入运动员任务列表。每日调度 `startAiPlanScheduler` 默认 18:00 为下一训练日生成草稿，教练手工草稿不被自动任务覆盖。
+
+`team_plan_item_checks` 是最小训练实施确认表，按 `(plan_id, session_id, item_id)` 记录教练勾选（`pending`/`executed`/`cancelled`），带操作人、时间与 `revision` 乐观锁；取消需填写原因，撤销勾选回到 `pending`。勾选仅代表教练确认队伍已组织实施该训练项，不生成也不覆盖运动员个人时长、距离、RPE、负荷与完成率，个人完成情况继续以实际训练记录与 `plan-execution.ts` 口径为准。仅教练及以上角色可写，运动员只读。
 
 `training_plan_execution_links` 是最小执行关联表，按实际 `training_session_id` 关联计划版本行、稳定训练课 ID 与当时合并 Override 的目标快照；不复制训练事实。训练填报和教练代填共用权限、日期、类别及已发布版本校验，写入事实及关联同事务提交；已关联记录可以修正实际数值，但不能静默改绑版本、日期或类别。合法无关联历史记录保留。`server/core/plan-execution.ts` 复用原汇总流程，新队伍计划逐课对照时长和距离，专项与体能独立计算；无记录或必需量未填报为待确认，不推断 0 或未完成。聚合执行率在任一训练课尚待确认时为空，返回逐课结果及待确认数；旧个人计划继续原按天统计口径。今日课表复用 `plan-today.ts`，正式任务只来自适用的发布版本。
 

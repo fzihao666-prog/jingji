@@ -23,55 +23,7 @@ export type RecognizedStrengthRow = {
   originalText?: string;
 };
 
-type ModelConfig = {
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-  timeout: number;
-};
-
-function configuredModels(): ModelConfig[] {
-  const timeoutValue = Number(process.env.AI_TIMEOUT_MS);
-  const timeout = Number.isFinite(timeoutValue) && timeoutValue >= 30_000 ? timeoutValue : 180_000;
-  const candidates = [
-    ['Primary', process.env.AI_BASE_URL, process.env.AI_API_KEY, process.env.AI_MODEL],
-    [
-      'Fallback',
-      process.env.AI_FALLBACK_BASE_URL,
-      process.env.AI_FALLBACK_API_KEY,
-      process.env.AI_FALLBACK_MODEL,
-    ],
-    ['Qwen', process.env.AI_CN_BASE_URL, process.env.AI_CN_API_KEY, process.env.AI_CN_MODEL],
-    [
-      'Gemini',
-      process.env.AI_GEMINI_BASE_URL,
-      process.env.AI_GEMINI_API_KEY,
-      process.env.AI_GEMINI_MODEL,
-    ],
-  ] as const;
-  return candidates.flatMap(([name, baseUrl, apiKey, model]) =>
-    baseUrl && apiKey && model
-      ? [
-          {
-            name,
-            baseUrl: baseUrl.replace(/\/+$/, ''),
-            apiKey,
-            model,
-            timeout,
-          },
-        ]
-      : []
-  );
-}
-
-function cleanJson(content: string) {
-  return content
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
-    .trim();
-}
+import { chatCompletion, cleanJson, configuredModels } from '../core/ai-client.ts';
 
 export async function recognizeStrengthImport(input: {
   buffer: Buffer;
@@ -109,47 +61,19 @@ ${JSON.stringify(athleteDirectory)}
     input.mimetype === 'application/pdf'
       ? { type: 'file', file: { filename: input.filename, file_data: dataUrl } }
       : { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } };
-  let lastError: Error | null = null;
 
-  for (const model of models) {
-    try {
-      const endpoint = model.baseUrl.endsWith('/chat/completions')
-        ? model.baseUrl
-        : `${model.baseUrl}/chat/completions`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${model.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: model.model,
-          temperature: 0,
-          max_completion_tokens: 12_000,
-          response_format: { type: 'json_object' },
-          ...(model.model.toLowerCase().startsWith('qwen') ? { enable_thinking: false } : {}),
-          messages: [
-            { role: 'system', content: '只识别已完成的体能训练结果，并严格输出JSON。' },
-            { role: 'user', content: [{ type: 'text', text: prompt }, attachment] },
-          ],
-        }),
-        signal: AbortSignal.timeout(model.timeout),
-      });
-      if (!response.ok) throw new Error(`识别接口返回 ${response.status}`);
-      const payload = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        error?: { message?: string };
-      };
-      if (payload.error?.message) throw new Error(payload.error.message);
-      const content = payload.choices?.[0]?.message?.content;
-      if (!content) throw new Error('识别接口返回空内容');
-      const parsed = JSON.parse(cleanJson(content)) as { rows?: RecognizedStrengthRow[] };
-      if (!Array.isArray(parsed.rows)) throw new Error('识别结果缺少rows数组');
-      return { rows: parsed.rows.slice(0, 1000), modelUsed: `${model.name} (${model.model})` };
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('未知识别错误');
-    }
+  try {
+    const result = await chatCompletion({
+      messages: [
+        { role: 'system', content: '只识别已完成的体能训练结果，并严格输出JSON。' },
+        { role: 'user', content: [{ type: 'text', text: prompt }, attachment] },
+      ],
+    });
+    const parsed = JSON.parse(cleanJson(result.content)) as { rows?: RecognizedStrengthRow[] };
+    if (!Array.isArray(parsed.rows)) throw new Error('识别结果缺少rows数组');
+    return { rows: parsed.rows.slice(0, 1000), modelUsed: result.modelUsed };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误';
+    throw new Error(`AI未能识别该文件：${message}。可改用Excel模板导入。`);
   }
-
-  throw new Error(`AI未能识别该文件：${lastError?.message || '未知错误'}。可改用Excel模板导入。`);
 }

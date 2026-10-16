@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { Express, Request, Response } from 'express';
 import { db } from '../core/db.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
-import { accessibleAthleteIds } from '../core/permissions.ts';
 import { readTeamPlans, teamPlanInput } from './team-plan-service.ts';
+import { teamPlanScope } from './team-plan-scope.ts';
 import type { TeamPlanData } from '../../shared/team-plan.ts';
 
 export function registerTeamPlanRoutes(app: Express) {
@@ -26,21 +26,7 @@ export function registerTeamPlanRoutes(app: Express) {
     );
   }
   function scope(req: Request) {
-    const ids = new Set(accessibleAthleteIds(req.authUser!));
-    const athletes = db
-      .prepare('SELECT id,name,team_id AS teamId,project FROM athletes WHERE active=1')
-      .all() as Array<{ id: number; name: string; teamId: number; project: string }>;
-    const teams = (
-      db.prepare('SELECT id,project,name FROM project_teams WHERE active=1').all() as Array<{
-        id: number;
-        project: string;
-        name: string;
-      }>
-    ).filter((team) => {
-      const members = athletes.filter((athlete) => athlete.teamId === team.id);
-      return members.length > 0 && members.every((athlete) => ids.has(athlete.id));
-    });
-    return { athletes: athletes.filter((athlete) => ids.has(athlete.id)), teams };
+    return teamPlanScope(db, req.authUser!);
   }
   app.get('/api/team-plans', requireAuth, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -93,11 +79,31 @@ export function registerTeamPlanRoutes(app: Express) {
         )
         .map((plan) => ({
           ...plan,
+          // 运动员端不下发 AI 生成信息。
+          aiMetadata: null,
           data: {
             ...plan.data,
             overrides: plan.data.overrides.filter((item) => item.athleteId === target),
           },
         }));
+    else
+      // 管理端下发 AI 摘要与对话，不下发内部历史快照（撤销在服务端处理）。
+      plans = plans.map((plan) =>
+        plan.aiMetadata
+          ? {
+              ...plan,
+              aiMetadata: {
+                source: plan.aiMetadata.source,
+                model: plan.aiMetadata.model,
+                generatedAt: plan.aiMetadata.generatedAt,
+                targetDate: plan.aiMetadata.targetDate,
+                dataNotes: plan.aiMetadata.dataNotes,
+                warnings: plan.aiMetadata.warnings,
+                conversation: plan.aiMetadata.conversation,
+              },
+            }
+          : plan
+      );
     res.json({
       plans,
       teams: user.role === 'ATL' ? [] : allowed.teams,

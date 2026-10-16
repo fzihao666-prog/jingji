@@ -39,4 +39,32 @@ function executionView(result, plan, athletes) {
     lessonExecution: rows.flatMap((row) => (row.lessonExecution || []).filter((lesson) => Number(lesson.planId) === Number(plan.id)).map((lesson) => ({ key: `${row.athleteId}-${lesson.sessionId}`, athleteName: row.athleteName, date: lesson.date, content: lesson.target ? lesson.target.content : '', status: lesson.status, statusLabel: statuses[lesson.status] || '待确认', rateText: rateText(lesson.completionRate) })))
   };
 }
-module.exports = { fields, emptySession, differences, effectiveSessions, revisionSummary, executionView };
+// 执行确认视图：把确认状态合并到训练课/内容项行，无确认行即待执行。
+const checkLabels = { pending: '待执行', executed: '已执行', cancelled: '已取消' };
+function checkRows(plan, checks) {
+  const rows = [];
+  (plan.data.sessions || []).forEach((session) => {
+    const sessionCheck = checks.find((row) => row.sessionId === session.id && !row.itemId) || { sessionId: session.id, itemId: '', status: 'pending', revision: 0, reason: '' };
+    rows.push({ key: `${session.id}:`, sessionId: session.id, itemId: '', label: session.content, status: sessionCheck.status, statusLabel: checkLabels[sessionCheck.status] || '待执行', reason: sessionCheck.reason || '', revision: sessionCheck.revision || 0 });
+    (session.items || []).forEach((item) => {
+      const itemCheck = checks.find((row) => row.sessionId === session.id && row.itemId === item.id) || { sessionId: session.id, itemId: item.id, status: 'pending', revision: 0, reason: '' };
+      rows.push({ key: `${session.id}:${item.id}`, sessionId: session.id, itemId: item.id, label: `${item.title}｜${item.description || ''}`, status: itemCheck.status, statusLabel: checkLabels[itemCheck.status] || '待执行', reason: itemCheck.reason || '', revision: itemCheck.revision || 0, isItem: true });
+    });
+  });
+  return rows;
+}
+// AI 修改差异：新增 / 删除 / 字段级修改的可读行。
+function diffRows(diff) {
+  const rows = [];
+  (diff.added || []).forEach((session) => rows.push({ key: `add-${session.id}`, text: `新增：${session.date} ${session.content}` }));
+  (diff.removed || []).forEach((session) => rows.push({ key: `del-${session.id}`, text: `删除：${session.date} ${session.content}` }));
+  const names = { period: '时段', content: '内容', durationMin: '时长', distanceKm: '距离', intensity: '强度', sets: '组数', reps: '次数', load: '负重', notes: '备注' };
+  (diff.modified || []).forEach((session) => {
+    Object.keys(session.changes || {}).forEach((field) => {
+      const change = session.changes[field];
+      rows.push({ key: `mod-${session.id}-${field}`, text: `修改：${session.content} ${names[field] || field}: ${change.from == null ? '未设置' : change.from} → ${change.to == null ? '未设置' : change.to}` });
+    });
+  });
+  return rows;
+}
+module.exports = { fields, emptySession, differences, effectiveSessions, revisionSummary, executionView, checkRows, diffRows };

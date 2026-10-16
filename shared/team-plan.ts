@@ -1,3 +1,8 @@
+export interface TeamPlanItem {
+  id: string;
+  title: string;
+  description: string;
+}
 export interface TeamPlanSession {
   id: string;
   date: string;
@@ -11,6 +16,8 @@ export interface TeamPlanSession {
   reps: number | null;
   load: number | null;
   notes: string;
+  // 训练课内容项（热身/主训练/整理放松等），可选；缺省时按整节训练课管理。
+  items?: TeamPlanItem[];
 }
 export interface TeamPlanOverride {
   athleteId: number;
@@ -28,6 +35,15 @@ export interface TeamPlanData {
   goal: string;
   focus: string;
 }
+export interface TeamPlanAiInfo {
+  source: string;
+  model?: string;
+  generatedAt?: string;
+  targetDate?: string;
+  dataNotes?: string[];
+  warnings?: string[];
+  conversation?: Array<{ role: string; text: string; at: string }>;
+}
 export interface TeamPlan {
   id: number;
   rootId: number;
@@ -43,6 +59,8 @@ export interface TeamPlan {
   data: TeamPlanData;
   publishedAt: string | null;
   archivedAt: string | null;
+  // AI 生成/修订信息（仅管理端下发；运动员端不返回）。
+  aiMetadata?: TeamPlanAiInfo | null;
 }
 export function resolveTeamPlanSessions(
   plan: Pick<TeamPlan, 'data'>,

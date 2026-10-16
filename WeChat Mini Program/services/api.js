@@ -13,6 +13,12 @@ module.exports = {
   createTeamPlan(data) { return request('/api/team-plans', { method: 'POST', data }); },
   updateTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}`, { method: 'PUT', data }); },
   transitionTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}/transition`, { method: 'POST', data }); },
+  // AI 生成/修订/撤销训练计划草稿，以及训练项执行确认。
+  generateAiTeamPlan(data) { return request('/api/team-plans/ai/generate', { method: 'POST', data }); },
+  reviseAiTeamPlan(id, data) { return request(`/api/team-plans/ai/${encodeURIComponent(id)}/revise`, { method: 'POST', data }); },
+  undoAiTeamPlan(id) { return request(`/api/team-plans/ai/${encodeURIComponent(id)}/undo`, { method: 'POST' }); },
+  teamPlanChecks(id) { return request(`/api/team-plans/${encodeURIComponent(id)}/checks`); },
+  updateTeamPlanCheck(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}/checks`, { method: 'PUT', data }); },
   login(username, password, traceId) {
     return request('/api/auth/login', { method: 'POST', auth: false, traceId, data: { username, password } });
   },

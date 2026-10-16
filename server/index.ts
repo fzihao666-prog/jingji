@@ -33,6 +33,7 @@ import { registerAuthRoutes } from './access/auth-routes.ts';
 import { registerStrengthTestRoutes } from './strength/strength-test-routes.ts';
 import { logger } from './core/logger.ts';
 import { startBackupScheduler } from './core/backup.ts';
+import { startAiPlanScheduler } from './training-plan/team-plan-ai-scheduler.ts';
 import { databaseBackupDirectory, databasePath } from './core/database-path.ts';
 
 // 全局异常捕获：防止未处理的 Promise 拒绝或异常导致进程静默崩溃。
@@ -341,6 +342,8 @@ const server = app.listen(port, host, () => {
   // 仅生产环境启动自动备份，避免本地开发重启反复生成备份文件。
   if (process.env.NODE_ENV === 'production') {
     startBackupScheduler({ databasePath, backupDir: databaseBackupDirectory });
+    // 每日为下一训练日生成 AI 计划草稿（失败不影响已发布计划，教练可手动触发）。
+    startAiPlanScheduler({ db });
   }
 });
 

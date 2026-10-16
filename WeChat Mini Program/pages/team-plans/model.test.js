@@ -54,3 +54,33 @@ test('执行展示仅含本队并按所选版本过滤，null与pending保留待
   assert.equal(view.lessonExecution[0].status, 'pending');
   assert.equal(view.lessonExecution[0].statusLabel, '待确认');
 });
+
+test('确认行按训练课与内容项展开，无确认行保持待执行', () => {
+  const plan = { data: { sessions: [
+    { id: 's1', content: '水上有氧训练', items: [
+      { id: 's1-1', title: '热身', description: '低强度划行' },
+      { id: 's1-2', title: '主训练', description: '持续划行' } ] },
+    { id: 's2', content: '基础力量', items: [] } ] } };
+  const rows = localModule.exports.checkRows(plan, [
+    { sessionId: 's1', itemId: '', status: 'executed', revision: 1, reason: '' },
+    { sessionId: 's1', itemId: 's1-1', status: 'cancelled', revision: 2, reason: '大风取消' },
+  ]);
+  assert.equal(rows.length, 4);
+  assert.equal(rows.find((row) => row.key === 's1:').statusLabel, '已执行');
+  assert.equal(rows.find((row) => row.key === 's1:s1-1').statusLabel, '已取消');
+  assert.equal(rows.find((row) => row.key === 's1:s1-1').reason, '大风取消');
+  assert.equal(rows.find((row) => row.key === 's1:s1-2').statusLabel, '待执行');
+  assert.equal(rows.find((row) => row.key === 's2:').statusLabel, '待执行');
+});
+
+test('AI修改差异行包含新增、删除与字段级修改', () => {
+  const rows = localModule.exports.diffRows({
+    added: [{ id: 's3', date: '2026-10-17', content: '拉伸放松' }],
+    removed: [{ id: 's2', date: '2026-10-17', content: '基础力量' }],
+    modified: [{ id: 's1', content: '水上有氧训练', changes: { durationMin: { from: 90, to: 70 } } }],
+  });
+  const text = rows.map((row) => row.text).join('\n');
+  assert.match(text, /新增：2026-10-17 拉伸放松/);
+  assert.match(text, /删除：2026-10-17 基础力量/);
+  assert.match(text, /修改：水上有氧训练 时长: 90 → 70/);
+});

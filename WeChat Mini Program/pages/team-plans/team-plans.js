@@ -1,8 +1,13 @@
 const api = require('../../services/api');
-const { emptySession, differences, effectiveSessions, revisionSummary, executionView } = require('./model');
+const { emptySession, differences, effectiveSessions, revisionSummary, executionView, checkRows, diffRows } = require('./model');
 const labels = { draft: '草稿', pending: '待审核', published: '已发布', archived: '已归档' };
+function tomorrow() {
+  const date = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
 Page({
-  data: { loading: false, saving: false, error: '', canManage: false, plans: [], teams: [], athletes: [], teamAthletes: [], selected: null, sessions: [], editor: null, lesson: null, lessonIndex: -1, overrideAthleteId: 0, overrideReason: '', categories: ['专项', '体能', '恢复'], statusLabels: labels, previewId: 0, sessionFields: [{"key": "date", "label": "日期 YYYY-MM-DD"}, {"key": "period", "label": "上午 / 下午 / 具体时间"}, {"key": "content", "label": "训练内容"}, {"key": "durationMin", "label": "计划时长（分钟）"}, {"key": "distanceKm", "label": "计划距离（公里）"}, {"key": "intensity", "label": "目标强度"}, {"key": "sets", "label": "组数"}, {"key": "reps", "label": "次数"}, {"key": "load", "label": "负重（kg）"}, {"key": "notes", "label": "技术要求与备注"}] },
+  data: { loading: false, saving: false, error: '', canManage: false, plans: [], teams: [], athletes: [], teamAthletes: [], selected: null, sessions: [], editor: null, lesson: null, lessonIndex: -1, overrideAthleteId: 0, overrideReason: '', categories: ['专项', '体能', '恢复'], statusLabels: labels, previewId: 0, aiOpen: false, aiDate: '', aiConstraints: '', aiInstruction: '', aiBusy: false, aiDiff: null, aiConversation: [], aiNotes: [], aiWarnings: [], checks: [], checkBusy: false, sessionFields: [{"key": "date", "label": "日期 YYYY-MM-DD"}, {"key": "period", "label": "上午 / 下午 / 具体时间"}, {"key": "content", "label": "训练内容"}, {"key": "durationMin", "label": "计划时长（分钟）"}, {"key": "distanceKm", "label": "计划距离（公里）"}, {"key": "intensity", "label": "目标强度"}, {"key": "sets", "label": "组数"}, {"key": "reps", "label": "次数"}, {"key": "load", "label": "负重（kg）"}, {"key": "notes", "label": "技术要求与备注"}] },
   reportError(message) { this.setData({ error: message }); wx.showToast({ title: message, icon: 'none', duration: 2500 }); },
   onShow() { this.load(); },
   async load() {
@@ -20,8 +25,29 @@ Page({
     const baseline = plan && this.data.plans.find((row) => row.rootId === plan.rootId && row.version < plan.version && row.status !== 'draft' && row.status !== 'pending');
     const changeSummary = plan ? revisionSummary(baseline, plan) : '';
     const adjustmentRows = plan ? plan.data.overrides.map((row) => { const athlete = this.data.athletes.find((a) => Number(a.id) === Number(row.athleteId)); const session = plan.data.sessions.find((s) => s.id === row.sessionId) || {}; return { key: `${row.athleteId}-${row.sessionId}`, name: athlete ? athlete.name : '运动员', date: session.date, content: session.content, reason: row.reason, changes: JSON.stringify(row.changes) }; }) : [];
-    this.setData({ teamExecution: [], lessonExecution: [], executionError: '', executionLoading: false, changeSummary, adjustmentRows, previewName: '', selected: plan, editor: null, lesson: null, previewId: this.data.ownAthleteId || 0, teamAthletes: plan ? this.data.athletes.filter((a) => Number(a.teamId) === Number(plan.teamId)) : [], sessions: plan ? effectiveSessions(plan, this.data.ownAthleteId) : [] });
+    const meta = plan && plan.aiMetadata ? plan.aiMetadata : null;
+    this.setData({
+      teamExecution: [], lessonExecution: [], executionError: '', executionLoading: false, changeSummary, adjustmentRows, previewName: '', selected: plan, editor: null, lesson: null, previewId: this.data.ownAthleteId || 0,
+      teamAthletes: plan ? this.data.athletes.filter((a) => Number(a.teamId) === Number(plan.teamId)) : [],
+      sessions: plan ? effectiveSessions(plan, this.data.ownAthleteId) : [],
+      aiDiff: null, aiInstruction: '',
+      aiConversation: meta && meta.conversation ? meta.conversation : [],
+      aiNotes: meta && meta.dataNotes ? meta.dataNotes : [],
+      aiWarnings: meta && meta.warnings ? meta.warnings : [],
+      checks: [],
+    });
+    if (plan && (plan.status === 'published' || plan.status === 'archived')) this.loadChecks(plan);
     if (plan && this.data.canManage) this.loadExecution(plan);
+  },
+  async loadChecks(plan) {
+    try {
+      const result = await api.teamPlanChecks(plan.id);
+      if (!this.data.selected || this.data.selected.id !== plan.id) return;
+      this.setData({ checks: checkRows(plan, result.checks || []) });
+    } catch (error) {
+      // 确认状态加载失败不阻塞计划查看。
+      this.setData({ checks: checkRows(plan, []) });
+    }
   },
   async loadExecution(plan) {
     const requestId = (this._executionRequestId || 0) + 1;
@@ -118,5 +144,96 @@ Page({
       finally { this.setData({ saving: false }); }
     } });
   },
-  enterTraining(event) { wx.navigateTo({ url: `/pages/training-entry/training-entry?teamPlanId=${this.data.selected.id}&planSessionId=${encodeURIComponent(event.currentTarget.dataset.id)}` }); }
+  enterTraining(event) { wx.navigateTo({ url: `/pages/training-entry/training-entry?teamPlanId=${this.data.selected.id}&planSessionId=${encodeURIComponent(event.currentTarget.dataset.id)}` }); },
+  // —— AI 生成与对话修改 ——
+  toggleAi() { this.setData({ aiOpen: !this.data.aiOpen, aiDate: this.data.aiDate || tomorrow() }); },
+  aiField(event) { this.setData({ [event.currentTarget.dataset.field]: event.detail.value }); },
+  async generateAi() {
+    if (this.data.aiBusy) return;
+    const team = this.data.teams[0];
+    if (!team) { this.reportError('当前没有可管理的队伍'); return; }
+    const date = this.data.aiDate || tomorrow();
+    this.setData({ aiBusy: true, error: '' });
+    try {
+      const result = await api.generateAiTeamPlan({ teamId: team.id, date, constraints: this.data.aiConstraints });
+      await this.load();
+      const plan = result.plan;
+      this.selectPlan(plan);
+      this.setData({
+        aiDiff: result.diff ? diffRows(result.diff) : null,
+        aiNotes: result.dataNotes || [],
+        aiWarnings: result.warnings || [],
+      });
+      wx.showToast({ title: 'AI草稿已生成', icon: 'success' });
+    } catch (error) { this.reportError(error.message || 'AI生成失败，可稍后手动重试'); }
+    finally { this.setData({ aiBusy: false }); }
+  },
+  async reviseAi() {
+    const plan = this.data.selected;
+    if (!plan || this.data.aiBusy) return;
+    if (!this.data.aiInstruction.trim()) { this.reportError('请填写调整要求'); return; }
+    this.setData({ aiBusy: true, error: '' });
+    try {
+      const result = await api.reviseAiTeamPlan(plan.id, { instruction: this.data.aiInstruction.trim() });
+      await this.load();
+      this.selectPlan(result.plan);
+      this.setData({
+        aiDiff: result.diff ? diffRows(result.diff) : null,
+        aiNotes: result.dataNotes || [],
+        aiWarnings: result.warnings || [],
+        aiInstruction: '',
+      });
+      wx.showToast({ title: 'AI已生成修订方案', icon: 'success' });
+    } catch (error) {
+      // 生成失败保留上一版有效草稿。
+      this.reportError(error.message || 'AI修订失败，草稿已保留');
+    } finally { this.setData({ aiBusy: false }); }
+  },
+  undoAi() {
+    const plan = this.data.selected;
+    if (!plan || this.data.aiBusy) return;
+    wx.showModal({ title: '撤销上一次修改', content: '将恢复为上一版AI草稿内容。', success: async ({ confirm }) => {
+      if (!confirm) return;
+      this.setData({ aiBusy: true });
+      try {
+        const result = await api.undoAiTeamPlan(plan.id);
+        await this.load();
+        this.selectPlan(result.plan);
+        this.setData({ aiDiff: null });
+        wx.showToast({ title: '已撤销上一次修改', icon: 'success' });
+      } catch (error) { this.reportError(error.message || '撤销失败'); }
+      finally { this.setData({ aiBusy: false }); }
+    } });
+  },
+  // —— 训练项执行确认（教练逐项勾选，代表队伍已组织实施） ——
+  markCheck(event) {
+    if (!this.data.canManage || this.data.checkBusy) return;
+    const plan = this.data.selected;
+    const { session, item, status } = event.currentTarget.dataset;
+    const itemId = item || '';
+    const previous = this.data.checks.find((row) => row.sessionId === session && row.itemId === itemId) || { revision: 0, status: 'pending' };
+    const apply = async (nextStatus, reason) => {
+      this.setData({ checkBusy: true });
+      try {
+        const result = await api.updateTeamPlanCheck(plan.id, { sessionId: session, itemId: itemId || undefined, status: nextStatus, reason, revision: previous.revision });
+        this.setData({ checks: checkRows(plan, this.data.checks.map((row) => row.sessionId === session && row.itemId === itemId ? result.check : row)) });
+      } catch (error) {
+        // 保存失败恢复原状态提示。
+        this.reportError(error.message || '确认失败，请重试');
+        this.loadChecks(plan);
+      } finally { this.setData({ checkBusy: false }); }
+    };
+    if (status === 'cancelled') {
+      wx.showModal({ title: '取消训练安排', editable: true, placeholderText: '请填写简要原因（必填）', success: ({ confirm, content }) => {
+        if (!confirm) return;
+        if (!content || !content.trim()) { this.reportError('取消训练安排必须填写原因'); return; }
+        apply('cancelled', content.trim());
+      } });
+    } else if (status === 'revert') {
+      // 取消勾选恢复待执行。
+      apply(null);
+    } else {
+      apply('executed');
+    }
+  },
 });
