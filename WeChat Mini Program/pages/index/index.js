@@ -301,7 +301,7 @@ Page({
       }
       rows.set(item.athleteId, { ...item, followedUp: followed.has(item.athleteId), focusLabel: label, focusReason: reason, focusLabels: [label], focusReasons: [reason] });
     };
-    // 训练记录缺失只表述为“暂无训练记录”，“未填报”保留给晨检，两者口径彻底分开。
+    // 训练记录缺失只表述为“暂无训练记录”，“未填报”保留给恢复日报，两者口径彻底分开。
     (todos.missing || []).forEach((item) => add(item, '暂无训练记录', '今日暂无有效训练记录'));
     (todos.attention || []).forEach((item) => add(item, '状态关注', item.reason || '存在待关注状态'));
     (todos.reviewDue || []).forEach((item) => add(item, '复查提醒', `${item.dueLabel} · ${item.injuryName}`));
@@ -430,7 +430,7 @@ Page({
     }
   },
 
-  // 队伍筛选后的运动员行：晨检概览、今日训练情况与人员列表共用同一过滤结果。
+  // 队伍筛选后的运动员行：恢复日报概览、今日训练情况与人员列表共用同一过滤结果。
   teamAthletes(overview, teams, teamId) {
     if (!overview) return [];
     const selectedTeam = (teams || this.data.teams || []).find((item) => Number(item.id) === Number(teamId === undefined ? this.data.teamId : teamId));
@@ -446,7 +446,7 @@ Page({
       meta: athlete.team || '未分队',
       tags: [
         { text: athlete.hasTraining ? '有训练记录' : '暂无训练记录', tone: athlete.hasTraining ? 'ok' : 'warn' },
-        { text: athlete.wellnessReported ? '晨检已填' : '晨检未填', tone: athlete.wellnessReported ? 'ok' : 'warn' }
+        { text: athlete.wellnessReported ? '恢复日报已填' : '恢复日报未填', tone: athlete.wellnessReported ? 'ok' : 'warn' }
       ],
       value: `${metricValue(athlete.load24h)} AU`,
       searchText: `${athlete.athleteName || ''} ${athlete.team || ''}`,
@@ -454,7 +454,7 @@ Page({
     return { athletes, teamPager: paginateList(athletes, 0, PAGE_SIZE) };
   },
 
-  // 晨检概览与今日训练情况：人数、名单同源于 readTeamOverview 当日晨检标记，与训练记录分开统计。
+  // 恢复日报概览与今日训练情况：人数、名单同源于 readTeamOverview 当日恢复日报标记，与训练记录分开统计。
   // filter/page 显式传入，避免与 setData 同批更新时读到旧的筛选与页码。
   buildMorningViews(overview, teams, teamId, page, filter) {
     const rows = this.teamAthletes(overview, teams, teamId);
@@ -514,7 +514,7 @@ Page({
     };
   },
 
-  // pager-nav 统一回调：状态监测与晨检人员分页；队伍运动员分页由 athlete-selector 组件内承担。
+  // pager-nav 统一回调：状态监测与恢复日报人员分页；队伍运动员分页由 athlete-selector 组件内承担。
   onPagerChange(event) {
     const key = event.currentTarget.dataset.key;
     const page = Number(event.detail && event.detail.page);
@@ -536,7 +536,7 @@ Page({
     this.setData(patch);
   },
 
-  // 晨检名单筛选：全部 / 仅看未填报；切换后回到第一页，人数与名单口径不变。
+  // 恢复日报名单筛选：全部 / 仅看未填报；切换后回到第一页，人数与名单口径不变。
   onMorningFilterChange(event) {
     const filter = event.currentTarget.dataset.filter;
     if (filter !== 'all' && filter !== 'missing') return;
@@ -564,7 +564,7 @@ Page({
     this.setData({
       teamId, todoPagerPages, athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE),
       teamView: this.buildTeamView(this.data.teamOverview, this.data.teams, teamId),
-      // 队伍筛选变化后晨检人数与名单同步更新，保持同一口径。
+      // 队伍筛选变化后恢复日报人数与名单同步更新，保持同一口径。
       ...this.buildMorningViews(this.data.teamOverview, this.data.teams, teamId, 0),
       ...this.buildCoachPlanViews(this.data.planExecution, this.data.teams, teamId, 0),
     });

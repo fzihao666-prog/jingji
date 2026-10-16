@@ -76,7 +76,7 @@ function todayStatusSummary(view) {
     : '今日还没有有效训练记录。';
   return {
     ...view,
-    // “未填报”保留给晨检；训练记录只说已记录/暂无记录。
+    // “未填报”保留给恢复日报；训练记录只说已记录/暂无记录。
     submittedLabel: view.submitted ? '已记录' : '暂无记录',
     note,
     timeNote: view.timeIncomplete ? '缺少开训时间的记录暂不计入24小时负荷。' : '',

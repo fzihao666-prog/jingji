@@ -182,7 +182,7 @@ describe('档案与训练总览空数据', () => {
   });
 });
 
-describe('教练首页晨检概览与未填报口径', () => {
+describe('教练首页恢复日报概览与未填报口径', () => {
   const overview = {
     date: '2026-10-15',
     athletes: [
@@ -193,7 +193,7 @@ describe('教练首页晨检概览与未填报口径', () => {
     ],
   };
 
-  it('晨检人数与名单同源于晨检标记，训练情况按训练记录单独统计', () => {
+  it('恢复日报人数与名单同源于恢复日报标记，训练情况按训练记录单独统计', () => {
     const page = createPage('index');
     const views = page.buildMorningViews(overview, [], 0);
     expect(views.morningView.counts).toEqual({ total: 4, reported: 3, missing: 1 });
@@ -204,7 +204,7 @@ describe('教练首页晨检概览与未填报口径', () => {
     expect(views.morningTraining).toEqual({ total: 4, trained: 2, noTraining: 2 });
   });
 
-  it('队伍筛选后晨检人数和名单同步更新，保持同一口径', () => {
+  it('队伍筛选后恢复日报人数和名单同步更新，保持同一口径', () => {
     const page = createPage('index');
     page.data.teams = [{ id: 1, name: '一队' }];
     const views = page.buildMorningViews(overview, page.data.teams, 1);
@@ -231,7 +231,7 @@ describe('教练首页晨检概览与未填报口径', () => {
     expect(page.data.morningView.rows).toMatchObject({ page: 1, pageCount: 2, total: 6 });
   });
 
-  it('队伍切换与焦点待办沿用晨检口径，训练缺失只写暂无训练记录', async () => {
+  it('队伍切换与焦点待办沿用恢复日报口径，训练缺失只写暂无训练记录', async () => {
     const page = createPage('index');
     page.data.canViewTodos = true;
     page.data.teamOverview = overview;
@@ -250,8 +250,8 @@ describe('教练首页晨检概览与未填报口径', () => {
     expect(focus.items[0].focusLabel).toBe('暂无训练记录');
     expect(focus.items[0].focusReason).toBe('今日暂无有效训练记录');
     const teamView = page.buildTeamView(overview, [], 0);
-    expect(teamView.athletes[0].tags.map((tag) => tag.text)).toEqual(['有训练记录', '晨检已填']);
-    expect(teamView.athletes[2].tags.map((tag) => tag.text)).toEqual(['有训练记录', '晨检未填']);
+    expect(teamView.athletes[0].tags.map((tag) => tag.text)).toEqual(['有训练记录', '恢复日报已填']);
+    expect(teamView.athletes[2].tags.map((tag) => tag.text)).toEqual(['有训练记录', '恢复日报未填']);
   });
 });
 

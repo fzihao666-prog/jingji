@@ -27,8 +27,8 @@ const athlete = (overrides) => ({
   ...overrides,
 });
 
-describe('晨检概览人数与名单同口径', () => {
-  it('未填报来自晨检标记而非训练记录，训练有无不影响晨检计数', () => {
+describe('恢复日报概览人数与名单同口径', () => {
+  it('未填报来自恢复日报标记而非训练记录，训练有无不影响恢复日报计数', () => {
     const rows = [
       athlete({ athleteId: 1, wellnessReported: true, sleepHours: 7.5, morningPulse: 54, fatigueIndex: 3, hasTraining: true }),
       athlete({ athleteId: 2, wellnessReported: true, sleepHours: null, morningPulse: 0, fatigueIndex: 0, hasTraining: false }),

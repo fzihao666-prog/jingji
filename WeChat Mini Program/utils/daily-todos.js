@@ -1,7 +1,7 @@
 const { INJURY_LABELS, number } = require('./format');
 
 const TODO_FILTERS = ['all', 'missing', 'attention', 'review', 'incomplete'];
-// “未填报”保留给晨检；训练记录缺失一律表述为“暂无训练记录”。
+// “未填报”保留给恢复日报；训练记录缺失一律表述为“暂无训练记录”。
 const GROUP_LABELS = {
   missing: '暂无训练记录',
   attention: '负荷与伤病',

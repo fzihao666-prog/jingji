@@ -1,7 +1,7 @@
 const { number } = require('./format');
 const { paginateList, PAGE_SIZE } = require('./pagination');
 
-// 晨检概览筛选：优先展示需处理的未填报待办。
+// 恢复日报概览筛选：优先展示需处理的未填报待办。
 const MORNING_FILTERS = ['all', 'missing'];
 
 // 缺失与合法 0 分开：只有有限数值才展示，其余一律 --，不用历史数据兜底。
@@ -9,7 +9,7 @@ function metricText(value, suffix = '') {
   return typeof value === 'number' && Number.isFinite(value) ? `${number(value, 1)}${suffix}` : '--';
 }
 
-// 晨检人数与名单同源于 readTeamOverview 当日 daily_wellness 填报标记，与训练记录彻底分开；
+// 恢复日报人数与名单同源于 readTeamOverview 当日 daily_wellness 填报标记，与训练记录彻底分开；
 // 队伍筛选后的运动员行由页面传入，人数与名单保持同一口径。
 function morningCheckView(rows, filter, page) {
   const athletes = Array.isArray(rows) ? rows : [];
