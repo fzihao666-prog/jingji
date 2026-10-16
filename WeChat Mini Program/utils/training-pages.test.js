@@ -301,6 +301,18 @@ describe('教练今日训练计划与执行情况', () => {
     expect(teamOnly.coachExecutionView.rows.items).toHaveLength(2);
   });
 
+  it('今日计划随队伍筛选展示主计划，不累计队员课表', () => {
+    const page = createPage('index');
+    const source = { ...planExecution, today: { ...planExecution.today, teamPlans: [
+      { team: '一队', plan: { hasPlan: true, plannedDurationMin: 90, plannedDistanceKm: 16 } },
+      { team: '二队', plan: { hasPlan: true, plannedDurationMin: 60, plannedDistanceKm: 10 } },
+    ] } };
+    const teams = [{ id: 1, name: '一队' }, { id: 2, name: '二队' }, { id: 3, name: '三队' }];
+    expect(page.buildCoachPlanViews(source, teams, 1).coachPlanView.durationText).toBe('90 分钟');
+    expect(page.buildCoachPlanViews(source, teams, 2).coachPlanView.distanceText).toBe('10 km');
+    expect(page.buildCoachPlanViews(source, teams, 3).coachPlanView.hasPlan).toBe(false);
+  });
+
   it('无计划时卡片保留空状态，执行率缺失显示 --', () => {
     const page = createPage('index');
     const views = page.buildCoachPlanViews({ summary: {}, athletes: [], today: { summary: {}, plan: { hasPlan: false, focus: [], specialItems: [], physicalItems: [], items: [], plannedDurationMin: null, plannedDistanceKm: null } } });

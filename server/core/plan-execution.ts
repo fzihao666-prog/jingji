@@ -24,6 +24,7 @@ type PlanRecord = {
   title: string;
   planData: string;
   teamPlanId?: number;
+  teamPlanData?: string;
   rootId?: number;
   publishedAt?: string;
   archivedAt?: string;
@@ -310,10 +311,17 @@ export function buildPlanExecution(input: {
     };
   });
 
-  // 今日队伍汇总：计划量来自各运动员当日课表，实际量来自当日正式课次（未填报的量不计 0）。
-  const todayPlans = rows.map((row) =>
-    readTodayPlanFrom(plansByAthlete.get(row.athleteId) || [], today)
-  );
+  // 队伍计划按主课表去重，个人 Override 仅用于个人执行目标。
+  const plansByTeam = new Map<string, Map<string, TodayPlanDay>>();
+  for (const row of rows) {
+    const day = readTodayPlanFrom(plansByAthlete.get(row.athleteId) || [], today, true);
+    if (!plansByTeam.has(row.team)) plansByTeam.set(row.team, new Map());
+    if (day) plansByTeam.get(row.team)!.set(JSON.stringify(day), day);
+  }
+  const teamPlans = [...plansByTeam].map(([team, days]) => ({
+    team, plan: summarizeTodayPlans([...days.values()]),
+  }));
+  const todayPlans = [...plansByTeam.values()].flatMap((days) => [...days.values()]);
   const todaySessions = rows.flatMap((row) =>
     (sessionsByAthlete.get(row.athleteId) || []).filter((s) => s.date === today)
   );
@@ -366,12 +374,13 @@ export function buildPlanExecution(input: {
           : null,
       },
       plan: planSummary,
+      teamPlans,
     },
   };
 }
 
 // 从运动员的计划中取当日课表；优先精确日期命中的计划，其次周期内当周星期命中的计划。
-function readTodayPlanFrom(plans: PlanRecord[], today: string): TodayPlanDay | null {
+function readTodayPlanFrom(plans: PlanRecord[], today: string, teamPlan = false): TodayPlanDay | null {
   const current = plans
     .filter(
       (plan) =>
@@ -386,7 +395,7 @@ function readTodayPlanFrom(plans: PlanRecord[], today: string): TodayPlanDay | n
         (b.publishedAt || '').localeCompare(a.publishedAt || '')
     );
   for (const plan of current) {
-    const day = extractTodayPlanDay(plan.planData, today, {
+    const day = extractTodayPlanDay(teamPlan ? plan.teamPlanData || plan.planData : plan.planData, today, {
       startDate: plan.startDate,
       endDate: plan.endDate,
       title: plan.title,
@@ -452,6 +461,7 @@ export function readPlanExecution(
           title: plan.title,
           planData: JSON.stringify({ sessions: targetSessions, focus: plan.data.focus }),
           teamPlanId: plan.id,
+          teamPlanData: JSON.stringify({ sessions: plan.data.sessions, focus: plan.data.focus }),
           rootId: plan.rootId,
           publishedAt: plan.publishedAt || undefined,
           archivedAt: plan.archivedAt || undefined,

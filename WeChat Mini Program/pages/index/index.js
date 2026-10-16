@@ -505,8 +505,13 @@ Page({
       const selectedTeam = (roster || []).find((item) => Number(item.id) === Number(activeTeamId));
       return !selectedTeam || row.team === selectedTeam.name;
     }));
+    const selectedTeam = (roster || []).find((item) => Number(item.id) === Number(activeTeamId));
+    const teamPlan = source.today && Array.isArray(source.today.teamPlans) && selectedTeam
+      ? source.today.teamPlans.find((item) => item.team === selectedTeam.name)
+      : null;
     return {
-      coachPlanView: todayPlanView((source.today && source.today.plan) || null),
+      coachPlanView: todayPlanView(selectedTeam && source.today && Array.isArray(source.today.teamPlans)
+        ? (teamPlan ? teamPlan.plan : null) : (source.today && source.today.plan) || null),
       coachExecutionView: todayExecutionView(rows, {
         page: Number.isInteger(page) ? page : this.data.todoPagerPages.exec,
         avgCompletion: source.summary ? source.summary.avgCompletion : null

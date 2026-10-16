@@ -236,3 +236,15 @@ describe('队伍计划逐课执行与版本快照', () => {
     ).toBe(1);
   });
 });
+
+it('今日队伍计划不按队员累计，并保留各队独立汇总', () => {
+  const base = JSON.stringify({ sessions: [{ id: 'am', date: '2026-09-28', type: 'special', name: '水上', durationMin: 90, distanceKm: 16 }] });
+  const result = buildPlanExecution({
+    athletes: [...athletes, { athleteId: 2, athleteName: '样例乙', team: '一队' }],
+    plans: [1, 2].map((athleteId) => ({ ...plan(), athleteId, teamPlanId: 10, publishedAt: '2026-09-27T00:00:00Z', planData: athleteId === 2 ? base.replace('90', '60').replace('16', '10') : base, teamPlanData: base })),
+    sessions: [], now,
+  });
+  expect(result.today.plan.plannedDurationMin).toBe(90);
+  expect(result.today.plan.plannedDistanceKm).toBe(16);
+  expect(result.today.teamPlans[0].team).toBe('一队');
+});
