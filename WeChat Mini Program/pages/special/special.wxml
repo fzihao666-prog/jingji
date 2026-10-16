@@ -16,17 +16,6 @@
   </view>
 
   <block>
-    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 已配置赛事参考成绩</view></view>
-    <view class="card">
-      <view wx:if="{{championEvents.length}}" class="champion-list">
-        <view wx:for="{{championEvents}}" wx:key="code" class="champion-row">
-          <view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}}</text></view>
-          <view class="champion-value"><text class="champion-performance">{{item.performance}}</text><text wx:if="{{item.pace}}">{{item.pace}}</text></view>
-        </view>
-      </view>
-      <block wx:else><template is="training-state" data="{{loading, error: error || championError, message: '待配置', chart: false}}" /></block>
-    </view>
-
     <view class="section-head"><view class="section-head-title">专项数据概览</view><view class="section-head-note">当前筛选范围</view></view>
     <view class="compact-grid">
       <view wx:for="{{metrics}}" wx:key="label" class="compact-stat {{item.tone}}">
@@ -152,6 +141,17 @@
         bind:detail="onAthleteDetail"
       />
     </block>
+
+    <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 已配置赛事参考成绩</view></view>
+    <view class="card">
+      <view wx:if="{{championEvents.length}}" class="champion-list">
+        <view wx:for="{{championEvents}}" wx:key="code" class="champion-row">
+          <view><view class="list-row-title">{{item.name}}</view><text class="list-row-meta">{{item.meta}}</text></view>
+          <view class="champion-value"><text class="champion-performance">{{item.performance}}</text><text wx:if="{{item.pace}}">{{item.pace}}</text></view>
+        </view>
+      </view>
+      <block wx:else><template is="training-state" data="{{loading, error: error || championError, message: '待配置', chart: false}}" /></block>
+    </view>
 
   </block>
 </view>
