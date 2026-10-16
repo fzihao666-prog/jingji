@@ -15,8 +15,6 @@
 
   <block>
     <block wx:if="{{activeSection === 'overview'}}">
-      <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 待配置</view></view>
-      <view class="card"><template is="training-state" data="{{loading, error: error, message: '待配置', chart: false}}" /></view>
       <view class="section-head"><view class="section-head-title">本周期训练概览</view><view class="section-head-note">时长与负荷仅汇总已填写数值；缺失显示 --</view></view>
       <template wx:if="{{trainingError}}" is="training-state" data="{{loading, error: trainingError}}" />
       <view class="compact-grid"><view wx:for="{{summaryCards}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view></view></view>
@@ -143,5 +141,9 @@
       bind:select="onAthleteSelect"
       bind:detail="onAthleteDetail"
     />
+  </block>
+  <block wx:if="{{activeSection === 'overview'}}">
+      <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 待配置</view></view>
+      <view class="card"><template is="training-state" data="{{loading, error: error, message: '待配置', chart: false}}" /></view>
   </block>
 </view>
