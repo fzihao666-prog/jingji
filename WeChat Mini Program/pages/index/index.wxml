@@ -55,7 +55,6 @@
               <text class="morning-measure-value {{item.fatigueText === '--' ? 'is-empty' : ''}}">{{item.fatigueText}}</text>
             </view>
           </button>
-          <view class="morning-missing-note">横线表示未填报或单项暂无数据</view>
           <pager-nav data-key="morning" page="{{morningView.rows.page}}" page-count="{{morningView.rows.pageCount}}" total="{{morningView.rows.total}}" label="今日运动员状态" bindpagechange="onPagerChange" />
         </block>
       </view>

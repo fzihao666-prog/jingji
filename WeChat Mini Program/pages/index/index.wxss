@@ -31,7 +31,6 @@
 .morning-measures { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8rpx; text-align: right; }
 .morning-measure-value { min-width: 0; color: #12303b; font-size: 28rpx; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .morning-measure-value.is-empty { color: #536c75; font-weight: 400; }
-.morning-missing-note { margin-top: 12rpx; color: #536c75; font-size: 21rpx; }
 
 /* 今日训练计划：重点/内容行 + 计划量 + 安排详情；教练与运动员卡片共用。 */
 .plan-focus-row { display: flex; align-items: baseline; gap: 14rpx; padding: 10rpx 4rpx; border-bottom: 1rpx solid #edf2f3; }
