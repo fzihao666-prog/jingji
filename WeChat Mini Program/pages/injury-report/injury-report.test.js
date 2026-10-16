@@ -46,10 +46,10 @@ const injuryMetric = loadCjs(new URL('../../utils/injury-metric.js', import.meta
 // 队伍名单的姓名搜索由公共运动员模块的纯视图逻辑承担。
 const { filterAthleteItems } = loadCjs(new URL('../../utils/athlete-selector-view.js', import.meta.url), {});
 
-function createOverviewPage(data = {}) {
+function createOverviewPage(data = {}, api = {}, wx = {}, app = { globalData: {} }) {
   let definition;
   const dependencies = {
-    '../../services/api': {},
+    '../../services/api': api,
     '../../utils/page-scope': {},
     '../../utils/request-guard': requestGuard,
     '../../utils/date': {},
@@ -65,6 +65,7 @@ function createOverviewPage(data = {}) {
     '../../utils/training-empty': loadCjs(new URL('../../utils/training-empty.js', import.meta.url), {}),
   };
   vm.runInNewContext(indexSource, {
+    wx, getApp: () => app,
     Page(value) { definition = value; },
     require(path) {
       if (Object.prototype.hasOwnProperty.call(dependencies, path)) return dependencies[path];
@@ -173,6 +174,47 @@ describe('伤病与疼痛上报入口', () => {
       focusReason: '今日暂无有效训练记录；恢复不足；今日复查 · 肩部不适；训练记录缺少有效开训时间',
     })]);
     expect(indexTemplate).toContain('wx:for="{{focusRows}}"');
+  });
+
+  it('日报未填仅使用明确 false，合并原因并支持已跟进名单', () => {
+    const person = { athleteId: 7, athleteName: '队员', team: '一队' };
+    const page = createOverviewPage({ teamOverview: { athletes: [
+      { ...person, wellnessReported: false },
+      { athleteId: 8, wellnessReported: true },
+      { athleteId: 9 },
+    ] } });
+    const todos = { missing: [person], followedUp: [] };
+    expect(page.buildFocusRows(todos, 0, [], 0).items[0].focusLabels).toEqual(['暂无训练记录', '日报未填']);
+    todos.followedUp = [7];
+    expect(page.buildFocusRows(todos, 0, [], 0).total).toBe(0);
+    page.data.focusFilter = 'followed';
+    expect(page.buildFocusRows(todos, 0, [], 0).items[0]).toMatchObject({ athleteId: 7, followedUp: true });
+  });
+
+  it('就地动作使用指定人员，拒绝未授权编号，跟进失败保留名单', async () => {
+    const navigateTo = vi.fn();
+    const showToast = vi.fn();
+    const markTodoFollowups = vi.fn(async () => {});
+    const unmarkTodoFollowups = vi.fn(async () => { throw new Error('失败'); });
+    const page = createOverviewPage({ canViewTodos: true, project: 'ROWING', athletes: [{ id: 7 }], todos: {}, focusRows: [{ athleteId: 7 }] },
+      { markTodoFollowups, unmarkTodoFollowups }, { navigateTo, showToast });
+    const event = (action, athleteId = 7) => ({ currentTarget: { dataset: { action, athleteId } } });
+    for (const [action, path] of [['training', 'training-entry'], ['wellness', 'wellness-entry'], ['injury', 'injury-report']]) {
+      page.openTodoAction(event(action));
+      expect(navigateTo).toHaveBeenLastCalledWith({ url: `/pages/${path}/${path}?athleteId=7` });
+    }
+    page.openTodoAction(event('training', 99));
+    expect(navigateTo).toHaveBeenCalledTimes(3);
+    page.loadTodos = vi.fn(async () => {});
+    await page.toggleTodoFollowup(event());
+    expect(markTodoFollowups).toHaveBeenCalledWith('ROWING', [7]);
+    expect(page.loadTodos).toHaveBeenCalledWith('ROWING');
+    page.data.focusRows = [{ athleteId: 7, followedUp: true }];
+    await page.toggleTodoFollowup(event());
+    expect(unmarkTodoFollowups).toHaveBeenCalledWith('ROWING', [7]);
+    expect(showToast).toHaveBeenCalled();
+    expect(page.data.followupBusy).toBe(false);
+    expect(page.data.focusRows).toHaveLength(1);
   });
 
   it('首页状态监测每页最多五人且末页不补假数据', () => {

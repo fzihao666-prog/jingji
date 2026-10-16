@@ -28,9 +28,9 @@ describe('训练总览移动端布局', () => {
     expect(overviewStyle).toContain('.today-task-grid');
   });
 
-  it('按核心数据、负荷趋势、结构、RPE、状态监测、运动员列表排序', () => {
+  it('按核心数据、状态监测、负荷趋势、结构、RPE、运动员列表排序', () => {
     expect(overview).not.toContain('周期核心数据');
-    const headings = ['class="metric-grid overview-metrics"', '训练负荷趋势', '训练结构', 'RPE 状态趋势', '状态监测', 'title="运动员"'];
+    const headings = ['class="metric-grid overview-metrics"', '状态监测', '训练负荷趋势', '训练结构', 'RPE 状态趋势', 'title="运动员"'];
     const positions = headings.map((heading) => overview.indexOf(heading));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));

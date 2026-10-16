@@ -201,6 +201,33 @@
       </view>
     </view>
 
+    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">状态监测</view><view class="section-head-note">当日待办 · 按人跟进</view></view>
+    <view wx:if="{{canViewTodos}}" class="card focus-card">
+      <view class="focus-filters">
+        <button class="morning-filter" data-filter="active" bindtap="onFocusFilter" aria-pressed="{{focusFilter === 'active'}}">待跟进</button>
+        <button class="morning-filter" data-filter="followed" bindtap="onFocusFilter" aria-pressed="{{focusFilter === 'followed'}}">已跟进</button>
+      </view>
+      <view wx:if="{{teamLoading}}" class="todo-note">正在核对恢复日报…</view>
+      <view wx:if="{{teamError}}" class="error-box"><text>恢复日报名单加载失败</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
+      <view wx:if="{{todosLoading && !todos}}" class="todo-note" aria-role="status" aria-live="polite">正在核对当日训练状态…</view>
+      <view wx:if="{{todosError}}" class="error-box"><text>{{todosError}}</text><button class="error-retry" bindtap="retryTodos">重试</button></view>
+      <view wx:if="{{!todosLoading && !teamLoading && !todosError && !teamError && focusPager && !focusPager.total}}" class="chart-empty">暂无相关人员</view>
+      <block wx:if="{{focusRows.length}}">
+        <view wx:for="{{focusRows}}" wx:key="athleteId" class="focus-row" aria-label="{{item.athleteName}}，{{item.team || '未分队'}}，{{item.focusLabel}}，{{item.focusReason}}">
+          <view class="focus-row-head"><text class="focus-name">{{item.athleteName}}</text><view class="focus-tags"><text wx:for="{{item.focusLabels}}" wx:for-item="label" wx:key="*this" class="focus-tag">{{label}}</text></view></view>
+          <view class="todo-note">{{item.team || '未分队'}} · {{item.focusReason}}</view>
+          <view class="focus-actions">
+            <button data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete">查看档案</button>
+            <button data-athlete-id="{{item.athleteId}}" data-action="training" bindtap="openTodoAction">代填训练</button>
+            <button data-athlete-id="{{item.athleteId}}" data-action="wellness" bindtap="openTodoAction">代填日报</button>
+            <button data-athlete-id="{{item.athleteId}}" data-action="injury" bindtap="openTodoAction">上报伤病</button>
+            <button data-athlete-id="{{item.athleteId}}" disabled="{{followupBusy}}" bindtap="toggleTodoFollowup">{{item.followedUp ? '已跟进 · 撤销' : '标记已跟进'}}</button>
+          </view>
+        </view>
+        <pager-nav data-key="focus" page="{{focusPager.page}}" page-count="{{focusPager.pageCount}}" total="{{focusPager.total}}" label="状态监测" bindpagechange="onPagerChange" />
+      </block>
+    </view>
+
     <view class="section-head"><view class="section-head-title">训练趋势</view><view class="section-head-note">{{range === 'day' ? '今日' : range === 'week' ? '近7天' : '近14天'}} · 训练时长（小时）与训练负荷（AU）分列展示</view></view>
     <view class="card chart-card">
       <view class="card-head">
@@ -279,20 +306,6 @@
       </view>
       </view>
       <view class="chart-footnote">阴影为队伍每日平均值 ±1 标准差；空白表示无有效记录。</view>
-    </view>
-
-    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">状态监测</view><view class="section-head-note">仅列客观待办</view></view>
-    <view wx:if="{{canViewTodos}}" class="card focus-card">
-      <view wx:if="{{todosLoading && !todos}}" class="todo-note" aria-role="status" aria-live="polite">正在核对当日训练状态…</view>
-      <view wx:if="{{todosError}}" class="error-box"><text>{{todosError}}</text><button class="error-retry" bindtap="retryTodos">重试</button></view>
-      <view wx:if="{{!todosLoading && !todosError && focusPager && !focusPager.total}}" class="chart-empty">暂无相关人员</view>
-      <block wx:if="{{focusRows.length}}">
-        <button wx:for="{{focusRows}}" wx:key="athleteId" class="focus-row overview-person-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team || '未分队'}}，{{item.focusLabel}}，{{item.focusReason}}，查看运动员档案">
-          <view class="focus-row-head"><text class="focus-name">{{item.athleteName}}</text><view class="focus-tags"><text wx:for="{{item.focusLabels}}" wx:for-item="label" wx:key="*this" class="focus-tag">{{label}}</text></view></view>
-          <view class="todo-note">{{item.team || '未分队'}} · {{item.focusReason}}</view>
-        </button>
-        <pager-nav data-key="focus" page="{{focusPager.page}}" page-count="{{focusPager.pageCount}}" total="{{focusPager.total}}" label="状态监测" bindpagechange="onPagerChange" />
-      </block>
     </view>
 
     <block wx:if="{{canViewTodos}}">

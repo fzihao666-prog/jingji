@@ -183,6 +183,8 @@ Page({
     showTeam: false,
     showAthlete: false,
     athleteKeyword: '',
+    focusFilter: 'active',
+    followupBusy: false,
     focusRows: [],
     focusPager: paginateList([], 0, PAGE_SIZE),
     ...buildView({}, null, '', ''), overviewError: '', comparisonError: ''
@@ -287,7 +289,7 @@ Page({
     const rows = new Map();
     const followed = new Set(todos.followedUp || []);
     const add = (item, label, reason) => {
-      if (followed.has(item.athleteId)) return;
+      if ((this.data.focusFilter === 'followed') !== followed.has(item.athleteId)) return;
       if (selectedTeam && item.team !== selectedTeam.name) return;
       const existing = rows.get(item.athleteId);
       if (existing) {
@@ -297,13 +299,16 @@ Page({
         existing.focusReason = existing.focusReasons.join('；');
         return;
       }
-      rows.set(item.athleteId, { ...item, focusLabel: label, focusReason: reason, focusLabels: [label], focusReasons: [reason] });
+      rows.set(item.athleteId, { ...item, followedUp: followed.has(item.athleteId), focusLabel: label, focusReason: reason, focusLabels: [label], focusReasons: [reason] });
     };
     // 训练记录缺失只表述为“暂无训练记录”，“未填报”保留给晨检，两者口径彻底分开。
     (todos.missing || []).forEach((item) => add(item, '暂无训练记录', '今日暂无有效训练记录'));
     (todos.attention || []).forEach((item) => add(item, '状态关注', item.reason || '存在待关注状态'));
     (todos.reviewDue || []).forEach((item) => add(item, '复查提醒', `${item.dueLabel} · ${item.injuryName}`));
     (todos.incompleteTime || []).forEach((item) => add(item, '时间待补', '训练记录缺少有效开训时间'));
+    ((this.data.teamOverview && this.data.teamOverview.athletes) || [])
+      .filter((item) => item.wellnessReported === false)
+      .forEach((item) => add(item, '日报未填', '今日恢复日报未填报'));
     return paginateList([...rows.values()], page || 0, PAGE_SIZE);
   },
 
@@ -325,6 +330,44 @@ Page({
       }
     } finally {
       if (this._todoGuard.isLatest(id)) this.setData({ todosLoading: false });
+    }
+  },
+
+  refreshFocus() {
+    const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, this.data.teams, this.data.teamId);
+    this.setData({ focusRows: focus.items, focusPager: focus });
+  },
+
+  onFocusFilter(event) {
+    this.setData({ focusFilter: event.currentTarget.dataset.filter === 'followed' ? 'followed' : 'active', todoPagerPages: { ...this.data.todoPagerPages, focus: 0 } });
+    this.refreshFocus();
+  },
+
+  openTodoAction(event) {
+    if (!this.data.canViewTodos) return;
+    const athleteId = Number(event.currentTarget.dataset.athleteId);
+    if (!this.data.athletes.some((item) => Number(item.id) === athleteId)) return;
+    const pages = { training: 'training-entry', wellness: 'wellness-entry', injury: 'injury-report' };
+    const page = pages[event.currentTarget.dataset.action];
+    if (page) wx.navigateTo({ url: `/pages/${page}/${page}?athleteId=${athleteId}` });
+  },
+
+  async toggleTodoFollowup(event) {
+    if (!this.data.canViewTodos || this.data.followupBusy || !this.data.todos) return;
+    const athleteId = Number(event.currentTarget.dataset.athleteId);
+    const row = this.data.focusRows.find((item) => item.athleteId === athleteId);
+    if (!row || !this.data.athletes.some((item) => Number(item.id) === athleteId)) return;
+    const project = this.data.project;
+    this.setData({ followupBusy: true });
+    try {
+      if (row.followedUp) await api.unmarkTodoFollowups(project, [athleteId]);
+      else await api.markTodoFollowups(project, [athleteId]);
+      getApp().globalData.homeNeedsRefresh = true;
+      if (this.data.project === project) await this.loadTodos(project);
+    } catch (error) {
+      wx.showToast({ title: error.message || '跟进操作失败，请重试', icon: 'none' });
+    } finally {
+      this.setData({ followupBusy: false });
     }
   },
 
@@ -378,9 +421,11 @@ Page({
       const teamOverview = result;
       const teamView = this.buildTeamView(teamOverview, this.data.teams, this.data.teamId);
       this.setData({ teamLoading: false, teamOverview, teamView, ...this.buildMorningViews(teamOverview, this.data.teams, this.data.teamId) });
+      this.refreshFocus();
     } catch (error) {
       if (this._teamGuard.isLatest(id)) {
         this.setData({ teamLoading: false, teamOverview: null, teamView: emptyTeamView(), morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), teamError: error.message || '队伍总览加载失败，请重试。' });
+        this.refreshFocus();
       }
     }
   },
