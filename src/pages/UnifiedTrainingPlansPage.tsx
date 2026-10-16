@@ -3,7 +3,9 @@ import { api } from '../api';
 import type { Athlete, Project, User } from '../types';
 import type { CatalogPlan, PlanExecutionRow } from '../../shared/training-plan-catalog';
 import type { TeamPlan } from '../../shared/team-plan';
-import { resolveTeamPlanSessions } from '../../shared/team-plan';
+import { TrainingPlanWorkspace } from '../components/TrainingPlanWorkspace';
+import { TrainingPlanWeekView } from '../components/TrainingPlanWeekView';
+import { weekStart } from './training-plan-week';
 import { projectLabel } from '../../shared/projects';
 import { PLAN_KIND_LABELS, filterCatalog } from '../../shared/training-plan-view';
 import { UnifiedPlanDetail } from '../components/UnifiedPlanDetail';
@@ -26,7 +28,8 @@ type Props = {
   onBack?: () => void;
 };
 const statusLabels = { draft: '草稿', pending: '待审核', published: '已发布', archived: '已归档' };
-const categoryLabels = { special: '专项', physical: '体能', recovery: '恢复' };
+const today = () =>
+  new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
 export function UnifiedTrainingPlansPage(props: Props) {
   const [plans, setPlans] = useState<TeamPlan[]>([]);
   const [history, setHistory] = useState<CatalogPlan[]>([]);
@@ -45,7 +48,8 @@ export function UnifiedTrainingPlansPage(props: Props) {
   });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [historyKey, setHistoryKey] = useState('');
-  const [athleteId, setAthleteId] = useState('');
+  const [workspaceDirty, setWorkspaceDirty] = useState(false);
+  const [emptyDate, setEmptyDate] = useState(today());
   const [execution, setExecution] = useState<{ rows: PlanExecutionRow[]; error: string } | null>(
     null
   );
@@ -108,7 +112,11 @@ export function UnifiedTrainingPlansPage(props: Props) {
       active = false;
     };
   }, [project, props.user.role, retry]);
+  const permitPlanChange = () =>
+    !workspaceDirty || window.confirm('当前计划有未保存修改，切换将放弃这些修改。是否继续？');
   const changeFilter = (patch: Partial<typeof filters>) => {
+    if (!permitPlanChange()) return;
+    setWorkspaceDirty(false);
     setFilters({ ...filters, ...patch });
     setSelectedId(null);
     setHistoryKey('');
@@ -124,11 +132,6 @@ export function UnifiedTrainingPlansPage(props: Props) {
     (athlete) =>
       selected && athlete.teamId === selected.teamId && athlete.project === selected.project
   );
-  const sessions = selected
-    ? athleteId && scopedAthletes.some((athlete) => String(athlete.id) === athleteId)
-      ? resolveTeamPlanSessions(selected, Number(athleteId))
-      : selected.data.sessions
-    : [];
   const oldShown = filterCatalog(history, { ...filters, kind: '' });
   return (
     <PageContainer className="unified-plans-page">
@@ -137,13 +140,18 @@ export function UnifiedTrainingPlansPage(props: Props) {
         title="训练计划"
         actions={
           props.onBack ? (
-            <button className="secondary-button" onClick={props.onBack}>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                if (permitPlanChange()) props.onBack?.();
+              }}
+            >
               返回来源页面
             </button>
           ) : undefined
         }
       />
-      <p>队伍统一安排专项、体能与恢复训练；教练在小程序创建、调整并确认发布。</p>
+      <p>队伍统一安排专项、体能与恢复训练；教练通过周视图编排草稿、调整个人目标并审核发布。</p>
       <FilterBar label="训练计划筛选">
         <label>
           项目
@@ -268,9 +276,10 @@ export function UnifiedTrainingPlansPage(props: Props) {
                         className="secondary-button"
                         aria-label={`查看计划：${plan.title} V${plan.version}`}
                         onClick={() => {
+                          if (selectedId === plan.id || !permitPlanChange()) return;
+                          setWorkspaceDirty(false);
                           setSelectedId(plan.id);
                           setHistoryKey('');
-                          setAthleteId('');
                         }}
                       >
                         查看计划
@@ -283,6 +292,26 @@ export function UnifiedTrainingPlansPage(props: Props) {
           </div>
         )}
       </AppCard>
+      {!selected && !selectedHistory && (
+        <AppCard>
+          <h2>周安排</h2>
+          <p>
+            {plans.length
+              ? '请选择一份队伍计划查看与编排。'
+              : '暂无队伍计划，周视图保留空状态。教练可通过既有小程序入口创建队伍主计划。'}
+          </p>
+          <TrainingPlanWeekView
+            sessions={[]}
+            overrides={[]}
+            weekStart={weekStart(emptyDate)}
+            selectedDate={emptyDate}
+            today={today()}
+            onSelectDate={setEmptyDate}
+            onChangeWeek={setEmptyDate}
+            onToday={() => setEmptyDate(today())}
+          />
+        </AppCard>
+      )}
       {selected && (
         <AppCard className="unified-plan-detail">
           <h2 tabIndex={-1} ref={heading}>
@@ -296,62 +325,38 @@ export function UnifiedTrainingPlansPage(props: Props) {
           <p>
             训练目标：{selected.data.goal || '未设置'} · 训练重点：{selected.data.focus || '未设置'}
           </p>
-          <label>
-            最终适用计划预览
-            <select value={athleteId} onChange={(event) => setAthleteId(event.target.value)}>
-              <option value="">队伍主计划</option>
-              {scopedAthletes.map((athlete) => (
-                <option key={athlete.id} value={athlete.id}>
-                  {athlete.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <h3>每日训练安排</h3>
-          {!sessions.length && <p>暂无训练课。</p>}
-          {sessions.map((session) => (
-            <section className="unified-plan-day" key={session.id}>
-              <h4>
-                {session.date} · {session.period || '未指定时段'} ·{' '}
-                {categoryLabels[session.category]}
-              </h4>
-              <p>{session.content || '未设置内容'}</p>
-              <p>
-                时长：{session.durationMin ?? '—'} 分钟 · 距离：{session.distanceKm ?? '—'} km ·
-                强度：{session.intensity || '—'}
-              </p>
-              {session.category === 'physical' && (
-                <p>
-                  组数：{session.sets ?? '—'} · 次数：{session.reps ?? '—'} · 负重：
-                  {session.load ?? '—'}
-                </p>
-              )}
-              <p>{session.notes}</p>
-            </section>
-          ))}
-          <h3>个人差异调整</h3>
-          {!selected.data.overrides.length && <p>无个人调整，所有运动员继承队伍主计划。</p>}
-          {selected.data.overrides.map((item) => (
-            <section className="unified-plan-day" key={`${item.athleteId}:${item.sessionId}`}>
-              <h4>
-                {athletes.find((athlete) => athlete.id === item.athleteId)?.name ||
-                  `运动员 ${item.athleteId}`}{' '}
-                ·{' '}
-                {selected.data.sessions.find((session) => session.id === item.sessionId)?.content ||
-                  item.sessionId}
-              </h4>
-              <p>原因：{item.reason}</p>
-              <p>
-                差异：
-                {Object.entries(item.changes)
-                  .map(
-                    ([key, value]) =>
-                      `${({ period: '时段', content: '内容', durationMin: '时长（分钟）', distanceKm: '距离（km）', intensity: '强度', sets: '组数', reps: '次数', load: '负重', notes: '备注' } as Record<string, string>)[key] || key}：${value ?? '未设置'}`
-                  )
-                  .join('；')}
-              </p>
-            </section>
-          ))}
+          <TrainingPlanWorkspace
+            key={selected.id}
+            plan={selected}
+            athletes={athletes}
+            user={props.user}
+            previousPlan={
+              plans
+                .filter(
+                  (plan) =>
+                    plan.rootId === selected.rootId &&
+                    plan.version < selected.version &&
+                    plan.publishedAt
+                )
+                .sort((a, b) => b.version - a.version)[0]
+            }
+            onDirtyChange={setWorkspaceDirty}
+            onSaved={(plan) => {
+              setPlans((previous) => [...previous.filter((item) => item.id !== plan.id), plan]);
+              setSelectedId(plan.id);
+              setWorkspaceDirty(false);
+              if (plan.status === 'published')
+                api
+                  .teamPlans()
+                  .then((result) => setPlans(result.plans))
+                  .catch((err: unknown) =>
+                    setError(
+                      err instanceof Error ? err.message : '计划已保存，列表刷新失败，请重试。'
+                    )
+                  );
+              setFilters((previous) => ({ ...previous, status: '' }));
+            }}
+          />
           <h3>执行情况</h3>
           <p role="status" aria-live="polite">
             {execution
@@ -403,6 +408,8 @@ export function UnifiedTrainingPlansPage(props: Props) {
                 className="secondary-button"
                 aria-label={`查看历史计划：${plan.title || '未命名计划'}`}
                 onClick={() => {
+                  if (!permitPlanChange()) return;
+                  setWorkspaceDirty(false);
                   setHistoryKey(plan.key);
                   setSelectedId(null);
                 }}

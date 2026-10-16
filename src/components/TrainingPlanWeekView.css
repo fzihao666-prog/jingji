@@ -1,0 +1,177 @@
+.training-plan-week {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.training-plan-week-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.training-plan-week-toolbar h3 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.training-plan-week-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.training-plan-week-actions button,
+.training-plan-week-actions input {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.training-plan-week-actions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.training-plan-week-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.training-plan-week-summary > div {
+  background: var(--mist);
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.training-plan-week-summary dt {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.training-plan-week-summary dd {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+  margin: 6px 0 0;
+}
+
+.training-plan-week-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 3px;
+}
+
+.training-plan-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 8px;
+  min-width: 820px;
+}
+
+.training-plan-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  height: 208px;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+
+.training-plan-week-day[aria-pressed='true'] {
+  border: 2px solid var(--river);
+  padding: 11px 9px;
+  background: var(--mist);
+}
+
+.training-plan-week-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.training-plan-week-today {
+  font-size: 11px;
+  border-bottom: 2px solid var(--river);
+  color: var(--river);
+}
+
+.training-plan-week-day time {
+  margin-top: 5px;
+  font-size: 13px;
+}
+
+.training-plan-week-day-counts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.training-plan-week-category {
+  font-size: 12px;
+  line-height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+
+.training-plan-week-category.is-special {
+  color: var(--river);
+}
+
+.training-plan-week-category.is-physical {
+  color: var(--ink-deep);
+}
+
+.training-plan-week-category.is-recovery {
+  color: var(--ink);
+  background: var(--mist);
+}
+
+.training-plan-week-empty {
+  font-size: 13px;
+}
+
+.training-plan-week-adjusted {
+  margin-top: auto;
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.training-plan-week button:focus-visible,
+.training-plan-week input:focus-visible,
+.training-plan-week-scroll:focus-visible {
+  outline: 3px solid var(--river);
+  outline-offset: 2px;
+}
+
+@media (width <= 640px) {
+  .training-plan-week-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .training-plan-week-actions {
+    width: 100%;
+  }
+}

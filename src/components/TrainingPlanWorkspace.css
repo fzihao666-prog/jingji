@@ -1,0 +1,117 @@
+.training-plan-workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.plan-workspace-preview-picker,
+.plan-workspace-day-heading,
+.plan-workspace-lesson-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.plan-workspace-preview-picker label,
+.plan-workspace-editor > label {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-workspace-status {
+  color: var(--river);
+  font-weight: 600;
+}
+
+.plan-workspace-layout {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.plan-workspace-layout:has(.plan-workspace-editor) {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr);
+  align-items: start;
+}
+
+.plan-workspace-lessons {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.plan-workspace-lesson {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  min-width: 0;
+}
+
+.plan-workspace-lesson h4 {
+  margin: 0;
+  color: var(--river);
+}
+
+.plan-workspace-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.plan-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.plan-workspace-empty {
+  padding: 24px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+.plan-workspace-review {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-workspace-confirm {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.plan-workspace-feedback {
+  min-height: 24px;
+}
+
+.plan-workspace-feedback [role='alert'] {
+  color: var(--danger, #a12626);
+}
+
+.plan-workspace-editor {
+  min-width: 0;
+}
+
+@media (width <= 1000px) {
+  .plan-workspace-layout:has(.plan-workspace-editor) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.plan-workspace-preview-picker > div {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-workspace-editor > select {
+  width: 100%;
+  margin: 8px 0;
+}

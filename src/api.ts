@@ -442,6 +442,31 @@ export const api = {
       athletes: Pick<Athlete, 'id' | 'name' | 'teamId' | 'project'>[];
     }>(`/api/team-plans?${query}`);
   },
+  async updateTeamPlan(plan: TeamPlan) {
+    return request<{ plan: TeamPlan }>(`/api/team-plans/${plan.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revision: plan.revision,
+        title: plan.title,
+        startDate: plan.startDate,
+        endDate: plan.endDate,
+        data: plan.data,
+      }),
+    });
+  },
+  async transitionTeamPlan(
+    planId: number,
+    input: {
+      revision: number;
+      action: 'submit' | 'return' | 'publish' | 'archive' | 'revise';
+      confirmed?: boolean;
+    }
+  ) {
+    return request<{ plan: TeamPlan }>(`/api/team-plans/${planId}/transition`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
   async trainingPlanCatalog() {
     return request<{ plans: CatalogPlan[] }>('/api/training-plans/catalog');
   },
