@@ -63,6 +63,8 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   registerAccessRoutes(app);
+  const { registerAuthRoutes } = await import('./auth-routes.ts');
+  registerAuthRoutes(app);
   server = await new Promise<Server>((resolve) => {
     const listening = app.listen(0, '127.0.0.1', () => resolve(listening));
   });
@@ -143,6 +145,29 @@ describe('队伍责任范围 HTTP 集成', () => {
       ],
     });
     expect(payload.coaches.map((coach) => coach.id)).toEqual([2]);
+  });
+
+  it('队伍人数和教练名单包含无登录账号队员，账号停用或删除不改变档案责任范围', async () => {
+    const expectFullTeam = async () => {
+      for (const path of ['/api/teams', '/api/admin/teams']) {
+        const response = await fetch(`${baseUrl}${path}`, { headers: headers(2) });
+        expect(response.status).toBe(200);
+        const payload = await response.json() as { teams: Array<{ id: number; athleteCount: number }> };
+        expect(payload.teams.find((team) => team.id === 10)?.athleteCount).toBe(3);
+        expect(payload.teams.some((team) => team.id === 11 || team.id === 20)).toBe(false);
+      }
+      const payload = await assignments(2);
+      expect(payload.athletes.map((athlete) => athlete.id).sort()).toEqual([101, 102, 103]);
+      for (const athlete of payload.athletes) {
+        expect(athlete.coachUsers.map((coach) => coach.id)).toContain(2);
+      }
+    };
+    // 101 有登录账号，102、103 只有档案；三人应同属教练管理范围。
+    await expectFullTeam();
+    database.exec('UPDATE users SET active = 0 WHERE athlete_id = 101');
+    await expectFullTeam();
+    database.exec('DELETE FROM users WHERE athlete_id = 101');
+    await expectFullTeam();
   });
 
   it('区域管理者只返回本区域且项目队伍匹配成员，不泄露完整责任名单', async () => {
