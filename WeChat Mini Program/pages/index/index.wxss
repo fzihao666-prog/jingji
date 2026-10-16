@@ -22,19 +22,13 @@
 .morning-filter::after { border: 0; }
 .morning-filter.is-active { color: #ffffff; border-color: #176f7f; background: #176f7f; }
 .morning-filter:focus { outline: 3rpx solid #176373; outline-offset: 1rpx; }
-.morning-row { display: block; box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 24rpx 4rpx; border: 0; border-bottom: 1rpx solid #d8e3e6; border-radius: 0; background: transparent; text-align: left; line-height: 1.5; }
+.morning-table-head, .morning-row.overview-person-button { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr); gap: 12rpx; align-items: center; }
+.morning-table-head { padding: 10rpx 4rpx; color: #536c75; font-size: 20rpx; }
+.morning-row.overview-person-button { box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 22rpx 4rpx; border: 0; border-bottom: 1rpx solid #d8e3e6; border-radius: 0; background: transparent; text-align: left; line-height: 1.5; }
 .morning-row::after { border: 0; }
-.morning-person { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
-.morning-identity { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6rpx 14rpx; }
-.morning-name { min-width: 0; color: #12303b; font-size: 27rpx; font-weight: 700; overflow-wrap: anywhere; }
-.morning-team { color: #536c75; font-size: 22rpx; overflow-wrap: anywhere; }
-.morning-person .today-badge { flex: none; margin: 0; }
-.morning-measures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 18rpx; }
-.morning-measure { min-width: 0; padding: 0 16rpx; border-left: 1rpx solid #d8e3e6; }
-.morning-measure:first-child { padding-left: 0; border-left: 0; }
-.morning-measure-label { display: block; color: #536c75; font-size: 22rpx; }
-.morning-measure-unit { font-size: 19rpx; }
-.morning-measure-value { display: block; margin-top: 4rpx; color: #12303b; font-size: 34rpx; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.morning-name { min-width: 0; color: #12303b; font-size: 25rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.morning-measures { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8rpx; text-align: right; }
+.morning-measure-value { min-width: 0; color: #12303b; font-size: 28rpx; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .morning-measure-value.is-empty { color: #536c75; font-weight: 400; }
 .morning-missing-note { margin-top: 12rpx; color: #536c75; font-size: 21rpx; }
 
