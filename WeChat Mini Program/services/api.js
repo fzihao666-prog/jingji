@@ -7,6 +7,16 @@ function query(params) {
     .join('&');
 }
 
+// AI 生成比普通业务请求耗时更长，避免先于服务端模型超时而中断。
+function requestAiPlan(path, data) {
+  return request(path, { method: 'POST', data, timeout: 240000 }).catch((error) => {
+    if (error.kind === 'timeout') {
+      error.message = 'AI生成等待超时，服务端可能仍在处理。请先刷新计划列表查看草稿，再决定是否重试。';
+    }
+    throw error;
+  });
+}
+
 module.exports = {
   assetUrl,
   teamPlans(params = {}) { return request(`/api/team-plans?${query(params)}`); },
@@ -14,8 +24,8 @@ module.exports = {
   updateTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}`, { method: 'PUT', data }); },
   transitionTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}/transition`, { method: 'POST', data }); },
   // AI 生成/修订/撤销训练计划草稿，以及训练项执行确认。
-  generateAiTeamPlan(data) { return request('/api/team-plans/ai/generate', { method: 'POST', data }); },
-  reviseAiTeamPlan(id, data) { return request(`/api/team-plans/ai/${encodeURIComponent(id)}/revise`, { method: 'POST', data }); },
+  generateAiTeamPlan(data) { return requestAiPlan('/api/team-plans/ai/generate', data); },
+  reviseAiTeamPlan(id, data) { return requestAiPlan(`/api/team-plans/ai/${encodeURIComponent(id)}/revise`, data); },
   undoAiTeamPlan(id) { return request(`/api/team-plans/ai/${encodeURIComponent(id)}/undo`, { method: 'POST' }); },
   teamPlanChecks(id) { return request(`/api/team-plans/${encodeURIComponent(id)}/checks`); },
   updateTeamPlanCheck(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}/checks`, { method: 'PUT', data }); },
