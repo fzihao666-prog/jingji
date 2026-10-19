@@ -42,3 +42,8 @@
   background: #176f7f;
   box-shadow: 0 5rpx 12rpx rgba(23, 111, 127, .2);
 }
+
+/* 搜索独占筛选区首行，用明确边框区分输入与下方选择控件。 */
+.scope-keyword-row { min-width: 0; margin-bottom: 14rpx; }
+.scope-keyword-input { box-sizing: border-box; width: 100%; min-width: 0; height: 80rpx; padding: 0 22rpx; border: 2rpx solid #9bb9c0; border-radius: 13rpx; color: #12303b; background: #f8fbfb; font-size: 24rpx; }
+.scope-keyword-input:focus { border-color: #176f7f; }
