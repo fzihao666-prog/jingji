@@ -79,7 +79,6 @@ function buildTrainingView(result, to) {
       load,
       value: load,
       summary: [`课次 ${sessionCount}`, `时长 ${duration}`, `距离 ${distance}`],
-      searchText: `${athlete.name || ''} ${meta}`,
     };
   });
   return { metrics, trend: trend.filter((item) => Number.isFinite(item.duration) || Number.isFinite(item.distance)),
@@ -185,7 +184,7 @@ Page({
     this.setData({ specialTests: all.slice(0, this.data.specialTests.length) });
   },
 
-  // 运动员模块由 athlete-selector 承担搜索与 5 人分页；选中切换本页个人专项视图。
+  // 运动员模块由 athlete-selector 承担每页 5 人分页；选中切换本页个人专项视图。
   onAthleteSelect(event) {
     const id = Number(event.detail && event.detail.id) || 0;
     const item = (this.data.athleteItems || []).find((row) => Number(row.id) === id);

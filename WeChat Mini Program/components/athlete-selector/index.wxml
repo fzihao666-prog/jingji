@@ -4,18 +4,9 @@
     <view class="section-head-note">{{note || (pager.total ? '当前范围共 ' + pager.total + ' 人' : '')}}</view>
   </view>
   <view class="card">
-    <input
-      class="input athlete-search"
-      type="text"
-      value="{{keyword}}"
-      placeholder="{{searchPlaceholder}}"
-      confirm-type="search"
-      bindinput="onSearchInput"
-      aria-label="{{searchPlaceholder}}"
-    />
     <view wx:if="{{error}}" class="error-box"><text>{{error}}</text></view>
     <view wx:if="{{!error && isEmpty && !loading}}" class="state athlete-empty" aria-live="polite">
-      <view class="state-title">{{keyword ? '未找到匹配运动员' : emptyText}}</view>
+      <view class="state-title">{{emptyText}}</view>
     </view>
     <view wx:if="{{!error && !isEmpty}}" class="athlete-list">
       <view

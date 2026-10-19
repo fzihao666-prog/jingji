@@ -9,13 +9,12 @@ const { goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
-// 运动员条目归一化为 athlete-selector 形状（姓名/队伍/可检索文本）。
+// 运动员条目归一化为 athlete-selector 形状（姓名/队伍）。
 function athleteItems(athletes) {
   return (athletes || []).map((athlete) => ({
     id: athlete.id,
     name: athlete.name,
     meta: athlete.team || '未分队',
-    searchText: `${athlete.name || ''} ${athlete.team || ''} ${athlete.project || ''}`,
   }));
 }
 
@@ -95,7 +94,7 @@ Page({
     }, '体能训练数据加载失败。');
   },
 
-  // 运动员模块由 athlete-selector 承担搜索与 5 人分页；点选切换本页体能分析。
+  // 运动员模块由 athlete-selector 承担每页 5 人分页；点选切换本页体能分析。
   onAthleteSelect(event) {
     const id = Number(event.detail && event.detail.id) || 0;
     if (!id || !(this.data.athletes || []).some((item) => Number(item.id) === id)) return Promise.resolve();

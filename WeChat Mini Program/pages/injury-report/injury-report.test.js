@@ -44,7 +44,6 @@ const injuryMetric = loadCjs(new URL('../../utils/injury-metric.js', import.meta
   './injury-form': injuryForm,
 });
 // 队伍名单的姓名搜索由公共运动员模块的纯视图逻辑承担。
-const { filterAthleteItems } = loadCjs(new URL('../../utils/athlete-selector-view.js', import.meta.url), {});
 
 function createOverviewPage(data = {}, api = {}, wx = {}, app = { globalData: {} }) {
   let definition;
@@ -231,7 +230,7 @@ describe('伤病与疼痛上报入口', () => {
     expect(page.data.focusPager).toMatchObject({ total: 6, page: 1, pageCount: 2, hasNext: false });
   });
 
-  it('首页队伍名单按姓名搜索且不显示其他队伍的同名人员', () => {
+  it('首页队伍名单不显示其他队伍的同名人员', () => {
     const page = createOverviewPage({
       teams: [{ id: 1, name: '一队' }],
       teamId: 1,
@@ -247,9 +246,6 @@ describe('伤病与疼痛上报入口', () => {
     expect(view.athletes.map((item) => item.id)).toEqual([7, 8]);
     expect(view.athletes[0]).toMatchObject({ id: 7, name: '样例队员', meta: '一队' });
     expect(view.teamPager).toMatchObject({ total: 2, page: 0 });
-    // 姓名搜索由 athlete-selector 组件内的纯视图逻辑承担。
-    expect(filterAthleteItems(view.athletes, '样例').map((item) => item.id)).toEqual([7]);
-    expect(filterAthleteItems(view.athletes, '不存在')).toEqual([]);
     expect(indexTemplate).toContain('bind:select="onTeamAthleteSelect"');
   });
 

@@ -11,7 +11,7 @@
     </view>
   </view>
 
-  <scope-filter projects="{{projects}}" project="{{project}}" teams="{{teams}}" team-id="{{teamId}}" show-team="{{showTeam}}" athletes="{{scopeAthletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" keyword="{{athleteKeyword}}" range="{{range}}" bindprojectchange="onScopeChange" bindteamchange="onOverviewTeamChange" bindathletechange="onOverviewAthleteChange" bindkeywordchange="onAthleteKeyword" bindrangechange="onScopeChange" />
+  <scope-filter show-search="{{false}}" projects="{{projects}}" project="{{project}}" teams="{{teams}}" team-id="{{teamId}}" show-team="{{showTeam}}" athletes="{{scopeAthletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onScopeChange" bindteamchange="onOverviewTeamChange" bindathletechange="onOverviewAthleteChange" bindrangechange="onScopeChange" />
 
   <view wx:if="{{canViewTodos && selectedAthleteId}}" class="view-mode-bar">
     <text class="view-mode-label">个人分析视图 · 团队趋势参照保留</text>

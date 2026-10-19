@@ -1,6 +1,5 @@
-/* 公共运动员模块：搜索 + 每页 5 人卡片 + 翻页 + 选中高亮。
+/* 公共运动员模块：每页 5 人卡片 + 翻页 + 选中高亮。
    只使用 app.wxss 品牌变量；整卡可点，详情入口独立按钮不嵌套。 */
-.athlete-search { margin-bottom: 16rpx; }
 .athlete-list { display: grid; gap: 14rpx; }
 
 .athlete-card {

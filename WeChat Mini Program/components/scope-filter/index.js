@@ -12,6 +12,7 @@ Component({
     teams: { type: Array, value: [] },
     teamId: { type: Number, value: 0 },
     showTeam: { type: Boolean, value: false },
+    showSearch: { type: Boolean, value: true },
     keyword: { type: String, value: '' }
   },
 

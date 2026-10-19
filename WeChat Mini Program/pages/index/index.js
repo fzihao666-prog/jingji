@@ -182,7 +182,6 @@ Page({
     teamId: 0,
     showTeam: false,
     showAthlete: false,
-    athleteKeyword: '',
     focusFilter: 'active',
     followupBusy: false,
     focusRows: [],
@@ -437,7 +436,7 @@ Page({
     return (overview.athletes || []).filter((item) => !selectedTeam || item.team === selectedTeam.name);
   },
 
-  // 队伍运动员归一化为 athlete-selector 条目；搜索与 5 人分页由组件承担。
+  // 队伍运动员归一化为 athlete-selector 条目；每页 5 人分页由组件承担。
   buildTeamView(overview, teams, teamId) {
     if (!overview) return emptyTeamView();
     const athletes = this.teamAthletes(overview, teams, teamId).map((athlete) => ({
@@ -449,7 +448,6 @@ Page({
         { text: athlete.wellnessReported ? '恢复日报已填' : '恢复日报未填', tone: athlete.wellnessReported ? 'ok' : 'warn' }
       ],
       value: `${metricValue(athlete.load24h)} AU`,
-      searchText: `${athlete.athleteName || ''} ${athlete.team || ''}`,
     }));
     return { athletes, teamPager: paginateList(athletes, 0, PAGE_SIZE) };
   },
@@ -553,7 +551,7 @@ Page({
     });
   },
 
-  // 筛选/搜索变化后所有人员列表回到第一页（spec §6）。
+  // 筛选变化后所有人员列表回到第一页（spec §6）。
   resetPagerPages() {
     return { team: 0, focus: 0, morning: 0, exec: 0 };
   },
@@ -567,7 +565,7 @@ Page({
     if (!this.data.teams.some((item) => Number(item.id) === teamId) && teamId !== 0) return Promise.resolve();
     const todoPagerPages = { ...this.data.todoPagerPages, focus: 0, team: 0, morning: 0, exec: 0 };
     this.setData({
-      teamId, todoPagerPages, athleteKeyword: '', focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE),
+      teamId, todoPagerPages, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE),
       teamView: this.buildTeamView(this.data.teamOverview, this.data.teams, teamId),
       // 队伍筛选变化后恢复日报人数与名单同步更新，保持同一口径。
       ...this.buildMorningViews(this.data.teamOverview, this.data.teams, teamId, 0),
@@ -601,17 +599,13 @@ Page({
     navigateToAthlete(this, { currentTarget: { dataset: { athleteId: event.detail && event.detail.id } } }, this.data.athletes);
   },
 
-  onAthleteKeyword(event) {
-    this.setData({ athleteKeyword: event.detail && event.detail.value || '' });
-  },
-
   onScopeChange(event) {
     const change = applyScopeChange(this, event);
     if (!change) return Promise.resolve();
     if (change.field === 'project') {
       this._todoGuard = this._todoGuard || createRequestGuard();
       this._todoGuard.next();
-      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, athleteKeyword: '', todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true, morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all', planExecution: null, coachPlanView: emptyCoachPlanView(), coachExecutionView: emptyExecutionView(), planError: '', planLoading: true });
+      this.setData({ ...buildView({}, null, this.data.from, this.data.to), todos: null, focusRows: [], focusPager: paginateList([], 0, PAGE_SIZE), teamId: 0, teams: [], selectedAthleteId: 0, todoPagerPages: this.resetPagerPages(), todosError: '', todosLoading: true, morningView: emptyMorningView(), morningTraining: emptyTrainingSituation(), morningFilter: 'all', planExecution: null, coachPlanView: emptyCoachPlanView(), coachExecutionView: emptyExecutionView(), planError: '', planLoading: true });
     }
     return loadWithGuard(this, this._guard, async (isLatest) => {
       if (change.field === 'project') {

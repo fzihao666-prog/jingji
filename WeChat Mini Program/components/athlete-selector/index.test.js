@@ -57,17 +57,29 @@ describe('运动员组件数据监听', () => {
     expect(component.data.pager.total).toBe(0);
   });
 
-  it('分页后搜索回到第一页，更新列表保留搜索词', () => {
+  it('翻页保留完整名单，名单更新后回到第一页', () => {
     const items = Array.from({ length: 7 }, (_, index) => ({ id: index + 1, name: `运动员${index + 1}` }));
     const component = createSelector(items);
     component.onPageChange({ detail: { page: 1 } });
     expect(component.data.pageItems.map((item) => item.id)).toEqual([6, 7]);
-    component.onSearchInput({ detail: { value: '运动员1' } });
-    expect(component.data.pager.page).toBe(0);
-    expect(component.data.pageItems.map((item) => item.id)).toEqual([1]);
     component.properties.items = items.slice(1);
     component.setData({ items: component.properties.items });
-    expect(component.data.keyword).toBe('运动员1');
-    expect(component.data.isEmpty).toBe(true);
+    expect(component.data.pager.page).toBe(0);
+    expect(component.data.pager.total).toBe(6);
+    expect(component.data.pageItems.map((item) => item.id)).toEqual([2, 3, 4, 5, 6]);
+    expect(component.onSearchInput).toBeUndefined();
+    expect(component.data).not.toHaveProperty('keyword');
+  });
+
+  it('三个训练页关闭顶部搜索，人员组件移除搜索入口，档案保留搜索', () => {
+    for (const name of ['index', 'special', 'strength']) {
+      const source = readFileSync(new URL(`../../pages/${name}/${name}.wxml`, import.meta.url), 'utf8');
+      expect(source).toContain('show-search="{{false}}"');
+      expect(source).not.toContain('keyword');
+    }
+    const component = readFileSync(new URL('./index.wxml', import.meta.url), 'utf8');
+    expect(component).not.toContain('<input');
+    const profile = readFileSync(new URL('../../pages/profile/profile.wxml', import.meta.url), 'utf8');
+    expect(profile).not.toContain('show-search="{{false}}"');
   });
 });
