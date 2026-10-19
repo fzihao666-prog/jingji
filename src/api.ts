@@ -1,4 +1,6 @@
 import type { TeamPlan } from '../shared/team-plan';
+import { reportPreviewSchema, reportCommentarySchema, savedReportSchema, reportHistorySchema,
+  type ReportRange, type ReportCommentary } from '../shared/training-report';
 import type { CatalogPlan, PlanExecutionRow } from '../shared/training-plan-catalog';
 import {
   resetAccountPasswordSchema,
@@ -166,6 +168,23 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
+  async reportPreview(id: number, range: ReportRange) {
+    return reportPreviewSchema.parse(await request<unknown>(`/api/athletes/${id}/reports/preview?${new URLSearchParams(range)}`));
+  },
+  async reportCommentary(id: number, range: ReportRange, fingerprint: string) {
+    return reportCommentarySchema.parse(await request<unknown>(`/api/athletes/${id}/reports/commentary`, {
+      method: 'POST', body: JSON.stringify({ range, fingerprint, consent: true }), timeoutMs: 240000 }));
+  },
+  async saveReport(id: number, range: ReportRange, fingerprint: string, commentary: ReportCommentary) {
+    return savedReportSchema.parse(await request<unknown>(`/api/athletes/${id}/reports`, {
+      method: 'POST', body: JSON.stringify({ range, fingerprint, commentary, confirmed: true }) }));
+  },
+  async reportHistory(id: number) {
+    return reportHistorySchema.parse(await request<unknown>(`/api/athletes/${id}/reports`));
+  },
+  async reportDetail(id: number, reportId: string) {
+    return savedReportSchema.parse(await request<unknown>(`/api/athletes/${id}/reports/${encodeURIComponent(reportId)}`));
+  },
   async physicalChampion(query: { project: string; from: string; to: string }) {
     const payload = await request<unknown>(`/api/physical-champion?${new URLSearchParams(query)}`);
     return physicalChampionPayloadSchema.parse(payload);

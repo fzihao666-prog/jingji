@@ -6,6 +6,7 @@
     "pages/special/special",
     "pages/strength/strength",
     "pages/profile/profile",
+    "pages/training-report/training-report",
     "pages/profile-edit/profile-edit",
     "pages/athlete-create/athlete-create",
     "pages/training-entry/training-entry",

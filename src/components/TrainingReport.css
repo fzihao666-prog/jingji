@@ -1,0 +1,230 @@
+.training-report {
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  margin-block: 16px;
+}
+
+.training-report header {
+  border-bottom: 2px solid var(--teal);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.training-report header > span {
+  color: var(--river);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.training-report h2 {
+  margin-block: 8px;
+}
+
+.training-report h3 {
+  margin: 24px 0 14px;
+}
+
+.training-report small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.training-report h3 small {
+  display: inline;
+}
+
+.training-report-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.training-report-kpis > div {
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--teal);
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.training-report-kpis strong {
+  display: block;
+  font-size: 26px;
+  color: var(--river);
+  padding-block: 10px;
+}
+
+.training-report-kpis strong small {
+  display: inline;
+  margin-left: 6px;
+}
+
+.training-report-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.training-report-grid > * {
+  min-width: 0;
+}
+
+.training-report .app-echart-wrap {
+  --chart-height: 240px;
+
+  min-height: 240px;
+}
+
+.training-report .app-echart {
+  --chart-height: 240px;
+}
+
+.training-report-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.training-report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  padding: 16px 0;
+  border: 0;
+}
+
+.training-report-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.training-report button,
+.training-report input,
+.training-report select,
+.training-report textarea {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.training-report button {
+  color: var(--river);
+  cursor: pointer;
+}
+
+.training-report button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.training-report textarea {
+  width: 100%;
+  min-height: 110px;
+  margin-top: 10px;
+  resize: vertical;
+}
+
+.training-report .training-report-consent {
+  display: flex;
+  align-items: start;
+  font-size: 12px;
+  color: var(--muted);
+  flex-basis: 100%;
+}
+
+.training-report-consent input {
+  width: auto;
+}
+
+.training-report table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.training-report th,
+.training-report td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.training-report th {
+  background: var(--mist);
+}
+
+.training-report-table {
+  overflow-x: auto;
+}
+
+.training-report-empty {
+  padding: 28px;
+  text-align: center;
+  background: var(--mist);
+  color: var(--muted);
+}
+
+.training-report summary {
+  cursor: pointer;
+  color: var(--river);
+  padding-block: 8px;
+}
+
+@media (width <= 760px) {
+  .training-report {
+    padding: 16px;
+  }
+
+  .training-report-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .training-report-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  :where(body:has(.training-report[data-printing='true'])) * {
+    visibility: hidden;
+  }
+
+  .training-report[data-printing='true'],
+  .training-report[data-printing='true'] * {
+    visibility: visible !important;
+  }
+
+  .training-report[data-printing='true'] {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    margin: 0;
+    border: 0;
+    box-sizing: border-box;
+  }
+
+  .training-report .training-report-controls {
+    display: none;
+  }
+
+  .training-report section,
+  .training-report-kpis {
+    break-inside: avoid;
+  }
+
+  .training-report table {
+    font-size: 11px;
+  }
+}

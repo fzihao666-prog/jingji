@@ -1,4 +1,5 @@
 import { migrateTeamPlans } from './team-plan-migration.ts';
+import { initializeTrainingReports } from '../report/report-service.ts';
 import { initializeTrainingPlanLinks } from './training-plan-links.ts';
 import { initializeTeamPlanChecks } from './team-plan-checks.ts';
 import type { DatabaseSync } from 'node:sqlite';
@@ -5869,6 +5870,7 @@ export function initializeDatabase(
   migrateTeamPlans(db);
   initializeTrainingPlanLinks(db);
   initializeTeamPlanChecks(db);
+  initializeTrainingReports(db);
   return { upsertAthleteOrigin };
 
 }
