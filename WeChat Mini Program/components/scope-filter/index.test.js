@@ -52,3 +52,13 @@ describe('运动员搜索无需父页面回写关键词', () => {
     expect(events.at(-1)).toEqual({ type: 'athletechange', detail: { value: 2 } });
   });
 });
+
+
+describe('搜索行添加入口', () => {
+  it('只有启用添加入口时才发出添加事件', () => {
+    const { component, events } = createFilter();
+    component.onAddAthlete(); expect(events).toEqual([]);
+    component.data.showAddAthlete = true;
+    component.onAddAthlete(); expect(events).toEqual([{ type: 'addathlete', detail: undefined }]);
+  });
+});

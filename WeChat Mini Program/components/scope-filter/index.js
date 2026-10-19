@@ -13,6 +13,7 @@ Component({
     teamId: { type: Number, value: 0 },
     showTeam: { type: Boolean, value: false },
     showSearch: { type: Boolean, value: true },
+    showAddAthlete: { type: Boolean, value: false },
     keyword: { type: String, value: '' }
   },
 
@@ -69,6 +70,9 @@ Component({
       const index = Number(event.detail.value);
       const item = this.data.teamItems[index] || this.data.teamItems[0] || { id: 0 };
       this.triggerEvent('teamchange', { value: Number(item.id) || 0 });
+    },
+    onAddAthlete() {
+      if (this.data.showAddAthlete) this.triggerEvent('addathlete');
     },
     onKeywordInput(event) {
       const keyword = event.detail.value || '';

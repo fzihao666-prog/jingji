@@ -376,7 +376,8 @@ describe('档案添加入口与列表刷新', () => {
     page.setData({ canAddAthlete: true }); page.openAthleteCreate();
     expect(destinations).toEqual(['/pages/athlete-create/athlete-create?project=ROWING&teamId=10']);
     const template = readFileSync(new URL('../pages/profile/profile.wxml', import.meta.url), 'utf8');
-    expect(template).toContain('wx:if="{{canAddAthlete}}"');
+    expect(template).toContain('show-add-athlete="{{canAddAthlete}}"');
+    expect(template).toContain('bindaddathlete="openAthleteCreate"');
   });
 });
 

@@ -1,6 +1,7 @@
 <view class="scope-filter">
-  <view wx:if="{{showAthlete && showSearch}}" class="scope-keyword-row">
-    <input class="scope-keyword-input" value="{{keyword}}" bindinput="onKeywordInput" placeholder="搜索运动员姓名或队伍" confirm-type="search" aria-label="按姓名或队伍筛选运动员" />
+  <view wx:if="{{(showAthlete && showSearch) || showAddAthlete}}" class="scope-keyword-row {{showAthlete && showSearch && showAddAthlete ? 'has-add-action' : ''}}">
+    <input wx:if="{{showAthlete && showSearch}}" class="scope-keyword-input" value="{{keyword}}" bindinput="onKeywordInput" placeholder="搜索姓名或队伍" confirm-type="search" aria-label="按姓名或队伍筛选运动员" />
+    <button wx:if="{{showAddAthlete}}" class="scope-add-athlete" bindtap="onAddAthlete" aria-label="添加运动员">+ 添加运动员</button>
   </view>
   <view class="scope-picker-row">
     <picker class="scope-picker" mode="selector" range="{{projectItems}}" range-key="label" value="{{projectIndex}}" bindchange="onProjectChange">

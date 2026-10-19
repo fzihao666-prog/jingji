@@ -43,7 +43,12 @@
   box-shadow: 0 5rpx 12rpx rgba(23, 111, 127, .2);
 }
 
-/* 搜索独占筛选区首行，用明确边框区分输入与下方选择控件。 */
-.scope-keyword-row { min-width: 0; margin-bottom: 14rpx; }
+/* 搜索与添加入口共用首行，有添加权限时等分可用宽度。 */
+.scope-keyword-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12rpx; min-width: 0; margin-bottom: 14rpx; }
 .scope-keyword-input { box-sizing: border-box; width: 100%; min-width: 0; height: 80rpx; padding: 0 22rpx; border: 2rpx solid #9bb9c0; border-radius: 13rpx; color: #12303b; background: #f8fbfb; font-size: 24rpx; }
 .scope-keyword-input:focus { border-color: #176f7f; }
+
+.scope-keyword-row.has-add-action { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.scope-add-athlete { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 80rpx; margin: 0; padding: 12rpx; display: flex; align-items: center; justify-content: center; border: 2rpx solid #176f7f; border-radius: 13rpx; color: #176f7f; background: #ffffff; font-size: 24rpx; line-height: 1.5; white-space: normal; }
+.scope-add-athlete::after { border: 0; }
+.scope-add-athlete:focus { outline: 3rpx solid #176f7f; outline-offset: 2rpx; }
