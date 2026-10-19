@@ -258,7 +258,9 @@ Page({
   },
 
   editMyProfile() {
-    wx.navigateTo({ url: '/pages/profile-edit/profile-edit' });
+    if (!this.data.selectedAthleteId || (!this.data.canEditSelf && !this.data.canCoachFill)) return;
+    const query = this.data.canCoachFill ? `?athleteId=${Number(this.data.selectedAthleteId)}` : '';
+    wx.navigateTo({ url: `/pages/profile-edit/profile-edit${query}` });
   },
 
   reportInjury() {

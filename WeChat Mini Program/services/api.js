@@ -45,6 +45,7 @@ module.exports = {
   athletes() { return request('/api/athletes'); },
   athleteCreateOptions() { return request('/api/admin/athletes/create-options'); },
   createAthlete(data) { return request('/api/admin/athletes', { method: 'POST', data }); },
+  updateAthlete(id, data) { return request(`/api/admin/athletes/${encodeURIComponent(id)}`, { method: 'PUT', data }); },
   teams() { return request('/api/registration/teams', { auth: false }); },
   updateMyAthleteProfile(data) {
     return request('/api/me/athlete-profile', { method: 'PUT', data });

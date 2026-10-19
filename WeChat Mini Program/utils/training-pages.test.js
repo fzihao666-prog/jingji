@@ -379,3 +379,18 @@ describe('档案添加入口与列表刷新', () => {
     expect(template).toContain('wx:if="{{canAddAthlete}}"');
   });
 });
+
+describe('档案资料编辑入口', () => {
+  it('管理者进入当前运动员编辑，本人保留本人入口，无权限不导航', () => {
+    const destinations = [];
+    const page = createPage('profile', {}, { wx: { navigateTo: ({ url }) => destinations.push(url) } });
+    page.setData({ selectedAthleteId: 101, canCoachFill: true });
+    page.editMyProfile();
+    expect(destinations.pop()).toBe('/pages/profile-edit/profile-edit?athleteId=101');
+    page.setData({ canCoachFill: false, canEditSelf: true }); page.editMyProfile();
+    expect(destinations.pop()).toBe('/pages/profile-edit/profile-edit');
+    page.setData({ canEditSelf: false }); page.editMyProfile();
+    page.setData({ canCoachFill: true, selectedAthleteId: 0 }); page.editMyProfile();
+    expect(destinations).toEqual([]);
+  });
+});

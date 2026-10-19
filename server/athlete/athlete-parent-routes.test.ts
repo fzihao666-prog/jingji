@@ -248,3 +248,26 @@ describe('小程序复用运动员创建接口', () => {
     } finally { database.exec('DROP TRIGGER fail_create_profile'); }
   });
 });
+
+describe('小程序管理者复用运动员编辑接口', () => {
+  it.each([2, 5, 1])('管理者 %s 可更新已有运动员，保留档案 ID 和账号关联', async (actor) => {
+    const response = await update({ ...payload, team: 'A队', name: '更新队员', notes: '完善资料', phone: '13800000000', currentEvent: '单人双桨' }, actor);
+    expect(response.status).toBe(200);
+    expect(database.prepare('SELECT id, name, team_id FROM athletes WHERE id=101').get()).toEqual({ id: 101, name: '更新队员', team_id: 10 });
+    expect(database.prepare('SELECT notes, phone, current_event FROM athlete_profiles WHERE athlete_id=101').get()).toEqual({ notes: '完善资料', phone: '13800000000', current_event: '单人双桨' });
+    expect(database.prepare('SELECT username, display_name, athlete_id FROM users WHERE id=4').get()).toEqual({ username: 'athlete', display_name: '更新队员', athlete_id: 101 });
+    expect(database.prepare('SELECT display_name FROM users WHERE id=?').get(actor)).not.toEqual({ display_name: '更新队员' });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 1 });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM users').get()).toEqual({ count: 5 });
+  });
+  it('TD 沿用相同的权限范围规则维护档案', async () => {
+    database.exec("UPDATE users SET role='TD' WHERE id=1");
+    expect((await update({ ...payload, team: 'A队', notes: '技术负责人完善' }, 1)).status).toBe(200);
+  });
+  it('拒绝其他队伍教练、运动员角色和无权目标队伍，不部分更新', async () => {
+    expect((await update({ ...payload, team: 'A队', name: '拒绝修改' }, 3)).status).toBe(404);
+    expect((await update({ ...payload, team: 'A队', name: '拒绝修改' }, 4)).status).toBe(403);
+    expect((await update({ ...payload, name: '拒绝修改' }, 2)).status).toBe(400);
+    expect(database.prepare('SELECT name, team_id FROM athletes WHERE id=101').get()).toEqual({ name: '测试队员', team_id: 10 });
+  });
+});
