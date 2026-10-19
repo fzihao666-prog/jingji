@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 const sources = resolve('public/assets/olympic-sports');
 const targets = [
   { dir: resolve('public/assets/olympic-sports-login-v1'), size: 144, budget: 4 * 1024 * 1024 },
-  { dir: resolve('WeChat Mini Program/assets/olympic-sports-login-v1'), size: 72, budget: 1100 * 1024 },
+  { dir: resolve('WeChat Mini Program/assets/olympic-sports-login-v1'), size: 48, budget: 500 * 1024 },
 ];
 
 describe('登录 GIF 裁剪与动画完整性', () => {

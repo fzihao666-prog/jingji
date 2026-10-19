@@ -4,13 +4,14 @@ import { resolve } from 'node:path';
 
 // 两端分别匹配现有 aspectFill 与 cover + scale(1.5)，所有帧使用同一个居中裁剪框。
 const sourceDir = resolve('public/assets/olympic-sports');
+const miniOnly = process.argv.includes('--mini-only');
 const targets = [
   { dir: resolve('public/assets/olympic-sports-login-v1'), size: 144, zoom: 1.5, colours: 16 },
-  { dir: resolve('WeChat Mini Program/assets/olympic-sports-login-v1'), size: 72, zoom: 1, colours: 8 },
-];
+  { dir: resolve('WeChat Mini Program/assets/olympic-sports-login-v1'), size: 48, zoom: 1, colours: 4 },
+].filter((target) => !miniOnly || target.dir.includes('WeChat Mini Program'));
 for (const target of targets) await mkdir(target.dir, { recursive: true });
 let originalBytes = 0;
-const totals = [0, 0];
+const totals = targets.map(() => 0);
 for (const name of (await readdir(sourceDir)).filter((name) => name.endsWith('.gif')).sort()) {
   const input = resolve(sourceDir, name);
   const metadata = await sharp(input, { animated: true }).metadata();
@@ -42,4 +43,4 @@ for (const name of (await readdir(sourceDir)).filter((name) => name.endsWith('.g
   }
   console.log(`已处理 ${name}`);
 }
-console.log(JSON.stringify({ originalBytes, webBytes: totals[0], miniBytes: totals[1] }));
+console.log(JSON.stringify({ originalBytes, outputs: targets.map((target, index) => ({ dir: target.dir, bytes: totals[index] })) }));
