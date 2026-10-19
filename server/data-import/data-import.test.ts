@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as XLSX from '@e965/xlsx';
-vi.mock('../core/db.ts', () => ({ db: {} }));
-import { parseImportBirthDate } from './data-import.ts';
+vi.mock('../core/db.ts', () => ({ db: { prepare: vi.fn() } }));
+import { db } from '../core/db.ts';
+import { listDataImportBatches, parseImportBirthDate } from './data-import.ts';
 
 describe('独立导入出生日期', () => {
   it.each(['1900-01-01', '1990-10-01', '1996-02-29', '1996/2/29', '1996年2月29日'])(
@@ -28,4 +29,16 @@ describe('独立导入出生日期', () => {
   ])('拒绝非法或未来生日 %s', (input) => {
     expect(parseImportBirthDate(input, '2026-10-12')).toBe('');
   });
+});
+
+it('历史批次列表恢复乱码文件名，并保留项目和账号筛选', () => {
+  const filename = '赛艇训练数据.xlsx';
+  const all = vi
+    .fn()
+    .mockReturnValue([
+      { id: 'batch-1', filename: Buffer.from(filename).toString('latin1'), project: '赛艇' },
+    ]);
+  vi.mocked(db.prepare).mockReturnValue({ all } as unknown as ReturnType<typeof db.prepare>);
+  expect(listDataImportBatches('赛艇', 7)[0].filename).toBe(filename);
+  expect(all).toHaveBeenCalledWith('赛艇', 7);
 });

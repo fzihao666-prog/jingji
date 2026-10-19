@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
 import { db } from '../core/db.ts';
+import { normalizeImportFilename } from './import-filename.ts';
 import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
 import {
   inferStrengthBodyPosition,
@@ -1427,6 +1428,7 @@ export function analyzeDataImport(input: {
   userId: number;
   athletes: ImportAthlete[];
 }) {
+  input = { ...input, filename: normalizeImportFilename(input.filename) };
   if (!/\.(xls|xlsx)$/i.test(input.filename))
     throw new Error('统一数据导入当前支持 XLS 和 XLSX 文件。');
   if (input.defaultDate && !validIsoDate(input.defaultDate))
@@ -1716,7 +1718,7 @@ export function getDataImportBatch(
   if (duplicateFile) summary.duplicateFile = true;
   return {
     id: text(row.id),
-    filename: text(row.filename),
+    filename: normalizeImportFilename(text(row.filename)),
     project: text(row.project),
     status: row.status as DataImportPreview['status'],
     parserVersion: text(row.parserVersion),
@@ -1768,7 +1770,7 @@ export function listDataImportBatches(project: string, userId: number) {
       .all(project, userId) as Record<string, unknown>[]
   ).map((row) => ({
     id: text(row.id),
-    filename: text(row.filename),
+    filename: normalizeImportFilename(text(row.filename)),
     project: text(row.project),
     status: text(row.status),
     parserVersion: text(row.parserVersion),
