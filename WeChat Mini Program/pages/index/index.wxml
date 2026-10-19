@@ -47,7 +47,7 @@
           <view class="morning-table-head" aria-hidden="true">
             <text>姓名</text><view class="morning-measures"><text>睡眠</text><text>晨脉(bpm)</text><text>疲劳(分)</text></view>
           </view>
-          <button wx:for="{{morningView.rows.items}}" wx:key="athleteId" class="morning-row overview-person-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.reported ? '恢复日报已填报，睡眠 ' + item.sleepText + '，晨脉 ' + item.pulseText + ' bpm，疲劳 ' + item.fatigueText + ' 分，横线表示单项暂无数据' : '恢复日报未填报'}}，查看运动员档案">
+          <button wx:for="{{morningView.rows.items}}" wx:key="athleteId" class="morning-row card-row-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.reported ? '恢复日报已填报，睡眠 ' + item.sleepText + '，晨脉 ' + item.pulseText + ' bpm，疲劳 ' + item.fatigueText + ' 分，横线表示单项暂无数据' : '恢复日报未填报'}}，查看运动员档案">
             <text class="morning-name">{{item.athleteName}}</text>
             <view class="morning-measures">
               <text class="morning-measure-value {{item.sleepText === '--' ? 'is-empty' : ''}}">{{item.sleepText}}</text>
@@ -112,7 +112,7 @@
         <view class="plan-detail-title">{{coachExecutionView.listTitle}}</view>
         <view wx:if="{{!planError && coachExecutionView.listEmpty}}" class="chart-empty">暂无待确认人员</view>
         <block wx:if="{{coachExecutionView.rows.items.length}}">
-          <button wx:for="{{coachExecutionView.rows.items}}" wx:key="athleteId" class="exec-row overview-person-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.statusLabel}}，查看运动员档案">
+          <button wx:for="{{coachExecutionView.rows.items}}" wx:key="athleteId" class="exec-row card-row-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.statusLabel}}，查看运动员档案">
             <view class="morning-col-name">
               <text class="morning-name">{{item.athleteName}}</text>
               <text class="today-badge is-pending">{{item.statusLabel}}</text>

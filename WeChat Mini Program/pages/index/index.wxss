@@ -23,10 +23,13 @@
 .morning-filter::after { border: 0; }
 .morning-filter.is-active { color: #ffffff; border-color: #176f7f; background: #176f7f; }
 .morning-filter:focus { outline: 3rpx solid #176373; outline-offset: 1rpx; }
-.morning-table-head, .morning-row.overview-person-button { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr); gap: 12rpx; align-items: center; }
+.morning-table-head, .morning-row.card-row-button { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2.4fr); gap: 12rpx; align-items: center; }
 .morning-table-head { padding: 10rpx 4rpx; color: #536c75; font-size: 20rpx; }
-.morning-row.overview-person-button { box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 22rpx 4rpx; border: 0; border-bottom: 1rpx solid #d8e3e6; border-radius: 0; background: transparent; text-align: left; line-height: 1.5; }
+.morning-row.card-row-button { box-sizing: border-box; width: 100%; max-width: 100%; margin: 0; padding: 22rpx 4rpx; border: 0; border-bottom: 1rpx solid #d8e3e6; border-radius: 0; background: transparent; text-align: left; line-height: 1.5; }
 .morning-row::after { border: 0; }
+.morning-col-name { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6rpx; }
+.morning-col-name .morning-name { max-width: 100%; }
+.morning-col-name .today-badge { max-width: 100%; overflow-wrap: anywhere; }
 .morning-name { min-width: 0; color: #12303b; font-size: 25rpx; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .morning-measures { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8rpx; text-align: right; }
 .morning-measure-value { min-width: 0; color: #12303b; font-size: 28rpx; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -98,7 +101,7 @@
 .focus-row-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12rpx; }
 .focus-name { min-width: 0; color: #12303b; font-size: 25rpx; font-weight: 700; overflow-wrap: break-word; }
 .focus-tags { min-width: 0; max-width: 100%; margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6rpx; }
-.focus-tag { flex: none; padding: 4rpx 12rpx; border-radius: 999rpx; color: #7a4715; background: #fff1d8; font-size: 19rpx; }
+.focus-tag { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow-wrap: anywhere; padding: 4rpx 12rpx; border-radius: 999rpx; color: #7a4715; background: #fff1d8; font-size: 19rpx; }
 .focus-row .todo-note { margin-top: 7rpx; }
 .focus-card .todo-note { color: #536c75; font-size: 22rpx; line-height: 1.5; overflow-wrap: break-word; }
 /* 运动员今日状态：负荷摘要优先，训练与恢复分别呈现状态和操作。 */
@@ -145,10 +148,6 @@
 .overview-chart-overlay .state { min-height: 0; padding: 20rpx; background: rgba(255, 255, 255, .9); border-radius: 12rpx; }
 .overview-chart-overlay button { pointer-events: auto; }
 .structure-status { min-height: 64rpx; padding: 12rpx 0; color: #536c75; font-size: 23rpx; line-height: 1.5; }
-/* 通用按钮仅负责交互布局，保留人员行各自的背景、圆角和上下间距。 */
-.overview-person-button { display: block; box-sizing: border-box; width: 100%; min-width: 0; margin-right: 0; margin-left: 0; text-align: left; line-height: 1.5; }
-.overview-person-button:focus { outline: 3rpx solid #176373; outline-offset: 1rpx; }
-
 .focus-actions, .focus-filters { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }
 .focus-actions button { margin: 0; padding: 8rpx 16rpx; min-height: 80rpx; font-size: 22rpx; line-height: 2.6; color: #176373; background: #fff; }
 .focus-actions button:focus { outline: 3rpx solid #176373; outline-offset: 2rpx; }

@@ -59,6 +59,9 @@ button::after { border: 0; }
 .view-mode-button:focus { outline: 4rpx solid var(--river); outline-offset: 2rpx; }
 
 .card {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   margin-bottom: 20rpx;
   padding: 26rpx;
   border: 1rpx solid var(--line);
@@ -211,3 +214,21 @@ button::after { border: 0; }
 @media (min-width: 700px) {
   .page { width: 700px; margin: 0 auto; }
 }
+
+/* 卡片式按钮共用边界：外框包含内边距，内容允许收缩与换行。
+   不指定 display，人员列表自行选择 grid / flex，避免公共样式覆盖布局。 */
+.card-row-button {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-right: 0;
+  margin-left: 0;
+  text-align: left;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.card-row-button > view, .card-row-button > text { min-width: 0; max-width: 100%; }
+.card-row-button::after { border: 0; }
+.card-row-button:focus { outline: 3rpx solid #176373; outline-offset: 1rpx; }
