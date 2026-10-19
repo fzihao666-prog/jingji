@@ -60,7 +60,8 @@ Component({
     },
     onAthleteChange(event) {
       const index = Number(event.detail.value);
-      const item = this.data.athleteItems[index] || this.data.athleteItems[0] || { id: 0 };
+      const item = this.data.athleteItems[index];
+      if (!item) return;
       this.triggerEvent('athletechange', { value: Number(item.id) || 0 });
     },
     onTeamChange(event) {
@@ -69,7 +70,10 @@ Component({
       this.triggerEvent('teamchange', { value: Number(item.id) || 0 });
     },
     onKeywordInput(event) {
-      this.triggerEvent('keywordchange', { value: event.detail.value || '' });
+      const keyword = event.detail.value || '';
+      // 组件自行筛选，页面无需回写关键词也能使用搜索。
+      this.setData({ keyword });
+      this.triggerEvent('keywordchange', { value: keyword });
     },
     onRangeChange(event) {
       this.triggerEvent('rangechange', { value: event.currentTarget.dataset.value });

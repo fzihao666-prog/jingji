@@ -14,10 +14,10 @@
         <text class="scope-picker-arrow">⌄</text>
       </view>
     </picker>
-    <picker wx:if="{{showAthlete}}" class="scope-picker athlete-picker" mode="selector" range="{{athleteItems}}" range-key="name" value="{{athleteIndex}}" bindchange="onAthleteChange">
+    <picker wx:if="{{showAthlete}}" class="scope-picker athlete-picker" disabled="{{!athleteItems.length}}" mode="selector" range="{{athleteItems}}" range-key="name" value="{{athleteIndex}}" bindchange="onAthleteChange">
       <view class="scope-picker-control">
         <text class="scope-picker-label">运动员</text>
-        <text class="scope-picker-value">{{athleteItems[athleteIndex].name}}</text>
+        <text class="scope-picker-value">{{athleteItems.length ? athleteItems[athleteIndex].name : '未找到匹配运动员'}}</text>
         <text class="scope-picker-arrow">⌄</text>
       </view>
     </picker>
