@@ -1,4 +1,5 @@
 @import "../../templates/training-state.wxss";
+.profile-report-entry { box-sizing: border-box; width: 100% !important; max-width: 100%; min-width: 0; margin: 0 0 20rpx; padding: 20rpx 24rpx; line-height: 1.5; }
 .privacy-notice { margin: -4rpx 2rpx 18rpx; display: flex; align-items: center; gap: 9rpx; color: #6f858d; font-size: 20rpx; }
 .privacy-notice image { width: 32rpx; height: 32rpx; flex: none; }
 .more-grid { margin-top: 1rpx; }

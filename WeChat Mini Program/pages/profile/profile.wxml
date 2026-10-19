@@ -20,7 +20,7 @@
       <button wx:if="{{(canEditSelf || canCoachFill) && selectedAthleteId}}" class="hero-edit-button" bindtap="editMyProfile"><text class="hero-edit-icon">✎</text><text>编辑</text></button>
     </view>
 
-    <button wx:if="{{selectedAthleteId}}" class="secondary-button" bindtap="openTrainingReport">训练报告 · 周 / 月 / 自选日期</button>
+    <button wx:if="{{selectedAthleteId}}" class="secondary-button profile-report-entry" bindtap="openTrainingReport">训练报告</button>
     <view class="section-head"><view class="section-head-title">基本信息</view><view class="section-head-note">常用资料优先展示</view></view>
     <view class="profile-grid"><view wx:for="{{primaryCells}}" wx:key="label" class="profile-cell"><view class="profile-cell-label">{{item.label}}</view><text class="profile-cell-value">{{item.value}}</text></view></view>
     <view wx:if="{{showMore}}" class="profile-grid more-grid"><view wx:for="{{moreCells}}" wx:key="label" class="profile-cell"><view class="profile-cell-label">{{item.label}}</view><text class="profile-cell-value">{{item.value}}</text></view></view>
