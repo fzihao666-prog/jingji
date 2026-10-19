@@ -1,5 +1,5 @@
 <view class="page report-page">
-  <view class="page-head"><view class="page-title">{{athleteName}} · {{kinds[kindIndex]}}</view><view class="page-description">{{projectName}} · 图表报告</view></view>
+  <view class="page-head"><view class="page-title">竞迹·报告</view></view>
   <view class="card report-controls">
     <picker range="{{kinds}}" value="{{kindIndex}}" disabled="{{busy}}" bindchange="onKind"><view class="report-picker">报告类型：{{kinds[kindIndex]}} ▾</view></picker>
     <view class="report-dates"><picker mode="date" value="{{range.from}}" disabled="{{busy}}" bindchange="onFrom"><view class="report-picker">{{range.kind == 'custom' ? '开始日期' : '所在周 / 月'}}<text>{{range.from}}</text></view></picker>
