@@ -20,6 +20,9 @@ try {
       const rows = [...template.matchAll(/<button\b[^>]*class="(?:morning-row|exec-row) [^"]*"[\s\S]*?<\/button>/g)].map(([row]) => row
         .replace(/\{\{([^}]+)\}\}/g, (_, expression) => expression.includes('?') ? '' : /sleepText|pulseText|fatigueText/.test(expression) ? '7.5' : value));
       assert.equal(rows.length, 2, '恢复日报和执行情况必须均被检查');
+      const filtersMatch = template.match(/<view class="focus-filters">[\s\S]*?<\/view>/);
+      assert.ok(filtersMatch, '跟进状态筛选必须被检查');
+      const filters = filtersMatch[0].replace(/\{\{[^}]+\}\}/g, 'false');
       const actionsMatch = template.match(/<view class="focus-actions">[\s\S]*?<\/view>/);
       assert.ok(actionsMatch, '状态监测操作按钮必须被检查');
       const actions = actionsMatch[0].replace(/\{\{([^}]+)\}\}/g, (_, expression) => expression.includes('?') ? (longText ? '已跟进 · 撤销' : '标记已跟进') : '1');
@@ -32,7 +35,7 @@ try {
       const page = await browser.newPage({ viewport: { width, height: 1000 } });
       await page.setContent(`<style>body { margin: 0; } view, text { display: block; } button { width: 100%; } ${css}</style>
         <view class="page">${rows.map((row) => `<view class="card morning-card">${row}${pager}</view>`).join('')}
-        <view class="card focus-card"><view class="focus-row"><view class="focus-row-head"><text class="focus-name">${value}</text><view class="focus-tags"><text class="focus-tag">${value}</text></view></view><view class="todo-note">${value}</view>${actions}</view>${pager}</view></view>`);
+        <view class="card focus-card">${filters}<view class="focus-row"><view class="focus-row-head"><text class="focus-name">${value}</text><view class="focus-tags"><text class="focus-tag">${value}</text></view></view><view class="todo-note">${value}</view>${actions}</view>${pager}</view></view>`);
       const failures = await page.evaluate(() => {
         const errors = [];
         for (const host of document.querySelectorAll('pager-nav')) {
@@ -44,6 +47,9 @@ try {
           if (bounds.left < card.left || bounds.right > card.right + 1) errors.push('人员卡片超出外层卡片');
           if (row.scrollWidth > row.clientWidth + 1) errors.push('人员内容横向溢出');
         }
+        const filterButtons = [...document.querySelectorAll('.focus-filters button')];
+        if (filterButtons.length !== 2) errors.push('跟进状态筛选按钮缺失');
+        if (Math.abs(filterButtons[0].getBoundingClientRect().top - filterButtons[1].getBoundingClientRect().top) > 1) errors.push('跟进状态筛选未横向排列');
         const actionButtons = [...document.querySelectorAll('.focus-actions button')];
         if (actionButtons.length !== 5) errors.push('状态监测操作按钮缺失');
         if (Math.abs(actionButtons[0].getBoundingClientRect().top - actionButtons[1].getBoundingClientRect().top) > 1) errors.push('操作按钮未优先横向排列');

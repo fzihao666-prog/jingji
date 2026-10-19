@@ -151,6 +151,7 @@
 .focus-actions, .focus-filters { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }
 .focus-actions button { flex: 0 1 auto; width: auto; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; margin: 0; padding: 8rpx 16rpx; min-height: 80rpx; font-size: 22rpx; line-height: 2.6; color: #176373; background: #fff; }
 .focus-actions button:focus { outline: 3rpx solid #176373; outline-offset: 2rpx; }
+.focus-filters button { flex: 0 1 auto; width: auto; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .focus-filters button[aria-pressed="true"] { color: #fff; background: #176373; }
 
 /* 计划入口紧邻今日安排标题，窄屏下优先保留按钮点击区域。 */
