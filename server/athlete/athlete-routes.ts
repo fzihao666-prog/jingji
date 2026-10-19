@@ -142,6 +142,21 @@ export function registerAthleteRoutes(app: Express) {
       });
     }
   });
+  // 添加页面只读取当前账号的创建范围，写入仍由原有创建路由重新校验。
+  app.get(
+    '/api/admin/athletes/create-options',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const permissions = accountPermissions(req.authUser!.id);
+      const teams = (db.prepare(
+        'SELECT id, project, name FROM project_teams WHERE active = 1 ORDER BY project, name'
+      ).all() as Array<{ id: number; project: string; name: string }>).filter((team) =>
+        permissionsAllowProjectTeam(permissions, team.project, team.name)
+      );
+      res.json({ teams, areas: permissions.areas });
+    }
+  );
   app.post(
     '/api/admin/athletes',
     requireAuth,

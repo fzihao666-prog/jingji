@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
-function createPage(name, api = {}) {
+function createPage(name, api = {}, options = {}) {
   let definition;
-  const app = { globalData: { athletes: [] } };
-  const mocks = { '../../services/api': api };
+  const app = options.app || { globalData: { athletes: [] } };
+  const mocks = { '../../services/api': api, ...options.modules };
   function load(url) {
     const module = { exports: {} };
     vm.runInNewContext(readFileSync(url, 'utf8'), {
@@ -17,7 +17,7 @@ function createPage(name, api = {}) {
   vm.runInNewContext(readFileSync(url, 'utf8'), {
     Page: (value) => { definition = value; },
     require: (path) => mocks[path] || load(new URL(`${path}.js`, url)),
-    getApp: () => app, wx: {},
+    getApp: () => app, wx: options.wx || {},
   });
   return { ...definition, data: JSON.parse(JSON.stringify(definition.data)), setData(values) { Object.assign(this.data, values); } };
 }
@@ -350,5 +350,32 @@ describe('教练今日训练计划与执行情况', () => {
     await failing.loadPlanExecution('rowing');
     expect(failing.data.planError).toContain('加载失败');
     expect(failing.data.coachPlanView.hasPlan).toBe(false);
+  });
+});
+
+
+describe('档案添加入口与列表刷新', () => {
+  it.each(['SCC', 'REG', 'TD', 'DMD', 'ATL'])('角色 %s 在空档案时按实际队伍范围显示入口', async (role) => {
+    const current = { ...scope, athletes: [], selectedAthleteId: 0, user: { role } };
+    const page = createPage('profile', { athleteCreateOptions: async () => ({ teams: [{ id: 10 }] }) }, {
+      modules: { '../../utils/page-scope': { loadPage: async (page, settings) => {
+        const view = await settings.load(page, current, () => true);
+        page.setData(view); return view;
+      } } },
+    });
+    page.scheduleRadarDraw = () => {};
+    await page.loadPage();
+    expect(page.data.canAddAthlete).toBe(role !== 'ATL');
+    expect(page.data.primaryCells).toHaveLength(8);
+  });
+  it('入口传递当前项目与队伍作为预选，未获权限不能导航', () => {
+    const destinations = [];
+    const page = createPage('profile', {}, { wx: { navigateTo: ({ url }) => destinations.push(url) } });
+    page.setData({ project: 'ROWING', selectedAthleteId: 1, athletes: [{ id: 1, teamId: 10 }] });
+    page.openAthleteCreate(); expect(destinations).toEqual([]);
+    page.setData({ canAddAthlete: true }); page.openAthleteCreate();
+    expect(destinations).toEqual(['/pages/athlete-create/athlete-create?project=ROWING&teamId=10']);
+    const template = readFileSync(new URL('../pages/profile/profile.wxml', import.meta.url), 'utf8');
+    expect(template).toContain('wx:if="{{canAddAthlete}}"');
   });
 });

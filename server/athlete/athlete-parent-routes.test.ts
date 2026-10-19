@@ -44,7 +44,7 @@ beforeAll(async () => {
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
     CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER,
-      active INTEGER, gender TEXT, birth_date TEXT, region TEXT, city TEXT, county TEXT, profile_status TEXT);
+      active INTEGER DEFAULT 1, gender TEXT, birth_date TEXT, region TEXT, city TEXT, county TEXT, profile_status TEXT, source TEXT);
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, ethnicity TEXT, phone TEXT,
       blood_type TEXT, emergency_contact TEXT, emergency_phone TEXT, education TEXT, technical_level TEXT,
@@ -81,7 +81,7 @@ beforeEach(() =>
     (4,'ROWING','A队',1),(5,'ROWING','*',1);
   INSERT INTO account_profiles VALUES (4,2,'test',NULL);
   INSERT INTO project_teams VALUES (10,'ROWING','A队',1),(11,'ROWING','B队',1);
-  INSERT INTO athletes VALUES (101,'测试队员','ROWING','A队',10,1,'男','2000-01-01','四川','成都市','武侯区','complete');
+  INSERT INTO athletes VALUES (101,'测试队员','ROWING','A队',10,1,'男','2000-01-01','四川','成都市','武侯区','complete','manual');
   INSERT INTO athlete_origins VALUES (101,'四川','成都市','武侯区');
 `)
 );
@@ -176,5 +176,75 @@ describe('运动员转队真实 PUT 路由', () => {
     ).toEqual({ team: 'A队' });
     expect(database.prepare('SELECT * FROM athlete_profiles').all()).toEqual([]);
     expect(database.prepare('SELECT * FROM audit_logs').all()).toEqual([]);
+  });
+});
+
+function creationRequest(path: string, actor = 2, body?: Record<string, unknown>) {
+  return fetch(`${baseUrl}${path}`, {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      Authorization: `Bearer ${jwt.sign({ id: actor, sessionVersion: 0 }, secret, { expiresIn: '5m' })}`,
+      'Content-Type': 'application/json',
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+const minimalAthlete = { name: '新建队员', project: 'ROWING', team: 'A队', createAccount: false };
+
+describe('小程序复用运动员创建接口', () => {
+  it('创建选项仅返回授权队伍，无创建角色被拒绝', async () => {
+    const response = await creationRequest('/api/admin/athletes/create-options');
+    expect(response.status).toBe(200);
+    const result = await response.json() as { teams: Array<{ id: number; project: string; name: string }>; areas: unknown[] };
+    expect(result.teams).toEqual([{ id: 10, project: 'ROWING', name: 'A队' }]);
+    expect(result.areas).toHaveLength(1);
+    expect((await creationRequest('/api/admin/athletes/create-options', 4)).status).toBe(403);
+  });
+  it('读取选项后撤销队伍授权，原有创建接口仍拒绝保存', async () => {
+    expect((await creationRequest('/api/admin/athletes/create-options')).status).toBe(200);
+    database.prepare('DELETE FROM user_team_permissions WHERE user_id=2').run();
+    expect((await creationRequest('/api/admin/athletes', 2, minimalAthlete)).status).toBe(400);
+    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 1 });
+  });
+  it('区域管理者指定授权归属后可立即查询新增档案', async () => {
+    const response = await creationRequest('/api/admin/athletes', 5, { ...minimalAthlete, region: '四川' });
+    expect(response.status).toBe(201);
+    const { id } = await response.json() as { id: number };
+    expect(accessibleAthleteIds({ ...coach(5), role: 'REG' })).toContain(id);
+  });
+  it('最少字段创建独立档案并立即进入本队教练范围，不创建账号', async () => {
+    const response = await creationRequest('/api/admin/athletes', 2, minimalAthlete);
+    expect(response.status).toBe(201);
+    const { id, accountId } = await response.json() as { id: number; accountId: number | null };
+    expect(accountId).toBeNull();
+    expect(database.prepare('SELECT COUNT(*) AS count FROM users').get()).toEqual({ count: 5 });
+    expect(accessibleAthleteIds(coach(2))).toContain(id);
+    expect(accessibleAthleteIds(coach(3))).not.toContain(id);
+    expect(database.prepare('SELECT notes FROM athlete_profiles WHERE athlete_id=?').get(id)).toEqual({ notes: '' });
+  });
+  it('拒绝重复创建、跨队、跨项目和运动员角色提交', async () => {
+    expect((await creationRequest('/api/admin/athletes', 2, minimalAthlete)).status).toBe(201);
+    expect((await creationRequest('/api/admin/athletes', 2, minimalAthlete)).status).toBe(400);
+    expect((await creationRequest('/api/admin/athletes', 2, { ...minimalAthlete, team: 'B队' })).status).toBe(400);
+    expect((await creationRequest('/api/admin/athletes', 2, { ...minimalAthlete, project: 'CANOE' })).status).toBe(400);
+    expect((await creationRequest('/api/admin/athletes', 4, minimalAthlete)).status).toBe(403);
+    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 2 });
+  });
+  it('无效日期、不支持字段和教练创建账号均拒绝，不部分写入', async () => {
+    for (const body of [
+      { ...minimalAthlete, birthDate: '2026-02-30' },
+      { ...minimalAthlete, unexpectedField: '拒绝未知字段' },
+      { ...minimalAthlete, createAccount: true },
+    ]) expect((await creationRequest('/api/admin/athletes', 2, body)).status).toBe(400);
+    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 1 });
+  });
+  it('资料写入失败回滚档案、行政归属与审计', async () => {
+    database.exec("CREATE TRIGGER fail_create_profile BEFORE INSERT ON athlete_profiles BEGIN SELECT RAISE(ABORT, 'fixture failure'); END");
+    try {
+      expect((await creationRequest('/api/admin/athletes', 2, minimalAthlete)).status).toBe(409);
+      expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 1 });
+      expect(database.prepare('SELECT COUNT(*) AS count FROM athlete_origins').get()).toEqual({ count: 1 });
+      expect(database.prepare('SELECT COUNT(*) AS count FROM audit_logs').get()).toEqual({ count: 0 });
+    } finally { database.exec('DROP TRIGGER fail_create_profile'); }
   });
 });

@@ -7,6 +7,7 @@
     "pages/strength/strength",
     "pages/profile/profile",
     "pages/profile-edit/profile-edit",
+    "pages/athlete-create/athlete-create",
     "pages/training-entry/training-entry",
     "pages/wellness-entry/wellness-entry",
     "pages/injury-report/injury-report",

@@ -1,0 +1,22 @@
+<view class="page athlete-create">
+  <view class="page-head"><view class="page-title">添加运动员</view><view class="page-description">创建独立档案，暂不创建登录账号</view></view>
+  <view wx:if="{{loading}}" class="state" aria-role="status">正在读取可管理的项目与队伍…</view>
+  <view wx:if="{{error}}" class="error-box" aria-role="alert"><text>{{error}}</text><button wx:if="{{!allowed && !loading}}" class="error-retry" bindtap="loadPage">重试</button></view>
+  <block wx:if="{{allowed && !loading && !saved}}">
+    <view class="card">
+      <view class="card-head-title">基本信息</view>
+      <view class="form-field"><label for="athlete-name" class="field-label">姓名（必填）</label><input id="athlete-name" class="input" value="{{name}}" maxlength="20" disabled="{{saving}}" data-field="name" bindinput="input" placeholder="请输入姓名" aria-label="姓名，必填" /><text wx:if="{{fieldErrors.name}}" class="field-error" aria-role="alert">{{fieldErrors.name}}</text></view>
+      <view class="form-field"><view class="field-label">性别</view><picker mode="selector" range="{{genderItems}}" value="{{genderIndex}}" disabled="{{saving}}" bindchange="genderChange" aria-label="选择性别"><view class="input create-picker">{{gender || '暂不填写'}}<text>⌄</text></view></picker></view>
+      <view class="form-field"><view class="field-label">出生日期</view><picker mode="date" value="{{birthDate}}" end="{{today}}" disabled="{{saving}}" bindchange="birthDateChange" aria-label="选择出生日期"><view class="input create-picker">{{birthDate || '选择年月日（可暂不填写）'}}<text>⌄</text></view></picker><text wx:if="{{fieldErrors.birthDate}}" class="field-error" aria-role="alert">{{fieldErrors.birthDate}}</text></view>
+    </view>
+    <view class="card">
+      <view class="card-head-title">组织归属</view>
+      <view class="form-field"><view class="field-label">运动项目（必填）</view><picker mode="selector" range="{{projectItems}}" range-key="label" value="{{projectIndex}}" disabled="{{saving}}" bindchange="projectChange" aria-label="选择运动项目，必填"><view class="input create-picker">{{projectItems[projectIndex].label}}<text>⌄</text></view></picker></view>
+      <view class="form-field"><view class="field-label">所属队伍（必填）</view><picker mode="selector" range="{{teamItems}}" range-key="name" value="{{teamIndex}}" disabled="{{saving}}" bindchange="teamChange" aria-label="选择所属队伍，必填"><view class="input create-picker">{{teamItems[teamIndex].name}}<text>⌄</text></view></picker><text wx:if="{{fieldErrors.team}}" class="field-error" aria-role="alert">{{fieldErrors.team}}</text></view>
+      <view wx:if="{{needsArea}}" class="form-field"><view class="field-label">档案行政归属（必填）</view><picker mode="selector" range="{{areaItems}}" range-key="label" value="{{areaIndex}}" disabled="{{saving}}" bindchange="areaChange" aria-label="选择档案行政归属，必填"><view class="input create-picker">{{areaItems[areaIndex].label}}<text>⌄</text></view></picker><text class="field-note">用于确定档案管理范围，仅展示当前账号的授权区域。</text><text wx:if="{{fieldErrors.area}}" class="field-error" aria-role="alert">{{fieldErrors.area}}</text></view>
+    </view>
+    <view class="card"><view class="card-head-title">其他信息（可选）</view><view class="form-field"><label for="athlete-notes" class="field-label">备注</label><textarea id="athlete-notes" class="input create-notes" value="{{notes}}" disabled="{{saving}}" maxlength="1000" data-field="notes" bindinput="input" placeholder="可补充说明，后续也可完善档案" aria-label="备注，可选" /></view></view>
+    <button class="primary-button create-submit" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在添加…' : '确认添加'}}</button>
+  </block>
+  <view wx:if="{{saved}}" class="card"><view class="card-head-title">运动员添加成功</view><button class="primary-button create-submit" bindtap="returnToProfile">返回运动员档案</button></view>
+</view>

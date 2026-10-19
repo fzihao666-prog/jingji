@@ -156,6 +156,8 @@ Page({
     athletes: [],
     selectedAthleteId: 0,
     showAthlete: true,
+    canAddAthlete: false,
+    createAccessError: '',
     range: 'month',
     from: '',
     to: '',
@@ -169,6 +171,13 @@ Page({
   loadPage() {
     return runPageLoad(this, {
       error: '运动员档案加载失败。',
+      load: async (page, scope, isLatest) => {
+        const access = MANAGER_ROLES.includes(scope.user.role)
+          ? api.athleteCreateOptions().then((value) => ({ value, error: '' }), (error) => ({ value: null, error: error.message || '添加权限读取失败，请重试。' }))
+          : Promise.resolve({ value: null, error: '' });
+        const [view, creation] = await Promise.all([page.loadPageData(scope, isLatest), access]);
+        return { ...view, canAddAthlete: Boolean(creation.value && creation.value.teams.length), createAccessError: creation.error };
+      },
       scope: {
         range: this.data.range,
         selectedAthleteId: getApp().globalData.selectedAthleteId
@@ -236,6 +245,12 @@ Page({
       this.scheduleRadarDraw();
       return result;
     });
+  },
+
+  openAthleteCreate() {
+    if (!this.data.canAddAthlete) return;
+    const athlete = this.data.athletes.find((item) => Number(item.id) === Number(this.data.selectedAthleteId));
+    wx.navigateTo({ url: `/pages/athlete-create/athlete-create?project=${encodeURIComponent(this.data.project)}&teamId=${athlete && athlete.teamId || 0}` });
   },
 
   toggleMore() {

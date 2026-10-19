@@ -43,6 +43,8 @@ module.exports = {
     return request('/api/auth/logout', { method: 'POST' });
   },
   athletes() { return request('/api/athletes'); },
+  athleteCreateOptions() { return request('/api/admin/athletes/create-options'); },
+  createAthlete(data) { return request('/api/admin/athletes', { method: 'POST', data }); },
   teams() { return request('/api/registration/teams', { auth: false }); },
   updateMyAthleteProfile(data) {
     return request('/api/me/athlete-profile', { method: 'PUT', data });
