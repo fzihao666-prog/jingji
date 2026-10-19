@@ -7,6 +7,8 @@ const root = new URL('../WeChat Mini Program/', import.meta.url);
 const globalStyle = readFileSync(new URL('app.wxss', root), 'utf8');
 const pageStyle = readFileSync(new URL('pages/index/index.wxss', root), 'utf8');
 const template = readFileSync(new URL('pages/index/index.wxml', root), 'utf8');
+const pagerStyle = readFileSync(new URL('components/pager-nav/index.wxss', root), 'utf8');
+const pagerTemplate = readFileSync(new URL('components/pager-nav/index.wxml', root), 'utf8');
 const browser = await chromium.launch({
   executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: true,
@@ -18,21 +20,31 @@ try {
       const rows = [...template.matchAll(/<button\b[^>]*class="(?:morning-row|exec-row) [^"]*"[\s\S]*?<\/button>/g)].map(([row]) => row
         .replace(/\{\{([^}]+)\}\}/g, (_, expression) => expression.includes('?') ? '' : /sleepText|pulseText|fatigueText/.test(expression) ? '7.5' : value));
       assert.equal(rows.length, 2, '恢复日报和执行情况必须均被检查');
-      const css = `${globalStyle}\n${pageStyle}`
+      const pager = `<pager-nav>${pagerTemplate.replace(/\{\{([^}]+)\}\}/g, (_, expression) => expression.includes('?') || expression.includes('>') || expression.includes('<=') ? '' : expression === 'page + 1' ? '10000' : expression === 'label' ? '运动员' : expression === 'unit' ? '人' : '99999')}</pager-nav>`;
+      const css = `${globalStyle}\n${pageStyle}\n${pagerStyle}`
         .replace(/@import[^;]+;/g, '')
         .replace(/([\d.]+)rpx/g, (_, number) => `${Number(number) * width / 750}px`)
-        .replace(/\bpage\s*\{/g, 'body {');
+        .replace(/\bpage\s*\{/g, 'body {')
+        .replace(/:host/g, 'pager-nav');
       const page = await browser.newPage({ viewport: { width, height: 1000 } });
       await page.setContent(`<style>body { margin: 0; } view, text { display: block; } ${css}</style>
-        <view class="page">${rows.map((row) => `<view class="card morning-card">${row}</view>`).join('')}
-        <view class="card focus-card"><view class="focus-row"><view class="focus-row-head"><text class="focus-name">${value}</text><view class="focus-tags"><text class="focus-tag">${value}</text></view></view><view class="todo-note">${value}</view></view></view></view>`);
+        <view class="page">${rows.map((row) => `<view class="card morning-card">${row}${pager}</view>`).join('')}
+        <view class="card focus-card"><view class="focus-row"><view class="focus-row-head"><text class="focus-name">${value}</text><view class="focus-tags"><text class="focus-tag">${value}</text></view></view><view class="todo-note">${value}</view></view>${pager}</view></view>`);
       const failures = await page.evaluate(() => {
         const errors = [];
-        for (const row of document.querySelectorAll('.card-row-button, .focus-row')) {
+        for (const host of document.querySelectorAll('pager-nav')) {
+          if (getComputedStyle(host).display !== 'block') errors.push('分页组件外层未建立块级宽度边界');
+        }
+        for (const row of document.querySelectorAll('.card-row-button, .focus-row, pager-nav, .pager-nav, .pager-nav-button, .pager-nav-indicator')) {
           const card = row.closest('.card').getBoundingClientRect();
           const bounds = row.getBoundingClientRect();
           if (bounds.left < card.left || bounds.right > card.right + 1) errors.push('人员卡片超出外层卡片');
           if (row.scrollWidth > row.clientWidth + 1) errors.push('人员内容横向溢出');
+        }
+        for (const indicator of document.querySelectorAll('.pager-nav-indicator')) {
+          for (const text of indicator.children) {
+            if (text.scrollWidth > text.clientWidth + 1 || text.getBoundingClientRect().width < 1) errors.push('分页信息被挤压或裁剪');
+          }
         }
         if (getComputedStyle(document.querySelector('.exec-row')).display !== 'grid') errors.push('执行人员网格被公共按钮样式覆盖');
         if (document.documentElement.scrollWidth > innerWidth) errors.push('页面横向溢出');
@@ -42,7 +54,7 @@ try {
       await page.close();
     }
   }
-  console.log('小程序布局检查通过：4 种屏宽 × 普通/超长文本，人员卡片边界与网格布局正常。');
+  console.log('小程序布局检查通过：4 种屏宽 × 普通/超长文本，含分页按钮、五位数页码及总人数。');
 } finally {
   await browser.close();
 }

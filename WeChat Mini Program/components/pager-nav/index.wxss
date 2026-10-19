@@ -1,10 +1,14 @@
-/* 统一翻页控件：居中"上一页 · 页号指示 · 下一页"。
-   容器显式限宽并裁剪溢出，按钮与指示区禁止换行，窄屏不产生横向滚动。 */
-.pager-nav { width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 14rpx; margin-top: 18rpx; }
-.pager-nav-button { flex: none; margin: 0; min-height: 72rpx; padding: 0 26rpx; display: flex; align-items: center; justify-content: center; white-space: nowrap; border: 1rpx solid #cbdadd; border-radius: 14rpx; color: #176f7f; background: #fff; font-size: 23rpx; line-height: 1; }
+/* 组件外层也参与父级布局，不能只给内部容器限宽。 */
+:host { display: block; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+/* 操作和页码分行，避免不可收缩的按钮与人数共同撑大人员卡片。 */
+.pager-nav { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-top: 18rpx; }
+.pager-nav-button { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; margin: 0; min-height: 72rpx; padding: 12rpx; display: flex; align-items: center; justify-content: center; white-space: normal; overflow-wrap: anywhere; border: 1rpx solid #cbdadd; border-radius: 14rpx; color: #176f7f; background: #fff; font-size: 23rpx; line-height: 1.5; }
+.pager-nav-button:first-child { grid-column: 1; grid-row: 1; }
+.pager-nav-button:last-child { grid-column: 2; grid-row: 1; }
+.pager-nav-button::after { border: 0; }
 .pager-nav-button.is-disabled { color: #9db3ba; border-color: #dbe5e8; background: #f2f7f8; }
 .pager-nav-button:focus { outline: 4rpx solid #176373; outline-offset: 2rpx; }
-.pager-nav-indicator { flex: 0 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 6rpx; white-space: nowrap; overflow: hidden; }
-.pager-nav-current { white-space: nowrap; color: #176f7f; font-size: 30rpx; font-weight: 800; }
-.pager-nav-total { white-space: nowrap; color: #46616c; font-size: 23rpx; }
-.pager-nav-count { white-space: nowrap; color: #819399; font-size: 21rpx; overflow: hidden; text-overflow: ellipsis; }
+.pager-nav-indicator { grid-column: 1 / -1; grid-row: 2; min-width: 0; max-width: 100%; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 6rpx; overflow-wrap: anywhere; }
+.pager-nav-current { min-width: 0; max-width: 100%; color: #176f7f; font-size: 30rpx; font-weight: 800; }
+.pager-nav-total { min-width: 0; max-width: 100%; color: #46616c; font-size: 23rpx; }
+.pager-nav-count { min-width: 0; max-width: 100%; color: #819399; font-size: 21rpx; }
