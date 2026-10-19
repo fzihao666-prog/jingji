@@ -2,7 +2,8 @@
 .scope-picker-row { display: flex; gap: 12rpx; }
 .scope-picker { min-width: 0; flex: 1; }
 .scope-picker:focus .scope-picker-control { outline: 4rpx solid #0f5d6d; outline-offset: 2rpx; }
-.scope-picker-control { height: 66rpx; padding: 0 15rpx; border: 1rpx solid #d5e1e3; border-radius: 13rpx; display: flex; align-items: center; gap: 8rpx; background: #f8fbfb; }
+.scope-picker-control, .scope-keyword-input, .scope-add-athlete { box-sizing: border-box; height: 66rpx; padding: 0 15rpx; border: 1rpx solid #d5e1e3; border-radius: 13rpx; color: #1d4d58; background: #f8fbfb; font-size: 21rpx; font-weight: 800; }
+.scope-picker-control { display: flex; align-items: center; gap: 8rpx; }
 .scope-picker-label { flex: none; color: #829399; font-size: 18rpx; }
 .scope-picker-value { min-width: 0; flex: 1; overflow: hidden; color: #1d4d58; font-size: 21rpx; font-weight: 800; white-space: nowrap; text-overflow: ellipsis; }
 .scope-picker-arrow { color: #6f848b; font-size: 18rpx; }
@@ -45,10 +46,10 @@
 
 /* 搜索与添加入口共用首行，有添加权限时等分可用宽度。 */
 .scope-keyword-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12rpx; min-width: 0; margin-bottom: 14rpx; }
-.scope-keyword-input { box-sizing: border-box; width: 100%; min-width: 0; height: 80rpx; padding: 0 22rpx; border: 2rpx solid #9bb9c0; border-radius: 13rpx; color: #12303b; background: #f8fbfb; font-size: 24rpx; }
-.scope-keyword-input:focus { border-color: #176f7f; }
+.scope-keyword-input { width: 100%; min-width: 0; }
+.scope-keyword-input:focus { outline: 4rpx solid #0f5d6d; outline-offset: 2rpx; }
 
 .scope-keyword-row.has-add-action { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.scope-add-athlete { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 80rpx; margin: 0; padding: 12rpx; display: flex; align-items: center; justify-content: center; border: 2rpx solid #176f7f; border-radius: 13rpx; color: #176f7f; background: #ffffff; font-size: 24rpx; line-height: 1.5; white-space: normal; }
+.scope-add-athlete { width: 100%; min-width: 0; max-width: 100%; min-height: 66rpx; margin: 0; display: flex; align-items: center; justify-content: center; line-height: 1.5; white-space: normal; }
 .scope-add-athlete::after { border: 0; }
-.scope-add-athlete:focus { outline: 3rpx solid #176f7f; outline-offset: 2rpx; }
+.scope-add-athlete:focus { outline: 4rpx solid #0f5d6d; outline-offset: 2rpx; }
