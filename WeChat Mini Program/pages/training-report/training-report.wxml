@@ -35,11 +35,10 @@
       <text wx:if="{{!metric.days}}" class="report-note">暂无有效记录</text>
       <scroll-view scroll-x class="report-scroll"><view class="report-bars"><view wx:for="{{metric.bars}}" wx:for-item="bar" wx:key="date" class="report-slot"><text>{{bar.value}}</text><view class="report-bar-stage"><view class="report-segment special" style="height: {{bar.height}}%;"></view></view><text>{{bar.shortDate}}</text></view></view></scroll-view>
     </view></view>
-    <view class="card"><view class="section-head-title">简短点评 · {{saved ? '已确认' : '待核对'}}</view>
+    <view class="card"><view class="section-head-title">简短点评<text wx:if="{{saved}}"> · 已确认</text></view>
       <block wx:if="{{!saved}}"><checkbox-group bindchange="onConsent"><label class="report-consent"><checkbox value="yes" checked="{{consent}}" disabled="{{busy}}" />同意将去身份化训练汇总发送至配置的大模型。不发送姓名、联系方式、伤病和恢复健康数据。</label></checkbox-group>
         <button class="secondary-button" bindtap="generate" disabled="{{busy || !consent || !report.totals.sessions}}">生成 AI 点评</button></block>
       <view wx:for="{{commentaryFields}}" wx:key="key" class="report-comment"><view>{{item.label}}</view><text wx:if="{{saved}}">{{commentary[item.key] || '未填写'}}</text><textarea wx:else value="{{commentary[item.key]}}" maxlength="201" disabled="{{busy}}" data-key="{{item.key}}" bindinput="onCommentary" placeholder="每行一条，最多两条；可手动填写或留空" /></view>
-      <text class="report-note">点评总计最多 250 字，仅供参考，不作诊断，不自动调整计划。保存后训练补录不会改写历史报告。</text>
       <button wx:if="{{!saved}}" class="primary-button" bindtap="save" disabled="{{busy}}">确认并保存报告</button>
       <text wx:else class="report-note">保存于 {{saved}} · 网页端可打印 / 保存为 PDF</text>
     </view>
