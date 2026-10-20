@@ -92,7 +92,6 @@ const pageKeys: PageKey[] = [
   'accounts',
   'bluetooth',
   'data-import',
-  'data-import-history',
   'data-management',
 ];
 
@@ -100,6 +99,7 @@ function pageFromHash(): PageKey {
   const key =
     window.location.hash.replace(/^#\/?/, '').split('?')[0] ||
     (window.location.pathname === '/training-plans' ? 'training-plans' : '');
+  if (key === 'data-import-history') return 'data-import';
   if (key === 'special-schedule' || key === 'strength-plan') return 'training-plans';
   return pageKeys.includes(key as PageKey) ? (key as PageKey) : 'overview';
 }
@@ -414,16 +414,6 @@ export default function App() {
             user={user}
             project={project}
             athletes={projectAthletes}
-            mode="import"
-            onChanged={() => setRefreshKey((key) => key + 1)}
-          />
-        )}
-        {page === 'data-import-history' && user.role !== 'ATL' && (
-          <DataImportPage
-            user={user}
-            project={project}
-            athletes={projectAthletes}
-            mode="history"
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
         )}

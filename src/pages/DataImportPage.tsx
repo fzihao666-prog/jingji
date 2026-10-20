@@ -31,7 +31,6 @@ type Props = {
   user: User;
   project: Project;
   athletes: Athlete[];
-  mode?: 'import' | 'history';
   onChanged: () => void;
 };
 
@@ -86,7 +85,7 @@ function displayValue(item: DataImportItem) {
   return `${item.valueNum ?? '—'} ${item.unit}`;
 }
 
-export function DataImportPage({ project, athletes, mode = 'import', onChanged }: Props) {
+export function DataImportPage({ project, athletes, onChanged }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [defaultDate, setDefaultDate] = useState('');
@@ -341,106 +340,100 @@ export function DataImportPage({ project, athletes, mode = 'import', onChanged }
       .slice(0, 500);
   }, [batch, filter, query]);
 
-  const historyOnly = mode === 'history';
-
   return (
     <PageContainer className="data-import-page">
       <PageHeader
         className="data-management-header"
-        eyebrow={historyOnly ? 'IMPORT HISTORY' : 'DATA IMPORT'}
-        title={historyOnly ? '导入记录' : '数据导入'}
+        eyebrow="DATA IMPORT"
+        title="数据导入"
         actions={
-          !historyOnly && (
-            <div className="data-import-hero-actions">
-              <button
-                type="button"
-                className="data-import-template"
-                disabled={Boolean(busy)}
-                onClick={downloadTemplate}
-              >
-                <Download size={19} />
-                <div>
-                  <strong>{busy === 'template' ? '正在准备模板…' : '下载统一数据模板'}</strong>
-                  <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="data-import-template"
-                disabled={Boolean(busy)}
-                onClick={exportUnifiedData}
-              >
-                <FileSpreadsheet size={19} />
-                <div>
-                  <strong>{busy === 'export' ? '正在导出数据…' : '导出统一数据'}</strong>
-                  <span>导出当前项目及权限范围内的全部已入库数据</span>
-                </div>
-              </button>
-              <div className="data-import-safety">
-                <Database size={20} />
-                <div>
-                  <strong>先暂存，后入库</strong>
-                  <span>原值、工作表和单元格坐标全程保留</span>
-                </div>
+          <div className="data-import-hero-actions">
+            <button
+              type="button"
+              className="data-import-template"
+              disabled={Boolean(busy)}
+              onClick={downloadTemplate}
+            >
+              <Download size={19} />
+              <div>
+                <strong>{busy === 'template' ? '正在准备模板…' : '下载统一数据模板'}</strong>
+                <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="data-import-template"
+              disabled={Boolean(busy)}
+              onClick={exportUnifiedData}
+            >
+              <FileSpreadsheet size={19} />
+              <div>
+                <strong>{busy === 'export' ? '正在导出数据…' : '导出统一数据'}</strong>
+                <span>导出当前项目及权限范围内的全部已入库数据</span>
+              </div>
+            </button>
+            <div className="data-import-safety">
+              <Database size={20} />
+              <div>
+                <strong>先暂存，后入库</strong>
+                <span>原值、工作表和单元格坐标全程保留</span>
               </div>
             </div>
-          )
+          </div>
         }
       />
 
-      <div className={`data-import-grid ${historyOnly ? 'history-only' : ''}`}>
-        {!historyOnly && (
-          <section className="data-import-upload-card">
-            <div className="data-import-card-heading">
-              <FileSpreadsheet size={20} />
-              <div>
-                <strong>上传源文件</strong>
-                <span>支持旧版 XLS 与新版 XLSX，单文件不超过 80MB</span>
-              </div>
+      <div className="data-import-grid">
+        <section className="data-import-upload-card">
+          <div className="data-import-card-heading">
+            <FileSpreadsheet size={20} />
+            <div>
+              <strong>上传源文件</strong>
+              <span>支持旧版 XLS 与新版 XLSX，单文件不超过 80MB</span>
             </div>
-            <button
-              type="button"
-              className="data-import-drop"
-              onClick={() => fileRef.current?.click()}
-            >
-              <UploadCloud size={28} />
-              <strong>{file ? file.name : '选择 Excel 文件'}</strong>
-              <span>
-                {file
-                  ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                  : '系统会自动遍历多张工作表和重复运动员小表'}
-              </span>
-            </button>
+          </div>
+          <button
+            type="button"
+            className="data-import-drop"
+            onClick={() => fileRef.current?.click()}
+          >
+            <UploadCloud size={28} />
+            <strong>{file ? file.name : '选择 Excel 文件'}</strong>
+            <span>
+              {file
+                ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                : '系统会自动遍历多张工作表和重复运动员小表'}
+            </span>
+          </button>
+          <input
+            ref={fileRef}
+            className="visually-hidden"
+            type="file"
+            accept=".xls,.xlsx"
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+          />
+          <label className="data-import-date">
+            <span>缺失日期时使用</span>
             <input
-              ref={fileRef}
-              className="visually-hidden"
-              type="file"
-              accept=".xls,.xlsx"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
+              type="date"
+              value={defaultDate}
+              onChange={(event) => setDefaultDate(event.target.value)}
             />
-            <label className="data-import-date">
-              <span>缺失日期时使用</span>
-              <input
-                type="date"
-                value={defaultDate}
-                onChange={(event) => setDefaultDate(event.target.value)}
-              />
-              <small>可选；表内存在日期时仍优先保留表内日期</small>
-            </label>
-            <button
-              className="data-import-primary"
-              disabled={!file || Boolean(busy)}
-              onClick={analyze}
-            >
-              {busy === 'analyze' ? (
-                <RefreshCw className="spin" size={17} />
-              ) : (
-                <FileCheck2 size={17} />
-              )}
-              解析并生成审核预览
-            </button>
-          </section>
-        )}
+            <small>可选；表内存在日期时仍优先保留表内日期</small>
+          </label>
+          <button
+            className="data-import-primary"
+            disabled={!file || Boolean(busy)}
+            onClick={analyze}
+          >
+            {busy === 'analyze' ? (
+              <RefreshCw className="spin" size={17} />
+            ) : (
+              <FileCheck2 size={17} />
+            )}
+            解析并生成审核预览
+          </button>
+        </section>
 
         <section className="data-import-history-card">
           <div className="data-import-card-heading">

@@ -52,10 +52,6 @@
   gap: 18px;
 }
 
-.data-import-grid.history-only {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .data-import-upload-card,
 .data-import-history-card,
 .data-import-sheet-audit,
