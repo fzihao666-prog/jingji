@@ -36,6 +36,8 @@
 
 ## 与网页端共用数据
 
+当前正式接口地址为 `https://www.jingjity.xin`（2026-10-19 核对，对应用户指定的服务器）。根域名 `jingjity.xin` 当时仍指向另一台服务器，不应混用；访问同一套数据的网页版也应使用带 `www` 的地址。微信公众平台需将 `https://www.jingjity.xin` 配置为 request、uploadFile、downloadFile 合法域名；不要以关闭域名校验代替正式配置。更换服务器地址后应退出并重新登录，避免沿用另一台服务器的会话缓存。此配置不会迁移或合并两台服务器的数据。
+
 ```text
 React 网页端 ─┐
               ├─ Express /api ─ SQLite
