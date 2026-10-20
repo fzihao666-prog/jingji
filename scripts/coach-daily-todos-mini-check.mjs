@@ -35,6 +35,22 @@ export async function checkMiniDailyTodoFlow(assert) {
     viewContext
   );
   modules['../../utils/daily-todos'] = viewContext.module.exports;
+  // 首页视图依赖使用真实实现，确保控制器初始化与当前页面保持一致。
+  for (const name of ['morning-check', 'today-plan']) {
+    const context = {
+      module: { exports: {} },
+      require: (path) => {
+        if (path === './format') return format.module.exports;
+        if (path === './pagination') return paginationContext.module.exports;
+        throw new Error(`未预期依赖：${name} -> ${path}`);
+      },
+    };
+    vm.runInNewContext(
+      readFileSync(new URL(`../WeChat Mini Program/utils/${name}.js`, import.meta.url), 'utf8'),
+      context
+    );
+    modules[`../../utils/${name}`] = context.module.exports;
+  }
   const todayStatusContext = { module: { exports: {} }, require: () => format.module.exports };
   vm.runInNewContext(
     readFileSync(new URL('../WeChat Mini Program/utils/today-status.js', import.meta.url), 'utf8'),
@@ -175,7 +191,10 @@ export async function checkMiniDailyTodoFlow(assert) {
       Page: (page) => {
         definition = page;
       },
-      require: (path) => modules[path],
+      require: (path) => {
+        if (!Object.hasOwn(modules, path)) throw new Error(`首页测试未加载依赖：${path}`);
+        return modules[path];
+      },
       getApp: () => app,
       wx: wxApi,
     }
@@ -304,7 +323,7 @@ export async function checkMiniDailyTodoFlow(assert) {
   page.data.project = 'ROWING';
   await page.retryTodos();
   assert(page.data.focusPager.total === 2, '同一运动员的多个关注来源应合并为一行');
-  assert(page.data.focusRows[0].focusLabel === '未填报、状态关注', '关注名单应合并来源标签');
+  assert(page.data.focusRows[0].focusLabel === '暂无训练记录、状态关注', '关注名单应合并来源标签');
   assert(page.data.focusRows[0].focusReason.includes('自评需要休息'), '休息自评应拼入关注原因');
   assert(page.data.focusRows[1].focusReason.includes('1 天后复查'), '复查提醒应给出倒计时文案');
   api.dailyTodos = async () => ({ todos: { ...richTodos(), followedUp: [2] } });
@@ -355,8 +374,8 @@ export async function checkMiniDailyTodoFlow(assert) {
   api.myWellness = async () => ({ date: '2026-09-23', record: null });
   await page.loadToday();
   assert(
-    page.data.todayView.submittedLabel === '未填报' && page.data.wellnessView.filledLabel === '未填写',
-    '今日状态卡应同时显示训练填报与恢复日报状态'
+    page.data.todayView.submittedLabel === '暂无记录' && page.data.wellnessView.filledLabel === '未填写',
+    '今日状态卡应同时显示训练记录与恢复日报状态'
   );
   api.todayStatus = async () => ({
     ...todayPayload,
@@ -377,8 +396,8 @@ export async function checkMiniDailyTodoFlow(assert) {
   });
   await page.loadToday();
   assert(
-    page.data.todayView.submittedLabel === '已填报' && page.data.todayView.loadText === '468',
-    '已填报时今日状态卡应显示服务端计算的负荷'
+    page.data.todayView.submittedLabel === '已记录' && page.data.todayView.loadText === '468',
+    '已有训练记录时今日状态卡应显示服务端计算的负荷'
   );
   assert(page.data.wellnessView.filled === true, '已填写恢复日报后应显示已填写');
   api.todayStatus = async () => {
