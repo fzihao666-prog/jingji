@@ -258,6 +258,7 @@ export type StrengthImportPreview = {
 };
 
 export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
+export type DataImportResolution = '' | 'skip' | 'update';
 export type DataImportItemType =
   | 'athlete_profile'
   | 'wellness'
@@ -267,7 +268,24 @@ export type DataImportItemType =
   | 'body_measurement'
   | 'injury_record'
   | 'competitive_state'
-  | 'scoring_rule';
+  | 'scoring_rule'
+  | 'invalid_row';
+
+export type DataImportConflictField = {
+  field: string;
+  label: string;
+  oldValue: string;
+  newValue: string;
+  overwrites: boolean;
+};
+
+export type DataImportConflict = {
+  exists: boolean;
+  entityType: string;
+  entityId: number | null;
+  identical: boolean;
+  fields: DataImportConflictField[];
+};
 
 export type DataImportItem = {
   id: number;
@@ -299,8 +317,18 @@ export type DataImportItem = {
   quality: DataImportQuality;
   messages: string[];
   businessKey: string;
+  resolution: DataImportResolution;
+  conflict: DataImportConflict | null;
   committedEntityType: string;
   committedEntityId: number | null;
+};
+
+export type DataImportPersonSuggestion = {
+  id: number;
+  name: string;
+  team: string;
+  gender: string;
+  birthDate: string;
 };
 
 export type DataImportAthleteCandidate = {
@@ -317,6 +345,9 @@ export type DataImportAthleteCandidate = {
   status: 'pending' | 'matched' | 'created';
   matchedAthleteId: number | null;
   createdAthleteId: number | null;
+  suggested: DataImportPersonSuggestion[];
+  confirmed: boolean;
+  excluded: boolean;
   sourceSheet: string;
   messages: string[];
 };
@@ -341,11 +372,23 @@ export type DataImportBatch = {
     ignoredSheets: Array<{ name: string; reason: string }>;
     duplicateFile?: boolean;
   };
+  counts: {
+    newCount: number;
+    duplicateCount: number;
+    overwriteCount: number;
+    invalidCount: number;
+    personMatched: number;
+    personPending: number;
+    personAmbiguous: number;
+  };
   athleteCandidates: DataImportAthleteCandidate[];
   items: DataImportItem[];
 };
 
-export type DataImportBatchSummary = Omit<DataImportBatch, 'sheetCount' | 'summary' | 'items'>;
+export type DataImportBatchSummary = Omit<
+  DataImportBatch,
+  'sheetCount' | 'summary' | 'items' | 'counts' | 'athleteCandidates'
+>;
 
 export type InjuryStatus = 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';
 

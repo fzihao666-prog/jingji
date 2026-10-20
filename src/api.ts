@@ -528,19 +528,40 @@ export const api = {
       body: JSON.stringify({ project }),
     });
   },
-  async downloadDataImportTemplate() {
-    const response = await fetch('/api/data-import/template', {
+  async downloadDataImportTemplate(kind: 'profile' | 'training' | 'test' | 'unified' = 'unified', project?: string) {
+    const params = new URLSearchParams({ kind });
+    if (project) params.set('project', project);
+    const response = await fetch(`/api/data-import/template?${params.toString()}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.message || '统一数据导入模板下载失败。');
+      throw new Error(payload?.message || '数据导入模板下载失败。');
     }
     const blob = await response.blob();
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = '竞迹统一数据导入模板.xlsx';
+    link.download =
+      kind === 'unified' ? '竞迹统一数据导入模板.xlsx' : `竞迹${project || ''}分用途导入模板.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  },
+  async downloadDataImportErrorReport(id: string, filename: string) {
+    const response = await fetch(`/api/data-import/batches/${encodeURIComponent(id)}/errors`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.message || '问题清单导出失败。');
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = `竞迹导入问题清单_${filename.replace(/\.(xls|xlsx)$/i, '')}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -564,11 +585,17 @@ export const api = {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
-  async analyzeDataImport(file: File, project: Project, defaultDate?: string) {
+  async analyzeDataImport(
+    file: File,
+    project: Project,
+    defaultDate?: string,
+    options?: { reparse?: boolean }
+  ) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
     if (defaultDate) body.append('defaultDate', defaultDate);
+    if (options?.reparse) body.append('reparse', '1');
     return request<{ batch: DataImportBatch }>('/api/data-import/analyze', {
       method: 'POST',
       body,
@@ -599,6 +626,8 @@ export const api = {
       valueNum?: number | null;
       actualReps?: number | null;
       actualWeightKg?: number | null;
+      payload?: Record<string, unknown>;
+      resolution?: '' | 'skip' | 'update';
     }>
   ) {
     return request<{ batch: DataImportBatch }>(
@@ -611,7 +640,15 @@ export const api = {
   },
   async updateDataImportAthletes(
     id: string,
-    corrections: Array<{ id: number; name?: string; team?: string; gender?: string }>
+    corrections: Array<{
+      id: number;
+      name?: string;
+      team?: string;
+      gender?: string;
+      matchedAthleteId?: number | null;
+      excluded?: boolean;
+      confirmed?: boolean;
+    }>
   ) {
     return request<{ batch: DataImportBatch }>(
       `/api/data-import/batches/${encodeURIComponent(id)}/athletes`,
@@ -627,6 +664,11 @@ export const api = {
       imported: number;
       skipped: number;
       createdAthletes: number;
+      linkedAthletes: number;
+      createdRecords: number;
+      updatedRecords: number;
+      filledProfileFields: number;
+      overwrittenProfileFields: number;
       batch: DataImportBatch;
     }>(`/api/data-import/batches/${encodeURIComponent(id)}/commit`, {
       method: 'POST',

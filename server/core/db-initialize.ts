@@ -308,6 +308,90 @@ export function initializeDatabase(
   if (tableExists('data_import_batches') && !hasColumn('data_import_batches', 'storage_path')) {
     db.exec('ALTER TABLE data_import_batches ADD COLUMN storage_path TEXT');
   }
+  // data_import_items 旧版 CHECK 不含 invalid_row，且缺少逐条冲突决策列；
+  // 暂存数据可完整搬移，重建表以补齐结构（幂等：新结构含 'invalid_row' 时跳过）。
+  if (tableExists('data_import_items')) {
+    const itemsSql = String(
+      (
+        db
+          .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'data_import_items'")
+          .get() as { sql: string } | undefined
+      )?.sql || ''
+    );
+    if (!itemsSql.includes("'invalid_row'")) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.exec(`
+          CREATE TABLE data_import_items_v2 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id TEXT NOT NULL,
+            item_type TEXT NOT NULL CHECK(item_type IN ('athlete_profile', 'wellness', 'training_session', 'training_set', 'test_measurement', 'body_measurement', 'injury_record', 'competitive_state', 'scoring_rule', 'invalid_row')),
+            athlete_id INTEGER,
+            raw_athlete_name TEXT NOT NULL DEFAULT '',
+            event_date TEXT NOT NULL DEFAULT '',
+            session_label TEXT NOT NULL DEFAULT '',
+            test_type TEXT NOT NULL DEFAULT '',
+            metric_code TEXT NOT NULL DEFAULT '',
+            metric_label TEXT NOT NULL DEFAULT '',
+            side TEXT NOT NULL DEFAULT 'center' CHECK(side IN ('left', 'right', 'bilateral', 'center')),
+            value_num REAL,
+            unit TEXT NOT NULL DEFAULT '',
+            exercise_name TEXT NOT NULL DEFAULT '',
+            set_index INTEGER NOT NULL DEFAULT 1,
+            target_reps REAL,
+            actual_reps REAL,
+            actual_weight_kg REAL,
+            intensity_percent REAL,
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            source_sheet TEXT NOT NULL,
+            source_address TEXT NOT NULL,
+            raw_value TEXT NOT NULL DEFAULT '',
+            quality TEXT NOT NULL CHECK(quality IN ('valid', 'warning', 'error', 'skipped')),
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            business_key TEXT NOT NULL DEFAULT '',
+            resolution TEXT NOT NULL DEFAULT '' CHECK(resolution IN ('', 'skip', 'update')),
+            conflict_json TEXT NOT NULL DEFAULT '{}',
+            committed_entity_type TEXT NOT NULL DEFAULT '',
+            committed_entity_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (batch_id, item_type, source_sheet, source_address, metric_code, side, set_index),
+            FOREIGN KEY (batch_id) REFERENCES data_import_batches(id) ON DELETE CASCADE,
+            FOREIGN KEY (athlete_id) REFERENCES athletes(id)
+          )
+        `);
+        db.exec(`
+          INSERT INTO data_import_items_v2 (
+            id, batch_id, item_type, athlete_id, raw_athlete_name, event_date, session_label, test_type,
+            metric_code, metric_label, side, value_num, unit, exercise_name, set_index, target_reps,
+            actual_reps, actual_weight_kg, intensity_percent, payload_json, source_sheet, source_address,
+            raw_value, quality, messages_json, business_key, committed_entity_type, committed_entity_id, created_at
+          )
+          SELECT id, batch_id, item_type, athlete_id, raw_athlete_name, event_date, session_label, test_type,
+            metric_code, metric_label, side, value_num, unit, exercise_name, set_index, target_reps,
+            actual_reps, actual_weight_kg, intensity_percent, payload_json, source_sheet, source_address,
+            raw_value, quality, messages_json, business_key, committed_entity_type, committed_entity_id, created_at
+          FROM data_import_items
+        `);
+        db.exec('DROP TABLE data_import_items');
+        db.exec('ALTER TABLE data_import_items_v2 RENAME TO data_import_items');
+        db.exec('COMMIT');
+      } catch (error) {
+        if (db.isTransaction) db.exec('ROLLBACK');
+        throw error;
+      }
+    }
+  }
+  if (tableExists('data_import_athlete_candidates')) {
+    if (!hasColumn('data_import_athlete_candidates', 'suggested_json')) {
+      db.exec(`ALTER TABLE data_import_athlete_candidates ADD COLUMN suggested_json TEXT NOT NULL DEFAULT '[]'`);
+    }
+    if (!hasColumn('data_import_athlete_candidates', 'confirmed')) {
+      db.exec('ALTER TABLE data_import_athlete_candidates ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!hasColumn('data_import_athlete_candidates', 'excluded')) {
+      db.exec('ALTER TABLE data_import_athlete_candidates ADD COLUMN excluded INTEGER NOT NULL DEFAULT 0');
+    }
+  }
   preserveLegacySpecialChampionModels(db);
 
   initializeSystemData(db);
@@ -1186,7 +1270,7 @@ export function initializeDatabase(
   CREATE TABLE IF NOT EXISTS data_import_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     batch_id TEXT NOT NULL,
-    item_type TEXT NOT NULL CHECK(item_type IN ('athlete_profile', 'wellness', 'training_session', 'training_set', 'test_measurement', 'body_measurement', 'injury_record', 'competitive_state', 'scoring_rule')),
+    item_type TEXT NOT NULL CHECK(item_type IN ('athlete_profile', 'wellness', 'training_session', 'training_set', 'test_measurement', 'body_measurement', 'injury_record', 'competitive_state', 'scoring_rule', 'invalid_row')),
     athlete_id INTEGER,
     raw_athlete_name TEXT NOT NULL DEFAULT '',
     event_date TEXT NOT NULL DEFAULT '',
@@ -1210,6 +1294,8 @@ export function initializeDatabase(
     quality TEXT NOT NULL CHECK(quality IN ('valid', 'warning', 'error', 'skipped')),
     messages_json TEXT NOT NULL DEFAULT '[]',
     business_key TEXT NOT NULL DEFAULT '',
+    resolution TEXT NOT NULL DEFAULT '' CHECK(resolution IN ('', 'skip', 'update')),
+    conflict_json TEXT NOT NULL DEFAULT '{}',
     committed_entity_type TEXT NOT NULL DEFAULT '',
     committed_entity_id INTEGER,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1232,6 +1318,9 @@ export function initializeDatabase(
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'matched', 'created')),
     matched_athlete_id INTEGER,
     created_athlete_id INTEGER,
+    suggested_json TEXT NOT NULL DEFAULT '[]',
+    confirmed INTEGER NOT NULL DEFAULT 0,
+    excluded INTEGER NOT NULL DEFAULT 0,
     source_sheet TEXT NOT NULL DEFAULT '',
     messages_json TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

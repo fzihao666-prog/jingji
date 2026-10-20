@@ -1,21 +1,25 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Database,
   Download,
   FileCheck2,
   FileSpreadsheet,
+  FileWarning,
   RefreshCw,
   Save,
   Search,
   UploadCloud,
+  Users,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import type {
   Athlete,
-  DataImportAthleteCandidate,
   DataImportBatch,
   DataImportBatchSummary,
   DataImportItem,
@@ -41,6 +45,8 @@ type Correction = {
   valueNum?: number | null;
   actualReps?: number | null;
   actualWeightKg?: number | null;
+  payload?: Record<string, unknown>;
+  resolution?: '' | 'skip' | 'update';
 };
 
 type AthleteCorrection = {
@@ -48,41 +54,44 @@ type AthleteCorrection = {
   name?: string;
   team?: string;
   gender?: string;
+  matchedAthleteId?: number | null;
+  excluded?: boolean;
+  confirmed?: boolean;
 };
 
-function normalizeAthleteName(value: string) {
-  return value.normalize('NFKC').replace(/[\s·•]/g, '');
-}
+type TemplateKind = 'profile' | 'training' | 'test' | 'unified';
 
 const ITEM_LABELS: Record<DataImportItem['itemType'], string> = {
   athlete_profile: '运动员档案',
   wellness: '恢复状态',
   training_session: '训练课次',
   training_set: '训练组次',
-  test_measurement: '力量测试',
+  test_measurement: '测试成绩',
   body_measurement: '身体测量',
   injury_record: '伤病记录',
   competitive_state: '竞技状态',
   scoring_rule: '评分规则',
+  invalid_row: '错误行',
 };
 
 const STATUS_LABELS: Record<DataImportBatch['status'], string> = {
-  reviewing: '待审核',
+  reviewing: '待确认',
   committed: '已入库',
   failed: '失败',
   rolled_back: '已撤销',
 };
 
-function displayValue(item: DataImportItem) {
-  if (item.itemType === 'athlete_profile') return '基础档案与生源信息';
-  if (item.itemType === 'wellness') return '每日恢复记录';
-  if (item.itemType === 'training_session') return `${item.valueNum ?? 0} min`;
-  if (item.itemType === 'injury_record') return item.metricLabel || '伤病记录';
-  if (item.itemType === 'training_set')
-    return `${item.actualWeightKg ?? '—'} kg × ${item.actualReps ?? '—'} 次`;
-  if (item.itemType === 'scoring_rule')
-    return `${item.valueNum ?? '—'} ${item.unit} / ${String(item.payload.score || '—')}分`;
-  return `${item.valueNum ?? '—'} ${item.unit}`;
+const PAGE_SIZE = 50;
+
+function numberOrUndefined(value: string): number | null | undefined {
+  if (value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function payloadNumber(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key];
+  return value === null || value === undefined ? '' : String(value);
 }
 
 export function DataImportPage({ project, athletes, onChanged }: Props) {
@@ -94,22 +103,41 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
   const [busy, setBusy] = useState<
-    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | ''
+    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | 'errors' | ''
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState<'all' | 'error' | 'warning' | 'training' | 'test'>('all');
+  const [filter, setFilter] = useState<'exception' | 'duplicate' | 'overwrite' | 'all'>(
+    'exception'
+  );
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
   const [conflictPolicy, setConflictPolicy] = useState<'skip' | 'update'>('skip');
   const [corrections, setCorrections] = useState<Map<number, Correction>>(new Map());
   const [athleteCorrections, setAthleteCorrections] = useState<Map<number, AthleteCorrection>>(
     new Map()
   );
+  const [personDialogOpen, setPersonDialogOpen] = useState(false);
+  const [personTab, setPersonTab] = useState<'all' | 'pending' | 'ambiguous'>('all');
+  const [personQuery, setPersonQuery] = useState('');
+  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+  const [result, setResult] = useState<{
+    message: string;
+    createdAthletes: number;
+    linkedAthletes: number;
+    createdRecords: number;
+    updatedRecords: number;
+    skipped: number;
+    filledProfileFields: number;
+    overwrittenProfileFields: number;
+  } | null>(null);
 
   const refreshBatches = async () => {
     try {
-      const result = await api.dataImportBatches(project);
-      setBatches(result.batches);
+      const list = await api.dataImportBatches(project);
+      setBatches(list.batches);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '导入记录加载失败。');
     }
@@ -121,11 +149,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setAthleteCorrections(new Map());
     setMessage('');
     setError('');
+    setResult(null);
+    setPersonDialogOpen(false);
+    setConfirmDialogOpen(false);
+    setDuplicateDialogOpen(false);
     void refreshBatches();
     void api
       .adminTeams()
-      .then((result) => {
-        const available = result.teams.filter((team) => team.project === project);
+      .then((list) => {
+        const available = list.teams.filter((team) => team.project === project);
         setTeams(available);
         setBulkCandidateTeam((current) =>
           available.some((team) => team.name === current) ? current : ''
@@ -134,51 +166,38 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       .catch((nextError) =>
         setError(nextError instanceof Error ? nextError.message : '队伍列表加载失败。')
       );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
 
-  const discardBatch = async (item: DataImportBatchSummary) => {
-    if (busy || item.status !== 'reviewing') return;
-    if (
-      !window.confirm(
-        `确定放弃提交“${item.filename}”？该批次及相关暂存数据将被永久删除，无法恢复。`
-      )
-    )
-      return;
-    setBusy('discard');
-    setError('');
-    setMessage('');
-    try {
-      const result = await api.discardDataImport(item.id, project);
-      setBatches((current) => current.filter((entry) => entry.id !== item.id));
-      if (batch?.id === item.id) {
-        setBatch(null);
-        setCorrections(new Map());
-        setAthleteCorrections(new Map());
-        setFile(null);
-        if (fileRef.current) fileRef.current.value = '';
-      }
-      setMessage(result.message);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '放弃提交失败。');
-    } finally {
-      setBusy('');
-    }
+  const startReview = (next: DataImportBatch) => {
+    setBatch(next);
+    setCorrections(new Map());
+    setAthleteCorrections(new Map());
+    setPage(0);
+    setResult(null);
+    const unresolved = next.athleteCandidates.filter(
+      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
+    );
+    if (unresolved.length) setPersonDialogOpen(true);
   };
 
-  const analyze = async () => {
+  const analyze = async (options?: { reparse?: boolean }) => {
     if (!file) return;
     setBusy('analyze');
     setError('');
     setMessage('');
     try {
-      const result = await api.analyzeDataImport(file, project, defaultDate || undefined);
-      setBatch(result.batch);
-      setCorrections(new Map());
-      setAthleteCorrections(new Map());
+      const info = await api.analyzeDataImport(file, project, defaultDate || undefined, options);
+      if (info.batch.summary.duplicateFile && !options?.reparse) {
+        setBatch(info.batch);
+        setDuplicateDialogOpen(true);
+        setMessage('该文件已上传过，可继续上次校对，或按当前参数重新解析。');
+        await refreshBatches();
+        return;
+      }
+      startReview(info.batch);
       setMessage(
-        result.batch.summary.duplicateFile
-          ? '该文件已上传过，已打开原有导入批次。'
-          : `已识别${result.batch.itemCount}条候选数据，请先处理红色错误并复核黄色警告。`
+        `已识别${info.batch.itemCount}条候选数据；请先完成人员确认，再校对业务数据。`
       );
       await refreshBatches();
     } catch (nextError) {
@@ -188,15 +207,17 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     }
   };
 
-  const downloadTemplate = async () => {
+  const downloadTemplate = async (kind: TemplateKind) => {
     setBusy('template');
     setError('');
     setMessage('');
     try {
-      await api.downloadDataImportTemplate();
-      setMessage('统一数据导入模板已开始下载。');
+      await api.downloadDataImportTemplate(kind, project);
+      setMessage(
+        kind === 'unified' ? '统一数据模板已开始下载。' : '分用途模板已开始下载（含已有人员预填）。'
+      );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '统一数据导入模板下载失败。');
+      setError(nextError instanceof Error ? nextError.message : '模板下载失败。');
     } finally {
       setBusy('');
     }
@@ -216,17 +237,57 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     }
   };
 
+  const downloadErrors = async () => {
+    if (!batch) return;
+    setBusy('errors');
+    try {
+      await api.downloadDataImportErrorReport(batch.id, batch.filename);
+      setMessage('问题清单已开始下载，包含工作表、行号与错误原因。');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : '问题清单导出失败。');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const loadBatch = async (id: string) => {
     setBusy('load');
     setError('');
     setMessage('');
     try {
-      const result = await api.dataImportBatch(id);
-      setBatch(result.batch);
-      setCorrections(new Map());
-      setAthleteCorrections(new Map());
+      const info = await api.dataImportBatch(id);
+      startReview(info.batch);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '批次加载失败。');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const discardBatch = async (item: DataImportBatchSummary) => {
+    if (busy || item.status !== 'reviewing') return;
+    if (
+      !window.confirm(
+        `确定放弃提交“${item.filename}”？该批次及相关暂存数据将被永久删除，无法恢复。`
+      )
+    )
+      return;
+    setBusy('discard');
+    setError('');
+    setMessage('');
+    try {
+      const info = await api.discardDataImport(item.id, project);
+      setBatches((current) => current.filter((entry) => entry.id !== item.id));
+      if (batch?.id === item.id) {
+        setBatch(null);
+        setCorrections(new Map());
+        setAthleteCorrections(new Map());
+        setFile(null);
+        if (fileRef.current) fileRef.current.value = '';
+      }
+      setMessage(info.message);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : '放弃提交失败。');
     } finally {
       setBusy('');
     }
@@ -235,12 +296,13 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const patchItem = (itemId: number, patch: Omit<Correction, 'id'>) => {
     const sourceItem = batch?.items.find((item) => item.id === itemId);
     const groupedIds =
-      sourceItem && 'athleteId' in patch
+      sourceItem && 'athleteId' in patch && sourceItem.itemType !== 'invalid_row'
         ? batch?.items
             .filter(
               (item) =>
-                normalizeAthleteName(item.rawAthleteName) ===
-                normalizeAthleteName(sourceItem.rawAthleteName)
+                item.itemType !== 'invalid_row' &&
+                item.rawAthleteName &&
+                item.rawAthleteName === sourceItem.rawAthleteName
             )
             .map((item) => item.id) || [itemId]
         : [itemId];
@@ -249,16 +311,24 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         ? {
             ...current,
             items: current.items.map((item) =>
-              groupedIds.includes(item.id) ? { ...item, ...patch } : item
+              groupedIds.includes(item.id) ? { ...item, ...patch, payload: patch.payload ? { ...item.payload, ...patch.payload } : item.payload } : item
             ),
           }
         : current
     );
     setCorrections((current) => {
       const next = new Map(current);
-      for (const id of groupedIds) next.set(id, { ...(next.get(id) || { id }), ...patch });
+      for (const id of groupedIds) {
+        const prior = next.get(id) || { id };
+        next.set(id, {
+          ...prior,
+          ...patch,
+          payload: patch.payload ? { ...(prior.payload || {}), ...patch.payload } : prior.payload,
+        });
+      }
       return next;
     });
+    setPage(0);
   };
 
   const patchAthleteCandidate = (candidateId: number, patch: Omit<AthleteCorrection, 'id'>) => {
@@ -287,29 +357,33 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       setError('请先选择要批量分配的新运动员所属队伍。');
       return;
     }
-    const pending = batch.athleteCandidates.filter((candidate) => candidate.status === 'pending');
+    const pending = batch.athleteCandidates.filter(
+      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId
+    );
     if (!pending.length) return;
-    for (const candidate of pending)
-      patchAthleteCandidate(candidate.id, { team: bulkCandidateTeam });
-    setMessage(`已为${pending.length}名待创建运动员填入“${bulkCandidateTeam}”，请保存后提交。`);
+    for (const candidate of pending) patchAthleteCandidate(candidate.id, { team: bulkCandidateTeam });
+    setMessage(`已为${pending.length}名待建档运动员填入“${bulkCandidateTeam}”，保存后生效。`);
   };
 
-  const saveCorrections = async () => {
-    if (!batch || (!corrections.size && !athleteCorrections.size)) return batch;
+  const saveCorrections = async (
+    overrideAthlete?: Map<number, AthleteCorrection>,
+    overrideItems?: Map<number, Correction>
+  ) => {
+    const athleteMap = overrideAthlete ?? athleteCorrections;
+    const itemMap = overrideItems ?? corrections;
+    if (!batch || (!itemMap.size && !athleteMap.size)) return batch;
     setBusy('save');
     setError('');
     try {
       let currentBatch = batch;
-      if (athleteCorrections.size)
-        currentBatch = (
-          await api.updateDataImportAthletes(batch.id, [...athleteCorrections.values()])
-        ).batch;
-      if (corrections.size)
-        currentBatch = (await api.updateDataImportItems(batch.id, [...corrections.values()])).batch;
+      if (athleteMap.size)
+        currentBatch = (await api.updateDataImportAthletes(batch.id, [...athleteMap.values()])).batch;
+      if (itemMap.size)
+        currentBatch = (await api.updateDataImportItems(batch.id, [...itemMap.values()])).batch;
       setBatch(currentBatch);
       setCorrections(new Map());
       setAthleteCorrections(new Map());
-      setMessage('校对内容已保存，服务端已重新执行数据校验。');
+      setMessage('校对内容已保存，服务端已按最终数据重新校验并检测重复。');
       return currentBatch;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '校对内容保存失败。');
@@ -318,6 +392,13 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       setBusy('');
     }
   };
+
+  const unconfirmedPersons = useMemo(() => {
+    if (!batch) return [];
+    return batch.athleteCandidates.filter(
+      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
+    );
+  }, [batch]);
 
   const commit = async () => {
     if (!batch) return;
@@ -329,15 +410,39 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       if (!saved) return;
       currentBatch = saved;
     }
-    if (currentBatch.errorCount > 0) {
-      setError(`仍有${currentBatch.errorCount}条红色错误，请先修正后再提交。`);
+    const stillUnconfirmed = currentBatch.athleteCandidates.filter(
+      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
+    );
+    if (stillUnconfirmed.length) {
+      setError(`还有${stillUnconfirmed.length}名运动员未完成人员确认，请先处理。`);
+      setPersonDialogOpen(true);
       return;
     }
+    if (currentBatch.errorCount > 0) {
+      setError(`仍有${currentBatch.errorCount}条红色错误，请先修正或排除后再提交。`);
+      return;
+    }
+    setConfirmDialogOpen(true);
+  };
+
+  const doCommit = async () => {
+    if (!batch) return;
+    setConfirmDialogOpen(false);
     setBusy('commit');
     try {
-      const result = await api.commitDataImport(currentBatch.id, conflictPolicy);
-      setBatch(result.batch);
-      setMessage(result.message);
+      const info = await api.commitDataImport(batch.id, conflictPolicy);
+      setBatch(info.batch);
+      setMessage(info.message);
+      setResult({
+        message: info.message,
+        createdAthletes: info.createdAthletes,
+        linkedAthletes: info.linkedAthletes,
+        createdRecords: info.createdRecords,
+        updatedRecords: info.updatedRecords,
+        skipped: info.skipped,
+        filledProfileFields: info.filledProfileFields,
+        overwrittenProfileFields: info.overwrittenProfileFields,
+      });
       await refreshBatches();
       onChanged();
     } catch (nextError) {
@@ -347,15 +452,43 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     }
   };
 
+  const confirmAndContinue = async () => {
+    if (!batch) return;
+    const nextMap = new Map(athleteCorrections);
+    for (const candidate of batch.athleteCandidates) {
+      if (candidate.status !== 'pending' || candidate.excluded) continue;
+      const unresolvedAmbiguity = candidate.suggested.length > 0 && !candidate.matchedAthleteId;
+      const missingTeam = !candidate.matchedAthleteId && !candidate.team;
+      if (unresolvedAmbiguity || missingTeam) continue; // 身份歧义与缺队伍必须逐项解决
+      nextMap.set(candidate.id, { ...(nextMap.get(candidate.id) || { id: candidate.id }), confirmed: true });
+    }
+    const pendingFix = batch.athleteCandidates.filter((candidate) => {
+      if (candidate.status !== 'pending' || candidate.excluded) return false;
+      if (candidate.suggested.length > 0 && !candidate.matchedAthleteId) return true;
+      if (!candidate.matchedAthleteId && !candidate.team) return true;
+      return false;
+    });
+    const saved = await saveCorrections(nextMap);
+    if (!saved) return;
+    if (pendingFix.length) {
+      setError(
+        `还有${pendingFix.length}人需要处理：身份歧义必须选择关联人员，待建档必须选择所属队伍。`
+      );
+      return;
+    }
+    setPersonDialogOpen(false);
+    setMessage('人员确认完成，已保存人员映射草稿；请继续数据校对。');
+  };
+
   const filteredItems = useMemo(() => {
     if (!batch) return [];
     const needle = query.trim().toLowerCase();
     return batch.items
       .filter((item) => {
-        if (filter === 'error' && item.quality !== 'error') return false;
-        if (filter === 'warning' && item.quality !== 'warning') return false;
-        if (filter === 'training' && item.itemType !== 'training_set') return false;
-        if (filter === 'test' && !['test_measurement', 'body_measurement'].includes(item.itemType))
+        if (filter === 'exception' && item.itemType !== 'invalid_row' && item.quality === 'valid')
+          return false;
+        if (filter === 'duplicate' && !item.conflict?.exists) return false;
+        if (filter === 'overwrite' && !item.conflict?.fields.some((field) => field.overwrites))
           return false;
         if (!needle) return true;
         return [
@@ -364,10 +497,105 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           item.exerciseName,
           item.metricLabel,
           item.sourceSheet,
+          item.sourceAddress,
         ].some((value) => value.toLowerCase().includes(needle));
       })
-      .slice(0, 500);
+      .sort((a, b) => {
+        const rank = (item: DataImportItem) =>
+          item.itemType === 'invalid_row' || item.quality === 'error'
+            ? 0
+            : item.quality === 'warning'
+              ? 1
+              : 2;
+        return rank(a) - rank(b);
+      });
   }, [batch, filter, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageItems = filteredItems.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+
+  const summaryPreview = useMemo(() => {
+    if (!batch) return null;
+    const importable = batch.items.filter(
+      (item) => item.quality !== 'skipped' && item.resolution !== 'skip' && item.itemType !== 'invalid_row'
+    );
+    const excludedKeys = new Set(
+      batch.athleteCandidates.filter((candidate) => candidate.excluded).map((c) => c.normalizedName)
+    );
+    const active = importable.filter((item) => !excludedKeys.has(item.rawAthleteName.replace(/[\s·•]/g, '')));
+    const createPersons = batch.athleteCandidates.filter(
+      (candidate) =>
+        candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId
+    );
+    const linkPersons = batch.athleteCandidates.filter(
+      (candidate) =>
+        (candidate.status === 'pending' && candidate.matchedAthleteId) ||
+        candidate.status === 'matched'
+    );
+    const newRecords = active.filter((item) => !item.conflict?.exists).length;
+    const updateRecords = active.filter(
+      (item) =>
+        item.conflict?.exists &&
+        (item.resolution || conflictPolicy) === 'update' &&
+        !item.conflict.identical
+    ).length;
+    const skipRecords =
+      active.filter(
+        (item) =>
+          item.conflict?.exists &&
+          ((item.resolution || conflictPolicy) === 'skip' || item.conflict.identical)
+      ).length +
+      batch.items.filter((item) => item.resolution === 'skip').length +
+      importable.filter((item) => excludedKeys.has(item.rawAthleteName.replace(/[\s·•]/g, ''))).length;
+    const overwriteFields = active.reduce(
+      (sum, item) => sum + (item.conflict?.fields.filter((field) => field.overwrites).length || 0),
+      0
+    );
+    return {
+      createPersons: createPersons.length,
+      linkPersons: linkPersons.length,
+      newRecords,
+      updateRecords,
+      skipRecords,
+      overwriteFields,
+    };
+  }, [batch, conflictPolicy]);
+
+  const selectedPerson = useMemo(
+    () =>
+      batch?.athleteCandidates.find((candidate) => candidate.id === selectedPersonId) || null,
+    [batch, selectedPersonId]
+  );
+
+  const visiblePersons = useMemo(() => {
+    if (!batch) return [];
+    const needle = personQuery.trim().toLowerCase();
+    return batch.athleteCandidates.filter((candidate) => {
+      if (personTab === 'pending' && !(candidate.status === 'pending' && !candidate.suggested.length))
+        return false;
+      if (personTab === 'ambiguous' && !(candidate.status === 'pending' && candidate.suggested.length))
+        return false;
+      if (!needle) return true;
+      return [candidate.name, candidate.team, candidate.sourceSheet].some((value) =>
+        value.toLowerCase().includes(needle)
+      );
+    });
+  }, [batch, personTab, personQuery]);
+
+  const batchConfirmNoConflict = () => {
+    if (!batch) return;
+    const ready = batch.athleteCandidates.filter(
+      (candidate) =>
+        candidate.status === 'pending' &&
+        !candidate.excluded &&
+        !candidate.confirmed &&
+        candidate.suggested.length === 0 &&
+        (candidate.matchedAthleteId || candidate.team)
+    );
+    for (const candidate of ready) patchAthleteCandidate(candidate.id, { confirmed: true });
+    setMessage(`已批量确认${ready.length}名无冲突人员，请保存后继续。`);
+  };
 
   return (
     <PageContainer className="data-import-page">
@@ -381,12 +609,48 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               type="button"
               className="data-import-template"
               disabled={Boolean(busy)}
-              onClick={downloadTemplate}
+              onClick={() => downloadTemplate('profile')}
             >
               <Download size={19} />
               <div>
-                <strong>{busy === 'template' ? '正在准备模板…' : '下载统一数据模板'}</strong>
-                <span>档案、训练、FMS、冠军模型、伤病、竞技状态</span>
+                <strong>{busy === 'template' ? '正在准备模板…' : '队员资料模板'}</strong>
+                <span>批量建档与补全，预填已有人员</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="data-import-template"
+              disabled={Boolean(busy)}
+              onClick={() => downloadTemplate('training')}
+            >
+              <Download size={19} />
+              <div>
+                <strong>训练记录模板</strong>
+                <span>课次、组次与恢复，预填已有人员</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="data-import-template"
+              disabled={Boolean(busy)}
+              onClick={() => downloadTemplate('test')}
+            >
+              <Download size={19} />
+              <div>
+                <strong>测试成绩模板</strong>
+                <span>专项测试与体能测试，预填已有人员</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="data-import-template"
+              disabled={Boolean(busy)}
+              onClick={() => downloadTemplate('unified')}
+            >
+              <FileSpreadsheet size={19} />
+              <div>
+                <strong>统一数据模板</strong>
+                <span>13张工作表，高级导入入口</span>
               </div>
             </button>
             <button
@@ -395,19 +659,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               disabled={Boolean(busy)}
               onClick={exportUnifiedData}
             >
-              <FileSpreadsheet size={19} />
+              <Database size={19} />
               <div>
-                <strong>{busy === 'export' ? '正在导出数据…' : '导出统一数据'}</strong>
-                <span>导出当前项目及权限范围内的全部已入库数据</span>
+                <strong>导出统一数据</strong>
+                <span>导出当前项目及权限范围内已入库数据</span>
               </div>
             </button>
-            <div className="data-import-safety">
-              <Database size={20} />
-              <div>
-                <strong>先暂存，后入库</strong>
-                <span>原值、工作表和单元格坐标全程保留</span>
-              </div>
-            </div>
           </div>
         }
       />
@@ -418,7 +675,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <FileSpreadsheet size={20} />
             <div>
               <strong>上传源文件</strong>
-              <span>支持旧版 XLS 与新版 XLSX，单文件不超过 80MB</span>
+              <span>支持 XLS / XLSX，单文件不超过 80MB</span>
             </div>
           </div>
           <button
@@ -431,7 +688,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <span>
               {file
                 ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                : '系统会自动遍历多张工作表和重复运动员小表'}
+                : '上传后先识别运动员，再校对业务数据'}
             </span>
           </button>
           <input
@@ -453,14 +710,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           <button
             className="data-import-primary"
             disabled={!file || Boolean(busy)}
-            onClick={analyze}
+            onClick={() => void analyze()}
           >
             {busy === 'analyze' ? (
               <RefreshCw className="spin" size={17} />
             ) : (
               <FileCheck2 size={17} />
             )}
-            解析并生成审核预览
+            上传并检查
           </button>
         </section>
 
@@ -479,7 +736,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <button
                   type="button"
                   className={batch?.id === item.id ? 'active' : ''}
-                  onClick={() => loadBatch(item.id)}
+                  onClick={() => void loadBatch(item.id)}
                   disabled={Boolean(busy)}
                   aria-label={`查看导入批次：${item.filename}`}
                 >
@@ -516,135 +773,76 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         </div>
       )}
 
-      {batch && (
-        <>
-          {batch.athleteCandidates.length > 0 && (
-            <section className="data-import-candidates">
-              <div className="data-import-review-head">
-                <div>
-                  <span>NEW ATHLETES</span>
-                  <h2>新运动员档案</h2>
-                  <p>
-                    这些姓名未匹配到现有名册。请先批量或逐人分配所属队伍；提交时只创建人员档案，不创建登录账号。
-                  </p>
-                </div>
-                <div className="data-import-candidate-bulk">
-                  <select
-                    value={bulkCandidateTeam}
-                    disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                    onChange={(event) => setBulkCandidateTeam(event.target.value)}
-                  >
-                    <option value="">批量选择所属队伍</option>
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.name}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                    onClick={applyBulkCandidateTeam}
-                  >
-                    批量应用
-                  </button>
-                </div>
-                <button
-                  disabled={
-                    !athleteCorrections.size || Boolean(busy) || batch.status !== 'reviewing'
-                  }
-                  onClick={saveCorrections}
-                >
-                  <Save size={15} />
-                  保存新运动员资料
-                </button>
-              </div>
-              <div className="data-import-candidate-grid">
-                {batch.athleteCandidates.map((candidate: DataImportAthleteCandidate) => (
-                  <article key={candidate.id}>
-                    <span className={`candidate-state ${candidate.status}`}>
-                      {candidate.status === 'pending'
-                        ? '待创建'
-                        : candidate.status === 'created'
-                          ? '已创建'
-                          : '已匹配'}
-                    </span>
-                    <label>
-                      <span>姓名</span>
-                      <input
-                        disabled={batch.status !== 'reviewing' || candidate.status !== 'pending'}
-                        value={candidate.name}
-                        onChange={(event) =>
-                          patchAthleteCandidate(candidate.id, {
-                            name: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>性别</span>
-                      <select
-                        disabled={batch.status !== 'reviewing' || candidate.status !== 'pending'}
-                        value={candidate.gender}
-                        onChange={(event) =>
-                          patchAthleteCandidate(candidate.id, {
-                            gender: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">暂不填写</option>
-                        <option>男</option>
-                        <option>女</option>
-                      </select>
-                    </label>
-                    <label>
-                      <span>所属队伍</span>
-                      <select
-                        disabled={batch.status !== 'reviewing' || candidate.status !== 'pending'}
-                        value={candidate.team}
-                        onChange={(event) =>
-                          patchAthleteCandidate(candidate.id, {
-                            team: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">请选择所属队伍</option>
-                        {teams.map((team) => (
-                          <option key={team.id} value={team.name}>
-                            {team.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <small>
-                      {candidate.region}/{candidate.city}/{candidate.county} · 来源：
-                      {candidate.sourceSheet}
-                    </small>
-                  </article>
-                ))}
-              </div>
-            </section>
-          )}
-          <section className="data-import-summary">
+      {result && (
+        <section className="data-import-result">
+          <div className="data-import-card-heading">
+            <CheckCircle2 size={20} />
             <div>
-              <span>候选数据</span>
-              <strong>{batch.itemCount}</strong>
-              <small>{batch.sheetCount}张工作表</small>
+              <strong>导入完成</strong>
+              <span>{result.message}</span>
+            </div>
+          </div>
+          <div className="data-import-summary">
+            <div>
+              <span>新建运动员</span>
+              <strong>{result.createdAthletes}</strong>
+              <small>最小建档，无登录账号</small>
             </div>
             <div>
-              <span>可直接导入</span>
-              <strong>{batch.validCount}</strong>
-              <small>已通过确定性校验</small>
+              <span>关联已有</span>
+              <strong>{result.linkedAthletes}</strong>
+              <small>未覆盖已有档案</small>
+            </div>
+            <div>
+              <span>新增记录</span>
+              <strong>{result.createdRecords}</strong>
+              <small>业务数据新写入</small>
             </div>
             <div className="warning">
-              <span>需要复核</span>
-              <strong>{batch.warningCount}</strong>
-              <small>允许确认后导入</small>
+              <span>更新记录</span>
+              <strong>{result.updatedRecords}</strong>
+              <small>
+                补全{result.filledProfileFields}项 / 覆盖{result.overwrittenProfileFields}项字段
+              </small>
+            </div>
+            <div>
+              <span>跳过重复</span>
+              <strong>{result.skipped}</strong>
+              <small>保留数据库原值</small>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {batch && (
+        <>
+          <section className="data-import-summary">
+            <div>
+              <span>已确认运动员</span>
+              <strong>{batch.counts.personMatched}</strong>
+              <small>
+                待建档{batch.counts.personPending} · 待确认{batch.counts.personAmbiguous}
+              </small>
+            </div>
+            <div>
+              <span>待新增记录</span>
+              <strong>{batch.counts.newCount}</strong>
+              <small>业务键上没有重复</small>
+            </div>
+            <div className="warning">
+              <span>重复记录</span>
+              <strong>{batch.counts.duplicateCount}</strong>
+              <small>按冲突策略处理</small>
             </div>
             <div className="danger">
-              <span>阻止提交</span>
-              <strong>{batch.errorCount}</strong>
-              <small>必须先修正</small>
+              <span>待确认覆盖</span>
+              <strong>{batch.counts.overwriteCount}</strong>
+              <small>原值→新值需确认</small>
+            </div>
+            <div className="danger">
+              <span>错误记录</span>
+              <strong>{batch.counts.invalidCount}</strong>
+              <small>必须先修正或排除</small>
             </div>
             <div>
               <span>批次状态</span>
@@ -660,6 +858,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <strong>工作表识别结果</strong>
                 <span>展示哪些工作表会入库、哪些被安全忽略</span>
               </div>
+              <button
+                type="button"
+                className="data-import-outline"
+                disabled={Boolean(busy)}
+                onClick={() => void downloadErrors()}
+              >
+                <FileWarning size={16} />
+                {busy === 'errors' ? '正在导出…' : '下载问题清单'}
+              </button>
             </div>
             <div className="sheet-audit-grid">
               {batch.summary.recognizedSheets.map((sheet) => (
@@ -691,25 +898,39 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <div className="data-import-review-head">
               <div>
                 <span>REVIEW QUEUE</span>
-                <h2>数据校对</h2>
-                <p>最多同时展示500条；修改运动员、日期或数值后先保存校对。</p>
+                <h2>数据审查与校对</h2>
+                <p>
+                  校对的修改就是最终入库值；空白不覆盖已有数据，真实0值会保留。
+                  {unconfirmedPersons.length > 0 && (
+                    <strong className="data-import-gate">
+                      还有{unconfirmedPersons.length}名运动员待确认，
+                      <button type="button" onClick={() => setPersonDialogOpen(true)}>
+                        打开人员确认
+                      </button>
+                    </strong>
+                  )}
+                </p>
               </div>
               <div className="data-import-review-actions">
                 <label className="data-import-search">
                   <Search size={15} />
                   <input
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => {
+                      setQuery(event.target.value);
+                      setPage(0);
+                    }}
                     placeholder="搜索姓名、动作或指标"
                   />
                 </label>
                 <button
+                  type="button"
                   disabled={
                     (!corrections.size && !athleteCorrections.size) ||
                     Boolean(busy) ||
                     batch.status !== 'reviewing'
                   }
-                  onClick={saveCorrections}
+                  onClick={() => void saveCorrections()}
                 >
                   <Save size={15} />
                   保存校对
@@ -717,22 +938,32 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     ? `（${corrections.size + athleteCorrections.size}）`
                     : ''}
                 </button>
+                <button
+                  type="button"
+                  disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                  onClick={() => setPersonDialogOpen(true)}
+                >
+                  <Users size={15} />
+                  人员确认
+                </button>
               </div>
             </div>
             <div className="data-import-filters">
               {(
                 [
+                  ['exception', `异常 ${batch.counts.invalidCount}`],
+                  ['duplicate', `重复 ${batch.counts.duplicateCount}`],
+                  ['overwrite', `待覆盖 ${batch.counts.overwriteCount}`],
                   ['all', `全部 ${batch.itemCount}`],
-                  ['error', `错误 ${batch.errorCount}`],
-                  ['warning', `警告 ${batch.warningCount}`],
-                  ['training', '训练组次'],
-                  ['test', '测试与身体'],
                 ] as const
               ).map(([key, label]) => (
                 <button
                   key={key}
                   className={filter === key ? 'active' : ''}
-                  onClick={() => setFilter(key)}
+                  onClick={() => {
+                    setFilter(key);
+                    setPage(0);
+                  }}
                 >
                   {label}
                 </button>
@@ -747,29 +978,32 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     <th>运动员</th>
                     <th>日期</th>
                     <th>动作/指标</th>
-                    <th>数值</th>
+                    <th>数值（最终入库值）</th>
+                    <th>重复处理</th>
                     <th>来源</th>
-                    <th>校验信息</th>
+                    <th>校验与冲突</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((item) => (
+                  {pageItems.map((item) => (
                     <tr key={item.id} className={item.quality}>
                       <td>
                         <span className={`quality-pill ${item.quality}`}>
-                          {item.quality === 'valid'
-                            ? '通过'
-                            : item.quality === 'warning'
-                              ? '复核'
-                              : item.quality === 'error'
-                                ? '错误'
-                                : '跳过'}
+                          {item.itemType === 'invalid_row'
+                            ? '错误行'
+                            : item.quality === 'valid'
+                              ? '通过'
+                              : item.quality === 'warning'
+                                ? '复核'
+                                : item.quality === 'error'
+                                  ? '错误'
+                                  : '跳过'}
                         </span>
                       </td>
                       <td>{ITEM_LABELS[item.itemType]}</td>
                       <td>
-                        {item.itemType === 'scoring_rule' ? (
-                          <span>规则数据</span>
+                        {item.itemType === 'scoring_rule' || item.itemType === 'invalid_row' ? (
+                          <span>{item.itemType === 'invalid_row' ? item.rawValue.slice(0, 16) : '规则数据'}</span>
                         ) : (
                           <select
                             disabled={batch.status !== 'reviewing'}
@@ -780,7 +1014,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               })
                             }
                           >
-                            <option value="">新建无账号档案：{item.rawAthleteName}</option>
+                            <option value="">人员确认后自动关联：{item.rawAthleteName}</option>
                             {athletes.map((athlete) => (
                               <option key={athlete.id} value={athlete.id}>
                                 {athlete.name} · {athlete.team}
@@ -790,7 +1024,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         )}
                       </td>
                       <td>
-                        {item.itemType === 'scoring_rule' ? (
+                        {item.itemType === 'scoring_rule' || item.itemType === 'invalid_row' ? (
                           '—'
                         ) : (
                           <input
@@ -806,14 +1040,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         )}
                       </td>
                       <td>
-                        <strong>{item.exerciseName || item.metricLabel}</strong>
+                        <strong>{item.exerciseName || item.metricLabel || '—'}</strong>
                         {item.side !== 'center' && (
                           <small>
-                            {item.side === 'left'
-                              ? '左侧'
-                              : item.side === 'right'
-                                ? '右侧'
-                                : '双侧'}
+                            {item.side === 'left' ? '左侧' : item.side === 'right' ? '右侧' : '双侧'}
                           </small>
                         )}
                       </td>
@@ -825,12 +1055,11 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               type="number"
                               step="0.1"
                               value={item.actualWeightKg ?? ''}
-                              onChange={(event) =>
-                                patchItem(item.id, {
-                                  actualWeightKg:
-                                    event.target.value === '' ? null : Number(event.target.value),
-                                })
-                              }
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { actualWeightKg: value });
+                              }}
                             />
                             <span>kg ×</span>
                             <input
@@ -838,17 +1067,102 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               type="number"
                               step="1"
                               value={item.actualReps ?? ''}
-                              onChange={(event) =>
-                                patchItem(item.id, {
-                                  actualReps:
-                                    event.target.value === '' ? null : Number(event.target.value),
-                                })
-                              }
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { actualReps: value });
+                              }}
                             />
                             <span>次</span>
                           </div>
                         ) : item.itemType === 'scoring_rule' ? (
-                          displayValue(item)
+                          <span>
+                            {item.valueNum ?? '—'} {item.unit}
+                          </span>
+                        ) : item.itemType === 'invalid_row' ? (
+                          <span>—</span>
+                        ) : item.itemType === 'body_measurement' &&
+                          item.metricCode === 'body_composition' ? (
+                          <div className="training-value-inputs">
+                            <input
+                              disabled={batch.status !== 'reviewing'}
+                              type="number"
+                              step="0.1"
+                              placeholder="身高cm"
+                              value={payloadNumber(item.payload, 'heightCm')}
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { payload: { heightCm: value } });
+                              }}
+                            />
+                            <input
+                              disabled={batch.status !== 'reviewing'}
+                              type="number"
+                              step="0.1"
+                              placeholder="体重kg"
+                              value={payloadNumber(item.payload, 'weightKg')}
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { payload: { weightKg: value } });
+                              }}
+                            />
+                          </div>
+                        ) : item.itemType === 'wellness' ? (
+                          <div className="training-value-inputs">
+                            <input
+                              disabled={batch.status !== 'reviewing'}
+                              type="number"
+                              step="0.1"
+                              placeholder="睡眠h"
+                              value={payloadNumber(item.payload, 'sleepHours')}
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { payload: { sleepHours: value } });
+                              }}
+                            />
+                            <input
+                              disabled={batch.status !== 'reviewing'}
+                              type="number"
+                              step="1"
+                              placeholder="晨脉"
+                              value={payloadNumber(item.payload, 'morningPulse')}
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { payload: { morningPulse: value } });
+                              }}
+                            />
+                          </div>
+                        ) : item.itemType === 'training_session' ? (
+                          <div className="training-value-inputs">
+                            <input
+                              disabled={batch.status !== 'reviewing'}
+                              type="number"
+                              step="1"
+                              placeholder="时长min"
+                              value={item.valueNum ?? ''}
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { valueNum: value });
+                              }}
+                            />
+                            <input
+                              disabled={batch.status !== 'reviewing'}
+                              type="number"
+                              step="0.1"
+                              placeholder="距离km"
+                              value={payloadNumber(item.payload, 'distanceKm')}
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { payload: { distanceKm: value } });
+                              }}
+                            />
+                          </div>
                         ) : (
                           <div className="metric-value-input">
                             <input
@@ -856,15 +1170,48 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               type="number"
                               step="0.1"
                               value={item.valueNum ?? ''}
-                              onChange={(event) =>
-                                patchItem(item.id, {
-                                  valueNum:
-                                    event.target.value === '' ? null : Number(event.target.value),
-                                })
-                              }
+                              onChange={(event) => {
+                                const value = numberOrUndefined(event.target.value);
+                                if (value === undefined) return;
+                                patchItem(item.id, { valueNum: value });
+                              }}
                             />
                             <span>{item.unit}</span>
                           </div>
+                        )}
+                      </td>
+                      <td>
+                        {item.conflict?.exists ? (
+                          <select
+                            disabled={batch.status !== 'reviewing'}
+                            value={item.resolution}
+                            onChange={(event) =>
+                              patchItem(item.id, {
+                                resolution: event.target.value as '' | 'skip' | 'update',
+                              })
+                            }
+                            aria-label={`重复处理：${item.rawAthleteName}`}
+                          >
+                            <option value="">按批次策略</option>
+                            <option value="skip">跳过（保留原值）</option>
+                            <option value="update">更新已有</option>
+                          </select>
+                        ) : item.itemType === 'invalid_row' ? (
+                          <select
+                            disabled={batch.status !== 'reviewing'}
+                            value={item.resolution}
+                            onChange={(event) =>
+                              patchItem(item.id, {
+                                resolution: event.target.value as '' | 'skip' | 'update',
+                              })
+                            }
+                            aria-label="错误行处理"
+                          >
+                            <option value="">待修正</option>
+                            <option value="skip">排除此行</option>
+                          </select>
+                        ) : (
+                          <span className="data-import-new-tag">新增</span>
                         )}
                       </td>
                       <td>
@@ -875,20 +1222,29 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                       </td>
                       <td>
                         <div className="import-messages">
+                          {item.conflict?.fields.map((field) => (
+                            <span
+                              key={field.field}
+                              className={field.overwrites ? 'conflict-overwrite' : ''}
+                            >
+                              {field.label}：{field.oldValue || '空'} → {field.newValue}
+                              {field.overwrites ? '（需确认覆盖）' : ''}
+                            </span>
+                          ))}
                           {item.messages.length ? (
                             item.messages.map((entry, index) => (
                               <span key={index}>{entry.replace(/^错误：|^警告：/, '')}</span>
                             ))
-                          ) : (
+                          ) : !item.conflict?.fields.length ? (
                             <span>校验通过</span>
-                          )}
+                          ) : null}
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {!filteredItems.length && (
+                  {!pageItems.length && (
                     <tr>
-                      <td colSpan={8} className="data-import-empty">
+                      <td colSpan={9} className="data-import-empty">
                         当前筛选条件下没有数据。
                       </td>
                     </tr>
@@ -896,6 +1252,29 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 </tbody>
               </table>
             </div>
+            <footer className="data-import-pagination">
+              <small>
+                共{filteredItems.length}条 · 第{currentPage + 1}/{totalPages}页 · 每页{PAGE_SIZE}条
+              </small>
+              <div>
+                <button
+                  type="button"
+                  disabled={currentPage <= 0}
+                  onClick={() => setPage(currentPage - 1)}
+                  aria-label="上一页"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages - 1}
+                  onClick={() => setPage(currentPage + 1)}
+                  aria-label="下一页"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </footer>
             <footer className="data-import-commit-bar">
               <label>
                 <span>冲突处理</span>
@@ -905,27 +1284,496 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                   disabled={batch.status !== 'reviewing'}
                 >
                   <option value="skip">保留数据库原值，跳过重复项</option>
-                  <option value="update">使用本批次更新重复项</option>
+                  <option value="update">使用本批次更新重复项（覆盖需确认）</option>
                 </select>
               </label>
               <div>
-                <small>跳过项和空白值不会写入；整个批次在同一事务内提交。</small>
+                <small>
+                  空白不覆盖已有数据；整个批次在同一事务内提交，失败自动回滚。
+                </small>
                 <button
                   className="data-import-primary"
-                  disabled={Boolean(busy) || batch.status !== 'reviewing' || batch.errorCount > 0}
-                  onClick={commit}
+                  disabled={
+                    Boolean(busy) ||
+                    batch.status !== 'reviewing' ||
+                    batch.errorCount > 0 ||
+                    unconfirmedPersons.length > 0
+                  }
+                  onClick={() => void commit()}
                 >
                   <Database size={17} />
                   {busy === 'commit'
                     ? '正在写入…'
                     : batch.status === 'committed'
                       ? '已写入数据库'
-                      : '确认写入数据库'}
+                      : '确认导入'}
                 </button>
               </div>
             </footer>
           </section>
         </>
+      )}
+
+      {duplicateDialogOpen && batch && (
+        <div
+          className="data-import-dialog-backdrop"
+          role="presentation"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setDuplicateDialogOpen(false);
+          }}
+        >
+          <section className="data-import-dialog" role="dialog" aria-modal="true">
+            <header>
+              <div>
+                <span>DUPLICATE FILE</span>
+                <h2>该文件已上传过</h2>
+                <p>
+                  “{batch.filename}”已有导入批次。可继续上次校对，或按当前项目、队伍和默认日期重新解析。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="data-import-icon-button"
+                onClick={() => setDuplicateDialogOpen(false)}
+                aria-label="关闭"
+              >
+                <X size={19} />
+              </button>
+            </header>
+            <div className="data-import-dialog-actions">
+              <button
+                type="button"
+                className="data-import-primary"
+                onClick={() => {
+                  setDuplicateDialogOpen(false);
+                  startReview(batch);
+                  setMessage('已打开原有导入批次，可继续上次校对。');
+                }}
+              >
+                继续上次校对
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => {
+                  setDuplicateDialogOpen(false);
+                  void analyze({ reparse: true });
+                }}
+              >
+                重新解析文件
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {personDialogOpen && batch && (
+        <div
+          className="data-import-dialog-backdrop"
+          role="presentation"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget && !busy) setPersonDialogOpen(false);
+          }}
+        >
+          <section
+            className="data-import-dialog data-import-person-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="data-import-person-title"
+          >
+            <header>
+              <div>
+                <span>PERSON CONFIRM</span>
+                <h2 id="data-import-person-title">待确认运动员</h2>
+                <p>
+                  已匹配 {batch.counts.personMatched} 人 · 待新建 {batch.counts.personPending} 人 ·
+                  身份待确认 {batch.counts.personAmbiguous} 人。
+                  只需姓名与所属队伍即可最小建档；关闭本窗口不会丢失已确认内容。
+                </p>
+              </div>
+              <button
+                type="button"
+                className="data-import-icon-button"
+                onClick={() => setPersonDialogOpen(false)}
+                disabled={Boolean(busy)}
+                aria-label="关闭人员确认"
+              >
+                <X size={19} />
+              </button>
+            </header>
+            <div className="data-import-person-toolbar">
+              <div className="data-import-filters">
+                {(
+                  [
+                    ['all', '全部'],
+                    ['pending', '待建档'],
+                    ['ambiguous', '身份待确认'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={personTab === key ? 'active' : ''}
+                    onClick={() => setPersonTab(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <label className="data-import-search">
+                <Search size={15} />
+                <input
+                  value={personQuery}
+                  onChange={(event) => setPersonQuery(event.target.value)}
+                  placeholder="搜索姓名或队伍"
+                />
+              </label>
+              <div className="data-import-candidate-bulk">
+                <select
+                  value={bulkCandidateTeam}
+                  disabled={batch.status !== 'reviewing' || Boolean(busy)}
+                  onChange={(event) => setBulkCandidateTeam(event.target.value)}
+                >
+                  <option value="">批量选择所属队伍</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.name}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={batch.status !== 'reviewing' || Boolean(busy)}
+                  onClick={applyBulkCandidateTeam}
+                >
+                  批量应用
+                </button>
+                <button
+                  type="button"
+                  disabled={batch.status !== 'reviewing' || Boolean(busy)}
+                  onClick={batchConfirmNoConflict}
+                >
+                  批量确认无冲突
+                </button>
+              </div>
+            </div>
+            <div className="data-import-person-body">
+              <div className="data-import-person-list">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>姓名</th>
+                      <th>项目</th>
+                      <th>所属队伍</th>
+                      <th>处理方式</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePersons.map((candidate) => (
+                      <tr
+                        key={candidate.id}
+                        className={[
+                          selectedPersonId === candidate.id ? 'selected' : '',
+                          candidate.excluded ? 'excluded' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        onClick={() => setSelectedPersonId(candidate.id)}
+                      >
+                        <td>{candidate.name}</td>
+                        <td>{candidate.project}</td>
+                        <td>{candidate.team || '—'}</td>
+                        <td>
+                          <span
+                            className={`person-state ${
+                              candidate.excluded
+                                ? 'excluded'
+                                : candidate.status === 'matched' || candidate.matchedAthleteId
+                                  ? 'matched'
+                                  : candidate.confirmed
+                                    ? 'confirmed'
+                                    : 'pending'
+                            }`}
+                          >
+                            {candidate.excluded
+                              ? '已排除'
+                              : candidate.status === 'created'
+                                ? '已创建'
+                                : candidate.status === 'matched' && candidate.confirmed
+                                  ? '已匹配'
+                                  : candidate.matchedAthleteId
+                                    ? '关联已有'
+                                    : candidate.suggested.length
+                                      ? '身份待确认'
+                                      : candidate.confirmed
+                                        ? '待建档（已确认）'
+                                        : '待建档'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                    {!visiblePersons.length && (
+                      <tr>
+                        <td colSpan={4} className="data-import-empty">
+                          没有符合条件的人员。
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <aside className="data-import-person-detail">
+                {!selectedPerson ? (
+                  <p className="data-import-empty">点击左侧人员查看和修改必要信息。</p>
+                ) : (
+                  <>
+                    <h3>{selectedPerson.name}</h3>
+                    {selectedPerson.messages.map((entry, index) => (
+                      <p key={index} className="data-import-person-hint">
+                        {entry}
+                      </p>
+                    ))}
+                    <label>
+                      <span>姓名</span>
+                      <input
+                        disabled={
+                          batch.status !== 'reviewing' ||
+                          selectedPerson.status !== 'pending' ||
+                          Boolean(selectedPerson.matchedAthleteId) ||
+                          selectedPerson.excluded
+                        }
+                        value={selectedPerson.name}
+                        onChange={(event) =>
+                          patchAthleteCandidate(selectedPerson.id, { name: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>性别（可留空）</span>
+                      <select
+                        disabled={
+                          batch.status !== 'reviewing' ||
+                          selectedPerson.status !== 'pending' ||
+                          Boolean(selectedPerson.matchedAthleteId) ||
+                          selectedPerson.excluded
+                        }
+                        value={selectedPerson.gender}
+                        onChange={(event) =>
+                          patchAthleteCandidate(selectedPerson.id, { gender: event.target.value })
+                        }
+                      >
+                        <option value="">暂不填写</option>
+                        <option>男</option>
+                        <option>女</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>处理方式</span>
+                      <select
+                        disabled={batch.status !== 'reviewing' || selectedPerson.status !== 'pending'}
+                        value={
+                          selectedPerson.excluded
+                            ? 'exclude'
+                            : selectedPerson.matchedAthleteId
+                              ? 'link'
+                              : 'create'
+                        }
+                        onChange={(event) => {
+                          const mode = event.target.value;
+                          if (mode === 'exclude')
+                            patchAthleteCandidate(selectedPerson.id, {
+                              excluded: true,
+                              confirmed: true,
+                            });
+                          else if (mode === 'link')
+                            patchAthleteCandidate(selectedPerson.id, {
+                              excluded: false,
+                              matchedAthleteId: selectedPerson.suggested[0]?.id ?? null,
+                              confirmed: false,
+                            });
+                          else
+                            patchAthleteCandidate(selectedPerson.id, {
+                              excluded: false,
+                              matchedAthleteId: null,
+                              confirmed: false,
+                            });
+                        }}
+                      >
+                        <option value="create">新建档案（最小建档）</option>
+                        <option value="link">关联已有运动员</option>
+                        <option value="exclude">排除此人（其记录一并排除）</option>
+                      </select>
+                    </label>
+                    {!selectedPerson.excluded && selectedPerson.matchedAthleteId !== null ? (
+                      <label>
+                        <span>关联已有运动员</span>
+                        <select
+                          disabled={batch.status !== 'reviewing'}
+                          value={selectedPerson.matchedAthleteId || ''}
+                          onChange={(event) =>
+                            patchAthleteCandidate(selectedPerson.id, {
+                              matchedAthleteId: Number(event.target.value) || null,
+                              confirmed: false,
+                            })
+                          }
+                        >
+                          <option value="">请选择</option>
+                          {(selectedPerson.suggested.length
+                            ? selectedPerson.suggested.map((entry) => ({
+                                id: entry.id,
+                                name: entry.name,
+                                team: entry.team,
+                              }))
+                            : athletes
+                                .filter((athlete) => athlete.project === selectedPerson.project)
+                                .map((athlete) => ({
+                                  id: athlete.id,
+                                  name: athlete.name,
+                                  team: athlete.team,
+                                }))
+                          ).map((entry) => (
+                            <option key={entry.id} value={entry.id}>
+                              {entry.name} · {entry.team || '无队伍'}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {!selectedPerson.excluded && !selectedPerson.matchedAthleteId ? (
+                      <label>
+                        <span>所属队伍（必选）</span>
+                        <select
+                          disabled={batch.status !== 'reviewing'}
+                          value={selectedPerson.team}
+                          onChange={(event) =>
+                            patchAthleteCandidate(selectedPerson.id, {
+                              team: event.target.value,
+                              confirmed: false,
+                            })
+                          }
+                        >
+                          <option value="">请选择所属队伍</option>
+                          {teams.map((team) => (
+                            <option key={team.id} value={team.name}>
+                              {team.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {selectedPerson.status === 'pending' && !selectedPerson.excluded && (
+                      <button
+                        type="button"
+                        className="data-import-primary"
+                        disabled={
+                          Boolean(busy) ||
+                          (selectedPerson.matchedAthleteId
+                            ? false
+                            : !selectedPerson.team || selectedPerson.suggested.length > 0)
+                        }
+                        onClick={() => {
+                          patchAthleteCandidate(selectedPerson.id, { confirmed: true });
+                          setMessage(`已确认“${selectedPerson.name}”，记得保存并继续。`);
+                        }}
+                      >
+                        <CheckCircle2 size={16} />
+                        {selectedPerson.confirmed ? '已确认' : '确认此人'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </aside>
+            </div>
+            <footer className="data-import-dialog-actions">
+              <button type="button" disabled={Boolean(busy)} onClick={() => setPersonDialogOpen(false)}>
+                返回上传
+              </button>
+              <button
+                type="button"
+                className="data-import-primary"
+                disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                onClick={() => void confirmAndContinue()}
+              >
+                <Users size={16} />
+                确认人员并继续
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+
+      {confirmDialogOpen && batch && summaryPreview && (
+        <div
+          className="data-import-dialog-backdrop"
+          role="presentation"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget && !busy) setConfirmDialogOpen(false);
+          }}
+        >
+          <section className="data-import-dialog" role="dialog" aria-modal="true">
+            <header>
+              <div>
+                <span>FINAL CONFIRM</span>
+                <h2>确认导入</h2>
+                <p>以下数量来自最终校对结果，而非原始 Excel 行数；整个批次在同一事务内提交。</p>
+              </div>
+              <button
+                type="button"
+                className="data-import-icon-button"
+                onClick={() => setConfirmDialogOpen(false)}
+                disabled={Boolean(busy)}
+                aria-label="关闭确认"
+              >
+                <X size={19} />
+              </button>
+            </header>
+            <div className="data-import-summary">
+              <div>
+                <span>新建运动员</span>
+                <strong>{summaryPreview.createPersons}</strong>
+                <small>最小建档</small>
+              </div>
+              <div>
+                <span>关联已有运动员</span>
+                <strong>{summaryPreview.linkPersons}</strong>
+                <small>不覆盖已有档案</small>
+              </div>
+              <div>
+                <span>新增记录</span>
+                <strong>{summaryPreview.newRecords}</strong>
+                <small>训练/测试/恢复等</small>
+              </div>
+              <div className="warning">
+                <span>更新已有记录</span>
+                <strong>{summaryPreview.updateRecords}</strong>
+                <small>仅更新提供的字段</small>
+              </div>
+              <div>
+                <span>跳过重复记录</span>
+                <strong>{summaryPreview.skipRecords}</strong>
+                <small>保留数据库原值</small>
+              </div>
+              <div className="danger">
+                <span>覆盖档案字段</span>
+                <strong>{summaryPreview.overwriteFields}</strong>
+                <small>原值→新值已展示</small>
+              </div>
+            </div>
+            <div className="data-import-dialog-actions">
+              <button type="button" disabled={Boolean(busy)} onClick={() => setConfirmDialogOpen(false)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="data-import-primary"
+                disabled={Boolean(busy)}
+                onClick={() => void doCommit()}
+              >
+                <Database size={16} />
+                确认导入
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </PageContainer>
   );

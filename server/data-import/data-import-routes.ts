@@ -609,17 +609,195 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
   return workbook;
 }
 
+export type TemplateKind = 'profile' | 'training' | 'test' | 'unified';
+
+const PURPOSE_SHEETS: Record<Exclude<TemplateKind, 'unified'>, string[]> = {
+  profile: ['运动员信息'],
+  training: ['训练课次', '力量训练组次', '恢复状态'],
+  test: ['测试指标', 'FMS测试', '冠军模型测试'],
+};
+
+const PURPOSE_TITLES: Record<TemplateKind, string> = {
+  profile: '队员资料模板',
+  training: '训练记录模板',
+  test: '测试成绩模板',
+  unified: '统一数据模板',
+};
+
+/**
+ * 分用途模板：复用统一模板的表头与解析规则，并按当前项目和权限预填
+ * 系统运动员编号、姓名、所属队伍，教练无需导出历史数据即可填报。
+ */
+export function buildPurposeTemplate(
+  kind: Exclude<TemplateKind, 'unified'>,
+  project: string,
+  athletes: Array<{ id: number; name: string; team: string }>
+) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = '竞迹训练监控系统';
+  const instructions = workbook.addWorksheet('填写说明');
+  instructions.getCell('A1').value = `竞迹训练监控系统｜${PURPOSE_TITLES[kind]}`;
+  instructions.getCell('A3').value =
+    '第1—3行为表头请勿删除；已按当前项目和队伍预填系统运动员编号、姓名和所属队伍。空白表示未提供，不会覆盖已有数据；日期请使用YYYY-MM-DD。';
+  instructions.getColumn(1).width = 110;
+  for (const sheetName of PURPOSE_SHEETS[kind]) {
+    const baseHeaders =
+      unifiedExportHeaders.find(([name]) => name === sheetName)?.[1] || ['姓名', '日期'];
+    const headers = ['系统运动员编号', ...baseHeaders];
+    const sheet = workbook.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 3 }] });
+    sheet.mergeCells(1, 1, 1, headers.length);
+    sheet.getCell('A1').value = sheetName;
+    sheet.getCell('A1').font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 14 };
+    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF246BFD' } };
+    sheet.getCell('A2').value =
+      '由竞迹训练监控系统生成；保留表头后可直接导入。新运动员可不填系统运动员编号，仅填姓名和所属队伍。';
+    const header = sheet.getRow(3);
+    header.values = headers;
+    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172033' } };
+    header.alignment = { horizontal: 'center', vertical: 'middle' };
+    headers.forEach((label, index) => {
+      sheet.getColumn(index + 1).width = /备注|内容|地址|计划/.test(label)
+        ? 24
+        : /姓名|日期|项目|队伍|类型|状态|编号/.test(label)
+          ? 16
+          : 13;
+    });
+    athletes.forEach((athlete, index) => {
+      const row = sheet.getRow(index + 4);
+      const values = headers.map((label) => {
+        if (label === '系统运动员编号') return athlete.id;
+        if (label === '姓名') return athlete.name;
+        if (label === '所属队伍') return athlete.team;
+        if (label === '运动项目') return project;
+        return null;
+      });
+      row.values = values;
+    });
+  }
+  return workbook;
+}
+
+export function buildImportErrorReport(batch: {
+  filename: string;
+  items: Array<{
+    itemType: string;
+    rawAthleteName: string;
+    eventDate: string;
+    metricLabel: string;
+    exerciseName: string;
+    sourceSheet: string;
+    sourceAddress: string;
+    rawValue: string;
+    quality: string;
+    messages: string[];
+  }>;
+}) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = '竞迹训练监控系统';
+  const sheet = workbook.addWorksheet('错误清单');
+  const headers = ['工作表', '单元格', '记录类型', '运动员', '日期', '字段/指标', '原值', '状态', '问题原因'];
+  sheet.getRow(1).values = headers;
+  sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172033' } };
+  headers.forEach((label, index) => {
+    sheet.getColumn(index + 1).width = label === '问题原因' ? 48 : 16;
+  });
+  const rows = batch.items.filter(
+    (item) => item.quality === 'error' || item.quality === 'warning' || item.itemType === 'invalid_row'
+  );
+  rows.forEach((item, index) => {
+    sheet.getRow(index + 2).values = [
+      item.sourceSheet,
+      item.sourceAddress,
+      item.itemType,
+      item.rawAthleteName,
+      item.eventDate,
+      item.exerciseName || item.metricLabel,
+      item.rawValue,
+      item.quality === 'error' ? '错误' : item.quality === 'warning' ? '警告' : '已跳过',
+      item.messages.join('；'),
+    ];
+  });
+  return workbook;
+}
+
 export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-import/template',
     requireAuth,
     requireRole('SCC', 'REG', 'TD', 'DMD'),
-    (_req, res) => {
-      // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
-      const templatePath = unifiedTemplatePath();
-      if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
-      res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.download(templatePath, unifiedTemplateName);
+    (req, res) => {
+      const kind = (cleanString(req.query.kind) || 'unified') as TemplateKind;
+      if (!['profile', 'training', 'test', 'unified'].includes(kind))
+        return res.status(400).json({ message: '模板类型无效。' });
+      try {
+        if (kind === 'unified') {
+          // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
+          const templatePath = unifiedTemplatePath();
+          if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
+          res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          return res.download(templatePath, unifiedTemplateName);
+        }
+        const project = normalizeProject(cleanString(req.query.project));
+        if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
+        const scope = dataImportScope(req.authUser!, project);
+        if (!scope.allowed)
+          return res.status(403).json({ message: '当前账号无权导出该项目模板。' });
+        const athletes = strengthImportCandidates(req.authUser!)
+          .filter((athlete) => athlete.project === project)
+          .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
+        buildPurposeTemplate(kind, project, athletes)
+          .xlsx.writeBuffer()
+          .then((buffer) => {
+            const filename = `竞迹${project}${PURPOSE_TITLES[kind]}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            res.setHeader(
+              'Content-Type',
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            );
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+            );
+            res.send(Buffer.from(buffer));
+          })
+          .catch((error) => {
+            res
+              .status(500)
+              .json({ message: error instanceof Error ? error.message : '模板生成失败。' });
+          });
+      } catch (error) {
+        res
+          .status(500)
+          .json({ message: error instanceof Error ? error.message : '模板生成失败。' });
+      }
+    }
+  );
+
+  app.get(
+    '/api/data-import/batches/:id/errors',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    async (req, res) => {
+      try {
+        const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
+        const workbook = buildImportErrorReport(batch);
+        const buffer = await workbook.xlsx.writeBuffer();
+        const filename = `竞迹导入问题清单_${batch.filename.replace(/\.(xls|xlsx)$/i, '')}.xlsx`;
+        res.setHeader(
+          'Content-Type',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+        );
+        res.send(Buffer.from(buffer));
+      } catch (error) {
+        res
+          .status(400)
+          .json({ message: error instanceof Error ? error.message : '问题清单导出失败。' });
+      }
     }
   );
 
@@ -683,6 +861,8 @@ export function registerDataImportRoutes(app: Express) {
           defaultArea: scope.defaultArea,
           userId: req.authUser!.id,
           athletes,
+          allowedTeams: scope.allowedTeams,
+          reparse: cleanString(req.body?.reparse) === '1',
         });
         res.json({ batch });
       } catch (error) {
@@ -784,6 +964,9 @@ export function registerDataImportRoutes(app: Express) {
           batchId: batch.id,
           userId: req.authUser!.id,
           allowedTeams: scope.allowedTeams,
+          athletes: strengthImportCandidates(req.authUser!).filter(
+            (athlete) => athlete.project === batch.project
+          ),
           corrections,
         });
         res.json({ batch: updated });
@@ -815,7 +998,10 @@ export function registerDataImportRoutes(app: Express) {
           conflictPolicy,
         });
         res.json({
-          message: `已创建${result.createdAthletes || 0}名无账号运动员，写入${result.imported}条数据，跳过${result.skipped}条。`,
+          message:
+            `新建运动员${result.createdAthletes || 0}人、关联已有${result.linkedAthletes || 0}人；` +
+            `新增记录${result.createdRecords || 0}条、更新${result.updatedRecords || 0}条、跳过${result.skipped}条；` +
+            `补全档案字段${result.filledProfileFields || 0}项、覆盖${result.overwrittenProfileFields || 0}项。`,
           ...result,
         });
       } catch (error) {

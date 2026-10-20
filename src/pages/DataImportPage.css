@@ -37,7 +37,8 @@
 
 .data-import-hero-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 180px));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  max-width: 980px;
   align-items: stretch;
   gap: 8px;
 }
@@ -340,7 +341,7 @@
 .data-import-summary {
   margin-top: 18px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -1033,4 +1034,338 @@
 .data-import-discard:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ---- 数据导入流程重构：弹窗、分页、人员确认与冲突展示 ---- */
+
+.data-import-outline {
+  margin-left: auto;
+  min-height: 30px;
+  padding: 6px 12px;
+  border: 1px solid #cfdcdd;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #17645c;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.data-import-outline:hover:not(:disabled) {
+  border-color: #7fc4bb;
+  background: #f2fbfa;
+}
+
+.data-import-outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.data-import-new-tag {
+  color: #1a7f72;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.data-import-gate {
+  display: block;
+  margin-top: 6px;
+  color: #b6473a;
+  font-size: 11px;
+}
+
+.data-import-gate button {
+  border: none;
+  padding: 0;
+  color: #17645c;
+  background: none;
+  font-size: 11px;
+  font-weight: 750;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.import-messages .conflict-overwrite {
+  color: #b6473a;
+  font-weight: 700;
+}
+
+.data-import-pagination {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.data-import-pagination small {
+  color: #7b8f94;
+  font-size: 10px;
+}
+
+.data-import-pagination > div {
+  display: flex;
+  gap: 6px;
+}
+
+.data-import-pagination button {
+  width: 30px;
+  height: 28px;
+  border: 1px solid #cfdcdd;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  cursor: pointer;
+}
+
+.data-import-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.data-import-dialog-backdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: rgb(4 35 45 / 56%);
+  backdrop-filter: blur(3px);
+}
+
+.data-import-dialog {
+  width: min(1120px, 96vw);
+  max-height: calc(100vh - 48px);
+  border: 1px solid rgb(255 255 255 / 40%);
+  border-radius: 14px;
+  overflow: auto;
+  color: #173b43;
+  background: #f4f8f8;
+  box-shadow: 0 28px 80px rgb(3 33 43 / 28%);
+}
+
+.data-import-dialog > header {
+  min-height: 78px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #d7e3e4;
+  background: #fff;
+}
+
+.data-import-dialog > header span {
+  color: #0d9488;
+  font:
+    800 9px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.18em;
+}
+
+.data-import-dialog h2 {
+  margin: 3px 0 0;
+  font-size: 19px;
+}
+
+.data-import-dialog header p {
+  margin: 3px 0 0;
+  max-width: 720px;
+  color: #6e8389;
+  font-size: 10px;
+}
+
+.data-import-icon-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d5e1e2;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  cursor: pointer;
+}
+
+.data-import-dialog-actions {
+  padding: 14px 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #d7e3e4;
+  background: #fff;
+}
+
+.data-import-dialog-actions > button {
+  min-height: 34px;
+  padding: 8px 16px;
+  border: 1px solid #cfdcdd;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.data-import-dialog-actions > button.data-import-primary {
+  border-color: #148a81;
+  color: #fff;
+  background: #148a81;
+}
+
+.data-import-dialog .data-import-summary {
+  margin: 16px 18px;
+}
+
+.data-import-person-toolbar {
+  padding: 12px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #dfe9ea;
+}
+
+.data-import-person-body {
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
+  gap: 14px;
+}
+
+.data-import-person-list {
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid #dce7e8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.data-import-person-list table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.data-import-person-list th,
+.data-import-person-list td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e8f0f0;
+  text-align: left;
+}
+
+.data-import-person-list th {
+  position: sticky;
+  top: 0;
+  color: #6c8288;
+  background: #f7fbfb;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.data-import-person-list tbody tr {
+  cursor: pointer;
+}
+
+.data-import-person-list tbody tr:hover {
+  background: #f2faf9;
+}
+
+.data-import-person-list tbody tr.selected {
+  background: #e3f4f1;
+}
+
+.data-import-person-list tbody tr.excluded {
+  opacity: 0.55;
+}
+
+.person-state {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.person-state.pending {
+  color: #9a6208;
+  background: #fdf1da;
+}
+
+.person-state.confirmed {
+  color: #147065;
+  background: #dff2ee;
+}
+
+.person-state.matched {
+  color: #20647c;
+  background: #dff0f6;
+}
+
+.person-state.excluded {
+  color: #8d4a41;
+  background: #f7e5e2;
+}
+
+.data-import-person-detail {
+  padding: 14px;
+  border: 1px solid #dce7e8;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+}
+
+.data-import-person-detail h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.data-import-person-detail label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #5d747a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.data-import-person-detail input,
+.data-import-person-detail select {
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid #cfdcdd;
+  border-radius: 8px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.data-import-person-hint {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: #8a5a10;
+  background: #fdf4e2;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.data-import-result {
+  margin-top: 18px;
+}
+
+@media (width <= 880px) {
+  .data-import-person-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .data-import-hero-actions {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
 }

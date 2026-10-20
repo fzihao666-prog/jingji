@@ -40,12 +40,19 @@ export const strengthImportCache = new Map<
 export function strengthImportCandidates(user: AuthUser) {
   const ids = accessibleAthleteIds(user);
   if (!ids.length)
-    return [] as Array<{ id: number; name: string; project: string; team: string; gender: string }>;
+    return [] as Array<{
+      id: number;
+      name: string;
+      project: string;
+      team: string;
+      gender: string;
+      birthDate: string;
+    }>;
   const placeholders = ids.map(() => '?').join(',');
   return db
     .prepare(
       `
-    SELECT id, name, project, team, gender
+    SELECT id, name, project, team, gender, COALESCE(birth_date, '') AS birthDate
     FROM athletes WHERE id IN (${placeholders}) AND active = 1
     ORDER BY name, id
   `
@@ -56,6 +63,7 @@ export function strengthImportCandidates(user: AuthUser) {
     project: string;
     team: string;
     gender: string;
+    birthDate: string;
   }>;
 }
 
