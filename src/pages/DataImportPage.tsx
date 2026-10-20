@@ -372,7 +372,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   return (
     <PageContainer className="data-import-page">
       <PageHeader
-        className="data-management-header"
+        className="data-management-header data-import-header"
         eyebrow="DATA IMPORT"
         title="数据导入"
         actions={
