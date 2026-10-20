@@ -16,8 +16,13 @@
   <block>
     <view class="card profile-hero">
       <view class="profile-photo"><image wx:if="{{photoUrl}}" src="{{photoUrl}}" mode="aspectFill" /><view wx:else class="profile-photo-placeholder">{{athleteInitial}}</view></view>
-      <view class="profile-hero-info"><view class="profile-name">{{athleteName}}</view><text class="profile-line">{{athleteMeta}}</text><text class="profile-line">{{athleteSubline}}</text></view>
-      <button wx:if="{{(canEditSelf || canCoachFill) && selectedAthleteId}}" class="hero-edit-button" bindtap="editMyProfile"><text class="hero-edit-icon">✎</text><text>编辑</text></button>
+      <view class="profile-hero-info">
+        <view class="profile-name-row">
+          <view class="profile-name">{{athleteName}}</view>
+          <button wx:if="{{(canEditSelf || canCoachFill) && selectedAthleteId}}" class="hero-edit-button" hover-class="hero-edit-button-pressed" bindtap="editMyProfile" aria-label="编辑运动员资料"><text class="hero-edit-icon">✎</text><text>编辑</text></button>
+        </view>
+        <text class="profile-line">{{athleteMeta}}</text><text class="profile-line">{{athleteSubline}}</text>
+      </view>
     </view>
 
     <button wx:if="{{selectedAthleteId}}" class="secondary-button profile-report-entry" bindtap="openTrainingReport">训练报告</button>
