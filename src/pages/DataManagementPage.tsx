@@ -60,7 +60,7 @@ export function DataManagementPage({ user }: Props) {
   };
   return (
     <PageContainer className="data-import-page">
-      <PageHeader className="data-import-hero" eyebrow="DATA MANAGEMENT" title="数据管理" />
+      <PageHeader className="data-management-header" eyebrow="DATA MANAGEMENT" title="数据管理" />
       {message && <p className="data-import-message">{message}</p>}
       <div className="data-import-grid">
         <section className="data-import-upload-card">

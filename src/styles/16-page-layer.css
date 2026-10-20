@@ -497,3 +497,38 @@
   }
 }
 
+
+/* 数据管理四个二级页面共用标题栏。 */
+.app-page-header.data-management-header {
+  min-width: 0;
+  min-height: 142px;
+  padding: 26px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-radius: 20px;
+  color: #fff;
+  background: linear-gradient(125deg, #0c3642 0%, #105d63 62%, #148d83 100%);
+  box-shadow: 0 18px 42px rgb(7 48 58 / 16%);
+}
+
+.data-management-header h1 {
+  color: #fff;
+}
+
+.data-management-header .app-page-header-eyebrow {
+  color: #71d7c8;
+  font:
+    800 10px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.18em;
+}
+
+@media (width <= 720px) {
+  .app-page-header.data-management-header {
+    padding: 20px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

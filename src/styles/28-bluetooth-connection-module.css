@@ -9,16 +9,6 @@
   overflow-x: hidden;
 }
 
-.bluetooth-heading {
-  min-width: 0;
-  align-items: flex-start;
-  gap: 18px;
-}
-
-.bluetooth-heading > div:first-child {
-  min-width: 0;
-}
-
 .bluetooth-actions {
   flex: 0 0 auto;
   display: flex;
@@ -223,10 +213,6 @@
 }
 
 @media (width <= 820px) {
-  .bluetooth-heading {
-    align-items: stretch;
-  }
-
   .bluetooth-actions {
     justify-content: stretch;
   }

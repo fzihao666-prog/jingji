@@ -4,20 +4,6 @@
   color: #12303b;
 }
 
-.data-import-hero {
-  min-height: 142px;
-  padding: 26px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  border-radius: 20px;
-  color: #fff;
-  background: linear-gradient(125deg, #0c3642 0%, #105d63 62%, #148d83 100%);
-  box-shadow: 0 18px 42px rgb(7 48 58 / 16%);
-}
-
-.data-import-hero > div:first-child > span,
 .data-import-review-head > div:first-child > span {
   color: #71d7c8;
   font:
@@ -762,12 +748,6 @@
 }
 
 @media (width <= 720px) {
-  .data-import-hero {
-    padding: 20px;
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .data-import-hero-actions {
     width: 100%;
     flex-direction: column;
