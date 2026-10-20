@@ -21,6 +21,7 @@ module.exports = {
   reportPreview(id, range) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/preview?${query(range)}`); },
   reportHistory(id) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`); },
   reportDetail(id, reportId) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/${encodeURIComponent(reportId)}`); },
+  reportPdf(id, reportId) { return downloadFile(`/api/athletes/${encodeURIComponent(id)}/reports/${encodeURIComponent(reportId)}/pdf`); },
   reportCommentary(id, range, fingerprint) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/commentary`, { method: 'POST', timeout: 240000, data: { range, fingerprint, consent: true } }); },
   saveReport(id, range, fingerprint, commentary) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`, { method: 'POST', data: { range, fingerprint, commentary, confirmed: true } }); },
   assetUrl,

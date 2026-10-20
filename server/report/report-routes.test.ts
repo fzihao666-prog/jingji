@@ -67,6 +67,24 @@ async function setup() {
   return { db, state, base, getPreview, post };
 }
 describe('训练报告 API 权限与失败边界', () => {
+  it('PDF仅导出授权的历史快照，拒绝越权和无效编号', async () => {
+    const { base, db, post, getPreview, state } = await setup();
+    const preview = await getPreview();
+    const saved = savedReportSchema.parse(await (await post('', { range, fingerprint: preview.fingerprint, commentary, confirmed: true })).json());
+    db.exec('DELETE FROM training_sessions');
+    const response = await fetch(`${base}/${saved.id}/pdf`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/pdf');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-disposition')).toContain('attachment;');
+    expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await fetch(`${base}/${saved.id}/pdf`, { headers: { 'x-test-deny': 'true' } })).status).toBe(401);
+    expect((await fetch(`${base.replace('/1/', '/2/')}/${saved.id}/pdf`)).status).toBe(403);
+    expect((await fetch(`${base}/bad/pdf`)).status).toBe(400);
+    expect((await fetch(`${base}/00000000-0000-4000-8000-000000000001/pdf`)).status).toBe(404);
+    state.authorized = false;
+    expect((await fetch(`${base}/${saved.id}/pdf`)).status).toBe(403);
+  });
   it('预览、确认、两端共用历史、不可改写快照', async () => {
     const { base, db, getPreview, post } = await setup();
     const preview = await getPreview();

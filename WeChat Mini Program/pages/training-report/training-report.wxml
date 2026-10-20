@@ -11,7 +11,10 @@
   <view wx:if="{{showHistory}}" class="card report-history">
     <view class="section-head-title">历史报告</view>
     <view wx:if="{{!history.length}}" class="report-history-empty">暂无报告</view>
-    <button wx:for="{{history}}" wx:key="id" class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}</button></view>
+    <view wx:for="{{history}}" wx:key="id" class="history-row">
+      <button class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}</button>
+      <button class="history-export" disabled="{{busy}}" loading="{{exportingId === item.id}}" data-id="{{item.id}}" bindtap="exportPdf" aria-label="导出 {{item.from}} 至 {{item.to}} 的PDF报告">{{exportingId === item.id ? '导出中' : '导出 PDF'}}</button>
+    </view></view>
   <block wx:if="{{report}}">
     <view class="report-note">{{report.range.from}} — {{report.range.to}}<text wx:if="{{saved}}"> · 已确认快照</text></view>
     <view class="report-kpis"><view wx:for="{{view.kpis}}" wx:key="key" class="card report-kpi"><text>{{item.label}}</text><view class="report-value">{{item.value}}<text>{{item.unit}}</text></view><text class="report-note">前期 {{item.previous}}</text><text class="report-note">{{item.coverage}}</text></view></view>

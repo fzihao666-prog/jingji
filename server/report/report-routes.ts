@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { AuthUser } from '../core/shared-server.ts';
 import { reportRangeSchema, reportCommentarySchema } from '../../shared/training-report.ts';
 import { readReport, reportFingerprint, reportAiInput } from './report-service.ts';
+import { renderReportPdf } from './report-pdf.ts';
 
 type Dependencies = {
   db: DatabaseSync;
@@ -173,6 +174,27 @@ export function registerReportRoutes(app: Express, deps: Dependencies) {
         )
         .all(id, project)
     );
+  });
+  app.get(`${root}/:reportId/pdf`, deps.requireAuth, authorize, (req, res) => {
+    const parsed = z.string().max(36).uuid().safeParse(req.params.reportId);
+    if (!parsed.success) return res.status(400).json({ message: '报告编号无效。' });
+    if (limited(`pdf:${req.authUser!.id}`, 6, 60000) || limited('pdf:global', 20, 60000))
+      return res.status(429).json({ message: '导出过于频繁，请稍后重试。' });
+    const { id, project } = res.locals.reportScope as { id: number; project: string };
+    const row = db.prepare(`SELECT id, created_at AS createdAt, data_json AS data, commentary_json AS commentary
+      FROM training_reports WHERE id = ? AND athlete_id = ? AND project = ?`)
+      .get(parsed.data, id, project) as { id: string; createdAt: string; data: string; commentary: string } | undefined;
+    if (!row) return res.status(404).json({ message: '报告不存在或不在当前权限范围。' });
+    try {
+      if (row.data.length > 2_000_000 || row.commentary.length > 10000) throw new Error('snapshot too large');
+      const pdf = renderReportPdf({ ...row, data: JSON.parse(row.data), commentary: JSON.parse(row.commentary) }, id);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="jingji-report-${parsed.data}.pdf"`);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.send(pdf);
+    } catch {
+      return res.status(503).json({ message: 'PDF 导出暂不可用，请稍后重试。' });
+    }
   });
   app.get(`${root}/:reportId`, deps.requireAuth, authorize, (req, res) => {
     const parsed = z.string().max(36).uuid().safeParse(req.params.reportId);

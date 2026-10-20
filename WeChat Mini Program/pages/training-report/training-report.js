@@ -8,7 +8,7 @@ const emptyCommentary = () => ({ highlights: '', concerns: '', suggestions: '' }
 Page({
   data: { athleteId: 0, athleteName: '', projectName: '', busy: false, error: '', saved: '',
     range: reportPeriod('week', todayBeijing()), kindIndex: 0, kinds: ['周报告', '月报告', '阶段报告'],
-    report: null, view: null, history: [], showHistory: false, showDaily: false, commentary: emptyCommentary(),
+    report: null, view: null, history: [], showHistory: false, showDaily: false, exportingId: '', commentary: emptyCommentary(),
     commentaryFields: [{ key: 'highlights', label: '主要表现' }, { key: 'concerns', label: '需要关注' }, { key: 'suggestions', label: '下一步建议' }] },
   onLoad(options) {
     this._alive = true;
@@ -107,6 +107,24 @@ Page({
       this.setData({ report: result.data, view: reportView(result.data), range: result.data.range, kindIndex: kinds.indexOf(result.data.range.kind),
         saved: result.createdAt, showHistory: false,
         commentary: Object.fromEntries(Object.entries(result.commentary).map(([key, values]) => [key, values.join('\n')])) });
+    });
+  },
+  exportPdf(event) {
+    this.run(async () => {
+      const id = event.currentTarget.dataset.id;
+      if (!this.data.athleteId || !this.data.history.some(row => row.id === id)) return;
+      this.setData({ exportingId: id });
+      try {
+        const filePath = await api.reportPdf(this.data.athleteId, id);
+        if (!this._alive) return;
+        await new Promise((resolve, reject) => wx.openDocument({
+          filePath, fileType: 'pdf', showMenu: true,
+          success: resolve,
+          fail: () => reject(new Error('PDF 已下载，但打开失败，请重试。'))
+        }));
+      } finally {
+        if (this._alive) this.setData({ exportingId: '' });
+      }
     });
   },
   toggleDaily() { this.setData({ showDaily: !this.data.showDaily }); },

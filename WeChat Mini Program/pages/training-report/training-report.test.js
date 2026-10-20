@@ -10,12 +10,14 @@ function setup() {
     totals: { sessions: 1, duration: 60, distance: null, srpe: null, durationCount: 1, distanceCount: 0, srpeCount: 0 }, previous: {} };
   const preview = { data: report, fingerprint: 'a'.repeat(64) };
   const api = { reportPreview: vi.fn(async () => preview),
+    reportPdf: vi.fn(async () => '/tmp/report.pdf'),
     reportCommentary: vi.fn(async () => ({ highlights: ['表现'], concerns: [], suggestions: [] })),
     saveReport: vi.fn(async () => ({ createdAt: '2026-10-19T00:00:00Z' })),
     reportHistory: vi.fn(async () => []), reportDetail: vi.fn(async () => ({ data: report, createdAt: 'saved', commentary: { highlights: ['历史点评'], concerns: [], suggestions: [] } })) };
   const mocks = { '../../services/api': api, '../../utils/context': { loadContext: async () => ({ projectAthletes: [{ id: 1, name: '合成', project: 'ROWING' }] }) },
     '../../utils/date': { todayBeijing: () => '2026-10-05' }, '../../utils/project-label': { projectLabel: () => '赛艇' }, '../../utils/training-report': utilsModule.exports };
-  const wx = { showModal: vi.fn(({ success }) => success({ confirm: true })), showToast() {} };
+  const wx = { showModal: vi.fn(({ success }) => success({ confirm: true })), showToast() {},
+    openDocument: vi.fn(({ success }) => success({})) };
   vm.runInNewContext(readFileSync(new URL('./training-report.js', import.meta.url), 'utf8'), {
     Page(value) { definition = value; }, require(path) { if (!(path in mocks)) throw new Error(path); return mocks[path]; },
     wx,
@@ -28,6 +30,23 @@ function setup() {
   return { page, api, preview, wx };
 }
 describe('小程序训练报告页面流程', () => {
+  it('独立导出选中历史报告，下载失败可重试，不切换当前预览', async () => {
+    const { page, api, wx } = setup();
+    page.data.athleteId = 1;
+    page.data.history = [{ id: 'history-a' }];
+    const event = { currentTarget: { dataset: { id: 'history-a' } } };
+    api.reportPdf.mockRejectedValueOnce(new Error('下载失败'));
+    page.exportPdf(event);
+    await vi.waitFor(() => expect(page.data.error).toBe('下载失败'));
+    expect(wx.openDocument).not.toHaveBeenCalled();
+    expect(page.data.exportingId).toBe('');
+    page.exportPdf(event); page.exportPdf(event);
+    await vi.waitFor(() => expect(wx.openDocument).toHaveBeenCalledTimes(1));
+    expect(api.reportPdf).toHaveBeenCalledTimes(2);
+    expect(api.reportPdf).toHaveBeenLastCalledWith(1, 'history-a');
+    expect(wx.openDocument.mock.calls[0][0]).toMatchObject({ filePath: '/tmp/report.pdf', fileType: 'pdf', showMenu: true });
+    expect(page.data.report).toBeNull();
+  });
   it('校验档案范围，预览、点评、保存和历史共用 API', async () => {
     const { page, api } = setup();
     page.onLoad({ athleteId: '1' }); await vi.waitFor(() => expect(page.data.busy).toBe(false));
