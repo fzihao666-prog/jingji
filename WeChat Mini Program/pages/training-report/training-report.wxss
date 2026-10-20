@@ -22,3 +22,5 @@
 .report-comment > text { display: block; white-space: pre-wrap; margin-top: 14rpx; }
 .report-consent { display: block; font-size: 22rpx; color: var(--muted); margin: 20rpx 0; line-height: 1.7; }
 .history-item { width: 100%; text-align: left; margin-top: 12rpx; font-size: 24rpx; background: var(--mist); padding: 14rpx; }
+.report-history .section-head-title { display: block; }
+.report-history-empty { margin-top: 24rpx; padding: 24rpx 0; text-align: center; font-size: 26rpx; line-height: 1.6; color: var(--muted); }

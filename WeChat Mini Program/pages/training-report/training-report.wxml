@@ -5,11 +5,12 @@
     <view class="report-dates"><picker mode="date" value="{{range.from}}" disabled="{{busy}}" bindchange="onFrom"><view class="report-picker">{{range.kind == 'custom' ? '开始日期' : '所在周 / 月'}}<text>{{range.from}}</text></view></picker>
       <picker mode="date" value="{{range.to}}" disabled="{{busy || range.kind != 'custom'}}" bindchange="onTo"><view class="report-picker">结束日期<text>{{range.to}}</text></view></picker></view>
     <view class="report-actions"><button class="primary-button" disabled="{{busy || !athleteId}}" bindtap="preview">预览图表</button><button class="secondary-button" disabled="{{busy || !athleteId}}" bindtap="history">历史报告</button></view>
-    <text class="report-note">最长 90 天；周按周一至周日，月按自然月。未到日期不补零。</text>
   </view>
   <view wx:if="{{busy}}" class="notice">正在处理，请稍候…</view>
   <view wx:if="{{error}}" class="error-box">{{error}}</view>
-  <view wx:if="{{showHistory}}" class="card"><view class="section-head-title">最近 50 份已确认报告</view><text wx:if="{{!history.length}}">暂无历史报告</text>
+  <view wx:if="{{showHistory}}" class="card report-history">
+    <view class="section-head-title">历史报告</view>
+    <view wx:if="{{!history.length}}" class="report-history-empty">暂无报告</view>
     <button wx:for="{{history}}" wx:key="id" class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}<text class="report-note">{{item.createdAt}}</text></button></view>
   <block wx:if="{{report}}">
     <view class="report-note">{{report.range.from}} — {{report.range.to}} · {{saved ? '已确认快照' : '预览草稿'}}</view>
@@ -44,5 +45,4 @@
       <text wx:else class="report-note">保存于 {{saved}} · 网页端可打印 / 保存为 PDF</text>
     </view>
   </block>
-  <view wx:else class="card report-note">选择日期并预览图表；无需 AI 也可生成报告。</view>
 </view>
