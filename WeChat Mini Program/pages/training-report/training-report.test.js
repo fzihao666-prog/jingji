@@ -15,16 +15,17 @@ function setup() {
     reportHistory: vi.fn(async () => []), reportDetail: vi.fn(async () => ({ data: report, createdAt: 'saved', commentary: { highlights: ['历史点评'], concerns: [], suggestions: [] } })) };
   const mocks = { '../../services/api': api, '../../utils/context': { loadContext: async () => ({ projectAthletes: [{ id: 1, name: '合成', project: 'ROWING' }] }) },
     '../../utils/date': { todayBeijing: () => '2026-10-05' }, '../../utils/project-label': { projectLabel: () => '赛艇' }, '../../utils/training-report': utilsModule.exports };
+  const wx = { showModal: vi.fn(({ success }) => success({ confirm: true })), showToast() {} };
   vm.runInNewContext(readFileSync(new URL('./training-report.js', import.meta.url), 'utf8'), {
     Page(value) { definition = value; }, require(path) { if (!(path in mocks)) throw new Error(path); return mocks[path]; },
-    wx: { showModal: ({ success }) => success({ confirm: true }), showToast() {} },
+    wx,
   });
   const page = { ...definition, data: structuredClone(definition.data), _alive: true,
     setData(values) { for (const [path, value] of Object.entries(values)) {
       if (path.includes('.')) { const [root, key] = path.split('.'); this.data[root][key] = value; }
       else this.data[path] = value;
     } } };
-  return { page, api, preview };
+  return { page, api, preview, wx };
 }
 describe('小程序训练报告页面流程', () => {
   it('校验档案范围，预览、点评、保存和历史共用 API', async () => {
@@ -33,7 +34,7 @@ describe('小程序训练报告页面流程', () => {
     expect(page.data.athleteId).toBe(1);
     page.preview(); await vi.waitFor(() => expect(page.data.report).not.toBeNull());
     expect(page.data.view.kpis[1].value).toBe('60');
-    page.onConsent({ detail: { value: ['yes'] } }); page.generate();
+    page.generate();
     await vi.waitFor(() => expect(page.data.commentary.highlights).toBe('表现'));
     page.save(); await vi.waitFor(() => expect(page.data.saved).not.toBe(''));
     expect(api.saveReport).toHaveBeenCalledTimes(1);
@@ -43,13 +44,30 @@ describe('小程序训练报告页面流程', () => {
     expect(page._preview).toBeNull();
   });
   it('没有同意不请求 AI，AI 失败仍保留图表', async () => {
-    const { page, api, preview } = setup();
+    const { page, api, preview, wx } = setup();
     page.data.athleteId = 1; page._preview = preview; page.data.report = preview.data;
+    wx.showModal.mockImplementationOnce(({ success }) => success({ confirm: false }));
     page.generate(); await vi.waitFor(() => expect(page.data.busy).toBe(false));
     expect(api.reportCommentary).not.toHaveBeenCalled();
-    page.data.consent = true; api.reportCommentary.mockRejectedValueOnce(new Error('模型暂不可用'));
+    api.reportCommentary.mockRejectedValueOnce(new Error('模型暂不可用'));
     page.generate(); await vi.waitFor(() => expect(page.data.error).toBe('模型暂不可用'));
     expect(page.data.report).toEqual(preview.data);
+  });
+  it('无记录时提示原因，确认期间防重复，离开页面后不发送', async () => {
+    const { page, api, preview, wx } = setup();
+    page._preview = preview;
+    preview.data.totals.sessions = 0;
+    page.generate();
+    await vi.waitFor(() => expect(page.data.error).toContain('暂无有效训练记录'));
+    expect(wx.showModal).not.toHaveBeenCalled();
+    preview.data.totals.sessions = 1;
+    let confirm;
+    wx.showModal.mockImplementationOnce(({ success }) => { confirm = success; });
+    page.generate(); page.generate();
+    expect(wx.showModal).toHaveBeenCalledTimes(1);
+    page.onUnload(); confirm({ confirm: true });
+    await Promise.resolve(); await Promise.resolve();
+    expect(api.reportCommentary).not.toHaveBeenCalled();
   });
   it('日期变更清除旧报告，拒绝越界运动员和过长范围', async () => {
     const { page, api, preview } = setup();

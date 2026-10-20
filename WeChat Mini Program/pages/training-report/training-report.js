@@ -6,7 +6,7 @@ const { reportPeriod, reportView } = require('../../utils/training-report');
 const kinds = ['week', 'month', 'custom'];
 const emptyCommentary = () => ({ highlights: '', concerns: '', suggestions: '' });
 Page({
-  data: { athleteId: 0, athleteName: '', projectName: '', busy: false, error: '', saved: '', consent: false,
+  data: { athleteId: 0, athleteName: '', projectName: '', busy: false, error: '', saved: '',
     range: reportPeriod('week', todayBeijing()), kindIndex: 0, kinds: ['周报告', '月报告', '阶段报告'],
     report: null, view: null, history: [], showHistory: false, showDaily: false, commentary: emptyCommentary(),
     commentaryFields: [{ key: 'highlights', label: '主要表现' }, { key: 'concerns', label: '需要关注' }, { key: 'suggestions', label: '下一步建议' }] },
@@ -57,7 +57,6 @@ Page({
       this.setData({ report: result.data, view: reportView(result.data), saved: '', commentary: emptyCommentary() });
     });
   },
-  onConsent(event) { this.setData({ consent: event.detail.value.includes('yes') }); },
   onCommentary(event) {
     const key = event.currentTarget.dataset.key;
     if (!['highlights', 'concerns', 'suggestions'].includes(key)) return;
@@ -65,7 +64,16 @@ Page({
   },
   generate() {
     this.run(async () => {
-      if (!this._preview || !this.data.consent) return;
+      if (!this._preview || this.data.saved) throw new Error('请先预览图表。');
+      if (!this._preview.data.totals.sessions) throw new Error('当前日期范围暂无有效训练记录，请调整日期后重新预览。');
+      const confirmed = await new Promise((resolve) => wx.showModal({
+        title: '生成 AI 点评',
+        content: '是否将去身份化的训练汇总发送至配置的大模型？不发送姓名、联系方式、伤病和恢复健康数据。',
+        confirmText: '同意生成',
+        success: (result) => resolve(result.confirm),
+        fail: () => resolve(false)
+      }));
+      if (!confirmed || !this._alive) return;
       const result = await api.reportCommentary(this.data.athleteId, this._preview.data.range, this._preview.fingerprint);
       if (this._alive) this.setData({ commentary: Object.fromEntries(Object.entries(result).map(([key, values]) => [key, values.join('\n')])) });
     });
