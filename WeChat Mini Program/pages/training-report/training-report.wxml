@@ -13,9 +13,8 @@
     <view wx:if="{{!history.length}}" class="report-history-empty">暂无报告</view>
     <button wx:for="{{history}}" wx:key="id" class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}<text class="report-note">{{item.createdAt}}</text></button></view>
   <block wx:if="{{report}}">
-    <view class="report-note">{{report.range.from}} — {{report.range.to}} · {{saved ? '已确认快照' : '预览草稿'}}</view>
+    <view class="report-note">{{report.range.from}} — {{report.range.to}}<text wx:if="{{saved}}"> · 已确认快照</text></view>
     <view class="report-kpis"><view wx:for="{{view.kpis}}" wx:key="key" class="card report-kpi"><text>{{item.label}}</text><view class="report-value">{{item.value}}<text>{{item.unit}}</text></view><text class="report-note">前期 {{item.previous}}</text><text class="report-note">{{item.coverage}}</text></view></view>
-    <text class="report-note">训练记录 {{report.trainingDays}}/{{report.days}} 天 · 恢复日报 {{report.wellnessDays}}/{{report.days}} 天。覆盖不是完成率；前期指紧邻的等长区间，记录可能不完整。“—”为缺失。</text>
     <view class="card"><view class="section-head-title">训练结构 · 分钟</view>
       <view class="report-legend"><text class="special">■ 专项</text><text class="physical">■ 体能</text><text class="recovery">■ 恢复</text><text class="other">■ 未分类</text></view>
       <text wx:if="{{!report.totals.sessions}}" class="report-note">暂无有效训练记录</text>
