@@ -26,7 +26,7 @@
       <button class="text-button" bindtap="toggleDaily">{{showDaily ? '收起每日明细' : '查看每日明细'}}</button>
       <block wx:if="{{showDaily}}"><view class="report-row report-th"><text>日期</text><text>课次</text><text>分钟</text><text>SRPE</text></view><view wx:for="{{view.daily}}" wx:key="date" class="report-row"><text>{{item.shortDate}}</text><text>{{item.sessions}}</text><text>{{item.durationText}}</text><text>{{item.srpeText}}</text></view></block>
     </view>
-    <view class="card"><view class="section-head-title">测试变化</view><text class="report-note">周期内首次 → 末次；仅同指标、单位、侧别、协议比较。数值增减不直接代表进步。</text>
+    <view class="card"><view class="section-head-title">测试变化</view>
       <text wx:if="{{!view.tests.length}}" class="report-note">暂无有效测试记录</text>
       <view wx:for="{{view.tests}}" wx:key="key" class="report-test"><view>{{item.label}} · {{item.unit}}</view><text class="report-note">{{item.protocol || '协议未记录'}} · {{item.sideText}}</text>
         <view class="report-row report-th"><text>首次</text><text>末次</text><text>变化</text></view><view class="report-row"><text>{{item.firstText}}</text><text>{{item.lastText}}</text><text>{{item.changeText}}</text></view><text class="report-note">{{item.first.date}} → {{item.last.date}}</text></view>
