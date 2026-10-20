@@ -30,6 +30,8 @@ export function DataManagementPage({ user }: Props) {
     ReturnType<typeof api.dataManagementStandards>
   > | null>(null);
   const [message, setMessage] = useState('');
+  const [editingMetric, setEditingMetric] = useState<Metric | null>(null);
+  const [savingMetric, setSavingMetric] = useState(false);
   const [alias, setAlias] = useState('');
   const [metricCode, setMetricCode] = useState('');
   const editable = user.role === 'TD' || user.role === 'DMD';
@@ -58,10 +60,44 @@ export function DataManagementPage({ user }: Props) {
       setMessage(error instanceof Error ? error.message : '保存失败。');
     }
   };
+  const saveMetric = async () => {
+    if (!editable || !editingMetric || savingMetric) return;
+    const label = editingMetric.label.trim();
+    const unit = editingMetric.unit.trim();
+    if (!label || label.length > 80 || unit.length > 24) {
+      setMessage('请输入 1–80 字的指标名称，单位不能超过 24 字。');
+      return;
+    }
+    setSavingMetric(true);
+    try {
+      await api.updateDataManagementMetric(editingMetric.code, {
+        label,
+        unit,
+        active: Boolean(editingMetric.active),
+      });
+      setMetrics((items) =>
+        items.map((item) =>
+          item.code === editingMetric.code ? { ...editingMetric, label, unit } : item
+        )
+      );
+      setEditingMetric(null);
+      setMessage('指标字典已保存。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '指标保存失败，请重试。');
+    } finally {
+      setSavingMetric(false);
+    }
+  };
   return (
     <PageContainer className="data-import-page">
-      <PageHeader className="data-management-header" eyebrow="METRICS & STANDARDS" title="指标与标准" />
-      {message && <p className="data-import-message">{message}</p>}
+      <PageHeader
+        className="data-management-header"
+        eyebrow="METRICS & STANDARDS"
+        title="指标与标准"
+      />
+      <p className="data-import-message" role="status">
+        {message}
+      </p>
       <div className="data-import-grid">
         <section className="data-import-upload-card">
           <div className="data-import-card-heading">
@@ -136,11 +172,74 @@ export function DataManagementPage({ user }: Props) {
             <h2>指标字典</h2>
             <p>动态测试指标唯一来源：metric_definitions</p>
           </div>
-          <button type="button" onClick={() => load()}>
+          <button
+            type="button"
+            onClick={() =>
+              load().catch((error) =>
+                setMessage(error instanceof Error ? error.message : '刷新失败。')
+              )
+            }
+            disabled={savingMetric}
+          >
             <Save size={15} />
             刷新
           </button>
         </div>
+        {editable && editingMetric && (
+          <form
+            className="data-import-upload-card"
+            aria-label="编辑指标"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveMetric();
+            }}
+          >
+            <strong>编辑指标：{editingMetric.code}</strong>
+            <label className="data-import-date">
+              <span>名称</span>
+              <input
+                autoFocus
+                required
+                maxLength={80}
+                value={editingMetric.label}
+                disabled={savingMetric}
+                onChange={(event) =>
+                  setEditingMetric({ ...editingMetric, label: event.target.value })
+                }
+              />
+            </label>
+            <label className="data-import-date">
+              <span>单位</span>
+              <input
+                maxLength={24}
+                value={editingMetric.unit}
+                disabled={savingMetric}
+                onChange={(event) =>
+                  setEditingMetric({ ...editingMetric, unit: event.target.value })
+                }
+              />
+            </label>
+            <label className="data-import-date">
+              <span>状态</span>
+              <select
+                value={editingMetric.active ? '1' : '0'}
+                disabled={savingMetric}
+                onChange={(event) =>
+                  setEditingMetric({ ...editingMetric, active: Number(event.target.value) })
+                }
+              >
+                <option value="1">启用</option>
+                <option value="0">停用</option>
+              </select>
+            </label>
+            <button className="data-import-primary" type="submit" disabled={savingMetric}>
+              {savingMetric ? '保存中…' : '保存指标'}
+            </button>
+            <button type="button" disabled={savingMetric} onClick={() => setEditingMetric(null)}>
+              取消
+            </button>
+          </form>
+        )}
         <div className="data-import-table-wrap">
           <table className="data-import-table">
             <thead>
@@ -152,6 +251,7 @@ export function DataManagementPage({ user }: Props) {
                 <th>方向</th>
                 <th>频率</th>
                 <th>状态</th>
+                {editable && <th>操作</th>}
               </tr>
             </thead>
             <tbody>
@@ -164,6 +264,21 @@ export function DataManagementPage({ user }: Props) {
                   <td>{item.direction}</td>
                   <td>{item.frequency}</td>
                   <td>{item.active ? '启用' : '停用'}</td>
+                  {editable && (
+                    <td>
+                      <button
+                        type="button"
+                        disabled={savingMetric}
+                        aria-label={`编辑${item.label}（${item.code}）`}
+                        onClick={() => {
+                          setEditingMetric({ ...item });
+                          setMessage('');
+                        }}
+                      >
+                        编辑
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

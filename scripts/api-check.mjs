@@ -113,6 +113,21 @@ try {
     adminLogin.status === 200 && adminToken && adminLogin.payload.user.role === 'DMD',
     '数据监控总监登录或角色迁移失败'
   );
+  for (const path of ['/api/coach/load-management', '/api/coach/wellness-baseline', '/api/me/today-sessions']) {
+    assert((await request(path, {}, adminToken)).status === 404, `已删除接口应返回404：${path}`);
+  }
+  const dictionaryBefore = await request('/api/data-management/metrics', {}, adminToken);
+  const metric = dictionaryBefore.payload.metrics[0];
+  assert(dictionaryBefore.status === 200 && metric, '指标字典应有可编辑指标');
+  const metricPath = `/api/data-management/metrics/${encodeURIComponent(metric.code)}`;
+  const editedMetric = { label: '指标编辑回归', unit: '回归单位', active: false };
+  assert((await request(metricPath, { method: 'PUT', body: JSON.stringify(editedMetric) }, adminToken)).status === 200, 'DMD应能编辑指标');
+  const dictionaryAfter = await request('/api/data-management/metrics', {}, adminToken);
+  const savedMetric = dictionaryAfter.payload.metrics.find((item) => item.code === metric.code);
+  assert(savedMetric.label === editedMetric.label && savedMetric.unit === editedMetric.unit && savedMetric.active === 0, '指标名称、单位和停用状态应持久化');
+  assert((await request(metricPath, { method: 'PUT', body: JSON.stringify({ ...editedMetric, label: '   ' }) }, adminToken)).status === 400, '指标名称不得仅含空白');
+  assert((await request(metricPath, { method: 'PUT', body: JSON.stringify(editedMetric) })).status === 401, '未登录者不能编辑指标');
+  assert((await request(metricPath, { method: 'PUT', body: JSON.stringify({ label: metric.label, unit: metric.unit, active: Boolean(metric.active) }) }, adminToken)).status === 200, '指标编辑回归应恢复原值');
   const adminAthletesForAnalysis = await request('/api/athletes', {}, adminToken);
   const analysisAthlete = adminAthletesForAnalysis.payload.athletes.find(
     (item) => item.project === 'ROWING'
@@ -345,6 +360,7 @@ try {
     method: 'POST',
     body: JSON.stringify({ username: 'coach01', password: 'demo123' }),
   });
+  assert((await request(metricPath, { method: 'PUT', body: JSON.stringify(editedMetric) }, demoCoachLogin.payload.token)).status === 403, '教练不能编辑指标字典');
   const demoCoachAthletes = await request('/api/athletes', {}, demoCoachLogin.payload.token);
   const coachAthlete = demoCoachAthletes.payload.athletes[0];
   await checkCoachDailyTodos({ request, assert, databasePath,
@@ -377,37 +393,6 @@ try {
   assert(
     (await request('/api/coach/team-overview?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
     '队伍总览应拒绝无效项目'
-  );
-
-  // 负荷管理（ACWR）
-  const loadMgmtPath = `/api/coach/load-management?project=${encodeURIComponent(coachAthlete.project)}`;
-  assert((await request(loadMgmtPath)).status === 401, '负荷管理必须要求登录');
-  const loadMgmt = await request(loadMgmtPath, {}, demoCoachLogin.payload.token);
-  assert(
-    loadMgmt.status === 200 &&
-      loadMgmt.payload.summary &&
-      typeof loadMgmt.payload.summary.avgAcwr === 'number' &&
-      Array.isArray(loadMgmt.payload.athletes),
-    '负荷管理应返回 ACWR 汇总'
-  );
-  assert(
-    (await request('/api/coach/load-management?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
-    '负荷管理应拒绝无效项目'
-  );
-
-  // 恢复状态基线偏离预警
-  const baselinePath = `/api/coach/wellness-baseline?project=${encodeURIComponent(coachAthlete.project)}`;
-  assert((await request(baselinePath)).status === 401, '基线预警必须要求登录');
-  const baseline = await request(baselinePath, {}, demoCoachLogin.payload.token);
-  assert(
-    baseline.status === 200 &&
-      baseline.payload.summary &&
-      Array.isArray(baseline.payload.alerts),
-    '基线预警应返回分析结果'
-  );
-  assert(
-    (await request('/api/coach/wellness-baseline?project=UNKNOWN', {}, demoCoachLogin.payload.token)).status === 400,
-    '基线预警应拒绝无效项目'
   );
 
   // 训练计划执行率
@@ -653,34 +638,6 @@ try {
       clearedStatus.payload.load24h === 0 &&
       clearedStatus.payload.source === null,
     '删除当天课次后今日状态应回到未填报'
-  );
-
-  // 运动员今日训练明细：返回当天课次列表，教练与未登录者无权访问。
-  const todaySessionsEmpty = await request('/api/me/today-sessions', {}, athleteSessionToken);
-  assert(
-    todaySessionsEmpty.status === 200 &&
-      todaySessionsEmpty.payload.date === beijingToday &&
-      Array.isArray(todaySessionsEmpty.payload.sessions),
-    '运动员应能读取本人今日训练（空列表）'
-  );
-  assert((await request('/api/me/today-sessions', {}, demoCoachLogin.payload.token)).status === 403, '教练不能读取运动员今日训练');
-  assert((await request('/api/me/today-sessions')).status === 401, '未登录者不能读取今日训练');
-  const sessionForList = await request(
-    '/api/me/training-sessions',
-    { method: 'POST', body: JSON.stringify({ ...selfSessionInput, date: beijingToday, startTime: '10:00' }) },
-    athleteSessionToken
-  );
-  const sessionForListId = sessionForList.payload.session?.id;
-  assert(sessionForList.status === 201 && sessionForListId, '今日训练回归需要创建当天课次');
-  const todaySessionsFilled = await request('/api/me/today-sessions', {}, athleteSessionToken);
-  assert(
-    todaySessionsFilled.status === 200 &&
-      todaySessionsFilled.payload.sessions.some((s) => s.id === sessionForListId && s.sessionOrder >= 1),
-    '今日训练应返回当天已填报的课次明细'
-  );
-  assert(
-    (await request(`/api/me/training-sessions/${sessionForListId}`, { method: 'DELETE' }, athleteSessionToken)).status === 200,
-    '今日训练回归需要清理当天课次'
   );
 
   // 恢复日报：日期窗口、本人权限、只写本人行与同日幂等 upsert。
@@ -1986,8 +1943,8 @@ try {
         overviewPipeline: 'passed',
         coachDailyTodos: 'passed',
         teamOverview: 'passed',
-        loadManagement: 'passed',
-        wellnessBaseline: 'passed',
+        metricDictionaryEditing: 'passed',
+        removedUnusedQueryRoutes: 'passed',
         planExecution: 'passed',
         selfTraining: 'passed',
         rowingAnalysis: 'passed',

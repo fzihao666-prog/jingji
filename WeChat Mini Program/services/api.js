@@ -75,7 +75,6 @@ module.exports = {
     return request(`/api/me/training-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
   todayStatus() { return request('/api/me/today-status'); },
-  todaySessions() { return request('/api/me/today-sessions'); },
   myWellness(date) { return request(`/api/me/wellness?${query({ date })}`); },
   saveWellness(data) {
     return request('/api/me/wellness', { method: 'POST', data });
@@ -104,12 +103,6 @@ module.exports = {
   },
   teamOverview(project) {
     return request(`/api/coach/team-overview?${query({ project })}`);
-  },
-  loadManagement(project) {
-    return request(`/api/coach/load-management?${query({ project })}`);
-  },
-  wellnessBaseline(project) {
-    return request(`/api/coach/wellness-baseline?${query({ project })}`);
   },
   planExecution(project) {
     return request(`/api/coach/plan-execution?${query({ project })}`);
