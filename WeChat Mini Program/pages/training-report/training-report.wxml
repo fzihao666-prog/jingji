@@ -28,7 +28,7 @@
     </view>
     <view class="card"><view class="section-head-title">测试变化</view>
       <text wx:if="{{!view.tests.length}}" class="report-note">暂无有效测试记录</text>
-      <view wx:for="{{view.tests}}" wx:key="key" class="report-test"><view>{{item.label}} · {{item.unit}}</view><text class="report-note">{{item.protocol || '协议未记录'}} · {{item.sideText}}</text>
+      <view wx:for="{{view.tests}}" wx:key="key" class="report-test"><view>{{item.label}} · {{item.unit}}</view>
         <view class="report-row report-th"><text>首次</text><text>末次</text><text>变化</text></view><view class="report-row"><text>{{item.firstText}}</text><text>{{item.lastText}}</text><text>{{item.changeText}}</text></view><text class="report-note">{{item.first.date}} → {{item.last.date}}</text></view>
     </view>
     <view class="card"><view class="section-head-title">恢复趋势</view><view wx:for="{{view.wellness}}" wx:for-item="metric" wx:key="key"><view class="report-metric-title">{{metric.label}} · 均值 {{metric.averageText}} {{metric.unit}}</view>
