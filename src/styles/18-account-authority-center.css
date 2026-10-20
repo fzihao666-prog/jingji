@@ -842,7 +842,7 @@
 
 @media (width <= 1180px) {
   .app-frame {
-    grid-template-columns: 220px minmax(0, 1fr);
+    --sidebar-width: 220px;
   }
 
   .page-heading {

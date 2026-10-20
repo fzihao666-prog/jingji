@@ -2,15 +2,20 @@
 
 /* Shell */
 .app-frame {
+  --sidebar-width: 254px;
+
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 254px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   background: var(--mist);
 }
 
+/* 侧栏固定于视口，避免页面溢出或页脚高度触发 sticky 的父容器边界。 */
 .sidebar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  width: var(--sidebar-width);
   height: 100vh;
   padding: 25px 18px 18px;
   display: flex;
@@ -514,6 +519,7 @@
 }
 
 .main-area {
+  grid-column: 2;
   position: relative;
   min-width: 0;
 }
