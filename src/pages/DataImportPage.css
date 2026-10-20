@@ -972,12 +972,27 @@
 
 .data-import-discard {
   flex-shrink: 0;
-  padding: 8px;
-  border: 1px solid #d9aaaa;
-  border-radius: 8px;
-  color: #a12d2d;
-  background: #fff;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid #ead7d5;
+  border-radius: 6px;
+  color: #963e36;
+  background: #fff8f7;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.data-import-discard:hover:not(:disabled) {
+  border-color: #d4aaa5;
+  color: #802c25;
+  background: #fbece9;
+}
+
+.data-import-discard:active:not(:disabled) {
+  background: #f5dfdb;
 }
 
 .data-import-discard:disabled {
