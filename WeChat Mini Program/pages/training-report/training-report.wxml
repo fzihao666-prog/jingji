@@ -11,7 +11,7 @@
   <view wx:if="{{showHistory}}" class="card report-history">
     <view class="section-head-title">历史报告</view>
     <view wx:if="{{!history.length}}" class="report-history-empty">暂无报告</view>
-    <button wx:for="{{history}}" wx:key="id" class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}<text class="report-note">{{item.createdAt}}</text></button></view>
+    <button wx:for="{{history}}" wx:key="id" class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}</button></view>
   <block wx:if="{{report}}">
     <view class="report-note">{{report.range.from}} — {{report.range.to}}<text wx:if="{{saved}}"> · 已确认快照</text></view>
     <view class="report-kpis"><view wx:for="{{view.kpis}}" wx:key="key" class="card report-kpi"><text>{{item.label}}</text><view class="report-value">{{item.value}}<text>{{item.unit}}</text></view><text class="report-note">前期 {{item.previous}}</text><text class="report-note">{{item.coverage}}</text></view></view>
