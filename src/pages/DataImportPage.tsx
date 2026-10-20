@@ -347,8 +347,8 @@ export function DataImportPage({ project, athletes, mode = 'import', onChanged }
     <PageContainer className="data-import-page">
       <PageHeader
         className="data-management-header"
-        eyebrow={historyOnly ? 'IMPORT HISTORY' : 'DATA INTAKE'}
-        title={historyOnly ? '导入记录' : '统一数据导入'}
+        eyebrow={historyOnly ? 'IMPORT HISTORY' : 'DATA IMPORT'}
+        title={historyOnly ? '导入记录' : '数据导入'}
         actions={
           !historyOnly && (
             <div className="data-import-hero-actions">
