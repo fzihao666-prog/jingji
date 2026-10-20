@@ -97,7 +97,7 @@ Gitee Go 的 `deploy/gitee-go-pipeline.yml` 执行静态检查、小程序契约
 
 ### 训练报告共享契约
 
-`shared/training-report.ts` 定义日期范围、统计快照与限长点评结构；`server/report/` 提供 `/api/athletes/:athleteId/reports` 系列接口。预览只读既有 `training_sessions`、`daily_wellness` 和统一测试表；采用与训练总览一致的演示/估算/质量排除规则，`duration_reported`、`distance_reported` 和 RPE 缺失分别控制指标有效性。相同测试指标、单位、侧别、协议才分组比较，无协议不计算变化。前期为紧邻的等长区间，不推断记录完整性。
+`shared/training-report.ts` 定义日期范围、统计快照与限长点评结构；`server/report/` 提供 `/api/athletes/:athleteId/reports` 系列接口。预览只读既有 `training_sessions`、`daily_wellness` 和统一测试表；采用与训练总览一致的演示/估算/质量排除规则，`duration_reported`、`distance_reported` 和 RPE 缺失分别控制指标有效性。测试按指标、单位、侧别分组，两次及以上记录计算末次减首次，不以协议作为分组或计算条件；协议不同显示“多种协议”，单次变化为缺失。差值仅表示数值变化，不保证测试方法可比，不评价进退；历史快照保持原值。前期为紧邻的等长区间，不推断记录完整性。
 
 预览在单个只读事务内聚合，返回 SHA-256 统计指纹。生成点评及保存时重新聚合并验证指纹，数据变化返回 409，客户端须重新预览。每次请求沿用运动员权限与当前项目范围；AI 等待结束再检查账号有效性、权限、项目及统计指纹。客户端不能上传或篡改统计结果。
 

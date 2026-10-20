@@ -127,7 +127,7 @@ function readReportSnapshot(
     .all(athleteId, project, range.from, range.to) as Measurement[];
   const groups = new Map<string, Measurement[]>();
   for (const row of measurements) {
-    const key = JSON.stringify([row.code, row.unit, row.protocol, row.side]);
+    const key = JSON.stringify([row.code, row.unit, row.side]);
     groups.set(key, [...(groups.get(key) || []), row]);
   }
   type Wellness = {
@@ -175,13 +175,13 @@ function readReportSnapshot(
         key,
         label: first.label,
         unit: first.unit,
-        protocol: first.protocol,
+        protocol: values.every((row) => row.protocol === first.protocol) ? first.protocol : '多种协议',
         side: first.side,
         points: values.map(({ date, value }) => ({ date, value })),
         first: { date: first.date, value: first.value },
         last: { date: last.date, value: last.value },
         change:
-          values.length > 1 && first.protocol.trim()
+          values.length > 1
             ? Math.round((last.value - first.value) * 100) / 100
             : null,
       };

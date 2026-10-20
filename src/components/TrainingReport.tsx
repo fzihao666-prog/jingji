@@ -157,7 +157,7 @@ export function TrainingReportFigures({ data }: FiguresProps) {
         <h3>测试变化</h3>
         <p className="training-report-note">
           周期内首次 →
-          末次；相同指标、单位、侧别及已记录的协议才可比较。变化仅表示数值差，不自动判为进步。
+          末次；按相同指标、单位和侧别汇总，不要求填写协议。变化仅表示数值差，不自动判为进步。
         </p>
         {data.tests.length ? (
           <div className="training-report-table">

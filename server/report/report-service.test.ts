@@ -51,9 +51,9 @@ describe('训练报告统计与跨端契约', () => {
       expect(data.daily[3].srpe).toBeNull();
       expect(data.wellness[0].days).toBe(1);
       expect(data.wellness[2].average).toBeNull();
-      expect(data.tests).toHaveLength(2);
-      expect(data.tests[0].change).toBe(20);
-      expect(data.tests[1].change).toBeNull();
+      expect(data.tests).toHaveLength(1);
+      expect(data.tests[0].change).toBe(400);
+      expect(data.tests[0].protocol).toBe('多种协议');
       expect(
         reportPreviewSchema.safeParse({ data, fingerprint: reportFingerprint(data) }).success
       ).toBe(true);
@@ -96,11 +96,24 @@ describe('训练报告统计与跨端契约', () => {
       db.close();
     }
   });
-  it('无协议的两次测试不计算变化', () => {
+  it('不要求协议，按首末数值计算负数和零变化', () => {
     const db = createReportFixture();
     try {
-      db.exec("UPDATE test_sessions SET protocol = '' WHERE id IN (1,2)");
-      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBeNull();
+      db.exec("UPDATE test_sessions SET protocol = ''; UPDATE test_measurements SET value_num=50 WHERE id=1; UPDATE test_measurements SET value_num=30 WHERE id=3");
+      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBe(-20);
+      db.exec("UPDATE test_measurements SET value_num=50 WHERE id=3");
+      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+  it('不同指标、单位和侧别仍分组，单次记录不计算变化', () => {
+    const db = createReportFixture();
+    try {
+      db.exec("UPDATE test_measurements SET unit='kW' WHERE id=2; UPDATE test_measurements SET side='left' WHERE id=3; INSERT INTO metric_definitions VALUES('other','另一指标'); INSERT INTO test_measurements VALUES(4,1,'other','W','center',10,0,'manual','valid')");
+      const tests = readReport(db, 1, 'ROWING', range).tests;
+      expect(tests).toHaveLength(4);
+      expect(tests.map((test) => test.change)).toEqual([null, null, null, null]);
     } finally {
       db.close();
     }
