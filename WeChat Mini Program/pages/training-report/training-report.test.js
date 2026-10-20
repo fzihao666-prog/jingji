@@ -30,6 +30,21 @@ function setup() {
   return { page, api, preview, wx };
 }
 describe('小程序训练报告页面流程', () => {
+  it('历史列表和正文互斥，预览或打开历史后返回正文', async () => {
+    const { page, preview } = setup();
+    page.data.athleteId = 1;
+    page.data.report = preview.data;
+    page.history();
+    expect(page.data.showHistory).toBe(true);
+    await vi.waitFor(() => expect(page.data.busy).toBe(false));
+    page.preview();
+    await vi.waitFor(() => expect(page.data.showHistory).toBe(false));
+    page.history();
+    await vi.waitFor(() => expect(page.data.busy).toBe(false));
+    page.openHistory({ currentTarget: { dataset: { id: 'history' } } });
+    await vi.waitFor(() => expect(page.data.saved).toBe('saved'));
+    expect(page.data.showHistory).toBe(false);
+  });
   it('独立导出选中历史报告，下载失败可重试，不切换当前预览', async () => {
     const { page, api, wx } = setup();
     page.data.athleteId = 1;

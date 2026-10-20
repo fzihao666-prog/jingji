@@ -54,7 +54,7 @@ Page({
       const result = await api.reportPreview(this.data.athleteId, range);
       if (!this._alive) return;
       this._preview = result;
-      this.setData({ report: result.data, view: reportView(result.data), saved: '', commentary: emptyCommentary() });
+      this.setData({ report: result.data, view: reportView(result.data), saved: '', showHistory: false, commentary: emptyCommentary() });
     });
   },
   onCommentary(event) {
@@ -95,6 +95,7 @@ Page({
   history() {
     this.run(async () => {
       if (!this.data.athleteId) return;
+      this.setData({ showHistory: true });
       const history = await api.reportHistory(this.data.athleteId);
       if (this._alive) this.setData({ history, showHistory: true });
     });

@@ -15,7 +15,7 @@
       <button class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}</button>
       <button class="history-export" disabled="{{busy}}" loading="{{exportingId === item.id}}" data-id="{{item.id}}" bindtap="exportPdf" aria-label="导出 {{item.from}} 至 {{item.to}} 的PDF报告">{{exportingId === item.id ? '导出中' : '导出 PDF'}}</button>
     </view></view>
-  <block wx:if="{{report}}">
+  <block wx:if="{{report && !showHistory}}">
     <view class="report-note">{{report.range.from}} — {{report.range.to}}<text wx:if="{{saved}}"> · 已确认快照</text></view>
     <view class="report-kpis"><view wx:for="{{view.kpis}}" wx:key="key" class="card report-kpi"><text>{{item.label}}</text><view class="report-value">{{item.value}}<text>{{item.unit}}</text></view><text class="report-note">前期 {{item.previous}}</text><text class="report-note">{{item.coverage}}</text></view></view>
     <view class="card"><view class="section-head-title">训练结构 · 分钟</view>
