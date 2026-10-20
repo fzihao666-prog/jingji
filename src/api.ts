@@ -584,6 +584,12 @@ export const api = {
       `/api/data-import/batches/${encodeURIComponent(id)}`
     );
   },
+  async discardDataImport(id: string, project: Project) {
+    return request<{ message: string }>(
+      `/api/data-import/batches/${encodeURIComponent(id)}?project=${encodeURIComponent(project)}`,
+      { method: 'DELETE' }
+    );
+  },
   async updateDataImportItems(
     id: string,
     corrections: Array<{

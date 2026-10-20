@@ -94,7 +94,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
   const [busy, setBusy] = useState<
-    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | ''
+    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | ''
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -135,6 +135,35 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         setError(nextError instanceof Error ? nextError.message : '队伍列表加载失败。')
       );
   }, [project]);
+
+  const discardBatch = async (item: DataImportBatchSummary) => {
+    if (busy || item.status !== 'reviewing') return;
+    if (
+      !window.confirm(
+        `确定放弃提交“${item.filename}”？该批次及相关暂存数据将被永久删除，无法恢复。`
+      )
+    )
+      return;
+    setBusy('discard');
+    setError('');
+    setMessage('');
+    try {
+      const result = await api.discardDataImport(item.id, project);
+      setBatches((current) => current.filter((entry) => entry.id !== item.id));
+      if (batch?.id === item.id) {
+        setBatch(null);
+        setCorrections(new Map());
+        setAthleteCorrections(new Map());
+        setFile(null);
+        if (fileRef.current) fileRef.current.value = '';
+      }
+      setMessage(result.message);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : '放弃提交失败。');
+    } finally {
+      setBusy('');
+    }
+  };
 
   const analyze = async () => {
     if (!file) return;
@@ -446,21 +475,35 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           <div className="data-import-history-list">
             {!batches.length && <p className="data-import-empty">当前项目还没有导入记录。</p>}
             {batches.map((item) => (
-              <button
-                key={item.id}
-                className={batch?.id === item.id ? 'active' : ''}
-                onClick={() => loadBatch(item.id)}
-                disabled={busy === 'load'}
-              >
-                <span className={`batch-state ${item.status}`}>
-                  {STATUS_LABELS[item.status as DataImportBatch['status']] || item.status}
-                </span>
-                <strong title={item.filename}>{item.filename}</strong>
-                <small>
-                  {item.itemCount}条 · 错误{item.errorCount} ·{' '}
-                  {new Date(item.createdAt).toLocaleString('zh-CN')}
-                </small>
-              </button>
+              <div key={item.id} className="data-import-history-row">
+                <button
+                  type="button"
+                  className={batch?.id === item.id ? 'active' : ''}
+                  onClick={() => loadBatch(item.id)}
+                  disabled={Boolean(busy)}
+                  aria-label={`查看导入批次：${item.filename}`}
+                >
+                  <span className={`batch-state ${item.status}`}>
+                    {STATUS_LABELS[item.status as DataImportBatch['status']] || item.status}
+                  </span>
+                  <strong title={item.filename}>{item.filename}</strong>
+                  <small>
+                    {item.itemCount}条 · 错误{item.errorCount} ·{' '}
+                    {new Date(item.createdAt).toLocaleString('zh-CN')}
+                  </small>
+                </button>
+                {item.status === 'reviewing' && (
+                  <button
+                    type="button"
+                    className="data-import-discard"
+                    disabled={Boolean(busy)}
+                    onClick={() => void discardBatch(item)}
+                    aria-label={`放弃提交导入批次：${item.filename}`}
+                  >
+                    放弃提交
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </section>

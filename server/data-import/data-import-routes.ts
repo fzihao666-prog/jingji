@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { discardDataImport } from './discard-data-import.ts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Express } from 'express';
@@ -717,6 +718,27 @@ export function registerDataImportRoutes(app: Express) {
         res
           .status(404)
           .json({ message: error instanceof Error ? error.message : '导入批次不存在。' });
+      }
+    }
+  );
+
+  app.delete(
+    '/api/data-import/batches/:id',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const project = cleanString(req.query.project);
+      if (!PROJECTS.includes(project))
+        return res.status(400).json({ message: '请选择有效的运动项目。' });
+      if (!dataImportScope(req.authUser!, project).allowed)
+        return res.status(403).json({ message: '当前账号无权操作该项目的导入记录。' });
+      try {
+        discardDataImport(cleanString(req.params.id), req.authUser!.id, project);
+        res.json({ message: '已放弃提交，并删除该批次及相关暂存数据。' });
+      } catch (error) {
+        res
+          .status(400)
+          .json({ message: error instanceof Error ? error.message : '放弃提交失败。' });
       }
     }
   );
