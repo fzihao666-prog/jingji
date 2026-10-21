@@ -340,6 +340,26 @@ function cellAddress(row: number, column: number) {
   return XLSX.utils.encode_cell({ r: row, c: column });
 }
 
+/**
+ * 别名匹配限定在调用方传入的可访问运动员集合内。
+ * 别名表查询只用于发现候选 id，最终结果必须落在 athletes 参数（accessibleAthleteIds 派生）里，
+ * 防止通过别名把导入数据自动关联到当前账号权限范围外的运动员。
+ */
+function athletesByAlias(
+  normalized: string,
+  project: string,
+  athletes: ImportAthlete[]
+): ImportAthlete[] {
+  const rows = db
+    .prepare(
+      `SELECT aa.athlete_id AS id FROM athlete_aliases aa JOIN athletes a ON a.id = aa.athlete_id
+       WHERE aa.normalized_alias = ? AND aa.project = ? AND a.active = 1`
+    )
+    .all(normalized, project) as Array<{ id: number }>;
+  const ids = new Set(rows.map((row) => row.id));
+  return athletes.filter((athlete) => athlete.project === project && ids.has(athlete.id));
+}
+
 function matchAthlete(name: string, project: string, athletes: ImportAthlete[]) {
   // 解析期的粗匹配：仅在“项目 + 姓名”唯一时自动关联；
   // 队伍冲突、同名多人等情况留给人员确认阶段的 resolvePerson 处理。
@@ -348,16 +368,7 @@ function matchAthlete(name: string, project: string, athletes: ImportAthlete[]) 
     (athlete) => athlete.project === project && normalizedName(athlete.name) === normalized
   );
   if (direct.length === 1) return direct[0];
-  const alias = db
-    .prepare(
-      `
-    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender
-    FROM athlete_aliases aa JOIN athletes a ON a.id = aa.athlete_id
-    LEFT JOIN project_teams pt ON pt.id = a.team_id
-    WHERE aa.normalized_alias = ? AND aa.project = ? AND a.active = 1
-  `
-    )
-    .all(normalized, project) as ImportAthlete[];
+  const alias = athletesByAlias(normalized, project, athletes);
   return alias.length === 1 ? alias[0] : null;
 }
 
@@ -459,16 +470,7 @@ function resolvePerson(
       message: `“${hint.name}”匹配到多名已有运动员（请结合队伍或出生日期选择）`,
     };
   }
-  const alias = db
-    .prepare(
-      `
-    SELECT a.id, a.name, a.project, COALESCE(pt.name, '') AS team, a.gender
-    FROM athlete_aliases aa JOIN athletes a ON a.id = aa.athlete_id
-    LEFT JOIN project_teams pt ON pt.id = a.team_id
-    WHERE aa.normalized_alias = ? AND aa.project = ? AND a.active = 1
-  `
-    )
-    .all(normalized, hint.project) as ImportAthlete[];
+  const alias = athletesByAlias(normalized, hint.project, athletes);
   if (alias.length === 1) return { kind: 'matched', athlete: alias[0], method: '历史别名' };
   if (alias.length > 1)
     return {
@@ -2202,11 +2204,8 @@ export function analyzeDataImport(input: {
   }
   // ---- 统一校验（与校对、提交同一规则）----
   const candidateNames = new Set(persons.keys());
-  const allowedAthleteIds = new Set(
-    [...persons.values()]
-      .map((person) => person.matchedAthleteId)
-      .filter((id): id is number => id !== null)
-  );
+  // 权限集合只来自当前账号可访问的运动员列表，不从解析/匹配结果反推，防止越权 id 通过校验。
+  const allowedAthleteIds = new Set(input.athletes.map((athlete) => athlete.id));
   for (const item of items) {
     if (item.itemType === 'invalid_row') {
       item.quality = 'error';
@@ -4043,9 +4042,8 @@ export function commitDataImport(input: {
   const candidateNames = new Set(
     batch.athleteCandidates.map((candidate) => candidate.normalizedName)
   );
-  // 手工关联草稿中的运动员也纳入权限集合，提交时仍会二次验证。
-  for (const candidate of batch.athleteCandidates)
-    if (candidate.matchedAthleteId) allowed.add(candidate.matchedAthleteId);
+  // 手工关联的运动员必须已在当前可访问集合内（保存关联时已校验）；
+  // 不把草稿里的 matched_athlete_id 无条件并入权限集合，否则越权 id 会绕过二次验证。
   const excludedKeys = new Set(
     batch.athleteCandidates.filter((candidate) => candidate.excluded).map((c) => c.normalizedName)
   );
