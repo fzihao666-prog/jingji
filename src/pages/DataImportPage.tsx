@@ -380,11 +380,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
 
   const personHandlingLabel = (candidate: DataImportAthleteCandidate) => {
     if (candidate.excluded) return '已排除';
+    if (candidate.status === 'created') return '新建';
     const athleteId = candidate.matchedAthleteId || candidate.createdAthleteId;
     if (athleteId) {
       const athlete = athletes.find(entry => entry.id === athleteId)
         || candidate.suggested.find(entry => entry.id === athleteId);
-      return `${athlete?.name || candidate.name} · ${athlete?.team || candidate.team || '无队伍'} · 编号 ${athleteId}`;
+      return `自动关联：${athlete?.name || candidate.name} · ${athlete?.team || candidate.team || '无队伍'} · 编号 ${athleteId}`;
     }
     return candidate.suggested.length ? '身份待确认（请选择已有运动员）' : '新建';
   };

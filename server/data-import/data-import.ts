@@ -2189,7 +2189,7 @@ export function analyzeDataImport(input: {
     const prior = priorIds.get(person.key);
     const priorId = prior?.size === 1 ? [...prior][0] : null;
     const priorAthlete = input.athletes.find(athlete => athlete.id === priorId && athlete.project === input.project);
-    const resolution: PersonResolution = priorAthlete
+    let resolution: PersonResolution = priorAthlete
       ? { kind: 'matched', athlete: priorAthlete, method: '同文件已提交关联' }
       : resolvePerson(
       {
@@ -2201,6 +2201,13 @@ export function analyzeDataImport(input: {
       },
       input.athletes
     );
+    // 弹窗打开前完成唯一队伍内的匹配，无需等待用户再次选择队伍。
+    if (resolution.kind === 'ambiguous' && !person.team && allowedTeams?.size === 1) {
+      const team = [...allowedTeams][0];
+      const scoped = resolvePerson({ name: person.name, project: input.project, team,
+        birthDate: person.birthDate, athleteCode: person.athleteCode }, input.athletes);
+      if (scoped.kind === 'matched') resolution = scoped;
+    }
     if (resolution.kind === 'matched' && resolution.athlete.active === false) {
       person.suggested = [toSuggestion(resolution.athlete)];
       person.team = person.team || resolution.athlete.team;

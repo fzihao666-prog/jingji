@@ -1242,3 +1242,10 @@ it('已有测试课次的空协议可以补充，身体指标的侧别原样保�
   commit(second.id, 'skip');
   expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-10'").get()).toEqual({ protocol: '测量协议' });
 });
+
+it('上传解析即关联唯一管理队伍内的已有运动员，新人员保持新建候选', () => {
+  const scoped = [...athletes, { id: 4, name: '张某', project: PROJECT, team: 'B队', gender: '男' }];
+  const batch = analyze({ 运动员信息: [['姓名'], ['张某'], ['首次队员']] }, { athletes: scoped, allowedTeams: new Set(['A队']) });
+  expect(batch.athleteCandidates.find(person => person.name === '张某')).toMatchObject({ status: 'matched', matchedAthleteId: 1, confirmed: true });
+  expect(batch.athleteCandidates.find(person => person.name === '首次队员')).toMatchObject({ status: 'pending', matchedAthleteId: null });
+});
