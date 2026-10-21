@@ -317,15 +317,60 @@
 }
 /* stylelint-enable selector-class-pattern */
 
+.data-import-notifications {
+  position: fixed;
+  z-index: 130;
+  right: 16px;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  width: min(560px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
 .data-import-message {
-  margin-top: 16px;
-  padding: 11px 14px;
+  padding: 16px;
+  border: 1px solid currentcolor;
   border-radius: 10px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 9px;
-  font-weight: 750;
+  align-items: flex-start;
+  gap: 12px;
+  max-height: 45vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgb(4 35 45 / 20%);
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 650;
+  pointer-events: auto;
+}
+
+.data-import-message > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.data-import-message > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.data-import-message-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.data-import-message-close:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 2px;
 }
 
 .data-import-message.success {

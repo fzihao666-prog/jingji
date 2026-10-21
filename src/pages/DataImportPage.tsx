@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dataImportPersonKey } from '../../shared/data-import-person';
+import { createPortal } from 'react-dom';
 import { api } from '../api';
 import type {
   Athlete,
@@ -768,11 +769,24 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         </section>
       </div>
 
-      {(message || error) && (
-        <div className={`data-import-message ${error ? 'error' : 'success'}`}>
-          {error ? <AlertTriangle size={17} /> : <CheckCircle2 size={17} />}
-          <span>{error || message}</span>
-        </div>
+      {createPortal(
+        <div className="data-import-notifications" aria-live="polite" aria-atomic="true">
+          {(message || error) && (
+            <div className={`data-import-message ${error ? 'error' : 'success'}`} role={error ? 'alert' : 'status'}>
+              {error ? <AlertTriangle size={20} aria-hidden="true" /> : <CheckCircle2 size={20} aria-hidden="true" />}
+              <span>{error || message}</span>
+              <button
+                type="button"
+                className="data-import-message-close"
+                aria-label="关闭提示"
+                onClick={() => { setError(''); setMessage(''); }}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>,
+        document.body
       )}
 
       {result && (
