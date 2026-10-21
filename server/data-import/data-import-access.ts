@@ -27,4 +27,3 @@ export function dataImportScope(user: AuthUser, project: string) {
     },
   };
 }
-
