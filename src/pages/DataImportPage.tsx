@@ -1,4 +1,4 @@
-import { importReviewGroups } from '../../shared/import-conflict-review';
+import { importReviewGroups, selectImportReviewRecord } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
@@ -113,6 +113,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [reviewRevision, setReviewRevision] = useState(0);
   const [savingReviewGroups, setSavingReviewGroups] = useState<Set<number>>(new Set());
   const [pendingSelections, setPendingSelections] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<'exception' | 'duplicate' | 'overwrite' | 'all'>(
@@ -541,15 +542,18 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   };
 
   const reviewGroups = useMemo(() => importReviewGroups(batch?.items || []), [batch]);
+  const pendingReviewGroups = reviewGroups.filter(group => !group.some(item => item.payload.valueReviewDecision));
+  const recordCount = Math.max(0, ...pendingReviewGroups.map(group => group.length));
   const matchingReviewGroups = reviewGroups.filter(group => !query.trim() || group.some(item => `${item.rawAthleteName} ${item.athleteName} ${item.eventDate} ${item.metricLabel} ${item.metricCode} ${item.testType} ${item.exerciseName}`.includes(query.trim())));
   const reviewGroupPages = Math.max(1, Math.ceil(matchingReviewGroups.length / 8));
   const currentReviewPage = Math.min(reviewGroupPage, reviewGroupPages - 1);
   const reviewGroupIds = useMemo(() => new Set(reviewGroups.flatMap(group => group.map(item => item.id))), [reviewGroups]);
-  const handleValueReview = async (updates: Correction[]) => {
+  const handleValueReview = async (updates: Correction[], bulk = false) => {
     const targetId = updates[0]?.id;
-    const scoped = updates.length > 0 && updates.every(update => update.id === targetId && update.payload?.valueReview);
+    const scoped = !bulk && updates.length > 0 && updates.every(update => update.id === targetId && update.payload?.valueReview);
+    if (bulk) setBusy('save');
     const current = corrections.size || athleteCorrections.size ? await saveCorrections() : batch;
-    if (!current) return;
+    if (!current) { if (bulk) setBusy(''); return; }
     if (scoped) setSavingReviewGroups(previous => new Set(previous).add(targetId));
     else setBusy('save');
     setError('');
@@ -574,7 +578,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         };
       });
       setPendingSelections(previous => new Set([...previous].filter(id => !updates.some(update => update.id === id))));
-      setMessage('选择已保存。');
+      if (bulk) setReviewRevision(previous => previous + 1);
+      setMessage(bulk ? `已将所选记录应用到全部 ${updates.length} 组待审查数据；缺少的冲突字段仍需选择。` : '选择已保存。');
     } catch (error) {
       setError(error instanceof Error ? error.message : '选择保存失败，请重新点击要采用的值。');
     } finally {
@@ -1091,9 +1096,21 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             {reviewGroups.length > 0 && <div className="import-value-review-groups">
               <div className="import-value-review-heading">
                 <h3>导入数据集中审查 · {reviewGroups.length} 组</h3>
+                {recordCount > 0 && <div className="import-value-review-actions" role="group" aria-label="全选待审查记录">
+                  <span>全选：</span>
+                  {Array.from({ length: recordCount }, (_, index) => <button
+                    key={index} type="button"
+                    disabled={Boolean(busy) || savingReviewGroups.size > 0 || batch.items.some(item => pendingSelections.has(item.id)) || batch.status !== 'reviewing'}
+                    title={`将记录 ${index + 1} 应用到所有页面的待审查组；缺少该记录的组保持不变`}
+                    onClick={() => {
+                      const updates = selectImportReviewRecord(pendingReviewGroups, index);
+                      if (updates.length) void handleValueReview(updates, true);
+                    }}
+                  >记录 {index + 1}</button>)}
+                </div>}
               </div>
               {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
-                key={`${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
+                key={`${reviewRevision}-${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
                 items={group} disabled={Boolean(busy) || group.some(item => savingReviewGroups.has(item.id)) || batch.status !== 'reviewing'}
                 onPending={id => setPendingSelections(current => new Set(current).add(id))}
                 onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}

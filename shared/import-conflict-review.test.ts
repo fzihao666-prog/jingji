@@ -3,6 +3,7 @@ import {
   importFieldValues,
   importReviewGroups,
   importReviewKey,
+  selectImportReviewRecord,
   type ImportReviewItem,
 } from './import-conflict-review.js';
 const item: ImportReviewItem = {
@@ -95,4 +96,30 @@ it('恢复、训练、力量、伤病、评估、档案和规则使用统一字�
   expect(
     importReviewGroups([session, { ...session, id: 2, payload: { sessionOrder: 2 } }])
   ).toEqual([]);
+});
+
+
+describe('批量选择记录序号', () => {
+  const group = (id: number) => [
+    { ...item, id, payload: { weightKg: 80, bodyFatPct: 0 } },
+    { ...item, id: id + 1, payload: { weightKg: 81, bodyFatPct: 20, skeletalMuscleKg: 30 } },
+  ];
+  it('处理全部组而非当前8组页，保留真实0与互补字段', () => {
+    const updates = selectImportReviewRecord(Array.from({ length: 10 }, (_, index) => group(index * 2 + 1)), 0);
+    expect(updates).toHaveLength(10);
+    expect(updates.every(update => update.payload.valueReview.action === 'merge')).toBe(true);
+    expect(updates[0].payload.valueReview).toMatchObject({ values: { weightKg: 80, bodyFatPct: 0, skeletalMuscleKg: 30 } });
+  });
+  it('记录2选择其对应值，已处理组及不存在该序号的组不改变', () => {
+    expect(selectImportReviewRecord([group(1), [{ ...item, payload: { valueReviewDecision: {} } }], [item]], 1))
+      .toEqual([expect.objectContaining({ id: 1, payload: { valueReview: expect.objectContaining({ values: { weightKg: 81, bodyFatPct: 20, skeletalMuscleKg: 30 } }) } })]);
+  });
+  it('所选记录缺少冲突字段时暂存已有选择，不猜测其余值', () => {
+    const updates = selectImportReviewRecord([[{ ...item, payload: { weightKg: 80 } }, { ...item, id: 2, payload: { weightKg: 81, bodyFatPct: 10 } }, { ...item, id: 3, payload: { bodyFatPct: 20 } }]], 0);
+    expect(updates[0].payload.valueReview).toEqual({ action: 'draft', choices: { weightKg: '80' }, manual: {} });
+  });
+  it('数据库覆盖也使用同一比较和选择逻辑', () => {
+    const row = { ...item, payload: { weightKg: 81 }, conflict: { exists: true, fields: [{ field: 'weightKg', oldValue: '80', newValue: '81', overwrites: true }] } };
+    expect(selectImportReviewRecord([[row]], 0)[0].payload.valueReview).toMatchObject({ action: 'merge', values: { weightKg: 81 }, includeDatabase: true });
+  });
 });

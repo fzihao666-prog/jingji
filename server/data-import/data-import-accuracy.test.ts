@@ -7,7 +7,7 @@ vi.mock('../core/db.ts', async () => {
   return { db: new DatabaseSync(':memory:') };
 });
 import { db } from '../core/db.ts';
-import { importReviewGroups } from '../../shared/import-conflict-review.ts';
+import { importReviewGroups, selectImportReviewRecord } from '../../shared/import-conflict-review.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
 import {
   analyzeDataImport,
@@ -1549,4 +1549,17 @@ it('单组保存拒绝跨组成员、其他账号、权限外人员和夹带字�
   expect(() => updateDataImportItems({ ...input, athletes: [] })).toThrow(/权限/);
   expect(() => updateDataImportItems({ ...input, corrections: [{ ...input.corrections[0], eventDate: '2025-12-06' }] })).toThrow(/单组审查/);
   expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 0 });
+});
+
+
+it('全选记录2一次保存所有待审查组，提交正确采用各组第二条记录', () => {
+  const rows = Array.from({ length: 10 }, (_, index) => [`2025-12-${String(index + 10).padStart(2, '0')}`]).flatMap(([date], index) => [['张某', date, 70 + index], ['张某', date, 80 + index]]);
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ...rows] });
+  const groups = importReviewGroups(batch.items);
+  const updates = selectImportReviewRecord(groups, 1);
+  expect(updates).toHaveLength(10);
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: updates });
+  expect(saved.errorCount).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(10);
+  expect(db.prepare('SELECT weight_kg AS weight FROM athlete_body_measurements ORDER BY measurement_date').all()).toEqual(Array.from({ length: 10 }, (_, index) => ({ weight: 80 + index })));
 });

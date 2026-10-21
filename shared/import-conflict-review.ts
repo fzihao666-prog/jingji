@@ -361,3 +361,29 @@ export function databaseReviewRecords<T extends ImportReviewItem>(items: T[]): T
 export function requiresDatabaseReview(item: ImportReviewItem) {
   return Boolean(item.conflict?.exists && item.conflict.fields.some((field) => field.overwrites));
 }
+
+
+/** 按界面记录序号批量选择；缺少冲突值时保留待选，不按其他来源猜测。 */
+export function selectImportReviewRecord<T extends ImportReviewItem>(groups: T[][], recordIndex: number) {
+  if (!Number.isSafeInteger(recordIndex) || recordIndex < 0) return [];
+  return groups.filter(group => !group.some(item => item.payload.valueReviewDecision)).flatMap(group => {
+    const selected = group[recordIndex];
+    if (!selected) return [];
+    const includeDatabase = group.some(requiresDatabaseReview);
+    const comparison = includeDatabase ? [...group, ...databaseReviewRecords(group)] : group;
+    const selectedValues = reviewValues(selected, group);
+    const values: Record<string, ReviewValue> = {};
+    let remaining = false;
+    for (const [, field] of reviewFields(comparison)) {
+      const available = importFieldValues(comparison, field);
+      if (!available.length) continue;
+      if (available.length === 1) values[field] = available[0];
+      else if (selectedValues[field] !== undefined) values[field] = selectedValues[field];
+      else remaining = true;
+    }
+    const valueReview = remaining
+      ? { action: 'draft', choices: Object.fromEntries(Object.entries(values).map(([field, value]) => [field, String(value)])), manual: {} }
+      : { action: 'merge', memberIds: group.map(item => item.id), values, includeDatabase };
+    return [{ id: group[0].id, payload: { valueReview } }];
+  });
+}
