@@ -969,3 +969,25 @@ describe('竞技水平评估为可选资料', () => {
     expect(() => commit(batch.id, 'skip')).toThrow(/校验/);
   });
 });
+
+describe('自动识别附带的未注明日期冠军模型数据', () => {
+  it('导入队员资料时不因附带未填日期的冠军模型数值而阻断，明确说明未导入', () => {
+    const batch = analyze({
+      运动员信息: [['姓名', '所属队伍'], ['张某', 'A队']],
+      冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['张某', '', 21.9]],
+    });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.map(item => item.itemType)).toEqual(['athlete_profile']);
+    expect(batch.summary.ignoredSheets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '冠军模型测试', reason: expect.stringContaining('未填测试日期') }),
+    ]));
+    commit(batch.id, 'skip');
+    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 0 });
+  });
+
+  it('填写了明确测试日期的冠军模型数据仍正常导入', () => {
+    const batch = analyze({ 冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['张某', '2025-09-07', 21.9]] });
+    expect(batch.errorCount).toBe(0);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  });
+});
