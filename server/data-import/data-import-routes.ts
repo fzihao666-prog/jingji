@@ -1,3 +1,5 @@
+import { dataImportScope } from './data-import-access.ts';
+export { dataImportScope } from './data-import-access.ts';
 import ExcelJS from 'exceljs';
 import { discardDataImport } from './discard-data-import.ts';
 import { existsSync } from 'node:fs';
@@ -20,36 +22,6 @@ import { requireAuth, requireRole } from '../core/auth.ts';
 import { PROJECTS, normalizeProject } from '../../shared/projects.ts';
 import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity.ts';
 import type { AuthUser, Project } from '../core/shared-server.ts';
-
-export function dataImportScope(user: AuthUser, project: string) {
-  const permissions = accountPermissions(user.id);
-  const projectAllowed =
-    permissions.projects.includes('*') || permissions.projects.includes(project);
-  const allTeams = (
-    db
-      .prepare('SELECT name FROM project_teams WHERE project = ? AND active = 1 ORDER BY name')
-      .all(project) as Array<{ name: string }>
-  ).map((row) => row.name);
-  const allowedTeams = new Set(
-    allTeams.filter((team) =>
-      permissions.teams.some(
-        (item) =>
-          (item.project === '*' || item.project === project) &&
-          (item.team === '*' || item.team === team)
-      )
-    )
-  );
-  const area = permissions.areas[0];
-  return {
-    allowed: projectAllowed && allowedTeams.size > 0,
-    allowedTeams,
-    defaultArea: {
-      region: area?.areaLevel === 'national' ? '未设置' : area?.province || '未设置',
-      city: area && ['city', 'county'].includes(area.areaLevel) ? area.city || '未设置' : '未设置',
-      county: area?.areaLevel === 'county' ? area.county || '未设置' : '未设置',
-    },
-  };
-}
 
 /** 停用档案仅向有删除/恢复权限且满足当前地域、项目、队伍范围的管理者提供。 */
 function dataImportCandidates(user: AuthUser) {
@@ -866,6 +838,8 @@ export function registerDataImportRoutes(app: Express) {
         const scope = dataImportScope(req.authUser!, project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号在该项目下没有可导入的队伍权限。' });
+        if (!scope.allowedTeams.size)
+          return res.status(400).json({ message: '该项目当前没有可导入的有效队伍，请先在组织管理中建立或启用授权范围内的队伍。' });
         const athletes = dataImportCandidates(req.authUser!).filter(
           (athlete) => athlete.project === project
         );
