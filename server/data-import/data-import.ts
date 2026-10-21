@@ -1529,7 +1529,7 @@ function parseStandardSheet(
   return items;
 }
 
-/** 同一批次内按最终人员和日期合并身体测量，冲突必须显式修正，不能依赖表格顺序。 */
+/** 相同及互补事实自动合并；不同值继续使用统一字段审查。 */
 function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
   for (const item of items) {
     delete item.payload.valueImportConflicts;
@@ -1537,7 +1537,9 @@ function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemVi
   }
   const active = items.filter(item => item.resolution !== 'skip' && item.quality !== 'skipped');
   // 解析期尚无暂存行号，使用稳定的临时序号参与统一分组。
-  const grouped = importReviewGroups(active.map((item, index) => ({ ...item, id: 'id' in item ? item.id : -(index + 1) })));
+  const indexed = active.map((item, index) => ({ ...item, id: 'id' in item ? item.id : -(index + 1) }));
+  const originals = new Map(indexed.map((item, index) => [item.id, active[index]]));
+  const grouped = importReviewGroups(indexed);
   for (const group of grouped) {
     if (group.length < 2) continue;
     const decision = group.find(item => item.payload.valueReviewDecision)?.payload.valueReviewDecision as { sources: Array<{ id: number }> } | undefined;
@@ -1550,7 +1552,32 @@ function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemVi
     }
     for (const item of group) {
       if (conflicts.length) item.payload.valueImportConflicts = conflicts;
-      else item.payload.valueReviewPending = true;
+    }
+    if (!conflicts.length && !group.some(item => item.payload.unitConflict || item.payload.valueReviewDecision)) {
+      const values: Record<string, ReviewValue> = {};
+      for (const [, field] of reviewFields(group)) {
+        const available = importFieldValues(group, field);
+        if (available.length === 1) values[field] = available[0];
+      }
+      const sources = group.flatMap(item => Array.isArray(item.payload.valueAutoMergeSources)
+        ? item.payload.valueAutoMergeSources
+        : [{ sourceSheet: item.sourceSheet, sourceAddress: item.sourceAddress, values: reviewValues(item, group) }]);
+      const representatives = new Set<string>();
+      for (const entry of group) {
+        const item = originals.get(entry.id)!;
+        const key = item.itemType === 'test_measurement' ? reviewMetricKey(entry) : 'record';
+        if (representatives.has(key)) {
+          item.resolution = 'skip';
+          item.quality = 'skipped';
+          item.payload.valueAutoMerged = true;
+        } else {
+          representatives.add(key);
+          writeReviewValues(entry, values, group);
+          const { id: _reviewId, ...merged } = entry;
+          Object.assign(item, merged);
+          item.payload.valueAutoMergeSources = sources;
+        }
+      }
     }
   }
 }
@@ -2191,7 +2218,7 @@ export function analyzeDataImport(input: {
       continue;
     }
     item.messages = validateImportItem(item, { allowedAthletes: allowedAthleteIds, candidateNames });
-    item.quality = makeQuality(item.messages);
+    item.quality = makeQuality(item.messages, item.resolution === 'skip');
     item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item as DataImportItemView);
   }
   const counts = summarizeItems(items);
@@ -2376,6 +2403,16 @@ export function getDataImportBatch(
   const summary = JSON.parse(text(row.summaryJson) || '{}') as DataImportPreview['summary'];
   if (duplicateFile) summary.duplicateFile = true;
   const items = itemRows.map(mapItem);
+  // 兼容当前解析器已保存的待确认草稿；读取时即时整理，正式写入仍走提交校验与事务。
+  if (row.status === 'reviewing') {
+    refreshImportConflicts(items);
+    for (const item of items) {
+      if (!item.payload.valueAutoMergeSources && !item.payload.valueAutoMerged) continue;
+      item.messages = item.messages.filter(message => !message.includes('存在重复业务数据，请在集中审查卡片'));
+      item.quality = makeQuality(item.messages, item.resolution === 'skip');
+      item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item);
+    }
+  }
   const athleteCandidates: DataImportAthleteCandidate[] = candidateRows.map((candidate) => ({
     id: Number(candidate.id),
     batchId: text(candidate.batchId),
@@ -2406,9 +2443,9 @@ export function getDataImportBatch(
     parserVersion: text(row.parserVersion),
     sheetCount: Number(row.sheetCount),
     itemCount: Number(row.itemCount),
-    validCount: Number(row.validCount),
-    warningCount: Number(row.warningCount),
-    errorCount: Number(row.errorCount),
+    validCount: items.filter(item => item.quality === 'valid').length,
+    warningCount: items.filter(item => item.quality === 'warning').length,
+    errorCount: items.filter(item => item.quality === 'error').length,
     importedCount: Number(row.importedCount),
     skippedCount: Number(row.skippedCount),
     createdAt: text(row.createdAt),
@@ -4303,7 +4340,7 @@ export function commitDataImport(input: {
       throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
     const freshConflicts = new Map(importable.map(item => [item.id, detectItemConflict(item)]));
     for (const item of importable) {
-      if (resolution.excludedKeys.has(dataImportPersonKey(item))) {
+      if (item.payload.valueAutoMerged || resolution.excludedKeys.has(dataImportPersonKey(item))) {
         skipped += 1;
         continue;
       }

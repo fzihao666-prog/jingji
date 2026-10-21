@@ -7,9 +7,11 @@ vi.mock('../core/db.ts', async () => {
   return { db: new DatabaseSync(':memory:') };
 });
 import { db } from '../core/db.ts';
+import { importReviewGroups } from '../../shared/import-conflict-review.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
 import {
   analyzeDataImport,
+  getDataImportBatch,
   commitDataImport,
   updateDataImportAthleteCandidates,
   updateDataImportItems,
@@ -1140,8 +1142,7 @@ describe('统一模板按业务归属整理', () => {
       身体测量: [['姓名', '测量日期', '身高cm'], ['张某', '2025-10-02', 180]],
       冠军模型测试: [['姓名', '测试日期', '身高cm', '体脂率%'], ['张某', '2025-10-02', 180, 20]],
     });
-    expect(batch.errorCount).toBe(2);
-    updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
+    expect(batch.errorCount).toBe(0);
     commit(batch.id, 'skip');
     expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
     expect(db.prepare('SELECT height_cm AS height, body_fat_pct AS fat FROM athlete_body_measurements').get()).toEqual({ height: 180, fat: 20 });
@@ -1209,8 +1210,7 @@ it('通用测试旧代码和新身体表指向同一事实，单位不一致不�
     身体测量: [['姓名', '测量日期', '身高cm'], ['张某', '2025-10-07', 180]],
     其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-10-07', 'heightCm', 180, 'cm']],
   });
-  expect(batch.errorCount).toBe(2);
-  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
+  expect(batch.errorCount).toBe(0);
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   const invalid = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-10-08', 'heightCm', 1.8, 'm']] });
   expect(invalid.errorCount).toBe(1);
@@ -1324,12 +1324,11 @@ it('表内合并不自动覆盖数据库，更新策略需明确保存且不会�
 });
 
 
-it('未确认的相同互补身体测量必须先审查，不能直接提交丢弃字段', () => {
+it('相同互补身体测量直接自动合并，无需确认且不丢字段', () => {
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '骨骼肌kg'], ['张某', '2025-11-06', 80], ['张某', '2025-11-06', null, 30]] });
-  expect(batch.errorCount).toBe(2);
-  expect(() => commit(batch.id, 'skip')).toThrow();
-  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
-  expect(fixed.errorCount).toBe(0);
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.some(item => item.payload.valueAutoMergeSources)).toBe(true);
+  expect(importReviewGroups(batch.items)).toEqual([]);
   commit(batch.id, 'skip');
   expect(db.prepare("SELECT weight_kg AS weight, skeletal_muscle_kg AS muscle FROM athlete_body_measurements WHERE measurement_date = '2025-11-06'").get()).toEqual({ weight: 80, muscle: 30 });
 });
@@ -1466,4 +1465,35 @@ it('测试备注的新增列初始化可重复执行，保留既有测量和备�
   expect(db.prepare("SELECT value_num AS value, note FROM test_measurements WHERE metric_code = 'migration_note'").get()).toEqual({ value: 20, note: '保留备注' });
   const columns = db.prepare('PRAGMA table_info(test_measurements)').all() as Array<{ name: string }>;
   expect(columns.filter(column => column.name === 'note')).toHaveLength(1);
+});
+
+
+it('当前草稿的相同互补行刷新后直接整理，不再要求确认', () => {
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '骨骼肌kg'], ['张某', '2025-12-01', 80], ['张某', '2025-12-01', null, 30]] });
+  for (const item of batch.items) {
+    const payload = { ...item.payload };
+    delete payload.valueAutoMergeSources;
+    delete payload.valueAutoMerged;
+    if (item.sourceAddress === batch.items[0].sourceAddress) delete payload.skeletalMuscleKg;
+    payload.valueReviewPending = true;
+    db.prepare("UPDATE data_import_items SET payload_json = ?, quality = 'error', resolution = '', messages_json = ? WHERE id = ?")
+      .run(JSON.stringify(payload), JSON.stringify(['错误：存在重复业务数据，请在集中审查卡片确认最终值或填写真实日期后分别保留']), item.id);
+  }
+  const refreshed = getDataImportBatch(batch.id, USER_ID);
+  expect(refreshed.errorCount).toBe(0);
+  expect(importReviewGroups(refreshed.items)).toEqual([]);
+  expect(refreshed.items.filter(item => item.resolution !== 'skip')).toHaveLength(1);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  expect(db.prepare("SELECT weight_kg AS weight, skeletal_muscle_kg AS muscle FROM athlete_body_measurements").get()).toEqual({ weight: 80, muscle: 30 });
+});
+
+it.each([
+  ['每日恢复', ['姓名', '日期', '睡眠小时'], ['张某', '2025-12-02', 7], 'SELECT COUNT(*) AS count FROM daily_wellness'],
+  ['其他测试', ['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-12-02', 'grip', 30, 'kg'], 'SELECT COUNT(*) AS count FROM test_measurements'],
+] as const)('%s 相同值自动合并且只写一次', (sheet, headers, values, sql) => {
+  const batch = analyze({ [sheet]: [[...headers], [...values], [...values]] });
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.filter(item => item.resolution !== 'skip')).toHaveLength(1);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  expect(db.prepare(sql).get()).toEqual({ count: 1 });
 });

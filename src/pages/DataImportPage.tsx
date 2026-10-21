@@ -1,4 +1,4 @@
-import { importReviewGroups, importFieldValues, reviewFields, requiresDatabaseReview } from '../../shared/import-conflict-review';
+import { importReviewGroups } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
@@ -541,7 +541,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const matchingReviewGroups = reviewGroups.filter(group => !query.trim() || group.some(item => `${item.rawAthleteName} ${item.athleteName} ${item.eventDate} ${item.metricLabel} ${item.metricCode} ${item.testType} ${item.exerciseName}`.includes(query.trim())));
   const reviewGroupPages = Math.max(1, Math.ceil(matchingReviewGroups.length / 8));
   const currentReviewPage = Math.min(reviewGroupPage, reviewGroupPages - 1);
-  const autoMergeReviewGroups = reviewGroups.filter(group => !group.some(item => item.payload.valueReviewDecision || requiresDatabaseReview(item)) && reviewFields(group).every(([, field]) => importFieldValues(group, field).length <= 1));
   const reviewGroupIds = useMemo(() => new Set(reviewGroups.flatMap(group => group.map(item => item.id))), [reviewGroups]);
   const handleValueReview = async (updates: Correction[]) => {
     const saved = await saveCorrections();
@@ -562,7 +561,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     const needle = query.trim().toLowerCase();
     return batch.items
       .filter((item) => {
-        if (reviewGroupIds.has(item.id)) return false;
+        if (reviewGroupIds.has(item.id) || item.payload.valueAutoMerged) return false;
+        if (item.payload.valueAutoMergeSources && item.quality === 'valid' && !item.conflict?.fields.some(field => field.overwrites)) return false;
         if (filter === 'exception' && item.itemType !== 'invalid_row' && item.quality === 'valid')
           return false;
         if (filter === 'duplicate' && !item.conflict?.exists) return false;
@@ -1064,10 +1064,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             {reviewGroups.length > 0 && <div className="import-value-review-groups">
               <div className="import-value-review-heading">
                 <h3>导入数据集中审查 · {reviewGroups.length} 组</h3>
-                <button type="button" disabled={Boolean(busy) || batch.status !== 'reviewing' || !autoMergeReviewGroups.length}
-                  onClick={() => void handleValueReview(autoMergeReviewGroups.map(group => ({ id: group[0].id, payload: { valueReview: { action: 'merge', memberIds: group.map(item => item.id), values: {} } } })))}>
-                  一键合并相同及互补记录（{autoMergeReviewGroups.length} 组）
-                </button>
               </div>
               {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
                 key={`${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
