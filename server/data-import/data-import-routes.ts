@@ -12,7 +12,7 @@ import {
   updateDataImportAthleteCandidates,
   updateDataImportItems,
 } from './data-import.ts';
-import { accessibleAthleteIds, accountPermissions, hasAthleteAccess } from '../core/permissions.ts';
+import { accessibleAthleteIds, accountPermissions, hasAthleteAccess, permissionsAllowAthlete } from '../core/permissions.ts';
 import { strengthImportCandidates } from '../strength/strength-training-routes.ts';
 import { cleanString } from '../core/utils.ts';
 import { dataImportUpload } from '../core/uploads.ts';
@@ -49,6 +49,23 @@ export function dataImportScope(user: AuthUser, project: string) {
       county: area?.areaLevel === 'county' ? area.county || '未设置' : '未设置',
     },
   };
+}
+
+/** 停用档案仅向有删除/恢复权限且满足当前地域、项目、队伍范围的管理者提供。 */
+function dataImportCandidates(user: AuthUser) {
+  const active = strengthImportCandidates(user);
+  if (!['REG', 'TD', 'DMD'].includes(user.role)) return active;
+  const permissions = accountPermissions(user.id);
+  const inactive = db.prepare(`
+    SELECT a.id, a.name, a.project, COALESCE(pt.name, a.team, '') AS team, a.gender,
+      COALESCE(a.birth_date, '') AS birthDate,
+      COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county
+    FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id
+    LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id WHERE a.active = 0
+  `).all() as Array<{ id: number; name: string; project: string; team: string; gender: string;
+    birthDate: string; region: string; city: string; county: string }>;
+  return [...active, ...inactive.filter(athlete => permissionsAllowAthlete(permissions, athlete))
+    .map(athlete => ({ ...athlete, active: false }))];
 }
 
 export const unifiedTemplateName = '竞迹统一数据导入模板.xlsx';
@@ -849,7 +866,7 @@ export function registerDataImportRoutes(app: Express) {
         const scope = dataImportScope(req.authUser!, project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号在该项目下没有可导入的队伍权限。' });
-        const athletes = strengthImportCandidates(req.authUser!).filter(
+        const athletes = dataImportCandidates(req.authUser!).filter(
           (athlete) => athlete.project === project
         );
         const batch = analyzeDataImport({
@@ -935,7 +952,7 @@ export function registerDataImportRoutes(app: Express) {
         const batch = updateDataImportItems({
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
-          athletes: strengthImportCandidates(req.authUser!),
+          athletes: dataImportCandidates(req.authUser!),
           corrections,
         });
         res.json({ batch });
@@ -964,7 +981,7 @@ export function registerDataImportRoutes(app: Express) {
           batchId: batch.id,
           userId: req.authUser!.id,
           allowedTeams: scope.allowedTeams,
-          athletes: strengthImportCandidates(req.authUser!).filter(
+          athletes: dataImportCandidates(req.authUser!).filter(
             (athlete) => athlete.project === batch.project
           ),
           corrections,
@@ -990,7 +1007,7 @@ export function registerDataImportRoutes(app: Express) {
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
           creatorRole: req.authUser!.role,
-          athletes: strengthImportCandidates(req.authUser!),
+          athletes: dataImportCandidates(req.authUser!),
           allowedTeams: dataImportScope(
             req.authUser!,
             getDataImportBatch(cleanString(req.params.id), req.authUser!.id).project

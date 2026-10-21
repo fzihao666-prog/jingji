@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v13：无身份提示的跨表记录复用唯一人员候选；不同编号或有歧义的人员继续独立确认。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v13-cross-sheet-person';
+// v14：已提交文件可再次解析，停用档案经当前权限与人工确认后恢复；保留原批次。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v14-repeat-import-restore';
 
 export type ImportAthlete = {
   id: number;
@@ -19,6 +19,7 @@ export type ImportAthlete = {
   team: string;
   gender: string;
   birthDate?: string;
+  active?: boolean;
 };
 
 export type DataImportItemType =
@@ -2055,24 +2056,25 @@ export function analyzeDataImport(input: {
   if (input.defaultDate && !validIsoDate(input.defaultDate))
     throw new Error('默认日期格式应为 YYYY-MM-DD。');
   ensureMetricDefinitions();
-  const fileHash = createHash('sha256').update(input.buffer).digest('hex');
+  const originalHash = createHash('sha256').update(input.buffer).digest('hex');
+  let fileHash = originalHash;
   const existing = db
     .prepare(
-      'SELECT id, parser_version AS parserVersion, status, created_by AS createdBy FROM data_import_batches WHERE file_hash = ? AND project = ?'
+      `SELECT id, file_hash AS fileHash, parser_version AS parserVersion, status, created_by AS createdBy
+       FROM data_import_batches WHERE (file_hash = ? OR file_hash LIKE ?) AND project = ?
+       ORDER BY rowid DESC LIMIT 1`
     )
-    .get(fileHash, input.project) as
-    { id: string; parserVersion: string; status: string; createdBy: number } | undefined;
+    .get(originalHash, `${originalHash}:%`, input.project) as
+    { id: string; fileHash: string; parserVersion: string; status: string; createdBy: number } | undefined;
+  if (existing && existing.createdBy !== input.userId)
+    throw new Error('同一文件已有其他账号创建的导入批次。');
   if (existing?.status === 'committed') {
-    // 已入库批次保留审计痕迹，不覆盖；仅提示重复文件。
-    return getDataImportBatch(existing.id, input.userId, true);
-  }
-  if (existing?.parserVersion === DATA_IMPORT_PARSER_VERSION && !input.reparse) {
-    // 继续上次校对：打开原批次；由用户决定“重新解析”后再按当前参数重建。
-    return getDataImportBatch(existing.id, input.userId, true);
-  }
-  if (existing) {
-    if (existing.createdBy !== input.userId)
-      throw new Error('同一文件已有其他账号创建的待审核批次。');
+    // 保留已提交批次和审计链，新批次重新检测当前正式表中的缺失与重复。
+    fileHash = `${originalHash}:${randomUUID()}`;
+  } else if (existing) {
+    if (existing.parserVersion === DATA_IMPORT_PARSER_VERSION && !input.reparse)
+      return getDataImportBatch(existing.id, input.userId, true);
+    fileHash = existing.fileHash;
     db.prepare('DELETE FROM data_import_batches WHERE id = ?').run(existing.id);
   }
   const workbook = XLSX.read(input.buffer, {
@@ -2186,7 +2188,11 @@ export function analyzeDataImport(input: {
       },
       input.athletes
     );
-    if (resolution.kind === 'matched') {
+    if (resolution.kind === 'matched' && resolution.athlete.active === false) {
+      person.suggested = [toSuggestion(resolution.athlete)];
+      person.team = person.team || resolution.athlete.team;
+      person.messages.push('该运动员档案已停用，确认关联后将恢复原档案及其历史数据，不启用登录账号');
+    } else if (resolution.kind === 'matched') {
       person.matched = true;
       person.matchedAthleteId = resolution.athlete.id;
       person.gender = person.gender || resolution.athlete.gender;
@@ -3991,10 +3997,15 @@ function resolvePendingAthletes(input: {
     if (candidate.matchedAthleteId) {
       // 关联已有运动员：服务端重新验证存在性与权限，不覆盖已有档案。
       const target = db
-        .prepare('SELECT id, name, project FROM athletes WHERE id = ? AND active = 1')
-        .get(candidate.matchedAthleteId) as { id: number; name: string; project: string } | undefined;
+        .prepare('SELECT id, name, project, active FROM athletes WHERE id = ?')
+        .get(candidate.matchedAthleteId) as { id: number; name: string; project: string; active: number } | undefined;
       if (!target || target.project !== candidate.project || !input.allowedAthletes.has(target.id))
         throw new Error(`“${candidate.name}”关联的已有运动员无效或不在当前权限范围内。`);
+      if (target.active === 0) {
+        db.prepare('UPDATE athletes SET active = 1 WHERE id = ?').run(target.id);
+        db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
+          .run(input.userId, 'RESTORE_ATHLETE_FROM_IMPORT', 'athlete', target.id);
+      }
       db.prepare(
         `UPDATE data_import_athlete_candidates SET status = 'matched', matched_athlete_id = ?, created_athlete_id = NULL WHERE id = ?`
       ).run(target.id, candidate.id);

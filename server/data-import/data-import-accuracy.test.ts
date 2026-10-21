@@ -1038,3 +1038,54 @@ it('文件中多个同名身份时，仅姓名的跨表记录仍要求人工确�
   expect(test.athleteId).toBeNull();
   expect(batch.athleteCandidates.find(person => person.status === 'pending')?.suggested).toHaveLength(2);
 });
+
+it('已入库文件重传可恢复已停用运动员并补回缺失记录，保留历史批次及已有数据', () => {
+  const buffer = workbookBuffer({ 训练课次: [['系统运动员编号', '姓名', '日期', '时长分钟'], [1, '张某', '2025-09-10', 60], [2, '赵某', '2025-09-10', 90]] });
+  const input = { buffer, filename: '恢复导入.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']) };
+  const original = analyzeDataImport(input);
+  commit(original.id, 'skip');
+  db.prepare('UPDATE athletes SET active = 0 WHERE id = 1').run();
+  db.prepare('DELETE FROM training_sessions WHERE athlete_id = 1').run();
+  const current = [{ ...athletes[0], active: false }, athletes[1], athletes[2]];
+  const next = analyzeDataImport({ ...input, athletes: current });
+  expect(next.status).toBe('reviewing');
+  expect(next.id).not.toBe(original.id);
+  const person = next.athleteCandidates.find(person => person.name === '张某')!;
+  expect(person.confirmed).toBe(false);
+  updateDataImportAthleteCandidates({ batchId: next.id, userId: USER_ID, athletes: current, allowedTeams: input.allowedTeams, corrections: [{ id: person.id, matchedAthleteId: 1, confirmed: true }] });
+  const result = commitDataImport({ batchId: next.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: input.allowedTeams, conflictPolicy: 'skip' });
+  expect(result.createdRecords).toBe(1);
+  expect(result.skipped).toBeGreaterThanOrEqual(1);
+  expect(db.prepare('SELECT active FROM athletes WHERE id = 1').get()).toEqual({ active: 1 });
+  expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({ count: 2 });
+  expect(db.prepare('SELECT status FROM data_import_batches WHERE id = ?').get(original.id)).toEqual({ status: 'committed' });
+  expect(db.prepare('SELECT COUNT(*) AS count FROM data_import_batches').get()).toEqual({ count: 2 });
+});
+
+it('恢复停用档案不启用登录账号，权限被收回时拒绝提交', () => {
+  db.prepare('UPDATE athletes SET active = 0 WHERE id = 1').run();
+  db.prepare("INSERT INTO users (id, username, password_hash, display_name, role, athlete_id, active) VALUES (99, 'inactive-athlete', 'x', '测试账号', 'ATL', 1, 0)").run();
+  const current = [{ ...athletes[0], active: false }, athletes[1]];
+  const batch = analyze({ 训练课次: [['系统运动员编号', '姓名', '日期', '时长分钟'], [1, '张某', '2025-09-11', 60]] }, { athletes: current });
+  updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes: current, allowedTeams: new Set(['A队']), corrections: [{ id: batch.athleteCandidates[0].id, matchedAthleteId: 1, confirmed: true }] });
+  expect(() => commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: [athletes[1]], allowedTeams: new Set(['B队']), conflictPolicy: 'skip' })).toThrow();
+  expect(db.prepare('SELECT active FROM athletes WHERE id = 1').get()).toEqual({ active: 0 });
+  commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: new Set(['A队']), conflictPolicy: 'skip' });
+  expect(db.prepare('SELECT active FROM users WHERE id = 99').get()).toEqual({ active: 0 });
+  expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'RESTORE_ATHLETE_FROM_IMPORT'").get()).toEqual({ count: 1 });
+});
+
+it('恢复后的业务写入失败时，档案恢复和审计同事务回滚', () => {
+  db.prepare('UPDATE athletes SET active = 0 WHERE id = 1').run();
+  const current = [{ ...athletes[0], active: false }];
+  const batch = analyze({ 训练课次: [['系统运动员编号', '姓名', '日期', '时长分钟'], [1, '张某', '2025-09-12', 60]] }, { athletes: current });
+  updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes: current, allowedTeams: new Set(['A队']), corrections: [{ id: batch.athleteCandidates[0].id, matchedAthleteId: 1, confirmed: true }] });
+  db.exec("CREATE TRIGGER reject_import_insert BEFORE INSERT ON training_sessions BEGIN SELECT RAISE(ABORT, '模拟写入失败'); END");
+  try {
+    expect(() => commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: new Set(['A队']), conflictPolicy: 'skip' })).toThrow();
+    expect(db.prepare('SELECT active FROM athletes WHERE id = 1').get()).toEqual({ active: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'RESTORE_ATHLETE_FROM_IMPORT'").get()).toEqual({ count: 0 });
+  } finally {
+    db.exec('DROP TRIGGER reject_import_insert');
+  }
+});
