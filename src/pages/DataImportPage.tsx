@@ -180,7 +180,18 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     const unresolved = next.athleteCandidates.filter(
       (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
     );
-    if (unresolved.length) setPersonDialogOpen(true);
+    setPersonDialogOpen(next.status === 'reviewing' && unresolved.length > 0);
+    setDuplicateDialogOpen(false);
+    setConfirmDialogOpen(false);
+    if (next.status === 'committed') {
+      setMessage(`该文件已完成入库：写入${next.importedCount}条、跳过${next.skippedCount}条；无需再次确认人员或提交。当前显示历史导入结果。`);
+    } else if (next.status === 'reviewing') {
+      setMessage(unresolved.length
+        ? `已识别${next.itemCount}条候选数据；还有${unresolved.length}名人员待确认，请完成人员确认后校对数据。`
+        : `已识别${next.itemCount}条候选数据；人员已确认，请校对数据后确认导入。`);
+    } else {
+      setMessage('该历史批次当前不能提交，请检查批次状态后重新上传文件。');
+    }
   };
 
   const analyze = async (options?: { reparse?: boolean }) => {
@@ -190,7 +201,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setMessage('');
     try {
       const info = await api.analyzeDataImport(file, project, defaultDate || undefined, options);
-      if (info.batch.summary.duplicateFile && !options?.reparse) {
+      if (info.batch.status === 'committed') {
+        startReview(info.batch);
+        await refreshBatches();
+        return;
+      }
+      if (info.batch.status === 'reviewing' && info.batch.summary.duplicateFile && !options?.reparse) {
         setBatch(info.batch);
         setDuplicateDialogOpen(true);
         setMessage('该文件已上传过，可继续上次校对，或按当前参数重新解析。');
@@ -198,9 +214,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         return;
       }
       startReview(info.batch);
-      setMessage(
-        `已识别${info.batch.itemCount}条候选数据；请先完成人员确认，再校对业务数据。`
-      );
       await refreshBatches();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '文件解析失败。');
@@ -1330,7 +1343,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         </>
       )}
 
-      {duplicateDialogOpen && batch && (
+      {duplicateDialogOpen && batch?.status === 'reviewing' && (
         <div
           className="data-import-dialog-backdrop"
           role="presentation"
@@ -1363,7 +1376,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 onClick={() => {
                   setDuplicateDialogOpen(false);
                   startReview(batch);
-                  setMessage('已打开原有导入批次，可继续上次校对。');
                 }}
               >
                 继续上次校对
