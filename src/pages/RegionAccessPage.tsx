@@ -114,6 +114,7 @@ export function RegionAccessPage({ user }: { user: User }) {
   const teamSelectRefs = useRef<Array<HTMLSelectElement | null>>([]);
   const [teamOptions, setTeamOptions] = useState<ProjectTeam[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [auditPage, setAuditPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createInvalid, setCreateInvalid] = useState<'username' | 'password' | 'confirm' | null>(
@@ -478,6 +479,11 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const visibleParentOptions = (targetRole: Role) =>
     payload?.possibleParents.filter((parent) => canManageRole(parent.role, targetRole)) || [];
+
+  const auditPageSize = 6;
+  const auditPageCount = Math.max(1, Math.ceil(logs.length / auditPageSize));
+  const currentAuditPage = Math.min(auditPage, auditPageCount - 1);
+  const visibleLogs = logs.slice(currentAuditPage * auditPageSize, (currentAuditPage + 1) * auditPageSize);
 
   const canEditAccess = user.role !== 'SCC';
   const feedbackInFooter = canEditAccess && Boolean(selected);
@@ -1469,7 +1475,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </tr>
               </thead>
               <tbody>
-                {logs.slice(0, 20).map((log) => (
+                {visibleLogs.map((log) => (
                   <tr key={log.id}>
                     <td>
                       {new Date(log.createdAt.replace(' ', 'T') + 'Z').toLocaleString('zh-CN')}
@@ -1487,6 +1493,27 @@ export function RegionAccessPage({ user }: { user: User }) {
               </tbody>
             </table>
           </div>
+          <nav className="roster-pagination" aria-label="权限与操作日志分页">
+            <span className="roster-pagination-summary" aria-live="polite">
+              共 {logs.length} 条 · 每页 6 条 · 第 {currentAuditPage + 1} / {auditPageCount} 页
+            </span>
+            <div className="roster-pagination-pages">
+              <button
+                type="button"
+                disabled={currentAuditPage === 0}
+                onClick={() => setAuditPage(currentAuditPage - 1)}
+              >
+                上一页
+              </button>
+              <button
+                type="button"
+                disabled={currentAuditPage >= auditPageCount - 1}
+                onClick={() => setAuditPage(currentAuditPage + 1)}
+              >
+                下一页
+              </button>
+            </div>
+          </nav>
         </section>
       )}
     </PageContainer>
