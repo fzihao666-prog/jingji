@@ -2950,12 +2950,21 @@ export function updateDataImportAthleteCandidates(input: {
       const team = 'team' in correction ? text(correction.team) : current.team;
       const gender = 'gender' in correction ? text(correction.gender) : current.gender;
       const excluded = 'excluded' in correction ? Boolean(correction.excluded) : current.excluded;
-      const confirmed = 'confirmed' in correction ? Boolean(correction.confirmed) : current.confirmed;
+      let confirmed = 'confirmed' in correction ? Boolean(correction.confirmed) : current.confirmed;
       let matchedAthleteId =
         'matchedAthleteId' in correction
           ? correction.matchedAthleteId ?? null
           : current.matchedAthleteId;
       const messages: string[] = [];
+      if (!excluded && !matchedAthleteId && team) {
+        const existing = input.athletes.filter(athlete => athlete.project === current.project
+          && text(athlete.team) === team && normalizedName(athlete.name) === normalizedName(name)
+          && athlete.active !== false);
+        if (existing.length === 1) {
+          matchedAthleteId = existing[0].id;
+          confirmed = true;
+        }
+      }
       if (!excluded) {
         if (!name || name.length > 40) messages.push('姓名不能为空且不能超过40个字符');
         if (gender && !['男', '女'].includes(gender)) messages.push('性别应为男、女或暂不填写');

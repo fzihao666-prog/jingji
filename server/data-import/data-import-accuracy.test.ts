@@ -711,22 +711,23 @@ describe('P0：人员确认及旧草稿保护', () => {
   });
 });
 
-it('选择新建时遇到同队同名档案不在提交阶段偷偷关联', () => {
+it('选择队伍后唯一同队同名档案自动关联，无需手动选择', () => {
   const batch = analyze({
     训练课次: [
       ['系统运动员编号', '姓名', '日期', '时长分钟'],
       [999, '张某', '2025-08-06', 60],
     ],
   });
-  updateDataImportAthleteCandidates({
+  const updated = updateDataImportAthleteCandidates({
     batchId: batch.id,
     userId: USER_ID,
     allowedTeams: new Set(['A队']),
     athletes,
     corrections: [{ id: batch.athleteCandidates[0].id, team: 'A队', confirmed: true }],
   });
-  expect(() => commit(batch.id, 'skip')).toThrow(/同名档案/);
-  expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({ count: 0 });
+  expect(updated.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 1, confirmed: true });
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  expect(db.prepare('SELECT athlete_id FROM training_sessions').get()).toEqual({ athlete_id: 1 });
 });
 
 describe('P1：模板空行、日期和非法数值', () => {

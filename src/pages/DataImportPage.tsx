@@ -350,6 +350,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   };
 
   const patchAthleteCandidate = (candidateId: number, patch: Omit<AthleteCorrection, 'id'>) => {
+    const candidate = batch?.athleteCandidates.find(entry => entry.id === candidateId);
+    if (candidate && ('team' in patch || 'name' in patch) && !candidate.excluded) {
+      const name = (patch.name ?? candidate.name).trim();
+      const team = patch.team ?? candidate.team;
+      const existing = athletes.filter(athlete => athlete.project === candidate.project
+        && athlete.name.trim() === name && athlete.team === team);
+      if (existing.length === 1) patch = { ...patch, matchedAthleteId: existing[0].id, confirmed: true };
+    }
     setBatch((current) =>
       current
         ? {
