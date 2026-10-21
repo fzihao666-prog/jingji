@@ -1473,7 +1473,7 @@
   width: 80px;
 }
 
-/* 校对表使用稳定列宽，长来源及校验信息在单元格内换行。 */
+/* 校对表使用稳定列宽，长校验信息在单元格内换行。 */
 .data-import-table.data-import-review-table {
   min-width: 1080px;
   table-layout: fixed;
@@ -1534,4 +1534,30 @@
 .data-import-review-table .import-messages {
   min-width: 0;
   gap: 6px;
+}
+
+.import-source-details {
+  margin-top: 8px;
+  color: #6f8388;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.import-source-details summary {
+  cursor: pointer;
+}
+
+.import-source-details summary:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: 3px;
+}
+
+.import-source-details > div {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.import-source-details p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
 }

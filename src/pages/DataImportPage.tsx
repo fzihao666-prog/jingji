@@ -1043,10 +1043,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                   <col style={{ width: '11%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '9%' }} />
-                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '24%' }} />
                   <col style={{ width: '9%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '26%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1057,7 +1056,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     <th>动作/指标</th>
                     <th>数值（最终入库值）</th>
                     <th>重复处理</th>
-                    <th>来源</th>
                     <th>校验与冲突</th>
                   </tr>
                 </thead>
@@ -1285,12 +1283,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         )}
                       </td>
                       <td>
-                        <strong>{item.sourceSheet}</strong>
-                        <small>
-                          {item.sourceAddress} · 原值 {item.rawValue || '空'}
-                        </small>
-                      </td>
-                      <td>
                         <div className="import-messages">
                           {item.conflict?.fields.filter(field => field.oldValue !== field.newValue).map((field) => (
                             <span
@@ -1309,12 +1301,19 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             <span>校验通过</span>
                           ) : null}
                         </div>
+                        <details className="import-source-details">
+                          <summary>查看原始记录</summary>
+                          <div>
+                            <strong>{item.sourceSheet} · {item.sourceAddress}</strong>
+                            <p>原值：{item.rawValue || '空'}</p>
+                          </div>
+                        </details>
                       </td>
                     </tr>
                   ))}
                   {!pageItems.length && (
                     <tr>
-                      <td colSpan={9} className="data-import-empty">
+                      <td colSpan={8} className="data-import-empty">
                         当前筛选条件下没有数据。
                       </td>
                     </tr>
