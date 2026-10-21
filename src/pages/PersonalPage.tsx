@@ -16,6 +16,7 @@ import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import { ProfileTrainingStatus } from '../components/ProfileTrainingStatus';
+import { TrainingReport } from '../components/TrainingReport';
 import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import type {
@@ -614,6 +615,10 @@ export function PersonalPage(props: Props) {
         />
       ) : (
         <>
+          <details key={`report-${selectedAthlete.id}`} className="personal-profile-section">
+            <summary>训练报告 · 周 / 月 / 自选日期</summary>
+            <TrainingReport key={selectedAthlete.id} athleteId={selectedAthlete.id} athleteName={selectedAthlete.name} initialDate={props.to} />
+          </details>
           <section className="personal-dossier">
             <header className="personal-dossier-identity">
               <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>

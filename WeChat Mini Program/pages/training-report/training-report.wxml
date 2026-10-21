@@ -1,0 +1,49 @@
+<view class="page report-page">
+  <view class="page-head"><view class="page-title">竞迹·报告</view></view>
+  <view class="card report-controls">
+    <picker range="{{kinds}}" value="{{kindIndex}}" disabled="{{busy}}" bindchange="onKind"><view class="report-picker">报告类型：{{kinds[kindIndex]}} ▾</view></picker>
+    <view class="report-dates"><picker mode="date" value="{{range.from}}" disabled="{{busy}}" bindchange="onFrom"><view class="report-picker">{{range.kind == 'custom' ? '开始日期' : '所在周 / 月'}}<text>{{range.from}}</text></view></picker>
+      <picker mode="date" value="{{range.to}}" disabled="{{busy || range.kind != 'custom'}}" bindchange="onTo"><view class="report-picker">结束日期<text>{{range.to}}</text></view></picker></view>
+    <view class="report-actions"><button class="primary-button" disabled="{{busy || !athleteId}}" bindtap="preview">预览图表</button><button class="secondary-button" disabled="{{busy || !athleteId}}" bindtap="history">历史报告</button></view>
+  </view>
+  <view wx:if="{{busy}}" class="notice">正在处理，请稍候…</view>
+  <view wx:if="{{error}}" class="error-box">{{error}}</view>
+  <view wx:if="{{showHistory}}" class="card report-history">
+    <view class="section-head-title">历史报告</view>
+    <view wx:if="{{!history.length}}" class="report-history-empty">暂无报告</view>
+    <view wx:for="{{history}}" wx:key="id" class="history-row">
+      <button class="history-item" disabled="{{busy}}" data-id="{{item.id}}" bindtap="openHistory">{{item.from}} — {{item.to}}</button>
+      <button class="history-export" disabled="{{busy}}" loading="{{exportingId === item.id}}" data-id="{{item.id}}" bindtap="exportPdf" aria-label="导出 {{item.from}} 至 {{item.to}} 的PDF报告">{{exportingId === item.id ? '导出中' : '导出 PDF'}}</button>
+    </view></view>
+  <block wx:if="{{report && !showHistory}}">
+    <view class="report-note">{{report.range.from}} — {{report.range.to}}<text wx:if="{{saved}}"> · 已确认快照</text></view>
+    <view class="report-kpis"><view wx:for="{{view.kpis}}" wx:key="key" class="card report-kpi"><text>{{item.label}}</text><view class="report-value">{{item.value}}<text>{{item.unit}}</text></view><text class="report-note">前期 {{item.previous}}</text><text class="report-note">{{item.coverage}}</text></view></view>
+    <view class="card"><view class="section-head-title">训练结构 · 分钟</view>
+      <view class="report-legend"><text class="special">■ 专项</text><text class="physical">■ 体能</text><text class="recovery">■ 恢复</text><text class="other">■ 未分类</text></view>
+      <text wx:if="{{!report.totals.sessions}}" class="report-note">暂无有效训练记录</text>
+      <scroll-view scroll-x class="report-scroll"><view class="report-bars"><view wx:for="{{view.daily}}" wx:key="date" class="report-slot"><text>{{item.durationText}}</text><view class="report-bar-stage"><view wx:for="{{item.segments}}" wx:for-item="segment" wx:key="key" class="report-segment {{segment.key}}" style="height: {{segment.height}}%;"></view></view><text>{{item.shortDate}}</text></view></view></scroll-view>
+      <view class="report-row report-th"><text>类型</text><text>课次</text><text>分钟</text></view><view wx:for="{{view.categories}}" wx:key="key" class="report-row"><text>{{item.label}}</text><text>{{item.sessions}}</text><text>{{item.durationText}}</text></view>
+    </view>
+    <view class="card"><view class="section-head-title">每日负荷 · SRPE（AU）</view><text class="report-note">仅汇总有时长和 RPE 的课次，缺失不补零。</text>
+      <scroll-view scroll-x class="report-scroll"><view class="report-bars"><view wx:for="{{view.daily}}" wx:key="date" class="report-slot"><text>{{item.srpeText}}</text><view class="report-bar-stage"><view class="report-segment load" style="height: {{item.loadHeight}}%;"></view></view><text>{{item.shortDate}}</text></view></view></scroll-view>
+      <button class="text-button" bindtap="toggleDaily">{{showDaily ? '收起每日明细' : '查看每日明细'}}</button>
+      <block wx:if="{{showDaily}}"><view class="report-row report-th"><text>日期</text><text>课次</text><text>分钟</text><text>SRPE</text></view><view wx:for="{{view.daily}}" wx:key="date" class="report-row"><text>{{item.shortDate}}</text><text>{{item.sessions}}</text><text>{{item.durationText}}</text><text>{{item.srpeText}}</text></view></block>
+    </view>
+    <view class="card"><view class="section-head-title">测试变化</view>
+      <text wx:if="{{!view.tests.length}}" class="report-note">暂无有效测试记录</text>
+      <view wx:for="{{view.tests}}" wx:key="key" class="report-test"><view>{{item.label}} · {{item.unit}}</view>
+        <view class="report-row report-th"><text>首次</text><text>末次</text><text>变化</text></view><view class="report-row"><text>{{item.firstText}}</text><text>{{item.lastText}}</text><text>{{item.changeText}}</text></view><text class="report-note">{{item.first.date}} → {{item.last.date}}</text></view>
+    </view>
+    <view class="card"><view class="section-head-title">恢复趋势</view><view wx:for="{{view.wellness}}" wx:for-item="metric" wx:key="key"><view class="report-metric-title">{{metric.label}} · 均值 {{metric.averageText}} {{metric.unit}}</view>
+      <text wx:if="{{!metric.days}}" class="report-note">暂无有效记录</text>
+      <scroll-view scroll-x class="report-scroll"><view class="report-bars"><view wx:for="{{metric.bars}}" wx:for-item="bar" wx:key="date" class="report-slot"><text>{{bar.value}}</text><view class="report-bar-stage"><view class="report-segment special" style="height: {{bar.height}}%;"></view></view><text>{{bar.shortDate}}</text></view></view></scroll-view>
+    </view></view>
+    <view class="card"><view class="section-head-title">简短点评<text wx:if="{{saved}}"> · 已确认</text></view>
+      <block wx:if="{{!saved}}">
+        <button class="primary-button report-ai-button" bindtap="generate" disabled="{{busy}}" loading="{{busy}}">生成 AI 点评</button></block>
+      <view wx:for="{{commentaryFields}}" wx:key="key" class="report-comment"><view>{{item.label}}</view><text wx:if="{{saved}}">{{commentary[item.key] || '未填写'}}</text><textarea wx:else value="{{commentary[item.key]}}" maxlength="201" disabled="{{busy}}" data-key="{{item.key}}" bindinput="onCommentary" /></view>
+      <button wx:if="{{!saved}}" class="primary-button" bindtap="save" disabled="{{busy}}">确认并保存报告</button>
+      <text wx:else class="report-note">保存于 {{saved}} · 网页端可打印 / 保存为 PDF</text>
+    </view>
+  </block>
+</view>
