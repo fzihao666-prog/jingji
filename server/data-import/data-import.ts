@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v11：附带的无日期冠军模型数据明确标注未导入，不阻断队员资料；旧草稿须重新解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v11-optional-champion-date';
+// v12：空白记录日期优先使用所选日期，未选择时补北京时间当天；旧草稿须重新解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v12-default-today';
 
 export type ImportAthlete = {
   id: number;
@@ -1019,13 +1019,13 @@ function parseStandardSheet(
   project: string,
   filename: string,
   defaultDate: string,
-  athletes: ImportAthlete[],
-  skippedRows: string[] = []
+  athletes: ImportAthlete[]
 ) {
   const header = standardHeader(matrix);
   if (!header) return [];
   const items: ParsedImportItem[] = [];
   const year = workbookYear(filename);
+  const fallbackDate = defaultDate || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
   const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目']);
   const dateLabels = ['日期', '测量日期', '测试日期', '发生日期', '评估日期'];
@@ -1076,12 +1076,7 @@ function parseStandardSheet(
     const athlete = matchAthlete(rawName, project, athletes);
     const rawDate = standardValue(row, header.columns, ...dateLabels);
     const dateColumn = dateLabels.map(label => header.columns.get(normalizedText(label))).find(column => column !== undefined);
-    const rowDate = text(rawDate) === '' ? defaultDate : parseStandardDate(rawDate, year);
-    // 无测试日期的附带模型数值不构成一次实测记录，不推测日期或伪造测试事实。
-    if (sheet === '冠军模型测试' && text(rawDate) === '' && !defaultDate) {
-      skippedRows.push(`第${rowIndex + 1}行未填测试日期，未导入冠军模型测试数据`);
-      continue;
-    }
+    const rowDate = text(rawDate) === '' ? fallbackDate : parseStandardDate(rawDate, year);
     const messages: string[] = [];
     const base = {
       athleteId: athlete?.id || null,
@@ -2080,7 +2075,6 @@ export function analyzeDataImport(input: {
     let parsed: ParsedImportItem[] = [];
     let type = '';
     let note = '';
-    const skippedRows: string[] = [];
     if (STANDARD_SHEETS.has(sheetName)) {
       parsed = parseStandardSheet(
         matrix,
@@ -2088,8 +2082,7 @@ export function analyzeDataImport(input: {
         input.project,
         input.filename,
         input.defaultDate || '',
-        input.athletes,
-        skippedRows
+        input.athletes
       );
       type = `统一模板·${sheetName}`;
       note = '按竞迹统一数据模板的固定列确定性解析';
@@ -2147,12 +2140,11 @@ export function analyzeDataImport(input: {
       type = '历史测试对比';
       note = '仅提取各日期原始值，忽略差值公式';
     }
-    if (skippedRows.length) note += `；${skippedRows.join('；')}`;
     if (parsed.length) {
       items.push(...parsed);
       recognizedSheets.push({ name: sheetName, type, items: parsed.length, note });
     } else {
-      const reason = skippedRows.length ? skippedRows.join('；') : STANDARD_SHEETS.has(sheetName) && standardHeader(matrix)
+      const reason = STANDARD_SHEETS.has(sheetName) && standardHeader(matrix)
         ? '未填写业务数据（仅有表头或预填人员信息）'
         : !firstRows.replace(/\|/g, '') ? '空白工作表' : '未识别为支持的数据模板';
       ignoredSheets.push({ name: sheetName, reason });

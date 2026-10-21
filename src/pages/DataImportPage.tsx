@@ -707,7 +707,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               value={defaultDate}
               onChange={(event) => setDefaultDate(event.target.value)}
             />
-            <small>可选；表内存在日期时仍优先保留表内日期</small>
+            <small>可选；表内日期优先，缺失时使用所选日期，未选择则使用北京时间当天</small>
           </label>
           <button
             className="data-import-primary"

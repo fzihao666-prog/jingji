@@ -962,27 +962,24 @@ describe('竞技水平评估为可选资料', () => {
     expect(batch.items.map(item => item.itemType)).toEqual(['training_session']);
   });
 
-  it('实际填写了评估分数时仍须填写日期', () => {
+  it('实际填写了评估分数但缺日期时自动补当天', () => {
     const batch = analyze({ 竞技水平评估: [['姓名', '评估日期', '竞技总分'], ['张某', '', 80]] });
     expect(batch.items.map(item => item.itemType)).toEqual(['competitive_state']);
-    expect(batch.errorCount).toBe(1);
-    expect(() => commit(batch.id, 'skip')).toThrow(/校验/);
+    expect(batch.errorCount).toBe(0);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   });
 });
 
 describe('自动识别附带的未注明日期冠军模型数据', () => {
-  it('导入队员资料时不因附带未填日期的冠军模型数值而阻断，明确说明未导入', () => {
+  it('附带未填日期的冠军模型数值自动补当天并导入', () => {
     const batch = analyze({
       运动员信息: [['姓名', '所属队伍'], ['张某', 'A队']],
       冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['张某', '', 21.9]],
     });
     expect(batch.errorCount).toBe(0);
-    expect(batch.items.map(item => item.itemType)).toEqual(['athlete_profile']);
-    expect(batch.summary.ignoredSheets).toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: '冠军模型测试', reason: expect.stringContaining('未填测试日期') }),
-    ]));
+    expect(batch.items.map(item => item.itemType).sort()).toEqual(['athlete_profile', 'test_measurement']);
     commit(batch.id, 'skip');
-    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 1 });
   });
 
   it('填写了明确测试日期的冠军模型数据仍正常导入', () => {
@@ -990,4 +987,22 @@ describe('自动识别附带的未注明日期冠军模型数据', () => {
     expect(batch.errorCount).toBe(0);
     expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   });
+});
+
+
+it('空白日期按所选默认日期、北京时间当天依次补充，表内日期优先', () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date('2026-10-21T16:30:00Z'));
+    const sheets = { 训练课次: [['姓名', '日期', '时长分钟'], ['张某', '', 60], ['赵某', '2025-09-07', 90]] };
+    const today = analyze(sheets);
+    expect(today.items.map(item => item.eventDate)).toEqual(['2026-10-22', '2025-09-07']);
+    expect(today.errorCount).toBe(0);
+    commit(today.id, 'skip');
+    expect(db.prepare('SELECT session_date AS date FROM training_sessions WHERE athlete_id = 1').get()).toEqual({ date: '2026-10-22' });
+    const chosen = analyze(sheets, { defaultDate: '2025-09-08' });
+    expect(chosen.items.map(item => item.eventDate)).toEqual(['2025-09-08', '2025-09-07']);
+  } finally {
+    vi.useRealTimers();
+  }
 });
