@@ -23,6 +23,7 @@ import { api } from '../api';
 import type {
   Athlete,
   DataImportBatch,
+  DataImportAthleteCandidate,
   DataImportBatchSummary,
   DataImportItem,
   Project,
@@ -367,6 +368,17 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       });
       return next;
     });
+  };
+
+  const personHandlingLabel = (candidate: DataImportAthleteCandidate) => {
+    if (candidate.excluded) return '已排除';
+    const athleteId = candidate.matchedAthleteId || candidate.createdAthleteId;
+    if (athleteId) {
+      const athlete = athletes.find(entry => entry.id === athleteId)
+        || candidate.suggested.find(entry => entry.id === athleteId);
+      return `${athlete?.name || candidate.name} · ${athlete?.team || candidate.team || '无队伍'} · 编号 ${athleteId}`;
+    }
+    return candidate.suggested.length ? '身份待确认（请选择已有运动员）' : '新建';
   };
 
   const applyBulkCandidateTeam = (team: string) => {
@@ -1521,19 +1533,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                                     : 'pending'
                             }`}
                           >
-                            {candidate.excluded
-                              ? '已排除'
-                              : candidate.status === 'created'
-                                ? '已创建'
-                                : candidate.status === 'matched' && candidate.confirmed
-                                  ? '已匹配'
-                                  : candidate.matchedAthleteId
-                                    ? '关联已有'
-                                    : candidate.suggested.length
-                                      ? '身份待确认'
-                                      : candidate.confirmed
-                                        ? '待建档（已确认）'
-                                        : '待建档'}
+                            {personHandlingLabel(candidate)}
                           </span>
                         </td>
                       </tr>
@@ -1600,7 +1600,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         value={
                           selectedPerson.excluded
                             ? 'exclude'
-                            : selectedPerson.matchedAthleteId || personLinkModes.has(selectedPerson.id)
+                            : selectedPerson.matchedAthleteId || selectedPerson.createdAthleteId || personLinkModes.has(selectedPerson.id)
                               ? 'link'
                               : 'create'
                         }
@@ -1631,8 +1631,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             });
                         }}
                       >
-                        <option value="create">新建档案（最小建档）</option>
-                        <option value="link">关联已有运动员</option>
+                        <option value="create">新建</option>
+                        <option value="link">
+                          {selectedPerson.matchedAthleteId || selectedPerson.createdAthleteId
+                            ? personHandlingLabel(selectedPerson)
+                            : '选择已有运动员'}
+                        </option>
                         <option value="exclude">排除此人（其记录一并排除）</option>
                       </select>
                     </label>
@@ -1665,7 +1669,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                                 }))
                           ).map((entry) => (
                             <option key={entry.id} value={entry.id}>
-                              {entry.name} · {entry.team || '无队伍'}
+                              {entry.name} · {entry.team || '无队伍'} · 编号 {entry.id}
                             </option>
                           ))}
                         </select>
