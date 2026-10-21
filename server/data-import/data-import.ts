@@ -11,8 +11,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v17：新旧模板共用领域字段，身体测量独立于测试成绩；同批重复事实合并或报冲突。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v20-unified-value-review';
+// v21：统一导出往返保留测试事实归属、类型和原指标代码，旧草稿需重新解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v21-export-fact-identity';
 
 export type ImportAthlete = {
   id: number;
@@ -1393,8 +1393,10 @@ function parseStandardSheet(
         items.push(itemBase({ ...base, itemType: 'invalid_row', eventDate: rowDate, quality: 'error',
           messages: ['错误：体能测试至少填写一项实测数值'], rawValue: row.map(text).join(' | ') }));
     } else if (sheet === '测试指标') {
+      const explicitTestType = standardText(row, header.columns, '测试类型');
       const rawCode = standardText(row, header.columns, '指标代码');
-      const metricCode = canonicalImportMetricCode(rawCode);
+      // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
+      const metricCode = explicitTestType ? rawCode : canonicalImportMetricCode(rawCode);
       const valueNum = readNumber('数值');
       const durationMin = readNumber('测试时长分钟');
       if (!metricCode) messages.push('错误：指标代码不能为空');
@@ -1407,7 +1409,7 @@ function parseStandardSheet(
       if (!['left', 'right', 'bilateral', 'center'].includes(side))
         messages.push('错误：测试侧别只能使用center、left、right或bilateral');
       const bodyField = BODY_TEMPLATE_FIELDS.find(([, , code]) => code === metricCode);
-      if (bodyField && bodyField[1] !== 'armSpanCm' && side === 'center') {
+      if (!explicitTestType && bodyField && bodyField[1] !== 'armSpanCm' && side === 'center') {
         items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
           metricCode: 'body_composition', metricLabel: '身体测量', valueNum,
           payload: { ...base.payload, [bodyField[1]]: valueNum, note: standardText(row, header.columns, '备注'),
@@ -1421,7 +1423,7 @@ function parseStandardSheet(
           ...base,
           itemType: 'test_measurement',
           eventDate: rowDate,
-          testType: metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : standardText(row, header.columns, '测试类型') || '专项测试',
+          testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : '专项测试'),
           metricCode,
           metricLabel: standardText(row, header.columns, '指标名称') || metricCode,
           valueNum,

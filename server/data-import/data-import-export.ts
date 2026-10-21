@@ -162,7 +162,7 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
       `SELECT ts.id AS testSessionId, ts.athlete_id, ts.test_date, ts.test_type, ts.duration_min, ts.protocol, tm.metric_code, tm.value_num, tm.unit, tm.side, tm.note, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) ORDER BY ts.test_date, ts.athlete_id, tm.id`
     )
     .all(...profileIds) as Array<Record<string, unknown>>;
-  // 按字段业务归属导出，不把身体指标重复放入通用测试表；历史数据只读，不改写。
+  // 专用表仅接收能完整还原原课次的记录，其余保留在其他测试，避免往返时改变事实归属。
   const bodyHeaders = UNIFIED_IMPORT_HEADERS.find(([name]) => name === '身体测量')![1];
   const bodyValues = bodyRows.map((row) => [
     row.athlete_id,
@@ -176,9 +176,10 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
   const groupedTests = new Map<string, { sheet: string; values: unknown[] }>();
   const otherRows: unknown[][] = [];
   for (const row of testRows) {
-    const code = canonicalImportMetricCode(String(row.metric_code));
+    const originalCode = String(row.metric_code);
+    const code = canonicalImportMetricCode(originalCode);
     const physical = BODY_TEMPLATE_FIELDS.find(([, , canonical]) => canonical === code);
-    if (physical && !row.note && row.side === 'center' && String(row.unit || '') === physical[4]) {
+    if (originalCode === code && physical?.[1] === 'armSpanCm' && row.test_type === '身体测量' && !row.protocol && row.duration_min == null && !row.note && row.side === 'center' && String(row.unit || '') === physical[4]) {
       const column = bodyHeaders.indexOf(physical[0]);
       let target = bodyValues.find(
         (values) =>
@@ -203,7 +204,11 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
     const score = EVALUATION_SCORE_METRICS.find(([, canonical]) => canonical === code);
     const expectedUnit = fitness?.[3] || score?.[3] || (fms ? '分' : '');
     if (
-      !physical && !row.note &&
+      !physical && !row.note && row.duration_min == null &&
+      row.test_type === (fitness ? '体能测试' : fms ? 'FMS测试' : '竞技评估') &&
+      (!fms || row.protocol === '功能动作筛查（FMS）') &&
+      (!score || Boolean(row.protocol)) &&
+      (!fitness || code !== 'asymmetry_index_pct' || Boolean(row.protocol)) &&
       row.side === 'center' &&
       String(row.unit || '') === expectedUnit &&
       (fitness || fms || score)
@@ -229,8 +234,8 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
         nameById.get(Number(row.athlete_id)),
         row.test_date,
         row.test_type,
-        code,
-        row.label || code,
+        originalCode,
+        row.label || originalCode,
         row.value_num,
         row.unit,
         row.side,

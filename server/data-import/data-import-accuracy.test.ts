@@ -1563,3 +1563,42 @@ it('全选记录2一次保存所有待审查组，提交正确采用各组第二
   expect(commit(batch.id, 'skip').createdRecords).toBe(10);
   expect(db.prepare('SELECT weight_kg AS weight FROM athlete_body_measurements ORDER BY measurement_date').all()).toEqual(Array.from({ length: 10 }, (_, index) => ({ weight: 80 + index })));
 });
+
+it('不同测试类型的同日同指标导出往返不串课次、不丢时长、不制造冲突', async () => {
+  const batch = analyze({ 其他测试: [
+    ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟'],
+    ['张某', '2025-12-22', '实验室测试A', 'vo2max_ml_kg_min', 50, 'ml/kg/min', '协议A', 12],
+    ['张某', '2025-12-22', '实验室测试B', 'vo2max_ml_kg_min', 55, 'ml/kg/min', '协议B', 15],
+    ['张某', '2025-12-22', '体能测试', 'vo2max_ml_kg_min', 60, 'ml/kg/min', '协议C', 20],
+  ] });
+  expect(batch.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const exported = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '多课次往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(exported.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  expect(exported.items.filter(item => item.itemType === 'test_measurement').map(item => [item.testType, item.valueNum, item.payload.durationMin]).sort()).toEqual([
+    ['实验室测试A', 50, 12], ['实验室测试B', 55, 15], ['体能测试', 60, 20],
+  ].sort());
+  expect(commit(exported.id, 'skip').createdRecords).toBe(0);
+});
+
+it('历史测试表中的身体指标及自定义FMS协议导出后保留原归属，不制造身体测量冲突', async () => {
+  const body = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-12-23', 80]] });
+  commit(body.id, 'skip');
+  for (const [type, code, value, unit, protocol] of [
+    ['历史体测', 'weight_kg', 81, 'kg', '历史测量协议'],
+    ['FMS测试', 'fms_deep_squat', 2, '分', '历史FMS协议'],
+    ['其他臂展测试', 'arm_span_cm', 185, 'cm', '臂展协议'],
+    ['历史身高测试', 'heightCm', 180, 'cm', '旧代码协议'],
+  ] as const) {
+    const session = db.prepare('INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol) VALUES (1, ?, ?, ?)').run('2025-12-23', type, protocol);
+    db.prepare('INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit) VALUES (?, ?, ?, ?)').run(session.lastInsertRowid, code, value, unit);
+  }
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const exported = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '历史身体指标往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(exported.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  expect(exported.items.filter(item => item.itemType === 'test_measurement').map(item => item.testType).sort()).toEqual(['历史体测', 'FMS测试', '其他臂展测试', '历史身高测试'].sort());
+  expect(commit(exported.id, 'skip').createdRecords).toBe(0);
+});
