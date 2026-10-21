@@ -1,3 +1,4 @@
+import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -1148,31 +1149,24 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           <span>—</span>
                         ) : item.itemType === 'body_measurement' &&
                           item.metricCode === 'body_composition' ? (
-                          <div className="training-value-inputs">
-                            <input
-                              disabled={batch.status !== 'reviewing'}
-                              type="number"
-                              step="0.1"
-                              placeholder="身高cm"
-                              value={payloadNumber(item.payload, 'heightCm')}
-                              onChange={(event) => {
-                                const value = numberOrUndefined(event.target.value);
-                                if (value === undefined) return;
-                                patchItem(item.id, { payload: { heightCm: value } });
-                              }}
-                            />
-                            <input
-                              disabled={batch.status !== 'reviewing'}
-                              type="number"
-                              step="0.1"
-                              placeholder="体重kg"
-                              value={payloadNumber(item.payload, 'weightKg')}
-                              onChange={(event) => {
-                                const value = numberOrUndefined(event.target.value);
-                                if (value === undefined) return;
-                                patchItem(item.id, { payload: { weightKg: value } });
-                              }}
-                            />
+                          <div className="training-value-inputs body-measurement-inputs">
+                            {BODY_TEMPLATE_FIELDS.filter(([, field]) => field !== 'armSpanCm' && (item.payload[field] != null || ['heightCm', 'weightKg', 'bodyFatPct', 'skeletalMuscleKg'].includes(field))).map(([header, field]) => (
+                              <label key={field}>
+                                <span>{header}</span>
+                                <input
+                                  disabled={batch.status !== 'reviewing'}
+                                  aria-label={`${item.rawAthleteName} ${item.sourceAddress} ${header}`}
+                                  type="number"
+                                  step="any"
+                                  value={payloadNumber(item.payload, field)}
+                                  onChange={(event) => {
+                                    const value = numberOrUndefined(event.target.value);
+                                    if (value === undefined) return;
+                                    patchItem(item.id, { payload: { [field]: value } });
+                                  }}
+                                />
+                              </label>
+                            ))}
                           </div>
                         ) : item.itemType === 'wellness' ? (
                           <div className="training-value-inputs">
@@ -1261,7 +1255,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             <option value="skip">跳过此行（不写入）</option>
                             <option value="update">更新已有</option>
                           </select>
-                        ) : item.itemType === 'invalid_row' ? (
+                        ) : item.itemType === 'invalid_row' || item.quality === 'error' || item.resolution === 'skip' ? (
                           <select
                             disabled={batch.status !== 'reviewing'}
                             value={item.resolution}
@@ -1287,7 +1281,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                       </td>
                       <td>
                         <div className="import-messages">
-                          {item.conflict?.fields.map((field) => (
+                          {item.conflict?.fields.filter(field => field.oldValue !== field.newValue).map((field) => (
                             <span
                               key={field.field}
                               className={field.overwrites ? 'conflict-overwrite' : ''}

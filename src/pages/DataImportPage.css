@@ -1454,3 +1454,21 @@
 .data-import-table.metric-dictionary-table td:first-child {
   position: static;
 }
+
+.body-measurement-inputs {
+  flex-wrap: wrap;
+  min-width: 190px;
+}
+
+.body-measurement-inputs label {
+  display: grid;
+  gap: 3px;
+}
+
+.body-measurement-inputs label span {
+  font-size: 11px;
+}
+
+.body-measurement-inputs input {
+  width: 80px;
+}

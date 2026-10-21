@@ -11,7 +11,7 @@ import {
 } from '../../shared/strength-training.ts';
 
 // v17：新旧模板共用领域字段，身体测量独立于测试成绩；同批重复事实合并或报冲突。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v17-domain-template';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v18-review-body-conflicts';
 
 export type ImportAthlete = {
   id: number;
@@ -1529,7 +1529,32 @@ function parseStandardSheet(
 }
 
 /** 同一批次内按最终人员和日期合并身体测量，冲突必须显式修正，不能依赖表格顺序。 */
+function refreshBodyImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
+  const groups = new Map<string, Array<ParsedImportItem | DataImportItemView>>();
+  for (const item of items) {
+    if (item.itemType !== 'body_measurement' || item.metricCode !== 'body_composition') continue;
+    delete item.payload.bodyImportConflicts;
+    if (('resolution' in item && item.resolution === 'skip') || item.quality === 'skipped') continue;
+    const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
+    const key = `${identity}|${item.eventDate}`;
+    const group = groups.get(key) || [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    const conflicts: string[] = [];
+    for (const [, field, , label, unit] of BODY_TEMPLATE_FIELDS) {
+      if (field === 'armSpanCm') continue;
+      const values = group.filter(item => isProvided(item.payload[field]));
+      if (new Set(values.map(item => item.payload[field])).size < 2) continue;
+      conflicts.push(`错误：同一运动员在${group[0].eventDate}的${label}冲突（存在不同数值）：${values.map(item => `${item.sourceSheet}!${item.sourceAddress} = ${item.payload[field]}${unit}`).join('；')}。请修改日期或数值，或选择“排除此行”，保存校对后重新校验`);
+    }
+    if (conflicts.length) for (const item of group) item.payload.bodyImportConflicts = conflicts;
+  }
+}
+
 function consolidateImportFacts(items: ParsedImportItem[]) {
+  refreshBodyImportConflicts(items);
   const sessions = new Map<string, ParsedImportItem[]>();
   for (const item of items) {
     if (item.itemType !== 'test_measurement') continue;
@@ -1553,6 +1578,7 @@ function consolidateImportFacts(items: ParsedImportItem[]) {
     const body = item.itemType === 'body_measurement' && item.metricCode === 'body_composition';
     const test = item.itemType === 'test_measurement';
     if (!body && !test) return true;
+    if (body && Array.isArray(item.payload.bodyImportConflicts)) return true;
     const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
     const key = body ? `${identity}|${item.eventDate}|body`
       : `${identity}|${item.eventDate}|test|${item.testType}|${item.metricCode}|${item.side}`;
@@ -2588,6 +2614,8 @@ function validateImportItem(
     return item.messages.filter((message) => message.startsWith('错误：'));
   }
   const payload = item.payload || {};
+  if (Array.isArray(payload.bodyImportConflicts))
+    messages.push(...payload.bodyImportConflicts.filter((value): value is string => typeof value === 'string'));
   if (Array.isArray(payload.importConflicts))
     messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string'));
   if (item.itemType === 'test_measurement' && item.athleteId && text(payload.protocol)) {
@@ -2725,7 +2753,7 @@ function revalidateItem(
   candidateNames = new Set<string>()
 ) {
   const messages = validateImportItem(item, { allowedAthletes, candidateNames });
-  return { messages, quality: makeQuality(messages, item.quality === 'skipped') };
+  return { messages, quality: makeQuality(messages, item.resolution === 'skip' || item.quality === 'skipped') };
 }
 
 const PAYLOAD_EDITABLE: Record<DataImportItemType, Set<string>> = {
@@ -2806,8 +2834,10 @@ function applyCorrection(
   if ('eventDate' in correction) next.eventDate = text(correction.eventDate);
   if ('actualReps' in correction) next.actualReps = correction.actualReps ?? null;
   if ('actualWeightKg' in correction) next.actualWeightKg = correction.actualWeightKg ?? null;
-  if ('resolution' in correction && correction.resolution !== undefined)
+  if ('resolution' in correction && correction.resolution !== undefined) {
     next.resolution = correction.resolution ?? '';
+    if (next.resolution !== 'skip' && next.quality === 'skipped') next.quality = 'valid';
+  }
   const editable = PAYLOAD_EDITABLE[next.itemType] || new Set<string>();
   if (correction.payload) {
     for (const [key, value] of Object.entries(correction.payload)) {
@@ -2873,10 +2903,15 @@ export function updateDataImportItems(input: {
   );
   db.exec('BEGIN IMMEDIATE');
   try {
-    for (const correction of input.corrections) {
-      const current = batch.items.find((item) => item.id === correction.id);
-      if (!current) continue;
-      const next = applyCorrection(current, correction);
+    const corrected = new Map(input.corrections.map(correction => [correction.id, correction]));
+    const nextItems = batch.items.map(item => {
+      const correction = corrected.get(item.id);
+      return correction ? applyCorrection(item, correction) : item;
+    });
+    refreshBodyImportConflicts(nextItems);
+    for (const next of nextItems) {
+      // 同组另一行被修改或排除时，也重新校验本行。
+      if (!corrected.has(next.id) && !(next.itemType === 'body_measurement' && next.metricCode === 'body_composition')) continue;
       const validation = revalidateItem(next, allowed, candidateNames);
       next.quality = validation.quality;
       next.messages = validation.messages;
@@ -4197,6 +4232,7 @@ export function commitDataImport(input: {
   );
   if (candidateTeamOutOfScope)
     throw new Error(`“${candidateTeamOutOfScope.name}”选择的所属队伍不在当前账号权限范围内。`);
+  refreshBodyImportConflicts(importable);
   const invalid = importable.filter(
     (item) =>
       revalidateItem(item, allowed, candidateNames).quality === 'error'

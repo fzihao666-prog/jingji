@@ -1249,3 +1249,30 @@ it('上传解析即关联唯一管理队伍内的已有运动员，新人员保�
   expect(batch.athleteCandidates.find(person => person.name === '张某')).toMatchObject({ status: 'matched', matchedAthleteId: 1, confirmed: true });
   expect(batch.athleteCandidates.find(person => person.name === '首次队员')).toMatchObject({ status: 'pending', matchedAthleteId: null });
 });
+
+it('表内身体冲突保留两行和双方数值，可排除任一行后保存并提交', () => {
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-10-11', 83], ['张某', '2025-10-11', 85]] });
+  expect(batch.items).toHaveLength(2);
+  expect(batch.errorCount).toBe(2);
+  expect(batch.items[0].messages.join('；')).toContain('83kg');
+  expect(batch.items[0].messages.join('；')).toContain('85kg');
+  expect(() => commit(batch.id, 'skip')).toThrow();
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[1].id, resolution: 'skip' }] });
+  expect(fixed.errorCount).toBe(0);
+  expect(fixed.items[0].messages.join('；')).not.toContain('不同数值');
+  const restored = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[1].id, resolution: '' }] });
+  expect(restored.errorCount).toBe(2);
+  expect(() => commit(batch.id, 'skip')).toThrow();
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[1].id, resolution: 'skip' }] });
+  commit(batch.id, 'skip');
+  expect(db.prepare("SELECT weight_kg AS weight FROM athlete_body_measurements WHERE measurement_date = '2025-10-11'").get()).toEqual({ weight: 83 });
+});
+
+it('修改冲突日期可保留两次身体测量，修改数值也会重新校验同组', () => {
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-10-12', 83], ['张某', '2025-10-12', 85]] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[1].id, eventDate: '2025-10-13' }] });
+  expect(fixed.errorCount).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(2);
+  const next = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-10-14', 80], ['张某', '2025-10-14', 81]] });
+  expect(updateDataImportItems({ batchId: next.id, userId: USER_ID, athletes, corrections: [{ id: next.items[1].id, payload: { weightKg: 80 } }] }).errorCount).toBe(0);
+});
