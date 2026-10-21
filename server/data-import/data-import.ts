@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v9：忽略未填业务行，严格区分空白、错误日期和非法数值；旧草稿须重新解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v9-input-validation';
+// v10：竞技档案与按日期评估独立导入，未填评估不生成记录；旧草稿须重新解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v10-optional-assessment';
 
 export type ImportAthlete = {
   id: number;
@@ -1151,30 +1151,26 @@ function parseStandardSheet(
         standardValue(row, header.columns, '技术等级')
       );
       const bestResult = standardText(row, header.columns, '最好成绩');
-      const overallScore = readNumber('竞技总分');
-      // 空白等级保持未提供，新增入库时才落到默认档位，避免覆盖已有等级。
-      const stateLevel = standardText(row, header.columns, '竞技状态');
-      if (!technicalLevel) messages.push('错误：技术等级不能为空');
-      else if (!TECHNICAL_LEVELS.includes(technicalLevel as (typeof TECHNICAL_LEVELS)[number]))
-        messages.push(
-          '错误：技术等级须为国际级运动健将、运动健将、一级运动员、二级运动员或三级运动员'
-        );
-      if (overallScore === null || overallScore < 0 || overallScore > 100)
-        messages.push('错误：竞技总分须在0—100之间');
-      if (!['巅峰', '良好', '建设', '调整', 'peak', 'good', 'build', 'adjust'].includes(stateLevel))
-        messages.push('错误：竞技状态等级不在允许范围内');
-      const profilePayload = { ...base.payload, technicalLevel, bestResult };
-      items.push(
-        itemBase({
+      // 等级、最好成绩属于档案资料，无需附带按日期的评估记录。
+      if (technicalLevel || bestResult) {
+        items.push(itemBase({
           ...base,
           itemType: 'athlete_profile',
-          payload: profilePayload,
-          rawValue: technicalLevel,
-          quality: makeQuality(messages),
-          messages: [...messages],
+          payload: { ...base.payload, technicalLevel, bestResult },
+          rawValue: technicalLevel || bestResult,
+          quality: 'valid',
+          messages: [],
           businessKey: `${athlete?.id || normalizedName(rawName)}|competitive-profile`,
-        })
+        }));
+      }
+      const assessmentLabels = ['竞技总分', '竞技状态', '专项耐力', '力量爆发', '技术效率',
+        '负荷适应', '恢复能力', '比赛能力'];
+      const hasAssessment = text(rawDate) !== '' || assessmentLabels.some(
+        label => text(standardValue(row, header.columns, label)) !== ''
       );
+      if (!hasAssessment) continue;
+      const overallScore = readNumber('竞技总分');
+      const stateLevel = standardText(row, header.columns, '竞技状态');
       const payload = {
         ...base.payload,
         overallScore,
@@ -2583,8 +2579,6 @@ function validateImportItem(
     if (birthDate && !validIsoDate(birthDate))
       messages.push('错误：出生日期须为有效日期且不能晚于今天');
     const technicalLevel = text(payload.technicalLevel);
-    if (item.sourceSheet === '竞技水平评估' && !technicalLevel)
-      messages.push('错误：技术等级不能为空');
     if (
       technicalLevel &&
       !TECHNICAL_LEVELS.includes(technicalLevel as (typeof TECHNICAL_LEVELS)[number])

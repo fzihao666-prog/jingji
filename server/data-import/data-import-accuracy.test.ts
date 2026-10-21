@@ -935,3 +935,37 @@ it('实际统一模板保留三行表头及未填写工作表后能够往返导�
   expect(batch.items[0].sourceAddress).toBe('A4');
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
 });
+
+describe('竞技水平评估为可选资料', () => {
+  it.each([
+    ['二级运动员', ''],
+    ['', '省赛第一名'],
+    ['二级运动员', '省赛第一名'],
+  ])('只填写技术等级%s和最好成绩%s不要求评估日期或总分', (level, best) => {
+    const batch = analyze({ 竞技水平评估: [
+      ['姓名', '评估日期', '技术等级', '最好成绩', '竞技总分', '竞技状态'],
+      ['张某', '', level, best, '', ''],
+    ] });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.map(item => item.itemType)).toEqual(['athlete_profile']);
+    expect(commit(batch.id, 'update').imported).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM competitive_state_assessments').get()).toEqual({ count: 0 });
+    expect(db.prepare('SELECT technical_level AS level, best_result AS best FROM athlete_profiles WHERE athlete_id = 1').get()).toMatchObject({ ...(level ? { level } : {}), ...(best ? { best } : {}) });
+  });
+
+  it('只有姓名的评估行不产生记录，也不阻断其他工作表', () => {
+    const batch = analyze({
+      竞技水平评估: [['姓名', '评估日期', '技术等级', '竞技总分'], ['张某']],
+      训练课次: [['姓名', '日期', '时长分钟'], ['张某', '2025-09-06', 60]],
+    });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.map(item => item.itemType)).toEqual(['training_session']);
+  });
+
+  it('实际填写了评估分数时仍须填写日期', () => {
+    const batch = analyze({ 竞技水平评估: [['姓名', '评估日期', '竞技总分'], ['张某', '', 80]] });
+    expect(batch.items.map(item => item.itemType)).toEqual(['competitive_state']);
+    expect(batch.errorCount).toBe(1);
+    expect(() => commit(batch.id, 'skip')).toThrow(/校验/);
+  });
+});
