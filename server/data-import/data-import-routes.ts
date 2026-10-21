@@ -1001,7 +1001,7 @@ export function registerDataImportRoutes(app: Express) {
           message:
             `新建运动员${result.createdAthletes || 0}人、关联已有${result.linkedAthletes || 0}人；` +
             `新增记录${result.createdRecords || 0}条、更新${result.updatedRecords || 0}条、跳过${result.skipped}条；` +
-            `补全档案字段${result.filledProfileFields || 0}项、覆盖${result.overwrittenProfileFields || 0}项。`,
+            `补全空缺字段${result.filledProfileFields || 0}项、覆盖已有字段${result.overwrittenProfileFields || 0}项。`,
           ...result,
         });
       } catch (error) {

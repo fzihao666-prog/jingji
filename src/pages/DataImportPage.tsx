@@ -1194,7 +1194,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             aria-label={`重复处理：${item.rawAthleteName}`}
                           >
                             <option value="">按批次策略</option>
-                            <option value="skip">跳过（保留原值）</option>
+                            <option value="skip">跳过此行（不写入）</option>
                             <option value="update">更新已有</option>
                           </select>
                         ) : item.itemType === 'invalid_row' ? (
@@ -1284,13 +1284,13 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                   onChange={(event) => setConflictPolicy(event.target.value as 'skip' | 'update')}
                   disabled={batch.status !== 'reviewing'}
                 >
-                  <option value="skip">保留数据库原值，跳过重复项</option>
+                  <option value="skip">补全空缺字段，保留已有值（不覆盖）</option>
                   <option value="update">使用本批次更新重复项（覆盖需确认）</option>
                 </select>
               </label>
               <div>
                 <small>
-                  空白不覆盖已有数据；整个批次在同一事务内提交，失败自动回滚。
+                  空白不覆盖已有数据；重复项默认只补空缺、保留已有值。整批在同一事务内提交，失败自动回滚。
                 </small>
                 <button
                   className="data-import-primary"

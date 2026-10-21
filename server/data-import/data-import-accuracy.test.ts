@@ -223,6 +223,93 @@ describe('数据准确性：空白保护与真实 0', () => {
   });
 });
 
+describe('统一合并语义：skip 只补空缺不覆盖', () => {
+  it('恢复状态部分冲突时补全空字段并保留冲突值', () => {
+    db.prepare(
+      `INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, status) VALUES (1, '2025-05-06', 7, 'normal')`
+    ).run();
+    const batch = analyze({
+      恢复状态: [
+        ['姓名', '日期', '睡眠小时', '晨脉'],
+        ['张某', '2025-05-06', 5, 52],
+      ],
+    });
+    const result = commit(batch.id, 'skip');
+    expect(result.updatedRecords).toBe(1);
+    expect(result.skipped).toBe(0);
+    const row = db
+      .prepare(
+        'SELECT sleep_hours AS sleep, morning_pulse AS pulse FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = ?'
+      )
+      .get('2025-05-06') as { sleep: number; pulse: number };
+    expect(row.sleep).toBe(7); // 冲突值保留
+    expect(row.pulse).toBe(52); // 空缺补全
+  });
+
+  it('身体测量部分冲突时补全空缺字段并保留冲突值', () => {
+    db.prepare(
+      `INSERT INTO athlete_body_measurements (athlete_id, measurement_date, height_cm) VALUES (1, '2025-05-07', 180)`
+    ).run();
+    const batch = analyze({
+      身体测量: [
+        ['姓名', '日期', '身高cm', '体重kg'],
+        ['张某', '2025-05-07', 181, 77],
+      ],
+    });
+    const result = commit(batch.id, 'skip');
+    expect(result.updatedRecords).toBe(1);
+    const row = db
+      .prepare(
+        'SELECT height_cm AS height, weight_kg AS weight FROM athlete_body_measurements WHERE athlete_id = 1 AND measurement_date = ?'
+      )
+      .get('2025-05-07') as { height: number; weight: number };
+    expect(row.height).toBe(180);
+    expect(row.weight).toBe(77);
+  });
+
+  it('训练课次部分冲突时只补空字段，未报距离按空缺补全', () => {
+    db.prepare(
+      `INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported)
+       VALUES (1, '2025-05-08', 1, '专项训练', '水上训练', 'AN', '水上', 60, 0, 1, 0)`
+    ).run();
+    const batch = analyze({
+      训练课次: [
+        ['姓名', '日期', '课次序号', '训练类型', '训练内容', '时长分钟', '距离千米'],
+        ['张某', '2025-05-08', 1, '专项训练', '水上', 50, 8],
+      ],
+    });
+    const result = commit(batch.id, 'skip');
+    expect(result.updatedRecords).toBe(1);
+    const row = db
+      .prepare(
+        'SELECT duration_min AS duration, distance_km AS distance, distance_reported AS distanceReported FROM training_sessions WHERE athlete_id = 1 AND session_date = ?'
+      )
+      .get('2025-05-08') as { duration: number; distance: number; distanceReported: number };
+    expect(row.duration).toBe(60); // 已报冲突时长保留
+    expect(row.distance).toBe(8); // 未报距离属于空缺，补全
+    expect(row.distanceReported).toBe(1);
+  });
+
+  it('skip 下全部字段冲突时整行保留，计入跳过', () => {
+    db.prepare(
+      `INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, status) VALUES (1, '2025-05-09', 7, 'normal')`
+    ).run();
+    const batch = analyze({
+      恢复状态: [
+        ['姓名', '日期', '睡眠小时'],
+        ['张某', '2025-05-09', 5],
+      ],
+    });
+    const result = commit(batch.id, 'skip');
+    expect(result.skipped).toBe(1);
+    expect(result.updatedRecords).toBe(0);
+    const row = db
+      .prepare('SELECT sleep_hours AS sleep FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = ?')
+      .get('2025-05-09') as { sleep: number };
+    expect(row.sleep).toBe(7);
+  });
+});
+
 describe('数据准确性：非法日期与错误行', () => {
   it('非法日期被拒绝为错误行，修正后才能提交', () => {
     const batch = analyze({

@@ -2998,14 +2998,12 @@ function upsertTrainingItem(
         )
         .get(sessionId, item.exerciseName, item.setIndex) as Record<string, unknown> | undefined)
     : undefined;
-  if (existing && policy === 'skip')
-    return { skipped: true, entityId: Number(existing.id), sessionId, created: false, filled: 0, overwritten: 0 };
   const category = text(payload.trainingCategory) || inferStrengthCategory(item.exerciseName);
   const position = text(payload.bodyPosition) || inferStrengthBodyPosition(item.exerciseName);
   const note = item.messages.join('；');
   const sourceRow = `${item.sourceSheet}!${item.sourceAddress}`;
   if (existing) {
-    // 空白不覆盖：仅写入文件/校对提供的字段；真实 0 会正常写入。
+    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
     const patch: Array<[string, unknown]> = [
       ['target_reps', item.targetReps],
       ['actual_reps', item.actualReps],
@@ -3014,11 +3012,14 @@ function upsertTrainingItem(
       ['training_category', category],
       ['body_position', position],
     ];
-    const changed = patch.filter(
+    const proposed = patch.filter(
       ([column, value]) => isProvided(value) && String(existing[column] ?? '') !== String(value)
     );
+    const changed = proposed.filter(
+      ([column]) => policy === 'update' || !isProvided(existing[column])
+    );
     const filled = changed.filter(([column]) => !isProvided(existing[column])).length;
-    const overwritten = changed.filter(([column]) => isProvided(existing[column])).length;
+    const overwritten = changed.length - filled;
     if (!changed.length)
       return { skipped: true, entityId: Number(existing.id), sessionId, created: false, filled: 0, overwritten: 0 };
     const setSql = changed.map(([column]) => `${column} = ?`).join(', ');
@@ -3143,13 +3144,14 @@ function upsertTestItem(
     .get(session.id, item.metricCode, item.side) as
     | { id: number; valueNum: number; unit: string }
     | undefined;
-  if (existing && policy === 'skip')
-    return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
   if (existing) {
+    // 统一合并语义：skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    const blank = existing.valueNum === null || existing.valueNum === undefined;
     const identical =
+      !blank &&
       Number(existing.valueNum) === Number(item.valueNum) &&
       text(existing.unit) === text(item.unit);
-    if (identical)
+    if (identical || (policy === 'skip' && !blank))
       return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
     db.prepare(
       `UPDATE test_measurements SET value_num = ?, unit = ?, quality = ?, source = 'file_import', is_demo = 0,
@@ -3162,7 +3164,13 @@ function upsertTestItem(
       `${item.sourceSheet}!${item.sourceAddress}`,
       existing.id
     );
-    return { skipped: false, entityId: existing.id, created: false, filled: 0, overwritten: 1 };
+    return {
+      skipped: false,
+      entityId: existing.id,
+      created: false,
+      filled: blank ? 1 : 0,
+      overwritten: blank ? 0 : 1,
+    };
   }
   const inserted = db
     .prepare(
@@ -3205,27 +3213,37 @@ function upsertBodyItem(
     const existing = db
       .prepare('SELECT * FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?')
       .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
-    if (existing && policy === 'skip')
-      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
     const provided = BODY_COMPOSITION_FIELDS.map(([key]) => [key, optionalNumber(payload[key])] as const)
       .filter(([, value]) => value !== null);
     const note = text(payload.note);
     if (existing) {
-      // 空白不覆盖：只写入文件/校对明确提供的字段；真实 0 正常写入。
-      const changed = provided.filter(([key, value]) => {
+      // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+      const isBlank = (key: string) => {
+        const value = existing[bodyColumnOf(key)];
+        return value === null || value === undefined;
+      };
+      const proposed = provided.filter(([key, value]) => {
         const column = bodyColumnOf(key);
         return !Object.is(Number(existing[column] ?? NaN), Number(value));
       });
-      const filled = changed.filter(([key]) => existing[bodyColumnOf(key)] === null || existing[bodyColumnOf(key)] === undefined).length;
-      const overwritten = changed.length - filled;
-      if (!changed.length && !isProvided(note))
+      const changed = proposed.filter(([key]) => policy === 'update' || isBlank(key));
+      const noteChanged = isProvided(note) && text(existing.note) !== note;
+      const noteApplied = noteChanged && (policy === 'update' || !text(existing.note));
+      const blanks = changed.filter(([key]) => isBlank(key)).length;
+      const filled = blanks + (noteApplied && !text(existing.note) ? 1 : 0);
+      const overwritten =
+        changed.length - blanks + (noteApplied && text(existing.note) ? 1 : 0);
+      if (!changed.length && !noteApplied)
         return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
       const setParts = changed.map(([key]) => `${bodyColumnOf(key)} = ?`);
       const params = sqlList(changed.map(([, value]) => value));
-      if (isProvided(note)) setParts.push('note = ?');
+      if (noteApplied) {
+        setParts.push('note = ?');
+        params.push(note);
+      }
       db.prepare(
         `UPDATE athlete_body_measurements SET ${setParts.join(', ')}, source = 'file_import', quality = ?, is_demo = 0, data_import_batch_id = ? WHERE id = ?`
-      ).run(...params, ...(isProvided(note) ? [note] : []), quality, batchId, Number(existing.id));
+      ).run(...params, quality, batchId, Number(existing.id));
       return { skipped: false, entityId: Number(existing.id), created: false, filled, overwritten };
     }
     const columns = ['athlete_id', 'measurement_date', ...provided.map(([key]) => bodyColumnOf(key))];
@@ -3506,19 +3524,23 @@ function upsertWellnessItem(
   const status = text(p.status);
   const statusProvided = ['normal', 'attention', 'alert', 'rest', 'missing'].includes(status);
   if (existing) {
-    if (policy === 'skip')
-      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
-    const changed = provided.filter(
+    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
+    const proposed = provided.filter(
       ([column, value]) => !Object.is(Number(existing[column] ?? NaN), Number(value))
     );
+    const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
     const statusChanged = statusProvided && text(existing.status) !== status;
-    const filled = changed.filter(([column]) => existing[column] === null || existing[column] === undefined).length;
-    const overwritten = changed.length - filled + (statusChanged && existing.status ? 1 : 0);
-    if (!changed.length && !statusChanged)
+    const statusApplied = statusChanged && (policy === 'update' || !text(existing.status));
+    const blanks = changed.filter(([column]) => isBlank(column)).length;
+    const filled = blanks + (statusApplied && !text(existing.status) ? 1 : 0);
+    const overwritten =
+      changed.length - blanks + (statusApplied && text(existing.status) ? 1 : 0);
+    if (!changed.length && !statusApplied)
       return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
     const setParts = changed.map(([column]) => `${column} = ?`);
     const params: SqlValue[] = sqlList(changed.map(([, value]) => value));
-    if (statusChanged) {
+    if (statusApplied) {
       setParts.push('status = ?');
       params.push(status);
     }
@@ -3591,30 +3613,48 @@ function upsertSessionItem(
     .map(([key, column]) => [column, text(p[key])] as const)
     .filter(([, value]) => isProvided(value));
   if (existing) {
-    if (policy === 'skip')
-      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
+    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
     const changes: Array<[string, unknown]> = [];
-    let filled = 0;
-    let overwritten = 0;
+    const proposals: Array<[string, unknown, boolean]> = [];
     const consider = (column: string, value: unknown, provided: boolean) => {
       if (!provided || value === null) return;
       const current = existing[column];
       const currentText = current === null || current === undefined ? '' : String(current);
       if (currentText === String(value)) return;
-      if (!currentText && current !== 0) {
-        filled += 1;
-      } else {
-        overwritten += 1;
-      }
-      changes.push([column, value]);
+      // 时长/距离列 NOT NULL 默认 0，是否空缺以 reported 标记为准；其余字段 0 视为真实值。
+      const blank =
+        column === 'duration_min'
+          ? Number(existing.duration_reported ?? 1) !== 1
+          : column === 'distance_km'
+            ? Number(existing.distance_reported ?? 1) !== 1
+            : !currentText && current !== 0;
+      proposals.push([column, value, blank]);
     };
     consider('duration_min', duration, durationProvided);
     consider('distance_km', distance, distanceProvided);
     for (const [column, value] of providedNumbers) consider(column, value, true);
     for (const [column, value] of providedTexts) consider(column, value, true);
-    if (durationProvided && Number(existing.duration_reported ?? 1) !== 1)
+    let filled = 0;
+    let overwritten = 0;
+    for (const [column, value, blank] of proposals) {
+      if (policy === 'skip' && !blank) continue;
+      if (blank) filled += 1;
+      else overwritten += 1;
+      changes.push([column, value]);
+    }
+    // 已报标记跟随字段写入：仅在实际写入时长/距离或更新策略下同步，避免 skip 改写已有元数据。
+    const appliedColumn = (column: string) => changes.some(([key]) => key === column);
+    if (
+      durationProvided &&
+      (policy === 'update' || appliedColumn('duration_min')) &&
+      Number(existing.duration_reported ?? 1) !== 1
+    )
       changes.push(['duration_reported', 1]);
-    if (distanceProvided && Number(existing.distance_reported ?? 1) !== 1)
+    if (
+      distanceProvided &&
+      (policy === 'update' || appliedColumn('distance_km')) &&
+      Number(existing.distance_reported ?? 1) !== 1
+    )
       changes.push(['distance_reported', 1]);
     if (!changes.length)
       return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
@@ -3693,18 +3733,19 @@ function upsertInjuryItem(
     ['note', text(p.note)],
   ];
   if (existing) {
-    if (policy === 'skip')
-      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
-    const changed = fields.filter(([column, value]) => {
+    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    const isBlank = (column: string) => {
+      const current = existing[column];
+      return current === null || current === undefined || current === '';
+    };
+    const proposed = fields.filter(([column, value]) => {
       if (value === null) return false; // 空白=未提供
       const current = existing[column];
       const currentText = current === null || current === undefined ? '' : String(current);
       return currentText !== String(value);
     });
-    const filled = changed.filter(([column]) => {
-      const current = existing[column];
-      return current === null || current === undefined || current === '';
-    }).length;
+    const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
+    const filled = changed.filter(([column]) => isBlank(column)).length;
     const overwritten = changed.length - filled;
     if (!changed.length)
       return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
@@ -3768,15 +3809,28 @@ function upsertCompetitiveItem(
     .filter(([, value]) => value !== null);
   const note = text(p.note);
   if (existing) {
-    if (policy === 'skip')
-      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
-    const changed = provided.filter(
+    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
+    const proposed = provided.filter(
       ([column, value]) => !Object.is(Number(existing[column] ?? NaN), Number(value))
     );
-    const levelChanged = isProvided(level) && text(existing.state_level) !== level;
-    const noteChanged = isProvided(note) && text(existing.note) !== note;
-    const filled = changed.filter(([column]) => existing[column] === null || existing[column] === undefined).length;
-    const overwritten = changed.length - filled + (levelChanged ? 1 : 0) + (noteChanged ? 1 : 0);
+    const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
+    const levelChanged =
+      isProvided(level) && text(existing.state_level) !== level &&
+      (policy === 'update' || !text(existing.state_level));
+    const noteChanged =
+      isProvided(note) && text(existing.note) !== note &&
+      (policy === 'update' || !text(existing.note));
+    const blanks = changed.filter(([column]) => isBlank(column)).length;
+    const filled =
+      blanks +
+      (levelChanged && !text(existing.state_level) ? 1 : 0) +
+      (noteChanged && !text(existing.note) ? 1 : 0);
+    const overwritten =
+      changed.length -
+      blanks +
+      (levelChanged && text(existing.state_level) ? 1 : 0) +
+      (noteChanged && text(existing.note) ? 1 : 0);
     if (!changed.length && !levelChanged && !noteChanged)
       return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
     const setParts = changed.map(([column]) => `${column} = ?`);
@@ -3843,12 +3897,22 @@ function upsertScoringRule(
     | { id: number; thresholdValue: number }
     | undefined;
   if (existing) {
-    if (policy === 'skip' || Number(existing.thresholdValue) === Number(item.valueNum))
+    // 统一合并语义：skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    const blank = existing.thresholdValue === null || existing.thresholdValue === undefined;
+    if (!blank && Number(existing.thresholdValue) === Number(item.valueNum))
+      return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
+    if (policy === 'skip' && !blank)
       return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
     db.prepare(
       'UPDATE metric_scoring_rules SET threshold_value = ?, comparison = ?, source_batch_id = ?, active = 1 WHERE id = ?'
     ).run(item.valueNum, comparison, batchId, existing.id);
-    return { skipped: false, entityId: existing.id, created: false, filled: 0, overwritten: 1 };
+    return {
+      skipped: false,
+      entityId: existing.id,
+      created: false,
+      filled: blank ? 1 : 0,
+      overwritten: blank ? 0 : 1,
+    };
   }
   const inserted = db
     .prepare(
