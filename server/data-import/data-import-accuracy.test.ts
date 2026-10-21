@@ -310,6 +310,47 @@ describe('统一合并语义：skip 只补空缺不覆盖', () => {
   });
 });
 
+describe('校对保存上限：超限显式拒绝而不是静默截断', () => {
+  it('单次超过 5000 条数据校对被拒绝，草稿不被部分写入', () => {
+    const batch = analyze({
+      恢复状态: [
+        ['姓名', '日期', '睡眠小时'],
+        ['张某', '2025-05-10', 6],
+      ],
+    });
+    const corrections = Array.from({ length: 5001 }, (_, index) => ({ id: index + 1 }));
+    expect(() =>
+      updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections })
+    ).toThrow(/分批保存/);
+    const saved = db
+      .prepare('SELECT payload_json AS payload FROM data_import_items WHERE batch_id = ?')
+      .get(batch.id) as { payload: string };
+    expect(JSON.parse(saved.payload).sleepHours).toBe(6);
+  });
+
+  it('单次超过 500 条人员修改被拒绝', () => {
+    const batch = analyze({
+      恢复状态: [
+        ['姓名', '日期', '睡眠小时'],
+        ['张某', '2025-05-11', 6],
+      ],
+    });
+    const corrections = Array.from({ length: 501 }, (_, index) => ({
+      id: index + 1,
+      confirmed: true,
+    }));
+    expect(() =>
+      updateDataImportAthleteCandidates({
+        batchId: batch.id,
+        userId: USER_ID,
+        allowedTeams: new Set(['A队', 'B队']),
+        athletes,
+        corrections,
+      })
+    ).toThrow(/分批保存/);
+  });
+});
+
 describe('数据准确性：非法日期与错误行', () => {
   it('非法日期被拒绝为错误行，修正后才能提交', () => {
     const batch = analyze({

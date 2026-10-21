@@ -929,9 +929,9 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
-        const corrections = Array.isArray(req.body?.corrections)
-          ? req.body.corrections.slice(0, 5000)
-          : [];
+        if (req.body?.corrections !== undefined && !Array.isArray(req.body.corrections))
+          return res.status(400).json({ message: '校对修改格式无效。' });
+        const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections : [];
         const batch = updateDataImportItems({
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
@@ -957,9 +957,9 @@ export function registerDataImportRoutes(app: Express) {
         const scope = dataImportScope(req.authUser!, batch.project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号无权在该项目创建运动员。' });
-        const corrections = Array.isArray(req.body?.corrections)
-          ? req.body.corrections.slice(0, 500)
-          : [];
+        if (req.body?.corrections !== undefined && !Array.isArray(req.body.corrections))
+          return res.status(400).json({ message: '人员修改格式无效。' });
+        const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections : [];
         const updated = updateDataImportAthleteCandidates({
           batchId: batch.id,
           userId: req.authUser!.id,

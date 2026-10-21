@@ -329,7 +329,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       }
       return next;
     });
-    setPage(0);
   };
 
   const patchAthleteCandidate = (candidateId: number, patch: Omit<AthleteCorrection, 'id'>) => {
@@ -420,7 +419,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       return;
     }
     if (currentBatch.errorCount > 0) {
-      setError(`仍有${currentBatch.errorCount}条红色错误，请先修正或排除后再提交。`);
+      setError(
+        `仍有${currentBatch.errorCount}条红色错误：可编辑的红色字段请修正，无法修改的错误行请在列表中排除后再提交。`
+      );
       return;
     }
     setConfirmDialogOpen(true);
@@ -843,7 +844,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <div className="danger">
               <span>错误记录</span>
               <strong>{batch.counts.invalidCount}</strong>
-              <small>必须先修正或排除</small>
+              <small>修正可编辑项，错误行需排除</small>
             </div>
             <div>
               <span>批次状态</span>
@@ -1208,7 +1209,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             }
                             aria-label="错误行处理"
                           >
-                            <option value="">待修正</option>
+                            <option value="">未处理（阻止提交）</option>
                             <option value="skip">排除此行</option>
                           </select>
                         ) : (

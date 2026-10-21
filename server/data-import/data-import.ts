@@ -2819,6 +2819,9 @@ export function updateDataImportItems(input: {
     resolution?: DataImportResolution | null;
   }>;
 }) {
+  // 超限显式拒绝而不是静默截断：截断会让用户以为全部修改已保存。
+  if (input.corrections.length > 5000)
+    throw new Error('单次最多保存 5000 条校对修改，请分批保存后重试。');
   const batch = getDataImportBatch(input.batchId, input.userId);
   if (batch.status !== 'reviewing') throw new Error('只有待审核批次可以修改。');
   const allowed = new Set(input.athletes.map((athlete) => athlete.id));
@@ -2897,6 +2900,9 @@ export function updateDataImportAthleteCandidates(input: {
     confirmed?: boolean;
   }>;
 }) {
+  // 超限显式拒绝而不是静默截断：截断会让用户以为全部修改已保存。
+  if (input.corrections.length > 500)
+    throw new Error('单次最多保存 500 条人员修改，请分批保存后重试。');
   const batch = getDataImportBatch(input.batchId, input.userId);
   if (batch.status !== 'reviewing') throw new Error('只有待审核批次可以修改新运动员资料。');
   const update =
@@ -4123,7 +4129,7 @@ export function commitDataImport(input: {
   );
   if (invalidRows.length)
     throw new Error(
-      `仍有${invalidRows.length}个非空错误行（缺少姓名、非法数值等）未处理，请修正或在列表中排除后重新提交。`
+      `仍有${invalidRows.length}个非空错误行（缺少姓名、非法数值等）未处理；这类行无法在页面修改，请在列表中排除后重新提交，需保留该数据时请在原文件中修正并重新上传。`
     );
   const candidateWithoutTeam = batch.athleteCandidates.find(
     (candidate) =>
