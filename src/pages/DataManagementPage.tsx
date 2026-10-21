@@ -240,8 +240,8 @@ export function DataManagementPage({ user }: Props) {
             </button>
           </form>
         )}
-        <div className="data-import-table-wrap">
-          <table className="data-import-table">
+        <div className="data-import-table-wrap metric-dictionary-table-wrap">
+          <table className="data-import-table metric-dictionary-table">
             <thead>
               <tr>
                 <th>编码</th>
