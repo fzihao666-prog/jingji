@@ -81,6 +81,13 @@ export function BodyMeasurementReview({
   const fields = BODY_REVIEW_FIELDS.filter(
     ([, field]) => bodyFieldValues(originals, field).length > 0
   );
+  const visibleFields = fields.filter(
+    ([, field]) =>
+      bodyFieldValues(originals, field).length > 1 ||
+      originals.every((item) => item.payload[field] != null) ||
+      validationMessages.length > 0 ||
+      choices[field] != null
+  );
   const finalValues: Record<string, number> = {};
   let remaining = 0;
   for (const [, field] of fields) {
@@ -183,7 +190,7 @@ export function BodyMeasurementReview({
         </div>
       ) : (
         <>
-          <div className="body-review-comparison-wrap">
+          <div className="body-review-comparison-wrap" hidden={visibleFields.length === 0}>
             <table className="body-review-comparison">
               <caption>原始测量对比与最终入库值</caption>
               <thead>
@@ -198,7 +205,7 @@ export function BodyMeasurementReview({
                 </tr>
               </thead>
               <tbody>
-                {fields.map(([header, field, , , unit]) => {
+                {visibleFields.map(([header, field, , , unit]) => {
                   const values = bodyFieldValues(originals, field);
                   const choice = choices[field] ?? (values.length === 1 ? String(values[0]) : '');
                   return (

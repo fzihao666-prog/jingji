@@ -60,6 +60,8 @@ export const Conflict = {
     const button = [...canvasElement.querySelectorAll('button')].find((entry) =>
       entry.textContent?.includes('确认合并')
     )!;
+    if (canvasElement.querySelector('input[aria-label="骨骼肌kg最终值"]'))
+      throw new Error('单方有值应自动补齐，不展示输入框');
     if (!button.disabled) throw new Error('尚未选择冲突字段时必须阻止确认');
     const select = canvasElement.querySelector<HTMLSelectElement>(
       'select[aria-label="体重kg最终值"]'
