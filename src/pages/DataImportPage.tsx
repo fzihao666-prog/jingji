@@ -113,6 +113,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [savingReviewGroups, setSavingReviewGroups] = useState<Set<number>>(new Set());
   const [pendingSelections, setPendingSelections] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<'exception' | 'duplicate' | 'overwrite' | 'all'>(
     'exception'
@@ -545,18 +546,41 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const currentReviewPage = Math.min(reviewGroupPage, reviewGroupPages - 1);
   const reviewGroupIds = useMemo(() => new Set(reviewGroups.flatMap(group => group.map(item => item.id))), [reviewGroups]);
   const handleValueReview = async (updates: Correction[]) => {
-    const saved = await saveCorrections();
-    if (!saved) return;
-    setBusy('save');
+    const targetId = updates[0]?.id;
+    const scoped = updates.length > 0 && updates.every(update => update.id === targetId && update.payload?.valueReview);
+    const current = corrections.size || athleteCorrections.size ? await saveCorrections() : batch;
+    if (!current) return;
+    if (scoped) setSavingReviewGroups(previous => new Set(previous).add(targetId));
+    else setBusy('save');
     setError('');
     try {
-      const result = await api.updateDataImportItems(saved.id, updates);
-      setBatch(result.batch);
-      setPendingSelections(current => new Set([...current].filter(id => !updates.some(update => update.id === id))));
+      const result = await api.updateDataImportItems(current.id, updates, scoped ? targetId : undefined);
+      setBatch(previous => {
+        if (!previous || previous.id !== current.id) return previous;
+        if (!result.partial) return result.batch;
+        const updated = new Map(result.batch.items.map(item => [item.id, item]));
+        const items = previous.items.map(item => updated.get(item.id) || item);
+        const active = items.filter(item => item.quality !== 'skipped' && item.itemType !== 'invalid_row');
+        return { ...previous, items,
+          validCount: items.filter(item => item.quality === 'valid').length,
+          warningCount: items.filter(item => item.quality === 'warning').length,
+          errorCount: items.filter(item => item.quality === 'error').length,
+          counts: { ...previous.counts,
+            newCount: active.filter(item => !item.conflict?.exists).length,
+            duplicateCount: active.filter(item => item.conflict?.exists).length,
+            overwriteCount: active.filter(item => item.conflict?.fields.some(field => field.overwrites)).length,
+            invalidCount: items.filter(item => item.itemType === 'invalid_row' || item.quality === 'error').length,
+          },
+        };
+      });
+      setPendingSelections(previous => new Set([...previous].filter(id => !updates.some(update => update.id === id))));
       setMessage('选择已保存。');
     } catch (error) {
-      setError(error instanceof Error ? error.message : '数据冲突审查保存失败');
-    } finally { setBusy(''); }
+      setError(error instanceof Error ? error.message : '选择保存失败，请重新点击要采用的值。');
+    } finally {
+      if (scoped) setSavingReviewGroups(previous => new Set([...previous].filter(id => id !== targetId)));
+      else setBusy('');
+    }
   };
 
   const filteredItems = useMemo(() => {
@@ -1070,7 +1094,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </div>
               {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
                 key={`${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
-                items={group} disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                items={group} disabled={Boolean(busy) || group.some(item => savingReviewGroups.has(item.id)) || batch.status !== 'reviewing'}
                 onPending={id => setPendingSelections(current => new Set(current).add(id))}
                 onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}
                 onDraft={(id, choices, manual) => void handleValueReview([{ id, payload: { valueReview: { action: 'draft', choices, manual } } }])}

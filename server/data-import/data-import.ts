@@ -2354,7 +2354,8 @@ function computeCounts(
 export function getDataImportBatch(
   batchId: string,
   userId: number,
-  duplicateFile = false
+  duplicateFile = false,
+  reviewTargetId?: number
 ): DataImportPreview {
   const row = db
     .prepare(
@@ -2384,11 +2385,18 @@ export function getDataImportBatch(
       di.committed_entity_type AS committedEntityType,
       di.committed_entity_id AS committedEntityId, a.name AS athleteName, a.project AS athleteProject, a.team AS athleteTeam
     FROM data_import_items di LEFT JOIN athletes a ON a.id = di.athlete_id
-    WHERE di.batch_id = ? ORDER BY CASE di.quality WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'valid' THEN 3 ELSE 4 END,
+    WHERE di.batch_id = ? ${reviewTargetId === undefined ? '' : `AND EXISTS (
+      SELECT 1 FROM data_import_items target WHERE target.id = ? AND target.batch_id = di.batch_id
+        AND target.item_type = di.item_type
+        AND (target.item_type = 'scoring_rule' OR (
+          (target.athlete_id IS NOT NULL AND target.athlete_id = di.athlete_id OR target.athlete_id IS NULL AND di.athlete_id IS NULL AND (json_extract(target.payload_json, '$.personKey') IS NULL OR json_extract(di.payload_json, '$.personKey') IS NULL OR json_extract(target.payload_json, '$.personKey') = json_extract(di.payload_json, '$.personKey')))
+          AND (target.item_type = 'athlete_profile' OR target.event_date = di.event_date)
+        ))
+    )`} ORDER BY CASE di.quality WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'valid' THEN 3 ELSE 4 END,
       di.source_sheet, di.source_address, di.id
   `
     )
-    .all(batchId) as Record<string, unknown>[];
+    .all(...(reviewTargetId === undefined ? [batchId] : [batchId, reviewTargetId])) as Record<string, unknown>[];
   const candidateRows = db
     .prepare(
       `SELECT id, batch_id AS batchId, normalized_name AS normalizedName,
@@ -2402,7 +2410,13 @@ export function getDataImportBatch(
     .all(batchId) as Record<string, unknown>[];
   const summary = JSON.parse(text(row.summaryJson) || '{}') as DataImportPreview['summary'];
   if (duplicateFile) summary.duplicateFile = true;
-  const items = itemRows.map(mapItem);
+  let items = itemRows.map(mapItem);
+  if (reviewTargetId !== undefined) {
+    const target = items.find(item => item.id === reviewTargetId);
+    if (!target) throw new Error('未找到该组导入记录');
+    const key = importReviewKey(target);
+    items = items.filter(item => importReviewKey(item) === key);
+  }
   // 兼容当前解析器已保存的待确认草稿；读取时即时整理，正式写入仍走提交校验与事务。
   if (row.status === 'reviewing') {
     refreshImportConflicts(items);
@@ -2443,9 +2457,9 @@ export function getDataImportBatch(
     parserVersion: text(row.parserVersion),
     sheetCount: Number(row.sheetCount),
     itemCount: Number(row.itemCount),
-    validCount: items.filter(item => item.quality === 'valid').length,
-    warningCount: items.filter(item => item.quality === 'warning').length,
-    errorCount: items.filter(item => item.quality === 'error').length,
+    validCount: reviewTargetId === undefined ? items.filter(item => item.quality === 'valid').length : Number(row.validCount),
+    warningCount: reviewTargetId === undefined ? items.filter(item => item.quality === 'warning').length : Number(row.warningCount),
+    errorCount: reviewTargetId === undefined ? items.filter(item => item.quality === 'error').length : Number(row.errorCount),
     importedCount: Number(row.importedCount),
     skippedCount: Number(row.skippedCount),
     createdAt: text(row.createdAt),
@@ -2931,6 +2945,7 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
 
 export function updateDataImportItems(input: {
   batchId: string;
+  reviewTargetId?: number;
   userId: number;
   athletes: ImportAthlete[];
   corrections: Array<{
@@ -2947,7 +2962,11 @@ export function updateDataImportItems(input: {
   // 超限显式拒绝而不是静默截断：截断会让用户以为全部修改已保存。
   if (input.corrections.length > 5000)
     throw new Error('单次最多保存 5000 条校对修改，请分批保存后重试。');
-  const batch = getDataImportBatch(input.batchId, input.userId);
+  if (input.reviewTargetId !== undefined && (!Number.isSafeInteger(input.reviewTargetId) || !input.corrections.length || input.corrections.some(correction =>
+    correction.id !== input.reviewTargetId || Object.keys(correction).some(key => !['id', 'payload'].includes(key)) ||
+    !correction.payload || Object.keys(correction.payload).some(key => key !== 'valueReview') || !correction.payload.valueReview
+  ))) throw new Error('单组审查只能保存当前组的选择');
+  const batch = getDataImportBatch(input.batchId, input.userId, false, input.reviewTargetId);
   if (batch.status !== 'reviewing') throw new Error('只有待审核批次可以修改。');
   const allowed = new Set(input.athletes.map((athlete) => athlete.id));
   const candidateNames = new Set(
@@ -3030,7 +3049,7 @@ export function updateDataImportItems(input: {
     db.exec('ROLLBACK');
     throw error;
   }
-  return getDataImportBatch(input.batchId, input.userId);
+  return getDataImportBatch(input.batchId, input.userId, false, input.reviewTargetId);
 }
 
 export function updateDataImportAthleteCandidates(input: {

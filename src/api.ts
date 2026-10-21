@@ -647,13 +647,14 @@ export const api = {
       actualWeightKg?: number | null;
       payload?: Record<string, unknown>;
       resolution?: '' | 'skip' | 'update';
-    }>
+    }>,
+    reviewTargetId?: number
   ) {
-    return request<{ batch: DataImportBatch }>(
+    return request<{ batch: DataImportBatch; partial: boolean }>(
       `/api/data-import/batches/${encodeURIComponent(id)}/items`,
       {
         method: 'PUT',
-        body: JSON.stringify({ corrections }),
+        body: JSON.stringify({ corrections, reviewTargetId }),
       }
     );
   },

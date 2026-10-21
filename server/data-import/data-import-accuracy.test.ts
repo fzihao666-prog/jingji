@@ -1503,12 +1503,50 @@ it('选齐自动保存后可在同一事务直接改选，入库采用新的选�
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%'], ['张某', '2025-12-03', 80, 10], ['张某', '2025-12-03', 81, 20]] });
   const id = batch.items[0].id;
   const memberIds = batch.items.map(item => item.id);
-  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id, payload: { valueReview: { action: 'merge', memberIds, values: { weightKg: 80, bodyFatPct: 20 } } } }] });
-  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, reviewTargetId: id, corrections: [{ id, payload: { valueReview: { action: 'merge', memberIds, values: { weightKg: 80, bodyFatPct: 20 } } } }] });
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, reviewTargetId: id, corrections: [
     { id, payload: { valueReview: { action: 'reopen' } } },
     { id, payload: { valueReview: { action: 'merge', memberIds, values: { weightKg: 81, bodyFatPct: 10 } } } },
   ] });
   expect(saved.errorCount).toBe(0);
   commit(batch.id, 'skip');
   expect(db.prepare('SELECT weight_kg AS weight, body_fat_pct AS fat FROM athlete_body_measurements').get()).toEqual({ weight: 81, fat: 10 });
+});
+
+
+it('千行批次单组选择只校验、更新并返回本组，查询数量不随整批行数增长', () => {
+  const others = Array.from({ length: 1000 }, (_, index) => ['张某', new Date(Date.UTC(2020, 0, index + 1)).toISOString().slice(0, 10), 70]);
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-12-04', 80], ['张某', '2025-12-04', 81], ...others] });
+  const members = batch.items.filter(item => item.eventDate === '2025-12-04');
+  const id = members[0].id;
+  db.exec('CREATE TEMP TABLE review_updates (id INTEGER); CREATE TEMP TRIGGER track_review_updates AFTER UPDATE ON data_import_items BEGIN INSERT INTO review_updates VALUES (NEW.id); END;');
+  const prepare = vi.spyOn(db, 'prepare');
+  try {
+    const started = performance.now();
+    const patch = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, reviewTargetId: id, corrections: [{ id, payload: { valueReview: { action: 'merge', memberIds: members.map(item => item.id), values: { weightKg: 81 } } } }] });
+    const elapsed = performance.now() - started;
+    const queries = prepare.mock.calls.length;
+    expect(patch.items.map(item => item.id).sort()).toEqual(members.map(item => item.id).sort());
+    expect(patch.itemCount).toBe(1002);
+    expect(patch.errorCount).toBe(0);
+    expect(queries).toBeLessThan(40);
+    expect(db.prepare('SELECT id FROM review_updates ORDER BY id').all()).toEqual(members.map(item => ({ id: item.id })).sort((a, b) => a.id - b.id));
+    console.info(`单组保存：批次1002条，返回${patch.items.length}条，SQL预编译${queries}次，内存数据库耗时${elapsed.toFixed(1)}ms`);
+  } finally {
+    prepare.mockRestore();
+    db.exec('DROP TRIGGER track_review_updates; DROP TABLE review_updates;');
+  }
+});
+
+it('单组保存拒绝跨组成员、其他账号、权限外人员和夹带字段', () => {
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-12-05', 80], ['张某', '2025-12-05', 81], ['赵某', '2025-12-05', 70]] });
+  const members = batch.items.filter(item => item.athleteId === 1);
+  const other = batch.items.find(item => item.athleteId === 2)!;
+  const id = members[0].id;
+  const input = { batchId: batch.id, userId: USER_ID, athletes, reviewTargetId: id, corrections: [{ id, payload: { valueReview: { action: 'merge', memberIds: members.map(item => item.id), values: { weightKg: 81 } } } }] };
+  expect(() => updateDataImportItems({ ...input, corrections: [{ id, payload: { valueReview: { action: 'merge', memberIds: [id, other.id], values: { weightKg: 81 } } } }] })).toThrow(/同一业务记录/);
+  expect(() => updateDataImportItems({ ...input, userId: 999 })).toThrow(/无权/);
+  expect(() => updateDataImportItems({ ...input, athletes: [] })).toThrow(/权限/);
+  expect(() => updateDataImportItems({ ...input, corrections: [{ ...input.corrections[0], eventDate: '2025-12-06' }] })).toThrow(/单组审查/);
+  expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 0 });
 });

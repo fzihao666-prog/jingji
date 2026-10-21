@@ -351,8 +351,9 @@ export function registerDataImportRoutes(app: Express) {
           userId: req.authUser!.id,
           athletes: dataImportCandidates(req.authUser!),
           corrections,
+          reviewTargetId: req.body?.reviewTargetId,
         });
-        res.json({ batch });
+        res.json({ batch, partial: req.body?.reviewTargetId !== undefined });
       } catch (error) {
         res
           .status(400)
