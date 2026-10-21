@@ -1,4 +1,4 @@
-import { BODY_REVIEW_FIELDS, bodyReviewKey, bodyFieldValues } from '../../shared/body-import-review.ts';
+import { reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
 import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
@@ -12,7 +12,7 @@ import {
 } from '../../shared/strength-training.ts';
 
 // v17：新旧模板共用领域字段，身体测量独立于测试成绩；同批重复事实合并或报冲突。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v19-body-review-cards';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v20-unified-value-review';
 
 export type ImportAthlete = {
   id: number;
@@ -1410,7 +1410,7 @@ function parseStandardSheet(
       if (bodyField && bodyField[1] !== 'armSpanCm' && side === 'center') {
         items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
           metricCode: 'body_composition', metricLabel: '身体测量', valueNum,
-          payload: { ...base.payload, [bodyField[1]]: valueNum,
+          payload: { ...base.payload, [bodyField[1]]: valueNum, note: standardText(row, header.columns, '备注'),
             unitConflict: standardText(row, header.columns, '单位') && standardText(row, header.columns, '单位') !== bodyField[4]
               ? `错误：${rawSheet}!${base.sourceAddress} 单位须为${bodyField[4]}，不能自动换算` : '' },
           rawValue: String(valueNum ?? ''), messages, quality: makeQuality(messages),
@@ -1530,69 +1530,41 @@ function parseStandardSheet(
 }
 
 /** 同一批次内按最终人员和日期合并身体测量，冲突必须显式修正，不能依赖表格顺序。 */
-function refreshBodyImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
-  const groups = new Map<string, Array<ParsedImportItem | DataImportItemView>>();
+function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
   for (const item of items) {
-    if (item.itemType !== 'body_measurement' || item.metricCode !== 'body_composition') continue;
-    delete item.payload.bodyImportConflicts;
-    delete item.payload.bodyReviewPending;
-    if (('resolution' in item && item.resolution === 'skip') || item.quality === 'skipped') continue;
-    const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
-    const key = `${identity}|${item.eventDate}`;
-    const group = groups.get(key) || [];
-    group.push(item);
-    groups.set(key, group);
+    delete item.payload.valueImportConflicts;
+    delete item.payload.valueReviewPending;
   }
-  for (const group of groups.values()) {
+  const active = items.filter(item => item.resolution !== 'skip' && item.quality !== 'skipped');
+  // 解析期尚无暂存行号，使用稳定的临时序号参与统一分组。
+  const grouped = importReviewGroups(active.map((item, index) => ({ ...item, id: 'id' in item ? item.id : -(index + 1) })));
+  for (const group of grouped) {
+    if (group.length < 2) continue;
+    const decision = group.find(item => item.payload.valueReviewDecision)?.payload.valueReviewDecision as { sources: Array<{ id: number }> } | undefined;
+    if (decision && group.every(item => decision.sources.some(source => source.id === item.id))) continue;
     const conflicts: string[] = [];
-    for (const [, field, , label, unit] of BODY_TEMPLATE_FIELDS) {
-      if (field === 'armSpanCm') continue;
-      const values = group.filter(item => isProvided(item.payload[field]));
-      if (new Set(values.map(item => item.payload[field])).size < 2) continue;
-      conflicts.push(`错误：同一运动员在${group[0].eventDate}的${label}冲突（存在不同数值）：${values.map(item => `${item.sourceSheet}!${item.sourceAddress} = ${item.payload[field]}${unit}`).join('；')}。请修改日期或数值，或选择“排除此行”，保存校对后重新校验`);
+    for (const [, field, , label, unit] of reviewFields(group)) {
+      if (importFieldValues(group, field).length < 2) continue;
+      const values = group.filter(item => reviewValues(item, group)[field] !== undefined);
+      conflicts.push(`错误：${reviewTitle(group[0])}${group[0].eventDate ? `在${group[0].eventDate}` : ''}的${label}冲突：${values.map(item => `${item.sourceSheet}!${item.sourceAddress} = ${reviewValues(item, group)[field]}${unit}`).join('；')}。请在集中审查中选择最终值或填写真实日期后分别保留`);
     }
-    if (conflicts.length) for (const item of group) item.payload.bodyImportConflicts = conflicts;
-    else if (group.length > 1) for (const item of group) item.payload.bodyReviewPending = true;
+    for (const item of group) {
+      if (conflicts.length) item.payload.valueImportConflicts = conflicts;
+      else item.payload.valueReviewPending = true;
+    }
   }
 }
 
 function consolidateImportFacts(items: ParsedImportItem[]) {
-  refreshBodyImportConflicts(items);
-  const sessions = new Map<string, ParsedImportItem[]>();
   for (const item of items) {
-    if (item.itemType !== 'test_measurement') continue;
-    const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
-    const key = `${identity}|${item.eventDate}|${item.testType}`;
-    const session = sessions.get(key) || [];
-    session.push(item);
-    sessions.set(key, session);
-  }
-  for (const session of sessions.values()) {
-    const protocols = [...new Set(session.map(item => text(item.payload.protocol)).filter(Boolean))];
-    for (const item of session) {
-      if (protocols.length > 1) item.payload.importConflicts = [
-        '错误：同一运动员、日期及测试类型存在不同测试协议，请修正原文件后重新上传',
-      ];
-      else if (protocols.length === 1) item.payload.protocol = protocols[0];
+    if (item.itemType === 'body_measurement' && item.metricCode !== 'body_composition') {
+      const field = item.metricCode === 'height_cm' ? 'heightCm' : item.metricCode === 'weight_kg' ? 'weightKg' : null;
+      if (field) { item.payload[field] = item.valueNum; item.metricCode = 'body_composition'; item.metricLabel = '身体测量'; }
     }
   }
-  const grouped = new Map<string, ParsedImportItem>();
-  return items.filter(item => {
-    if (item.itemType !== 'test_measurement') return true;
-    const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
-    const key = `${identity}|${item.eventDate}|test|${item.testType}|${item.metricCode}|${item.side}`;
-    const current = grouped.get(key);
-    if (!current) { grouped.set(key, item); return true; }
-    const conflicts = Array.isArray(current.payload.importConflicts) ? current.payload.importConflicts as string[] : [];
-    const conflict = (label: string) => conflicts.push(`错误：${current.sourceSheet}!${current.sourceAddress}与${item.sourceSheet}!${item.sourceAddress}的${label}冲突，请修正原文件后重新上传`);
-    if (current.valueNum !== item.valueNum || current.unit !== item.unit) conflict(item.metricLabel);
-    if (text(current.payload.protocol) && text(item.payload.protocol) && text(current.payload.protocol) !== text(item.payload.protocol)) conflict('测试协议');
-    if (!text(current.payload.protocol)) current.payload.protocol = item.payload.protocol;
-    if (item.payload.unitConflict) current.payload.unitConflict = item.payload.unitConflict;
-    current.payload.protocolRequired = Boolean(current.payload.protocolRequired || item.payload.protocolRequired);
-    current.payload.importConflicts = conflicts;
-    return false;
-  });
+  // 所有可审查记录保留原始行，不在解析期丢弃冲突来源。
+  refreshImportConflicts(items);
+  return items;
 }
 
 function ensureMetricDefinitions() {
@@ -1688,6 +1660,17 @@ function conflictField(
   };
 }
 
+/** 数据库比较与文件比较使用相同字段定义，只在这里适配数据库列名。 */
+function databaseConflictFields(item: DataImportItemView, row: Record<string, unknown>) {
+  const values = reviewValues(item);
+  return reviewFields([item]).flatMap(([, field, , label]) => {
+    const column = field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    if (!(field in row) && !(column in row)) return [];
+    const conflict = conflictField(field, label, field in row ? row[field] : row[column], values[field]);
+    return conflict ? [conflict] : [];
+  });
+}
+
 /**
  * 预览期重复与覆盖检测：按正式业务唯一键查找已有记录，
  * 仅比较文件明确提供的字段；空白字段不参与覆盖判定。
@@ -1708,7 +1691,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
   if (item.itemType === 'athlete_profile') {
     const athlete = db
       .prepare(
-        `SELECT a.gender, a.birth_date AS birthDate, COALESCE(pt.name, '') AS team,
+        `SELECT ap.*, a.gender, a.birth_date AS birthDate, COALESCE(pt.name, '') AS team,
           ap.technical_level AS technicalLevel, ap.best_result AS bestResult,
           COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county
         FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id
@@ -1718,15 +1701,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       )
       .get(item.athleteId) as Record<string, unknown> | undefined;
     if (!athlete) return empty;
-    const fields = push([
-      conflictField('gender', '性别', athlete.gender, text(p.gender)),
-      conflictField('birthDate', '出生日期', athlete.birthDate, validIsoDate(text(p.birthDate)) ? p.birthDate : ''),
-      conflictField('region', '省份', athlete.region, text(p.region)),
-      conflictField('city', '城市', athlete.city, text(p.city)),
-      conflictField('county', '区县', athlete.county, text(p.county)),
-      conflictField('technicalLevel', '技术等级', athlete.technicalLevel, text(p.technicalLevel)),
-      conflictField('bestResult', '最好成绩', athlete.bestResult, text(p.bestResult)),
-    ]);
+    const fields = databaseConflictFields(item, athlete);
     return {
       exists: true,
       entityType: 'athlete',
@@ -1740,19 +1715,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       .prepare('SELECT * FROM daily_wellness WHERE athlete_id=? AND wellness_date=?')
       .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
     if (!existing) return empty;
-    const map: Array<[string, string, string]> = [
-      ['sleepHours', '睡眠小时', 'sleep_hours'],
-      ['sleepQuality', '睡眠质量', 'sleep_quality'],
-      ['morningPulse', '晨脉', 'morning_pulse'],
-      ['weightKg', '体重kg', 'weight_kg'],
-      ['fatigueIndex', '疲劳', 'fatigue_index'],
-      ['sorenessIndex', '肌肉酸痛', 'soreness_index'],
-      ['moodIndex', '情绪', 'mood_index'],
-      ['status', '状态', 'status'],
-    ];
-    const fields = push(
-      map.map(([key, label, column]) => conflictField(key, label, existing[column], p[key]))
-    );
+    const fields = databaseConflictFields(item, existing);
     return {
       exists: true,
       entityType: 'daily_wellness',
@@ -1769,23 +1732,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       )
       .get(item.athleteId, item.eventDate, order) as Record<string, unknown> | undefined;
     if (!existing) return empty;
-    const map: Array<[string, string, string]> = [
-      ['startTime', '开始时间', 'start_time'],
-      ['trainingType', '训练类型', 'training_type'],
-      ['structureType', '训练阶段', 'structure_type'],
-      ['intensityZone', '强度区间', 'intensity_zone'],
-      ['content', '训练内容', 'content'],
-      ['durationMin', '时长分钟', 'duration_min'],
-      ['distanceKm', '距离千米', 'distance_km'],
-      ['rpe', 'RPE', 'rpe'],
-      ['averageHeartRate', '平均心率', 'average_heart_rate'],
-      ['maxHeartRate', '最大心率', 'max_heart_rate'],
-      ['averagePowerW', '平均功率W', 'average_power_w'],
-      ['strokeRateSpm', '桨频SPM', 'stroke_rate_spm'],
-    ];
-    const fields = push(
-      map.map(([key, label, column]) => conflictField(key, label, existing[column], p[key]))
-    );
+    const fields = databaseConflictFields(item, existing);
     return {
       exists: true,
       entityType: 'training_session',
@@ -1810,12 +1757,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
           | undefined)
       : undefined;
     if (!existing) return empty;
-    const fields = push([
-      conflictField('targetReps', '计划次数', existing.target_reps, item.targetReps),
-      conflictField('actualReps', '实际次数', existing.actual_reps, item.actualReps),
-      conflictField('actualWeightKg', '实际重量kg', existing.actual_weight_kg, item.actualWeightKg),
-      conflictField('intensityPercent', '强度百分比', existing.intensity_percent, item.intensityPercent),
-    ]);
+    const fields = databaseConflictFields(item, { ...existing });
     return {
       exists: true,
       entityType: 'strength_result_set',
@@ -1826,9 +1768,9 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
   }
   if (item.itemType === 'test_measurement') {
     const session = db
-      .prepare('SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
+      .prepare('SELECT id, protocol, duration_min AS durationMin FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
       .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as
-      | { id: number }
+      | { id: number; protocol: string; durationMin: number | null }
       | undefined;
     const existing = session
       ? (db
@@ -1837,15 +1779,17 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
           )
           .get(session.id, item.metricCode, item.side) as Record<string, unknown> | undefined)
       : undefined;
-    if (!existing) return empty;
+    if (!session) return empty;
     const fields = push([
-      conflictField('valueNum', item.metricLabel || item.metricCode, existing.value_num, item.valueNum),
-      conflictField('unit', '单位', existing.unit, item.unit),
+      ...(existing ? [conflictField('valueNum', item.metricLabel || item.metricCode, existing.value_num, item.valueNum), conflictField('unit', '单位', existing.unit, item.unit), conflictField('note', '备注', existing.note, p.note)] : []),
+      conflictField('protocol', '测试协议', session.protocol, p.protocol),
+      conflictField('durationMin', '测试时长分钟', session.durationMin, p.durationMin),
     ]);
+    if (!existing && !fields.some(field => field.overwrites)) return empty;
     return {
       exists: true,
-      entityType: 'test_measurement',
-      entityId: Number(existing.id),
+      entityType: existing ? 'test_measurement' : 'test_session',
+      entityId: Number(existing?.id ?? session.id),
       identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
       fields,
     };
@@ -1855,13 +1799,8 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       .prepare('SELECT * FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?')
       .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
     if (!existing) return empty;
-    const columnByField = new Map(BODY_COMPOSITION_FIELDS.map(([key]) => [key, key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)]));
     if (item.metricCode === 'body_composition') {
-      const fields = push(
-        BODY_COMPOSITION_FIELDS.map(([key, label]) =>
-          conflictField(key, label, existing[columnByField.get(key) || key], p[key])
-        )
-      );
+      const fields = databaseConflictFields(item, existing);
       return {
         exists: true,
         entityType: 'athlete_body_measurement',
@@ -1886,16 +1825,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       .prepare('SELECT * FROM injury_records WHERE athlete_id=? AND onset_date=? AND injury_name=?')
       .get(item.athleteId, item.eventDate, text(p.injuryName)) as Record<string, unknown> | undefined;
     if (!existing) return empty;
-    const fields = push([
-      conflictField('bodyPart', '部位', existing.body_part, text(p.bodyPart)),
-      conflictField('side', '侧别', existing.side, text(p.side)),
-      conflictField('status', '状态', existing.status, text(p.status)),
-      conflictField('painScore', '疼痛评分', existing.pain_score, p.painScore),
-      conflictField('restrictions', '训练限制', existing.restrictions, text(p.restrictions)),
-      conflictField('rehabPlan', '康复计划', existing.rehab_plan, text(p.rehabPlan)),
-      conflictField('reviewDate', '复查日期', existing.review_date, text(p.reviewDate)),
-      conflictField('note', '备注', existing.note, text(p.note)),
-    ]);
+    const fields = databaseConflictFields(item, { ...existing });
     return {
       exists: true,
       entityType: 'injury_record',
@@ -1909,19 +1839,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       .prepare('SELECT * FROM competitive_state_assessments WHERE athlete_id=? AND assessment_date=?')
       .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
     if (!existing) return empty;
-    const map: Array<[string, string, string]> = [
-      ['overallScore', '总分', 'overall_score'],
-      ['stateLevel', '等级', 'state_level'],
-      ['enduranceScore', '专项耐力', 'endurance_score'],
-      ['powerScore', '力量爆发', 'power_score'],
-      ['techniqueScore', '技术效率', 'technique_score'],
-      ['loadAdaptationScore', '负荷适应', 'load_adaptation_score'],
-      ['recoveryScore', '恢复能力', 'recovery_score'],
-      ['competitionScore', '比赛能力', 'competition_score'],
-    ];
-    const fields = push(
-      map.map(([key, label, column]) => conflictField(key, label, existing[column], p[key]))
-    );
+    const fields = databaseConflictFields(item, existing);
     return {
       exists: true,
       entityType: 'competitive_state_assessment',
@@ -1943,9 +1861,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       | Record<string, unknown>
       | undefined;
     if (!existing) return empty;
-    const fields = push([
-      conflictField('thresholdValue', item.metricLabel || item.metricCode, existing.thresholdValue, item.valueNum),
-    ]);
+    const fields = databaseConflictFields(item, { ...existing, valueNum: existing.thresholdValue });
     return {
       exists: true,
       entityType: 'metric_scoring_rule',
@@ -2604,15 +2520,17 @@ function validateImportItem(
     return item.messages.filter((message) => message.startsWith('错误：'));
   }
   const payload = item.payload || {};
-  if (payload.bodyReviewPending) messages.push('错误：同人同日存在多条身体测量，请在集中审查卡片确认合并或填写真实日期后分别保留');
-  if (Array.isArray(payload.bodyImportConflicts))
-    messages.push(...payload.bodyImportConflicts.filter((value): value is string => typeof value === 'string'));
+  if (payload.valueReviewPending) messages.push('错误：存在重复业务数据，请在集中审查卡片确认最终值或填写真实日期后分别保留');
+  if (Array.isArray(payload.valueImportConflicts))
+    messages.push(...payload.valueImportConflicts.filter((value): value is string => typeof value === 'string'));
   if (Array.isArray(payload.importConflicts))
     messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string'));
   if (item.itemType === 'test_measurement' && item.athleteId && text(payload.protocol)) {
     const session = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
       .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
-    if (text(session?.protocol) && text(session?.protocol) !== text(payload.protocol))
+    const confirmed = payload.valueReviewProtocol as { previous?: string; next?: string } | undefined;
+    if (text(session?.protocol) && text(session?.protocol) !== text(payload.protocol)
+      && !(confirmed?.previous === text(session?.protocol) && confirmed?.next === text(payload.protocol)))
       messages.push('错误：测试协议与该运动员当日已有同类测试不一致，请核对协议或测试日期');
   }
   if (payload.protocolRequired && !text(payload.protocol))
@@ -2821,7 +2739,7 @@ function applyCorrection(
     ...current,
     payload: { ...current.payload },
   };
-  if ((current.payload.bodyMergeDecision || current.payload.bodyMergedInto) && !correction.payload?.bodyMergeReview
+  if ((current.payload.valueReviewDecision || current.payload.valueMergedInto || current.payload.valueReviewMemberOf) && !correction.payload?.valueReview
     && (correction.payload || 'eventDate' in correction || 'athleteId' in correction || 'valueNum' in correction))
     throw new Error('请先点击重新编辑，展开合并来源后再修改');
   if ('athleteId' in correction) next.athleteId = correction.athleteId ?? null;
@@ -2868,84 +2786,110 @@ function applyCorrection(
 }
 
 /** 合并只改暂存记录；来源及选择由服务端生成，正式入库仍走原事务与校验。 */
-function applyBodyMergeReview(items: DataImportItemView[], targetId: number, raw: unknown, allowed: Set<number>, userId: number) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('身体测量审查请求无效');
+function applyValueReview(items: DataImportItemView[], targetId: number, raw: unknown, allowed: Set<number>, userId: number) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('数据审查请求无效');
   const review = raw as Record<string, unknown>;
   const target = items.find(item => item.id === targetId);
-  if (!target || target.itemType !== 'body_measurement' || target.metricCode !== 'body_composition') throw new Error('只能审查身体测量记录');
+  if (!target || !reviewFields([target]).length) throw new Error('该记录不支持数据审查');
   const checkAccess = (item: DataImportItemView) => {
     if (item.athleteId && !allowed.has(item.athleteId)) throw new Error('所选运动员不在当前权限范围内');
   };
   checkAccess(target);
   if (review.action === 'draft') {
-    if (target.payload.bodyMergeDecision || target.payload.bodyMergedInto) throw new Error('请先重新编辑合并结果');
+    if (target.payload.valueReviewDecision || target.payload.valueMergedInto) throw new Error('请先重新编辑合并结果');
     const draft: Record<string, Record<string, string>> = {};
     for (const key of ['choices', 'manual']) {
       const rawValues = review[key];
       if (!rawValues || typeof rawValues !== 'object' || Array.isArray(rawValues)) throw new Error('审查草稿格式无效');
       draft[key] = {};
       for (const [field, value] of Object.entries(rawValues)) {
-        if (!BODY_REVIEW_FIELDS.some(([, code]) => code === field) || typeof value !== 'string' || value.length > 64) throw new Error('审查草稿字段无效');
+        if (!reviewFields(items.filter(item => importReviewKey(item) === importReviewKey(target))).some(([, code]) => code === field) || typeof value !== 'string' || value.length > 10000) throw new Error('审查草稿字段无效');
         draft[key][field] = value;
       }
     }
-    target.payload.bodyMergeDraft = draft;
+    target.payload.valueReviewDraft = draft;
     return;
   }
   if (review.action === 'reopen') {
-    const decision = target.payload.bodyMergeDecision as { sources?: Array<{ id: number; values: Record<string, unknown> }> } | undefined;
+    const decision = target.payload.valueReviewDecision as { sources?: Array<{ id: number; values: Record<string, ReviewValue> }> } | undefined;
     if (!decision?.sources) throw new Error('该组尚未合并');
     for (const source of decision.sources) {
       const item = items.find(entry => entry.id === source.id);
-      if (!item || (item.id !== target.id && item.payload.bodyMergedInto !== target.id)) throw new Error('合并来源已变化，请刷新后重试');
+      if (!item || (item.id !== target.id && item.payload.valueMergedInto !== target.id && item.payload.valueReviewMemberOf !== target.id)) throw new Error('合并来源已变化，请刷新后重试');
       checkAccess(item);
-      for (const [, field] of BODY_REVIEW_FIELDS) delete item.payload[field];
-      Object.assign(item.payload, source.values);
-      delete item.payload.bodyMergedInto;
-      delete item.payload.bodyMergeDecision;
+      writeReviewValues(item, source.values, items.filter(entry => importReviewKey(entry) === importReviewKey(target)));
+      delete item.payload.valueMergedInto;
+      delete item.payload.valueReviewMemberOf;
+      delete item.payload.valueReviewProtocol;
+      delete item.payload.valueReviewDecision;
       item.resolution = '';
       item.quality = 'valid';
-      item.valueNum = optionalNumber(item.payload.weightKg ?? item.payload.heightCm);
+
     }
-    const history = Array.isArray(target.payload.bodyMergeHistory) ? target.payload.bodyMergeHistory : [];
-    target.payload.bodyMergeHistory = [...history, { ...decision, reopenedBy: userId, reopenedAt: new Date().toISOString() }];
+    const history = Array.isArray(target.payload.valueReviewHistory) ? target.payload.valueReviewHistory : [];
+    target.payload.valueReviewHistory = [...history, { ...decision, reopenedBy: userId, reopenedAt: new Date().toISOString() }];
     return;
   }
   if (review.action !== 'merge' || !Array.isArray(review.memberIds) || !review.values || typeof review.values !== 'object' || Array.isArray(review.values)) throw new Error('合并参数无效');
   const memberIds = review.memberIds;
-  if (memberIds.length < 2 || new Set(memberIds).size !== memberIds.length || !memberIds.includes(targetId)) throw new Error('请至少选择两条不同来源');
+  if (memberIds.length < (review.includeDatabase === true ? 1 : 2) || new Set(memberIds).size !== memberIds.length || !memberIds.includes(targetId)) throw new Error('请至少选择两条不同来源');
   const members = memberIds.map(id => items.find(item => item.id === id));
-  if (members.some(item => !item || item.itemType !== 'body_measurement' || item.metricCode !== 'body_composition' || bodyReviewKey(item) !== bodyReviewKey(target))) throw new Error('只能合并同一运动员、同一日期的身体测量');
+  if (members.some(item => !item || !reviewFields([item]).length || importReviewKey(item) !== importReviewKey(target))) throw new Error('只能合并同一业务记录的重复来源');
   const sources = members.filter((item): item is DataImportItemView => Boolean(item));
   for (const item of sources) {
     checkAccess(item);
     if (item.payload.unitConflict) throw new Error(`原始记录单位不一致，请先排除或修正来源：${item.sourceSheet}!${item.sourceAddress}`);
-    if (item.resolution === 'skip' || item.payload.bodyMergeDecision || item.payload.bodyMergedInto) throw new Error('请先重新编辑已合并的记录');
+    if (item.resolution === 'skip' || item.payload.valueReviewDecision || item.payload.valueMergedInto || item.payload.valueReviewMemberOf) throw new Error('请先重新编辑已合并的记录');
   }
+  const databaseSnapshots = review.includeDatabase === true ? sources.map(item => {
+    const fresh = detectItemConflict(item);
+    assertConflictUnchanged(item, fresh);
+    if (item.conflict?.exists && !fresh.exists) throw new Error('数据库已有记录已变化，请刷新后重新审查');
+    return { id: item.id, conflict: fresh };
+  }) : [];
+  const database = databaseReviewRecords(sources.map(item => ({ ...item, conflict: databaseSnapshots.find(snapshot => snapshot.id === item.id)?.conflict ?? null })));
+  if (review.includeDatabase === true && !database.length) throw new Error('没有可比较的数据库已有值，请刷新后重试');
+  const comparison = [...sources, ...database];
   const selected = review.values as Record<string, unknown>;
-  if (Object.keys(selected).some(field => !BODY_REVIEW_FIELDS.some(([, key]) => key === field))) throw new Error('合并包含不支持的字段');
-  const values: Record<string, number> = {};
-  for (const [, field, , label] of BODY_REVIEW_FIELDS) {
-    const available = bodyFieldValues(sources, field);
+  const fields = reviewFields(comparison);
+  if (Object.keys(selected).some(field => !fields.some(([, key]) => key === field))) throw new Error('合并包含不支持的字段');
+  const values: Record<string, ReviewValue> = {};
+  for (const [, field, , label, , kind] of fields) {
+    const available = importFieldValues(comparison, field);
     if (Object.prototype.hasOwnProperty.call(selected, field)) {
-      if (typeof selected[field] !== 'number' || !Number.isFinite(selected[field])) throw new Error(`${label}必须是有效数值`);
-      values[field] = selected[field];
+      const value = selected[field];
+      if (kind === 'text' ? typeof value !== 'string' || value.length > 10000 : typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${label}格式无效`);
+      values[field] = value as ReviewValue;
     } else if (available.length === 1) values[field] = available[0];
     else if (available.length > 1) throw new Error(`请为${label}选择最终值`);
   }
   const snapshots = sources.map(item => ({ id: item.id, sourceSheet: item.sourceSheet, sourceAddress: item.sourceAddress,
     eventDate: item.eventDate, rawDate: item.payload.rawDate,
-    values: Object.fromEntries(BODY_REVIEW_FIELDS.filter(([, field]) => isProvided(item.payload[field])).map(([, field]) => [field, item.payload[field]])) }));
-  for (const [, field] of BODY_REVIEW_FIELDS) delete target.payload[field];
-  Object.assign(target.payload, values);
-  delete target.payload.bodyMergeDraft;
-  target.payload.bodyMergeDecision = { confirmed: true, sources: snapshots, choices: selected, finalValues: values, confirmedBy: userId, confirmedAt: new Date().toISOString() };
-  target.valueNum = optionalNumber(target.payload.weightKg ?? target.payload.heightCm);
-  for (const item of sources) {
-    if (item.id === target.id) continue;
-    item.resolution = 'skip';
-    item.payload.bodyMergedInto = target.id;
+    values: reviewValues(item, sources) }));
+  const representatives = new Set<string>();
+  for (const item of [target, ...sources.filter(item => item.id !== target.id)]) {
+    const fact = item.itemType === 'test_measurement' ? reviewMetricKey(item) : 'record';
+    if (representatives.has(fact)) {
+      item.resolution = 'skip';
+      item.payload.valueMergedInto = target.id;
+    } else {
+      representatives.add(fact);
+      writeReviewValues(item, values, sources);
+      if (review.includeDatabase === true) {
+        item.resolution = 'update';
+        if (item.itemType === 'test_measurement' && typeof values.protocol === 'string') {
+          const existing = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
+            .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
+          if (text(existing?.protocol) && text(existing?.protocol) !== values.protocol)
+            item.payload.valueReviewProtocol = { previous: text(existing?.protocol), next: values.protocol };
+        }
+      }
+      if (item.id !== target.id) item.payload.valueReviewMemberOf = target.id;
+    }
   }
+  delete target.payload.valueReviewDraft;
+  target.payload.valueReviewDecision = { confirmed: true, sources: snapshots, databaseSnapshots, databaseSources: database.map(item => ({ id: -item.id, values: reviewValues(item, comparison) })), choices: selected, finalValues: values, confirmedBy: userId, confirmedAt: new Date().toISOString() };
+
 }
 
 export function updateDataImportItems(input: {
@@ -2973,7 +2917,7 @@ export function updateDataImportItems(input: {
     batch.athleteCandidates.map((candidate) => candidate.normalizedName)
   );
   const update = db.prepare(
-    `UPDATE data_import_items SET athlete_id = ?, event_date = ?, value_num = ?, actual_reps = ?, actual_weight_kg = ?,
+    `UPDATE data_import_items SET athlete_id = ?, event_date = ?, value_num = ?, actual_reps = ?, actual_weight_kg = ?, unit = ?, target_reps = ?, intensity_percent = ?,
       payload_json = ?, resolution = ?, conflict_json = ?, quality = ?, messages_json = ? WHERE id = ? AND batch_id = ?`
   );
   db.exec('BEGIN IMMEDIATE');
@@ -2982,22 +2926,29 @@ export function updateDataImportItems(input: {
     const nextItems = batch.items.map(item => {
       const correction = corrected.get(item.id);
       const next = correction ? applyCorrection(item, correction) : { ...item, payload: { ...item.payload } };
-      if (next.itemType === 'body_measurement' && !next.athleteId && !correction?.athleteId) {
+      if (next.itemType !== 'scoring_rule' && !next.athleteId && !correction?.athleteId) {
         const candidate = batch.athleteCandidates.find(candidate => candidate.normalizedName === dataImportPersonKey(next) && !candidate.excluded);
         if (candidate?.matchedAthleteId) next.athleteId = candidate.matchedAthleteId;
       }
       return next;
     });
-    const bodyReviewedIds = new Set<number>();
     for (const correction of input.corrections) {
-      if (!correction.payload || !('bodyMergeReview' in correction.payload)) continue;
-      applyBodyMergeReview(nextItems, correction.id, correction.payload.bodyMergeReview, allowed, input.userId);
-      for (const item of nextItems) if (item.itemType === 'body_measurement') bodyReviewedIds.add(item.id);
+      if (correction.resolution === undefined) continue;
+      for (const item of nextItems) if (item.payload.valueReviewMemberOf === correction.id) {
+        item.resolution = correction.resolution ?? '';
+        if (item.resolution !== 'skip' && item.quality === 'skipped') item.quality = 'valid';
+      }
     }
-    refreshBodyImportConflicts(nextItems);
+    const reviewedIds = new Set<number>();
+    for (const correction of input.corrections) {
+      if (!correction.payload || !('valueReview' in correction.payload)) continue;
+      applyValueReview(nextItems, correction.id, correction.payload.valueReview, allowed, input.userId);
+      for (const item of nextItems) if (reviewFields([item]).length) reviewedIds.add(item.id);
+    }
+    refreshImportConflicts(nextItems);
     for (const next of nextItems) {
       // 同组另一行被修改或排除时，也重新校验本行。
-      if (!corrected.has(next.id) && !bodyReviewedIds.has(next.id) && !(next.itemType === 'body_measurement' && next.metricCode === 'body_composition')) continue;
+      if (!corrected.has(next.id) && !reviewedIds.has(next.id) && !reviewFields([next]).length) continue;
       const validation = revalidateItem(next, allowed, candidateNames);
       next.quality = validation.quality;
       next.messages = validation.messages;
@@ -3009,6 +2960,9 @@ export function updateDataImportItems(input: {
         next.valueNum,
         next.actualReps,
         next.actualWeightKg,
+        next.unit,
+        next.targetReps,
+        next.intensityPercent,
         JSON.stringify(next.payload),
         next.resolution,
         JSON.stringify(next.conflict ?? {}),
@@ -3175,7 +3129,7 @@ function upsertTrainingItem(
     : undefined;
   const category = text(payload.trainingCategory) || inferStrengthCategory(item.exerciseName);
   const position = text(payload.bodyPosition) || inferStrengthBodyPosition(item.exerciseName);
-  const note = item.messages.join('；');
+  const note = text(payload.note);
   const sourceRow = `${item.sourceSheet}!${item.sourceAddress}`;
   if (existing) {
     // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
@@ -3186,6 +3140,8 @@ function upsertTrainingItem(
       ['intensity_percent', item.intensityPercent],
       ['training_category', category],
       ['body_position', position],
+      ['rpe', optionalNumber(payload.rpe)],
+      ['note', note],
     ];
     const proposed = patch.filter(
       ([column, value]) => isProvided(value) && String(existing[column] ?? '') !== String(value)
@@ -3199,10 +3155,9 @@ function upsertTrainingItem(
       return { skipped: true, entityId: Number(existing.id), sessionId, created: false, filled: 0, overwritten: 0 };
     const setSql = changed.map(([column]) => `${column} = ?`).join(', ');
     db.prepare(
-      `UPDATE strength_result_sets SET ${setSql}, note = ?, source = 'file_import', data_import_batch_id = ?, source_row = ?, original_text = ?, created_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      `UPDATE strength_result_sets SET ${setSql}, source = 'file_import', data_import_batch_id = ?, source_row = ?, original_text = ?, created_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(
       ...sqlList(changed.map(([, value]) => value)),
-      note,
       batchId,
       sourceRow,
       item.rawValue,
@@ -3240,7 +3195,7 @@ function upsertTrainingItem(
     training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg,
     training_category, body_position, training_environment, intensity_percent, intensity_zone, rpe,
     completed, note, source, data_import_batch_id, source_row, original_text, created_by
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '陆上', ?, 'AN', NULL, 1, ?, 'file_import', ?, ?, ?, ?)`
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '陆上', ?, 'AN', ?, 1, ?, 'file_import', ?, ?, ?, ?)`
     )
     .run(
       sessionId,
@@ -3252,6 +3207,7 @@ function upsertTrainingItem(
       category,
       position,
       item.intensityPercent,
+      optionalNumber(payload.rpe),
       note,
       batchId,
       sourceRow,
@@ -3287,8 +3243,15 @@ function upsertTestItem(
 ): UpsertResult {
   const storedSession = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
     .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
-  if (text(storedSession?.protocol) && text(item.payload.protocol) && text(storedSession?.protocol) !== text(item.payload.protocol))
-    throw new Error('测试协议与该运动员当日已有同类测试不一致，请重新校对后提交');
+  if (text(storedSession?.protocol) && text(item.payload.protocol) && text(storedSession?.protocol) !== text(item.payload.protocol)) {
+    const confirmed = item.payload.valueReviewProtocol as { previous?: string; next?: string } | undefined;
+    if (confirmed?.previous !== text(storedSession?.protocol) || confirmed?.next !== text(item.payload.protocol))
+      throw new Error('测试协议与已有课次不一致，请通过统一审查确认最终协议');
+    db.prepare('UPDATE test_sessions SET protocol = ? WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
+      .run(confirmed.next, item.athleteId, item.eventDate, item.testType || '力量素质测试');
+    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
+      .run(userId, 'CONFIRM_IMPORT_TEST_PROTOCOL', 'test_session', JSON.stringify({ batchId, athleteId: item.athleteId, date: item.eventDate, testType: item.testType, ...confirmed }));
+  }
   const policy = resolveItemPolicy(item, batchPolicy);
   db.prepare(
     `INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, active)
@@ -3320,44 +3283,31 @@ function upsertTestItem(
     .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { id: number };
   const existing = db
     .prepare(
-      'SELECT id, value_num AS valueNum, unit FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
+      'SELECT id, value_num AS valueNum, unit, note FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
     )
     .get(session.id, item.metricCode, item.side) as
-    | { id: number; valueNum: number; unit: string }
+    | { id: number; valueNum: number | null; unit: string; note: string }
     | undefined;
+  const note = text(item.payload.note);
   if (existing) {
-    // 统一合并语义：skip 只补全空字段并保留已有值，update 才覆盖不同值。
-    const blank = existing.valueNum === null || existing.valueNum === undefined;
-    const identical =
-      !blank &&
-      Number(existing.valueNum) === Number(item.valueNum) &&
-      text(existing.unit) === text(item.unit);
-    if (identical || (policy === 'skip' && !blank))
-      return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
-    db.prepare(
-      `UPDATE test_measurements SET value_num = ?, unit = ?, quality = ?, source = 'file_import', is_demo = 0,
-      data_import_batch_id = ?, source_ref = ? WHERE id = ?`
-    ).run(
-      item.valueNum,
-      item.unit,
-      item.quality === 'warning' ? 'partial' : 'valid',
-      batchId,
-      `${item.sourceSheet}!${item.sourceAddress}`,
-      existing.id
-    );
-    return {
-      skipped: false,
-      entityId: existing.id,
-      created: false,
-      filled: blank ? 1 : 0,
-      overwritten: blank ? 0 : 1,
-    };
+    const proposed = { valueNum: item.valueNum, unit: item.unit, note };
+    const keys = ['valueNum', 'unit', 'note'] as const;
+    const changed = keys.filter(key => isProvided(proposed[key]) && proposed[key] !== existing[key]
+      && (policy === 'update' || !isProvided(existing[key])));
+    if (!changed.length) return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
+    const next = { ...existing };
+    for (const key of changed) Object.assign(next, { [key]: proposed[key] });
+    db.prepare(`UPDATE test_measurements SET value_num = ?, unit = ?, note = ?, quality = ?, source = 'file_import', is_demo = 0,
+      data_import_batch_id = ?, source_ref = ? WHERE id = ?`).run(next.valueNum, next.unit, next.note,
+      item.quality === 'warning' ? 'partial' : 'valid', batchId, `${item.sourceSheet}!${item.sourceAddress}`, existing.id);
+    const filled = changed.filter(key => !isProvided(existing[key])).length;
+    return { skipped: false, entityId: existing.id, created: false, filled, overwritten: changed.length - filled };
   }
   const inserted = db
     .prepare(
       `INSERT INTO test_measurements (
-    test_session_id, metric_code, value_num, unit, side, quality, source, is_demo, data_import_batch_id, source_ref
-  ) VALUES (?, ?, ?, ?, ?, ?, 'file_import', 0, ?, ?)`
+    test_session_id, metric_code, value_num, unit, side, quality, source, is_demo, data_import_batch_id, source_ref, note
+  ) VALUES (?, ?, ?, ?, ?, ?, 'file_import', 0, ?, ?, ?)`
     )
     .run(
       session.id,
@@ -3367,7 +3317,8 @@ function upsertTestItem(
       item.side,
       item.quality === 'warning' ? 'partial' : 'valid',
       batchId,
-      `${item.sourceSheet}!${item.sourceAddress}`
+      `${item.sourceSheet}!${item.sourceAddress}`,
+      note
     );
   return {
     skipped: false,
@@ -4318,7 +4269,7 @@ export function commitDataImport(input: {
   );
   if (candidateTeamOutOfScope)
     throw new Error(`“${candidateTeamOutOfScope.name}”选择的所属队伍不在当前账号权限范围内。`);
-  refreshBodyImportConflicts(importable);
+  refreshImportConflicts(importable);
   const invalid = importable.filter(
     (item) =>
       revalidateItem(item, allowed, candidateNames).quality === 'error'
@@ -4347,16 +4298,24 @@ export function commitDataImport(input: {
     createdAthletes = resolution.createdCount;
     linkedAthletes = resolution.linkedCount;
     for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
-    refreshBodyImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
-    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.bodyReviewPending || Array.isArray(item.payload.bodyImportConflicts))))
-      throw new Error('人员关联后出现同人同日的多条身体测量，请保存校对并重新审查后提交');
+    refreshImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
+    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
+      throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
+    const freshConflicts = new Map(importable.map(item => [item.id, detectItemConflict(item)]));
     for (const item of importable) {
       if (resolution.excludedKeys.has(dataImportPersonKey(item))) {
         skipped += 1;
         continue;
       }
       // 提交时基于最新数据库状态重新判定重复与覆盖；预览后被并发修改的覆盖必须重新确认。
-      const fresh = detectItemConflict(item);
+      const fresh = freshConflicts.get(item.id)!;
+      const anchor = batch.items.find(entry => entry.id === item.payload.valueReviewMemberOf) || item;
+      const decision = anchor.payload.valueReviewDecision as { databaseSnapshots?: Array<{ id: number; conflict: DataImportConflict }> } | undefined;
+      const snapshot = decision?.databaseSnapshots?.find(snapshot => snapshot.id === item.id);
+      if (snapshot) {
+        if (snapshot.conflict.exists && !fresh.exists) throw new Error('数据库已有记录已变化，请重新审查');
+        assertConflictUnchanged({ ...item, conflict: snapshot.conflict }, fresh);
+      }
       const policy = resolveItemPolicy(item, input.conflictPolicy);
       if (fresh.exists && policy === 'update' && fresh.fields.some((field) => field.overwrites))
         assertConflictUnchanged(item, fresh);

@@ -1562,14 +1562,14 @@
   white-space: pre-wrap;
 }
 
-.body-review-groups {
+.import-value-review-groups {
   display: grid;
   gap: 14px;
   padding: 16px;
 }
 
-.body-review-heading,
-.body-review-card > header {
+.import-value-review-heading,
+.import-value-review-card > header {
   display: flex;
   flex-wrap: wrap;
   align-items: start;
@@ -1577,7 +1577,7 @@
   gap: 12px;
 }
 
-.body-review-card {
+.import-value-review-card {
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--line);
@@ -1585,64 +1585,64 @@
   background: var(--paper);
 }
 
-.body-review-card h3,
-.body-review-heading h3 {
+.import-value-review-card h3,
+.import-value-review-heading h3 {
   margin: 0;
   font-size: 15px;
 }
 
-.body-review-card p {
+.import-value-review-card p {
   margin: 6px 0;
   line-height: 1.6;
   font-size: 12px;
 }
 
-.body-review-notice {
+.import-value-review-notice {
   color: #875512;
 }
 
-.body-review-actions,
-.body-review-split {
+.import-value-review-actions,
+.import-value-review-split {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.body-review-actions button[aria-pressed='true'] {
+.import-value-review-actions button[aria-pressed='true'] {
   background: #e7f2f1;
   border-color: #346d66;
 }
 
-.body-review-split p {
+.import-value-review-split p {
   flex-basis: 100%;
 }
 
-.body-review-split label {
+.import-value-review-split label {
   display: grid;
   gap: 5px;
   font-size: 12px;
 }
 
-.body-review-comparison-wrap {
+.import-value-review-comparison-wrap {
   max-width: 100%;
   overflow-x: auto;
   margin: 14px 0;
 }
 
-.body-review-comparison {
+.import-value-review-comparison {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
 
-.body-review-comparison caption {
+.import-value-review-comparison caption {
   text-align: left;
   padding-bottom: 8px;
   color: var(--muted);
 }
 
-.body-review-comparison th,
-.body-review-comparison td {
+.import-value-review-comparison th,
+.import-value-review-comparison td {
   min-width: 90px;
   padding: 10px;
   border: 1px solid var(--line);
@@ -1651,26 +1651,26 @@
   overflow-wrap: anywhere;
 }
 
-.body-review-comparison th {
+.import-value-review-comparison th {
   background: var(--mist);
 }
 
-.body-review-comparison small {
+.import-value-review-comparison small {
   display: block;
   margin-top: 5px;
   color: var(--muted);
 }
 
-.body-review-comparison select,
-.body-review-comparison input {
+.import-value-review-comparison select,
+.import-value-review-comparison input {
   box-sizing: border-box;
   width: 100%;
   min-width: 120px;
   margin-top: 4px;
 }
 
-.body-review-card button,
-.body-review-heading button {
+.import-value-review-card button,
+.import-value-review-heading button {
   min-height: 36px;
   padding: 7px 12px;
   border: 1px solid var(--line);
@@ -1682,8 +1682,8 @@
   cursor: pointer;
 }
 
-.body-review-card input,
-.body-review-card select {
+.import-value-review-card input,
+.import-value-review-card select {
   min-height: 36px;
   padding: 6px 8px;
   border: 1px solid var(--line);
@@ -1694,19 +1694,19 @@
   font-size: 12px;
 }
 
-.body-review-card button:disabled,
-.body-review-heading button:disabled {
+.import-value-review-card button:disabled,
+.import-value-review-heading button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.body-review-card :is(button, input, select, summary):focus-visible,
-.body-review-heading button:focus-visible {
+.import-value-review-card :is(button, input, select, summary):focus-visible,
+.import-value-review-heading button:focus-visible {
   outline: 2px solid var(--river);
   outline-offset: 3px;
 }
 
-.body-review-validation {
+.import-value-review-validation {
   margin: 10px 0;
   padding: 8px 12px;
   border-left: 3px solid var(--signal);

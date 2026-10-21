@@ -1,4 +1,5 @@
-import { BodyMeasurementReview } from './BodyMeasurementReview';
+import { ImportConflictReview } from './ImportConflictReview';
+import type { ReviewValue } from '../../shared/import-conflict-review';
 import type { DataImportItem } from '../types';
 
 function measurement(id: number, payload: Record<string, unknown>): DataImportItem {
@@ -38,27 +39,33 @@ function measurement(id: number, payload: Record<string, unknown>): DataImportIt
     committedEntityId: null,
   };
 }
-let lastMerge: Record<string, number> | undefined;
+let lastMerge: Record<string, ReviewValue> | undefined;
+let lastDatabase = false;
 const actions = {
-  onMerge: (_id: number, _members: number[], values: Record<string, number>) => {
+  onMerge: (
+    _id: number,
+    _members: number[],
+    values: Record<string, ReviewValue>,
+    includeDatabase = false
+  ) => {
     lastMerge = values;
+    lastDatabase = includeDatabase;
   },
   onReopen: () => {},
   onExclude: () => {},
   onDraft: () => {},
   onSplit: () => {},
-  onPolicy: () => {},
 };
 const items = [
   measurement(2477, { weightKg: 85.94, bodyFatPct: 9.6 }),
   measurement(2710, { weightKg: 85.9, bodyFatPct: 33, skeletalMuscleKg: 38 }),
 ];
-export default { title: '数据导入/身体测量集中审查', component: BodyMeasurementReview };
+export default { title: '数据导入/统一值冲突审查', component: ImportConflictReview };
 export const Conflict = {
   args: { items, disabled: false, ...actions },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const button = [...canvasElement.querySelectorAll('button')].find((entry) =>
-      entry.textContent?.includes('确认合并')
+      entry.textContent?.includes('确认最终值')
     )!;
     if (canvasElement.querySelector('input[aria-label="骨骼肌kg最终值"]'))
       throw new Error('单方有值应自动补齐，不展示输入框');
@@ -107,7 +114,7 @@ export const Merged = {
         ...items[0],
         payload: {
           ...items[0].payload,
-          bodyMergeDecision: {
+          valueReviewDecision: {
             sources: items.map((item) => ({ id: item.id, values: item.payload })),
             finalValues: { weightKg: 85.94, bodyFatPct: 9.6, skeletalMuscleKg: 38 },
           },
@@ -116,8 +123,90 @@ export const Merged = {
       {
         ...items[1],
         resolution: 'skip' as const,
-        payload: { ...items[1].payload, bodyMergedInto: items[0].id },
+        payload: { ...items[1].payload, valueMergedInto: items[0].id },
       },
     ],
+  },
+};
+
+export const ArmSpan = {
+  args: {
+    ...Conflict.args,
+    items: [185, 186].map((value, index) => ({
+      ...measurement(index + 1, {}),
+      itemType: 'test_measurement' as const,
+      testType: '身体测量',
+      metricCode: 'arm_span_cm',
+      metricLabel: '臂展',
+      valueNum: value,
+      unit: 'cm',
+    })),
+  },
+};
+export const Protocol = {
+  args: {
+    ...Conflict.args,
+    items: ['A', 'B'].map((protocol, index) => ({
+      ...measurement(index + 1, { protocol }),
+      itemType: 'test_measurement' as const,
+      testType: '专项测试',
+      metricCode: `metric_${index}`,
+      metricLabel: `指标${index + 1}`,
+      valueNum: 10 + index,
+      unit: 'kg',
+    })),
+  },
+};
+export const Text = {
+  args: {
+    ...Conflict.args,
+    items: ['成绩A', '成绩B'].map((bestResult, index) => ({
+      ...measurement(index + 1, { bestResult }),
+      itemType: 'athlete_profile' as const,
+      eventDate: '',
+    })),
+  },
+};
+export const Database = {
+  args: {
+    ...Conflict.args,
+    items: [
+      {
+        ...measurement(1, { weightKg: 81, bodyFatPct: 21 }),
+        conflict: {
+          exists: true,
+          entityType: 'athlete_body_measurement',
+          entityId: 1,
+          identical: false,
+          fields: [
+            { field: 'weightKg', label: '体重', oldValue: '80', newValue: '81', overwrites: true },
+            {
+              field: 'bodyFatPct',
+              label: '体脂率',
+              oldValue: '20',
+              newValue: '21',
+              overwrites: true,
+            },
+          ],
+        },
+      },
+    ],
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const header = [...canvasElement.querySelectorAll('th')].find(
+      (element) => element.textContent === '数据库已有'
+    );
+    if (!header) throw new Error('数据库已有值必须作为对比来源');
+    for (const control of canvasElement.querySelectorAll<HTMLSelectElement>('select')) {
+      control.value = control.options[1].value;
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await new Promise(requestAnimationFrame);
+    const button = [...canvasElement.querySelectorAll('button')].find((element) =>
+      element.textContent?.includes('确认最终值')
+    )!;
+    button.click();
+    if (!lastDatabase || lastMerge?.weightKg !== 81)
+      throw new Error('数据库比较必须通过统一选择命令提交');
   },
 };

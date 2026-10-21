@@ -1141,7 +1141,7 @@ describe('统一模板按业务归属整理', () => {
       冠军模型测试: [['姓名', '测试日期', '身高cm', '体脂率%'], ['张某', '2025-10-02', 180, 20]],
     });
     expect(batch.errorCount).toBe(2);
-    updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
+    updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
     commit(batch.id, 'skip');
     expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
     expect(db.prepare('SELECT height_cm AS height, body_fat_pct AS fat FROM athlete_body_measurements').get()).toEqual({ height: 180, fat: 20 });
@@ -1210,7 +1210,7 @@ it('通用测试旧代码和新身体表指向同一事实，单位不一致不�
     其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-10-07', 'heightCm', 180, 'cm']],
   });
   expect(batch.errorCount).toBe(2);
-  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   const invalid = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-10-08', 'heightCm', 1.8, 'm']] });
   expect(invalid.errorCount).toBe(1);
@@ -1282,11 +1282,11 @@ it('修改冲突日期可保留两次身体测量，修改数值也会重新校�
 it('身体测量逐字段合并保留互补字段和原始记录，刷新可重新编辑', () => {
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%', '骨骼肌kg'], ['张某', '2025-11-01', 85.94, 9.6], ['张某', '2025-11-01', 85.9, 33, 38]] });
   const review = { action: 'merge', memberIds: batch.items.map(item => item.id), values: { weightKg: 85.94, bodyFatPct: 9.6 } };
-  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: review } }] });
+  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: review } }] });
   expect(merged.errorCount).toBe(0);
-  expect(merged.items[0].payload).toMatchObject({ weightKg: 85.94, bodyFatPct: 9.6, skeletalMuscleKg: 38, bodyMergeDecision: { confirmed: true } });
+  expect(merged.items[0].payload).toMatchObject({ weightKg: 85.94, bodyFatPct: 9.6, skeletalMuscleKg: 38, valueReviewDecision: { confirmed: true } });
   expect(merged.items[1]).toMatchObject({ resolution: 'skip', payload: { weightKg: 85.9, bodyFatPct: 33 } });
-  const reopened = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'reopen' } } }] });
+  const reopened = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'reopen' } } }] });
   expect(reopened.errorCount).toBe(2);
   expect(reopened.items[0].payload.skeletalMuscleKg).toBeUndefined();
   expect(reopened.items[1].resolution).toBe('');
@@ -1294,7 +1294,7 @@ it('身体测量逐字段合并保留互补字段和原始记录，刷新可重�
 
 it('身体测量合并不能漏选冲突字段或引用其他日期记录', () => {
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-11-02', 80], ['张某', '2025-11-02', 81], ['张某', '2025-11-03', 82]] });
-  const merge = (memberIds: number[], values: Record<string, unknown>) => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds, values } } }] });
+  const merge = (memberIds: number[], values: Record<string, unknown>) => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds, values } } }] });
   expect(() => merge([batch.items[0].id, batch.items[1].id], {})).toThrow(/选择/);
   expect(() => merge(batch.items.map(item => item.id), { weightKg: 80 })).toThrow(/同一/);
   expect(() => merge([batch.items[0].id, batch.items[1].id], { weightKg: 'abc' })).toThrow();
@@ -1303,7 +1303,7 @@ it('身体测量合并不能漏选冲突字段或引用其他日期记录', () =
 it('三条身体测量保留真实0、手填选择与互补值，合并只写一次且可重复提交', () => {
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%', '骨骼肌kg'], ['张某', '2025-11-04', 80, 0], ['张某', '2025-11-04', 81, null, 30], ['张某', '2025-11-04', 82, 0]] });
   expect(batch.items).toHaveLength(3);
-  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { weightKg: 81.5 } } } }] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { weightKg: 81.5 } } } }] });
   expect(fixed.errorCount).toBe(0);
   expect(fixed.items[0].payload).toMatchObject({ weightKg: 81.5, bodyFatPct: 0, skeletalMuscleKg: 30 });
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
@@ -1315,7 +1315,7 @@ it('表内合并不自动覆盖数据库，更新策略需明确保存且不会�
   const original = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-11-05', 79]] });
   commit(original.id, 'skip');
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg'], ['张某', '2025-11-05', 80], ['张某', '2025-11-05', 81]] });
-  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { weightKg: 80 } } } }] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { weightKg: 80 } } } }] });
   expect(fixed.items[0].conflict?.fields.find(field => field.field === 'weightKg')?.oldValue).toBe('79');
   expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { weightKg: 90 } }] })).toThrow(/重新编辑/);
   updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, resolution: 'update' }] });
@@ -1328,7 +1328,7 @@ it('未确认的相同互补身体测量必须先审查，不能直接提交丢�
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '骨骼肌kg'], ['张某', '2025-11-06', 80], ['张某', '2025-11-06', null, 30]] });
   expect(batch.errorCount).toBe(2);
   expect(() => commit(batch.id, 'skip')).toThrow();
-  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: {} } } }] });
   expect(fixed.errorCount).toBe(0);
   commit(batch.id, 'skip');
   expect(db.prepare("SELECT weight_kg AS weight, skeletal_muscle_kg AS muscle FROM athlete_body_measurements WHERE measurement_date = '2025-11-06'").get()).toEqual({ weight: 80, muscle: 30 });
@@ -1337,10 +1337,133 @@ it('未确认的相同互补身体测量必须先审查，不能直接提交丢�
 it('未完成的字段选择可暂存，不解除冲突，非法草稿字段拒绝且不改正式数据', () => {
   const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%'], ['张某', '2025-11-07', 80, 10], ['张某', '2025-11-07', 81, 20]] });
   const review = { action: 'draft', choices: { weightKg: '80' }, manual: {} };
-  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: review } }] });
-  expect(saved.items[0].payload.bodyMergeDraft).toEqual({ choices: { weightKg: '80' }, manual: {} });
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: review } }] });
+  expect(saved.items[0].payload.valueReviewDraft).toEqual({ choices: { weightKg: '80' }, manual: {} });
   expect(saved.errorCount).toBe(2);
   expect(() => commit(batch.id, 'skip')).toThrow();
-  expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { bodyMergeReview: { ...review, choices: { unknown: '2' } } } }] })).toThrow(/字段/);
+  expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { ...review, choices: { unknown: '2' } } } }] })).toThrow(/字段/);
   expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 0 });
+});
+
+it('臂展复用统一值审查，保留两条来源并可选最终值入库', () => {
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '臂展cm'], ['张某', '2025-11-08', 185], ['张某', '2025-11-08', 186]] });
+  expect(batch.items).toHaveLength(2);
+  expect(batch.items.every(item => item.payload.valueImportConflicts)).toBe(true);
+  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { 'metric:arm_span_cm:center': 186 } } } }] });
+  expect(merged.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare("SELECT value_num AS value FROM test_measurements WHERE metric_code = 'arm_span_cm'").get()).toEqual({ value: 186 });
+});
+
+it('同测试课次的协议冲突也复用统一选择，保留所有不同指标及侧别', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '侧别', '协议'], ['张某', '2025-11-09', '统一课次', 'grip', 30, 'kg', 'left', 'A'], ['张某', '2025-11-09', '统一课次', 'grip', 35, 'kg', 'right', 'B']] });
+  expect(batch.errorCount).toBe(2);
+  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { protocol: 'A' } } } }] });
+  expect(merged.errorCount).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(2);
+  expect(db.prepare('SELECT side, value_num AS value FROM test_measurements ORDER BY side').all()).toEqual([{ side: 'left', value: 30 }, { side: 'right', value: 35 }]);
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-11-09'").get()).toEqual({ protocol: 'A' });
+});
+
+it.each([
+  ['每日恢复', ['姓名', '日期', '睡眠小时'], ['张某', '2025-11-10', 7], ['张某', '2025-11-10', 8], { sleepHours: 8 }, 'SELECT sleep_hours AS value FROM daily_wellness', 8],
+  ['训练课次', ['姓名', '日期', '时长分钟', '训练内容'], ['张某', '2025-11-10', 30, '内容A'], ['张某', '2025-11-10', 60, '内容B'], { durationMin: 60, content: '内容B' }, 'SELECT duration_min AS value FROM training_sessions', 60],
+  ['竞技评估', ['姓名', '评估日期', '总分'], ['张某', '2025-11-10', 70], ['张某', '2025-11-10', 80], { overallScore: 80 }, 'SELECT overall_score AS value FROM competitive_state_assessments', 80],
+] as const)('%s 的冲突通过相同命令选择最终字段', (sheet, header, first, second, values, sql, value) => {
+  const batch = analyze({ [sheet]: [[...header], [...first], [...second]] });
+  expect(batch.errorCount).toBe(2);
+  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values } } }] });
+  expect(merged.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare(sql).get()).toEqual({ value });
+});
+
+it('同一审查命令可逐字段选择数据库已有值和导入值，并检查并发变化', () => {
+  const first = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%'], ['张某', '2025-11-11', 80, 20]] });
+  commit(first.id, 'skip');
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%'], ['张某', '2025-11-11', 81, 21]] });
+  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: [batch.items[0].id], includeDatabase: true, values: { weightKg: 80, bodyFatPct: 21 } } } }] });
+  expect(merged.errorCount).toBe(0);
+  expect(merged.items[0].payload.valueReviewDecision).toMatchObject({ finalValues: { weightKg: 80, bodyFatPct: 21 } });
+  db.prepare("UPDATE athlete_body_measurements SET weight_kg = 82 WHERE measurement_date = '2025-11-11'").run();
+  expect(() => commit(batch.id, 'skip')).toThrow(/修改/);
+  expect(db.prepare("SELECT body_fat_pct AS value FROM athlete_body_measurements WHERE measurement_date = '2025-11-11'").get()).toEqual({ value: 20 });
+});
+
+it('力量组次、伤病和档案文本采用同一审查命令，业务唯一键不混用', () => {
+  const cases: Array<{ sheet: string; rows: unknown[][]; values: Record<string, string | number> }> = [
+    { sheet: '力量训练组次', rows: [['姓名', '日期', '动作', '组序', '实际次数', '实际重量kg', 'RPE', '备注'], ['张某', '2025-11-12', '深蹲', 1, 5, 60, 5, 'A'], ['张某', '2025-11-12', '深蹲', 1, 6, 65, 6, 'B']], values: { actualReps: 6, actualWeightKg: 65, rpe: 6, note: 'B' } },
+    { sheet: '伤病记录', rows: [['姓名', '发生日期', '伤病名称', '部位', '疼痛评分'], ['张某', '2025-11-12', '肩部不适', '肩', 2], ['张某', '2025-11-12', '肩部不适', '肩', 3]], values: { painScore: 3 } },
+    { sheet: '运动员基本资料', rows: [['姓名', '最好成绩'], ['张某', '成绩A'], ['张某', '成绩B']], values: { bestResult: '成绩B' } },
+  ];
+  for (const entry of cases) {
+    const batch = analyze({ [entry.sheet]: entry.rows });
+    expect(batch.items).toHaveLength(2);
+    const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: entry.values } } }] });
+    expect(merged.errorCount).toBe(0);
+    expect(merged.items[0].payload.valueReviewDecision).toMatchObject({ finalValues: entry.values });
+    commit(batch.id, 'skip');
+  }
+  expect(db.prepare('SELECT actual_reps AS reps, actual_weight_kg AS weight, rpe, note FROM strength_result_sets').get()).toEqual({ reps: 6, weight: 65, rpe: 6, note: 'B' });
+  expect(db.prepare('SELECT pain_score AS pain FROM injury_records').get()).toEqual({ pain: 3 });
+  expect(db.prepare('SELECT best_result AS best FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ best: '成绩B' });
+});
+
+it('不同指标的协议审查可恢复所有来源，不会只恢复一个测量值', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议'], ['张某', '2025-11-13', '同课次', 'metric_a', 10, 'kg', 'A'], ['张某', '2025-11-13', '同课次', 'metric_b', 20, 'kg', 'B']] });
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { protocol: 'A' } } } }] });
+  const reopened = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'reopen' } } }] });
+  expect(reopened.errorCount).toBe(2);
+  expect(reopened.items.map(item => [item.metricCode, item.valueNum, item.payload.protocol])).toEqual([['metric_a', 10, 'A'], ['metric_b', 20, 'B']]);
+});
+
+it('单位、计划次数和强度百分比在保存、重新读取及入库后都保留选择结果', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '备注'], ['张某', '2025-11-14', 'custom_unit', 10, 'kg', '来源A'], ['张某', '2025-11-14', 'custom_unit', 20, 'g', '来源B']] });
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { 'metric:custom_unit:center': 20, 'unit:custom_unit:center': 'g', 'note:custom_unit:center': '来源B' } } } }] });
+  expect(saved.items[0]).toMatchObject({ valueNum: 20, unit: 'g', payload: { note: '来源B' } });
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT value_num AS value, unit, note FROM test_measurements').get()).toEqual({ value: 20, unit: 'g', note: '来源B' });
+  const strength = analyze({ 力量训练组次: [['姓名', '日期', '动作', '组序', '计划次数', '实际次数', '实际重量kg', '强度百分比'], ['张某', '2025-11-14', '深蹲', 1, 5, 5, 60, 50], ['张某', '2025-11-14', '深蹲', 1, 6, 5, 60, 60]] });
+  const result = updateDataImportItems({ batchId: strength.id, userId: USER_ID, athletes, corrections: [{ id: strength.items[0].id, payload: { valueReview: { action: 'merge', memberIds: strength.items.map(item => item.id), values: { targetReps: 6, intensityPercent: 60 } } } }] });
+  expect(result.items[0]).toMatchObject({ targetReps: 6, intensityPercent: 60 });
+  commit(strength.id, 'skip');
+  expect(db.prepare('SELECT target_reps AS reps, intensity_percent AS intensity FROM strength_result_sets').get()).toEqual({ reps: 6, intensity: 60 });
+});
+
+it('测试备注可补空、通过统一审查覆盖，且导出再导入保留备注', async () => {
+  const headers = ['姓名', '测试日期', '指标代码', '数值', '单位', '备注'];
+  const first = analyze({ 其他测试: [headers, ['张某', '2025-11-15', 'custom_note', 20, 'kg', 'A']] });
+  commit(first.id, 'skip');
+  const batch = analyze({ 其他测试: [headers, ['张某', '2025-11-15', 'custom_note', 20, 'kg', 'B']] });
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: [batch.items[0].id], includeDatabase: true, values: { 'note:custom_note:center': 'B' } } } }] });
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT note FROM test_measurements').get()).toEqual({ note: 'B' });
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const exported = analyzeDataImport({ buffer, filename: '备注往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队']) });
+  expect(exported.items.find(item => item.metricCode === 'custom_note')?.payload.note).toBe('B');
+});
+
+it('明确选择数据库课次的新协议后保留所有指标，并记录审计', () => {
+  const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议'];
+  const first = analyze({ 其他测试: [headers, ['张某', '2025-11-16', '协议审查课次', 'a', 10, 'kg', 'A'], ['张某', '2025-11-16', '协议审查课次', 'b', 20, 'kg', 'A']] });
+  commit(first.id, 'skip');
+  const batch = analyze({ 其他测试: [headers, ['张某', '2025-11-16', '协议审查课次', 'a', 10, 'kg', 'B'], ['张某', '2025-11-16', '协议审查课次', 'b', 20, 'kg', 'B']] });
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), includeDatabase: true, values: { protocol: 'B' } } } }] });
+  expect(saved.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT protocol FROM test_sessions').get()).toEqual({ protocol: 'B' });
+  expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 2 });
+  expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'CONFIRM_IMPORT_TEST_PROTOCOL'").get()).toEqual({ count: 1 });
+});
+
+it('测试备注的新增列初始化可重复执行，保留既有测量和备注', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '备注'], ['张某', '2025-11-17', 'migration_note', 20, 'kg', '保留备注']] });
+  commit(batch.id, 'skip');
+  initializeDatabase(db, { databasePath: ':memory:', databaseExistedBeforeStartup: true });
+  initializeDatabase(db, { databasePath: ':memory:', databaseExistedBeforeStartup: true });
+  expect(db.prepare("SELECT value_num AS value, note FROM test_measurements WHERE metric_code = 'migration_note'").get()).toEqual({ value: 20, note: '保留备注' });
+  const columns = db.prepare('PRAGMA table_info(test_measurements)').all() as Array<{ name: string }>;
+  expect(columns.filter(column => column.name === 'note')).toHaveLength(1);
 });
