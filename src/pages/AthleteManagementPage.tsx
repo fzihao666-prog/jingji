@@ -291,6 +291,8 @@ export function AthleteManagementPage({
           athlete.currentEvent,
           athlete.region,
           athlete.city,
+          // 支持按系统运动员编号精确查找（导入模板预填值）。
+          String(athlete.id),
         ].some((value) =>
           String(value || '')
             .toLocaleLowerCase()
@@ -748,6 +750,8 @@ export function AthleteManagementPage({
                       <div>
                         <strong>{athlete.name}</strong>
                         <small>
+                          <span title="系统运动员编号，导入模板预填值">编号 {athlete.id}</span>
+                          {' · '}
                           {athlete.gender || '性别未填'} · {ageFromBirthDate(athlete.birthDate)} 岁
                           {athlete.profileStatus === 'incomplete' ? ' · 档案待补全' : ''}
                           {!athlete.hasAccount ? ' · 无登录账号' : ''}
