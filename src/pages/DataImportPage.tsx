@@ -123,6 +123,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [personTab, setPersonTab] = useState<'all' | 'pending' | 'ambiguous'>('all');
   const [personQuery, setPersonQuery] = useState('');
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  const [personLinkModes, setPersonLinkModes] = useState<Set<number>>(new Set());
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [result, setResult] = useState<{
@@ -173,6 +174,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
 
   const startReview = (next: DataImportBatch) => {
     setBatch(next);
+    setPersonLinkModes(new Set());
     setCorrections(new Map());
     setAthleteCorrections(new Map());
     setPage(0);
@@ -475,23 +477,27 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       if (candidate.status !== 'pending' || candidate.excluded) continue;
       const unresolvedAmbiguity = candidate.suggested.length > 0 && !candidate.matchedAthleteId;
       const missingTeam = !candidate.matchedAthleteId && !candidate.team;
-      if (unresolvedAmbiguity || missingTeam) continue; // 身份歧义与缺队伍必须逐项解决
+      const missingLink = personLinkModes.has(candidate.id) && !candidate.matchedAthleteId;
+      if (unresolvedAmbiguity || missingTeam || missingLink) continue; // 身份歧义与缺队伍必须逐项解决
       nextMap.set(candidate.id, { ...(nextMap.get(candidate.id) || { id: candidate.id }), confirmed: true });
     }
     const pendingFix = batch.athleteCandidates.filter((candidate) => {
       if (candidate.status !== 'pending' || candidate.excluded) return false;
       if (candidate.suggested.length > 0 && !candidate.matchedAthleteId) return true;
-      if (!candidate.matchedAthleteId && !candidate.team) return true;
+      if (!candidate.matchedAthleteId && (!candidate.team || personLinkModes.has(candidate.id))) return true;
       return false;
     });
-    const saved = await saveCorrections(nextMap);
-    if (!saved) return;
     if (pendingFix.length) {
+      setPersonTab('all');
+      setPersonQuery('');
+      setSelectedPersonId(pendingFix[0].id);
       setError(
-        `还有${pendingFix.length}人需要处理：身份歧义必须选择关联人员，待建档必须选择所属队伍。`
+        `还有${pendingFix.length}人需要处理，已定位到“${pendingFix[0].name}”：${pendingFix[0].suggested.length || personLinkModes.has(pendingFix[0].id) ? '请在右侧选择要关联的已有运动员' : '请在右侧选择所属队伍'}。`
       );
       return;
     }
+    const saved = await saveCorrections(nextMap);
+    if (!saved) return;
     setPersonDialogOpen(false);
     setMessage('人员确认完成，已保存人员映射草稿；请继续数据校对。');
   };
@@ -607,7 +613,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         !candidate.excluded &&
         !candidate.confirmed &&
         candidate.suggested.length === 0 &&
-        (candidate.matchedAthleteId || candidate.team)
+        (candidate.matchedAthleteId || (candidate.team && !personLinkModes.has(candidate.id)))
     );
     for (const candidate of ready) patchAthleteCandidate(candidate.id, { confirmed: true });
     setMessage(`已批量确认${ready.length}名无冲突人员，请保存后继续。`);
@@ -1601,12 +1607,18 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         value={
                           selectedPerson.excluded
                             ? 'exclude'
-                            : selectedPerson.matchedAthleteId
+                            : selectedPerson.matchedAthleteId || personLinkModes.has(selectedPerson.id)
                               ? 'link'
                               : 'create'
                         }
                         onChange={(event) => {
                           const mode = event.target.value;
+                          setPersonLinkModes(current => {
+                            const next = new Set(current);
+                            if (mode === 'link') next.add(selectedPerson.id);
+                            else next.delete(selectedPerson.id);
+                            return next;
+                          });
                           if (mode === 'exclude')
                             patchAthleteCandidate(selectedPerson.id, {
                               excluded: true,
@@ -1615,7 +1627,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           else if (mode === 'link')
                             patchAthleteCandidate(selectedPerson.id, {
                               excluded: false,
-                              matchedAthleteId: selectedPerson.suggested[0]?.id ?? null,
+                              matchedAthleteId: selectedPerson.suggested.length === 1 ? selectedPerson.suggested[0].id : null,
                               confirmed: false,
                             });
                           else
@@ -1631,9 +1643,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         <option value="exclude">排除此人（其记录一并排除）</option>
                       </select>
                     </label>
-                    {!selectedPerson.excluded && selectedPerson.matchedAthleteId !== null ? (
+                    {!selectedPerson.excluded && (selectedPerson.matchedAthleteId !== null || personLinkModes.has(selectedPerson.id) || selectedPerson.suggested.length > 0) ? (
                       <label>
-                        <span>关联已有运动员</span>
+                        <span>关联已有运动员（请选择具体人员）</span>
                         <select
                           disabled={batch.status !== 'reviewing'}
                           value={selectedPerson.matchedAthleteId || ''}
@@ -1666,7 +1678,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         </select>
                       </label>
                     ) : null}
-                    {!selectedPerson.excluded && !selectedPerson.matchedAthleteId ? (
+                    {!selectedPerson.excluded && !selectedPerson.matchedAthleteId && !personLinkModes.has(selectedPerson.id) ? (
                       <label>
                         <span>所属队伍（必选）</span>
                         <select
@@ -1696,7 +1708,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           Boolean(busy) ||
                           (selectedPerson.matchedAthleteId
                             ? false
-                            : !selectedPerson.team || selectedPerson.suggested.length > 0)
+                            : !selectedPerson.team || selectedPerson.suggested.length > 0 || personLinkModes.has(selectedPerson.id))
                         }
                         onClick={() => {
                           patchAthleteCandidate(selectedPerson.id, { confirmed: true });
