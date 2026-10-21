@@ -1104,3 +1104,18 @@ it('重传同一文件沿用已提交的人员关联，只让已停用人员重�
   const revoked = analyzeDataImport({ ...input, athletes: [current[0], current[2]], reparse: true });
   expect(revoked.athleteCandidates.find(person => person.name === '赵某')).toMatchObject({ status: 'pending', matchedAthleteId: null, confirmed: false });
 });
+
+it('已关联档案的队伍不被导入文件或默认队伍覆盖，即使使用更新策略', () => {
+  const originalTeam = db.prepare('SELECT team_id AS teamId, team FROM athletes WHERE id = 1').get();
+  const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍', '最好成绩'], [1, '张某', 'B队', '新成绩']] });
+  expect(batch.items[0].conflict?.fields.some(field => field.field === 'team')).toBe(false);
+  const result = commit(batch.id, 'update');
+  expect(result.updatedRecords).toBe(1);
+  expect(db.prepare('SELECT team_id AS teamId, team FROM athletes WHERE id = 1').get()).toEqual(originalTeam);
+  expect(batch.items[0].messages.join('；')).toContain('保留已有队伍');
+});
+
+it('已有运动员未填写文件队伍时不会套用唯一可选的其他队伍', () => {
+  const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '最好成绩'], [1, '张某', '成绩']] }, { allowedTeams: new Set(['B队']) });
+  expect(batch.items[0].payload.team).toBe('A队');
+});

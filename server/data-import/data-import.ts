@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v15：同文件重传复用已提交的唯一人员关联，仍以当前权限和档案状态重新校验。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v15-reuse-confirmed-identities';
+// v16：已关联人员保留原队伍，导入只为新档案分配队伍，不执行调队。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v16-preserve-athlete-team';
 
 export type ImportAthlete = {
   id: number;
@@ -1712,7 +1712,6 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
     const fields = push([
       conflictField('gender', '性别', athlete.gender, text(p.gender)),
       conflictField('birthDate', '出生日期', athlete.birthDate, validIsoDate(text(p.birthDate)) ? p.birthDate : ''),
-      conflictField('team', '所属队伍', athlete.team, text(p.team)),
       conflictField('region', '省份', athlete.region, text(p.region)),
       conflictField('city', '城市', athlete.city, text(p.city)),
       conflictField('county', '区县', athlete.county, text(p.county)),
@@ -2216,6 +2215,7 @@ export function analyzeDataImport(input: {
     } else if (resolution.kind === 'matched') {
       person.matched = true;
       person.matchedAthleteId = resolution.athlete.id;
+      person.team = resolution.athlete.team;
       person.gender = person.gender || resolution.athlete.gender;
     } else if (resolution.kind === 'ambiguous' || resolution.kind === 'conflict') {
       person.suggested = resolution.suggested;
@@ -2224,13 +2224,13 @@ export function analyzeDataImport(input: {
       person.messages.push('待建档：仅需姓名与所属队伍即可最小建档，其他资料可稍后在运动员档案中补充');
     }
     // 队伍自动带入：文件队伍合法时采纳；仅有一个可管理队伍时默认选择；冲突时提示人工确认。
-    if (person.team && allowedTeams && !allowedTeams.has(person.team)) {
+    if (!person.matched && person.team && allowedTeams && !allowedTeams.has(person.team)) {
       person.messages.push(
         `文件中填写的所属队伍“${person.team}”不在当前账号权限范围内，请重新选择`
       );
       person.team = '';
     }
-    if (!person.team && allowedTeams && allowedTeams.size === 1) {
+    if (!person.matched && !person.team && allowedTeams && allowedTeams.size === 1) {
       person.team = [...allowedTeams][0];
     }
     if (!person.matched && !person.team)
@@ -2622,6 +2622,12 @@ function validateImportItem(
       messages.push(`错误：${item.sourceSheet}!${text(payload.dateAddress) || item.sourceAddress} 日期“${text(payload.rawDate) || item.eventDate}”无效或缺失，请按YYYY-MM-DD填写；默认日期仅补空白`);
   }
   if (item.itemType === 'athlete_profile') {
+    if (item.athleteId && text(payload.team)) {
+      const current = db.prepare(`SELECT COALESCE(pt.name, a.team, '') AS team FROM athletes a
+        LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id = ?`).get(item.athleteId) as { team: string } | undefined;
+      if (current && current.team !== text(payload.team))
+        messages.push(`警告：文件队伍“${text(payload.team)}”与档案不一致，保留已有队伍“${current.team}”，导入不执行调队`);
+    }
     const gender = text(payload.gender);
     if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
     const birthDate = text(payload.birthDate);
@@ -3397,16 +3403,6 @@ function upsertAthleteProfileItem(
 ): UpsertResult {
   const policy = resolveItemPolicy(item, batchPolicy);
   const p = item.payload;
-  const team = text(p.team);
-  const teamId = team
-    ? (
-        db
-          .prepare(
-            `SELECT id FROM project_teams WHERE project = (SELECT project FROM athletes WHERE id = ?) AND name = ? AND active = 1`
-          )
-          .get(item.athleteId, team) as { id: number } | undefined
-      )?.id
-    : null;
   const existing = db
     .prepare(
       `SELECT a.gender, a.team_id AS teamId, a.birth_date AS birthDate,
@@ -3457,14 +3453,7 @@ function upsertAthleteProfileItem(
     athleteSets.push('birth_date = ?');
     athleteParams.push(value);
   });
-  if (teamId && Number(existing.teamId ?? 0) !== teamId) {
-    if (!existing.teamId || policy === 'update') {
-      if (!existing.teamId) filled += 1;
-      else overwritten += 1;
-      athleteSets.push('team_id = ?');
-      athleteParams.push(teamId);
-    }
-  }
+  // 队伍是身份与权限归属，已有档案不通过数据导入调队。
   if (athleteSets.length) {
     db.prepare(
       `UPDATE athletes SET ${athleteSets.join(', ')}, source = 'file_import', data_import_batch_id = ? WHERE id = ?`
@@ -4196,24 +4185,13 @@ export function commitDataImport(input: {
     (candidate) =>
       candidate.status === 'pending' &&
       !candidate.excluded &&
+      !candidate.matchedAthleteId &&
       text(candidate.team) &&
       input.allowedTeams &&
       !input.allowedTeams.has(text(candidate.team))
   );
   if (candidateTeamOutOfScope)
     throw new Error(`“${candidateTeamOutOfScope.name}”选择的所属队伍不在当前账号权限范围内。`);
-  const profileTeamOutOfScope = importable.find(
-    (item) =>
-      item.itemType === 'athlete_profile' &&
-      Boolean(item.athleteId) &&
-      text(item.payload.team) &&
-      input.allowedTeams &&
-      !input.allowedTeams.has(text(item.payload.team))
-  );
-  if (profileTeamOutOfScope)
-    throw new Error(
-      `“${profileTeamOutOfScope.rawAthleteName}”填写的所属队伍不在当前账号权限范围内。`
-    );
   const invalid = importable.filter(
     (item) =>
       revalidateItem(item, allowed, candidateNames).quality === 'error'
