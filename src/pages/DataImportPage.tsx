@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { dataImportPersonKey } from '../../shared/data-import-person';
 import { api } from '../api';
 import type {
   Athlete,
@@ -302,7 +303,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               (item) =>
                 item.itemType !== 'invalid_row' &&
                 item.rawAthleteName &&
-                item.rawAthleteName === sourceItem.rawAthleteName
+                dataImportPersonKey(item) === dataImportPersonKey(sourceItem)
             )
             .map((item) => item.id) || [itemId]
         : [itemId];
@@ -523,7 +524,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     const excludedKeys = new Set(
       batch.athleteCandidates.filter((candidate) => candidate.excluded).map((c) => c.normalizedName)
     );
-    const active = importable.filter((item) => !excludedKeys.has(item.rawAthleteName.replace(/[\s·•]/g, '')));
+    const active = importable.filter((item) => !excludedKeys.has(dataImportPersonKey(item)));
     const createPersons = batch.athleteCandidates.filter(
       (candidate) =>
         candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId
@@ -547,7 +548,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           ((item.resolution || conflictPolicy) === 'skip' || item.conflict.identical)
       ).length +
       batch.items.filter((item) => item.resolution === 'skip').length +
-      importable.filter((item) => excludedKeys.has(item.rawAthleteName.replace(/[\s·•]/g, ''))).length;
+      importable.filter((item) => excludedKeys.has(dataImportPersonKey(item))).length;
     const overwriteFields = active.reduce(
       (sum, item) => sum + (item.conflict?.fields.filter((field) => field.overwrites).length || 0),
       0

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
 import { db } from '../core/db.ts';
+import { dataImportPersonKey, normalizeImportPersonName } from '../../shared/data-import-person.ts';
 import { normalizeImportFilename } from './import-filename.ts';
 import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
 import {
@@ -8,9 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v7：忽略旧模板中的证件列，不再将证件资料写入待审核数据。
-// 同一文件重新上传时会按新版本重新解析，而不是复用旧的待审核批次。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v7-profile-data-minimization';
+// v8：按稳定人员标识隔离同名队员，保留训练空白字段；旧草稿须重新解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v8-person-isolation';
 
 export type ImportAthlete = {
   id: number;
@@ -227,12 +227,7 @@ function normalizedText(value: unknown) {
 }
 
 function normalizedName(value: unknown) {
-  // 部分 Excel 会把“雨”等汉字写为 CJK 部首兼容字（例如“⾬”）。
-  // NFKC 不会统一这类字符，须先映射，避免同一运动员被误判为新建档案。
-  return text(value)
-    .normalize('NFKC')
-    .replaceAll('⾬', '雨')
-    .replace(/[\s·•]/g, '');
+  return normalizeImportPersonName(text(value));
 }
 
 function numberValue(value: unknown): number | null {
@@ -418,6 +413,11 @@ function resolvePerson(
         suggested: [toSuggestion(byCode)],
         message: `系统运动员编号${code}属于其他运动项目，请人工确认`,
       };
+    return {
+      kind: 'conflict',
+      suggested: [],
+      message: `系统运动员编号${code}不存在或不在当前权限范围内，请人工确认`,
+    };
   }
   const pool = athletes.filter(
     (athlete) =>
@@ -1040,6 +1040,7 @@ function parseStandardSheet(
       sourceAddress: cellAddress(rowIndex, nameColumn),
       payload: {
         athleteCode: standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号'),
+        team: standardText(row, header.columns, '所属队伍'),
       } as Record<string, unknown>,
     };
     if (sheet !== '运动员信息' && !validIsoDate(rowDate))
@@ -1252,9 +1253,9 @@ function parseStandardSheet(
         ...base.payload,
         sessionOrder: numberValue(standardValue(row, header.columns, '课次序号')) ?? 1,
         startTime: standardText(row, header.columns, '开始时间'),
-        trainingType: standardText(row, header.columns, '训练类型') || '专项训练',
-        structureType: standardText(row, header.columns, '训练阶段') || '专项训练',
-        intensityZone: standardText(row, header.columns, '强度区间') || 'AN',
+        trainingType: standardText(row, header.columns, '训练类型'),
+        structureType: standardText(row, header.columns, '训练阶段'),
+        intensityZone: standardText(row, header.columns, '强度区间'),
         content: standardText(row, header.columns, '训练内容'),
         durationMin: duration,
         distanceKm: distance,
@@ -1704,6 +1705,8 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
     const map: Array<[string, string, string]> = [
       ['startTime', '开始时间', 'start_time'],
       ['trainingType', '训练类型', 'training_type'],
+      ['structureType', '训练阶段', 'structure_type'],
+      ['intensityZone', '强度区间', 'intensity_zone'],
       ['content', '训练内容', 'content'],
       ['durationMin', '时长分钟', 'duration_min'],
       ['distanceKm', '距离千米', 'distance_km'],
@@ -1908,9 +1911,18 @@ function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
   const persons = new Map<string, PersonRecord>();
   for (const item of items) {
     if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') continue;
-    const key = normalizedName(item.rawAthleteName);
-    if (!key) continue;
+    const name = normalizedName(item.rawAthleteName);
+    if (!name) continue;
     const payload = item.payload || {};
+    const code = text(payload.athleteCode);
+    const team = text(payload.team);
+    const birth = text(payload.birthDate);
+    const key = code
+      ? JSON.stringify(['code', code, name])
+      : team || birth
+        ? JSON.stringify(['person', name, team, birth])
+        : name;
+    item.payload = { ...payload, personKey: key };
     const genderFromSheet = /女子|女队/.test(item.sourceSheet)
       ? '女'
       : /男子|男队/.test(item.sourceSheet)
@@ -2118,7 +2130,7 @@ export function analyzeDataImport(input: {
   }
   const personOf = (item: ParsedImportItem) => {
     if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') return null;
-    return persons.get(normalizedName(item.rawAthleteName)) || null;
+    return persons.get(dataImportPersonKey(item)) || null;
   };
   for (const item of items) {
     const person = personOf(item);
@@ -2483,7 +2495,7 @@ function validateImportItem(
   if (item.itemType !== 'scoring_rule') {
     if (item.athleteId && !ctx.allowedAthletes.has(item.athleteId))
       messages.push('错误：所选运动员不在当前权限范围内');
-    else if (!item.athleteId && !ctx.candidateNames.has(normalizedName(item.rawAthleteName)))
+    else if (!item.athleteId && !ctx.candidateNames.has(dataImportPersonKey(item)))
       messages.push('错误：缺少可创建或可匹配的运动员姓名');
     if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate))
       messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
@@ -3797,7 +3809,7 @@ function resolvePendingAthletes(input: {
           item.quality !== 'skipped' &&
           item.resolution !== 'skip'
       )
-      .map((item) => normalizedName(item.rawAthleteName))
+      .map((item) => dataImportPersonKey(item))
   );
   const resolved = new Map<string, number>();
   const excludedKeys = new Set<string>();
@@ -3835,56 +3847,47 @@ function resolvePendingAthletes(input: {
       throw new Error(
         `请先在人员确认中为“${candidate.name}”选择所属队伍（${candidate.project}下未找到“${candidate.team}”）。`
       );
-    let athlete = db
+    const existing = db
       .prepare(`SELECT id FROM athletes WHERE name = ? AND project = ? AND team_id = ?`)
-      .get(candidate.name, candidate.project, team.id) as { id: number } | undefined;
-    const wasCreated = !athlete;
-    if (!athlete) {
-      // 最小建档：仅姓名、项目、队伍与可选性别；不伪造生日等身份信息，不创建登录账号。
-      const result = db
-        .prepare(
-          `INSERT INTO athletes (
-        name, project, team, team_id, gender, region, city, county, profile_status, source, data_import_batch_id, active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
-        )
-        .run(
-          candidate.name,
-          candidate.project,
-          candidate.team,
-          team.id,
-          candidate.gender || null,
-          candidate.region || '未设置',
-          candidate.city || '未设置',
-          candidate.county || '未设置',
-          input.batch.id
-        );
-      athlete = { id: Number(result.lastInsertRowid) };
-      db.prepare(
-        `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo)
-        VALUES (?, ?, ?, ?, 'file_import', 'valid', 0)`
-      ).run(athlete.id, candidate.region, candidate.city, candidate.county);
-      db.prepare(`INSERT INTO athlete_profiles (athlete_id, notes) VALUES (?, ?)`).run(
-        athlete.id,
-        '由数据导入最小建档创建，无登录账号；出生日期等资料可稍后在运动员档案中补充。'
+      .get(candidate.name, candidate.project, team.id);
+    if (existing)
+      throw new Error(`“${candidate.name}”在该队伍已有同名档案，请在人员确认中明确选择关联人员，不能自动合并。`);
+    // 最小建档：仅姓名、项目、队伍与可选性别；不伪造生日等身份信息，不创建登录账号。
+    const result = db
+      .prepare(
+        `INSERT INTO athletes (
+      name, project, team, team_id, gender, region, city, county, profile_status, source, data_import_batch_id, active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
+      )
+      .run(
+        candidate.name,
+        candidate.project,
+        candidate.team,
+        team.id,
+        candidate.gender || null,
+        candidate.region || '未设置',
+        candidate.city || '未设置',
+        candidate.county || '未设置',
+        input.batch.id
       );
-      createdCount += 1;
-    } else {
-      db.prepare('UPDATE athletes SET active = 1 WHERE id = ?').run(athlete.id);
-      db.prepare('INSERT OR IGNORE INTO athlete_profiles (athlete_id) VALUES (?)').run(athlete.id);
-    }
+    const athlete = { id: Number(result.lastInsertRowid) };
     db.prepare(
-      `UPDATE data_import_athlete_candidates SET status = ?, created_athlete_id = ?, matched_athlete_id = ? WHERE id = ?`
-    ).run(
-      wasCreated ? 'created' : 'matched',
-      wasCreated ? athlete.id : null,
-      wasCreated ? null : athlete.id,
-      candidate.id
+      `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo)
+      VALUES (?, ?, ?, ?, 'file_import', 'valid', 0)`
+    ).run(athlete.id, candidate.region, candidate.city, candidate.county);
+    db.prepare(`INSERT INTO athlete_profiles (athlete_id, notes) VALUES (?, ?)`).run(
+      athlete.id,
+      '由数据导入最小建档创建，无登录账号；出生日期等资料可稍后在运动员档案中补充。'
     );
+    createdCount += 1;
+    db.prepare(
+      `UPDATE data_import_athlete_candidates SET status = 'created', created_athlete_id = ?, matched_athlete_id = NULL WHERE id = ?`
+    ).run(athlete.id, candidate.id);
     resolved.set(candidate.normalizedName, athlete.id);
   }
   for (const item of input.batch.items) {
     if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') continue;
-    const key = normalizedName(item.rawAthleteName);
+    const key = dataImportPersonKey(item);
     if (excludedKeys.has(key)) {
       item.quality = 'skipped';
       db.prepare('UPDATE data_import_items SET quality = ? WHERE id = ?').run('skipped', item.id);
@@ -3957,6 +3960,8 @@ export function commitDataImport(input: {
       overwrittenProfileFields: 0,
     };
   if (batch.status !== 'reviewing') throw new Error('该批次当前不能提交。');
+  if (batch.parserVersion !== DATA_IMPORT_PARSER_VERSION)
+    throw new Error('该草稿使用旧版导入规则，请重新上传原文件解析并确认后再提交。');
   const allowed = new Set(input.athletes.map((athlete) => athlete.id));
   const candidateNames = new Set(
     batch.athleteCandidates.map((candidate) => candidate.normalizedName)
@@ -3972,7 +3977,7 @@ export function commitDataImport(input: {
       item.quality !== 'skipped' &&
       item.resolution !== 'skip' &&
       item.itemType !== 'invalid_row' &&
-      !excludedKeys.has(normalizedName(item.rawAthleteName))
+      !excludedKeys.has(dataImportPersonKey(item))
   );
   const invalidRows = batch.items.filter(
     (item) => item.itemType === 'invalid_row' && item.resolution !== 'skip'
@@ -3988,7 +3993,7 @@ export function commitDataImport(input: {
       !candidate.matchedAthleteId &&
       importable.some(
         (item) =>
-          !item.athleteId && normalizedName(item.rawAthleteName) === candidate.normalizedName
+          !item.athleteId && dataImportPersonKey(item) === candidate.normalizedName
       ) &&
       !text(candidate.team)
   );
@@ -4045,7 +4050,7 @@ export function commitDataImport(input: {
     linkedAthletes = resolution.linkedCount;
     for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
     for (const item of importable) {
-      if (resolution.excludedKeys.has(normalizedName(item.rawAthleteName))) {
+      if (resolution.excludedKeys.has(dataImportPersonKey(item))) {
         skipped += 1;
         continue;
       }

@@ -410,3 +410,192 @@ describe('预览与提交校验一致', () => {
     expect(item.messages.join('；')).toContain('测试值');
   });
 });
+
+describe('P0：人员隔离与训练空白保护', () => {
+  it('同名不同编号跨表独立匹配并分别入库', () => {
+    db.prepare("UPDATE athletes SET name = '张某' WHERE id = 2").run();
+    const people = [athletes[0], { ...athletes[1], name: '张某' }];
+    const batch = analyze(
+      {
+        运动员信息: [
+          ['系统运动员编号', '姓名', '所属队伍'],
+          [1, '张某', 'A队'],
+          [2, '张某', 'B队'],
+        ],
+        训练课次: [
+          ['系统运动员编号', '姓名', '日期', '时长分钟'],
+          [1, '张某', '2025-08-01', 60],
+          [2, '张某', '2025-08-01', 90],
+        ],
+      },
+      { athletes: people }
+    );
+    expect(batch.athleteCandidates).toHaveLength(2);
+    expect(
+      batch.items.filter((x) => x.itemType === 'training_session').map((x) => x.athleteId)
+    ).toEqual([1, 2]);
+    const result = commitDataImport({
+      batchId: batch.id,
+      userId: USER_ID,
+      creatorRole: 'SCC',
+      athletes: people,
+      allowedTeams: new Set(['A队', 'B队']),
+      conflictPolicy: 'skip',
+    });
+    expect(result.createdRecords).toBe(2);
+    expect(
+      db
+        .prepare(
+          'SELECT athlete_id AS id, duration_min AS duration FROM training_sessions ORDER BY athlete_id'
+        )
+        .all()
+    ).toEqual([
+      { id: 1, duration: 60 },
+      { id: 2, duration: 90 },
+    ]);
+  });
+
+  it('更新时空白类型、阶段和强度保留原值，显式值进入覆盖预览', () => {
+    db.prepare(
+      "INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content, duration_min) VALUES (1, '2025-08-02', 1, '体能训练', '体能训练', 'UT2', '原内容', 50)"
+    ).run();
+    const batch = analyze({
+      训练课次: [
+        ['姓名', '日期', '时长分钟'],
+        ['张某', '2025-08-02', 60],
+      ],
+    });
+    expect(batch.items[0].payload.intensityZone).toBe('');
+    commit(batch.id, 'update');
+    expect(
+      db
+        .prepare(
+          'SELECT training_type AS type, structure_type AS structure, intensity_zone AS zone, content FROM training_sessions'
+        )
+        .get()
+    ).toEqual({ type: '体能训练', structure: '体能训练', zone: 'UT2', content: '原内容' });
+    const explicit = analyze({
+      训练课次: [
+        ['姓名', '日期', '时长分钟', '训练阶段', '强度区间'],
+        ['张某', '2025-08-02', 60, '水上训练', 'AN'],
+      ],
+    });
+    expect(explicit.items[0].conflict?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'intensityZone',
+          oldValue: 'UT2',
+          newValue: 'AN',
+          overwrites: true,
+        }),
+        expect.objectContaining({ field: 'structureType', overwrites: true }),
+      ])
+    );
+  });
+
+  it('新增记录未填写强度时不伪造AN', () => {
+    const batch = analyze({
+      训练课次: [
+        ['姓名', '日期', '时长分钟'],
+        ['张某', '2025-08-03', 60],
+      ],
+    });
+    commit(batch.id, 'skip');
+    expect(db.prepare('SELECT intensity_zone AS zone FROM training_sessions').get()).toEqual({
+      zone: '',
+    });
+  });
+});
+
+describe('P0：人员确认及旧草稿保护', () => {
+  it('无效编号不降级按姓名自动关联，确认与排除仅作用于对应人员', () => {
+    const batch = analyze({
+      训练课次: [
+        ['系统运动员编号', '姓名', '日期', '时长分钟'],
+        [998, '张某', '2025-08-04', 60],
+        [999, '张某', '2025-08-04', 90],
+      ],
+    });
+    expect(batch.athleteCandidates).toHaveLength(2);
+    expect(batch.items.every((item) => item.athleteId === null)).toBe(true);
+    const [first, second] = batch.athleteCandidates;
+    updateDataImportAthleteCandidates({
+      batchId: batch.id,
+      userId: USER_ID,
+      allowedTeams: new Set(['A队', 'B队']),
+      athletes,
+      corrections: [
+        { id: first.id, matchedAthleteId: 1, confirmed: true },
+        { id: second.id, excluded: true },
+      ],
+    });
+    const result = commit(batch.id, 'skip');
+    expect(result.createdRecords).toBe(1);
+    expect(
+      db.prepare('SELECT athlete_id AS id, duration_min AS duration FROM training_sessions').all()
+    ).toEqual([{ id: 1, duration: 60 }]);
+  });
+
+  it('无编号同名不同队的资料独立识别', () => {
+    db.prepare("UPDATE athletes SET name = '张某' WHERE id = 2").run();
+    const people = [athletes[0], { ...athletes[1], name: '张某' }];
+    const batch = analyze(
+      {
+        运动员信息: [
+          ['姓名', '所属队伍', '出生日期'],
+          ['张某', 'A队', '1990-01-01'],
+          ['张某', 'B队', '1992-02-02'],
+        ],
+      },
+      { athletes: people }
+    );
+    expect(batch.athleteCandidates).toHaveLength(2);
+    expect(batch.items.map((item) => item.athleteId)).toEqual([1, 2]);
+  });
+
+  it('旧版草稿禁止直接提交，原文件重新解析后可提交', () => {
+    const sheets = {
+      训练课次: [
+        ['姓名', '日期', '时长分钟'],
+        ['张某', '2025-08-05', 60],
+      ],
+    };
+    const batch = analyze(sheets);
+    db.prepare(
+      "UPDATE data_import_batches SET parser_version = 'deterministic-v7-profile-data-minimization' WHERE id = ?"
+    ).run(batch.id);
+    expect(() => commit(batch.id, 'skip')).toThrow(/重新上传原文件/);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({
+      count: 0,
+    });
+    const fresh = analyzeDataImport({
+      buffer: workbookBuffer({ ...sheets, 说明: [[`测试标记__t${unique}__`]] }),
+      filename: '重新解析.xlsx',
+      mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      project: PROJECT,
+      userId: USER_ID,
+      athletes,
+      allowedTeams: new Set(['A队', 'B队']),
+    });
+    expect(fresh.id).not.toBe(batch.id);
+    expect(commit(fresh.id, 'skip').createdRecords).toBe(1);
+  });
+});
+
+it('选择新建时遇到同队同名档案不在提交阶段偷偷关联', () => {
+  const batch = analyze({
+    训练课次: [
+      ['系统运动员编号', '姓名', '日期', '时长分钟'],
+      [999, '张某', '2025-08-06', 60],
+    ],
+  });
+  updateDataImportAthleteCandidates({
+    batchId: batch.id,
+    userId: USER_ID,
+    allowedTeams: new Set(['A队']),
+    athletes,
+    corrections: [{ id: batch.athleteCandidates[0].id, team: 'A队', confirmed: true }],
+  });
+  expect(() => commit(batch.id, 'skip')).toThrow(/同名档案/);
+  expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({ count: 0 });
+});
