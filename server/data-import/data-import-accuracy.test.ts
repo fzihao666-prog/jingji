@@ -1089,3 +1089,18 @@ it('恢复后的业务写入失败时，档案恢复和审计同事务回滚', (
     db.exec('DROP TRIGGER reject_import_insert');
   }
 });
+
+it('重传同一文件沿用已提交的人员关联，只让已停用人员重新确认', () => {
+  const buffer = workbookBuffer({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [991, '张某', 'A队'], [992, '赵某', 'B队']] });
+  const input = { buffer, filename: '历史人员映射.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']) };
+  const first = analyzeDataImport(input);
+  updateDataImportAthleteCandidates({ batchId: first.id, userId: USER_ID, athletes, allowedTeams: input.allowedTeams, corrections: first.athleteCandidates.map(person => ({ id: person.id, matchedAthleteId: person.name === '张某' ? 1 : 2, confirmed: true })) });
+  commit(first.id, 'skip');
+  db.prepare('UPDATE athletes SET active = 0 WHERE id = 1').run();
+  const current = [{ ...athletes[0], active: false }, athletes[1], athletes[2]];
+  const next = analyzeDataImport({ ...input, athletes: current });
+  expect(next.athleteCandidates.find(person => person.name === '赵某')).toMatchObject({ status: 'matched', matchedAthleteId: 2, confirmed: true });
+  expect(next.athleteCandidates.find(person => person.name === '张某')).toMatchObject({ status: 'pending', confirmed: false });
+  const revoked = analyzeDataImport({ ...input, athletes: [current[0], current[2]], reparse: true });
+  expect(revoked.athleteCandidates.find(person => person.name === '赵某')).toMatchObject({ status: 'pending', matchedAthleteId: null, confirmed: false });
+});

@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v14：已提交文件可再次解析，停用档案经当前权限与人工确认后恢复；保留原批次。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v14-repeat-import-restore';
+// v15：同文件重传复用已提交的唯一人员关联，仍以当前权限和档案状态重新校验。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v15-reuse-confirmed-identities';
 
 export type ImportAthlete = {
   id: number;
@@ -2176,9 +2176,30 @@ export function analyzeDataImport(input: {
   if (!items.length) throw new Error('未填写业务数据或未识别到支持的数据模板，请填写实际记录后重新上传。');
   // ---- 运动员识别与人员映射（先人员、后数据）----
   const persons = collectPersons(items);
+  // 仅复用同账号、同项目、同一文件最近一次已提交的真实关联，草稿不能作为身份依据。
+  const previous = db.prepare(`SELECT id FROM data_import_batches
+    WHERE (file_hash = ? OR file_hash LIKE ?) AND project = ? AND created_by = ? AND status = 'committed'
+    ORDER BY rowid DESC LIMIT 1`).get(originalHash, `${originalHash}:%`, input.project, input.userId) as { id: string } | undefined;
+  const priorIds = new Map<string, Set<number>>();
+  if (previous) {
+    const priorItems = db.prepare(`SELECT raw_athlete_name AS name, payload_json AS payload, athlete_id AS athleteId
+      FROM data_import_items WHERE batch_id = ? AND athlete_id IS NOT NULL AND committed_entity_id IS NOT NULL`)
+      .all(previous.id) as Array<{ name: string; payload: string; athleteId: number }>;
+    for (const prior of priorItems) {
+      const key = dataImportPersonKey({ rawAthleteName: prior.name, payload: JSON.parse(prior.payload) as Record<string, unknown> });
+      const ids = priorIds.get(key) || new Set<number>();
+      ids.add(prior.athleteId);
+      priorIds.set(key, ids);
+    }
+  }
   const allowedTeams = input.allowedTeams;
   for (const person of persons.values()) {
-    const resolution = resolvePerson(
+    const prior = priorIds.get(person.key);
+    const priorId = prior?.size === 1 ? [...prior][0] : null;
+    const priorAthlete = input.athletes.find(athlete => athlete.id === priorId && athlete.project === input.project);
+    const resolution: PersonResolution = priorAthlete
+      ? { kind: 'matched', athlete: priorAthlete, method: '同文件已提交关联' }
+      : resolvePerson(
       {
         name: person.name,
         project: input.project,
