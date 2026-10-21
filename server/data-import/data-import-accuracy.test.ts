@@ -1006,3 +1006,35 @@ it('空白日期按所选默认日期、北京时间当天依次补充，表内�
     vi.useRealTimers();
   }
 });
+
+describe('跨表新队员人员确认', () => {
+  it('档案有队伍、测试表只有姓名时，共用唯一的新队员建档候选', () => {
+    const batch = analyze({
+      运动员信息: [['姓名', '所属队伍'], ['新队员', 'A队']],
+      冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['新队员', '', 21.9]],
+    });
+    expect(batch.athleteCandidates).toHaveLength(1);
+    updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes, allowedTeams: new Set(['A队']), corrections: [{ id: batch.athleteCandidates[0].id, confirmed: true }] });
+    expect(commit(batch.id, 'skip').createdAthletes).toBe(1);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM athletes WHERE name = '新队员'").get()).toEqual({ count: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 1 });
+  });
+  it('编号无效时仍提供可访问的同名人员供人工关联', () => {
+    const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [999, '张某', 'A队']] });
+    expect(batch.athleteCandidates[0].status).toBe('pending');
+    expect(batch.athleteCandidates[0].suggested.map(person => person.id)).toEqual([1]);
+  });
+});
+
+it('文件中多个同名身份时，仅姓名的跨表记录仍要求人工确认', () => {
+  db.prepare("UPDATE athletes SET name = '张某' WHERE id = 2").run();
+  const people = [athletes[0], { ...athletes[1], name: '张某' }];
+  const batch = analyze({
+    运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [1, '张某', 'A队'], [2, '张某', 'B队']],
+    冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['张某', '', 21.9]],
+  }, { athletes: people });
+  expect(batch.athleteCandidates).toHaveLength(3);
+  const test = batch.items.find(item => item.itemType === 'test_measurement')!;
+  expect(test.athleteId).toBeNull();
+  expect(batch.athleteCandidates.find(person => person.status === 'pending')?.suggested).toHaveLength(2);
+});

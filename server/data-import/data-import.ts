@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v12：空白记录日期优先使用所选日期，未选择时补北京时间当天；旧草稿须重新解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v12-default-today';
+// v13：无身份提示的跨表记录复用唯一人员候选；不同编号或有歧义的人员继续独立确认。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v13-cross-sheet-person';
 
 export type ImportAthlete = {
   id: number;
@@ -426,7 +426,7 @@ function resolvePerson(
       };
     return {
       kind: 'conflict',
-      suggested: [],
+      suggested: athletes.filter(athlete => athlete.project === hint.project && normalizedName(athlete.name) === normalized).map(toSuggestion),
       message: `系统运动员编号${code}不存在或不在当前权限范围内，请人工确认`,
     };
   }
@@ -2011,6 +2011,27 @@ function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
     person.city = person.city || text(payload.city);
     person.county = person.county || text(payload.county);
     persons.set(key, person);
+  }
+  // 只有姓名的业务表可复用文件中唯一且无冲突的身份；多队伍、多个编号不得按姓名合并。
+  const byName = new Map<string, PersonRecord[]>();
+  for (const person of persons.values()) {
+    const name = normalizedName(person.name);
+    byName.set(name, [...(byName.get(name) || []), person]);
+  }
+  for (const [name, group] of byName) {
+    const bare = persons.get(name);
+    const qualified = group.filter(person => person.key !== name);
+    if (!bare || qualified.length !== 1) continue;
+    const target = qualified[0];
+    if (bare.gender && target.gender && bare.gender !== target.gender) continue;
+    for (const field of ['gender', 'region', 'city', 'county'] as const)
+      target[field] = target[field] || bare[field];
+    for (const item of items) {
+      if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') continue;
+      if (dataImportPersonKey(item) === bare.key)
+        item.payload = { ...item.payload, personKey: target.key };
+    }
+    persons.delete(bare.key);
   }
   return persons;
 }
