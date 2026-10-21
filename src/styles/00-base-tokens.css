@@ -334,6 +334,12 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+/* 焦点管理会脚本聚焦 tabIndex=-1 的标题等非交互元素（供读屏播报）；
+   这类元素无法用 Tab 到达，隐藏浏览器默认焦点框，避免刷新后标题被框住。 */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
 .recharts-wrapper:focus,
 .recharts-wrapper:focus-visible,
 .recharts-surface:focus,
