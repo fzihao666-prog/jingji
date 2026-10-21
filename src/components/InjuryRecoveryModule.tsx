@@ -148,7 +148,7 @@ export function InjuryRecoveryModule({ athlete, user, asOfDate }: Props) {
                   <span>{current.recordType === 'feedback' ? '运动员反馈' : '当前问题'}</span>
                   <strong>{current.injuryName}</strong>
                   <small>
-                    {sideLabels[current.side]} · {current.bodyPart} · 疼痛 {current.painScore}/10
+                    {sideLabels[current.side]} · {current.bodyPart} · 疼痛 {current.painScore == null ? '未提供' : `${current.painScore}/10`}
                   </small>
                 </div>
                 <div className="injury-current-review">
@@ -215,7 +215,7 @@ export function InjuryRecoveryModule({ athlete, user, asOfDate }: Props) {
                       <div>
                         <strong>{record.injuryName}</strong>
                         <span>
-                          {sideLabels[record.side]} · {record.bodyPart} · 疼痛 {record.painScore}/10
+                          {sideLabels[record.side]} · {record.bodyPart} · 疼痛 {record.painScore == null ? '未提供' : `${record.painScore}/10`}
                         </span>
                       </div>
                       <b>{record.recordType === 'feedback' ? '待确认' : meta.label}</b>

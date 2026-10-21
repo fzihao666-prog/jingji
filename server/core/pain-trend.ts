@@ -4,7 +4,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type PainTrendRow = {
   bodyPart: string;
-  painScore: number;
+  painScore: number | null;
   recordType: string;
   status: string;
   createdAt: string;
@@ -48,8 +48,10 @@ export function buildPainTrend(input: {
   rows: PainTrendRow[];
 }): PainTrend {
   const { startDate, endDate } = painTrendWindow(input.now, input.days);
-  const byPart = new Map<string, Map<string, PainTrendRow & { timestamp: number }>>();
+  type MeasuredRow = PainTrendRow & { painScore: number; timestamp: number };
+  const byPart = new Map<string, Map<string, MeasuredRow>>();
   for (const row of input.rows) {
+    if (row.painScore === null || !Number.isFinite(row.painScore)) continue;
     // created_at 有两种历史格式：SQLite UTC 文本（无时区）与 ISO 带时区；统一解析为 UTC 时间戳。
     const timestamp = /[zZ]|[+-]\d\d:\d\d$/.test(row.createdAt)
       ? Date.parse(row.createdAt)
@@ -57,10 +59,10 @@ export function buildPainTrend(input: {
     if (!Number.isFinite(timestamp)) continue;
     const date = beijingDate(new Date(timestamp));
     if (date < startDate || date > endDate) continue;
-    const part = byPart.get(row.bodyPart) ?? new Map<string, PainTrendRow & { timestamp: number }>();
+    const part = byPart.get(row.bodyPart) ?? new Map<string, MeasuredRow>();
     const existing = part.get(date);
     if (!existing || timestamp >= existing.timestamp) {
-      part.set(date, { ...row, timestamp });
+      part.set(date, { ...row, painScore: row.painScore, timestamp });
     }
     byPart.set(row.bodyPart, part);
   }

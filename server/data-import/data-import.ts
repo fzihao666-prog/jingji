@@ -14,8 +14,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v22：力量组次按课次序号关联，扩展字段与技术等级支持完整往返；旧草稿需重新解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v22-complete-export-roundtrip';
+// v23：枚举在解析、校对、审查和入库全程归一为规范代码，空白疼痛保留未提供。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v23-canonical-enum-pipeline';
 
 export type ImportAthlete = {
   id: number;
@@ -978,13 +978,10 @@ function parseStandardDate(value: unknown, year: number): string {
 }
 
 /** 模板枚举可读中文、数据库存规范代码；解析期即归一，冲突比较、校对与入库共用同一口径。 */
-const INJURY_SIDE_CODES: Record<string, string> = {
-  未指定: 'unspecified',
-  左: 'left',
-  右: 'right',
-  双侧: 'bilateral',
-  中央: 'center',
+const TEST_SIDE_CODES: Record<string, string> = {
+  左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center',
 };
+const INJURY_SIDE_CODES: Record<string, string> = { 未指定: 'unspecified', ...TEST_SIDE_CODES };
 const INJURY_STATUS_CODES: Record<string, string> = {
   健康: 'healthy',
   观察: 'observation',
@@ -1000,7 +997,24 @@ const STATE_LEVEL_CODES: Record<string, string> = {
 };
 function canonicalCode(value: unknown, codes: Record<string, string>, fallback: string) {
   const raw = text(value);
-  return codes[raw] || raw || fallback;
+  return Object.hasOwn(codes, raw) ? codes[raw] : raw || fallback;
+}
+
+function canonicalEnumField(itemType: string, field: string, value: ReviewValue): ReviewValue {
+  if (itemType === 'injury_record' && field === 'side') return canonicalCode(value, INJURY_SIDE_CODES, 'unspecified');
+  if (itemType === 'injury_record' && field === 'status') return canonicalCode(value, INJURY_STATUS_CODES, 'observation');
+  if (itemType === 'competitive_state' && field === 'stateLevel') return canonicalCode(value, STATE_LEVEL_CODES, '');
+  return value;
+}
+function normalizeImportEnums(item: ParsedImportItem | DataImportItemView) {
+  if (item.itemType === 'injury_record') {
+    item.payload.side = canonicalCode(item.payload.side, INJURY_SIDE_CODES, 'unspecified');
+    item.payload.status = canonicalCode(item.payload.status, INJURY_STATUS_CODES, 'observation');
+  } else if (item.itemType === 'competitive_state') {
+    item.payload.stateLevel = canonicalCode(item.payload.stateLevel, STATE_LEVEL_CODES, '');
+  } else if (item.itemType === 'test_measurement') {
+    item.side = canonicalCode(item.side, TEST_SIDE_CODES, 'center') as ParsedImportItem['side'];
+  }
 }
 
 function parseStandardSheet(
@@ -1421,9 +1435,7 @@ function parseStandardSheet(
       if (valueNum === null) messages.push('错误：测试数值不能为空');
       if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
       const sideText = standardText(row, header.columns, '侧别');
-      const side = ({ 左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center' }[sideText] ||
-        sideText ||
-        'center') as ParsedImportItem['side'];
+      const side = canonicalCode(sideText, TEST_SIDE_CODES, 'center') as ParsedImportItem['side'];
       if (!['left', 'right', 'bilateral', 'center'].includes(side))
         messages.push('错误：测试侧别只能使用center、left、right或bilateral');
       const bodyField = BODY_TEMPLATE_FIELDS.find(([, , code]) => code === metricCode);
@@ -1600,6 +1612,7 @@ function resolveImportStrengthSessions(items: Array<ParsedImportItem | DataImpor
 
 /** 相同及互补事实自动合并；不同值继续使用统一字段审查。 */
 function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
+  for (const item of items) normalizeImportEnums(item);
   resolveImportStrengthSessions(items);
   for (const item of items) {
     delete item.payload.valueImportConflicts;
@@ -2583,33 +2596,9 @@ const WELLNESS_NUMBER_FIELDS = [
 
 const WELLNESS_STATUSES = ['', 'normal', 'attention', 'alert', 'rest', 'missing'];
 
-const INJURY_SIDES = [
-  '未指定',
-  '左',
-  '右',
-  '双侧',
-  '中央',
-  'unspecified',
-  'left',
-  'right',
-  'bilateral',
-  'center',
-];
-
-const INJURY_STATUSES = [
-  '健康',
-  '观察',
-  '限训',
-  '康复',
-  '停训',
-  'healthy',
-  'observation',
-  'restricted',
-  'rehab',
-  'suspended',
-];
-
-const STATE_LEVELS = ['巅峰', '良好', '建设', '调整', 'peak', 'good', 'build', 'adjust', ''];
+const INJURY_SIDES = Object.values(INJURY_SIDE_CODES);
+const INJURY_STATUSES = Object.values(INJURY_STATUS_CODES);
+const STATE_LEVELS = [...Object.values(STATE_LEVEL_CODES), ''];
 
 const NUMERIC_PAYLOAD_FIELDS: Partial<Record<DataImportItemType, readonly string[]>> = {
   wellness: WELLNESS_NUMBER_FIELDS,
@@ -2631,6 +2620,7 @@ function validateImportItem(
   item: DataImportItemView | ParsedImportItem,
   ctx: { allowedAthletes: Set<number>; candidateNames: Set<string> }
 ): string[] {
+  normalizeImportEnums(item);
   const messages: string[] = [];
   if (item.itemType === 'invalid_row') {
     // 无法解析的非空行：保留原始行错误说明，始终阻断提交，直至用户排除或修正。
@@ -2885,7 +2875,7 @@ function applyCorrection(
       if (!editable.has(key)) continue;
       if (key === 'technicalLevel') { next.payload[key] = normalizeTechnicalLevel(value); continue; }
       if (value === null) delete next.payload[key];
-      else next.payload[key] = value;
+      else next.payload[key] = typeof value === 'string' || typeof value === 'number' ? canonicalEnumField(next.itemType, key, value) : value;
     }
   }
   if ('valueNum' in correction) {
@@ -2934,7 +2924,7 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
       draft[key] = {};
       for (const [field, value] of Object.entries(rawValues)) {
         if (!reviewFields(items.filter(item => importReviewKey(item) === importReviewKey(target))).some(([, code]) => code === field) || typeof value !== 'string' || value.length > 10000) throw new Error('审查草稿字段无效');
-        draft[key][field] = value;
+        draft[key][field] = String(canonicalEnumField(target.itemType, field, value));
       }
     }
     target.payload.valueReviewDraft = draft;
@@ -2981,7 +2971,7 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
   const database = databaseReviewRecords(sources.map(item => ({ ...item, conflict: databaseSnapshots.find(snapshot => snapshot.id === item.id)?.conflict ?? null })));
   if (review.includeDatabase === true && !database.length) throw new Error('没有可比较的数据库已有值，请刷新后重试');
   const comparison = [...sources, ...database];
-  const selected = review.values as Record<string, unknown>;
+  const selected = { ...review.values } as Record<string, unknown>;
   const fields = reviewFields(comparison);
   if (Object.keys(selected).some(field => !fields.some(([, key]) => key === field))) throw new Error('合并包含不支持的字段');
   const values: Record<string, ReviewValue> = {};
@@ -2990,7 +2980,8 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
     if (Object.prototype.hasOwnProperty.call(selected, field)) {
       const value = selected[field];
       if (kind === 'text' ? typeof value !== 'string' || value.length > 10000 : typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${label}格式无效`);
-      values[field] = value as ReviewValue;
+      values[field] = canonicalEnumField(target.itemType, field, value as ReviewValue);
+      selected[field] = values[field];
     } else if (available.length === 1) values[field] = available[0];
     else if (available.length > 1) throw new Error(`请为${label}选择最终值`);
   }
@@ -4021,7 +4012,7 @@ function upsertInjuryItem(
       text(p.bodyPart),
       side,
       status,
-      painScore === null ? 0 : Math.min(10, Math.max(0, painScore)),
+      painScore,
       item.eventDate,
       text(p.restrictions),
       text(p.rehabPlan),

@@ -1725,18 +1725,18 @@ it('统一模板覆盖业务字段可完整导出并恢复，缺失与真实0及
 });
 
 it('导出模板中的中文侧别、状态与等级再导入与数据库同口径，不制造覆盖冲突', async () => {
+  const sides = ['未指定', '左', '右', '双侧', '中央'];
+  const statuses = ['健康', '观察', '限训', '康复', '停训'];
   const seed = analyze({
-    伤病记录: [
-      ['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'],
-      ['张某', '2026-01-05', '膝部不适', '膝', '左', '观察', 2],
-    ],
-    竞技评估: [
-      ['姓名', '评估日期', '总分', '等级', '评估协议'],
-      ['张某', '2026-01-05', 80, '调整', '人工评价'],
-    ],
+    伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'],
+      ...sides.flatMap((side, index) => statuses.map((status, j) => ['张某', '2026-01-05', `枚举${index}-${j}`, '膝', side, status, j === 0 ? null : j]))],
+    竞技评估: [['姓名', '评估日期', '总分', '等级'], ...['巅峰', '良好', '建设', '调整'].map((level, index) => ['张某', `2026-01-0${index + 5}`, 80, level])],
+    其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '侧别'], ...sides.slice(1).map(side => ['张某', '2026-01-05', '专项测试', 'grip', 30, 'kg', side])],
   });
   expect(seed.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
   commit(seed.id, 'skip');
+  const snapshot = () => JSON.stringify(['injury_records', 'competitive_state_assessments', 'test_sessions', 'test_measurements'].map(table => db.prepare(`SELECT * FROM ${table} ORDER BY id`).all()));
+  const before = snapshot();
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(PROJECT, [1]);
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
@@ -1750,9 +1750,10 @@ it('导出模板中的中文侧别、状态与等级再导入与数据库同口�
   });
   expect(roundtrip.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
   const items = roundtrip.items.filter(
-    item => item.itemType === 'injury_record' || item.itemType === 'competitive_state'
+    item => item.itemType === 'injury_record' || item.itemType === 'competitive_state' || item.itemType === 'test_measurement'
   );
-  expect(items.filter(item => item.itemType === 'injury_record').length).toBeGreaterThan(0);
+  expect(items).toHaveLength(33);
+  expect(items.filter(item => item.itemType === 'injury_record')).toHaveLength(25);
   expect(items.filter(item => item.itemType === 'competitive_state').length).toBeGreaterThan(0);
   for (const item of items) {
     expect(item.conflict?.exists).toBe(true);
@@ -1762,13 +1763,9 @@ it('导出模板中的中文侧别、状态与等级再导入与数据库同口�
   expect(importReviewGroups(items)).toEqual([]);
   const result = commit(roundtrip.id, 'update');
   expect(result.updatedRecords).toBe(0);
-  expect(
-    db.prepare('SELECT side, status FROM injury_records').all()
-  ).toEqual([{ side: 'left', status: 'observation' }]);
-  expect(
-    db.prepare('SELECT state_level AS level FROM competitive_state_assessments').all()
-  ).toEqual([{ level: 'adjust' }]);
+  expect(snapshot()).toBe(before);
 });
+
 
 it.each([
   ['课次序号', 1.5], ['计划重量kg', -1], ['完成状态', 2], ['组次时长分钟', -1], ['组次距离千米', -1], ['训练环境', '未知环境'], ['强度区间', '未知区间'],
@@ -1806,4 +1803,55 @@ it('仅承载力量组次的课次也导出完整课次资料，不伪造时长�
   const restored = parse();
   expect(commit(restored.id, 'skip').createdRecords).toBe(2);
   expect(db.prepare('SELECT session_order, start_time, training_type, structure_type, intensity_zone, content, duration_reported, distance_reported, smvl FROM training_sessions').get()).toEqual({ session_order: 3, start_time: '13:00', training_type: '体能训练', structure_type: '动作准备', intensity_zone: 'U3', content: '功能训练', duration_reported: 0, distance_reported: 0, smvl: 350 });
+});
+
+it('校对和审查中的中文枚举立即归一，未知文本保留并阻断，空白疼痛不伪造0', () => {
+  const batch = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'], ['张某', '2026-01-06', '不适', '膝', '左', '观察', null]] });
+  const id = batch.items[0].id;
+  const corrected = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id, payload: { side: '右', status: '康复' } }] });
+  expect(corrected.items[0].payload).toMatchObject({ side: 'right', status: 'rehab', painScore: null });
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT side, status, pain_score AS pain FROM injury_records').get()).toEqual({ side: 'right', status: 'rehab', pain: null });
+  const invalid = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态'], ['张某', '2026-01-07', '不适', '膝', 'constructor', '未知状态']] });
+  expect(invalid.items[0].payload).toMatchObject({ side: 'constructor', status: '未知状态' });
+  expect(invalid.errorCount).toBe(1);
+});
+
+
+it('空白枚举使用约定默认，竞技等级仅新增时默认，已有疼痛与等级不被空白覆盖', () => {
+  const batch = analyze({
+    伤病记录: [['姓名', '发生日期', '伤病名称', '部位'], ['张某', '2026-01-09', '空白默认', '膝']],
+    竞技评估: [['姓名', '评估日期', '总分', '等级'], ['张某', '2026-01-09', 80, null]],
+  });
+  expect(batch.items.find(item => item.itemType === 'injury_record')?.payload).toMatchObject({ side: 'unspecified', status: 'observation', painScore: null });
+  expect(batch.items.find(item => item.itemType === 'competitive_state')?.payload.stateLevel).toBe('');
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT pain_score AS pain FROM injury_records').get()).toEqual({ pain: null });
+  expect(db.prepare('SELECT state_level AS level FROM competitive_state_assessments').get()).toEqual({ level: 'build' });
+  db.prepare("UPDATE injury_records SET pain_score = 5").run();
+  db.prepare("UPDATE competitive_state_assessments SET state_level = 'good'").run();
+  const replay = analyze({
+    伤病记录: [['姓名', '发生日期', '伤病名称', '部位'], ['张某', '2026-01-09', '空白默认', '膝']],
+    竞技评估: [['姓名', '评估日期', '总分'], ['张某', '2026-01-09', 80]],
+  });
+  commit(replay.id, 'update');
+  expect(db.prepare('SELECT pain_score AS pain FROM injury_records').get()).toEqual({ pain: 5 });
+  expect(db.prepare('SELECT state_level AS level FROM competitive_state_assessments').get()).toEqual({ level: 'good' });
+});
+
+it('真实疼痛差异仍触发审查，中文枚举校对及审查写回均只保存规范代码', () => {
+  const seed = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'], ['张某', '2026-01-10', '疼痛差异', '膝', 'left', 'observation', 2]] });
+  commit(seed.id, 'skip');
+  const changed = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'], ['张某', '2026-01-10', '疼痛差异', '膝', '左', '观察', 4]] });
+  const item = changed.items[0];
+  expect(item.payload).toMatchObject({ side: 'left', status: 'observation' });
+  expect(item.conflict?.fields.filter(field => field.overwrites).map(field => field.field)).toEqual(['painScore']);
+  expect(importReviewGroups(changed.items)).toHaveLength(1);
+  expect(item.conflict?.fields.find(field => field.field === 'side')).toMatchObject({ oldValue: 'left', newValue: 'left', overwrites: false });
+  const draft = updateDataImportItems({ batchId: changed.id, userId: USER_ID, athletes, corrections: [{ id: item.id, payload: { valueReview: { action: 'draft', choices: { side: '左', status: '观察' }, manual: {} } } }] });
+  expect(draft.items[0].payload.valueReviewDraft).toMatchObject({ choices: { side: 'left', status: 'observation' } });
+  const saved = updateDataImportItems({ batchId: changed.id, userId: USER_ID, athletes, corrections: [{ id: item.id, payload: { valueReview: { action: 'merge', memberIds: [item.id], includeDatabase: true, values: { side: '左', status: '观察', painScore: 4 } } } }] });
+  expect(saved.items[0].payload).toMatchObject({ side: 'left', status: 'observation' });
+  expect(saved.items[0].payload.valueReviewDecision).toMatchObject({ finalValues: { side: 'left', status: 'observation', painScore: 4 } });
+  expect(commit(changed.id, 'update').updatedRecords).toBe(1);
 });

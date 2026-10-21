@@ -102,3 +102,9 @@ describe('buildPainTrend 混合时间格式', () => {
     ]);
   });
 });
+
+
+it('未提供疼痛评分不伪造0，真实0仍保留', () => {
+  const trend = buildPainTrend({ athleteId: 1, days: 7, now: NOW, rows: [row({ painScore: 0, createdAt: '2026-09-28 08:00:00' }), row({ painScore: null, createdAt: '2026-09-29 08:00:00' })] });
+  expect(trend.parts[0].series).toEqual([{ date: '2026-09-28', painScore: 0, recordType: 'feedback' }]);
+});

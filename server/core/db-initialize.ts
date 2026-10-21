@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { dirname, join } from 'node:path';
+import { migrateNullableInjuryPainScore } from './injury-pain-score-migration.ts';
 import { migrateTeamPlans } from './team-plan-migration.ts';
 import { initializeTrainingReports } from '../report/report-service.ts';
 import { initializeTrainingPlanLinks } from './training-plan-links.ts';
@@ -189,7 +192,7 @@ export function initializeDatabase(
     body_part TEXT NOT NULL,
     side TEXT NOT NULL DEFAULT 'unspecified' CHECK (side IN ('left', 'right', 'bilateral', 'center', 'unspecified')),
     status TEXT NOT NULL CHECK (status IN ('healthy', 'observation', 'restricted', 'rehab', 'suspended')),
-    pain_score INTEGER NOT NULL DEFAULT 0 CHECK (pain_score BETWEEN 0 AND 10),
+    pain_score INTEGER DEFAULT NULL CHECK (pain_score BETWEEN 0 AND 10),
     onset_date TEXT NOT NULL,
     restrictions TEXT NOT NULL DEFAULT '',
     rehab_plan TEXT NOT NULL DEFAULT '',
@@ -292,6 +295,9 @@ export function initializeDatabase(
     FOREIGN KEY (specialty_id) REFERENCES specialty_catalog(id)
   );
 `);
+
+  migrateNullableInjuryPainScore(db, databaseExistedBeforeStartup && databasePath !== ':memory:'
+    ? join(dirname(databasePath), 'backups', `before-injury-pain-nullable-${randomUUID()}.db`) : undefined);
 
   function hasColumn(table: string, column: string) {
     return (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some(

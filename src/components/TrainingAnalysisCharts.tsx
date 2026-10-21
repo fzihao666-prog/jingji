@@ -1445,7 +1445,7 @@ export function InjuryAssessmentChart({
                   {row.bodyPart} · {row.injuryName}
                 </small>
               </span>
-              <b>{row.painScore}/10</b>
+              <b>{row.painScore == null ? '未提供' : `${row.painScore}/10`}</b>
             </div>
           ))
         ) : (

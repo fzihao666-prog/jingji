@@ -67,7 +67,7 @@ type TodoInjury = {
   status: string;
   injuryName: string;
   bodyPart: string;
-  painScore: number;
+  painScore: number | null;
   createdAt: string;
 };
 type TodoReviewInjury = {
@@ -75,7 +75,7 @@ type TodoReviewInjury = {
   status: string;
   injuryName: string;
   bodyPart: string;
-  painScore: number;
+  painScore: number | null;
   reviewDate: string;
 };
 
