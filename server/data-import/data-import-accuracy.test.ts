@@ -917,7 +917,7 @@ it('实际统一模板保留三行表头及未填写工作表后能够往返导�
   });
   XLSX.utils.sheet_add_aoa(
     workbook.Sheets['训练课次'],
-    [['张某', '2025-09-05', 1, '', '', '', '', '', 60], ['赵某']],
+    [[1, '张某', '2025-09-05', 1, '', '', '', '', '', 60], [2, '赵某']],
     { origin: 'A4' }
   );
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
@@ -932,7 +932,7 @@ it('实际统一模板保留三行表头及未填写工作表后能够往返导�
   });
   expect(batch.errorCount).toBe(0);
   expect(batch.items).toHaveLength(1);
-  expect(batch.items[0].sourceAddress).toBe('A4');
+  expect(batch.items[0].sourceAddress).toBe('B4');
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
 });
 
@@ -977,9 +977,9 @@ describe('自动识别附带的未注明日期冠军模型数据', () => {
       冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['张某', '', 21.9]],
     });
     expect(batch.errorCount).toBe(0);
-    expect(batch.items.map(item => item.itemType).sort()).toEqual(['athlete_profile', 'test_measurement']);
+    expect(batch.items.map(item => item.itemType).sort()).toEqual(['athlete_profile', 'body_measurement']);
     commit(batch.id, 'skip');
-    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
   });
 
   it('填写了明确测试日期的冠军模型数据仍正常导入', () => {
@@ -1017,7 +1017,7 @@ describe('跨表新队员人员确认', () => {
     updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes, allowedTeams: new Set(['A队']), corrections: [{ id: batch.athleteCandidates[0].id, confirmed: true }] });
     expect(commit(batch.id, 'skip').createdAthletes).toBe(1);
     expect(db.prepare("SELECT COUNT(*) AS count FROM athletes WHERE name = '新队员'").get()).toEqual({ count: 1 });
-    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
   });
   it('编号无效时仍提供可访问的同名人员供人工关联', () => {
     const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [999, '张某', 'A队']] });
@@ -1034,7 +1034,7 @@ it('文件中多个同名身份时，仅姓名的跨表记录仍要求人工确�
     冠军模型测试: [['姓名', '测试日期', '体脂率%'], ['张某', '', 21.9]],
   }, { athletes: people });
   expect(batch.athleteCandidates).toHaveLength(3);
-  const test = batch.items.find(item => item.itemType === 'test_measurement')!;
+  const test = batch.items.find(item => item.itemType === 'body_measurement')!;
   expect(test.athleteId).toBeNull();
   expect(batch.athleteCandidates.find(person => person.status === 'pending')?.suggested).toHaveLength(2);
 });
@@ -1118,4 +1118,126 @@ it('已关联档案的队伍不被导入文件或默认队伍覆盖，即使使�
 it('已有运动员未填写文件队伍时不会套用唯一可选的其他队伍', () => {
   const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '最好成绩'], [1, '张某', '成绩']] }, { allowedTeams: new Set(['B队']) });
   expect(batch.items[0].payload.team).toBe('A队');
+});
+
+describe('统一模板按业务归属整理', () => {
+  it('新表名可导入，身体指标与体能成绩分开保存', () => {
+    const batch = analyze({
+      运动员基本资料: [['姓名', '所属队伍'], ['张某', 'A队']],
+      身体测量: [['姓名', '测量日期', '身高cm', '臂展cm', '体脂率%'], ['张某', '2025-10-01', 180, 185, 21.9]],
+      体能测试: [['姓名', '测试日期', 'VO2Max', '测试协议'], ['张某', '2025-10-01', 55, '实测协议']],
+    });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.some(item => item.metricCode === 'arm_span_cm')).toBe(true);
+    expect(batch.items.some(item => item.metricCode === 'vo2max_ml_kg_min')).toBe(true);
+    commit(batch.id, 'skip');
+    expect(db.prepare('SELECT height_cm AS height, body_fat_pct AS fat FROM athlete_body_measurements').get()).toEqual({ height: 180, fat: 21.9 });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM test_measurements WHERE metric_code = 'heightCm'").get()).toEqual({ count: 0 });
+  });
+  it('旧冠军模型的身体指标落到身体测量，与同日重复值合并', () => {
+    const batch = analyze({
+      身体测量: [['姓名', '测量日期', '身高cm'], ['张某', '2025-10-02', 180]],
+      冠军模型测试: [['姓名', '测试日期', '身高cm', '体脂率%'], ['张某', '2025-10-02', 180, 20]],
+    });
+    expect(batch.errorCount).toBe(0);
+    commit(batch.id, 'skip');
+    expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
+    expect(db.prepare('SELECT height_cm AS height, body_fat_pct AS fat FROM athlete_body_measurements').get()).toEqual({ height: 180, fat: 20 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 0 });
+  });
+  it('旧表与新表的同日身体指标不一致时阻断，不按表格顺序取值', () => {
+    const batch = analyze({
+      身体测量: [['姓名', '测量日期', '身高cm'], ['张某', '2025-10-03', 180]],
+      冠军模型测试: [['姓名', '测试日期', '身高cm'], ['张某', '2025-10-03', 181]],
+    });
+    expect(batch.errorCount).toBeGreaterThan(0);
+    expect(batch.items.flatMap(item => item.messages).join('；')).toContain('冲突');
+    expect(() => commit(batch.id, 'skip')).toThrow();
+  });
+  it('新统一模板没有冠军模型表，基本资料和身体测量职责分离', () => {
+    const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), { type: 'buffer' });
+    expect(workbook.SheetNames).toContain('运动员基本资料');
+    expect(workbook.SheetNames).toContain('体能测试');
+    expect(workbook.SheetNames).not.toContain('冠军模型测试');
+    expect(workbook.SheetNames).not.toContain('竞技水平评估');
+  });
+});
+
+it('新模板导入后统一导出再导入不重复写入，协议、单位及字段不串列', async () => {
+  const batch = analyze({
+    运动员基本资料: [['系统运动员编号', '姓名', '所属队伍'], [1, '张某', 'A队']],
+    身体测量: [['姓名', '测量日期', '身高cm', '臂展cm', '体脂率%'], ['张某', '2025-10-04', 180, 185, 20]],
+    体能测试: [['姓名', '测试日期', 'VO2Max', '测试协议'], ['张某', '2025-10-04', 55, '协议A']],
+    FMS测试: [['姓名', '测试日期', '深蹲', '跨栏步'], ['张某', '2025-10-04', 2, 3]],
+    训练课次: [['姓名', '日期', '时长分钟'], ['张某', '2025-10-04', 60]],
+    力量训练组次: [['姓名', '日期', '课次名称', '动作', '组序', '计划次数', '实际次数', '实际重量kg'], ['张某', '2025-10-04', '力量课', '深蹲', 1, 6, 5, 60]],
+    竞技评估: [['姓名', '评估日期', '一般耐力评分', '评估协议'], ['张某', '2025-10-04', 80, '人工评分协议A']],
+  });
+  expect(batch.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const exported = analyzeDataImport({ buffer, filename: '统一导出往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']) });
+  expect(exported.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  expect(exported.items.find(item => item.metricCode === 'vo2max_ml_kg_min')?.payload.protocol).toBe('协议A');
+  expect(exported.items.find(item => item.itemType === 'training_set')).toMatchObject({ actualReps: 5, actualWeightKg: 60, targetReps: 6 });
+  expect(commit(exported.id, 'skip').createdRecords).toBe(0);
+  expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
+});
+
+it('人工评分缺少明确协议时阻断，补充协议后才可导入', () => {
+  const batch = analyze({ 竞技评估: [['姓名', '评估日期', '核心力量评分'], ['张某', '2025-10-05', 75]] });
+  expect(batch.errorCount).toBe(1);
+  expect(batch.items[0].messages.join('；')).toContain('评估协议');
+  expect(() => commit(batch.id, 'skip')).toThrow(/校验/);
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { protocol: '评分协议B' } }] });
+  expect(fixed.errorCount).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+});
+
+it('不对称指数未注明测试方法时必须明确补充协议', () => {
+  const batch = analyze({ 体能测试: [['姓名', '测试日期', '不对称指数%'], ['张某', '2025-10-06', 10]] });
+  expect(batch.errorCount).toBe(1);
+  expect(batch.items[0].messages.join('；')).toContain('测试协议');
+});
+
+it('通用测试旧代码和新身体表指向同一事实，单位不一致不能静默换算', () => {
+  const batch = analyze({
+    身体测量: [['姓名', '测量日期', '身高cm'], ['张某', '2025-10-07', 180]],
+    其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-10-07', 'heightCm', 180, 'cm']],
+  });
+  expect(batch.errorCount).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  const invalid = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2025-10-08', 'heightCm', 1.8, 'm']] });
+  expect(invalid.errorCount).toBe(1);
+  expect(invalid.items[0].messages.join('；')).toContain('单位');
+});
+
+it('同课次不同指标的协议冲突阻断，缺失协议可从同课次补齐', () => {
+  const headers = ['姓名', '测试日期', 'VO2Max', '不对称指数%', '测试协议'];
+  const conflict = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 55, null, 'A'], ['张某', '2025-10-09', null, 10, 'B']] });
+  expect(conflict.errorCount).toBe(2);
+  expect(() => commit(conflict.id, 'skip')).toThrow();
+  const valid = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 55], ['张某', '2025-10-09', null, 10, 'B']] });
+  expect(valid.errorCount).toBe(0);
+  commit(valid.id, 'skip');
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-09'").get()).toEqual({ protocol: 'B' });
+  const mismatch = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 56, null, 'C']] });
+  expect(mismatch.errorCount).toBeGreaterThan(0);
+  expect(mismatch.items[0].messages.join('；')).toContain('已有同类测试');
+  expect(() => commit(mismatch.id, 'update')).toThrow();
+});
+
+it('已有测试课次的空协议可以补充，身体指标的侧别原样保留', () => {
+  const headers = ['姓名', '测试日期', '指标代码', '数值', '单位', '侧别', '测试类型', '协议'];
+  const first = analyze({ 其他测试: [headers, ['张某', '2025-10-10', 'height_cm', 180, 'cm', 'left', '侧别测试']] });
+  expect(first.items[0]).toMatchObject({ itemType: 'test_measurement', side: 'left', testType: '侧别测试' });
+  expect(first.errorCount).toBe(0);
+  commit(first.id, 'skip');
+  const second = analyze({ 其他测试: [headers, ['张某', '2025-10-10', 'arm_span_cm', 185, 'cm', 'right', '侧别测试', '测量协议']] });
+  expect(second.errorCount).toBe(0);
+  expect(second.items[0]).toMatchObject({ itemType: 'test_measurement', side: 'right', testType: '侧别测试' });
+  commit(second.id, 'skip');
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-10'").get()).toEqual({ protocol: '测量协议' });
 });

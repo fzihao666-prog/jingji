@@ -672,7 +672,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <FileSpreadsheet size={19} />
               <div>
                 <strong>统一数据模板</strong>
-                <span>13张工作表，高级导入入口</span>
+                <span>按资料、测量、训练与测试分类，按需填写</span>
               </div>
             </button>
             <button

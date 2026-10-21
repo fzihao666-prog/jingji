@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "template:build": "tsx scripts/build-data-import-template.mjs",
     "dev": "tsx server/dev.ts",
     "dev:web": "vite",
     "dev:server": "tsx watch server/index.ts",

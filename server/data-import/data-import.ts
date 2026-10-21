@@ -1,3 +1,4 @@
+import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
 import { db } from '../core/db.ts';
@@ -9,8 +10,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v16：已关联人员保留原队伍，导入只为新档案分配队伍，不执行调队。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v16-preserve-athlete-team';
+// v17：新旧模板共用领域字段，身体测量独立于测试成绩；同批重复事实合并或报冲突。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v17-domain-template';
 
 export type ImportAthlete = {
   id: number;
@@ -911,30 +912,6 @@ function parseScoringSheet(matrix: Matrix, sheet: string, project: string, batch
   return items;
 }
 
-const FMS_TEMPLATE_METRICS = [
-  ['深蹲', 'fms_deep_squat', '深蹲'],
-  ['跨栏步', 'fms_hurdle_step', '跨栏步'],
-  ['直线弓步蹲', 'fms_inline_lunge', '直线弓步蹲'],
-  ['肩部灵活性', 'fms_shoulder_mobility', '肩部灵活性'],
-  ['主动直腿上抬', 'fms_active_straight_leg_raise', '主动直腿上抬'],
-  ['躯干稳定俯卧撑', 'fms_trunk_stability_pushup', '躯干稳定俯卧撑'],
-  ['旋转稳定性', 'fms_rotary_stability', '旋转稳定性'],
-] as const;
-
-const CHAMPION_TEMPLATE_METRICS = [
-  ['身高cm', 'heightCm', '身高', 'cm'],
-  ['臂展cm', 'armSpanCm', '臂展', 'cm'],
-  ['体脂率%', 'body_fat_pct', '体脂率', '%'],
-  ['骨骼肌kg', 'skeletal_muscle_kg', '骨骼肌量', 'kg'],
-  ['一般耐力评分', 'general_endurance_score', '一般耐力', '分'],
-  ['VO2Max', 'vo2max_ml_kg_min', '最大摄氧量', 'ml/kg/min'],
-  ['不对称指数%', 'asymmetry_index_pct', '不对称指数', '%'],
-  ['CMJ峰值功率W', 'cmj_peak_power_w', 'CMJ峰值功率', 'W'],
-  ['无氧功率W/kg', 'anaerobic_power_wkg', '无氧功率', 'W/kg'],
-  ['IMTP峰值力量N', 'imtp_peak_force_n', 'IMTP峰值力量', 'N'],
-  ['核心力量评分', 'core_strength_score', '核心力量', '分'],
-] as const;
-
 const TECHNICAL_LEVELS = [
   '国际级运动健将',
   '运动健将',
@@ -955,6 +932,7 @@ function normalizeTechnicalLevel(value: unknown) {
 }
 
 const STANDARD_SHEETS = new Set([
+  ...UNIFIED_IMPORT_HEADERS.map(([name]) => name),
   '运动员信息',
   '竞技水平评估',
   '身体测量',
@@ -1016,12 +994,13 @@ function parseStandardDate(value: unknown, year: number): string {
 
 function parseStandardSheet(
   matrix: Matrix,
-  sheet: string,
+  rawSheet: string,
   project: string,
   filename: string,
   defaultDate: string,
   athletes: ImportAthlete[]
 ) {
+  const sheet = IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
   const header = standardHeader(matrix);
   if (!header) return [];
   const items: ParsedImportItem[] = [];
@@ -1041,12 +1020,12 @@ function parseStandardSheet(
         items.push(
           itemBase({
             itemType: 'invalid_row',
-            sourceSheet: sheet,
+            sourceSheet: rawSheet,
             sourceAddress: cellAddress(rowIndex, nameColumn),
             rawValue: row.map((value) => text(value)).filter(Boolean).slice(0, 6).join(' | '),
             quality: 'error',
             messages: [
-              `错误：${sheet}!${cellAddress(rowIndex, nameColumn)} 该行有内容但缺少姓名，无法关联运动员；请补充姓名或移除该行后重新导入`,
+              `错误：${rawSheet}!${cellAddress(rowIndex, nameColumn)} 该行有内容但缺少姓名，无法关联运动员；请补充姓名或移除该行后重新导入`,
             ],
             businessKey: `invalid|${sheet}|${rowIndex}`,
           })
@@ -1069,7 +1048,7 @@ function parseStandardSheet(
         numericErrors.set(label, {
           address,
           raw: text(raw),
-          message: `错误：${sheet}!${address} ${label}“${text(raw)}”不是有效数字；请修正原文件后重新上传，或明确排除整行`,
+          message: `错误：${rawSheet}!${address} ${label}“${text(raw)}”不是有效数字；请修正原文件后重新上传，或明确排除整行`,
         });
       }
       return value;
@@ -1082,7 +1061,7 @@ function parseStandardSheet(
     const base = {
       athleteId: athlete?.id || null,
       rawAthleteName: rawName,
-      sourceSheet: sheet,
+      sourceSheet: rawSheet,
       sourceAddress: cellAddress(rowIndex, nameColumn),
       payload: {
         athleteCode: standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号'),
@@ -1090,6 +1069,18 @@ function parseStandardSheet(
         rawDate: text(rawDate),
         dateAddress: cellAddress(rowIndex, dateColumn ?? nameColumn),
       } as Record<string, unknown>,
+    };
+    const appendMetric = (headerName: string, metricCode: string, metricLabel: string, unit: string, type: string, protocol: string) => {
+      const value = readNumber(headerName);
+      if (value === null) return;
+      items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate,
+        testType: type, metricCode, metricLabel, valueNum: value, unit, side: 'center',
+        payload: { ...base.payload, protocol,
+          protocolRequired: rawSheet === '体能测试' && metricCode === 'asymmetry_index_pct',
+          note: standardText(row, header.columns, '备注') },
+        rawValue: String(value), messages: [], quality: 'valid',
+        businessKey: `${rawName}|${rowDate}|${type}|${metricCode}`,
+      }));
     };
     if (sheet !== '运动员信息' && !validIsoDate(rowDate))
       messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
@@ -1200,57 +1191,29 @@ function parseStandardSheet(
           businessKey: `${athlete?.id || 0}|${rowDate}|competitive`,
         })
       );
-    } else if (sheet === '身体测量') {
+    } else if (sheet === '身体测量' || sheet === '冠军模型测试') {
       const fields: Record<string, number | null> = {};
-      const mappings = [
-        ['heightCm', '身高cm'],
-        ['weightKg', '体重kg'],
-        ['bodyFatPct', '体脂率%'],
-        ['skeletalMuscleKg', '骨骼肌kg'],
-        ['muscleMassKg', '肌肉量kg'],
-        ['upperLimbMuscleKg', '上肢肌肉kg'],
-        ['lowerLimbMuscleKg', '下肢肌肉kg'],
-        ['trunkMuscleKg', '躯干肌肉kg'],
-        ['subcutaneousFatMm', '皮下脂肪mm'],
-        ['tricepsSkinfoldMm', '肱三头肌皮褶mm'],
-        ['abdominalSkinfoldMm', '腹部皮褶mm'],
-        ['thighSkinfoldMm', '大腿皮褶mm'],
-        ['calfSkinfoldMm', '小腿皮褶mm'],
-        ['visceralFatLevel', '内脏脂肪等级'],
-        ['basalMetabolismKcal', '基础代谢kcal'],
-        ['totalBodyWaterKg', '总水分kg'],
-        ['ecwTbwRatio', '细胞外水比'],
-        ['phaseAngleDeg', '相位角°'],
-        ['visceralFatAreaCm2', '内脏脂肪面积cm²'],
-        ['leftArmLeanKg', '左上肢瘦体重kg'],
-        ['rightArmLeanKg', '右上肢瘦体重kg'],
-        ['trunkLeanKg', '躯干瘦体重kg'],
-        ['leftLegLeanKg', '左下肢瘦体重kg'],
-        ['rightLegLeanKg', '右下肢瘦体重kg'],
-      ];
-      for (const [key, label] of mappings)
-        fields[key] = readNumber(label);
-      if (!Object.values(fields).some((value) => value !== null))
-        messages.push('错误：身体测量至少填写一个数值');
-      items.push(
-        itemBase({
-          ...base,
-          itemType: 'body_measurement',
-          eventDate: rowDate,
-          metricCode: 'body_composition',
-          metricLabel: '身体成分',
-          valueNum: fields.weightKg ?? fields.heightCm ?? null,
-          payload: {
-            ...base.payload,
-            ...fields,
-            note: standardText(row, header.columns, '备注'),
-          },
-          rawValue: JSON.stringify(fields),
-          quality: makeQuality(messages),
-          messages,
-          businessKey: `${athlete?.id || 0}|${rowDate}|body`,
-        })
-      );
+      for (const [headerName, key] of BODY_TEMPLATE_FIELDS) {
+        if (key !== 'armSpanCm') fields[key] = readNumber(headerName);
+      }
+      const armSpan = readNumber('臂展cm');
+      const hasBody = Object.values(fields).some(value => value !== null);
+      if (hasBody) items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
+        metricCode: 'body_composition', metricLabel: '身体测量', valueNum: fields.weightKg ?? fields.heightCm ?? null,
+        payload: { ...base.payload, ...fields, note: standardText(row, header.columns, '备注') },
+        rawValue: JSON.stringify(fields), messages: [...messages], quality: makeQuality(messages),
+        businessKey: `${rawName}|${rowDate}|body`,
+      }));
+      if (armSpan !== null) appendMetric('臂展cm', 'arm_span_cm', '臂展', 'cm', '身体测量', standardText(row, header.columns, '测试协议'));
+      if (sheet === '身体测量' && !hasBody && armSpan === null)
+        items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
+          metricCode: 'body_composition', payload: base.payload, quality: 'error', messages: ['错误：身体测量至少填写一个数值'],
+        }));
+      if (sheet === '冠军模型测试') {
+        const protocol = standardText(row, header.columns, '测试协议');
+        for (const [headerName, code, label, unit] of [...FITNESS_TEMPLATE_METRICS, ...EVALUATION_SCORE_METRICS])
+          appendMetric(headerName, code, label, unit, '体能测试', protocol);
+      }
     } else if (sheet === '恢复状态') {
       const payload = {
         ...base.payload,
@@ -1421,59 +1384,16 @@ function parseStandardSheet(
           });
         items.push(...fmsItems);
       }
-    } else if (sheet === '冠军模型测试') {
-      const championItems = CHAMPION_TEMPLATE_METRICS.flatMap(
-        ([headerName, metricCode, metricLabel, unit]) => {
-          const valueNum = readNumber(headerName);
-          if (valueNum === null) return [];
-          return [
-            itemBase({
-              ...base,
-              itemType: 'test_measurement',
-              eventDate: rowDate,
-              testType: '冠军模型综合评估',
-              metricCode,
-              metricLabel,
-              valueNum,
-              unit,
-              side: 'center',
-              payload: {
-                ...base.payload,
-                protocol: standardText(row, header.columns, '测试协议') || '冠军模型八维评估',
-                note: standardText(row, header.columns, '备注'),
-              },
-              rawValue: String(valueNum),
-              quality: makeQuality(messages),
-              messages: [...messages],
-              businessKey: `${athlete?.id || 0}|${rowDate}|champion|${metricCode}`,
-            }),
-          ];
-        }
-      );
-      if (!championItems.length) {
-        messages.push('错误：冠军模型指标至少填写一项测试数值');
-        items.push(
-          itemBase({
-            ...base,
-            itemType: 'test_measurement',
-            eventDate: rowDate,
-            testType: '冠军模型综合评估',
-            metricCode: 'general_endurance_score',
-            metricLabel: '一般耐力',
-            valueNum: null,
-            unit: '分',
-            payload: { ...base.payload, protocol: '冠军模型八维评估' },
-            rawValue: '',
-            quality: makeQuality(messages),
-            messages,
-            businessKey: `${athlete?.id || 0}|${rowDate}|champion|empty`,
-          })
-        );
-      } else {
-        items.push(...championItems);
-      }
+    } else if (sheet === '体能测试') {
+      const protocol = standardText(row, header.columns, '测试协议');
+      for (const [headerName, code, label, unit] of FITNESS_TEMPLATE_METRICS)
+        appendMetric(headerName, code, label, unit, '体能测试', protocol);
+      if (items.length === rowStart && !numericErrors.size)
+        items.push(itemBase({ ...base, itemType: 'invalid_row', eventDate: rowDate, quality: 'error',
+          messages: ['错误：体能测试至少填写一项实测数值'], rawValue: row.map(text).join(' | ') }));
     } else if (sheet === '测试指标') {
-      const metricCode = standardText(row, header.columns, '指标代码');
+      const rawCode = standardText(row, header.columns, '指标代码');
+      const metricCode = canonicalImportMetricCode(rawCode);
       const valueNum = readNumber('数值');
       const durationMin = readNumber('测试时长分钟');
       if (!metricCode) messages.push('错误：指标代码不能为空');
@@ -1485,12 +1405,22 @@ function parseStandardSheet(
         'center') as ParsedImportItem['side'];
       if (!['left', 'right', 'bilateral', 'center'].includes(side))
         messages.push('错误：测试侧别只能使用center、left、right或bilateral');
-      items.push(
+      const bodyField = BODY_TEMPLATE_FIELDS.find(([, , code]) => code === metricCode);
+      if (bodyField && bodyField[1] !== 'armSpanCm' && side === 'center') {
+        items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
+          metricCode: 'body_composition', metricLabel: '身体测量', valueNum,
+          payload: { ...base.payload, [bodyField[1]]: valueNum,
+            unitConflict: standardText(row, header.columns, '单位') && standardText(row, header.columns, '单位') !== bodyField[4]
+              ? `错误：${rawSheet}!${base.sourceAddress} 单位须为${bodyField[4]}，不能自动换算` : '' },
+          rawValue: String(valueNum ?? ''), messages, quality: makeQuality(messages),
+          businessKey: `${rawName}|${rowDate}|body`,
+        }));
+      } else items.push(
         itemBase({
           ...base,
           itemType: 'test_measurement',
           eventDate: rowDate,
-          testType: standardText(row, header.columns, '测试类型') || '专项测试',
+          testType: metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : standardText(row, header.columns, '测试类型') || '专项测试',
           metricCode,
           metricLabel: standardText(row, header.columns, '指标名称') || metricCode,
           valueNum,
@@ -1537,6 +1467,17 @@ function parseStandardSheet(
         })
       );
     } else if (sheet === '竞技状态') {
+      const protocol = standardText(row, header.columns, '评估协议');
+      for (const [headerName, code, label, unit] of EVALUATION_SCORE_METRICS) {
+        appendMetric(headerName, code, label, unit, '竞技评估', protocol);
+        if (text(standardValue(row, header.columns, headerName)) && !protocol && !numericErrors.size) {
+          const item = items.at(-1);
+          if (item) item.payload.protocolRequired = true;
+        }
+      }
+      const stateHeaders = ['总分', '等级', '专项耐力', '力量爆发', '技术效率', '负荷适应', '恢复能力', '比赛能力'];
+      const hasState = stateHeaders.some(label => text(standardValue(row, header.columns, label)) !== '');
+      if (hasState) {
       const overallScore = readNumber('总分');
       const payload = {
         ...base.payload,
@@ -1566,6 +1507,7 @@ function parseStandardSheet(
           businessKey: `${athlete?.id || 0}|${rowDate}|competitive`,
         })
       );
+      }
     }
     if (numericErrors.size) {
       const errors = [...numericErrors.entries()];
@@ -1584,6 +1526,57 @@ function parseStandardSheet(
     }
   }
   return items;
+}
+
+/** 同一批次内按最终人员和日期合并身体测量，冲突必须显式修正，不能依赖表格顺序。 */
+function consolidateImportFacts(items: ParsedImportItem[]) {
+  const sessions = new Map<string, ParsedImportItem[]>();
+  for (const item of items) {
+    if (item.itemType !== 'test_measurement') continue;
+    const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
+    const key = `${identity}|${item.eventDate}|${item.testType}`;
+    const session = sessions.get(key) || [];
+    session.push(item);
+    sessions.set(key, session);
+  }
+  for (const session of sessions.values()) {
+    const protocols = [...new Set(session.map(item => text(item.payload.protocol)).filter(Boolean))];
+    for (const item of session) {
+      if (protocols.length > 1) item.payload.importConflicts = [
+        '错误：同一运动员、日期及测试类型存在不同测试协议，请修正原文件后重新上传',
+      ];
+      else if (protocols.length === 1) item.payload.protocol = protocols[0];
+    }
+  }
+  const grouped = new Map<string, ParsedImportItem>();
+  return items.filter(item => {
+    const body = item.itemType === 'body_measurement' && item.metricCode === 'body_composition';
+    const test = item.itemType === 'test_measurement';
+    if (!body && !test) return true;
+    const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
+    const key = body ? `${identity}|${item.eventDate}|body`
+      : `${identity}|${item.eventDate}|test|${item.testType}|${item.metricCode}|${item.side}`;
+    const current = grouped.get(key);
+    if (!current) { grouped.set(key, item); return true; }
+    const conflicts = Array.isArray(current.payload.importConflicts) ? current.payload.importConflicts as string[] : [];
+    const conflict = (label: string) => conflicts.push(`错误：${current.sourceSheet}!${current.sourceAddress}与${item.sourceSheet}!${item.sourceAddress}的${label}冲突，请修正原文件后重新上传`);
+    if (body) {
+      for (const [, field, , label] of BODY_TEMPLATE_FIELDS) {
+        if (field === 'armSpanCm' || !isProvided(item.payload[field])) continue;
+        if (isProvided(current.payload[field]) && current.payload[field] !== item.payload[field]) conflict(label);
+        else current.payload[field] = item.payload[field];
+      }
+      current.valueNum = optionalNumber(current.payload.weightKg ?? current.payload.heightCm);
+    } else {
+      if (current.valueNum !== item.valueNum || current.unit !== item.unit) conflict(item.metricLabel);
+      if (text(current.payload.protocol) && text(item.payload.protocol) && text(current.payload.protocol) !== text(item.payload.protocol)) conflict('测试协议');
+      if (!text(current.payload.protocol)) current.payload.protocol = item.payload.protocol;
+    }
+    if (item.payload.unitConflict) current.payload.unitConflict = item.payload.unitConflict;
+    current.payload.protocolRequired = Boolean(current.payload.protocolRequired || item.payload.protocolRequired);
+    current.payload.importConflicts = conflicts;
+    return false;
+  });
 }
 
 function ensureMetricDefinitions() {
@@ -2247,6 +2240,8 @@ export function analyzeDataImport(input: {
     if (item.itemType === 'athlete_profile' && person.team && !text(item.payload.team))
       item.payload = { ...item.payload, team: person.team };
   }
+  const mergedItems = consolidateImportFacts(items);
+  items.splice(0, items.length, ...mergedItems);
   // ---- 统一校验（与校对、提交同一规则）----
   const candidateNames = new Set(persons.keys());
   // 权限集合只来自当前账号可访问的运动员列表，不从解析/匹配结果反推，防止越权 id 通过校验。
@@ -2516,32 +2511,9 @@ export function listDataImportBatches(project: string, userId: number) {
   }));
 }
 
-const BODY_COMPOSITION_FIELDS: Array<[string, string]> = [
-  ['heightCm', '身高'],
-  ['weightKg', '体重'],
-  ['bodyFatPct', '体脂率'],
-  ['skeletalMuscleKg', '骨骼肌'],
-  ['muscleMassKg', '肌肉量'],
-  ['upperLimbMuscleKg', '上肢肌肉'],
-  ['lowerLimbMuscleKg', '下肢肌肉'],
-  ['trunkMuscleKg', '躯干肌肉'],
-  ['subcutaneousFatMm', '皮下脂肪'],
-  ['tricepsSkinfoldMm', '肱三头肌皮褶'],
-  ['abdominalSkinfoldMm', '腹部皮褶'],
-  ['thighSkinfoldMm', '大腿皮褶'],
-  ['calfSkinfoldMm', '小腿皮褶'],
-  ['visceralFatLevel', '内脏脂肪等级'],
-  ['basalMetabolismKcal', '基础代谢'],
-  ['totalBodyWaterKg', '总水分'],
-  ['ecwTbwRatio', '细胞外水比'],
-  ['phaseAngleDeg', '相位角'],
-  ['visceralFatAreaCm2', '内脏脂肪面积'],
-  ['leftArmLeanKg', '左上肢瘦体重'],
-  ['rightArmLeanKg', '右上肢瘦体重'],
-  ['trunkLeanKg', '躯干瘦体重'],
-  ['leftLegLeanKg', '左下肢瘦体重'],
-  ['rightLegLeanKg', '右下肢瘦体重'],
-];
+const BODY_COMPOSITION_FIELDS: Array<readonly [string, string]> = BODY_TEMPLATE_FIELDS
+  .filter(([, key]) => key !== 'armSpanCm')
+  .map(([, key, , label]) => [key, label] as const);
 
 const WELLNESS_NUMBER_FIELDS = [
   'sleepHours',
@@ -2609,6 +2581,17 @@ function validateImportItem(
     return item.messages.filter((message) => message.startsWith('错误：'));
   }
   const payload = item.payload || {};
+  if (Array.isArray(payload.importConflicts))
+    messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string'));
+  if (item.itemType === 'test_measurement' && item.athleteId && text(payload.protocol)) {
+    const session = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
+      .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
+    if (text(session?.protocol) && text(session?.protocol) !== text(payload.protocol))
+      messages.push('错误：测试协议与该运动员当日已有同类测试不一致，请核对协议或测试日期');
+  }
+  if (payload.protocolRequired && !text(payload.protocol))
+    messages.push(item.testType === '竞技评估' ? '错误：人工评分必须填写评估协议' : '错误：不对称指数必须填写测试协议或测试方法');
+  if (typeof payload.unitConflict === 'string' && payload.unitConflict) messages.push(payload.unitConflict);
   for (const field of NUMERIC_PAYLOAD_FIELDS[item.itemType] || []) {
     if (isProvided(payload[field]) && standardNumberValue(payload[field]) === null)
       messages.push(`错误：${field}“${text(payload[field])}”必须是有效数字`);
@@ -3165,6 +3148,10 @@ function upsertTestItem(
   userId: number,
   batchPolicy: 'skip' | 'update'
 ): UpsertResult {
+  const storedSession = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
+    .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
+  if (text(storedSession?.protocol) && text(item.payload.protocol) && text(storedSession?.protocol) !== text(item.payload.protocol))
+    throw new Error('测试协议与该运动员当日已有同类测试不一致，请重新校对后提交');
   const policy = resolveItemPolicy(item, batchPolicy);
   db.prepare(
     `INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, active)
@@ -3175,15 +3162,17 @@ function upsertTestItem(
   const validDurationMin = durationMin !== null && durationMin > 0 ? durationMin : null;
   db.prepare(
     `INSERT INTO test_sessions (athlete_id, test_date, test_type, duration_min, protocol, source, quality, is_demo, created_by)
-    VALUES (?, ?, ?, ?, '国家队力量素质测试', 'file_import', ?, 0, ?)
+    VALUES (?, ?, ?, ?, ?, 'file_import', ?, 0, ?)
     ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET
       duration_min = COALESCE(excluded.duration_min, test_sessions.duration_min),
+      protocol = CASE WHEN TRIM(COALESCE(test_sessions.protocol, '')) = '' THEN excluded.protocol ELSE test_sessions.protocol END,
       quality = CASE WHEN excluded.quality = 'partial' THEN 'partial' ELSE test_sessions.quality END`
   ).run(
     item.athleteId,
     item.eventDate,
     item.testType || '力量素质测试',
     validDurationMin,
+    text(item.payload.protocol),
     item.quality === 'warning' ? 'partial' : 'valid',
     userId
   );
