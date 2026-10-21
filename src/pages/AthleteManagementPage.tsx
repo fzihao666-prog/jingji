@@ -1,3 +1,4 @@
+import { TECHNICAL_LEVELS as ALL_TECHNICAL_LEVELS } from '../../shared/athlete-technical-level';
 import {
   Activity,
   AlertCircle,
@@ -31,7 +32,7 @@ import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 const PAGE_SIZE = 6;
 const HEALTH_OPTIONS = ['健康', '观察', '训练受限', '康复中'];
 const ATHLETE_STATUS_OPTIONS = ['在训', '集训', '休整', '离队'];
-const TECHNICAL_LEVELS = ['国际级运动健将', '运动健将', '一级运动员', '二级运动员', '三级运动员'];
+const TECHNICAL_LEVELS = ALL_TECHNICAL_LEVELS;
 
 type AthleteForm = {
   name: string;
@@ -272,7 +273,7 @@ export function AthleteManagementPage({
           !athlete.trainingVenue.toLocaleLowerCase().includes(advanced.venue.toLocaleLowerCase())
         )
           return false;
-        if (advanced.technicalLevel && athlete.technicalLevel !== advanced.technicalLevel)
+        if (advanced.technicalLevel && (athlete.technicalLevel || '未定级') !== advanced.technicalLevel)
           return false;
         if (advanced.athleteStatus && athlete.athleteStatus !== advanced.athleteStatus)
           return false;
@@ -1232,7 +1233,7 @@ export function AthleteManagementPage({
                             })
                           }
                         >
-                          <option value="">未定级</option>
+                          <option value="">未填写</option>
                           {TECHNICAL_LEVELS.map((level) => (
                             <option key={level}>{level}</option>
                           ))}

@@ -1,3 +1,4 @@
+import { normalizeTechnicalLevel, validTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { PROJECTS } from '../../shared/projects.ts';
@@ -40,7 +41,7 @@ export function readAthleteAdminPayload(body: Record<string, unknown>) {
     emergencyContact: cleanString(body.emergencyContact),
     emergencyPhone: cleanString(body.emergencyPhone),
     education: cleanString(body.education),
-    technicalLevel: cleanString(body.technicalLevel),
+    technicalLevel: normalizeTechnicalLevel(body.technicalLevel),
     athletePosition: cleanString(body.athletePosition),
     healthStatus: cleanString(body.healthStatus) || '健康',
     bestResult: cleanString(body.bestResult),
@@ -180,7 +181,7 @@ export const selfAthleteProfileSchema = z.strictObject({
   emergencyContact: athleteProfileText(40),
   emergencyPhone: athleteProfileText(20),
   education: athleteProfileText(40),
-  technicalLevel: athleteProfileText(40),
+  technicalLevel: athleteProfileText(40).transform(normalizeTechnicalLevel).refine(validTechnicalLevel, '技术等级须为未定级或有效运动员等级'),
   athletePosition: athleteProfileText(80),
   healthStatus: athleteProfileText(20),
   bestResult: athleteProfileText(500),

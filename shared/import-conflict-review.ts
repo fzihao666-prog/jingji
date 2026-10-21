@@ -82,13 +82,17 @@ const schemas: Record<string, ReviewField[]> = {
   ],
   training_set: [
     ...numeric({
+      plannedWeightKg: '计划重量kg',
+      completed: '完成状态',
+      durationMin: '组次时长分钟',
+      distanceKm: '组次距离千米',
       targetReps: '计划次数',
       actualReps: '实际次数',
       actualWeightKg: '实际重量kg',
       intensityPercent: '强度百分比',
       rpe: 'RPE',
     }),
-    ...textual({ trainingCategory: '训练类别', bodyPosition: '身体部位', note: '备注' }),
+    ...textual({ exerciseCode: '动作代码', trainingEnvironment: '训练环境', intensityZone: '强度区间', trainingCategory: '训练类别', bodyPosition: '身体部位', note: '备注' }),
   ],
   injury_record: [
     ...numeric({ painScore: '疼痛评分' }),
@@ -166,6 +170,7 @@ export function reviewFields(items: ImportReviewItem[]): ReviewField[] {
       return [
         [label, `metric:${key}`, item.metricCode, label, item.unit || ''],
         [`${label}单位`, `unit:${key}`, '', `${label}单位`, '', 'text'],
+        [`${label}目标值`, `target:${key}`, '', `${label}目标值`, item.unit || ''],
         [`${label}备注`, `note:${key}`, '', `${label}备注`, '', 'text'],
       ];
     }),
@@ -185,6 +190,8 @@ export function reviewValues(
       value = field.slice(7) === reviewMetricKey(item) ? item.valueNum : null;
     else if (field.startsWith('unit:'))
       value = field.slice(5) === reviewMetricKey(item) ? item.unit : null;
+    else if (field.startsWith('target:'))
+      value = field.slice(7) === reviewMetricKey(item) ? item.payload.targetValue : null;
     else if (field.startsWith('note:'))
       value = field.slice(5) === reviewMetricKey(item) ? item.payload.note : null;
     else value = topFields.has(field) ? item[field as keyof ImportReviewItem] : item.payload[field];
@@ -205,6 +212,8 @@ export function writeReviewValues(
     item.unit =
       typeof values[`unit:${key}`] === 'string' ? (values[`unit:${key}`] as string) : item.unit;
     item.payload.note = values[`note:${key}`] ?? '';
+    if (values[`target:${key}`] !== undefined) item.payload.targetValue = values[`target:${key}`];
+    else delete item.payload.targetValue;
     item.payload.protocol = values.protocol ?? '';
     if ('durationMin' in values) item.payload.durationMin = values.durationMin;
     else delete item.payload.durationMin;
@@ -234,7 +243,7 @@ export function importReviewKey(item: ImportReviewItem) {
   if (item.itemType === 'training_session')
     suffix = String(Math.max(1, Math.round(Number(item.payload.sessionOrder) || 1)));
   if (item.itemType === 'training_set')
-    suffix = JSON.stringify([item.sessionLabel, item.exerciseName, item.setIndex]);
+    suffix = JSON.stringify([item.payload.sessionOrder ?? item.sessionLabel, item.exerciseName, item.setIndex]);
   if (item.itemType === 'injury_record') suffix = String(item.payload.injuryName || '');
   if (item.itemType === 'scoring_rule')
     return JSON.stringify([
@@ -336,8 +345,8 @@ export function databaseReviewRecords<T extends ImportReviewItem>(items: T[]): T
     const fields = reviewFields(items);
     for (const field of conflict.fields) {
       const key =
-        item.itemType === 'test_measurement' && ['valueNum', 'unit', 'note'].includes(field.field)
-          ? `${field.field === 'valueNum' ? 'metric' : field.field}:${reviewMetricKey(item)}`
+        item.itemType === 'test_measurement' && ['valueNum', 'targetValue', 'unit', 'note'].includes(field.field)
+          ? `${field.field === 'valueNum' ? 'metric' : field.field === 'targetValue' ? 'target' : field.field}:${reviewMetricKey(item)}`
           : field.field;
       const definition = fields.find(([, name]) => name === key);
       if (!definition || field.oldValue === '') continue;
@@ -368,7 +377,7 @@ export function selectImportReviewRecord<T extends ImportReviewItem>(groups: T[]
   if (!Number.isSafeInteger(recordIndex) || recordIndex < 0) return [];
   return groups.filter(group => !group.some(item => item.payload.valueReviewDecision)).flatMap(group => {
     const selected = group[recordIndex];
-    if (!selected) return [];
+    if (!selected || group.some(item => importSessionChoices(item).length > 1)) return [];
     const includeDatabase = group.some(requiresDatabaseReview);
     const comparison = includeDatabase ? [...group, ...databaseReviewRecords(group)] : group;
     const selectedValues = reviewValues(selected, group);
@@ -385,5 +394,16 @@ export function selectImportReviewRecord<T extends ImportReviewItem>(groups: T[]
       ? { action: 'draft', choices: Object.fromEntries(Object.entries(values).map(([field, value]) => [field, String(value)])), manual: {} }
       : { action: 'merge', memberIds: group.map(item => item.id), values, includeDatabase };
     return [{ id: group[0].id, payload: { valueReview } }];
+  });
+}
+
+
+/** 服务端生成的旧模板课次候选，仅展示有效序号。 */
+export function importSessionChoices(item: ImportReviewItem): Array<{ sessionOrder: number; label: string }> {
+  const choices: unknown = item.payload.sessionChoices;
+  if (!Array.isArray(choices)) return [];
+  return choices.flatMap((choice: unknown) => {
+    if (!choice || typeof choice !== 'object' || !('sessionOrder' in choice) || typeof choice.sessionOrder !== 'number' || !Number.isSafeInteger(choice.sessionOrder) || choice.sessionOrder < 1) return [];
+    return [{ sessionOrder: choice.sessionOrder, label: 'label' in choice && typeof choice.label === 'string' ? choice.label : '' }];
   });
 }

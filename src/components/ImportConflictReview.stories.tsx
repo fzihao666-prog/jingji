@@ -201,3 +201,21 @@ export const Database = {
       throw new Error('数据库比较必须通过统一选择命令提交');
   },
 };
+
+
+let assignedSession: number | undefined;
+export const SessionAmbiguity = {
+  args: { ...Conflict.args,
+    items: [{ ...measurement(1, { sessionChoices: [{ sessionOrder: 1, label: '力量课' }, { sessionOrder: 2, label: '力量课' }] }), itemType: 'training_set' as const, exerciseName: '深蹲', sessionLabel: '力量课', actualReps: 5, actualWeightKg: 80 }],
+    onAssignSession: (_id: number, order: number) => { assignedSession = order; },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    assignedSession = undefined;
+    const select = canvasElement.querySelector<HTMLSelectElement>('select[aria-label="记录 1 所属课次"]');
+    if (!select || select.options.length !== 3) throw new Error('同名课次必须提供明确选择');
+    select.value = '2';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(requestAnimationFrame);
+    if (assignedSession !== 2) throw new Error('应提交所选课次序号');
+  },
+};

@@ -1716,6 +1716,7 @@ export function initializeDatabase(
       ['test_measurements', 'data_import_batch_id', 'TEXT'],
       ['test_measurements', 'source_ref', "TEXT NOT NULL DEFAULT ''"],
       ['test_measurements', 'note', "TEXT NOT NULL DEFAULT ''"],
+      ['daily_wellness', 'note', "TEXT NOT NULL DEFAULT ''"],
       ['athlete_body_measurements', 'data_import_batch_id', 'TEXT'],
     ] as const) {
       if (!hasColumn(table, column))

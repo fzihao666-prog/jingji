@@ -1,4 +1,4 @@
-import { importReviewGroups, selectImportReviewRecord } from '../../shared/import-conflict-review';
+import { importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
@@ -542,7 +542,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   };
 
   const reviewGroups = useMemo(() => importReviewGroups(batch?.items || []), [batch]);
-  const pendingReviewGroups = reviewGroups.filter(group => !group.some(item => item.payload.valueReviewDecision));
+  const pendingReviewGroups = reviewGroups.filter(group => !group.some(item => item.payload.valueReviewDecision || importSessionChoices(item).length > 1));
   const recordCount = Math.max(0, ...pendingReviewGroups.map(group => group.length));
   const matchingReviewGroups = reviewGroups.filter(group => !query.trim() || group.some(item => `${item.rawAthleteName} ${item.athleteName} ${item.eventDate} ${item.metricLabel} ${item.metricCode} ${item.testType} ${item.exerciseName}`.includes(query.trim())));
   const reviewGroupPages = Math.max(1, Math.ceil(matchingReviewGroups.length / 8));
@@ -1112,6 +1112,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
                 key={`${reviewRevision}-${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
                 items={group} disabled={Boolean(busy) || group.some(item => savingReviewGroups.has(item.id)) || batch.status !== 'reviewing'}
+                onAssignSession={(id, sessionOrder) => void handleValueReview([{ id, payload: { sessionOrder } }])}
                 onPending={id => setPendingSelections(current => new Set(current).add(id))}
                 onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}
                 onDraft={(id, choices, manual) => void handleValueReview([{ id, payload: { valueReview: { action: 'draft', choices, manual } } }])}
@@ -1205,6 +1206,16 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                       </td>
                       <td>
                         <strong>{item.exerciseName || item.metricLabel || '—'}</strong>
+                        {item.itemType === 'training_set' && importSessionChoices(item).length > 1 && <label>
+                          <span>所属课次</span>
+                          <select aria-label={`${item.exerciseName}所属课次`} disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                            value={Number(item.payload.sessionOrder) || ''}
+                            onChange={event => void handleValueReview([{ id: item.id, payload: { sessionOrder: Number(event.target.value) } }])}>
+                            <option value="">请选择课次</option>
+                            {importSessionChoices(item).map(choice => <option key={choice.sessionOrder} value={choice.sessionOrder}>第 {choice.sessionOrder} 课 · {choice.label}</option>)}
+                          </select>
+                        </label>}
+
                         {item.side !== 'center' && (
                           <small>
                             {item.side === 'left' ? '左侧' : item.side === 'right' ? '右侧' : '双侧'}

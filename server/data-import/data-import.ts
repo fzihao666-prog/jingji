@@ -1,3 +1,4 @@
+import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import { reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
 import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -9,10 +10,12 @@ import { validateRegistrationDemographics } from '../../shared/registration-demo
 import {
   inferStrengthBodyPosition,
   inferStrengthCategory,
+  isStrengthIntensityZone,
+  isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v21：统一导出往返保留测试事实归属、类型和原指标代码，旧草稿需重新解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v21-export-fact-identity';
+// v22：力量组次按课次序号关联，扩展字段与技术等级支持完整往返；旧草稿需重新解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v22-complete-export-roundtrip';
 
 export type ImportAthlete = {
   id: number;
@@ -913,25 +916,6 @@ function parseScoringSheet(matrix: Matrix, sheet: string, project: string, batch
   return items;
 }
 
-const TECHNICAL_LEVELS = [
-  '国际级运动健将',
-  '运动健将',
-  '一级运动员',
-  '二级运动员',
-  '三级运动员',
-] as const;
-
-function normalizeTechnicalLevel(value: unknown) {
-  const level = text(value).replace(/\s/g, '');
-  if (!level) return '';
-  if (/国际.*健将/.test(level)) return '国际级运动健将';
-  if (/^(国家)?运动健将$/.test(level)) return '运动健将';
-  if (/(国家)?一级(运动员)?/.test(level)) return '一级运动员';
-  if (/(国家)?二级(运动员)?/.test(level)) return '二级运动员';
-  if (/(国家)?三级(运动员)?/.test(level)) return '三级运动员';
-  return level;
-}
-
 const STANDARD_SHEETS = new Set([
   ...UNIFIED_IMPORT_HEADERS.map(([name]) => name),
   '运动员信息',
@@ -1340,6 +1324,14 @@ function parseStandardSheet(
           intensityPercent: readNumber('强度百分比'),
           payload: {
             ...base.payload,
+            sessionOrder: readNumber('课次序号'),
+            exerciseCode: standardText(row, header.columns, '动作代码'),
+            plannedWeightKg: readNumber('计划重量kg'),
+            completed: ({ '已完成': 1, '未完成': 0, '是': 1, '否': 0 } as Record<string, number>)[standardText(row, header.columns, '完成状态')] ?? readNumber('完成状态'),
+            trainingEnvironment: standardText(row, header.columns, '训练环境'),
+            durationMin: readNumber('组次时长分钟'),
+            distanceKm: readNumber('组次距离千米'),
+            intensityZone: standardText(row, header.columns, '强度区间'),
             rpe: readNumber('RPE'),
             trainingCategory:
               standardText(row, header.columns, '类别') || inferStrengthCategory(exerciseName),
@@ -1459,6 +1451,7 @@ function parseStandardSheet(
             ...base.payload,
             protocol: standardText(row, header.columns, '协议'),
             durationMin,
+            targetValue: readNumber('目标值'),
             note: standardText(row, header.columns, '备注'),
           },
           rawValue: String(valueNum ?? ''),
@@ -1557,8 +1550,57 @@ function parseStandardSheet(
   return items;
 }
 
+type ImportStrengthSession = { id: number; sessionOrder: number; label: string };
+function importStrengthSessions(item: ParsedImportItem | DataImportItemView): ImportStrengthSession[] {
+  if (!item.athleteId) return [];
+  const order = optionalNumber(item.payload.sessionOrder);
+  return db.prepare(`SELECT ts.id, ts.session_order AS sessionOrder, ts.content AS label FROM training_sessions ts
+    WHERE ts.athlete_id = ? AND ts.session_date = ? AND ${order !== null ? 'ts.session_order = ?' : `(ts.training_type = '力量训练' OR EXISTS (SELECT 1 FROM strength_result_sets srs WHERE srs.training_session_id = ts.id)) AND ts.content = ?`}
+    ORDER BY ts.session_order`).all(item.athleteId, item.eventDate, order ?? item.sessionLabel) as ImportStrengthSession[];
+}
+function findImportStrengthSession(item: ParsedImportItem | DataImportItemView) {
+  const candidates = importStrengthSessions(item);
+  if (candidates.length > 1) throw new Error('同日存在同名力量课，请先选择课次序号');
+  return candidates[0];
+}
+function resolveImportStrengthSessions(items: Array<ParsedImportItem | DataImportItemView>) {
+  const key = (item: ParsedImportItem | DataImportItemView, label: string) => JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, label]);
+  const staged = new Map<string, ImportStrengthSession[]>();
+  for (const session of items) {
+    if (session.itemType !== 'training_session' || session.resolution === 'skip') continue;
+    const label = text(session.payload.content);
+    const identity = key(session, label);
+    const entries = staged.get(identity) || [];
+    entries.push({ id: 0, sessionOrder: optionalNumber(session.payload.sessionOrder) ?? 1, label });
+    staged.set(identity, entries);
+  }
+  const resolved = new Map<string, Map<number, ImportStrengthSession>>();
+  for (const item of items) {
+    if (item.itemType !== 'training_set' || item.resolution === 'skip') continue;
+    delete item.payload.sessionChoices;
+    if (isProvided(item.payload.sessionOrder)) continue;
+    const identity = key(item, item.sessionLabel);
+    let candidates = resolved.get(identity);
+    if (!candidates) {
+      candidates = new Map([...importStrengthSessions(item), ...(staged.get(identity) || [])].map(session => [session.sessionOrder, session]));
+      resolved.set(identity, candidates);
+    }
+    if (candidates.size === 1) item.payload.sessionOrder = [...candidates.keys()][0];
+    else if (candidates.size > 1) item.payload.sessionChoices = [...candidates.values()];
+  }
+  const sessionIdentity = (item: ParsedImportItem | DataImportItemView) => JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, optionalNumber(item.payload.sessionOrder) ?? 1]);
+  const withSets = new Set(items.filter(item => item.itemType === 'training_set' && item.resolution !== 'skip' && isProvided(item.payload.sessionOrder)).map(sessionIdentity));
+  for (const session of items) {
+    if (session.itemType !== 'training_session') continue;
+    if (withSets.has(sessionIdentity(session))) session.payload.hasStrengthSets = true;
+    else delete session.payload.hasStrengthSets;
+  }
+
+}
+
 /** 相同及互补事实自动合并；不同值继续使用统一字段审查。 */
 function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
+  resolveImportStrengthSessions(items);
   for (const item of items) {
     delete item.payload.valueImportConflicts;
     delete item.payload.valueReviewPending;
@@ -1581,7 +1623,7 @@ function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemVi
     for (const item of group) {
       if (conflicts.length) item.payload.valueImportConflicts = conflicts;
     }
-    if (!conflicts.length && !group.some(item => item.payload.unitConflict || item.payload.valueReviewDecision)) {
+    if (!conflicts.length && !group.some(item => item.payload.unitConflict || item.payload.valueReviewDecision || item.payload.sessionChoices)) {
       const values: Record<string, ReviewValue> = {};
       for (const [, field] of reviewFields(group)) {
         const available = importFieldValues(group, field);
@@ -1797,11 +1839,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
     };
   }
   if (item.itemType === 'training_set') {
-    const session = db
-      .prepare(
-        `SELECT id FROM training_sessions WHERE athlete_id = ? AND session_date = ? AND training_type = '力量训练' AND content = ? ORDER BY session_order LIMIT 1`
-      )
-      .get(item.athleteId, item.eventDate, item.sessionLabel) as { id: number } | undefined;
+    const session = Array.isArray(p.sessionChoices) ? undefined : findImportStrengthSession(item);
     const existing = session
       ? (db
           .prepare(
@@ -1836,7 +1874,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       : undefined;
     if (!session) return empty;
     const fields = push([
-      ...(existing ? [conflictField('valueNum', item.metricLabel || item.metricCode, existing.value_num, item.valueNum), conflictField('unit', '单位', existing.unit, item.unit), conflictField('note', '备注', existing.note, p.note)] : []),
+      ...(existing ? [conflictField('valueNum', item.metricLabel || item.metricCode, existing.value_num, item.valueNum), conflictField('targetValue', '目标值', existing.target_value, p.targetValue), conflictField('unit', '单位', existing.unit, item.unit), conflictField('note', '备注', existing.note, p.note)] : []),
       conflictField('protocol', '测试协议', session.protocol, p.protocol),
       conflictField('durationMin', '测试时长分钟', session.durationMin, p.durationMin),
     ]);
@@ -2577,8 +2615,8 @@ const NUMERIC_PAYLOAD_FIELDS: Partial<Record<DataImportItemType, readonly string
   wellness: WELLNESS_NUMBER_FIELDS,
   training_session: ['sessionOrder', 'durationMin', 'distanceKm', 'rpe', 'srpe', 'smvl',
     'averageHeartRate', 'maxHeartRate', 'averagePowerW', 'strokeRateSpm'],
-  training_set: ['rpe'],
-  test_measurement: ['durationMin'],
+  training_set: ['rpe', 'sessionOrder', 'plannedWeightKg', 'completed', 'durationMin', 'distanceKm'],
+  test_measurement: ['durationMin', 'targetValue'],
   body_measurement: BODY_COMPOSITION_FIELDS.map(([key]) => key),
   injury_record: ['painScore'],
   competitive_state: ['overallScore', 'enduranceScore', 'powerScore', 'techniqueScore',
@@ -2645,7 +2683,7 @@ function validateImportItem(
       !TECHNICAL_LEVELS.includes(technicalLevel as (typeof TECHNICAL_LEVELS)[number])
     )
       messages.push(
-        '错误：技术等级须为国际级运动健将、运动健将、一级运动员、二级运动员或三级运动员'
+        '错误：技术等级须为未定级、国际级运动健将、运动健将、一级运动员、二级运动员或三级运动员'
       );
   } else if (item.itemType === 'wellness') {
     for (const field of WELLNESS_NUMBER_FIELDS) {
@@ -2659,7 +2697,7 @@ function validateImportItem(
   } else if (item.itemType === 'training_session') {
     const durationReported = Boolean(payload.durationReported) || isProvided(payload.durationMin);
     const distanceReported = Boolean(payload.distanceReported) || isProvided(payload.distanceKm);
-    if (!durationReported && !distanceReported)
+    if (!durationReported && !distanceReported && !payload.hasStrengthSets)
       messages.push('错误：时长分钟、距离千米至少填写一项；留空不等于 0。');
     const duration = optionalNumber(payload.durationMin);
     if (durationReported && (duration === null || duration < 0 || duration > 1440))
@@ -2673,6 +2711,18 @@ function validateImportItem(
       messages.push('错误：实际次数不能为空且不能小于0');
     if (item.actualWeightKg === null || item.actualWeightKg < 0)
       messages.push('错误：实际重量不能为空且不能小于0');
+
+    const order = optionalNumber(payload.sessionOrder);
+    if (isProvided(payload.sessionOrder) && (order === null || !Number.isInteger(order) || order < 1)) messages.push('错误：课次序号须为正整数');
+    if (Array.isArray(payload.sessionChoices) && payload.sessionChoices.length > 1) messages.push('错误：同日存在多个同名力量课，请选择所属课次序号');
+    for (const field of ['plannedWeightKg', 'durationMin', 'distanceKm']) {
+      const value = optionalNumber(payload[field]);
+      if (value !== null && value < 0) messages.push('错误：计划重量、组次时长和距离不能小于0');
+    }
+    if (text(payload.trainingEnvironment) && !isStrengthTrainingEnvironment(text(payload.trainingEnvironment))) messages.push('错误：训练环境不在允许范围内');
+    if (text(payload.intensityZone) && !isStrengthIntensityZone(text(payload.intensityZone))) messages.push('错误：强度区间不在允许范围内');
+    const completed = optionalNumber(payload.completed);
+    if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
   } else if (item.itemType === 'test_measurement') {
     if (!item.metricCode) messages.push('错误：指标代码不能为空');
     if (item.valueNum === null || !Number.isFinite(item.valueNum))
@@ -2771,8 +2821,8 @@ const PAYLOAD_EDITABLE: Record<DataImportItemType, Set<string>> = {
     'averagePowerW',
     'strokeRateSpm',
   ]),
-  training_set: new Set(['rpe', 'trainingCategory', 'bodyPosition', 'note']),
-  test_measurement: new Set(['durationMin', 'protocol', 'note']),
+  training_set: new Set(['rpe', 'sessionOrder', 'exerciseCode', 'plannedWeightKg', 'completed', 'trainingEnvironment', 'durationMin', 'distanceKm', 'intensityZone', 'trainingCategory', 'bodyPosition', 'note']),
+  test_measurement: new Set(['durationMin', 'targetValue', 'protocol', 'note']),
   body_measurement: new Set([...BODY_COMPOSITION_FIELDS.map(([key]) => key), 'note']),
   injury_record: new Set([
     'injuryName',
@@ -2833,6 +2883,7 @@ function applyCorrection(
   if (correction.payload) {
     for (const [key, value] of Object.entries(correction.payload)) {
       if (!editable.has(key)) continue;
+      if (key === 'technicalLevel') { next.payload[key] = normalizeTechnicalLevel(value); continue; }
       if (value === null) delete next.payload[key];
       else next.payload[key] = value;
     }
@@ -2917,6 +2968,7 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
   const sources = members.filter((item): item is DataImportItemView => Boolean(item));
   for (const item of sources) {
     checkAccess(item);
+    if (Array.isArray(item.payload.sessionChoices) && item.payload.sessionChoices.length > 1) throw new Error('请先选择所属课次，再选择冲突值');
     if (item.payload.unitConflict) throw new Error(`原始记录单位不一致，请先排除或修正来源：${item.sourceSheet}!${item.sourceAddress}`);
     if (item.resolution === 'skip' || item.payload.valueReviewDecision || item.payload.valueMergedInto || item.payload.valueReviewMemberOf) throw new Error('请先重新编辑已合并的记录');
   }
@@ -3197,11 +3249,7 @@ function upsertTrainingItem(
   batchPolicy: 'skip' | 'update'
 ): UpsertResult {
   const policy = resolveItemPolicy(item, batchPolicy);
-  const existingSession = db
-    .prepare(
-      `SELECT id FROM training_sessions WHERE athlete_id = ? AND session_date = ? AND training_type = '力量训练' AND content = ? ORDER BY session_order LIMIT 1`
-    )
-    .get(item.athleteId, item.eventDate, item.sessionLabel) as { id: number } | undefined;
+  const existingSession = findImportStrengthSession(item);
   let sessionId = existingSession?.id;
   const payload = item.payload;
   const existing = sessionId
@@ -3218,6 +3266,13 @@ function upsertTrainingItem(
   if (existing) {
     // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
     const patch: Array<[string, unknown]> = [
+      ['exercise_code', text(payload.exerciseCode)],
+      ['planned_weight_kg', optionalNumber(payload.plannedWeightKg)],
+      ['completed', optionalNumber(payload.completed)],
+      ['training_environment', text(payload.trainingEnvironment)],
+      ['duration_min', optionalNumber(payload.durationMin)],
+      ['distance_km', optionalNumber(payload.distanceKm)],
+      ['intensity_zone', text(payload.intensityZone)],
       ['target_reps', item.targetReps],
       ['actual_reps', item.actualReps],
       ['actual_weight_kg', item.actualWeightKg],
@@ -3266,7 +3321,7 @@ function upsertTrainingItem(
       .run(
         item.athleteId,
         item.eventDate,
-        Number(order.value) + 1,
+        optionalNumber(payload.sessionOrder) ?? Number(order.value) + 1,
         item.sessionLabel,
         item.quality === 'warning' ? 'partial' : 'valid',
         userId
@@ -3277,9 +3332,9 @@ function upsertTrainingItem(
     .prepare(
       `INSERT INTO strength_result_sets (
     training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg,
-    training_category, body_position, training_environment, intensity_percent, intensity_zone, rpe,
+    exercise_code, planned_weight_kg, duration_min, distance_km, training_category, body_position, training_environment, intensity_percent, intensity_zone, rpe,
     completed, note, source, data_import_batch_id, source_row, original_text, created_by
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '陆上', ?, 'AN', ?, 1, ?, 'file_import', ?, ?, ?, ?)`
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, ?, ?, ?)`
     )
     .run(
       sessionId,
@@ -3288,10 +3343,17 @@ function upsertTrainingItem(
       item.targetReps,
       item.actualReps,
       item.actualWeightKg,
+      text(payload.exerciseCode),
+      optionalNumber(payload.plannedWeightKg),
+      optionalNumber(payload.durationMin) ?? 0,
+      optionalNumber(payload.distanceKm) ?? 0,
       category,
       position,
+      text(payload.trainingEnvironment) || '陆上',
       item.intensityPercent,
+      text(payload.intensityZone) || 'AN',
       optionalNumber(payload.rpe),
+      optionalNumber(payload.completed) ?? 1,
       note,
       batchId,
       sourceRow,
@@ -3367,22 +3429,22 @@ function upsertTestItem(
     .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { id: number };
   const existing = db
     .prepare(
-      'SELECT id, value_num AS valueNum, unit, note FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
+      'SELECT id, value_num AS valueNum, target_value AS targetValue, unit, note FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
     )
     .get(session.id, item.metricCode, item.side) as
-    | { id: number; valueNum: number | null; unit: string; note: string }
+    | { id: number; valueNum: number | null; targetValue: number | null; unit: string; note: string }
     | undefined;
   const note = text(item.payload.note);
   if (existing) {
-    const proposed = { valueNum: item.valueNum, unit: item.unit, note };
-    const keys = ['valueNum', 'unit', 'note'] as const;
+    const proposed = { valueNum: item.valueNum, targetValue: optionalNumber(item.payload.targetValue), unit: item.unit, note };
+    const keys = ['valueNum', 'targetValue', 'unit', 'note'] as const;
     const changed = keys.filter(key => isProvided(proposed[key]) && proposed[key] !== existing[key]
       && (policy === 'update' || !isProvided(existing[key])));
     if (!changed.length) return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
     const next = { ...existing };
     for (const key of changed) Object.assign(next, { [key]: proposed[key] });
-    db.prepare(`UPDATE test_measurements SET value_num = ?, unit = ?, note = ?, quality = ?, source = 'file_import', is_demo = 0,
-      data_import_batch_id = ?, source_ref = ? WHERE id = ?`).run(next.valueNum, next.unit, next.note,
+    db.prepare(`UPDATE test_measurements SET value_num = ?, target_value = ?, unit = ?, note = ?, quality = ?, source = 'file_import', is_demo = 0,
+      data_import_batch_id = ?, source_ref = ? WHERE id = ?`).run(next.valueNum, next.targetValue, next.unit, next.note,
       item.quality === 'warning' ? 'partial' : 'valid', batchId, `${item.sourceSheet}!${item.sourceAddress}`, existing.id);
     const filled = changed.filter(key => !isProvided(existing[key])).length;
     return { skipped: false, entityId: existing.id, created: false, filled, overwritten: changed.length - filled };
@@ -3390,13 +3452,14 @@ function upsertTestItem(
   const inserted = db
     .prepare(
       `INSERT INTO test_measurements (
-    test_session_id, metric_code, value_num, unit, side, quality, source, is_demo, data_import_batch_id, source_ref, note
-  ) VALUES (?, ?, ?, ?, ?, ?, 'file_import', 0, ?, ?, ?)`
+    test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo, data_import_batch_id, source_ref, note
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, 'file_import', 0, ?, ?, ?)`
     )
     .run(
       session.id,
       item.metricCode,
       item.valueNum,
+      optionalNumber(item.payload.targetValue),
       item.unit,
       item.side,
       item.quality === 'warning' ? 'partial' : 'valid',
@@ -3731,11 +3794,13 @@ function upsertWellnessItem(
     const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
     const statusChanged = statusProvided && text(existing.status) !== status;
     const statusApplied = statusChanged && (policy === 'update' || !text(existing.status));
+    const note = text(p.note);
+    const noteApplied = Boolean(note) && note !== text(existing.note) && (policy === 'update' || !text(existing.note));
     const blanks = changed.filter(([column]) => isBlank(column)).length;
-    const filled = blanks + (statusApplied && !text(existing.status) ? 1 : 0);
+    const filled = blanks + (statusApplied && !text(existing.status) ? 1 : 0) + (noteApplied && !text(existing.note) ? 1 : 0);
     const overwritten =
-      changed.length - blanks + (statusApplied && text(existing.status) ? 1 : 0);
-    if (!changed.length && !statusApplied)
+      changed.length - blanks + (statusApplied && text(existing.status) ? 1 : 0) + (noteApplied && text(existing.note) ? 1 : 0);
+    if (!changed.length && !statusApplied && !noteApplied)
       return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
     const setParts = changed.map(([column]) => `${column} = ?`);
     const params: SqlValue[] = sqlList(changed.map(([, value]) => value));
@@ -3743,6 +3808,7 @@ function upsertWellnessItem(
       setParts.push('status = ?');
       params.push(status);
     }
+    if (noteApplied) { setParts.push('note = ?'); params.push(note); }
     db.prepare(
       `UPDATE daily_wellness SET ${setParts.join(', ')}, source = 'file_import', quality = ?, is_demo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(...params, quality, Number(existing.id));
@@ -3754,6 +3820,8 @@ function upsertWellnessItem(
     item.eventDate,
     ...sqlList(provided.map(([, value]) => value)),
   ];
+  columns.push('note');
+  values.push(text(p.note));
   columns.push('status');
   // 新记录才使用默认状态；已有记录绝不因空白被改写。
   values.push(statusProvided ? status : 'normal');
@@ -4356,6 +4424,7 @@ export function commitDataImport(input: {
   let filledProfileFields = 0;
   let overwrittenProfileFields = 0;
   const sessionIds = new Set<number>();
+  const explicitTotalIds = new Set<number>();
   // 赋值发生在事务内且失败即回滚抛出，后续返回必然已赋值。
   let createdAthletes!: number;
   let linkedAthletes!: number;
@@ -4373,7 +4442,7 @@ export function commitDataImport(input: {
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
       throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
     const freshConflicts = new Map(importable.map(item => [item.id, detectItemConflict(item)]));
-    for (const item of importable) {
+    for (const item of [...importable].sort((a, b) => Number(b.itemType === 'training_session') - Number(a.itemType === 'training_session'))) {
       if (item.payload.valueAutoMerged || resolution.excludedKeys.has(dataImportPersonKey(item))) {
         skipped += 1;
         continue;
@@ -4400,11 +4469,12 @@ export function commitDataImport(input: {
         entityType = 'daily_wellness';
       } else if (item.itemType === 'training_session') {
         result = upsertSessionItem(item, input.userId, input.conflictPolicy);
+        if (optionalNumber(item.payload.smvl) !== null) explicitTotalIds.add(result.entityId);
         entityType = 'training_session';
       } else if (item.itemType === 'training_set') {
         result = upsertTrainingItem(item, input.batchId, input.userId, input.conflictPolicy);
         entityType = 'strength_result_set';
-        if (result.sessionId) sessionIds.add(result.sessionId);
+        if (result.sessionId && !result.skipped) sessionIds.add(result.sessionId);
       } else if (item.itemType === 'test_measurement') {
         result = upsertTestItem(item, input.batchId, input.userId, input.conflictPolicy);
         entityType = 'test_measurement';
@@ -4434,7 +4504,7 @@ export function commitDataImport(input: {
         'UPDATE data_import_items SET committed_entity_type = ?, committed_entity_id = ? WHERE id = ?'
       ).run(entityType, result.entityId, item.id);
     }
-    for (const sessionId of sessionIds) updateSessionTotals(sessionId);
+    for (const sessionId of sessionIds) if (!explicitTotalIds.has(sessionId)) updateSessionTotals(sessionId);
     db.prepare(
       `UPDATE data_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(imported, skipped, input.batchId);

@@ -51,3 +51,15 @@ describe('旧运动员教练字段兼容校验', () => {
     expect(adminAthleteProfileSchema.safeParse({ ...profile, coachIds: [1] }).success).toBe(false);
   });
 });
+
+
+describe('技术等级共用口径', () => {
+  it.each(['未定级', '国家一级运动员', '一级', '国家运动健将'])('档案校验和读取一致支持 %s', level => {
+    const parsed = adminAthleteProfileSchema.safeParse({ ...input, project: '赛艇', team: 'A队', technicalLevel: level });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(readAthleteAdminPayload(parsed.data).technicalLevel).toBe(parsed.data.technicalLevel);
+  });
+  it('未知技术等级拒绝，不静默清空', () => {
+    expect(adminAthleteProfileSchema.safeParse({ ...input, project: '赛艇', team: 'A队', technicalLevel: '未知等级' }).success).toBe(false);
+  });
+});

@@ -1,3 +1,4 @@
+import { normalizeTechnicalLevel, validTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import bcrypt from 'bcryptjs';
 import type { Express } from 'express';
 import { randomUUID } from 'node:crypto';
@@ -432,8 +433,9 @@ export function registerAthleteRoutes(app: Express) {
         ['athleteStatus', 'athlete_status'],
         ['trainingPhase', 'training_phase'],
       ] as const;
+      if (!validTechnicalLevel(normalizeTechnicalLevel(req.body?.technicalLevel))) return res.status(400).json({ message: '技术等级须为未定级或有效运动员等级。' });
       const changes = allowed
-        .map(([key, column]) => ({ column, value: cleanString(req.body?.[key]) }))
+        .map(([key, column]) => ({ column, value: key === 'technicalLevel' ? normalizeTechnicalLevel(req.body?.[key]) : cleanString(req.body?.[key]) }))
         .filter((item) => item.value);
       if (!changes.length) return res.status(400).json({ message: '请至少填写一项批量修改内容。' });
       if (

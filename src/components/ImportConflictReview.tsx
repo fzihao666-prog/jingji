@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   reviewFields,
+  importSessionChoices,
   reviewValues,
   databaseReviewRecords,
   requiresDatabaseReview,
@@ -25,6 +26,7 @@ type Props = {
     choices: Record<string, string>,
     manual: Record<string, string>
   ) => void;
+  onAssignSession?: (itemId: number, sessionOrder: number) => void;
   onPending?: (targetId: number) => void;
   onSplit: (dates: Array<{ id: number; eventDate: string }>) => void;
 };
@@ -38,6 +40,7 @@ export function ImportConflictReview({
   onExclude,
   onDraft,
   onPending,
+  onAssignSession,
 }: Props) {
   const target = items.find((item) => item.payload.valueReviewDecision) || items[0];
   const decision = target.payload.valueReviewDecision as
@@ -114,7 +117,7 @@ export function ImportConflictReview({
   }
   const serializedValues = JSON.stringify(finalValues);
   useEffect(() => {
-    if (!dirty || disabled || split) return;
+    if (!dirty || disabled || split || items.some(item => importSessionChoices(item).length > 1)) return;
     const timer = window.setTimeout(() => {
       setDirty(false);
       if (remaining === 0) onMerge(target.id, items.map(item => item.id), JSON.parse(serializedValues) as Record<string, ReviewValue>, database.length > 0);
@@ -144,7 +147,7 @@ export function ImportConflictReview({
           <p>
             {target.athleteTeam || '队伍待确认'} · {items.length} 条导入记录
             {database.length > 0 ? ' · 数据库已有值参与比较' : ''} ·{' '}
-            <span role="status">{dirty || disabled ? '正在保存选择…' : remaining ? `${remaining} 个字段待选择` : '已选齐，自动保存'}</span>
+            <span role="status">{items.some(item => importSessionChoices(item).length > 1) ? '请先选择所属课次' : dirty || disabled ? '正在保存选择…' : remaining ? `${remaining} 个字段待选择` : '已选齐，自动保存'}</span>
           </p>
           {target.eventDate && items.some((item) => !item.payload.rawDate) && (
             <p className="import-value-review-notice">
@@ -193,15 +196,24 @@ export function ImportConflictReview({
         </div>
       ) : (
         <>
-          <div className="import-value-review-comparison-wrap" hidden={visibleFields.length === 0}>
+          <div className="import-value-review-comparison-wrap" hidden={visibleFields.length === 0 && !items.some(item => importSessionChoices(item).length > 1)}>
             <table className="import-value-review-comparison">
-              <caption>点击要采用的记录值，选中后自动保存</caption>
+              <caption>{items.some(item => importSessionChoices(item).length > 1) ? '请先选择每条记录所属课次' : '点击要采用的记录值，选中后自动保存'}</caption>
               <thead>
                 <tr>
                   <th scope="col">指标</th>
                   {originals.map((item, index) => (
                     <th scope="col" key={item.id}>
                       {item.payload.reviewDatabase ? '数据库已有' : `记录 ${index + 1}`}
+                      {!item.payload.reviewDatabase && importSessionChoices(item).length > 1 && <label>
+                        <span>所属课次</span>
+                        <select aria-label={`记录 ${index + 1} 所属课次`} disabled={disabled}
+                          value={Number(item.payload.sessionOrder) || ''}
+                          onChange={event => onAssignSession?.(item.id, Number(event.target.value))}>
+                          <option value="">请选择课次</option>
+                          {importSessionChoices(item).map(choice => <option key={choice.sessionOrder} value={choice.sessionOrder}>第 {choice.sessionOrder} 课 · {choice.label}</option>)}
+                        </select>
+                      </label>}
                     </th>
                   ))}
                 </tr>
@@ -225,7 +237,7 @@ export function ImportConflictReview({
                           {value == null ? '未提供' : <button
                             type="button" className="import-value-review-choice"
                             aria-label={`${header}：${value}${unit}（${item.payload.reviewDatabase ? '数据库已有' : `记录 ${index + 1}`}）`}
-                            aria-pressed={selected} disabled={disabled}
+                            aria-pressed={selected} disabled={disabled || items.some(source => importSessionChoices(source).length > 1)}
                             onClick={() => updateChoice(field, String(value))}
                           >{String(value)} {unit}{selected && <span> ✓ 已选</span>}</button>}
                         </td>;

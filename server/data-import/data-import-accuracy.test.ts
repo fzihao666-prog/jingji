@@ -7,6 +7,7 @@ vi.mock('../core/db.ts', async () => {
   return { db: new DatabaseSync(':memory:') };
 });
 import { db } from '../core/db.ts';
+import { UNIFIED_IMPORT_HEADERS } from '../../shared/data-import-template.ts';
 import { importReviewGroups, selectImportReviewRecord } from '../../shared/import-conflict-review.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
 import {
@@ -1163,6 +1164,10 @@ describe('统一模板按业务归属整理', () => {
     expect(workbook.SheetNames).toContain('体能测试');
     expect(workbook.SheetNames).not.toContain('冠军模型测试');
     expect(workbook.SheetNames).not.toContain('竞技水平评估');
+    for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as unknown[][];
+      expect(rows[2]).toEqual(headers);
+    }
   });
 });
 
@@ -1603,6 +1608,122 @@ it('历史测试表中的身体指标及自定义FMS协议导出后保留原归�
   expect(commit(exported.id, 'skip').createdRecords).toBe(0);
 });
 
+it('同日同名力量课完整往返保留课次、组次字段与未完成状态', async () => {
+  for (const order of [1, 2]) {
+    const session = db.prepare("INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content, duration_min) VALUES (1, '2025-12-26', ?, '力量训练', '体能训练', 'AN', '力量课', 60)").run(order);
+    db.prepare(`INSERT INTO strength_result_sets (training_session_id, exercise_name, exercise_code, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg, training_category, body_position, training_environment, duration_min, distance_km, intensity_percent, intensity_zone, rpe, completed, note)
+      VALUES (?, '深蹲', 'squat', 1, 6, 0, ?, ?, '基础力量', '下肢', '陆上', 0, 0, 75, 'AN', 0, 0, '未完成且零值保留')`).run(session.lastInsertRowid, 80 + order, 90 + order);
+  }
+  const expected = db.prepare(`SELECT ts.session_order, srs.exercise_code, srs.actual_reps, srs.actual_weight_kg, srs.planned_weight_kg, srs.training_environment, srs.duration_min, srs.distance_km, srs.intensity_zone, srs.completed, srs.rpe, srs.note FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id ORDER BY ts.session_order`).all();
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const parse = () => analyzeDataImport({ buffer, filename: '完整力量往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  const preview = parse();
+  expect(preview.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  expect(commit(preview.id, 'skip').createdRecords).toBe(0);
+  db.exec("DELETE FROM strength_result_sets; DELETE FROM training_sessions;");
+  const restored = parse();
+  expect(commit(restored.id, 'skip').createdRecords).toBe(4);
+  expect(db.prepare(`SELECT ts.session_order, srs.exercise_code, srs.actual_reps, srs.actual_weight_kg, srs.planned_weight_kg, srs.training_environment, srs.duration_min, srs.distance_km, srs.intensity_zone, srs.completed, srs.rpe, srs.note FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id ORDER BY ts.session_order`).all()).toEqual(expected);
+});
+
+it('旧模板存在同名力量课歧义时阻断，可选择课次序号后保存', () => {
+  for (const order of [1, 2]) db.prepare("INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content) VALUES (1, '2025-12-27', ?, '力量训练', '体能训练', 'AN', '力量课')").run(order);
+  const batch = analyze({ 力量训练组次: [['姓名', '日期', '课次名称', '动作', '组序', '实际次数', '实际重量kg'], ['张某', '2025-12-27', '力量课', '深蹲', 1, 5, 80]] });
+  expect(batch.errorCount).toBe(1);
+  expect(batch.items[0].payload.sessionChoices).toHaveLength(2);
+  expect(() => commit(batch.id, 'skip')).toThrow();
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { sessionOrder: 2 } }] });
+  expect(saved.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT ts.session_order AS orderNum FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id').get()).toEqual({ orderNum: 2 });
+});
+
+it('未定级档案与每日恢复备注完整往返', async () => {
+  db.prepare("INSERT INTO athlete_profiles (athlete_id, technical_level) VALUES (1, '未定级')").run();
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '睡眠小时', '备注'], ['张某', '2025-12-28', 0, '今日未入睡']] });
+  commit(batch.id, 'skip');
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const preview = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '档案恢复备注往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(preview.errorCount).toBe(0);
+  expect(preview.items.find(item => item.itemType === 'wellness')?.payload.note).toBe('今日未入睡');
+  expect(commit(preview.id, 'skip').createdRecords).toBe(0);
+});
+
+
+it('测试目标值含0导出再导入不丢失，真实目标值差异复用选择逻辑', async () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '目标值'], ['张某', '2025-12-29', '专项测试', 'grip', 30, 'kg', 0]] });
+  expect(batch.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare("SELECT target_value AS target FROM test_measurements WHERE metric_code = 'grip'").get()).toEqual({ target: 0 });
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const preview = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '目标值往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(preview.errorCount).toBe(0);
+  expect(preview.items.find(item => item.itemType === 'test_measurement')?.payload.targetValue).toBe(0);
+  expect(commit(preview.id, 'skip').createdRecords).toBe(0);
+  const changed = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '目标值'], ['张某', '2025-12-29', '专项测试', 'grip', 30, 'kg', 40]] });
+  const item = changed.items.find(item => item.itemType === 'test_measurement')!;
+  expect(item.conflict?.fields.some(field => field.field === 'targetValue' && field.overwrites)).toBe(true);
+  const saved = updateDataImportItems({ batchId: changed.id, userId: USER_ID, athletes, corrections: [{ id: item.id, payload: { valueReview: { action: 'merge', memberIds: [item.id], includeDatabase: true, values: { 'target:grip:center': 40 } } } }] });
+  expect(saved.errorCount).toBe(0);
+  commit(changed.id, 'update');
+  expect(db.prepare("SELECT target_value AS target FROM test_measurements WHERE metric_code = 'grip'").get()).toEqual({ target: 40 });
+});
+
+it('每日恢复备注列迁移可重复执行且保留已有数据', () => {
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '备注'], ['张某', '2025-12-30', '恢复备注']] });
+  commit(batch.id, 'skip');
+  initializeDatabase(db, { databasePath: ':memory:', databaseExistedBeforeStartup: true });
+  expect(db.prepare("SELECT note FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = '2025-12-30'").get()).toEqual({ note: '恢复备注' });
+});
+
+it('统一模板覆盖业务字段可完整导出并恢复，缺失与真实0及课次总量保持不变', async () => {
+  const batch = analyze({
+    运动员基本资料: [['系统运动员编号', '姓名', '所属队伍', '技术等级', '备注'], [1, '张某', 'A队', '未定级', '档案备注']],
+    身体测量: [['姓名', '测量日期', '身高cm', '臂展cm', '体重kg', '骨骼肌kg', '备注'], ['张某', '2025-12-31', 180, 185, 80, 30, '身体备注']],
+    每日恢复: [['姓名', '日期', '睡眠小时', '睡眠质量', '晨脉', '体重kg', '疲劳', '肌肉酸痛', '情绪', '状态', '备注'], ['张某', '2025-12-31', 0, 0, 60, 80, 0, 1, 2, 'normal', '恢复备注']],
+    训练课次: [['姓名', '日期', '课次序号', '开始时间', '训练类型', '训练内容', '训练阶段', '强度区间', '时长分钟', '距离千米', 'RPE', 'SRPE', 'SMVL', '平均心率', '最大心率', '平均功率W', '桨频SPM'], ['张某', '2025-12-31', 1, '09:30', '力量训练', '力量课', '体能训练', 'AN', 60, null, 6, 360, 789, 130, 170, 200, 25]],
+    力量训练组次: [['姓名', '日期', '课次序号', '课次名称', '动作', '组序', '计划次数', '实际次数', '实际重量kg', '计划重量kg', '完成状态', '训练环境', '组次时长分钟', '组次距离千米', '强度区间', '动作代码', '类别', '身体部位', '强度百分比', 'RPE', '备注'], ['张某', '2025-12-31', 1, '力量课', '深蹲', 1, 6, 5, 70, 80, 0, '场馆', 0, 0, 'AN', 'squat', '基础力量', '下肢', 75, 0, '组次备注']],
+    其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '侧别', '协议', '备注', '测试时长分钟', '目标值'], ['张某', '2025-12-31', '专项测试', 'grip', 0, 'kg', 'left', '测试协议', '测试备注', 8, 0]],
+    体能测试: [['姓名', '测试日期', 'VO2Max', '测试协议'], ['张某', '2025-12-31', 55, '体能协议']],
+    FMS测试: [['姓名', '测试日期', '深蹲'], ['张某', '2025-12-31', 2]],
+    伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分', '训练限制', '康复计划', '复查日期', '备注'], ['张某', '2025-12-31', '膝部不适', '膝', '左', '观察', 0, '减少负重', '恢复活动', '2026-01-02', '伤病备注']],
+    竞技评估: [['姓名', '评估日期', '总分', '等级', '专项耐力', '力量爆发', '技术效率', '负荷适应', '恢复能力', '比赛能力', '一般耐力评分', '评估协议', '备注'], ['张某', '2025-12-31', 0, '调整', 1, 2, 3, 4, 5, 6, 70, '人工评价', '评估备注']],
+  });
+  expect(batch.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  commit(batch.id, 'skip');
+  const queries = [
+    'SELECT technical_level, notes FROM athlete_profiles ORDER BY athlete_id',
+    'SELECT height_cm, weight_kg, skeletal_muscle_kg, note FROM athlete_body_measurements ORDER BY athlete_id',
+    'SELECT sleep_hours, sleep_quality, morning_pulse, weight_kg, fatigue_index, soreness_index, mood_index, status, note FROM daily_wellness ORDER BY athlete_id',
+    'SELECT session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm FROM training_sessions ORDER BY athlete_id, session_order',
+    'SELECT exercise_code, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg, planned_weight_kg, training_category, body_position, training_environment, duration_min, distance_km, intensity_percent, intensity_zone, rpe, completed, note FROM strength_result_sets ORDER BY exercise_name',
+    'SELECT ts.test_type, ts.protocol, ts.duration_min, tm.metric_code, tm.value_num, tm.target_value, tm.unit, tm.side, tm.note FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id ORDER BY ts.test_type, tm.metric_code, tm.side',
+    'SELECT injury_name, body_part, side, status, pain_score, restrictions, rehab_plan, review_date, note FROM injury_records ORDER BY athlete_id',
+    'SELECT overall_score, state_level, endurance_score, power_score, technique_score, load_adaptation_score, recovery_score, competition_score, note FROM competitive_state_assessments ORDER BY athlete_id',
+  ];
+  const snapshot = () => queries.map(sql => db.prepare(sql).all());
+  const original = snapshot();
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const parse = () => analyzeDataImport({ buffer, filename: '全业务字段往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  const unchanged = parse();
+  expect(unchanged.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  const unchangedResult = commit(unchanged.id, 'skip');
+  expect(unchangedResult.createdRecords).toBe(0);
+  expect(unchangedResult.updatedRecords).toBe(0);
+  expect(snapshot()).toEqual(original);
+  db.exec('DELETE FROM strength_result_sets; DELETE FROM training_sessions; DELETE FROM test_measurements; DELETE FROM test_sessions; DELETE FROM athlete_profiles; DELETE FROM athlete_body_measurements; DELETE FROM daily_wellness; DELETE FROM injury_records; DELETE FROM competitive_state_assessments;');
+  const restored = parse();
+  expect(restored.errorCount).toBe(0);
+  commit(restored.id, 'skip');
+  expect(snapshot()).toEqual(original);
+});
+
 it('导出模板中的中文侧别、状态与等级再导入与数据库同口径，不制造覆盖冲突', async () => {
   const seed = analyze({
     伤病记录: [
@@ -1647,4 +1768,42 @@ it('导出模板中的中文侧别、状态与等级再导入与数据库同口�
   expect(
     db.prepare('SELECT state_level AS level FROM competitive_state_assessments').all()
   ).toEqual([{ level: 'adjust' }]);
+});
+
+it.each([
+  ['课次序号', 1.5], ['计划重量kg', -1], ['完成状态', 2], ['组次时长分钟', -1], ['组次距离千米', -1], ['训练环境', '未知环境'], ['强度区间', '未知区间'],
+])('新增组次字段%s的非法值会阻断写入', (header, value) => {
+  const batch = analyze({ 力量训练组次: [['姓名', '日期', '课次名称', '动作', '实际次数', '实际重量kg', header], ['张某', '2025-12-24', '力量课', '深蹲', 5, 80, value]] });
+  expect(batch.errorCount).toBeGreaterThan(0);
+  expect(() => commit(batch.id, 'skip')).toThrow();
+  expect(db.prepare('SELECT COUNT(*) AS count FROM strength_result_sets').get()).toEqual({ count: 0 });
+});
+
+it('旧文件同名课次歧义不能被相同值自动合并，两条来源可分别关联', () => {
+  for (const order of [1, 2]) db.prepare("INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content) VALUES (1, '2025-12-21', ?, '力量训练', '体能训练', 'AN', '力量课')").run(order);
+  const batch = analyze({ 力量训练组次: [['姓名', '日期', '课次名称', '动作', '组序', '实际次数', '实际重量kg'], ['张某', '2025-12-21', '力量课', '深蹲', 1, 5, 80], ['张某', '2025-12-21', '力量课', '深蹲', 1, 5, 80]] });
+  expect(batch.items).toHaveLength(2);
+  expect(batch.errorCount).toBe(2);
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: batch.items.map((item, index) => ({ id: item.id, payload: { sessionOrder: index + 1 } })) });
+  expect(saved.errorCount).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(2);
+  expect(db.prepare('SELECT ts.session_order AS orderNum FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id ORDER BY ts.session_order').all()).toEqual([{ orderNum: 1 }, { orderNum: 2 }]);
+});
+
+
+it('仅承载力量组次的课次也导出完整课次资料，不伪造时长与距离', async () => {
+  const session = db.prepare("INSERT INTO training_sessions (athlete_id, session_date, session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, smvl) VALUES (1, '2025-12-20', 3, '13:00', '体能训练', '动作准备', 'U3', '功能训练', 0, 0, 0, 0, 350)").run();
+  db.prepare("INSERT INTO strength_result_sets (training_session_id, exercise_name, actual_reps, actual_weight_kg) VALUES (?, '深蹲', 5, 70)").run(session.lastInsertRowid);
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const parse = () => analyzeDataImport({ buffer, filename: '仅组次课次往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  const preview = parse();
+  expect(preview.errorCount).toBe(0);
+  expect(preview.items.some(item => item.itemType === 'training_session' && item.payload.sessionOrder === 3)).toBe(true);
+  expect(commit(preview.id, 'skip').createdRecords).toBe(0);
+  db.exec('DELETE FROM strength_result_sets; DELETE FROM training_sessions;');
+  const restored = parse();
+  expect(commit(restored.id, 'skip').createdRecords).toBe(2);
+  expect(db.prepare('SELECT session_order, start_time, training_type, structure_type, intensity_zone, content, duration_reported, distance_reported, smvl FROM training_sessions').get()).toEqual({ session_order: 3, start_time: '13:00', training_type: '体能训练', structure_type: '动作准备', intensity_zone: 'U3', content: '功能训练', duration_reported: 0, distance_reported: 0, smvl: 350 });
 });
