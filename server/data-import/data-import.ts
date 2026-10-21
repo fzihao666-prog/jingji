@@ -9,8 +9,8 @@ import {
   inferStrengthCategory,
 } from '../../shared/strength-training.ts';
 
-// v8：按稳定人员标识隔离同名队员，保留训练空白字段；旧草稿须重新解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v8-person-isolation';
+// v9：忽略未填业务行，严格区分空白、错误日期和非法数值；旧草稿须重新解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v9-input-validation';
 
 export type ImportAthlete = {
   id: number;
@@ -990,6 +990,27 @@ function standardText(row: unknown[], columns: Map<string, number>, ...labels: s
   return text(standardValue(row, columns, ...labels));
 }
 
+/** 标准模板与校对共用：空白保持缺失，非数字文本不得当作数值。 */
+function standardNumberValue(value: unknown): number | null {
+  if (text(value) === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' ||
+    !/^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text(value)))
+    return null;
+  return numberValue(value);
+}
+
+/** 非空非法日期保留原文供校对；默认日期仅用于真正空白的单元格。 */
+function parseStandardDate(value: unknown, year: number): string {
+  const raw = text(value);
+  if (typeof value === 'string') {
+    const normalized = raw.replace(/年|\//g, '-').replace(/月|\./g, '-').replace(/日/g, '');
+    if (!/^(?:\d{4}-)?\d{1,2}-\d{1,2}$/.test(normalized)) return raw;
+  }
+  const parsed = parseDate(value, year);
+  return validIsoDate(parsed) ? parsed : raw;
+}
+
 function parseStandardSheet(
   matrix: Matrix,
   sheet: string,
@@ -1003,6 +1024,8 @@ function parseStandardSheet(
   const items: ParsedImportItem[] = [];
   const year = workbookYear(filename);
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
+  const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目']);
+  const dateLabels = ['日期', '测量日期', '测试日期', '发生日期', '评估日期'];
   for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
     const row = matrix[rowIndex] || [];
     const rawName = standardText(row, header.columns, '姓名');
@@ -1026,12 +1049,31 @@ function parseStandardSheet(
         );
       continue;
     }
+    // 模板预填的人员信息不代表实际填写了业务记录；资料表仍支持最小建档。
+    if (
+      sheet !== '运动员信息' &&
+      ![...header.columns].some(([label, column]) => !identityHeaders.has(label) && text(row[column]) !== '')
+    ) continue;
+    const rowStart = items.length;
+    const numericErrors = new Map<string, { address: string; raw: string; message: string }>();
+    const readNumber = (label: string): number | null => {
+      const raw = standardValue(row, header.columns, label);
+      if (text(raw) === '') return null;
+      const value = standardNumberValue(raw);
+      if (value === null) {
+        const address = cellAddress(rowIndex, header.columns.get(normalizedText(label)) ?? 0);
+        numericErrors.set(label, {
+          address,
+          raw: text(raw),
+          message: `错误：${sheet}!${address} ${label}“${text(raw)}”不是有效数字；请修正原文件后重新上传，或明确排除整行`,
+        });
+      }
+      return value;
+    };
     const athlete = matchAthlete(rawName, project, athletes);
-    const rowDate =
-      parseDate(
-        standardValue(row, header.columns, '日期', '测量日期', '测试日期', '发生日期', '评估日期'),
-        year
-      ) || defaultDate;
+    const rawDate = standardValue(row, header.columns, ...dateLabels);
+    const dateColumn = dateLabels.map(label => header.columns.get(normalizedText(label))).find(column => column !== undefined);
+    const rowDate = text(rawDate) === '' ? defaultDate : parseStandardDate(rawDate, year);
     const messages: string[] = [];
     const base = {
       athleteId: athlete?.id || null,
@@ -1041,6 +1083,8 @@ function parseStandardSheet(
       payload: {
         athleteCode: standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号'),
         team: standardText(row, header.columns, '所属队伍'),
+        rawDate: text(rawDate),
+        dateAddress: cellAddress(rowIndex, dateColumn ?? nameColumn),
       } as Record<string, unknown>,
     };
     if (sheet !== '运动员信息' && !validIsoDate(rowDate))
@@ -1105,7 +1149,7 @@ function parseStandardSheet(
         standardValue(row, header.columns, '技术等级')
       );
       const bestResult = standardText(row, header.columns, '最好成绩');
-      const overallScore = numberValue(standardValue(row, header.columns, '竞技总分'));
+      const overallScore = readNumber('竞技总分');
       // 空白等级保持未提供，新增入库时才落到默认档位，避免覆盖已有等级。
       const stateLevel = standardText(row, header.columns, '竞技状态');
       if (!technicalLevel) messages.push('错误：技术等级不能为空');
@@ -1133,12 +1177,12 @@ function parseStandardSheet(
         ...base.payload,
         overallScore,
         stateLevel,
-        enduranceScore: numberValue(standardValue(row, header.columns, '专项耐力')),
-        powerScore: numberValue(standardValue(row, header.columns, '力量爆发')),
-        techniqueScore: numberValue(standardValue(row, header.columns, '技术效率')),
-        loadAdaptationScore: numberValue(standardValue(row, header.columns, '负荷适应')),
-        recoveryScore: numberValue(standardValue(row, header.columns, '恢复能力')),
-        competitionScore: numberValue(standardValue(row, header.columns, '比赛能力')),
+        enduranceScore: readNumber('专项耐力'),
+        powerScore: readNumber('力量爆发'),
+        techniqueScore: readNumber('技术效率'),
+        loadAdaptationScore: readNumber('负荷适应'),
+        recoveryScore: readNumber('恢复能力'),
+        competitionScore: readNumber('比赛能力'),
         note: standardText(row, header.columns, '备注'),
       };
       items.push(
@@ -1185,7 +1229,7 @@ function parseStandardSheet(
         ['rightLegLeanKg', '右下肢瘦体重kg'],
       ];
       for (const [key, label] of mappings)
-        fields[key] = numberValue(standardValue(row, header.columns, label));
+        fields[key] = readNumber(label);
       if (!Object.values(fields).some((value) => value !== null))
         messages.push('错误：身体测量至少填写一个数值');
       items.push(
@@ -1210,13 +1254,13 @@ function parseStandardSheet(
     } else if (sheet === '恢复状态') {
       const payload = {
         ...base.payload,
-        sleepHours: numberValue(standardValue(row, header.columns, '睡眠小时')),
-        sleepQuality: numberValue(standardValue(row, header.columns, '睡眠质量')),
-        morningPulse: numberValue(standardValue(row, header.columns, '晨脉')),
-        weightKg: numberValue(standardValue(row, header.columns, '体重kg')),
-        fatigueIndex: numberValue(standardValue(row, header.columns, '疲劳')),
-        sorenessIndex: numberValue(standardValue(row, header.columns, '肌肉酸痛')),
-        moodIndex: numberValue(standardValue(row, header.columns, '情绪')),
+        sleepHours: readNumber('睡眠小时'),
+        sleepQuality: readNumber('睡眠质量'),
+        morningPulse: readNumber('晨脉'),
+        weightKg: readNumber('体重kg'),
+        fatigueIndex: readNumber('疲劳'),
+        sorenessIndex: readNumber('肌肉酸痛'),
+        moodIndex: readNumber('情绪'),
         // 空白状态不伪造取值；入库时仅在文件明确填写时写入。
         status: standardText(row, header.columns, '状态'),
         note: standardText(row, header.columns, '备注'),
@@ -1240,18 +1284,18 @@ function parseStandardSheet(
       const distanceCell = standardValue(row, header.columns, '距离千米');
       const durationReported = text(durationCell) !== '';
       const distanceReported = text(distanceCell) !== '';
-      const duration = numberValue(durationCell);
-      const distance = numberValue(distanceCell);
+      const duration = readNumber('时长分钟');
+      const distance = readNumber('距离千米');
       if (!durationReported && !distanceReported)
         messages.push('错误：时长分钟、距离千米至少填写一项；留空不等于 0。');
       if (durationReported && (duration === null || duration < 0 || duration > 1440))
         messages.push('错误：时长分钟须为 0—1440 的数字。');
       if (distanceReported && (distance === null || distance < 0 || distance > 500))
         messages.push('错误：距离千米须为 0—500 的数字。');
-      const rpe = numberValue(standardValue(row, header.columns, 'RPE'));
+      const rpe = readNumber('RPE');
       const payload = {
         ...base.payload,
-        sessionOrder: numberValue(standardValue(row, header.columns, '课次序号')) ?? 1,
+        sessionOrder: readNumber('课次序号') ?? 1,
         startTime: standardText(row, header.columns, '开始时间'),
         trainingType: standardText(row, header.columns, '训练类型'),
         structureType: standardText(row, header.columns, '训练阶段'),
@@ -1263,12 +1307,12 @@ function parseStandardSheet(
         distanceReported,
         rpe,
         // 空白 SRPE/SMVL 保持未提供；仅在文件明确填写时写入，避免伪造 0 值。
-        srpe: numberValue(standardValue(row, header.columns, 'SRPE')) ?? (rpe === null || duration === null ? null : rpe * duration),
-        smvl: numberValue(standardValue(row, header.columns, 'SMVL')),
-        averageHeartRate: numberValue(standardValue(row, header.columns, '平均心率')),
-        maxHeartRate: numberValue(standardValue(row, header.columns, '最大心率')),
-        averagePowerW: numberValue(standardValue(row, header.columns, '平均功率W')),
-        strokeRateSpm: numberValue(standardValue(row, header.columns, '桨频SPM')),
+        srpe: readNumber('SRPE') ?? (rpe === null || duration === null ? null : rpe * duration),
+        smvl: readNumber('SMVL'),
+        averageHeartRate: readNumber('平均心率'),
+        maxHeartRate: readNumber('最大心率'),
+        averagePowerW: readNumber('平均功率W'),
+        strokeRateSpm: readNumber('桨频SPM'),
       };
       items.push(
         itemBase({
@@ -1287,8 +1331,8 @@ function parseStandardSheet(
       );
     } else if (sheet === '力量训练组次') {
       const exerciseName = standardText(row, header.columns, '动作');
-      const actualReps = numberValue(standardValue(row, header.columns, '实际次数'));
-      const actualWeightKg = numberValue(standardValue(row, header.columns, '实际重量kg'));
+      const actualReps = readNumber('实际次数');
+      const actualWeightKg = readNumber('实际重量kg');
       if (!exerciseName) messages.push('错误：训练动作不能为空');
       if (actualReps === null || actualWeightKg === null)
         messages.push('错误：实际次数和实际重量不能为空');
@@ -1299,14 +1343,14 @@ function parseStandardSheet(
           eventDate: rowDate,
           sessionLabel: standardText(row, header.columns, '课次名称') || '力量训练',
           exerciseName,
-          setIndex: numberValue(standardValue(row, header.columns, '组序')) || 1,
-          targetReps: numberValue(standardValue(row, header.columns, '计划次数')),
+          setIndex: readNumber('组序') || 1,
+          targetReps: readNumber('计划次数'),
           actualReps,
           actualWeightKg,
-          intensityPercent: numberValue(standardValue(row, header.columns, '强度百分比')),
+          intensityPercent: readNumber('强度百分比'),
           payload: {
             ...base.payload,
-            rpe: numberValue(standardValue(row, header.columns, 'RPE')),
+            rpe: readNumber('RPE'),
             trainingCategory:
               standardText(row, header.columns, '类别') || inferStrengthCategory(exerciseName),
             bodyPosition:
@@ -1317,12 +1361,12 @@ function parseStandardSheet(
           rawValue: `${actualWeightKg || ''}kg×${actualReps || ''}`,
           quality: makeQuality(messages),
           messages,
-          businessKey: `${athlete?.id || 0}|${rowDate}|${exerciseName}|${numberValue(standardValue(row, header.columns, '组序')) || 1}`,
+          businessKey: `${athlete?.id || 0}|${rowDate}|${exerciseName}|${readNumber('组序') || 1}`,
         })
       );
     } else if (sheet === 'FMS测试') {
       const fmsItems = FMS_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel]) => {
-        const valueNum = numberValue(standardValue(row, header.columns, headerName));
+        const valueNum = readNumber(headerName);
         if (valueNum === null) return [];
         const metricMessages = [...messages];
         if (!Number.isInteger(valueNum) || valueNum < 0 || valueNum > 3)
@@ -1380,7 +1424,7 @@ function parseStandardSheet(
     } else if (sheet === '冠军模型测试') {
       const championItems = CHAMPION_TEMPLATE_METRICS.flatMap(
         ([headerName, metricCode, metricLabel, unit]) => {
-          const valueNum = numberValue(standardValue(row, header.columns, headerName));
+          const valueNum = readNumber(headerName);
           if (valueNum === null) return [];
           return [
             itemBase({
@@ -1430,8 +1474,8 @@ function parseStandardSheet(
       }
     } else if (sheet === '测试指标') {
       const metricCode = standardText(row, header.columns, '指标代码');
-      const valueNum = numberValue(standardValue(row, header.columns, '数值'));
-      const durationMin = numberValue(standardValue(row, header.columns, '测试时长分钟'));
+      const valueNum = readNumber('数值');
+      const durationMin = readNumber('测试时长分钟');
       if (!metricCode) messages.push('错误：指标代码不能为空');
       if (valueNum === null) messages.push('错误：测试数值不能为空');
       if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
@@ -1472,7 +1516,7 @@ function parseStandardSheet(
         side: standardText(row, header.columns, '侧别') || 'unspecified',
         status: standardText(row, header.columns, '状态') || 'observation',
         // 空白疼痛评分保持未提供（不伪造 0）；写入时仅在明确填写时落库。
-        painScore: numberValue(standardValue(row, header.columns, '疼痛评分')),
+        painScore: readNumber('疼痛评分'),
         restrictions: standardText(row, header.columns, '训练限制'),
         rehabPlan: standardText(row, header.columns, '康复计划'),
         reviewDate: parseDate(standardValue(row, header.columns, '复查日期'), year),
@@ -1493,18 +1537,18 @@ function parseStandardSheet(
         })
       );
     } else if (sheet === '竞技状态') {
-      const overallScore = numberValue(standardValue(row, header.columns, '总分'));
+      const overallScore = readNumber('总分');
       const payload = {
         ...base.payload,
         overallScore,
         // 空白等级保持未提供；入库新增时才落到默认档位。
         stateLevel: standardText(row, header.columns, '等级'),
-        enduranceScore: numberValue(standardValue(row, header.columns, '专项耐力')),
-        powerScore: numberValue(standardValue(row, header.columns, '力量爆发')),
-        techniqueScore: numberValue(standardValue(row, header.columns, '技术效率')),
-        loadAdaptationScore: numberValue(standardValue(row, header.columns, '负荷适应')),
-        recoveryScore: numberValue(standardValue(row, header.columns, '恢复能力')),
-        competitionScore: numberValue(standardValue(row, header.columns, '比赛能力')),
+        enduranceScore: readNumber('专项耐力'),
+        powerScore: readNumber('力量爆发'),
+        techniqueScore: readNumber('技术效率'),
+        loadAdaptationScore: readNumber('负荷适应'),
+        recoveryScore: readNumber('恢复能力'),
+        competitionScore: readNumber('比赛能力'),
         note: standardText(row, header.columns, '备注'),
       };
       items.push(
@@ -1522,6 +1566,21 @@ function parseStandardSheet(
           businessKey: `${athlete?.id || 0}|${rowDate}|competitive`,
         })
       );
+    }
+    if (numericErrors.size) {
+      const errors = [...numericErrors.entries()];
+      items.splice(rowStart);
+      items.push(itemBase({
+        ...base,
+        itemType: 'invalid_row',
+        eventDate: rowDate,
+        sourceAddress: errors[0][1].address,
+        metricLabel: errors.map(([label]) => label).join('、'),
+        rawValue: errors.map(([label, error]) => `${label}=${error.raw}`).join('；'),
+        quality: 'error',
+        messages: errors.map(([, error]) => error.message),
+        businessKey: `invalid|${sheet}|${rowIndex}`,
+      }));
     }
   }
   return items;
@@ -2086,11 +2145,13 @@ export function analyzeDataImport(input: {
       items.push(...parsed);
       recognizedSheets.push({ name: sheetName, type, items: parsed.length, note });
     } else {
-      const reason = !firstRows.replace(/\|/g, '') ? '空白工作表' : '未识别为支持的数据模板';
+      const reason = STANDARD_SHEETS.has(sheetName) && standardHeader(matrix)
+        ? '未填写业务数据（仅有表头或预填人员信息）'
+        : !firstRows.replace(/\|/g, '') ? '空白工作表' : '未识别为支持的数据模板';
       ignoredSheets.push({ name: sheetName, reason });
     }
   }
-  if (!items.length) throw new Error('没有识别到可导入的训练记录、力量测试或评分规则。');
+  if (!items.length) throw new Error('未填写业务数据或未识别到支持的数据模板，请填写实际记录后重新上传。');
   // ---- 运动员识别与人员映射（先人员、后数据）----
   const persons = collectPersons(items);
   const allowedTeams = input.allowedTeams;
@@ -2478,6 +2539,18 @@ const INJURY_STATUSES = [
 
 const STATE_LEVELS = ['巅峰', '良好', '建设', '调整', 'peak', 'good', 'build', 'adjust', ''];
 
+const NUMERIC_PAYLOAD_FIELDS: Partial<Record<DataImportItemType, readonly string[]>> = {
+  wellness: WELLNESS_NUMBER_FIELDS,
+  training_session: ['sessionOrder', 'durationMin', 'distanceKm', 'rpe', 'srpe', 'smvl',
+    'averageHeartRate', 'maxHeartRate', 'averagePowerW', 'strokeRateSpm'],
+  training_set: ['rpe'],
+  test_measurement: ['durationMin'],
+  body_measurement: BODY_COMPOSITION_FIELDS.map(([key]) => key),
+  injury_record: ['painScore'],
+  competitive_state: ['overallScore', 'enduranceScore', 'powerScore', 'techniqueScore',
+    'loadAdaptationScore', 'recoveryScore', 'competitionScore'],
+};
+
 /**
  * 统一业务校验：解析预览、校对修改与最终提交共用同一规则，
  * 保证“预览通过即可提交、预览报错必须修正”，不一致即视为缺陷。
@@ -2492,13 +2565,17 @@ function validateImportItem(
     return item.messages.filter((message) => message.startsWith('错误：'));
   }
   const payload = item.payload || {};
+  for (const field of NUMERIC_PAYLOAD_FIELDS[item.itemType] || []) {
+    if (isProvided(payload[field]) && standardNumberValue(payload[field]) === null)
+      messages.push(`错误：${field}“${text(payload[field])}”必须是有效数字`);
+  }
   if (item.itemType !== 'scoring_rule') {
     if (item.athleteId && !ctx.allowedAthletes.has(item.athleteId))
       messages.push('错误：所选运动员不在当前权限范围内');
     else if (!item.athleteId && !ctx.candidateNames.has(dataImportPersonKey(item)))
       messages.push('错误：缺少可创建或可匹配的运动员姓名');
     if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate))
-      messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
+      messages.push(`错误：${item.sourceSheet}!${text(payload.dateAddress) || item.sourceAddress} 日期“${text(payload.rawDate) || item.eventDate}”无效或缺失，请按YYYY-MM-DD填写；默认日期仅补空白`);
   }
   if (item.itemType === 'athlete_profile') {
     const gender = text(payload.gender);
@@ -3984,7 +4061,7 @@ export function commitDataImport(input: {
   );
   if (invalidRows.length)
     throw new Error(
-      `仍有${invalidRows.length}个非空错误行（缺少姓名等）未处理，请修正或在列表中排除后重新提交。`
+      `仍有${invalidRows.length}个非空错误行（缺少姓名、非法数值等）未处理，请修正或在列表中排除后重新提交。`
     );
   const candidateWithoutTeam = batch.athleteCandidates.find(
     (candidate) =>

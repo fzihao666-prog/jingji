@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from '@e965/xlsx';
 
@@ -598,4 +599,211 @@ it('选择新建时遇到同队同名档案不在提交阶段偷偷关联', () =
   });
   expect(() => commit(batch.id, 'skip')).toThrow(/同名档案/);
   expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({ count: 0 });
+});
+
+describe('P1：模板空行、日期和非法数值', () => {
+  it('只导入实际填写的业务行，未填人员行和未用工作表无需删除', () => {
+    const batch = analyze({
+      训练课次: [
+        ['系统运动员编号', '姓名', '所属队伍', '日期', '时长分钟'],
+        [1, '张某', 'A队', '2025-09-01', 60],
+        [2, '赵某', 'B队'],
+      ],
+      力量训练组次: [
+        ['系统运动员编号', '姓名'],
+        [1, '张某'],
+        [2, '赵某'],
+      ],
+      恢复状态: [
+        ['系统运动员编号', '姓名'],
+        [1, '张某'],
+      ],
+      测试指标: [
+        ['系统运动员编号', '姓名'],
+        [1, '张某'],
+      ],
+      FMS测试: [
+        ['系统运动员编号', '姓名'],
+        [1, '张某'],
+      ],
+      冠军模型测试: [
+        ['系统运动员编号', '姓名'],
+        [1, '张某'],
+      ],
+    });
+    expect(batch.items).toHaveLength(1);
+    expect(batch.errorCount).toBe(0);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  });
+
+  it('全部只有预填人员时提示尚未填写数据，不创建错误批次', () => {
+    expect(() =>
+      analyze({
+        训练课次: [
+          ['系统运动员编号', '姓名'],
+          [1, '张某'],
+        ],
+      })
+    ).toThrow(/未填写业务数据/);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM data_import_batches').get()).toEqual({
+      count: 0,
+    });
+  });
+
+  it.each(['错误日期', '2025-02-30', '2025-09-01额外文本'])(
+    '非空错误日期%s不能被默认日期替换',
+    (rawDate) => {
+      const batch = analyze(
+        {
+          训练课次: [
+            ['姓名', '日期', '时长分钟'],
+            ['张某', rawDate, 60],
+          ],
+        },
+        { defaultDate: '2025-09-02' }
+      );
+      expect(batch.errorCount).toBeGreaterThan(0);
+      expect(batch.items[0].eventDate).not.toBe('2025-09-02');
+      expect(batch.items[0].messages.join('；')).toContain('日期');
+      expect(() => commit(batch.id, 'skip')).toThrow(/校验/);
+      const corrected = updateDataImportItems({
+        batchId: batch.id,
+        userId: USER_ID,
+        athletes,
+        corrections: [{ id: batch.items[0].id, eventDate: '2025-09-01' }],
+      });
+      expect(corrected.errorCount).toBe(0);
+      expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+    }
+  );
+
+  it('只有空白日期才使用默认日期，真实0仍视为已填业务数据', () => {
+    const batch = analyze(
+      {
+        恢复状态: [
+          ['姓名', '日期', '睡眠小时'],
+          ['张某', '', 0],
+        ],
+      },
+      { defaultDate: '2025-09-02' }
+    );
+    expect(batch.items[0].eventDate).toBe('2025-09-02');
+    expect(batch.errorCount).toBe(0);
+    commit(batch.id, 'skip');
+    expect(db.prepare('SELECT sleep_hours AS sleep FROM daily_wellness').get()).toEqual({
+      sleep: 0,
+    });
+  });
+
+  it.each([
+    [
+      '身体测量',
+      ['姓名', '测量日期', '身高cm', '体重kg'],
+      ['张某', '2025-09-03', '填错了', 75],
+      '身高cm',
+      'C2',
+    ],
+    [
+      '恢复状态',
+      ['姓名', '日期', '睡眠小时', '晨脉'],
+      ['张某', '2025-09-03', 7, '填错了'],
+      '晨脉',
+      'D2',
+    ],
+    [
+      '训练课次',
+      ['姓名', '日期', '时长分钟', 'RPE'],
+      ['张某', '2025-09-03', 60, '填错了'],
+      'RPE',
+      'D2',
+    ],
+    [
+      '力量训练组次',
+      ['姓名', '日期', '动作', '实际次数', '实际重量kg', '计划次数'],
+      ['张某', '2025-09-03', '深蹲', 5, 60, '填错了'],
+      '计划次数',
+      'F2',
+    ],
+    [
+      'FMS测试',
+      ['姓名', '测试日期', '深蹲', '跨栏步'],
+      ['张某', '2025-09-03', 2, '填错了'],
+      '跨栏步',
+      'D2',
+    ],
+    [
+      '测试指标',
+      ['姓名', '测试日期', '指标代码', '数值', '测试时长分钟'],
+      ['张某', '2025-09-03', 'squat_kg', 60, '填错了'],
+      '测试时长分钟',
+      'E2',
+    ],
+  ])('%s的非法数值保留原文并准确定位', (sheet, headers, row, label, address) => {
+    const batch = analyze({ [sheet as string]: [headers as unknown[], row as unknown[]] });
+    expect(batch.errorCount).toBeGreaterThan(0);
+    const item = batch.items.find((entry) => entry.quality === 'error')!;
+    expect(item.rawValue).toContain('填错了');
+    expect(item.messages.join('；')).toContain(label);
+    expect(item.messages.join('；')).toContain(address);
+    expect(() => commit(batch.id, 'skip')).toThrow();
+    // 排除必须显式操作，不能让该行的其他有效字段悄悄入库。
+    updateDataImportItems({
+      batchId: batch.id,
+      userId: USER_ID,
+      athletes,
+      corrections: batch.items.map((entry) => ({ id: entry.id, resolution: 'skip' })),
+    });
+    expect(commit(batch.id, 'skip').imported).toBe(0);
+  });
+});
+
+it('校对接口不能将非法可选数值静默丢弃，修正后可提交', () => {
+  const batch = analyze({
+    训练课次: [
+      ['姓名', '日期', '时长分钟'],
+      ['张某', '2025-09-04', 60],
+    ],
+  });
+  const invalid = updateDataImportItems({
+    batchId: batch.id,
+    userId: USER_ID,
+    athletes,
+    corrections: [{ id: batch.items[0].id, payload: { rpe: '填错了' } }],
+  });
+  expect(invalid.errorCount).toBe(1);
+  expect(() => commit(batch.id, 'skip')).toThrow(/校验/);
+  const fixed = updateDataImportItems({
+    batchId: batch.id,
+    userId: USER_ID,
+    athletes,
+    corrections: [{ id: batch.items[0].id, payload: { rpe: 5 } }],
+  });
+  expect(fixed.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT rpe FROM training_sessions').get()).toEqual({ rpe: 5 });
+});
+
+it('实际统一模板保留三行表头及未填写工作表后能够往返导入', () => {
+  const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), {
+    type: 'buffer',
+  });
+  XLSX.utils.sheet_add_aoa(
+    workbook.Sheets['训练课次'],
+    [['张某', '2025-09-05', 1, '', '', '', '', '', 60], ['赵某']],
+    { origin: 'A4' }
+  );
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const batch = analyzeDataImport({
+    buffer,
+    filename: '实际模板往返.xlsx',
+    mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    project: PROJECT,
+    userId: USER_ID,
+    athletes,
+    allowedTeams: new Set(['A队', 'B队']),
+  });
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items).toHaveLength(1);
+  expect(batch.items[0].sourceAddress).toBe('A4');
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
 });
