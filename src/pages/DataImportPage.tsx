@@ -173,6 +173,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   }, [project]);
 
   const startReview = (next: DataImportBatch) => {
+    setBulkCandidateTeam('');
     setBatch(next);
     setPersonLinkModes(new Set());
     setCorrections(new Map());
@@ -368,17 +369,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     });
   };
 
-  const applyBulkCandidateTeam = () => {
-    if (!batch || !bulkCandidateTeam) {
-      setError('请先选择要批量分配的新运动员所属队伍。');
-      return;
-    }
+  const applyBulkCandidateTeam = (team: string) => {
+    setBulkCandidateTeam(team);
+    if (!batch || !team) return;
     const pending = batch.athleteCandidates.filter(
       (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId
     );
     if (!pending.length) return;
-    for (const candidate of pending) patchAthleteCandidate(candidate.id, { team: bulkCandidateTeam });
-    setMessage(`已为${pending.length}名待建档运动员填入“${bulkCandidateTeam}”，保存后生效。`);
+    for (const candidate of pending) patchAthleteCandidate(candidate.id, { team });
+    setMessage(`已为${pending.length}名待建档运动员填入“${team}”，保存后生效。`);
   };
 
   const saveCorrections = async (
@@ -1465,7 +1464,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <select
                   value={bulkCandidateTeam}
                   disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                  onChange={(event) => setBulkCandidateTeam(event.target.value)}
+                  aria-label="批量选择所属队伍，选择后立即应用"
+                  onChange={(event) => applyBulkCandidateTeam(event.target.value)}
                 >
                   <option value="">批量选择所属队伍</option>
                   {teams.map((team) => (
@@ -1474,13 +1474,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     </option>
                   ))}
                 </select>
-                <button
-                  type="button"
-                  disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                  onClick={applyBulkCandidateTeam}
-                >
-                  批量应用
-                </button>
                 <button
                   type="button"
                   disabled={batch.status !== 'reviewing' || Boolean(busy)}
