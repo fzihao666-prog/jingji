@@ -19,25 +19,25 @@ type Props = {
     values: Record<string, ReviewValue>,
     includeDatabase?: boolean
   ) => void;
-  onReopen: (targetId: number) => void;
   onExclude: (itemId: number) => void;
   onDraft: (
     targetId: number,
     choices: Record<string, string>,
     manual: Record<string, string>
   ) => void;
+  onPending?: (targetId: number) => void;
   onSplit: (dates: Array<{ id: number; eventDate: string }>) => void;
 };
 
-/** 同人同日的原始测量并排比较；选择仅为草稿，确认后由服务端合并。 */
+/** 点击原始值即可选择；选齐后自动保存合并结果，正式写入仍由提交事务完成。 */
 export function ImportConflictReview({
   items,
   disabled,
   onMerge,
-  onReopen,
   onSplit,
   onExclude,
   onDraft,
+  onPending,
 }: Props) {
   const target = items.find((item) => item.payload.valueReviewDecision) || items[0];
   const decision = target.payload.valueReviewDecision as
@@ -69,24 +69,13 @@ export function ImportConflictReview({
   const originals: DataImportItem[] = [...fileOriginals, ...database];
   const draft = target.payload.valueReviewDraft as
     { choices: Record<string, string>; manual: Record<string, string> } | undefined;
-  const [choices, setChoices] = useState<Record<string, string>>(draft?.choices || {});
-  const [manual, setManual] = useState<Record<string, string>>(draft?.manual || {});
+  const [choices, setChoices] = useState<Record<string, string>>(draft?.choices || Object.fromEntries(Object.entries(decision?.finalValues || {}).map(([field, value]) => [field, String(value)])));
+  const [manual] = useState<Record<string, string>>(draft?.manual || {});
   const [dirty, setDirty] = useState(false);
-  useEffect(() => {
-    if (!dirty || disabled) return;
-    const timer = window.setTimeout(() => {
-      setDirty(false);
-      onDraft(target.id, choices, manual);
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [choices, manual, dirty, disabled, onDraft, target.id]);
   const updateChoice = (field: string, value: string) => {
     setChoices((current) => ({ ...current, [field]: value }));
     setDirty(true);
-  };
-  const updateManual = (field: string, value: string) => {
-    setManual((current) => ({ ...current, [field]: value }));
-    setDirty(true);
+    onPending?.(target.id);
   };
   const [split, setSplit] = useState(false);
   const [dates, setDates] = useState<Record<number, string>>({});
@@ -112,9 +101,7 @@ export function ImportConflictReview({
   const visibleFields = fields.filter(
     ([, field]) =>
       importFieldValues(originals, field).length > 1 ||
-      originals.every((item) => item.payload[field] != null) ||
-      validationMessages.length > 0 ||
-      choices[field] != null
+      validationMessages.length > 0
   );
   const finalValues: Record<string, ReviewValue> = {};
   let remaining = 0;
@@ -125,6 +112,16 @@ export function ImportConflictReview({
     if (raw.trim() === '' || (kind !== 'text' && !Number.isFinite(Number(raw)))) remaining++;
     else finalValues[field] = kind === 'text' ? raw : Number(raw);
   }
+  const serializedValues = JSON.stringify(finalValues);
+  useEffect(() => {
+    if (!dirty || disabled || split) return;
+    const timer = window.setTimeout(() => {
+      setDirty(false);
+      if (remaining === 0) onMerge(target.id, items.map(item => item.id), JSON.parse(serializedValues) as Record<string, ReviewValue>, database.length > 0);
+      else onDraft(target.id, choices, manual);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [dirty, disabled, split, remaining, target.id, items, serializedValues, database.length, choices, manual, onMerge, onDraft]);
   const finalDates = items.map((item) => ({
     id: item.id,
     eventDate: dates[item.id] ?? item.eventDate,
@@ -147,15 +144,7 @@ export function ImportConflictReview({
           <p>
             {target.athleteTeam || '队伍待确认'} · {items.length} 条导入记录
             {database.length > 0 ? ' · 数据库已有值参与比较' : ''} ·{' '}
-            {decision
-              ? target.quality === 'error'
-                ? '合并结果校验未通过，请重新编辑'
-                : '已合并（提交前可重新编辑）'
-              : remaining
-                ? `${remaining} 个字段待选择`
-                : fields.some(([, field]) => importFieldValues(originals, field).length > 1)
-                  ? '最终值已选齐，待确认'
-                  : '相同及互补字段已自动整理，待确认'}
+            <span role="status">{dirty || disabled ? '正在保存选择…' : remaining ? `${remaining} 个字段待选择` : '已选齐，自动保存'}</span>
           </p>
           {target.eventDate && items.some((item) => !item.payload.rawDate) && (
             <p className="import-value-review-notice">
@@ -163,30 +152,11 @@ export function ImportConflictReview({
             </p>
           )}
         </div>
-        {decision ? (
-          <button type="button" disabled={disabled} onClick={() => onReopen(target.id)}>
-            重新编辑
+        {!decision && <div className="import-value-review-actions">
+          <button type="button" aria-pressed={split} disabled={disabled || !target.eventDate} onClick={() => setSplit(current => !current)}>
+            {split ? '返回选择记录' : '不同次记录，分别保留'}
           </button>
-        ) : (
-          <div className="import-value-review-actions">
-            <button
-              type="button"
-              aria-pressed={!split}
-              disabled={disabled}
-              onClick={() => setSplit(false)}
-            >
-              同一记录，选择最终值
-            </button>
-            <button
-              type="button"
-              aria-pressed={split}
-              disabled={disabled || !target.eventDate}
-              onClick={() => setSplit(true)}
-            >
-              不同次记录，分别保留
-            </button>
-          </div>
-        )}
+        </div>}
       </header>
       {validationMessages.length > 0 && (
         <div className="import-value-review-validation" role="alert">
@@ -225,7 +195,7 @@ export function ImportConflictReview({
         <>
           <div className="import-value-review-comparison-wrap" hidden={visibleFields.length === 0}>
             <table className="import-value-review-comparison">
-              <caption>原始记录对比与最终入库值</caption>
+              <caption>点击要采用的记录值，选中后自动保存</caption>
               <thead>
                 <tr>
                   <th scope="col">指标</th>
@@ -234,11 +204,10 @@ export function ImportConflictReview({
                       {item.payload.reviewDatabase ? '数据库已有' : `记录 ${index + 1}`}
                     </th>
                   ))}
-                  <th scope="col">最终入库值</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleFields.map(([header, field, , , unit, kind]) => {
+                {visibleFields.map(([header, field, , , unit]) => {
                   const values = importFieldValues(originals, field);
                   const choice = choices[field] ?? (values.length === 1 ? String(values[0]) : '');
                   return (
@@ -246,115 +215,29 @@ export function ImportConflictReview({
                       <th scope="row">
                         {header}
                         {field === 'protocol' && database.length > 0 && (
-                          <small>协议属于整次测试，确认后会应用于该课次全部指标。</small>
+                          <small>协议属于整次测试，所选协议会应用于该课次全部指标。</small>
                         )}
                       </th>
-                      {originals.map((item) => (
-                        <td key={item.id}>
-                          {item.payload[field] == null ? '未提供' : String(item.payload[field])}
-                        </td>
-                      ))}
-                      <td>
-                        {decision ? (
-                          <strong>
-                            {decision.finalValues[field] ?? '未测量'} {unit}
-                          </strong>
-                        ) : values.length === 1 ? (
-                          <>
-                            <input
-                              aria-label={`${header}最终值`}
-                              disabled={disabled}
-                              type={kind === 'text' ? 'text' : 'number'}
-                              step="any"
-                              value={choices[field] ?? String(values[0])}
-                              onChange={(event) => updateChoice(field, event.target.value)}
-                            />
-                            <small>
-                              {originals.every((item) => item.payload[field] != null)
-                                ? '相同，自动合并（可修改）'
-                                : '单方有值，自动补齐（可修改）'}
-                            </small>
-                          </>
-                        ) : (
-                          <>
-                            <select
-                              aria-label={`${header}最终值`}
-                              disabled={disabled}
-                              value={choice}
-                              onChange={(event) => updateChoice(field, event.target.value)}
-                            >
-                              <option value="">待选择</option>
-                              {values.map((value) => (
-                                <option key={value} value={String(value)}>
-                                  {value} {unit}（记录{' '}
-                                  {originals
-                                    .map((item, index) =>
-                                      item.payload[field] === value
-                                        ? item.payload.reviewDatabase
-                                          ? '数据库已有'
-                                          : index + 1
-                                        : null
-                                    )
-                                    .filter(Boolean)
-                                    .join('、')}
-                                  ）
-                                </option>
-                              ))}
-                              <option value="manual">手动输入</option>
-                            </select>
-                            {choice === 'manual' && (
-                              <input
-                                aria-label={`手动填写${header}`}
-                                disabled={disabled}
-                                type={kind === 'text' ? 'text' : 'number'}
-                                step="any"
-                                value={manual[field] ?? ''}
-                                onChange={(event) => updateManual(field, event.target.value)}
-                              />
-                            )}
-                            <small>
-                              {finalValues[field] == null
-                                ? '最终值：待选择'
-                                : `最终值：${finalValues[field]} ${unit}`}
-                            </small>
-                          </>
-                        )}
-                      </td>
+                      {originals.map((item, index) => {
+                        const value = item.payload[field];
+                        const selected = value != null && choice === String(value);
+                        return <td key={item.id}>
+                          {value == null ? '未提供' : <button
+                            type="button" className="import-value-review-choice"
+                            aria-label={`${header}：${value}${unit}（${item.payload.reviewDatabase ? '数据库已有' : `记录 ${index + 1}`}）`}
+                            aria-pressed={selected} disabled={disabled}
+                            onClick={() => updateChoice(field, String(value))}
+                          >{String(value)} {unit}{selected && <span> ✓ 已选</span>}</button>}
+                        </td>;
+                      })}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-          {!decision && (
-            <button
-              type="button"
-              disabled={disabled || remaining > 0}
-              onClick={() =>
-                onMerge(
-                  target.id,
-                  items.map((item) => item.id),
-                  finalValues,
-                  database.length > 0
-                )
-              }
-            >
-              确认最终值{remaining > 0 ? `（${remaining} 个字段待选择）` : ''}
-            </button>
-          )}
+
         </>
-      )}
-      {target.conflict?.exists && (
-        <details className="import-source-details">
-          <summary>数据库原值与最终结果</summary>
-          {decision && <p>已按逐字段选择确定最终值；需要调整时请点击“重新编辑”。</p>}
-          {target.conflict.fields.map((field) => (
-            <p key={field.field}>
-              {field.label}：数据库 {field.oldValue || '空'} → 导入 {field.newValue}
-              {field.overwrites ? (decision ? '（已确认最终值）' : '（待选择）') : ''}
-            </p>
-          ))}
-        </details>
       )}
       <details className="import-source-details">
         <summary>查看原始记录</summary>

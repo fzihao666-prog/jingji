@@ -1497,3 +1497,18 @@ it.each([
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   expect(db.prepare(sql).get()).toEqual({ count: 1 });
 });
+
+
+it('选齐自动保存后可在同一事务直接改选，入库采用新的选择', () => {
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '体脂率%'], ['张某', '2025-12-03', 80, 10], ['张某', '2025-12-03', 81, 20]] });
+  const id = batch.items[0].id;
+  const memberIds = batch.items.map(item => item.id);
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id, payload: { valueReview: { action: 'merge', memberIds, values: { weightKg: 80, bodyFatPct: 20 } } } }] });
+  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [
+    { id, payload: { valueReview: { action: 'reopen' } } },
+    { id, payload: { valueReview: { action: 'merge', memberIds, values: { weightKg: 81, bodyFatPct: 10 } } } },
+  ] });
+  expect(saved.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT weight_kg AS weight, body_fat_pct AS fat FROM athlete_body_measurements').get()).toEqual({ weight: 81, fat: 10 });
+});

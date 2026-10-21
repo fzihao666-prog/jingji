@@ -113,6 +113,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [pendingSelections, setPendingSelections] = useState<Set<number>>(new Set());
   const [filter, setFilter] = useState<'exception' | 'duplicate' | 'overwrite' | 'all'>(
     'exception'
   );
@@ -452,6 +453,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   }, [batch]);
 
   const commit = async () => {
+    if (batch?.items.some(item => pendingSelections.has(item.id))) { setError('选择尚未保存，请等待保存完成；保存失败时请重新点击要采用的值。'); return; }
     if (!batch) return;
     setError('');
     setMessage('');
@@ -550,7 +552,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     try {
       const result = await api.updateDataImportItems(saved.id, updates);
       setBatch(result.batch);
-      setMessage('数据冲突审查已保存；已重新分组并校验。');
+      setPendingSelections(current => new Set([...current].filter(id => !updates.some(update => update.id === id))));
+      setMessage('选择已保存。');
     } catch (error) {
       setError(error instanceof Error ? error.message : '数据冲突审查保存失败');
     } finally { setBusy(''); }
@@ -1068,10 +1071,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
                 key={`${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
                 items={group} disabled={Boolean(busy) || batch.status !== 'reviewing'}
-                onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([{ id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}
+                onPending={id => setPendingSelections(current => new Set(current).add(id))}
+                onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}
                 onDraft={(id, choices, manual) => void handleValueReview([{ id, payload: { valueReview: { action: 'draft', choices, manual } } }])}
                 onExclude={id => void handleValueReview([{ id, resolution: 'skip' }])}
-                onReopen={targetId => void handleValueReview([{ id: targetId, payload: { valueReview: { action: 'reopen' } } }])}
                 onSplit={dates => void handleValueReview(dates)}
               />)}
               {reviewGroupPages > 1 && <nav className="import-value-review-heading" aria-label="数据冲突审查分页">
@@ -1411,6 +1414,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     Boolean(busy) ||
                     batch.status !== 'reviewing' ||
                     batch.errorCount > 0 ||
+                    batch.items.some(item => pendingSelections.has(item.id)) ||
                     unconfirmedPersons.length > 0
                   }
                   onClick={() => void commit()}

@@ -1713,3 +1713,15 @@
   color: var(--ink);
   background: #fff4f1;
 }
+
+.import-value-review-choice {
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.import-value-review-choice[aria-pressed='true'] {
+  background: var(--primary, #176e68);
+  color: #fff;
+  border-color: currentcolor;
+}

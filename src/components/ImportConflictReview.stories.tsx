@@ -41,6 +41,7 @@ function measurement(id: number, payload: Record<string, unknown>): DataImportIt
 }
 let lastMerge: Record<string, ReviewValue> | undefined;
 let lastDatabase = false;
+const recordedMerge = () => lastMerge;
 const actions = {
   onMerge: (
     _id: number,
@@ -51,7 +52,6 @@ const actions = {
     lastMerge = values;
     lastDatabase = includeDatabase;
   },
-  onReopen: () => {},
   onExclude: () => {},
   onDraft: () => {},
   onSplit: () => {},
@@ -64,28 +64,22 @@ export default { title: '数据导入/统一值冲突审查', component: ImportC
 export const Conflict = {
   args: { items, disabled: false, ...actions },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const button = [...canvasElement.querySelectorAll('button')].find((entry) =>
-      entry.textContent?.includes('确认最终值')
-    )!;
-    if (canvasElement.querySelector('input[aria-label="骨骼肌kg最终值"]'))
-      throw new Error('单方有值应自动补齐，不展示输入框');
-    if (!button.disabled) throw new Error('尚未选择冲突字段时必须阻止确认');
-    const select = canvasElement.querySelector<HTMLSelectElement>(
-      'select[aria-label="体重kg最终值"]'
-    )!;
-    select.focus();
-    if (document.activeElement !== select) throw new Error('字段选择必须可聚焦');
-    for (const control of canvasElement.querySelectorAll<HTMLSelectElement>('select')) {
-      control.value = control.options[1].value;
-      control.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    lastMerge = undefined;
+    if (canvasElement.textContent?.includes('最终入库值') || canvasElement.textContent?.includes('确认最终值'))
+      throw new Error('不应展示额外结果列或确认按钮');
+    const controls = [...canvasElement.querySelectorAll<HTMLButtonElement>('.import-value-review-choice')];
+    controls[0].focus();
+    if (document.activeElement !== controls[0]) throw new Error('候选值必须可聚焦');
+    controls[0].click();
     await new Promise(requestAnimationFrame);
-    if (button.disabled) throw new Error('所有冲突字段选择后必须可确认');
-    button.click();
+    if (controls[0].getAttribute('aria-pressed') !== 'true') throw new Error('点击后必须选中');
+    if (lastMerge) throw new Error('未选齐不能合并');
+    controls[2].click();
+    await new Promise(resolve => setTimeout(resolve, 500));
     if (
-      lastMerge?.weightKg !== 85.94 ||
-      lastMerge?.bodyFatPct !== 9.6 ||
-      lastMerge?.skeletalMuscleKg !== 38
+      recordedMerge()?.weightKg !== 85.94 ||
+      recordedMerge()?.bodyFatPct !== 9.6 ||
+      recordedMerge()?.skeletalMuscleKg !== 38
     )
       throw new Error('最终值必须保留选择和互补字段');
   },
@@ -197,16 +191,13 @@ export const Database = {
       (element) => element.textContent === '数据库已有'
     );
     if (!header) throw new Error('数据库已有值必须作为对比来源');
-    for (const control of canvasElement.querySelectorAll<HTMLSelectElement>('select')) {
-      control.value = control.options[1].value;
-      control.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+    lastDatabase = false;
+    const controls = [...canvasElement.querySelectorAll<HTMLButtonElement>('.import-value-review-choice')];
+    controls[0].click();
     await new Promise(requestAnimationFrame);
-    const button = [...canvasElement.querySelectorAll('button')].find((element) =>
-      element.textContent?.includes('确认最终值')
-    )!;
-    button.click();
-    if (!lastDatabase || lastMerge?.weightKg !== 81)
+    controls[2].click();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (!lastDatabase || recordedMerge()?.weightKg !== 81)
       throw new Error('数据库比较必须通过统一选择命令提交');
   },
 };
