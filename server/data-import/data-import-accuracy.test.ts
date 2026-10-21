@@ -1569,6 +1569,46 @@ it('全选记录2一次保存所有待审查组，提交正确采用各组第二
   expect(db.prepare('SELECT weight_kg AS weight FROM athlete_body_measurements ORDER BY measurement_date').all()).toEqual(Array.from({ length: 10 }, (_, index) => ({ weight: 80 + index })));
 });
 
+it('只修改真实差异字段，不顺带改写浮点尾差相同的其他字段', () => {
+  db.prepare("INSERT INTO athlete_body_measurements (athlete_id, measurement_date, weight_kg, note) VALUES (1, '2026-08-12', ?, '旧备注')").run(61.300000000000004);
+  const batch = analyze({ 身体测量: [['姓名', '测量日期', '体重kg', '备注'], ['张某', '2026-08-12', 61.3, '新备注']] });
+  expect(batch.items[0].conflict?.fields.filter(field => field.overwrites).map(field => field.field)).toEqual(['note']);
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: selectImportReviewRecord(importReviewGroups(batch.items), 0) });
+  expect(commit(batch.id, 'update').updatedRecords).toBe(1);
+  expect(db.prepare('SELECT weight_kg, note FROM athlete_body_measurements WHERE athlete_id = 1').get()).toEqual({ weight_kg: 61.300000000000004, note: '新备注' });
+});
+
+it('65项测试的浮点尾差不制造审查或改写数据库，真实差异仍需选择', async () => {
+  db.prepare("INSERT OR IGNORE INTO metric_definitions (code, label, domain, unit, direction, frequency) VALUES ('weight_kg', '体重', 'custom', 'kg', 'neutral', 'phase')").run();
+  const session = db.prepare("INSERT INTO test_sessions (athlete_id, test_date, test_type) VALUES (1, '2026-08-13', '专业综合评估')").run();
+  db.prepare('INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit) VALUES (?, ?, ?, ?)').run(session.lastInsertRowid, 'weight_kg', 61.300000000000004, 'kg');
+  const rows = [['张某', '2026-08-13', '专业综合评估', 'weight_kg', 61.3, 'kg'], ...Array.from({ length: 64 }, (_, index) => ['张某', '2026-08-13', '专业综合评估', `custom_${index}`, index + 1, '分'])];
+  const seed = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位'], ...rows] });
+  const weight = seed.items.find(item => item.metricCode === 'weight_kg')!;
+  expect(weight.conflict?.identical).toBe(true);
+  expect(importReviewGroups(seed.items)).toEqual([]);
+  expect(commit(seed.id, 'update').updatedRecords).toBe(0);
+  expect(db.prepare('SELECT value_num FROM test_measurements WHERE metric_code = ?').get('weight_kg')).toEqual({ value_num: 61.300000000000004 });
+  const snapshot = () => JSON.stringify(['test_sessions', 'test_measurements', 'metric_definitions'].map(table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()));
+  const before = snapshot();
+  const repeat = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位'], ...rows] });
+  expect(importReviewGroups(repeat.items)).toEqual([]);
+  expect(commit(repeat.id, 'update').updatedRecords).toBe(0);
+  expect(snapshot()).toBe(before);
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '浮点尾差往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  const tests = roundtrip.items.filter(item => item.itemType === 'test_measurement');
+  expect(tests).toHaveLength(65);
+  expect(tests.every(item => item.conflict?.identical)).toBe(true);
+  expect(importReviewGroups(tests)).toEqual([]);
+  expect(commit(roundtrip.id, 'update').updatedRecords).toBe(0);
+  expect(snapshot()).toBe(before);
+  const changed = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位'], ['张某', '2026-08-13', '专业综合评估', 'weight_kg', 61.4, 'kg']] });
+  expect(changed.items.find(item => item.metricCode === 'weight_kg')?.conflict?.fields.some(field => field.overwrites)).toBe(true);
+  expect(importReviewGroups(changed.items)).toHaveLength(1);
+});
+
 it('不同测试类型的同日同指标导出往返不串课次、不丢时长、不制造冲突', async () => {
   const batch = analyze({ 其他测试: [
     ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟'],

@@ -2,6 +2,14 @@ import { BODY_TEMPLATE_FIELDS } from './data-import-template.js';
 import { dataImportPersonKey } from './data-import-person.js';
 
 export type ReviewValue = number | string;
+/** 只吸收机器浮点尾差，不按业务小数位舍入；空白、真实零及文本不混同。 */
+export function importReviewValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (typeof left !== 'number' || typeof right !== 'number' ||
+      !Number.isFinite(left) || !Number.isFinite(right) || left === 0 || right === 0 ||
+      (Number.isInteger(left) && Number.isInteger(right))) return false;
+  return Math.abs(left - right) <= Number.EPSILON * Math.max(Math.abs(left), Math.abs(right));
+}
 export type ReviewField = readonly [
   header: string,
   key: string,
@@ -178,23 +186,25 @@ export function reviewFields(items: ImportReviewItem[]): ReviewField[] {
     ...numeric({ durationMin: '测试时长分钟' }),
   ];
 }
+function reviewValue(item: ImportReviewItem, field: string): unknown {
+  if (item.payload.reviewDatabase) return item.payload[field];
+  if (field.startsWith('metric:'))
+    return field.slice(7) === reviewMetricKey(item) ? item.valueNum : null;
+  if (field.startsWith('unit:'))
+    return field.slice(5) === reviewMetricKey(item) ? item.unit : null;
+  if (field.startsWith('target:'))
+    return field.slice(7) === reviewMetricKey(item) ? item.payload.targetValue : null;
+  if (field.startsWith('note:'))
+    return field.slice(5) === reviewMetricKey(item) ? item.payload.note : null;
+  return topFields.has(field) ? item[field as keyof ImportReviewItem] : item.payload[field];
+}
 export function reviewValues(
   item: ImportReviewItem,
   group: ImportReviewItem[] = [item]
 ): Record<string, ReviewValue> {
   const values: Record<string, ReviewValue> = {};
   for (const [, field] of reviewFields(group)) {
-    let value: unknown;
-    if (item.payload.reviewDatabase) value = item.payload[field];
-    else if (field.startsWith('metric:'))
-      value = field.slice(7) === reviewMetricKey(item) ? item.valueNum : null;
-    else if (field.startsWith('unit:'))
-      value = field.slice(5) === reviewMetricKey(item) ? item.unit : null;
-    else if (field.startsWith('target:'))
-      value = field.slice(7) === reviewMetricKey(item) ? item.payload.targetValue : null;
-    else if (field.startsWith('note:'))
-      value = field.slice(5) === reviewMetricKey(item) ? item.payload.note : null;
-    else value = topFields.has(field) ? item[field as keyof ImportReviewItem] : item.payload[field];
+    const value = reviewValue(item, field);
     if (typeof value === 'number' && Number.isFinite(value)) values[field] = value;
     else if (typeof value === 'string' && value.trim()) values[field] = value;
   }
@@ -262,21 +272,38 @@ export function importReviewKey(item: ImportReviewItem) {
   ]);
 }
 export function importFieldValues(items: ImportReviewItem[], field: string): ReviewValue[] {
-  return [
-    ...new Set(
-      items
-        .map((item) =>
-          Object.prototype.hasOwnProperty.call(item.payload, field)
-            ? item.payload[field]
-            : reviewValues(item, items)[field]
-        )
-        .filter(
-          (value): value is ReviewValue =>
-            (typeof value === 'number' && Number.isFinite(value)) ||
-            (typeof value === 'string' && value.trim() !== '')
-        )
-    ),
-  ];
+  const values = items
+    .map((item) =>
+      Object.prototype.hasOwnProperty.call(item.payload, field)
+        ? item.payload[field]
+        : reviewValue(item, field)
+    )
+    .filter(
+      (value): value is ReviewValue =>
+        (typeof value === 'number' && Number.isFinite(value)) ||
+        (typeof value === 'string' && value.trim() !== '')
+    );
+  const distinct: ReviewValue[] = [];
+  for (const value of values) {
+    if (!distinct.some(previous => importReviewValuesEqual(previous, value))) distinct.push(value);
+  }
+  return distinct;
+}
+
+/** 只缩减展示列，原始来源与合并成员保持完整，序号仍对应批量选择。 */
+export function reviewComparisonRecords<T extends ImportReviewItem>(items: T[], fields: string[]) {
+  const result: Array<{ item: T; index: number }> = [];
+  const provided = (value: unknown) => value !== null && value !== undefined && value !== '';
+  items.forEach((item, index) => {
+    const needsSession = importSessionChoices(item).length > 1;
+    if (!needsSession && !fields.some(field => provided(item.payload[field]))) return;
+    const duplicate = !needsSession && result.some(({ item: previous }) =>
+      Boolean(previous.payload.reviewDatabase) === Boolean(item.payload.reviewDatabase) &&
+      importSessionChoices(previous).length <= 1 &&
+      fields.every(field => importReviewValuesEqual(previous.payload[field], item.payload[field])));
+    if (!duplicate) result.push({ item, index });
+  });
+  return result;
 }
 export function importReviewGroups<T extends ImportReviewItem>(items: T[]): T[][] {
   const groups = new Map<string, T[]>();

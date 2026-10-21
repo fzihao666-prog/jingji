@@ -7,6 +7,7 @@ import {
   requiresDatabaseReview,
   reviewTitle,
   importFieldValues,
+  reviewComparisonRecords,
   type ReviewValue,
 } from '../../shared/import-conflict-review';
 import type { DataImportItem } from '../types';
@@ -106,6 +107,7 @@ export function ImportConflictReview({
       importFieldValues(originals, field).length > 1 ||
       validationMessages.length > 0
   );
+  const comparisonRecords = reviewComparisonRecords(originals, visibleFields.map(([, field]) => field));
   const finalValues: Record<string, ReviewValue> = {};
   let remaining = 0;
   for (const [, field, , , , kind] of fields) {
@@ -202,7 +204,7 @@ export function ImportConflictReview({
               <thead>
                 <tr>
                   <th scope="col">指标</th>
-                  {originals.map((item, index) => (
+                  {comparisonRecords.map(({ item, index }) => (
                     <th scope="col" key={item.id}>
                       {item.payload.reviewDatabase ? '数据库已有' : `记录 ${index + 1}`}
                       {!item.payload.reviewDatabase && importSessionChoices(item).length > 1 && <label>
@@ -230,7 +232,7 @@ export function ImportConflictReview({
                           <small>协议属于整次测试，所选协议会应用于该课次全部指标。</small>
                         )}
                       </th>
-                      {originals.map((item, index) => {
+                      {comparisonRecords.map(({ item, index }) => {
                         const value = item.payload[field];
                         const selected = value != null && choice === String(value);
                         return <td key={item.id}>

@@ -1,5 +1,5 @@
 import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
-import { reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
+import { importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
 import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
@@ -14,8 +14,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v23：枚举在解析、校对、审查和入库全程归一为规范代码，空白疼痛保留未提供。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v23-canonical-enum-pipeline';
+// v24：文件、数据库冲突及写入共用机器精度比较，避免浮点尾差制造覆盖。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v24-numeric-conflict-comparison';
 
 export type ImportAthlete = {
   id: number;
@@ -1766,7 +1766,7 @@ function conflictField(
     label,
     oldValue: oldText,
     newValue: newText,
-    overwrites: oldText !== '' && oldText !== newText,
+    overwrites: oldText !== '' && !importReviewValuesEqual(oldValue, newValue) && oldText !== newText,
   };
 }
 
@@ -1816,7 +1816,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'athlete',
       entityId: item.athleteId,
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1830,7 +1830,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'daily_wellness',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1847,7 +1847,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'training_session',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1868,7 +1868,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'strength_result_set',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1896,7 +1896,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: existing ? 'test_measurement' : 'test_session',
       entityId: Number(existing?.id ?? session.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1911,7 +1911,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
         exists: true,
         entityType: 'athlete_body_measurement',
         entityId: Number(existing.id),
-        identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+        identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
         fields,
       };
     }
@@ -1922,7 +1922,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'athlete_body_measurement',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1936,7 +1936,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'injury_record',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1950,7 +1950,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'competitive_state_assessment',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -1972,7 +1972,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       exists: true,
       entityType: 'metric_scoring_rule',
       entityId: Number(existing.id),
-      identical: fields.every((field) => !field.overwrites && field.oldValue === field.newValue),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
       fields,
     };
   }
@@ -3274,7 +3274,7 @@ function upsertTrainingItem(
       ['note', note],
     ];
     const proposed = patch.filter(
-      ([column, value]) => isProvided(value) && String(existing[column] ?? '') !== String(value)
+      ([column, value]) => isProvided(value) && !importReviewValuesEqual(existing[column], value)
     );
     const changed = proposed.filter(
       ([column]) => policy === 'update' || !isProvided(existing[column])
@@ -3378,6 +3378,9 @@ function upsertTestItem(
   userId: number,
   batchPolicy: 'skip' | 'update'
 ): UpsertResult {
+  const existingConflict = detectItemConflict(item);
+  if (existingConflict.identical && existingConflict.entityType === 'test_measurement' && existingConflict.entityId !== null)
+    return { skipped: true, entityId: existingConflict.entityId, created: false, filled: 0, overwritten: 0 };
   const storedSession = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
     .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
   if (text(storedSession?.protocol) && text(item.payload.protocol) && text(storedSession?.protocol) !== text(item.payload.protocol)) {
@@ -3429,7 +3432,7 @@ function upsertTestItem(
   if (existing) {
     const proposed = { valueNum: item.valueNum, targetValue: optionalNumber(item.payload.targetValue), unit: item.unit, note };
     const keys = ['valueNum', 'targetValue', 'unit', 'note'] as const;
-    const changed = keys.filter(key => isProvided(proposed[key]) && proposed[key] !== existing[key]
+    const changed = keys.filter(key => isProvided(proposed[key]) && !importReviewValuesEqual(proposed[key], existing[key])
       && (policy === 'update' || !isProvided(existing[key])));
     if (!changed.length) return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
     const next = { ...existing };
@@ -3494,7 +3497,7 @@ function upsertBodyItem(
       };
       const proposed = provided.filter(([key, value]) => {
         const column = bodyColumnOf(key);
-        return !Object.is(Number(existing[column] ?? NaN), Number(value));
+        return !importReviewValuesEqual(existing[column], value);
       });
       const changed = proposed.filter(([key]) => policy === 'update' || isBlank(key));
       const noteChanged = isProvided(note) && text(existing.note) !== note;
@@ -3552,7 +3555,7 @@ function upsertBodyItem(
   if (existing) {
     if (current !== null && current !== undefined) {
       // 该字段已有值：跳过策略不更新已有数据；更新策略才覆盖。
-      if (policy === 'skip' || Number(current) === Number(item.valueNum))
+      if (policy === 'skip' || importReviewValuesEqual(current, item.valueNum))
         return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
       db.prepare(
         `UPDATE athlete_body_measurements SET ${column} = ?, source = 'file_import', quality = ?, is_demo = 0, data_import_batch_id = ? WHERE id = ?`
@@ -3780,7 +3783,7 @@ function upsertWellnessItem(
     // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
     const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
     const proposed = provided.filter(
-      ([column, value]) => !Object.is(Number(existing[column] ?? NaN), Number(value))
+      ([column, value]) => !importReviewValuesEqual(existing[column], value)
     );
     const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
     const statusChanged = statusProvided && text(existing.status) !== status;
@@ -3878,7 +3881,7 @@ function upsertSessionItem(
       if (!provided || value === null) return;
       const current = existing[column];
       const currentText = current === null || current === undefined ? '' : String(current);
-      if (currentText === String(value)) return;
+      if (importReviewValuesEqual(current, value) || currentText === String(value)) return;
       // 时长/距离列 NOT NULL 默认 0，是否空缺以 reported 标记为准；其余字段 0 视为真实值。
       const blank =
         column === 'duration_min'
@@ -3990,7 +3993,7 @@ function upsertInjuryItem(
       if (value === null) return false; // 空白=未提供
       const current = existing[column];
       const currentText = current === null || current === undefined ? '' : String(current);
-      return currentText !== String(value);
+      return !importReviewValuesEqual(current, value) && currentText !== String(value);
     });
     const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
     const filled = changed.filter(([column]) => isBlank(column)).length;
@@ -4057,7 +4060,7 @@ function upsertCompetitiveItem(
     // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
     const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
     const proposed = provided.filter(
-      ([column, value]) => !Object.is(Number(existing[column] ?? NaN), Number(value))
+      ([column, value]) => !importReviewValuesEqual(existing[column], value)
     );
     const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
     const levelChanged =
@@ -4144,7 +4147,7 @@ function upsertScoringRule(
   if (existing) {
     // 统一合并语义：skip 只补全空字段并保留已有值，update 才覆盖不同值。
     const blank = existing.thresholdValue === null || existing.thresholdValue === undefined;
-    if (!blank && Number(existing.thresholdValue) === Number(item.valueNum))
+    if (!blank && importReviewValuesEqual(existing.thresholdValue, item.valueNum))
       return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
     if (policy === 'skip' && !blank)
       return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };

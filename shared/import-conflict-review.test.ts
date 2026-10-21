@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   importFieldValues,
+  importReviewValuesEqual,
+  reviewComparisonRecords,
   importReviewGroups,
   importReviewKey,
   selectImportReviewRecord,
@@ -19,6 +21,25 @@ const item: ImportReviewItem = {
   sourceSheet: '身体测量',
   sourceAddress: 'B2',
 };
+it('机器浮点尾差相同，但真实精度差异、文本、空白和零保持区别', () => {
+  expect(importReviewValuesEqual(61.3, 61.300000000000004)).toBe(true);
+  expect(importReviewValuesEqual(85.94, 85.9)).toBe(false);
+  expect(importReviewValuesEqual(0, 1e-20)).toBe(false);
+  expect(importReviewValuesEqual(1e-20, 1.01e-20)).toBe(false);
+  expect(importReviewValuesEqual(null, 0)).toBe(false);
+  expect(importReviewValuesEqual('061.3', '61.3')).toBe(false);
+  expect(importReviewValuesEqual(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 1)).toBe(false);
+  expect(importFieldValues([{ ...item, payload: { weightKg: 61.3 } }, { ...item, payload: { weightKg: 61.300000000000004 } }], 'weightKg')).toEqual([61.3]);
+});
+
+it('65个指标仅展示与待选字段有关的来源，保留原序号和全部原始记录', () => {
+  const records = Array.from({ length: 65 }, (_, index) => ({ ...item, id: index + 1, payload: index === 1 ? { weightKg: 61.3 } : { heightCm: 173 } }));
+  const database = records.map(record => ({ ...record, id: -record.id, payload: { ...record.payload, reviewDatabase: true } }));
+  const all = [...records, ...database];
+  expect(reviewComparisonRecords(all, ['weightKg']).map(({ item, index }) => [item.id, index])).toEqual([[2, 1], [-2, 66]]);
+  expect(all).toHaveLength(130);
+  expect(reviewComparisonRecords(records, ['heightCm'])).toHaveLength(1);
+});
 describe('身体测量审查分组', () => {
   it('同一人员同一日期归组，不混用其他人员日期', () => {
     expect(
