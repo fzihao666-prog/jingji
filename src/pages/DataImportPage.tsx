@@ -1036,7 +1036,18 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               ))}
             </div>
             <div className="data-import-table-wrap">
-              <table className="data-import-table">
+              <table className="data-import-table data-import-review-table">
+                <colgroup>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '18%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '18%' }} />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>状态</th>
