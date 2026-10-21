@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { dataImportPersonKey } from '../../shared/data-import-person';
+import { automaticImportPersonLinks, dataImportPersonKey } from '../../shared/data-import-person';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import type {
@@ -174,11 +174,21 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   }, [project]);
 
   const startReview = (next: DataImportBatch) => {
+    const links = next.status === 'reviewing'
+      ? automaticImportPersonLinks(next.athleteCandidates, athletes) : new Map<number, number>();
+    const automaticCorrections = new Map<number, AthleteCorrection>();
+    next = { ...next, athleteCandidates: next.athleteCandidates.map(candidate => {
+      const athleteId = links.get(candidate.id);
+      if (!athleteId) return candidate;
+      const correction = { id: candidate.id, matchedAthleteId: athleteId, confirmed: true };
+      automaticCorrections.set(candidate.id, correction);
+      return { ...candidate, ...correction, messages: ['已自动关联已有运动员，保留原档案及所属队伍'] };
+    }) };
     setBulkCandidateTeam('');
     setBatch(next);
     setPersonLinkModes(new Set());
     setCorrections(new Map());
-    setAthleteCorrections(new Map());
+    setAthleteCorrections(automaticCorrections);
     setPage(0);
     setResult(null);
     const unresolved = next.athleteCandidates.filter(
@@ -614,9 +624,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     if (!batch) return [];
     const needle = personQuery.trim().toLowerCase();
     return batch.athleteCandidates.filter((candidate) => {
-      if (personTab === 'pending' && !(candidate.status === 'pending' && !candidate.suggested.length))
+      if (personTab === 'pending' && !(candidate.status === 'pending' && !candidate.matchedAthleteId && !candidate.suggested.length))
         return false;
-      if (personTab === 'ambiguous' && !(candidate.status === 'pending' && candidate.suggested.length))
+      if (personTab === 'ambiguous' && !(candidate.status === 'pending' && !candidate.matchedAthleteId && candidate.suggested.length))
         return false;
       if (!needle) return true;
       return [candidate.name, candidate.team, candidate.sourceSheet].some((value) =>
@@ -874,9 +884,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           <section className="data-import-summary">
             <div>
               <span>已确认运动员</span>
-              <strong>{batch.counts.personMatched}</strong>
+              <strong>{batch.athleteCandidates.filter(candidate => !candidate.excluded && Boolean(candidate.matchedAthleteId)).length}</strong>
               <small>
-                待建档{batch.counts.personPending} · 待确认{batch.counts.personAmbiguous}
+                待建档{batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && !candidate.suggested.length).length} · 待确认{batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && candidate.suggested.length > 0).length}
               </small>
             </div>
             <div>
@@ -1440,8 +1450,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <span>PERSON CONFIRM</span>
                 <h2 id="data-import-person-title">待确认运动员</h2>
                 <p>
-                  已匹配 {batch.counts.personMatched} 人 · 待新建 {batch.counts.personPending} 人 ·
-                  身份待确认 {batch.counts.personAmbiguous} 人。
+                  已匹配 {batch.athleteCandidates.filter(candidate => !candidate.excluded && Boolean(candidate.matchedAthleteId)).length} 人 · 待新建 {batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && !candidate.suggested.length).length} 人 ·
+                  身份待确认 {batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && candidate.suggested.length > 0).length} 人。
                   只需姓名与所属队伍即可最小建档；关闭本窗口不会丢失已确认内容。
                 </p>
               </div>
