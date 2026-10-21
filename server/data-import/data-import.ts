@@ -1,3 +1,4 @@
+import { BODY_REVIEW_FIELDS, bodyReviewKey, bodyFieldValues } from '../../shared/body-import-review.ts';
 import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
@@ -11,7 +12,7 @@ import {
 } from '../../shared/strength-training.ts';
 
 // v17：新旧模板共用领域字段，身体测量独立于测试成绩；同批重复事实合并或报冲突。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v18-review-body-conflicts';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v19-body-review-cards';
 
 export type ImportAthlete = {
   id: number;
@@ -1534,6 +1535,7 @@ function refreshBodyImportConflicts(items: Array<ParsedImportItem | DataImportIt
   for (const item of items) {
     if (item.itemType !== 'body_measurement' || item.metricCode !== 'body_composition') continue;
     delete item.payload.bodyImportConflicts;
+    delete item.payload.bodyReviewPending;
     if (('resolution' in item && item.resolution === 'skip') || item.quality === 'skipped') continue;
     const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
     const key = `${identity}|${item.eventDate}`;
@@ -1550,6 +1552,7 @@ function refreshBodyImportConflicts(items: Array<ParsedImportItem | DataImportIt
       conflicts.push(`错误：同一运动员在${group[0].eventDate}的${label}冲突（存在不同数值）：${values.map(item => `${item.sourceSheet}!${item.sourceAddress} = ${item.payload[field]}${unit}`).join('；')}。请修改日期或数值，或选择“排除此行”，保存校对后重新校验`);
     }
     if (conflicts.length) for (const item of group) item.payload.bodyImportConflicts = conflicts;
+    else if (group.length > 1) for (const item of group) item.payload.bodyReviewPending = true;
   }
 }
 
@@ -1575,29 +1578,16 @@ function consolidateImportFacts(items: ParsedImportItem[]) {
   }
   const grouped = new Map<string, ParsedImportItem>();
   return items.filter(item => {
-    const body = item.itemType === 'body_measurement' && item.metricCode === 'body_composition';
-    const test = item.itemType === 'test_measurement';
-    if (!body && !test) return true;
-    if (body && Array.isArray(item.payload.bodyImportConflicts)) return true;
+    if (item.itemType !== 'test_measurement') return true;
     const identity = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
-    const key = body ? `${identity}|${item.eventDate}|body`
-      : `${identity}|${item.eventDate}|test|${item.testType}|${item.metricCode}|${item.side}`;
+    const key = `${identity}|${item.eventDate}|test|${item.testType}|${item.metricCode}|${item.side}`;
     const current = grouped.get(key);
     if (!current) { grouped.set(key, item); return true; }
     const conflicts = Array.isArray(current.payload.importConflicts) ? current.payload.importConflicts as string[] : [];
     const conflict = (label: string) => conflicts.push(`错误：${current.sourceSheet}!${current.sourceAddress}与${item.sourceSheet}!${item.sourceAddress}的${label}冲突，请修正原文件后重新上传`);
-    if (body) {
-      for (const [, field, , label] of BODY_TEMPLATE_FIELDS) {
-        if (field === 'armSpanCm' || !isProvided(item.payload[field])) continue;
-        if (isProvided(current.payload[field]) && current.payload[field] !== item.payload[field]) conflict(label);
-        else current.payload[field] = item.payload[field];
-      }
-      current.valueNum = optionalNumber(current.payload.weightKg ?? current.payload.heightCm);
-    } else {
-      if (current.valueNum !== item.valueNum || current.unit !== item.unit) conflict(item.metricLabel);
-      if (text(current.payload.protocol) && text(item.payload.protocol) && text(current.payload.protocol) !== text(item.payload.protocol)) conflict('测试协议');
-      if (!text(current.payload.protocol)) current.payload.protocol = item.payload.protocol;
-    }
+    if (current.valueNum !== item.valueNum || current.unit !== item.unit) conflict(item.metricLabel);
+    if (text(current.payload.protocol) && text(item.payload.protocol) && text(current.payload.protocol) !== text(item.payload.protocol)) conflict('测试协议');
+    if (!text(current.payload.protocol)) current.payload.protocol = item.payload.protocol;
     if (item.payload.unitConflict) current.payload.unitConflict = item.payload.unitConflict;
     current.payload.protocolRequired = Boolean(current.payload.protocolRequired || item.payload.protocolRequired);
     current.payload.importConflicts = conflicts;
@@ -2614,6 +2604,7 @@ function validateImportItem(
     return item.messages.filter((message) => message.startsWith('错误：'));
   }
   const payload = item.payload || {};
+  if (payload.bodyReviewPending) messages.push('错误：同人同日存在多条身体测量，请在集中审查卡片确认合并或填写真实日期后分别保留');
   if (Array.isArray(payload.bodyImportConflicts))
     messages.push(...payload.bodyImportConflicts.filter((value): value is string => typeof value === 'string'));
   if (Array.isArray(payload.importConflicts))
@@ -2830,6 +2821,9 @@ function applyCorrection(
     ...current,
     payload: { ...current.payload },
   };
+  if ((current.payload.bodyMergeDecision || current.payload.bodyMergedInto) && !correction.payload?.bodyMergeReview
+    && (correction.payload || 'eventDate' in correction || 'athleteId' in correction || 'valueNum' in correction))
+    throw new Error('请先点击重新编辑，展开合并来源后再修改');
   if ('athleteId' in correction) next.athleteId = correction.athleteId ?? null;
   if ('eventDate' in correction) next.eventDate = text(correction.eventDate);
   if ('actualReps' in correction) next.actualReps = correction.actualReps ?? null;
@@ -2873,6 +2867,87 @@ function applyCorrection(
   return next;
 }
 
+/** 合并只改暂存记录；来源及选择由服务端生成，正式入库仍走原事务与校验。 */
+function applyBodyMergeReview(items: DataImportItemView[], targetId: number, raw: unknown, allowed: Set<number>, userId: number) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('身体测量审查请求无效');
+  const review = raw as Record<string, unknown>;
+  const target = items.find(item => item.id === targetId);
+  if (!target || target.itemType !== 'body_measurement' || target.metricCode !== 'body_composition') throw new Error('只能审查身体测量记录');
+  const checkAccess = (item: DataImportItemView) => {
+    if (item.athleteId && !allowed.has(item.athleteId)) throw new Error('所选运动员不在当前权限范围内');
+  };
+  checkAccess(target);
+  if (review.action === 'draft') {
+    if (target.payload.bodyMergeDecision || target.payload.bodyMergedInto) throw new Error('请先重新编辑合并结果');
+    const draft: Record<string, Record<string, string>> = {};
+    for (const key of ['choices', 'manual']) {
+      const rawValues = review[key];
+      if (!rawValues || typeof rawValues !== 'object' || Array.isArray(rawValues)) throw new Error('审查草稿格式无效');
+      draft[key] = {};
+      for (const [field, value] of Object.entries(rawValues)) {
+        if (!BODY_REVIEW_FIELDS.some(([, code]) => code === field) || typeof value !== 'string' || value.length > 64) throw new Error('审查草稿字段无效');
+        draft[key][field] = value;
+      }
+    }
+    target.payload.bodyMergeDraft = draft;
+    return;
+  }
+  if (review.action === 'reopen') {
+    const decision = target.payload.bodyMergeDecision as { sources?: Array<{ id: number; values: Record<string, unknown> }> } | undefined;
+    if (!decision?.sources) throw new Error('该组尚未合并');
+    for (const source of decision.sources) {
+      const item = items.find(entry => entry.id === source.id);
+      if (!item || (item.id !== target.id && item.payload.bodyMergedInto !== target.id)) throw new Error('合并来源已变化，请刷新后重试');
+      checkAccess(item);
+      for (const [, field] of BODY_REVIEW_FIELDS) delete item.payload[field];
+      Object.assign(item.payload, source.values);
+      delete item.payload.bodyMergedInto;
+      delete item.payload.bodyMergeDecision;
+      item.resolution = '';
+      item.quality = 'valid';
+      item.valueNum = optionalNumber(item.payload.weightKg ?? item.payload.heightCm);
+    }
+    const history = Array.isArray(target.payload.bodyMergeHistory) ? target.payload.bodyMergeHistory : [];
+    target.payload.bodyMergeHistory = [...history, { ...decision, reopenedBy: userId, reopenedAt: new Date().toISOString() }];
+    return;
+  }
+  if (review.action !== 'merge' || !Array.isArray(review.memberIds) || !review.values || typeof review.values !== 'object' || Array.isArray(review.values)) throw new Error('合并参数无效');
+  const memberIds = review.memberIds;
+  if (memberIds.length < 2 || new Set(memberIds).size !== memberIds.length || !memberIds.includes(targetId)) throw new Error('请至少选择两条不同来源');
+  const members = memberIds.map(id => items.find(item => item.id === id));
+  if (members.some(item => !item || item.itemType !== 'body_measurement' || item.metricCode !== 'body_composition' || bodyReviewKey(item) !== bodyReviewKey(target))) throw new Error('只能合并同一运动员、同一日期的身体测量');
+  const sources = members.filter((item): item is DataImportItemView => Boolean(item));
+  for (const item of sources) {
+    checkAccess(item);
+    if (item.payload.unitConflict) throw new Error(`原始记录单位不一致，请先排除或修正来源：${item.sourceSheet}!${item.sourceAddress}`);
+    if (item.resolution === 'skip' || item.payload.bodyMergeDecision || item.payload.bodyMergedInto) throw new Error('请先重新编辑已合并的记录');
+  }
+  const selected = review.values as Record<string, unknown>;
+  if (Object.keys(selected).some(field => !BODY_REVIEW_FIELDS.some(([, key]) => key === field))) throw new Error('合并包含不支持的字段');
+  const values: Record<string, number> = {};
+  for (const [, field, , label] of BODY_REVIEW_FIELDS) {
+    const available = bodyFieldValues(sources, field);
+    if (Object.prototype.hasOwnProperty.call(selected, field)) {
+      if (typeof selected[field] !== 'number' || !Number.isFinite(selected[field])) throw new Error(`${label}必须是有效数值`);
+      values[field] = selected[field];
+    } else if (available.length === 1) values[field] = available[0];
+    else if (available.length > 1) throw new Error(`请为${label}选择最终值`);
+  }
+  const snapshots = sources.map(item => ({ id: item.id, sourceSheet: item.sourceSheet, sourceAddress: item.sourceAddress,
+    eventDate: item.eventDate, rawDate: item.payload.rawDate,
+    values: Object.fromEntries(BODY_REVIEW_FIELDS.filter(([, field]) => isProvided(item.payload[field])).map(([, field]) => [field, item.payload[field]])) }));
+  for (const [, field] of BODY_REVIEW_FIELDS) delete target.payload[field];
+  Object.assign(target.payload, values);
+  delete target.payload.bodyMergeDraft;
+  target.payload.bodyMergeDecision = { confirmed: true, sources: snapshots, choices: selected, finalValues: values, confirmedBy: userId, confirmedAt: new Date().toISOString() };
+  target.valueNum = optionalNumber(target.payload.weightKg ?? target.payload.heightCm);
+  for (const item of sources) {
+    if (item.id === target.id) continue;
+    item.resolution = 'skip';
+    item.payload.bodyMergedInto = target.id;
+  }
+}
+
 export function updateDataImportItems(input: {
   batchId: string;
   userId: number;
@@ -2906,12 +2981,23 @@ export function updateDataImportItems(input: {
     const corrected = new Map(input.corrections.map(correction => [correction.id, correction]));
     const nextItems = batch.items.map(item => {
       const correction = corrected.get(item.id);
-      return correction ? applyCorrection(item, correction) : item;
+      const next = correction ? applyCorrection(item, correction) : { ...item, payload: { ...item.payload } };
+      if (next.itemType === 'body_measurement' && !next.athleteId && !correction?.athleteId) {
+        const candidate = batch.athleteCandidates.find(candidate => candidate.normalizedName === dataImportPersonKey(next) && !candidate.excluded);
+        if (candidate?.matchedAthleteId) next.athleteId = candidate.matchedAthleteId;
+      }
+      return next;
     });
+    const bodyReviewedIds = new Set<number>();
+    for (const correction of input.corrections) {
+      if (!correction.payload || !('bodyMergeReview' in correction.payload)) continue;
+      applyBodyMergeReview(nextItems, correction.id, correction.payload.bodyMergeReview, allowed, input.userId);
+      for (const item of nextItems) if (item.itemType === 'body_measurement') bodyReviewedIds.add(item.id);
+    }
     refreshBodyImportConflicts(nextItems);
     for (const next of nextItems) {
       // 同组另一行被修改或排除时，也重新校验本行。
-      if (!corrected.has(next.id) && !(next.itemType === 'body_measurement' && next.metricCode === 'body_composition')) continue;
+      if (!corrected.has(next.id) && !bodyReviewedIds.has(next.id) && !(next.itemType === 'body_measurement' && next.metricCode === 'body_composition')) continue;
       const validation = revalidateItem(next, allowed, candidateNames);
       next.quality = validation.quality;
       next.messages = validation.messages;
@@ -4261,6 +4347,9 @@ export function commitDataImport(input: {
     createdAthletes = resolution.createdCount;
     linkedAthletes = resolution.linkedCount;
     for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
+    refreshBodyImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
+    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.bodyReviewPending || Array.isArray(item.payload.bodyImportConflicts))))
+      throw new Error('人员关联后出现同人同日的多条身体测量，请保存校对并重新审查后提交');
     for (const item of importable) {
       if (resolution.excludedKeys.has(dataImportPersonKey(item))) {
         skipped += 1;

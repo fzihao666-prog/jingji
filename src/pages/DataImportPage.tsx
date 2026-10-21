@@ -1,3 +1,5 @@
+import { bodyReviewGroups, bodyFieldValues, BODY_REVIEW_FIELDS } from '../../shared/body-import-review';
+import { BodyMeasurementReview } from '../components/BodyMeasurementReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
   AlertTriangle,
@@ -116,6 +118,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   );
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
+  const [bodyReviewPage, setBodyReviewPage] = useState(0);
   const [conflictPolicy, setConflictPolicy] = useState<'skip' | 'update'>('skip');
   const [corrections, setCorrections] = useState<Map<number, Correction>>(new Map());
   const [athleteCorrections, setAthleteCorrections] = useState<Map<number, AthleteCorrection>>(
@@ -186,6 +189,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       return { ...candidate, ...correction, messages: ['已自动关联已有运动员，保留原档案及所属队伍'] };
     }) };
     setBulkCandidateTeam('');
+    setBodyReviewPage(0);
     setBatch(next);
     setPersonLinkModes(new Set());
     setCorrections(new Map());
@@ -533,11 +537,32 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setMessage('人员确认完成，已保存人员映射草稿；请继续数据校对。');
   };
 
+  const bodyGroups = useMemo(() => bodyReviewGroups(batch?.items || []), [batch]);
+  const matchingBodyGroups = bodyGroups.filter(group => !query.trim() || group.some(item => `${item.rawAthleteName} ${item.athleteName} ${item.eventDate}`.includes(query.trim())));
+  const bodyReviewPages = Math.max(1, Math.ceil(matchingBodyGroups.length / 8));
+  const currentBodyPage = Math.min(bodyReviewPage, bodyReviewPages - 1);
+  const autoMergeBodyGroups = bodyGroups.filter(group => !group.some(item => item.payload.bodyMergeDecision) && BODY_REVIEW_FIELDS.every(([, field]) => bodyFieldValues(group, field).length <= 1));
+  const bodyGroupIds = useMemo(() => new Set(bodyGroups.flatMap(group => group.map(item => item.id))), [bodyGroups]);
+  const handleBodyReview = async (updates: Correction[]) => {
+    const saved = await saveCorrections();
+    if (!saved) return;
+    setBusy('save');
+    setError('');
+    try {
+      const result = await api.updateDataImportItems(saved.id, updates);
+      setBatch(result.batch);
+      setMessage('身体测量审查已保存；已重新分组并校验。');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '身体测量审查保存失败');
+    } finally { setBusy(''); }
+  };
+
   const filteredItems = useMemo(() => {
     if (!batch) return [];
     const needle = query.trim().toLowerCase();
     return batch.items
       .filter((item) => {
+        if (bodyGroupIds.has(item.id)) return false;
         if (filter === 'exception' && item.itemType !== 'invalid_row' && item.quality === 'valid')
           return false;
         if (filter === 'duplicate' && !item.conflict?.exists) return false;
@@ -562,7 +587,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               : 2;
         return rank(a) - rank(b);
       });
-  }, [batch, filter, query]);
+  }, [batch, filter, query, bodyGroupIds]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages - 1);
@@ -985,6 +1010,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     onChange={(event) => {
                       setQuery(event.target.value);
                       setPage(0);
+                      setBodyReviewPage(0);
                     }}
                     placeholder="搜索姓名、动作或指标"
                   />
@@ -1035,6 +1061,30 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 </button>
               ))}
             </div>
+            {bodyGroups.length > 0 && <div className="body-review-groups">
+              <div className="body-review-heading">
+                <h3>身体测量集中审查 · {bodyGroups.length} 组</h3>
+                <button type="button" disabled={Boolean(busy) || batch.status !== 'reviewing' || !autoMergeBodyGroups.length}
+                  onClick={() => void handleBodyReview(autoMergeBodyGroups.map(group => ({ id: group[0].id, payload: { bodyMergeReview: { action: 'merge', memberIds: group.map(item => item.id), values: {} } } })))}>
+                  一键合并相同及互补记录（{autoMergeBodyGroups.length} 组）
+                </button>
+              </div>
+              {matchingBodyGroups.slice(currentBodyPage * 8, (currentBodyPage + 1) * 8).map(group => <BodyMeasurementReview
+                key={`${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.bodyMergeDecision))}`}
+                items={group} disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                onMerge={(targetId, memberIds, values) => void handleBodyReview([{ id: targetId, payload: { bodyMergeReview: { action: 'merge', memberIds, values } } }])}
+                onDraft={(id, choices, manual) => void handleBodyReview([{ id, payload: { bodyMergeReview: { action: 'draft', choices, manual } } }])}
+                onExclude={id => void handleBodyReview([{ id, resolution: 'skip' }])}
+                onReopen={targetId => void handleBodyReview([{ id: targetId, payload: { bodyMergeReview: { action: 'reopen' } } }])}
+                onSplit={dates => void handleBodyReview(dates)}
+                onPolicy={(id, resolution) => void handleBodyReview([{ id, resolution }])}
+              />)}
+              {bodyReviewPages > 1 && <nav className="body-review-heading" aria-label="身体测量审查分页">
+                <button type="button" disabled={currentBodyPage === 0 || Boolean(busy)} onClick={() => setBodyReviewPage(currentBodyPage - 1)}>上一组页</button>
+                <span>第 {currentBodyPage + 1} / {bodyReviewPages} 页 · 每页 8 组</span>
+                <button type="button" disabled={currentBodyPage >= bodyReviewPages - 1 || Boolean(busy)} onClick={() => setBodyReviewPage(currentBodyPage + 1)}>下一组页</button>
+              </nav>}
+            </div>}
             <div className="data-import-table-wrap">
               <table className="data-import-table data-import-review-table">
                 <colgroup>
@@ -1081,7 +1131,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           <span>{item.itemType === 'invalid_row' ? item.rawValue.slice(0, 16) : '规则数据'}</span>
                         ) : (
                           <select
-                            disabled={batch.status !== 'reviewing'}
+                            disabled={batch.status !== 'reviewing' || Boolean(item.payload.bodyMergeDecision)}
                             value={item.athleteId || ''}
                             onChange={(event) =>
                               patchItem(item.id, {
@@ -1103,7 +1153,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           '—'
                         ) : (
                           <input
-                            disabled={batch.status !== 'reviewing'}
+                            disabled={batch.status !== 'reviewing' || Boolean(item.payload.bodyMergeDecision)}
                             type="date"
                             value={item.eventDate}
                             onChange={(event) =>
@@ -1163,7 +1213,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               <label key={field}>
                                 <span>{header}</span>
                                 <input
-                                  disabled={batch.status !== 'reviewing'}
+                                  disabled={batch.status !== 'reviewing' || Boolean(item.payload.bodyMergeDecision)}
                                   aria-label={`${item.rawAthleteName} ${item.sourceAddress} ${header}`}
                                   type="number"
                                   step="any"
@@ -1314,7 +1364,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                   {!pageItems.length && (
                     <tr>
                       <td colSpan={8} className="data-import-empty">
-                        当前筛选条件下没有数据。
+                        {bodyGroups.length ? '身体测量请在上方卡片中审查；此处展示其他数据。' : '当前筛选条件下没有数据。'}
                       </td>
                     </tr>
                   )}

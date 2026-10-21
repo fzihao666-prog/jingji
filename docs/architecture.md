@@ -780,3 +780,5 @@ route → application service → repository/query service → SQLite
 导入模板授权与队伍存在性分开判断：账号须具备行政、项目及对应队伍范围授权，有权项目尚无队伍时仍可下载空模板；上传导入另校验授权范围内存在有效队伍，并返回业务前置条件提示。不得仅依据 DMD 等角色名称绕过实际授权。
 
 统一模板采用 `shared/data-import-template.ts` 定义工作表、别名、身体字段和指标代码，在线及静态构建共用 `template-workbook.ts`，导出由 `data-import-export.ts` 读取正式数据。新模板不设置冠军模型原始数据表；旧冠军模型的身体字段转换到 `athlete_body_measurements`，臂展继续使用现有 `test_sessions/test_measurements` 的 `arm_span_cm`，分析端已兼容该代码，不新增数据库列或第二套测量事实。导出按业务归属展开历史指标，不批量改写原表；同批同人同日身体事实合并、冲突阻断。每日恢复体重保持独立口径。评分协议及测试协议按文件原值保存，不再补入虚构的国家队协议。
+
+身体测量审查沿用 `data_import_items` 暂存与原有正式入库事务：同人同日组保留各来源，未确认组服务端阻止提交。`bodyMergeReview` 为校对接口的保留命令，由服务端验证同组、访问范围及字段后生成不可直接编辑的 `bodyMergeDecision`（来源快照、最终值、选择、操作者与时间）；来源行标记为合并跳过，重新编辑恢复快照并保留审查历史。无新增正式表或历史测量迁移，数据库已有值仍按独立的重复处理策略审查。
