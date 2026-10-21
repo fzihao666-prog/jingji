@@ -1602,3 +1602,49 @@ it('历史测试表中的身体指标及自定义FMS协议导出后保留原归�
   expect(exported.items.filter(item => item.itemType === 'test_measurement').map(item => item.testType).sort()).toEqual(['历史体测', 'FMS测试', '其他臂展测试', '历史身高测试'].sort());
   expect(commit(exported.id, 'skip').createdRecords).toBe(0);
 });
+
+it('导出模板中的中文侧别、状态与等级再导入与数据库同口径，不制造覆盖冲突', async () => {
+  const seed = analyze({
+    伤病记录: [
+      ['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'],
+      ['张某', '2026-01-05', '膝部不适', '膝', '左', '观察', 2],
+    ],
+    竞技评估: [
+      ['姓名', '评估日期', '总分', '等级', '评估协议'],
+      ['张某', '2026-01-05', 80, '调整', '人工评价'],
+    ],
+  });
+  expect(seed.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  commit(seed.id, 'skip');
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const roundtrip = analyzeDataImport({
+    buffer,
+    filename: '中文枚举往返.xlsx',
+    mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    project: PROJECT,
+    userId: USER_ID,
+    athletes,
+  });
+  expect(roundtrip.items.filter(item => item.quality === 'error').map(item => item.messages)).toEqual([]);
+  const items = roundtrip.items.filter(
+    item => item.itemType === 'injury_record' || item.itemType === 'competitive_state'
+  );
+  expect(items.filter(item => item.itemType === 'injury_record').length).toBeGreaterThan(0);
+  expect(items.filter(item => item.itemType === 'competitive_state').length).toBeGreaterThan(0);
+  for (const item of items) {
+    expect(item.conflict?.exists).toBe(true);
+    expect(item.conflict?.identical).toBe(true);
+    expect(item.conflict?.fields.filter(field => field.overwrites)).toEqual([]);
+  }
+  expect(importReviewGroups(items)).toEqual([]);
+  const result = commit(roundtrip.id, 'update');
+  expect(result.updatedRecords).toBe(0);
+  expect(
+    db.prepare('SELECT side, status FROM injury_records').all()
+  ).toEqual([{ side: 'left', status: 'observation' }]);
+  expect(
+    db.prepare('SELECT state_level AS level FROM competitive_state_assessments').all()
+  ).toEqual([{ level: 'adjust' }]);
+});

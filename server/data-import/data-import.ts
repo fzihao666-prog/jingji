@@ -993,6 +993,32 @@ function parseStandardDate(value: unknown, year: number): string {
   return validIsoDate(parsed) ? parsed : raw;
 }
 
+/** 模板枚举可读中文、数据库存规范代码；解析期即归一，冲突比较、校对与入库共用同一口径。 */
+const INJURY_SIDE_CODES: Record<string, string> = {
+  未指定: 'unspecified',
+  左: 'left',
+  右: 'right',
+  双侧: 'bilateral',
+  中央: 'center',
+};
+const INJURY_STATUS_CODES: Record<string, string> = {
+  健康: 'healthy',
+  观察: 'observation',
+  限训: 'restricted',
+  康复: 'rehab',
+  停训: 'suspended',
+};
+const STATE_LEVEL_CODES: Record<string, string> = {
+  巅峰: 'peak',
+  良好: 'good',
+  建设: 'build',
+  调整: 'adjust',
+};
+function canonicalCode(value: unknown, codes: Record<string, string>, fallback: string) {
+  const raw = text(value);
+  return codes[raw] || raw || fallback;
+}
+
 function parseStandardSheet(
   matrix: Matrix,
   rawSheet: string,
@@ -1164,7 +1190,7 @@ function parseStandardSheet(
       );
       if (!hasAssessment) continue;
       const overallScore = readNumber('竞技总分');
-      const stateLevel = standardText(row, header.columns, '竞技状态');
+      const stateLevel = canonicalCode(standardText(row, header.columns, '竞技状态'), STATE_LEVEL_CODES, '');
       const payload = {
         ...base.payload,
         overallScore,
@@ -1446,8 +1472,8 @@ function parseStandardSheet(
         ...base.payload,
         injuryName: standardText(row, header.columns, '伤病名称'),
         bodyPart: standardText(row, header.columns, '部位'),
-        side: standardText(row, header.columns, '侧别') || 'unspecified',
-        status: standardText(row, header.columns, '状态') || 'observation',
+        side: canonicalCode(standardText(row, header.columns, '侧别'), INJURY_SIDE_CODES, 'unspecified'),
+        status: canonicalCode(standardText(row, header.columns, '状态'), INJURY_STATUS_CODES, 'observation'),
         // 空白疼痛评分保持未提供（不伪造 0）；写入时仅在明确填写时落库。
         painScore: readNumber('疼痛评分'),
         restrictions: standardText(row, header.columns, '训练限制'),
@@ -1486,7 +1512,7 @@ function parseStandardSheet(
         ...base.payload,
         overallScore,
         // 空白等级保持未提供；入库新增时才落到默认档位。
-        stateLevel: standardText(row, header.columns, '等级'),
+        stateLevel: canonicalCode(standardText(row, header.columns, '等级'), STATE_LEVEL_CODES, ''),
         enduranceScore: readNumber('专项耐力'),
         powerScore: readNumber('力量爆发'),
         techniqueScore: readNumber('技术效率'),
@@ -3882,18 +3908,8 @@ function upsertInjuryItem(
   const existing = db
     .prepare('SELECT * FROM injury_records WHERE athlete_id=? AND onset_date=? AND injury_name=?')
     .get(item.athleteId, item.eventDate, text(p.injuryName)) as Record<string, unknown> | undefined;
-  const side =
-    { 左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center', 未指定: 'unspecified' }[
-      text(p.side)
-    ] ||
-    text(p.side) ||
-    'unspecified';
-  const status =
-    { 健康: 'healthy', 观察: 'observation', 限训: 'restricted', 康复: 'rehab', 停训: 'suspended' }[
-      text(p.status)
-    ] ||
-    text(p.status) ||
-    'observation';
+  const side = canonicalCode(p.side, INJURY_SIDE_CODES, 'unspecified');
+  const status = canonicalCode(p.status, INJURY_STATUS_CODES, 'observation');
   const painScore = optionalNumber(p.painScore);
   const fields: Array<[string, unknown]> = [
     ['body_part', text(p.bodyPart)],
@@ -3964,10 +3980,7 @@ function upsertCompetitiveItem(
     .prepare('SELECT * FROM competitive_state_assessments WHERE athlete_id=? AND assessment_date=?')
     .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
   const quality = item.quality === 'warning' ? 'partial' : 'valid';
-  const level =
-    { 巅峰: 'peak', 良好: 'good', 建设: 'build', 调整: 'adjust' }[text(p.stateLevel)] ||
-    text(p.stateLevel) ||
-    '';
+  const level = canonicalCode(p.stateLevel, STATE_LEVEL_CODES, '');
   const map: Array<[string, string]> = [
     ['overallScore', 'overall_score'],
     ['enduranceScore', 'endurance_score'],
