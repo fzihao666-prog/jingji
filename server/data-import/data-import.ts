@@ -1,3 +1,5 @@
+import { resolveImportMetricName } from '../../shared/import-metric-choice.ts';
+import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import { IMPORT_TEMPLATE_VERSION, IMPORT_TEMPLATE_VERSION_NAME, templateHeaderKey } from '../../shared/import-template-fields.ts';
 import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import { importRecordPolicy, importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
@@ -15,8 +17,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v28：简化模板字段映射、显式日期与条件必填校验；旧草稿需重解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v28-simplified-template';
+// v29：中文测试项目按当前项目字典解析；旧草稿需重解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v29-chinese-test-names';
 
 export type ImportAthlete = {
   id: number;
@@ -1009,6 +1011,7 @@ function parseStandardSheet(
   const header = standardHeader(matrix);
   if (!header) return [];
   const items: ParsedImportItem[] = [];
+  const metricCatalog = sheet === '测试指标' ? readImportMetricDefinitions(project) : [];
   const year = workbookYear(filename);
   const fallbackDate = defaultDate || (simplified ? '' : new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
@@ -1415,13 +1418,14 @@ function parseStandardSheet(
       const explicitTestType = standardText(row, header.columns, '测试类型');
       const rawCode = standardText(row, header.columns, '指标代码');
       // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
-      const metricCode = explicitTestType ? rawCode : canonicalImportMetricCode(rawCode);
+      const selected = rawCode ? undefined : resolveImportMetricName(standardText(row, header.columns, '指标名称'), standardText(row, header.columns, '单位'), metricCatalog);
+      const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || '';
       const valueNum = readNumber('数值');
       const metricDefinition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(metricCode) as { unit: string } | undefined;
       const providedUnit = standardText(row, header.columns, '单位');
       const metricUnit = providedUnit || metricDefinition?.unit || '';
       const durationMin = readNumber('测试时长分钟');
-      if (!metricCode) messages.push('错误：指标代码不能为空');
+      if (selected?.error) messages.push(selected.error);
       if (valueNum === null) messages.push('错误：测试数值不能为空');
       if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
       const sideText = standardText(row, header.columns, '侧别');
@@ -1445,12 +1449,13 @@ function parseStandardSheet(
           eventDate: rowDate,
           testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : '专项测试'),
           metricCode,
-          metricLabel: standardText(row, header.columns, '指标名称') || metricCode,
+          metricLabel: selected?.metric?.label || standardText(row, header.columns, '指标名称') || metricCode,
           valueNum,
           unit: metricUnit,
           side,
           payload: {
             ...base.payload,
+            metricSelectionError: selected?.error || '',
             protocol: standardText(row, header.columns, '协议'),
             durationMin,
             targetValue: readNumber('目标值'),
@@ -2753,8 +2758,9 @@ function validateImportItem(
     const completed = optionalNumber(payload.completed);
     if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
   } else if (item.itemType === 'test_measurement') {
-    if (!item.metricCode) messages.push('错误：指标代码不能为空');
-    if (!item.unit) {
+    if (payload.metricSelectionError) messages.push(String(payload.metricSelectionError));
+    if (!item.metricCode && !payload.metricSelectionError) messages.push('错误：请选择测试项目');
+    if (!item.unit && !payload.metricSelectionError) {
       const definition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(item.metricCode) as { unit: string } | undefined;
       if (!definition || definition.unit !== '') messages.push('错误：指标单位无法由字典确定，请填写单位');
     }

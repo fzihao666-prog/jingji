@@ -24,7 +24,7 @@ describe('简化导入模板', () => {
     for (const [name, original] of UNIFIED_IMPORT_HEADERS) {
       const sheet = loaded.getWorksheet(name)!;
       const fields = importTemplateFields(name);
-      expect(fields.map((field) => field.key).sort()).toEqual([...original].sort());
+      expect(fields.map((field) => field.key).sort()).toEqual(original.filter(key => name !== '其他测试' || !['指标代码', '单位'].includes(key)).sort());
       fields.forEach((field, index) => {
         const cell = sheet.getCell(3, index + 1);
         expect(templateHeaderKey(String(cell.value))).toBe(field.key);
@@ -106,4 +106,21 @@ it('条件必填显示具体条件，编号和课次不只标注术语', () => {
     '同一人同一天有多次训练'
   );
   expect(headers.find((value) => value.startsWith('姓名\n'))).toContain('没有系统编号');
+});
+
+it('教练其他测试模板选择中文项目，不出现内部代码或单位填写列', () => {
+  const workbook = buildImportWorkbook(['其他测试']);
+  const sheet = workbook.getWorksheet('其他测试')!;
+  const fields = importTemplateFields('其他测试');
+  const keys = fields.map(field => field.key);
+  expect(keys).not.toContain('指标代码');
+  expect(keys).not.toContain('单位');
+  const column = keys.indexOf('指标名称') + 1;
+  expect(String(sheet.getCell(3, column).value)).toMatch(/^测试项目\n/);
+  expect(String(sheet.getCell(3, column).value)).toContain('纵跳（cm）');
+  expect(sheet.getCell(4, column).dataValidation.formulae).toEqual(['_JINGJI_TEST_NAMES']);
+  const dictionary = workbook.getWorksheet('数据字典')!;
+  expect(dictionary.getCell('A1').value).toBe('测试项目（下拉选项）');
+  expect(dictionary.getColumn(1).values).toContain('纵跳（cm）');
+  expect(workbook.definedNames.model.some(name => name.name === '_JINGJI_TEST_NAMES')).toBe(true);
 });

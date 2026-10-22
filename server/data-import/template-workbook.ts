@@ -1,3 +1,4 @@
+import { DEFAULT_IMPORT_METRICS, importMetricChoices, type ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
 import ExcelJS from 'exceljs';
 import { importTemplateFields } from '../../shared/import-template-fields.ts';
 import { createTemplateWorkbook, addTemplateSheet } from './template-layout.ts';
@@ -12,7 +13,7 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export' } = {}) {
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; metrics?: readonly ImportMetricDefinition[] } = {}) {
   const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook('竞迹训练监控系统｜简化数据导入模板');
   workbook.creator = '竞迹训练监控系统';
   const instructions = workbook.getWorksheet('填写说明') || workbook.addWorksheet('填写说明');
@@ -26,10 +27,11 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
       instructions.getRow(index + 3).height = 36;
     });
   }
+  const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
   for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
     if (!sheetNames.includes(name)) continue;
     if (options.mode !== 'export') {
-      addTemplateSheet(workbook, name, importTemplateFields(name), IMPORT_SHEET_NOTES[name]);
+      addTemplateSheet(workbook, name, importTemplateFields(name).map(field => name === '其他测试' && field.key === '指标名称' && metricChoices.length ? { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' } : field), name === '其他测试' ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。' : IMPORT_SHEET_NOTES[name]);
       continue;
     }
     const sheet = workbook.addWorksheet(name, {
@@ -61,6 +63,15 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
     sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: headers.length } };
   }
   const dictionary = workbook.addWorksheet('数据字典');
+  if (options.mode !== 'export') {
+    dictionary.addRow(['测试项目（下拉选项）', '单位', '填写说明']);
+    metricChoices.forEach(metric => dictionary.addRow([metric.name, metric.unit, '在其他测试中选择本项目，再填写实测成绩；不要与专用表重复填报']));
+    if (metricChoices.length) workbook.definedNames.add(`'数据字典'!$A$2:$A$${metricChoices.length + 1}`, '_JINGJI_TEST_NAMES');
+    dictionary.columns.forEach(column => { column.width = 32; });
+    dictionary.getColumn(3).width = 75;
+    dictionary.getRow(1).font = { bold: true };
+    return workbook;
+  }
   dictionary.addRow(['指标代码', '指标名称', '单位', '填写工作表', '说明']);
   for (const [, , code, label, unit] of BODY_TEMPLATE_FIELDS)
     dictionary.addRow([code, label, unit, '身体测量', '实测数值，可留空；不在其它表重复填报']);

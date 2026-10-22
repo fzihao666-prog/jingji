@@ -96,13 +96,13 @@ export function addTemplateSheet(
       sheet.getCell(row, index + 1).dataValidation = {
         type: field.choices ? 'list' : 'custom',
         allowBlank: true,
-        formulae: field.choices ? [`"${field.choices.join(',')}"`] : ['TRUE'],
+        formulae: field.choiceFormula ? [field.choiceFormula] : field.choices ? [`"${field.choices.join(',')}"`] : ['TRUE'],
         showInputMessage: true,
         promptTitle: `${field.key}：怎么填`.slice(0, 32),
         prompt: templateFieldHelp(field).slice(0, 255),
         showErrorMessage: Boolean(field.choices),
         errorTitle: '请检查填写值',
-        error: `请选择：${field.choices?.join('、') || '按列说明填写'}`,
+        error: field.choiceFormula ? '请从下拉列表选择测试项目；找不到时请管理员先配置。' : `请选择：${field.choices?.join('、') || '按列说明填写'}`,
       };
     }
   });

@@ -145,6 +145,15 @@ it('简化模板HTTP下载预填正确，缺日期不可提交，校对后成功
     expect(response.status).toBe(200);
     const workbook = XLSX.read(Buffer.from(await response.arrayBuffer()), { type: 'buffer' });
     expect(workbook.Sheets['填写说明'].B1.v).toBe(IMPORT_TEMPLATE_VERSION);
+    if (kind === 'test' || kind === 'unified') {
+      const metricRows = XLSX.utils.sheet_to_json(workbook.Sheets['其他测试'], { header: 1 }) as unknown[][];
+      const metricHeaders = metricRows[2].map(value => String(value).split('\n')[0]);
+      expect(metricHeaders).toContain('测试项目');
+      expect(metricHeaders).not.toContain('指标代码');
+      expect(metricHeaders).not.toContain('单位');
+      const dictionary = XLSX.utils.sheet_to_json(workbook.Sheets['数据字典'], { header: 1 }) as unknown[][];
+      expect(dictionary.some(row => row[0] === '纵跳（cm）')).toBe(true);
+    }
     if (kind !== 'training') continue;
     const sheet = workbook.Sheets['训练课次'];
     const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
@@ -168,6 +177,7 @@ it('简化模板HTTP下载预填正确，缺日期不可提交，校对后成功
   }
   expect((await fetch(`${base}/api/data-import/template?kind=training&project=ROWING`)).status).toBe(401);
   expect((await fetch(`${base}/api/data-import/template?kind=training&project=CANOE_SLALOM`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(403);
+  expect((await fetch(`${base}/api/data-import/template?kind=unified&project=CANOE_SLALOM`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(403);
 });
 
 

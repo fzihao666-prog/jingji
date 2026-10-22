@@ -29,13 +29,16 @@ export type ImportTemplateField = {
   hint: string;
   advanced: boolean;
   choices?: readonly string[];
+  choiceFormula?: string;
+  displayName?: string;
   fillCondition?: string;
   guidance?: ImportFieldGuidance;
 };
 
-/** 第一行始终为旧版稳定表头；其余行仅用于人类阅读。 */
+/** 提取首行字段名；教练使用的中文测试项目映射到既有指标名称字段。 */
 export function templateHeaderKey(value: string): string {
-  return value.split(/\r?\n/)[0].trim();
+  const key = value.split(/\r?\n/)[0].trim();
+  return key === '测试项目' ? '指标名称' : key;
 }
 
 const commonColumns: Record<string, string[]> = {
@@ -386,7 +389,7 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
         ? SPECIAL_IMPORT_HEADERS
         : []);
   const common = commonColumns[sheet] || original;
-  const ordered = [...common, ...original.filter((key) => !common.includes(key))];
+  const ordered = [...common, ...original.filter((key) => !common.includes(key))].filter(key => sheet !== '其他测试' || !['指标代码', '单位'].includes(key));
   const fields: ImportTemplateField[] = ordered.map((key) => {
     let requirement: TemplateRequirement = '选填';
     let hint = '仅填写实际已采集数据，未提供留空。';
@@ -472,9 +475,10 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
       if (key === '侧别') fieldChoices = ['左', '右', '双侧', '未指定'];
     }
     if (sheet === '其他测试') {
-      if (key === '指标代码' || key === '数值') {
+      if (key === '指标名称' || key === '数值') {
         requirement = '必填';
-        hint = '按项目指标字典填写；一项指标一行。';
+        hint = '从下拉列表选择中文测试项目，单位随项目确定；一项测试一行，只填写实际成绩。';
+        if (key === '指标名称') example = '纵跳（cm）';
       }
       if (key === '单位') {
         requirement = '条件必填';
@@ -528,6 +532,7 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
     }
     return {
       key,
+      displayName: sheet === '其他测试' && key === '指标名称' ? '测试项目' : undefined,
       requirement,
       unit,
       example,
@@ -547,7 +552,7 @@ export function templateFieldHeader(field: ImportTemplateField): string {
     : field.requirement;
   const unit = field.unit === '无单位' ? '' : `｜${field.unit}`;
   const meaning = field.guidance ? `\n${field.guidance.meaning}` : '';
-  return `${field.key}${meaning}\n${requirement}${unit}\n例：${field.example}`;
+  return `${field.displayName || field.key}${meaning}\n${requirement}${unit}\n例：${field.example}`;
 }
 
 export function templateFieldHelp(field: ImportTemplateField): string {
@@ -558,6 +563,7 @@ export function templateFieldHelp(field: ImportTemplateField): string {
 }
 
 export const TEMPLATE_CALCULATION_NOTES = [
+  '其他测试：选择中文测试项目（如纵跳（cm）），再填成绩（如45）；系统自动匹配指标和单位，无需填写代码。找不到项目时请管理员先配置，不要编造名称。',
   '表头颜色：红色=必填，橙色=满足说明中的条件才必填，蓝色=选填，灰色=系统预填；具体填写要求以表头文字为准。',
   '必填项在前，选填项在后；常用选填项排在专业选填项前面，所有数据列直接显示，按需填写即可。',
   '第1—3行是说明和表头，第4行起填写；示例仅在表头，不需要删除示例数据。所有已填写的数据都会校验和导入。',

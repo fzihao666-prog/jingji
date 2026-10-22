@@ -1,3 +1,5 @@
+import { readImportMetricDefinitions } from './import-metric-catalog.ts';
+import type { ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
 import { buildUnifiedDataExport } from './data-import-export.ts';
 export { buildUnifiedDataExport, writeUnifiedExportRows } from './data-import-export.ts';
 import { UNIFIED_IMPORT_HEADERS, IMPORT_PURPOSE_SHEETS } from '../../shared/data-import-template.ts';
@@ -72,9 +74,10 @@ const PURPOSE_TITLES: Record<TemplateKind, string> = {
 export function buildPurposeTemplate(
   kind: Exclude<TemplateKind, 'unified'>,
   project: string,
-  athletes: Array<{ id: number; name: string; team: string }>
+  athletes: Array<{ id: number; name: string; team: string }>,
+  metrics?: readonly ImportMetricDefinition[]
 ) {
-  const workbook = buildImportWorkbook(PURPOSE_SHEETS[kind]);
+  const workbook = buildImportWorkbook(PURPOSE_SHEETS[kind], { metrics });
   for (const sheetName of PURPOSE_SHEETS[kind]) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
@@ -145,7 +148,7 @@ export function registerDataImportRoutes(app: Express) {
       if (!['profile', 'training', 'test', 'unified'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {
-        if (kind === 'unified') {
+        if (kind === 'unified' && !cleanString(req.query.project)) {
           // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
           const templatePath = unifiedTemplatePath();
           if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
@@ -160,7 +163,9 @@ export function registerDataImportRoutes(app: Express) {
         const athletes = strengthImportCandidates(req.authUser!)
           .filter((athlete) => athlete.project === project)
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
-        buildPurposeTemplate(kind, project, athletes)
+        const metrics = kind === 'test' || kind === 'unified' ? readImportMetricDefinitions(project) : undefined;
+        const workbook = kind === 'unified' ? buildImportWorkbook(undefined, { metrics }) : buildPurposeTemplate(kind, project, athletes, metrics);
+        workbook
           .xlsx.writeBuffer()
           .then((buffer) => {
             const filename = `竞迹${project}${PURPOSE_TITLES[kind]}_${new Date().toISOString().slice(0, 10)}.xlsx`;

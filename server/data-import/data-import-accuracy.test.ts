@@ -1234,7 +1234,7 @@ describe('统一模板按业务归属整理', () => {
     for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as unknown[][];
       expect(rows[2].map(value => templateHeaderKey(String(value)))).toEqual(importTemplateFields(name).map(field => field.key));
-      expect(rows[2].map(value => templateHeaderKey(String(value))).sort()).toEqual([...headers].sort());
+      expect(rows[2].map(value => templateHeaderKey(String(value))).sort()).toEqual(headers.filter(key => name !== '其他测试' || !['指标代码', '单位'].includes(key)).sort());
     }
   });
 });
@@ -2143,4 +2143,35 @@ it('复制带通俗条件说明的部分列后，仍识别新版模板并阻止�
   const batch = analyze({ 训练课次: [fields.map(templateFieldHeader), fields.map(field => field.key === '姓名' ? '张某' : 60)] });
   expect(batch.items[0].eventDate).toBe('');
   expect(batch.errorCount).toBeGreaterThan(0);
+});
+
+it('教练只填中文测试项目与成绩，系统确定代码和单位并支持完整往返', async () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '测试项目', '数值'], ['张某', '2026-10-22', '纵跳（cm）', 45]] });
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items[0]).toMatchObject({ metricCode: 'vertical_jump_cm', metricLabel: '纵跳', unit: 'cm', valueNum: 45 });
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const rows = XLSX.utils.sheet_to_json(XLSX.read(Buffer.from(await workbook.xlsx.writeBuffer())).Sheets['其他测试'], { header: 1 }) as unknown[][];
+  expect(rows[2]).toContain('指标代码');
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '中文测试往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(roundtrip.errorCount).toBe(0);
+  expect(commit(roundtrip.id, 'skip').createdRecords).toBe(0);
+});
+
+it('中文测试项目使用当前启用字典，未知、同名歧义、项目外或停用项不猜测', () => {
+  const insert = db.prepare("INSERT INTO metric_definitions (code,label,domain,unit,direction,frequency,projects_json,active) VALUES (?,?,'custom',?,'neutral','phase',?,?)");
+  insert.run('coach_test', '队内测试甲', '秒', '["赛艇"]', 1);
+  insert.run('ambiguous_a', '队内同名测试', '秒', '["赛艇"]', 1);
+  insert.run('ambiguous_b', '队内同名测试', '秒', '["赛艇"]', 1);
+  insert.run('foreign_test', '项目外测试', '秒', '["皮划艇"]', 1);
+  insert.run('inactive_test', '已停用测试', '秒', '["赛艇"]', 0);
+  const valid = analyze({ 其他测试: [['姓名', '测试日期', '测试项目', '数值'], ['张某', '2026-10-22', '队内测试甲', 12]] });
+  expect(valid.errorCount).toBe(0);
+  expect(valid.items[0]).toMatchObject({ metricCode: 'coach_test', unit: '秒' });
+  for (const name of ['未知测试', '队内同名测试', '项目外测试', '已停用测试']) {
+    const invalid = analyze({ 其他测试: [['姓名', '测试日期', '测试项目', '数值'], ['张某', '2026-10-22', name, 12]] });
+    expect(invalid.errorCount, name).toBeGreaterThan(0);
+    expect(invalid.items[0].messages.join('；')).toContain('测试项目');
+  }
 });
