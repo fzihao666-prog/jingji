@@ -18,14 +18,14 @@ import {
   updateDataImportAthleteCandidates,
   updateDataImportItems,
 } from './data-import.ts';
-import { accessibleAthleteIds, accountPermissions, hasAthleteAccess, permissionsAllowAthlete } from '../core/permissions.ts';
+import { accountPermissions, permissionsAllowAthlete } from '../core/permissions.ts';
 import { strengthImportCandidates } from '../strength/strength-training-routes.ts';
 import { cleanString } from '../core/utils.ts';
 import { dataImportUpload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { PROJECTS, normalizeProject } from '../../shared/projects.ts';
 import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity.ts';
-import type { AuthUser, Project } from '../core/shared-server.ts';
+import type { AuthUser } from '../core/shared-server.ts';
 
 /** 停用档案仅向有删除/恢复权限且满足当前地域、项目、队伍范围的管理者提供。 */
 function dataImportCandidates(user: AuthUser) {
@@ -401,15 +401,16 @@ export function registerDataImportRoutes(app: Express) {
       try {
         const conflictPolicy =
           cleanString(req.body?.conflictPolicy) === 'update' ? 'update' : 'skip';
+        const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
+        const scope = dataImportScope(req.authUser!, batch.project);
+        if (!scope.allowed)
+          return res.status(403).json({ message: '当前账号已无该项目导入权限，请重新核对授权。' });
         const result = commitDataImport({
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
           creatorRole: req.authUser!.role,
           athletes: dataImportCandidates(req.authUser!),
-          allowedTeams: dataImportScope(
-            req.authUser!,
-            getDataImportBatch(cleanString(req.params.id), req.authUser!.id).project
-          ).allowedTeams,
+          allowedTeams: scope.allowedTeams,
           conflictPolicy,
         });
         res.json({

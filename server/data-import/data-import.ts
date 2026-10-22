@@ -14,8 +14,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v26：所有业务数据按本次导入非空值自动更新，数据库差异不再人工选择。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v26-latest-import-for-all';
+// v27：人员映射即时重验、完整冲突快照和提交并发保护；旧草稿需重解析。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v27-validated-person-mapping';
 
 export type ImportAthlete = {
   id: number;
@@ -197,28 +197,6 @@ const METRICS = {
 
 type MetricCode = keyof typeof METRICS;
 
-const LEGACY_METRIC_KEYS: Partial<
-  Record<MetricCode | `${MetricCode}:left` | `${MetricCode}:right`, string>
-> = {
-  height_cm: 'heightCm',
-  weight_kg: 'weightKg',
-  training_years: 'trainingYears',
-  arm_span_cm: 'armSpanCm',
-  sit_reach_cm: 'sitReachCm',
-  front_plank_sec: 'frontPlankSec',
-  'side_plank_sec:left': 'leftPlankSec',
-  'side_plank_sec:right': 'rightPlankSec',
-  'single_leg_squat_reps:left': 'leftSingleLegSquatReps',
-  'single_leg_squat_reps:right': 'rightSingleLegSquatReps',
-  pull_ups_reps: 'pullUpsReps',
-  squat_kg: 'squatKg',
-  deadlift_kg: 'deadliftKg',
-  bench_press_kg: 'benchPressKg',
-  bench_pull_kg: 'benchPullKg',
-  clean_kg: 'highPullKg',
-  vertical_jump_cm: 'verticalJumpCm',
-};
-
 function text(value: unknown) {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return dateToIso(value);
@@ -389,7 +367,7 @@ function toSuggestion(athlete: ImportAthlete & { birthDate?: string }): DataImpo
     id: athlete.id,
     name: athlete.name,
     team: athlete.team,
-    gender: athlete.gender,
+    gender: text(athlete.gender),
     birthDate: athlete.birthDate || '',
   };
 }
@@ -2254,7 +2232,7 @@ export function analyzeDataImport(input: {
       person.matched = true;
       person.matchedAthleteId = resolution.athlete.id;
       person.team = resolution.athlete.team;
-      person.gender = person.gender || resolution.athlete.gender;
+      person.gender = person.gender || text(resolution.athlete.gender);
     } else if (resolution.kind === 'ambiguous' || resolution.kind === 'conflict') {
       person.suggested = resolution.suggested;
       person.messages.push(resolution.message);
@@ -2262,13 +2240,14 @@ export function analyzeDataImport(input: {
       person.messages.push('待建档：仅需姓名与所属队伍即可最小建档，其他资料可稍后在运动员档案中补充');
     }
     // 队伍自动带入：文件队伍合法时采纳；仅有一个可管理队伍时默认选择；冲突时提示人工确认。
-    if (!person.matched && person.team && allowedTeams && !allowedTeams.has(person.team)) {
+    const teamOutOfScope = !person.matched && Boolean(person.team) && allowedTeams && !allowedTeams.has(person.team);
+    if (teamOutOfScope) {
       person.messages.push(
         `文件中填写的所属队伍“${person.team}”不在当前账号权限范围内，请重新选择`
       );
       person.team = '';
     }
-    if (!person.matched && !person.team && allowedTeams && allowedTeams.size === 1) {
+    if (!teamOutOfScope && !person.matched && !person.team && allowedTeams && allowedTeams.size === 1) {
       person.team = [...allowedTeams][0];
     }
     if (!person.matched && !person.team)
@@ -2414,7 +2393,7 @@ function computeCounts(
     duplicateCount: active.filter((item) => item.conflict?.exists).length,
     overwriteCount: active.filter(item => item.conflict?.fields.some(field => field.overwrites)).length,
     invalidCount: items.filter(
-      (item) => item.itemType === 'invalid_row' || item.quality === 'error'
+      (item) => item.resolution !== 'skip' && item.quality !== 'skipped' && (item.itemType === 'invalid_row' || item.quality === 'error')
     ).length,
     personMatched: athleteCandidates.filter((candidate) => candidate.status === 'matched').length,
     personPending: athleteCandidates.filter(
@@ -3004,6 +2983,57 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
 
 }
 
+/** 校对与人员映射共用重新校验、冲突快照及暂存计数；调用方负责事务。 */
+function persistValidatedImportItems(
+  batchId: string, items: DataImportItemView[], allowed: Set<number>, candidateNames: Set<string>
+) {
+  const update = db.prepare(
+    `UPDATE data_import_items SET athlete_id = ?, event_date = ?, value_num = ?, actual_reps = ?, actual_weight_kg = ?, unit = ?, target_reps = ?, intensity_percent = ?,
+      payload_json = ?, resolution = ?, conflict_json = ?, quality = ?, messages_json = ? WHERE id = ? AND batch_id = ?`
+  );
+  refreshImportConflicts(items);
+  for (const next of items) {
+    const validation = revalidateItem(next, allowed, candidateNames);
+    next.quality = validation.quality;
+    next.messages = validation.messages;
+    // 校对后按最终值重新检测重复与覆盖，保证预览展示的就是提交时会写入的数据。
+    next.conflict = next.quality === 'skipped' ? null : detectItemConflict(next);
+    update.run(
+      next.athleteId,
+      next.eventDate,
+      next.valueNum,
+      next.actualReps,
+      next.actualWeightKg,
+      next.unit,
+      next.targetReps,
+      next.intensityPercent,
+      JSON.stringify(next.payload),
+      next.resolution,
+      JSON.stringify(next.conflict ?? {}),
+      next.quality,
+      JSON.stringify(next.messages),
+      next.id,
+      batchId
+    );
+  }
+  const counts = db
+    .prepare(
+      `SELECT COUNT(*) AS itemCount,
+    SUM(quality = 'valid') AS validCount, SUM(quality = 'warning') AS warningCount, SUM(quality = 'error') AS errorCount
+    FROM data_import_items WHERE batch_id = ?`
+    )
+    .get(batchId) as Record<string, number>;
+  db.prepare(
+    `UPDATE data_import_batches SET item_count = ?, valid_count = ?, warning_count = ?, error_count = ? WHERE id = ?`
+  ).run(
+    Number(counts.itemCount),
+    Number(counts.validCount || 0),
+    Number(counts.warningCount || 0),
+    Number(counts.errorCount || 0),
+    batchId
+  );
+}
+
 export function updateDataImportItems(input: {
   batchId: string;
   reviewTargetId?: number;
@@ -3033,10 +3063,6 @@ export function updateDataImportItems(input: {
   const candidateNames = new Set(
     batch.athleteCandidates.map((candidate) => candidate.normalizedName)
   );
-  const update = db.prepare(
-    `UPDATE data_import_items SET athlete_id = ?, event_date = ?, value_num = ?, actual_reps = ?, actual_weight_kg = ?, unit = ?, target_reps = ?, intensity_percent = ?,
-      payload_json = ?, resolution = ?, conflict_json = ?, quality = ?, messages_json = ? WHERE id = ? AND batch_id = ?`
-  );
   db.exec('BEGIN IMMEDIATE');
   try {
     const corrected = new Map(input.corrections.map(correction => [correction.id, correction]));
@@ -3056,55 +3082,11 @@ export function updateDataImportItems(input: {
         if (item.resolution !== 'skip' && item.quality === 'skipped') item.quality = 'valid';
       }
     }
-    const reviewedIds = new Set<number>();
     for (const correction of input.corrections) {
       if (!correction.payload || !('valueReview' in correction.payload)) continue;
       applyValueReview(nextItems, correction.id, correction.payload.valueReview, allowed, input.userId);
-      for (const item of nextItems) if (reviewFields([item]).length) reviewedIds.add(item.id);
     }
-    refreshImportConflicts(nextItems);
-    for (const next of nextItems) {
-      // 同组另一行被修改或排除时，也重新校验本行。
-      if (!corrected.has(next.id) && !reviewedIds.has(next.id) && !reviewFields([next]).length) continue;
-      const validation = revalidateItem(next, allowed, candidateNames);
-      next.quality = validation.quality;
-      next.messages = validation.messages;
-      // 校对后按最终值重新检测重复与覆盖，保证预览展示的就是提交时会写入的数据。
-      next.conflict = next.quality === 'skipped' ? null : detectItemConflict(next);
-      update.run(
-        next.athleteId,
-        next.eventDate,
-        next.valueNum,
-        next.actualReps,
-        next.actualWeightKg,
-        next.unit,
-        next.targetReps,
-        next.intensityPercent,
-        JSON.stringify(next.payload),
-        next.resolution,
-        JSON.stringify(next.conflict ?? {}),
-        next.quality,
-        JSON.stringify(next.messages),
-        next.id,
-        input.batchId
-      );
-    }
-    const counts = db
-      .prepare(
-        `SELECT COUNT(*) AS itemCount,
-      SUM(quality = 'valid') AS validCount, SUM(quality = 'warning') AS warningCount, SUM(quality = 'error') AS errorCount
-      FROM data_import_items WHERE batch_id = ?`
-      )
-      .get(input.batchId) as Record<string, number>;
-    db.prepare(
-      `UPDATE data_import_batches SET item_count = ?, valid_count = ?, warning_count = ?, error_count = ? WHERE id = ?`
-    ).run(
-      Number(counts.itemCount),
-      Number(counts.validCount || 0),
-      Number(counts.warningCount || 0),
-      Number(counts.errorCount || 0),
-      input.batchId
-    );
+    persistValidatedImportItems(input.batchId, nextItems, allowed, candidateNames);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -3197,6 +3179,26 @@ export function updateDataImportAthleteCandidates(input: {
         input.batchId
       );
     }
+    const updated = getDataImportBatch(input.batchId, input.userId);
+    const candidates = new Map(updated.athleteCandidates.map(candidate => [candidate.normalizedName, candidate]));
+    const allowed = new Set(input.athletes.map(athlete => athlete.id));
+    const changedKeys = new Set(updated.athleteCandidates.filter(candidate => {
+      const previous = batch.athleteCandidates.find(entry => entry.id === candidate.id);
+      return previous && (previous.matchedAthleteId !== candidate.matchedAthleteId || previous.excluded !== candidate.excluded);
+    }).map(candidate => candidate.normalizedName));
+    // 身份变化使既有合并选择失效，先恢复来源，再按新身份检测冲突。
+    for (const item of updated.items) {
+      const decision = item.payload.valueReviewDecision as { sources?: Array<{ id: number }> } | undefined;
+      if (decision?.sources?.some(source => updated.items.some(entry => entry.id === source.id && changedKeys.has(dataImportPersonKey(entry)))))
+        applyValueReview(updated.items, item.id, { action: 'reopen' }, allowed, input.userId);
+    }
+    for (const item of updated.items) {
+      const candidate = candidates.get(dataImportPersonKey(item));
+      if (!candidate || candidate.status !== 'pending' || item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
+      item.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
+      item.quality = item.resolution === 'skip' || candidate.excluded ? 'skipped' : 'valid';
+    }
+    persistValidatedImportItems(input.batchId, updated.items, allowed, new Set(candidates.keys()));
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -4179,7 +4181,6 @@ function resolvePendingAthletes(input: {
         (item) =>
           item.itemType !== 'scoring_rule' &&
           item.itemType !== 'invalid_row' &&
-          !item.athleteId &&
           item.quality !== 'skipped' &&
           item.resolution !== 'skip'
       )
@@ -4197,7 +4198,7 @@ function resolvePendingAthletes(input: {
       excludedKeys.add(candidate.normalizedName);
       continue;
     }
-    if (!requiredNames.has(candidate.normalizedName)) continue;
+    if (candidate.status !== 'pending' || !requiredNames.has(candidate.normalizedName)) continue;
     if (!candidate.confirmed)
       throw new Error(`请先在人员确认中确认“${candidate.name}”的建档或关联方式。`);
     if (candidate.matchedAthleteId) {
@@ -4306,12 +4307,15 @@ function resolvePendingAthletes(input: {
 
 function assertConflictUnchanged(item: DataImportItemView, fresh: DataImportConflict) {
   const recorded = item.conflict;
-  if (!recorded?.exists || !fresh.exists) return;
+  if (!recorded) return;
+  if (Boolean(recorded.exists) !== Boolean(fresh.exists) || (recorded.exists && (recorded.entityId !== fresh.entityId || recorded.entityType !== fresh.entityType)))
+    throw new Error('数据库已有记录已变化，请保存校对并重新确认后再提交。');
+  if (!recorded.exists) return;
   for (const field of recorded.fields) {
     const freshField = fresh.fields.find((entry) => entry.field === field.field);
     if (freshField && freshField.oldValue !== field.oldValue)
       throw new Error(
-        `“${item.rawAthleteName}”的${field.label}在预览后被其他操作修改（${field.oldValue || '空'}→${freshField.oldValue || '空'}），请重新打开批次确认冲突后再提交。`
+        `“${item.rawAthleteName}”的${field.label}在预览后被其他操作修改（${field.oldValue || '空'}→${freshField.oldValue || '空'}），请点击保存校对，核实更新后的差异后再提交。`
       );
   }
 }
@@ -4326,18 +4330,17 @@ export function commitDataImport(input: {
 }) {
   ensureMetricDefinitions();
   const batch = getDataImportBatch(input.batchId, input.userId);
-  if (batch.status === 'committed')
+  if (batch.status === 'committed') {
+    const audit = db.prepare("SELECT detail FROM audit_logs WHERE action = 'COMMIT_DATA_IMPORT' AND user_id = ? AND json_extract(detail, '$.batchId') = ? ORDER BY id DESC LIMIT 1")
+      .get(input.userId, input.batchId) as { detail: string } | undefined;
+    const saved = audit ? JSON.parse(audit.detail) as Record<string, number> : {};
     return {
-      batch,
-      imported: batch.importedCount,
-      skipped: batch.skippedCount,
-      createdAthletes: 0,
-      linkedAthletes: 0,
-      createdRecords: 0,
-      updatedRecords: 0,
-      filledProfileFields: 0,
-      overwrittenProfileFields: 0,
+      batch, imported: batch.importedCount, skipped: batch.skippedCount,
+      createdAthletes: saved.createdAthletes ?? 0, linkedAthletes: saved.linkedAthletes ?? 0,
+      createdRecords: saved.createdRecords ?? 0, updatedRecords: saved.updatedRecords ?? 0,
+      filledProfileFields: saved.filledProfileFields ?? 0, overwrittenProfileFields: saved.overwrittenProfileFields ?? 0,
     };
+  }
   if (batch.status !== 'reviewing') throw new Error('该批次当前不能提交。');
   if (batch.parserVersion !== DATA_IMPORT_PARSER_VERSION)
     throw new Error('该草稿使用旧版导入规则，请重新上传原文件解析并确认后再提交。');
@@ -4403,6 +4406,7 @@ export function commitDataImport(input: {
   let updatedRecords = 0;
   let filledProfileFields = 0;
   let overwrittenProfileFields = 0;
+  const previewAthleteIds = new Set(batch.items.filter(item => item.athleteId).map(item => item.id));
   const sessionIds = new Set<number>();
   const explicitTotalIds = new Set<number>();
   // 赋值发生在事务内且失败即回滚抛出，后续返回必然已赋值。
@@ -4421,6 +4425,8 @@ export function commitDataImport(input: {
     refreshImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
       throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
+    const savedConflicts = new Map((db.prepare('SELECT id, conflict_json AS conflictJson FROM data_import_items WHERE batch_id = ?')
+      .all(input.batchId) as Array<{ id: number; conflictJson: string }>).map(row => [row.id, JSON.parse(row.conflictJson || '{}') as DataImportConflict]));
     const freshConflicts = new Map(importable.map(item => [item.id, detectItemConflict(item)]));
     for (const item of [...importable].sort((a, b) => Number(b.itemType === 'training_session') - Number(a.itemType === 'training_session'))) {
       if (item.payload.valueAutoMerged || resolution.excludedKeys.has(dataImportPersonKey(item))) {
@@ -4432,10 +4438,10 @@ export function commitDataImport(input: {
       const anchor = batch.items.find(entry => entry.id === item.payload.valueReviewMemberOf) || item;
       const decision = anchor.payload.valueReviewDecision as { databaseSnapshots?: Array<{ id: number; conflict: DataImportConflict }> } | undefined;
       const snapshot = decision?.databaseSnapshots?.find(snapshot => snapshot.id === item.id);
-      if (snapshot) {
-        if (snapshot.conflict.exists && !fresh.exists) throw new Error('数据库已有记录已变化，请重新审查');
-        assertConflictUnchanged({ ...item, conflict: snapshot.conflict }, fresh);
-      }
+      // 新建档案在本事务产生，不与建档前的空快照比较。
+      const recorded = snapshot?.conflict ?? savedConflicts.get(item.id);
+      if ((item.itemType === 'scoring_rule' || previewAthleteIds.has(item.id)) && recorded)
+        assertConflictUnchanged({ ...item, conflict: recorded }, fresh);
       let result: UpsertResult;
       let entityType = '';
       if (item.itemType === 'athlete_profile') {

@@ -1379,7 +1379,7 @@ it('三条身体测量保留真实0、手填选择与互补值，合并只写一
   expect(fixed.errorCount).toBe(0);
   expect(fixed.items[0].payload).toMatchObject({ weightKg: 81.5, bodyFatPct: 0, skeletalMuscleKg: 30 });
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
-  expect(commit(batch.id, 'skip').createdRecords).toBe(0);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
 });
 
@@ -1961,4 +1961,76 @@ it('疼痛差异自动更新，中文枚举校对及审查写回均只保存规�
   expect(saved.items[0].payload).toMatchObject({ side: 'left', status: 'observation' });
   expect(saved.items[0].payload.valueReviewDecision).toMatchObject({ finalValues: { side: 'left', status: 'observation', painScore: 4 } });
   expect(commit(changed.id, 'update').updatedRecords).toBe(1);
+});
+
+it('普通覆盖在校对后数据库变化时拒绝提交，重新保存校对后才采用新基线', () => {
+  commit(analyze({ 身体测量: [['姓名', '日期', '体重kg'], ['张某', '2026-10-01', 70]] }).id, 'update');
+  const batch = analyze({ 身体测量: [['姓名', '日期', '体重kg'], ['张某', '2026-10-01', 80]] });
+  db.prepare('UPDATE athlete_body_measurements SET weight_kg = 75 WHERE athlete_id = 1').run();
+  expect(() => commit(batch.id, 'update')).toThrow(/变化|修改/);
+  expect(db.prepare('SELECT weight_kg FROM athlete_body_measurements WHERE athlete_id = 1').get()).toEqual({ weight_kg: 75 });
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [] });
+  expect(commit(batch.id, 'update').updatedRecords).toBe(1);
+});
+
+it('预览后新增或删除同一业务记录也要求重新校对，跳过行不阻断', () => {
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['张某', '2026-10-02', 8]] });
+  commit(analyze({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['张某', '2026-10-02', 6]] }).id, 'update');
+  expect(() => commit(batch.id, 'update')).toThrow(/变化|修改/);
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [] });
+  db.prepare('DELETE FROM daily_wellness WHERE athlete_id = 1').run();
+  expect(() => commit(batch.id, 'update')).toThrow(/变化|修改/);
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, resolution: 'skip' }] });
+  expect(commit(batch.id, 'update').imported).toBe(0);
+});
+
+it('人员映射保存即更新下游记录，再改关联后按新运动员重新检查重复', () => {
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['待确认队员', '2026-10-03', 8]] });
+  const candidate = batch.athleteCandidates[0];
+  const first = updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']), athletes,
+    corrections: [{ id: candidate.id, matchedAthleteId: 1, confirmed: true }] });
+  expect(first.items[0].athleteId).toBe(1);
+  const second = updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']), athletes,
+    corrections: [{ id: candidate.id, matchedAthleteId: 2, confirmed: true }] });
+  expect(second.items[0].athleteId).toBe(2);
+  expect(commit(batch.id, 'update').createdRecords).toBe(1);
+  expect(db.prepare('SELECT athlete_id FROM daily_wellness').all()).toEqual([{ athlete_id: 2 }]);
+});
+
+it('重复提交返回首次入库结果，不把已新增和更新数量伪装为0', () => {
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['张某', '2026-10-04', 8]] });
+  const first = commit(batch.id, 'update');
+  const second = commit(batch.id, 'update');
+  expect(second.createdRecords).toBe(first.createdRecords);
+  expect(second.updatedRecords).toBe(first.updatedRecords);
+  expect(second.skipped).toBe(first.skipped);
+});
+
+it('改关联使原冲突选择失效，恢复每条来源后按新身份重新审查', () => {
+  const batch = analyze({ 身体测量: [['姓名', '日期', '体重kg'], ['待确认新人', '2026-10-07', 70], ['待确认新人', '2026-10-07', 80]] });
+  const candidate = batch.athleteCandidates[0];
+  const linked = updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']), athletes,
+    corrections: [{ id: candidate.id, matchedAthleteId: 1, confirmed: true }] });
+  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes,
+    corrections: selectImportReviewRecord(importReviewGroups(linked.items), 0) });
+  expect(merged.items.some(item => item.payload.valueReviewDecision)).toBe(true);
+  const changed = updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']), athletes,
+    corrections: [{ id: candidate.id, matchedAthleteId: 2, confirmed: true }] });
+  expect(changed.items.every(item => item.athleteId === 2 && !item.payload.valueReviewDecision)).toBe(true);
+  expect(changed.items.map(item => item.payload.weightKg).sort()).toEqual([70, 80]);
+  expect(importReviewGroups(changed.items)).toHaveLength(1);
+  expect(() => commit(batch.id, 'update')).toThrow(/校验|审查/);
+});
+
+it('人员排除再恢复即更新校对状态，不提前写正式记录', () => {
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['待确认新人', '2026-10-08', 8]] });
+  const candidate = batch.athleteCandidates[0];
+  const excluded = updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']), athletes,
+    corrections: [{ id: candidate.id, excluded: true }] });
+  expect(excluded.items[0].quality).toBe('skipped');
+  const restored = updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']), athletes,
+    corrections: [{ id: candidate.id, excluded: false, matchedAthleteId: 1, confirmed: true }] });
+  expect(restored.items[0].quality).not.toBe('skipped');
+  expect(db.prepare('SELECT COUNT(*) AS count FROM daily_wellness').get()).toEqual({ count: 0 });
+  expect(commit(batch.id, 'update').createdRecords).toBe(1);
 });

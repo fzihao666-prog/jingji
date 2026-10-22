@@ -152,8 +152,7 @@
 
 .data-import-date input,
 .data-import-table input,
-.data-import-table select,
-.data-import-commit-bar select {
+.data-import-table select {
   height: 34px;
   padding: 0 9px;
   border: 1px solid #d8e3e5;
@@ -756,28 +755,16 @@
 }
 
 .data-import-commit-bar {
+  position: sticky;
+  z-index: 3;
+  bottom: 0;
+  box-shadow: 0 -4px 16px rgb(23 32 51 / 8%);
   padding: 14px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 15px;
-  background: #f8fbfb;
-}
-
-.data-import-commit-bar > label {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.data-import-commit-bar > label > span {
-  color: #61787e;
-  font-size: 8px;
-  font-weight: 800;
-}
-
-.data-import-commit-bar select {
-  width: 245px;
+  background: var(--paper);
 }
 
 .data-import-commit-bar > div {
@@ -870,10 +857,6 @@
   .data-import-commit-bar > div {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .data-import-commit-bar select {
-    width: 100%;
   }
 }
 
@@ -1724,4 +1707,55 @@
   background: var(--primary, #176e68);
   color: #fff;
   border-color: currentcolor;
+}
+
+.data-import-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 16px 0;
+  margin: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.data-import-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-import-steps li[aria-current='step'] {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.data-import-steps li > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid currentcolor;
+  border-radius: 50%;
+}
+
+
+.data-import-save-status {
+  padding: 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.data-import-person-name {
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.data-import-person-name:focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 2px;
 }

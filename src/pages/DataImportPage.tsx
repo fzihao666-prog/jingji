@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { automaticImportPersonLinks, dataImportPersonKey } from '../../shared/data-import-person';
+import { dataImportPersonKey, importPersonNeedsConfirmation } from '../../shared/data-import-person';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import type {
@@ -46,7 +46,6 @@ type Props = {
 
 type Correction = {
   id: number;
-  athleteId?: number | null;
   eventDate?: string;
   valueNum?: number | null;
   actualReps?: number | null;
@@ -122,6 +121,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [reviewGroupPage, setReviewGroupPage] = useState(0);
+  const correctionQueue = useRef(Promise.resolve());
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   const [corrections, setCorrections] = useState<Map<number, Correction>>(new Map());
   const [athleteCorrections, setAthleteCorrections] = useState<Map<number, AthleteCorrection>>(
     new Map()
@@ -130,6 +132,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [personTab, setPersonTab] = useState<'all' | 'pending' | 'ambiguous'>('all');
   const [personQuery, setPersonQuery] = useState('');
   const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
+  const [personCreateModes, setPersonCreateModes] = useState<Set<number>>(new Set());
   const [personLinkModes, setPersonLinkModes] = useState<Set<number>>(new Set());
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
@@ -180,27 +183,19 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   }, [project]);
 
   const startReview = (next: DataImportBatch) => {
-    const links = next.status === 'reviewing'
-      ? automaticImportPersonLinks(next.athleteCandidates, athletes) : new Map<number, number>();
-    const automaticCorrections = new Map<number, AthleteCorrection>();
-    next = { ...next, athleteCandidates: next.athleteCandidates.map(candidate => {
-      const athleteId = links.get(candidate.id);
-      if (!athleteId) return candidate;
-      const correction = { id: candidate.id, matchedAthleteId: athleteId, confirmed: true };
-      automaticCorrections.set(candidate.id, correction);
-      return { ...candidate, ...correction, messages: ['已自动关联已有运动员，保留原档案及所属队伍'] };
-    }) };
     setBulkCandidateTeam('');
     setReviewGroupPage(0);
     setBatch(next);
     setPersonLinkModes(new Set());
+    setPersonCreateModes(new Set());
     setCorrections(new Map());
-    setAthleteCorrections(automaticCorrections);
+    setAthleteCorrections(new Map());
     setPage(0);
     setResult(null);
     const unresolved = next.athleteCandidates.filter(
-      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
+      (candidate) => importPersonNeedsConfirmation(candidate, next.items)
     );
+    setSelectedPersonId(unresolved[0]?.id ?? null);
     setPersonDialogOpen(next.status === 'reviewing' && unresolved.length > 0);
     setDuplicateDialogOpen(false);
     setConfirmDialogOpen(false);
@@ -217,6 +212,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
 
   const analyze = async (options?: { reparse?: boolean }) => {
     if (!file) return;
+    if (hasUnsavedChanges && !window.confirm('当前批次有未保存修改，上传其他文件会丢失这些修改。是否继续？')) return;
     setBusy('analyze');
     setError('');
     setMessage('');
@@ -287,6 +283,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   };
 
   const loadBatch = async (id: string) => {
+    if (hasUnsavedChanges && !window.confirm('当前批次有未保存修改，切换批次会丢失这些修改。是否继续？')) return;
     setBusy('load');
     setError('');
     setMessage('');
@@ -330,51 +327,29 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   };
 
   const patchItem = (itemId: number, patch: Omit<Correction, 'id'>) => {
-    const sourceItem = batch?.items.find((item) => item.id === itemId);
-    const groupedIds =
-      sourceItem && 'athleteId' in patch && sourceItem.itemType !== 'invalid_row'
-        ? batch?.items
-            .filter(
-              (item) =>
-                item.itemType !== 'invalid_row' &&
-                item.rawAthleteName &&
-                dataImportPersonKey(item) === dataImportPersonKey(sourceItem)
-            )
-            .map((item) => item.id) || [itemId]
-        : [itemId];
     setBatch((current) =>
       current
         ? {
             ...current,
             items: current.items.map((item) =>
-              groupedIds.includes(item.id) ? { ...item, ...patch, payload: patch.payload ? { ...item.payload, ...patch.payload } : item.payload } : item
+              item.id === itemId ? { ...item, ...patch, payload: patch.payload ? { ...item.payload, ...patch.payload } : item.payload } : item
             ),
           }
         : current
     );
     setCorrections((current) => {
       const next = new Map(current);
-      for (const id of groupedIds) {
-        const prior = next.get(id) || { id };
-        next.set(id, {
-          ...prior,
-          ...patch,
-          payload: patch.payload ? { ...(prior.payload || {}), ...patch.payload } : prior.payload,
-        });
-      }
+      const prior = next.get(itemId) || { id: itemId };
+      next.set(itemId, {
+        ...prior,
+        ...patch,
+        payload: patch.payload ? { ...(prior.payload || {}), ...patch.payload } : prior.payload,
+      });
       return next;
     });
   };
 
   const patchAthleteCandidate = (candidateId: number, patch: Omit<AthleteCorrection, 'id'>) => {
-    const candidate = batch?.athleteCandidates.find(entry => entry.id === candidateId);
-    if (candidate && ('team' in patch || 'name' in patch) && !candidate.excluded) {
-      const name = (patch.name ?? candidate.name).trim();
-      const team = patch.team ?? candidate.team;
-      const existing = athletes.filter(athlete => athlete.project === candidate.project
-        && athlete.name.trim() === name && athlete.team === team);
-      if (existing.length === 1) patch = { ...patch, matchedAthleteId: existing[0].id, confirmed: true };
-    }
     setBatch((current) =>
       current
         ? {
@@ -424,14 +399,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   ) => {
     const athleteMap = overrideAthlete ?? athleteCorrections;
     const itemMap = overrideItems ?? corrections;
-    if (!batch || (!itemMap.size && !athleteMap.size)) return batch;
+    if (!batch) return null;
     setBusy('save');
     setError('');
     try {
       let currentBatch = batch;
       if (athleteMap.size)
         currentBatch = (await api.updateDataImportAthletes(batch.id, [...athleteMap.values()])).batch;
-      if (itemMap.size)
+      if (itemMap.size || !athleteMap.size)
         currentBatch = (await api.updateDataImportItems(batch.id, [...itemMap.values()])).batch;
       setBatch(currentBatch);
       setCorrections(new Map());
@@ -446,10 +421,65 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     }
   };
 
+  // 连续编辑串行保存；只把最新一轮响应用于页面，避免旧响应覆盖正在输入的值。
+  useEffect(() => {
+    const batchId = batch?.id;
+    if (!batchId || !corrections.size || athleteCorrections.size) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      correctionQueue.current = correctionQueue.current.then(async () => {
+        if (cancelled) return;
+        setBusy('save');
+        try {
+          const info = await api.updateDataImportItems(batchId, [...corrections.values()]);
+          if (!cancelled) {
+            setBatch(info.batch);
+            setCorrections(new Map());
+            setError('');
+          }
+        } catch (error) {
+          if (!cancelled) setError(error instanceof Error ? error.message : '自动校验失败，请保存校对后重试。');
+        } finally {
+          setBusy(current => current === 'save' ? '' : current);
+        }
+      });
+    }, 600);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [corrections, athleteCorrections.size, batch?.id]);
+
+  const hasUnsavedChanges = corrections.size > 0 || athleteCorrections.size > 0 || pendingSelections.size > 0;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    if (!personDialogOpen && !confirmDialogOpen && !duplicateDialogOpen) return;
+    const previous = document.activeElement;
+    const dialog = document.querySelector<HTMLElement>('.data-import-dialog-backdrop [role="dialog"]');
+    if (!dialog) return;
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')];
+    focusable()[0]?.focus();
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !busyRef.current) {
+        setPersonDialogOpen(false); setConfirmDialogOpen(false); setDuplicateDialogOpen(false);
+      }
+      if (event.key !== 'Tab') return;
+      const elements = focusable();
+      const first = elements[0], last = elements.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    dialog.addEventListener('keydown', handleKey);
+    return () => { dialog.removeEventListener('keydown', handleKey); if (previous instanceof HTMLElement) previous.focus(); };
+  }, [personDialogOpen, confirmDialogOpen, duplicateDialogOpen]);
+
   const unconfirmedPersons = useMemo(() => {
     if (!batch) return [];
     return batch.athleteCandidates.filter(
-      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
+      (candidate) => importPersonNeedsConfirmation(candidate, batch.items)
     );
   }, [batch]);
 
@@ -465,7 +495,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       currentBatch = saved;
     }
     const stillUnconfirmed = currentBatch.athleteCandidates.filter(
-      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed
+      (candidate) => importPersonNeedsConfirmation(candidate, currentBatch.items)
     );
     if (stillUnconfirmed.length) {
       setError(`还有${stillUnconfirmed.length}名运动员未完成人员确认，请先处理。`);
@@ -513,7 +543,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     const nextMap = new Map(athleteCorrections);
     for (const candidate of batch.athleteCandidates) {
       if (candidate.status !== 'pending' || candidate.excluded) continue;
-      const unresolvedAmbiguity = candidate.suggested.length > 0 && !candidate.matchedAthleteId;
+      const unresolvedAmbiguity = candidate.suggested.length > 0 && !personCreateModes.has(candidate.id) && !candidate.matchedAthleteId;
       const missingTeam = !candidate.matchedAthleteId && !candidate.team;
       const missingLink = personLinkModes.has(candidate.id) && !candidate.matchedAthleteId;
       if (unresolvedAmbiguity || missingTeam || missingLink) continue; // 身份歧义与缺队伍必须逐项解决
@@ -521,7 +551,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     }
     const pendingFix = batch.athleteCandidates.filter((candidate) => {
       if (candidate.status !== 'pending' || candidate.excluded) return false;
-      if (candidate.suggested.length > 0 && !candidate.matchedAthleteId) return true;
+      if (candidate.suggested.length > 0 && !personCreateModes.has(candidate.id) && !candidate.matchedAthleteId) return true;
       if (!candidate.matchedAthleteId && (!candidate.team || personLinkModes.has(candidate.id))) return true;
       return false;
     });
@@ -593,7 +623,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     return batch.items
       .filter((item) => {
         if (reviewGroupIds.has(item.id) || item.payload.valueAutoMerged) return false;
-        if (item.payload.valueAutoMergeSources && item.quality === 'valid' && !item.conflict?.fields.some(field => field.overwrites)) return false;
+        if (filter !== 'all' && item.payload.valueAutoMergeSources && item.quality === 'valid' && !item.conflict?.fields.some(field => field.overwrites)) return false;
         if (filter === 'exception' && !isImportException(item))
           return false;
         if (filter === 'duplicate' && !item.conflict?.exists) return false;
@@ -615,7 +645,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             ? 0
             : item.quality === 'warning'
               ? 1
-              : 2;
+              : item.conflict?.fields.some(field => field.overwrites) ? 2 : item.conflict?.exists ? 3 : 4;
         return rank(a) - rank(b);
       });
   }, [batch, filter, query, reviewGroupIds]);
@@ -627,7 +657,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const summaryPreview = useMemo(() => {
     if (!batch) return null;
     const importable = batch.items.filter(
-      (item) => item.quality !== 'skipped' && item.resolution !== 'skip' && item.itemType !== 'invalid_row'
+      (item) => (item.quality === 'valid' || item.quality === 'warning') && item.resolution !== 'skip' && !item.payload.valueAutoMerged && item.itemType !== 'invalid_row'
     );
     const excludedKeys = new Set(
       batch.athleteCandidates.filter((candidate) => candidate.excluded).map((c) => c.normalizedName)
@@ -635,7 +665,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     const active = importable.filter((item) => !excludedKeys.has(dataImportPersonKey(item)));
     const createPersons = batch.athleteCandidates.filter(
       (candidate) =>
-        candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId
+        candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId &&
+        active.some(item => dataImportPersonKey(item) === candidate.normalizedName)
     );
     const linkPersons = batch.athleteCandidates.filter(
       (candidate) =>
@@ -655,7 +686,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           item.conflict?.exists &&
           (importRecordPolicy(item) === 'skip' || item.conflict.identical)
       ).length +
-      batch.items.filter((item) => item.resolution === 'skip').length +
+      batch.items.filter((item) => item.resolution === 'skip' || item.quality === 'skipped' || item.payload.valueAutoMerged).length +
       importable.filter((item) => excludedKeys.has(dataImportPersonKey(item))).length;
     const overwriteFields = active.reduce(
       (sum, item) => sum + (item.conflict?.fields.filter((field) => field.overwrites).length || 0),
@@ -778,6 +809,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         }
       />
 
+      <ol className="data-import-steps" aria-label="数据导入进度">
+        {['上传并检查', '确认运动员', '数据校对与确认导入', '导入结果'].map((label, index) => {
+          const current = !batch ? 0 : batch.status === 'committed' ? 3 : unconfirmedPersons.length ? 1 : 2;
+          return <li key={label} aria-current={index === current ? 'step' : undefined}>
+            <span>{index + 1}</span>{label}{index === 1 && batch && !unconfirmedPersons.length ? '（已自动通过）' : ''}
+          </li>;
+        })}
+      </ol>
+
       <div className="data-import-grid">
         <section className="data-import-upload-card">
           <div className="data-import-card-heading">
@@ -805,6 +845,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             className="visually-hidden"
             type="file"
             accept=".xls,.xlsx"
+            aria-label="Excel文件"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
           />
           <label className="data-import-date">
@@ -928,7 +969,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </small>
             </div>
             <div>
-              <span>跳过重复</span>
+              <span>跳过或排除</span>
               <strong>{result.skipped}</strong>
               <small>保留数据库原值</small>
             </div>
@@ -938,7 +979,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
 
       {batch && (
         <>
-          <section className="data-import-summary">
+          {batch.status === 'reviewing' && <section className="data-import-summary">
             <div>
               <span>已确认运动员</span>
               <strong>{batch.athleteCandidates.filter(candidate => !candidate.excluded && Boolean(candidate.matchedAthleteId)).length}</strong>
@@ -947,9 +988,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </small>
             </div>
             <div>
-              <span>待新增记录</span>
-              <strong>{batch.counts.newCount}</strong>
-              <small>业务键上没有重复</small>
+              <span>可写入记录</span>
+              <strong>{(summaryPreview?.newRecords ?? 0) + (summaryPreview?.updateRecords ?? 0)}</strong>
+              <small>按最终有效数据统计</small>
             </div>
             <div className="warning">
               <span>重复记录</span>
@@ -962,8 +1003,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <small>自动采用本次导入值</small>
             </div>
             <div className="danger">
-              <span>错误记录</span>
-              <strong>{batch.counts.invalidCount}</strong>
+              <span>待处理错误</span>
+              <strong>{batch.errorCount}</strong>
               <small>修正可编辑项，错误行需排除</small>
             </div>
             <div>
@@ -971,7 +1012,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <strong className="status-text">{STATUS_LABELS[batch.status]}</strong>
               <small>{batch.parserVersion}</small>
             </div>
-          </section>
+          </section>}
 
           <section className="data-import-sheet-audit">
             <div className="data-import-card-heading">
@@ -1022,7 +1063,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <span>REVIEW QUEUE</span>
                 <h2>数据审查与校对</h2>
                 <p>
-                  校对的修改就是最终入库值；空白不覆盖已有数据，真实0值会保留。
+                  修改后自动保存并重新校验；空白不覆盖已有数据，真实0值会保留。
                   {unconfirmedPersons.length > 0 && (
                     <strong className="data-import-gate">
                       还有{unconfirmedPersons.length}名运动员待确认，
@@ -1048,15 +1089,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 </label>
                 <button
                   type="button"
-                  disabled={
-                    (!corrections.size && !athleteCorrections.size) ||
-                    Boolean(busy) ||
-                    batch.status !== 'reviewing'
-                  }
+                  disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                  title="重新校验当前草稿并刷新数据库差异"
                   onClick={() => void saveCorrections()}
                 >
                   <Save size={15} />
-                  保存校对
+                  {busy === 'save' ? '正在重新校验…' : '保存校对'}
                   {corrections.size + athleteCorrections.size
                     ? `（${corrections.size + athleteCorrections.size}）`
                     : ''}
@@ -1071,6 +1109,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 </button>
               </div>
             </div>
+            <p role="status" aria-live="polite" className="data-import-save-status">
+              {busy === 'save' ? '正在保存修改并重新校验…' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
+            </p>
             <div className="data-import-filters">
               {(
                 [
@@ -1169,22 +1210,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         {item.itemType === 'scoring_rule' || item.itemType === 'invalid_row' ? (
                           <span>{item.itemType === 'invalid_row' ? item.rawValue.slice(0, 16) : '规则数据'}</span>
                         ) : (
-                          <select
-                            disabled={batch.status !== 'reviewing' || Boolean(item.payload.valueReviewDecision)}
-                            value={item.athleteId || ''}
-                            onChange={(event) =>
-                              patchItem(item.id, {
-                                athleteId: Number(event.target.value) || null,
-                              })
-                            }
-                          >
-                            <option value="">人员确认后自动关联：{item.rawAthleteName}</option>
-                            {athletes.map((athlete) => (
-                              <option key={athlete.id} value={athlete.id}>
-                                {athlete.name} · {athlete.team}
-                              </option>
-                            ))}
-                          </select>
+                          <span>
+                            {item.athleteName || item.rawAthleteName}
+                            <small>{item.athleteId ? item.athleteTeam : '待完成人员确认'}</small>
+                          </span>
                         )}
                       </td>
                       <td>
@@ -1464,7 +1493,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                     ? '正在写入…'
                     : batch.status === 'committed'
                       ? '已写入数据库'
-                      : '确认导入'}
+                      : hasUnsavedChanges ? '校验后确认导入' : `确认导入：新增${summaryPreview?.createPersons ?? 0}名运动员、写入${(summaryPreview?.newRecords ?? 0) + (summaryPreview?.updateRecords ?? 0)}条记录`}
                 </button>
               </div>
             </footer>
@@ -1480,7 +1509,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             if (event.target === event.currentTarget) setDuplicateDialogOpen(false);
           }}
         >
-          <section className="data-import-dialog" role="dialog" aria-modal="true">
+          <section className="data-import-dialog" role="dialog" aria-modal="true" aria-label="该文件已上传过">
             <header>
               <div>
                 <span>DUPLICATE FILE</span>
@@ -1559,7 +1588,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </button>
             </header>
             <div className="data-import-person-toolbar">
-              <div className="data-import-filters">
+              <p role="status" aria-live="polite" className="data-import-save-status">
+              {busy === 'save' ? '正在保存修改并重新校验…' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
+            </p>
+            <div className="data-import-filters">
                 {(
                   [
                     ['all', '全部'],
@@ -1630,7 +1662,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           .join(' ')}
                         onClick={() => setSelectedPersonId(candidate.id)}
                       >
-                        <td>{candidate.name}</td>
+                        <td><button type="button" className="data-import-person-name"
+                          aria-pressed={selectedPersonId === candidate.id}
+                          onClick={() => setSelectedPersonId(candidate.id)}>{candidate.name}</button></td>
                         <td>{candidate.project}</td>
                         <td>{candidate.team || '—'}</td>
                         <td>
@@ -1714,10 +1748,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             ? 'exclude'
                             : selectedPerson.matchedAthleteId || selectedPerson.createdAthleteId || personLinkModes.has(selectedPerson.id)
                               ? 'link'
-                              : 'create'
+                              : selectedPerson.suggested.length && !personCreateModes.has(selectedPerson.id) ? '' : 'create'
                         }
                         onChange={(event) => {
                           const mode = event.target.value;
+                          setPersonCreateModes(current => {
+                            const next = new Set(current);
+                            if (mode === 'create') next.add(selectedPerson.id); else next.delete(selectedPerson.id);
+                            return next;
+                          });
                           setPersonLinkModes(current => {
                             const next = new Set(current);
                             if (mode === 'link') next.add(selectedPerson.id);
@@ -1743,6 +1782,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             });
                         }}
                       >
+                        <option value="" disabled>请选择处理方式</option>
                         <option value="create">新建</option>
                         <option value="link">
                           {selectedPerson.matchedAthleteId || selectedPerson.createdAthleteId
@@ -1752,7 +1792,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         <option value="exclude">排除此人（其记录一并排除）</option>
                       </select>
                     </label>
-                    {!selectedPerson.excluded && (selectedPerson.matchedAthleteId !== null || personLinkModes.has(selectedPerson.id) || selectedPerson.suggested.length > 0) ? (
+                    {!selectedPerson.excluded && !personCreateModes.has(selectedPerson.id) && (selectedPerson.matchedAthleteId !== null || personLinkModes.has(selectedPerson.id) || selectedPerson.suggested.length > 0) ? (
                       <label>
                         <span>关联已有运动员（请选择具体人员）</span>
                         <select
@@ -1817,7 +1857,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           Boolean(busy) ||
                           (selectedPerson.matchedAthleteId
                             ? false
-                            : !selectedPerson.team || selectedPerson.suggested.length > 0 || personLinkModes.has(selectedPerson.id))
+                            : !selectedPerson.team || (selectedPerson.suggested.length > 0 && !personCreateModes.has(selectedPerson.id)) || personLinkModes.has(selectedPerson.id))
                         }
                         onClick={() => {
                           patchAthleteCandidate(selectedPerson.id, { confirmed: true });
@@ -1858,7 +1898,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             if (event.target === event.currentTarget && !busy) setConfirmDialogOpen(false);
           }}
         >
-          <section className="data-import-dialog" role="dialog" aria-modal="true">
+          <section className="data-import-dialog" role="dialog" aria-modal="true" aria-label="确认导入">
             <header>
               <div>
                 <span>FINAL CONFIRM</span>
@@ -1897,7 +1937,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <small>仅更新提供的字段</small>
               </div>
               <div>
-                <span>跳过重复记录</span>
+                <span>跳过或排除记录</span>
                 <strong>{summaryPreview.skipRecords}</strong>
                 <small>保留数据库原值</small>
               </div>
@@ -1918,7 +1958,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 onClick={() => void doCommit()}
               >
                 <Database size={16} />
-                确认导入
+                确认导入：新增{summaryPreview.createPersons}名运动员、写入{summaryPreview.newRecords + summaryPreview.updateRecords}条记录
               </button>
             </div>
           </section>
