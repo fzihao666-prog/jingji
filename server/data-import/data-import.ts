@@ -1,5 +1,5 @@
 import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
-import { requiresDatabaseReview, importRecordPolicy, importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
+import { importRecordPolicy, importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
 import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
@@ -14,8 +14,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v25：档案非空资料按本次导入自动更新，不进入数据库数值冲突审查。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v25-profile-latest-import';
+// v26：所有业务数据按本次导入非空值自动更新，数据库差异不再人工选择。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v26-latest-import-for-all';
 
 export type ImportAthlete = {
   id: number;
@@ -46,7 +46,7 @@ export type DataImportConflictField = {
   label: string;
   oldValue: string;
   newValue: string;
-  /** 现值非空且与新值不同；档案自动更新，测量事实需按冲突策略处理 */
+  /** 现值非空且与新值不同，提交时自动按本次导入更新 */
   overwrites: boolean;
 };
 
@@ -2412,7 +2412,7 @@ function computeCounts(
   return {
     newCount: active.filter((item) => !item.conflict?.exists).length,
     duplicateCount: active.filter((item) => item.conflict?.exists).length,
-    overwriteCount: active.filter(requiresDatabaseReview).length,
+    overwriteCount: active.filter(item => item.conflict?.fields.some(field => field.overwrites)).length,
     invalidCount: items.filter(
       (item) => item.itemType === 'invalid_row' || item.quality === 'error'
     ).length,
@@ -2630,14 +2630,6 @@ function validateImportItem(
     messages.push(...payload.valueImportConflicts.filter((value): value is string => typeof value === 'string'));
   if (Array.isArray(payload.importConflicts))
     messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string'));
-  if (item.itemType === 'test_measurement' && item.athleteId && text(payload.protocol)) {
-    const session = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
-      .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
-    const confirmed = payload.valueReviewProtocol as { previous?: string; next?: string } | undefined;
-    if (text(session?.protocol) && text(session?.protocol) !== text(payload.protocol)
-      && !(confirmed?.previous === text(session?.protocol) && confirmed?.next === text(payload.protocol)))
-      messages.push('错误：测试协议与该运动员当日已有同类测试不一致，请核对协议或测试日期');
-  }
   if (payload.protocolRequired && !text(payload.protocol))
     messages.push(item.testType === '竞技评估' ? '错误：人工评分必须填写评估协议' : '错误：不对称指数必须填写测试协议或测试方法');
   if (typeof payload.unitConflict === 'string' && payload.unitConflict) messages.push(payload.unitConflict);
@@ -3253,7 +3245,7 @@ function upsertTrainingItem(
   const note = text(payload.note);
   const sourceRow = `${item.sourceSheet}!${item.sourceAddress}`;
   if (existing) {
-    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
     const patch: Array<[string, unknown]> = [
       ['exercise_code', text(payload.exerciseCode)],
       ['planned_weight_kg', optionalNumber(payload.plannedWeightKg)],
@@ -3382,14 +3374,10 @@ function upsertTestItem(
   const storedSession = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
     .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
   if (text(storedSession?.protocol) && text(item.payload.protocol) && text(storedSession?.protocol) !== text(item.payload.protocol)) {
-    const confirmed = item.payload.valueReviewProtocol as { previous?: string; next?: string } | undefined;
-    if (confirmed?.previous !== text(storedSession?.protocol) || confirmed?.next !== text(item.payload.protocol))
-      throw new Error('测试协议与已有课次不一致，请通过统一审查确认最终协议');
-    db.prepare('UPDATE test_sessions SET protocol = ? WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
-      .run(confirmed.next, item.athleteId, item.eventDate, item.testType || '力量素质测试');
     db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
-      .run(userId, 'CONFIRM_IMPORT_TEST_PROTOCOL', 'test_session', JSON.stringify({ batchId, athleteId: item.athleteId, date: item.eventDate, testType: item.testType, ...confirmed }));
+      .run(userId, 'UPDATE_IMPORT_TEST_PROTOCOL', 'test_session', JSON.stringify({ batchId, athleteId: item.athleteId, date: item.eventDate, testType: item.testType, previous: storedSession?.protocol, next: text(item.payload.protocol) }));
   }
+  const sessionFields = existingConflict.fields.filter(field => ['protocol', 'durationMin'].includes(field.field) && (field.overwrites || field.oldValue === ''));
   const policy = resolveItemPolicy(item, batchPolicy);
   db.prepare(
     `INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, active)
@@ -3403,7 +3391,7 @@ function upsertTestItem(
     VALUES (?, ?, ?, ?, ?, 'file_import', ?, 0, ?)
     ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET
       duration_min = COALESCE(excluded.duration_min, test_sessions.duration_min),
-      protocol = CASE WHEN TRIM(COALESCE(test_sessions.protocol, '')) = '' THEN excluded.protocol ELSE test_sessions.protocol END,
+      protocol = CASE WHEN TRIM(excluded.protocol) <> '' THEN excluded.protocol ELSE test_sessions.protocol END,
       quality = CASE WHEN excluded.quality = 'partial' THEN 'partial' ELSE test_sessions.quality END`
   ).run(
     item.athleteId,
@@ -3432,7 +3420,7 @@ function upsertTestItem(
     const keys = ['valueNum', 'targetValue', 'unit', 'note'] as const;
     const changed = keys.filter(key => isProvided(proposed[key]) && !importReviewValuesEqual(proposed[key], existing[key])
       && (policy === 'update' || !isProvided(existing[key])));
-    if (!changed.length) return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
+    if (!changed.length) return { skipped: sessionFields.length === 0, entityId: existing.id, created: false, filled: sessionFields.filter(field => field.oldValue === '').length, overwritten: sessionFields.filter(field => field.overwrites).length };
     const next = { ...existing };
     for (const key of changed) Object.assign(next, { [key]: proposed[key] });
     db.prepare(`UPDATE test_measurements SET value_num = ?, target_value = ?, unit = ?, note = ?, quality = ?, source = 'file_import', is_demo = 0,
@@ -3488,7 +3476,7 @@ function upsertBodyItem(
       .filter(([, value]) => value !== null);
     const note = text(payload.note);
     if (existing) {
-      // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+      // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
       const isBlank = (key: string) => {
         const value = existing[bodyColumnOf(key)];
         return value === null || value === undefined;
@@ -3778,7 +3766,7 @@ function upsertWellnessItem(
   const status = text(p.status);
   const statusProvided = ['normal', 'attention', 'alert', 'rest', 'missing'].includes(status);
   if (existing) {
-    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
     const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
     const proposed = provided.filter(
       ([column, value]) => !importReviewValuesEqual(existing[column], value)
@@ -3872,7 +3860,7 @@ function upsertSessionItem(
     .map(([key, column]) => [column, text(p[key])] as const)
     .filter(([, value]) => isProvided(value));
   if (existing) {
-    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
     const changes: Array<[string, unknown]> = [];
     const proposals: Array<[string, unknown, boolean]> = [];
     const consider = (column: string, value: unknown, provided: boolean) => {
@@ -3982,13 +3970,13 @@ function upsertInjuryItem(
     ['note', text(p.note)],
   ];
   if (existing) {
-    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
     const isBlank = (column: string) => {
       const current = existing[column];
       return current === null || current === undefined || current === '';
     };
     const proposed = fields.filter(([column, value]) => {
-      if (value === null) return false; // 空白=未提供
+      if (!isProvided(value)) return false; // 空白=未提供，不清空已有文本或数值
       const current = existing[column];
       const currentText = current === null || current === undefined ? '' : String(current);
       return !importReviewValuesEqual(current, value) && currentText !== String(value);
@@ -4055,7 +4043,7 @@ function upsertCompetitiveItem(
     .filter(([, value]) => value !== null);
   const note = text(p.note);
   if (existing) {
-    // 统一合并语义：空白不覆盖；skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
     const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
     const proposed = provided.filter(
       ([column, value]) => !importReviewValuesEqual(existing[column], value)
@@ -4137,15 +4125,15 @@ function upsertScoringRule(
   const ruleVersion = text(payload.ruleVersion);
   const existing = db
     .prepare(
-      `SELECT id, threshold_value AS thresholdValue FROM metric_scoring_rules WHERE project = ? AND gender = ? AND metric_code = ? AND score = ? AND rule_version = ?`
+      `SELECT id, threshold_value AS thresholdValue, comparison FROM metric_scoring_rules WHERE project = ? AND gender = ? AND metric_code = ? AND score = ? AND rule_version = ?`
     )
     .get(project, gender, item.metricCode, score, ruleVersion) as
-    | { id: number; thresholdValue: number }
+    | { id: number; thresholdValue: number; comparison: string }
     | undefined;
   if (existing) {
-    // 统一合并语义：skip 只补全空字段并保留已有值，update 才覆盖不同值。
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
     const blank = existing.thresholdValue === null || existing.thresholdValue === undefined;
-    if (!blank && importReviewValuesEqual(existing.thresholdValue, item.valueNum))
+    if (!blank && importReviewValuesEqual(existing.thresholdValue, item.valueNum) && existing.comparison === comparison)
       return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
     if (policy === 'skip' && !blank)
       return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
@@ -4448,9 +4436,6 @@ export function commitDataImport(input: {
         if (snapshot.conflict.exists && !fresh.exists) throw new Error('数据库已有记录已变化，请重新审查');
         assertConflictUnchanged({ ...item, conflict: snapshot.conflict }, fresh);
       }
-      const policy = resolveItemPolicy(item, input.conflictPolicy);
-      if (fresh.exists && policy === 'update' && fresh.fields.some((field) => field.overwrites))
-        assertConflictUnchanged(item, fresh);
       let result: UpsertResult;
       let entityType = '';
       if (item.itemType === 'athlete_profile') {
@@ -4517,7 +4502,7 @@ export function commitDataImport(input: {
         overwrittenProfileFields,
         createdAthletes,
         linkedAthletes,
-        conflictPolicy: input.conflictPolicy,
+        conflictPolicy: 'update',
       })
     );
     db.exec('COMMIT');

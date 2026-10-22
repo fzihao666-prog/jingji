@@ -36,6 +36,11 @@ it('档案与数据库不同直接按新导入更新，同一文件内不同值�
   expect(importReviewGroups([profile])).toEqual([]);
   expect(importReviewGroups([profile, { ...profile, id: 2, payload: { bloodType: 'B' } }])).toHaveLength(1);
 });
+it('所有导入类型与数据库不同都不再产生审查卡片', () => {
+  for (const itemType of ['body_measurement', 'wellness', 'test_measurement', 'training_session', 'training_set', 'injury_record', 'competitive_state', 'scoring_rule']) {
+    expect(importReviewGroups([{ ...item, itemType, payload: { weightKg: 70 }, conflict: { exists: true, fields: [{ field: 'weightKg', oldValue: '60', newValue: '70', overwrites: true }] } }])).toEqual([]);
+  }
+});
 
 it('65个指标仅展示与待选字段有关的来源，保留原序号和全部原始记录', () => {
   const records = Array.from({ length: 65 }, (_, index) => ({ ...item, id: index + 1, payload: index === 1 ? { weightKg: 61.3 } : { heightCm: 173 } }));
@@ -144,8 +149,8 @@ describe('批量选择记录序号', () => {
     const updates = selectImportReviewRecord([[{ ...item, payload: { weightKg: 80 } }, { ...item, id: 2, payload: { weightKg: 81, bodyFatPct: 10 } }, { ...item, id: 3, payload: { bodyFatPct: 20 } }]], 0);
     expect(updates[0].payload.valueReview).toEqual({ action: 'draft', choices: { weightKg: '80' }, manual: {} });
   });
-  it('数据库覆盖也使用同一比较和选择逻辑', () => {
+  it('批量选择只采用文件记录，不再混入数据库旧值', () => {
     const row = { ...item, payload: { weightKg: 81 }, conflict: { exists: true, fields: [{ field: 'weightKg', oldValue: '80', newValue: '81', overwrites: true }] } };
-    expect(selectImportReviewRecord([[row]], 0)[0].payload.valueReview).toMatchObject({ action: 'merge', values: { weightKg: 81 }, includeDatabase: true });
+    expect(selectImportReviewRecord([[row]], 0)[0].payload.valueReview).toMatchObject({ action: 'merge', values: { weightKg: 81 }, includeDatabase: false });
   });
 });

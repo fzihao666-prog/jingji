@@ -67,7 +67,7 @@ it('档案非空资料自动采用本次导入，血型不进入数据库冲突�
   db.prepare("INSERT INTO athlete_profiles (athlete_id, blood_type, phone) VALUES (1, 'A', '123')").run();
   const batch = analyze({ 运动员基本资料: [['姓名', '血型', '手机号'], ['张某', 'O', '']] });
   expect(importReviewGroups(batch.items)).toEqual([]);
-  expect(batch.counts.overwriteCount).toBe(0);
+  expect(batch.counts.overwriteCount).toBe(1);
   expect(commit(batch.id, 'skip').updatedRecords).toBe(1);
   expect(db.prepare('SELECT blood_type, phone FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ blood_type: 'O', phone: '123' });
 });
@@ -78,6 +78,55 @@ it('明确排除档案行时不自动更新资料', () => {
   updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, resolution: 'skip' }] });
   expect(commit(batch.id, 'skip').updatedRecords).toBe(0);
   expect(db.prepare('SELECT blood_type FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ blood_type: 'A' });
+});
+
+it('测试最新导入自动更新数值、目标、协议、时长，空白保留且导出往返不再出现旧值', async () => {
+  const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟', '目标值', '备注'];
+  const seed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '力量素质测试', 'single_leg_squat_reps', 255, '次', '旧协议', 12, 30, '原备注']] });
+  commit(seed.id, 'skip');
+  const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '力量素质测试', 'single_leg_squat_reps', 25, '次', '新协议', 15, 35, '']] });
+  expect(changed.errorCount).toBe(0);
+  expect(importReviewGroups(changed.items)).toEqual([]);
+  expect(commit(changed.id, 'skip').updatedRecords).toBe(1);
+  expect(db.prepare('SELECT m.value_num, m.target_value, m.note, s.protocol, s.duration_min FROM test_measurements m JOIN test_sessions s ON s.id = m.test_session_id').get()).toEqual({ value_num: 25, target_value: 35, note: '原备注', protocol: '新协议', duration_min: 15 });
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '最新导入往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(roundtrip.items.filter(item => item.itemType === 'test_measurement').map(item => item.valueNum)).toEqual([25]);
+  expect(roundtrip.items.flatMap(item => item.messages).some(message => message.includes('255'))).toBe(false);
+  expect(commit(roundtrip.id, 'skip').updatedRecords).toBe(0);
+});
+
+it('力量组次、伤病和竞技评估统一自动更新，零值有效，空白文本不清空', () => {
+  const strengthHeaders = ['姓名', '日期', '课次名称', '动作', '组序', '实际次数', '实际重量kg', '备注'];
+  const injuryHeaders = ['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分', '训练限制', '备注'];
+  const stateHeaders = ['姓名', '评估日期', '总分', '等级', '备注'];
+  const seed = analyze({
+    力量训练组次: [strengthHeaders, ['张某', '2026-02-12', '力量课', '深蹲', 1, 5, 80, '组次备注']],
+    伤病记录: [injuryHeaders, ['张某', '2026-02-12', '膝伤', '膝', '左', '观察', 5, '限制内容', '伤病备注']],
+    竞技评估: [stateHeaders, ['张某', '2026-02-12', 80, '良好', '评估备注']],
+  });
+  expect(seed.errorCount).toBe(0);
+  commit(seed.id, 'skip');
+  const changed = analyze({
+    力量训练组次: [strengthHeaders, ['张某', '2026-02-12', '力量课', '深蹲', 1, 0, 90, '']],
+    伤病记录: [injuryHeaders, ['张某', '2026-02-12', '膝伤', '膝', '左', '康复', 0, '', '']],
+    竞技评估: [stateHeaders, ['张某', '2026-02-12', 0, '调整', '']],
+  });
+  expect(changed.errorCount).toBe(0);
+  expect(importReviewGroups(changed.items)).toEqual([]);
+  expect(commit(changed.id, 'skip').updatedRecords).toBe(3);
+  expect(db.prepare('SELECT actual_reps, actual_weight_kg, note FROM strength_result_sets').get()).toEqual({ actual_reps: 0, actual_weight_kg: 90, note: '组次备注' });
+  expect(db.prepare('SELECT pain_score, status, restrictions, note FROM injury_records').get()).toEqual({ pain_score: 0, status: 'rehab', restrictions: '限制内容', note: '伤病备注' });
+  expect(db.prepare('SELECT overall_score, state_level, note FROM competitive_state_assessments').get()).toEqual({ overall_score: 0, state_level: 'adjust', note: '评估备注' });
+});
+
+it('只更新测试协议和时长也正确计入更新，空白测量元数据保留', () => {
+  const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟'];
+  commit(analyze({ 其他测试: [headers, ['张某', '2026-02-11', '专项测试', 'grip', 30, 'kg', 'A', 10]] }).id, 'skip');
+  const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-11', '专项测试', 'grip', 30, 'kg', 'B', 15]] });
+  expect(commit(changed.id, 'skip').updatedRecords).toBe(1);
+  expect(db.prepare('SELECT protocol, duration_min FROM test_sessions').get()).toEqual({ protocol: 'B', duration_min: 15 });
 });
 
 beforeEach(() => {
@@ -195,7 +244,7 @@ describe('数据准确性：空白保护与真实 0', () => {
     expect(zero.sleep).toBe(0);
   });
 
-  it('跳过重复策略不更新已有记录', () => {
+  it('旧客户端的跳过批次参数也按最新非空值更新', () => {
     db.prepare(
       `INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, status) VALUES (1, '2025-05-05', 7, 'normal')`
     ).run();
@@ -206,11 +255,11 @@ describe('数据准确性：空白保护与真实 0', () => {
       ],
     });
     const result = commit(batch.id, 'skip');
-    expect(result.skipped).toBe(1);
+    expect(result.skipped).toBe(0);
     const row = db
       .prepare('SELECT sleep_hours AS sleep FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = ?')
       .get('2025-05-05') as { sleep: number };
-    expect(row.sleep).toBe(7);
+    expect(row.sleep).toBe(5);
   });
 
   it('档案非空字段按本次导入更新，不受测量记录的跳过策略影响', () => {
@@ -243,8 +292,8 @@ describe('数据准确性：空白保护与真实 0', () => {
   });
 });
 
-describe('统一合并语义：skip 只补空缺不覆盖', () => {
-  it('恢复状态部分冲突时补全空字段并保留冲突值', () => {
+describe('统一合并语义：最新非空值覆盖并补全空缺', () => {
+  it('恢复状态更新非空字段并补全空缺', () => {
     db.prepare(
       `INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, status) VALUES (1, '2025-05-06', 7, 'normal')`
     ).run();
@@ -262,11 +311,11 @@ describe('统一合并语义：skip 只补空缺不覆盖', () => {
         'SELECT sleep_hours AS sleep, morning_pulse AS pulse FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = ?'
       )
       .get('2025-05-06') as { sleep: number; pulse: number };
-    expect(row.sleep).toBe(7); // 冲突值保留
+    expect(row.sleep).toBe(5); // 采用本次导入值
     expect(row.pulse).toBe(52); // 空缺补全
   });
 
-  it('身体测量部分冲突时补全空缺字段并保留冲突值', () => {
+  it('身体测量更新非空字段并补全空缺', () => {
     db.prepare(
       `INSERT INTO athlete_body_measurements (athlete_id, measurement_date, height_cm) VALUES (1, '2025-05-07', 180)`
     ).run();
@@ -283,11 +332,11 @@ describe('统一合并语义：skip 只补空缺不覆盖', () => {
         'SELECT height_cm AS height, weight_kg AS weight FROM athlete_body_measurements WHERE athlete_id = 1 AND measurement_date = ?'
       )
       .get('2025-05-07') as { height: number; weight: number };
-    expect(row.height).toBe(180);
+    expect(row.height).toBe(181);
     expect(row.weight).toBe(77);
   });
 
-  it('训练课次部分冲突时只补空字段，未报距离按空缺补全', () => {
+  it('训练课次更新已报时长并补全未报距离', () => {
     db.prepare(
       `INSERT INTO training_sessions (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported)
        VALUES (1, '2025-05-08', 1, '专项训练', '水上训练', 'AN', '水上', 60, 0, 1, 0)`
@@ -305,12 +354,12 @@ describe('统一合并语义：skip 只补空缺不覆盖', () => {
         'SELECT duration_min AS duration, distance_km AS distance, distance_reported AS distanceReported FROM training_sessions WHERE athlete_id = 1 AND session_date = ?'
       )
       .get('2025-05-08') as { duration: number; distance: number; distanceReported: number };
-    expect(row.duration).toBe(60); // 已报冲突时长保留
+    expect(row.duration).toBe(50); // 采用本次导入时长
     expect(row.distance).toBe(8); // 未报距离属于空缺，补全
     expect(row.distanceReported).toBe(1);
   });
 
-  it('skip 下全部字段冲突时整行保留，计入跳过', () => {
+  it('全部字段不同仍自动更新，不按旧批次策略跳过', () => {
     db.prepare(
       `INSERT INTO daily_wellness (athlete_id, wellness_date, sleep_hours, status) VALUES (1, '2025-05-09', 7, 'normal')`
     ).run();
@@ -321,12 +370,12 @@ describe('统一合并语义：skip 只补空缺不覆盖', () => {
       ],
     });
     const result = commit(batch.id, 'skip');
-    expect(result.skipped).toBe(1);
-    expect(result.updatedRecords).toBe(0);
+    expect(result.skipped).toBe(0);
+    expect(result.updatedRecords).toBe(1);
     const row = db
       .prepare('SELECT sleep_hours AS sleep FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = ?')
       .get('2025-05-09') as { sleep: number };
-    expect(row.sleep).toBe(7);
+    expect(row.sleep).toBe(5);
   });
 });
 
@@ -1249,9 +1298,10 @@ it('同课次不同指标的协议冲突阻断，缺失协议可从同课次补�
   commit(valid.id, 'skip');
   expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-09'").get()).toEqual({ protocol: 'B' });
   const mismatch = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 56, null, 'C']] });
-  expect(mismatch.errorCount).toBeGreaterThan(0);
-  expect(mismatch.items[0].messages.join('；')).toContain('已有同类测试');
-  expect(() => commit(mismatch.id, 'update')).toThrow();
+  expect(mismatch.errorCount).toBe(0);
+  expect(importReviewGroups(mismatch.items)).toEqual([]);
+  commit(mismatch.id, 'skip');
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-09'").get()).toEqual({ protocol: 'C' });
 });
 
 it('已有测试课次的空协议可以补充，身体指标的侧别原样保留', () => {
@@ -1476,7 +1526,7 @@ it('明确选择数据库课次的新协议后保留所有指标，并记录审�
   commit(batch.id, 'skip');
   expect(db.prepare('SELECT protocol FROM test_sessions').get()).toEqual({ protocol: 'B' });
   expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 2 });
-  expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'CONFIRM_IMPORT_TEST_PROTOCOL'").get()).toEqual({ count: 1 });
+  expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'UPDATE_IMPORT_TEST_PROTOCOL'").get()).toEqual({ count: 1 });
 });
 
 it('测试备注的新增列初始化可重复执行，保留既有测量和备注', () => {
@@ -1595,7 +1645,7 @@ it('只修改真实差异字段，不顺带改写浮点尾差相同的其他字�
   expect(db.prepare('SELECT weight_kg, note FROM athlete_body_measurements WHERE athlete_id = 1').get()).toEqual({ weight_kg: 61.300000000000004, note: '新备注' });
 });
 
-it('65项测试的浮点尾差不制造审查或改写数据库，真实差异仍需选择', async () => {
+it('65项测试的浮点尾差不改写数据库，真实差异按最新导入更新', async () => {
   db.prepare("INSERT OR IGNORE INTO metric_definitions (code, label, domain, unit, direction, frequency) VALUES ('weight_kg', '体重', 'custom', 'kg', 'neutral', 'phase')").run();
   const session = db.prepare("INSERT INTO test_sessions (athlete_id, test_date, test_type) VALUES (1, '2026-08-13', '专业综合评估')").run();
   db.prepare('INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit) VALUES (?, ?, ?, ?)').run(session.lastInsertRowid, 'weight_kg', 61.300000000000004, 'kg');
@@ -1623,7 +1673,7 @@ it('65项测试的浮点尾差不制造审查或改写数据库，真实差异�
   expect(snapshot()).toBe(before);
   const changed = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位'], ['张某', '2026-08-13', '专业综合评估', 'weight_kg', 61.4, 'kg']] });
   expect(changed.items.find(item => item.metricCode === 'weight_kg')?.conflict?.fields.some(field => field.overwrites)).toBe(true);
-  expect(importReviewGroups(changed.items)).toHaveLength(1);
+  expect(importReviewGroups(changed.items)).toEqual([]);
 });
 
 it('不同测试类型的同日同指标导出往返不串课次、不丢时长、不制造冲突', async () => {
@@ -1896,14 +1946,14 @@ it('空白枚举使用约定默认，竞技等级仅新增时默认，已有疼�
   expect(db.prepare('SELECT state_level AS level FROM competitive_state_assessments').get()).toEqual({ level: 'good' });
 });
 
-it('真实疼痛差异仍触发审查，中文枚举校对及审查写回均只保存规范代码', () => {
+it('疼痛差异自动更新，中文枚举校对及审查写回均只保存规范代码', () => {
   const seed = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'], ['张某', '2026-01-10', '疼痛差异', '膝', 'left', 'observation', 2]] });
   commit(seed.id, 'skip');
   const changed = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'], ['张某', '2026-01-10', '疼痛差异', '膝', '左', '观察', 4]] });
   const item = changed.items[0];
   expect(item.payload).toMatchObject({ side: 'left', status: 'observation' });
   expect(item.conflict?.fields.filter(field => field.overwrites).map(field => field.field)).toEqual(['painScore']);
-  expect(importReviewGroups(changed.items)).toHaveLength(1);
+  expect(importReviewGroups(changed.items)).toEqual([]);
   expect(item.conflict?.fields.find(field => field.field === 'side')).toMatchObject({ oldValue: 'left', newValue: 'left', overwrites: false });
   const draft = updateDataImportItems({ batchId: changed.id, userId: USER_ID, athletes, corrections: [{ id: item.id, payload: { valueReview: { action: 'draft', choices: { side: '左', status: '观察' }, manual: {} } } }] });
   expect(draft.items[0].payload.valueReviewDraft).toMatchObject({ choices: { side: 'left', status: 'observation' } });

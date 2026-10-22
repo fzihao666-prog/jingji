@@ -1,4 +1,4 @@
-import { requiresDatabaseReview, importRecordPolicy, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
+import { importRecordPolicy, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
@@ -122,7 +122,6 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [reviewGroupPage, setReviewGroupPage] = useState(0);
-  const [conflictPolicy, setConflictPolicy] = useState<'skip' | 'update'>('skip');
   const [corrections, setCorrections] = useState<Map<number, Correction>>(new Map());
   const [athleteCorrections, setAthleteCorrections] = useState<Map<number, AthleteCorrection>>(
     new Map()
@@ -487,7 +486,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setConfirmDialogOpen(false);
     setBusy('commit');
     try {
-      const info = await api.commitDataImport(batch.id, conflictPolicy);
+      const info = await api.commitDataImport(batch.id, 'update');
       setBatch(info.batch);
       setMessage(info.message);
       setResult({
@@ -572,7 +571,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
           counts: { ...previous.counts,
             newCount: active.filter(item => !item.conflict?.exists).length,
             duplicateCount: active.filter(item => item.conflict?.exists).length,
-            overwriteCount: active.filter(requiresDatabaseReview).length,
+            overwriteCount: active.filter(item => item.conflict?.fields.some(field => field.overwrites)).length,
             invalidCount: items.filter(item => item.itemType === 'invalid_row' || item.quality === 'error').length,
           },
         };
@@ -598,7 +597,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         if (filter === 'exception' && item.itemType !== 'invalid_row' && item.quality === 'valid')
           return false;
         if (filter === 'duplicate' && !item.conflict?.exists) return false;
-        if (filter === 'overwrite' && !requiresDatabaseReview(item))
+        if (filter === 'overwrite' && !item.conflict?.fields.some(field => field.overwrites))
           return false;
         if (!needle) return true;
         return [
@@ -647,14 +646,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     const updateRecords = active.filter(
       (item) =>
         item.conflict?.exists &&
-        importRecordPolicy(item, conflictPolicy) === 'update' &&
+        importRecordPolicy(item) === 'update' &&
         !item.conflict.identical
     ).length;
     const skipRecords =
       active.filter(
         (item) =>
           item.conflict?.exists &&
-          (importRecordPolicy(item, conflictPolicy) === 'skip' || item.conflict.identical)
+          (importRecordPolicy(item) === 'skip' || item.conflict.identical)
       ).length +
       batch.items.filter((item) => item.resolution === 'skip').length +
       importable.filter((item) => excludedKeys.has(dataImportPersonKey(item))).length;
@@ -670,7 +669,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       skipRecords,
       overwriteFields,
     };
-  }, [batch, conflictPolicy]);
+  }, [batch]);
 
   const selectedPerson = useMemo(
     () =>
@@ -914,7 +913,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <div>
               <span>关联已有</span>
               <strong>{result.linkedAthletes}</strong>
-              <small>非空资料按本次导入更新</small>
+              <small>非空数据按本次导入更新</small>
             </div>
             <div>
               <span>新增记录</span>
@@ -955,12 +954,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <div className="warning">
               <span>重复记录</span>
               <strong>{batch.counts.duplicateCount}</strong>
-              <small>按冲突策略处理</small>
+              <small>非空值按本次导入更新</small>
             </div>
-            <div className="danger">
-              <span>待确认覆盖</span>
+            <div>
+              <span>将更新已有</span>
               <strong>{batch.counts.overwriteCount}</strong>
-              <small>原值→新值需确认</small>
+              <small>自动采用本次导入值</small>
             </div>
             <div className="danger">
               <span>错误记录</span>
@@ -1077,7 +1076,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 [
                   ['exception', `异常 ${batch.counts.invalidCount}`],
                   ['duplicate', `重复 ${batch.counts.duplicateCount}`],
-                  ['overwrite', `待覆盖 ${batch.counts.overwriteCount}`],
+                  ['overwrite', `将更新 ${batch.counts.overwriteCount}`],
                   ['all', `全部 ${batch.itemCount}`],
                 ] as const
               ).map(([key, label]) => (
@@ -1352,7 +1351,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         {item.conflict?.exists ? (
                           <select
                             disabled={batch.status !== 'reviewing'}
-                            value={item.resolution}
+                            value={item.resolution === 'skip' ? 'skip' : ''}
                             onChange={(event) =>
                               patchItem(item.id, {
                                 resolution: event.target.value as '' | 'skip' | 'update',
@@ -1360,9 +1359,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             }
                             aria-label={`重复处理：${item.rawAthleteName}`}
                           >
-                            <option value="">{item.itemType === 'athlete_profile' ? '按本次导入更新资料' : '按批次策略'}</option>
+                            <option value="">按本次导入更新</option>
                             <option value="skip">跳过此行（不写入）</option>
-                            <option value="update">更新已有</option>
                           </select>
                         ) : item.itemType === 'invalid_row' || item.quality === 'error' || item.resolution === 'skip' ? (
                           <select
@@ -1390,7 +1388,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               className={field.overwrites ? 'conflict-overwrite' : ''}
                             >
                               {field.label}：{field.oldValue || '空'} → {field.newValue}
-                              {field.overwrites ? item.itemType === 'athlete_profile' ? '（按本次导入更新）' : '（需确认覆盖）' : ''}
+                              {field.overwrites ? '（按本次导入更新）' : ''}
                             </span>
                           ))}
                           {item.messages.length ? (
@@ -1445,20 +1443,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </div>
             </footer>
             <footer className="data-import-commit-bar">
-              <label>
-                <span>冲突处理</span>
-                <select
-                  value={conflictPolicy}
-                  onChange={(event) => setConflictPolicy(event.target.value as 'skip' | 'update')}
-                  disabled={batch.status !== 'reviewing'}
-                >
-                  <option value="skip">补全空缺字段，保留已有值（不覆盖）</option>
-                  <option value="update">使用本批次更新重复项（覆盖需确认）</option>
-                </select>
-              </label>
+              <div>本次导入的非空值更新已有记录</div>
               <div>
                 <small>
-                  档案非空资料按本次导入更新，空白保留原值；测量重复项按所选策略处理。整批在同一事务内提交，失败自动回滚。
+                  所有数据采用本次导入的非空值，空白保留原值；同一文件内不同值需先审查。整批在同一事务内提交，失败自动回滚。
                 </small>
                 <button
                   className="data-import-primary"
@@ -1896,7 +1884,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <div>
                 <span>关联已有运动员</span>
                 <strong>{summaryPreview.linkPersons}</strong>
-                <small>非空资料按本次导入更新</small>
+                <small>非空数据按本次导入更新</small>
               </div>
               <div>
                 <span>新增记录</span>
@@ -1914,7 +1902,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <small>保留数据库原值</small>
               </div>
               <div className="danger">
-                <span>覆盖档案字段</span>
+                <span>更新已有字段</span>
                 <strong>{summaryPreview.overwriteFields}</strong>
                 <small>原值→新值已展示</small>
               </div>

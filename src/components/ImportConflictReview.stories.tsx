@@ -1,5 +1,5 @@
 import { ImportConflictReview } from './ImportConflictReview';
-import type { ReviewValue } from '../../shared/import-conflict-review';
+import { importReviewGroups, type ReviewValue } from '../../shared/import-conflict-review';
 import type { DataImportItem } from '../types';
 
 function measurement(id: number, payload: Record<string, unknown>): DataImportItem {
@@ -154,7 +154,7 @@ export const Protocol = {
 export const ManyIndicators = {
   args: {
     ...Conflict.args,
-    items: Array.from({ length: 65 }, (_, index): DataImportItem => ({
+    items: [...Array.from({ length: 65 }, (_, index): DataImportItem => ({
       ...measurement(index + 1, {}),
       itemType: 'test_measurement',
       testType: '专业综合评估',
@@ -170,21 +170,24 @@ export const ManyIndicators = {
         identical: index !== 1,
         fields: [{ field: 'valueNum', label: '数值', oldValue: String(index === 1 ? 61.3 : index + 1), newValue: String(index === 1 ? 61.4 : index + 1), overwrites: index === 1 }],
       },
-    })),
+    })), {
+      ...measurement(66, {}), itemType: 'test_measurement' as const, testType: '专业综合评估',
+      metricCode: 'weight_kg', metricLabel: '体重', valueNum: 61.3, unit: 'kg', quality: 'valid' as const,
+    }],
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     lastMerge = undefined;
     const table = canvasElement.querySelector('table')!;
     if (table.querySelectorAll('thead th').length !== 3 || table.querySelectorAll('tbody tr').length !== 1)
-      throw new Error('65项测试仅有体重冲突时应展示指标、记录2、数据库已有三列');
+      throw new Error('文件内仅体重冲突时应展示指标及两个文件来源');
     const buttons = [...table.querySelectorAll<HTMLButtonElement>('button')];
     if (buttons.length !== 2 || table.textContent?.includes('未提供'))
       throw new Error('不应展示无关指标空列');
     buttons[1].click();
     await new Promise(resolve => setTimeout(resolve, 500));
-    if (recordedMerge()?.['metric:weight_kg:center'] !== 61.3 || recordedMerge()?.['metric:custom_64:center'] !== 65 || !lastDatabase)
-      throw new Error(`选择数据库值后必须保留其余64项测试：${JSON.stringify({ weight: recordedMerge()?.['metric:weight_kg:center'], last: recordedMerge()?.['metric:custom_64:center'], database: lastDatabase })}`);
-    if (canvasElement.querySelector('.import-source-details')?.querySelectorAll('strong').length !== 130)
+    if (recordedMerge()?.['metric:weight_kg:center'] !== 61.3 || recordedMerge()?.['metric:custom_64:center'] !== 65 || lastDatabase)
+      throw new Error('选择文件值后必须保留其余64项测试，不混入数据库候选');
+    if (canvasElement.querySelector('.import-source-details')?.querySelectorAll('strong').length !== 66)
       throw new Error('必须完整保留原始来源');
   },
 };
@@ -199,6 +202,8 @@ export const Text = {
   },
 };
 export const Database = {
+  render: (args: Parameters<typeof ImportConflictReview>[0]) => importReviewGroups(args.items).length
+    ? <ImportConflictReview {...args} /> : <p>已有记录将按本次导入更新，无需冲突审查。</p>,
   args: {
     ...Conflict.args,
     items: [
@@ -227,15 +232,8 @@ export const Database = {
     const header = [...canvasElement.querySelectorAll('th')].find(
       (element) => element.textContent === '数据库已有'
     );
-    if (!header) throw new Error('数据库已有值必须作为对比来源');
-    lastDatabase = false;
-    const controls = [...canvasElement.querySelectorAll<HTMLButtonElement>('.import-value-review-choice')];
-    controls[0].click();
-    await new Promise(requestAnimationFrame);
-    controls[2].click();
-    await new Promise(resolve => setTimeout(resolve, 500));
-    if (!lastDatabase || recordedMerge()?.weightKg !== 81)
-      throw new Error('数据库比较必须通过统一选择命令提交');
+    if (header || canvasElement.querySelector('table') || !canvasElement.textContent?.includes('无需冲突审查'))
+      throw new Error('数据库差异应自动更新，不展示选择表格');
   },
 };
 

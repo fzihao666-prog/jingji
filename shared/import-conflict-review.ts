@@ -394,14 +394,14 @@ export function databaseReviewRecords<T extends ImportReviewItem>(items: T[]): T
     ];
   });
 }
-export function requiresDatabaseReview(item: ImportReviewItem) {
-  return item.itemType !== 'athlete_profile' && Boolean(item.conflict?.exists && item.conflict.fields.some((field) => field.overwrites));
+/** 文件与数据库之间的非空差异统一按本次导入更新，不再产生人工选择。 */
+export function requiresDatabaseReview(_item: ImportReviewItem): boolean {
+  return false;
 }
 
-/** 档案资料以本次导入的非空值更新；测量事实继续遵循既有冲突策略。 */
-export function importRecordPolicy(item: Pick<ImportReviewItem, 'itemType' | 'resolution'>, batchPolicy: 'skip' | 'update'): 'skip' | 'update' {
-  if (item.resolution === 'skip' || item.resolution === 'update') return item.resolution;
-  return item.itemType === 'athlete_profile' ? 'update' : batchPolicy;
+/** 保留行级排除；旧客户端传入的批次策略不改变统一更新规则。 */
+export function importRecordPolicy(item: Pick<ImportReviewItem, 'itemType' | 'resolution'>, _batchPolicy: 'skip' | 'update' = 'update'): 'skip' | 'update' {
+  return item.resolution === 'skip' ? 'skip' : 'update';
 }
 
 
