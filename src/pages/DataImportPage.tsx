@@ -1,4 +1,4 @@
-import { importRecordPolicy, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
+import { isImportException, importRecordPolicy, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import {
@@ -594,7 +594,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       .filter((item) => {
         if (reviewGroupIds.has(item.id) || item.payload.valueAutoMerged) return false;
         if (item.payload.valueAutoMergeSources && item.quality === 'valid' && !item.conflict?.fields.some(field => field.overwrites)) return false;
-        if (filter === 'exception' && item.itemType !== 'invalid_row' && item.quality === 'valid')
+        if (filter === 'exception' && !isImportException(item))
           return false;
         if (filter === 'duplicate' && !item.conflict?.exists) return false;
         if (filter === 'overwrite' && !item.conflict?.fields.some(field => field.overwrites))
@@ -1074,7 +1074,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <div className="data-import-filters">
               {(
                 [
-                  ['exception', `异常 ${batch.counts.invalidCount}`],
+                  ['exception', `异常 ${batch.items.filter(isImportException).length}`],
                   ['duplicate', `重复 ${batch.counts.duplicateCount}`],
                   ['overwrite', `将更新 ${batch.counts.overwriteCount}`],
                   ['all', `全部 ${batch.itemCount}`],

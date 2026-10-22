@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   importFieldValues,
+  isImportException,
   importReviewValuesEqual,
   reviewComparisonRecords,
   importReviewGroups,
@@ -21,6 +22,19 @@ const item: ImportReviewItem = {
   sourceSheet: '身体测量',
   sourceAddress: 'B2',
 };
+it('异常同时包含错误和待复核，已排除和自动跳过的来源不计入', () => {
+  const rows = [
+    { ...item, quality: 'warning' },
+    { ...item, id: 2, quality: 'warning' },
+    { ...item, id: 3, quality: 'warning' },
+    { ...item, id: 4, quality: 'valid' },
+    { ...item, id: 5, resolution: 'skip' },
+    { ...item, id: 6, quality: 'skipped', itemType: 'invalid_row' },
+  ];
+  expect(rows.filter(isImportException).map(row => row.id)).toEqual([1, 2, 3]);
+  expect(isImportException(item)).toBe(true);
+  expect(isImportException({ ...item, itemType: 'invalid_row', quality: 'valid' })).toBe(true);
+});
 it('机器浮点尾差相同，但真实精度差异、文本、空白和零保持区别', () => {
   expect(importReviewValuesEqual(61.3, 61.300000000000004)).toBe(true);
   expect(importReviewValuesEqual(85.94, 85.9)).toBe(false);

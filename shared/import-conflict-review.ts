@@ -2,6 +2,11 @@ import { BODY_TEMPLATE_FIELDS } from './data-import-template.js';
 import { dataImportPersonKey } from './data-import-person.js';
 
 export type ReviewValue = number | string;
+/** 异常列表与计数共用口径：错误或待复核，已排除的行不再待处理。 */
+export function isImportException(item: Pick<ImportReviewItem, 'itemType' | 'quality' | 'resolution'>): boolean {
+  return item.resolution !== 'skip' && item.quality !== 'skipped' &&
+    (item.itemType === 'invalid_row' || item.quality === 'error' || item.quality === 'warning');
+}
 /** 只吸收机器浮点尾差，不按业务小数位舍入；空白、真实零及文本不混同。 */
 export function importReviewValuesEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true;
