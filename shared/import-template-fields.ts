@@ -387,7 +387,7 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
         : []);
   const common = commonColumns[sheet] || original;
   const ordered = [...common, ...original.filter((key) => !common.includes(key))];
-  return ordered.map((key) => {
+  const fields: ImportTemplateField[] = ordered.map((key) => {
     let requirement: TemplateRequirement = '选填';
     let hint = '仅填写实际已采集数据，未提供留空。';
     const unit = /日期$/.test(key) ? 'YYYY-MM-DD' : units[key] || '无单位';
@@ -538,6 +538,7 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
       guidance: importFieldGuidance(key),
     };
   });
+  return fields.sort((left, right) => Number(left.requirement === '选填') - Number(right.requirement === '选填'));
 }
 
 export function templateFieldHeader(field: ImportTemplateField): string {
@@ -557,8 +558,8 @@ export function templateFieldHelp(field: ImportTemplateField): string {
 }
 
 export const TEMPLATE_CALCULATION_NOTES = [
-  '常用列在前；专业选填列在右侧默认收起，点左上角分组级别“2”展开。不支持分组时使用取消隐藏列；不使用宏。',
-  '第1—3行是说明和表头，第4行起填写；示例仅在表头，不需要删除示例数据。隐藏列有值仍会校验和导入。',
+  '必填项在前，选填项在后；常用选填项排在专业选填项前面，所有数据列直接显示，按需填写即可。',
+  '第1—3行是说明和表头，第4行起填写；示例仅在表头，不需要删除示例数据。所有已填写的数据都会校验和导入。',
   '业务日期须在行内填写，或在上传页明确选择统一日期；新模板不静默使用今天，生日永不补填。',
   '系统预填：授权范围内的人员编号、姓名、项目和队伍；不要自行编造编号，不预填测量成绩。',
   'SRPE：有效时长(min)×RPE，单位AU；缺时长或RPE保持未提供，不能根据距离推算时长。',

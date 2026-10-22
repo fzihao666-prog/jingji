@@ -16,7 +16,7 @@ import {
 } from './specialized-template-workbooks.ts';
 
 describe('简化导入模板', () => {
-  it('每列具备必填性、单位、示例；专业项连续折叠且条件必填可见', async () => {
+  it('每列具备必填性、单位、示例；选填项靠后且所有数据列直接可见', async () => {
     const workbook = buildImportWorkbook();
     const loaded = new ExcelJS.Workbook();
     await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
@@ -32,10 +32,16 @@ describe('简化导入模板', () => {
         if (field.unit !== '无单位') expect(String(cell.value)).toContain(field.unit);
         expect(String(cell.value)).toContain('例：');
         expect(cell.note).toBeTruthy();
-        expect(Boolean(sheet.getColumn(index + 1).hidden)).toBe(field.advanced);
+        expect(Boolean(sheet.getColumn(index + 1).hidden)).toBe(false);
+        expect(sheet.getColumn(index + 1).outlineLevel).toBe(0);
         if (field.requirement === '条件必填' || field.requirement === '必填')
           expect(field.advanced).toBe(false);
       });
+      const optionalStart = fields.findIndex((field) => field.requirement === '选填');
+      if (optionalStart >= 0)
+        expect(fields.slice(optionalStart).every((field) => field.requirement === '选填')).toBe(
+          true
+        );
       const start = fields.findIndex((field) => field.advanced);
       if (start >= 0) expect(fields.slice(start).every((field) => field.advanced)).toBe(true);
       sheet.eachRow((row, number) => {
@@ -56,7 +62,7 @@ describe('简化导入模板', () => {
     for (const [name, headers] of UNIFIED_IMPORT_HEADERS)
       expect(full.getWorksheet(name)!.getRow(3).values).toEqual([undefined, ...headers]);
   });
-  it('体能与专项模板没有示例业务行，并且可展开专业列', () => {
+  it('体能与专项模板没有示例业务行，专业列也全部显示', () => {
     for (const workbook of [buildStrengthImportWorkbook(), buildSpecialImportWorkbook()]) {
       const data = workbook.worksheets.find(
         (sheet) => !['填写说明', '数据字典'].includes(sheet.name)
@@ -64,7 +70,9 @@ describe('简化导入模板', () => {
       data.eachRow((row, number) => {
         if (number > 3) expect(row.actualCellCount).toBe(0);
       });
-      expect(data.columns.some((column) => column.hidden && column.outlineLevel === 1)).toBe(true);
+      expect(data.columns.every((column) => !column.hidden && column.outlineLevel === 0)).toBe(
+        true
+      );
       data.getRow(3).eachCell((cell) => expect(String(cell.value)).toContain('例：'));
     }
   });
