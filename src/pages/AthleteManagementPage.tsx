@@ -157,7 +157,6 @@ export function AthleteManagementPage({
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
-  const [verificationFilter, setVerificationFilter] = useState('');
   const [healthFilter, setHealthFilter] = useState('');
   const [eventFilter, setEventFilter] = useState('');
   const [advanced, setAdvanced] = useState({
@@ -263,7 +262,6 @@ export function AthleteManagementPage({
         const query = search.trim().toLocaleLowerCase();
         if (projectFilter && athlete.project !== projectFilter) return false;
         if (teamFilter && athlete.team !== teamFilter) return false;
-        if (verificationFilter && athlete.source !== verificationFilter) return false;
         if (healthFilter === '__risk' && athlete.healthStatus === '健康') return false;
         if (healthFilter && healthFilter !== '__risk' && athlete.healthStatus !== healthFilter)
           return false;
@@ -305,7 +303,6 @@ export function AthleteManagementPage({
       search,
       projectFilter,
       teamFilter,
-      verificationFilter,
       healthFilter,
       eventFilter,
       advanced,
@@ -324,7 +321,6 @@ export function AthleteManagementPage({
     setSearch('');
     setProjectFilter('');
     setTeamFilter('');
-    setVerificationFilter('');
     setHealthFilter('');
     setEventFilter('');
     setAdvanced({
@@ -593,18 +589,6 @@ export function AthleteManagementPage({
           ))}
         </select>
         <select
-          value={verificationFilter}
-          onChange={(event) => {
-            setVerificationFilter(event.target.value);
-            setPage(1);
-          }}
-          aria-label="筛选入队核实状态"
-        >
-          <option value="">全部入队状态</option>
-          <option value="self_registered">入队待核实</option>
-          <option value="registration_verified">注册入队已核实</option>
-        </select>
-        <select
           value={healthFilter}
           onChange={(event) => {
             setHealthFilter(event.target.value);
@@ -645,7 +629,6 @@ export function AthleteManagementPage({
         {(search ||
           projectFilter ||
           teamFilter ||
-          verificationFilter ||
           healthFilter ||
           eventFilter ||
           monthlyOnly ||
