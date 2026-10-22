@@ -1,5 +1,5 @@
 import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
-import { importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
+import { requiresDatabaseReview, importRecordPolicy, importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
 import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
@@ -14,8 +14,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v24：文件、数据库冲突及写入共用机器精度比较，避免浮点尾差制造覆盖。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v24-numeric-conflict-comparison';
+// v25：档案非空资料按本次导入自动更新，不进入数据库数值冲突审查。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v25-profile-latest-import';
 
 export type ImportAthlete = {
   id: number;
@@ -46,7 +46,7 @@ export type DataImportConflictField = {
   label: string;
   oldValue: string;
   newValue: string;
-  /** 现值非空且与新值不同，需要确认才会覆盖 */
+  /** 现值非空且与新值不同；档案自动更新，测量事实需按冲突策略处理 */
   overwrites: boolean;
 };
 
@@ -2412,9 +2412,7 @@ function computeCounts(
   return {
     newCount: active.filter((item) => !item.conflict?.exists).length,
     duplicateCount: active.filter((item) => item.conflict?.exists).length,
-    overwriteCount: active.filter((item) =>
-      item.conflict?.fields.some((field) => field.overwrites)
-    ).length,
+    overwriteCount: active.filter(requiresDatabaseReview).length,
     invalidCount: items.filter(
       (item) => item.itemType === 'invalid_row' || item.quality === 'error'
     ).length,
@@ -3200,7 +3198,7 @@ export function updateDataImportAthleteCandidates(input: {
           excluded
             ? ['已移除该人员，其关联业务记录将一并排除']
             : matchedAthleteId
-              ? ['将关联已有运动员，不覆盖其现有档案']
+              ? ['将关联已有运动员，非空档案资料按本次导入更新']
               : ['将创建无登录账号的最小运动员档案，姓名与所属队伍以外的资料可稍后补充']
         ),
         current.id,
@@ -3230,7 +3228,7 @@ function resolveItemPolicy(
   item: DataImportItemView,
   batchPolicy: 'skip' | 'update'
 ): 'skip' | 'update' {
-  return item.resolution || batchPolicy;
+  return importRecordPolicy(item, batchPolicy);
 }
 
 function upsertTrainingItem(
@@ -3611,8 +3609,8 @@ const PROFILE_DETAIL_FIELDS: Array<[string, string, string]> = [
 
 /**
  * 运动员档案写入：区分新建 / 补全空字段 / 覆盖已有字段。
- * 空白一律视为未提供；跳过策略下不修改任何已有非空字段；
- * 覆盖仅在更新策略下发生，并计数供结果摘要展示。
+ * 空白一律视为未提供；档案非空资料按本次导入自动更新；
+ * 队伍不通过导入变更，覆盖计数供结果摘要展示。
  */
 function upsertAthleteProfileItem(
   item: DataImportItemView,
@@ -3677,7 +3675,7 @@ function upsertAthleteProfileItem(
       `UPDATE athletes SET ${athleteSets.join(', ')}, source = 'file_import', data_import_batch_id = ? WHERE id = ?`
     ).run(...athleteParams, batchId, item.athleteId);
   }
-  // 档案明细字段：跳过策略仅补全空字段，不覆盖已有值。
+  // 档案明细字段共用自动更新策略，空白不覆盖已有值。
   const detailSets: string[] = [];
   const detailParams: SqlValue[] = [];
   for (const [key, , column] of PROFILE_DETAIL_FIELDS) {

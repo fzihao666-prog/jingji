@@ -31,6 +31,11 @@ it('机器浮点尾差相同，但真实精度差异、文本、空白和零保�
   expect(importReviewValuesEqual(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 1)).toBe(false);
   expect(importFieldValues([{ ...item, payload: { weightKg: 61.3 } }, { ...item, payload: { weightKg: 61.300000000000004 } }], 'weightKg')).toEqual([61.3]);
 });
+it('档案与数据库不同直接按新导入更新，同一文件内不同值仍需选择', () => {
+  const profile = { ...item, itemType: 'athlete_profile', payload: { bloodType: 'O' }, conflict: { exists: true, fields: [{ field: 'bloodType', oldValue: 'A', newValue: 'O', overwrites: true }] } };
+  expect(importReviewGroups([profile])).toEqual([]);
+  expect(importReviewGroups([profile, { ...profile, id: 2, payload: { bloodType: 'B' } }])).toHaveLength(1);
+});
 
 it('65个指标仅展示与待选字段有关的来源，保留原序号和全部原始记录', () => {
   const records = Array.from({ length: 65 }, (_, index) => ({ ...item, id: index + 1, payload: index === 1 ? { weightKg: 61.3 } : { heightCm: 173 } }));

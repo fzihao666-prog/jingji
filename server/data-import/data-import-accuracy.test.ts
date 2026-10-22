@@ -63,6 +63,23 @@ const commit = (batchId: string, conflictPolicy: 'skip' | 'update', allowedTeams
     conflictPolicy,
   });
 
+it('档案非空资料自动采用本次导入，血型不进入数据库冲突审查，空白保留原值', () => {
+  db.prepare("INSERT INTO athlete_profiles (athlete_id, blood_type, phone) VALUES (1, 'A', '123')").run();
+  const batch = analyze({ 运动员基本资料: [['姓名', '血型', '手机号'], ['张某', 'O', '']] });
+  expect(importReviewGroups(batch.items)).toEqual([]);
+  expect(batch.counts.overwriteCount).toBe(0);
+  expect(commit(batch.id, 'skip').updatedRecords).toBe(1);
+  expect(db.prepare('SELECT blood_type, phone FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ blood_type: 'O', phone: '123' });
+});
+
+it('明确排除档案行时不自动更新资料', () => {
+  db.prepare("INSERT INTO athlete_profiles (athlete_id, blood_type) VALUES (1, 'A')").run();
+  const batch = analyze({ 运动员基本资料: [['姓名', '血型'], ['张某', 'O']] });
+  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, resolution: 'skip' }] });
+  expect(commit(batch.id, 'skip').updatedRecords).toBe(0);
+  expect(db.prepare('SELECT blood_type FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ blood_type: 'A' });
+});
+
 beforeEach(() => {
   db.exec(`
     PRAGMA foreign_keys = OFF;
@@ -196,7 +213,7 @@ describe('数据准确性：空白保护与真实 0', () => {
     expect(row.sleep).toBe(7);
   });
 
-  it('跳过重复策略不修改已有运动员档案字段', () => {
+  it('档案非空字段按本次导入更新，不受测量记录的跳过策略影响', () => {
     const batch = analyze({
       运动员信息: [
         ['姓名', '运动项目', '所属队伍', '性别', '最好成绩'],
@@ -207,7 +224,7 @@ describe('数据准确性：空白保护与真实 0', () => {
     const row = db
       .prepare('SELECT gender FROM athletes WHERE id = 1')
       .get() as { gender: string };
-    expect(row.gender).toBe('男');
+    expect(row.gender).toBe('女');
   });
 
   it('更新策略下档案覆盖计数并写入，空白仍不覆盖', () => {

@@ -395,7 +395,13 @@ export function databaseReviewRecords<T extends ImportReviewItem>(items: T[]): T
   });
 }
 export function requiresDatabaseReview(item: ImportReviewItem) {
-  return Boolean(item.conflict?.exists && item.conflict.fields.some((field) => field.overwrites));
+  return item.itemType !== 'athlete_profile' && Boolean(item.conflict?.exists && item.conflict.fields.some((field) => field.overwrites));
+}
+
+/** 档案资料以本次导入的非空值更新；测量事实继续遵循既有冲突策略。 */
+export function importRecordPolicy(item: Pick<ImportReviewItem, 'itemType' | 'resolution'>, batchPolicy: 'skip' | 'update'): 'skip' | 'update' {
+  if (item.resolution === 'skip' || item.resolution === 'update') return item.resolution;
+  return item.itemType === 'athlete_profile' ? 'update' : batchPolicy;
 }
 
 
