@@ -6,7 +6,17 @@ import {
   templateFieldHeader,
   templateFieldHelp,
   type ImportTemplateField,
+  type TemplateRequirement,
 } from '../../shared/import-template-fields.ts';
+
+// 配色与必填文字同时展示，避免只依赖色差判断填写要求。
+const requirementColors: Record<TemplateRequirement, { background: string; text: string }> = {
+  必填: { background: 'FF991B1B', text: 'FFFFFFFF' },
+  条件必填: { background: 'FFF59E0B', text: 'FF422006' },
+  选填: { background: 'FF1D4ED8', text: 'FFFFFFFF' },
+  系统预填: { background: 'FFE2E8F0', text: 'FF334155' },
+  系统计算: { background: 'FFEDE9FE', text: 'FF5B21B6' },
+};
 
 export function createTemplateWorkbook(title: string): ExcelJS.Workbook {
   const workbook = new ExcelJS.Workbook();
@@ -73,18 +83,12 @@ export function addTemplateSheet(
       );
     sheet.getRow(3).height = Math.max(sheet.getRow(3).height || 82, wrappedLines * 15 + 14);
     cell.note = `${templateFieldHeader(field)}\n${templateFieldHelp(field)}`;
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    const colors = requirementColors[field.requirement];
+    cell.font = { bold: true, color: { argb: colors.text } };
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: {
-        argb:
-          field.requirement === '必填'
-            ? 'FF193A44'
-            : field.requirement === '条件必填'
-              ? 'FF345D68'
-              : 'FF52747C',
-      },
+      fgColor: { argb: colors.background },
     };
     cell.alignment = { wrapText: true, vertical: 'middle' };
     // 使用公开的单元格API；不放示例值，粘贴不能替代服务端校验。
