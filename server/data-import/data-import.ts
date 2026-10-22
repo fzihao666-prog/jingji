@@ -2154,7 +2154,7 @@ export function analyzeDataImport(input: {
         input.athletes,
         (workbook.Workbook?.Names?.some(name => name.Name === IMPORT_TEMPLATE_VERSION_NAME) === true
           && workbook.Sheets['填写说明']?.B1?.v === IMPORT_TEMPLATE_VERSION)
-          || matrix.slice(0, 12).some(row => row.some(value => /\n(?:必填|条件必填|选填|系统预填)｜/.test(String(value ?? ''))))
+          || matrix.slice(0, 12).some(row => row.some(value => /\n(?:必填|条件必填|选填|系统预填)(?:：[^\n]*)?(?:｜|\n)/.test(String(value ?? ''))))
       );
       type = `统一模板·${sheetName}`;
       note = '按稳定字段名识别模板，支持字段说明及列重排';

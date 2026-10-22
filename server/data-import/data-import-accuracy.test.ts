@@ -2136,3 +2136,11 @@ it('重复解析不改写未变化的指标字典元数据', () => {
   analyze({ 训练课次: [['姓名', '日期', '时长分钟'], ['张某', '2026-10-21', 60]] });
   expect(db.prepare("SELECT updated_at AS value FROM metric_definitions WHERE code='squat_kg'").get()).toEqual({ value: '2000-01-01 00:00:00' });
 });
+
+it('复制带通俗条件说明的部分列后，仍识别新版模板并阻止缺日期', async () => {
+  const { templateFieldHeader } = await import('../../shared/import-template-fields.ts');
+  const fields = importTemplateFields('训练课次').filter(field => ['姓名', '时长分钟'].includes(field.key));
+  const batch = analyze({ 训练课次: [fields.map(templateFieldHeader), fields.map(field => field.key === '姓名' ? '张某' : 60)] });
+  expect(batch.items[0].eventDate).toBe('');
+  expect(batch.errorCount).toBeGreaterThan(0);
+});

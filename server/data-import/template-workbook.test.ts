@@ -29,7 +29,7 @@ describe('简化导入模板', () => {
         const cell = sheet.getCell(3, index + 1);
         expect(templateHeaderKey(String(cell.value))).toBe(field.key);
         expect(String(cell.value)).toContain(field.requirement);
-        expect(String(cell.value)).toContain(field.unit);
+        if (field.unit !== '无单位') expect(String(cell.value)).toContain(field.unit);
         expect(String(cell.value)).toContain('例：');
         expect(cell.note).toBeTruthy();
         expect(Boolean(sheet.getColumn(index + 1).hidden)).toBe(field.advanced);
@@ -72,4 +72,30 @@ describe('简化导入模板', () => {
     expect(templateHeaderKey('实际重量kg\n必填｜kg｜例：60')).toBe('实际重量kg');
     expect(templateHeaderKey('实际重量kg')).toBe('实际重量kg');
   });
+});
+
+it('评估协议在表头直接说明何时填，输入提示解释用途、例子及不知道时怎么办', () => {
+  const workbook = buildImportWorkbook(['竞技评估']);
+  const sheet = workbook.getWorksheet('竞技评估')!;
+  const column =
+    importTemplateFields('竞技评估').findIndex((field) => field.key === '评估协议') + 1;
+  const header = String(sheet.getCell(3, column).value);
+  expect(header).toContain('一般耐力/核心力量评分');
+  expect(header).toContain('评分标准');
+  expect(header).toContain('队内核心力量评分表（2026版）');
+  expect(header).not.toContain('无单位');
+  const help = sheet.getCell(4, column).dataValidation.prompt!;
+  expect(help).toContain('为什么');
+  expect(help).toContain('没有评分标准');
+  expect(help).toContain('对应评分都留空');
+  expect(help).not.toContain('本队已采用的评分协议名称及版本');
+});
+
+it('条件必填显示具体条件，编号和课次不只标注术语', () => {
+  const sheet = buildImportWorkbook(['训练课次']).getWorksheet('训练课次')!;
+  const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(String);
+  expect(headers.find((value) => value.startsWith('课次序号\n'))).toContain(
+    '同一人同一天有多次训练'
+  );
+  expect(headers.find((value) => value.startsWith('姓名\n'))).toContain('没有系统编号');
 });

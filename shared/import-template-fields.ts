@@ -1,4 +1,9 @@
 import {
+  importFieldGuidance,
+  importFieldFillCondition,
+  type ImportFieldGuidance,
+} from './import-template-guidance.js';
+import {
   UNIFIED_IMPORT_HEADERS,
   BODY_TEMPLATE_FIELDS,
   FITNESS_TEMPLATE_METRICS,
@@ -24,6 +29,8 @@ export type ImportTemplateField = {
   hint: string;
   advanced: boolean;
   choices?: readonly string[];
+  fillCondition?: string;
+  guidance?: ImportFieldGuidance;
 };
 
 /** 第一行始终为旧版稳定表头；其余行仅用于人类阅读。 */
@@ -326,13 +333,13 @@ const examples: Record<string, string> = {
   疼痛评分: '2',
   训练限制: '避免跑跳',
   康复计划: '按专业人员制定的方案填写',
-  总分: '按既有评价协议原值填写',
+  总分: '80（须按实际评分表打分）',
   等级: '建设',
-  一般耐力评分: '按既有协议填写',
-  核心力量评分: '按既有协议填写',
-  评估协议: '本队已采用的评分协议名称及版本',
-  测试协议: '实际设备、方法与版本',
-  协议: '实际测试方法及版本',
+  一般耐力评分: '80（须按实际评分表打分）',
+  核心力量评分: '75（须按实际评分表打分）',
+  评估协议: '队内核心力量评分表（2026版）',
+  测试协议: '测力台单腿跳测试（按设备报告）',
+  协议: '纵跳摸高，测3次取最好成绩',
   测试类型: '专项测试',
   指标代码: 'vertical_jump_cm',
   指标名称: '纵跳',
@@ -527,12 +534,26 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
       hint,
       advanced: !common.includes(key),
       choices: fieldChoices,
+      fillCondition: requirement === '条件必填' ? importFieldFillCondition(sheet, key) : undefined,
+      guidance: importFieldGuidance(key),
     };
   });
 }
 
 export function templateFieldHeader(field: ImportTemplateField): string {
-  return `${field.key}\n${field.requirement}｜${field.unit}\n例：${field.example}`;
+  const requirement = field.fillCondition
+    ? `${field.requirement}：${field.fillCondition}`
+    : field.requirement;
+  const unit = field.unit === '无单位' ? '' : `｜${field.unit}`;
+  const meaning = field.guidance ? `\n${field.guidance.meaning}` : '';
+  return `${field.key}${meaning}\n${requirement}${unit}\n例：${field.example}`;
+}
+
+export function templateFieldHelp(field: ImportTemplateField): string {
+  const guide = field.guidance;
+  if (!guide)
+    return `${field.hint} 例：${field.example}${field.choices ? ` 可选：${field.choices.join('、')}` : ''}`;
+  return `${guide.meaning}。${field.fillCondition ? `什么时候填：${field.fillCondition}。` : ''}怎么填：${guide.how}例：${field.example}。为什么：${guide.why}不知道时：${guide.unknown}`;
 }
 
 export const TEMPLATE_CALCULATION_NOTES = [
@@ -544,6 +565,7 @@ export const TEMPLATE_CALCULATION_NOTES = [
   'SMVL/力量训练量：按现有规则汇总实际次数×实际重量kg；计划数不是实际数，外部显式总量沿用既有优先策略。',
   'FMS：七项齐全才生成完整21分制总分，未测不补0。专项：按有效轮次计算平均、最好及同条件排名；无可比历史显示缺失。',
   '年龄由真实生日计算；冠军模型、雷达图和参考值由系统分析，不要求填报。Excel公式不作为计算事实源。',
+  '表头写明何时填写；点击填写单元格可看解释、填写例子和不知道时的处理办法，详细说明也在表头批注。示例评分表名仅演示格式，请用真实依据，不代表系统提供该标准。',
   '必填条件见列批注。空白是未提供，真实0保留；非法文本报错。仅预填身份和日期的业务行自动忽略。',
   '已有记录只按非空值更新，空白保留已有值；跨项目、越权、同名歧义及同日多课归属必须在提交前解决。',
 ];

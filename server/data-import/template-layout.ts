@@ -4,6 +4,7 @@ import {
   IMPORT_TEMPLATE_VERSION_NAME,
   TEMPLATE_CALCULATION_NOTES,
   templateFieldHeader,
+  templateFieldHelp,
   type ImportTemplateField,
 } from '../../shared/import-template-fields.ts';
 
@@ -57,7 +58,25 @@ export function addTemplateSheet(
     if (/编号|手机|电话/.test(field.key)) column.numFmt = '@';
     const cell = sheet.getCell(3, index + 1);
     cell.value = templateFieldHeader(field);
-    cell.note = `${templateFieldHeader(field)}\n${field.hint}${field.choices ? `\n可选值：${field.choices.join('、')}` : ''}`;
+    const wrappedLines = String(cell.value)
+      .split('\n')
+      .reduce(
+        (count, line) =>
+          count +
+          Math.max(
+            1,
+            Math.ceil(
+              [...line].reduce(
+                (width, character) => width + (character.charCodeAt(0) > 255 ? 2 : 1),
+                0
+              ) /
+                (column.width! - 2)
+            )
+          ),
+        0
+      );
+    sheet.getRow(3).height = Math.max(sheet.getRow(3).height || 82, wrappedLines * 15 + 14);
+    cell.note = `${templateFieldHeader(field)}\n${templateFieldHelp(field)}`;
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = {
       type: 'pattern',
@@ -79,8 +98,8 @@ export function addTemplateSheet(
         allowBlank: true,
         formulae: field.choices ? [`"${field.choices.join(',')}"`] : ['TRUE'],
         showInputMessage: true,
-        promptTitle: `${field.requirement}｜${field.unit}`.slice(0, 32),
-        prompt: `${field.hint} 例：${field.example}`.slice(0, 255),
+        promptTitle: `${field.key}：怎么填`.slice(0, 32),
+        prompt: templateFieldHelp(field).slice(0, 255),
         showErrorMessage: Boolean(field.choices),
         errorTitle: '请检查填写值',
         error: `请选择：${field.choices?.join('、') || '按列说明填写'}`,
