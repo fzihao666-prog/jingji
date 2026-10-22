@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as XLSX from '@e965/xlsx';
@@ -149,6 +150,10 @@ beforeEach(() => {
     '教练',
     'SCC'
   );
+  // 这些用例测试成绩合并及往返；自定义项目由管理员事先配置，导入本身不再建字典。
+  const configuredMetrics = [['grip', 'kg'], ['metric_a', 'kg'], ['metric_b', 'kg'], ['a', 'kg'], ['b', 'kg'], ['custom_note', 'kg'], ['migration_note', 'kg'], ['custom_unit', 'g']];
+  for (const [code, unit] of configuredMetrics)
+    db.prepare("INSERT OR IGNORE INTO metric_definitions (code,label,domain,unit,direction,frequency) VALUES (?,?,'custom',?,'neutral','phase')").run(code, code, unit);
   for (const team of ['A队', 'B队'])
     db.prepare('INSERT INTO project_teams (project, name) VALUES (?, ?)').run(PROJECT, team);
   for (const athlete of athletes)
@@ -776,7 +781,8 @@ describe('P0：人员确认及旧草稿保护', () => {
       athletes,
       allowedTeams: new Set(['A队', 'B队']),
     });
-    expect(fresh.id).not.toBe(batch.id);
+    expect(fresh.id).toBe(batch.id);
+    expect(fresh.revision).toBe(batch.revision + 1);
     expect(commit(fresh.id, 'skip').createdRecords).toBe(1);
   });
 });
@@ -1491,7 +1497,7 @@ it('不同指标的协议审查可恢复所有来源，不会只恢复一个测�
 });
 
 it('单位、计划次数和强度百分比在保存、重新读取及入库后都保留选择结果', () => {
-  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '备注'], ['张某', '2025-11-14', 'custom_unit', 10, 'kg', '来源A'], ['张某', '2025-11-14', 'custom_unit', 20, 'g', '来源B']] });
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '备注'], ['张某', '2025-11-14', 'custom_unit', 10, 'g', '来源A'], ['张某', '2025-11-14', 'custom_unit', 20, 'g', '来源B']] });
   const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { 'metric:custom_unit:center': 20, 'unit:custom_unit:center': 'g', 'note:custom_unit:center': '来源B' } } } }] });
   expect(saved.items[0]).toMatchObject({ valueNum: 20, unit: 'g', payload: { note: '来源B' } });
   commit(batch.id, 'skip');
@@ -1652,6 +1658,7 @@ it('65项测试的浮点尾差不改写数据库，真实差异按最新导入�
   const session = db.prepare("INSERT INTO test_sessions (athlete_id, test_date, test_type) VALUES (1, '2026-08-13', '专业综合评估')").run();
   db.prepare('INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit) VALUES (?, ?, ?, ?)').run(session.lastInsertRowid, 'weight_kg', 61.300000000000004, 'kg');
   const rows = [['张某', '2026-08-13', '专业综合评估', 'weight_kg', 61.3, 'kg'], ...Array.from({ length: 64 }, (_, index) => ['张某', '2026-08-13', '专业综合评估', `custom_${index}`, index + 1, '分'])];
+  for (let index = 0; index < 64; index += 1) db.prepare("INSERT OR IGNORE INTO metric_definitions (code,label,domain,unit,direction,frequency) VALUES (?,?,'custom','分','neutral','phase')").run(`custom_${index}`, `虚构测试${index}`);
   const seed = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位'], ...rows] });
   const weight = seed.items.find(item => item.metricCode === 'weight_kg')!;
   expect(weight.conflict?.identical).toBe(true);
@@ -2182,4 +2189,77 @@ it.each([['正常', 'normal'], ['休息', 'rest'], ['关注', 'attention'], ['�
   expect(batch.items[0].payload.status).toBe(code);
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   expect(db.prepare("SELECT status FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = '2026-10-23'").get()).toEqual({ status: code });
+});
+
+it('P0：解析和失败提交不覆盖管理员指标设置', () => {
+  const before = db.prepare("SELECT * FROM metric_definitions WHERE code='vertical_jump_cm'").get();
+  db.prepare("UPDATE metric_definitions SET label='队内纵跳', unit='毫米', active=0 WHERE code='vertical_jump_cm'").run();
+  const snapshot = db.prepare('SELECT * FROM metric_definitions ORDER BY code').all();
+  try {
+    const batch = analyze({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['张某', '2026-11-01', 8]] });
+    commit(batch.id, 'skip');
+    expect(() => analyze({ 每日恢复: [['姓名', '日期', '睡眠小时']] })).toThrow();
+    expect(db.prepare('SELECT * FROM metric_definitions ORDER BY code').all()).toEqual(snapshot);
+  } finally {
+    if (before) db.prepare('UPDATE metric_definitions SET label=?, unit=?, active=? WHERE code=?').run(before.label, before.unit, before.active, 'vertical_jump_cm');
+  }
+});
+
+it('P0：不同账号可上传相同文件，本人旧哈希草稿可继续', () => {
+  db.prepare("INSERT INTO users (id,username,password_hash,display_name,role) VALUES (8,'other-p0','x','虚构教练','SCC')").run();
+  const buffer = workbookBuffer({ 每日恢复: [['姓名', '日期', '睡眠小时'], ['张某', '2026-11-02', 8]] });
+  const first = analyze({}, { buffer });
+  const second = analyze({}, { buffer, userId: 8 });
+  expect(first.id).not.toBe(second.id);
+  db.prepare('UPDATE data_import_batches SET file_hash=? WHERE id=?').run(createHash('sha256').update(buffer).digest('hex'), first.id);
+  expect(analyze({}, { buffer }).id).toBe(first.id);
+  expect(() => getDataImportBatch(first.id, 8)).toThrow();
+});
+
+it('P0：重解析失败保留旧草稿与校对，持久化失败也回滚', () => {
+  const buffer = workbookBuffer({ 每日恢复: [['姓名', '所属队伍', '日期', '睡眠小时'], ['新队员P0', 'A队', '', 8]] });
+  const first = analyze({}, { buffer, defaultDate: '2026-11-03' });
+  updateDataImportAthleteCandidates({ batchId: first.id, userId: USER_ID, athletes, allowedTeams: new Set(['A队']), corrections: [{ id: first.athleteCandidates[0].id, matchedAthleteId: 1, confirmed: true }] });
+  const saved = updateDataImportItems({ batchId: first.id, userId: USER_ID, athletes, corrections: [{ id: first.items[0].id, payload: { sleepHours: 9 } }] });
+  const storedHash = (db.prepare('SELECT file_hash AS hash FROM data_import_batches WHERE id=?').get(first.id) as { hash: string }).hash;
+  const tooManySheets = Object.fromEntries(Array.from({ length: 101 }, (_, index) => [`表${index}`, [['表头']]]));
+  for (const badBuffer of [Buffer.from('PK\x03\x04损坏的工作簿'), workbookBuffer({ 每日恢复: [['姓名', '日期', '睡眠小时']] }), workbookBuffer(tooManySheets)]) {
+    db.prepare('UPDATE data_import_batches SET file_hash=? WHERE id=?').run(createHash('sha256').update(badBuffer).digest('hex'), first.id);
+    expect(() => analyze({}, { buffer: badBuffer, reparse: true })).toThrow();
+    expect(getDataImportBatch(first.id, USER_ID)).toEqual(saved);
+  }
+  db.prepare('UPDATE data_import_batches SET file_hash=? WHERE id=?').run(storedHash, first.id);
+  db.exec("CREATE TRIGGER p0_fail_insert BEFORE INSERT ON data_import_items BEGIN SELECT RAISE(ABORT, '模拟持久化失败'); END");
+  try { expect(() => analyze({}, { buffer, reparse: true })).toThrow('模拟持久化失败'); } finally { db.exec('DROP TRIGGER p0_fail_insert'); }
+  expect(getDataImportBatch(first.id, USER_ID)).toEqual(saved);
+});
+
+it('P0：未知指标不能通过旧代码文件创建字典，停用及单位变化在提交时复核', () => {
+  const unknown = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2026-11-05', 'not_configured_p0', 30, 'kg']] });
+  expect(unknown.errorCount).toBeGreaterThan(0);
+  expect(() => commit(unknown.id, 'skip')).toThrow();
+  expect(db.prepare("SELECT code FROM metric_definitions WHERE code='not_configured_p0'").get()).toBeUndefined();
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2026-11-05', 'grip', 30, 'kg']] });
+  expect(batch.errorCount).toBe(0);
+  try {
+    db.prepare("UPDATE metric_definitions SET unit='g' WHERE code='grip'").run();
+    expect(() => commit(batch.id, 'skip')).toThrow();
+    db.prepare("UPDATE metric_definitions SET unit='kg',active=0 WHERE code='grip'").run();
+    expect(() => commit(batch.id, 'skip')).toThrow();
+  } finally { db.prepare("UPDATE metric_definitions SET unit='kg',active=1 WHERE code='grip'").run(); }
+  expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 0 });
+});
+
+
+it('P0：管理员配置在重复初始化和成功测试入库后保持不变', () => {
+  const previous = db.prepare("SELECT * FROM metric_definitions WHERE code='squat_kg'").get() as { label: string; unit: string; active: number };
+  try {
+    db.prepare("UPDATE metric_definitions SET label='队内深蹲',unit='千克',active=1 WHERE code='squat_kg'").run();
+    const snapshot = db.prepare("SELECT * FROM metric_definitions WHERE code='squat_kg'").get();
+    initializeDatabase(db, { databasePath: ':memory:', databaseExistedBeforeStartup: true });
+    const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '指标名称', '数值', '单位'], ['张某', '2026-11-06', 'squat_kg', '文件自改名称', 60, '千克']] });
+    expect(batch.errorCount).toBe(0);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+    expect(db.prepare("SELECT * FROM metric_definitions WHERE code='squat_kg'").get()).toEqual(snapshot);
+  } finally { db.prepare('UPDATE metric_definitions SET label=?,unit=?,active=? WHERE code=?').run(previous.label, previous.unit, previous.active, 'squat_kg'); }
 });

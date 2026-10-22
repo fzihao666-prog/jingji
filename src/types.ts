@@ -354,6 +354,7 @@ export type DataImportAthleteCandidate = {
 
 export type DataImportBatch = {
   id: string;
+  revision: number;
   filename: string;
   project: string;
   status: 'reviewing' | 'committed' | 'failed' | 'rolled_back';
@@ -387,7 +388,7 @@ export type DataImportBatch = {
 
 export type DataImportBatchSummary = Omit<
   DataImportBatch,
-  'sheetCount' | 'summary' | 'items' | 'counts' | 'athleteCandidates'
+  'revision' | 'sheetCount' | 'summary' | 'items' | 'counts' | 'athleteCandidates'
 >;
 
 export type InjuryStatus = 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';

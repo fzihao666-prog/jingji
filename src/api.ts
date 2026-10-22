@@ -608,13 +608,14 @@ export const api = {
     file: File,
     project: Project,
     defaultDate?: string,
-    options?: { reparse?: boolean }
+    options?: { reparse?: boolean; expectedRevision?: number }
   ) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
     if (defaultDate) body.append('defaultDate', defaultDate);
     if (options?.reparse) body.append('reparse', '1');
+    if (options?.expectedRevision !== undefined) body.append('expectedRevision', String(options.expectedRevision));
     return request<{ batch: DataImportBatch }>('/api/data-import/analyze', {
       method: 'POST',
       body,
@@ -648,13 +649,14 @@ export const api = {
       payload?: Record<string, unknown>;
       resolution?: '' | 'skip' | 'update';
     }>,
-    reviewTargetId?: number
+    reviewTargetId: number | undefined,
+    expectedRevision: number
   ) {
     return request<{ batch: DataImportBatch; partial: boolean }>(
       `/api/data-import/batches/${encodeURIComponent(id)}/items`,
       {
         method: 'PUT',
-        body: JSON.stringify({ corrections, reviewTargetId }),
+        body: JSON.stringify({ corrections, reviewTargetId, expectedRevision }),
       }
     );
   },
@@ -668,17 +670,18 @@ export const api = {
       matchedAthleteId?: number | null;
       excluded?: boolean;
       confirmed?: boolean;
-    }>
+    }>,
+    expectedRevision: number
   ) {
     return request<{ batch: DataImportBatch }>(
       `/api/data-import/batches/${encodeURIComponent(id)}/athletes`,
       {
         method: 'PUT',
-        body: JSON.stringify({ corrections }),
+        body: JSON.stringify({ corrections, expectedRevision }),
       }
     );
   },
-  async commitDataImport(id: string, conflictPolicy: 'skip' | 'update') {
+  async commitDataImport(id: string, conflictPolicy: 'skip' | 'update', expectedRevision: number) {
     return request<{
       message: string;
       imported: number;
@@ -692,7 +695,7 @@ export const api = {
       batch: DataImportBatch;
     }>(`/api/data-import/batches/${encodeURIComponent(id)}/commit`, {
       method: 'POST',
-      body: JSON.stringify({ conflictPolicy }),
+      body: JSON.stringify({ conflictPolicy, expectedRevision }),
     });
   },
   async dataManagementMetrics() {

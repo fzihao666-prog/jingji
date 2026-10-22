@@ -1,3 +1,4 @@
+import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import type { ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
 import { buildUnifiedDataExport } from './data-import-export.ts';
@@ -5,7 +6,7 @@ export { buildUnifiedDataExport, writeUnifiedExportRows } from './data-import-ex
 import { UNIFIED_IMPORT_HEADERS, IMPORT_PURPOSE_SHEETS } from '../../shared/data-import-template.ts';
 import { templateHeaderKey } from '../../shared/import-template-fields.ts';
 import { buildImportWorkbook } from './template-workbook.ts';
-import { dataImportScope } from './data-import-access.ts';
+import { dataImportScope, assertDataImportBatchAccess } from './data-import-access.ts';
 export { dataImportScope } from './data-import-access.ts';
 import ExcelJS from 'exceljs';
 import { discardDataImport } from './discard-data-import.ts';
@@ -138,6 +139,17 @@ export function buildImportErrorReport(batch: {
   return workbook;
 }
 
+function expectedImportRevision(value: unknown): number {
+  if (value === undefined) throw new ImportRequestError('请刷新导入页面后重试，缺少草稿修订号。', 428);
+  const revision = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0)
+    throw new ImportRequestError('草稿修订号格式无效。', 400);
+  return revision;
+}
+function authorizeImportBatch(user: AuthUser, batchId: string) {
+  return assertDataImportBatchAccess(user, batchId, dataImportCandidates(user));
+}
+
 export function registerDataImportRoutes(app: Express) {
   app.get(
     '/api/data-import/template',
@@ -198,6 +210,7 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     async (req, res) => {
       try {
+        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
         const workbook = buildImportErrorReport(batch);
         const buffer = await workbook.xlsx.writeBuffer();
@@ -213,7 +226,7 @@ export function registerDataImportRoutes(app: Express) {
         res.send(Buffer.from(buffer));
       } catch (error) {
         res
-          .status(400)
+          .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '问题清单导出失败。' });
       }
     }
@@ -283,11 +296,13 @@ export function registerDataImportRoutes(app: Express) {
           athletes,
           allowedTeams: scope.allowedTeams,
           reparse: cleanString(req.body?.reparse) === '1',
+          expectedRevision: cleanString(req.body?.reparse) === '1' ? expectedImportRevision(req.body?.expectedRevision) : undefined,
+          authorizeBatch: batchId => { authorizeImportBatch(req.authUser!, batchId); },
         });
         res.json({ batch });
       } catch (error) {
         res
-          .status(400)
+          .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '数据文件解析失败。' });
       }
     }
@@ -313,10 +328,11 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
+        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         res.json({ batch: getDataImportBatch(cleanString(req.params.id), req.authUser!.id) });
       } catch (error) {
         res
-          .status(404)
+          .status(error instanceof ImportRequestError ? error.status : 404)
           .json({ message: error instanceof Error ? error.message : '导入批次不存在。' });
       }
     }
@@ -337,7 +353,7 @@ export function registerDataImportRoutes(app: Express) {
         res.json({ message: '已放弃提交，并删除该批次及相关暂存数据。' });
       } catch (error) {
         res
-          .status(400)
+          .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '放弃提交失败。' });
       }
     }
@@ -352,17 +368,20 @@ export function registerDataImportRoutes(app: Express) {
         if (req.body?.corrections !== undefined && !Array.isArray(req.body.corrections))
           return res.status(400).json({ message: '校对修改格式无效。' });
         const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections : [];
+        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = updateDataImportItems({
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
           athletes: dataImportCandidates(req.authUser!),
           corrections,
           reviewTargetId: req.body?.reviewTargetId,
+          expectedRevision: expectedImportRevision(req.body?.expectedRevision),
+          authorizeBatch: () => { authorizeImportBatch(req.authUser!, cleanString(req.params.id)); },
         });
         res.json({ batch, partial: req.body?.reviewTargetId !== undefined });
       } catch (error) {
         res
-          .status(400)
+          .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '导入数据校验失败。' });
       }
     }
@@ -374,6 +393,7 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
+        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
         const scope = dataImportScope(req.authUser!, batch.project);
         if (!scope.allowed)
@@ -382,6 +402,8 @@ export function registerDataImportRoutes(app: Express) {
           return res.status(400).json({ message: '人员修改格式无效。' });
         const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections : [];
         const updated = updateDataImportAthleteCandidates({
+          expectedRevision: expectedImportRevision(req.body?.expectedRevision),
+          authorizeBatch: () => { authorizeImportBatch(req.authUser!, cleanString(req.params.id)); },
           batchId: batch.id,
           userId: req.authUser!.id,
           allowedTeams: scope.allowedTeams,
@@ -393,7 +415,7 @@ export function registerDataImportRoutes(app: Express) {
         res.json({ batch: updated });
       } catch (error) {
         res
-          .status(400)
+          .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '新运动员资料保存失败。' });
       }
     }
@@ -407,11 +429,14 @@ export function registerDataImportRoutes(app: Express) {
       try {
         const conflictPolicy =
           cleanString(req.body?.conflictPolicy) === 'update' ? 'update' : 'skip';
+        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
         const scope = dataImportScope(req.authUser!, batch.project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号已无该项目导入权限，请重新核对授权。' });
         const result = commitDataImport({
+          expectedRevision: expectedImportRevision(req.body?.expectedRevision),
+          authorizeBatch: () => { authorizeImportBatch(req.authUser!, cleanString(req.params.id)); },
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
           creatorRole: req.authUser!.role,
@@ -428,7 +453,7 @@ export function registerDataImportRoutes(app: Express) {
         });
       } catch (error) {
         res
-          .status(400)
+          .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '导入提交失败。' });
       }
     }

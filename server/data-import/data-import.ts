@@ -1,3 +1,5 @@
+import { IMPORT_BASE_METRICS as METRICS } from '../../shared/import-base-metrics.ts';
+import { assertImportRevision, advanceImportRevision, importRevision } from './data-import-revision.ts';
 import { resolveImportMetricName } from '../../shared/import-metric-choice.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import { IMPORT_TEMPLATE_VERSION, IMPORT_TEMPLATE_VERSION_NAME, templateHeaderKey } from '../../shared/import-template-fields.ts';
@@ -94,6 +96,7 @@ export type ParsedImportItem = {
 
 export type DataImportPreview = {
   id: string;
+  revision: number;
   filename: string;
   project: string;
   status: 'reviewing' | 'committed' | 'failed' | 'rolled_back';
@@ -111,6 +114,7 @@ export type DataImportPreview = {
     recognizedSheets: Array<{ name: string; type: string; items: number; note: string }>;
     ignoredSheets: Array<{ name: string; reason: string }>;
     duplicateFile?: boolean;
+    revision?: number;
   };
   counts: {
     newCount: number;
@@ -172,31 +176,6 @@ export type DataImportItemView = Omit<ParsedImportItem, 'payload'> & {
 
 type Matrix = unknown[][];
 
-const METRICS = {
-  height_cm: { label: '身高', unit: 'cm', domain: 'morphology', min: 100, max: 230 },
-  weight_kg: { label: '体重', unit: 'kg', domain: 'morphology', min: 30, max: 200 },
-  training_years: { label: '训练年限', unit: '年', domain: 'morphology', min: 0, max: 50 },
-  arm_span_cm: { label: '臂展', unit: 'cm', domain: 'morphology', min: 100, max: 250 },
-  sit_reach_cm: { label: '坐位体前屈', unit: 'cm', domain: 'flexibility', min: -30, max: 60 },
-  supine_support_sec: { label: '仰卧支撑', unit: '秒', domain: 'core', min: 0, max: 900 },
-  front_plank_sec: { label: '俯卧支撑', unit: '秒', domain: 'core', min: 0, max: 900 },
-  side_plank_sec: { label: '侧支撑', unit: '秒', domain: 'core', min: 0, max: 900 },
-  single_leg_squat_reps: {
-    label: '单腿蹲',
-    unit: '次',
-    domain: 'strength_endurance',
-    min: 0,
-    max: 100,
-  },
-  pull_ups_reps: { label: '引体向上', unit: '次', domain: 'strength_endurance', min: 0, max: 100 },
-  squat_kg: { label: '深蹲', unit: 'kg', domain: 'strength', min: 0, max: 450 },
-  deadlift_kg: { label: '硬拉', unit: 'kg', domain: 'strength', min: 0, max: 500 },
-  hip_thrust_kg: { label: '臀推', unit: 'kg', domain: 'strength', min: 0, max: 600 },
-  bench_press_kg: { label: '卧推', unit: 'kg', domain: 'strength', min: 0, max: 350 },
-  bench_pull_kg: { label: '卧拉', unit: 'kg', domain: 'strength', min: 0, max: 350 },
-  clean_kg: { label: '高翻', unit: 'kg', domain: 'explosive', min: 0, max: 300 },
-  vertical_jump_cm: { label: '纵跳', unit: 'cm', domain: 'explosive', min: 0, max: 120 },
-} as const;
 
 type MetricCode = keyof typeof METRICS;
 
@@ -1699,20 +1678,6 @@ function consolidateImportFacts(items: ParsedImportItem[]) {
   return items;
 }
 
-function ensureMetricDefinitions() {
-  const statement = db.prepare(`
-    INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, minimum, maximum, active)
-    VALUES (?, ?, ?, ?, 'higher_better', 'phase', '["赛艇","皮划艇","激流"]', ?, ?, 1)
-    ON CONFLICT(code) DO UPDATE SET label = excluded.label, domain = excluded.domain, unit = excluded.unit,
-      minimum = excluded.minimum, maximum = excluded.maximum, active = 1, updated_at = CURRENT_TIMESTAMP
-    WHERE metric_definitions.label IS NOT excluded.label OR metric_definitions.domain IS NOT excluded.domain
-      OR metric_definitions.unit IS NOT excluded.unit OR metric_definitions.minimum IS NOT excluded.minimum
-      OR metric_definitions.maximum IS NOT excluded.maximum OR metric_definitions.active IS NOT 1
-  `);
-  for (const [code, metric] of Object.entries(METRICS))
-    statement.run(code, metric.label, metric.domain, metric.unit, metric.min, metric.max);
-}
-
 function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string): Matrix {
   return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
     header: 1,
@@ -2102,35 +2067,32 @@ export function analyzeDataImport(input: {
   userId: number;
   athletes: ImportAthlete[];
   allowedTeams?: Set<string>;
-  /** 重复上传时选择“重新解析文件”，按当前参数删除旧草稿并重新解析 */
+  /** 重复上传时选择“重新解析文件”，按当前参数解析成功后原子替换旧草稿 */
   reparse?: boolean;
+  expectedRevision?: number;
+  authorizeBatch?: (batchId: string) => void;
 }) {
   input = { ...input, filename: normalizeImportFilename(input.filename) };
   if (!/\.(xls|xlsx)$/i.test(input.filename))
     throw new Error('统一数据导入当前支持 XLS 和 XLSX 文件。');
   if (input.defaultDate && !validIsoDate(input.defaultDate))
     throw new Error('默认日期格式应为 YYYY-MM-DD。');
-  ensureMetricDefinitions();
   const originalHash = createHash('sha256').update(input.buffer).digest('hex');
-  let fileHash = originalHash;
-  const existing = db
-    .prepare(
-      `SELECT id, file_hash AS fileHash, parser_version AS parserVersion, status, created_by AS createdBy
-       FROM data_import_batches WHERE (file_hash = ? OR file_hash LIKE ?) AND project = ?
-       ORDER BY rowid DESC LIMIT 1`
-    )
-    .get(originalHash, `${originalHash}:%`, input.project) as
-    { id: string; fileHash: string; parserVersion: string; status: string; createdBy: number } | undefined;
-  if (existing && existing.createdBy !== input.userId)
-    throw new Error('同一文件已有其他账号创建的导入批次。');
-  if (existing?.status === 'committed') {
-    // 保留已提交批次和审计链，新批次重新检测当前正式表中的缺失与重复。
-    fileHash = `${originalHash}:${randomUUID()}`;
-  } else if (existing) {
-    if (existing.parserVersion === DATA_IMPORT_PARSER_VERSION && !input.reparse)
-      return getDataImportBatch(existing.id, input.userId, true);
-    fileHash = existing.fileHash;
-    db.prepare('DELETE FROM data_import_batches WHERE id = ?').run(existing.id);
+  const scopedHash = createHash('sha256').update(`import-v2:${input.userId}:${input.project}:${originalHash}`).digest('hex');
+  let fileHash = scopedHash;
+  const existing = db.prepare(`SELECT id, file_hash AS fileHash, parser_version AS parserVersion, status,
+    summary_json AS summaryJson FROM data_import_batches
+    WHERE created_by=? AND project=? AND (file_hash=? OR file_hash LIKE ? OR file_hash=? OR file_hash LIKE ?)
+    ORDER BY rowid DESC LIMIT 1`).get(input.userId, input.project, scopedHash, `${scopedHash}:%`, originalHash, `${originalHash}:%`) as
+    { id: string; fileHash: string; parserVersion: string; status: string; summaryJson: string } | undefined;
+  if (existing) input.authorizeBatch?.(existing.id);
+  const replacing = existing && existing.status !== 'committed' ? existing : undefined;
+  if (existing?.status === 'committed') fileHash = `${scopedHash}:${randomUUID()}`;
+  else if (replacing) {
+    if (replacing.parserVersion === DATA_IMPORT_PARSER_VERSION && !input.reparse)
+      return getDataImportBatch(replacing.id, input.userId, true);
+    assertImportRevision(replacing.id, input.userId, input.expectedRevision);
+    fileHash = replacing.fileHash;
   }
   const workbook = XLSX.read(input.buffer, {
     type: 'buffer',
@@ -2143,7 +2105,7 @@ export function analyzeDataImport(input: {
   const items: ParsedImportItem[] = [];
   const recognizedSheets: Array<{ name: string; type: string; items: number; note: string }> = [];
   const ignoredSheets: Array<{ name: string; reason: string }> = [];
-  const batchId = randomUUID();
+  const batchId = replacing?.id || randomUUID();
   const batchVersion = `IMPORT-${new Date().toISOString().slice(0, 10)}-${batchId.slice(0, 8)}`;
   for (const sheetName of workbook.SheetNames) {
     const matrix = matrixForSheet(workbook, sheetName);
@@ -2236,8 +2198,8 @@ export function analyzeDataImport(input: {
   const persons = collectPersons(items);
   // 仅复用同账号、同项目、同一文件最近一次已提交的真实关联，草稿不能作为身份依据。
   const previous = db.prepare(`SELECT id FROM data_import_batches
-    WHERE (file_hash = ? OR file_hash LIKE ?) AND project = ? AND created_by = ? AND status = 'committed'
-    ORDER BY rowid DESC LIMIT 1`).get(originalHash, `${originalHash}:%`, input.project, input.userId) as { id: string } | undefined;
+    WHERE (file_hash = ? OR file_hash LIKE ? OR file_hash = ? OR file_hash LIKE ?) AND project = ? AND created_by = ? AND status = 'committed'
+    ORDER BY rowid DESC LIMIT 1`).get(scopedHash, `${scopedHash}:%`, originalHash, `${originalHash}:%`, input.project, input.userId) as { id: string } | undefined;
   const priorIds = new Map<string, Set<number>>();
   if (previous) {
     const priorItems = db.prepare(`SELECT raw_athlete_name AS name, payload_json AS payload, athlete_id AS athleteId
@@ -2330,9 +2292,15 @@ export function analyzeDataImport(input: {
     item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item as DataImportItemView);
   }
   const counts = summarizeItems(items);
-  const summary = { recognizedSheets, ignoredSheets };
+  const summary = { recognizedSheets, ignoredSheets, accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
   db.exec('BEGIN IMMEDIATE');
   try {
+    if (replacing) {
+      input.authorizeBatch?.(replacing.id);
+      const current = assertImportRevision(replacing.id, input.userId, input.expectedRevision ?? importRevision(JSON.parse(replacing.summaryJson)));
+      if (current.status !== 'reviewing') throw new Error('批次已提交，不能重新解析替换。');
+      db.prepare('DELETE FROM data_import_batches WHERE id=? AND created_by=?').run(replacing.id, input.userId);
+    }
     db.prepare(
       `
       INSERT INTO data_import_batches (
@@ -2384,6 +2352,7 @@ export function analyzeDataImport(input: {
         )
       );
     }
+    input.authorizeBatch?.(batchId);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -2514,7 +2483,8 @@ export function getDataImportBatch(
       CASE status WHEN 'pending' THEN 0 ELSE 1 END, excluded, name, id`
     )
     .all(batchId) as Record<string, unknown>[];
-  const summary = JSON.parse(text(row.summaryJson) || '{}') as DataImportPreview['summary'];
+  const summary = JSON.parse(text(row.summaryJson) || '{}') as DataImportPreview['summary'] & { accessTeams?: unknown };
+  delete summary.accessTeams;
   if (duplicateFile) summary.duplicateFile = true;
   let items = itemRows.map(mapItem);
   if (reviewTargetId !== undefined) {
@@ -2557,6 +2527,7 @@ export function getDataImportBatch(
   }));
   return {
     id: text(row.id),
+    revision: importRevision(summary),
     filename: normalizeImportFilename(text(row.filename)),
     project: text(row.project),
     status: row.status as DataImportPreview['status'],
@@ -2762,6 +2733,9 @@ function validateImportItem(
     const completed = optionalNumber(payload.completed);
     if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
   } else if (item.itemType === 'test_measurement') {
+    const metricDefinition = db.prepare('SELECT unit, active FROM metric_definitions WHERE code=?').get(item.metricCode) as { unit: string; active: number } | undefined;
+    if (!metricDefinition || !metricDefinition.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
+    else if (item.unit !== metricDefinition.unit) messages.push(`错误：测试项目单位已变更或不匹配，应为${metricDefinition.unit}，请重新校验`);
     if (payload.metricSelectionError) messages.push(String(payload.metricSelectionError));
     if (!item.metricCode && !payload.metricSelectionError) messages.push('错误：请选择测试项目');
     if (!item.unit && !payload.metricSelectionError) {
@@ -3131,6 +3105,8 @@ export function updateDataImportItems(input: {
   batchId: string;
   reviewTargetId?: number;
   userId: number;
+  expectedRevision?: number;
+  authorizeBatch?: () => void;
   athletes: ImportAthlete[];
   corrections: Array<{
     id: number;
@@ -3158,6 +3134,8 @@ export function updateDataImportItems(input: {
   );
   db.exec('BEGIN IMMEDIATE');
   try {
+    input.authorizeBatch?.();
+    assertImportRevision(input.batchId, input.userId, input.expectedRevision);
     const corrected = new Map(input.corrections.map(correction => [correction.id, correction]));
     const nextItems = batch.items.map(item => {
       const correction = corrected.get(item.id);
@@ -3182,6 +3160,8 @@ export function updateDataImportItems(input: {
       applyValueReview(nextItems, correction.id, correction.payload.valueReview, allowed, input.userId);
     }
     persistValidatedImportItems(input.batchId, nextItems, allowed, candidateNames);
+    input.authorizeBatch?.();
+    advanceImportRevision(input.batchId, input.userId, input.expectedRevision);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -3193,6 +3173,8 @@ export function updateDataImportItems(input: {
 export function updateDataImportAthleteCandidates(input: {
   batchId: string;
   userId: number;
+  expectedRevision?: number;
+  authorizeBatch?: () => void;
   allowedTeams: Set<string>;
   athletes: ImportAthlete[];
   corrections: Array<{
@@ -3219,6 +3201,8 @@ export function updateDataImportAthleteCandidates(input: {
     WHERE id = ? AND batch_id = ? AND status = 'pending'`);
   db.exec('BEGIN IMMEDIATE');
   try {
+    input.authorizeBatch?.();
+    assertImportRevision(input.batchId, input.userId, input.expectedRevision);
     for (const correction of input.corrections) {
       const current = batch.athleteCandidates.find((candidate) => candidate.id === correction.id);
       if (!current || current.status !== 'pending') continue;
@@ -3294,6 +3278,8 @@ export function updateDataImportAthleteCandidates(input: {
       item.quality = item.resolution === 'skip' || candidate.excluded ? 'skipped' : 'valid';
     }
     persistValidatedImportItems(input.batchId, updated.items, allowed, new Set(candidates.keys()));
+    input.authorizeBatch?.();
+    advanceImportRevision(input.batchId, input.userId, input.expectedRevision);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
@@ -3476,11 +3462,6 @@ function upsertTestItem(
   }
   const sessionFields = existingConflict.fields.filter(field => ['protocol', 'durationMin'].includes(field.field) && (field.overwrites || field.oldValue === ''));
   const policy = resolveItemPolicy(item, batchPolicy);
-  db.prepare(
-    `INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, projects_json, active)
-    VALUES (?, ?, 'custom', ?, 'neutral', 'phase', '["赛艇","皮划艇","激流"]', 1)
-    ON CONFLICT(code) DO UPDATE SET label=excluded.label, unit=excluded.unit, active=1, updated_at=CURRENT_TIMESTAMP`
-  ).run(item.metricCode, item.metricLabel || item.metricCode, item.unit);
   const durationMin = optionalNumber(item.payload.durationMin);
   const validDurationMin = durationMin !== null && durationMin > 0 ? durationMin : null;
   db.prepare(
@@ -4418,12 +4399,13 @@ function assertConflictUnchanged(item: DataImportItemView, fresh: DataImportConf
 export function commitDataImport(input: {
   batchId: string;
   userId: number;
+  expectedRevision?: number;
+  authorizeBatch?: () => void;
   creatorRole: string;
   athletes: ImportAthlete[];
   allowedTeams?: Set<string>;
   conflictPolicy: 'skip' | 'update';
 }) {
-  ensureMetricDefinitions();
   const batch = getDataImportBatch(input.batchId, input.userId);
   if (batch.status === 'committed') {
     const audit = db.prepare("SELECT detail FROM audit_logs WHERE action = 'COMMIT_DATA_IMPORT' AND user_id = ? AND json_extract(detail, '$.batchId') = ? ORDER BY id DESC LIMIT 1")
@@ -4509,6 +4491,8 @@ export function commitDataImport(input: {
   let linkedAthletes!: number;
   db.exec('BEGIN IMMEDIATE');
   try {
+    input.authorizeBatch?.();
+    assertImportRevision(input.batchId, input.userId, input.expectedRevision);
     const resolution = resolvePendingAthletes({
       batch,
       userId: input.userId,
@@ -4517,6 +4501,8 @@ export function commitDataImport(input: {
     createdAthletes = resolution.createdCount;
     linkedAthletes = resolution.linkedCount;
     for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
+    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && revalidateItem(item, allowed, candidateNames).quality === 'error'))
+      throw new Error('数据或指标配置已变化，请重新校验后提交。');
     refreshImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
       throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
@@ -4606,6 +4592,8 @@ export function commitDataImport(input: {
         conflictPolicy: 'update',
       })
     );
+    input.authorizeBatch?.();
+    advanceImportRevision(input.batchId, input.userId, input.expectedRevision);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

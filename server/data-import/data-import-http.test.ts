@@ -55,6 +55,12 @@ afterAll(async () => {
 });
 
 async function request(path: string, method = 'GET', body?: unknown, auth = token) {
+  // 既有成功流程显式使用当前修订；过期/缺失修订用例通过raw请求单独验证。
+  const match = path.match(/^\/batches\/([^/]+)\/(items|athletes|commit)$/);
+  if (match && body && typeof body === 'object' && !(body instanceof FormData) && !('expectedRevision' in body)) {
+    const snapshot = db.prepare('SELECT summary_json AS summary FROM data_import_batches WHERE id=?').get(match[1]) as { summary: string } | undefined;
+    body = { ...body, expectedRevision: Number(JSON.parse(snapshot?.summary || '{}').revision || 0) };
+  }
   const response = await fetch(`${base}/api/data-import${path}`, {
     method, headers: { authorization: `Bearer ${auth}`, ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) },
     body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
@@ -201,4 +207,110 @@ it.each([undefined, 2])('独立体能预览的组次错误不能通过直接提�
   const response = await fetch(`${base}/api/strength-training/import/commit`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ token: preview.token }) });
   expect(response.status).toBe(400);
   expect(db.prepare("SELECT COUNT(*) AS count FROM training_sessions WHERE athlete_id = 701 AND session_date = '2026-10-20'").get()).toEqual({ count: 0 });
+});
+
+it('P0 HTTP：修订号必需，过期保存/人员确认/提交返回409且不改数据', async () => {
+  const batch = await upload([['姓名', '日期', '睡眠小时'], ['虚构队员', '2026-11-11', 8]], '每日恢复');
+  expect(batch.revision).toBe(0);
+  const saved = await request(`/batches/${batch.id}/items`, 'PUT', { expectedRevision: batch.revision, corrections: [{ id: batch.items[0].id, payload: { sleepHours: 9 } }] });
+  expect(saved.status).toBe(200);
+  expect(saved.body.batch!.revision).toBe(1);
+  for (const [suffix, method, data] of [
+    ['items', 'PUT', { corrections: [{ id: batch.items[0].id, payload: { sleepHours: 10 } }] }],
+    ['athletes', 'PUT', { corrections: [] }], ['commit', 'POST', {}],
+  ] as const) {
+    expect((await request(`/batches/${batch.id}/${suffix}`, method, { ...data, expectedRevision: 0 })).status).toBe(409);
+  }
+  expect((await request(`/batches/${batch.id}/items`, 'PUT', { expectedRevision: undefined, corrections: [] })).status).toBe(428);
+  expect((await request(`/batches/${batch.id}/items`, 'PUT', { expectedRevision: -1, corrections: [] })).status).toBe(400);
+  const current = await request(`/batches/${batch.id}`);
+  expect(current.body.batch!.items[0].payload.sleepHours).toBe(9);
+  expect(current.body.batch!.revision).toBe(1);
+  expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE wellness_date='2026-11-11'").get()).toEqual({ count: 0 });
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', { expectedRevision: 1 })).status).toBe(200);
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', { expectedRevision: 0 })).status).toBe(200);
+});
+
+it('P0 HTTP：队伍授权收紧后旧稿预览、错误下载、保存、提交和重传不泄露队员', async () => {
+  const rows = [['姓名', '日期', '睡眠小时'], ['虚构队员', '2026-11-12', 8]];
+  const batch = await upload(rows, '每日恢复');
+  db.prepare("UPDATE user_team_permissions SET team='HTTP乙队' WHERE user_id=701 AND project='ROWING'").run();
+  try {
+    for (const [path, method, body] of [
+      [`/batches/${batch.id}`, 'GET', undefined],
+      [`/batches/${batch.id}/errors`, 'GET', undefined],
+      [`/batches/${batch.id}/items`, 'PUT', { corrections: [] }],
+      [`/batches/${batch.id}/athletes`, 'PUT', { corrections: [] }],
+      [`/batches/${batch.id}/commit`, 'POST', {}],
+    ] as const) {
+      const result = await request(path, method, body);
+      expect(result.status, path).toBe(403);
+      expect(JSON.stringify(result.body)).not.toContain('虚构队员');
+    }
+    expect(db.prepare('SELECT status FROM data_import_batches WHERE id=?').get(batch.id)).toEqual({ status: 'reviewing' });
+  } finally {
+    db.prepare("UPDATE user_team_permissions SET team='HTTP甲队' WHERE user_id=701 AND project='ROWING'").run();
+  }
+  expect((await request(`/batches/${batch.id}`)).status).toBe(200);
+});
+
+it('P0 HTTP：相同文件不同账号独立，重复上传本人旧稿不串账号', async () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['姓名', '日期', '睡眠小时'], ['虚构队员', '2026-11-13', 8]]), '每日恢复');
+  const bytes = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+  const send = async (auth: string, revision?: number) => {
+    const body = new FormData();
+    body.set('project', 'ROWING'); body.set('file', new Blob([bytes]), '相同文件.xlsx');
+    if (revision !== undefined) { body.set('reparse', '1'); body.set('expectedRevision', String(revision)); }
+    return request('/analyze', 'POST', body, auth);
+  };
+  const first = await send(token), other = await send(otherToken), again = await send(token);
+  expect([first.status, other.status, again.status]).toEqual([200, 200, 200]);
+  expect(first.body.batch!.id).not.toBe(other.body.batch!.id);
+  expect(again.body.batch!.id).toBe(first.body.batch!.id);
+  const reparsed = await send(token, first.body.batch!.revision);
+  expect(reparsed.status).toBe(200);
+  expect(reparsed.body.batch!.id).toBe(first.body.batch!.id);
+  expect(reparsed.body.batch!.revision).toBe(1);
+  expect((await send(token, 0)).status).toBe(409);
+  db.prepare("UPDATE user_team_permissions SET team='HTTP乙队' WHERE user_id=701").run();
+  try { expect((await send(token)).status).toBe(403); }
+  finally { db.prepare("UPDATE user_team_permissions SET team='HTTP甲队' WHERE user_id=701").run(); }
+
+  expect((await request(`/batches/${first.body.batch!.id}/errors`, 'GET', undefined, otherToken)).status).toBe(404);
+});
+
+it('P0 HTTP：事务中的授权变化使正式写入整体回滚', async () => {
+  const batch = await upload([['姓名', '日期', '睡眠小时'], ['虚构队员', '2026-11-14', 8]], '每日恢复');
+  db.exec("CREATE TRIGGER p0_revoke_in_transaction AFTER INSERT ON daily_wellness WHEN NEW.wellness_date='2026-11-14' BEGIN DELETE FROM user_area_permissions WHERE user_id=701; END");
+  try {
+    expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(403);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE wellness_date='2026-11-14'").get()).toEqual({ count: 0 });
+    expect(db.prepare('SELECT status FROM data_import_batches WHERE id=?').get(batch.id)).toEqual({ status: 'reviewing' });
+    expect((await request(`/batches/${batch.id}`)).status).toBe(200);
+  } finally { db.exec('DROP TRIGGER p0_revoke_in_transaction'); }
+});
+
+it('P0 HTTP：运动员停用后已提交历史批次也不能向普通教练泄露档案', async () => {
+  const batch = await upload([['姓名', '日期', '睡眠小时'], ['虚构队员', '2026-11-15', 8]], '每日恢复');
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+  db.prepare('UPDATE athletes SET active=0 WHERE id=701').run();
+  try {
+    const response = await request(`/batches/${batch.id}`);
+    expect(response.status).toBe(403);
+    expect(JSON.stringify(response.body)).not.toContain('虚构队员');
+  } finally { db.prepare('UPDATE athletes SET active=1 WHERE id=701').run(); }
+});
+
+it('P0 HTTP：旧草稿没有权限快照时，待建档人员也按当前地域范围保护', async () => {
+  const batch = await upload([['姓名', '所属队伍', '日期', '睡眠小时'], ['旧草稿虚构新人', 'HTTP甲队', '2026-11-16', 8]], '每日恢复');
+  db.prepare("UPDATE data_import_batches SET summary_json=json_remove(summary_json,'$.accessTeams','$.revision') WHERE id=?").run(batch.id);
+  expect((await request(`/batches/${batch.id}`)).body.batch!.revision).toBe(0);
+  db.prepare("UPDATE user_area_permissions SET area_level='province',province='广东' WHERE user_id=701").run();
+  try {
+    const result = await request(`/batches/${batch.id}/errors`);
+    expect(result.status).toBe(403);
+    expect(JSON.stringify(result.body)).not.toContain('旧草稿虚构新人');
+  } finally { db.prepare("UPDATE user_area_permissions SET area_level='national',province='' WHERE user_id=701").run(); }
+  expect((await request(`/batches/${batch.id}`)).status).toBe(200);
 });

@@ -122,6 +122,11 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [page, setPage] = useState(0);
   const [reviewGroupPage, setReviewGroupPage] = useState(0);
   const correctionQueue = useRef(Promise.resolve());
+  const knownRevisions = useRef(new Map<string, number>());
+  const expectedRevision = (current: DataImportBatch) => knownRevisions.current.get(current.id) ?? current.revision;
+  const rememberRevision = (current: DataImportBatch) => {
+    knownRevisions.current.set(current.id, Math.max(knownRevisions.current.get(current.id) ?? 0, current.revision));
+  };
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const [corrections, setCorrections] = useState<Map<number, Correction>>(new Map());
@@ -183,6 +188,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   }, [project]);
 
   const startReview = (next: DataImportBatch) => {
+    rememberRevision(next);
     setBulkCandidateTeam('');
     setReviewGroupPage(0);
     setBatch(next);
@@ -217,13 +223,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setError('');
     setMessage('');
     try {
-      const info = await api.analyzeDataImport(file, project, defaultDate || undefined, options);
+      const info = await api.analyzeDataImport(file, project, defaultDate || undefined, { ...options, expectedRevision: options?.reparse && batch ? expectedRevision(batch) : undefined });
       if (info.batch.status === 'committed') {
         startReview(info.batch);
         await refreshBatches();
         return;
       }
       if (info.batch.status === 'reviewing' && info.batch.summary.duplicateFile && !options?.reparse) {
+        rememberRevision(info.batch);
         setBatch(info.batch);
         setDuplicateDialogOpen(true);
         setMessage('该文件已上传过，可继续上次校对，或按当前参数重新解析。');
@@ -404,10 +411,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setError('');
     try {
       let currentBatch = batch;
-      if (athleteMap.size)
-        currentBatch = (await api.updateDataImportAthletes(batch.id, [...athleteMap.values()])).batch;
+      if (athleteMap.size) {
+        currentBatch = (await api.updateDataImportAthletes(batch.id, [...athleteMap.values()], expectedRevision(currentBatch))).batch;
+        rememberRevision(currentBatch);
+        setBatch(currentBatch);
+      }
       if (itemMap.size || !athleteMap.size)
-        currentBatch = (await api.updateDataImportItems(batch.id, [...itemMap.values()])).batch;
+        currentBatch = (await api.updateDataImportItems(batch.id, [...itemMap.values()], undefined, expectedRevision(currentBatch))).batch;
+      rememberRevision(currentBatch);
       setBatch(currentBatch);
       setCorrections(new Map());
       setAthleteCorrections(new Map());
@@ -431,7 +442,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         if (cancelled) return;
         setBusy('save');
         try {
-          const info = await api.updateDataImportItems(batchId, [...corrections.values()]);
+          const info = await api.updateDataImportItems(batchId, [...corrections.values()], undefined, expectedRevision(batch));
+          rememberRevision(info.batch);
           if (!cancelled) {
             setBatch(info.batch);
             setCorrections(new Map());
@@ -445,7 +457,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       });
     }, 600);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [corrections, athleteCorrections.size, batch?.id]);
+  }, [corrections, athleteCorrections.size, batch?.id, batch?.revision]);
 
   const hasUnsavedChanges = corrections.size > 0 || athleteCorrections.size > 0 || pendingSelections.size > 0;
   useEffect(() => {
@@ -516,7 +528,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setConfirmDialogOpen(false);
     setBusy('commit');
     try {
-      const info = await api.commitDataImport(batch.id, 'update');
+      const info = await api.commitDataImport(batch.id, 'update', expectedRevision(batch));
+      rememberRevision(info.batch);
       setBatch(info.batch);
       setMessage(info.message);
       setResult({
@@ -587,14 +600,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     else setBusy('save');
     setError('');
     try {
-      const result = await api.updateDataImportItems(current.id, updates, scoped ? targetId : undefined);
+      const result = await api.updateDataImportItems(current.id, updates, scoped ? targetId : undefined, expectedRevision(current));
+      rememberRevision(result.batch);
       setBatch(previous => {
         if (!previous || previous.id !== current.id) return previous;
         if (!result.partial) return result.batch;
         const updated = new Map(result.batch.items.map(item => [item.id, item]));
         const items = previous.items.map(item => updated.get(item.id) || item);
         const active = items.filter(item => item.quality !== 'skipped' && item.itemType !== 'invalid_row');
-        return { ...previous, items,
+        return { ...previous, revision: result.batch.revision, items,
           validCount: items.filter(item => item.quality === 'valid').length,
           warningCount: items.filter(item => item.quality === 'warning').length,
           errorCount: items.filter(item => item.quality === 'error').length,

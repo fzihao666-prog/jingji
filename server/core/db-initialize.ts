@@ -1,3 +1,4 @@
+import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { migrateNullableInjuryPainScore } from './injury-pain-score-migration.ts';
@@ -1786,6 +1787,13 @@ export function initializeDatabase(
       input.isDemo ? 1 : 0
     );
   }
+
+  // 补齐兼容导入字典，只插入缺失项，不覆盖管理员配置或启停状态。
+  const insertImportMetric = db.prepare(`INSERT OR IGNORE INTO metric_definitions
+    (code,label,domain,unit,direction,frequency,projects_json,minimum,maximum)
+    VALUES (?,?,?,?,'higher_better','phase','["赛艇","皮划艇","激流"]',?,?)`);
+  for (const [code, metric] of Object.entries(IMPORT_BASE_METRICS))
+    insertImportMetric.run(code, metric.label, metric.domain, metric.unit, metric.min, metric.max);
 
   function seed() {
     const athleteCount = db.prepare('SELECT COUNT(*) AS count FROM athletes').get() as {
