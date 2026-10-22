@@ -4,7 +4,6 @@ import {
   IMPORT_TEMPLATE_VERSION_NAME,
   TEMPLATE_CALCULATION_NOTES,
   templateFieldHeader,
-  templateFieldHelp,
   type ImportTemplateField,
   type TemplateRequirement,
 } from '../../shared/import-template-fields.ts';
@@ -53,7 +52,7 @@ export function addTemplateSheet(
   sheet.getRow(1).height = 30;
   sheet.mergeCells(2, 1, 2, fields.length);
   sheet.getCell('A2').value =
-    `${note} 必填项在前，选填项在后；所有数据列直接显示，按需填写。详情见列批注。`;
+    `${note} 必填项在前，选填项在后；所有数据列直接显示，按需填写。填写要求见表头。`;
   sheet.getCell('A2').alignment = { wrapText: true, vertical: 'middle' };
   sheet.getRow(2).height = 48;
   sheet.getRow(3).height = 82;
@@ -82,7 +81,6 @@ export function addTemplateSheet(
         0
       );
     sheet.getRow(3).height = Math.max(sheet.getRow(3).height || 82, wrappedLines * 15 + 14);
-    cell.note = `${templateFieldHeader(field)}\n${templateFieldHelp(field)}`;
     const colors = requirementColors[field.requirement];
     cell.font = { bold: true, color: { argb: colors.text } };
     cell.fill = {
@@ -109,9 +107,7 @@ export function addTemplateSheet(
         type: field.choices ? 'list' : 'custom',
         allowBlank: true,
         formulae: choiceFormula ? [choiceFormula] : field.choices ? [`"${field.choices.join(',')}"`] : ['TRUE'],
-        showInputMessage: true,
-        promptTitle: `${field.displayName || field.key}：怎么填`.slice(0, 32),
-        prompt: templateFieldHelp(field).slice(0, 255),
+        showInputMessage: false,
         showErrorMessage: Boolean(field.choices),
         errorStyle: 'stop',
         errorTitle: '请检查填写值',

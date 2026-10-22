@@ -31,7 +31,11 @@ describe('简化导入模板', () => {
         expect(String(cell.value)).toContain(field.requirement);
         if (field.unit !== '无单位') expect(String(cell.value)).toContain(field.unit);
         expect(String(cell.value)).toContain('例：');
-        expect(cell.note).toBeTruthy();
+        expect(cell.note).toBeUndefined();
+        const validation = sheet.getCell(4, index + 1).dataValidation;
+        expect(Boolean(validation.showInputMessage)).toBe(false);
+        expect(validation.prompt).toBeUndefined();
+        expect(validation.promptTitle).toBeUndefined();
         expect(Boolean(sheet.getColumn(index + 1).hidden)).toBe(false);
         expect(sheet.getColumn(index + 1).outlineLevel).toBe(0);
         if (field.requirement === '条件必填' || field.requirement === '必填')
@@ -82,7 +86,7 @@ describe('简化导入模板', () => {
   });
 });
 
-it('评估协议在表头直接说明何时填，输入提示解释用途、例子及不知道时怎么办', () => {
+it('评估协议保留表头通俗解释，不弹出提示或批注', () => {
   const workbook = buildImportWorkbook(['竞技评估']);
   const sheet = workbook.getWorksheet('竞技评估')!;
   const column =
@@ -92,11 +96,9 @@ it('评估协议在表头直接说明何时填，输入提示解释用途、例�
   expect(header).toContain('评分标准');
   expect(header).toContain('队内核心力量评分表（2026版）');
   expect(header).not.toContain('无单位');
-  const help = sheet.getCell(4, column).dataValidation.prompt!;
-  expect(help).toContain('为什么');
-  expect(help).toContain('没有评分标准');
-  expect(help).toContain('对应评分都留空');
-  expect(help).not.toContain('本队已采用的评分协议名称及版本');
+  expect(sheet.getCell(4, column).dataValidation.prompt).toBeUndefined();
+  expect(sheet.getCell(4, column).dataValidation.showInputMessage).toBe(false);
+  expect(sheet.getCell(3, column).note).toBeUndefined();
 });
 
 it('条件必填显示具体条件，编号和课次不只标注术语', () => {
