@@ -253,7 +253,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     try {
       await api.downloadDataImportTemplate(kind, project);
       setMessage(
-        kind === 'unified' ? '统一数据模板已开始下载。' : '分用途模板已开始下载（含已有人员预填）。'
+        kind === 'unified'
+          ? '统一数据模板已开始下载（含已有人员预填）。'
+          : '分用途模板已开始下载（含已有人员预填）。'
       );
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '模板下载失败。');
@@ -804,7 +806,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <FileSpreadsheet size={19} />
               <div>
                 <strong>统一数据模板</strong>
-                <span>按资料、测量、训练与测试分类，按需填写</span>
+                <span>按资料、测量、训练与测试分类，预填已有人员</span>
               </div>
             </button>
             <button

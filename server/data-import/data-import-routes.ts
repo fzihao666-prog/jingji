@@ -69,17 +69,19 @@ const PURPOSE_TITLES: Record<TemplateKind, string> = {
 };
 
 /**
- * 分用途模板：复用统一模板的表头与解析规则，并按当前项目和权限预填
- * 系统运动员编号、姓名、所属队伍，教练无需导出历史数据即可填报。
+ * 统一模板与分用途模板：复用统一模板的表头与解析规则，并按当前项目和权限预填
+ * 系统运动员编号、姓名、所属队伍，教练无需导出历史数据即可填报。统一模板
+ * 覆盖全部业务表，其余按用途取表，预填行组织方式与分用途模板保持一致。
  */
 export function buildPurposeTemplate(
-  kind: Exclude<TemplateKind, 'unified'>,
+  kind: TemplateKind,
   project: string,
   athletes: Array<{ id: number; name: string; team: string }>,
   metrics?: readonly ImportMetricDefinition[]
 ) {
-  const workbook = buildImportWorkbook(PURPOSE_SHEETS[kind], { metrics });
-  for (const sheetName of PURPOSE_SHEETS[kind]) {
+  const sheetNames = kind === 'unified' ? UNIFIED_IMPORT_HEADERS.map(([name]) => name) : PURPOSE_SHEETS[kind];
+  const workbook = buildImportWorkbook(sheetNames, { metrics });
+  for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
     athletes.forEach((athlete, index) => {
@@ -176,7 +178,7 @@ export function registerDataImportRoutes(app: Express) {
           .filter((athlete) => athlete.project === project)
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
         const metrics = kind === 'test' || kind === 'unified' ? readImportMetricDefinitions(project) : undefined;
-        const workbook = kind === 'unified' ? buildImportWorkbook(undefined, { metrics }) : buildPurposeTemplate(kind, project, athletes, metrics);
+        const workbook = buildPurposeTemplate(kind, project, athletes, metrics);
         workbook
           .xlsx.writeBuffer()
           .then((buffer) => {

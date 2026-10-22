@@ -186,6 +186,61 @@ it('简化模板HTTP下载预填正确，缺日期不可提交，校对后成功
   expect((await fetch(`${base}/api/data-import/template?kind=unified&project=CANOE_SLALOM`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(403);
 });
 
+it('统一数据模板预填与分用途模板一致，预填空行不入库且按编号关联已有运动员', async () => {
+  const { templateHeaderKey } = await import('../../shared/import-template-fields.ts');
+  const download = async (kind: string) => {
+    const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING`, { headers: { authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(200);
+    return XLSX.read(Buffer.from(await response.arrayBuffer()), { type: 'buffer' });
+  };
+  const rowsOf = (book: ReturnType<typeof XLSX.read>, sheetName: string) =>
+    XLSX.utils.sheet_to_json(book.Sheets[sheetName], { header: 1 }) as unknown[][];
+  const athleteIdentity = (matrix: unknown[][]) => {
+    const keys = matrix[2].map(value => templateHeaderKey(String(value)));
+    const index = matrix.findIndex((row, number) => number >= 3 && row[keys.indexOf('系统运动员编号')] === 701);
+    expect(index).toBeGreaterThanOrEqual(3);
+    const pick = (label: string) => (keys.includes(label) ? matrix[index][keys.indexOf(label)] ?? null : null);
+    return { code: pick('系统运动员编号'), name: pick('姓名'), team: pick('所属队伍'), project: pick('运动项目') };
+  };
+  const unified = await download('unified');
+  for (const sheetName of ['运动员基本资料', '身体测量', '体能测试', 'FMS测试', '训练课次', '力量训练组次', '每日恢复', '伤病记录', '竞技评估', '其他测试'])
+    expect(athleteIdentity(rowsOf(unified, sheetName)).name, sheetName).toBe('虚构队员');
+  expect(athleteIdentity(rowsOf(unified, '运动员基本资料'))).toEqual({ code: 701, name: '虚构队员', team: 'HTTP甲队', project: 'ROWING' });
+  expect(athleteIdentity(rowsOf(unified, '运动员基本资料'))).toEqual(athleteIdentity(rowsOf(await download('profile'), '运动员基本资料')));
+  expect(athleteIdentity(rowsOf(unified, '训练课次'))).toEqual(athleteIdentity(rowsOf(await download('training'), '训练课次')));
+
+  // 仅有预填人员信息的整份模板不产生空批次
+  const blank = new FormData();
+  blank.set('project', 'ROWING');
+  blank.set('file', new Blob([new Uint8Array(XLSX.write(unified, { type: 'buffer', bookType: 'xlsx' }))]), '统一预填空白.xlsx');
+  const rejected = await request('/analyze', 'POST', blank);
+  expect(rejected.status).toBe(400);
+  expect(rejected.body.message).toContain('未填写业务数据');
+
+  // 只回填一行业务数据：其余预填行不生成空记录，提交后按编号关联已有运动员、不重复建档
+  const matrix = rowsOf(unified, '每日恢复');
+  const keys = matrix[2].map(value => templateHeaderKey(String(value)));
+  const dataRow = matrix.findIndex((row, number) => number >= 3 && row[keys.indexOf('系统运动员编号')] === 701);
+  XLSX.utils.sheet_add_aoa(unified.Sheets['每日恢复'], [['2026-10-18']], { origin: { r: dataRow, c: keys.indexOf('日期') } });
+  XLSX.utils.sheet_add_aoa(unified.Sheets['每日恢复'], [[7.5]], { origin: { r: dataRow, c: keys.indexOf('睡眠小时') } });
+  const form = new FormData();
+  form.set('project', 'ROWING');
+  form.set('file', new Blob([new Uint8Array(XLSX.write(unified, { type: 'buffer', bookType: 'xlsx' }))]), '统一预填往返.xlsx');
+  const analyzed = await request('/analyze', 'POST', form);
+  expect(analyzed.status).toBe(200);
+  const batch = analyzed.body.batch!;
+  expect(batch.items).toHaveLength(1);
+  expect(batch.items[0].itemType).toBe('wellness');
+  expect(batch.items[0].athleteId).toBe(701);
+  const athleteCount = (db.prepare('SELECT COUNT(*) AS count FROM athletes').get() as { count: number }).count;
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status).toBe(200);
+  expect(result.body.createdAthletes).toBe(0);
+  expect(result.body.createdRecords).toBe(1);
+  expect((db.prepare('SELECT COUNT(*) AS count FROM athletes').get() as { count: number }).count).toBe(athleteCount);
+  expect(db.prepare("SELECT sleep_hours FROM daily_wellness WHERE athlete_id = 701 AND wellness_date = '2026-10-18'").get()).toEqual({ sleep_hours: 7.5 });
+});
+
 
 it.each([undefined, 2])('独立体能预览的组次错误不能通过直接提交token绕过，第二组=%s', async (secondSet) => {
   const { buildStrengthImportWorkbook } = await import('./specialized-template-workbooks.ts');
