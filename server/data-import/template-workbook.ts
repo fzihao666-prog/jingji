@@ -1,4 +1,6 @@
 import ExcelJS from 'exceljs';
+import { importTemplateFields } from '../../shared/import-template-fields.ts';
+import { createTemplateWorkbook, addTemplateSheet } from './template-layout.ts';
 import {
   UNIFIED_IMPORT_HEADERS,
   BODY_TEMPLATE_FIELDS,
@@ -10,20 +12,26 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name)) {
-  const workbook = new ExcelJS.Workbook();
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export' } = {}) {
+  const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook('竞迹训练监控系统｜简化数据导入模板');
   workbook.creator = '竞迹训练监控系统';
-  const instructions = workbook.addWorksheet('填写说明');
-  instructions.getCell('A1').value = '竞迹训练监控系统｜统一数据导入模板';
-  instructions.getCell('A1').font = { bold: true, size: 18 };
-  instructions.getColumn(1).width = 110;
-  TEMPLATE_INSTRUCTIONS.forEach((line, index) => {
-    instructions.getCell(index + 3, 1).value = `${index + 1}. ${line}`;
-    instructions.getCell(index + 3, 1).alignment = { wrapText: true, vertical: 'middle' };
-    instructions.getRow(index + 3).height = 36;
-  });
+  const instructions = workbook.getWorksheet('填写说明') || workbook.addWorksheet('填写说明');
+  if (options.mode === 'export') {
+    instructions.getCell('A1').value = '竞迹训练监控系统｜统一数据导入模板';
+    instructions.getCell('A1').font = { bold: true, size: 18 };
+    instructions.getColumn(1).width = 110;
+    TEMPLATE_INSTRUCTIONS.forEach((line, index) => {
+      instructions.getCell(index + 3, 1).value = `${index + 1}. ${line}`;
+      instructions.getCell(index + 3, 1).alignment = { wrapText: true, vertical: 'middle' };
+      instructions.getRow(index + 3).height = 36;
+    });
+  }
   for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
     if (!sheetNames.includes(name)) continue;
+    if (options.mode !== 'export') {
+      addTemplateSheet(workbook, name, importTemplateFields(name), IMPORT_SHEET_NOTES[name]);
+      continue;
+    }
     const sheet = workbook.addWorksheet(name, {
       views: [{ state: 'frozen', ySplit: 3, xSplit: 2 }],
     });

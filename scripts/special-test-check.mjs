@@ -57,7 +57,7 @@ async function filledTemplate(athletes) {
   const fill = (sheetName, valuesByHeader, rowNumber) => {
     const sheet = workbook.getWorksheet(sheetName);
     const headers = new Map();
-    sheet.getRow(6).eachCell((cell, columnNumber) => headers.set(cell.text.trim(), columnNumber));
+    sheet.getRow(3).eachCell((cell, columnNumber) => headers.set(cell.text.split(/\r?\n/)[0].trim(), columnNumber));
     for (const [header, value] of Object.entries(valuesByHeader))
       sheet.getCell(rowNumber, headers.get(header)).value = value;
   };

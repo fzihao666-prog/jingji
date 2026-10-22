@@ -8,6 +8,7 @@ vi.mock('../core/db.ts', async () => {
 });
 import { db } from '../core/db.ts';
 import { UNIFIED_IMPORT_HEADERS } from '../../shared/data-import-template.ts';
+import { importTemplateFields, templateHeaderKey } from '../../shared/import-template-fields.ts';
 import { importReviewGroups, selectImportReviewRecord } from '../../shared/import-conflict-review.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
 import {
@@ -987,7 +988,7 @@ it('实际统一模板保留三行表头及未填写工作表后能够往返导�
   });
   XLSX.utils.sheet_add_aoa(
     workbook.Sheets['训练课次'],
-    [[1, '张某', '2025-09-05', 1, '', '', '', '', '', 60], [2, '赵某']],
+    [{ 系统运动员编号: 1, 姓名: '张某', 日期: '2025-09-05', 课次序号: 1, 时长分钟: 60 }, { 系统运动员编号: 2, 姓名: '赵某' }].map(values => importTemplateFields('训练课次').map(field => values[field.key as keyof typeof values] ?? null)),
     { origin: 'A4' }
   );
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
@@ -1232,7 +1233,8 @@ describe('统一模板按业务归属整理', () => {
     expect(workbook.SheetNames).not.toContain('竞技水平评估');
     for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as unknown[][];
-      expect(rows[2]).toEqual(headers);
+      expect(rows[2].map(value => templateHeaderKey(String(value)))).toEqual(importTemplateFields(name).map(field => field.key));
+      expect(rows[2].map(value => templateHeaderKey(String(value))).sort()).toEqual([...headers].sort());
     }
   });
 });
@@ -2033,4 +2035,104 @@ it('人员排除再恢复即更新校对状态，不提前写正式记录', () =
   expect(restored.items[0].quality).not.toBe('skipped');
   expect(db.prepare('SELECT COUNT(*) AS count FROM daily_wellness').get()).toEqual({ count: 0 });
   expect(commit(batch.id, 'update').createdRecords).toBe(1);
+});
+
+describe('简化模板的填写契约', () => {
+  async function simplified(name: string, values: Record<string, unknown>, options: Partial<Parameters<typeof analyzeDataImport>[0]> = {}) {
+    const { buildImportWorkbook } = await import('./template-workbook.ts');
+    const { templateHeaderKey } = await import('../../shared/import-template-fields.ts');
+    const workbook = buildImportWorkbook([name]);
+    const sheet = workbook.getWorksheet(name)!;
+    sheet.getRow(3).eachCell((cell, column) => {
+      const key = templateHeaderKey(String(cell.value));
+      if (key in values) sheet.getCell(4, column).value = values[key] as string | number;
+    });
+    return analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: `简化${++unique}.xlsx`, mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']), ...options });
+  }
+  it('新模板无日期阻断，选定统一日期后只填距离可提交且不伪造SRPE', async () => {
+    const values = { 姓名: '张某', 距离千米: 12.5 };
+    const missing = await simplified('训练课次', values);
+    expect(missing.errorCount).toBeGreaterThan(0);
+    expect(missing.items[0].eventDate).toBe('');
+    const valid = await simplified('训练课次', values, { defaultDate: '2026-10-01', reparse: true });
+    expect(valid.errorCount).toBe(0);
+    expect(valid.items[0].payload.srpe).toBeNull();
+    expect(commit(valid.id, 'skip').createdRecords).toBe(1);
+  });
+  it('有效编号无需重复填姓名；只预填身份和日期不产生业务行', async () => {
+    const batch = await simplified('身体测量', { 系统运动员编号: 1, 测量日期: '2026-10-01', 体重kg: 75 });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items[0].athleteId).toBe(1);
+    await expect(simplified('训练课次', { 姓名: '张某', 日期: '2026-10-01' })).rejects.toThrow('未填写业务数据');
+  });
+  it('恢复只填睡眠合法，只填备注报错；旧文件日期回退明确提示', async () => {
+    const valid = await simplified('每日恢复', { 姓名: '张某', 日期: '2026-10-01', 睡眠小时: 8 });
+    expect(valid.errorCount).toBe(0);
+    const invalid = await simplified('每日恢复', { 姓名: '张某', 日期: '2026-10-01', 备注: '未采集' });
+    expect(invalid.errorCount).toBeGreaterThan(0);
+    const legacy = analyze({ 训练课次: [['姓名', '时长分钟'], ['张某', 60]] });
+    expect(legacy.items[0].messages.join('；')).toContain('北京时间当天');
+  });
+  it('新模板复用RPE与恢复量表边界并定位原列', async () => {
+    const training = await simplified('训练课次', { 姓名: '张某', 日期: '2026-10-01', 时长分钟: 60, RPE: 11 });
+    expect(training.errorCount).toBeGreaterThan(0);
+    expect(training.items[0].messages.join('；')).toMatch(/训练课次![A-Z]+4.*RPE/);
+    const recovery = await simplified('每日恢复', { 姓名: '张某', 日期: '2026-10-01', 睡眠小时: 99 });
+    expect(recovery.errorCount).toBeGreaterThan(0);
+  });
+  it('装饰表头与业务列重排后仍按字段名解析', async () => {
+    const { buildImportWorkbook } = await import('./template-workbook.ts');
+    const workbook = buildImportWorkbook(['训练课次']);
+    const sheet = workbook.getWorksheet('训练课次')!;
+    const fields = importTemplateFields('训练课次');
+    const data: Record<string, string | number> = { 系统运动员编号: 1, 日期: '2026-10-01', 时长分钟: 60, RPE: 6 };
+    sheet.getRow(3).values = fields.map(field => String(sheet.getCell(3, fields.indexOf(field) + 1).value)).reverse();
+    sheet.getRow(4).values = fields.map(field => data[field.key] ?? null).reverse();
+    const batch = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '列重排.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items[0].payload).toMatchObject({ durationMin: 60, rpe: 6, srpe: 360 });
+    expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  });
+  it('同人同日多课缺序号时不静默合并', async () => {
+    const batch = analyze({ 训练课次: [['姓名', '日期', '时长分钟', '训练内容'], ['张某', '2026-10-01', 60, '上午'], ['张某', '2026-10-01', 30, '下午']] });
+    expect(batch.errorCount).toBeGreaterThan(0);
+    expect(batch.items.flatMap(item => item.messages).join('；')).toContain('课次序号');
+  });
+});
+
+it.each([400, 0])('互补课次合并保留外部显式SRPE=%s', (load) => {
+  const batch = analyze({ 训练课次: [['姓名', '日期', '课次序号', '时长分钟', 'SRPE'], ['张某', '2026-10-17', 1, 60, ''], ['张某', '2026-10-17', 1, '', load]] });
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.find(item => item.quality !== 'skipped')!.payload.srpe).toBe(load);
+  commit(batch.id, 'skip');
+  expect(db.prepare("SELECT srpe FROM training_sessions WHERE athlete_id=1 AND session_date='2026-10-17'").get()).toEqual({ srpe: load });
+});
+
+it('已知无量纲指标与完整导出往返不要求编造单位', async () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位'], ['张某', '2026-10-18', 'dsd_ratio', 0.8, '']] });
+  expect(batch.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '无量纲往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(roundtrip.errorCount).toBe(0);
+  expect(roundtrip.items.find(item => item.metricCode === 'dsd_ratio')?.valueNum).toBe(0.8);
+});
+
+it('历史对比表编号在姓名前时仍读取姓名列', () => {
+  const batch = analyze({ 数据源: [
+    ['历史数据源'],
+    ['系统运动员编号', '姓名', '队伍', '性别', '备注', '', '深蹲'],
+    ['', '', '', '', '', '', '2026-10-19'],
+    [1, '张某', 'A队', '男', '', '', 60],
+  ] });
+  expect(batch.items[0].rawAthleteName).toBe('张某');
+  expect(batch.items[0].athleteId).toBe(1);
+});
+
+it('重复解析不改写未变化的指标字典元数据', () => {
+  analyze({ 训练课次: [['姓名', '日期', '时长分钟'], ['张某', '2026-10-21', 60]] });
+  db.prepare("UPDATE metric_definitions SET updated_at='2000-01-01 00:00:00' WHERE code='squat_kg'").run();
+  analyze({ 训练课次: [['姓名', '日期', '时长分钟'], ['张某', '2026-10-21', 60]] });
+  expect(db.prepare("SELECT updated_at AS value FROM metric_definitions WHERE code='squat_kg'").get()).toEqual({ value: '2000-01-01 00:00:00' });
 });

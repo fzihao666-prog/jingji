@@ -18,7 +18,7 @@ export function writeUnifiedExportRows(sheet: ExcelJS.Worksheet | undefined, row
 }
 
 export async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
-  const workbook = buildImportWorkbook();
+  const workbook = buildImportWorkbook(undefined, { mode: 'export' });
   if (!athleteIds.length) return workbook;
   const placeholders = athleteIds.map(() => '?').join(',');
   const profileRows = db

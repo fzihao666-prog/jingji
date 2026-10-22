@@ -1,3 +1,4 @@
+import { templateHeaderKey, IMPORT_TEMPLATE_VERSION } from '../../shared/import-template-fields.ts';
 import ExcelJS from 'exceljs';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -18,7 +19,7 @@ import {
   type StrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 import { accessibleAthleteIds, hasAthleteAccess } from '../core/permissions.ts';
-import { cleanString, strengthImportNumber } from '../core/utils.ts';
+import { cleanString, strengthImportNumber, isValidIsoDate } from '../core/utils.ts';
 import { upload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import type { AuthUser, StrengthImportRow } from '../core/shared-server.ts';
@@ -32,8 +33,10 @@ export const strengthImportCache = new Map<
     mimetype: string;
     sourceType: 'excel' | 'csv' | 'image' | 'pdf';
     rows: StrengthImportRow[];
+    originalRecords?: Record<string, unknown>[];
     modelUsed: string;
     expiresAt: number;
+    templateVersion?: string;
   }
 >();
 
@@ -104,7 +107,7 @@ export function strengthCellText(value: ExcelJS.CellValue) {
 }
 
 export function normalizedStrengthHeader(value: unknown) {
-  return cleanString(value)
+  return templateHeaderKey(cleanString(value))
     .toLowerCase()
     .replace(/[\s_()（）/\\-]/g, '');
 }
@@ -126,7 +129,8 @@ export function validateStrengthImportRow(
     source.athleteName ?? strengthRecordValue(source, ['运动员', '运动员姓名', '姓名', 'athlete'])
   );
   const team = cleanString(source.team ?? strengthRecordValue(source, ['队伍', '组别', 'team']));
-  const requestedAthleteId = Number(source.athleteId || 0);
+  const rawAthleteId = source.athleteId || strengthRecordValue(source, ['系统运动员编号']);
+  const requestedAthleteId = Number(rawAthleteId || 0);
   let matches = requestedAthleteId
     ? athletes.filter((athlete) => athlete.id === requestedAthleteId)
     : athletes.filter((athlete) => athlete.name === athleteName);
@@ -224,7 +228,24 @@ export function validateStrengthImportRow(
   const originalText = cleanString(source.originalText) || JSON.stringify(source).slice(0, 1000);
   const errors: string[] = [];
   const warnings: string[] = [];
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trainingDate)) errors.push('训练日期格式应为YYYY-MM-DD');
+  if (source._templateVersion === IMPORT_TEMPLATE_VERSION) {
+    for (const [field, label, aliases] of [
+      ['setIndex', '组次', ['组次', '组序号']], ['targetReps', '计划次数', ['计划次数', '目标次数']],
+      ['actualReps', '实际次数', ['实际次数', '次数']], ['actualWeightKg', '实际重量kg', ['实际重量kg', '重量kg']],
+      ['plannedWeightKg', '计划重量kg', ['计划重量kg', '计划重量']], ['durationMin', '训练时间min', ['训练时间min', '训练时长min']],
+      ['distanceKm', '训练距离km', ['训练距离km']], ['intensityPercent', '强度%', ['强度%', '强度百分比']], ['rpe', 'RPE', ['RPE']],
+    ] as const) {
+      const raw = source[field] ?? strengthRecordValue(source, [...aliases]);
+      const value = strengthImportNumber(raw);
+      if (cleanString(raw) && value === null) errors.push(`${originalText} ${label}“${cleanString(raw)}”不是有效数字`);
+      if (field === 'setIndex' && value !== null && (!Number.isInteger(value) || value < 1)) errors.push('组次须为正整数');
+    }
+  }
+  if (source._missingSetIndex) errors.push('同动作多组须填写不同组次，请修正文件后重新上传');
+  if (!isValidIsoDate(trainingDate)) errors.push('训练日期须为真实有效的YYYY-MM-DD日期');
+  if (cleanString(rawAthleteId) && (!Number.isSafeInteger(requestedAthleteId) || requestedAthleteId < 1)) errors.push('系统运动员编号无效');
+  if (matched && athleteName && athleteName !== matched.name) errors.push('系统运动员编号与姓名不一致，请核对身份');
+  if (requestedAthleteId && matched && team && matched.team !== team) errors.push('系统运动员编号与队伍不一致，导入不能调队');
   if (!athleteName && !requestedAthleteId) errors.push('缺少运动员姓名');
   else if (!matched)
     errors.push(matches.length > 1 ? '同名运动员需要选择队伍' : '未匹配到权限范围内的运动员');
@@ -301,6 +322,26 @@ export function validateStrengthImportRow(
   };
 }
 
+/** 最终提交也按当前人员映射检查整批组次，不信任客户端保留解析标记。 */
+function validateStrengthImportBatch(
+  sources: Array<StrengthImportRow | Record<string, unknown>>,
+  athletes: Parameters<typeof validateStrengthImportRow>[2],
+  simplified: boolean
+): StrengthImportRow[] {
+  const rows = sources.map((source, index) => validateStrengthImportRow({ ...source, ...(simplified ? { _templateVersion: IMPORT_TEMPLATE_VERSION } : {}) }, Number(source.rowNumber || index + 1), athletes));
+  if (simplified) {
+    const groups = new Map<string, StrengthImportRow[]>();
+    for (const row of rows) {
+      const key = JSON.stringify([row.athleteId ?? row.athleteName, row.trainingDate, row.sessionLabel, row.exerciseName, row.setIndex]);
+      const group = groups.get(key) || []; group.push(row); groups.set(key, group);
+    }
+    for (const group of groups.values()) if (group.length > 1) {
+      for (const row of group) row.errors.push(`第${row.rowNumber}行：同人同课同动作的组次重复或缺失，请填写不同组次`);
+    }
+  }
+  return rows;
+}
+
 export function parseStrengthCsv(buffer: Buffer) {
   const lines = buffer
     .toString('utf8')
@@ -342,6 +383,7 @@ export async function parseStrengthImportFile(
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(file.buffer as unknown as ArrayBuffer);
     const records: Record<string, unknown>[] = [];
+    const simplified = workbook.getWorksheet('填写说明')?.getCell('B1').value === IMPORT_TEMPLATE_VERSION;
     workbook.eachSheet((sheet) => {
       let headers: string[] = [];
       let headerNumber = 0;
@@ -368,10 +410,22 @@ export async function parseStrengthImportFile(
             strengthCellText(row.getCell(index + 1).value),
           ])
         );
-        if (Object.values(record).some((value) => cleanString(value)))
-          records.push({ ...record, originalText: `${sheet.name}!${rowNumber}` });
+        const identities = ['系统运动员编号', '运动员', '运动员姓名', '姓名', '队伍', '训练日期', '日期'].map(normalizedStrengthHeader);
+        if (Object.entries(record).some(([key, value]) => !identities.includes(key) && cleanString(value)))
+          records.push({ ...record, _templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '', originalText: `${sheet.name}!${rowNumber}` });
       }
     });
+    if (simplified) {
+      const groups = new Map<string, Record<string, unknown>[]>();
+      for (const record of records) {
+        const key = JSON.stringify(['系统运动员编号', '运动员', '队伍', '训练日期', '训练场次', '动作'].map(label => strengthRecordValue(record, [label])));
+        const group = groups.get(key) || []; group.push(record); groups.set(key, group);
+      }
+      for (const group of groups.values()) {
+        if (group.length < 2) continue;
+        for (const record of group) if (!cleanString(strengthRecordValue(record, ['组次']))) record._missingSetIndex = true;
+      }
+    }
     if (!records.length) throw new Error('未找到包含“运动员”和“动作”表头的训练结果工作表。');
     return { records, sourceType: 'excel' as const, modelUsed: '结构化Excel解析' };
   }
@@ -535,9 +589,8 @@ export function registerStrengthTrainingRoutes(app: Express) {
         if (!athletes.length)
           return res.status(403).json({ message: '当前账号没有可导入的运动员。' });
         const parsed = await parseStrengthImportFile(req.file, athletes);
-        const rows = parsed.records
-          .slice(0, 1000)
-          .map((record, index) => validateStrengthImportRow(record, index + 1, athletes));
+        const simplified = parsed.records.some(record => record._templateVersion === IMPORT_TEMPLATE_VERSION);
+        const rows = validateStrengthImportBatch(parsed.records.slice(0, 1000), athletes, simplified);
         const token = randomUUID();
         strengthImportCache.set(token, {
           ownerId: req.authUser!.id,
@@ -545,7 +598,9 @@ export function registerStrengthTrainingRoutes(app: Express) {
           mimetype: req.file.mimetype,
           sourceType: parsed.sourceType,
           rows,
+          originalRecords: parsed.records.slice(0, 1000),
           modelUsed: parsed.modelUsed,
+          templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
           expiresAt: Date.now() + 30 * 60 * 1000,
         });
         res.json({
@@ -579,11 +634,8 @@ export function registerStrengthTrainingRoutes(app: Express) {
         ? (cleanString(req.body.conflictPolicy) as 'skip' | 'update' | 'new')
         : 'skip';
       const athletes = strengthImportCandidates(req.authUser!);
-      const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : cached.rows;
-      const rows: StrengthImportRow[] = sourceRows.map(
-        (row: Record<string, unknown>, index: number) =>
-          validateStrengthImportRow(row, Number(row.rowNumber || index + 1), athletes)
-      );
+      const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : cached.originalRecords || cached.rows;
+      const rows = validateStrengthImportBatch(sourceRows, athletes, cached.templateVersion === IMPORT_TEMPLATE_VERSION);
       const invalid = rows.filter((row) => row.errors.length);
       if (invalid.length)
         return res

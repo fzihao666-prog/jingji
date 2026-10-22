@@ -1,3 +1,4 @@
+import { templateHeaderKey } from '../../shared/import-template-fields.ts';
 import ExcelJS from 'exceljs';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -18,7 +19,7 @@ import { upload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { buildSpecialTrainingPayload } from '../analysis/overview-service.ts';
 import { excelCellText } from '../training-plan/training-plan-service.ts';
-import { PROJECTS, projectLabel } from '../../shared/projects.ts';
+import { PROJECTS, projectLabel, normalizeProject } from '../../shared/projects.ts';
 import type { AuthUser, Project, SpecialTestImportRow } from '../core/shared-server.ts';
 
 export const specialTestImportCache = new Map<
@@ -56,7 +57,7 @@ export function findSpecialTestSheet(workbook: ExcelJS.Workbook) {
       sheet
         .getRow(rowNumber)
         .eachCell({ includeEmpty: true }, (cell) =>
-          headings.push(excelCellText(cell).replace(/\s+/g, ''))
+          headings.push(templateHeaderKey(excelCellText(cell)).replace(/\s+/g, ''))
         );
       const hasCrew =
         headings.includes('运动员/组合') ||
@@ -82,14 +83,12 @@ export async function parseSpecialTestWorkbook(
   const { sheet, headerRowNumber } = found;
   const headers: string[] = [];
   sheet.getRow(headerRowNumber).eachCell({ includeEmpty: true }, (cell, columnNumber) => {
-    headers[columnNumber] = excelCellText(cell).trim();
+    headers[columnNumber] = templateHeaderKey(excelCellText(cell));
   });
   const athletes = db
     .prepare('SELECT id, name, project FROM athletes WHERE active = 1')
     .all() as Array<{ id: number; name: string; project: string }>;
-  const athleteByName = new Map(
-    athletes.map((athlete) => [athlete.name.replace(/\s+/g, ''), athlete])
-  );
+  const athletesNamed = (name: string) => athletes.filter(athlete => athlete.name.replace(/\s+/g, '') === name.replace(/\s+/g, ''));
   const allowed = new Set(accessibleAthleteIds(user));
   const rows: SpecialTestImportRow[] = [];
 
@@ -107,12 +106,12 @@ export async function parseSpecialTestWorkbook(
       item[header] = value ?? '';
     });
     if (!hasValue) return;
+    const identityHeaders = new Set(['训练日期', '测试日期', '日期', '项目', '运动项目', '运动员/组合', '组合名称', '运动员姓名', '姓名', '成员姓名', '成员']);
+    if (!Object.entries(item).some(([key, value]) => !identityHeaders.has(key) && cleanString(value) !== '')) return;
     const errors: string[] = [];
     const warnings: string[] = [];
     const testDate = parseDate(pick(item, ['训练日期', '测试日期', '日期']));
-    const project = cleanString(
-      pick(item, ['项目', '运动项目'])
-    ) as SpecialTestImportRow['project'];
+    const project = normalizeProject(pick(item, ['项目', '运动项目'])) as SpecialTestImportRow['project'];
     const distanceM = Math.round(
       numberOrZero(
         pick(item, [
@@ -126,7 +125,7 @@ export async function parseSpecialTestWorkbook(
         ])
       )
     );
-    const boatClass = cleanString(pick(item, ['艇型', '项目'])) || '未分组';
+    const boatClass = cleanString(pick(item, ['艇型'])) || '未分组';
     const genderGroup = cleanString(pick(item, ['性别组别', '组别'])) || '未分组';
     const rawCrewName = cleanString(pick(item, ['运动员/组合', '组合名称', '运动员姓名', '姓名']));
     const rawMemberNames = cleanString(pick(item, ['运动员姓名', '成员姓名', '成员']));
@@ -134,9 +133,11 @@ export async function parseSpecialTestWorkbook(
       .split(/[、,，+＋/]/)
       .map((name) => name.trim())
       .filter(Boolean);
-    const members = memberNames
-      .map((name) => athleteByName.get(name.replace(/\s+/g, '')))
-      .filter(Boolean) as Array<{ id: number; name: string; project: string }>;
+    const members = memberNames.flatMap(name => {
+      const matches = athletesNamed(name).filter(athlete => allowed.has(athlete.id) && normalizeProject(athlete.project) === project);
+      if (matches.length > 1) errors.push(`同名运动员“${name}”无法唯一确认，请先在人员档案中核对身份`);
+      return matches.length === 1 ? matches : [];
+    });
     const attemptsMs = [
       '第1轮',
       '第一轮',
@@ -155,23 +156,26 @@ export async function parseSpecialTestWorkbook(
           : index === 3
             ? ['第2轮', '第二轮', '二']
             : ['第3轮', '第三轮', '三'];
-      const parsed = parseRaceTime(pick(item, aliases));
+      const raw = pick(item, aliases);
+      const parsed = parseRaceTime(raw);
+      if (cleanString(raw) && parsed === null) errors.push(`${aliases[0]}成绩无效，请填写有效秒数或m:ss.SS`);
       if (parsed !== null) times.push(parsed);
       return times;
     }, []);
     const previousBestMs = parseRaceTime(pick(item, ['历史最好', '个人最好', '此前最好']));
-    if (!testDate) errors.push('训练日期格式无效，应为YYYY-MM-DD');
+    if (!isValidIsoDate(testDate)) errors.push('训练日期格式无效，应为YYYY-MM-DD');
     if (!PROJECTS.includes(project)) errors.push('项目必须填写“赛艇”“皮划艇”或“激流”');
-    else if (project !== expectedProject)
+    else if (project !== normalizeProject(expectedProject))
       errors.push(`当前为${expectedProject}空间，不能导入${project}数据`);
     if (distanceM <= 0 || distanceM > 100000) errors.push('训练距离应为1—100000米');
     if (!rawCrewName) errors.push('缺少运动员/组合');
     if (!memberNames.length) errors.push('缺少运动员姓名');
     for (const name of memberNames) {
-      const athlete = athleteByName.get(name.replace(/\s+/g, ''));
+      const matches = athletesNamed(name);
+      const athlete = matches.find(candidate => allowed.has(candidate.id) && normalizeProject(candidate.project) === project) || matches[0];
       if (!athlete) errors.push(`运动员“${name}”不在系统名单中`);
       else if (!allowed.has(athlete.id)) errors.push(`当前账户无权导入运动员“${name}”`);
-      else if (athlete.project !== project)
+      else if (normalizeProject(athlete.project) !== project)
         errors.push(`运动员“${name}”属于${athlete.project}，与本行项目不一致`);
     }
     if (!attemptsMs.length) errors.push('至少填写一轮有效成绩，如0:55.15');

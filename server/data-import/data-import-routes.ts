@@ -1,6 +1,7 @@
 import { buildUnifiedDataExport } from './data-import-export.ts';
 export { buildUnifiedDataExport, writeUnifiedExportRows } from './data-import-export.ts';
 import { UNIFIED_IMPORT_HEADERS, IMPORT_PURPOSE_SHEETS } from '../../shared/data-import-template.ts';
+import { templateHeaderKey } from '../../shared/import-template-fields.ts';
 import { buildImportWorkbook } from './template-workbook.ts';
 import { dataImportScope } from './data-import-access.ts';
 export { dataImportScope } from './data-import-access.ts';
@@ -75,8 +76,8 @@ export function buildPurposeTemplate(
 ) {
   const workbook = buildImportWorkbook(PURPOSE_SHEETS[kind]);
   for (const sheetName of PURPOSE_SHEETS[kind]) {
-    const headers = unifiedExportHeaders.find(([name]) => name === sheetName)![1];
     const sheet = workbook.getWorksheet(sheetName)!;
+    const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
     athletes.forEach((athlete, index) => {
       sheet.getRow(index + 4).values = headers.map(label => {
         if (label === '系统运动员编号') return athlete.id;
