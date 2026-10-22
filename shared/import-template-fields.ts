@@ -1,3 +1,4 @@
+import { PROJECT_DEFINITIONS } from './projects.js';
 import {
   importFieldGuidance,
   importFieldFillCondition,
@@ -368,6 +369,13 @@ const examples: Record<string, string> = {
 };
 const choices: Record<string, readonly string[]> = {
   性别: ['男', '女'],
+  运动项目: PROJECT_DEFINITIONS.map(project => project.nameZh),
+  身体状态: ['健康', '观察', '训练受限', '康复中'],
+  训练状态: ['在训', '集训', '休整', '离队'],
+  等级: ['巅峰', '良好', '建设', '调整'],
+  测试类型: ['专项测试', '体能测试', 'FMS测试', '身体测量', '竞技评估'],
+  '上午/下午': ['上午', '下午'],
+  性别组别: ['男子', '女子', '混合'],
   技术等级: TECHNICAL_LEVELS,
   血型: ['A', 'B', 'AB', 'O'],
   训练类型: STRENGTH_TRAINING_CATEGORIES,
@@ -459,10 +467,10 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
       if (key === '睡眠质量' || key === '情绪') hint = '0—10分，越高越好；仅填本人实际报告。';
       if (key === '疲劳' || key === '肌肉酸痛') hint = '0—10分，越高越严重；仅填本人实际报告。';
       if (key === '状态') {
-        fieldChoices = ['normal', 'rest', 'attention', 'alert', 'missing'];
-        example = 'normal';
+        fieldChoices = ['正常', '休息', '关注', '警报', '缺失'];
+        example = '正常';
         hint =
-          'normal正常、rest休息、attention关注、alert警报、missing缺失；至少一项恢复数值或状态，不能仅备注。';
+          '从下拉选择正常、休息、关注、警报或缺失；至少一项恢复数值或状态，不能仅备注。';
       }
     }
     if (key === '疼痛评分') hint = '0—10分；0表示无痛，未采集必须留空。';
@@ -565,6 +573,7 @@ export function templateFieldHelp(field: ImportTemplateField): string {
 export const TEMPLATE_CALCULATION_NOTES = [
   '其他测试：选择中文测试项目（如纵跳（cm）），再填成绩（如45）；系统自动匹配指标和单位，无需填写代码。找不到项目时请管理员先配置，不要编造名称。',
   '表头颜色：红色=必填，橙色=满足说明中的条件才必填，蓝色=选填，灰色=系统预填；具体填写要求以表头文字为准。',
+  '有固定选项的字段直接点击单元格下拉选择；无需手写内部代码。空白表示未提供，不用选择任意值占位。',
   '必填项在前，选填项在后；常用选填项排在专业选填项前面，所有数据列直接显示，按需填写即可。',
   '第1—3行是说明和表头，第4行起填写；示例仅在表头，不需要删除示例数据。所有已填写的数据都会校验和导入。',
   '业务日期须在行内填写，或在上传页明确选择统一日期；新模板不静默使用今天，生日永不补填。',

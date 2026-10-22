@@ -54,7 +54,7 @@ describe('简化导入模板', () => {
       const workbook = buildImportWorkbook(names);
       expect(
         workbook.worksheets
-          .filter((sheet) => !['填写说明', '数据字典'].includes(sheet.name))
+          .filter((sheet) => !['填写说明', '数据字典', '选项列表'].includes(sheet.name))
           .map((sheet) => sheet.name)
       ).toEqual(names);
     }
@@ -65,7 +65,7 @@ describe('简化导入模板', () => {
   it('体能与专项模板没有示例业务行，专业列也全部显示', () => {
     for (const workbook of [buildStrengthImportWorkbook(), buildSpecialImportWorkbook()]) {
       const data = workbook.worksheets.find(
-        (sheet) => !['填写说明', '数据字典'].includes(sheet.name)
+        (sheet) => !['填写说明', '数据字典', '选项列表'].includes(sheet.name)
       )!;
       data.eachRow((row, number) => {
         if (number > 3) expect(row.actualCellCount).toBe(0);
@@ -123,4 +123,34 @@ it('教练其他测试模板选择中文项目，不出现内部代码或单位�
   expect(dictionary.getCell('A1').value).toBe('测试项目（下拉选项）');
   expect(dictionary.getColumn(1).values).toContain('纵跳（cm）');
   expect(workbook.definedNames.model.some(name => name.name === '_JINGJI_TEST_NAMES')).toBe(true);
+});
+
+it('所有固定枚举使用可见下拉，长选项使用命名区域，保存后仍有效', async () => {
+  const workbook = buildImportWorkbook();
+  const loaded = new ExcelJS.Workbook();
+  await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
+  const expected: Record<string, string[]> = {
+    运动员基本资料: ['性别', '血型', '技术等级', '运动项目'],
+    力量训练组次: ['类别', '身体部位', '训练环境', '强度区间', '完成状态'],
+    伤病记录: ['状态', '侧别'],
+    竞技评估: ['等级'],
+    其他测试: ['测试类型', '侧别'],
+    每日恢复: ['状态'],
+  };
+  for (const [name, keys] of Object.entries(expected)) {
+    const fields = importTemplateFields(name);
+    for (const key of keys) {
+      const column = fields.findIndex(field => field.key === key) + 1;
+      const validation = loaded.getWorksheet(name)!.getCell(4, column).dataValidation;
+      expect(validation.type, `${name}/${key}`).toBe('list');
+      expect(validation.showErrorMessage).toBe(true);
+      expect(validation.errorStyle).toBe('stop');
+      expect(String(validation.formulae?.[0]).length).toBeLessThanOrEqual(255);
+    }
+  }
+  for (const name of ['项目', '性别组别', '上午/下午']) {
+    const fields = importTemplateFields('专项训练成绩');
+    const sheet = buildSpecialImportWorkbook().getWorksheet('专项训练成绩')!;
+    expect(sheet.getCell(4, fields.findIndex(field => field.key === name) + 1).dataValidation.type).toBe('list');
+  }
 });

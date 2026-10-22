@@ -91,18 +91,31 @@ export function addTemplateSheet(
       fgColor: { argb: colors.background },
     };
     cell.alignment = { wrapText: true, vertical: 'middle' };
+    // Excel内联列表限255字符；长字典放可见选项表并通过命名区域引用。
+    let choiceFormula = field.choiceFormula;
+    if (!choiceFormula && field.choices?.length && field.choices.join(',').length > 250) {
+      const optionsSheet = workbook.getWorksheet('选项列表') || workbook.addWorksheet('选项列表');
+      const optionsColumn = optionsSheet.columnCount + 1;
+      optionsSheet.getCell(1, optionsColumn).value = `${name}：${field.displayName || field.key}`;
+      field.choices.forEach((value, offset) => { optionsSheet.getCell(offset + 2, optionsColumn).value = value; });
+      optionsSheet.getColumn(optionsColumn).width = 28;
+      const letter = optionsSheet.getColumn(optionsColumn).letter;
+      choiceFormula = `_JINGJI_OPTIONS_${workbook.worksheets.length}_${optionsColumn}`;
+      workbook.definedNames.add(`'选项列表'!$${letter}$2:$${letter}$${field.choices.length + 1}`, choiceFormula);
+    }
     // 使用公开的单元格API；不放示例值，粘贴不能替代服务端校验。
     for (let row = 4; row <= 503; row += 1) {
       sheet.getCell(row, index + 1).dataValidation = {
         type: field.choices ? 'list' : 'custom',
         allowBlank: true,
-        formulae: field.choiceFormula ? [field.choiceFormula] : field.choices ? [`"${field.choices.join(',')}"`] : ['TRUE'],
+        formulae: choiceFormula ? [choiceFormula] : field.choices ? [`"${field.choices.join(',')}"`] : ['TRUE'],
         showInputMessage: true,
-        promptTitle: `${field.key}：怎么填`.slice(0, 32),
+        promptTitle: `${field.displayName || field.key}：怎么填`.slice(0, 32),
         prompt: templateFieldHelp(field).slice(0, 255),
         showErrorMessage: Boolean(field.choices),
+        errorStyle: 'stop',
         errorTitle: '请检查填写值',
-        error: field.choiceFormula ? '请从下拉列表选择测试项目；找不到时请管理员先配置。' : `请选择：${field.choices?.join('、') || '按列说明填写'}`,
+        error: choiceFormula ? '请从下拉列表选择；找不到选项时请核对项目或联系管理员。' : `请选择：${field.choices?.join('、') || '按列说明填写'}`,
       };
     }
   });

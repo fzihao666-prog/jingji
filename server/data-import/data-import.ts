@@ -959,6 +959,7 @@ function parseStandardDate(value: unknown, year: number): string {
 }
 
 /** 模板枚举可读中文、数据库存规范代码；解析期即归一，冲突比较、校对与入库共用同一口径。 */
+const WELLNESS_STATUS_CODES: Record<string, string> = { 正常: 'normal', 休息: 'rest', 关注: 'attention', 警报: 'alert', 缺失: 'missing' };
 const TEST_SIDE_CODES: Record<string, string> = {
   左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center',
 };
@@ -982,13 +983,16 @@ function canonicalCode(value: unknown, codes: Record<string, string>, fallback: 
 }
 
 function canonicalEnumField(itemType: string, field: string, value: ReviewValue): ReviewValue {
+  if (itemType === 'wellness' && field === 'status') return canonicalCode(value, WELLNESS_STATUS_CODES, '');
   if (itemType === 'injury_record' && field === 'side') return canonicalCode(value, INJURY_SIDE_CODES, 'unspecified');
   if (itemType === 'injury_record' && field === 'status') return canonicalCode(value, INJURY_STATUS_CODES, 'observation');
   if (itemType === 'competitive_state' && field === 'stateLevel') return canonicalCode(value, STATE_LEVEL_CODES, '');
   return value;
 }
 function normalizeImportEnums(item: ParsedImportItem | DataImportItemView) {
-  if (item.itemType === 'injury_record') {
+  if (item.itemType === 'wellness') {
+    item.payload.status = canonicalCode(item.payload.status, WELLNESS_STATUS_CODES, '');
+  } else if (item.itemType === 'injury_record') {
     item.payload.side = canonicalCode(item.payload.side, INJURY_SIDE_CODES, 'unspecified');
     item.payload.status = canonicalCode(item.payload.status, INJURY_STATUS_CODES, 'observation');
   } else if (item.itemType === 'competitive_state') {
@@ -1237,7 +1241,7 @@ function parseStandardSheet(
         sorenessIndex: readNumber('肌肉酸痛'),
         moodIndex: readNumber('情绪'),
         // 空白状态不伪造取值；入库时仅在文件明确填写时写入。
-        status: standardText(row, header.columns, '状态'),
+        status: canonicalCode(standardText(row, header.columns, '状态'), WELLNESS_STATUS_CODES, ''),
         note: standardText(row, header.columns, '备注'),
       };
       items.push(

@@ -2175,3 +2175,11 @@ it('中文测试项目使用当前启用字典，未知、同名歧义、项目�
     expect(invalid.items[0].messages.join('；')).toContain('测试项目');
   }
 });
+
+it.each([['正常', 'normal'], ['休息', 'rest'], ['关注', 'attention'], ['警报', 'alert'], ['缺失', 'missing']])('恢复状态下拉中文%s按既有代码%s入库', (label, code) => {
+  const batch = analyze({ 每日恢复: [['姓名', '日期', '状态'], ['张某', '2026-10-23', label]] });
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items[0].payload.status).toBe(code);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  expect(db.prepare("SELECT status FROM daily_wellness WHERE athlete_id = 1 AND wellness_date = '2026-10-23'").get()).toEqual({ status: code });
+});
