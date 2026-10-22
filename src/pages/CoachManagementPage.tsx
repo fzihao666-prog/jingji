@@ -350,11 +350,6 @@ export function CoachManagementPage({
         </div>
       )}
 
-      <p>
-        负责运动员由负责队伍自动确定；名单和人数仅展示当前权限内的运动员。
-        {canManage && <a href="#/regions">前往账号权限调整负责队伍</a>}
-      </p>
-
       <FilterBar className="coach-directory-toolbar" label="教练筛选与操作">
         <label className="coach-directory-search">
           <Search size={17} />
