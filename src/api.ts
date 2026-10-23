@@ -631,6 +631,12 @@ export const api = {
       `/api/data-import/batches/${encodeURIComponent(id)}`
     );
   },
+  async expiredImportDrafts(project: Project) {
+    return request<import('../shared/import-draft-cleanup').ImportDraftCleanupPreview>(`/api/data-import/draft-cleanup?project=${encodeURIComponent(project)}`);
+  },
+  async cleanupExpiredImportDrafts(project: Project, drafts: Array<{ id: string; revision: number }>) {
+    return request<{ message: string; deletedCount: number; deletedIds: string[] }>('/api/data-import/draft-cleanup', { method: 'POST', body: JSON.stringify({ project, drafts }) });
+  },
   async discardDataImport(id: string, project: Project) {
     return request<{ message: string }>(
       `/api/data-import/batches/${encodeURIComponent(id)}?project=${encodeURIComponent(project)}`,

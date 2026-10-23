@@ -810,3 +810,6 @@ route → application service → repository/query service → SQLite
 文件识别使用版本化账号作用域哈希，查找仅限本人及当前项目并兼容旧内容哈希；沿用原唯一约束，不迁移历史批次。重解析先构建候选，事务内核对修订后替换本人的待确认批次，保持ID和正式业务历史；失败回滚保留旧稿。`summary_json` 内持久化递增修订和最初授权队伍辅助信息；内部权限辅助信息不随预览返回，旧修订默认0，无Schema迁移。
 
 `data-import-access.ts` 对所有批次预览、错误下载、校对、提交和旧文件恢复复核当前项目/运动员/队伍授权，事务开始和写入后再次复核；范围收紧时不向客户端返回原人员明细。网页和写接口同步传递已见 `expectedRevision`，过期409、缺失428；重复提交仍返回原回执。部署需同步前后端并刷新旧网页，不支持旧客户端绕过修订保护。正式事实源、并发快照复核、建档与业务同事务及审计保持既有边界。
+
+
+导入过期草稿清理：`GET /api/data-import/draft-cleanup?project=...` 返回最多200批本人授权范围内的候选；`POST /api/data-import/draft-cleanup` 接收严格校验的 `{ project, drafts: [{ id, revision }] }`。仅删除创建超过30天、最近30天未保存、无正式引用/入库痕迹的 reviewing 批次，暂存明细通过既有外键级联删除。草稿修订推进在同一摘要内写入 `lastActivityAt`，无活动时间且已有修订的旧草稿保守保留，不新增表或迁移。确认执行时以 `BEGIN IMMEDIATE` 重新验证所有权、项目/人员授权、期限、状态和修订；删除与 `CLEANUP_EXPIRED_IMPORT_DRAFTS` 审计原子提交，任一步失败回滚。不运行定时删除或在线VACUUM，不清理已入库批次及正式事实。

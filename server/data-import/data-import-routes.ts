@@ -10,6 +10,9 @@ import { dataImportScope, assertDataImportBatchAccess } from './data-import-acce
 export { dataImportScope } from './data-import-access.ts';
 import ExcelJS from 'exceljs';
 import { discardDataImport } from './discard-data-import.ts';
+import { z } from 'zod';
+import { cleanupExpiredImportDrafts, listExpiredImportDrafts } from './expired-import-drafts.ts';
+import { IMPORT_DRAFT_RETENTION_DAYS, IMPORT_DRAFT_CLEANUP_LIMIT } from '../../shared/import-draft-cleanup.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Express } from 'express';
@@ -323,6 +326,37 @@ export function registerDataImportRoutes(app: Express) {
       res.json({ batches: listDataImportBatches(project, req.authUser!.id) });
     }
   );
+
+  const cleanupProject = z.string().trim().min(1).max(50).refine(project => PROJECTS.includes(project));
+  const cleanupPreviewSchema = z.object({ project: cleanupProject }).strict();
+  const cleanupSchema = z.object({ project: cleanupProject, drafts: z.array(z.object({ id: z.string().trim().min(1).max(100), revision: z.number().int().min(0).safe() }).strict()).min(1).max(IMPORT_DRAFT_CLEANUP_LIMIT) }).strict();
+  const checkCleanupProject = (user: AuthUser, project: string) => {
+    if (!dataImportScope(user, project).allowed) throw new ImportRequestError('当前账号无权清理该项目草稿。', 403);
+  };
+  const authorizeCleanupBatch = (user: AuthUser, id: string) => {
+    authorizeImportBatch(user, id);
+    const permissions = accountPermissions(user.id);
+    const pending = db.prepare('SELECT project,team,region,city,county FROM data_import_athlete_candidates WHERE batch_id=? AND matched_athlete_id IS NULL AND created_athlete_id IS NULL').all(id) as Array<{ project: string; team: string; region: string; city: string; county: string }>;
+    if (pending.some(person => !person.team || !permissionsAllowAthlete(permissions, { ...person, id: 0 }))) throw new ImportRequestError('该草稿人员范围无法按当前权限确认，已保留。', 403);
+  };
+  app.get('/api/data-import/draft-cleanup', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const parsed = cleanupPreviewSchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ message: '请选择有效项目。' });
+    try {
+      checkCleanupProject(req.authUser!, parsed.data.project);
+      const drafts = listExpiredImportDrafts({ userId: req.authUser!.id, project: parsed.data.project, authorize: id => { authorizeCleanupBatch(req.authUser!, id); } });
+      return res.json({ retentionDays: IMPORT_DRAFT_RETENTION_DAYS, drafts });
+    } catch (error) { return res.status(error instanceof ImportRequestError ? error.status : 500).json({ message: error instanceof ImportRequestError ? error.message : '过期草稿预览失败。' }); }
+  });
+  app.post('/api/data-import/draft-cleanup', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
+    const parsed = cleanupSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: '清理参数无效，请重新预览后确认。' });
+    try {
+      const result = cleanupExpiredImportDrafts({ ...parsed.data, userId: req.authUser!.id, authorize: id => { authorizeCleanupBatch(req.authUser!, id); }, authorizeProject: () => checkCleanupProject(req.authUser!, parsed.data.project) });
+      return res.json({ ...result, message: `已清理${result.deletedCount}个过期草稿及相关暂存明细，正式数据保持不变。` });
+    } catch (error) { return res.status(error instanceof ImportRequestError ? error.status : 500).json({ message: error instanceof ImportRequestError ? error.message : '清理失败，已回滚，未删除草稿。' }); }
+  });
 
   app.get(
     '/api/data-import/batches/:id',

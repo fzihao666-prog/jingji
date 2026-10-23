@@ -1,6 +1,7 @@
 import { isImportException, importRecordPolicy, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
+import type { ImportDraftCleanupPreview } from '../../shared/import-draft-cleanup';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -108,7 +109,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
   const [busy, setBusy] = useState<
-    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | 'errors' | ''
+    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | 'cleanup' | 'errors' | ''
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -152,6 +153,40 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     overwrittenProfileFields: number;
   } | null>(null);
 
+  const [cleanupPreview, setCleanupPreview] = useState<(ImportDraftCleanupPreview & { project: Project }) | null>(null);
+  const cleanupProjectRef = useRef(project);
+  cleanupProjectRef.current = project;
+
+  const previewExpiredDrafts = async () => {
+    if (busy || hasUnsavedChanges) return;
+    setBusy('cleanup');
+    setError('');
+    setCleanupPreview(null);
+    try {
+      const preview = await api.expiredImportDrafts(project);
+      if (cleanupProjectRef.current !== project) return;
+      const drafts = preview.drafts.filter(item => item.id !== batch?.id);
+      setCleanupPreview({ ...preview, project, drafts });
+      if (!drafts.length) setMessage('没有可清理的过期草稿；当前打开的批次不会加入清理。');
+    } catch (error) { if (cleanupProjectRef.current === project) setError(error instanceof Error ? error.message : '预览失败。'); }
+    finally { setBusy(current => current === 'cleanup' ? '' : current); }
+  };
+  const cleanupExpiredDrafts = async () => {
+    if (busy || hasUnsavedChanges || cleanupPreview?.project !== project || !cleanupPreview.drafts.length) return;
+    if (!window.confirm(`确定永久删除预览中的${cleanupPreview.drafts.length}个过期草稿及暂存明细？此操作无法恢复，正式数据和已入库批次不受影响。`)) return;
+    setBusy('cleanup');
+    setError('');
+    try {
+      const result = await api.cleanupExpiredImportDrafts(project, cleanupPreview.drafts.map(({ id, revision }) => ({ id, revision })));
+      if (cleanupProjectRef.current !== project) return;
+      setBatches(current => current.filter(item => !result.deletedIds.includes(item.id)));
+      setCleanupPreview(null);
+      setMessage(result.message);
+    } catch (error) {
+      if (cleanupProjectRef.current === project) { setCleanupPreview(null); setError(error instanceof Error ? error.message : '清理失败，请重新预览。'); }
+    } finally { setBusy(current => current === 'cleanup' ? '' : current); }
+  };
+
   const refreshBatches = async () => {
     try {
       const list = await api.dataImportBatches(project);
@@ -188,6 +223,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   }, [project]);
 
   const startReview = (next: DataImportBatch) => {
+    setCleanupPreview(null);
     rememberRevision(next);
     setBulkCandidateTeam('');
     setReviewGroupPage(0);
@@ -894,7 +930,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <strong>最近导入批次</strong>
               <span>当前项目：{projectLabel(project)}</span>
             </div>
+            <button type="button" disabled={Boolean(busy) || hasUnsavedChanges} title={hasUnsavedChanges ? '请先保存当前校对' : '预览过期草稿，不会立即删除'} onClick={() => void previewExpiredDrafts()}>清理过期草稿</button>
           </div>
+          {cleanupPreview?.project === project && <section aria-label="过期草稿清理预览">
+            <p>创建超过{cleanupPreview.retentionDays}天、且最近{cleanupPreview.retentionDays}天未保存校对的本人草稿，共{cleanupPreview.drafts.length}批。仅显示当前项目授权范围，每次最多200批；当前打开的批次不参与。缺少最后编辑时间的历史已校对草稿会保留。</p>
+            {cleanupPreview.drafts.length > 0 && <details open><summary>查看待清理草稿及暂存条数</summary><ul>{cleanupPreview.drafts.map(item => <li key={item.id}>{item.filename} · 创建于{new Date(item.createdAt.endsWith('Z') ? item.createdAt : `${item.createdAt}Z`).toLocaleString('zh-CN')} · 暂存{item.itemCount}条</li>)}</ul></details>}
+            <p>确认后永久删除草稿及暂存明细；已入库批次和正式数据会保留。数据库空闲空间可供后续复用，文件大小不一定立即缩小。</p>
+            <button type="button" disabled={Boolean(busy) || hasUnsavedChanges || !cleanupPreview.drafts.length} onClick={() => void cleanupExpiredDrafts()}>确认清理{cleanupPreview.drafts.length}个草稿</button>
+            <button type="button" disabled={Boolean(busy)} onClick={() => setCleanupPreview(null)}>取消清理</button>
+          </section>}
           <div className="data-import-history-list">
             {!batches.length && <p className="data-import-empty">当前项目还没有导入记录。</p>}
             {batches.map((item) => (

@@ -18,5 +18,5 @@ export function assertImportRevision(batchId: string, userId: number, expected?:
 }
 export function advanceImportRevision(batchId: string, userId: number, expected?: number) {
   const current = assertImportRevision(batchId, userId, expected);
-  db.prepare('UPDATE data_import_batches SET summary_json=? WHERE id=? AND created_by=?').run(JSON.stringify({ ...current.summary, revision: current.revision + 1 }), batchId, userId);
+  db.prepare('UPDATE data_import_batches SET summary_json=? WHERE id=? AND created_by=?').run(JSON.stringify({ ...current.summary, revision: current.revision + 1, lastActivityAt: new Date().toISOString() }), batchId, userId);
 }
