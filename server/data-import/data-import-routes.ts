@@ -165,6 +165,11 @@ export function registerDataImportRoutes(app: Express) {
       if (!['profile', 'training', 'test', 'unified'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {
+        const team = cleanString(req.query.team);
+        if (req.query.team !== undefined && (typeof req.query.team !== 'string' || !team))
+          return res.status(400).json({ message: '请选择有效的队伍。' });
+        if (team && !cleanString(req.query.project))
+          return res.status(400).json({ message: '选择队伍时必须指定运动项目。' });
         if (kind === 'unified' && !cleanString(req.query.project)) {
           // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
           const templatePath = unifiedTemplatePath();
@@ -177,8 +182,10 @@ export function registerDataImportRoutes(app: Express) {
         const scope = dataImportScope(req.authUser!, project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号无权导出该项目模板。' });
+        if (team && !scope.allowedTeams.has(team))
+          return res.status(403).json({ message: '所选队伍不存在、已停用或不在当前授权范围内。' });
         const athletes = strengthImportCandidates(req.authUser!)
-          .filter((athlete) => athlete.project === project)
+          .filter((athlete) => athlete.project === project && (!team || athlete.team === team))
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
         const metrics = kind === 'test' || kind === 'unified' ? readImportMetricDefinitions(project) : undefined;
         const workbook = buildPurposeTemplate(kind, project, athletes, metrics);

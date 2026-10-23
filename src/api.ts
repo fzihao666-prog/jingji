@@ -547,9 +547,10 @@ export const api = {
       body: JSON.stringify({ project }),
     });
   },
-  async downloadDataImportTemplate(kind: 'profile' | 'training' | 'test' | 'unified' = 'unified', project?: string) {
+  async downloadDataImportTemplate(kind: 'profile' | 'training' | 'test' | 'unified' = 'unified', project?: string, team?: string) {
     const params = new URLSearchParams({ kind });
     if (project) params.set('project', project);
+    if (team) params.set('team', team);
     const response = await fetch(`/api/data-import/template?${params.toString()}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });

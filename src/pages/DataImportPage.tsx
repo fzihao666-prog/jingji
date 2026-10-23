@@ -105,6 +105,8 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [defaultDate, setDefaultDate] = useState('');
   const [bulkCandidateTeam, setBulkCandidateTeam] = useState('');
+  const [templateTeam, setTemplateTeam] = useState('');
+  const [templateTeamsProject, setTemplateTeamsProject] = useState<Project | null>(null);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
@@ -197,6 +199,10 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    setTemplateTeamsProject(null);
+    setTemplateTeam('');
+    setTeams([]);
     setBatch(null);
     setCorrections(new Map());
     setAthleteCorrections(new Map());
@@ -210,15 +216,19 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     void api
       .adminTeams()
       .then((list) => {
+        if (cancelled) return;
         const available = list.teams.filter((team) => team.project === project);
         setTeams(available);
+        setTemplateTeam(available.length === 1 ? available[0].name : '');
+        setTemplateTeamsProject(project);
         setBulkCandidateTeam((current) =>
           available.some((team) => team.name === current) ? current : ''
         );
       })
-      .catch((nextError) =>
-        setError(nextError instanceof Error ? nextError.message : '队伍列表加载失败。')
-      );
+      .catch((nextError) => {
+        if (!cancelled) setError(nextError instanceof Error ? nextError.message : '队伍列表加载失败。');
+      });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
 
@@ -287,7 +297,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setError('');
     setMessage('');
     try {
-      await api.downloadDataImportTemplate(kind, project);
+      await api.downloadDataImportTemplate(kind, project, templateTeam || undefined);
       setMessage(
         kind === 'unified'
           ? '统一数据模板已开始下载（含已有人员预填）。'
@@ -797,10 +807,21 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         title="数据导入"
         actions={
           <div className="data-import-hero-actions">
+            <label className="data-import-template-team">
+              <span>模板预填队伍</span>
+              <select
+                value={templateTeamsProject === project ? templateTeam : ''}
+                disabled={Boolean(busy) || templateTeamsProject !== project}
+                onChange={(event) => setTemplateTeam(event.target.value)}
+              >
+                <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '全部授权队伍' : '暂无队伍（空模板）'}</option>
+                {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
+              </select>
+            </label>
             <button
               type="button"
               className="data-import-template"
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || templateTeamsProject !== project}
               onClick={() => downloadTemplate('profile')}
             >
               <Download size={19} />
@@ -812,7 +833,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <button
               type="button"
               className="data-import-template"
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || templateTeamsProject !== project}
               onClick={() => downloadTemplate('training')}
             >
               <Download size={19} />
@@ -824,7 +845,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <button
               type="button"
               className="data-import-template"
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || templateTeamsProject !== project}
               onClick={() => downloadTemplate('test')}
             >
               <Download size={19} />
@@ -836,7 +857,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             <button
               type="button"
               className="data-import-template"
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || templateTeamsProject !== project}
               onClick={() => downloadTemplate('unified')}
             >
               <FileSpreadsheet size={19} />

@@ -69,6 +69,40 @@ async function request(path: string, method = 'GET', body?: unknown, auth = toke
   return { status: response.status, body: payload };
 }
 
+it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回空模板', async () => {
+  const addedTeams = ['模板虚构二队', '模板虚构空队'];
+  for (const team of addedTeams) {
+    db.prepare("INSERT INTO project_teams (project, name) VALUES ('ROWING', ?)").run(team);
+    db.prepare("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (701, 'ROWING', ?, 701)").run(team);
+  }
+  const teamId = (db.prepare('SELECT id FROM project_teams WHERE name=?').get(addedTeams[0]) as { id: number }).id;
+  db.prepare("INSERT INTO athletes (id, name, project, team, team_id) VALUES (799, '模板虚构队员', 'ROWING', ?, ?)").run(addedTeams[0], teamId);
+  try {
+    for (const kind of ['profile', 'training', 'test', 'unified']) {
+      const response = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind, project: 'ROWING', team: addedTeams[0] })}`, { headers: { authorization: `Bearer ${token}` } });
+      expect(response.status).toBe(200);
+      const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array' });
+      const content = JSON.stringify(workbook.SheetNames.map(name => XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 })));
+      expect(content).toContain('模板虚构队员');
+      expect(content).not.toContain('"虚构队员"');
+    }
+    const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'unified', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
+    expect(empty.status).toBe(200);
+    const workbook = XLSX.read(await empty.arrayBuffer(), { type: 'array' });
+    expect(JSON.stringify(workbook.Sheets)).not.toContain('虚构队员');
+    for (const query of ['project=ROWING&team=HTTP乙队', 'project=ROWING&team=不存在的队伍'])
+      expect((await request(`/template?${query}`)).status).toBe(403);
+    for (const query of ['team=HTTP甲队', 'project=ROWING&team=', 'project=ROWING&team=a&team=b'])
+      expect((await request(`/template?${query}`)).status).toBe(400);
+  } finally {
+    db.prepare('DELETE FROM athletes WHERE id=799').run();
+    for (const team of addedTeams) {
+      db.prepare('DELETE FROM user_team_permissions WHERE user_id=701 AND team=?').run(team);
+      db.prepare('DELETE FROM project_teams WHERE name=?').run(team);
+    }
+  }
+});
+
 async function upload(rows: unknown[][], sheet = '身体测量') {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheet);

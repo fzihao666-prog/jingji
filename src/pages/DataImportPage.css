@@ -4,6 +4,27 @@
   color: #12303b;
 }
 
+.data-import-template-team {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted, #667085);
+  font-size: 12px;
+}
+
+.data-import-template-team select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e2e9ea);
+  border-radius: 8px;
+  background: var(--paper, #fff);
+  color: var(--text, #12303b);
+  font: inherit;
+}
+
 .data-import-review-head > div:first-child > span {
   color: #71d7c8;
   font:
