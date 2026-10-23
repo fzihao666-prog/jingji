@@ -1,5 +1,7 @@
-import { isImportException, importRecordPolicy, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
+import { importStatistics, type ImportStatistics } from '../../shared/import-statistics';
+import { isImportException, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
+import { ImportSourceRowEditor } from '../components/ImportSourceRowEditor';
 import { BODY_TEMPLATE_FIELDS } from '../../shared/data-import-template';
 import type { ImportDraftCleanupPreview } from '../../shared/import-draft-cleanup';
 import {
@@ -37,12 +39,22 @@ import type {
 import './DataImportPage.css';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 import { projectLabel } from '../../shared/projects';
+import { readImportReviewPosition, writeImportReviewPosition } from '../utils/import-review-position';
+
+function ImportCountSummary({ counts }: { counts: ImportStatistics }) {
+  return <details className="data-import-count-summary">
+    <summary>查看完整统计与计数说明</summary>
+    <p>新增{counts.newCount} · 更新{counts.updateCount} · 无变化{counts.unchangedCount} · 排除{counts.excludedCount} · 未填报{counts.unfilledRows} · 阻断错误{counts.errorCount}</p>
+    <small>未填报按源行统计，其余按业务记录统计；一行可拆为多条记录。自动合并来源{counts.mergedCount}条，单独列示。</small>
+  </details>;
+}
 
 type Props = {
   user: User;
   project: Project;
   athletes: Athlete[];
   onChanged: () => void;
+  onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
 };
 
 type Correction = {
@@ -52,6 +64,9 @@ type Correction = {
   actualReps?: number | null;
   actualWeightKg?: number | null;
   payload?: Record<string, unknown>;
+  sourceCells?: Record<string, string | number | null>;
+  metricCode?: string;
+  side?: DataImportItem['side'];
   resolution?: '' | 'skip' | 'update';
 };
 
@@ -100,7 +115,14 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ project, athletes, onChanged }: Props) {
+export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange }: Props) {
+  const positionKey = `jingji:import-review:${user.id}:${project}`;
+  const reviewRef = useRef<HTMLElement>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [metrics, setMetrics] = useState<Array<{ code: string; label: string; unit: string }>>([]);
+  const [mobileIndex, setMobileIndex] = useState(0);
+  const [isCompact, setIsCompact] = useState(() => window.matchMedia('(max-width: 720px)').matches);
+  const navigationState = useRef({ unsaved: false, busy: false });
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [defaultDate, setDefaultDate] = useState('');
@@ -151,6 +173,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     createdRecords: number;
     updatedRecords: number;
     skipped: number;
+    receipt?: ImportStatistics;
     filledProfileFields: number;
     overwrittenProfileFields: number;
   } | null>(null);
@@ -192,9 +215,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const refreshBatches = async () => {
     try {
       const list = await api.dataImportBatches(project);
-      setBatches(list.batches);
+      if (cleanupProjectRef.current === project) setBatches(list.batches);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '导入记录加载失败。');
+      if (cleanupProjectRef.current === project) setError(nextError instanceof Error ? nextError.message : '导入记录加载失败。');
     }
   };
 
@@ -203,7 +226,15 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setTemplateTeamsProject(null);
     setTemplateTeam('');
     setTeams([]);
+    setMetrics([]);
+    void api.dataImportMetrics(project).then(result => { if (!cancelled) setMetrics(result.metrics); })
+      .catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : '测试项目加载失败。'); });
     setBatch(null);
+    setBatches([]);
+    setSaveFailed(false);
+    setFile(null);
+    setDefaultDate('');
+    setPendingSelections(new Set());
     setCorrections(new Map());
     setAthleteCorrections(new Map());
     setMessage('');
@@ -236,18 +267,24 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     setCleanupPreview(null);
     rememberRevision(next);
     setBulkCandidateTeam('');
-    setReviewGroupPage(0);
+    const savedPosition = readImportReviewPosition(positionKey);
+    const restoring = savedPosition?.batchId === next.id ? savedPosition : null;
+    setReviewGroupPage(restoring?.reviewGroupPage ?? 0);
+    setFilter(restoring?.filter ?? 'exception');
+    setQuery(restoring?.query ?? '');
     setBatch(next);
     setPersonLinkModes(new Set());
     setPersonCreateModes(new Set());
     setCorrections(new Map());
     setAthleteCorrections(new Map());
-    setPage(0);
+    setPage(restoring?.page ?? 0);
+    setMobileIndex(0);
+    setSaveFailed(false);
     setResult(null);
     const unresolved = next.athleteCandidates.filter(
       (candidate) => importPersonNeedsConfirmation(candidate, next.items)
     );
-    setSelectedPersonId(unresolved[0]?.id ?? null);
+    setSelectedPersonId(restoring?.selectedPersonId && next.athleteCandidates.some(person => person.id === restoring.selectedPersonId) ? restoring.selectedPersonId : unresolved[0]?.id ?? null);
     setPersonDialogOpen(next.status === 'reviewing' && unresolved.length > 0);
     setDuplicateDialogOpen(false);
     setConfirmDialogOpen(false);
@@ -399,9 +436,16 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         ...prior,
         ...patch,
         payload: patch.payload ? { ...(prior.payload || {}), ...patch.payload } : prior.payload,
+        sourceCells: patch.sourceCells ? { ...(prior.sourceCells || {}), ...patch.sourceCells } : prior.sourceCells,
       });
       return next;
     });
+  };
+
+  const sourceCorrectionId = (item: DataImportItem) => {
+    const source = item.payload.sourceRow as { rowIndex?: number } | undefined;
+    return batch?.items.find(entry => entry.sourceSheet === item.sourceSheet && source?.rowIndex !== undefined &&
+      (entry.payload.sourceRow as { rowIndex?: number } | undefined)?.rowIndex === source.rowIndex)?.id ?? item.id;
   };
 
   const patchAthleteCandidate = (candidateId: number, patch: Omit<AthleteCorrection, 'id'>) => {
@@ -454,15 +498,18 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   ) => {
     const athleteMap = overrideAthlete ?? athleteCorrections;
     const itemMap = overrideItems ?? corrections;
-    if (!batch) return null;
+    if (!batch || busyRef.current) return null;
+    busyRef.current = 'save';
     setBusy('save');
     setError('');
+    setSaveFailed(false);
     try {
       let currentBatch = batch;
       if (athleteMap.size) {
         currentBatch = (await api.updateDataImportAthletes(batch.id, [...athleteMap.values()], expectedRevision(currentBatch))).batch;
         rememberRevision(currentBatch);
         setBatch(currentBatch);
+        setAthleteCorrections(new Map());
       }
       if (itemMap.size || !athleteMap.size)
         currentBatch = (await api.updateDataImportItems(batch.id, [...itemMap.values()], undefined, expectedRevision(currentBatch))).batch;
@@ -473,6 +520,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
       setMessage('校对内容已保存，服务端已按最终数据重新校验并检测重复。');
       return currentBatch;
     } catch (nextError) {
+      setSaveFailed(true);
       setError(nextError instanceof Error ? nextError.message : '校对内容保存失败。');
       return null;
     } finally {
@@ -483,12 +531,13 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   // 连续编辑串行保存；只把最新一轮响应用于页面，避免旧响应覆盖正在输入的值。
   useEffect(() => {
     const batchId = batch?.id;
-    if (!batchId || !corrections.size || athleteCorrections.size) return;
+    if (!batchId || !corrections.size || athleteCorrections.size || [...corrections.values()].some(item => item.sourceCells)) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       correctionQueue.current = correctionQueue.current.then(async () => {
         if (cancelled) return;
         setBusy('save');
+        setSaveFailed(false);
         try {
           const info = await api.updateDataImportItems(batchId, [...corrections.values()], undefined, expectedRevision(batch));
           rememberRevision(info.batch);
@@ -498,16 +547,38 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             setError('');
           }
         } catch (error) {
-          if (!cancelled) setError(error instanceof Error ? error.message : '自动校验失败，请保存校对后重试。');
+          if (!cancelled) { setSaveFailed(true); setError(error instanceof Error ? error.message : '自动校验失败，请重试保存。'); }
         } finally {
           setBusy(current => current === 'save' ? '' : current);
         }
       });
     }, 600);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [corrections, athleteCorrections.size, batch?.id, batch?.revision]);
+  }, [corrections, athleteCorrections.size, batch]);
 
   const hasUnsavedChanges = corrections.size > 0 || athleteCorrections.size > 0 || pendingSelections.size > 0;
+  navigationState.current = { unsaved: hasUnsavedChanges, busy: Boolean(busy) || savingReviewGroups.size > 0 };
+  useEffect(() => {
+    onNavigationGuardChange?.(() => {
+      if (navigationState.current.busy) {
+        setError('正在处理导入，请等待完成后再离开。');
+        return false;
+      }
+      return !navigationState.current.unsaved || window.confirm('当前导入有未保存修改，离开会丢失这些修改。确定离开？');
+    });
+    return () => onNavigationGuardChange?.(null);
+  }, [onNavigationGuardChange]);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 720px)');
+    const update = () => setIsCompact(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!batch || batch.project !== project) return;
+    writeImportReviewPosition(positionKey, { batchId: batch.id, filter, query, page, reviewGroupPage, selectedPersonId });
+  }, [positionKey, project, batch, filter, query, page, reviewGroupPage, selectedPersonId]);
+  useEffect(() => { setMobileIndex(0); }, [filter, query, page]);
   useEffect(() => {
     if (!hasUnsavedChanges) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -587,6 +658,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         createdRecords: info.createdRecords,
         updatedRecords: info.updatedRecords,
         skipped: info.skipped,
+        receipt: info.receipt,
         filledProfileFields: info.filledProfileFields,
         overwrittenProfileFields: info.overwrittenProfileFields,
       });
@@ -715,6 +787,17 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages - 1);
   const pageItems = filteredItems.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const compactIndex = Math.min(mobileIndex, Math.max(0, pageItems.length - 1));
+  const displayedItems = isCompact ? pageItems.slice(compactIndex, compactIndex + 1) : pageItems;
+  const goToErrors = () => {
+    setFilter('exception');
+    setQuery('');
+    setPage(0);
+    setReviewGroupPage(0);
+    setMobileIndex(0);
+    reviewRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    reviewRef.current?.focus({ preventScroll: true });
+  };
 
   const summaryPreview = useMemo(() => {
     if (!batch) return null;
@@ -735,21 +818,9 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
         (candidate.status === 'pending' && candidate.matchedAthleteId) ||
         candidate.status === 'matched'
     );
-    const newRecords = active.filter((item) => !item.conflict?.exists).length;
-    const updateRecords = active.filter(
-      (item) =>
-        item.conflict?.exists &&
-        importRecordPolicy(item) === 'update' &&
-        !item.conflict.identical
-    ).length;
-    const skipRecords =
-      active.filter(
-        (item) =>
-          item.conflict?.exists &&
-          (importRecordPolicy(item) === 'skip' || item.conflict.identical)
-      ).length +
-      batch.items.filter((item) => item.resolution === 'skip' || item.quality === 'skipped' || item.payload.valueAutoMerged).length +
-      importable.filter((item) => excludedKeys.has(dataImportPersonKey(item))).length;
+    const statistics = importStatistics(batch.items, excludedKeys, batch.summary.unfilledRows || 0);
+    const { newCount: newRecords, updateCount: updateRecords } = statistics;
+    const skipRecords = statistics.unchangedCount + statistics.excludedCount + statistics.mergedCount;
     const overwriteFields = active.reduce(
       (sum, item) => sum + (item.conflict?.fields.filter((field) => field.overwrites).length || 0),
       0
@@ -757,6 +828,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
     return {
       createPersons: createPersons.length,
       linkPersons: linkPersons.length,
+      statistics,
       newRecords,
       updateRecords,
       skipRecords,
@@ -1026,6 +1098,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               <span>{result.message}</span>
             </div>
           </div>
+          {result.receipt && <ImportCountSummary counts={result.receipt} />}
           <div className="data-import-summary">
             <div>
               <span>新建运动员</span>
@@ -1050,7 +1123,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </small>
             </div>
             <div>
-              <span>跳过或排除</span>
+              <span>未写入合计</span>
               <strong>{result.skipped}</strong>
               <small>保留数据库原值</small>
             </div>
@@ -1060,40 +1133,17 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
 
       {batch && (
         <>
-          {batch.status === 'reviewing' && <section className="data-import-summary">
-            <div>
-              <span>已确认运动员</span>
-              <strong>{batch.athleteCandidates.filter(candidate => !candidate.excluded && Boolean(candidate.matchedAthleteId)).length}</strong>
-              <small>
-                待建档{batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && !candidate.suggested.length).length} · 待确认{batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && candidate.suggested.length > 0).length}
-              </small>
+          {batch.status === 'reviewing' && <section className="data-import-summary data-import-main-summary" aria-label="本次导入概况">
+            <div className={batch.errorCount || unconfirmedPersons.length ? 'danger' : ''}>
+              <span>待处理</span>
+              <strong>{batch.errorCount}条错误 · {unconfirmedPersons.length}名人员</strong>
+              <small>完成后即可确认导入</small>
             </div>
-            <div>
-              <span>可写入记录</span>
-              <strong>{(summaryPreview?.newRecords ?? 0) + (summaryPreview?.updateRecords ?? 0)}</strong>
-              <small>按最终有效数据统计</small>
-            </div>
-            <div className="warning">
-              <span>重复记录</span>
-              <strong>{batch.counts.duplicateCount}</strong>
-              <small>非空值按本次导入更新</small>
-            </div>
-            <div>
-              <span>将更新已有</span>
-              <strong>{batch.counts.overwriteCount}</strong>
-              <small>自动采用本次导入值</small>
-            </div>
-            <div className="danger">
-              <span>待处理错误</span>
-              <strong>{batch.errorCount}</strong>
-              <small>修正可编辑项，错误行需排除</small>
-            </div>
-            <div>
-              <span>批次状态</span>
-              <strong className="status-text">{STATUS_LABELS[batch.status]}</strong>
-              <small>{batch.parserVersion}</small>
-            </div>
+            <div><span>新增记录</span><strong>{summaryPreview?.newRecords ?? 0}</strong><small>新建运动员{summaryPreview?.createPersons ?? 0}名</small></div>
+            <div><span>更新记录</span><strong>{summaryPreview?.updateRecords ?? 0}</strong><small>空白保留原值，真实0正常写入</small></div>
           </section>}
+          {batch.status === 'reviewing' && summaryPreview && <ImportCountSummary counts={summaryPreview.statistics} />}
+          {batch.status === 'committed' && !result && batch.summary.receipt && <section className="data-import-result"><h2>入库回执</h2><ImportCountSummary counts={batch.summary.receipt} /></section>}
 
           <section className="data-import-sheet-audit">
             <div className="data-import-card-heading">
@@ -1138,7 +1188,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             </div>
           </section>
 
-          <section className="data-import-review">
+          <section ref={reviewRef} className="data-import-review" tabIndex={-1}>
             <div className="data-import-review-head">
               <div>
                 <span>REVIEW QUEUE</span>
@@ -1191,7 +1241,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </div>
             </div>
             <p role="status" aria-live="polite" className="data-import-save-status">
-              {busy === 'save' ? '正在保存修改并重新校验…' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
+              {busy === 'save' ? '正在保存修改并重新校验…' : saveFailed ? '保存失败，修改仍保留在当前页面，请重试保存。' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
             </p>
             <div className="data-import-filters">
               {(
@@ -1246,6 +1296,11 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <button type="button" disabled={currentReviewPage >= reviewGroupPages - 1 || Boolean(busy)} onClick={() => setReviewGroupPage(currentReviewPage + 1)}>下一组页</button>
               </nav>}
             </div>}
+            {isCompact && pageItems.length > 0 && <nav className="data-import-compact-navigation" aria-label="逐条校对">
+              <button type="button" disabled={compactIndex === 0} onClick={() => setMobileIndex(compactIndex - 1)}>上一条</button>
+              <span>本页第{compactIndex + 1} / {pageItems.length}条</span>
+              <button type="button" disabled={compactIndex >= pageItems.length - 1} onClick={() => setMobileIndex(compactIndex + 1)}>下一条</button>
+            </nav>}
             <div className="data-import-table-wrap">
               <table className="data-import-table data-import-review-table">
                 <colgroup>
@@ -1271,7 +1326,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageItems.map((item) => (
+                  {displayedItems.map((item) => (
                     <tr key={item.id} className={item.quality}>
                       <td>
                         <span className={`quality-pill ${item.quality}`}>
@@ -1302,7 +1357,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           '—'
                         ) : (
                           <input
-                            disabled={batch.status !== 'reviewing' || Boolean(item.payload.valueReviewDecision)}
+                            disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.valueReviewDecision) || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                             type="date"
                             value={item.eventDate}
                             onChange={(event) =>
@@ -1314,7 +1369,13 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         )}
                       </td>
                       <td>
-                        <strong>{item.exerciseName || item.metricLabel || '—'}</strong>
+                        {item.itemType === 'test_measurement' && batch.status === 'reviewing' && !item.payload.valueReviewDecision && (!item.payload.sourceRow || item.payload.sourceRowOutdated) ? <label>
+                          <span>测试项目</span>
+                          <select value={item.metricCode} disabled={Boolean(busy)} onChange={event => patchItem(item.id, { metricCode: event.target.value })}>
+                            {!metrics.some(metric => metric.code === item.metricCode) && <option value={item.metricCode}>{item.metricLabel || '请选择有效项目'}</option>}
+                            {metrics.map(metric => <option key={metric.code} value={metric.code}>{metric.label}{metric.unit ? `（${metric.unit}）` : ''}</option>)}
+                          </select>
+                        </label> : <strong>{item.exerciseName || item.metricLabel || '—'}</strong>}
                         {item.itemType === 'training_set' && importSessionChoices(item).length > 1 && <label>
                           <span>所属课次</span>
                           <select aria-label={`${item.exerciseName}所属课次`} disabled={Boolean(busy) || batch.status !== 'reviewing'}
@@ -1335,7 +1396,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         {item.itemType === 'training_set' ? (
                           <div className="training-value-inputs">
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="0.1"
                               value={item.actualWeightKg ?? ''}
@@ -1347,7 +1408,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             />
                             <span>kg ×</span>
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="1"
                               value={item.actualReps ?? ''}
@@ -1372,7 +1433,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               <label key={field}>
                                 <span>{header}</span>
                                 <input
-                                  disabled={batch.status !== 'reviewing' || Boolean(item.payload.valueReviewDecision)}
+                                  disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.valueReviewDecision) || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                                   aria-label={`${item.rawAthleteName} ${item.sourceAddress} ${header}`}
                                   type="number"
                                   step="any"
@@ -1389,7 +1450,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         ) : item.itemType === 'wellness' ? (
                           <div className="training-value-inputs">
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="0.1"
                               placeholder="睡眠h"
@@ -1401,7 +1462,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               }}
                             />
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="1"
                               placeholder="晨脉"
@@ -1416,7 +1477,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         ) : item.itemType === 'training_session' ? (
                           <div className="training-value-inputs">
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="1"
                               placeholder="时长min"
@@ -1428,7 +1489,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                               }}
                             />
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="0.1"
                               placeholder="距离km"
@@ -1443,7 +1504,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                         ) : (
                           <div className="metric-value-input">
                             <input
-                              disabled={batch.status !== 'reviewing'}
+                              disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                               type="number"
                               step="0.1"
                               value={item.valueNum ?? ''}
@@ -1460,7 +1521,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                       <td>
                         {item.conflict?.exists ? (
                           <select
-                            disabled={batch.status !== 'reviewing'}
+                            disabled={Boolean(busy) || batch.status !== 'reviewing'}
                             value={item.resolution === 'skip' ? 'skip' : ''}
                             onChange={(event) =>
                               patchItem(item.id, {
@@ -1474,7 +1535,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                           </select>
                         ) : item.itemType === 'invalid_row' || item.quality === 'error' || item.resolution === 'skip' ? (
                           <select
-                            disabled={batch.status !== 'reviewing'}
+                            disabled={Boolean(busy) || batch.status !== 'reviewing'}
                             value={item.resolution}
                             onChange={(event) =>
                               patchItem(item.id, {
@@ -1509,6 +1570,14 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                             <span>校验通过</span>
                           ) : null}
                         </div>
+                        {batch.status === 'reviewing' && <ImportSourceRowEditor
+                          item={item}
+                          metrics={metrics}
+                          disabled={Boolean(busy) || Boolean(item.payload.valueReviewDecision)}
+                          pending={corrections.get(sourceCorrectionId(item))?.sourceCells}
+                          onChange={sourceCells => patchItem(sourceCorrectionId(item), { sourceCells })}
+                          onSave={() => void saveCorrections()}
+                        />}
                         <details className="import-source-details">
                           <summary>查看原始记录</summary>
                           <div>
@@ -1553,7 +1622,12 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
               </div>
             </footer>
             <footer className="data-import-commit-bar">
-              <div>本次导入的非空值更新已有记录</div>
+              <div className="data-import-next-actions" aria-live="polite">
+                <strong>{batch.errorCount || unconfirmedPersons.length ? `还需处理：${unconfirmedPersons.length}名人员、${batch.errorCount}条错误` : hasUnsavedChanges ? '修改待保存，校验后可确认导入' : '校对完成，可以确认导入'}</strong>
+                {unconfirmedPersons.length > 0 && <button type="button" disabled={Boolean(busy)} onClick={() => setPersonDialogOpen(true)}>去确认人员</button>}
+                {batch.errorCount > 0 && <button type="button" onClick={goToErrors}>去修正错误</button>}
+                {saveFailed && <button type="button" disabled={Boolean(busy)} onClick={() => void saveCorrections()}>重试保存</button>}
+              </div>
               <div>
                 <small>
                   所有数据采用本次导入的非空值，空白保留原值；同一文件内不同值需先审查。整批在同一事务内提交，失败自动回滚。
@@ -1670,7 +1744,7 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
             </header>
             <div className="data-import-person-toolbar">
               <p role="status" aria-live="polite" className="data-import-save-status">
-              {busy === 'save' ? '正在保存修改并重新校验…' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
+              {busy === 'save' ? '正在保存修改并重新校验…' : saveFailed ? '保存失败，修改仍保留在当前页面，请重试保存。' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
             </p>
             <div className="data-import-filters">
                 {(
@@ -1996,38 +2070,19 @@ export function DataImportPage({ project, athletes, onChanged }: Props) {
                 <X size={19} />
               </button>
             </header>
-            <div className="data-import-summary">
-              <div>
-                <span>新建运动员</span>
-                <strong>{summaryPreview.createPersons}</strong>
-                <small>最小建档</small>
-              </div>
-              <div>
-                <span>关联已有运动员</span>
-                <strong>{summaryPreview.linkPersons}</strong>
-                <small>非空数据按本次导入更新</small>
-              </div>
-              <div>
-                <span>新增记录</span>
-                <strong>{summaryPreview.newRecords}</strong>
-                <small>训练/测试/恢复等</small>
-              </div>
-              <div className="warning">
-                <span>更新已有记录</span>
-                <strong>{summaryPreview.updateRecords}</strong>
-                <small>仅更新提供的字段</small>
-              </div>
-              <div>
-                <span>跳过或排除记录</span>
-                <strong>{summaryPreview.skipRecords}</strong>
-                <small>保留数据库原值</small>
-              </div>
-              <div className="danger">
-                <span>更新已有字段</span>
-                <strong>{summaryPreview.overwriteFields}</strong>
-                <small>原值→新值已展示</small>
-              </div>
+            <div className="data-import-summary data-import-main-summary">
+              <div><span>待处理</span><strong>{batch.errorCount}</strong><small>新建运动员{summaryPreview.createPersons}名</small></div>
+              <div><span>新增记录</span><strong>{summaryPreview.newRecords}</strong></div>
+              <div><span>更新记录</span><strong>{summaryPreview.updateRecords}</strong><small>仅更新本次提供的非空字段</small></div>
             </div>
+            <ImportCountSummary counts={summaryPreview.statistics} />
+            <details className="data-import-final-differences">
+              <summary>查看本次更新的原值与新值</summary>
+              <p>空白不清空原值，真实0正常写入；完整差异也可在校对列表中按“将更新”查看。</p>
+              <table><caption>更新差异（最多显示前100项）</caption><thead><tr><th scope="col">运动员 / 来源</th><th scope="col">字段</th><th scope="col">原值</th><th scope="col">新值</th></tr></thead><tbody>
+                {batch.items.filter(item => item.quality !== 'error' && item.quality !== 'skipped' && item.resolution !== 'skip' && !item.payload.valueAutoMerged).flatMap(item => (item.conflict?.fields || []).filter(field => field.oldValue !== field.newValue).map(field => ({ item, field }))).slice(0, 100).map(({ item, field }) => <tr key={`${item.id}-${field.field}`}><td>{item.rawAthleteName} · {item.sourceSheet}!{item.sourceAddress}</td><td>{field.label}</td><td>{field.oldValue === '' ? '空' : field.oldValue}</td><td>{field.newValue === '' ? '空' : field.newValue}</td></tr>)}
+              </tbody></table>
+            </details>
             <div className="data-import-dialog-actions">
               <button type="button" disabled={Boolean(busy)} onClick={() => setConfirmDialogOpen(false)}>
                 取消

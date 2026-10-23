@@ -65,6 +65,56 @@ const commit = (batchId: string, conflictPolicy: 'skip' | 'update', allowedTeams
     conflictPolicy,
   });
 
+it('在线修复非法数值源行并一致重算同源测试记录，修订冲突回滚', () => {
+  const batch = analyze({ 体能测试: [['姓名', '测试日期', 'VO2Max', 'CMJ峰值功率W'], ['张某', '2026-02-13', '坏值', 30]] });
+  const invalid = batch.items.find(item => item.itemType === 'invalid_row')!;
+  expect(invalid).toBeDefined();
+  expect(invalid.payload.sourceRow).toBeDefined();
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, expectedRevision: batch.revision, athletes, corrections: [{ id: invalid.id, sourceCells: { VO2Max: 40, 测试日期: '2026-02-14' } }] });
+  expect(fixed.items.some(item => item.itemType === 'invalid_row')).toBe(false);
+  expect(fixed.items.map(item => item.eventDate)).toEqual(fixed.items.map(() => '2026-02-14'));
+  expect(fixed.items.map(item => item.valueNum).sort()).toEqual([30, 40]);
+  expect(() => updateDataImportItems({ batchId: fixed.id, userId: USER_ID, expectedRevision: batch.revision, athletes, corrections: [{ id: fixed.items[0].id, sourceCells: { VO2Max: 55 } }] })).toThrow();
+  expect(getDataImportBatch(batch.id, USER_ID).items.map(item => item.valueNum).sort()).toEqual([30, 40]);
+});
+
+it('源行固定选项、日期和授权姓名可修正，未知人员仍阻断提交', () => {
+  const batch = analyze({ 伤病记录: [['姓名', '发生日期', '伤病名称', '部位', '侧别', '状态', '疼痛评分'], ['张某', '坏日期', '膝伤', '膝', '错误侧别', '错误状态', 2]] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, sourceCells: { 姓名: '赵某', 发生日期: '2026-02-14', 侧别: '左', 状态: '康复' } }] });
+  expect(fixed.items.flatMap(item => item.messages).filter(message => message.startsWith('错误：'))).toEqual([]);
+  expect(fixed.items[0].athleteId).toBe(2);
+  expect(fixed.items[0].payload.side).toBe('left');
+  const unknown = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: fixed.items[0].id, sourceCells: { 姓名: '未知人员' } }] });
+  expect(unknown.errorCount).toBeGreaterThan(0);
+  expect(unknown.items[0].athleteId).toBeNull();
+  expect(() => commit(batch.id, 'skip')).toThrow();
+});
+
+it('源行修复保留已确认人员映射', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值'], ['待关联人员', '2026-02-13', 'single_leg_squat_reps', 10]] });
+  const candidate = batch.athleteCandidates[0];
+  updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']), corrections: [{ id: candidate.id, matchedAthleteId: 2, confirmed: true }] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, sourceCells: { 数值: 20 } }] });
+  expect(fixed.items[0].athleteId).toBe(2);
+  expect(fixed.items[0].valueNum).toBe(20);
+});
+
+it('业务字段校对后禁止旧源行覆盖已保存值', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值'], ['张某', '2026-02-13', 'single_leg_squat_reps', 10]] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, valueNum: 20 }] });
+  expect(fixed.items[0].payload.sourceRowOutdated).toBe(true);
+  expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: fixed.items[0].id, sourceCells: { 测试日期: '2026-02-14' } }] })).toThrow('业务字段校对');
+  expect(getDataImportBatch(batch.id, USER_ID).items[0].valueNum).toBe(20);
+});
+
+it('缺少姓名源行可关联已有人员，未知源字段和越项目指标拒绝且保留原草稿', () => {
+  const batch = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值'], ['', '2026-02-13', 'single_leg_squat_reps', 10]] });
+  const fixed = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, sourceCells: { 姓名: '张某' } }] });
+  expect(fixed.items[0].athleteId).toBe(1);
+  expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: fixed.items[0].id, sourceCells: { 不存在: 1 } }] })).toThrow('无效字段');
+  expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: fixed.items[0].id, metricCode: 'not_a_metric' }] })).toThrow('正式字典');
+});
+
 it('档案非空资料自动采用本次导入，血型不进入数据库冲突审查，空白保留原值', () => {
   db.prepare("INSERT INTO athlete_profiles (athlete_id, blood_type, phone) VALUES (1, 'A', '123')").run();
   const batch = analyze({ 运动员基本资料: [['姓名', '血型', '手机号'], ['张某', 'O', '']] });

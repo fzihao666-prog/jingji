@@ -1,5 +1,5 @@
 import { BluetoothConnectPage } from './pages/BluetoothConnectPage';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, getToken, setToken } from './api';
 import {
   AppShell,
@@ -126,12 +126,24 @@ export default function App() {
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [athletesReady, setAthletesReady] = useState(false);
+  const rosterUserRef = useRef<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [globalError, setGlobalError] = useState('');
+  const importNavigationGuard = useRef<(() => boolean) | null>(null);
+  const acceptedHash = useRef(window.location.hash);
+  const setImportNavigationGuard = useCallback((guard: (() => boolean) | null) => {
+    importNavigationGuard.current = guard;
+  }, []);
 
   useEffect(() => {
     const syncPageFromHash = () => {
+      if (window.location.hash === acceptedHash.current) return;
+      if (importNavigationGuard.current && !importNavigationGuard.current()) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${acceptedHash.current}`);
+        return;
+      }
+      acceptedHash.current = window.location.hash;
       setPage(pageFromHash());
       setRouteHash(window.location.hash);
     };
@@ -140,6 +152,7 @@ export default function App() {
   }, []);
 
   const changePage = (nextPage: PageKey) => {
+    if (nextPage !== page && importNavigationGuard.current && !importNavigationGuard.current()) return;
     if (nextPage === 'special-schedule' || nextPage === 'strength-plan') {
       const kind = nextPage === 'special-schedule' ? 'special' : 'physical';
       const source =
@@ -149,11 +162,13 @@ export default function App() {
             ? 'special-overview'
             : 'strength-overview';
       window.location.hash = `/training-plans?type=${kind}&source=${source}`;
+      acceptedHash.current = window.location.hash;
       setPage('training-plans');
       return;
     }
     setPage(nextPage);
     writePageHash(nextPage);
+    acceptedHash.current = window.location.hash;
     setRouteHash(window.location.hash);
   };
 
@@ -168,7 +183,9 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    setAthletesReady(false);
+    // 同账号刷新保留页面和导入回执；账号变化仍等待新名册。
+    if (rosterUserRef.current !== user) setAthletesReady(false);
+    rosterUserRef.current = user;
     Promise.all([api.athletes(), api.currentProject()])
       .then(([{ athletes: nextAthletes }, saved]) => {
         setAthletes(nextAthletes);
@@ -235,6 +252,7 @@ export default function App() {
   };
 
   const logout = async () => {
+    if (importNavigationGuard.current && !importNavigationGuard.current()) return;
     try {
       await api.logout();
     } catch {
@@ -308,6 +326,7 @@ export default function App() {
     },
     onAthleteChange: setAthleteId,
     onProjectChange: (nextProject: Project) => {
+      if (nextProject !== project && importNavigationGuard.current && !importNavigationGuard.current()) return;
       setProject(nextProject);
       setAthleteId(null);
       void api.saveCurrentProject(nextProject).catch(() => undefined);
@@ -411,6 +430,7 @@ export default function App() {
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && (
           <DataImportPage
+            onNavigationGuardChange={setImportNavigationGuard}
             user={user}
             project={project}
             athletes={projectAthletes}

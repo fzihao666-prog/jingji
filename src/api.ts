@@ -1,3 +1,4 @@
+import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
 import { reportPreviewSchema, reportCommentarySchema, savedReportSchema, reportHistorySchema,
   type ReportRange, type ReportCommentary } from '../shared/training-report';
@@ -653,6 +654,9 @@ export const api = {
       valueNum?: number | null;
       actualReps?: number | null;
       actualWeightKg?: number | null;
+      sourceCells?: Record<string, string | number | null>;
+      metricCode?: string;
+      side?: string;
       payload?: Record<string, unknown>;
       resolution?: '' | 'skip' | 'update';
     }>,
@@ -692,6 +696,7 @@ export const api = {
     return request<{
       message: string;
       imported: number;
+      receipt?: ImportStatistics;
       skipped: number;
       createdAthletes: number;
       linkedAthletes: number;
@@ -704,6 +709,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ conflictPolicy, expectedRevision }),
     });
+  },
+  async dataImportMetrics(project: Project) {
+    return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(`/api/data-import/metrics?${new URLSearchParams({ project })}`);
   },
   async dataManagementMetrics() {
     return request<{

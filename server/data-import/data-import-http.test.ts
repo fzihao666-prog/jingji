@@ -11,6 +11,7 @@ vi.mock('../core/db.ts', async () => {
 import { db } from '../core/db.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
 import type { DataImportPreview } from './data-import.ts';
+import type { ImportStatistics } from '../../shared/import-statistics.js';
 
 let server: Server;
 let base: string;
@@ -65,9 +66,20 @@ async function request(path: string, method = 'GET', body?: unknown, auth = toke
     method, headers: { authorization: `Bearer ${auth}`, ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) },
     body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
   });
-  const payload = await response.json() as { batch?: DataImportPreview; message?: string; createdRecords?: number; createdAthletes?: number };
+  const payload = await response.json() as { batch?: DataImportPreview; message?: string; createdRecords?: number; createdAthletes?: number; receipt?: ImportStatistics };
   return { status: response.status, body: payload };
 }
+
+it('纠错指标字典只返回授权项目，未登录和越项目请求拒绝', async () => {
+  const response = await fetch(`${base}/api/data-import/metrics?project=ROWING`, { headers: { authorization: `Bearer ${token}` } });
+  expect(response.status).toBe(200);
+  const payload = await response.json() as { metrics: Array<{ code: string; label: string; unit: string }> };
+  expect(payload.metrics.length).toBeGreaterThan(0);
+  expect(payload.metrics.every(metric => typeof metric.code === 'string' && typeof metric.label === 'string' && typeof metric.unit === 'string')).toBe(true);
+  expect((await request('/metrics?project=CANOE_SPRINT')).status).toBe(403);
+  expect((await request('/metrics?project=not-a-project')).status).toBe(400);
+  expect((await fetch(`${base}/api/data-import/metrics?project=ROWING`)).status).toBe(401);
+});
 
 it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回空模板', async () => {
   const addedTeams = ['模板虚构二队', '模板虚构空队'];
@@ -402,4 +414,33 @@ it('P0 HTTP：旧草稿没有权限快照时，待建档人员也按当前地域
     expect(JSON.stringify(result.body)).not.toContain('旧草稿虚构新人');
   } finally { db.prepare("UPDATE user_area_permissions SET area_level='national',province='' WHERE user_id=701").run(); }
   expect((await request(`/batches/${batch.id}`)).status).toBe(200);
+});
+
+it('P1.5：新增、更新、无变化、排除及未填报口径统一，回执持久化且重试不改变', async () => {
+  const initial = await upload([['姓名', '日期', '体重kg'], ['虚构队员', '2050-01-01', 70], ['虚构队员', '2050-01-02', 72]]);
+  expect((await request(`/batches/${initial.id}/commit`, 'POST', {})).status).toBe(200);
+  const batch = await upload([['姓名', '日期', '体重kg'],
+    ['虚构队员', '2050-01-01', 71], ['虚构队员', '2050-01-02', 72],
+    ['虚构队员', '2050-01-03', 73], ['虚构队员', '2050-01-04', 74],
+    ['虚构队员'], ['虚构队员', '2050-01-05', '错误数值']]);
+  expect(batch.summary.unfilledRows).toBe(1);
+  expect(batch.counts.newCount).toBe(2);
+  const difference = batch.items.find(item => item.eventDate === '2050-01-01')!.conflict!;
+  expect(difference.fields.some(field => field.oldValue === '70' && field.newValue === '71')).toBe(true);
+  const reportResponse = await fetch(`${base}/api/data-import/batches/${batch.id}/errors`, { headers: { authorization: `Bearer ${token}` } });
+  const report = XLSX.read(Buffer.from(await reportResponse.arrayBuffer()));
+  const reportRows = XLSX.utils.sheet_to_json(report.Sheets['错误清单'], { header: 1 }) as string[][];
+  expect(reportRows[0].slice(-2)).toEqual(['如何修正', '可用操作']);
+  expect(reportRows[1][2]).toBe('错误源行');
+  const excluded = batch.items.filter(item => item.eventDate === '2050-01-04' || item.itemType === 'invalid_row');
+  expect(excluded).toHaveLength(2);
+  expect((await request(`/batches/${batch.id}/items`, 'PUT', { corrections: excluded.map(item => ({ id: item.id, resolution: 'skip' })) })).status).toBe(200);
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(result.body.receipt).toEqual({ newCount: 1, updateCount: 1, unchangedCount: 1, excludedCount: 2, unfilledRows: 1, errorCount: 0, mergedCount: 0 });
+  expect(result.body.message).toContain('无变化1条、排除2条、未填报1行');
+  expect((await request(`/batches/${batch.id}`)).body.batch!.summary.receipt).toEqual(result.body.receipt);
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).body.receipt).toEqual(result.body.receipt);
+  expect(db.prepare("SELECT weight_kg FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2050-01-01'").get()).toEqual({ weight_kg: 71 });
+  expect(db.prepare("SELECT COUNT(*) AS count FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2050-01-04'").get()).toEqual({ count: 0 });
 });

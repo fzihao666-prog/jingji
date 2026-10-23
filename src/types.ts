@@ -1,3 +1,4 @@
+import type { ImportStatistics } from '../shared/import-statistics';
 import type { ProfilePhysiologyRecord } from '../shared/profile-physiology';
 import type { AreaLevel, Role } from '../shared/access';
 import type { RadarDimensionDefinition, RadarDirection } from '../shared/athlete-radar-model';
@@ -371,6 +372,8 @@ export type DataImportBatch = {
   summary: {
     recognizedSheets: Array<{ name: string; type: string; items: number; note: string }>;
     ignoredSheets: Array<{ name: string; reason: string }>;
+    unfilledRows?: number;
+    receipt?: ImportStatistics;
     duplicateFile?: boolean;
   };
   counts: {

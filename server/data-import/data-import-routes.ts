@@ -118,7 +118,7 @@ export function buildImportErrorReport(batch: {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '竞迹训练监控系统';
   const sheet = workbook.addWorksheet('错误清单');
-  const headers = ['工作表', '单元格', '记录类型', '运动员', '日期', '字段/指标', '原值', '状态', '问题原因'];
+  const headers = ['工作表', '单元格', '记录类型', '运动员', '日期', '字段/指标', '原值', '状态', '问题原因', '如何修正', '可用操作'];
   sheet.getRow(1).values = headers;
   sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF172033' } };
@@ -132,13 +132,15 @@ export function buildImportErrorReport(batch: {
     sheet.getRow(index + 2).values = [
       item.sourceSheet,
       item.sourceAddress,
-      item.itemType,
+      ({ athlete_profile: '运动员资料', wellness: '每日恢复', training_session: '训练课次', training_set: '力量组次', test_measurement: '测试成绩', body_measurement: '身体测量', injury_record: '伤病记录', competitive_state: '竞技评估', scoring_rule: '评分规则', invalid_row: '错误源行' } as Record<string, string>)[item.itemType] || '业务记录',
       item.rawAthleteName,
       item.eventDate,
       item.exerciseName || item.metricLabel,
       item.rawValue,
       item.quality === 'error' ? '错误' : item.quality === 'warning' ? '警告' : '已跳过',
       item.messages.join('；'),
+      item.itemType === 'invalid_row' ? '按单元格位置修正原文件后重传；不需导入时明确排除此行。' : '在校对页修正人员、日期或数值后保存；不能在线修改的字段需修正原文件后重传。',
+      item.itemType === 'invalid_row' ? '修正原文件重传 / 排除此行' : '在线校对 / 修正原文件重传 / 排除此行',
     ];
   });
   return workbook;
@@ -156,6 +158,16 @@ function authorizeImportBatch(user: AuthUser, batchId: string) {
 }
 
 export function registerDataImportRoutes(app: Express) {
+  app.get('/api/data-import/metrics', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
+    const project = normalizeProject(cleanString(req.query.project));
+    if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
+    if (!dataImportScope(req.authUser!, project).allowed) return res.status(403).json({ message: '当前账号无权查看该项目测试字典。' });
+    try {
+      return res.json({ metrics: readImportMetricDefinitions(project).map(({ code, label, unit }) => ({ code, label, unit })) });
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : '测试字典读取失败。' });
+    }
+  });
   app.get(
     '/api/data-import/template',
     requireAuth,
@@ -490,7 +502,7 @@ export function registerDataImportRoutes(app: Express) {
         res.json({
           message:
             `新建运动员${result.createdAthletes || 0}人、关联已有${result.linkedAthletes || 0}人；` +
-            `新增记录${result.createdRecords || 0}条、更新${result.updatedRecords || 0}条、跳过${result.skipped}条；` +
+            (result.receipt ? `新增记录${result.receipt.newCount}条、更新${result.receipt.updateCount}条、无变化${result.receipt.unchangedCount}条、排除${result.receipt.excludedCount}条、未填报${result.receipt.unfilledRows}行；` : `新增记录${result.createdRecords || 0}条、更新${result.updatedRecords || 0}条、未写入合计${result.skipped}条（历史批次未拆分） ;`) +
             `补全空缺字段${result.filledProfileFields || 0}项、覆盖已有字段${result.overwrittenProfileFields || 0}项。`,
           ...result,
         });

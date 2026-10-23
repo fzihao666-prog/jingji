@@ -1,3 +1,5 @@
+import { normalizeProject } from '../../shared/projects.ts';
+import { importStatistics, type ImportStatistics } from '../../shared/import-statistics.js';
 import { IMPORT_BASE_METRICS as METRICS } from '../../shared/import-base-metrics.ts';
 import { assertImportRevision, advanceImportRevision, importRevision } from './data-import-revision.ts';
 import { resolveImportMetricName } from '../../shared/import-metric-choice.ts';
@@ -20,7 +22,7 @@ import {
 } from '../../shared/strength-training.ts';
 
 // v29：中文测试项目按当前项目字典解析；旧草稿需重解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v29-chinese-test-names';
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v30-import-statistics';
 
 export type ImportAthlete = {
   id: number;
@@ -113,6 +115,8 @@ export type DataImportPreview = {
   summary: {
     recognizedSheets: Array<{ name: string; type: string; items: number; note: string }>;
     ignoredSheets: Array<{ name: string; reason: string }>;
+    unfilledRows?: number;
+    receipt?: ImportStatistics;
     duplicateFile?: boolean;
     revision?: number;
   };
@@ -1009,6 +1013,10 @@ function parseStandardSheet(
     if (sheet !== '运动员信息' && !hasBusiness) continue;
     if (simplified && sheet === '运动员信息' && numberedAthlete && !hasBusiness) continue;
     if (/^示例/.test(rawName)) continue;
+    const sourceRow = {
+      rowIndex, columns: [...header.columns], values: row.map(value => typeof value === 'number' ? value : text(value)),
+      filename, defaultDate, simplified,
+    };
     const rowHasContent = row.some((value) => text(value) !== '');
     if (!rawName) {
       // 有内容但缺少姓名的行必须提示错误，不得静默丢弃业务数据。
@@ -1016,6 +1024,7 @@ function parseStandardSheet(
         items.push(
           itemBase({
             itemType: 'invalid_row',
+            payload: { sourceRow },
             sourceSheet: rawSheet,
             sourceAddress: cellAddress(rowIndex, nameColumn),
             rawValue: row.map((value) => text(value)).filter(Boolean).slice(0, 6).join(' | '),
@@ -1055,6 +1064,7 @@ function parseStandardSheet(
       sourceSheet: rawSheet,
       sourceAddress: cellAddress(rowIndex, nameColumn),
       payload: {
+        sourceRow,
         athleteCode: standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号'),
         team: standardText(row, header.columns, '所属队伍'),
         templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
@@ -2105,6 +2115,7 @@ export function analyzeDataImport(input: {
   const items: ParsedImportItem[] = [];
   const recognizedSheets: Array<{ name: string; type: string; items: number; note: string }> = [];
   const ignoredSheets: Array<{ name: string; reason: string }> = [];
+  let unfilledRows = 0;
   const batchId = replacing?.id || randomUUID();
   const batchVersion = `IMPORT-${new Date().toISOString().slice(0, 10)}-${batchId.slice(0, 8)}`;
   for (const sheetName of workbook.SheetNames) {
@@ -2182,6 +2193,16 @@ export function analyzeDataImport(input: {
       );
       type = '历史测试对比';
       note = '仅提取各日期原始值，忽略差值公式';
+    }
+    if (STANDARD_SHEETS.has(sheetName)) {
+      const header = standardHeader(matrix);
+      if (header) {
+        const represented = new Set(parsed.map(item => XLSX.utils.decode_cell(item.sourceAddress).r));
+        unfilledRows += matrix.slice(header.rowIndex + 1).filter((row, offset) => {
+          const identity = ['姓名', '系统运动员编号', '运动员编号', '编号'].map(label => standardText(row, header.columns, label)).find(Boolean) || '';
+          return Boolean(identity) && !/^示例/.test(identity) && !represented.has(header.rowIndex + 1 + offset);
+        }).length;
+      }
     }
     if (parsed.length) {
       items.push(...parsed);
@@ -2292,7 +2313,7 @@ export function analyzeDataImport(input: {
     item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item as DataImportItemView);
   }
   const counts = summarizeItems(items);
-  const summary = { recognizedSheets, ignoredSheets, accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
+  const summary = { recognizedSheets, ignoredSheets, unfilledRows, accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
   db.exec('BEGIN IMMEDIATE');
   try {
     if (replacing) {
@@ -2406,9 +2427,10 @@ function computeCounts(
   items: DataImportItemView[],
   athleteCandidates: DataImportAthleteCandidate[]
 ): DataImportPreview['counts'] {
-  const active = items.filter((item) => item.quality !== 'skipped' && item.itemType !== 'invalid_row');
+  const excluded = new Set(athleteCandidates.filter(person => person.excluded).map(person => person.normalizedName));
+  const active = items.filter(item => item.quality !== 'skipped' && item.quality !== 'error' && item.resolution !== 'skip' && !item.payload.valueAutoMerged && item.itemType !== 'invalid_row' && !excluded.has(dataImportPersonKey(item)));
   return {
-    newCount: active.filter((item) => !item.conflict?.exists).length,
+    newCount: importStatistics(items, new Set(athleteCandidates.filter(person => person.excluded).map(person => person.normalizedName))).newCount,
     duplicateCount: active.filter((item) => item.conflict?.exists).length,
     overwriteCount: active.filter(item => item.conflict?.fields.some(field => field.overwrites)).length,
     invalidCount: items.filter(
@@ -2880,6 +2902,9 @@ function applyCorrection(
   current: DataImportItemView,
   correction: {
     id: number;
+    sourceCells?: Record<string, string | number | null>;
+    metricCode?: string;
+    side?: string;
     athleteId?: number | null;
     eventDate?: string;
     valueNum?: number | null;
@@ -2896,6 +2921,22 @@ function applyCorrection(
   if ((current.payload.valueReviewDecision || current.payload.valueMergedInto || current.payload.valueReviewMemberOf) && !correction.payload?.valueReview
     && (correction.payload || 'eventDate' in correction || 'athleteId' in correction || 'valueNum' in correction))
     throw new Error('请先点击重新编辑，展开合并来源后再修改');
+  if (current.payload.sourceRow && Object.keys(correction).some(key => !['id', 'resolution'].includes(key))) next.payload.sourceRowOutdated = true;
+  if ('metricCode' in correction) {
+    if (next.itemType !== 'test_measurement') throw new Error('只有测试记录可以重选测试项目');
+    const project = (db.prepare('SELECT project FROM data_import_batches WHERE id = ?').get(current.batchId) as { project: string }).project;
+    const metric = readImportMetricDefinitions(project).find(entry => entry.code === correction.metricCode);
+    if (!metric) throw new Error('所选测试项目不在当前项目正式字典中');
+    next.metricCode = metric.code;
+    next.metricLabel = metric.label;
+    next.unit = metric.unit;
+    delete next.payload.metricSelectionError;
+    delete next.payload.unitConflict;
+  }
+  if ('side' in correction) {
+    if (next.itemType !== 'test_measurement' || !['center', 'left', 'right', 'bilateral'].includes(correction.side || '')) throw new Error('测试侧别无效');
+    next.side = correction.side as DataImportItemView['side'];
+  }
   if ('athleteId' in correction) next.athleteId = correction.athleteId ?? null;
   if ('eventDate' in correction) next.eventDate = text(correction.eventDate);
   if ('actualReps' in correction) next.actualReps = correction.actualReps ?? null;
@@ -3056,7 +3097,7 @@ function persistValidatedImportItems(
 ) {
   const update = db.prepare(
     `UPDATE data_import_items SET athlete_id = ?, event_date = ?, value_num = ?, actual_reps = ?, actual_weight_kg = ?, unit = ?, target_reps = ?, intensity_percent = ?,
-      payload_json = ?, resolution = ?, conflict_json = ?, quality = ?, messages_json = ? WHERE id = ? AND batch_id = ?`
+      payload_json = ?, resolution = ?, conflict_json = ?, quality = ?, messages_json = ?, metric_code = ?, metric_label = ?, side = ? WHERE id = ? AND batch_id = ?`
   );
   refreshImportConflicts(items);
   for (const next of items) {
@@ -3079,6 +3120,9 @@ function persistValidatedImportItems(
       JSON.stringify(next.conflict ?? {}),
       next.quality,
       JSON.stringify(next.messages),
+      next.metricCode,
+      next.metricLabel,
+      next.side,
       next.id,
       batchId
     );
@@ -3110,6 +3154,9 @@ export function updateDataImportItems(input: {
   athletes: ImportAthlete[];
   corrections: Array<{
     id: number;
+    sourceCells?: Record<string, string | number | null>;
+    metricCode?: string;
+    side?: string;
     athleteId?: number | null;
     eventDate?: string;
     valueNum?: number | null;
@@ -3136,8 +3183,56 @@ export function updateDataImportItems(input: {
   try {
     input.authorizeBatch?.();
     assertImportRevision(input.batchId, input.userId, input.expectedRevision);
-    const corrected = new Map(input.corrections.map(correction => [correction.id, correction]));
-    const nextItems = batch.items.map(item => {
+    const sourceGroups = new Map<string, { item: DataImportItemView; cells: Record<string, string | number | null> }>();
+    for (const correction of input.corrections) {
+      const item = batch.items.find(entry => entry.id === correction.id);
+      if (!item) throw new Error('校对记录不属于当前批次');
+      if (correction.sourceCells === undefined) continue;
+      if (Object.keys(correction).some(key => !['id', 'sourceCells'].includes(key))) throw new Error('源行修复不能与记录字段修改混用');
+      const source = item.payload.sourceRow as { rowIndex: number } | undefined;
+      if (!source || !Number.isSafeInteger(source.rowIndex)) throw new Error('该记录没有可定位的完整源行，请修正原文件后重新上传');
+      const key = `${item.sourceSheet}:${source.rowIndex}`;
+      if (sourceGroups.has(key)) throw new Error('同一源行请合并为一次修复');
+      sourceGroups.set(key, { item, cells: correction.sourceCells });
+    }
+    for (const { item, cells } of sourceGroups.values()) {
+      const source = item.payload.sourceRow as { rowIndex: number; columns: [string, number][]; values: (string | number)[]; filename: string; defaultDate: string; simplified: boolean };
+      if (!cells || typeof cells !== 'object' || Array.isArray(cells) || Object.keys(cells).length > 200) throw new Error('源行修复格式无效');
+      const related = batch.items.filter(entry => entry.sourceSheet === item.sourceSheet && (entry.payload.sourceRow as { rowIndex?: number } | undefined)?.rowIndex === source.rowIndex);
+      if (related.some(entry => entry.payload.sourceRowOutdated)) throw new Error('该源行已通过业务字段校对，请继续使用业务字段校对；如需修改源单元格请修正原文件后重新上传');
+      if (related.some(entry => entry.payload.valueReviewDecision || entry.payload.valueMergedInto || entry.payload.valueReviewMemberOf)) throw new Error('请先重新编辑合并来源，再修复源行');
+      if (related.some(entry => input.corrections.some(correction => correction.id === entry.id && correction.sourceCells === undefined))) throw new Error('同源行不能同时修改源单元格和派生记录');
+      const values = [...source.values];
+      for (const [label, value] of Object.entries(cells)) {
+        const column = source.columns.find(([name]) => name === normalizedText(label))?.[1];
+        if (column === undefined || (value !== null && typeof value !== 'string' && typeof value !== 'number') || (typeof value === 'number' && !Number.isFinite(value)) || (typeof value === 'string' && value.length > 10000)) throw new Error('源行修复包含无效字段或数值');
+        values[column] = value ?? '';
+      }
+      const matrix: Matrix = Array.from({ length: source.rowIndex + 1 }, () => []);
+      for (const [label, column] of source.columns) matrix[0][column] = label;
+      matrix[source.rowIndex] = values;
+      const parsed = parseStandardSheet(matrix, item.sourceSheet, batch.project, source.filename, source.defaultDate, input.athletes, source.simplified);
+      if (!parsed.length) throw new Error('修复后没有可导入业务记录；如不需导入请明确排除此行');
+      const projectColumn = source.columns.find(([label]) => label === '运动项目')?.[1];
+      if (projectColumn !== undefined && text(values[projectColumn]) && normalizeProject(text(values[projectColumn])) !== normalizeProject(batch.project)) throw new Error('源行运动项目与当前批次不一致');
+      for (const entry of parsed) {
+        const candidate = batch.athleteCandidates.find(person => person.normalizedName === dataImportPersonKey(entry));
+        if (candidate?.status === 'pending' && candidate.confirmed) entry.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
+        else if (entry.itemType !== 'invalid_row') {
+          const person = resolvePerson({ name: entry.rawAthleteName, project: batch.project, team: text(entry.payload.team), athleteCode: text(entry.payload.athleteCode), birthDate: text(entry.payload.birthDate) }, input.athletes);
+          if (person.kind === 'conflict' || person.kind === 'ambiguous') throw new Error(person.message);
+          entry.athleteId = person.kind === 'matched' ? person.athlete.id : null;
+        }
+        if (candidate?.confirmed && entry.itemType === 'athlete_profile') entry.payload.gender = candidate.gender;
+      }
+      const metricCodes = new Set(readImportMetricDefinitions(batch.project).map(metric => metric.code));
+      if (parsed.some(entry => entry.itemType === 'test_measurement' && entry.metricCode && !metricCodes.has(entry.metricCode))) throw new Error('源行测试项目不在当前项目正式字典中');
+      for (const entry of related) db.prepare('DELETE FROM data_import_items WHERE id = ? AND batch_id = ?').run(entry.id, input.batchId);
+      insertItems(input.batchId, parsed);
+    }
+    const currentItems = sourceGroups.size ? getDataImportBatch(input.batchId, input.userId).items : batch.items;
+    const corrected = new Map(input.corrections.filter(correction => correction.sourceCells === undefined).map(correction => [correction.id, correction]));
+    const nextItems = currentItems.map(item => {
       const correction = corrected.get(item.id);
       const next = correction ? applyCorrection(item, correction) : { ...item, payload: { ...item.payload } };
       if (correction?.payload && Object.hasOwn(correction.payload, 'sessionOrder')) next.payload.sessionOrderProvided = true;
@@ -3275,6 +3370,7 @@ export function updateDataImportAthleteCandidates(input: {
       const candidate = candidates.get(dataImportPersonKey(item));
       if (!candidate || candidate.status !== 'pending' || item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
       item.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
+      if (item.itemType === 'athlete_profile') item.payload.gender = candidate.gender;
       item.quality = item.resolution === 'skip' || candidate.excluded ? 'skipped' : 'valid';
     }
     persistValidatedImportItems(input.batchId, updated.items, allowed, new Set(candidates.keys()));
@@ -4412,7 +4508,7 @@ export function commitDataImport(input: {
       .get(input.userId, input.batchId) as { detail: string } | undefined;
     const saved = audit ? JSON.parse(audit.detail) as Record<string, number> : {};
     return {
-      batch, imported: batch.importedCount, skipped: batch.skippedCount,
+      batch, receipt: batch.summary.receipt, imported: batch.importedCount, skipped: batch.skippedCount,
       createdAthletes: saved.createdAthletes ?? 0, linkedAthletes: saved.linkedAthletes ?? 0,
       createdRecords: saved.createdRecords ?? 0, updatedRecords: saved.updatedRecords ?? 0,
       filledProfileFields: saved.filledProfileFields ?? 0, overwrittenProfileFields: saved.overwrittenProfileFields ?? 0,
@@ -4479,6 +4575,9 @@ export function commitDataImport(input: {
     );
   let imported = 0;
   let skipped = batch.items.filter((item) => item.quality === 'skipped').length;
+  let unchangedRecords = 0;
+  const initialStatistics = importStatistics(batch.items, excludedKeys, batch.summary.unfilledRows || 0);
+  let receipt: ImportStatistics;
   let createdRecords = 0;
   let updatedRecords = 0;
   let filledProfileFields = 0;
@@ -4499,7 +4598,7 @@ export function commitDataImport(input: {
       allowedAthletes: allowed,
     });
     createdAthletes = resolution.createdCount;
-    linkedAthletes = resolution.linkedCount;
+    linkedAthletes = new Set(importable.filter(item => item.athleteId !== null && allowed.has(item.athleteId)).map(item => item.athleteId)).size;
     for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && revalidateItem(item, allowed, candidateNames).quality === 'error'))
       throw new Error('数据或指标配置已变化，请重新校验后提交。');
@@ -4556,6 +4655,7 @@ export function commitDataImport(input: {
         entityType = 'metric_scoring_rule';
       }
       if (result.skipped) {
+        if (fresh.identical) unchangedRecords += 1;
         skipped += 1;
       } else {
         imported += 1;
@@ -4568,6 +4668,8 @@ export function commitDataImport(input: {
         'UPDATE data_import_items SET committed_entity_type = ?, committed_entity_id = ? WHERE id = ?'
       ).run(entityType, result.entityId, item.id);
     }
+    receipt = { ...initialStatistics, newCount: createdRecords, updateCount: updatedRecords, unchangedCount: unchangedRecords, errorCount: 0 };
+    db.prepare("UPDATE data_import_batches SET summary_json=json_set(summary_json,'$.receipt',json(?)) WHERE id=?").run(JSON.stringify(receipt), input.batchId);
     for (const sessionId of sessionIds) if (!explicitTotalIds.has(sessionId)) updateSessionTotals(sessionId);
     db.prepare(
       `UPDATE data_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP WHERE id = ?`
@@ -4585,6 +4687,7 @@ export function commitDataImport(input: {
         skipped,
         createdRecords,
         updatedRecords,
+        receipt,
         filledProfileFields,
         overwrittenProfileFields,
         createdAthletes,
@@ -4601,6 +4704,7 @@ export function commitDataImport(input: {
   }
   return {
     batch: getDataImportBatch(input.batchId, input.userId),
+    receipt: receipt!,
     imported,
     skipped,
     createdAthletes,
