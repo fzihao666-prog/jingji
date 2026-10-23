@@ -46,14 +46,15 @@
 
 .data-import-page .app-page-header.data-import-header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
+  gap: 16px;
 }
 
 .data-import-header > .app-page-header-actions {
-  width: auto;
-  place-self: end;
-  justify-content: flex-end;
+  width: 100%;
+  place-self: stretch;
+  justify-content: flex-start;
 }
 
 .data-import-hero-actions {
