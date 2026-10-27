@@ -1,3 +1,4 @@
+import { normalizeProject } from '../../shared/projects.ts';
 import ExcelJS from 'exceljs';
 import { db } from '../core/db.ts';
 import { buildImportWorkbook } from './template-workbook.ts';
@@ -18,6 +19,7 @@ export function writeUnifiedExportRows(sheet: ExcelJS.Worksheet | undefined, row
 }
 
 export async function buildUnifiedDataExport(project: string, athleteIds: number[]) {
+  const projectCode = normalizeProject(project);
   const workbook = buildImportWorkbook(undefined, { mode: 'export' });
   if (!athleteIds.length) return workbook;
   const placeholders = athleteIds.map(() => '?').join(',');
@@ -105,9 +107,9 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
   );
   const sessionRows = db
     .prepare(
-      `SELECT ts.*, EXISTS (SELECT 1 FROM strength_result_sets srs WHERE srs.training_session_id = ts.id) AS has_strength_sets FROM training_sessions ts WHERE athlete_id IN (${ids}) ORDER BY session_date, athlete_id, session_order`
+      `SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadence_rpm, EXISTS (SELECT 1 FROM strength_result_sets srs WHERE srs.training_session_id = ts.id) AS has_strength_sets FROM training_sessions ts WHERE athlete_id IN (${ids}) AND (ts.project_code IS NULL OR ts.project_code=?) ORDER BY session_date, athlete_id, session_order`
     )
-    .all(...profileIds) as Array<Record<string, unknown>>;
+    .all(...profileIds, projectCode) as Array<Record<string, unknown>>;
   writeUnifiedExportRows(
     workbook.getWorksheet('训练课次'),
     sessionRows
@@ -131,13 +133,15 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
         row.max_heart_rate,
         row.average_power_w,
         row.stroke_rate_spm,
+        row.activity_code, row.intensity_system, row.cadence_rpm,
+        row.project_code, row.project_status,
       ])
   );
   const setRows = db
     .prepare(
-      `SELECT srs.*, ts.athlete_id, ts.session_date, ts.session_order, ts.content FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id WHERE ts.athlete_id IN (${ids}) ORDER BY ts.session_date, ts.athlete_id, srs.id`
+      `SELECT srs.*, ts.project_code, ts.project_status, ts.athlete_id, ts.session_date, ts.session_order, ts.content FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id WHERE ts.athlete_id IN (${ids}) AND (ts.project_code IS NULL OR ts.project_code=?) ORDER BY ts.session_date, ts.athlete_id, srs.id`
     )
-    .all(...profileIds) as Array<Record<string, unknown>>;
+    .all(...profileIds, projectCode) as Array<Record<string, unknown>>;
   writeUnifiedExportRows(
     workbook.getWorksheet('力量训练组次'),
     setRows.map((row) => [
@@ -163,13 +167,14 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
       row.duration_min,
       row.distance_km,
       row.intensity_zone,
+      row.project_code, row.project_status,
     ])
   );
   const testRows = db
     .prepare(
-      `SELECT ts.id AS testSessionId, ts.athlete_id, ts.test_date, ts.test_type, ts.duration_min, ts.protocol, tm.metric_code, tm.value_num, tm.target_value, tm.unit, tm.side, tm.note, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) ORDER BY ts.test_date, ts.athlete_id, tm.id`
+      `SELECT ts.id AS testSessionId, ts.athlete_id, ts.test_date, ts.test_type, ts.duration_min, ts.protocol, ts.protocol_version, ts.context_key, ts.attempt_order, ts.project_code, ts.project_status, tm.metric_code, tm.value_num, tm.target_value, tm.unit, tm.side, tm.note, md.label FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id LEFT JOIN metric_definitions md ON md.code = tm.metric_code WHERE ts.athlete_id IN (${ids}) AND (ts.project_code IS NULL OR ts.project_code=?) ORDER BY ts.test_date, ts.athlete_id, tm.id`
     )
-    .all(...profileIds) as Array<Record<string, unknown>>;
+    .all(...profileIds, projectCode) as Array<Record<string, unknown>>;
   // 专用表仅接收能完整还原原课次的记录，其余保留在其他测试，避免往返时改变事实归属。
   const bodyHeaders = UNIFIED_IMPORT_HEADERS.find(([name]) => name === '身体测量')![1];
   const bodyValues = bodyRows.map((row) => [
@@ -187,7 +192,7 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
     const originalCode = String(row.metric_code);
     const code = canonicalImportMetricCode(originalCode);
     const physical = BODY_TEMPLATE_FIELDS.find(([, , canonical]) => canonical === code);
-    if (originalCode === code && physical?.[1] === 'armSpanCm' && row.test_type === '身体测量' && !row.protocol && row.duration_min == null && row.target_value == null && !row.note && row.side === 'center' && String(row.unit || '') === physical[4]) {
+    if (!row.project_status && !row.project_code && originalCode === code && physical?.[1] === 'armSpanCm' && row.test_type === '身体测量' && !row.protocol && !row.protocol_version && !row.context_key && Number(row.attempt_order || 1) === 1 && row.duration_min == null && row.target_value == null && !row.note && row.side === 'center' && String(row.unit || '') === physical[4]) {
       const column = bodyHeaders.indexOf(physical[0]);
       let target = bodyValues.find(
         (values) =>
@@ -213,7 +218,7 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
     const score = EVALUATION_SCORE_METRICS.find(([, canonical]) => canonical === code);
     const expectedUnit = fitness?.[3] || score?.[3] || (fms ? '分' : '');
     if (
-      !physical && !row.note && row.duration_min == null && row.target_value == null &&
+      !physical && !row.protocol_version && !row.context_key && Number(row.attempt_order || 1) === 1 && !row.note && row.duration_min == null && row.target_value == null &&
       row.test_type === (fitness ? '体能测试' : fms ? 'FMS测试' : '竞技评估') &&
       (!fms || row.protocol === '功能动作筛查（FMS）') &&
       (!score || Boolean(row.protocol)) &&
@@ -231,6 +236,8 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
         values[0] = row.athlete_id;
         values[1] = nameById.get(Number(row.athlete_id));
         values[2] = row.test_date;
+        values[headers.indexOf('事实项目')] = row.project_code;
+        values[headers.indexOf('项目归属状态')] = row.project_status;
         const protocolColumn = headers.indexOf(score ? '评估协议' : '测试协议');
         if (protocolColumn >= 0) values[protocolColumn] = row.protocol;
         group = { sheet, values };
@@ -252,6 +259,8 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
         row.note || '',
         row.duration_min,
         row.target_value,
+        row.protocol_version, row.context_key, row.attempt_order,
+        row.project_code, row.project_status,
       ]);
   }
   writeUnifiedExportRows(workbook.getWorksheet('身体测量'), bodyValues);

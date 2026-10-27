@@ -59,13 +59,8 @@ try {
     {},
     token
   );
-  assert(initial.status === 200 && initial.payload.records.length > 0, '专项训练基础记录为空');
-  assert(
-    initial.payload.records.some(
-      (item) => item.averageHeartRate && item.averagePowerW && item.strokeRateSpm
-    ),
-    '数据库专项指标不完整'
-  );
+  // 初始化演示记录不得成为正式分析样本；本脚本随后通过接口建立独立回归事实。
+  assert(initial.status === 200, '训练记录接口读取失败');
 
   const baseRow = {
     athleteId: athlete.id,
@@ -229,7 +224,7 @@ try {
   console.log(
     JSON.stringify(
       {
-        seededRecords: initial.payload.records.length,
+        initialRealRecords: initial.payload.records.length,
         persistedSessionId: record.id,
         validation: 'ok',
         transactionRollback: 'ok',

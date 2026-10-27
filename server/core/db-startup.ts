@@ -9,6 +9,8 @@ export function initializeStartupDatabase(
   db: DatabaseSync,
   options: { databasePath: string; databaseExistedBeforeStartup: boolean }
 ) {
+  // 结构检查也可能遇到并发初始化的写锁；在任何读取之前启用等待，不改变旧库内容。
+  db.exec('PRAGMA busy_timeout = 15000;');
   if (inspectIdentityRemoval(db).pending) {
     throw new Error(
       '数据库包含历史身份证字段。请先停止服务，运行身份证清理工具并确认迁移后再启动。'

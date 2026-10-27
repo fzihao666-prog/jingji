@@ -1,3 +1,4 @@
+import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
 import { normalizeTechnicalLevel, validTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import bcrypt from 'bcryptjs';
 import type { Express } from 'express';
@@ -352,6 +353,7 @@ export function registerAthleteRoutes(app: Express) {
 
       db.exec('BEGIN');
       try {
+        assertAthleteProjectChangeAllowed(db, athleteId, payload.project);
         const selectedTeam = db
           .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
           .get(payload.project, payload.team) as { id: number } | undefined;

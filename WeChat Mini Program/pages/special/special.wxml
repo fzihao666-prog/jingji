@@ -44,10 +44,10 @@
     <view class="card">
       <template wx:if="{{!hasIntensity || trainingError}}" is="training-state" data="{{loading, error: error || trainingError, message: '暂无训练数据'}}" />
       <view class="composition-strip" aria-hidden="true">
-        <view wx:for="{{intensity}}" wx:key="name" class="composition-segment" style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}" />
+        <view wx:for="{{intensity}}" wx:key="key" class="composition-segment" style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}" />
       </view>
       <view class="composition-grid" aria-label="按强度区间统计训练时长的完整占比数据">
-        <view wx:for="{{intensity}}" wx:key="name" class="composition-item">
+        <view wx:for="{{intensity}}" wx:key="key" class="composition-item">
           <view class="composition-item-head">
             <view class="composition-dot" style="{{'background: ' + item.color + ';'}}" />
             <text class="composition-item-name">{{item.name}}</text>
@@ -74,6 +74,7 @@
       </view>
     </view>
 
+    <block wx:if="{{hasWaterSpecial}}">
     <view class="section-head">
       <view class="section-head-title">专项测试成绩</view>
       <view class="section-head-row">
@@ -125,6 +126,7 @@
       </view>
       <button wx:if="{{specialTestsMoreCount > 0}}" class="test-more-events" bindtap="onShowMoreTests" aria-label="展开更早的专项测试场次">展开更早 {{specialTestsMoreCount}} 场测试</button>
     </block>
+    </block>
     <block wx:if="{{user && user.role !== 'ATL'}}">
       <view wx:if="{{viewAthleteId}}" class="view-mode-bar">
         <text class="view-mode-label">个人专项分析 · {{athleteItems.length ? (viewAthleteName || '所选运动员') : ''}}</text>
@@ -142,6 +144,7 @@
       />
     </block>
 
+    <block wx:if="{{hasWaterSpecial}}">
     <view class="section-head"><view class="section-head-title">冠军模型</view><view class="section-head-note">{{projectLabel}} · 已配置赛事参考成绩</view></view>
     <view class="card">
       <view wx:if="{{championEvents.length}}" class="champion-list">
@@ -153,5 +156,6 @@
       <block wx:else><template is="training-state" data="{{loading, error: error || championError, message: '待配置', chart: false}}" /></block>
     </view>
 
+    </block>
   </block>
 </view>

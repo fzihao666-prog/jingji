@@ -18,6 +18,7 @@ function requestAiPlan(path, data) {
 }
 
 module.exports = {
+  projectRules(project) { return request(`/api/projects/rules?${query({ project })}`); },
   reportPreview(id, range) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/preview?${query(range)}`); },
   reportHistory(id) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`); },
   reportDetail(id, reportId) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/${encodeURIComponent(reportId)}`); },
@@ -161,6 +162,9 @@ module.exports = {
   },
   personalOverview(athleteId, from, to, project) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/overview?${query({ from, to, project })}`);
+  },
+  physicalChampion(project, from, to) {
+    return request(`/api/physical-champion?${query({ project, from, to })}`);
   },
   championBenchmark(athleteId) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/champion-model`);

@@ -1,3 +1,4 @@
+const { sportRules = {} } = require('../../data/register-data');
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { createRequestGuard, loadWithGuard } = require('../../utils/request-guard');
@@ -77,8 +78,8 @@ Page({
 
   // 专项首次进入的预填视图：上次赛事条件 + 今日日期 + 主测默认组合 + 常用距离。
   buildSeedView(project, target) {
-    const defaults = loadLocal(testEventKey(project)) || {};
-    const chips = loadLocal(testDistanceKey(project));
+    const defaults = loadLocal(testEventKey(project)) || loadLocal(testEventKey(projectLabel(project))) || {};
+    const chips = loadLocal(testDistanceKey(project)) || loadLocal(testDistanceKey(projectLabel(project)));
     return {
       form: {
         ...this.defaultFormFor(),
@@ -142,6 +143,7 @@ Page({
       this._athletes = athletes;
       this.restoreDraft();
       const project = target.project || context.project;
+      if (this._mode === 'special' && !sportRules[project]?.activities.includes('on_water')) throw new Error('当前项目的水上专项计时未配置，请使用公共体能测试。');
       // 首次进入专项录入预填上次赛事条件与主测默认组合；切换运动员不重填，保留现场已填内容。
       const seed = this._mode === 'special' && !this._formSeeded;
       this._formSeeded = true;

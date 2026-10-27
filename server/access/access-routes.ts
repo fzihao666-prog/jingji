@@ -1,3 +1,4 @@
+import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
 import {
   accountCredentialsSchema,
   ACCOUNT_USERNAME_HINT,
@@ -903,6 +904,7 @@ export function registerAccessRoutes(app: Express) {
 
       db.exec('BEGIN');
       try {
+        if (target.role === 'ATL' && target.athleteId) assertAthleteProjectChangeAllowed(db, target.athleteId, permissions.projects[0]);
         db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, targetId);
         replaceAccountScope({
           userId: targetId,
@@ -947,7 +949,7 @@ export function registerAccessRoutes(app: Express) {
       } catch (error) {
         db.exec('ROLLBACK');
         res
-          .status(500)
+          .status(error instanceof AthleteProjectChangeError ? 409 : 500)
           .json({ message: error instanceof Error ? error.message : '权限更新失败。' });
       }
     }

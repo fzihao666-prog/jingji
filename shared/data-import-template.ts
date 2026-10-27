@@ -84,6 +84,7 @@ export const UNIFIED_IMPORT_HEADERS: Array<[string, string[]]> = [
       'IMTP峰值力量N',
       '测试协议',
       '备注',
+      '协议版本', '测试上下文', '试次序号',
     ],
   ],
   [
@@ -123,6 +124,9 @@ export const UNIFIED_IMPORT_HEADERS: Array<[string, string[]]> = [
       '最大心率',
       '平均功率W',
       '桨频SPM',
+      '训练活动',
+      '强度体系',
+      '踏频rpm',
     ],
   ],
   [
@@ -222,9 +226,14 @@ export const UNIFIED_IMPORT_HEADERS: Array<[string, string[]]> = [
       '备注',
       '测试时长分钟',
       '目标值',
+      '协议版本', '测试上下文', '试次序号',
     ],
   ],
 ];
+// 事实归属元数据用于完整导出回导；空白新模板不推断历史归属。
+for (const [sheet, headers] of UNIFIED_IMPORT_HEADERS) {
+  if (['训练课次', '力量训练组次', '体能测试', 'FMS测试', '竞技评估', '其他测试'].includes(sheet)) headers.push('事实项目', '项目归属状态');
+}
 export const BODY_TEMPLATE_FIELDS = [
   ['身高cm', 'heightCm', 'height_cm', '身高', 'cm'],
   ['臂展cm', 'armSpanCm', 'arm_span_cm', '臂展', 'cm'],

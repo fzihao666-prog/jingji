@@ -140,7 +140,21 @@
       </view>
       <text class="comparison-footnote">同队、同周期参照；差异不代表训练优劣。</text>
     </view>
-    <view class="section-head"><view class="section-head-title">雷达模型对照</view><view class="section-head-note">{{from}} 至 {{to}} · 正式参考标准</view></view>
+    <view class="section-head"><view class="section-head-title">当前项目体能参考</view><view class="section-head-note">实测与已审核参考分开呈现</view></view>
+    <view class="card">
+      <template wx:if="{{physicalReferenceError}}" is="training-state" data="{{loading, error: physicalReferenceError}}" />
+      <view class="notice">{{physicalReferenceNote}}</view>
+      <view wx:for="{{physicalReferenceRows}}" wx:key="key" class="radar-dim">
+        <text class="card-label">{{item.label}} · {{item.date}}</text>
+        <view class="radar-dim-values"><text>实测 {{item.value}} {{item.unit}}</text><text>参考 {{item.reference}} {{item.unit}}</text><text>达成 {{item.achieved}}%</text></view>
+        <view class="chart-note">{{item.source}} · {{item.version}}</view>
+        <view wx:if="{{item.protocol}}" class="chart-note">{{item.protocol}}</view>
+        <view wx:if="{{item.pending}}" class="chart-note">{{item.pending}}</view>
+      </view>
+      <template wx:if="{{!physicalReferenceRows.length && !physicalReferenceError}}" is="training-state" data="{{loading, message: '待配置参考或待采集实测', chart: false}}" />
+    </view>
+
+    <view class="section-head"><view class="section-head-title">历史雷达模型对照</view><view class="section-head-note">{{from}} 至 {{to}} · 旧版只读结果</view></view>
     <block>
       <view wx:for="{{radarGroups}}" wx:key="canvasId" class="card radar-card">
         <view class="card-head"><view><view class="card-title">{{item.title}}</view><text class="chart-note">参考标准多边形固定 100%，个人按达成度绘制；缺失维度处断线，详细数值见下表</text></view></view>

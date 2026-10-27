@@ -30,7 +30,7 @@ import { strengthImportCandidates } from '../strength/strength-training-routes.t
 import { cleanString } from '../core/utils.ts';
 import { dataImportUpload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
-import { PROJECTS, normalizeProject } from '../../shared/projects.ts';
+import { isProject, normalizeProject } from '../../shared/projects.ts';
 import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 
@@ -83,7 +83,7 @@ export function buildPurposeTemplate(
   metrics?: readonly ImportMetricDefinition[]
 ) {
   const sheetNames = kind === 'unified' ? UNIFIED_IMPORT_HEADERS.map(([name]) => name) : PURPOSE_SHEETS[kind];
-  const workbook = buildImportWorkbook(sheetNames, { metrics });
+  const workbook = buildImportWorkbook(sheetNames, { metrics, project });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
@@ -299,7 +299,7 @@ export function registerDataImportRoutes(app: Express) {
       try {
         if (!req.file) return res.status(400).json({ message: '请选择要导入的 Excel 文件。' });
         const project = cleanString(req.body?.project);
-        if (!PROJECTS.includes(project))
+        if (!isProject(project))
           return res.status(400).json({ message: '请选择有效的运动项目。' });
         const scope = dataImportScope(req.authUser!, project);
         if (!scope.allowed)
@@ -338,7 +338,7 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const project = cleanString(req.query.project);
-      if (!PROJECTS.includes(project))
+      if (!isProject(project))
         return res.status(400).json({ message: '请选择有效的运动项目。' });
       if (!dataImportScope(req.authUser!, project).allowed)
         return res.status(403).json({ message: '当前账号无权查看该项目的导入记录。' });
@@ -346,7 +346,7 @@ export function registerDataImportRoutes(app: Express) {
     }
   );
 
-  const cleanupProject = z.string().trim().min(1).max(50).refine(project => PROJECTS.includes(project));
+  const cleanupProject = z.string().trim().min(1).max(50).refine(project => isProject(project));
   const cleanupPreviewSchema = z.object({ project: cleanupProject }).strict();
   const cleanupSchema = z.object({ project: cleanupProject, drafts: z.array(z.object({ id: z.string().trim().min(1).max(100), revision: z.number().int().min(0).safe() }).strict()).min(1).max(IMPORT_DRAFT_CLEANUP_LIMIT) }).strict();
   const checkCleanupProject = (user: AuthUser, project: string) => {
@@ -399,7 +399,7 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const project = cleanString(req.query.project);
-      if (!PROJECTS.includes(project))
+      if (!isProject(project))
         return res.status(400).json({ message: '请选择有效的运动项目。' });
       if (!dataImportScope(req.authUser!, project).allowed)
         return res.status(403).json({ message: '当前账号无权操作该项目的导入记录。' });

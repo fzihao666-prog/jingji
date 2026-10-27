@@ -14,10 +14,12 @@ import {
   unmarkFollowups,
 } from './core/coach-daily-todos.ts';
 import { readPlanExecution } from './core/plan-execution.ts';
-import { PROJECTS } from '../shared/projects.ts';
+import { isProject } from '../shared/projects.ts';
 import { requireAuth, requireRole } from './core/auth.ts';
 import { accessibleAthleteIds, selectableProjects } from './core/permissions.ts';
 import { registerAnalysisRoutes } from './analysis/analysis-routes.ts';
+import { registerSportRulesRoutes } from './analysis/sport-rules-routes.ts';
+import { readPhysicalReferences, isUsablePhysicalReference } from './analysis/physical-champion-service.ts';
 import { registerAccessRoutes } from './access/access-routes.ts';
 import { registerSpecialTrainingRoutes } from './special/special-training-routes.ts';
 import { registerDataImportRoutes } from './data-import/data-import-routes.ts';
@@ -116,6 +118,11 @@ registerDataImportRoutes(app);
 registerSpecialTrainingRoutes(app);
 registerAccessRoutes(app);
 registerAnalysisRoutes(app);
+registerSportRulesRoutes(app, {
+  requireAuth,
+  projects: req => selectableProjects(req.authUser!),
+  referenceAvailable: project => readPhysicalReferences(db, project).some(ref => isUsablePhysicalReference(ref, beijingDate(new Date()))),
+});
 registerStrengthTestRoutes(app);
 registerReportRoutes(app, { db, requireAuth, hasAccess: hasAthleteAccess, currentUser: getAuthUser,
   generate: async (data) => (await chatJson<unknown>({ temperature: 0.2, maxCompletionTokens: 900,
@@ -134,7 +141,7 @@ app.get('/api/coach/daily-todos', requireAuth, requireRole('SCC', 'REG', 'TD', '
       message: '请选择有效项目；待办日期仅支持北京时间当天，且不能附加范围参数。',
     });
   const user = req.authUser!;
-  if (!selectableProjects(user).includes(parsed.data.project))
+  if (!selectableProjects(user).some(project => project === parsed.data.project))
     return res.status(403).json({ message: '无权查看该项目的每日待办。' });
   const todos = readDailyTodos(db, {
     athleteIds: accessibleAthleteIds(user),
@@ -152,7 +159,7 @@ const followupsBody = z.strictObject({
     .trim()
     .min(1)
     .max(40)
-    .refine((value) => PROJECTS.includes(value)),
+    .refine((value) => isProject(value)),
   athleteIds: z.array(z.number().int().positive()).min(1).max(50),
 });
 
@@ -161,7 +168,7 @@ app.put('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'REG
   const parsed = followupsBody.safeParse(req.body);
   if (!parsed.success)
     return res.status(400).json({ message: '请选择有效项目，并选择 1 至 50 名要标记的运动员。' });
-  if (!selectableProjects(user).includes(parsed.data.project))
+  if (!selectableProjects(user).some(project => project === parsed.data.project))
     return res.status(403).json({ message: '无权操作该项目的待办跟进。' });
   const athleteIds = [...new Set(parsed.data.athleteIds)];
   const allowed = new Set(accessibleAthleteIds(user));
@@ -199,7 +206,7 @@ const followupsProjectQuery = z.object({
     .trim()
     .min(1)
     .max(40)
-    .refine((value) => PROJECTS.includes(value)),
+    .refine((value) => isProject(value)),
 });
 
 app.delete('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
@@ -207,7 +214,7 @@ app.delete('/api/coach/daily-todos/followups', requireAuth, requireRole('SCC', '
   const parsed = followupsProjectQuery.safeParse(req.query);
   if (!parsed.success)
     return res.status(400).json({ message: '请选择有效项目。' });
-  if (!selectableProjects(user).includes(parsed.data.project))
+  if (!selectableProjects(user).some(project => project === parsed.data.project))
     return res.status(403).json({ message: '无权操作该项目的待办跟进。' });
   const athleteIds = String(req.query.athleteIds ?? '')
     .split(',')
@@ -235,7 +242,7 @@ const teamOverviewQuery = (now: Date) =>
       .trim()
       .min(1)
       .max(40)
-      .refine((value) => PROJECTS.includes(value)),
+      .refine((value) => isProject(value)),
   });
 
 app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
@@ -245,7 +252,7 @@ app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'REG', 'TD',
   if (!parsed.success)
     return res.status(400).json({ message: '请选择有效项目。' });
   const user = req.authUser!;
-  if (!selectableProjects(user).includes(parsed.data.project))
+  if (!selectableProjects(user).some(project => project === parsed.data.project))
     return res.status(403).json({ message: '无权查看该项目的队伍总览。' });
   const overview = readTeamOverview(db, {
     athleteIds: accessibleAthleteIds(user),
@@ -263,7 +270,7 @@ app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD'
   if (!parsed.success)
     return res.status(400).json({ message: '请选择有效项目。' });
   const user = req.authUser!;
-  if (!selectableProjects(user).includes(parsed.data.project))
+  if (!selectableProjects(user).some(project => project === parsed.data.project))
     return res.status(403).json({ message: '无权查看该项目的计划执行数据。' });
   const result = readPlanExecution(db, {
     athleteIds: accessibleAthleteIds(user),

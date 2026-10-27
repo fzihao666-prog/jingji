@@ -156,3 +156,19 @@ it('所有固定枚举使用可见下拉，长选项使用命名区域，保存�
     expect(sheet.getCell(4, fields.findIndex(field => field.key === name) + 1).dataValidation.type).toBe('list');
   }
 });
+
+it.each(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])('%s在线统一模板的活动选项遵守项目配置且不要求距离或艇型', async project => {
+  const { projectRules, ACTIVITY_LABELS } = await import('../../shared/sport-rules.ts');
+  const rules = projectRules(project)!;
+  expect(rules).toBeTruthy();
+  const workbook = buildImportWorkbook(undefined, { project });
+  const fields = importTemplateFields('训练课次');
+  const index = fields.findIndex(field => field.key === '训练活动') + 1;
+  const sheet = workbook.getWorksheet('训练课次')!;
+  const formula = String(sheet.getCell(4, index).dataValidation.formulae?.[0]);
+  expect(formula).toBeTruthy();
+  expect(formula).toBe('\"' + rules.activities.map(activity => ACTIVITY_LABELS[activity]).join(',') + '\"');
+  expect(fields.some(field => field.key === '艇型')).toBe(false);
+  expect(fields.find(field => field.key === '距离千米')?.requirement).toBe('条件必填');
+  expect(sheet.getRow(4).actualCellCount).toBe(0);
+});

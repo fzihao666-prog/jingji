@@ -39,7 +39,11 @@ beforeAll(async () => {
       VALUES (?, ?, 'synthetic_hash', '合成测试账号', 'ATL', ?)`).run(id, `synthetic_${id}`, id);
   }
   const { registerSelfTrainingRoutes } = await import('./self-training-routes.ts');
+  const { registerReportRoutes } = await import('../report/report-routes.ts');
+  const { requireAuth, getAuthUser } = await import('../core/auth.ts');
   const app = express(); app.use(express.json()); registerSelfTrainingRoutes(app);
+  registerReportRoutes(app, { db, requireAuth, hasAccess: (user, id) => user.athleteId === id, currentUser: getAuthUser,
+    generate: async () => ({ highlights: [], concerns: [], suggestions: [] }) });
   app.use((_error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(500).json({ message: '测试内部错误' });
   });
@@ -52,10 +56,82 @@ beforeEach(() => {
   db.exec('DELETE FROM training_sessions;');
   db.exec('DELETE FROM training_submission_keys');
   db.exec('UPDATE users SET active = 1, athlete_id = id WHERE id IN (9001, 9002)');
+  db.exec("UPDATE athletes SET project = 'ROWING' WHERE id IN (9001, 9002)");
 });
 afterAll(async () => { await new Promise<void>((resolve) => server.close(() => resolve())); db.close(); vi.unstubAllEnvs(); });
 
 describe('训练填报幂等接口', () => {
+  it('当前项目不能读取、修改或删除已知其他项目的历史课次', async () => {
+    const created = await (await post()).json() as { session: { id: number } };
+    db.exec("UPDATE athletes SET project='VOLLEYBALL' WHERE id=9001");
+    const headers = { Authorization: `Bearer ${jwt.sign({ id: 9001, sessionVersion: 1 }, secret)}`, 'Content-Type': 'application/json' };
+    const list = await (await fetch(`${baseUrl}/api/me/training-sessions`, { headers })).json() as { sessions: unknown[] };
+    expect(list.sessions).toEqual([]);
+    const path = `${baseUrl}/api/me/training-sessions/${created.session.id}`;
+    expect((await fetch(path, { method: 'PUT', headers, body: JSON.stringify({ ...payload, activityCode: 'volleyball_technique' }) })).status).toBe(404);
+    expect((await fetch(path, { method: 'DELETE', headers })).status).toBe(404);
+    expect(db.prepare('SELECT project_code, project_status FROM training_sessions').get()).toMatchObject({ project_code: 'ROWING', project_status: 'confirmed' });
+  });
+  it('编辑待核实课次不能自动确认其历史项目', async () => {
+    const created = await (await post()).json() as { session: { id: number } };
+    db.exec("UPDATE training_sessions SET project_code=NULL, project_status='pending_verification', project_source='legacy_unknown'");
+    const response = await fetch(`${baseUrl}/api/me/training-sessions/${created.session.id}`, {
+      method: 'PUT', headers: { Authorization: `Bearer ${jwt.sign({ id: 9001, sessionVersion: 1 }, secret)}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, duration: 65 }),
+    });
+    expect(response.status).toBe(200);
+    expect(db.prepare('SELECT project_code, project_status, duration_min FROM training_sessions').get()).toMatchObject({ project_code: null, project_status: 'pending_verification', duration_min: 65 });
+  });
+  it('排球接口拒绝不适用功率并回滚幂等记录', async () => {
+    db.exec("UPDATE athletes SET project='VOLLEYBALL' WHERE id=9001");
+    expect((await post({ ...payload, activityCode: 'volleyball_technique', averagePowerW: 800 })).status).toBe(400);
+    expect(count('training_sessions')).toBe(0);
+    expect(count('training_submission_keys')).toBe(0);
+  });
+  it.each([
+    ['ROWING', 'on_water'], ['CANOE_SPRINT', 'on_water'], ['CANOE_SLALOM', 'on_water'],
+    ['CYCLING_ROAD', 'cycling'], ['CYCLING_TRACK', 'cycling'], ['VOLLEYBALL', 'volleyball_technique'],
+  ])('%s公共填报、读取与项目报告使用同一正式事实', async (project, activityCode) => {
+    db.prepare('UPDATE athletes SET project=? WHERE id=9001').run(project);
+    expect((await post({ ...payload, activityCode })).status).toBe(201);
+    const headers = { Authorization: `Bearer ${jwt.sign({ id: 9001, sessionVersion: 1 }, secret)}` };
+    const sessions = await (await fetch(`${baseUrl}/api/me/training-sessions`, { headers })).json() as { sessions: { projectCode: string; activityCode: string }[] };
+    expect(sessions.sessions[0]).toMatchObject({ projectCode: project, activityCode });
+    const response = await fetch(`${baseUrl}/api/athletes/9001/reports/preview?from=2026-10-10&to=2026-10-10&kind=custom`, { headers });
+    expect(response.status).toBe(200);
+    const preview = await response.json() as { data: { version: number; project: string; totals: { sessions: number; duration: number; srpe: number } } };
+    expect(preview.data).toMatchObject({ version: 2, project, totals: { sessions: 1, duration: 60, srpe: 300 } });
+  });
+  it('旧摘要编号在升级后仍返回首次快照，不能带新字段复用', async () => {
+    const first = await (await post()).json();
+    db.exec('UPDATE training_submission_keys SET payload_version=1');
+    expect(await (await post()).json()).toEqual(first);
+    expect((await post({ ...payload, activityCode: 'on_water' })).status).toBe(409);
+    expect(count('training_sessions')).toBe(1);
+  });
+  it('自行车填报保存发生时项目、骑行活动、功率及踏频', async () => {
+    db.prepare("UPDATE athletes SET project = 'CYCLING_ROAD' WHERE id = 9001").run();
+    const response = await post({ ...payload, activityCode: 'cycling', intensityZone: '', averagePowerW: 240, cadenceRpm: 85 });
+    expect(response.status).toBe(201);
+    const row = db.prepare('SELECT project_code, project_status, activity_code, average_power_w, stroke_rate_spm FROM training_sessions').get();
+    expect(row).toMatchObject({ project_code: 'CYCLING_ROAD', project_status: 'confirmed', activity_code: 'cycling', average_power_w: 240, stroke_rate_spm: null });
+    expect(db.prepare('SELECT metric_code, value_num, unit FROM training_session_metrics').get()).toMatchObject({ metric_code: 'cadenceRpm', value_num: 85, unit: 'rpm' });
+  });
+  it('排球只填时长时不虚构距离和RPE负荷，拒绝桨频字段', async () => {
+    db.prepare("UPDATE athletes SET project = 'VOLLEYBALL' WHERE id = 9001").run();
+    const input = { ...payload, activityCode: 'volleyball_technique', intensityZone: '', rpe: '' };
+    expect((await post({ ...input, strokeRateSpm: 30 })).status).toBe(400);
+    expect((await post(input)).status).toBe(201);
+    expect(db.prepare('SELECT distance_reported, rpe, srpe FROM training_sessions').get()).toMatchObject({ distance_reported: 0, rpe: null, srpe: 0 });
+  });
+  it('有距离但无时长的课次保留缺失，不计算SRPE', async () => {
+    expect((await post({ ...payload, duration: '', distance: 10 })).status).toBe(201);
+    expect(db.prepare('SELECT duration_reported, duration_min, srpe FROM training_sessions').get()).toMatchObject({ duration_reported: 0, duration_min: 0, srpe: 0 });
+    expect((await post({ ...payload, duration: '', distance: '' }, 'empty_training_key_0001')).status).toBe(400);
+  });
+  it('空白数字字符串表示未填报，不变成真实零', async () => {
+    expect((await post({ ...payload, duration: ' ', distance: 10, rpe: ' ' })).status).toBe(201);
+    expect(db.prepare('SELECT duration_reported,rpe,srpe FROM training_sessions').get()).toEqual({ duration_reported: 0, rpe: null, srpe: 0 });
+  });
   it('key格式保留大小写，接受边界长度且拒绝空白和非ASCII字符', () => {
     expect(idempotencyKeySchema.parse('Abc_0123456789-XY')).toBe('Abc_0123456789-XY');
     expect(idempotencyKeySchema.safeParse('a'.repeat(128)).success).toBe(true);

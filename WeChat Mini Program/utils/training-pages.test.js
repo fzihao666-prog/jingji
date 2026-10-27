@@ -21,7 +21,7 @@ function createPage(name, api = {}, options = {}) {
   });
   return { ...definition, data: JSON.parse(JSON.stringify(definition.data)), setData(values) { Object.assign(this.data, values); } };
 }
-const scope = { selectedAthleteId: 1, athletes: [{ id: 1, name: '测试运动员' }], from: '2026-10-01', to: '2026-10-10', project: 'rowing', teamId: 0 };
+const scope = { selectedAthleteId: 1, athletes: [{ id: 1, name: '测试运动员' }], from: '2026-10-01', to: '2026-10-10', project: 'ROWING', teamId: 0 };
 const fail = () => Promise.reject(new Error('加载失败，请重试'));
 
 describe('公共运动员模块与训练页选择联动', () => {
@@ -100,7 +100,7 @@ describe('训练页空数据与独立失败回归', () => {
     const page = createPage('special', { overviewTeams: fail, specialChampionModels: fail, specialTests: fail, specialTrainingOverview: fail });
     const view = await page.loadPageData(scope, true, () => true);
     expect(view.metrics.length).toBe(5);
-    expect(view.intensity).toHaveLength(7);
+    expect(view.intensity).toEqual([]);
     expect(view.content).toHaveLength(9);
     expect(view.trend).toEqual([]);
     expect(view.trainingError).toContain('加载失败');

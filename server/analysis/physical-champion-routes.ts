@@ -1,6 +1,12 @@
 import { canManageGlobalPhysicalReferences } from '../../shared/physical-champion-policy.ts';
+import { isProject } from '../../shared/projects.ts';
+import {
+  savePhysicalReferenceDraft,
+  reviewPhysicalReference,
+  PhysicalReferenceError,
+} from '../core/physical-champion-references.ts';
 import { z } from 'zod';
-import type { Express } from 'express';
+import type { Express, Request } from 'express';
 import { db } from '../core/db.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { accessibleAthleteIds, accountPermissions } from '../core/permissions.ts';
@@ -8,7 +14,7 @@ import { buildPhysicalChampion } from './physical-champion-service.ts';
 
 const querySchema = z
   .strictObject({
-    project: z.enum(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM']),
+    project: z.string().max(80).refine(isProject),
     from: z.iso.date(),
     to: z.iso.date(),
   })
@@ -17,14 +23,6 @@ const querySchema = z
       value.from <= value.to && Date.parse(value.to) - Date.parse(value.from) <= 366 * 86400000
   );
 const idSchema = z.coerce.number().int().positive();
-const editSchema = z.strictObject({
-  value: z.number().finite().positive().max(10000),
-  expectedValue: z.number().finite().positive(),
-  expectedRevision: z.number().int().nonnegative(),
-  protocol: z.string().trim().min(1).max(200),
-  sourceType: z.enum(['measured', 'public_reference', 'estimated']),
-  sourceNote: z.string().trim().min(1).max(500),
-});
 export function registerPhysicalChampionRoutes(app: Express) {
   app.get('/api/physical-champion', requireAuth, (req, res) => {
     const parsed = querySchema.safeParse(req.query);
@@ -48,74 +46,56 @@ export function registerPhysicalChampionRoutes(app: Express) {
       })
     );
   });
-  // 全局参考标准影响所有组织，仅拥有全部项目权限的系统管理者可以维护。
-  app.put('/api/physical-champion/references/:id', requireAuth, requireRole('DMD'), (req, res) => {
+  const manage = (req: Request) => {
     const user = req.authUser!;
-    if (!canManageGlobalPhysicalReferences(user.role, accountPermissions(user.id)))
-      return res
-        .status(403)
-        .json({ message: '维护全局标准需要全国、全部项目及全部队伍管理权限。' });
-    const id = idSchema.safeParse(req.params.id);
-    const parsed = editSchema.safeParse(req.body);
-    if (!id.success || !parsed.success)
-      return res.status(400).json({ message: '参考值、协议或来源信息无效。' });
-    const row = db
-      .prepare(
-        `SELECT id, source_id AS sourceId, project, revision, value_num AS value, (SELECT url FROM radar_reference_sources WHERE id = radar_reference_values.source_id) AS sourceUrl FROM radar_reference_values WHERE id = ? AND radar_kind = 'physical' AND active = 1`
-      )
-      .get(id.data) as
-      | {
-          id: number;
-          sourceId: number;
-          project: string;
-          value: number;
-          revision: number;
-          sourceUrl: string;
-        }
-      | undefined;
-    if (!row) return res.status(404).json({ message: '参考标准不存在。' });
-    if (row.revision !== parsed.data.expectedRevision)
-      return res.status(409).json({ message: '参考值已被更新，请刷新后再修改。' });
-    const { value, protocol, sourceType, sourceNote } = parsed.data;
-    // 每次修订独立来源，避免改动同源的其他指标；不接触运动员测试事实。
-    db.exec('BEGIN IMMEDIATE');
+    return { id: user.id, role: user.role, permissions: accountPermissions(user.id) };
+  };
+  const failure = (error: unknown, res: import('express').Response) =>
+    res
+      .status(error instanceof PhysicalReferenceError ? error.status : 500)
+      .json({
+        message:
+          error instanceof PhysicalReferenceError
+            ? error.message
+            : '参考标准保存失败，请稍后重试。',
+      });
+  app.post('/api/physical-champion/references', requireAuth, requireRole('DMD'), (req, res) => {
     try {
-      const existing = db
-        .prepare('SELECT revision FROM radar_reference_values WHERE id = ?')
-        .get(row.id) as { revision: number };
-      if (existing.revision !== parsed.data.expectedRevision) {
-        db.exec('ROLLBACK');
-        return res.status(409).json({ message: '参考值已被更新，请刷新后再修改。' });
-      }
-      db.prepare(
-        `INSERT OR IGNORE INTO radar_reference_sources (project, name, url, source_year, protocol, verified_at)
-        VALUES (?, ?, ?, ?, ?, ?)`
-      ).run(
-        row.project,
-        sourceNote,
-        row.sourceUrl,
-        new Date().getUTCFullYear(),
-        protocol,
-        new Date().toISOString()
-      );
-      const source = db
-        .prepare(
-          `SELECT id FROM radar_reference_sources WHERE project = ? AND name = ? AND url = ? AND source_year = ? AND protocol = ?`
-        )
-        .get(row.project, sourceNote, row.sourceUrl, new Date().getUTCFullYear(), protocol) as {
-        id: number;
-      };
-      db.prepare(
-        `UPDATE radar_reference_values SET revision = revision + 1, source_id = ?, value_num = ?, protocol = ?, source_type = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?`
-      ).run(source.id, value, protocol, sourceType, row.id);
-      db.prepare(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, 'UPDATE_PHYSICAL_REFERENCE', 'radar_reference_values', ?, ?)`
-      ).run(user.id, row.id, JSON.stringify({ before: row.value, after: value, sourceType }));
-      db.exec('COMMIT');
-    } catch {
-      db.exec('ROLLBACK');
-      return res.status(500).json({ message: '参考标准保存失败，请稍后重试。' });
+      return res.json(savePhysicalReferenceDraft(db, manage(req), req.body));
+    } catch (error) {
+      return failure(error, res);
     }
-    return res.json({ message: '参考标准已保存。' });
   });
+  app.put('/api/physical-champion/references/:id', requireAuth, requireRole('DMD'), (req, res) => {
+    const id = idSchema.safeParse(req.params.id);
+    const body = z
+      .strictObject({ expectedRevision: z.number().int().nonnegative(), draft: z.unknown() })
+      .safeParse(req.body);
+    if (!id.success || !body.success)
+      return res.status(400).json({ message: '参考版本参数无效。' });
+    try {
+      return res.json(
+        savePhysicalReferenceDraft(db, manage(req), body.data.draft, {
+          id: id.data,
+          expectedRevision: body.data.expectedRevision,
+        })
+      );
+    } catch (error) {
+      return failure(error, res);
+    }
+  });
+  app.post(
+    '/api/physical-champion/references/:id/review',
+    requireAuth,
+    requireRole('DMD'),
+    (req, res) => {
+      const id = idSchema.safeParse(req.params.id);
+      if (!id.success) return res.status(400).json({ message: '参考标识符无效。' });
+      try {
+        return res.json(reviewPhysicalReference(db, manage(req), id.data, req.body));
+      } catch (error) {
+        return failure(error, res);
+      }
+    }
+  );
 }

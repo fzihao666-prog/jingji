@@ -42,6 +42,27 @@ function createDraftStorage() {
 }
 
 describe('训练填报页', () => {
+  it('项目专项字段随活动切换，排球不预填赛艇强度和RPE', () => {
+    const dictionary = { exports: {} };
+    vm.runInNewContext(readFileSync(new URL('../../data/register-data.js', import.meta.url), 'utf8'), { module: dictionary });
+    let definition;
+    vm.runInNewContext(pageSource, {
+      Page(value) { definition = value; },
+      require(path) {
+        if (path.includes('register-data')) return dictionary.exports;
+        if (path.includes('utils/date')) return { todayBeijing: () => '2026-01-01' };
+        return {};
+      },
+    });
+    const page = { ...definition, data: JSON.parse(JSON.stringify(definition.data)), setData(values) { Object.assign(this.data, values); } };
+    page.configureProject('VOLLEYBALL');
+    expect(page.data.form.intensityZone).toBe('');
+    expect(page.data.form.rpe).toBe('');
+    expect(page.data.activityCodes).toContain('volleyball_technique');
+    expect(page.data.activityCodes).not.toContain('on_water');
+    page.configureProject('CYCLING_ROAD');
+    expect(page.data.activityCodes).toContain('cycling');
+  });
   it('加载失败后提供明确重试按钮，不自动重放写操作', () => {
     expect(pageSource).toContain('retryLoad()');
     expect(pageSource).toContain('this.loadPage()');

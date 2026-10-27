@@ -94,9 +94,29 @@ export const physicalReferenceSchema = z.object({
   unit: z.string(),
   value: z.number().positive(),
   protocol: z.string(),
+  protocolVersion: z.string(),
+  testContext: z.string(),
+  side: z.enum(['center', 'bilateral', 'left', 'right']),
   direction: z.enum(['higher_better', 'lower_better']),
   sourceType: z.enum(['measured', 'public_reference', 'estimated']),
   sourceNote: z.string(),
+  project: z.string(),
+  reviewStatus: z.enum(['draft', 'reviewed', 'disabled']),
+  sourceNature: z.enum(['official_research', 'expert', 'team', 'estimated', 'unverified']),
+  version: z.number().int().positive(),
+  effectiveFrom: z.string().nullable(),
+  effectiveTo: z.string().nullable(),
+  position: z.string(),
+  referenceLevel: z.string(),
+  referenceLabel: z.string(),
+  dimensionVersion: z.string(),
+  measurementCodes: z.array(z.string()),
+  measurementUnit: z.string(),
+  weightRelative: z.boolean(),
+  gender: z.string(),
+  event: z.string(),
+  weightClass: z.string(),
+  ageGroup: z.string(),
 });
 const resultSchema = z.object({
   key: z.string(),
@@ -104,6 +124,12 @@ const resultSchema = z.object({
   achievedPercent: nullableNumber,
   difference: nullableNumber,
   testDate: z.string().nullable(),
+  pendingReason: z.string().nullable(),
+  referenceId: z.number().nullable(),
+  referenceVersion: z.number().nullable(),
+  factMeasurementId: z.number().nullable(),
+  calculationVersion: z.string(),
+  appliedReference: physicalReferenceSchema.nullable(),
 });
 const athleteSchema = z.object({
   athleteId: z.number(),
@@ -118,6 +144,24 @@ export const physicalChampionPayloadSchema = z.object({
   to: z.string(),
   canEdit: z.boolean(),
   excludedCount: z.number(),
+  pendingReason: z.string().nullable(),
+  managementReferences: z.array(physicalReferenceSchema),
+  athletePendingReasons: z.array(z.object({ athleteId: z.number(), reason: z.string() })),
+  measurements: z.array(
+    z.object({
+      measurementId: z.number(),
+      athleteId: z.number(),
+      sessionId: z.number(),
+      date: z.string(),
+      protocol: z.string().nullable(),
+      protocolVersion: z.string().nullable(),
+      testContext: z.string(),
+      side: z.string(),
+      code: z.string(),
+      value: z.number(),
+      unit: z.string(),
+    })
+  ),
   groups: z.array(
     z.object({
       id: z.string(),
@@ -146,6 +190,13 @@ export type PhysicalChampionPayload = z.infer<typeof physicalChampionPayloadSche
 export type PhysicalReference = z.infer<typeof physicalReferenceSchema>;
 export type PhysicalAthleteResult = z.infer<typeof athleteSchema>;
 export function physicalComparison(value: number | null, reference: PhysicalReference) {
+  if (
+    reference.reviewStatus !== 'reviewed' ||
+    reference.sourceNature === 'estimated' ||
+    reference.sourceType === 'estimated' ||
+    reference.sourceNature === 'unverified'
+  )
+    return { value, achievedPercent: null, difference: null };
   const comparison = buildRadarComparison(reference.direction, value, reference.value);
   return {
     value,
@@ -162,3 +213,67 @@ export function mean(values: number[]): number | null {
         1000000
     : null;
 }
+
+const text = (max: number) => z.string().trim().min(1).max(max);
+export const physicalReferenceDraftSchema = z
+  .strictObject({
+    project: z.enum([
+      'ROWING',
+      'CANOE_SPRINT',
+      'CANOE_SLALOM',
+      'CYCLING_ROAD',
+      'CYCLING_TRACK',
+      'VOLLEYBALL',
+    ]),
+    key: text(80),
+    referenceLabel: text(120),
+    value: z.number().finite().positive().max(10000),
+    unit: text(40),
+    protocol: text(200),
+    protocolVersion: z.string().trim().max(80).default(''),
+    testContext: z.string().trim().max(200).default(''),
+    side: z.enum(['center', 'bilateral', 'left', 'right']).default('center'),
+    direction: z.enum(['higher_better', 'lower_better']),
+    sourceType: z.enum(['measured', 'public_reference', 'estimated']),
+    sourceNature: z.enum(['official_research', 'expert', 'team', 'estimated']),
+    sourceNote: text(500),
+    gender: z.enum(['男', '女', 'open']),
+    event: text(100),
+    weightClass: z.literal('open'),
+    ageGroup: z.enum(['adult', 'open']),
+    position: text(100),
+    referenceLevel: text(100),
+    effectiveFrom: z.iso.date(),
+    effectiveTo: z.iso.date().nullable(),
+    dimensionVersion: text(80),
+    measurementCodes: z.array(text(80)).min(1).max(20),
+    measurementUnit: text(40),
+    weightRelative: z.boolean(),
+  })
+  .refine((value) => !value.effectiveTo || value.effectiveFrom <= value.effectiveTo, {
+    message: '有效日期无效',
+  })
+  .refine((value) => value.sourceNature !== 'team' || /队内/.test(value.referenceLabel), {
+    message: '队内参考须明确标注',
+  })
+  .refine((value) => value.sourceNature !== 'expert' || /专家/.test(value.referenceLabel), {
+    message: '专家参考须明确标注',
+  })
+  .refine(
+    (value) =>
+      !['expert', 'team'].includes(value.sourceNature) ||
+      !/(金牌|冠军|官方)/.test(value.referenceLabel),
+    { message: '专家和队内参考不得冒充官方冠军标准' }
+  )
+  .refine(
+    (value) =>
+      value.weightRelative
+        ? value.measurementUnit === 'kg' && value.unit === '倍体重'
+        : value.measurementUnit === value.unit ||
+          (value.measurementUnit === '秒' && value.unit === 's'),
+    { message: '单位与换算维度不符' }
+  )
+  .refine((value) => value.sourceType !== 'estimated' || value.sourceNature === 'estimated', {
+    message: '估算来源性质必须明确',
+  });
+export type PhysicalReferenceDraft = z.infer<typeof physicalReferenceDraftSchema>;

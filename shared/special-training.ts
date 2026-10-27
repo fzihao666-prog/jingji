@@ -18,6 +18,9 @@ export type SpecialSession = {
   structureType: string;
   content: string;
   intensityZone: string;
+  intensitySystem?: string | null;
+  activityCode?: string | null;
+  trainingCategory?: string | null;
   durationMin: number;
   distanceKm: number;
   durationReported: number | boolean;
@@ -35,6 +38,7 @@ const total = (values: Array<number | null>) => {
 };
 const duration = (row: SpecialSession) => (row.durationReported ? row.durationMin : null);
 const distance = (row: SpecialSession) => (row.distanceReported ? row.distanceKm : null);
+const zoneLabel = (row: SpecialSession) => row.intensitySystem === undefined ? row.intensityZone : row.intensityZone ? `${row.intensitySystem || '未知体系'} · ${row.intensityZone}` : '';
 const load = (row: SpecialSession) =>
   Number.isFinite(row.srpe) && row.srpe >= 0 && (row.rpe !== null || row.srpe > 0)
     ? row.srpe
@@ -65,14 +69,14 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
   // 标准顺序之外的未知分区原样追加在后面。
   const zoneNames = [
     ...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
-    ...[...new Set(records.map((row) => row.intensityZone).filter(Boolean))]
+    ...[...new Set(records.map(zoneLabel).filter(Boolean))]
       .filter(
         (name) => !SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.includes(name as (typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER)[number])
       )
       .sort((a, b) => a.localeCompare(b)),
   ];
   const zones = zoneNames.map((name) => {
-    const rows = records.filter((row) => row.intensityZone === name);
+    const rows = records.filter((row) => zoneLabel(row) === name);
     // 未出现该分区的记录时记 0 分钟（没有训练即 0）；有记录但时长未填报时保留缺失，不用 0 代替。
     return {
       name,
@@ -94,6 +98,7 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
       distanceKm: total(records.map(distance)),
       load: total(records.map(load)),
       sessionCount: records.length,
+      loadSampleCount: records.filter(row => row.durationReported && row.rpe !== null).length,
     },
     days,
     intensity,

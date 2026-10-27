@@ -1,3 +1,5 @@
+import { projectRules, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
+import { projectLabel } from '../../shared/projects.ts';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { trainingLoadCategory } from '../../shared/training-content-category.ts';
@@ -17,12 +19,16 @@ export function initializeTrainingReports(db: DatabaseSync) {
 // 与训练总览一致：排除演示、估算、异常和不足质量记录。
 const valid = (alias: string) => `${alias}.is_demo = 0 AND ${alias}.quality IN ('valid','partial')
   AND lower(${alias}.source) NOT LIKE '%demo%' AND lower(${alias}.source) NOT LIKE '%seed%'
-  AND lower(${alias}.source) NOT LIKE '%estimated%'`;
+  AND lower(${alias}.source) NOT LIKE '%estimated%'
+  AND lower(${alias}.source) NOT LIKE '%synthetic%' AND lower(${alias}.source) NOT LIKE '%simulation%'`;
 type Session = {
   date: string;
   trainingType: string;
   structureType: string;
   content: string;
+  projectCode: string;
+  activityCode: string | null;
+  trainingCategory: string | null;
   duration: number | null;
   distance: number | null;
   srpe: number | null;
@@ -70,11 +76,12 @@ function readReportSnapshot(
       .prepare(
         `SELECT s.session_date AS date,
     s.training_type AS trainingType, s.structure_type AS structureType, s.content,
+    s.project_code AS projectCode, s.activity_code AS activityCode, s.training_category AS trainingCategory,
     CASE WHEN s.duration_reported = 1 THEN s.duration_min END AS duration,
     CASE WHEN s.distance_reported = 1 THEN s.distance_km END AS distance,
     CASE WHEN s.duration_reported = 1 AND s.rpe IS NOT NULL THEN s.srpe END AS srpe
     FROM training_sessions s JOIN athletes a ON a.id = s.athlete_id
-    WHERE s.athlete_id = ? AND a.project = ? AND s.session_date BETWEEN ? AND ? AND ${valid('s')}
+    WHERE s.athlete_id = ? AND s.project_code = ? AND s.project_status = 'confirmed' AND s.session_date BETWEEN ? AND ? AND ${valid('s')}
     ORDER BY s.session_date, s.session_order`
       )
       .all(athleteId, project, from, to) as Session[];
@@ -112,22 +119,26 @@ function readReportSnapshot(
     label: string;
     unit: string;
     protocol: string;
+    protocolCode: string | null;
+    protocolVersion: string | null;
+    context: string;
     side: string;
     date: string;
     value: number;
   };
   const measurements = db
     .prepare(
-      `SELECT m.metric_code AS code, d.label, m.unit, t.protocol, m.side,
+      `SELECT m.metric_code AS code, d.label, m.unit, t.protocol, t.protocol_code AS protocolCode,
+    t.protocol_version AS protocolVersion, t.context_key AS context, m.side,
     t.test_date AS date, m.value_num AS value FROM test_measurements m
     JOIN test_sessions t ON t.id = m.test_session_id JOIN metric_definitions d ON d.code = m.metric_code
-    JOIN athletes a ON a.id = t.athlete_id WHERE t.athlete_id = ? AND a.project = ?
+    JOIN athletes a ON a.id = t.athlete_id WHERE t.athlete_id = ? AND t.project_code = ? AND t.project_status = 'confirmed'
     AND t.test_date BETWEEN ? AND ? AND ${valid('t')} AND ${valid('m')} ORDER BY t.test_date, m.id`
     )
     .all(athleteId, project, range.from, range.to) as Measurement[];
   const groups = new Map<string, Measurement[]>();
   for (const row of measurements) {
-    const key = JSON.stringify([row.code, row.unit, row.side]);
+    const key = JSON.stringify([project, row.code, row.unit, row.side, row.protocolCode || row.protocol.trim(), row.protocolVersion, row.context]);
     groups.set(key, [...(groups.get(key) || []), row]);
   }
   type Wellness = {
@@ -149,8 +160,20 @@ function readReportSnapshot(
     { key: 'pulse', label: '晨脉', unit: 'bpm' },
     { key: 'weight', label: '体重', unit: 'kg' },
   ] as const;
+  const rules = projectRules(project);
   return {
-    version: 1,
+    version: 2,
+    rulesVersion: rules?.version || SPORT_RULES_VERSION,
+    referenceVersion: null,
+    sourceNote: '来源：当前项目已确认的正式训练与测试事实、运动员恢复日报；排除演示、估算及无效记录。参考标准未接入，不生成评分。',
+    specialty: {
+      project,
+      label: `${projectLabel(project)}专项`,
+      status: rules?.capabilities.special.status || 'pending_configuration',
+      reason: rules?.capabilities.special.reason || '项目专项能力待配置。',
+      sessions: rows.filter(r => category(r) === 'special').length,
+      duration: sum(rows.filter(r => category(r) === 'special').map(r => r.duration)),
+    },
     range,
     project,
     totals: totals(rows),
@@ -175,13 +198,14 @@ function readReportSnapshot(
         key,
         label: first.label,
         unit: first.unit,
-        protocol: values.every((row) => row.protocol === first.protocol) ? first.protocol : '多种协议',
+        protocol: [first.protocolCode || first.protocol.trim(), first.protocolVersion, first.context].filter(Boolean).join(' · '),
         side: first.side,
         points: values.map(({ date, value }) => ({ date, value })),
         first: { date: first.date, value: first.value },
         last: { date: last.date, value: last.value },
         change:
-          values.length > 1
+          values.length > 1 && Boolean((first.protocolCode || first.protocol).trim()) &&
+          !/^(unknown|未知|未记录|协议未知)$/i.test((first.protocolCode || first.protocol).trim())
             ? Math.round((last.value - first.value) * 100) / 100
             : null,
       };

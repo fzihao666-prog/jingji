@@ -49,6 +49,7 @@ import type {
   ErgometerChampionModelPayload,
 } from './types';
 import type { RowingPeriodAnalysis } from '../shared/rowing-model';
+import type { SportRules, SPORT_MODULES } from '../shared/sport-rules';
 import type { CoachCategory } from '../shared/coach-categories';
 
 const TOKEN_KEY = 'training-monitor-token';
@@ -169,6 +170,9 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
+  submitTrainingSession: (mode: 'self' | 'coach', athleteId: number, data: Record<string, string>, key?: string) =>
+    request<{ session: { id: number } }>(mode === 'self' ? '/api/me/training-sessions' : `/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`, { method: 'POST', body: JSON.stringify(data), headers: mode === 'self' && key ? { 'Idempotency-Key': key } : undefined }),
+  projectRules: (project: string) => request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(`/api/projects/rules?${new URLSearchParams({ project })}`),
   async reportPreview(id: number, range: ReportRange) {
     return reportPreviewSchema.parse(await request<unknown>(`/api/athletes/${id}/reports/preview?${new URLSearchParams(range)}`));
   },
@@ -192,20 +196,15 @@ export const api = {
   },
   async updatePhysicalReference(
     id: number,
-    body: {
-      value: number;
-      expectedValue: number;
-      expectedRevision: number;
-      protocol: string;
-      sourceType: 'measured' | 'public_reference' | 'estimated';
-      sourceNote: string;
-    }
+    body: { expectedRevision: number; draft: import('../shared/physical-champion').PhysicalReferenceDraft }
   ) {
-    const payload = await request<unknown>(`/api/physical-champion/references/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    });
-    return z.object({ message: z.string() }).parse(payload);
+    return z.object({message:z.string()}).parse(await request<unknown>(`/api/physical-champion/references/${id}`, {method:'PUT',body:JSON.stringify(body)}));
+  },
+  async createPhysicalReference(body: import('../shared/physical-champion').PhysicalReferenceDraft) {
+    return z.object({message:z.string()}).parse(await request<unknown>('/api/physical-champion/references', {method:'POST',body:JSON.stringify(body)}));
+  },
+  async reviewPhysicalReference(id:number, body:{expectedRevision:number;status:'reviewed'|'disabled'}) {
+    return z.object({message:z.string()}).parse(await request<unknown>(`/api/physical-champion/references/${id}/review`, {method:'POST',body:JSON.stringify(body)}));
   },
 
   async teams() {
@@ -446,6 +445,10 @@ export const api = {
     metrics: StrengthTest['metrics'];
     targets: StrengthTest['targets'];
     notes: string;
+    protocol?: string;
+    protocolVersion?: string;
+    contextKey?: string;
+    attemptOrder?: number;
   }) {
     return request<{ message: string; id: number }>('/api/strength-tests', {
       method: 'POST',

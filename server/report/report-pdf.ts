@@ -1,3 +1,4 @@
+import { projectLabel } from '../../shared/projects.ts';
 import { readFileSync } from 'node:fs';
 import { jsPDF } from 'jspdf';
 import { savedReportSchema, type SavedReport } from '../../shared/training-report.ts';
@@ -79,8 +80,12 @@ export function renderReportPdf(input: SavedReport, athleteId: number): Buffer {
 
   text('竞迹·报告', 16, y, 23); y += 10;
   text(`${d.range.from} - ${d.range.to}`, 16, y, 12); y += 7;
-  const project = ({ ROWING: '赛艇', CANOE: '皮划艇', SLALOM: '激流', CANOE_SPRINT: '皮划艇', CANOE_SLALOM: '激流' } as Record<string, string>)[d.project] || d.project;
+  const project = projectLabel(d.project);
   text(`运动员编号 ${athleteId}  /  ${project}  /  已保存快照`, 16, y, 9, muted); y += 12;
+  heading('公共训练与恢复');
+  paragraph(d.version === 2 ? `${d.sourceNote} 规则版本：${d.rulesVersion}；参考标准版本：${d.referenceVersion || '未接入'}。` : '历史版本未记录规则与参考标准版本；按原快照展示。');
+  paragraph(`记录覆盖：训练 ${d.trainingDays}/${d.days} 天，恢复日报 ${d.wellnessDays}/${d.days} 天；有效时长 ${d.totals.durationCount}/${d.totals.sessions} 课次，距离 ${d.totals.distanceCount}/${d.totals.sessions} 课次，SRPE ${d.totals.srpeCount}/${d.totals.sessions} 课次。缺失不代表零。`);
+  space(38);
   const kpis = [['训练课次', `${fmt(d.totals.sessions)} 次`], ['训练时长', `${fmt(d.totals.duration)} 分钟`],
     ['训练距离', `${fmt(d.totals.distance)} km`], ['SRPE负荷', `${fmt(d.totals.srpe)} AU`]];
   kpis.forEach(([label, value], i) => {
@@ -96,15 +101,21 @@ export function renderReportPdf(input: SavedReport, athleteId: number): Buffer {
   heading('每日明细');
   table(['日期', '课次', '分钟', 'SRPE (AU)'], d.daily.map(p => [p.date, fmt(p.sessions), fmt(p.duration), fmt(p.srpe)]), [58, 34, 40, 46]);
   heading('测试变化');
+  paragraph(d.version === 2 ? '按相同项目、指标、单位、侧别、协议版本及上下文分别展示；协议未知不计算变化，数值差不等于进步。' : '历史测试变化保留快照原值，不按当前规则重算。');
   if (!d.tests.length) paragraph('暂无测试记录');
   for (const t of d.tests) {
     space(44);
-    paragraph(`${t.label} / ${t.unit} / ${{ left: '左侧', right: '右侧', center: '中立' }[t.side] || t.side}`);
+    paragraph(`${t.label} / ${t.unit} / 样本 ${t.points.length} / ${t.protocol || '协议未记录'} /  ${{ left: '左侧', right: '右侧', center: '中立' }[t.side] || t.side}`);
     table(['首次', '末次', '变化'], [[`${fmt(t.first.value)} (${t.first.date})`, `${fmt(t.last.value)} (${t.last.date})`, fmt(t.change)]], [70, 70, 38]);
   }
   for (const m of d.wellness) {
     const byDate = new Map(m.points.map(p => [p.date, p.value]));
     chart(`${m.label} / 均值 ${fmt(m.average)} ${m.unit}`, d.daily.map(p => ({ date: p.date, value: byDate.get(p.date) ?? null })));
+  }
+  if (d.version === 2) {
+    heading(d.specialty.label);
+    paragraph(`专项训练 ${d.specialty.sessions} 课次；有效时长 ${fmt(d.specialty.duration)} 分钟。`);
+    paragraph(d.specialty.reason || '仅展示当前项目正式实测事实；测试见公共章节，不生成未经审核的专项评分。');
   }
   space(80); heading('简短点评');
   for (const [key, label] of [['highlights', '主要表现'], ['concerns', '需要关注'], ['suggestions', '下一步建议']] as const) {

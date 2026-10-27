@@ -1,17 +1,16 @@
+import { trainingPeriodSummary } from '../../shared/training-period-summary';
+import { TrainingSessionEntry } from '../components/TrainingSessionEntry';
+import { ProjectSpecialTraining } from '../components/ProjectSpecialTraining';
 import './ProfilePhysiology.css';
 import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import type { EChartsOption } from 'echarts';
 import { CalendarRange, Save, Search } from 'lucide-react';
 import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
-import { analyzeCanoePeriod } from '../../shared/canoe-model';
-import { analyzeRowingPeriod } from '../../shared/rowing-model';
-import { analyzeSlalomPeriod } from '../../shared/slalom-model';
 import { projectLabel } from '../../shared/projects';
 import { api } from '../api';
 import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
 import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
 import { EChart } from '../components/EChart';
-import { placeholderTrend } from '../components/chart-placeholder';
 import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
@@ -77,9 +76,9 @@ function profileValue(value: ProfileDetail['value']) {
     : String(value);
 }
 
-function rowingSeatValue(value: string | null | undefined) {
+function athletePositionValue(value: string | null | undefined) {
   const seat = value?.trim() || '';
-  return /^(?:[1-8]|[一二三四五六七八])号位$|^舵手$/.test(seat) ? seat : '';
+  return seat;
 }
 
 function ageAtDate(birthDate: string | null, date: string) {
@@ -396,7 +395,7 @@ export function PersonalPage(props: Props) {
   }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
 
   useEffect(() => {
-    setPositionDraft(rowingSeatValue(selectedAthlete?.athletePosition));
+    setPositionDraft(athletePositionValue(selectedAthlete?.athletePosition));
     setPositionMessage('');
   }, [selectedAthlete?.id, selectedAthlete?.athletePosition]);
 
@@ -416,10 +415,9 @@ export function PersonalPage(props: Props) {
     }
   };
 
-  const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(
-    () => analyzePeriod(selectedRecords),
-    [selectedRecords, analyzePeriod]
+    () => trainingPeriodSummary(selectedRecords),
+    [selectedRecords]
   );
   const athleteLocation = selectedAthlete
     ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county]
@@ -455,7 +453,7 @@ export function PersonalPage(props: Props) {
             { label: '最佳成绩', value: selectedAthlete.bestResult },
             {
               label: '位置/号位',
-              value: rowingSeatValue(selectedAthlete.athletePosition),
+              value: athletePositionValue(selectedAthlete.athletePosition),
             },
             { label: '运动员状态', value: selectedAthlete.athleteStatus },
             { label: '健康状态', value: selectedAthlete.healthStatus },
@@ -648,7 +646,7 @@ export function PersonalPage(props: Props) {
                         value={positionDraft}
                         onChange={(event) => setPositionDraft(event.target.value)}
                         maxLength={40}
-                        placeholder="例如：1号位、2号位、舵手"
+                        placeholder="填写本项目的位置、号位或角色"
                         aria-invalid={positionMessage.includes('失败')}
                         aria-describedby={positionMessage ? 'position-message' : undefined}
                       />
@@ -656,7 +654,7 @@ export function PersonalPage(props: Props) {
                     <button
                       disabled={
                         positionSaving ||
-                        positionDraft === rowingSeatValue(selectedAthlete.athletePosition)
+                        positionDraft === athletePositionValue(selectedAthlete.athletePosition)
                       }
                     >
                       <Save size={14} />
@@ -846,6 +844,15 @@ export function PersonalPage(props: Props) {
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
             <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
           </ProfileSection>
+          {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
+            <ProfileSection title="训练记录" subtitle="公共课次填写，按实际活动显示专项字段。">
+              <TrainingSessionEntry key={`${selectedAthlete.id}:${selectedAthlete.project}`} athleteId={selectedAthlete.id}
+                project={selectedAthlete.project} mode={props.user.role === 'ATL' ? 'self' : 'coach'} onSaved={props.onChanged} />
+            </ProfileSection>
+          )}
+          <ProfileSection title="项目专项" subtitle="按当前项目加载专项规则，公共内容沿用统一模块。">
+            <ProjectSpecialTraining project={selectedAthlete.project} records={selectedRecords} />
+          </ProfileSection>
         </>
       )}
     </PageContainer>
@@ -986,24 +993,8 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
                   </>
                 ) : (
                   <EChart
-                    option={wellnessTrendOption({
-                      ...trend,
-                      points: placeholderTrend.map((sample, index) => ({
-                        date: `2026-01-${String(index + 1).padStart(2, '0')}`,
-                        personalValue:
-                          trend.key === 'sleepHours'
-                            ? 6 + sample / 60
-                            : trend.key === 'morningPulse'
-                              ? 55 + sample / 8
-                              : trend.key === 'weightKg'
-                                ? 65 + sample / 20
-                                : 3 + sample / 20,
-                        teamMean: null,
-                        teamSampleCount: null,
-                        hasPersonalValue: false,
-                      })),
-                    })}
-                    label={`${trend.label}示例趋势`}
+                    option={wellnessTrendOption(trend)}
+                    label={`${trend.label}趋势`}
                     isPlaceholder
                   />
                 )}
@@ -1165,15 +1156,6 @@ function AerobicEndurance({
   data: AerobicEndurancePayload | null;
   loading: boolean;
 }) {
-  const sampleTrend: NonNullable<AerobicEndurancePayload['trend']> = {
-    code: 'sample',
-    label: '有氧能力',
-    unit: '示例',
-    points: placeholderTrend.map((value, index) => ({
-      date: `2026-01-${String(index + 1).padStart(2, '0')}`,
-      value,
-    })),
-  };
   const status = loading
     ? '有氧耐力指标读取中。'
     : data?.metrics.length
@@ -1234,11 +1216,11 @@ function AerobicEndurance({
           <section className="aerobic-trend" aria-label={`${data.trend?.label || '有氧能力'}趋势`}>
             <header>
               <h4>{data.trend?.label || '有氧能力'}趋势</h4>
-              <span>{data.trend?.unit || '示例'}</span>
+              <span>{data.trend?.unit || '—'}</span>
             </header>
             <EChart
-              option={aerobicTrendOption(data.trend || sampleTrend)}
-              label={data.trend ? aerobicTrendLabel(data.trend) : '有氧能力示例趋势'}
+              option={data.trend ? aerobicTrendOption(data.trend) : {}}
+              label={data.trend ? aerobicTrendLabel(data.trend) : '有氧能力趋势'}
               isPlaceholder={!data.trend}
             />
           </section>
@@ -1254,25 +1236,18 @@ function AerobicEndurance({
           ) : null}
         </div>
       ) : (
-        <section className="aerobic-trend" aria-label="有氧能力示例趋势">
+        <section className="aerobic-trend" aria-label="有氧能力趋势">
           <header>
             <h4>有氧能力趋势</h4>
-            <span>示例</span>
+            <span>暂无测试数据</span>
           </header>
-          <EChart option={aerobicTrendOption(sampleTrend)} label="有氧能力示例趋势" isPlaceholder />
+          <EChart option={{}} label="有氧能力趋势" isPlaceholder />
         </section>
       )}
     </AppCard>
   );
 }
 
-function analyzerForProject(project: string) {
-  return project === '激流'
-    ? analyzeSlalomPeriod
-    : project === '皮划艇'
-      ? analyzeCanoePeriod
-      : analyzeRowingPeriod;
-}
 
 function ProfilePhysiologyRecords({
   records,

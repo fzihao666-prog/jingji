@@ -1,3 +1,5 @@
+import { normalizeProject } from '../../shared/projects.ts';
+import { SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
 import { templateHeaderKey, IMPORT_TEMPLATE_VERSION } from '../../shared/import-template-fields.ts';
 import ExcelJS from 'exceljs';
 import { randomUUID } from 'node:crypto';
@@ -760,6 +762,12 @@ export function registerStrengthTrainingRoutes(app: Express) {
             }
             sessionMap.set(baseKey, sessionId);
           }
+          const owner = db.prepare('SELECT project FROM athletes WHERE id=?').get(row.athleteId) as { project: string } | undefined;
+          const projectCode = normalizeProject(owner?.project);
+          if (!projectCode) throw new Error('力量训练所属运动员项目无效');
+          db.prepare(`UPDATE training_sessions SET project_code=?,
+            project_status='confirmed',project_source='authenticated_strength_import',activity_code='strength',
+            training_category='physical',rules_version=? WHERE id=?`).run(projectCode, SPORT_RULES_VERSION, sessionId);
           sessionIds.add(sessionId);
           const existingSet = db
             .prepare(

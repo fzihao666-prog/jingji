@@ -14,6 +14,10 @@ function reportView(data) {
   const maxDuration = Math.max(1, ...data.daily.map(d => d.duration || 0));
   const maxLoad = Math.max(1, ...data.daily.map(d => d.srpe || 0));
   return {
+    versionNote: data.version === 2 ? `${data.sourceNote} 规则版本：${data.rulesVersion}；参考标准版本：${data.referenceVersion || '未接入'}。` : '历史版本未记录规则与参考标准版本；按原快照展示。',
+    coverageNote: `记录覆盖：训练 ${data.trainingDays}/${data.days} 天 · 恢复日报 ${data.wellnessDays}/${data.days} 天；缺失不代表零。`,
+    testNote: data.version === 2 ? '按项目、指标、单位、侧别、协议版本及上下文分别展示；协议未知不计算变化，数值差不等于进步。' : '历史测试变化保留快照原值，不按当前规则重算。',
+    specialty: data.version === 2 ? { ...data.specialty, durationText: format(data.specialty.duration) } : null,
     kpis: [['sessions', '训练课次', '次', null], ['duration', '训练时长', '分钟', data.totals.durationCount],
       ['distance', '训练距离', 'km', data.totals.distanceCount], ['srpe', 'SRPE 负荷', 'AU', data.totals.srpeCount]]
       .map(([key, label, unit, count]) => ({ key, label, unit, value: format(data.totals[key]), previous: format(data.previous[key]),

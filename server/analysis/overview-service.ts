@@ -10,10 +10,17 @@ import { db } from '../core/db.ts';
 import { STRENGTH_INTENSITY_ZONES } from '../../shared/strength-training.ts';
 import { trainingLoadCategory } from '../../shared/training-content-category.ts';
 import { projectLabel } from '../../shared/projects.ts';
+import { trainingSessionBreakdown } from '../core/utils.ts';
 
 const zones = STRENGTH_INTENSITY_ZONES;
 
 type SessionRow = {
+  projectCode: string | null;
+  projectStatus: string;
+  activityCode: string | null;
+  trainingCategory: string | null;
+  intensitySystem: string | null;
+  cadenceRpm: number | null;
   id: number;
   athleteId: number;
   athleteName: string;
@@ -59,6 +66,9 @@ type MeasurementRow = {
   measurementId: number;
   testQuality: string;
   testProtocol: string;
+  protocolVersion: string | null;
+  contextKey: string;
+  side: string;
   sessionId: number;
   athleteId: number;
   testDate: string;
@@ -142,42 +152,6 @@ type CompetitiveRow = {
   source: string;
   isDemo: number;
 };
-
-function emptyBreakdown() {
-  return {
-    waterMinutes: 0,
-    ergMinutes: 0,
-    landMinutes: {
-      functional: 0,
-      endurance: 0,
-      maxStrength: 0,
-      speedStrength: 0,
-      recovery: 0,
-      running: 0,
-      other: 0,
-    },
-    waterDistanceByZone: Object.fromEntries(zones.map((zone) => [zone, 0])),
-    waterTimeByZone: Object.fromEntries(zones.map((zone) => [zone, 0])),
-    ergDistanceByZone: Object.fromEntries(zones.map((zone) => [zone, 0])),
-  };
-}
-
-function sessionBreakdown(row: SessionRow) {
-  const breakdown = emptyBreakdown();
-  if (
-    zones.includes(row.intensityZone as (typeof zones)[number]) &&
-    row.trainingType === '专项训练'
-  ) {
-    breakdown.waterMinutes = row.durationMin;
-    breakdown.waterDistanceByZone[row.intensityZone] = row.distanceKm;
-    breakdown.waterTimeByZone[row.intensityZone] = row.durationMin;
-  } else if (row.structureType === '最大力量') breakdown.landMinutes.maxStrength = row.durationMin;
-  else if (row.structureType === '速度力量') breakdown.landMinutes.speedStrength = row.durationMin;
-  else if (row.structureType === '功能训练') breakdown.landMinutes.functional = row.durationMin;
-  else if (row.structureType === '再生恢复') breakdown.landMinutes.recovery = row.durationMin;
-  else breakdown.landMinutes.other = row.durationMin;
-  return breakdown;
-}
 
 function average(values: Array<number | null | undefined>) {
   const valid = values.filter(
@@ -651,6 +625,7 @@ function buildPhysiologyHeatmap(athleteIds: number[], from: string, to: string) 
     SELECT ts.test_date AS date, tm.metric_code AS code, tm.value_num AS value, tm.is_demo AS isDemo, tm.source
     FROM test_measurements tm JOIN test_sessions ts ON ts.id = tm.test_session_id
     WHERE ts.athlete_id IN (${placeholders}) AND ts.test_date BETWEEN ? AND ? AND tm.metric_code IN (${metricPlaceholders})
+      AND ts.project_status='confirmed' AND ts.project_code=(SELECT project FROM athletes WHERE id=ts.athlete_id)
   `
     )
     .all(...athleteIds, from, to, ...metricCodes) as Array<{
@@ -806,7 +781,10 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
   return db
     .prepare(
       `
-    SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName, a.project, a.team_id AS teamId, COALESCE(pt.name, '') AS team,
+    SELECT ts.id, ts.project_code AS projectCode, ts.project_status AS projectStatus,
+      ts.activity_code AS activityCode, ts.training_category AS trainingCategory, ts.intensity_system AS intensitySystem,
+      (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm,
+      ts.athlete_id AS athleteId, a.name AS athleteName, COALESCE(ts.project_code,a.project) AS project, a.team_id AS teamId, COALESCE(pt.name, '') AS team,
       COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county, ts.session_date AS date, ts.session_order AS sessionOrder, COALESCE(ts.start_time, '') AS startTime,
       ts.training_type AS trainingType, ts.structure_type AS structureType,
       ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
@@ -825,11 +803,14 @@ function readOverviewSessions(input: { athleteIds: number[]; from: string; to: s
     LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
     WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
+      AND (ts.project_code IS NULL OR ts.project_code=a.project)
       AND ts.is_demo = 0
       AND ts.quality NOT IN ('insufficient', 'outlier', 'estimated')
       AND lower(ts.source) NOT LIKE '%demo%'
       AND lower(ts.source) NOT LIKE '%seed%'
       AND lower(ts.source) NOT LIKE '%estimated%'
+      AND lower(ts.source) NOT LIKE '%synthetic%'
+      AND lower(ts.source) NOT LIKE '%simulation%'
     ORDER BY ts.session_date, ts.session_order, a.name
   `
     )
@@ -892,7 +873,7 @@ export function buildSpecialTrainingPayload(input: {
       !row.sessionDemo &&
       !/seed|demo|estimated/i.test(row.sessionSource) &&
       row.sessionQuality !== 'estimated' &&
-      trainingLoadCategory(row) === 'special'
+      row.projectStatus === 'confirmed' && row.projectCode === input.project && trainingLoadCategory(row) === 'special'
   );
   const sessions =
     input.athleteId === null || input.athleteId === undefined
@@ -990,12 +971,7 @@ export function buildOverviewPayload(input: {
       trainingVolume: emptyTrainingVolume(),
       trainingAnalytics: emptyTrainingAnalytics(),
       physiologyHeatmap: { metrics: [] },
-      intensityDistribution: zones.map((zone) => ({
-        zone,
-        durationMin: 0,
-        sessionCount: 0,
-        percentage: 0,
-      })),
+      intensityDistribution: [] as Array<{ zone: string; durationMin: number; sessionCount: number; percentage: number }>,
       trainingLoadRatio: {
         specialLoad: 0,
         physicalLoad: 0,
@@ -1033,6 +1009,12 @@ export function buildOverviewPayload(input: {
     id: row.id,
     athleteId: row.athleteId,
     athleteName: row.athleteName,
+    projectCode: row.projectCode,
+    projectStatus: row.projectStatus,
+    activityCode: row.activityCode,
+    trainingCategory: row.trainingCategory,
+    intensitySystem: row.intensitySystem,
+    cadenceRpm: row.cadenceRpm,
     project: row.project,
     team: row.team,
     region: row.province,
@@ -1057,7 +1039,7 @@ export function buildOverviewPayload(input: {
     fatigueIndex: row.fatigueIndex,
     status: row.status,
     coachNote: '',
-    trainingBreakdown: sessionBreakdown(row),
+    trainingBreakdown: trainingSessionBreakdown(row),
     updatedAt: row.updatedAt,
     updatedBy: row.sessionSource,
     dataQuality: row.sessionQuality,
@@ -1071,16 +1053,12 @@ export function buildOverviewPayload(input: {
     },
   }));
   const actualSessions = sessions.filter((row) => !row.sessionDemo);
-  const intensityTotalDuration = actualSessions
-    .filter(
-      (row) =>
-        zones.includes(row.intensityZone as (typeof zones)[number]) && Boolean(row.durationReported)
-    )
+  const intensityRows = actualSessions.filter(row => row.projectStatus === 'confirmed' && row.projectCode === input.project && row.intensityZone && Boolean(row.durationReported));
+  const intensityTotalDuration = intensityRows
     .reduce((sum, row) => sum + row.durationMin, 0);
-  const intensityDistribution = zones.map((zone) => {
-    const rows = actualSessions.filter(
-      (row) => row.intensityZone === zone && Boolean(row.durationReported)
-    );
+  const intensityLabel = (row: SessionRow) => `${row.intensitySystem || '未知体系'} · ${row.intensityZone}`;
+  const intensityDistribution = [...new Set(intensityRows.map(intensityLabel))].map((zone) => {
+    const rows = intensityRows.filter(row => intensityLabel(row) === zone);
     const durationMin = rows.reduce((sum, row) => sum + row.durationMin, 0);
     return {
       zone,
@@ -1274,22 +1252,32 @@ export function buildOverviewPayload(input: {
     .prepare(
       `
     SELECT ts.id AS sessionId, ts.athlete_id AS athleteId, ts.test_date AS testDate,
-      ts.test_type AS testType, ts.source AS testSource, ts.is_demo AS testDemo, ts.quality AS testQuality, ts.protocol AS testProtocol, tm.id AS measurementId,
+      ts.test_type AS testType, ts.source AS testSource, ts.is_demo AS testDemo, ts.quality AS testQuality,
+      ts.protocol_code AS testProtocol, ts.protocol_version AS protocolVersion, ts.context_key AS contextKey, tm.side, tm.id AS measurementId,
       tm.metric_code AS code, md.label, md.domain, tm.value_num AS value,
       tm.target_value AS target, tm.unit, tm.quality, tm.source, tm.is_demo AS isDemo
     FROM test_sessions ts
     JOIN test_measurements tm ON tm.test_session_id = ts.id
     JOIN metric_definitions md ON md.code = tm.metric_code
     WHERE ts.athlete_id IN (${placeholders})
+      AND ts.project_status='confirmed' AND ts.project_code=(SELECT project FROM athletes WHERE id=ts.athlete_id)
+      AND ts.is_demo=0 AND tm.is_demo=0 AND ts.quality IN ('valid','partial') AND tm.quality IN ('valid','partial')
+      AND lower(ts.source) NOT LIKE '%synthetic%' AND lower(ts.source) NOT LIKE '%simulation%'
+      AND lower(tm.source) NOT LIKE '%synthetic%' AND lower(tm.source) NOT LIKE '%simulation%'
+      AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
+      AND lower(ts.source) NOT LIKE '%estimated%' AND lower(tm.source) NOT LIKE '%estimated%'
+      AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
     ORDER BY ts.test_date DESC, ts.id DESC, tm.metric_code
   `
     )
     .all(...input.athleteIds) as MeasurementRow[];
 
-  const testDates = [...new Set(measurementRows.map((row) => row.testDate))].slice(0, 2);
-  const strengthTests = testDates.map((testDate, index) => {
+  const contextOf = (row: MeasurementRow) => JSON.stringify([row.testType, row.testProtocol, row.protocolVersion, row.contextKey, row.side]);
+  const testGroups = [...new Set(measurementRows.map(row => JSON.stringify([row.testDate, contextOf(row)])))].slice(0, 2);
+  const strengthTests = testGroups.map((key, index) => {
+    const [testDate, context] = JSON.parse(key) as [string, string];
     const rows = measurementRows.filter(
-      (row) => row.testDate === testDate && !row.code.includes('_')
+      (row) => row.testDate === testDate && contextOf(row) === context && !row.code.includes('_')
     );
     const codes = [...new Set(rows.map((row) => row.code))];
     const metrics = Object.fromEntries(
@@ -1308,6 +1296,9 @@ export function buildOverviewPayload(input: {
       id: input.individual ? rows[0]?.sessionId || -(index + 1) : -(index + 1),
       athleteId: input.individual ? input.athleteIds[0] : 0,
       testDate,
+      protocol: rows[0]?.testProtocol ?? '',
+      protocolVersion: rows[0]?.protocolVersion ?? '',
+      contextKey: rows[0]?.contextKey ?? '',
       metrics,
       targets,
       notes: input.individual ? '专业综合评估' : `${input.project}项目组均值`,
@@ -1318,11 +1309,13 @@ export function buildOverviewPayload(input: {
 
   const codes = [...new Set(measurementRows.map((row) => row.code))];
   const measurements = codes.map((code) => {
-    const codeRows = measurementRows.filter((row) => row.code === code);
+    const allCodeRows = measurementRows.filter((row) => row.code === code);
+    const latest = allCodeRows[0];
+    const codeRows = allCodeRows.filter(row => contextOf(row) === contextOf(latest) && row.unit === latest.unit);
     const latestDate = codeRows[0]?.testDate;
     const previousDate = codeRows.find((row) => row.testDate !== latestDate)?.testDate;
     const rows = codeRows.filter((row) => row.testDate === latestDate);
-    const previous = codeRows.filter((row) => row.testDate === previousDate);
+    const previous = latest.testProtocol && latest.protocolVersion ? codeRows.filter((row) => row.testDate === previousDate) : [];
     const value = average(rows.map((row) => row.value));
     const previousValue = average(previous.map((row) => row.value));
     return {
@@ -1383,8 +1376,12 @@ export function buildOverviewPayload(input: {
       WHERE athlete_id IN (${placeholders})
         AND test_date BETWEEN ? AND ?
         AND is_demo = 0
+        AND project_status='confirmed' AND project_code=(SELECT project FROM athletes WHERE id=test_sessions.athlete_id)
+        AND quality IN ('valid','partial')
+        AND lower(source) NOT LIKE '%synthetic%' AND lower(source) NOT LIKE '%simulation%'
+        AND lower(source) NOT LIKE '%demo%' AND lower(source) NOT LIKE '%seed%' AND lower(source) NOT LIKE '%estimated%'
         AND duration_min IS NOT NULL
-      GROUP BY test_date, test_type
+      GROUP BY test_date, test_type, protocol_code, protocol_version, context_key, attempt_order
     )
   `
     )

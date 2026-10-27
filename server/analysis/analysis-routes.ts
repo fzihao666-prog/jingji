@@ -34,7 +34,7 @@ import {
 } from '../../shared/rowing-model.ts';
 import { SLALOM_MODEL_STANDARD, analyzeSlalomPeriod } from '../../shared/slalom-model.ts';
 import {
-  PROJECTS,
+  isProject,
   hasSpecialAnalysis,
   projectCapability,
   projectLabel,
@@ -47,7 +47,7 @@ export function analysisStandardForProject(project: string) {
     ? SLALOM_MODEL_STANDARD
     : projectCapability(project) === 'canoe'
       ? CANOE_MODEL_STANDARD
-      : ROWING_MODEL_STANDARD;
+      : projectCapability(project) === 'rowing' ? ROWING_MODEL_STANDARD : (() => { throw new Error('该项目专项标准尚未配置'); })();
 }
 
 export function analyzePeriodForProject(project: string, records: RowingAnalysisRecord[]) {
@@ -55,7 +55,7 @@ export function analyzePeriodForProject(project: string, records: RowingAnalysis
     ? analyzeSlalomPeriod(records)
     : projectCapability(project) === 'canoe'
       ? analyzeCanoePeriod(records)
-      : analyzeRowingPeriod(records);
+      : projectCapability(project) === 'rowing' ? analyzeRowingPeriod(records) : (() => { throw new Error('该项目专项分析尚未配置'); })();
 }
 
 export function athleteProfileScope(
@@ -174,7 +174,7 @@ export function registerAnalysisRoutes(app: Express) {
   app.get('/api/overview/teams', requireAuth, (req, res) => {
     const user = req.authUser!;
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project)) return res.status(400).json({ message: '请选择有效项目。' });
+    if (!isProject(project)) return res.status(400).json({ message: '请选择有效项目。' });
     const ids = accessibleAthleteIds(user);
     if (!ids.length) return res.json({ teams: [] });
     const placeholders = ids.map(() => '?').join(',');
@@ -203,8 +203,8 @@ export function registerAnalysisRoutes(app: Express) {
     const requestedId = Number(req.query.athleteId || 0);
     const requestedTeamId = Number(req.query.teamId || 0);
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project))
-      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    if (!isProject(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
       return res.status(400).json({ message: '请选择有效的分析日期范围。' });
     }
@@ -284,8 +284,8 @@ export function registerAnalysisRoutes(app: Express) {
     const to = cleanString(req.query.to) || '2026-12-31';
     const requestedId = Number(req.query.athleteId || 0);
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project))
-      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    if (!isProject(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
     let ids = accessibleAthleteIds(user);
     if (ids.length) {
       const placeholders = ids.map(() => '?').join(',');
@@ -310,6 +310,9 @@ export function registerAnalysisRoutes(app: Express) {
       .prepare(
         `
       SELECT ts.id, ts.athlete_id AS athleteId, a.name AS athleteName,
+        ts.project_code AS projectCode, ts.project_status AS projectStatus, ts.activity_code AS activityCode,
+        ts.training_category AS trainingCategory, ts.intensity_system AS intensitySystem,
+        (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm,
         a.project, COALESCE(pt.name, '') AS team, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
         ts.session_date AS date, ts.training_type AS trainingType, ts.structure_type AS structureType,
         ts.intensity_zone AS intensityZone, ts.content, ts.duration_min AS durationMin,
@@ -328,6 +331,10 @@ export function registerAnalysisRoutes(app: Express) {
       LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
       LEFT JOIN users u ON u.id = ts.created_by
       WHERE ts.athlete_id IN (${placeholders}) AND ts.session_date BETWEEN ? AND ?
+      AND (ts.project_code IS NULL OR ts.project_code=a.project)
+        AND ts.is_demo=0 AND ts.quality NOT IN ('estimated','outlier','insufficient')
+        AND lower(ts.source) NOT LIKE '%demo%' AND lower(ts.source) NOT LIKE '%seed%' AND lower(ts.source) NOT LIKE '%estimated%'
+        AND lower(ts.source) NOT LIKE '%synthetic%' AND lower(ts.source) NOT LIKE '%simulation%'
       ORDER BY ts.session_date, ts.session_order, a.name
     `
       )
@@ -352,8 +359,8 @@ export function registerAnalysisRoutes(app: Express) {
 
   app.get('/api/analysis/model', requireAuth, (req, res) => {
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project))
-      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    if (!isProject(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
     if (!hasSpecialAnalysis(project))
       return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
     res.json({ standard: analysisStandardForProject(project) });
@@ -362,7 +369,7 @@ export function registerAnalysisRoutes(app: Express) {
   app.get('/api/special-champion-models', requireAuth, (req, res) => {
     const user = req.authUser!;
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project))
+    if (!isProject(project))
       return res.status(400).json({ message: '请选择有效的运动项目。' });
 
     const projectAllowed =
@@ -433,8 +440,8 @@ export function registerAnalysisRoutes(app: Express) {
     const to = cleanString(req.query.to);
     const requestedId = Number(req.query.athleteId || user.athleteId || 0);
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project))
-      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    if (!isProject(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
     if (!hasSpecialAnalysis(project))
       return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
@@ -459,10 +466,16 @@ export function registerAnalysisRoutes(app: Express) {
       FROM training_sessions ts
       LEFT JOIN daily_wellness dw ON dw.athlete_id = ts.athlete_id AND dw.wellness_date = ts.session_date
       WHERE ts.athlete_id = ? AND ts.session_date BETWEEN ? AND ?
+        AND ts.project_code = ? AND ts.project_status = 'confirmed'
+        AND ts.is_demo = 0 AND ts.quality = 'valid'
+        AND trim(ts.source) <> ''
+        AND lower(ts.source) NOT LIKE '%demo%' AND lower(ts.source) NOT LIKE '%seed%'
+        AND lower(ts.source) NOT LIKE '%estimated%'
+        AND lower(ts.source) NOT LIKE '%synthetic%' AND lower(ts.source) NOT LIKE '%simulation%'
       ORDER BY ts.session_date, ts.session_order
     `
       )
-      .all(requestedId, from, to) as RowingAnalysisRecord[];
+      .all(requestedId, from, to, project) as RowingAnalysisRecord[];
 
     const standard = analysisStandardForProject(project);
     res.json({
@@ -486,8 +499,8 @@ export function registerAnalysisRoutes(app: Express) {
     if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
     if (!hasAthleteAccess(user, athleteId))
       return res.status(403).json({ message: '无权查看该运动员档案分析。' });
-    if (!PROJECTS.includes(project))
-      return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    if (!isProject(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
     const athlete = db
       .prepare('SELECT project FROM athletes WHERE id = ? AND active = 1')
       .get(athleteId) as { project: string } | undefined;
@@ -511,7 +524,7 @@ export function registerAnalysisRoutes(app: Express) {
     const from = parseDate(req.query.from);
     const to = parseDate(req.query.to);
     if (
-      !PROJECTS.includes(project) ||
+      !isProject(project) ||
       !from ||
       !to ||
       !isValidIsoDate(from) ||
@@ -530,7 +543,7 @@ export function registerAnalysisRoutes(app: Express) {
     const from = parseDate(req.query.from);
     const to = parseDate(req.query.to);
     if (
-      !PROJECTS.includes(project) ||
+      !isProject(project) ||
       !from ||
       !to ||
       !isValidIsoDate(from) ||
@@ -556,7 +569,7 @@ export function registerAnalysisRoutes(app: Express) {
     const from = parseDate(req.query.from);
     const to = parseDate(req.query.to);
     if (
-      !PROJECTS.includes(project) ||
+      !isProject(project) ||
       !from ||
       !to ||
       !isValidIsoDate(from) ||
@@ -619,6 +632,7 @@ export function registerAnalysisRoutes(app: Express) {
         FROM test_sessions ts
         JOIN test_measurements tm ON tm.test_session_id = ts.id
         WHERE ts.athlete_id = ? AND ts.test_date BETWEEN ? AND ?
+          AND ts.project_code = ? AND ts.project_status = 'confirmed'
           AND tm.metric_code IN (${metricPlaceholders})
           AND ts.quality = 'valid' AND tm.quality = 'valid'
           AND ts.is_demo = 0 AND tm.is_demo = 0
@@ -627,10 +641,12 @@ export function registerAnalysisRoutes(app: Express) {
           AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
           AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
           AND lower(ts.source) NOT LIKE '%estimated%' AND lower(tm.source) NOT LIKE '%estimated%'
+          AND lower(ts.source) NOT LIKE '%synthetic%' AND lower(ts.source) NOT LIKE '%simulation%'
+          AND lower(tm.source) NOT LIKE '%synthetic%' AND lower(tm.source) NOT LIKE '%simulation%'
         ORDER BY ts.test_date DESC, ts.id DESC, tm.id DESC
       `
       )
-      .all(athleteId, from, to, ...radarMeasurementCodes) as RadarMeasurementRow[];
+      .all(athleteId, from, to, athlete.project, ...radarMeasurementCodes) as RadarMeasurementRow[];
     const latestMeasurements = new Map<string, RadarMeasurementRow>();
     for (const row of measurementRows) {
       if (!latestMeasurements.has(row.code)) latestMeasurements.set(row.code, row);
@@ -645,6 +661,7 @@ export function registerAnalysisRoutes(app: Express) {
         AND lower(source) NOT LIKE '%demo%'
         AND lower(source) NOT LIKE '%seed%'
         AND lower(source) NOT LIKE '%estimated%'
+        AND lower(source) NOT LIKE '%synthetic%' AND lower(source) NOT LIKE '%simulation%'
       ORDER BY measurement_date DESC, id DESC
       LIMIT 1
     `);
@@ -657,7 +674,7 @@ export function registerAnalysisRoutes(app: Express) {
       AND rv.metric_key = ?
       AND rv.gender = ?
       AND rv.unit = ?
-      AND rv.active = 1
+      AND rv.active = 1 AND rv.review_status = 'reviewed' AND rv.source_type <> 'estimated'
       -- 新版按协议匹配的体能标准由 physical-champion 接口处理，旧接口不混用。
       AND rv.protocol = ''
 
@@ -831,11 +848,18 @@ export function registerAnalysisRoutes(app: Express) {
         ts.test_date AS testDate, ts.id AS sessionId
       FROM test_sessions ts
       JOIN test_measurements tm ON tm.test_session_id = ts.id
-      WHERE ts.athlete_id = ?
+      WHERE ts.athlete_id = ? AND ts.project_code = ? AND ts.project_status = 'confirmed'
+        AND ts.quality = 'valid' AND tm.quality = 'valid' AND ts.is_demo = 0 AND tm.is_demo = 0
+        AND trim(ts.source) <> '' AND trim(tm.source) <> ''
+        AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
+        AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
+        AND lower(ts.source) NOT LIKE '%estimated%' AND lower(tm.source) NOT LIKE '%estimated%'
+        AND lower(ts.source) NOT LIKE '%synthetic%' AND lower(ts.source) NOT LIKE '%simulation%'
+        AND lower(tm.source) NOT LIKE '%synthetic%' AND lower(tm.source) NOT LIKE '%simulation%'
       ORDER BY ts.test_date DESC, ts.id DESC
     `
       )
-      .all(athlete.id) as Array<{
+      .all(athlete.id, athlete.project) as Array<{
       code: string;
       value: number;
       target: number | null;

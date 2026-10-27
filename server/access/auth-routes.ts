@@ -25,7 +25,7 @@ import { cleanString, userById, validatePersonName } from '../core/utils.ts';
 import { db } from '../core/db.ts';
 import { logger } from '../core/logger.ts';
 import { PROVINCE_CITIES } from '../../shared/regions.ts';
-import { PROJECTS } from '../../shared/projects.ts';
+import { isProject, PROJECTS } from '../../shared/projects.ts';
 import { LOGIN_ERROR_MESSAGES } from '../../shared/login-errors.ts';
 
 import type { AuthUser, Project } from '../core/shared-server.ts';
@@ -121,7 +121,7 @@ export function registerAuthRoutes(
     (req, res) => {
       const project = cleanString(req.body?.project);
       const name = cleanString(req.body?.name);
-      if (!PROJECTS.includes(project)) return res.status(400).json({ message: '请选择有效项目。' });
+      if (!isProject(project)) return res.status(400).json({ message: '请选择有效项目。' });
       if (name.length < 2 || name.length > 30)
         return res.status(400).json({ message: '队伍名称须为2—30个字符。' });
       const permissions = accountPermissions(req.authUser!.id);
@@ -238,7 +238,7 @@ export function registerAuthRoutes(
       }
       if (displayName.length < 2 || displayName.length > 20) errors.push('姓名须为2—20个字符');
       if (requestedRole !== 'ATL' && requestedRole !== 'SCC') errors.push('仅支持注册运动员或教练');
-      if (!PROJECTS.includes(project)) errors.push('请选择赛艇、皮划艇或激流');
+      if (!isProject(project)) errors.push('请选择有效的运动项目');
       const validTeam = db
         .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
         .get(project, team);
@@ -491,7 +491,7 @@ export function registerAuthRoutes(
     let project: Project | null = null;
     try {
       const saved = JSON.parse(row?.value || '{}') as { project?: unknown };
-      if (typeof saved.project === 'string' && projects.includes(saved.project))
+      if (isProject(saved.project) && projects.includes(saved.project))
         project = saved.project;
     } catch {
       /* 损坏偏好不影响进入系统 */
@@ -502,7 +502,7 @@ export function registerAuthRoutes(
   app.put('/api/preferences/current-project', requireAuth, (req, res) => {
     const project = cleanString(req.body?.project);
     const projects = selectableProjects(req.authUser!);
-    if (!PROJECTS.includes(project)) return res.status(400).json({ message: '项目参数无效。' });
+    if (!isProject(project)) return res.status(400).json({ message: '项目参数无效。' });
     if (!projects.includes(project)) return res.status(403).json({ message: '无权选择该项目。' });
     db.prepare(
       `

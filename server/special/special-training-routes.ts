@@ -1,3 +1,4 @@
+import { insertSession, sessionSchema } from '../athlete/training-session-service.ts';
 import { templateHeaderKey } from '../../shared/import-template-fields.ts';
 import ExcelJS from 'exceljs';
 import { randomUUID } from 'node:crypto';
@@ -19,7 +20,7 @@ import { upload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { buildSpecialTrainingPayload } from '../analysis/overview-service.ts';
 import { excelCellText } from '../training-plan/training-plan-service.ts';
-import { PROJECTS, projectLabel, normalizeProject } from '../../shared/projects.ts';
+import { isProject, projectCapability, projectLabel, normalizeProject } from '../../shared/projects.ts';
 import type { AuthUser, Project, SpecialTestImportRow } from '../core/shared-server.ts';
 
 export const specialTestImportCache = new Map<
@@ -164,7 +165,8 @@ export async function parseSpecialTestWorkbook(
     }, []);
     const previousBestMs = parseRaceTime(pick(item, ['历史最好', '个人最好', '此前最好']));
     if (!isValidIsoDate(testDate)) errors.push('训练日期格式无效，应为YYYY-MM-DD');
-    if (!PROJECTS.includes(project)) errors.push('项目必须填写“赛艇”“皮划艇”或“激流”');
+    if (!isProject(project)) errors.push('请选择明确有效的项目');
+    else if (!projectCapability(project)) errors.push('该项目的水上专项计时功能未配置');
     else if (project !== normalizeProject(expectedProject))
       errors.push(`当前为${expectedProject}空间，不能导入${project}数据`);
     if (distanceM <= 0 || distanceM > 100000) errors.push('训练距离应为1—100000米');
@@ -295,17 +297,6 @@ export function registerSpecialTrainingRoutes(app: Express) {
       const user = req.authUser!;
       const rows = Array.isArray(req.body?.sessions) ? req.body.sessions.slice(0, 1000) : [];
       if (!rows.length) return res.status(400).json({ message: '请提供需要保存的训练数据。' });
-      const insert = db.prepare(`
-      INSERT INTO training_sessions
-        (athlete_id, session_date, session_order, start_time, training_type, structure_type,
-         intensity_zone, content, duration_min, distance_km, rpe, srpe, smvl,
-         average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm,
-         source, quality, is_demo, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'valid', 0, ?)
-    `);
-      const nextOrder = db.prepare(
-        'SELECT COALESCE(MAX(session_order), 0) + 1 AS value FROM training_sessions WHERE athlete_id = ? AND session_date = ?'
-      );
       let imported = 0;
       try {
         db.exec('BEGIN');
@@ -320,70 +311,25 @@ export function registerSpecialTrainingRoutes(app: Express) {
           if (!isValidIsoDate(date)) throw new Error('训练日期无效，请使用正确的年月日。');
           if (cleanString(row?.project) && cleanString(row.project) !== athlete.project)
             throw new Error('训练项目与运动员档案不一致。');
-          const duration = numberOrNull(row?.duration);
-          const distance = numberOrNull(row?.distance);
-          const rpe = numberOrNull(row?.rpe);
-          const heartRate = numberOrNull(row?.heartRate);
-          const maxHeartRate = numberOrNull(row?.maxHeartRate);
-          const power = numberOrNull(row?.power);
-          const strokeRate = numberOrNull(row?.strokeRate);
-          if (duration === null || duration <= 0 || duration > 1440)
-            throw new Error('训练时长须在 1—1440 分钟之间。');
-          if (distance === null || distance < 0 || distance > 500)
-            throw new Error('训练距离须在 0—500 公里之间。');
-          if (rpe === null || rpe < 1 || rpe > 10) throw new Error('RPE 须在 1—10 之间。');
-          if (heartRate === null || heartRate < 30 || heartRate > 240)
-            throw new Error('平均心率须在 30—240 bpm 之间。');
-          if (
-            maxHeartRate === null ||
-            maxHeartRate < 30 ||
-            maxHeartRate > 240 ||
-            maxHeartRate < heartRate
-          )
-            throw new Error('最大心率须在 30—240 bpm 之间，且不能低于平均心率。');
-          if (power === null || power < 0 || power > 3000)
-            throw new Error('平均功率须在 0—3000 W 之间。');
-          if (strokeRate === null || strokeRate < 1 || strokeRate > 250)
-            throw new Error('桨频或划频须在 1—250 次/分之间。');
-          const order = (nextOrder.get(athleteId, date) as { value: number }).value;
-          const trainingType = cleanString(row?.type) || '专项训练';
-          const content = cleanString(row?.content);
-          if (!content || content.length > 100)
-            throw new Error('训练内容须填写且不能超过 100 个字符。');
-          const defaultStructure =
-            trainingType === '专项力量'
-              ? '最大力量'
-              : trainingType === '恢复训练'
-                ? '再生恢复'
-                : '专项训练';
-          insert.run(
-            athleteId,
-            date,
-            order,
-            cleanString(row?.startTime),
-            trainingType,
-            cleanString(row?.structureType) || defaultStructure,
-            cleanString(row?.intensityZone) || 'U2',
-            content,
-            duration,
-            distance,
-            rpe,
-            Math.round(duration * rpe),
-            heartRate,
-            maxHeartRate,
-            power,
-            strokeRate,
-            cleanString(row?.source) === 'import' ? 'table_import' : 'manual',
-            user.id
-          );
+          const parsed = sessionSchema.safeParse({
+            date, startTime: cleanString(row?.startTime),
+            trainingType: row?.type === '专项力量' ? '体能训练'
+              : ['水上训练', '测功仪', '技术训练'].includes(cleanString(row?.type)) ? '专项训练'
+              : cleanString(row?.type) || '专项训练',
+            content: cleanString(row?.content), intensityZone: cleanString(row?.intensityZone),
+            intensitySystem: row?.intensitySystem, activityCode: row?.activityCode, rulesVersion: row?.rulesVersion,
+            duration: row?.duration, distance: row?.distance, rpe: row?.rpe,
+            averageHeartRate: row?.heartRate, maxHeartRate: row?.maxHeartRate,
+            averagePowerW: row?.power, strokeRateSpm: row?.strokeRate, cadenceRpm: row?.cadenceRpm,
+          });
+          if (!parsed.success) throw new Error('训练日期、时长或距离、RPE或专项字段无效。');
+          insertSession(athleteId, parsed.data, cleanString(row?.source) === 'import' ? 'table_import' : 'manual', user.id);
           imported += 1;
         }
         db.exec('COMMIT');
         res.status(201).json({ message: `已保存 ${imported} 条专项训练数据。`, imported });
       } catch (error) {
-        try {
-          db.exec('ROLLBACK');
-        } catch {}
+        if (db.isTransaction) db.exec('ROLLBACK');
         res
           .status(400)
           .json({ message: error instanceof Error ? error.message : '专项训练数据保存失败。' });
@@ -395,7 +341,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
     const user = req.authUser!;
     const query = z
       .object({
-        project: z.string().trim().min(1).max(16),
+        project: z.string().trim().min(1).max(50),
         from: z.string().trim().min(1).max(10),
         to: z.string().trim().min(1).max(10),
         teamId: z.coerce.number().int().nonnegative().optional(),
@@ -408,7 +354,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
     const from = parseDate(query.data.from);
     const to = parseDate(query.data.to);
     const teamId = query.data.teamId || 0;
-    if (!PROJECTS.includes(project) || !from || !to || from > to)
+    if (!isProject(project) || !from || !to || from > to)
       return res.status(400).json({ message: '请选择有效项目和日期范围。' });
     const accessible = accessibleAthleteIds(user);
     let scoped = accessible.length
@@ -454,7 +400,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
   app.get('/api/special-tests', requireAuth, (req, res) => {
     const user = req.authUser!;
     const project = cleanString(req.query.project);
-    if (!PROJECTS.includes(project))
+    if (!isProject(project))
       return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
     const from = parseDate(req.query.from) || '1900-01-01';
     const to = parseDate(req.query.to) || '2999-12-31';
@@ -510,8 +456,9 @@ export function registerSpecialTrainingRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: '专项测试内容格式无效。' });
     const row = parsed.data;
     const project = row.project as Project;
-    if (!PROJECTS.includes(project))
+    if (!isProject(project))
       return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
+    if (!projectCapability(project)) return res.status(409).json({ code: 'CAPABILITY_UNAVAILABLE', message: '该项目不使用水上专项计时，请在公共体能测试记录实测成绩。' });
     const allowed = new Set(accessibleAthleteIds(user));
     const memberNames: string[] = [];
     for (const memberId of row.memberAthleteIds) {
@@ -616,7 +563,7 @@ export function registerSpecialTrainingRoutes(app: Express) {
       if (!req.file.originalname.toLowerCase().endsWith('.xlsx'))
         return res.status(400).json({ message: '当前版本仅支持.xlsx文件。' });
       const project = cleanString(req.body?.project);
-      if (!PROJECTS.includes(project))
+      if (!isProject(project))
         return res.status(400).json({ message: '请选择赛艇、皮划艇或激流项目。' });
       try {
         const rows = await parseSpecialTestWorkbook(req.file.buffer, req.authUser!, project);

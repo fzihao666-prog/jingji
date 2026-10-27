@@ -132,15 +132,15 @@ it('明确排除档案行时不自动更新资料', () => {
   expect(db.prepare('SELECT blood_type FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ blood_type: 'A' });
 });
 
-it('测试最新导入自动更新数值、目标、协议、时长，空白保留且导出往返不再出现旧值', async () => {
+it('同协议更新数值与目标且保留空白元数据，不同协议独立导出往返', async () => {
   const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟', '目标值', '备注'];
   const seed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '力量素质测试', 'single_leg_squat_reps', 255, '次', '旧协议', 12, 30, '原备注']] });
   commit(seed.id, 'skip');
-  const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '力量素质测试', 'single_leg_squat_reps', 25, '次', '新协议', 15, 35, '']] });
+  const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '力量素质测试', 'single_leg_squat_reps', 25, '次', '旧协议', 15, 35, '']] });
   expect(changed.errorCount).toBe(0);
   expect(importReviewGroups(changed.items)).toEqual([]);
   expect(commit(changed.id, 'skip').updatedRecords).toBe(1);
-  expect(db.prepare('SELECT m.value_num, m.target_value, m.note, s.protocol, s.duration_min FROM test_measurements m JOIN test_sessions s ON s.id = m.test_session_id').get()).toEqual({ value_num: 25, target_value: 35, note: '原备注', protocol: '新协议', duration_min: 15 });
+  expect(db.prepare('SELECT m.value_num, m.target_value, m.note, s.protocol, s.duration_min FROM test_measurements m JOIN test_sessions s ON s.id = m.test_session_id').get()).toEqual({ value_num: 25, target_value: 35, note: '原备注', protocol: '旧协议', duration_min: 15 });
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(PROJECT, [1]);
   const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '最新导入往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
@@ -173,12 +173,12 @@ it('力量组次、伤病和竞技评估统一自动更新，零值有效，空�
   expect(db.prepare('SELECT overall_score, state_level, note FROM competitive_state_assessments').get()).toEqual({ overall_score: 0, state_level: 'adjust', note: '评估备注' });
 });
 
-it('只更新测试协议和时长也正确计入更新，空白测量元数据保留', () => {
+it('不同测试协议新增独立场次并保留原场次时长', () => {
   const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟'];
   commit(analyze({ 其他测试: [headers, ['张某', '2026-02-11', '专项测试', 'grip', 30, 'kg', 'A', 10]] }).id, 'skip');
   const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-11', '专项测试', 'grip', 30, 'kg', 'B', 15]] });
-  expect(commit(changed.id, 'skip').updatedRecords).toBe(1);
-  expect(db.prepare('SELECT protocol, duration_min FROM test_sessions').get()).toEqual({ protocol: 'B', duration_min: 15 });
+  expect(commit(changed.id, 'skip').createdRecords).toBe(1);
+  expect(db.prepare('SELECT protocol, duration_min FROM test_sessions ORDER BY id').all()).toEqual([{ protocol: 'A', duration_min: 10 }, { protocol: 'B', duration_min: 15 }]);
 });
 
 beforeEach(() => {
@@ -1346,23 +1346,16 @@ it('通用测试旧代码和新身体表指向同一事实，单位不一致不�
   expect(invalid.items[0].messages.join('；')).toContain('单位');
 });
 
-it('同课次不同指标的协议冲突阻断，缺失协议可从同课次补齐', () => {
+it('同日不同协议分开保存，缺失协议保持未知且不从相邻行猜测', () => {
   const headers = ['姓名', '测试日期', 'VO2Max', '不对称指数%', '测试协议'];
-  const conflict = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 55, null, 'A'], ['张某', '2025-10-09', null, 10, 'B']] });
-  expect(conflict.errorCount).toBe(2);
-  expect(() => commit(conflict.id, 'skip')).toThrow();
-  const valid = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 55], ['张某', '2025-10-09', null, 10, 'B']] });
-  expect(valid.errorCount).toBe(0);
-  commit(valid.id, 'skip');
-  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-09'").get()).toEqual({ protocol: 'B' });
-  const mismatch = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 56, null, 'C']] });
-  expect(mismatch.errorCount).toBe(0);
-  expect(importReviewGroups(mismatch.items)).toEqual([]);
-  commit(mismatch.id, 'skip');
-  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-09'").get()).toEqual({ protocol: 'C' });
+  const batch = analyze({ 体能测试: [headers, ['张某', '2025-10-09', 55, null, 'A'], ['张某', '2025-10-09', null, 10, 'B'], ['张某', '2025-10-09', 56]] });
+  expect(batch.errorCount).toBe(0);
+  expect(importReviewGroups(batch.items)).toEqual([]);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(3);
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-09' ORDER BY id").all()).toEqual([{ protocol: 'A' }, { protocol: 'B' }, { protocol: '' }]);
 });
 
-it('已有测试课次的空协议可以补充，身体指标的侧别原样保留', () => {
+it('已有测试课次的未知协议不被新协议覆盖，身体指标侧别保留', () => {
   const headers = ['姓名', '测试日期', '指标代码', '数值', '单位', '侧别', '测试类型', '协议'];
   const first = analyze({ 其他测试: [headers, ['张某', '2025-10-10', 'height_cm', 180, 'cm', 'left', '侧别测试']] });
   expect(first.items[0]).toMatchObject({ itemType: 'test_measurement', side: 'left', testType: '侧别测试' });
@@ -1372,7 +1365,7 @@ it('已有测试课次的空协议可以补充，身体指标的侧别原样保�
   expect(second.errorCount).toBe(0);
   expect(second.items[0]).toMatchObject({ itemType: 'test_measurement', side: 'right', testType: '侧别测试' });
   commit(second.id, 'skip');
-  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-10'").get()).toEqual({ protocol: '测量协议' });
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-10-10' ORDER BY id").all()).toEqual([{ protocol: '' }, { protocol: '测量协议' }]);
 });
 
 it('上传解析即关联唯一管理队伍内的已有运动员，新人员保持新建候选', () => {
@@ -1484,14 +1477,13 @@ it('臂展复用统一值审查，保留两条来源并可选最终值入库', (
   expect(db.prepare("SELECT value_num AS value FROM test_measurements WHERE metric_code = 'arm_span_cm'").get()).toEqual({ value: 186 });
 });
 
-it('同测试课次的协议冲突也复用统一选择，保留所有不同指标及侧别', () => {
+it('不同协议不可通过值合并混为同场测试，所有侧别各自保存', () => {
   const batch = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '侧别', '协议'], ['张某', '2025-11-09', '统一课次', 'grip', 30, 'kg', 'left', 'A'], ['张某', '2025-11-09', '统一课次', 'grip', 35, 'kg', 'right', 'B']] });
-  expect(batch.errorCount).toBe(2);
-  const merged = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { protocol: 'A' } } } }] });
-  expect(merged.errorCount).toBe(0);
+  expect(batch.errorCount).toBe(0);
+  expect(() => updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { protocol: 'A' } } } }] })).toThrow('同一业务记录');
   expect(commit(batch.id, 'skip').createdRecords).toBe(2);
   expect(db.prepare('SELECT side, value_num AS value FROM test_measurements ORDER BY side').all()).toEqual([{ side: 'left', value: 30 }, { side: 'right', value: 35 }]);
-  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-11-09'").get()).toEqual({ protocol: 'A' });
+  expect(db.prepare("SELECT protocol FROM test_sessions WHERE test_date = '2025-11-09' ORDER BY id").all()).toEqual([{ protocol: 'A' }, { protocol: 'B' }]);
 });
 
 it.each([
@@ -1538,12 +1530,13 @@ it('力量组次、伤病和档案文本采用同一审查命令，业务唯一�
   expect(db.prepare('SELECT best_result AS best FROM athlete_profiles WHERE athlete_id = 1').get()).toEqual({ best: '成绩B' });
 });
 
-it('不同指标的协议审查可恢复所有来源，不会只恢复一个测量值', () => {
+it('显式修正草稿协议后可合并同协议来源，并保留原始修正值', () => {
   const batch = analyze({ 其他测试: [['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议'], ['张某', '2025-11-13', '同课次', 'metric_a', 10, 'kg', 'A'], ['张某', '2025-11-13', '同课次', 'metric_b', 20, 'kg', 'B']] });
-  updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), values: { protocol: 'A' } } } }] });
-  const reopened = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'reopen' } } }] });
-  expect(reopened.errorCount).toBe(2);
-  expect(reopened.items.map(item => [item.metricCode, item.valueNum, item.payload.protocol])).toEqual([['metric_a', 10, 'A'], ['metric_b', 20, 'B']]);
+  const corrected = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[1].id, payload: { protocol: 'A' } }] });
+  expect(corrected.errorCount).toBe(0);
+  commit(batch.id, 'skip');
+  expect(db.prepare('SELECT protocol FROM test_sessions').all()).toEqual([{ protocol: 'A' }]);
+  expect(db.prepare('SELECT metric_code, value_num FROM test_measurements ORDER BY metric_code').all()).toEqual([{ metric_code: 'metric_a', value_num: 10 }, { metric_code: 'metric_b', value_num: 20 }]);
 });
 
 it('单位、计划次数和强度百分比在保存、重新读取及入库后都保留选择结果', () => {
@@ -1574,17 +1567,16 @@ it('测试备注可补空、通过统一审查覆盖，且导出再导入保留�
   expect(exported.items.find(item => item.metricCode === 'custom_note')?.payload.note).toBe('B');
 });
 
-it('明确选择数据库课次的新协议后保留所有指标，并记录审计', () => {
+it('新协议是新事实而非改写数据库旧协议，不允许借合并绕过身份分组', () => {
   const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议'];
-  const first = analyze({ 其他测试: [headers, ['张某', '2025-11-16', '协议审查课次', 'a', 10, 'kg', 'A'], ['张某', '2025-11-16', '协议审查课次', 'b', 20, 'kg', 'A']] });
-  commit(first.id, 'skip');
-  const batch = analyze({ 其他测试: [headers, ['张某', '2025-11-16', '协议审查课次', 'a', 10, 'kg', 'B'], ['张某', '2025-11-16', '协议审查课次', 'b', 20, 'kg', 'B']] });
-  const saved = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { valueReview: { action: 'merge', memberIds: batch.items.map(item => item.id), includeDatabase: true, values: { protocol: 'B' } } } }] });
-  expect(saved.errorCount).toBe(0);
-  commit(batch.id, 'skip');
-  expect(db.prepare('SELECT protocol FROM test_sessions').get()).toEqual({ protocol: 'B' });
-  expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 2 });
-  expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'UPDATE_IMPORT_TEST_PROTOCOL'").get()).toEqual({ count: 1 });
+  commit(analyze({ 其他测试: [headers, ['张某', '2025-11-16', '协议课次', 'a', 10, 'kg', 'A'], ['张某', '2025-11-16', '协议课次', 'b', 20, 'kg', 'A']] }).id, 'skip');
+  const batch = analyze({ 其他测试: [headers, ['张某', '2025-11-16', '协议课次', 'a', 11, 'kg', 'B'], ['张某', '2025-11-16', '协议课次', 'b', 21, 'kg', 'B']] });
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.every(item => !item.conflict?.exists)).toBe(true);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(2);
+  expect(db.prepare('SELECT protocol FROM test_sessions ORDER BY id').all()).toEqual([{ protocol: 'A' }, { protocol: 'B' }]);
+  expect(db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get()).toEqual({ count: 4 });
+  expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'UPDATE_IMPORT_TEST_PROTOCOL'").get()).toEqual({ count: 0 });
 });
 
 it('测试备注的新增列初始化可重复执行，保留既有测量和备注', () => {
@@ -1706,6 +1698,8 @@ it('只修改真实差异字段，不顺带改写浮点尾差相同的其他字�
 it('65项测试的浮点尾差不改写数据库，真实差异按最新导入更新', async () => {
   db.prepare("INSERT OR IGNORE INTO metric_definitions (code, label, domain, unit, direction, frequency) VALUES ('weight_kg', '体重', 'custom', 'kg', 'neutral', 'phase')").run();
   const session = db.prepare("INSERT INTO test_sessions (athlete_id, test_date, test_type) VALUES (1, '2026-08-13', '专业综合评估')").run();
+  // 此用例验证已核实历史事实的往返，待核实归属由独立用例验证。
+  db.prepare("UPDATE test_sessions SET project_code='ROWING',project_status='confirmed' WHERE athlete_id=1").run();
   db.prepare('INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit) VALUES (?, ?, ?, ?)').run(session.lastInsertRowid, 'weight_kg', 61.300000000000004, 'kg');
   const rows = [['张某', '2026-08-13', '专业综合评估', 'weight_kg', 61.3, 'kg'], ...Array.from({ length: 64 }, (_, index) => ['张某', '2026-08-13', '专业综合评估', `custom_${index}`, index + 1, '分'])];
   for (let index = 0; index < 64; index += 1) db.prepare("INSERT OR IGNORE INTO metric_definitions (code,label,domain,unit,direction,frequency) VALUES (?,?,'custom','分','neutral','phase')").run(`custom_${index}`, `虚构测试${index}`);
@@ -1766,6 +1760,8 @@ it('历史测试表中的身体指标及自定义FMS协议导出后保留原归�
     const session = db.prepare('INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol) VALUES (1, ?, ?, ?)').run('2025-12-23', type, protocol);
     db.prepare('INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit) VALUES (?, ?, ?, ?)').run(session.lastInsertRowid, code, value, unit);
   }
+  // 此用例验证已核实历史事实的往返，待核实归属由独立用例验证。
+  db.prepare("UPDATE test_sessions SET project_code='ROWING',project_status='confirmed' WHERE athlete_id=1").run();
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(PROJECT, [1]);
   const exported = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '历史身体指标往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
@@ -1781,6 +1777,8 @@ it('同日同名力量课完整往返保留课次、组次字段与未完成状�
       VALUES (?, '深蹲', 'squat', 1, 6, 0, ?, ?, '基础力量', '下肢', '陆上', 0, 0, 75, 'AN', 0, 0, '未完成且零值保留')`).run(session.lastInsertRowid, 80 + order, 90 + order);
   }
   const expected = db.prepare(`SELECT ts.session_order, srs.exercise_code, srs.actual_reps, srs.actual_weight_kg, srs.planned_weight_kg, srs.training_environment, srs.duration_min, srs.distance_km, srs.intensity_zone, srs.completed, srs.rpe, srs.note FROM strength_result_sets srs JOIN training_sessions ts ON ts.id = srs.training_session_id ORDER BY ts.session_order`).all();
+  // 此用例验证已核实历史事实的往返，待核实归属由独立用例验证。
+  db.prepare("UPDATE training_sessions SET project_code='ROWING',project_status='confirmed' WHERE athlete_id=1").run();
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(PROJECT, [1]);
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
@@ -1957,6 +1955,8 @@ it('旧文件同名课次歧义不能被相同值自动合并，两条来源可�
 it('仅承载力量组次的课次也导出完整课次资料，不伪造时长与距离', async () => {
   const session = db.prepare("INSERT INTO training_sessions (athlete_id, session_date, session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, smvl) VALUES (1, '2025-12-20', 3, '13:00', '体能训练', '动作准备', 'U3', '功能训练', 0, 0, 0, 0, 350)").run();
   db.prepare("INSERT INTO strength_result_sets (training_session_id, exercise_name, actual_reps, actual_weight_kg) VALUES (?, '深蹲', 5, 70)").run(session.lastInsertRowid);
+  // 此用例验证已核实历史事实的往返，待核实归属由独立用例验证。
+  db.prepare("UPDATE training_sessions SET project_code='ROWING',project_status='confirmed' WHERE athlete_id=1").run();
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(PROJECT, [1]);
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
@@ -2312,4 +2312,145 @@ it('P0：管理员配置在重复初始化和成功测试入库后保持不变',
     expect(commit(batch.id, 'skip').createdRecords).toBe(1);
     expect(db.prepare("SELECT * FROM metric_definitions WHERE code='squat_kg'").get()).toEqual(snapshot);
   } finally { db.prepare('UPDATE metric_definitions SET label=?,unit=?,active=? WHERE code=?').run(previous.label, previous.unit, previous.active, 'squat_kg'); }
+});
+
+it.each([
+  ['赛艇', '骑行', 'cycling'], ['皮划艇', '水上训练', 'on_water'], ['激流', '水上训练', 'on_water'],
+  ['公路自行车', '骑行', 'cycling'], ['场地自行车', '骑行', 'cycling'], ['排球', '排球技术', 'volleyball_technique'],
+])('%s统一课次模板保存项目快照、活动、实测功率与踏频并可完整往返', async (project, activity, code) => {
+  const { normalizeProject } = await import('../../shared/projects.ts');
+  const projectCode = normalizeProject(project)!;
+  expect(projectCode).toBeTruthy();
+  db.prepare('UPDATE athletes SET project=? WHERE id=1').run(project);
+  db.prepare('UPDATE project_teams SET project=? WHERE id=1').run(project);
+  const scoped = [{ ...athletes[0], project }];
+  const cycling = code === 'cycling';
+  const headers = ['姓名', '日期', '训练类型', '训练活动', '时长分钟', 'RPE', '平均功率W', '踏频rpm', '强度体系', '强度区间'];
+  const batch = analyze({ 训练课次: [headers, ['张某', '2026-03-01', '专项训练', activity, 60, 5, cycling ? 220 : null, cycling ? 0 : null, 'UT_SYSTEM', 'UT2']] }, { project, athletes: scoped });
+  expect(batch.items.flatMap(item => item.messages).filter(message => message.startsWith('错误：'))).toEqual([]);
+  commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'SCC', conflictPolicy: 'skip', athletes: scoped, allowedTeams: new Set(['A队']) });
+  expect(db.prepare('SELECT project_code, project_status, activity_code, training_category, intensity_system, rules_version, srpe, distance_reported FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: projectCode, project_status: 'confirmed', activity_code: code, training_category: 'special', intensity_system: 'UT_SYSTEM', rules_version: 'multi-sport-v1', srpe: 300, distance_reported: 0 });
+  if (cycling) expect(db.prepare("SELECT value_num, unit FROM training_session_metrics WHERE metric_code='cadenceRpm'").get()).toEqual({ value_num: 0, unit: 'rpm' });
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(project, [1]);
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '多项目往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project, userId: USER_ID, athletes: scoped });
+  const row = roundtrip.items.find(item => item.itemType === 'training_session')!;
+  expect(roundtrip.errorCount).toBe(0);
+  expect(row.payload).toMatchObject({ activityCode: code, intensitySystem: 'UT_SYSTEM', cadenceRpm: cycling ? 0 : null });
+  expect(commitDataImport({ batchId: roundtrip.id, userId: USER_ID, creatorRole: 'SCC', conflictPolicy: 'skip', athletes: scoped }).createdRecords).toBe(0);
+});
+
+it('新协议版本、上下文和试次分别保存，导出回导不丢失身份', async () => {
+  const headers = ['姓名', '测试日期', '指标代码', '数值', '单位', '协议', '协议版本', '测试上下文', '试次序号'];
+  const batch = analyze({ 其他测试: [headers,
+    ['张某', '2026-03-02', 'grip', 30, 'kg', '握力', 'v1', '左手设备A', 1],
+    ['张某', '2026-03-02', 'grip', 31, 'kg', '握力', 'v1', '左手设备A', 2],
+    ['张某', '2026-03-02', 'grip', 32, 'kg', '握力', 'v2', '左手设备A', 1],
+    ['张某', '2026-03-02', 'grip', 33, 'kg', '握力', 'v1', '左手设备B', 1],
+  ] });
+  expect(batch.errorCount).toBe(0);
+  expect(commit(batch.id, 'update').createdRecords).toBe(4);
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '协议往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  expect(roundtrip.errorCount).toBe(0);
+  expect(roundtrip.items.filter(item => item.itemType === 'test_measurement').map(item => [item.payload.protocolVersion, item.payload.testContext, item.payload.attemptOrder])).toEqual([['v1', '左手设备A', 1], ['v1', '左手设备A', 2], ['v2', '左手设备A', 1], ['v1', '左手设备B', 1]]);
+  expect(commit(roundtrip.id, 'update').createdRecords).toBe(0);
+  expect(db.prepare('SELECT COUNT(*) AS count FROM test_sessions').get()).toEqual({ count: 4 });
+});
+
+it('活动、强度体系和试次不合法在预检阻断，纠正后原子写入', () => {
+  const batch = analyze({ 训练课次: [['姓名', '日期', '训练活动', '时长分钟', '踏频rpm', '强度体系', '强度区间'], ['张某', '2026-03-03', '力量训练', 30, 80, 'UT_SYSTEM', 'U2']] });
+  expect(batch.errorCount).toBe(1);
+  expect(() => commit(batch.id, 'update')).toThrow();
+  expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({ count: 0 });
+  const corrected = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { activityCode: 'cycling', intensitySystem: 'U_SYSTEM' } }] });
+  expect(corrected.errorCount).toBe(0);
+  expect(commit(batch.id, 'update').createdRecords).toBe(1);
+  const invalid = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '试次序号'], ['张某', '2026-03-03', 'grip', 30, 'kg', 1.5]] });
+  expect(invalid.errorCount).toBe(1);
+  expect(() => commit(invalid.id, 'update')).toThrow();
+  expect(db.prepare('SELECT COUNT(*) AS count FROM test_sessions').get()).toEqual({ count: 0 });
+});
+
+it('只更新踏频也正确显示差异与回执，空白保留真实0且并发更改阻断', () => {
+  const headers = ['姓名', '日期', '训练活动', '时长分钟', '踏频rpm'];
+  commit(analyze({ 训练课次: [headers, ['张某', '2026-03-04', '骑行', 30, 80]] }).id, 'update');
+  const batch = analyze({ 训练课次: [headers, ['张某', '2026-03-04', '骑行', 30, 0]] });
+  expect(batch.items[0].conflict?.fields.find(field => field.field === 'cadenceRpm')).toMatchObject({ oldValue: '80', newValue: '0', overwrites: true });
+  expect(commit(batch.id, 'update').updatedRecords).toBe(1);
+  expect(db.prepare("SELECT value_num FROM training_session_metrics WHERE metric_code='cadenceRpm'").get()).toEqual({ value_num: 0 });
+  commit(analyze({ 训练课次: [headers, ['张某', '2026-03-04', '', 30, null]] }).id, 'update');
+  expect(db.prepare("SELECT value_num FROM training_session_metrics WHERE metric_code='cadenceRpm'").get()).toEqual({ value_num: 0 });
+  const pending = analyze({ 训练课次: [headers, ['张某', '2026-03-04', '骑行', 30, 90]] });
+  db.prepare("UPDATE training_session_metrics SET value_num=85 WHERE metric_code='cadenceRpm'").run();
+  expect(() => commit(pending.id, 'update')).toThrow(/修改/);
+  expect(db.prepare("SELECT value_num FROM training_session_metrics WHERE metric_code='cadenceRpm'").get()).toEqual({ value_num: 85 });
+});
+
+it('更新已有骑行课的踏频可保留空白活动，已有踏频禁止改成力量活动', () => {
+  const headers = ['姓名', '日期', '训练活动', '时长分钟', '踏频rpm'];
+  commit(analyze({ 训练课次: [headers, ['张某', '2026-03-05', '骑行', 30, 80]] }).id, 'update');
+  const valid = analyze({ 训练课次: [headers, ['张某', '2026-03-05', '', 30, 85]] });
+  expect(valid.errorCount).toBe(0);
+  expect(commit(valid.id, 'update').updatedRecords).toBe(1);
+  const invalid = analyze({ 训练课次: [headers, ['张某', '2026-03-05', '力量训练', 30]] });
+  expect(invalid.errorCount).toBe(1);
+  expect(invalid.items[0].messages.join('；')).toContain('踏频仅适用于骑行');
+  expect(() => commit(invalid.id, 'update')).toThrow();
+  expect(db.prepare('SELECT activity_code FROM training_sessions WHERE athlete_id=1').get()).toEqual({ activity_code: 'cycling' });
+});
+
+it('同值更新旧课次不将待核实项目升级，导出待核实元数据回导阻断', async () => {
+  const headers = ['姓名', '日期', '时长分钟'];
+  commit(analyze({ 训练课次: [headers, ['张某', '2026-04-01', 30]] }).id, 'update');
+  db.prepare("UPDATE training_sessions SET project_code=NULL, project_status='pending_verification', project_source='legacy_unknown' WHERE athlete_id=1").run();
+  const same = analyze({ 训练课次: [headers, ['张某', '2026-04-01', 30]] });
+  expect(same.errorCount).toBe(0);
+  commit(same.id, 'update');
+  expect(db.prepare('SELECT project_code,project_status,project_source FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: null, project_status: 'pending_verification', project_source: 'legacy_unknown' });
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '待核实回导.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  const row = roundtrip.items.find(item => item.itemType === 'training_session')!;
+  expect(row.payload).toMatchObject({ factProject: '', projectStatus: 'pending_verification' });
+  expect(roundtrip.errorCount).toBeGreaterThan(0);
+  expect(() => commit(roundtrip.id, 'update')).toThrow();
+  expect(db.prepare('SELECT project_status FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_status: 'pending_verification' });
+});
+
+it('导出及预览不泄漏其他项目训练、力量和测试事实，禁止覆盖归属', async () => {
+  commit(analyze({ 力量训练组次: [['姓名', '日期', '课次序号', '课次名称', '动作', '组序', '实际次数', '实际重量kg'], ['张某', '2026-04-02', 1, '历史保密课次', '深蹲', 1, 6, 70]], 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '协议'], ['张某', '2026-04-02', 'grip', 30, 'kg', '历史保密协议']] }).id, 'update');
+  db.prepare("UPDATE training_sessions SET project_code='VOLLEYBALL' WHERE athlete_id=1").run();
+  db.prepare("UPDATE test_sessions SET project_code='VOLLEYBALL' WHERE athlete_id=1").run();
+  const preview = analyze({ 训练课次: [['姓名', '日期', '课次序号', '时长分钟'], ['张某', '2026-04-02', 1, 30]] });
+  expect(preview.errorCount).toBeGreaterThan(0);
+  expect(preview.items[0].conflict?.exists).toBe(false);
+  expect(JSON.stringify(preview.items)).not.toContain('历史保密课次');
+  expect(() => commit(preview.id, 'update')).toThrow();
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+  for (const name of ['训练课次', '力量训练组次', '体能测试', '其他测试']) expect(workbook.getWorksheet(name)!.getRow(4).actualCellCount).toBe(0);
+  expect(db.prepare('SELECT project_code FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: 'VOLLEYBALL' });
+});
+
+it('已确认事实项目快照往返不改变状态，待核实测试不可回导为新确认', async () => {
+  const seed = analyze({ 训练课次: [['姓名', '日期', '时长分钟'], ['张某', '2026-04-03', 30]], 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '协议'], ['张某', '2026-04-03', 'grip', 30, 'kg', '握力']] });
+  commit(seed.id, 'update');
+  const { buildUnifiedDataExport } = await import('./data-import-export.ts');
+  const exportBatch = async (filename: string) => {
+    const workbook = await buildUnifiedDataExport(PROJECT, [1]);
+    return analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename, mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });
+  };
+  const confirmed = await exportBatch('确认快照.xlsx');
+  expect(confirmed.errorCount).toBe(0);
+  for (const item of confirmed.items.filter(item => ['training_session','test_measurement'].includes(item.itemType))) expect(item.payload).toMatchObject({ factProject: 'ROWING', projectStatus: 'confirmed' });
+  expect(commit(confirmed.id, 'update').createdRecords).toBe(0);
+  db.prepare("UPDATE test_sessions SET project_code=NULL,project_status='pending_verification' WHERE athlete_id=1").run();
+  const pending = await exportBatch('待核实测试快照.xlsx');
+  const test = pending.items.find(item => item.itemType === 'test_measurement')!;
+  expect(test.payload.projectStatus).toBe('pending_verification');
+  expect(test.messages.join('；')).toContain('归属待核实');
+  expect(() => commit(pending.id, 'update')).toThrow();
+  expect(db.prepare('SELECT project_code,project_status FROM test_sessions WHERE athlete_id=1').get()).toEqual({ project_code: null, project_status: 'pending_verification' });
 });

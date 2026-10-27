@@ -36,16 +36,36 @@ function setup() {
       dimension.direction
     )
   );
+  db.exec(`ALTER TABLE athlete_profiles ADD COLUMN position TEXT; ALTER TABLE athlete_profiles ADD COLUMN technical_level TEXT;
+    ALTER TABLE test_sessions ADD COLUMN project_code TEXT DEFAULT 'ROWING'; ALTER TABLE test_sessions ADD COLUMN project_status TEXT DEFAULT 'confirmed';
+    ALTER TABLE test_sessions ADD COLUMN protocol_version TEXT;
+    ALTER TABLE test_sessions ADD COLUMN context_key TEXT DEFAULT '';
+    ALTER TABLE radar_reference_values ADD COLUMN protocol_version TEXT DEFAULT '';
+    ALTER TABLE radar_reference_values ADD COLUMN test_context TEXT DEFAULT '';
+    ALTER TABLE radar_reference_values ADD COLUMN side TEXT DEFAULT 'center';
+    ALTER TABLE radar_reference_values ADD COLUMN review_status TEXT DEFAULT 'draft';
+    ALTER TABLE radar_reference_values ADD COLUMN source_nature TEXT DEFAULT 'estimated';
+    ALTER TABLE radar_reference_values ADD COLUMN version INTEGER DEFAULT 1;
+    ALTER TABLE radar_reference_values ADD COLUMN effective_from TEXT;
+    ALTER TABLE radar_reference_values ADD COLUMN effective_to TEXT;
+    ALTER TABLE radar_reference_values ADD COLUMN position TEXT DEFAULT 'open';
+    ALTER TABLE radar_reference_values ADD COLUMN reference_level TEXT DEFAULT 'open';
+    ALTER TABLE radar_reference_values ADD COLUMN reference_label TEXT DEFAULT '';
+    ALTER TABLE radar_reference_values ADD COLUMN dimension_version TEXT DEFAULT '';
+    ALTER TABLE radar_reference_values ADD COLUMN measurement_codes TEXT DEFAULT '[]';
+    ALTER TABLE radar_reference_values ADD COLUMN measurement_unit TEXT DEFAULT '';
+    ALTER TABLE radar_reference_values ADD COLUMN weight_relative INTEGER DEFAULT 0;
+  `);
   return db;
 }
 describe('用户授权体能补充', () => {
-  it('只补缺测，真实零成绩和个人档案保持原样，重复执行不增加记录', () => {
+  it('未审核估算不得用于模拟补写，真实零与未知生日保持原样', () => {
     const db = setup();
     const options = { from: '2026-09-09', to: '2026-10-08', actorId: 1, batchId: 'unit-check' };
     const before = db.prepare('SELECT * FROM test_measurements WHERE id=1').get();
     const result = fillPhysicalChampionSimulation(db, options);
-    expect(result.athletesFilled).toBe(2);
-    expect(result.sessionsInserted).toBe(8);
+    expect(result.athletesFilled).toBe(0);
+    expect(result.sessionsInserted).toBe(0);
     expect(db.prepare('SELECT * FROM test_measurements WHERE id=1').get()).toEqual(before);
     expect(db.prepare('SELECT birth_date FROM athletes WHERE id=2').get()).toEqual({
       birth_date: null,
@@ -64,7 +84,8 @@ describe('用户授权体能补充', () => {
       athleteIds: [1, 2, 3],
       canEdit: false,
     });
-    expect(model.groups[0].athletes.map((athlete) => athlete.coverage)).toEqual([8, 8]);
+    expect(model.groups).toEqual([]);
+    expect(model.measurements[0].value).toBe(0);
     expect(fillPhysicalChampionSimulation(db, options).sessionsInserted).toBe(0);
     expect(
       db.prepare('SELECT count(*) AS count FROM test_sessions WHERE athlete_id=3').get()

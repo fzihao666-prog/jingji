@@ -1,7 +1,6 @@
 import type { EChartsOption } from 'echarts';
 import type { SpecialTrainingAnalytics } from '../../shared/special-training';
 import { addDays } from '../utils';
-import { placeholderTrend, placeholderRatio } from './chart-placeholder';
 
 const chartMetrics = {
   top: 40,
@@ -52,7 +51,10 @@ export function volumeOption(
         name: '专项时长（min）',
         type: 'bar',
         barMaxWidth: chartMetrics.barWidth,
-        data: dates.map((date, index) => [pointDate(date), isPlaceholder ? placeholderTrend[index % placeholderTrend.length] * 2 : rows.get(date)?.durationMin ?? null]),
+        data: dates.map((date) => [
+          pointDate(date),
+          isPlaceholder ? null : (rows.get(date)?.durationMin ?? null),
+        ]),
       },
       {
         id: 'distance',
@@ -61,7 +63,10 @@ export function volumeOption(
         yAxisIndex: 1,
         connectNulls: false,
         symbolSize: chartMetrics.symbolSize,
-        data: dates.map((date, index) => [pointDate(date), isPlaceholder ? placeholderTrend[index % placeholderTrend.length] / 10 : rows.get(date)?.distanceKm ?? null]),
+        data: dates.map((date) => [
+          pointDate(date),
+          isPlaceholder ? null : (rows.get(date)?.distanceKm ?? null),
+        ]),
       },
     ],
   };
@@ -84,12 +89,18 @@ export function loadOption(
         connectNulls: false,
         symbolSize: chartMetrics.symbolSize,
         lineStyle: { width: chartMetrics.lineWidth },
-        data: calendar(from, to).map((date, index) => [pointDate(date), isPlaceholder ? placeholderTrend[index % placeholderTrend.length] * 5 : rows.get(date)?.load ?? null]),
+        data: calendar(from, to).map((date) => [
+          pointDate(date),
+          isPlaceholder ? null : (rows.get(date)?.load ?? null),
+        ]),
       },
     ],
   };
 }
-export function intensityOption(data: SpecialTrainingAnalytics, isPlaceholder = false): EChartsOption {
+export function intensityOption(
+  data: SpecialTrainingAnalytics,
+  isPlaceholder = false
+): EChartsOption {
   return {
     animation: false,
     tooltip: {
@@ -106,16 +117,18 @@ export function intensityOption(data: SpecialTrainingAnalytics, isPlaceholder = 
         radius: ['38%', '65%'],
         center: ['50%', '44%'],
         label: { show: false },
-        data: isPlaceholder ? ['U3', 'U2', 'U1', 'AT'].map((name, index) => ({ name, value: placeholderRatio[index] })) : data.intensity
-          .map((row) => ({ name: row.name, value: row.durationMin || 0 })),
+        data: isPlaceholder
+          ? []
+          : data.intensity.map((row) => ({ name: row.name, value: row.durationMin ?? undefined })),
       },
     ],
   };
 }
-export function contentOption(data: SpecialTrainingAnalytics, isPlaceholder = false): EChartsOption {
-  const rows = isPlaceholder
-    ? ['水上训练', '测功仪', '技术训练', '恢复训练'].map((name, index) => ({ name, count: placeholderRatio[index] }))
-    : data.content;
+export function contentOption(
+  data: SpecialTrainingAnalytics,
+  isPlaceholder = false
+): EChartsOption {
+  const rows = isPlaceholder ? [] : data.content;
   return {
     animation: false,
     tooltip: {

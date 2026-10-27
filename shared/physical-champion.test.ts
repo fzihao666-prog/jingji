@@ -9,8 +9,28 @@ const reference: PhysicalReference = {
   unit: 'cm',
   value: 50,
   protocol: 'CMJ双手叉腰',
+  protocolVersion: '',
+  testContext: '',
+  side: 'center',
   direction: 'higher_better',
-  sourceType: 'estimated',
+  sourceType: 'public_reference',
+  project: 'ROWING',
+  reviewStatus: 'reviewed',
+  sourceNature: 'official_research',
+  version: 1,
+  effectiveFrom: '2026-01-01',
+  effectiveTo: null,
+  position: 'open',
+  referenceLevel: 'open',
+  referenceLabel: '测试参考',
+  dimensionVersion: 'v1',
+  measurementCodes: ['vertical_jump_cm'],
+  measurementUnit: 'cm',
+  weightRelative: false,
+  gender: '男',
+  event: 'open',
+  weightClass: 'open',
+  ageGroup: 'adult',
   sourceNote: '测试参考',
 };
 
@@ -47,4 +67,13 @@ describe('体能冠军标准化计算', () => {
     expect(mean([])).toBeNull();
     expect(mean([0, 50, 100])).toBe(50);
   });
+});
+
+it('未审核或估算标准不得评分', () => {
+  expect(
+    physicalComparison(60, { ...reference, sourceType: 'estimated' }).achievedPercent
+  ).toBeNull();
+  expect(
+    physicalComparison(60, { ...reference, reviewStatus: 'draft' }).achievedPercent
+  ).toBeNull();
 });

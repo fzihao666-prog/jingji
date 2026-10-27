@@ -1,5 +1,11 @@
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { canManageGlobalPhysicalReferences } from '../../shared/physical-champion-policy.ts';
 import type { DatabaseSync } from 'node:sqlite';
-import { PHYSICAL_CHAMPION_DIMENSIONS } from '../../shared/physical-champion.ts';
+import {
+  PHYSICAL_CHAMPION_DIMENSIONS,
+  physicalReferenceDraftSchema,
+} from '../../shared/physical-champion.ts';
 
 const tables = ['radar_reference_sources', 'radar_reference_values'] as const;
 
@@ -16,9 +22,17 @@ function migrateReferenceTables(db: DatabaseSync) {
   const projectCheck = /CHECK\s*\(\s*project\s*(?:=\s*'[^']+'|IN\s*\([^)]*\))\s*\)/gi;
   const needsRebuild = schemas.some((schema) => {
     const constraints = schema.sql!.match(projectCheck) || [];
-    return constraints.some(
-      (constraint) =>
-        !constraint.includes("'CANOE_SPRINT'") || !constraint.includes("'CANOE_SLALOM'")
+    return (
+      (schema.name === 'radar_reference_values' &&
+        /CHECK\s*\(\s*gender\s+IN/i.test(schema.sql!) &&
+        !/gender\s+IN\s*\([^)]*'open'/i.test(schema.sql!)) ||
+      (schema.name === 'radar_reference_sources' && /CHECK\s*\(\s*url\s+LIKE/i.test(schema.sql!)) ||
+      constraints.some(
+        (constraint) =>
+          !constraint.includes("'VOLLEYBALL'") ||
+          !constraint.includes("'CYCLING_ROAD'") ||
+          !constraint.includes("'CYCLING_TRACK'")
+      )
     );
   });
   const foreignKeys = Number(
@@ -42,7 +56,15 @@ function migrateReferenceTables(db: DatabaseSync) {
         const sql = schema
           .sql!.replace(
             projectCheck,
-            "CHECK(project IN ('ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CANOE', 'SLALOM'))"
+            "CHECK(project IN ('ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CANOE', 'SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'))"
+          )
+          .replace(
+            /CHECK\s*\(\s*gender\s+IN\s*\([^)]*\)\s*\)/gi,
+            "CHECK(gender IN ('男','女','open'))"
+          )
+          .replace(
+            /CHECK\s*\(\s*url\s+LIKE\s+'https:\/\/%'\s+OR\s+url\s+LIKE\s+'http:\/\/%'\s*\)/gi,
+            "CHECK(url = '' OR url LIKE 'https://%' OR url LIKE 'http://%')"
           )
           .replace(
             new RegExp(`CREATE TABLE (?:IF NOT EXISTS )?["\x60]?${schema.name}["\x60]?`, 'i'),
@@ -74,15 +96,47 @@ function migrateReferenceTables(db: DatabaseSync) {
       source_type:
         "TEXT NOT NULL DEFAULT 'public_reference' CHECK(source_type IN ('measured', 'public_reference', 'estimated'))",
       protocol: "TEXT NOT NULL DEFAULT ''",
+      protocol_version: "TEXT NOT NULL DEFAULT ''",
+      test_context: "TEXT NOT NULL DEFAULT ''",
+      side: "TEXT NOT NULL DEFAULT 'center' CHECK(side IN ('center','bilateral','left','right'))",
       event_group: "TEXT NOT NULL DEFAULT 'open'",
       weight_class: "TEXT NOT NULL DEFAULT 'open'",
       age_group: "TEXT NOT NULL DEFAULT 'adult'",
+      review_status:
+        "TEXT NOT NULL DEFAULT 'draft' CHECK(review_status IN ('draft','reviewed','disabled'))",
+      source_nature:
+        "TEXT NOT NULL DEFAULT 'unverified' CHECK(source_nature IN ('official_research','expert','team','estimated','unverified'))",
+      version: 'INTEGER NOT NULL DEFAULT 1',
+      parent_id: 'INTEGER REFERENCES radar_reference_values(id)',
+      reference_root_id: 'INTEGER REFERENCES radar_reference_values(id)',
+      effective_from: 'TEXT',
+      effective_to: 'TEXT',
+      position: "TEXT NOT NULL DEFAULT 'open'",
+      reference_level: "TEXT NOT NULL DEFAULT 'open'",
+      reference_label: "TEXT NOT NULL DEFAULT ''",
+      dimension_version: "TEXT NOT NULL DEFAULT ''",
+      measurement_codes: "TEXT NOT NULL DEFAULT '[]'",
+      measurement_unit: "TEXT NOT NULL DEFAULT ''",
+      weight_relative: 'INTEGER NOT NULL DEFAULT 0',
+      reviewed_by: 'INTEGER',
+      reviewed_at: 'TEXT',
       direction:
         "TEXT NOT NULL DEFAULT 'higher_better' CHECK(direction IN ('higher_better', 'lower_better'))",
     };
     for (const [name, declaration] of Object.entries(additions)) {
       if (!columns.has(name))
         db.exec(`ALTER TABLE radar_reference_values ADD COLUMN ${name} ${declaration}`);
+    }
+    for (const dimension of PHYSICAL_CHAMPION_DIMENSIONS) {
+      db.prepare(
+        `UPDATE radar_reference_values SET measurement_codes=?, measurement_unit=?, weight_relative=?, dimension_version='legacy-unreviewed'
+        WHERE project IN ('ROWING','CANOE_SPRINT','CANOE_SLALOM','CANOE','SLALOM') AND metric_key=? AND dimension_version=''`
+      ).run(
+        JSON.stringify(dimension.codes),
+        dimension.measurementUnit,
+        Number(dimension.weightRelative),
+        dimension.key
+      );
     }
     // 早期参考表没有来源外键。只补关联，不猜测其原始出处或测试协议。
     const unlinkedProjects = db
@@ -139,8 +193,8 @@ export function initializePhysicalChampionReferences(db: DatabaseSync) {
     db.prepare(`SELECT 1 FROM radar_reference_values WHERE project IN (?, ?) AND radar_kind = 'physical'
     AND metric_key = ? AND gender = ? AND trim(protocol) <> '' AND boat_class = '' AND event_group = 'open' AND weight_class = 'open' AND age_group = 'adult' LIMIT 1`);
   const insertValue = db.prepare(`INSERT INTO radar_reference_values
-    (source_id, project, radar_kind, metric_key, gender, boat_class, applicability, value_num, unit, source_type, protocol, event_group, weight_class, age_group, direction)
-    VALUES (?, ?, 'physical', ?, ?, '', ?, ?, ?, 'estimated', ?, 'open', 'open', 'adult', ?)`);
+    (source_id, project, radar_kind, metric_key, gender, boat_class, applicability, value_num, unit, source_type, protocol, event_group, weight_class, age_group, direction, source_nature, measurement_codes, measurement_unit, weight_relative, dimension_version)
+    VALUES (?, ?, 'physical', ?, ?, '', ?, ?, ?, 'estimated', ?, 'open', 'open', 'adult', ?, 'estimated', ?, ?, ?, 'legacy-unreviewed')`);
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const [project, genders] of Object.entries(referenceBaselines)) {
@@ -179,12 +233,259 @@ export function initializePhysicalChampionReferences(db: DatabaseSync) {
             values[index],
             dimension.unit,
             dimension.protocol,
-            dimension.direction
+            dimension.direction,
+            JSON.stringify(dimension.codes),
+            dimension.measurementUnit,
+            Number(dimension.weightRelative)
           );
         });
       }
     }
     db.exec('COMMIT');
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+export class PhysicalReferenceError extends Error {
+  constructor(
+    public status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+type ReferenceActor = {
+  id: number;
+  role: string;
+  permissions: Parameters<typeof canManageGlobalPhysicalReferences>[1];
+};
+function authorizeReference(actor: ReferenceActor) {
+  if (!canManageGlobalPhysicalReferences(actor.role, actor.permissions))
+    throw new PhysicalReferenceError(403, '维护全局标准需要全国、全部项目及全部队伍管理权限。');
+}
+export function savePhysicalReferenceDraft(
+  db: DatabaseSync,
+  actor: ReferenceActor,
+  input: unknown,
+  previous?: { id: number; expectedRevision: number }
+) {
+  authorizeReference(actor);
+  const parsed = physicalReferenceDraftSchema.safeParse(input);
+  if (!parsed.success)
+    throw new PhysicalReferenceError(400, '参考维度、来源、适用范围或有效日期无效。');
+  const draft = parsed.data;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    let version = 1;
+    let rootId: number | null = null;
+    if (previous) {
+      const old = db
+        .prepare(
+          "SELECT id,reference_root_id,revision,version,project,metric_key FROM radar_reference_values WHERE id=? AND radar_kind='physical'"
+        )
+        .get(previous.id) as
+        | {
+            id: number;
+            reference_root_id: number | null;
+            revision: number;
+            version: number;
+            project: string;
+            metric_key: string;
+          }
+        | undefined;
+      if (!old) throw new PhysicalReferenceError(404, '参考版本不存在。');
+      if (old.revision !== previous.expectedRevision)
+        throw new PhysicalReferenceError(409, '参考版本已更新，请刷新。');
+      if (old.project !== draft.project || old.metric_key !== draft.key)
+        throw new PhysicalReferenceError(400, '新版本不得变更项目和指标归属。');
+      rootId = old.reference_root_id || old.id;
+      const latest = db
+        .prepare(
+          'SELECT MAX(version) AS version FROM radar_reference_values WHERE id=? OR reference_root_id=?'
+        )
+        .get(rootId, rootId) as { version: number };
+      version = latest.version + 1;
+      db.prepare('UPDATE radar_reference_values SET revision=revision+1 WHERE id=?').run(
+        previous.id
+      );
+    }
+    const sourceProtocol = draft.protocol;
+    const sourceYear = new Date().getUTCFullYear();
+    db.prepare(
+      `INSERT OR IGNORE INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,?,'',?,?,'待审核')`
+    ).run(draft.project, draft.sourceNote, sourceYear, sourceProtocol);
+    const source = db
+      .prepare(
+        "SELECT id FROM radar_reference_sources WHERE project=? AND name=? AND url='' AND source_year=? AND protocol=?"
+      )
+      .get(draft.project, draft.sourceNote, sourceYear, sourceProtocol) as { id: number };
+    const result = db
+      .prepare(
+        `INSERT INTO radar_reference_values(source_id,project,radar_kind,metric_key,gender,boat_class,applicability,value_num,unit,
+      source_type,protocol,event_group,weight_class,age_group,direction,review_status,source_nature,version,parent_id,reference_root_id,effective_from,effective_to,
+      position,reference_level,reference_label,dimension_version,measurement_codes,measurement_unit,weight_relative,protocol_version,test_context,side)
+      VALUES(?,?,'physical',?,?,'',?,?,?, ?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      )
+      .run(
+        source.id,
+        draft.project,
+        draft.key,
+        draft.gender,
+        `版本草稿:${randomUUID()}`,
+        draft.value,
+        draft.unit,
+        draft.sourceType,
+        draft.protocol,
+        draft.event,
+        draft.weightClass,
+        draft.ageGroup,
+        draft.direction,
+        draft.sourceNature,
+        version,
+        previous?.id || null,
+        rootId,
+        draft.effectiveFrom,
+        draft.effectiveTo,
+        draft.position,
+        draft.referenceLevel,
+        draft.referenceLabel,
+        draft.dimensionVersion,
+        JSON.stringify(draft.measurementCodes),
+        draft.measurementUnit,
+        Number(draft.weightRelative),
+        draft.protocolVersion,
+        draft.testContext,
+        draft.side
+      );
+    const id = Number(result.lastInsertRowid);
+    db.prepare(
+      "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,detail) VALUES(?,'CREATE_PHYSICAL_REFERENCE_VERSION','radar_reference_values',?,?)"
+    ).run(actor.id, id, JSON.stringify({ parentId: previous?.id || null, version }));
+    db.exec('COMMIT');
+    return { id, version, message: '已创建新草稿版本，审核启用后生效。' };
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  }
+}
+export function reviewPhysicalReference(
+  db: DatabaseSync,
+  actor: ReferenceActor,
+  id: number,
+  input: unknown
+) {
+  authorizeReference(actor);
+  const parsed = z
+    .strictObject({
+      expectedRevision: z.number().int().nonnegative(),
+      status: z.enum(['reviewed', 'disabled']),
+    })
+    .safeParse(input);
+  if (!parsed.success) throw new PhysicalReferenceError(400, '审核操作参数无效。');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const row = db
+      .prepare("SELECT * FROM radar_reference_values WHERE id=? AND radar_kind='physical'")
+      .get(id) as Record<string, string | number | null> | undefined;
+    if (!row) throw new PhysicalReferenceError(404, '参考版本不存在。');
+    if (row.revision !== parsed.data.expectedRevision)
+      throw new PhysicalReferenceError(409, '参考版本已更新，请刷新。');
+    if (parsed.data.status === 'reviewed') {
+      const source = db
+        .prepare('SELECT name,active FROM radar_reference_sources WHERE id=?')
+        .get(row.source_id) as { name: string; active: number } | undefined;
+      const valid = physicalReferenceDraftSchema.safeParse({
+        project: row.project,
+        key: row.metric_key,
+        referenceLabel: row.reference_label,
+        value: row.value_num,
+        unit: row.unit,
+        protocol: row.protocol,
+        protocolVersion: row.protocol_version,
+        testContext: row.test_context,
+        side: row.side,
+        direction: row.direction,
+        sourceType: row.source_type,
+        sourceNature: row.source_nature,
+        sourceNote: source?.name,
+        gender: row.gender,
+        event: row.event_group,
+        weightClass: row.weight_class,
+        ageGroup: row.age_group,
+        position: row.position,
+        referenceLevel: row.reference_level,
+        effectiveFrom: row.effective_from,
+        effectiveTo: row.effective_to,
+        dimensionVersion: row.dimension_version,
+        measurementCodes: JSON.parse(String(row.measurement_codes)),
+        measurementUnit: row.measurement_unit,
+        weightRelative: row.weight_relative === 1,
+      });
+      if (!valid.success || !source?.active || !row.active)
+        throw new PhysicalReferenceError(
+          400,
+          '请创建并补全来源、维度、日期及适用条件的新版本后审核。'
+        );
+      const fields = [
+        'gender',
+        'event_group',
+        'weight_class',
+        'age_group',
+        'position',
+        'reference_level',
+      ];
+      const rank = (item: Record<string, string | number | null>) =>
+        fields.filter((field) => item[field] !== 'open').length;
+      const others = db
+        .prepare(
+          `SELECT * FROM radar_reference_values WHERE id<>? AND project IN (?,?) AND radar_kind='physical' AND metric_key=?
+        AND review_status='reviewed' AND active=1 AND source_id IN (SELECT id FROM radar_reference_sources WHERE active=1)`
+        )
+        .all(
+          id,
+          row.project,
+          row.project === 'CANOE_SPRINT'
+            ? 'CANOE'
+            : row.project === 'CANOE_SLALOM'
+              ? 'SLALOM'
+              : row.project,
+          row.metric_key
+        ) as Array<Record<string, string | number | null>>;
+      if (
+        others.some(
+          (other) =>
+            other.protocol === row.protocol &&
+            other.protocol_version === row.protocol_version &&
+            other.test_context === row.test_context &&
+            other.side === row.side &&
+            other.unit === row.unit &&
+            rank(other) === rank(row) &&
+            fields.every(
+              (field) =>
+                other[field] === 'open' || row[field] === 'open' || other[field] === row[field]
+            ) &&
+            String(other.effective_from || '') <= String(row.effective_to || '9999-12-31') &&
+            String(row.effective_from || '') <= String(other.effective_to || '9999-12-31')
+        )
+      )
+        throw new PhysicalReferenceError(409, '存在同优先级有效期重叠标准，请先停用旧版本。');
+    }
+    db.prepare(
+      `UPDATE radar_reference_values SET review_status=?,revision=revision+1,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?`
+    ).run(parsed.data.status, actor.id, id);
+    db.prepare(
+      "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,detail) VALUES(?,'REVIEW_PHYSICAL_REFERENCE','radar_reference_values',?,?)"
+    ).run(actor.id, id, JSON.stringify(parsed.data));
+    db.exec('COMMIT');
+    return {
+      message:
+        parsed.data.status === 'reviewed'
+          ? '参考版本已审核启用；估算仍不参与正式评分。'
+          : '参考版本已停用。',
+    };
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');
     throw error;

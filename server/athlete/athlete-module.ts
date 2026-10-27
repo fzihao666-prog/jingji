@@ -1,7 +1,7 @@
 import { normalizeTechnicalLevel, validTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { PROJECTS } from '../../shared/projects.ts';
+import { isProject } from '../../shared/projects.ts';
 import {
   inferStrengthBodyPosition,
   inferStrengthCategory,
@@ -66,7 +66,7 @@ export function athletePayloadErrors(payload: ReturnType<typeof readAthleteAdmin
   const errors: string[] = [];
   const nameResult = validatePersonName(payload.name);
   if (nameResult.error) errors.push(nameResult.error);
-  if (!PROJECTS.includes(payload.project)) errors.push('请选择有效的运动项目');
+  if (!isProject(payload.project)) errors.push('请选择有效的运动项目');
   if (
     !db
       .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')

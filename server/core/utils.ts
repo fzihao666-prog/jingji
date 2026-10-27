@@ -121,6 +121,8 @@ function parseTrainingBreakdownJson(value: string): TrainingBreakdown {
 }
 
 export function trainingSessionBreakdown(input: {
+  activityCode?: string | null;
+  intensitySystem?: string | null;
   trainingType: string;
   structureType: string;
   intensityZone: string;
@@ -129,13 +131,15 @@ export function trainingSessionBreakdown(input: {
 }): TrainingBreakdown {
   const breakdown = emptyTrainingBreakdown();
   const zone = input.intensityZone as IntensityZoneKey;
-  if (
-    (input.trainingType === '专项训练' || input.distanceKm > 0) &&
-    intensityZones.includes(zone)
-  ) {
+  if (input.activityCode === 'on_water') {
     breakdown.waterMinutes = input.durationMin;
-    breakdown.waterDistanceByZone[zone] = input.distanceKm;
-    breakdown.waterTimeByZone[zone] = input.durationMin;
+    if (input.intensitySystem === 'U' && intensityZones.includes(zone)) {
+      breakdown.waterDistanceByZone[zone] = input.distanceKm;
+      breakdown.waterTimeByZone[zone] = input.durationMin;
+    }
+  } else if (input.activityCode === 'ergometer') {
+    breakdown.ergMinutes = input.durationMin;
+    if (input.intensitySystem === 'U' && intensityZones.includes(zone)) breakdown.ergDistanceByZone[zone] = input.distanceKm;
   } else if (input.structureType === '最大力量')
     breakdown.landMinutes.maxStrength = input.durationMin;
   else if (input.structureType === '速度力量')

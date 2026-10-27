@@ -11,7 +11,9 @@ import {
   reportPeriod,
   reportCommentarySchema,
   reportPreviewSchema,
+  reportDataSchema,
 } from '../../shared/training-report.ts';
+import { renderReportPdf } from './report-pdf.ts';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import type { ReportData } from '../../shared/training-report.ts';
@@ -32,6 +34,15 @@ const mini = miniModule.exports as {
 };
 const range = { from: '2026-10-05', to: '2026-10-11', kind: 'week' as const };
 describe('训练报告统计与跨端契约', () => {
+  it('历史模拟即使标记有效且非演示，也不作为真实训练或测试', () => {
+    const db = createReportFixture();
+    try {
+      db.exec("UPDATE training_sessions SET source='synthetic_30d_current_v1'; UPDATE test_sessions SET source='user_requested_simulation'");
+      const data = readReport(db, 1, 'ROWING', range);
+      expect(data.totals.sessions).toBe(0);
+      expect(data.tests).toEqual([]);
+    } finally { db.close(); }
+  });
   it('区分缺失和零，排除演示与其他运动员，按等长前期对比', () => {
     const db = createReportFixture();
     try {
@@ -51,9 +62,10 @@ describe('训练报告统计与跨端契约', () => {
       expect(data.daily[3].srpe).toBeNull();
       expect(data.wellness[0].days).toBe(1);
       expect(data.wellness[2].average).toBeNull();
-      expect(data.tests).toHaveLength(1);
-      expect(data.tests[0].change).toBe(400);
-      expect(data.tests[0].protocol).toBe('多种协议');
+      expect(data.version).toBe(2);
+      expect(data.tests).toHaveLength(2);
+      expect(data.tests[0].change).toBe(20);
+      expect(data.tests[0].protocol).toBe('标准协议');
       expect(
         reportPreviewSchema.safeParse({ data, fingerprint: reportFingerprint(data) }).success
       ).toBe(true);
@@ -69,7 +81,7 @@ describe('训练报告统计与跨端契约', () => {
     const db = createReportFixture();
     try {
       initializeTrainingReports(db);
-      const data = readReport(db, 1, 'CANOE', range);
+      const data = readReport(db, 1, 'CANOE_SPRINT', range);
       expect(data.totals.sessions).toBe(0);
       expect(data.totals.srpe).toBeNull();
       expect(data.tests).toEqual([]);
@@ -96,13 +108,13 @@ describe('训练报告统计与跨端契约', () => {
       db.close();
     }
   });
-  it('不要求协议，按首末数值计算负数和零变化', () => {
+  it('未知协议仅展示原始值，不计算变化', () => {
     const db = createReportFixture();
     try {
       db.exec("UPDATE test_sessions SET protocol = ''; UPDATE test_measurements SET value_num=50 WHERE id=1; UPDATE test_measurements SET value_num=30 WHERE id=3");
-      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBe(-20);
+      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBeNull();
       db.exec("UPDATE test_measurements SET value_num=50 WHERE id=3");
-      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBe(0);
+      expect(readReport(db, 1, 'ROWING', range).tests[0].change).toBeNull();
     } finally {
       db.close();
     }
@@ -117,6 +129,55 @@ describe('训练报告统计与跨端契约', () => {
     } finally {
       db.close();
     }
+  });
+  it('协议版本、上下文、项目归属及确认状态均影响可比事实', () => {
+    const db = createReportFixture();
+    try {
+      db.exec("UPDATE test_sessions SET protocol_code='power', protocol_version='v1'; UPDATE test_sessions SET protocol_version='v2' WHERE id=2; UPDATE test_sessions SET context_key='distance:2000' WHERE id=3;");
+      expect(readReport(db, 1, 'ROWING', range).tests.map(t => t.change)).toEqual([null, null, null]);
+      db.exec("UPDATE training_sessions SET project_status='pending_verification' WHERE id=1; UPDATE test_sessions SET project_code='VOLLEYBALL' WHERE id=2;");
+      const data = readReport(db, 1, 'ROWING', range);
+      expect(data.totals.sessions).toBe(2);
+      expect(data.tests).toHaveLength(2);
+      expect(data.tests.flatMap(t => t.points.map(p => p.value))).toEqual([200, 600]);
+    } finally { db.close(); }
+  });
+  it.each(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])('只生成 %s 当前项目专项章节且公共报告可用', project => {
+    const db = createReportFixture();
+    try {
+      db.prepare('UPDATE athletes SET project=? WHERE id=1').run(project);
+      db.prepare('UPDATE training_sessions SET project_code=? WHERE athlete_id=1').run(project);
+      db.prepare('UPDATE test_sessions SET project_code=? WHERE athlete_id=1').run(project);
+      const data = readReport(db, 1, project, range);
+      expect(data.version).toBe(2);
+      if (data.version !== 2) throw new Error('expected v2');
+      expect(data.specialty.project).toBe(project);
+      expect(data.specialty.sessions).toBe(1);
+      expect(data.specialty.duration).toBe(60);
+      expect(data.totals.sessions).toBe(3);
+      expect(data.referenceVersion).toBeNull();
+      expect(Object.keys(data.specialty)).toEqual(['project', 'label', 'status', 'reason', 'sessions', 'duration']);
+      expect(reportDataSchema.safeParse(data).success).toBe(true);
+    } finally { db.close(); }
+  });
+  it('版本1快照按原值读取和导出，不按新协议规则重算', () => {
+    const db = createReportFixture();
+    try {
+      const current = readReport(db, 1, 'ROWING', range);
+      const legacy = { version: 1, range: current.range, project: current.project, totals: current.totals,
+        previous: current.previous, daily: current.daily, categories: current.categories,
+        tests: [{ ...current.tests[0], protocol: '多种协议', change: 400 }], wellness: current.wellness,
+        days: current.days, trainingDays: current.trainingDays, wellnessDays: current.wellnessDays };
+      const data = reportDataSchema.parse(legacy);
+      db.exec('DELETE FROM test_measurements; DELETE FROM training_sessions;');
+      expect(data.version).toBe(1);
+      expect(data.tests[0].change).toBe(400);
+      expect(mini.reportView(data).kpis[1].value).toBe('60');
+      const pdf = renderReportPdf({ id: 'legacy', createdAt: '2026-10-11', data,
+        commentary: { highlights: [], concerns: [], suggestions: [] } }, 1);
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(data.tests[0].change).toBe(400);
+    } finally { db.close(); }
   });
   it('限制日期、自然周月、未知字段和点评长度', () => {
     expect(reportRangeSchema.safeParse({ ...range, to: '2026-10-04' }).success).toBe(false);

@@ -2,6 +2,7 @@ import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { migrateNullableInjuryPainScore } from './injury-pain-score-migration.ts';
+import { migrateMultiSportFacts } from './multi-sport-migration.ts';
 import { migrateTeamPlans } from './team-plan-migration.ts';
 import { initializeTrainingReports } from '../report/report-service.ts';
 import { initializeTrainingPlanLinks } from './training-plan-links.ts';
@@ -5976,6 +5977,9 @@ export function initializeDatabase(
   initializeTrainingPlanLinks(db);
   initializeTeamPlanChecks(db);
   initializeTrainingReports(db);
+  // 旧初始化和历史种子完成后调整测试唯一键；部署时在开始接受写入前完成迁移。
+  migrateMultiSportFacts(db, databaseExistedBeforeStartup && databasePath !== ':memory:'
+    ? join(dirname(databasePath), 'backups', `before-multi-sport-${randomUUID()}.db`) : undefined);
   return { upsertAthleteOrigin };
 
 }

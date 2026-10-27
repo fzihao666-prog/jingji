@@ -8,7 +8,7 @@ import { ContentState, PageContainer, PageHeader } from '../components/PageLayou
 export function TeamsPage() {
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [canCreateProjects, setCanCreateProjects] = useState<Project[]>([]);
-  const [project, setProject] = useState<Project>('赛艇');
+  const [project, setProject] = useState<Project>('ROWING');
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);

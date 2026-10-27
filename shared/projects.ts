@@ -1,7 +1,7 @@
 export type ProjectCapability = 'rowing' | 'canoe' | 'slalom' | null;
 
 type ProjectDefinition = {
-  code: string;
+  code: Project;
   nameZh: string;
   nameEn: string;
   sort: number;
@@ -10,7 +10,7 @@ type ProjectDefinition = {
   accent: string;
 };
 
-const catalog: readonly ProjectDefinition[] = [
+const projectEntries = [
   ['SWIMMING', '游泳', 'Swimming'],
   ['MARATHON_SWIMMING', '马拉松游泳', 'Marathon Swimming'],
   ['ARTISTIC_SWIMMING', '花样游泳', 'Artistic Swimming'],
@@ -61,7 +61,11 @@ const catalog: readonly ProjectDefinition[] = [
   ['BEACH_VOLLEYBALL', '沙滩排球', 'Beach Volleyball'],
   ['WEIGHTLIFTING', '举重', 'Weightlifting'],
   ['WRESTLING', '摔跤', 'Wrestling'],
-].map(([code, nameZh, nameEn], index) => ({
+] as const;
+
+export type Project = (typeof projectEntries)[number][0];
+
+const catalog: readonly ProjectDefinition[] = projectEntries.map(([code, nameZh, nameEn], index) => ({
   code,
   nameZh,
   nameEn,
@@ -79,7 +83,6 @@ const catalog: readonly ProjectDefinition[] = [
 }));
 
 export const PROJECT_DEFINITIONS = catalog;
-export type Project = (typeof PROJECT_DEFINITIONS)[number]['code'];
 export const PROJECTS = PROJECT_DEFINITIONS.map((item) => item.code) as Project[];
 export const DEFAULT_PROJECT: Project = 'ROWING';
 export const PROJECT_BY_CODE = Object.fromEntries(
@@ -91,14 +94,14 @@ const legacyProjectCodes: Record<string, Project> = {
   激流: 'CANOE_SLALOM',
 };
 
-export function isProject(value: unknown): boolean {
-  return typeof value === 'string' && value in PROJECT_BY_CODE;
+export function isProject(value: unknown): value is Project {
+  return typeof value === 'string' && Object.hasOwn(PROJECT_BY_CODE, value);
 }
 export function normalizeProject(value: unknown): Project | null {
   if (typeof value !== 'string') return null;
   const candidate = value.trim();
   if (isProject(candidate)) return candidate;
-  const legacy = legacyProjectCodes[candidate];
+  const legacy = Object.hasOwn(legacyProjectCodes, candidate) ? legacyProjectCodes[candidate] : null;
   if (legacy) return legacy;
   const normalized = candidate.toLocaleLowerCase();
   return (

@@ -7,6 +7,9 @@ export const TRAINING_CONTENT_CATEGORIES = [
   '最大力量',
   '速度力量',
   '跑步',
+  '骑行',
+  '排球技术',
+  '专项',
   '其它',
 ] as const;
 
@@ -14,6 +17,8 @@ export type TrainingContentCategory = (typeof TRAINING_CONTENT_CATEGORIES)[numbe
 export type TrainingLoadCategory = 'special' | 'physical' | 'recovery';
 
 export type TrainingContentSource = {
+  activityCode?: string | null;
+  trainingCategory?: string | null;
   trainingType?: string | null;
   structureType?: string | null;
   content?: string | null;
@@ -21,6 +26,11 @@ export type TrainingContentSource = {
 
 // 这是统计展示口径：每个训练课次只归入一个固定类别，不改写原始训练字段。
 export function trainingContentCategory(input: TrainingContentSource): TrainingContentCategory {
+  const activities: Record<string, TrainingContentCategory> = {
+    on_water: '水上', ergometer: '测功仪', cycling: '骑行', volleyball_technique: '排球技术',
+    running: '跑步', recovery: '拉伸再生',
+  };
+  if (input.activityCode && Object.hasOwn(activities, input.activityCode)) return activities[input.activityCode];
   const text =
     `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (!text) return '其它';
@@ -31,16 +41,20 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
   if (/速度力量|爆发力|高拉|抓举|挺举|快速力量/.test(text)) return '速度力量';
   if (/力量耐力|循环力量|肌耐力|重复力量/.test(text)) return '力量耐力';
   if (/功能训练|功能性|核心稳定|协调|灵敏|平衡/.test(text)) return '功能';
-  if (/水上|艇上|划行|划桨|竞速|门区|回旋|专项训练|静水/.test(text)) return '水上';
+  if (/骑行|自行车|踏频/.test(text)) return '骑行';
+  if (/排球|发球|扣球|拦网|垫球/.test(text)) return '排球技术';
+  if (/水上|艇上|划行|划桨|门区|回旋|静水/.test(text)) return '水上';
+  if (/专项/.test(text)) return '专项';
   return '其它';
 }
 
 // 专项、体能与恢复训练模块共用这一口径。优先识别明确恢复内容，无法识别的记录不强行推断。
 export function trainingLoadCategory(input: TrainingContentSource): TrainingLoadCategory | null {
+  if (input.trainingCategory === 'special' || input.trainingCategory === 'physical' || input.trainingCategory === 'recovery') return input.trainingCategory;
   const text =
     `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (/拉伸|再生|恢复|放松|泡沫轴|理疗/.test(text)) return 'recovery';
-  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || ''))
+  if (/专项|水上|划行|艇上|门区|竞速|骑行|自行车|排球|发球|扣球|拦网/.test(text) && !/力量训练/.test(input.trainingType || ''))
     return 'special';
   if (/力量|体能|跑步|功能|核心|陆上|测功仪/.test(text)) return 'physical';
   return null;

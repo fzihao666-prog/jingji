@@ -1,5 +1,6 @@
 import express from 'express';
-import { afterEach, describe, expect, it } from 'vitest';
+import * as sportRules from '../../shared/sport-rules.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { AuthUser } from '../core/shared-server.ts';
 import { registerReportRoutes } from './report-routes.ts';
@@ -8,6 +9,7 @@ import { reportPreviewSchema, savedReportSchema } from '../../shared/training-re
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(cleanups.splice(0).map((close) => close()));
 });
 const range = { from: '2026-10-05', to: '2026-10-11', kind: 'week' };
@@ -172,6 +174,19 @@ describe('训练报告 API 权限与失败边界', () => {
     expect(
       (await post('/commentary', { range, fingerprint: preview.fingerprint, consent: true })).status
     ).toBe(409);
+  });
+  it('模型等待期间规则变化拒绝点评及旧指纹保存，不保存冲突快照', async () => {
+    const { db, state, post, getPreview } = await setup();
+    const originalRules = sportRules.projectRules('ROWING')!;
+    const preview = await getPreview();
+    state.generate = async () => {
+      vi.spyOn(sportRules, 'projectRules').mockReturnValue({ ...originalRules, version: 'changed-rules' });
+      return commentary;
+    };
+    expect((await post('/commentary', { range, fingerprint: preview.fingerprint, consent: true })).status).toBe(409);
+    expect((await post('', { range, fingerprint: preview.fingerprint, commentary, confirmed: true })).status).toBe(409);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM training_reports').get()?.n).toBe(0);
+    expect((await getPreview()).fingerprint).not.toBe(preview.fingerprint);
   });
   it('成功点评只返回草稿，每账号限流不无限调用', async () => {
     const { post, getPreview } = await setup();

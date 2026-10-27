@@ -2,7 +2,6 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { PHYSICAL_CHAMPION_DIMENSIONS } from '../../shared/physical-champion.ts';
 import {
-  ADULT_REFERENCE_ASSUMPTION,
   USER_PHYSICAL_SIMULATION_SOURCE,
   adultAt,
   buildPhysicalChampion,
@@ -97,14 +96,14 @@ export function fillPhysicalChampionSimulation(db: DatabaseSync, input: Options)
       'SELECT id FROM test_sessions WHERE athlete_id=? AND test_date=? AND test_type=?'
     );
     const insertSession = db.prepare(
-      `INSERT INTO test_sessions(athlete_id,test_date,test_type,protocol,source,quality,is_demo,created_by) VALUES(?,?,?,?,?,'valid',0,?)`
+      `INSERT INTO test_sessions(athlete_id,test_date,test_type,protocol,source,quality,is_demo,created_by) VALUES(?,?,?,?,?,'valid',1,?)`
     );
     const insertMeasurement = db.prepare(
-      `INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit,side,quality,source,is_demo,source_ref) VALUES(?,?,?,?,'center','valid',?,0,?)`
+      `INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit,side,quality,source,is_demo,source_ref) VALUES(?,?,?,?,'center','valid',?,1,?)`
     );
     const readWeight =
       db.prepare(`SELECT tm.value_num AS value FROM test_measurements tm JOIN test_sessions ts ON ts.id=tm.test_session_id
-      WHERE ts.athlete_id=? AND ts.test_date<=? AND tm.metric_code IN ('weight_kg','weightKg') AND tm.unit='kg' AND tm.value_num BETWEEN 30 AND 200
+      WHERE ts.athlete_id=? AND ts.test_date<=? AND ts.project_code=? AND ts.project_status='confirmed' AND tm.metric_code IN ('weight_kg','weightKg') AND tm.unit='kg' AND tm.value_num BETWEEN 30 AND 200
       AND ts.quality='valid' AND tm.quality='valid' AND ts.is_demo=0 AND tm.is_demo=0 ORDER BY ts.test_date DESC,ts.id DESC LIMIT 1`);
     for (const athlete of athletes) {
       const group = models
@@ -118,7 +117,7 @@ export function fillPhysicalChampionSimulation(db: DatabaseSync, input: Options)
         );
       if (
         !group ||
-        (athlete.birthDate?.trim() && !adultAt(athlete.birthDate, options.to)) ||
+        !adultAt(athlete.birthDate, options.to) ||
         /(轻量级|lightweight|\bLW)/i.test(athlete.event)
       ) {
         summary.skipped++;
@@ -129,14 +128,14 @@ export function fillPhysicalChampionSimulation(db: DatabaseSync, input: Options)
         (reference) => current?.dimensions.find((item) => item.key === reference.key)?.value == null
       );
       if (!missing.length) continue;
-      const weightRow = readWeight.get(athlete.id, options.to) as { value: number } | undefined;
+      const weightRow = readWeight.get(athlete.id, options.to, athlete.project) as { value: number } | undefined;
       const weight =
         weightRow?.value ??
         Math.round((athlete.gender === '女' ? 60 : 78) + ((athlete.id * 7) % 17));
       const base = 0.74 + ((athlete.id * 13) % 25) / 100;
       let insertedForAthlete = false;
       for (const [index, date] of dates.entries()) {
-        if (athlete.birthDate?.trim() && !adultAt(athlete.birthDate, date)) continue;
+        if (!adultAt(athlete.birthDate, date)) continue;
         // 不向已存在的测试追加或更新数据，保留用户后续修改过的补充记录。
         let testType = '力量素质测试';
         if (findSession.get(athlete.id, date, testType)) testType = '体能冠军模型补充测试';
@@ -144,7 +143,6 @@ export function fillPhysicalChampionSimulation(db: DatabaseSync, input: Options)
         const protocol = [
           ...new Set(missing.map((reference) => reference.protocol)),
           '用户授权模拟补充',
-          ...(!athlete.birthDate?.trim() ? [ADULT_REFERENCE_ASSUMPTION] : []),
           `补充批次:${options.batchId}`,
         ].join('；');
         const sessionId = Number(
@@ -212,7 +210,7 @@ export function fillPhysicalChampionSimulation(db: DatabaseSync, input: Options)
           from: options.from,
           to: options.to,
           source: USER_PHYSICAL_SIMULATION_SOURCE,
-          description: '用户明确授权的模拟补充，按正式测试参与统计，原测试未覆盖',
+          description: '用户明确授权的模拟补充，仅为模拟演示，不参与正式统计，原测试未覆盖',
         })
       );
     if (db.prepare('PRAGMA foreign_key_check').all().length)

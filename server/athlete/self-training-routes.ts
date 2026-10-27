@@ -1,3 +1,4 @@
+import { TrainingInputError } from './training-session-service.ts';
 import { TrainingPlanLinkError } from '../core/training-plan-links.ts';
 import type { Express, Request } from 'express';
 import { requireAuth } from '../core/auth.ts';
@@ -49,6 +50,7 @@ export function registerSelfTrainingRoutes(app: Express) {
         .status(201)
         .json(submitSelfTraining(athleteId, req.authUser!.id, parsed.data, key.data));
     } catch (error) {
+      if (error instanceof TrainingInputError) return res.status(error.code === 'CLIENT_RULES_OUTDATED' ? 409 : 400).json({ message: error.message, code: error.code });
       if (error instanceof TrainingPlanLinkError)
         return res.status(400).json({ message: error.message });
       if (error instanceof TrainingSubmissionConflict)
@@ -71,6 +73,7 @@ export function registerSelfTrainingRoutes(app: Express) {
     try {
       updateSession(athleteId, id, parsed.data, existing);
     } catch (error) {
+      if (error instanceof TrainingInputError) return res.status(error.code === 'CLIENT_RULES_OUTDATED' ? 409 : 400).json({ message: error.message, code: error.code });
       if (error instanceof TrainingPlanLinkError)
         return res.status(400).json({ message: error.message });
       throw error;

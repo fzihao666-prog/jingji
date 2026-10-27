@@ -69,10 +69,16 @@ try {
       }
     );
     const payload = await response.json();
-    if (!response.ok || !payload.records?.length)
+    if (!response.ok || !Array.isArray(payload.records))
       throw new Error(
         `并发初始化后的数据库校验失败：${response.status} ${JSON.stringify(payload)}`
       );
+    // 演示课次不再进入正式读取；以人员及空事实结构确认并发初始化结果。
+    const roster = await fetch('http://127.0.0.1:8797/api/athletes', {
+      headers: { authorization: `Bearer ${login.token}` },
+    });
+    const people = await roster.json();
+    if (!roster.ok || !people.athletes?.length) throw new Error('并发初始化后人员目录校验失败');
     console.log(
       JSON.stringify(
         {

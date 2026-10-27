@@ -1,3 +1,4 @@
+import { TrainingInputError } from './training-session-service.ts';
 import { TrainingPlanLinkError } from '../core/training-plan-links.ts';
 import type { Express, Request } from 'express';
 import { requireAuth, requireRole } from '../core/auth.ts';
@@ -58,6 +59,7 @@ export function registerCoachReportRoutes(app: Express) {
     let id: number;
     try { id = insertSession(athleteId, parsed.data, COACH_REPORT_SOURCE, user.id); }
     catch (error) {
+      if (error instanceof TrainingInputError) return res.status(error.code === 'CLIENT_RULES_OUTDATED' ? 409 : 400).json({ message: error.message, code: error.code });
       if (error instanceof TrainingPlanLinkError) return res.status(400).json({ message: error.message });
       throw error;
     }
@@ -82,6 +84,7 @@ export function registerCoachReportRoutes(app: Express) {
     if (!parsed.success) return res.status(400).json({ message: '训练内容、日期或数值格式无效。' });
     try { updateSession(athleteId, id, parsed.data, existing); }
     catch (error) {
+      if (error instanceof TrainingInputError) return res.status(error.code === 'CLIENT_RULES_OUTDATED' ? 409 : 400).json({ message: error.message, code: error.code });
       if (error instanceof TrainingPlanLinkError) return res.status(400).json({ message: error.message });
       throw error;
     }

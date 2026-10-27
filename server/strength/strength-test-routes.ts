@@ -1,7 +1,9 @@
+import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
+import { z } from 'zod';
 import type { Express } from 'express';
 import { db } from '../core/db.ts';
 import { hasAthleteAccess } from '../core/permissions.ts';
-import { cleanString } from '../core/utils.ts';
+import { cleanString, isValidIsoDate } from '../core/utils.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../../shared/strength-model.ts';
 import { strengthMetricCode, strengthMetricKeyByCode } from './strength-metrics.ts';
@@ -22,7 +24,7 @@ export function registerStrengthTestRoutes(app: Express) {
       return res.status(403).json({ message: '无权查看该运动员的力量测试档案。' });
     const sessions = db
       .prepare(
-        `SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, created_at AS updatedAt FROM test_sessions WHERE athlete_id = ? AND test_type = '力量素质测试' ORDER BY test_date DESC, id DESC`
+        `SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, protocol_version AS protocolVersion, context_key AS contextKey, attempt_order AS attemptOrder, created_at AS updatedAt FROM test_sessions WHERE athlete_id = ? AND test_type = '力量素质测试' AND (project_code IS NULL OR project_code=(SELECT project FROM athletes WHERE athletes.id=test_sessions.athlete_id)) ORDER BY test_date DESC, id DESC`
       )
       .all(athleteId) as Array<{
       id: number;
@@ -65,29 +67,29 @@ export function registerStrengthTestRoutes(app: Express) {
       if (!athleteId || !hasAthleteAccess(user, athleteId)) {
         return res.status(403).json({ message: '无权维护该运动员的力量测试档案。' });
       }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {
+      if (!isValidIsoDate(testDate)) {
         return res.status(400).json({ message: '请选择有效的测试日期。' });
       }
       if (notes.length > 500) return res.status(400).json({ message: '备注不能超过500个字符。' });
+      const context = z.object({
+        protocol: z.string().trim().max(500).optional(),
+        protocolVersion: z.string().trim().max(100).optional(),
+        contextKey: z.string().trim().max(500).optional(),
+        attemptOrder: z.number().int().min(1).max(10000).optional(),
+      }).safeParse(req.body);
+      if (!context.success) return res.status(400).json({ message: '测试协议、版本、条件或试次格式无效。' });
       const metricsResult = parseStrengthValues(req.body?.metrics);
       const targetsResult = parseStrengthValues(req.body?.targets, true);
       const errors = [...metricsResult.errors, ...targetsResult.errors];
       if (!Object.keys(metricsResult.values).length) errors.push('至少填写一项实测数据');
       if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
 
-      const existing = db
-        .prepare(
-          `SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`
-        )
-        .get(athleteId, testDate) as { id: number } | undefined;
-      db.prepare(
-        `INSERT INTO test_sessions (athlete_id, test_date, test_type, protocol, source, quality, is_demo, created_by) VALUES (?, ?, '力量素质测试', ?, 'manual', 'valid', 0, ?) ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET protocol = excluded.protocol, source = 'manual', quality = 'valid'`
-      ).run(athleteId, testDate, notes, user.id);
-      const saved = db
-        .prepare(
-          `SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = '力量素质测试'`
-        )
-        .get(athleteId, testDate) as { id: number };
+      const identity = { athleteId, date: testDate, type: '力量素质测试', protocol: context.data.protocol ?? notes,
+        protocolVersion: context.data.protocolVersion, context: context.data.contextKey, attempt: context.data.attemptOrder };
+      db.exec('BEGIN IMMEDIATE');
+      try {
+      const existing = findTestSession(db, identity);
+      const saved = saveTestSession(db, { ...identity, source: 'manual', createdBy: user.id });
       const definition = db.prepare(
         `INSERT INTO metric_definitions (code, label, domain, unit, direction, frequency, minimum, maximum) VALUES (?, ?, 'strength', ?, 'higher_better', 'phase', ?, ?) ON CONFLICT(code) DO NOTHING`
       );
@@ -118,10 +120,15 @@ export function registerStrengthTestRoutes(app: Express) {
         saved.id,
         JSON.stringify({ athleteId, testDate })
       );
+      db.exec('COMMIT');
       res.json({
         message: existing ? '力量测试档案已更新。' : '力量测试档案已保存。',
         id: saved.id,
       });
+      } catch (error) {
+        if (db.isTransaction) db.exec('ROLLBACK');
+        throw error;
+      }
     }
   );
 

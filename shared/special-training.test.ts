@@ -54,6 +54,16 @@ describe('aggregateSpecialTraining 强度分区', () => {
     expect(result.intensity.map((item) => item.name)).toEqual([...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER]);
     expect(result.intensity.every((item) => item.percentage === 0)).toBe(true);
   });
+  it('同名分区按体系分开，未知体系显式说明', () => {
+    const result = aggregateSpecialTraining([
+      { ...row, intensityZone: 'AT', intensitySystem: 'U_SYSTEM' },
+      { ...row, id: 2, intensityZone: 'AT', intensitySystem: 'UT_SYSTEM', durationMin: 30 },
+      { ...row, id: 3, intensityZone: 'AT', intensitySystem: null, durationMin: 15 },
+    ]);
+    expect(result.intensity.find(item => item.name === 'U_SYSTEM · AT')?.durationMin).toBe(60);
+    expect(result.intensity.find(item => item.name === 'UT_SYSTEM · AT')?.durationMin).toBe(30);
+    expect(result.intensity.find(item => item.name === '未知体系 · AT')?.durationMin).toBe(15);
+  });
 });
 
 describe('buildSpecialTestComparison', () => {

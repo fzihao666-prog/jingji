@@ -13,7 +13,11 @@ import type { EChartsOption } from 'echarts';
 import { api } from '../api';
 import type { Athlete, Project } from '../types';
 import { projectLabel } from '../../shared/projects';
-import type { PhysicalChampionPayload, PhysicalReference } from '../../shared/physical-champion';
+import {
+  physicalReferenceDraftSchema,
+  type PhysicalChampionPayload,
+  type PhysicalReference,
+} from '../../shared/physical-champion';
 import { ChartCard, ContentState } from './PageLayout';
 import './PhysicalChampionModel.css';
 
@@ -30,99 +34,268 @@ const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 3 }
 const format = (value: number | null | undefined) =>
   value == null ? '—' : numberFormat.format(value);
 
+const sourceNatureLabel = {
+  official_research: '研究或官方资料',
+  expert: '专家经验',
+  team: '队内统计',
+  estimated: '估算',
+  unverified: '待核实',
+} as const;
+const reviewStatusLabel = { draft: '草稿', reviewed: '已审核', disabled: '停用' } as const;
+
 function ReferenceEditor({
   reference,
+  project,
   onSaved,
 }: {
-  reference: PhysicalReference;
+  reference?: PhysicalReference;
+  project: string;
   onSaved: () => void;
 }) {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const id = useId();
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (saving) return;
-    const form = new FormData(event.currentTarget);
-    const sourceType = String(form.get('sourceType'));
-    if (
-      sourceType !== 'measured' &&
-      sourceType !== 'public_reference' &&
-      sourceType !== 'estimated'
-    )
-      return;
+  async function review(status: 'reviewed' | 'disabled') {
+    if (!reference || saving) return;
     setSaving(true);
-    setMessage('');
     try {
-      const response = await api.updatePhysicalReference(reference.id, {
-        value: Number(form.get('value')),
-        protocol: String(form.get('protocol')).trim(),
-        sourceType,
-        sourceNote: String(form.get('sourceNote')).trim(),
-        expectedValue: reference.value,
-        expectedRevision: reference.revision,
-      });
-      setMessage(response.message);
+      setMessage(
+        (
+          await api.reviewPhysicalReference(reference.id, {
+            expectedRevision: reference.revision,
+            status,
+          })
+        ).message
+      );
       onSaved();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败，请重试。');
+      setMessage(error instanceof Error ? error.message : '审核失败。');
     } finally {
       setSaving(false);
     }
   }
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const form = new FormData(event.currentTarget);
+    const value = (name: string) => String(form.get(name) || '').trim();
+    const draft = {
+      project,
+      key: value('key'),
+      referenceLabel: value('referenceLabel'),
+      value: Number(value('value')),
+      unit: value('unit'),
+      protocol: value('protocol'),
+      protocolVersion: value('protocolVersion'),
+      testContext: value('testContext'),
+      side: value('side'),
+      direction: value('direction'),
+      sourceType: value('sourceType'),
+      sourceNature: value('sourceNature'),
+      sourceNote: value('sourceNote'),
+      gender: value('gender'),
+      event: value('event'),
+      weightClass: 'open',
+      ageGroup: value('ageGroup'),
+      position: value('position'),
+      referenceLevel: value('referenceLevel'),
+      effectiveFrom: value('effectiveFrom'),
+      effectiveTo: value('effectiveTo') || null,
+      dimensionVersion: value('dimensionVersion'),
+      measurementCodes: value('measurementCodes')
+        .split(',')
+        .map((code) => code.trim())
+        .filter(Boolean),
+      measurementUnit: value('measurementUnit'),
+      weightRelative: form.has('weightRelative'),
+    };
+    // 与服务端共用配置契约，来源和日期在两端验证。
+    const parsed = physicalReferenceDraftSchema.safeParse(draft);
+    if (!parsed.success) {
+      setMessage('请补全适用范围、维度、来源及有效日期；专家或队内来源需在名称中明确标注。');
+      return;
+    }
+    setSaving(true);
+    setMessage('');
+    try {
+      const result = reference
+        ? await api.updatePhysicalReference(reference.id, {
+            expectedRevision: reference.revision,
+            draft: parsed.data,
+          })
+        : await api.createPhysicalReference(parsed.data);
+      setMessage(result.message);
+      onSaved();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '保存失败。');
+    } finally {
+      setSaving(false);
+    }
+  }
+  const fields = [
+    ['key', '指标标识', reference?.key || ''],
+    ['referenceLabel', '参考名称（专家/队内须注明）', reference?.referenceLabel || ''],
+    ['value', '参考值', String(reference?.value || '')],
+    ['unit', '比较单位', reference?.unit || ''],
+    ['protocol', '完整测试协议', reference?.protocol || ''],
+    ['protocolVersion', '协议版本（空仅匹配默认版本）', reference?.protocolVersion || ''],
+    ['testContext', '测试条件（空仅匹配默认条件）', reference?.testContext || ''],
+    ['sourceNote', '来源材料与说明', reference?.sourceNote || ''],
+    ['event', '分项（开放填open）', reference?.event || 'open'],
+    ['position', '位置（开放填open）', reference?.position || 'open'],
+    ['referenceLevel', '级别（开放填open）', reference?.referenceLevel || 'open'],
+    [
+      'dimensionVersion',
+      '维度版本',
+      reference?.dimensionVersion === 'legacy-unreviewed' ? '' : reference?.dimensionVersion || '',
+    ],
+    ['measurementCodes', '测量指标代码（逗号分隔）', reference?.measurementCodes.join(',') || ''],
+    ['measurementUnit', '实测单位', reference?.measurementUnit || ''],
+    ['effectiveFrom', '生效日期', reference?.effectiveFrom || ''],
+    ['effectiveTo', '结束日期（可空）', reference?.effectiveTo || ''],
+  ];
+  const selects = [
+    [
+      'side',
+      '测量侧别',
+      reference?.side || 'center',
+      [
+        ['center', '中心'],
+        ['bilateral', '双侧'],
+        ['left', '左侧'],
+        ['right', '右侧'],
+      ],
+    ],
+    [
+      'direction',
+      '比较方向',
+      reference?.direction || 'higher_better',
+      [
+        ['higher_better', '越大越好'],
+        ['lower_better', '越小越好'],
+      ],
+    ],
+    [
+      'sourceType',
+      '原始来源类型',
+      reference?.sourceType || 'public_reference',
+      [
+        ['public_reference', '公开参考'],
+        ['measured', '实测资料'],
+        ['estimated', '估算'],
+      ],
+    ],
+    [
+      'sourceNature',
+      '来源性质',
+      reference?.sourceNature === 'unverified' ? '' : reference?.sourceNature || '',
+      [
+        ['', '请选择'],
+        ['official_research', '研究或官方资料'],
+        ['expert', '专家经验'],
+        ['team', '队内统计'],
+        ['estimated', '估算'],
+      ],
+    ],
+    [
+      'gender',
+      '性别',
+      reference?.gender || 'open',
+      [
+        ['open', '开放'],
+        ['男', '男'],
+        ['女', '女'],
+      ],
+    ],
+    [
+      'ageGroup',
+      '年龄组',
+      reference?.ageGroup || 'adult',
+      [
+        ['adult', '成人（需生日）'],
+        ['open', '开放'],
+      ],
+    ],
+  ] as const;
   return (
     <details>
-      <summary>修改参考值</summary>
-      <form onSubmit={handleSubmit} className="physical-champion-editor">
-        <label htmlFor={`${id}-value`}>参考值（{reference.unit}）</label>
-        <input
-          id={`${id}-value`}
-          name="value"
-          type="number"
-          min="0.000001"
-          max="10000"
-          step="any"
-          required
-          defaultValue={reference.value}
-        />
-        <label htmlFor={`${id}-protocol`}>测试协议</label>
-        <input
-          id={`${id}-protocol`}
-          name="protocol"
-          required
-          maxLength={200}
-          defaultValue={reference.protocol}
-        />
-        <label htmlFor={`${id}-source`}>来源类型</label>
-        <select id={`${id}-source`} name="sourceType" defaultValue={reference.sourceType}>
-          <option value="measured">实测</option>
-          <option value="public_reference">公开参考</option>
-          <option value="estimated">估算</option>
-        </select>
-        <label htmlFor={`${id}-note`}>来源说明</label>
-        <textarea
-          id={`${id}-note`}
-          name="sourceNote"
-          required
-          maxLength={500}
-          defaultValue={reference.sourceNote}
-        />
-        <button type="submit" className="dashboard-action-button" aria-disabled={saving}>
-          {saving ? '保存中…' : '保存参考值'}
+      <summary>
+        {reference
+          ? `版本 ${reference.version} · ${reviewStatusLabel[reference.reviewStatus]} · ${reference.referenceLabel || reference.key}`
+          : '创建项目参考草稿'}
+      </summary>
+      {reference && (
+        <p>
+          来源：{reference.sourceNote}；性质：{sourceNatureLabel[reference.sourceNature]}；有效期：
+          {reference.effectiveFrom || '未配置'} — {reference.effectiveTo || '长期'}
+          。修改创建新版本，保留历史。
+        </p>
+      )}
+      <form onSubmit={submit} className="physical-champion-editor">
+        {fields.map(([name, label, initial]) => (
+          <label key={name} htmlFor={`${id}-${name}`}>
+            {label}
+            <input
+              id={`${id}-${name}`}
+              name={name}
+              defaultValue={initial}
+              required={!['effectiveTo', 'protocolVersion', 'testContext'].includes(name)}
+              maxLength={name === 'sourceNote' ? 500 : 200}
+              type={name.startsWith('effective') ? 'date' : name === 'value' ? 'number' : 'text'}
+              step={name === 'value' ? 'any' : undefined}
+              min={name === 'value' ? '0.000001' : undefined}
+            />
+          </label>
+        ))}
+        {selects.map(([name, label, initial, options]) => (
+          <label key={name} htmlFor={`${id}-${name}`}>
+            {label}
+            <select id={`${id}-${name}`} name={name} defaultValue={initial} required>
+              {options.map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        <label htmlFor={`${id}-relative`}>
+          <input
+            id={`${id}-relative`}
+            name="weightRelative"
+            type="checkbox"
+            defaultChecked={reference?.weightRelative}
+          />
+          使用同课次体重换算相对值
+        </label>
+        <button type="submit" className="dashboard-action-button" disabled={saving}>
+          {saving ? '保存中…' : '保存为新草稿版本'}
         </button>
+        {reference && (
+          <>
+            <button
+              type="button"
+              disabled={saving || reference.reviewStatus === 'reviewed'}
+              onClick={() => review('reviewed')}
+            >
+              审核并启用
+            </button>
+            <button
+              type="button"
+              disabled={saving || reference.reviewStatus === 'disabled'}
+              onClick={() => review('disabled')}
+            >
+              停用此版本
+            </button>
+          </>
+        )}
         <p role="status">{message}</p>
       </form>
     </details>
   );
 }
 
-export function PhysicalChampionModel({
-  project,
-  from,
-  to,
-  athletes,
-  athleteId,
-}: Props) {
+export function PhysicalChampionModel({ project, from, to, athletes, athleteId }: Props) {
   const [payload, setPayload] = useState<PhysicalChampionPayload | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -139,7 +312,7 @@ export function PhysicalChampionModel({
         if (active) setPayload(result);
       })
       .catch((failure: unknown) => {
-        if (active) setError(failure instanceof Error ? failure.message : '冠军模型加载失败。');
+        if (active) setError(failure instanceof Error ? failure.message : '项目参考加载失败。');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -244,7 +417,7 @@ export function PhysicalChampionModel({
       },
       {
         id: 'reference',
-        name: '冠军参考 100%',
+        name: '项目参考 100%',
         type: 'line',
         data: [
           [toTime(from), 100],
@@ -259,17 +432,16 @@ export function PhysicalChampionModel({
   };
   return (
     <ChartCard
-      title="体能冠军模型"
+      title="体能项目参考"
       description={`${projectLabel(project)} · ${from} — ${to}`}
       className="physical-champion"
-
     >
       <div aria-live="polite">
-        {showLoading && <ContentState kind="loading" title="正在加载冠军参考模型" />}
+        {showLoading && <ContentState kind="loading" title="正在加载项目参考模型" />}
         {error && (
           <ContentState
             kind="error"
-            title="冠军模型加载失败"
+            title="项目参考加载失败"
             description={error}
             action={
               <button type="button" onClick={() => setRevision((value) => value + 1)}>
@@ -279,6 +451,78 @@ export function PhysicalChampionModel({
           />
         )}
       </div>
+      {!showLoading && !error && payload && (
+        <>
+          <p role="status">{payload.pendingReason}</p>
+          {payload.athletePendingReasons
+            .filter((item) => !athleteId || item.athleteId === athleteId)
+            .map((item) => (
+              <p key={item.athleteId}>
+                {athletes.find((athlete) => athlete.id === item.athleteId)?.name || item.athleteId}
+                ：{item.reason}
+              </p>
+            ))}
+          {payload.canEdit && (
+            <section aria-label="项目参考管理">
+              <h3>参考版本与审核</h3>
+              <ReferenceEditor
+                project={project}
+                onSaved={() => setRevision((value) => value + 1)}
+              />
+              {payload.managementReferences.map((reference) => (
+                <ReferenceEditor
+                  key={`${reference.id}-${reference.revision}`}
+                  reference={reference}
+                  project={project}
+                  onSaved={() => setRevision((value) => value + 1)}
+                />
+              ))}
+            </section>
+          )}
+          <details>
+            <summary>实测记录与同协议历史（{payload.measurements.length} 条）</summary>
+            <table>
+              <caption>
+                仅含当前项目已确认有效实测；无标准时仍保留记录，按协议查看同指标的日期变化。
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">运动员</th>
+                  <th scope="col">日期</th>
+                  <th scope="col">协议 / 版本 / 条件 / 侧别</th>
+                  <th scope="col">指标</th>
+                  <th scope="col">实测</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payload.measurements
+                  .filter((row) => !athleteId || row.athleteId === athleteId)
+                  .map((row) => (
+                    <tr key={row.measurementId}>
+                      <td>
+                        {athletes.find((athlete) => athlete.id === row.athleteId)?.name ||
+                          row.athleteId}
+                      </td>
+                      <td>{row.date}</td>
+                      <td>
+                        {row.protocol || '协议未知'} /{' '}
+                        {row.protocolVersion === null
+                          ? '版本未知'
+                          : row.protocolVersion || '默认版本'}{' '}
+                        / {row.testContext || '默认条件'} / {row.side}
+                      </td>
+                      <td>{row.code}</td>
+                      <td>
+                        {format(row.value)} {row.unit}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+            {!payload.measurements.length && <p>当前周期暂无已确认实测记录。</p>}
+          </details>
+        </>
+      )}
       {!showLoading && !error && !group && (
         <ContentState kind="empty" title="待参考" description="当前项目尚未配置适用参考模型" />
       )}
@@ -305,13 +549,18 @@ export function PhysicalChampionModel({
             </p>
           )}
           <div className="physical-champion-section-heading">
-            <h3>冠军核心指标</h3>
+            <h3>项目参考指标</h3>
             <span>参考值 · 当前表现</span>
           </div>
-          <section aria-label="冠军核心指标" className="physical-champion-reference">
+          <section aria-label="项目参考指标" className="physical-champion-reference">
             {rows.map(({ reference, team, personal: personalResult }) => (
               <article key={reference.id}>
                 <h3>{reference.label}</h3>
+                <p>
+                  版本 {reference.version} · {sourceNatureLabel[reference.sourceNature]} ·{' '}
+                  {reference.sourceNote} · {reference.effectiveFrom} 至{' '}
+                  {reference.effectiveTo || '长期'}
+                </p>
                 <strong>
                   {format(reference.value)} <span>{reference.unit}</span>
                 </strong>
@@ -322,19 +571,13 @@ export function PhysicalChampionModel({
                     {(athleteId ? personalResult : team)?.achievedPercent != null && '%'}
                   </b>
                 </div>
-                {payload?.canEdit && (
-                  <ReferenceEditor
-                    reference={reference}
-                    onSaved={() => setRevision((value) => value + 1)}
-                  />
-                )}
               </article>
             ))}
           </section>
           <section className="physical-champion-section">
-            <h3>冠军体能雷达图</h3>
+            <h3>项目参考雷达图</h3>
             <p className="physical-champion-note">
-              冠军参考为 100%；团队仅包含当前分组的有效测试。超过 100%
+              已审核项目参考为 100%；团队仅包含当前分组的有效测试。超过 100%
               的成绩保留真实达成度，详细数值见下表。
             </p>
             <div className="physical-champion-chart" aria-hidden="true">
@@ -346,7 +589,7 @@ export function PhysicalChampionModel({
                   <Tooltip />
                   <Legend />
                   <Radar
-                    name="冠军模型"
+                    name="项目参考"
                     dataKey="champion"
                     stroke="var(--amber)"
                     fill="var(--amber)"
@@ -377,21 +620,21 @@ export function PhysicalChampionModel({
             </div>
           </section>
           <section className="physical-champion-section">
-            <h3>冠军差距分析</h3>
+            <h3>参考差距分析</h3>
             <div
               className="physical-champion-table-wrap"
               role="region"
-              aria-label="冠军差距分析数据，可横向滚动"
+              aria-label="参考差距分析数据，可横向滚动"
               tabIndex={0}
             >
               <table className="physical-champion-table">
                 <caption>
-                  差值为当前值减冠军值；达成度已按比较方向计算。— 表示待采集（缺少同协议有效测试）。
+                  差值为当前值减参考值；达成度已按比较方向计算。— 表示待采集（缺少同协议有效测试）。
                 </caption>
                 <thead>
                   <tr>
                     <th scope="col">维度 / 单位</th>
-                    <th scope="col">冠军值</th>
+                    <th scope="col">参考值</th>
                     <th scope="col">团队值</th>
                     <th scope="col">团队达成度</th>
                     <th scope="col">{scopeName}当前值</th>
@@ -408,14 +651,23 @@ export function PhysicalChampionModel({
                         <th scope="row">
                           {row.reference.label} / {row.reference.unit}
                         </th>
-                        <td>{format(row.reference.value)}</td>
+                        <td>
+                          {format(current?.appliedReference?.value ?? row.reference.value)}
+                          <small>
+                            版本 {current?.appliedReference?.version ?? row.reference.version} ·{' '}
+                            {current?.appliedReference?.sourceNote ?? row.reference.sourceNote}
+                          </small>
+                        </td>
                         <td>{format(row.team?.value)}</td>
                         <td>
                           {format(row.team?.achievedPercent)}
                           {row.team?.achievedPercent != null && '%'}
                         </td>
                         <td>{format(current?.value)}</td>
-                        <td>{format(current?.difference)}</td>
+                        <td>
+                          {format(current?.difference)}
+                          {current?.pendingReason && <small>{current.pendingReason}</small>}
+                        </td>
                         <td>
                           {format(current?.achievedPercent)}
                           {current?.achievedPercent != null && '%'}
@@ -429,7 +681,7 @@ export function PhysicalChampionModel({
             </div>
           </section>
           <section className="physical-champion-section">
-            <h3>冠军达成度趋势</h3>
+            <h3>参考达成度趋势</h3>
             <p className="physical-champion-note">
               展示本周期内 {scopeName} 的综合达成度；仅完整维度参与，按截至当日最近有效测试计算。
             </p>
@@ -471,7 +723,7 @@ export function PhysicalChampionModel({
                   <Suspense fallback={<ContentState kind="loading" title="正在加载趋势图" />}>
                     <EChart
                       option={trendOption}
-                      label={`${scopeName}冠军达成度趋势，最新${format(latestTrend?.score)}%，冠军参考100%。具体数值见趋势数据表。`}
+                      label={`${scopeName}参考达成度趋势，最新${format(latestTrend?.score)}%，项目参考100%。具体数值见趋势数据表。`}
                     />
                   </Suspense>
                 </div>
@@ -480,7 +732,7 @@ export function PhysicalChampionModel({
                   <div
                     className="physical-champion-table-wrap"
                     role="region"
-                    aria-label="冠军达成趋势数据，可横向滚动"
+                    aria-label="参考达成趋势数据，可横向滚动"
                     tabIndex={0}
                   >
                     <table className="physical-champion-table">

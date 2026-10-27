@@ -1,10 +1,11 @@
+const { sportRules = {} } = require('../../data/register-data');
 const api = require('../../services/api');
 const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { loadWithGuard } = require('../../utils/request-guard');
 const { showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
-const { completeRatioRows, INTENSITY_ZONE_NAMES, CONTENT_CATEGORY_NAMES } = require('../../utils/chart-placeholder');
+const { completeRatioRows, CONTENT_CATEGORY_NAMES } = require('../../utils/chart-placeholder');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { injuryMetricView } = require('../../utils/injury-metric');
 const { buildSpecialTestView, EVENT_PREVIEW_COUNT } = require('../../utils/special-test-view');
@@ -27,7 +28,7 @@ function buildTrainingView(result, to) {
     { label: '专项训练时长', value: metricValue(summary.durationMin == null ? null : summary.durationMin / 60), unit: 'h', note: '同队共同课次去重' },
     { label: '专项训练距离', value: metricValue(summary.distanceKm), unit: 'km', note: '只统计已填报距离' },
     { label: '专项训练课次', value: metricValue(summary.sessionCount, 0), unit: '课次', note: '当前筛选时间范围' },
-    { label: '专项训练负荷', value: metricValue(summary.load), unit: 'AU', note: '使用既有SRPE' },
+    { label: '专项训练负荷', value: metricValue(summary.load), unit: 'AU', note: summary.loadSampleCount == null ? '使用既有SRPE' : `有效时长与RPE ${summary.loadSampleCount}/${summary.sessionCount}课次` },
     result.injuries ? injuryMetricView(result.injuries, Boolean(result.injuryIndividual)) : { label: '损伤情况', value: '--', unit: '人', note: '暂无伤病数据' }
   ];
 
@@ -45,16 +46,16 @@ function buildTrainingView(result, to) {
     distanceHeight: Math.max(0, Math.round(chartValue(item.distanceKm) / maxDistance * 100))
   }));
 
-  // 占比固定展示全部分区/分类，0 值行保留；数据以入库训练记录为准，不再用模拟值顶替。
-  const intensity = withRatioColors(completeRatioRows(
-    training.intensity || [],
-    INTENSITY_ZONE_NAMES,
-    (item) => item.durationMin,
-    (value) => `${number(value)} min`
-  ));
+  // 强度保留服务端体系与分区标签；未填时长保持缺失，真实0保留。
+  const intensityRows = training.intensity || [];
+  const intensityTotal = intensityRows.reduce((sum, row) => sum + (Number.isFinite(row.durationMin) ? row.durationMin : 0), 0);
+  const intensity = withRatioColors(intensityRows.map((row, index) => {
+    const percentage = intensityTotal > 0 && Number.isFinite(row.durationMin) ? row.durationMin / intensityTotal * 100 : 0;
+    return { ...row, key: `${row.name || 'unknown'}:${index}`, name: row.name || '未知体系 · 未填分区', value: row.durationMin == null ? '-- min' : `${number(row.durationMin)} min`, percentage: row.durationMin == null ? '--' : Math.round(percentage * 10) / 10, width: Math.max(0, Math.min(100, percentage)) };
+  }));
   const content = withRatioColors(completeRatioRows(
     training.content || [],
-    CONTENT_CATEGORY_NAMES,
+    (training.content || []).length ? (training.content || []).map(row => row.name) : CONTENT_CATEGORY_NAMES,
     (item) => item.count,
     (value) => `${number(value, 0)} 课次`
   ));
@@ -84,7 +85,7 @@ function buildTrainingView(result, to) {
   return { metrics, trend: trend.filter((item) => Number.isFinite(item.duration) || Number.isFinite(item.distance)),
     intensity: intensity.map((row) => (training.intensity || []).length ? row : { ...row, value: '-- min', percentage: '--' }),
     content: content.map((row) => (training.content || []).length ? row : { ...row, value: '-- 课次', percentage: '--' }),
-    hasIntensity: (training.intensity || []).length > 0, hasContent: (training.content || []).length > 0,
+    hasIntensity: intensityRows.some(row => Number.isFinite(row.durationMin)), hasContent: (training.content || []).length > 0,
     athleteItems, athleteTotal: athletes.length, athletePager: paginateList(athleteItems, 0, PAGE_SIZE) };
 }
 
@@ -93,7 +94,7 @@ Page({
     loading: true,
     error: '',
     user: null,
-    canEnterTest: false,
+    canEnterTest: false, hasWaterSpecial: false,
     projects: [],
     project: '',
     range: 'month',
@@ -117,36 +118,38 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
-    this.setData({ ...buildTrainingView({}, ''), viewAthleteId: 0, trainingError: '', testError: '', championError: '' });
+    this.setData({ ...buildTrainingView({}, ''), hasWaterSpecial: false, canEnterTest: false, viewAthleteId: 0, trainingError: '', testError: '', championError: '' });
     return runPageLoad(this, {
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
-      prepare: (page, scope) => page.setData({ ...scope, teamId: 0, teamIndex: 0, canEnterTest: MANAGER_ROLES.includes(scope.user.role) }),
+      prepare: (page, scope) => page.setData({ ...scope, teamId: 0, teamIndex: 0, hasWaterSpecial: Boolean(sportRules[scope.project]?.activities.includes('on_water')), canEnterTest: MANAGER_ROLES.includes(scope.user.role) && Boolean(sportRules[scope.project]?.activities.includes('on_water')) }),
       load: (page, scope, isLatest) => page.loadPageData({ ...scope, teamId: 0 }, true, isLatest)
     });
   },
 
   async loadPageData(scope, full, isLatest, withTests = full) {
-    const testsTask = withTests
+    const hasWaterSpecial = Boolean(sportRules[scope.project]?.activities.includes('on_water'));
+    const testsTask = withTests && hasWaterSpecial
       ? sectionRequest(() => api.specialTests(scope.from, scope.to, scope.project), '专项测试加载失败')
       : Promise.resolve(null);
     const [teams, model, training, tests] = await Promise.all([
       full ? sectionRequest(() => api.overviewTeams(scope.project), '队伍加载失败') : Promise.resolve(null),
-      full ? sectionRequest(() => api.specialChampionModels(scope.project), '冠军模型加载失败') : Promise.resolve(null),
+      full && hasWaterSpecial ? sectionRequest(() => api.specialChampionModels(scope.project), '冠军模型加载失败') : Promise.resolve(null),
       sectionRequest(() => api.specialTrainingOverview(scope.from, scope.to, scope.project, scope.teamId, scope.viewAthleteId || 0), '专项训练加载失败'),
       testsTask
     ]);
     if (isLatest && !isLatest()) return null;
-    const view = { ...buildTrainingView(training.value || {}, scope.to), trainingError: training.error };
+    const view = { ...buildTrainingView(training.value || {}, scope.to), hasWaterSpecial, canEnterTest: hasWaterSpecial && MANAGER_ROLES.includes((scope.user || this.data.user || {}).role), trainingError: training.error };
+    if (!hasWaterSpecial) { this.applyTestView(view, buildSpecialTestView(null)); view.testError = ''; view.championEvents = []; view.championError = ''; }
     if (full) {
       view.teamItems = [{ id: 0, name: '全部队伍' }].concat((teams.value || {}).teams || []);
-      view.championEvents = ((model.value || {}).events || []).slice(0, 12).map((item) => ({
+      view.championEvents = ((model?.value || {}).events || []).slice(0, 12).map((item) => ({
         code: item.eventCode, name: item.eventName, performance: item.bestPerformance || '待核实',
         meta: [item.country, item.competition, item.location].filter(Boolean).join(' · ') || '赛事来源待配置', pace: item.pace || ''
       }));
-      view.championError = model.error;
+      view.championError = model?.error || '';
       view.trainingError = training.error || teams.error;
-      if (!model.error && !teams.error) this._loadedProject = scope.project;
+      if (!model?.error && !teams.error) this._loadedProject = scope.project;
     }
     if (tests) {
       view.testError = tests.error;
@@ -230,7 +233,8 @@ Page({
 
   resetTrainingView(resetTests = true) {
     const tests = resetTests ? this.applyTestView({}, buildSpecialTestView(null)) : {};
-    this.setData({ ...buildTrainingView({}, ''), trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
+    const hasWaterSpecial = Boolean(sportRules[this.data.project]?.activities.includes('on_water'));
+    this.setData({ ...buildTrainingView({}, ''), hasWaterSpecial, canEnterTest: hasWaterSpecial && MANAGER_ROLES.includes((this.data.user || {}).role), trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
   },
 
   showTrendDetail(event) {

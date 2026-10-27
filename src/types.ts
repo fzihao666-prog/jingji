@@ -477,6 +477,12 @@ export type SpecialTestImportPreview = {
 };
 
 export type TrainingRecord = {
+  projectCode?: string | null;
+  projectStatus?: string;
+  activityCode?: string | null;
+  trainingCategory?: string | null;
+  intensitySystem?: string | null;
+  cadenceRpm?: number | null;
   id: number;
   athleteId: number;
   athleteName: string;
@@ -587,6 +593,10 @@ export type AuditLog = {
 };
 
 export type StrengthTest = {
+  protocol?: string;
+  protocolVersion?: string;
+  contextKey?: string;
+  attemptOrder?: number;
   id: number;
   athleteId: number;
   testDate: string;
@@ -1042,7 +1052,7 @@ export type OverviewPayload = {
     }>;
   };
   intensityDistribution: Array<{
-    zone: StrengthIntensityZone;
+    zone: string;
     durationMin: number;
     sessionCount: number;
     percentage: number;

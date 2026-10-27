@@ -15,6 +15,7 @@ describe('启动前身份证保护与重建备份', () => {
       expect(() =>
         initializeStartupDatabase(db, { databasePath, databaseExistedBeforeStartup: true })
       ).toThrow('身份证');
+      expect(db.prepare('PRAGMA busy_timeout').get()).toEqual({ timeout: 15000 });
       expect(existsSync(`${databasePath}.before-reconstruction-v1`)).toBe(false);
       expect(
         db.prepare("SELECT name FROM sqlite_schema WHERE name='athletes'").get()

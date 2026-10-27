@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   ComposedChart,
@@ -9,7 +9,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { api } from '../api';
 import type { Athlete, Project, StrengthTest } from '../types';
 import { formatNumber } from '../utils';
 import {
@@ -17,12 +16,6 @@ import {
   STRENGTH_METRIC_MAP,
   type StrengthMetricKey,
 } from '../../shared/strength-model';
-import {
-  PHYSICAL_CHAMPION_DIMENSIONS,
-  physicalComparison,
-  type PhysicalChampionPayload,
-  type PhysicalReference,
-} from '../../shared/physical-champion';
 import { chartDisplay, placeholderTrend } from './chart-placeholder';
 import { ChartCard, ContentState } from './PageLayout';
 import './PhysicalTestModule.css';
@@ -47,49 +40,7 @@ type Standard = {
   value: number;
   label: string;
   note: string;
-  reference: PhysicalReference | null;
 };
-
-const UNIT_ALIASES: Array<string[]> = [
-  ['s', 'sec', 'second', '秒'],
-  ['cm', '厘米'],
-  ['kg', '千克'],
-  ['w/kg'],
-  ['ml/kg/min'],
-  ['j/kg'],
-  ['mmol/l'],
-  ['次', 'rep', 'reps'],
-];
-
-function normalizeUnit(unit: string) {
-  return unit.trim().toLowerCase().replace(/\s+/g, '');
-}
-
-function sameUnit(left: string, right: string) {
-  const a = normalizeUnit(left);
-  const b = normalizeUnit(right);
-  if (a === b) return true;
-  return UNIT_ALIASES.some((group) => group.includes(a) && group.includes(b));
-}
-
-function normalizeCode(code: string) {
-  return code.toLowerCase().replace(/_/g, '');
-}
-
-// 冠军模型参考值按项目/性别/小项/体重级/年龄组分组（与体能冠军模型同一口径），
-// 且参考值单位与指标单位一致时才可作为标准，避免混用不兼容标准。
-function championStandardFor(
-  metricKey: StrengthMetricKey,
-  unit: string,
-  group: PhysicalChampionPayload['groups'][number] | undefined
-): PhysicalReference | null {
-  if (!group) return null;
-  const dimension = PHYSICAL_CHAMPION_DIMENSIONS.find((item) =>
-    item.codes.some((code) => normalizeCode(code) === normalizeCode(metricKey))
-  );
-  if (!dimension || !sameUnit(dimension.unit, unit)) return null;
-  return group.references.find((reference) => reference.key === dimension.key) ?? null;
-}
 
 // 教练目标沿用现有测试聚合口径：仅统计大于 0 的目标值并取平均。
 function coachTarget(tests: StrengthTest[], metricKey: StrengthMetricKey) {
@@ -127,41 +78,18 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
       : metricOptions[0]?.key
   ) as StrengthMetricKey | undefined;
   const definition = metricKey ? STRENGTH_METRIC_MAP[metricKey] : undefined;
-  const [payload, setPayload] = useState<PhysicalChampionPayload | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .physicalChampion({ project, from, to })
-      .then((result) => {
-        if (active) setPayload(result);
-      })
-      .catch(() => {
-        if (active) setPayload(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [project, from, to]);
-
-  const group = useMemo(() => {
-    if (!payload) return undefined;
-    return (
-      payload.groups.find((item) => item.athletes.some((entry) => entry.athleteId === athleteId)) ??
-      payload.groups[0]
-    );
-  }, [athleteId, payload]);
-
-  const scopedTests = useMemo(
-    () => (athleteId ? tests.filter((test) => test.athleteId === athleteId) : tests),
-    [athleteId, tests]
-  );
+  const [selectedProtocol, setSelectedProtocol] = useState('');
+  const protocolKey = (test: StrengthTest) => JSON.stringify([test.protocol || '', test.protocolVersion || '', test.contextKey || '']);
+  const protocolOptions = [...new Map(tests.filter(test => metricKey && typeof test.metrics[metricKey] === 'number')
+    .map(test => [protocolKey(test), [test.protocol || '未知协议', test.protocolVersion && `版本 ${test.protocolVersion}`, test.contextKey && `条件 ${test.contextKey}`].filter(Boolean).join(' · ')])).entries()];
+  const activeProtocol = protocolOptions.some(([key]) => key === selectedProtocol) ? selectedProtocol : protocolOptions[0]?.[0];
+  const scopedTests = tests.filter(test => (!athleteId || test.athleteId === athleteId) && protocolKey(test) === activeProtocol);
 
   const trendRows = useMemo<TrendRow[]>(() => {
     if (!metricKey) return [];
     const teamByDate = new Map<string, Map<number, number>>();
     const personalByDate = new Map<string, number>();
-    for (const test of tests) {
+    for (const test of tests.filter(test => protocolKey(test) === activeProtocol && test.protocol)) {
       const value = test.metrics[metricKey];
       if (typeof value !== 'number') continue;
       const perAthlete = teamByDate.get(test.testDate) ?? new Map<number, number>();
@@ -180,30 +108,20 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
         count: values.length,
       };
     });
-  }, [athleteId, metricKey, tests]);
+  }, [athleteId, metricKey, tests, activeProtocol]);
 
   const standard = useMemo<Standard | null>(() => {
     if (!metricKey || !definition) return null;
-    const reference = championStandardFor(metricKey, definition.unit, group);
-    if (reference) {
-      return {
-        value: reference.value,
-        label: '冠军模型参考',
-        note: `${group?.label ?? ''} · ${reference.protocol} · ${reference.direction === 'lower_better' ? '越小越好' : '越大越好'}`,
-        reference,
-      };
-    }
     const target = coachTarget(scopedTests, metricKey);
     if (target !== null) {
       return {
         value: target,
         label: '教练目标',
         note: '按当前范围已有测试目标值平均',
-        reference: null,
       };
     }
     return null;
-  }, [definition, group, metricKey, scopedTests]);
+  }, [definition, metricKey, scopedTests]);
 
   const current = useMemo(() => {
     if (!metricKey) return { value: null as number | null, sampleCount: 0 };
@@ -222,13 +140,6 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
   const comparison = useMemo(() => {
     if (current.value === null || !standard)
       return { difference: null as number | null, achieved: null as number | null };
-    if (standard.reference) {
-      const result = physicalComparison(current.value, standard.reference);
-      return {
-        difference: result.difference === null ? null : round(result.difference),
-        achieved: result.achievedPercent,
-      };
-    }
     return {
       difference: round(current.value - standard.value),
       achieved: standard.value > 0 ? round((current.value / standard.value) * 100) : null,
@@ -253,7 +164,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
   return (
     <ChartCard
       title="体能测试"
-      description={`${scopeLabel} · ${from} — ${to} · 单指标趋势，不同单位指标不混轴`}
+      description={`${scopeLabel} · ${from} — ${to} · 同协议单指标趋势；项目参考评价在独立模块展示`}
       className="physical-test-module"
     >
       {definition && metricOptions.length ? (
@@ -274,6 +185,9 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                   ))}
                 </select>
               </label>
+              <label>测试协议<select aria-label="体能测试协议" value={activeProtocol || ''} onChange={event => setSelectedProtocol(event.target.value)}>
+                {protocolOptions.map(([key,label]) => <option key={key} value={key}>{label}</option>)}
+              </select></label>
               {isPlaceholder && <span className="app-chart-example">示例数据</span>}
             </div>
             <div className="physical-test-canvas">

@@ -43,7 +43,7 @@ const totals = z.strictObject({
   srpeCount: z.number(),
 });
 const point = z.strictObject({ date: z.string(), value: z.number() });
-export const reportDataSchema = z.strictObject({
+export const reportDataV1Schema = z.strictObject({
   version: z.literal(1),
   range: reportRangeSchema,
   project: z.string(),
@@ -91,6 +91,21 @@ export const reportDataSchema = z.strictObject({
   trainingDays: z.number(),
   wellnessDays: z.number(),
 });
+export const reportDataV2Schema = reportDataV1Schema.extend({
+  version: z.literal(2),
+  rulesVersion: z.string().min(1),
+  referenceVersion: z.string().nullable(),
+  sourceNote: z.string(),
+  specialty: z.strictObject({
+    project: z.string(),
+    label: z.string(),
+    status: z.enum(['available', 'pending_configuration', 'unsupported']),
+    reason: z.string(),
+    sessions: z.number(),
+    duration: value,
+  }),
+});
+export const reportDataSchema = z.discriminatedUnion('version', [reportDataV1Schema, reportDataV2Schema]);
 export type ReportData = z.infer<typeof reportDataSchema>;
 export const reportPreviewSchema = z.strictObject({
   data: reportDataSchema,

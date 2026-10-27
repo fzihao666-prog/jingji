@@ -17,6 +17,7 @@
     </view></view>
   <block wx:if="{{report && !showHistory}}">
     <view class="report-note">{{report.range.from}} — {{report.range.to}}<text wx:if="{{saved}}"> · 已确认快照</text></view>
+    <view class="card"><view class="section-head-title">公共训练与恢复</view><text class="report-note">{{view.versionNote}}</text><text class="report-note">{{view.coverageNote}}</text></view>
     <view class="report-kpis"><view wx:for="{{view.kpis}}" wx:key="key" class="card report-kpi"><text>{{item.label}}</text><view class="report-value">{{item.value}}<text>{{item.unit}}</text></view><text class="report-note">前期 {{item.previous}}</text><text class="report-note">{{item.coverage}}</text></view></view>
     <view class="card"><view class="section-head-title">训练结构 · 分钟</view>
       <view class="report-legend"><text class="special">■ 专项</text><text class="physical">■ 体能</text><text class="recovery">■ 恢复</text><text class="other">■ 未分类</text></view>
@@ -29,15 +30,16 @@
       <button class="text-button" bindtap="toggleDaily">{{showDaily ? '收起每日明细' : '查看每日明细'}}</button>
       <block wx:if="{{showDaily}}"><view class="report-row report-th"><text>日期</text><text>课次</text><text>分钟</text><text>SRPE</text></view><view wx:for="{{view.daily}}" wx:key="date" class="report-row"><text>{{item.shortDate}}</text><text>{{item.sessions}}</text><text>{{item.durationText}}</text><text>{{item.srpeText}}</text></view></block>
     </view>
-    <view class="card"><view class="section-head-title">测试变化</view>
+    <view class="card"><view class="section-head-title">测试变化</view><text class="report-note">{{view.testNote}}</text>
       <text wx:if="{{!view.tests.length}}" class="report-note">暂无有效测试记录</text>
-      <view wx:for="{{view.tests}}" wx:key="key" class="report-test"><view>{{item.label}} · {{item.unit}}</view>
+      <view wx:for="{{view.tests}}" wx:key="key" class="report-test"><view>{{item.label}} · {{item.unit}}</view><text class="report-note">样本 {{item.points.length}} · {{item.protocol || '协议未记录'}} · {{item.sideText}}</text>
         <view class="report-row report-th"><text>首次</text><text>末次</text><text>变化</text></view><view class="report-row"><text>{{item.firstText}}</text><text>{{item.lastText}}</text><text>{{item.changeText}}</text></view><text class="report-note">{{item.first.date}} → {{item.last.date}}</text></view>
     </view>
     <view class="card"><view class="section-head-title">恢复趋势</view><view wx:for="{{view.wellness}}" wx:for-item="metric" wx:key="key"><view class="report-metric-title">{{metric.label}} · 均值 {{metric.averageText}} {{metric.unit}}</view>
       <text wx:if="{{!metric.days}}" class="report-note">暂无有效记录</text>
       <scroll-view scroll-x class="report-scroll"><view class="report-bars"><view wx:for="{{metric.bars}}" wx:for-item="bar" wx:key="date" class="report-slot"><text>{{bar.value}}</text><view class="report-bar-stage"><view class="report-segment special" style="height: {{bar.height}}%;"></view></view><text>{{bar.shortDate}}</text></view></view></scroll-view>
     </view></view>
+    <view wx:if="{{view.specialty}}" class="card"><view class="section-head-title">{{view.specialty.label}}</view><view>专项训练 {{view.specialty.sessions}} 课次 · 有效时长 {{view.specialty.durationText}} 分钟</view><text class="report-note">{{view.specialty.reason || '仅展示当前项目正式实测事实；测试见公共章节，不生成未经审核的专项评分。'}}</text></view>
     <view class="card"><view class="section-head-title">简短点评<text wx:if="{{saved}}"> · 已确认</text></view>
       <block wx:if="{{!saved}}">
         <button class="primary-button report-ai-button" bindtap="generate" disabled="{{busy}}" loading="{{busy}}">生成 AI 点评</button></block>

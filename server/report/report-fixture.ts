@@ -7,7 +7,7 @@ export function createReportFixture() {
   db.exec(`PRAGMA foreign_keys = ON;
     CREATE TABLE athletes(id INTEGER PRIMARY KEY, project TEXT, active INTEGER);
     CREATE TABLE users(id INTEGER PRIMARY KEY);
-    INSERT INTO athletes VALUES(1, 'ROWING', 1), (2, 'CANOE', 1);
+    INSERT INTO athletes VALUES(1, 'ROWING', 1), (2, 'CANOE_SPRINT', 1);
     INSERT INTO users VALUES(1);
     CREATE TABLE training_sessions(id INTEGER PRIMARY KEY, athlete_id INTEGER, session_date TEXT, session_order INTEGER,
       training_type TEXT, structure_type TEXT, content TEXT, duration_min REAL, distance_km REAL,
@@ -33,6 +33,18 @@ export function createReportFixture() {
     INSERT INTO metric_definitions VALUES('power', '测试功率');
     INSERT INTO test_sessions VALUES(1,1,'2026-10-05','标准协议',0,'manual','valid'),(2,1,'2026-10-08','标准协议',0,'manual','valid'),(3,1,'2026-10-09','另一协议',0,'manual','valid');
     INSERT INTO test_measurements VALUES(1,1,'power','W','center',200,0,'manual','valid'),(2,2,'power','W','center',220,0,'manual','valid'),(3,3,'power','W','center',600,0,'manual','valid');`);
+  // 新事实必须有明确的项目归属；旧报告兼容通过快照测试单独验证。
+  db.exec(`ALTER TABLE training_sessions ADD COLUMN project_code TEXT;
+    ALTER TABLE training_sessions ADD COLUMN project_status TEXT DEFAULT 'confirmed';
+    ALTER TABLE training_sessions ADD COLUMN activity_code TEXT;
+    ALTER TABLE training_sessions ADD COLUMN training_category TEXT;
+    ALTER TABLE test_sessions ADD COLUMN project_code TEXT;
+    ALTER TABLE test_sessions ADD COLUMN project_status TEXT DEFAULT 'confirmed';
+    ALTER TABLE test_sessions ADD COLUMN protocol_code TEXT;
+    ALTER TABLE test_sessions ADD COLUMN protocol_version TEXT;
+    ALTER TABLE test_sessions ADD COLUMN context_key TEXT DEFAULT '';
+    UPDATE training_sessions SET project_code = (SELECT project FROM athletes WHERE id=athlete_id);
+    UPDATE test_sessions SET project_code = (SELECT project FROM athletes WHERE id=athlete_id);`);
   initializeTrainingReports(db);
   return db;
 }

@@ -1,3 +1,6 @@
+import { trainingContext } from '../../shared/training-context.ts';
+import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
+import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics.js';
 import { IMPORT_BASE_METRICS as METRICS } from '../../shared/import-base-metrics.ts';
@@ -21,8 +24,8 @@ import {
   isStrengthTrainingEnvironment,
 } from '../../shared/strength-training.ts';
 
-// v29：中文测试项目按当前项目字典解析；旧草稿需重解析。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v30-import-statistics';
+// 解析版本绑定项目规则；旧草稿须重解析，已入库回执仍保留。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v32-fact-snapshots-' + SPORT_RULES_VERSION;
 
 export type ImportAthlete = {
   id: number;
@@ -1065,6 +1068,10 @@ function parseStandardSheet(
       sourceAddress: cellAddress(rowIndex, nameColumn),
       payload: {
         sourceRow,
+        projectCode: normalizeProject(project), factProject: standardText(row, header.columns, '事实项目'), projectStatus: standardText(row, header.columns, '项目归属状态'), rulesVersion: SPORT_RULES_VERSION,
+        protocolVersion: standardText(row, header.columns, '协议版本'),
+        testContext: standardText(row, header.columns, '测试上下文'),
+        attemptOrder: readNumber('试次序号') ?? 1,
         athleteCode: standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号'),
         team: standardText(row, header.columns, '所属队伍'),
         templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
@@ -1269,6 +1276,8 @@ function parseStandardSheet(
         trainingType: standardText(row, header.columns, '训练类型'),
         structureType: standardText(row, header.columns, '训练阶段'),
         intensityZone: standardText(row, header.columns, '强度区间'),
+        intensitySystem: standardText(row, header.columns, '强度体系'),
+        activityCode: Object.entries(ACTIVITY_LABELS).find(([, label]) => label === standardText(row, header.columns, '训练活动'))?.[0] || standardText(row, header.columns, '训练活动'),
         content: standardText(row, header.columns, '训练内容'),
         durationMin: duration,
         distanceKm: distance,
@@ -1283,6 +1292,7 @@ function parseStandardSheet(
         maxHeartRate: readNumber('最大心率'),
         averagePowerW: readNumber('平均功率W'),
         strokeRateSpm: readNumber('桨频SPM'),
+        cadenceRpm: readNumber('踏频rpm'),
       };
       items.push(
         itemBase({
@@ -1555,9 +1565,10 @@ type ImportStrengthSession = { id: number; sessionOrder: number; label: string }
 function importStrengthSessions(item: ParsedImportItem | DataImportItemView): ImportStrengthSession[] {
   if (!item.athleteId) return [];
   const order = optionalNumber(item.payload.sessionOrder);
-  return db.prepare(`SELECT ts.id, ts.session_order AS sessionOrder, ts.content AS label FROM training_sessions ts
+  const sessions = db.prepare(`SELECT ts.id, ts.project_code, ts.session_order AS sessionOrder, ts.content AS label FROM training_sessions ts
     WHERE ts.athlete_id = ? AND ts.session_date = ? AND ${order !== null ? 'ts.session_order = ?' : `(ts.training_type = '力量训练' OR EXISTS (SELECT 1 FROM strength_result_sets srs WHERE srs.training_session_id = ts.id)) AND ts.content = ?`}
-    ORDER BY ts.session_order`).all(item.athleteId, item.eventDate, order ?? item.sessionLabel) as ImportStrengthSession[];
+    ORDER BY ts.session_order`).all(item.athleteId, item.eventDate, order ?? item.sessionLabel) as Array<ImportStrengthSession & { project_code: string | null }>;
+  return sessions.filter(session => importSnapshotMatches(item, session));
 }
 function findImportStrengthSession(item: ParsedImportItem | DataImportItemView) {
   const candidates = importStrengthSessions(item);
@@ -1838,10 +1849,10 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
     const order = Math.max(1, Math.round(optionalNumber(p.sessionOrder) || 1));
     const existing = db
       .prepare(
-        'SELECT * FROM training_sessions WHERE athlete_id=? AND session_date=? AND session_order=?'
+        "SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?"
       )
       .get(item.athleteId, item.eventDate, order) as Record<string, unknown> | undefined;
-    if (!existing) return empty;
+    if (!existing || !importSnapshotMatches(item, existing)) return empty;
     const fields = databaseConflictFields(item, existing);
     return {
       exists: true,
@@ -1873,11 +1884,7 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
     };
   }
   if (item.itemType === 'test_measurement') {
-    const session = db
-      .prepare('SELECT id, protocol, duration_min AS durationMin FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
-      .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as
-      | { id: number; protocol: string; durationMin: number | null }
-      | undefined;
+    const session = findTestSession(db, importedTestIdentity(item));
     const existing = session
       ? (db
           .prepare(
@@ -2623,7 +2630,7 @@ const STATE_LEVELS = [...Object.values(STATE_LEVEL_CODES), ''];
 const NUMERIC_PAYLOAD_FIELDS: Partial<Record<DataImportItemType, readonly string[]>> = {
   wellness: WELLNESS_NUMBER_FIELDS,
   training_session: ['sessionOrder', 'durationMin', 'distanceKm', 'rpe', 'srpe', 'smvl',
-    'averageHeartRate', 'maxHeartRate', 'averagePowerW', 'strokeRateSpm'],
+    'averageHeartRate', 'maxHeartRate', 'averagePowerW', 'strokeRateSpm', 'cadenceRpm'],
   training_set: ['rpe', 'sessionOrder', 'plannedWeightKg', 'completed', 'durationMin', 'distanceKm'],
   test_measurement: ['durationMin', 'targetValue'],
   body_measurement: BODY_COMPOSITION_FIELDS.map(([key]) => key),
@@ -2631,6 +2638,33 @@ const NUMERIC_PAYLOAD_FIELDS: Partial<Record<DataImportItemType, readonly string
   competitive_state: ['overallScore', 'enduranceScore', 'powerScore', 'techniqueScore',
     'loadAdaptationScore', 'recoveryScore', 'competitionScore'],
 };
+
+function importProject(item: ParsedImportItem | DataImportItemView) {
+  const athlete = db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined;
+  return normalizeProject(athlete?.project || item.payload.projectCode);
+}
+function importSnapshotMatches(item: ParsedImportItem | DataImportItemView, record: Record<string, unknown>) {
+  return !record.project_code || normalizeProject(record.project_code) === importProject(item);
+}
+
+/** 空白导入字段保留现值；预检和事务写入验证同一合并后的训练语义。 */
+function importTrainingContext(item: DataImportItemView | ParsedImportItem, stored?: Record<string, unknown>) {
+  const p = item.payload;
+  const athlete = db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined;
+  const current = stored ?? db.prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?")
+    .get(item.athleteId || 0, item.eventDate, Number(p.sessionOrder) || 1) as Record<string, unknown> | undefined;
+  if (current && !importSnapshotMatches(item, current)) throw new Error('正式课次的项目归属不匹配，不能通过导入修改。');
+  return trainingContext(athlete?.project || text(p.projectCode), {
+    trainingType: text(p.trainingType) || text(current?.training_type),
+    activityCode: text(p.activityCode) || text(current?.activity_code),
+    intensitySystem: text(p.intensitySystem) || text(current?.intensity_system),
+    intensityZone: text(p.intensityZone) || text(current?.intensity_zone),
+    rulesVersion: text(p.rulesVersion),
+    averagePowerW: optionalNumber(p.averagePowerW) ?? optionalNumber(current?.average_power_w),
+    cadenceRpm: optionalNumber(p.cadenceRpm) ?? optionalNumber(current?.cadenceRpm),
+    strokeRateSpm: optionalNumber(p.strokeRateSpm) ?? optionalNumber(current?.stroke_rate_spm),
+  });
+}
 
 /**
  * 统一业务校验：解析预览、校对修改与最终提交共用同一规则，
@@ -2647,6 +2681,13 @@ function validateImportItem(
     return item.messages.filter((message) => message.startsWith('错误：'));
   }
   const payload = item.payload || {};
+  if (isProvided(payload.projectStatus) && text(payload.projectStatus) !== 'confirmed') messages.push('错误：该历史事实项目归属待核实，请先核实归属后重新导出，不能直接回导。');
+  if (isProvided(payload.factProject) && normalizeProject(payload.factProject) !== importProject(item)) messages.push('错误：事实项目与当前授权项目不匹配，不能通过导入修改归属。');
+  if (['training_session', 'training_set'].includes(item.itemType) && item.athleteId) {
+    const order = optionalNumber(payload.sessionOrder);
+    const rows = db.prepare('SELECT project_code FROM training_sessions WHERE athlete_id=? AND session_date=? AND (? IS NULL OR session_order=?)').all(item.athleteId, item.eventDate, order, order) as Array<Record<string, unknown>>;
+    if (rows.some(row => !importSnapshotMatches(item, row))) messages.push('错误：正式课次的项目归属不匹配，请核实后处理，不能通过导入覆盖。');
+  }
   if (payload.dateSource === 'legacy_today' && item.eventDate === payload.defaultedDate)
     messages.push(`警告：旧模板日期留空，使用北京时间当天${item.eventDate}；请核对后确认导入，历史记录请修改日期`);
   if (payload.dateSource === 'selected' && item.eventDate === payload.defaultedDate)
@@ -2716,6 +2757,10 @@ function validateImportItem(
       }
     }
   } else if (item.itemType === 'training_session') {
+    try {
+      importTrainingContext(item);
+    } catch (error) { messages.push(`错误：${error instanceof Error ? error.message : '训练活动无效'}`); }
+    if (optionalNumber(payload.cadenceRpm) !== null && Number(payload.cadenceRpm) < 0) messages.push('错误：踏频不能小于0');
     if (payload.srpeCalculated) {
       const duration = optionalNumber(payload.durationMin);
       const rpe = optionalNumber(payload.rpe);
@@ -2755,6 +2800,9 @@ function validateImportItem(
     const completed = optionalNumber(payload.completed);
     if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
   } else if (item.itemType === 'test_measurement') {
+    if (!readImportMetricDefinitions(text(payload.projectCode) || text((db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined)?.project)).some(metric => metric.code === item.metricCode)) messages.push('错误：测试项目不适用于当前运动项目');
+    const attempt = optionalNumber(payload.attemptOrder);
+    if (isProvided(payload.attemptOrder) && (attempt === null || !Number.isInteger(attempt) || attempt < 1)) messages.push('错误：试次序号须为正整数');
     const metricDefinition = db.prepare('SELECT unit, active FROM metric_definitions WHERE code=?').get(item.metricCode) as { unit: string; active: number } | undefined;
     if (!metricDefinition || !metricDefinition.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
     else if (item.unit !== metricDefinition.unit) messages.push(`错误：测试项目单位已变更或不匹配，应为${metricDefinition.unit}，请重新校验`);
@@ -2866,10 +2914,10 @@ const PAYLOAD_EDITABLE: Record<DataImportItemType, Set<string>> = {
     'averageHeartRate',
     'maxHeartRate',
     'averagePowerW',
-    'strokeRateSpm',
+    'strokeRateSpm', 'cadenceRpm', 'activityCode', 'intensitySystem',
   ]),
   training_set: new Set(['rpe', 'sessionOrder', 'exerciseCode', 'plannedWeightKg', 'completed', 'trainingEnvironment', 'durationMin', 'distanceKm', 'intensityZone', 'trainingCategory', 'bodyPosition', 'note']),
-  test_measurement: new Set(['durationMin', 'targetValue', 'protocol', 'note']),
+  test_measurement: new Set(['durationMin', 'targetValue', 'protocol', 'protocolVersion', 'testContext', 'attemptOrder', 'note']),
   body_measurement: new Set([...BODY_COMPOSITION_FIELDS.map(([key]) => key), 'note']),
   injury_record: new Set([
     'injuryName',
@@ -3076,8 +3124,7 @@ function applyValueReview(items: DataImportItemView[], targetId: number, raw: un
       if (review.includeDatabase === true) {
         item.resolution = 'update';
         if (item.itemType === 'test_measurement' && typeof values.protocol === 'string') {
-          const existing = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
-            .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
+          const existing = findTestSession(db, importedTestIdentity(item));
           if (text(existing?.protocol) && text(existing?.protocol) !== values.protocol)
             item.payload.valueReviewProtocol = { previous: text(existing?.protocol), next: values.protocol };
         }
@@ -3487,6 +3534,7 @@ function upsertTrainingItem(
         userId
       );
     sessionId = Number(inserted.lastInsertRowid);
+    saveImportSessionContext(sessionId, { ...item, payload: { ...payload, activityCode: 'strength', trainingType: '力量训练' } }, true);
   }
   const inserted = db
     .prepare(
@@ -3541,6 +3589,12 @@ function updateSessionTotals(sessionId: number) {
   ).run(Math.round(Number(totals.volume) * 10) / 10, sessionId);
 }
 
+function importedTestIdentity(item: DataImportItemView) {
+  return { athleteId: Number(item.athleteId), date: item.eventDate, type: item.testType || '力量素质测试',
+    protocol: text(item.payload.protocol), protocolVersion: text(item.payload.protocolVersion),
+    context: text(item.payload.testContext), attempt: Number(item.payload.attemptOrder) || 1 };
+}
+
 function upsertTestItem(
   item: DataImportItemView,
   batchId: string,
@@ -3550,37 +3604,12 @@ function upsertTestItem(
   const existingConflict = detectItemConflict(item);
   if (existingConflict.identical && existingConflict.entityType === 'test_measurement' && existingConflict.entityId !== null)
     return { skipped: true, entityId: existingConflict.entityId, created: false, filled: 0, overwritten: 0 };
-  const storedSession = db.prepare('SELECT protocol FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?')
-    .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { protocol: string } | undefined;
-  if (text(storedSession?.protocol) && text(item.payload.protocol) && text(storedSession?.protocol) !== text(item.payload.protocol)) {
-    db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, detail) VALUES (?, ?, ?, ?)')
-      .run(userId, 'UPDATE_IMPORT_TEST_PROTOCOL', 'test_session', JSON.stringify({ batchId, athleteId: item.athleteId, date: item.eventDate, testType: item.testType, previous: storedSession?.protocol, next: text(item.payload.protocol) }));
-  }
   const sessionFields = existingConflict.fields.filter(field => ['protocol', 'durationMin'].includes(field.field) && (field.overwrites || field.oldValue === ''));
   const policy = resolveItemPolicy(item, batchPolicy);
   const durationMin = optionalNumber(item.payload.durationMin);
   const validDurationMin = durationMin !== null && durationMin > 0 ? durationMin : null;
-  db.prepare(
-    `INSERT INTO test_sessions (athlete_id, test_date, test_type, duration_min, protocol, source, quality, is_demo, created_by)
-    VALUES (?, ?, ?, ?, ?, 'file_import', ?, 0, ?)
-    ON CONFLICT(athlete_id, test_date, test_type) DO UPDATE SET
-      duration_min = COALESCE(excluded.duration_min, test_sessions.duration_min),
-      protocol = CASE WHEN TRIM(excluded.protocol) <> '' THEN excluded.protocol ELSE test_sessions.protocol END,
-      quality = CASE WHEN excluded.quality = 'partial' THEN 'partial' ELSE test_sessions.quality END`
-  ).run(
-    item.athleteId,
-    item.eventDate,
-    item.testType || '力量素质测试',
-    validDurationMin,
-    text(item.payload.protocol),
-    item.quality === 'warning' ? 'partial' : 'valid',
-    userId
-  );
-  const session = db
-    .prepare(
-      'SELECT id FROM test_sessions WHERE athlete_id = ? AND test_date = ? AND test_type = ?'
-    )
-    .get(item.athleteId, item.eventDate, item.testType || '力量素质测试') as { id: number };
+  const session = saveTestSession(db, { ...importedTestIdentity(item), source: 'file_import',
+    durationMin: validDurationMin, quality: item.quality === 'warning' ? 'partial' : 'valid', createdBy: userId });
   const existing = db
     .prepare(
       'SELECT id, value_num AS valueNum, target_value AS targetValue, unit, note FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
@@ -3994,6 +4023,21 @@ function upsertWellnessItem(
   };
 }
 
+function saveImportSessionContext(id: number, item: DataImportItemView, created = false) {
+  const p = item.payload;
+  const stored = db.prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE id=?").get(id) as Record<string, unknown>;
+  const context = importTrainingContext(item, stored);
+  if (!importSnapshotMatches(item, stored)) throw new Error('正式课次的项目归属不匹配，不能通过导入修改。');
+  if (created) db.prepare("UPDATE training_sessions SET project_code=?, project_status='confirmed', project_source='file_import' WHERE id=?").run(context.project, id);
+  db.prepare('UPDATE training_sessions SET activity_code=?, training_category=?, rules_version=?, intensity_system=? WHERE id=?').run(context.activity, context.category, context.version, context.system, id);
+  const cadenceChanged = isProvided(p.cadenceRpm) && !importReviewValuesEqual(stored.cadenceRpm, p.cadenceRpm);
+  if (cadenceChanged) db.prepare("INSERT INTO training_session_metrics(training_session_id,metric_code,value_num,unit,source) VALUES (?,'cadenceRpm',?,'rpm','file_import') ON CONFLICT(training_session_id,metric_code) DO UPDATE SET value_num=excluded.value_num,source=excluded.source").run(id, Number(p.cadenceRpm));
+  const changes = [
+    [stored.cadenceRpm, p.cadenceRpm], [stored.activity_code, p.activityCode], [stored.intensity_system, p.intensitySystem],
+  ].filter(([oldValue, newValue]) => isProvided(newValue) && !importReviewValuesEqual(oldValue, newValue));
+  return { filled: changes.filter(([oldValue]) => !isProvided(oldValue)).length, overwritten: changes.filter(([oldValue]) => isProvided(oldValue)).length };
+}
+
 function upsertSessionItem(
   item: DataImportItemView,
   userId: number,
@@ -4003,7 +4047,7 @@ function upsertSessionItem(
   const p = item.payload;
   const order = Math.max(1, Math.round(optionalNumber(p.sessionOrder) || 1));
   const existing = db
-    .prepare('SELECT * FROM training_sessions WHERE athlete_id=? AND session_date=? AND session_order=?')
+    .prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?")
     .get(item.athleteId, item.eventDate, order) as Record<string, unknown> | undefined;
   const quality = item.quality === 'warning' ? 'partial' : 'valid';
   const duration = optionalNumber(p.durationMin);
@@ -4077,12 +4121,15 @@ function upsertSessionItem(
       Number(existing.distance_reported ?? 1) !== 1
     )
       changes.push(['distance_reported', 1]);
-    if (!changes.length)
-      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
+    if (!changes.length) {
+      const contextChanges = saveImportSessionContext(Number(existing.id), item);
+      return { skipped: contextChanges.filled + contextChanges.overwritten === 0, entityId: Number(existing.id), created: false, ...contextChanges };
+    }
     db.prepare(
       `UPDATE training_sessions SET ${changes.map(([column]) => `${column} = ?`).join(', ')}, source = 'file_import', quality = ?, is_demo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(...sqlList(changes.map(([, value]) => value)), quality, Number(existing.id));
-    return { skipped: false, entityId: Number(existing.id), created: false, filled, overwritten };
+    const contextChanges = saveImportSessionContext(Number(existing.id), item);
+    return { skipped: false, entityId: Number(existing.id), created: false, filled: filled + contextChanges.filled, overwritten: overwritten + contextChanges.overwritten };
   }
   const inserted = db
     .prepare(
@@ -4111,6 +4158,7 @@ function upsertSessionItem(
       quality,
       userId
     );
+  saveImportSessionContext(Number(inserted.lastInsertRowid), item, true);
   return {
     skipped: false,
     entityId: Number(inserted.lastInsertRowid),

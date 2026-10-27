@@ -1,3 +1,4 @@
+import { projectRules, ACTIVITY_LABELS } from '../../shared/sport-rules.ts';
 import { DEFAULT_IMPORT_METRICS, importMetricChoices, type ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
 import ExcelJS from 'exceljs';
 import { importTemplateFields } from '../../shared/import-template-fields.ts';
@@ -13,7 +14,7 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; metrics?: readonly ImportMetricDefinition[] } = {}) {
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[] } = {}) {
   const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook('竞迹训练监控系统｜简化数据导入模板');
   workbook.creator = '竞迹训练监控系统';
   const instructions = workbook.getWorksheet('填写说明') || workbook.addWorksheet('填写说明');
@@ -31,7 +32,12 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
   for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
     if (!sheetNames.includes(name)) continue;
     if (options.mode !== 'export') {
-      addTemplateSheet(workbook, name, importTemplateFields(name).map(field => name === '其他测试' && field.key === '指标名称' && metricChoices.length ? { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' } : field), name === '其他测试' ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。' : IMPORT_SHEET_NOTES[name]);
+      addTemplateSheet(workbook, name, importTemplateFields(name).map(field => {
+        if (name === '其他测试' && field.key === '指标名称' && metricChoices.length) return { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' };
+        const rules = options.project ? projectRules(options.project) : null;
+        if (name === '训练课次' && field.key === '训练活动' && rules) return { ...field, choices: rules.activities.map(activity => ACTIVITY_LABELS[activity]) };
+        return field;
+      }), name === '其他测试' ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。' : IMPORT_SHEET_NOTES[name]);
       continue;
     }
     const sheet = workbook.addWorksheet(name, {

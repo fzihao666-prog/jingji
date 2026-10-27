@@ -8,7 +8,7 @@ import {
   type AreaLevel,
   type Role,
 } from '../../shared/access.ts';
-import { PROJECTS, type Project } from '../../shared/projects.ts';
+import { isProject, PROJECTS, type Project } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import { db } from './db.ts';
@@ -335,7 +335,7 @@ export function selectableProjects(user: AuthUser): Project[] {
           .prepare('SELECT project FROM athletes WHERE id = ? AND active = 1')
           .get(user.athleteId) as { project: string } | undefined)
       : undefined;
-    return athlete && PROJECTS.includes(athlete.project) ? [athlete.project] : [];
+    return athlete && isProject(athlete.project) ? [athlete.project] : [];
   }
   const permissions = accountPermissions(user.id);
   return PROJECTS.filter(

@@ -14,13 +14,34 @@ type ProfileScope = ProfileScopeInput & { teamId: number | null; teamAthleteIds:
 
 type NumericRow = { athleteId: number; date: string; value: number };
 
-type AerobicMeasurementRow = NumericRow & {
-  sessionId: number;
-  testType: string;
-  code: string;
-  label: string;
-  unit: string;
+type MeasurementContext = {
+  protocol: string | null;
+  protocolVersion: string | null;
+  testContext: string;
+  side: string;
 };
+function sameMeasurementContext(left: MeasurementContext, right: MeasurementContext) {
+  return (
+    !!left.protocol?.trim() &&
+    !!left.protocolVersion?.trim() &&
+    left.protocol === right.protocol &&
+    left.protocolVersion === right.protocolVersion &&
+    left.testContext === right.testContext &&
+    left.side === right.side
+  );
+}
+
+type ProfileMeasurement = NumericRow &
+  MeasurementContext & { code: string; label: string; unit: string; domain: string };
+
+type AerobicMeasurementRow = NumericRow &
+  MeasurementContext & {
+    sessionId: number;
+    testType: string;
+    code: string;
+    label: string;
+    unit: string;
+  };
 
 const usableSql = (alias: string) => `
   ${alias}.is_demo = 0
@@ -28,6 +49,8 @@ const usableSql = (alias: string) => `
   AND lower(${alias}.source) NOT LIKE '%demo%'
   AND lower(${alias}.source) NOT LIKE '%seed%'
   AND lower(${alias}.source) NOT LIKE '%estimated%'
+  AND lower(${alias}.source) NOT LIKE '%synthetic%'
+  AND lower(${alias}.source) NOT LIKE '%simulation%'
 `;
 
 function mean(values: number[]) {
@@ -89,10 +112,11 @@ function queryRpe(scope: ProfileScope) {
     FROM training_sessions ts
     WHERE ts.athlete_id IN (${scope.teamAthleteIds.map(() => '?').join(',')})
       AND ts.session_date BETWEEN ? AND ? AND rpe IS NOT NULL AND ${usableSql('ts')}
+      AND ts.project_code = ? AND ts.project_status = 'confirmed'
     GROUP BY athlete_id, session_date
   `
     )
-    .all(...scope.teamAthleteIds, scope.from, scope.to) as NumericRow[];
+    .all(...scope.teamAthleteIds, scope.from, scope.to, scope.project) as NumericRow[];
 }
 
 function trend(key: string, label: string, unit: string, rows: NumericRow[], athleteId: number) {
@@ -168,27 +192,28 @@ function latestBodyWeight(scope: ProfileScope) {
 }
 
 function latestMeasurements(scope: ProfileScope) {
-  if (!scope.teamAthleteIds.length)
-    return [] as Array<NumericRow & { code: string; label: string; unit: string; domain: string }>;
+  if (!scope.teamAthleteIds.length) return [] as ProfileMeasurement[];
   return db
     .prepare(
       `
     SELECT ts.athlete_id AS athleteId, ts.test_date AS date, tm.value_num AS value, tm.metric_code AS code,
+      ts.protocol, ts.protocol_version AS protocolVersion, ts.context_key AS testContext, tm.side,
       COALESCE(md.label, tm.metric_code) AS label, tm.unit, COALESCE(md.domain, '') AS domain
     FROM test_measurements tm
     JOIN test_sessions ts ON ts.id = tm.test_session_id
     LEFT JOIN metric_definitions md ON md.code = tm.metric_code
     WHERE ts.athlete_id IN (${scope.teamAthleteIds.map(() => '?').join(',')}) AND ts.test_date <= ?
       AND ${usableSql('ts')} AND ${usableSql('tm')}
+      AND ts.project_code = ? AND ts.project_status = 'confirmed'
       AND ts.test_date = (SELECT MAX(current_ts.test_date) FROM test_sessions current_ts
         JOIN test_measurements current_tm ON current_tm.test_session_id = current_ts.id
         WHERE current_ts.athlete_id = ts.athlete_id AND current_ts.test_date <= ?
+          AND current_ts.project_code = ts.project_code AND current_ts.project_status = 'confirmed'
           AND current_tm.metric_code = tm.metric_code AND ${usableSql('current_ts')} AND ${usableSql('current_tm')})
+    ORDER BY ts.test_date DESC, ts.id DESC, tm.id DESC
   `
     )
-    .all(...scope.teamAthleteIds, scope.to, scope.to) as Array<
-    NumericRow & { code: string; label: string; unit: string; domain: string }
-  >;
+    .all(...scope.teamAthleteIds, scope.to, scope.project, scope.to) as ProfileMeasurement[];
 }
 
 const AEROBIC_METRIC_PATTERN =
@@ -210,6 +235,7 @@ function aerobicMeasurements(scope: ProfileScope) {
       `
       SELECT
         ts.id AS sessionId,
+        ts.protocol, ts.protocol_version AS protocolVersion, ts.context_key AS testContext, tm.side,
         ts.athlete_id AS athleteId,
         ts.test_date AS date,
         ts.test_type AS testType,
@@ -224,15 +250,16 @@ function aerobicMeasurements(scope: ProfileScope) {
         AND ts.test_date BETWEEN ? AND ?
         AND ${usableSql('ts')}
         AND ${usableSql('tm')}
+        AND ts.project_code = ? AND ts.project_status = 'confirmed'
       ORDER BY ts.test_date DESC, ts.id DESC
     `
     )
-    .all(...scope.teamAthleteIds, scope.from, scope.to) as AerobicMeasurementRow[];
+    .all(...scope.teamAthleteIds, scope.from, scope.to, scope.project) as AerobicMeasurementRow[];
   return rows.filter((row) => AEROBIC_METRIC_PATTERN.test(`${row.code} ${row.label}`));
 }
 
-function latestRowByAthlete(rows: AerobicMeasurementRow[]) {
-  const latest = new Map<number, AerobicMeasurementRow>();
+function latestRowByAthlete<T extends { athleteId: number }>(rows: T[]) {
+  const latest = new Map<number, T>();
   for (const row of rows) {
     if (!latest.has(row.athleteId)) latest.set(row.athleteId, row);
   }
@@ -267,7 +294,10 @@ export function buildAerobicEndurance(scope: ProfileScope) {
     .map((personal) => {
       const sameCondition = rows.filter(
         (row) =>
-          row.code === personal.code && row.unit === personal.unit && row.date === personal.date
+          row.code === personal.code &&
+          row.unit === personal.unit &&
+          row.date === personal.date &&
+          sameMeasurementContext(personal, row)
       );
       const comparable = latestRowByAthlete(sameCondition);
       const teamMean = comparable.length >= 2 ? mean(comparable.map((row) => row.value)) : null;
@@ -284,19 +314,28 @@ export function buildAerobicEndurance(scope: ProfileScope) {
       };
     });
   const trendMetric = metrics[0];
-  const trendRows = trendMetric
-    ? personalRows.filter((row) => row.code === trendMetric.code && row.unit === trendMetric.unit)
-    : [];
-  const trend = trendMetric
-    ? {
-        code: trendMetric.code,
-        label: trendMetric.label,
-        unit: trendMetric.unit,
-        points: latestRowByDate(trendRows)
-          .sort((left, right) => left.date.localeCompare(right.date))
-          .map((row) => ({ date: row.date, value: row.value })),
-      }
+  const trendReference = trendMetric
+    ? personalLatestByMetric.get(`${trendMetric.code}\u0000${trendMetric.unit}`)
     : null;
+  const trendRows = trendReference
+    ? personalRows.filter(
+        (row) =>
+          row.code === trendReference.code &&
+          row.unit === trendReference.unit &&
+          sameMeasurementContext(trendReference, row)
+      )
+    : [];
+  const trend =
+    trendMetric && trendRows.length
+      ? {
+          code: trendMetric.code,
+          label: trendMetric.label,
+          unit: trendMetric.unit,
+          points: latestRowByDate(trendRows)
+            .sort((left, right) => left.date.localeCompare(right.date))
+            .map((row) => ({ date: row.date, value: row.value })),
+        }
+      : null;
   const recent = personalRows[0] ?? null;
   return {
     metrics,
@@ -426,8 +465,13 @@ export function buildProfileComparison(scope: ProfileScope) {
     const rows = measurementRows.filter((row) => row.code === code);
     const personal = rows.find((row) => row.athleteId === scope.athleteId);
     if (!personal) continue;
-    const comparable = rows.filter(
-      (row) => row.date === personal.date && row.unit === personal.unit
+    const comparable = latestRowByAthlete(
+      rows.filter(
+        (row) =>
+          row.date === personal.date &&
+          row.unit === personal.unit &&
+          sameMeasurementContext(personal, row)
+      )
     );
     items.push(
       comparisonItem({
@@ -470,17 +514,12 @@ export function buildProfileComparison(scope: ProfileScope) {
           const value = overview.trainingAnalytics.summary.physicalDurationMin;
           return value === null ? null : Math.round((value / 60) * 10) / 10;
         }),
-        statusMetric(
-          'intensity',
-          '训练强度',
-          'AU/h',
-          (overview) => {
-            const load = overview.trainingAnalytics.summary.physicalLoad;
-            const durationMin = overview.trainingAnalytics.summary.physicalDurationMin;
-            if (load === null || durationMin === null || durationMin === 0) return null;
-            return Math.round((load / (durationMin / 60)) * 10) / 10;
-          }
-        ),
+        statusMetric('intensity', '训练强度', 'AU/h', (overview) => {
+          const load = overview.trainingAnalytics.summary.physicalLoad;
+          const durationMin = overview.trainingAnalytics.summary.physicalDurationMin;
+          if (load === null || durationMin === null || durationMin === 0) return null;
+          return Math.round((load / (durationMin / 60)) * 10) / 10;
+        }),
         statusMetric(
           'load',
           '训练负荷',

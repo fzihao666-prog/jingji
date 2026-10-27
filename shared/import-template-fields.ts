@@ -1,3 +1,5 @@
+import { ACTIVITY_LABELS } from './sport-rules.js';
+import { INTENSITY_ZONE_SYSTEMS } from './training-intensity.js';
 import { PROJECT_DEFINITIONS } from './projects.js';
 import {
   importFieldGuidance,
@@ -211,6 +213,7 @@ const units: Record<string, string> = {
   最大心率: 'bpm',
   平均功率W: 'W',
   桨频SPM: 'SPM',
+  踏频rpm: 'rpm',
   实际次数: '次',
   计划次数: '次',
   实际重量kg: 'kg',
@@ -300,6 +303,14 @@ const examples: Record<string, string> = {
   平均心率: '140',
   最大心率: '175',
   桨频SPM: '22',
+  踏频rpm: '90',
+  事实项目: 'ROWING',
+  项目归属状态: 'confirmed',
+  训练活动: '骑行',
+  强度体系: 'U_SYSTEM',
+  协议版本: '2026-v1',
+  测试上下文: '室内/设备A',
+  试次序号: '1',
   课次名称: '上午力量',
   训练场次: '上午力量',
   动作: '深蹲',
@@ -368,6 +379,8 @@ const examples: Record<string, string> = {
   IMTP峰值力量N: '2000',
 };
 const choices: Record<string, readonly string[]> = {
+  训练活动: Object.values(ACTIVITY_LABELS),
+  强度体系: INTENSITY_ZONE_SYSTEMS.map(system => system.code),
   性别: ['男', '女'],
   运动项目: PROJECT_DEFINITIONS.map(project => project.nameZh),
   身体状态: ['健康', '观察', '训练受限', '康复中'],
@@ -446,6 +459,14 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
           ? '真实外加重量；徒手可填0，未采集留空并纠错，不能编造0。'
           : '填写实际记录。';
     }
+    if (key === '事实项目') hint = '完整导出的发生时项目，不能用当前档案项目替换；新建记录可留空。';
+    if (key === '项目归属状态') hint = '完整导出的归属状态；pending_verification须先核实，不能直接回导为已确认。新建记录可留空。';
+    if (key === '训练活动') hint = '按本次实际活动选择；交叉训练不改变运动员项目。未提供保持未分类，不从文字猜测。';
+    if (key === '踏频rpm') hint = '仅骑行活动填写实测踏频，单位rpm；不能填入桨频列。';
+    if (key === '强度体系') hint = '填写原记录使用的体系；分区须与该体系一致，不自动换算。';
+    if (key === '协议版本') hint = '填写测试方法实际版本；版本不同分别保存，不视为同场重复。';
+    if (key === '测试上下文') hint = '填写影响比较的设备、环境等原始条件；不同条件分别保存。';
+    if (key === '试次序号') hint = '同日同协议重复测试以正整数区分，留空按第1次处理。';
     if (key === 'RPE') hint = '0—10；未采集留空。时长与RPE齐全时系统计算SRPE；缺RPE仍可导入。';
     if (key === 'SRPE' || key === 'SMVL')
       hint = '专业外部来源选填；日常无需手算。系统计算规则见填写说明，外部原值按既有冲突规则处理。';

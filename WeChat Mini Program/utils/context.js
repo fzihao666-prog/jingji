@@ -23,6 +23,7 @@ async function loadContext(options = {}) {
     api.athletes()
   ]);
   const projects = projectResult.projects || [];
+  if (!projects.length) throw new Error('当前账号暂无可访问项目，请联系管理员配置。');
   const storedProject = app.globalData.currentProject;
   const project = projects.includes(app.globalData.pendingProject)
     ? app.globalData.pendingProject
@@ -34,9 +35,9 @@ async function loadContext(options = {}) {
     ? projectResult.project
     : projects.includes(storedProject)
       ? storedProject
-      : projects[0] || storedProject || '赛艇';
+      : projects[0];
   const athletes = athleteResult.athletes || [];
-  const projectAthletes = athletes.filter((item) => !item.project || item.project === project);
+  const projectAthletes = athletes.filter((item) => item.project === project);
 
   const preferredAthleteId = app.globalData.selectedAthleteId !== initialAthleteId
     ? app.globalData.selectedAthleteId : initialAthleteId;
@@ -58,7 +59,7 @@ async function loadContext(options = {}) {
 }
 
 function projectAthletes(athletes, project) {
-  return (athletes || []).filter((item) => !item.project || item.project === project);
+  return (athletes || []).filter((item) => item.project === project);
 }
 
 module.exports = { loadContext, projectAthletes };

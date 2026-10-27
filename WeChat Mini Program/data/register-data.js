@@ -202,6 +202,1492 @@ module.exports = {
       "label": "摔跤"
     }
   ],
+  "sportRules": {
+    "SWIMMING": {
+      "project": "SWIMMING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "MARATHON_SWIMMING": {
+      "project": "MARATHON_SWIMMING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "ARTISTIC_SWIMMING": {
+      "project": "ARTISTIC_SWIMMING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "DIVING": {
+      "project": "DIVING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "WATER_POLO": {
+      "project": "WATER_POLO",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "ARCHERY": {
+      "project": "ARCHERY",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "ATHLETICS": {
+      "project": "ATHLETICS",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BADMINTON": {
+      "project": "BADMINTON",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BASEBALL": {
+      "project": "BASEBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "SOFTBALL": {
+      "project": "SOFTBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BASKETBALL": {
+      "project": "BASKETBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BASKETBALL_3X3": {
+      "project": "BASKETBALL_3X3",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BOXING": {
+      "project": "BOXING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "CANOE_SLALOM": {
+      "project": "CANOE_SLALOM",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery",
+        "on_water",
+        "ergometer",
+        "cycling"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "available",
+          "reason": ""
+        },
+        "special": {
+          "status": "available",
+          "reason": ""
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "CANOE_SPRINT": {
+      "project": "CANOE_SPRINT",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery",
+        "on_water",
+        "ergometer",
+        "cycling"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "available",
+          "reason": ""
+        },
+        "special": {
+          "status": "available",
+          "reason": ""
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "CYCLING_ROAD": {
+      "project": "CYCLING_ROAD",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery",
+        "cycling"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "available",
+          "reason": ""
+        },
+        "special": {
+          "status": "available",
+          "reason": ""
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "CYCLING_TRACK": {
+      "project": "CYCLING_TRACK",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery",
+        "cycling"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "available",
+          "reason": ""
+        },
+        "special": {
+          "status": "available",
+          "reason": ""
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "CYCLING_MOUNTAIN_BIKE": {
+      "project": "CYCLING_MOUNTAIN_BIKE",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BMX_RACING": {
+      "project": "BMX_RACING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BMX_FREESTYLE": {
+      "project": "BMX_FREESTYLE",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "EQUESTRIAN_DRESSAGE": {
+      "project": "EQUESTRIAN_DRESSAGE",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "EQUESTRIAN_EVENTING": {
+      "project": "EQUESTRIAN_EVENTING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "EQUESTRIAN_JUMPING": {
+      "project": "EQUESTRIAN_JUMPING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "FENCING": {
+      "project": "FENCING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "FOOTBALL": {
+      "project": "FOOTBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "GOLF": {
+      "project": "GOLF",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "ARTISTIC_GYMNASTICS": {
+      "project": "ARTISTIC_GYMNASTICS",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "RHYTHMIC_GYMNASTICS": {
+      "project": "RHYTHMIC_GYMNASTICS",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "TRAMPOLINE": {
+      "project": "TRAMPOLINE",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "HANDBALL": {
+      "project": "HANDBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "HOCKEY": {
+      "project": "HOCKEY",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "JUDO": {
+      "project": "JUDO",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "KARATE_KATA": {
+      "project": "KARATE_KATA",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "KARATE_KUMITE": {
+      "project": "KARATE_KUMITE",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "MODERN_PENTATHLON": {
+      "project": "MODERN_PENTATHLON",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "ROWING": {
+      "project": "ROWING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery",
+        "on_water",
+        "ergometer",
+        "cycling"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "available",
+          "reason": ""
+        },
+        "special": {
+          "status": "available",
+          "reason": ""
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "RUGBY_SEVENS": {
+      "project": "RUGBY_SEVENS",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "SAILING": {
+      "project": "SAILING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "SHOOTING": {
+      "project": "SHOOTING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "SKATEBOARDING": {
+      "project": "SKATEBOARDING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "SPORT_CLIMBING": {
+      "project": "SPORT_CLIMBING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "SURFING": {
+      "project": "SURFING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "TABLE_TENNIS": {
+      "project": "TABLE_TENNIS",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "TAEKWONDO": {
+      "project": "TAEKWONDO",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "TENNIS": {
+      "project": "TENNIS",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "TRIATHLON": {
+      "project": "TRIATHLON",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "VOLLEYBALL": {
+      "project": "VOLLEYBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery",
+        "volleyball_technique"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "available",
+          "reason": ""
+        },
+        "special": {
+          "status": "available",
+          "reason": ""
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "BEACH_VOLLEYBALL": {
+      "project": "BEACH_VOLLEYBALL",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "WEIGHTLIFTING": {
+      "project": "WEIGHTLIFTING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    },
+    "WRESTLING": {
+      "project": "WRESTLING",
+      "version": "multi-sport-v1",
+      "activities": [
+        "unknown",
+        "strength",
+        "running",
+        "recovery"
+      ],
+      "capabilities": {
+        "management": {
+          "status": "available",
+          "reason": ""
+        },
+        "training": {
+          "status": "pending_configuration",
+          "reason": "公共填报可用，项目专属采集链路尚待配置。"
+        },
+        "special": {
+          "status": "pending_configuration",
+          "reason": "该项目专项分析尚待配置和验证。"
+        },
+        "reference": {
+          "status": "pending_configuration",
+          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+        }
+      }
+    }
+  },
+  "sportModules": [
+    {
+      "key": "people",
+      "label": "人员与队伍",
+      "kind": "common"
+    },
+    {
+      "key": "plans",
+      "label": "训练计划",
+      "kind": "common"
+    },
+    {
+      "key": "sessions",
+      "label": "训练记录",
+      "kind": "common"
+    },
+    {
+      "key": "wellness",
+      "label": "每日恢复",
+      "kind": "common"
+    },
+    {
+      "key": "injuries",
+      "label": "伤病管理",
+      "kind": "common"
+    },
+    {
+      "key": "measurements",
+      "label": "身体测量",
+      "kind": "common"
+    },
+    {
+      "key": "fitness",
+      "label": "通用体能测试",
+      "kind": "common"
+    },
+    {
+      "key": "special",
+      "label": "项目专项",
+      "kind": "specific"
+    },
+    {
+      "key": "overview",
+      "label": "训练总览",
+      "kind": "composed"
+    },
+    {
+      "key": "profile",
+      "label": "个人档案",
+      "kind": "composed"
+    },
+    {
+      "key": "reports",
+      "label": "训练报告",
+      "kind": "composed"
+    },
+    {
+      "key": "references",
+      "label": "参考评价",
+      "kind": "composed"
+    }
+  ],
+  "activityLabels": {
+    "unknown": "未分类",
+    "on_water": "水上训练",
+    "ergometer": "测功仪",
+    "cycling": "骑行",
+    "volleyball_technique": "排球技术",
+    "strength": "力量训练",
+    "running": "跑步",
+    "recovery": "恢复训练"
+  },
   "provinces": [
     "北京",
     "天津",

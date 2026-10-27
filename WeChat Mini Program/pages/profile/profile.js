@@ -136,9 +136,33 @@ function profileRadars(models) {
   ]).map((group) => ({ ...group, emptyMessage: group.dimensions.some((dim) => dim.referenceText !== '--') ? (group.dimensions.some((dim) => dim.valueText !== '--') ? '有效维度不足 3 个，暂不绘制雷达多边形' : '待采集') : '待参考' }));
 }
 
+// 只呈现服务端匹配结果及原始实测；不在客户端重算评分或参考。
+function physicalReferenceView(payload, athleteId) {
+  const data = payload || {};
+  const natureLabels = { official_research: '官方/研究参考', expert: '专家参考', team: '队内参考', estimated: '估算参考', unverified: '未核实来源' };
+  const rows = [];
+  const used = new Set();
+  (data.groups || []).forEach(group => {
+    const athlete = (group.athletes || []).find(item => Number(item.athleteId) === Number(athleteId));
+    if (!athlete) return;
+    (athlete.dimensions || []).forEach(dim => {
+      const ref = dim.appliedReference;
+      const definition = ref || (group.references || []).find(item => item.key === dim.key) || {};
+      if (dim.factMeasurementId) used.add(dim.factMeasurementId);
+      rows.push({ key: `${group.id}:${dim.key}`, label: definition.label || dim.key, value: metricValue(dim.value), unit: definition.unit || '', date: dim.testDate || '', reference: ref ? metricValue(ref.value) : '--', source: ref ? `${natureLabels[ref.sourceNature] || '参考来源未说明'} · ${ref.sourceNote || '来源未说明'}` : '待配置', version: ref ? `参考v${dim.referenceVersion || ref.version} · 维度${ref.dimensionVersion || '--'}` : '--', protocol: ref ? [ref.protocol, ref.protocolVersion, ref.testContext].filter(Boolean).join(' · ') : '', achieved: metricValue(dim.achievedPercent), pending: dim.pendingReason || '' });
+    });
+  });
+  (data.measurements || []).filter(item => Number(item.athleteId) === Number(athleteId) && !used.has(item.measurementId)).forEach(item => {
+    rows.push({ key: `measurement:${item.measurementId}`, label: item.code, value: metricValue(item.value), unit: item.unit || '', date: item.date || '', reference: '--', source: '待配置', version: '--', protocol: [item.protocol, item.protocolVersion, item.testContext].filter(Boolean).join(' · '), achieved: '--', pending: '保留原始实测，暂无匹配的已审核参考' });
+  });
+  const pending = (data.athletePendingReasons || []).find(item => Number(item.athleteId) === Number(athleteId));
+  return { physicalReferenceRows: rows, physicalReferenceNote: pending?.reason || data.pendingReason || '当前项目参考待配置；保留实测记录，不生成综合分或排名。' };
+}
+
 function emptyProfileView(athlete = {}, period = { from: '', to: '' }) {
   return {
     ...displayMissing(profileView(athlete, [], null, null, period)),
+    ...physicalReferenceView(null, athlete.id), physicalReferenceError: '',
     athleteName: athlete.name || '暂无可查看运动员', photoUrl: '', showMore: false,
     painTrend: null, wellnessTrend: completeWellnessView([]), bodyCompositionHistory: [],
     bodyCompositionSummary: displayMissing(bodyCompositionSummary([])), showBodyMore: false,
@@ -203,7 +227,7 @@ Page({
     if (!athleteId) return emptyProfileView();
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
-    const [injury, overview, benchmark, pain, wellness, body, comparison, radar, photo] = await Promise.all([
+    const [injury, overview, benchmark, pain, wellness, body, comparison, radar, photo, physical] = await Promise.all([
       sectionRequest(() => api.injuryRecords(athleteId), '伤病记录加载失败'),
       sectionRequest(() => api.personalOverview(athleteId, scope.from, scope.to, scope.project), '训练概览加载失败'),
       sectionRequest(() => api.championBenchmark(athleteId), '冠军模型加载失败'),
@@ -212,7 +236,8 @@ Page({
       sectionRequest(() => api.getBodyCompositionHistory(athleteId), '身体成分加载失败'),
       sectionRequest(() => api.profileComparison(athleteId, scope.from, scope.to, scope.project), '训练对比加载失败'),
       sectionRequest(() => api.radarModels(athleteId, scope.from, scope.to), '雷达模型加载失败'),
-      athlete.photoUrl ? sectionRequest(() => api.downloadAthletePhoto(athleteId), '照片加载失败') : Promise.resolve({ value: '', error: '' })
+      athlete.photoUrl ? sectionRequest(() => api.downloadAthletePhoto(athleteId), '照片加载失败') : Promise.resolve({ value: '', error: '' }),
+      sectionRequest(() => api.physicalChampion(scope.project, scope.from, scope.to), '项目参考加载失败')
     ]);
     if (!isLatest()) return null;
     const labels = { weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌', muscleMassKg: '肌肉量', totalBodyWaterKg: '体水分', visceralFatLevel: '内脏脂肪等级', basalMetabolismKcal: '基础代谢' };
@@ -222,10 +247,11 @@ Page({
       items: Object.entries(record).filter(([key, value]) => labels[key] && value != null).map(([key, value]) => ({ key, label: labels[key], value, unit: units[key] || '' }))
     }));
     const profileComparison = (comparison.value || {}).comparison || null;
-    const errors = { injuryError: injury.error, overviewError: overview.error, benchmarkError: benchmark.error, painError: pain.error, wellnessError: wellness.error, bodyError: body.error, comparisonError: comparison.error, radarError: radar.error, photoError: photo.error };
+    const errors = { injuryError: injury.error, overviewError: overview.error, benchmarkError: benchmark.error, painError: pain.error, wellnessError: wellness.error, bodyError: body.error, comparisonError: comparison.error, radarError: radar.error, photoError: photo.error, physicalReferenceError: physical.error };
     return {
       ...emptyProfileView(athlete, scope),
       ...displayMissing(profileView(athlete, (injury.value || {}).records, (overview.value || {}).overview, (benchmark.value || {}).benchmark, scope)),
+      ...physicalReferenceView(physical.value, athleteId),
       photoUrl: photo.value || '', painTrend: painTrendView(pain.value), wellnessTrend: completeWellnessView((wellness.value || {}).trends),
       bodyCompositionHistory, bodyCompositionSummary: displayMissing(bodyCompositionSummary(bodyCompositionHistory)), profileComparison,
       comparisonView: displayMissing(trainingComparisonSummary(profileComparison)), radarGroups: profileRadars(radar.value),

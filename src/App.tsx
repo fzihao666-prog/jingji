@@ -14,7 +14,7 @@ import { PhysiologyBiochemistryPage } from './pages/PhysiologyBiochemistryPage';
 import { StrengthTrainingDashboard } from './pages/TrainingDashboards';
 import type { Athlete, Project, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
-import { DEFAULT_PROJECT, isProject, normalizeProject, PROJECTS } from '../shared/projects';
+import { isProject, normalizeProject, PROJECTS } from '../shared/projects';
 
 const OverviewPage = lazy(() =>
   import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage }))
@@ -125,6 +125,7 @@ export default function App() {
   const [to, setTo] = useState(today);
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const [authorizedProjects, setAuthorizedProjects] = useState<Project[]>([]);
   const [athletesReady, setAthletesReady] = useState(false);
   const rosterUserRef = useRef<User | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,22 +193,21 @@ export default function App() {
         const ownProject = user.athleteId
           ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project
           : '';
-        const available = saved.projects.length
-          ? saved.projects
-          : orderedProjects(nextAthletes.map((athlete) => athlete.project));
-        const fallback = user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null;
+        const available = orderedProjects(saved.projects);
+        setAuthorizedProjects(available);
         const normalizedOwnProject = normalizeProject(ownProject);
         if (saved.project && available.includes(saved.project)) setProject(saved.project);
         else if (available.length === 1) setProject(available[0]);
         else if (normalizedOwnProject && available.includes(normalizedOwnProject))
           setProject(normalizedOwnProject);
         else if (available[0]) setProject(available[0]);
-        else setProject(fallback);
+        else setProject(null);
         if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
       })
       .catch((error) => {
         setGlobalError(error instanceof Error ? error.message : '运动员数据加载失败。');
-        setProject(user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null);
+        setAuthorizedProjects([]);
+        setProject(null);
       })
       .finally(() => setAthletesReady(true));
   }, [user, refreshKey]);
@@ -235,10 +235,7 @@ export default function App() {
       .finally(() => setLoading(false));
   }, [user, athletesReady, athletes, from, to, athleteId, project, page, refreshKey]);
 
-  const projects = useMemo(() => {
-    if (user?.role === 'DMD' || user?.role === 'TD') return [...PROJECTS];
-    return orderedProjects(athletes.map((athlete) => athlete.project));
-  }, [athletes, user?.role]);
+  const projects = authorizedProjects;
   const projectAthletes = useMemo(
     () => athletes.filter((athlete) => athlete.project === project),
     [athletes, project]
@@ -264,6 +261,7 @@ export default function App() {
     setRecords([]);
     setAthleteId(null);
     setProject(null);
+    setAuthorizedProjects([]);
     setAthletesReady(false);
   };
 

@@ -6,7 +6,7 @@ import { insertSession, readSession, type SessionInput, type SessionRow } from '
 export const idempotencyKeySchema = z.string().min(16).max(128).regex(/^[A-Za-z0-9_-]+$/).optional();
 const operation = 'athlete_self_training_create';
 type SubmissionResponse = { session: SessionRow & { editable: true } };
-type SavedSubmission = { payloadHash: string; athleteId: number; responseJson: string };
+type SavedSubmission = { payloadHash: string; athleteId: number; responseJson: string; payloadVersion: number };
 
 export class TrainingSubmissionConflict extends Error {}
 
@@ -18,10 +18,12 @@ export function submitSelfTraining(
   try {
     const payloadHash = createHash('sha256').update(JSON.stringify(input)).digest('hex');
     if (key !== undefined) {
-      const saved = db.prepare(`SELECT payload_hash AS payloadHash, athlete_id AS athleteId,
+      const saved = db.prepare(`SELECT payload_version AS payloadVersion, payload_hash AS payloadHash, athlete_id AS athleteId,
         response_json AS responseJson FROM training_submission_keys
         WHERE user_id = ? AND operation = ? AND idempotency_key = ?`).get(userId, operation, key) as SavedSubmission | undefined;
       if (saved) {
+        if (saved.payloadVersion === 1 && ['activityCode', 'intensitySystem', 'rulesVersion', 'cadenceRpm'].some(key => Object.hasOwn(input, key)))
+          throw new TrainingSubmissionConflict('历史提交标识不能用于新增项目字段，请为新内容使用新的提交标识。');
         if (saved.athleteId !== athleteId || saved.payloadHash !== payloadHash) {
           throw new TrainingSubmissionConflict('同一提交标识已用于其他训练内容，请确认后重新提交。');
         }
@@ -36,8 +38,8 @@ export function submitSelfTraining(
     const response: SubmissionResponse = { session: { ...session, editable: true } };
     if (key !== undefined) {
       db.prepare(`INSERT INTO training_submission_keys
-        (user_id, operation, idempotency_key, payload_hash, athlete_id, training_session_id, response_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(userId, operation, key, payloadHash, athleteId, id, JSON.stringify(response));
+        (user_id, operation, idempotency_key, payload_hash, athlete_id, training_session_id, response_json, payload_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 2)`).run(userId, operation, key, payloadHash, athleteId, id, JSON.stringify(response));
     }
     db.exec('COMMIT');
     return response;

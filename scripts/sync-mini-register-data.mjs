@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PROJECT_DEFINITIONS } from '../shared/projects.ts';
+import { projectRules, SPORT_MODULES, ACTIVITY_LABELS } from '../shared/sport-rules.ts';
 import { PROVINCES, PROVINCE_CITIES } from '../shared/regions.ts';
 import { ROLE_META } from '../shared/access.ts';
 import { STRENGTH_METRICS } from '../shared/strength-model.ts';
@@ -9,6 +10,9 @@ import { LOGIN_ERROR_MESSAGES } from '../shared/login-errors.ts';
 const target = fileURLToPath(new URL('../WeChat Mini Program/data/register-data.js', import.meta.url));
 const payload = {
   projects: PROJECT_DEFINITIONS.map(({ code, nameZh }) => ({ code, label: nameZh })),
+  sportRules: Object.fromEntries(PROJECT_DEFINITIONS.map(({ code }) => [code, projectRules(code)])),
+  sportModules: SPORT_MODULES,
+  activityLabels: ACTIVITY_LABELS,
   provinces: PROVINCES,
   provinceCities: PROVINCE_CITIES,
 };

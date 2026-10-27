@@ -1,165 +1,235 @@
 import type { DatabaseSync } from 'node:sqlite';
 import {
-  PHYSICAL_CHAMPION_DIMENSIONS,
   mean,
   physicalComparison,
   type PhysicalChampionPayload,
   type PhysicalReference,
 } from '../../shared/physical-champion.ts';
 
-type ReferenceRow = PhysicalReference & {
-  gender: string;
-  event: string;
-  weightClass: string;
-  ageGroup: string;
-};
 type AthleteRow = {
   id: number;
   name: string;
   gender: string | null;
   birthDate: string | null;
   event: string;
+  position: string;
+  level: string;
 };
-type Measurement = {
-  athleteId: number;
-  sessionId: number;
-  date: string;
-  protocol: string;
-  source: string;
-  code: string;
-  value: number;
-  unit: string;
-};
-
+type Measurement = PhysicalChampionPayload['measurements'][number];
 export const USER_PHYSICAL_SIMULATION_SOURCE = 'user_requested_simulation';
+// 仅保留历史标记供审计，不再用于推断年龄。
 export const ADULT_REFERENCE_ASSUMPTION = '成人参考假定（用户模拟补充）';
-
-function hasSimulationAgeAssumption(athlete: AthleteRow, row: Measurement) {
+export function adultAt(birthDate: string | null, date: string) {
+  if (
+    !birthDate ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(birthDate) ||
+    Number.isNaN(Date.parse(birthDate)) ||
+    new Date(birthDate).toISOString().slice(0, 10) !== birthDate ||
+    birthDate > date
+  )
+    return false;
   return (
-    !athlete.birthDate?.trim() &&
-    row.source === USER_PHYSICAL_SIMULATION_SOURCE &&
-    protocolMatches(row.protocol, ADULT_REFERENCE_ASSUMPTION)
+    Number(date.slice(0, 4)) -
+      Number(birthDate.slice(0, 4)) -
+      (date.slice(5) < birthDate.slice(5) ? 1 : 0) >=
+    18
   );
 }
-
-export function adultAt(birthDate: string | null, date: string) {
-  if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return false;
-  const age =
-    Number(date.slice(0, 4)) -
-    Number(birthDate.slice(0, 4)) -
-    (date.slice(5) < birthDate.slice(5) ? 1 : 0);
-  return age >= 18;
-}
-export function protocolMatches(actual: string, expected: string) {
+export function protocolMatches(actual: string | null, expected: string) {
   return (
     expected.trim().length > 0 &&
+    actual !== null &&
     actual
       .split(/[；;\n]/)
       .map((part) => part.trim())
       .includes(expected.trim())
   );
 }
-
+// 空版本与空条件是明确默认上下文，不作为具名版本或条件的通配符。
+function measurementContextMatches(row: Measurement, ref: PhysicalReference) {
+  return (
+    protocolMatches(row.protocol, ref.protocol) &&
+    row.protocolVersion === ref.protocolVersion &&
+    row.testContext === ref.testContext &&
+    row.side === ref.side
+  );
+}
+export function readPhysicalReferences(db: DatabaseSync, project: string): PhysicalReference[] {
+  const rows = db
+    .prepare(
+      `SELECT rv.id, rv.revision, rv.metric_key AS key, rv.unit, rv.value_num AS value,
+    rv.protocol, rv.protocol_version AS protocolVersion, rv.test_context AS testContext, rv.side, rv.direction, rv.source_type AS sourceType, rs.name AS sourceNote, rv.project,
+    rv.gender, rv.event_group AS event, rv.weight_class AS weightClass, rv.age_group AS ageGroup,
+    rv.review_status AS reviewStatus, rv.source_nature AS sourceNature, rv.version,
+    rv.effective_from AS effectiveFrom, rv.effective_to AS effectiveTo, rv.position,
+    rv.reference_level AS referenceLevel, rv.reference_label AS referenceLabel,
+    rv.dimension_version AS dimensionVersion, rv.measurement_codes AS measurementCodes,
+    rv.measurement_unit AS measurementUnit, rv.weight_relative AS weightRelative,
+    rv.active, rs.active AS sourceActive
+    FROM radar_reference_values rv JOIN radar_reference_sources rs ON rs.id=rv.source_id
+    WHERE rv.project IN (?,?) AND rv.radar_kind='physical' ORDER BY rv.id`
+    )
+    .all(
+      project,
+      project === 'CANOE_SPRINT' ? 'CANOE' : project === 'CANOE_SLALOM' ? 'SLALOM' : project
+    ) as Array<
+    Omit<PhysicalReference, 'measurementCodes' | 'weightRelative'> & {
+      measurementCodes: string;
+      weightRelative: number;
+      active: number;
+      sourceActive: number;
+    }
+  >;
+  return rows.map((row) => {
+    let codes: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(row.measurementCodes);
+      if (Array.isArray(parsed) && parsed.every((code) => typeof code === 'string')) codes = parsed;
+    } catch {
+      /* 历史配置损坏时保持待配置，不猜测指标。 */
+    }
+    return {
+      ...row,
+      label: row.referenceLabel || row.key,
+      reviewStatus: row.active && row.sourceActive ? row.reviewStatus : 'disabled',
+      measurementCodes: codes,
+      weightRelative: row.weightRelative === 1,
+    };
+  });
+}
+export function isUsablePhysicalReference(ref: PhysicalReference, date: string) {
+  return (
+    ref.reviewStatus === 'reviewed' &&
+    ref.sourceType !== 'estimated' &&
+    !['estimated', 'unverified'].includes(ref.sourceNature) &&
+    !!ref.effectiveFrom &&
+    ref.effectiveFrom <= date &&
+    (!ref.effectiveTo || ref.effectiveTo >= date) &&
+    (ref.weightRelative
+      ? ref.measurementUnit === 'kg' && ref.unit === '倍体重'
+      : ref.measurementUnit === ref.unit || (ref.measurementUnit === '秒' && ref.unit === 's')) &&
+    !!ref.dimensionVersion &&
+    ref.measurementCodes.length > 0 &&
+    !!ref.measurementUnit &&
+    !!ref.protocol
+  );
+}
+function applies(ref: PhysicalReference, athlete: AthleteRow, date: string) {
+  return (
+    (ref.gender === 'open' || athlete.gender === ref.gender) &&
+    (ref.ageGroup === 'open' || (ref.ageGroup === 'adult' && adultAt(athlete.birthDate, date))) &&
+    (ref.event === 'open' || (!!athlete.event && ref.event === athlete.event)) &&
+    ref.weightClass === 'open' &&
+    !/(轻量级|lightweight|\bLW)/i.test(athlete.event) &&
+    (ref.position === 'open' || (!!athlete.position && ref.position === athlete.position)) &&
+    (ref.referenceLevel === 'open' || (!!athlete.level && ref.referenceLevel === athlete.level))
+  );
+}
+const priority = (ref: PhysicalReference) =>
+  [ref.gender, ref.ageGroup, ref.event, ref.weightClass, ref.position, ref.referenceLevel].filter(
+    (value) => value !== 'open'
+  ).length;
 export function buildPhysicalChampion(
   db: DatabaseSync,
   scope: { project: string; from: string; to: string; athleteIds: number[]; canEdit: boolean }
 ): PhysicalChampionPayload {
   const { project, from, to, canEdit } = scope;
-  const referenceRows = db
-    .prepare(
-      `SELECT rv.id, rv.revision, rv.metric_key AS key, rv.unit, rv.value_num AS value,
-    rv.protocol, rv.direction, rv.source_type AS sourceType, rs.name AS sourceNote,
-    rv.gender, rv.event_group AS event, rv.weight_class AS weightClass, rv.age_group AS ageGroup
-    FROM radar_reference_values rv JOIN radar_reference_sources rs ON rs.id = rv.source_id
-    WHERE rv.project IN (?, ?) AND rv.radar_kind = 'physical' AND rv.active = 1 AND rs.active = 1
-    AND trim(rv.protocol) <> '' ORDER BY rv.updated_at DESC, rv.id DESC`
-    )
-    .all(
-      project,
-      project === 'CANOE_SPRINT' ? 'CANOE' : project === 'CANOE_SLALOM' ? 'SLALOM' : project
-    ) as ReferenceRow[];
-  const refs = referenceRows.map((row) => ({
-    ...row,
-    label:
-      PHYSICAL_CHAMPION_DIMENSIONS.find((dimension) => dimension.key === row.key)?.label || row.key,
-  }));
+  const references = readPhysicalReferences(db, project);
   const ids = new Set(scope.athleteIds);
   const athletes = (
     db
       .prepare(
-        `SELECT a.id, a.name, a.gender, a.birth_date AS birthDate,
-    COALESCE(ap.current_event, '') AS event FROM athletes a LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
-    WHERE a.project = ? AND a.active = 1`
+        `SELECT a.id,a.name,a.gender,a.birth_date AS birthDate, COALESCE(ap.current_event,'') AS event,
+    COALESCE(ap.position,'') AS position,COALESCE(ap.technical_level,'') AS level FROM athletes a LEFT JOIN athlete_profiles ap ON ap.athlete_id=a.id
+    WHERE a.project=? AND a.active=1`
       )
       .all(project) as AthleteRow[]
   ).filter((athlete) => ids.has(athlete.id));
-  // 查询始终按已授权运动员裁剪，任何演示、估算、异常或无来源测试都不进入分析。
-  const readMeasurements =
-    db.prepare(`SELECT ts.athlete_id AS athleteId, ts.id AS sessionId, ts.test_date AS date, ts.protocol, ts.source,
-    tm.metric_code AS code, tm.value_num AS value, tm.unit
-    FROM test_sessions ts JOIN test_measurements tm ON tm.test_session_id = ts.id
-    WHERE ts.athlete_id = ? AND ts.test_date BETWEEN ? AND ?
-    AND ts.quality = 'valid' AND tm.quality = 'valid' AND ts.is_demo = 0 AND tm.is_demo = 0
-    AND trim(ts.source) <> '' AND trim(tm.source) <> ''
+  const read =
+    db.prepare(`SELECT tm.id AS measurementId,ts.athlete_id AS athleteId,ts.id AS sessionId,ts.test_date AS date,ts.protocol,
+    ts.protocol_version AS protocolVersion,ts.context_key AS testContext,tm.side,
+    tm.metric_code AS code,tm.value_num AS value,tm.unit FROM test_sessions ts JOIN test_measurements tm ON tm.test_session_id=ts.id
+    WHERE ts.athlete_id=? AND ts.project_code=? AND ts.project_status='confirmed' AND ts.test_date BETWEEN ? AND ?
+    AND ts.quality='valid' AND tm.quality='valid' AND ts.is_demo=0 AND tm.is_demo=0
+    AND trim(ts.source)<>'' AND trim(tm.source)<>''
     AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
     AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
     AND lower(ts.source) NOT LIKE '%estimated%' AND lower(tm.source) NOT LIKE '%estimated%'
-    ORDER BY ts.test_date DESC, ts.id DESC, tm.id DESC`);
+    AND lower(ts.source) NOT LIKE '%synthetic%' AND lower(tm.source) NOT LIKE '%synthetic%'
+    AND lower(ts.source) NOT LIKE '%simulation%' AND lower(tm.source) NOT LIKE '%simulation%'
+    AND ts.source<>? AND tm.source<>? ORDER BY ts.test_date DESC,ts.id DESC,tm.id DESC`);
   const measurements = athletes.flatMap(
-    (athlete) => readMeasurements.all(athlete.id, from, to) as Measurement[]
+    (athlete) =>
+      read.all(
+        athlete.id,
+        project,
+        from,
+        to,
+        USER_PHYSICAL_SIMULATION_SOURCE,
+        USER_PHYSICAL_SIMULATION_SOURCE
+      ) as Measurement[]
   );
-  const groupRows = new Map<string, ReferenceRow[]>();
-  for (const ref of refs) {
-    if (
-      !PHYSICAL_CHAMPION_DIMENSIONS.some(
-        (dimension) => dimension.key === ref.key && dimension.unit === ref.unit
-      )
-    )
-      continue;
-    const id = JSON.stringify([ref.gender, ref.event, ref.weightClass, ref.ageGroup]);
-    const group = groupRows.get(id) || [];
-    if (!group.some((item) => item.key === ref.key)) group.push(ref);
-    groupRows.set(id, group);
+  const effective = references.filter(
+    (ref) =>
+      isUsablePhysicalReference(
+        ref,
+        ref.effectiveFrom && ref.effectiveFrom > from ? ref.effectiveFrom : from
+      ) &&
+      (!ref.effectiveTo || ref.effectiveTo >= from) &&
+      !!ref.effectiveFrom &&
+      ref.effectiveFrom <= to
+  );
+  // 分组保留适用范围；同维度多个版本由逐事实匹配检测冲突，不能按更新时间覆盖。
+  const buckets = new Map<string, PhysicalReference[]>();
+  for (const ref of effective) {
+    const id = JSON.stringify([
+      ref.gender,
+      ref.event,
+      ref.weightClass,
+      ref.ageGroup,
+      ref.position,
+      ref.referenceLevel,
+    ]);
+    buckets.set(id, [...(buckets.get(id) || []), ref]);
   }
   const matched = new Set<number>();
-  const groups = [...groupRows].map(([id, references]) => {
-    const first = references[0];
-    // 开放体重参考采用相对力量；尚无体重级别事实字段时不猜测具体级别。
-    const members = athletes.filter(
-      (athlete) =>
-        athlete.gender === first.gender &&
-        first.ageGroup === 'adult' &&
-        (adultAt(athlete.birthDate, to) ||
-          measurements.some(
-            (row) => row.athleteId === athlete.id && hasSimulationAgeAssumption(athlete, row)
-          )) &&
-        first.weightClass === 'open' &&
-        !/(轻量级|lightweight|\bLW)/i.test(athlete.event) &&
-        (first.event === 'open' || first.event === athlete.event)
-    );
+  const groups = [...buckets].map(([id, candidates]) => {
+    const first = candidates[0];
+    const refs = [...new Map(candidates.map((ref) => [ref.key, ref])).values()];
+    const members = athletes.filter((athlete) => applies(first, athlete, to));
     members.forEach((athlete) => matched.add(athlete.id));
     const resultAt = (athlete: AthleteRow, cutoff: string) => {
-      const rows = measurements.filter(
-        (row) =>
-          row.athleteId === athlete.id &&
-          row.date <= cutoff &&
-          (adultAt(athlete.birthDate, row.date) || hasSimulationAgeAssumption(athlete, row))
-      );
-      const dimensions = references.map((reference) => {
-        const definition = PHYSICAL_CHAMPION_DIMENSIONS.find(
-          (dimension) => dimension.key === reference.key
-        )!;
-        const row = rows.find(
-          (measurement) =>
-            (definition.codes as readonly string[]).includes(measurement.code) &&
-            measurement.unit === definition.measurementUnit &&
-            protocolMatches(measurement.protocol, reference.protocol) &&
-            Number.isFinite(measurement.value) &&
-            measurement.value >= 0
+      const dimensions = refs.map((displayRef) => {
+        const rows = measurements.filter(
+          (row) => row.athleteId === athlete.id && row.date <= cutoff
         );
-        let value: number | null = row?.value ?? null;
+        const all = references.filter((ref) => ref.key === displayRef.key);
+        const row = rows.find((item) =>
+          all.some(
+            (ref) =>
+              isUsablePhysicalReference(ref, item.date) &&
+              applies(ref, athlete, item.date) &&
+              ref.measurementCodes.includes(item.code) &&
+              item.unit === ref.measurementUnit &&
+              measurementContextMatches(item, ref)
+          )
+        );
+        const compatible = row
+          ? all.filter(
+              (ref) =>
+                isUsablePhysicalReference(ref, row.date) &&
+                applies(ref, athlete, row.date) &&
+                ref.measurementCodes.includes(row.code) &&
+                row.unit === ref.measurementUnit &&
+                measurementContextMatches(row, ref)
+            )
+          : [];
+        const rank = Math.max(-1, ...compatible.map(priority));
+        const best = compatible.filter((ref) => priority(ref) === rank);
+        const ref = best.length === 1 ? best[0] : null;
+        let value = row && Number.isFinite(row.value) && row.value >= 0 ? row.value : null;
+        const definition = ref || displayRef;
         if (row && definition.weightRelative) {
-          // 同一次测试的体重才能作为分母，避免跨日期体重改变相对力量。
           const weight = rows.find(
             (item) =>
               item.sessionId === row.sessionId &&
@@ -167,86 +237,103 @@ export function buildPhysicalChampion(
               item.unit === 'kg' &&
               item.value > 0
           );
-          value = weight ? Math.round((row.value / weight.value) * 1000) / 1000 : null;
+          value =
+            weight && value !== null ? Math.round((value / weight.value) * 1000) / 1000 : null;
         }
+        const pendingReason =
+          best.length > 1
+            ? '同优先级标准冲突，暂停评价'
+            : !ref
+              ? '无匹配日期、人群、协议版本、测试条件、侧别和单位的已审核标准'
+              : value === null
+                ? '缺少同协议实测或同课次体重'
+                : null;
         return {
-          key: reference.key,
-          ...physicalComparison(value, reference),
-          testDate: value === null ? null : (row?.date ?? null),
+          key: displayRef.key,
+          ...(ref
+            ? physicalComparison(value, ref)
+            : { value, achievedPercent: null, difference: null }),
+          testDate: row?.date || null,
+          pendingReason,
+          referenceId: ref?.id || null,
+          referenceVersion: ref?.version || null,
+          factMeasurementId: row?.measurementId || null,
+          calculationVersion: 'physical-reference-v2',
+          appliedReference: ref,
         };
       });
-      const scores = dimensions.flatMap((dimension) =>
-        dimension.achievedPercent === null ? [] : [dimension.achievedPercent]
-      );
       return {
         athleteId: athlete.id,
         athleteName: athlete.name,
         dimensions,
-        coverage: scores.length,
-        score: scores.length === references.length ? mean(scores) : null,
+        coverage: dimensions.filter((item) => item.achievedPercent !== null).length,
+        score: null,
       };
     };
     const results = members.map((athlete) => resultAt(athlete, to));
-    const team = references.map((reference) => {
-      const valid = results.flatMap((athlete) => {
-        const value = athlete.dimensions.find(
-          (dimension) => dimension.key === reference.key
-        )?.value;
-        return value == null ? [] : [value];
+    const team = refs.map((ref) => {
+      const values = results.flatMap((athlete) => {
+        const result = athlete.dimensions.find((item) => item.key === ref.key);
+        return result?.value == null ? [] : [result.value];
       });
+      // 人群或参考版本不同不能把团队均值直接套入某一参考。
       return {
-        key: reference.key,
-        ...physicalComparison(mean(valid), reference),
+        key: ref.key,
+        value: mean(values),
+        achievedPercent: null,
+        difference: null,
         testDate: null,
-        sampleCount: valid.length,
+        sampleCount: values.length,
+        pendingReason: '团队均值仅展示实测；未配置已审核综合方法',
+        referenceId: null,
+        referenceVersion: null,
+        factMeasurementId: null,
+        calculationVersion: 'physical-reference-v2',
+        appliedReference: null,
       };
     });
-    const dates = [
-      ...new Set(
-        measurements
-          .filter((row) => members.some((member) => member.id === row.athleteId))
-          .map((row) => row.date)
-      ),
-    ].sort();
-    const trend = dates.flatMap((date) => {
-      const daily = members.map((athlete) => resultAt(athlete, date));
-      const scores = daily.flatMap((athlete) => (athlete.score === null ? [] : [athlete.score]));
-      return [
-        {
-          date,
-          score: mean(scores),
-          sampleCount: scores.length,
-          athleteId: null,
-          coverage: daily.reduce((sum, athlete) => sum + athlete.coverage, 0),
-        },
-        ...daily.map((athlete) => ({
-          date,
-          score: athlete.score,
-          sampleCount: athlete.score === null ? 0 : 1,
-          athleteId: athlete.athleteId,
-          coverage: athlete.coverage,
-        })),
-      ];
-    });
-    // 仅完整八维进入综合排名，缺测人员保留明细但不以稀疏样本参与排名。
-    results.sort(
-      (a, b) =>
-        (b.coverage === references.length ? (b.score ?? -1) : -1) -
-        (a.coverage === references.length ? (a.score ?? -1) : -1)
-    );
     return {
       id,
-      label: `${first.gender} · ${first.event === 'open' ? '通用体能' : first.event} · 成人开放组`,
+      label: `${first.gender} · ${first.event} · ${first.ageGroup}`,
       gender: first.gender,
       event: first.event,
       weightClass: first.weightClass,
       ageGroup: first.ageGroup,
-      referenceLevel: '顶尖竞技水平参考（含估算，待校准）',
-      references,
+      referenceLevel: first.referenceLabel || '已审核项目参考',
+      references: refs,
       team,
       athletes: results,
-      trend,
+      trend: [],
     };
   });
-  return { project, from, to, canEdit, excludedCount: athletes.length - matched.size, groups };
+  const athletePendingReasons = athletes
+    .filter((athlete) => !matched.has(athlete.id))
+    .map((athlete) => ({
+      athleteId: athlete.id,
+      reason: !effective.length
+        ? '项目参考维度待配置'
+        : !athlete.birthDate && effective.some((ref) => ref.ageGroup === 'adult')
+          ? '无法匹配年龄组：出生日期缺失，不假定成人'
+          : !athlete.gender
+            ? '无法匹配性别：档案信息缺失'
+            : !athlete.position && effective.some((ref) => ref.position !== 'open')
+              ? '无法匹配位置：档案信息缺失'
+              : !athlete.level && effective.some((ref) => ref.referenceLevel !== 'open')
+                ? '无法匹配级别：档案信息缺失'
+                : '暂无满足全部项目、人群、分项和级别条件的参考',
+    }));
+  return {
+    athletePendingReasons,
+    project,
+    from,
+    to,
+    canEdit,
+    excludedCount: athletes.length - matched.size,
+    groups,
+    managementReferences: canEdit ? references : [],
+    measurements,
+    pendingReason: effective.length
+      ? '未配置已审核综合方法，不生成综合冠军分或排名；缺项不补零、不重配权重'
+      : '当前项目暂无有效已审核参考维度；保留实测与同协议记录',
+  };
 }

@@ -1,3 +1,4 @@
+import { projectRules } from '../../shared/sport-rules.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -393,6 +394,7 @@ export function buildTeamAiContext(
       athleteCount: athletes.length,
       trainingDate: input.date,
     },
+    projectRules: projectRules(team.project),
     currentPlan,
     loadTrend,
     dailyLoads,

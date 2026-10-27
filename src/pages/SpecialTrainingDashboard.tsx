@@ -2,7 +2,6 @@ import { Activity } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
-import { SpecialChampionModel } from '../components/SpecialChampionModel';
 import {
   AppCard,
   ChartCard,
@@ -21,7 +20,6 @@ import {
 } from '../components/special-chart-options';
 import type { Project, ProjectTeam } from '../types';
 import { formatNumber } from '../utils';
-import { PRIMARY_INTENSITY_ZONE_CODES } from '../../shared/training-intensity';
 
 type Props = {
   onPlanOpen: () => void;
@@ -90,15 +88,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
   const athletes = payload?.athletes || [];
   const selectedAthlete = payload?.selectedAthlete || null;
   const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
-  // 强度占比只展示填报端共用的七类标准区间（U3/U2/U1/AT/TPT/AN/ATP）：0 值行保留，名单外维度不展示，占比在展示维度内归一。
-  const intensityRows = (training?.intensity ?? [])
-    .filter((row) => (PRIMARY_INTENSITY_ZONE_CODES as readonly string[]).includes(row.name))
-    .map((row) => ({ ...row, durationMin: row.durationMin ?? 0 }));
-  const intensityTotal = intensityRows.reduce((sum, row) => sum + (row.durationMin || 0), 0);
-  const displayedIntensity = intensityRows.map((row) => ({
-    ...row,
-    percentage: intensityTotal ? (row.durationMin / intensityTotal) * 100 : 0,
-  }));
+  const displayedIntensity = training?.intensity ?? [];
   const intensityAnalytics = training ? { ...training, intensity: displayedIntensity } : null;
   const metricItems = training
     ? [
@@ -151,7 +141,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
           </select>
         </label>
       </FilterBar>
-      <SpecialChampionModel project={project} />
+      <AppCard><h3>项目参考评价</h3><p>专业参考标准需审核并匹配测试协议后使用；实测训练统计不受影响。</p></AppCard>
       {!current ? (
         <ContentState
           kind="loading"
@@ -192,9 +182,9 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
             <ChartCard title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
               <EChart option={volumeOption(training, from, to, !training.days.some((day) => day.durationMin !== null || day.distanceKm !== null))} label="专项训练时长与距离趋势" isPlaceholder={!training.days.some((day) => day.durationMin !== null || day.distanceKm !== null)} />
             </ChartCard>
-            <ChartCard title="专项训练强度占比" description="按原始强度分区的有效训练时长统计 · 固定展示 U3/U2/U1/AT/TPT/AN/ATP 七类标准区间，未训练分区保留 0 值">
+            <ChartCard title="专项训练强度占比" description="按已记录的体系与原始分区分别统计有效时长，不跨体系换算">
               <>
-                  <EChart option={intensityOption(intensityAnalytics ?? training, !displayedIntensity.some((row) => row.durationMin > 0))} label="专项训练强度时长占比" isPlaceholder={!displayedIntensity.some((row) => row.durationMin > 0)} />
+                  <EChart option={intensityOption(intensityAnalytics ?? training, !displayedIntensity.some((row) => (row.durationMin ?? 0) > 0))} label="专项训练强度时长占比" isPlaceholder={!displayedIntensity.some((row) => (row.durationMin ?? 0) > 0)} />
                   {training.summary.sessionCount > 0 && (
                   <div className="table-scroll">
                     <table className="data-table">
@@ -248,7 +238,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
             </ChartCard>
             <ChartCard
               title="专项训练负荷分析"
-              description={`累计专项负荷 ${value(training.summary.load)} AU · 每日既有 SRPE`}
+              description={`累计专项负荷 ${value(training.summary.load)} AU · 有效时长与 RPE 覆盖 ${training.summary.loadSampleCount}/${training.summary.sessionCount} 课次`}
             >
               <EChart option={loadOption(training, from, to, !training.days.some((day) => day.load !== null))} label="每日专项SRPE负荷趋势" isPlaceholder={!training.days.some((day) => day.load !== null)} />
             </ChartCard>

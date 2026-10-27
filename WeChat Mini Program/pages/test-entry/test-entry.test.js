@@ -34,6 +34,7 @@ const testEntryForm = loadModule(new URL('../../utils/test-entry-form.js', impor
   '../data/format-data': formatData,
 });
 const dateUtil = loadModule(new URL('../../utils/date.js', import.meta.url));
+const registerData = loadModule(new URL('../../data/register-data.js', import.meta.url));
 
 function loadPage({ role, athletes, selectedAthleteId, storage = {} }) {
   const calls = [];
@@ -65,12 +66,13 @@ function loadPage({ role, athletes, selectedAthleteId, storage = {} }) {
         return {
           loadContext: () => Promise.resolve({
             user: { role },
-            project: '赛艇',
+            project: 'ROWING',
             projectAthletes: athletes,
             selectedAthleteId,
           }),
         };
       }
+      if (path.includes('data/register-data')) return registerData;
       if (path.includes('utils/request-guard')) return guardModule;
       if (path.includes('utils/form-draft')) return draftModule;
       if (path.includes('utils/project-label')) return { projectLabel: () => '赛艇' };
@@ -217,8 +219,8 @@ describe('测试成绩现场录入页', () => {
     expect(page.data.form.crewName).toBe('张三');
     expect(page.data.memberIds).toEqual([7]);
     // 赛事条件与常用距离按项目记忆，供下次预填。
-    expect(store['jingji-mini-test-event:赛艇'].data).toMatchObject({ distanceM: '2000', boatClass: 'K1' });
-    expect(store['jingji-mini-test-distance:赛艇'].data).toEqual(['2000']);
+    expect(store['jingji-mini-test-event:ROWING'].data).toMatchObject({ distanceM: '2000', boatClass: 'K1' });
+    expect(store['jingji-mini-test-distance:ROWING'].data).toEqual(['2000']);
   });
 
   it('切换主测时纯自动成员跟随重置，已手动加人只补进新主测', async () => {

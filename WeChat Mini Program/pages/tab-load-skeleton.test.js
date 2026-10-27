@@ -110,6 +110,7 @@ function createPageModule(url, api, extraMocks = {}) {
   activeApp = app;
   const mocks = {
     '../../services/api': api,
+    '../../data/register-data': loadCjs(new URL('../data/register-data.js', import.meta.url), {}),
     '../../utils/page-scope': pageScope,
     '../../utils/request-guard': requestGuard,
     '../../utils/page-actions': pageActions,
@@ -169,6 +170,7 @@ const profileApi = () => {
   return {
     calls,
     assetUrl: (value) => value || '',
+    athleteCreateOptions: async () => ({ teams: [] }),
     injuryRecords: async () => {
       calls.injuryRecords += 1;
       return { records: [] };
@@ -180,6 +182,7 @@ const profileApi = () => {
       },
     }),
     championBenchmark: async () => ({ benchmark: null }),
+    physicalChampion: async () => ({ groups: [], measurements: [], pendingReason: '当前项目参考待配置' }),
     saveCurrentProject: async () => {},
   };
 };
@@ -368,4 +371,52 @@ describe('共用的下钻与趋势明细工具', () => {
     expect(activeApp.globalData.selectedAthleteId).toBe(1);
     expect(tabs).toEqual(['/pages/profile/profile']);
   });
+});
+
+it.each(['CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])('%s专项页保留公共训练量，跳过水上专属请求并保留不同强度体系', async project => {
+  const api = specialApi();
+  let waterCalls = 0;
+  api.specialTests = async () => { waterCalls += 1; return {}; };
+  api.specialChampionModels = async () => { waterCalls += 1; return {}; };
+  api.specialTrainingOverview = async () => ({ training: { summary: { durationMin: 90, sessionCount: 3 }, intensity: [
+    { name: 'U_SYSTEM · AT', durationMin: 30 }, { name: 'UT_SYSTEM · AT', durationMin: 45 }, { name: '未知体系 · AT', durationMin: 15 }, { name: '未知体系 · Z9', durationMin: null },
+  ] }, athletes: [] });
+  const { page } = createPageModule(new URL('./special/special.js', import.meta.url), api);
+  const view = await page.loadPageData({ project, from: '2026-10-01', to: '2026-10-10', teamId: 0 }, true, () => true);
+  expect(view.hasWaterSpecial).toBe(false);
+  expect(waterCalls).toBe(0);
+  expect(view.specialTests).toEqual([]);
+  expect(view.championEvents).toEqual([]);
+  expect(view.metrics[0].value).toBe('1.5');
+  expect(view.intensity.map(row => row.name)).toEqual(['U_SYSTEM · AT', 'UT_SYSTEM · AT', '未知体系 · AT', '未知体系 · Z9']);
+  expect(view.intensity[3].value).toBe('-- min');
+  expect(view.intensity[1].percentage).toBe(50);
+});
+
+it('档案页展示当前运动员实测与队内参考来源版本，过滤他人，不生成综合分', async () => {
+  const api = profileApi();
+  let args;
+  api.physicalChampion = async (...values) => { args = values; return { project: 'ROWING', pendingReason: '无已审核综合方法', groups: [{ id: 'team', references: [], athletes: [{ athleteId: 1, dimensions: [{ key: 'jump', value: 0, achievedPercent: 0, referenceVersion: 3, testDate: '2026-10-05', factMeasurementId: 11, appliedReference: { label: '纵跳', value: 45, unit: 'cm', sourceNature: 'team', sourceNote: '队内实测标准', version: 3, dimensionVersion: 'jump-v2', protocol: 'CMJ' } }] }, { athleteId: 2, dimensions: [{ key: 'private', value: 99 }] }] }], measurements: [{ athleteId: 1, measurementId: 11, code: 'jump', value: 0, unit: 'cm' }, { athleteId: 2, measurementId: 22, code: 'private', value: 99 } ] }; };
+  const { page } = createPageModule(new URL('./profile/profile.js', import.meta.url), api);
+  const scope = { selectedAthleteId: 1, athletes: [athlete], project: 'ROWING', from: '2026-10-01', to: '2026-10-10' };
+  const view = await page.loadPageData(scope, () => true);
+  expect(args).toEqual(['ROWING', scope.from, scope.to]);
+  expect(view.physicalReferenceRows).toHaveLength(1);
+  expect(view.physicalReferenceRows[0]).toMatchObject({ value: '0', achieved: '0', source: '队内参考 · 队内实测标准', version: '参考v3 · 维度jump-v2' });
+  expect(view.physicalReferenceNote).toBe('无已审核综合方法');
+  expect(await page.loadPageData(scope, () => false)).toBeNull();
+});
+
+it('档案项目参考失败保持其他模块可用，无标准时保留原始实测与待配置原因', async () => {
+  const api = profileApi();
+  api.physicalChampion = async () => { throw new Error('参考服务暂不可用'); };
+  const { page } = createPageModule(new URL('./profile/profile.js', import.meta.url), api);
+  const scope = { selectedAthleteId: 1, athletes: [athlete], project: 'VOLLEYBALL', from: '2026-10-01', to: '2026-10-10' };
+  const failed = await page.loadPageData(scope, () => true);
+  expect(failed.athleteName).toBe(athlete.name);
+  expect(failed.physicalReferenceError).toBe('参考服务暂不可用');
+  api.physicalChampion = async () => ({ athletePendingReasons: [{ athleteId: 1, reason: '项目参考维度待配置' }], measurements: [{ athleteId: 1, measurementId: 1, code: 'vertical_jump_cm', value: 40, unit: 'cm', date: '2026-10-05', protocol: 'CMJ' }], groups: [] });
+  const pending = await page.loadPageData(scope, () => true);
+  expect(pending.physicalReferenceNote).toBe('项目参考维度待配置');
+  expect(pending.physicalReferenceRows[0]).toMatchObject({ value: '40', source: '待配置', reference: '--', achieved: '--' });
 });

@@ -84,12 +84,14 @@ const schemas: Record<string, ReviewField[]> = {
       maxHeartRate: '最大心率',
       averagePowerW: '平均功率W',
       strokeRateSpm: '桨频',
+      cadenceRpm: '踏频rpm',
     }),
     ...textual({
       startTime: '开始时间',
       trainingType: '训练类型',
       structureType: '训练阶段',
       intensityZone: '强度区间',
+      activityCode: '训练活动', intensitySystem: '强度体系',
       content: '训练内容',
     }),
   ],
@@ -105,7 +107,8 @@ const schemas: Record<string, ReviewField[]> = {
       intensityPercent: '强度百分比',
       rpe: 'RPE',
     }),
-    ...textual({ exerciseCode: '动作代码', trainingEnvironment: '训练环境', intensityZone: '强度区间', trainingCategory: '训练类别', bodyPosition: '身体部位', note: '备注' }),
+    ...textual({ exerciseCode: '动作代码', trainingEnvironment: '训练环境', intensityZone: '强度区间',
+      activityCode: '训练活动', intensitySystem: '强度体系', trainingCategory: '训练类别', bodyPosition: '身体部位', note: '备注' }),
   ],
   injury_record: [
     ...numeric({ painScore: '疼痛评分' }),
@@ -187,7 +190,8 @@ export function reviewFields(items: ImportReviewItem[]): ReviewField[] {
         [`${label}备注`, `note:${key}`, '', `${label}备注`, '', 'text'],
       ];
     }),
-    ...textual({ protocol: '测试协议' }),
+    ...textual({ protocol: '测试协议', protocolVersion: '协议版本', testContext: '测试上下文' }),
+    ...numeric({ attemptOrder: '试次序号' }),
     ...numeric({ durationMin: '测试时长分钟' }),
   ];
 }
@@ -230,6 +234,7 @@ export function writeReviewValues(
     if (values[`target:${key}`] !== undefined) item.payload.targetValue = values[`target:${key}`];
     else delete item.payload.targetValue;
     item.payload.protocol = values.protocol ?? '';
+    for (const field of ['protocolVersion', 'testContext', 'attemptOrder']) if (field in values) item.payload[field] = values[field];
     if ('durationMin' in values) item.payload.durationMin = values.durationMin;
     else delete item.payload.durationMin;
     return;
@@ -254,7 +259,7 @@ export function writeReviewValues(
 export function importReviewKey(item: ImportReviewItem) {
   const person = item.athleteId ? `id:${item.athleteId}` : dataImportPersonKey(item);
   let suffix = '';
-  if (item.itemType === 'test_measurement') suffix = item.testType || '力量素质测试';
+  if (item.itemType === 'test_measurement') suffix = JSON.stringify([item.testType || '力量素质测试', item.payload.protocol || '', item.payload.protocolVersion || '', item.payload.testContext || '', Number(item.payload.attemptOrder) || 1]);
   if (item.itemType === 'training_session')
     suffix = String(Math.max(1, Math.round(Number(item.payload.sessionOrder) || 1)));
   if (item.itemType === 'training_set')

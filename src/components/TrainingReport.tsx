@@ -43,6 +43,10 @@ export function TrainingReportFigures({ data }: FiguresProps) {
   ] as const;
   return (
     <>
+      <h3>公共训练与恢复</h3>
+      <p className="training-report-note">
+        {data.version === 2 ? `${data.sourceNote} 规则版本：${data.rulesVersion}；参考标准版本：${data.referenceVersion || '未接入'}。` : '历史版本未记录规则与参考标准版本；按原快照展示。'}
+      </p>
       <div className="training-report-kpis">
         {metrics.map((m) => (
           <div key={m.key}>
@@ -156,8 +160,9 @@ export function TrainingReportFigures({ data }: FiguresProps) {
       <section>
         <h3>测试变化</h3>
         <p className="training-report-note">
-          周期内首次 →
-          末次；按相同指标、单位和侧别汇总，不要求填写协议。变化仅表示数值差，不自动判为进步。
+          {data.version === 2
+            ? '周期内首次 → 末次；仅在项目、指标、单位、侧别、协议版本与上下文一致且协议已记录时计算数值差；不同协议分别展示，不自动判为进步。'
+            : '历史快照：按当时的指标、单位和侧别汇总，变化保留原值，不按当前规则重算。'}
         </p>
         {data.tests.length ? (
           <div className="training-report-table">
@@ -176,7 +181,7 @@ export function TrainingReportFigures({ data }: FiguresProps) {
                     <td>
                       {t.label}（{t.unit}）
                       <small>
-                        {t.protocol || '协议未记录'} ·{' '}
+                        样本 {t.points.length} · {t.protocol || '协议未记录'} ·{' '}
                         {(
                           {
                             left: '左侧',
@@ -257,6 +262,13 @@ export function TrainingReportFigures({ data }: FiguresProps) {
           ))}
         </div>
       </section>
+      {data.version === 2 && (
+        <section aria-label={data.specialty.label}>
+          <h3>{data.specialty.label}</h3>
+          <p>专项训练 {data.specialty.sessions} 课次 · 有效时长 {number(data.specialty.duration)} 分钟</p>
+          <p className="training-report-note">{data.specialty.reason || '仅展示当前项目正式实测事实；同协议测试见公共测试章节，不生成未经审核的专项评分。'}</p>
+        </section>
+      )}
     </>
   );
 }

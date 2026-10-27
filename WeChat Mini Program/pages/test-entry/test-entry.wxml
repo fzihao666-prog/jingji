@@ -39,8 +39,8 @@
           </view>
         </view>
         <view class="field">
-          <text class="field-label">备注</text>
-          <textarea class="textarea" value="{{form.notes}}" data-field="notes" bindinput="onFieldInput" maxlength="200" placeholder="测试条件、状态等（可不填）" />
+          <text class="field-label">测试方法/协议（可选）</text>
+          <textarea class="textarea" value="{{form.notes}}" data-field="notes" bindinput="onFieldInput" maxlength="200" placeholder="如 CMJ 反向纵跳；方法不明时留空，不生成可比趋势" />
         </view>
         <view class="button-row"><button class="primary-button" loading="{{saving}}" disabled="{{saving}}" bindtap="save">{{saving ? '正在保存' : '保存体能测试'}}</button></view>
       </view>
@@ -116,7 +116,7 @@
             </view>
           </view>
           <view class="field">
-            <text class="field-label">备注</text>
+            <text class="field-label">测试方法/协议（可选）</text>
             <textarea class="textarea" value="{{form.note}}" data-field="note" bindinput="onFieldInput" maxlength="200" placeholder="可不填" />
           </view>
         </view>

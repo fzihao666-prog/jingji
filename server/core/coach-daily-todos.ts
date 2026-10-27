@@ -4,7 +4,7 @@ import {
   readTeamPlansForAthlete,
   resolveTeamPlanSessions,
 } from '../training-plan/team-plan-service.ts';
-import { PROJECTS } from '../../shared/projects.ts';
+import { isProject } from '../../shared/projects.ts';
 import { trainingLoadCategory } from '../../shared/training-content-category.ts';
 import { extractTodayPlanDay, type TodayPlanDay } from './plan-today.ts';
 
@@ -32,7 +32,7 @@ export function dailyTodoQuery(now: Date) {
       .trim()
       .min(1)
       .max(40)
-      .refine((value) => PROJECTS.includes(value)),
+      .refine((value) => isProject(value)),
     // 本接口只提供当天闭环；拒绝历史、未来和不存在的日期。
     date: z
       .string()

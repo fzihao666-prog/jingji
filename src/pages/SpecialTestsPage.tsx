@@ -42,7 +42,8 @@ import {
   SectionHeader,
 } from '../components/PageLayout';
 import type { Project, TrainingRecord } from '../types';
-import { projectLabel } from '../../shared/projects';
+import { projectCapability, projectLabel } from '../../shared/projects';
+import { ProjectSpecialTraining } from '../components/ProjectSpecialTraining';
 import './SpecialTrainingPage.css';
 import '../components/EChart.css';
 
@@ -66,7 +67,7 @@ type Session = {
   content: string;
   duration: number;
   distance: number;
-  rpe: number;
+  rpe: number | null;
   load: number;
   strokeRate: number | null;
   heartRate: number | null;
@@ -176,26 +177,20 @@ function stabilityScore(sessions: Session[], key: 'strokeRate' | 'heartRate' | '
   );
   return Math.max(0, Math.min(100, Math.round(100 - (deviation / average) * 100)));
 }
-function projectMetric(project: Project, index: number) {
-  if (project === '皮划艇')
+function projectMetric(project: Project) {
+  if (project === 'CANOE_SPRINT')
     return {
-      rate: 68 + ((index * 7) % 24),
-      power: 272 + ((index * 31) % 105),
       label: '划频',
       unit: '次/分',
       technique: '双桨衔接效率',
     };
-  if (project === '激流')
+  if (project === 'CANOE_SLALOM')
     return {
-      rate: 76 + ((index * 9) % 28),
-      power: 248 + ((index * 29) % 118),
       label: '划频',
       unit: '次/分',
       technique: '门区转换效率',
     };
   return {
-    rate: 24 + ((index * 3) % 14),
-    power: 315 + ((index * 37) % 145),
     label: '桨频',
     unit: '桨/分',
     technique: '推进阶段一致性',
@@ -203,10 +198,8 @@ function projectMetric(project: Project, index: number) {
 }
 
 function recordSessions(records: TrainingRecord[], project: Project): Session[] {
-  return records.map((record) => {
-    const rpe =
-      record.rpe ??
-      Math.max(2, Math.min(10, Math.round(record.srpe / Math.max(record.durationMin, 1))));
+  return records.filter(record => record.projectCode === project && record.projectStatus === 'confirmed').map((record) => {
+    const rpe = record.rpe;
     return {
       id: `record-${record.id}`,
       date: record.date,
@@ -217,7 +210,7 @@ function recordSessions(records: TrainingRecord[], project: Project): Session[] 
       duration: record.durationMin,
       distance: record.distanceKm,
       rpe,
-      load: record.srpe || record.durationMin * rpe,
+      load: record.rpe !== null && record.durationReported ? record.srpe : 0,
       strokeRate: record.strokeRateSpm ?? null,
       heartRate: record.averageHeartRate ?? null,
       maxHeartRate: record.maxHeartRate ?? null,
@@ -238,8 +231,8 @@ function aggregateDays(sessions: Session[]) {
       distance: number;
       load: number;
       rate: number;
-      heart: number;
       power: number;
+      heart: number;
       rateCount: number;
       heartCount: number;
       powerCount: number;
@@ -252,8 +245,8 @@ function aggregateDays(sessions: Session[]) {
       distance: 0,
       load: 0,
       rate: 0,
-      heart: 0,
       power: 0,
+      heart: 0,
       rateCount: 0,
       heartCount: 0,
       powerCount: 0,
@@ -284,8 +277,8 @@ function aggregateDays(sessions: Session[]) {
       distance: round(item.distance, 1),
       load: Math.round(item.load),
       rate: item.rateCount ? round(item.rate / item.rateCount) : null,
-      heart: item.heartCount ? Math.round(item.heart / item.heartCount) : null,
       power: item.powerCount ? Math.round(item.power / item.powerCount) : null,
+      heart: item.heartCount ? Math.round(item.heart / item.heartCount) : null,
     }));
   return daily.map((item) => ({
     ...item,
@@ -322,7 +315,7 @@ function loadRiskInsights(sessions: Session[]) {
     .map(([name, own]) => ({
       name,
       ...loadSnapshot(own),
-      highRpeDays: new Set(own.filter((item) => item.rpe >= 8).map((item) => item.date)).size,
+      highRpeDays: new Set(own.filter((item) => item.rpe !== null && item.rpe >= 8).map((item) => item.date)).size,
     }))
     .sort((a, b) => b.acwr - a.acwr);
   const highest = risks[0];
@@ -331,7 +324,7 @@ function loadRiskInsights(sessions: Session[]) {
   const highIntensityShare =
     totalLoad > 0
       ? (sum(
-          sessions.filter((item) => item.rpe >= 8),
+          sessions.filter((item) => item.rpe !== null && item.rpe >= 8),
           'load'
         ) /
           totalLoad) *
@@ -399,7 +392,7 @@ function MetricCard({
   );
 }
 
-function TrendChart({
+export function TrendChart({
   data,
   metric,
   color = '#12978f',
@@ -410,18 +403,10 @@ function TrendChart({
   color?: string;
   secondary?: 'chronic';
 }) {
-  const isPlaceholder = !data.some((row) => Number(row[metric]) > 0);
-  const scale = { duration: 2, distance: 0.1, load: 5, rate: 0.4, heart: 2, power: 3 }[metric];
-  const chartData = isPlaceholder
-    ? [36, 52, 44, 68, 57, 79, 63].map((value, index) => ({
-        date: `${index + 1}日`, isoDate: `示例第${index + 1}日`, duration: 0, distance: 0, load: 0, rate: 0, heart: 0, power: 0, chronic: value * 4,
-        rateCount: 0, heartCount: 0, powerCount: 0,
-        [metric]: value * scale,
-      }))
-    : data;
+  const isPlaceholder = !data.some((row) => row[metric] !== null && Number.isFinite(row[metric]));
+  const chartData = data;
   return (
     <div className="special-chart">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 12, right: 12, left: -18, bottom: 0 }}>
           <defs>
@@ -433,7 +418,7 @@ function TrendChart({
           <CartesianGrid stroke="#e8eff0" strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#778b91' }} tickLine={false} />
           <YAxis tick={{ fontSize: 10, fill: '#778b91' }} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => `${isPlaceholder ? '示例数据，仅用于展示图表效果 · ' : ''}${label}`} />
+          <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => `${label}`} />
           <Area
             type="monotone"
             dataKey={metric}
@@ -452,12 +437,12 @@ function TrendChart({
           )}
         </AreaChart>
       </ResponsiveContainer>
-      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据</p>}
     </div>
   );
 }
 
-function TypeDonut({
+export function TypeDonut({
   sessions,
   valueKey = 'duration',
 }: {
@@ -479,12 +464,9 @@ function TypeDonut({
     1
   );
   const isPlaceholder = !values.some((item) => item.value > 0);
-  const chartValues = isPlaceholder
-    ? ['水上训练', '测功仪', '技术训练', '恢复训练'].map((name, index) => ({ name, value: [42, 27, 19, 12][index] }))
-    : values;
+  const chartValues = values;
   return (
     <div className="special-donut-wrap">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="48%" height={210}>
         <PieChart>
           <Pie
@@ -499,7 +481,7 @@ function TypeDonut({
               <Cell key={index} fill={COLORS[index]} />
             ))}
           </Pie>
-          <Tooltip contentStyle={tooltipStyle} formatter={(value) => [isPlaceholder ? `${value} · 示例数据，仅用于展示图表效果` : value, '']} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(value) => [value, '']} />
         </PieChart>
       </ResponsiveContainer>
       <div className="special-legend">
@@ -511,7 +493,7 @@ function TypeDonut({
           </div>
         ))}
       </div>
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实占比数据 · 当前图表为示例效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实占比数据</p>}
     </div>
   );
 }
@@ -524,7 +506,7 @@ function AthleteTable({
   metric: 'duration' | 'distance' | 'load' | 'strokeRate' | 'heartRate' | 'power';
 }) {
   const rows = useMemo(() => {
-    const grouped = new Map<string, { name: string; total: number; count: number; rpe: number }>();
+    const grouped = new Map<string, { name: string; total: number; count: number; rpe: number; rpeCount: number }>();
     sessions.forEach((item) => {
       const value = item[metric];
       if (value === null) return;
@@ -532,11 +514,11 @@ function AthleteTable({
         name: item.athleteName,
         total: 0,
         count: 0,
-        rpe: 0,
+        rpe: 0, rpeCount: 0,
       };
       row.total += value;
       row.count += 1;
-      row.rpe += item.rpe;
+      if (item.rpe !== null) { row.rpe += item.rpe; row.rpeCount += 1; }
       grouped.set(item.athleteName, row);
     });
     return [...grouped.values()]
@@ -592,7 +574,7 @@ function AthleteTable({
                 <td className="table-value">
                   {round(row.value)} {unit}
                 </td>
-                <td>{round(row.rpe / row.count)}</td>
+                <td>{row.rpeCount ? round(row.rpe / row.rpeCount) : '—'}</td>
                 <td>
                   <span className={attention ? 'status attention' : 'status good'}>
                     {attention ? '低于队均' : '区间正常'}
@@ -623,9 +605,9 @@ function InsightList({ items, warning = false }: { items: string[]; warning?: bo
 }
 function ProjectNotes({ project }: { project: Project }) {
   const items =
-    project === '赛艇'
+    project === 'ROWING'
       ? ['以 500m / 2000m 分段为核心', '关注艇速、桨频与功率同步', '单桨 / 双桨分组比较']
-      : project === '皮划艇'
+      : project === 'CANOE_SPRINT'
         ? [
             '以 200m / 500m / 1000m 分段为核心',
             '关注左右侧输出与高划频保持',
@@ -724,7 +706,7 @@ function AnalysisPage({
   if (section === 'special-distance') {
     const total = sum(sessions, 'distance');
     const highIntensityDistance = sum(
-      sessions.filter((item) => item.rpe >= 8),
+      sessions.filter((item) => item.rpe !== null && item.rpe >= 8),
       'distance'
     );
     const highShare = total ? round((highIntensityDistance / total) * 100) : 0;
@@ -910,154 +892,27 @@ function TrainingVolumePage({
   );
 }
 
-function ZoneBars({ data }: { data: Array<{ name: string; value: number }> }) {
-  return (
-    <div className="zone-bars">
-      {data.map((item, index) => (
-        <div key={item.name}>
-          <header>
-            <span>
-              <i style={{ background: COLORS[index] }} />
-              {item.name}
-            </span>
-            <strong>{item.value}%</strong>
-          </header>
-          <b>
-            <i style={{ width: `${item.value}%`, background: COLORS[index] }} />
-          </b>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MetricPage({
-  section,
-  sessions,
-  days,
-  project,
-}: {
-  section: SpecialPageKey;
-  sessions: Session[];
-  days: ReturnType<typeof aggregateDays>;
-  project: Project;
+function MetricPage({ section, sessions, days, project }: {
+  section: SpecialPageKey; sessions: Session[]; days: ReturnType<typeof aggregateDays>; project: Project;
 }) {
-  const kind =
-    section === 'special-rate' ? 'rate' : section === 'special-heart' ? 'heart' : 'power';
-  const values = sessions
-    .map((item) =>
-      kind === 'rate' ? item.strokeRate : kind === 'heart' ? item.heartRate : item.power
-    )
-    .filter((value): value is number => value !== null);
-  const average = values.length ? round(values.reduce((a, b) => a + b, 0) / values.length) : '—';
-  const peakValues =
-    kind === 'heart'
-      ? sessions.map((item) => item.maxHeartRate).filter((value): value is number => value !== null)
-      : values;
-  const peak = peakValues.length ? Math.max(...peakValues) : '—';
-  const metric = projectMetric(project, 1);
+  const kind = section === 'special-rate' ? 'rate' : section === 'special-heart' ? 'heart' : 'power';
+  const metric = projectMetric(project);
+  const key = kind === 'rate' ? 'strokeRate' : kind === 'heart' ? 'heartRate' : 'power';
+  const values = sessions.map(row => row[key]).filter((value): value is number => value !== null && Number.isFinite(value));
+  const label = kind === 'rate' ? metric.label : kind === 'heart' ? '课次平均心率' : '课次平均功率';
   const unit = kind === 'rate' ? metric.unit : kind === 'heart' ? 'bpm' : 'W';
-  const label = kind === 'rate' ? metric.label : kind === 'heart' ? '平均心率' : '平均功率';
-  const maximum = Math.max(...values, 1);
-  const zoneNames =
-    kind === 'heart'
-      ? ['Z1 恢复', 'Z2 有氧', 'Z3 阈值', 'Z4 高强度', 'Z5 极限']
-      : ['低强度', '有氧耐力', '乳酸阈', '无氧功率'];
-  const boundaries = kind === 'heart' ? [0.6, 0.7, 0.8, 0.9] : [0.55, 0.72, 0.86];
-  const counts = Array(zoneNames.length).fill(0) as number[];
-  values.forEach((value) => {
-    const ratio = value / maximum;
-    const zoneIndex = boundaries.findIndex((boundary) => ratio < boundary);
-    counts[zoneIndex < 0 ? counts.length - 1 : zoneIndex] += 1;
-  });
-  const zones = zoneNames.map((name, index) => ({
-    name,
-    value: values.length ? round((counts[index] / values.length) * 100) : 0,
-  }));
-  const numericAverage = typeof average === 'number' ? average : 0;
-  const deviation = values.length
-    ? Math.sqrt(
-        values.reduce((total, value) => total + (value - numericAverage) ** 2, 0) / values.length
-      )
-    : 0;
-  const stability =
-    numericAverage > 0 ? Math.max(0, round(100 - (deviation / numericAverage) * 100)) : 0;
-  const targetShare = zones.slice(1, 3).reduce((total, zone) => total + zone.value, 0);
-  const coverage = sessions.length ? round((values.length / sessions.length) * 100) : 0;
-  return (
-    <>
-      <div className="special-metrics">
-        <MetricCard
-          icon={kind === 'heart' ? <HeartPulse /> : kind === 'power' ? <Zap /> : <Waves />}
-          label={label}
-          value={average}
-          unit={unit}
-          change={`基于 ${values.length} 条有效记录`}
-        />
-        <MetricCard
-          icon={<Gauge />}
-          label={
-            kind === 'rate' ? `峰值${metric.label}` : kind === 'heart' ? '峰值心率' : '峰值功率'
-          }
-          value={peak}
-          unit={unit}
-          change="当前周期实测峰值"
-          tone="blue"
-        />
-        <MetricCard
-          icon={<Target />}
-          label="目标区间占比"
-          value={targetShare}
-          unit="%"
-          change="中间两个训练区间"
-          tone="green"
-        />
-        <MetricCard
-          icon={<Activity />}
-          label={kind === 'power' ? '输出稳定性' : kind === 'rate' ? '节奏稳定性' : '心率稳定性'}
-          value={stability}
-          unit="%"
-          change={`指标覆盖率 ${coverage}%`}
-          tone="purple"
-        />
-      </div>
-      <div className="special-grid">
-        <SectionCard title={`${label}趋势`} note={`${projectLabel(project)} · ${unit}`} className="span-8">
-          <TrendChart
-            data={days}
-            metric={kind}
-            color={kind === 'heart' ? '#ef6b5b' : kind === 'power' ? '#7658cc' : '#12978f'}
-          />
-        </SectionCard>
-        <SectionCard
-          title={
-            kind === 'rate'
-              ? `${metric.label}效率区间`
-              : kind === 'heart'
-                ? '心率区间分布'
-                : '功率区间分布'
-          }
-          note="按有效训练记录"
-          className="span-4"
-        >
-          <ZoneBars data={zones} />
-        </SectionCard>
-        <SectionCard title={`${label}运动员对比`} note="队内同项目口径" className="span-8">
-          <AthleteTable
-            sessions={sessions}
-            metric={kind === 'rate' ? 'strokeRate' : kind === 'heart' ? 'heartRate' : 'power'}
-          />
-        </SectionCard>
-        <SectionCard title={`${projectLabel(project)}专项解释`} note="指标随所选运动变化" className="span-4">
-          <ProjectNotes project={project} />
-          <div className="technique-note">
-            <Sparkles />
-            <span>重点评价：{metric.technique}</span>
-          </div>
-        </SectionCard>
-      </div>
-    </>
-  );
+  return <>
+    <div className="special-metrics">
+      <MetricCard icon={<Activity />} label={`${label}均值`} value={values.length ? round(values.reduce((sum,value) => sum+value,0)/values.length) : '—'} unit={unit} change={`有效课次 ${values.length}/${sessions.length}；仅为课次值均值`} />
+      <MetricCard icon={<Gauge />} label="最高课次记录值" value={values.length ? Math.max(...values) : '—'} unit={unit} change="不代表瞬时峰值，不用于达标分区" />
+    </div>
+    <SectionCard title={`${label}趋势`} note="仅展示实测，不推算强度阈值或效率评分" className="span-12">
+      <TrendChart data={days} metric={kind} color="#12978f" />
+    </SectionCard>
+    <SectionCard title={`${label}课次汇总`} note="描述性统计，不作为冠军评分" className="span-12">
+      <AthleteTable sessions={sessions} metric={key} />
+    </SectionCard>
+  </>;
 }
 
 export function SpecialTestsPage({
@@ -1080,6 +935,10 @@ export function SpecialTestsPage({
   );
   const days = useMemo(() => aggregateDays(sessions), [sessions]);
   const meta = SECTION_META[section];
+  if (!projectCapability(project)) return <PageContainer>
+    <PageHeader eyebrow="SPECIAL TRAINING" title="专项训练" actions={<button onClick={onPlanOpen}>训练计划</button>} />
+    <ProjectSpecialTraining project={project} records={records.filter(record => record.date >= from && record.date <= to)} />
+  </PageContainer>;
   const analysisTabs: Array<{ key: SpecialPageKey; label: string }> = [
     { key: 'special-volume', label: '训练量' },
     { key: 'special-time', label: '时间' },
@@ -1087,7 +946,7 @@ export function SpecialTestsPage({
     { key: 'special-load', label: '负荷' },
   ];
   const metricTabs: Array<{ key: SpecialPageKey; label: string }> = [
-    { key: 'special-rate', label: project === '赛艇' ? '桨频' : '划频' },
+    { key: 'special-rate', label: project === 'ROWING' ? '桨频' : '划频' },
     { key: 'special-heart', label: '心率' },
     { key: 'special-power', label: '功率' },
   ];
@@ -1190,8 +1049,8 @@ function RecordPage({ sessions }: { sessions: Session[] }) {
                   <td>{record.content}</td>
                   <td>{round(record.duration)} min</td>
                   <td>{round(record.distance)} km</td>
-                  <td>{record.rpe}</td>
-                  <td className="table-value">{round(record.load)} AU</td>
+                  <td>{record.rpe ?? '—'}</td>
+                  <td className="table-value">{record.rpe === null ? '—' : round(record.load)} AU</td>
                 </tr>
               ))}
             </tbody>

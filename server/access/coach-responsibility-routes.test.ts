@@ -57,7 +57,7 @@ beforeAll(async () => {
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER PRIMARY KEY, category TEXT, updated_at TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER);
-    CREATE TABLE training_plans (id INTEGER, athlete_id INTEGER, title TEXT, start_date TEXT, end_date TEXT, created_by INTEGER, plan_data TEXT);
+    CREATE TABLE training_plans (id INTEGER, athlete_id INTEGER, title TEXT, start_date TEXT, end_date TEXT, created_by INTEGER, plan_data TEXT, model TEXT DEFAULT 'legacy');
     CREATE TABLE special_training_plans (id INTEGER, project TEXT, week_start TEXT, title TEXT, status TEXT, created_by INTEGER);
     CREATE TABLE special_training_plan_sessions (id INTEGER, plan_id INTEGER, session_date TEXT, session_order INTEGER, content TEXT, target_json TEXT);
   `);
@@ -155,7 +155,7 @@ describe('队伍责任范围 HTTP 集成', () => {
   });
 
   it('统一计划接口覆盖无账号队员，并隔离跨队、跨项目及项目级计划', async () => {
-    database.exec(`INSERT INTO training_plans VALUES
+    database.exec(`INSERT INTO training_plans(id,athlete_id,title,start_date,end_date,created_by,plan_data) VALUES
       (1,101,'甲计划','2026-10-01','2026-10-31',2,'{}'),
       (2,102,'乙计划','2026-10-01','2026-10-31',2,'{}'),
       (3,103,'无账号计划','2026-10-01','2026-10-31',2,'{}'),
@@ -169,7 +169,7 @@ describe('队伍责任范围 HTTP 集成', () => {
       const response = await fetch(`${baseUrl}/api/training-plans/catalog`, {
         headers: headers(actor),
       });
-      expect(response.status).toBe(200);
+      expect(response.status, await response.clone().text()).toBe(200);
       return (await response.json()) as { plans: Array<{ key: string }> };
     };
     expect((await read(2)).plans.map((plan) => plan.key)).toEqual([
@@ -188,7 +188,7 @@ describe('队伍责任范围 HTTP 集成', () => {
     const expectFullTeam = async () => {
       for (const path of ['/api/teams', '/api/admin/teams']) {
         const response = await fetch(`${baseUrl}${path}`, { headers: headers(2) });
-        expect(response.status).toBe(200);
+        expect(response.status, await response.clone().text()).toBe(200);
         const payload = (await response.json()) as {
           teams: Array<{ id: number; athleteCount: number }>;
         };
