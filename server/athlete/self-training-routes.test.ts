@@ -121,16 +121,26 @@ describe('训练填报幂等接口', () => {
     const input = { ...payload, activityCode: 'volleyball_technique', intensityZone: '', rpe: '' };
     expect((await post({ ...input, strokeRateSpm: 30 })).status).toBe(400);
     expect((await post(input)).status).toBe(201);
-    expect(db.prepare('SELECT distance_reported, rpe, srpe FROM training_sessions').get()).toMatchObject({ distance_reported: 0, rpe: null, srpe: 0 });
+    expect(db.prepare('SELECT distance_reported, rpe, srpe FROM training_sessions').get()).toMatchObject({ distance_reported: 0, rpe: null, srpe: null });
   });
   it('有距离但无时长的课次保留缺失，不计算SRPE', async () => {
     expect((await post({ ...payload, duration: '', distance: 10 })).status).toBe(201);
-    expect(db.prepare('SELECT duration_reported, duration_min, srpe FROM training_sessions').get()).toMatchObject({ duration_reported: 0, duration_min: 0, srpe: 0 });
+    expect(db.prepare('SELECT duration_reported, duration_min, srpe FROM training_sessions').get()).toMatchObject({ duration_reported: 0, duration_min: 0, srpe: null });
     expect((await post({ ...payload, duration: '', distance: '' }, 'empty_training_key_0001')).status).toBe(400);
   });
   it('空白数字字符串表示未填报，不变成真实零', async () => {
     expect((await post({ ...payload, duration: ' ', distance: 10, rpe: ' ' })).status).toBe(201);
-    expect(db.prepare('SELECT duration_reported,rpe,srpe FROM training_sessions').get()).toEqual({ duration_reported: 0, rpe: null, srpe: 0 });
+    expect(db.prepare('SELECT duration_reported,rpe,srpe FROM training_sessions').get()).toEqual({ duration_reported: 0, rpe: null, srpe: null });
+  });
+  it('真实RPE零保留SRPE零，总览与报告均计入有效覆盖', async () => {
+    expect((await post({ ...payload, rpe: 0 })).status).toBe(201);
+    expect(db.prepare('SELECT srpe FROM training_sessions').get()).toEqual({srpe:0});
+    const { buildOverviewPayload } = await import('../analysis/overview-service.ts');
+    const overview=buildOverviewPayload({athleteIds:[9001],project:'ROWING',from:'2026-10-10',to:'2026-10-10',individual:true});
+    expect(overview.trainingAnalytics.summary.specialLoad).toBe(0);
+    const response=await fetch(`${baseUrl}/api/athletes/9001/reports/preview?from=2026-10-10&to=2026-10-10&kind=custom`,{headers:{Authorization:`Bearer ${jwt.sign({id:9001,sessionVersion:1},secret)}`}});
+    const preview=await response.json() as {data:{totals:{srpe:number|null;srpeCount:number}}};
+    expect(preview.data.totals).toMatchObject({srpe:0,srpeCount:1});
   });
   it('key格式保留大小写，接受边界长度且拒绝空白和非ASCII字符', () => {
     expect(idempotencyKeySchema.parse('Abc_0123456789-XY')).toBe('Abc_0123456789-XY');

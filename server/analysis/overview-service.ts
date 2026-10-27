@@ -42,7 +42,7 @@ type SessionRow = {
   durationReported: number;
   distanceReported: number;
   rpe: number | null;
-  srpe: number;
+  srpe: number | null;
   smvl: number;
   averageHeartRate: number | null;
   maxHeartRate: number | null;
@@ -377,13 +377,13 @@ function aggregateTrainingAnalytics(sessions: SessionRow[], individual: boolean)
   for (const row of durationSessions) {
     const day = getDay(row);
     const category = trainingLoadCategory(row);
-    if (category === 'physical' && Number.isFinite(row.srpe)) {
+    if (category === 'physical' && row.durationReported && row.rpe != null && row.srpe != null && Number.isFinite(row.srpe)) {
       day.physicalLoad += row.srpe;
       day.physicalLoadCount += 1;
       totals.physicalLoad += row.srpe;
       totals.physicalLoadCount += 1;
     }
-    if (category === 'special' && Number.isFinite(row.srpe)) {
+    if (category === 'special' && row.durationReported && row.rpe != null && row.srpe != null && Number.isFinite(row.srpe)) {
       day.specialLoad += row.srpe;
       day.specialLoadCount += 1;
       totals.specialLoad += row.srpe;
@@ -1074,9 +1074,9 @@ export function buildOverviewPayload(input: {
   const physiologyHeatmap = buildPhysiologyHeatmap(input.athleteIds, input.from, input.to);
   const trainingLoads = teamDurationSessions(actualSessions, input.individual).reduce(
     (totals, row) => {
-      const load = Number(row.srpe);
+      const load = row.durationReported && row.rpe != null ? row.srpe : null;
       const category = trainingLoadCategory(row);
-      if (category && Number.isFinite(load) && load > 0) totals[category] += load;
+      if (category && load != null && Number.isFinite(load) && load >= 0) totals[category] += load;
       return totals;
     },
     { special: 0, physical: 0, recovery: 0 }

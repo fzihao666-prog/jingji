@@ -3523,7 +3523,7 @@ function upsertTrainingItem(
         `INSERT INTO training_sessions (
       athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content,
       duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, source, quality, is_demo, created_by
-    ) VALUES (?, ?, ?, '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, 0, 0, 'file_import', ?, 0, ?)`
+    ) VALUES (?, ?, ?, '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, NULL, 0, 'file_import', ?, 0, ?)`
       )
       .run(
         item.athleteId,
@@ -4030,6 +4030,7 @@ function saveImportSessionContext(id: number, item: DataImportItemView, created 
   if (!importSnapshotMatches(item, stored)) throw new Error('正式课次的项目归属不匹配，不能通过导入修改。');
   if (created) db.prepare("UPDATE training_sessions SET project_code=?, project_status='confirmed', project_source='file_import' WHERE id=?").run(context.project, id);
   db.prepare('UPDATE training_sessions SET activity_code=?, training_category=?, rules_version=?, intensity_system=? WHERE id=?').run(context.activity, context.category, context.version, context.system, id);
+  db.prepare("UPDATE training_sessions SET srpe=NULL WHERE id=? AND (duration_reported=0 OR rpe IS NULL)").run(id);
   const cadenceChanged = isProvided(p.cadenceRpm) && !importReviewValuesEqual(stored.cadenceRpm, p.cadenceRpm);
   if (cadenceChanged) db.prepare("INSERT INTO training_session_metrics(training_session_id,metric_code,value_num,unit,source) VALUES (?,'cadenceRpm',?,'rpm','file_import') ON CONFLICT(training_session_id,metric_code) DO UPDATE SET value_num=excluded.value_num,source=excluded.source").run(id, Number(p.cadenceRpm));
   const changes = [
@@ -4149,7 +4150,7 @@ function upsertSessionItem(
       durationProvided ? 1 : 0,
       distanceProvided ? 1 : 0,
       optionalNumber(p.rpe),
-      optionalNumber(p.srpe) ?? 0,
+      durationProvided && optionalNumber(p.rpe) != null ? optionalNumber(p.srpe) ?? ((duration ?? 0) * Number(p.rpe)) : null,
       optionalNumber(p.smvl) ?? 0,
       optionalNumber(p.averageHeartRate),
       optionalNumber(p.maxHeartRate),

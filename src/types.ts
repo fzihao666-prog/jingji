@@ -208,7 +208,7 @@ export type StrengthTrainingSession = {
   trainingType: string;
   structureType: string;
   intensityZone: StrengthIntensityZone;
-  srpe: number;
+  srpe: number | null;
   source: string;
   sourceFilename: string;
   modelUsed: string;
@@ -502,7 +502,7 @@ export type TrainingRecord = {
   durationReported: boolean;
   distanceReported: boolean;
   rpe: number | null;
-  srpe: number;
+  srpe: number | null;
   smvl: number;
   morningPulse: number | null;
   weightKg: number | null;

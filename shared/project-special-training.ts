@@ -4,7 +4,7 @@ import { trainingLoadCategory } from './training-content-category.js';
 type SpecialFact = {
   projectCode?: string | null; projectStatus?: string; trainingType?: string; structureType?: string; content?: string;
   trainingCategory?: string | null; activityCode?: string | null; durationMin: number; distanceKm?: number;
-  durationReported?: boolean; distanceReported?: boolean; rpe: number | null; srpe: number;
+  durationReported?: boolean; distanceReported?: boolean; rpe: number | null; srpe: number | null;
   averagePowerW?: number | null; cadenceRpm?: number | null; strokeRateSpm?: number | null;
 };
 type Field = { key: 'averagePowerW' | 'cadenceRpm' | 'strokeRateSpm'; label: string; unit: string };
@@ -25,6 +25,6 @@ export function projectSpecialTraining<T extends SpecialFact>(input: string, fac
     duration: measuredTotal(rows.map(row => row.durationReported === false ? null : row.durationMin)),
     distance: measuredTotal(rows.map(row => row.distanceReported ? row.distanceKm ?? null : null)),
     srpe: measuredTotal(rows.map(row => row.rpe === null || row.durationReported === false ? null : row.srpe)),
-    loadSampleCount: rows.filter(row => row.rpe !== null && row.durationReported !== false).length,
+    loadSampleCount: rows.filter(row => row.rpe !== null && row.durationReported !== false && row.srpe != null).length,
   } };
 }

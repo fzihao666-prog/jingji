@@ -436,6 +436,12 @@ export const api = {
       analysis: RowingPeriodAnalysis;
     }>(`/api/analysis/summary?${params}`);
   },
+  pendingProjectFacts(athleteId: number) {
+    return request<{ training: { id: number; date: string; content: string }[]; tests: { id: number; date: string; content: string }[] }>(`/api/athletes/${athleteId}/pending-project-facts`);
+  },
+  verifyFactProject(kind: 'training-sessions' | 'test-sessions', id: number, project: Project) {
+    return request<{ message: string }>(`/api/${kind}/${id}/verify-project`, { method: 'POST', body: JSON.stringify({ project }) });
+  },
   async strengthTests(athleteId: number) {
     return request<{ tests: StrengthTest[] }>(`/api/strength-tests?athleteId=${athleteId}`);
   },

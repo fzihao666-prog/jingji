@@ -116,7 +116,7 @@ export function buildDailyPerformance(
     return {
       date,
       label: date.slice(5).replace('-', '/'),
-      srpe: rows.reduce((sum, row) => sum + row.srpe, 0) / divisor,
+      srpe: rows.reduce((sum, row) => sum + (row.srpe ?? 0), 0) / divisor,
       smvl: rows.reduce((sum, row) => sum + row.smvl, 0) / divisor,
       duration: rows.reduce((sum, row) => sum + row.durationMin, 0) / divisor,
       distance: rows.reduce((sum, row) => sum + row.distanceKm, 0) / divisor,

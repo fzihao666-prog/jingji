@@ -43,7 +43,7 @@ export function aggregateRecords(records: TrainingRecord[]) {
   const days = new Set(records.map((record) => record.date));
   const totalDuration = training.reduce((sum, record) => sum + record.durationMin, 0);
   const totalDistance = training.reduce((sum, record) => sum + record.distanceKm, 0);
-  const totalSrpe = training.reduce((sum, record) => sum + record.srpe, 0);
+  const totalSrpe = training.reduce((sum, record) => sum + (record.srpe ?? 0), 0);
   const totalSmvl = training.reduce((sum, record) => sum + record.smvl, 0);
   const alerts = records.filter((record) => record.status === 'alert').length;
   const attention = records.filter((record) => record.status === 'attention').length;

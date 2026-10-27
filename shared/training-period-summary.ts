@@ -3,7 +3,7 @@ type PeriodRecord = {
   durationReported?: boolean;
   distanceKm: number;
   distanceReported?: boolean;
-  srpe: number;
+  srpe: number | null;
   rpe: number | null;
   status: string;
 };
@@ -14,6 +14,6 @@ export function trainingPeriodSummary(records: PeriodRecord[]) {
   return {
     sessions: sessions.length,
     totalDistanceKm: sessions.reduce((sum, row) => sum + (row.distanceReported !== false && Number.isFinite(row.distanceKm) ? row.distanceKm : 0), 0),
-    totalSrpe: sessions.reduce((sum, row) => sum + (row.durationReported !== false && row.rpe !== null && Number.isFinite(row.srpe) ? row.srpe : 0), 0),
+    totalSrpe: sessions.reduce((sum, row) => sum + (row.durationReported !== false && row.rpe !== null && row.srpe != null && Number.isFinite(row.srpe) ? row.srpe : 0), 0),
   };
 }

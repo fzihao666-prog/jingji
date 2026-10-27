@@ -243,7 +243,7 @@ export function OverviewPage(props: Props) {
       .reduce(
         (totals, record) => {
           const category = trainingLoadCategory(record);
-          if (category) totals[category] += record.srpe;
+          if (category) totals[category] += record.srpe ?? 0;
           return totals;
         },
         { physical: 0, special: 0, recovery: 0 }

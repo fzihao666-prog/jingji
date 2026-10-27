@@ -1,3 +1,4 @@
+import { migrateNullableSrpe } from './srpe-migration.ts';
 import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -1019,7 +1020,7 @@ export function initializeDatabase(
     duration_reported INTEGER NOT NULL DEFAULT 1 CHECK(duration_reported IN (0, 1)),
     distance_reported INTEGER NOT NULL DEFAULT 1 CHECK(distance_reported IN (0, 1)),
     rpe REAL,
-    srpe REAL NOT NULL DEFAULT 0,
+    srpe REAL,
     smvl REAL NOT NULL DEFAULT 0,
     average_heart_rate REAL,
     max_heart_rate REAL,
@@ -5980,6 +5981,7 @@ export function initializeDatabase(
   // 旧初始化和历史种子完成后调整测试唯一键；部署时在开始接受写入前完成迁移。
   migrateMultiSportFacts(db, databaseExistedBeforeStartup && databasePath !== ':memory:'
     ? join(dirname(databasePath), 'backups', `before-multi-sport-${randomUUID()}.db`) : undefined);
+  migrateNullableSrpe(db, databaseExistedBeforeStartup && databasePath !== ':memory:' ? join(dirname(databasePath), 'backups', `before-nullable-srpe-${randomUUID()}.db`) : undefined);
   return { upsertAthleteOrigin };
 
 }

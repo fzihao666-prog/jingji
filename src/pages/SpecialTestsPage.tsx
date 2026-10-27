@@ -210,7 +210,7 @@ function recordSessions(records: TrainingRecord[], project: Project): Session[] 
       duration: record.durationMin,
       distance: record.distanceKm,
       rpe,
-      load: record.rpe !== null && record.durationReported ? record.srpe : 0,
+      load: record.rpe !== null && record.durationReported ? (record.srpe ?? 0) : 0,
       strokeRate: record.strokeRateSpm ?? null,
       heartRate: record.averageHeartRate ?? null,
       maxHeartRate: record.maxHeartRate ?? null,

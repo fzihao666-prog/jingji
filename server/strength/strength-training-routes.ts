@@ -499,7 +499,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
         trainingType: string;
         structureType: string;
         intensityZone: StrengthIntensityZone;
-        srpe: number;
+        srpe: number | null;
         source: string;
         sourceFilename: string;
         modelUsed: string;
@@ -524,7 +524,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
           intensityZone: isStrengthIntensityZone(row.sessionIntensityZone)
             ? row.sessionIntensityZone
             : 'AN',
-          srpe: Number(row.srpe || 0),
+          srpe: row.srpe == null ? null : Number(row.srpe),
           source: cleanString(row.source),
           sourceFilename: cleanString(row.sourceFilename),
           modelUsed: cleanString(row.modelUsed),
@@ -746,7 +746,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
                 (athlete_id, session_date, session_order, start_time, training_type, structure_type,
                  intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl,
                  source, quality, is_demo, created_by)
-              VALUES (?, ?, ?, '', '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, 0, 0, ?, ?, 0, ?)
+              VALUES (?, ?, ?, '', '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, NULL, 0, ?, ?, 0, ?)
             `
                 )
                 .run(
@@ -916,7 +916,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
             Math.round(Number(totals.distanceKm || 0) * 10) / 10,
             Number(totals.durationReported),
             Number(totals.distanceReported),
-            Math.round((averageRpe || 0) * duration * 10) / 10,
+            averageRpe != null && totals.durationReported ? Math.round(averageRpe * duration * 10) / 10 : null,
             dominant?.environment || '陆上',
             isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN',
             sessionId

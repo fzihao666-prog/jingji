@@ -25,7 +25,7 @@ export type SpecialSession = {
   distanceKm: number;
   durationReported: number | boolean;
   distanceReported: number | boolean;
-  srpe: number;
+  srpe: number | null;
   rpe: number | null;
   sessionDemo: number;
   sessionSource?: string;
@@ -40,7 +40,7 @@ const duration = (row: SpecialSession) => (row.durationReported ? row.durationMi
 const distance = (row: SpecialSession) => (row.distanceReported ? row.distanceKm : null);
 const zoneLabel = (row: SpecialSession) => row.intensitySystem === undefined ? row.intensityZone : row.intensityZone ? `${row.intensitySystem || '未知体系'} · ${row.intensityZone}` : '';
 const load = (row: SpecialSession) =>
-  Number.isFinite(row.srpe) && row.srpe >= 0 && (row.rpe !== null || row.srpe > 0)
+  row.durationReported && row.rpe !== null && row.srpe != null && Number.isFinite(row.srpe) && row.srpe >= 0
     ? row.srpe
     : null;
 
@@ -98,7 +98,7 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
       distanceKm: total(records.map(distance)),
       load: total(records.map(load)),
       sessionCount: records.length,
-      loadSampleCount: records.filter(row => row.durationReported && row.rpe !== null).length,
+      loadSampleCount: records.filter(row => row.durationReported && row.rpe !== null && row.srpe != null).length,
     },
     days,
     intensity,

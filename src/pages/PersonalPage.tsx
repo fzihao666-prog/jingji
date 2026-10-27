@@ -1,3 +1,4 @@
+import { ProjectFactVerification } from '../components/ProjectFactVerification';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import { TrainingSessionEntry } from '../components/TrainingSessionEntry';
 import { ProjectSpecialTraining } from '../components/ProjectSpecialTraining';
@@ -846,6 +847,7 @@ export function PersonalPage(props: Props) {
           </ProfileSection>
           {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
             <ProfileSection title="训练记录" subtitle="公共课次填写，按实际活动显示专项字段。">
+              {props.user.role !== 'ATL' && <ProjectFactVerification athleteId={selectedAthlete.id} project={selectedAthlete.project} onChanged={props.onChanged} />}
               <TrainingSessionEntry key={`${selectedAthlete.id}:${selectedAthlete.project}`} athleteId={selectedAthlete.id}
                 project={selectedAthlete.project} mode={props.user.role === 'ATL' ? 'self' : 'coach'} onSaved={props.onChanged} />
             </ProfileSection>

@@ -29,14 +29,14 @@ import './EChart.css';
 const chartColors = ['#176f7f', '#22a99a', '#71c5aa', '#e5a72e', '#e36146', '#6a7285', '#8b6fb0'];
 
 export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
-  const byDate = new Map<string, { date: string; srpe: number; duration: number }>();
+  const byDate = new Map<string, { date: string; srpe: number | null; duration: number }>();
   for (const record of records) {
     const entry = byDate.get(record.date) || {
       date: record.date.slice(5).replace('-', '/'),
-      srpe: 0,
+      srpe: null,
       duration: 0,
     };
-    entry.srpe += record.srpe;
+    if (record.srpe != null) entry.srpe = (entry.srpe ?? 0) + record.srpe;
     entry.duration += record.durationMin;
     byDate.set(record.date, entry);
   }

@@ -433,11 +433,11 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
     .sort()
     .map((date) => {
       const items = sessions.filter((session) => session.trainingDate === date);
-      const loads = items.filter((item) => item.srpe > 0);
+      const loads = items.filter((item) => item.srpe != null);
       return {
         date,
         duration: items.reduce((sum, item) => sum + item.durationMin, 0),
-        load: loads.length ? loads.reduce((sum, item) => sum + item.srpe, 0) : null,
+        load: loads.length ? loads.reduce((sum, item) => sum + (item.srpe ?? 0), 0) : null,
       };
     });
   const isPlaceholder = !data.some((item) => item.duration > 0 || item.load !== null);
@@ -575,7 +575,7 @@ export function StrengthTrainingDashboard({
               : null,
             distanceKm: null,
             load: athleteSessions.length
-              ? athleteSessions.reduce((sum, session) => sum + session.srpe, 0)
+              ? athleteSessions.reduce((sum, session) => sum + (session.srpe ?? 0), 0)
               : null,
           },
         };

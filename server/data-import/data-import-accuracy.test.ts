@@ -2157,12 +2157,12 @@ describe('简化模板的填写契约', () => {
   });
 });
 
-it.each([400, 0])('互补课次合并保留外部显式SRPE=%s', (load) => {
+it.each([400, 0])('互补课次保留原始SRPE=%s，缺RPE时正式负荷为空', (load) => {
   const batch = analyze({ 训练课次: [['姓名', '日期', '课次序号', '时长分钟', 'SRPE'], ['张某', '2026-10-17', 1, 60, ''], ['张某', '2026-10-17', 1, '', load]] });
   expect(batch.errorCount).toBe(0);
   expect(batch.items.find(item => item.quality !== 'skipped')!.payload.srpe).toBe(load);
   commit(batch.id, 'skip');
-  expect(db.prepare("SELECT srpe FROM training_sessions WHERE athlete_id=1 AND session_date='2026-10-17'").get()).toEqual({ srpe: load });
+  expect(db.prepare("SELECT srpe FROM training_sessions WHERE athlete_id=1 AND session_date='2026-10-17'").get()).toEqual({ srpe: null });
 });
 
 it('已知无量纲指标与完整导出往返不要求编造单位', async () => {

@@ -1,3 +1,4 @@
+import { registerProjectVerificationRoutes } from './athlete/project-verification-routes.ts';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
@@ -110,6 +111,7 @@ const host = process.env.HOST || '127.0.0.1';
 registerAuthRoutes(app);
 registerAthleteRoutes(app);
 registerSelfTrainingRoutes(app);
+registerProjectVerificationRoutes(app);
 registerSelfDailyRoutes(app);
 registerCoachReportRoutes(app);
 registerTrainingPlanRoutes(app);

@@ -120,8 +120,7 @@ function radarPoints(values: number[], radius = 86, center = 110) {
 }
 
 function sessionLoad(session: StrengthTrainingSession) {
-  if (session.srpe > 0) return session.srpe;
-  return (session.rpe || 0) * (session.durationMin || 0);
+  return session.srpe;
 }
 
 function isoDateFromTime(time: number) {
@@ -175,7 +174,7 @@ function metricCards(sessions: StrengthTrainingSession[]) {
   const rpeValues = sets.map((set) => set.rpe).filter((value): value is number => value !== null);
   const completed = sets.filter((set) => set.completed).length;
   const duration = sessions.reduce((sum, session) => sum + (session.durationMin || 0), 0);
-  const load = sessions.reduce((sum, session) => sum + sessionLoad(session), 0);
+  const load = sessions.reduce((sum, session) => sum + (sessionLoad(session) ?? 0), 0);
   const intensityValues = sets
     .map((set) => set.intensityPercent)
     .filter((value): value is number => value !== null);
@@ -719,7 +718,7 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
     const recent = ordered.slice(-7);
     const trend = recent.map((session) => ({
       date: session.trainingDate.slice(5),
-      load: round(sessionLoad(session)),
+      load: sessionLoad(session) == null ? null : round(sessionLoad(session)!),
       rpe: session.rpe || 0,
     }));
     const earliest = ordered[0]?.trainingDate;
