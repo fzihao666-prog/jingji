@@ -12,6 +12,8 @@ import {
   SectionHeader,
 } from '../components/PageLayout';
 import { EChart } from '../components/EChart';
+import { SpecialChampionModel } from '../components/SpecialChampionModel';
+import { projectCapability } from '../../shared/projects';
 import {
   contentOption,
   intensityOption,
@@ -141,7 +143,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
           </select>
         </label>
       </FilterBar>
-      <AppCard><h3>项目参考评价</h3><p>专业参考标准需审核并匹配测试协议后使用；实测训练统计不受影响。</p></AppCard>
+      {projectCapability(project) && <SpecialChampionModel key={project} project={project} />}
       {!current ? (
         <ContentState
           kind="loading"
