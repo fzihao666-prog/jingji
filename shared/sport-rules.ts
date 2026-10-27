@@ -1,6 +1,6 @@
 import { normalizeProject, projectCapability, type Project } from './projects.js';
 
-export const SPORT_RULES_VERSION = 'multi-sport-v1';
+export const SPORT_RULES_VERSION = 'multi-sport-v2';
 export type CapabilityStatus = 'available' | 'pending_configuration' | 'unsupported';
 export type SportCapability = { status: CapabilityStatus; reason: string };
 export type ActivityCode = 'unknown' | 'on_water' | 'ergometer' | 'cycling' | 'volleyball_technique' | 'strength' | 'running' | 'recovery';
@@ -29,6 +29,7 @@ export const ACTIVITY_LABELS: Record<ActivityCode, string> = {
 export type SportRules = {
   project: Project;
   version: string;
+  requiredSessionFields: ('duration' | 'duration|distance')[];
   activities: ActivityCode[];
   capabilities: Record<'management' | 'training' | 'special' | 'reference', SportCapability>;
 };
@@ -46,6 +47,7 @@ export function projectRules(input: unknown): SportRules | null {
   return {
     project,
     version: SPORT_RULES_VERSION,
+    requiredSessionFields: [cycling ? 'duration|distance' : 'duration'],
     activities: [
       'unknown', 'strength', 'running', 'recovery',
       ...(water ? ['on_water', 'ergometer', 'cycling'] as const : []),
@@ -56,11 +58,21 @@ export function projectRules(input: unknown): SportRules | null {
       management: available(),
       training: firstWave ? available() : pending('公共填报可用，项目专属采集链路尚待配置。'),
       special: firstWave ? available() : pending('该项目专项分析尚待配置和验证。'),
-      reference: pending('需匹配适用人群、测试协议和已审核参考标准。'),
+      reference: pending('需匹配适用人群、测试协议和有效冠军参考。'),
     },
   };
 }
 
 export function isActivityCode(value: unknown): value is ActivityCode {
   return typeof value === 'string' && Object.hasOwn(ACTIVITY_LABELS, value);
+}
+
+/** 骑行交叉训练使用骑行要求，力量/恢复等活动仍需时长。 */
+export function sessionQuantityRequirement(project: unknown, activity = 'unknown'): 'duration' | 'duration|distance' {
+ const rules=projectRules(project);
+ if (rules?.activities.includes('cycling') && activity==='cycling') return 'duration|distance';
+ return activity==='unknown' && rules?.requiredSessionFields.includes('duration|distance') ? 'duration|distance' : 'duration';
+}
+export function sessionQuantityHint(project: unknown, activity = 'unknown') {
+ return sessionQuantityRequirement(project,activity)==='duration|distance' ? '时长或距离至少填一项。' : '此活动必须填写时长。';
 }

@@ -27,3 +27,12 @@ describe('多项目规则边界', () => {
     expect(new Set(SPORT_MODULES.map(row => row.key)).size).toBe(SPORT_MODULES.length);
   });
 });
+
+it('水上和排球要求时长，骑行可用距离替代，交叉训练按实际活动', async () => {
+  const { sessionQuantityRequirement } = await import('./sport-rules.js');
+  expect(projectRules('ROWING')!.requiredSessionFields).toEqual(['duration']);
+  expect(projectRules('VOLLEYBALL')!.requiredSessionFields).toEqual(['duration']);
+  expect(projectRules('CYCLING_ROAD')!.requiredSessionFields).toEqual(['duration|distance']);
+  expect(sessionQuantityRequirement('ROWING','cycling')).toBe('duration|distance');
+  expect(sessionQuantityRequirement('CYCLING_TRACK','strength')).toBe('duration');
+});

@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
-import { ACTIVITY_LABELS, isActivityCode, projectRules, type ActivityCode } from '../../shared/sport-rules';
+import { sessionQuantityHint, sessionQuantityRequirement, ACTIVITY_LABELS, isActivityCode, projectRules, type ActivityCode } from '../../shared/sport-rules';
 import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity';
 import { AppCard } from './PageLayout';
 import './TrainingSessionEntry.css';
@@ -16,8 +16,10 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Prop
   const submission = useRef<{ key: string; content: string } | null>(null);
   const durationInput = useRef<HTMLInputElement>(null);
   const errorId = useId();
-  const quantityError = error === '请填写有效的时长或距离。';
+  const quantityError = error.includes('时长');
   if (!rules) return null;
+  const allowsDistance = sessionQuantityRequirement(project, activity) === 'duration|distance';
+  const quantityHint = sessionQuantityHint(project, activity);
   const water = activity === 'on_water' || activity === 'ergometer';
   const power = water || activity === 'cycling';
   const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
@@ -26,7 +28,7 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Prop
     const form = event.currentTarget;
     const data: Record<string, string> = {};
     new FormData(form).forEach((value, key) => { if (typeof value === 'string') data[key] = value; });
-    if (!data.duration && !data.distance) { setError('请填写有效的时长或距离。'); durationInput.current?.focus(); return; }
+    if (!(Number(data.duration) > 0) && (!allowsDistance || !(Number(data.distance) > 0))) { setError(quantityHint); durationInput.current?.focus(); return; }
     setSaving(true); setError(''); setMessage('');
     try {
       const content = JSON.stringify(data);
@@ -40,7 +42,7 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Prop
   }
   return <AppCard className="training-session-entry">
     <h3>填写训练记录</h3>
-    <p>时长或距离至少填一项。RPE 可选；时长与 RPE 齐全才计算 SRPE。</p>
+    <p>{quantityHint}RPE 可选；时长与 RPE 齐全才计算 SRPE。</p>
     <form onSubmit={submit}>
       <fieldset disabled={saving}>
         <legend>实际完成情况</legend>
@@ -51,7 +53,7 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Prop
         <label>训练活动<select name="activityCode" value={activity} onChange={event => { if (isActivityCode(event.target.value)) setActivity(event.target.value); }}>
           {rules.activities.map(code => <option value={code} key={code}>{ACTIVITY_LABELS[code]}</option>)}
         </select></label>
-        <label>时长（分钟）<input ref={durationInput} name="duration" type="number" min="1" max="1440" step="any" aria-invalid={quantityError || undefined} aria-describedby={quantityError ? errorId : undefined} /></label>
+        <label>时长（分钟）<input ref={durationInput} required={!allowsDistance} name="duration" type="number" min="1" max="1440" step="any" aria-invalid={quantityError || undefined} aria-describedby={quantityError ? errorId : undefined} /></label>
         <label>距离（公里，可选）<input name="distance" type="number" min="0" max="500" step="any" aria-invalid={quantityError || undefined} aria-describedby={quantityError ? errorId : undefined} /></label>
         <label>RPE（0—10，可选）<input name="rpe" type="number" min="0" max="10" step="any" /></label>
         <label>强度体系（可选）<select name="intensitySystem"><option value="">未指定</option>{INTENSITY_ZONE_SYSTEMS.map(system => <option key={system.code} value={system.code}>{system.label}</option>)}</select></label>

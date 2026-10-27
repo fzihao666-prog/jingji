@@ -15,6 +15,11 @@ function emptyForm() {
   return { date: today(), startTime: '', trainingType: '专项训练', intensityZone: '', content: '', duration: '', distance: '', rpe: '', averageHeartRate: '', maxHeartRate: '', averagePowerW: '', strokeRateSpm: '' };
 }
 
+function quantityRule(project, activity) {
+  const rules=sportRules[project];
+  const allowDistance=activity==='cycling' || ((!activity || activity==='unknown') && (rules ? (rules.requiredSessionFields || []).includes('duration|distance') : ['CYCLING_ROAD','CYCLING_TRACK'].includes(project)));
+  return { allowDistance, quantityHint: allowDistance ? '时长或距离至少填一项；RPE可选。' : '此活动必须填写时长；RPE可选。' };
+}
 Page({
   data: {
     loading: true,
@@ -54,7 +59,7 @@ Page({
     this._trainingProject = project;
     const rules = sportRules[project];
     const codes = rules ? rules.activities : ['unknown'];
-    this.setData({ activityCodes: codes, activityOptions: codes.map(code => activityLabels[code] || '未分类'), activityIndex: 0,
+    this.setData({ ...quantityRule(project,'unknown'), activityCodes: codes, activityOptions: codes.map(code => activityLabels[code] || '未分类'), activityIndex: 0,
       intensityOptions: ['', 'U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP', 'UT3', 'UT2', 'UT1', 'TR', 'REC'], intensityIndex: 0,
       form: { ...emptyForm(), activityCode: 'unknown', rulesVersion: rules ? rules.version : undefined,
         intensityZone: '', rpe: '', cadenceRpm: '' } });
@@ -65,7 +70,7 @@ Page({
     const code = this.data.activityCodes[index];
     if (!code) return;
     const water = code === 'on_water' || code === 'ergometer';
-    this.setData({ activityIndex: index, form: { ...this.data.form, activityCode: code,
+    this.setData({ ...quantityRule(this._trainingProject,code), activityIndex: index, form: { ...this.data.form, activityCode: code,
       strokeRateSpm: water ? this.data.form.strokeRateSpm : '',
       cadenceRpm: code === 'cycling' ? this.data.form.cadenceRpm : '' } });
     this.persistDraft();
@@ -188,6 +193,7 @@ Page({
       success: (result) => {
         if (result.confirm) {
           this.setData({
+            ...quantityRule(this._trainingProject,draft.activityCode),
             form: { ...emptyForm(), ...draft },
             typeIndex: Math.max(0, this.data.typeOptions.indexOf(draft.trainingType)),
             intensityIndex: Math.max(0, this.data.intensityOptions.indexOf(draft.intensityZone)),
@@ -207,9 +213,10 @@ Page({
     const form = {};
     Object.keys(emptyForm()).forEach((key) => { form[key] = session[key] === null || session[key] === undefined ? '' : String(session[key]); });
     this.setData({
+      ...quantityRule(this._trainingProject,session.activityCode),
       editId: session.id,
       activityIndex: Math.max(0, this.data.activityCodes.indexOf(session.activityCode)),
-      form: { ...form, ...(session.activityCode ? { activityCode: session.activityCode, rulesVersion: session.rulesVersion || undefined, cadenceRpm: session.cadenceRpm == null ? '' : String(session.cadenceRpm), intensitySystem: session.intensitySystem || undefined } : {}), ...(session.teamPlanId ? { teamPlanId: session.teamPlanId, planSessionId: session.planSessionId } : {}) },
+      form: { ...form, ...(session.activityCode ? { activityCode: session.activityCode, rulesVersion: sportRules[this._trainingProject]?.version, cadenceRpm: session.cadenceRpm == null ? '' : String(session.cadenceRpm), intensitySystem: session.intensitySystem || undefined } : {}), ...(session.teamPlanId ? { teamPlanId: session.teamPlanId, planSessionId: session.planSessionId } : {}) },
       planLabel: session.teamPlanId ? `关联计划版本 #${session.teamPlanId} · ${session.planSessionId}` : '',
       typeIndex: Math.max(0, this.data.typeOptions.indexOf(session.trainingType)),
       intensityIndex: Math.max(0, this.data.intensityOptions.indexOf(session.intensityZone)),
@@ -236,8 +243,9 @@ Page({
   async save() {
     if (this.data.saving) return;
     const form = this.data.form;
-    if (!form.content || (!form.duration && !form.distance)) {
-      wx.showToast({ title: '请填写内容及时长或距离', icon: 'none' });
+    const requirement=quantityRule(this._trainingProject || this.data.project,form.activityCode);
+    if (!form.content || (!(Number(form.duration)>0) && (!requirement.allowDistance || !(Number(form.distance)>0)))) {
+      wx.showToast({ title: !form.content ? '请填写训练内容' : requirement.allowDistance ? '请填写时长或有效距离' : '请填写有效训练时长', icon: 'none' });
       return;
     }
     this.setData({ saving: true, error: '' });

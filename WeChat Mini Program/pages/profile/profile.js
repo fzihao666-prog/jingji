@@ -149,14 +149,14 @@ function physicalReferenceView(payload, athleteId) {
       const ref = dim.appliedReference;
       const definition = ref || (group.references || []).find(item => item.key === dim.key) || {};
       if (dim.factMeasurementId) used.add(dim.factMeasurementId);
-      rows.push({ key: `${group.id}:${dim.key}`, label: definition.label || dim.key, value: metricValue(dim.value), unit: definition.unit || '', date: dim.testDate || '', reference: ref ? metricValue(ref.value) : '--', source: ref ? `${natureLabels[ref.sourceNature] || '参考来源未说明'} · ${ref.sourceNote || '来源未说明'}` : '待配置', version: ref ? `参考v${dim.referenceVersion || ref.version} · 维度${ref.dimensionVersion || '--'}` : '--', protocol: ref ? [ref.protocol, ref.protocolVersion, ref.testContext].filter(Boolean).join(' · ') : '', achieved: metricValue(dim.achievedPercent), pending: dim.pendingReason || '' });
+      rows.push({ key: `${group.id}:${dim.key}`, label: definition.label || dim.key, value: metricValue(dim.value), unit: definition.unit || '', date: dim.testDate || '', reference: ref ? metricValue(ref.value) : '--', source: ref ? `${natureLabels[ref.sourceNature] || '参考来源未说明'} · ${ref.sourceNote || '来源未说明'}` : '待配置', version: ref ? `参考v${dim.referenceVersion || ref.version} · 维度${ref.dimensionVersion || '--'}` : '--', protocol: ref ? [ref.protocol, ref.protocolVersion, ref.testContext].filter(Boolean).join(' · ') : '', achieved: metricValue(dim.achievedPercent), pending: dim.pendingReason || (dim.achievedPercent != null && dim.scoringEligible === false ? '展示性达成度；估算参考，不参与正式评分' : '') });
     });
   });
   (data.measurements || []).filter(item => Number(item.athleteId) === Number(athleteId) && !used.has(item.measurementId)).forEach(item => {
-    rows.push({ key: `measurement:${item.measurementId}`, label: item.code, value: metricValue(item.value), unit: item.unit || '', date: item.date || '', reference: '--', source: '待配置', version: '--', protocol: [item.protocol, item.protocolVersion, item.testContext].filter(Boolean).join(' · '), achieved: '--', pending: '保留原始实测，暂无匹配的已审核参考' });
+    rows.push({ key: `measurement:${item.measurementId}`, label: item.code, value: metricValue(item.value), unit: item.unit || '', date: item.date || '', reference: '--', source: '待配置', version: '--', protocol: [item.protocol, item.protocolVersion, item.testContext].filter(Boolean).join(' · '), achieved: '--', pending: '保留原始实测，暂无匹配的冠军参考' });
   });
   const pending = (data.athletePendingReasons || []).find(item => Number(item.athleteId) === Number(athleteId));
-  return { physicalReferenceRows: rows, physicalReferenceNote: pending?.reason || data.pendingReason || '当前项目参考待配置；保留实测记录，不生成综合分或排名。' };
+  return { physicalReferenceRows: rows, physicalReferenceNote: pending?.reason || data.pendingReason || '冠军参考模型待配置；保留实测记录，不生成排名。' };
 }
 
 function emptyProfileView(athlete = {}, period = { from: '', to: '' }) {
@@ -237,7 +237,7 @@ Page({
       sectionRequest(() => api.profileComparison(athleteId, scope.from, scope.to, scope.project), '训练对比加载失败'),
       sectionRequest(() => api.radarModels(athleteId, scope.from, scope.to), '雷达模型加载失败'),
       athlete.photoUrl ? sectionRequest(() => api.downloadAthletePhoto(athleteId), '照片加载失败') : Promise.resolve({ value: '', error: '' }),
-      sectionRequest(() => api.physicalChampion(scope.project, scope.from, scope.to), '项目参考加载失败')
+      sectionRequest(() => api.physicalChampion(scope.project, scope.from, scope.to), '冠军参考模型加载失败')
     ]);
     if (!isLatest()) return null;
     const labels = { weightKg: '体重', bodyFatPct: '体脂率', skeletalMuscleKg: '骨骼肌', muscleMassKg: '肌肉量', totalBodyWaterKg: '体水分', visceralFatLevel: '内脏脂肪等级', basalMetabolismKcal: '基础代谢' };

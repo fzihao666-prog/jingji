@@ -14,3 +14,11 @@ describe('训练指标活动适用范围', () => {
     expect(() => trainingContext('ROWING', { trainingType: '体能训练', activityCode: 'strength', averagePowerW: 100 })).toThrow('功率');
   });
 });
+
+it('按项目和活动校验必填量，骑行距离不替代排球或水上时长', async () => {
+ const { validateSessionQuantity } = await import('./training-context.js');
+ expect(()=>validateSessionQuantity('VOLLEYBALL',{activityCode:'volleyball_technique',duration:null,distance:10})).toThrow('时长');
+ expect(()=>validateSessionQuantity('ROWING',{activityCode:'on_water',duration:null,distance:10})).toThrow('时长');
+ expect(()=>validateSessionQuantity('CYCLING_ROAD',{activityCode:'cycling',duration:null,distance:10})).not.toThrow();
+ expect(()=>validateSessionQuantity('CYCLING_ROAD',{activityCode:'cycling',duration:null,distance:0})).toThrow('时长');
+});

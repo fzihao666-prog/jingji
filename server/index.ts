@@ -20,7 +20,7 @@ import { requireAuth, requireRole } from './core/auth.ts';
 import { accessibleAthleteIds, selectableProjects } from './core/permissions.ts';
 import { registerAnalysisRoutes } from './analysis/analysis-routes.ts';
 import { registerSportRulesRoutes } from './analysis/sport-rules-routes.ts';
-import { readPhysicalReferences, isUsablePhysicalReference } from './analysis/physical-champion-service.ts';
+import { readPhysicalReferences, isDisplayPhysicalReference } from './analysis/physical-champion-service.ts';
 import { registerAccessRoutes } from './access/access-routes.ts';
 import { registerSpecialTrainingRoutes } from './special/special-training-routes.ts';
 import { registerDataImportRoutes } from './data-import/data-import-routes.ts';
@@ -123,7 +123,7 @@ registerAnalysisRoutes(app);
 registerSportRulesRoutes(app, {
   requireAuth,
   projects: req => selectableProjects(req.authUser!),
-  referenceAvailable: project => readPhysicalReferences(db, project).some(ref => isUsablePhysicalReference(ref, beijingDate(new Date()))),
+  referenceAvailable: project => readPhysicalReferences(db, project).some(ref => isDisplayPhysicalReference(ref, beijingDate(new Date()))),
 });
 registerStrengthTestRoutes(app);
 registerReportRoutes(app, { db, requireAuth, hasAccess: hasAthleteAccess, currentUser: getAuthUser,

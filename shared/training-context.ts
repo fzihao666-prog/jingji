@@ -1,4 +1,4 @@
-import { projectRules, isActivityCode, SPORT_RULES_VERSION, type TrainingCategory } from './sport-rules.js';
+import { sessionQuantityRequirement, projectRules, isActivityCode, SPORT_RULES_VERSION, type TrainingCategory } from './sport-rules.js';
 import { INTENSITY_ZONE_SYSTEMS } from './training-intensity.js';
 
 export class TrainingInputError extends Error {
@@ -34,4 +34,10 @@ export function trainingContext(project: string, row: {
   }
   const category: TrainingCategory = row.trainingType === '专项训练' ? 'special' : row.trainingType === '恢复训练' ? 'recovery' : 'physical';
   return { project: rules.project, activity, category, system, version: SPORT_RULES_VERSION };
+}
+
+export function validateSessionQuantity(project: string, row: { activityCode?: string; duration: number | null; distance: number | null }) {
+ if (row.duration != null && Number.isFinite(row.duration) && row.duration > 0) return;
+ if (sessionQuantityRequirement(project,row.activityCode)==='duration|distance' && row.distance != null && Number.isFinite(row.distance) && row.distance>0) return;
+ throw new TrainingInputError(sessionQuantityRequirement(project,row.activityCode)==='duration' ? '此训练活动必须填写有效时长。' : '请填写有效时长或大于0的距离。');
 }

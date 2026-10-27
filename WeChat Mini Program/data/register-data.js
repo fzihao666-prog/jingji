@@ -205,7 +205,10 @@ module.exports = {
   "sportRules": {
     "SWIMMING": {
       "project": "SWIMMING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -227,13 +230,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "MARATHON_SWIMMING": {
       "project": "MARATHON_SWIMMING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -255,13 +261,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "ARTISTIC_SWIMMING": {
       "project": "ARTISTIC_SWIMMING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -283,13 +292,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "DIVING": {
       "project": "DIVING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -311,13 +323,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "WATER_POLO": {
       "project": "WATER_POLO",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -339,13 +354,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "ARCHERY": {
       "project": "ARCHERY",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -367,13 +385,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "ATHLETICS": {
       "project": "ATHLETICS",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -395,13 +416,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BADMINTON": {
       "project": "BADMINTON",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -423,13 +447,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BASEBALL": {
       "project": "BASEBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -451,13 +478,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "SOFTBALL": {
       "project": "SOFTBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -479,13 +509,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BASKETBALL": {
       "project": "BASKETBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -507,13 +540,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BASKETBALL_3X3": {
       "project": "BASKETBALL_3X3",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -535,13 +571,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BOXING": {
       "project": "BOXING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -563,13 +602,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "CANOE_SLALOM": {
       "project": "CANOE_SLALOM",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -594,13 +636,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "CANOE_SPRINT": {
       "project": "CANOE_SPRINT",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -625,13 +670,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "CYCLING_ROAD": {
       "project": "CYCLING_ROAD",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration|distance"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -654,13 +702,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "CYCLING_TRACK": {
       "project": "CYCLING_TRACK",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration|distance"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -683,13 +734,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "CYCLING_MOUNTAIN_BIKE": {
       "project": "CYCLING_MOUNTAIN_BIKE",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -711,13 +765,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BMX_RACING": {
       "project": "BMX_RACING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -739,13 +796,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BMX_FREESTYLE": {
       "project": "BMX_FREESTYLE",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -767,13 +827,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "EQUESTRIAN_DRESSAGE": {
       "project": "EQUESTRIAN_DRESSAGE",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -795,13 +858,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "EQUESTRIAN_EVENTING": {
       "project": "EQUESTRIAN_EVENTING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -823,13 +889,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "EQUESTRIAN_JUMPING": {
       "project": "EQUESTRIAN_JUMPING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -851,13 +920,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "FENCING": {
       "project": "FENCING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -879,13 +951,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "FOOTBALL": {
       "project": "FOOTBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -907,13 +982,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "GOLF": {
       "project": "GOLF",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -935,13 +1013,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "ARTISTIC_GYMNASTICS": {
       "project": "ARTISTIC_GYMNASTICS",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -963,13 +1044,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "RHYTHMIC_GYMNASTICS": {
       "project": "RHYTHMIC_GYMNASTICS",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -991,13 +1075,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "TRAMPOLINE": {
       "project": "TRAMPOLINE",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1019,13 +1106,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "HANDBALL": {
       "project": "HANDBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1047,13 +1137,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "HOCKEY": {
       "project": "HOCKEY",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1075,13 +1168,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "JUDO": {
       "project": "JUDO",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1103,13 +1199,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "KARATE_KATA": {
       "project": "KARATE_KATA",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1131,13 +1230,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "KARATE_KUMITE": {
       "project": "KARATE_KUMITE",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1159,13 +1261,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "MODERN_PENTATHLON": {
       "project": "MODERN_PENTATHLON",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1187,13 +1292,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "ROWING": {
       "project": "ROWING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1218,13 +1326,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "RUGBY_SEVENS": {
       "project": "RUGBY_SEVENS",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1246,13 +1357,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "SAILING": {
       "project": "SAILING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1274,13 +1388,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "SHOOTING": {
       "project": "SHOOTING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1302,13 +1419,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "SKATEBOARDING": {
       "project": "SKATEBOARDING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1330,13 +1450,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "SPORT_CLIMBING": {
       "project": "SPORT_CLIMBING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1358,13 +1481,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "SURFING": {
       "project": "SURFING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1386,13 +1512,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "TABLE_TENNIS": {
       "project": "TABLE_TENNIS",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1414,13 +1543,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "TAEKWONDO": {
       "project": "TAEKWONDO",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1442,13 +1574,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "TENNIS": {
       "project": "TENNIS",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1470,13 +1605,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "TRIATHLON": {
       "project": "TRIATHLON",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1498,13 +1636,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "VOLLEYBALL": {
       "project": "VOLLEYBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1527,13 +1668,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "BEACH_VOLLEYBALL": {
       "project": "BEACH_VOLLEYBALL",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1555,13 +1699,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "WEIGHTLIFTING": {
       "project": "WEIGHTLIFTING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1583,13 +1730,16 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     },
     "WRESTLING": {
       "project": "WRESTLING",
-      "version": "multi-sport-v1",
+      "version": "multi-sport-v2",
+      "requiredSessionFields": [
+        "duration"
+      ],
       "activities": [
         "unknown",
         "strength",
@@ -1611,7 +1761,7 @@ module.exports = {
         },
         "reference": {
           "status": "pending_configuration",
-          "reason": "需匹配适用人群、测试协议和已审核参考标准。"
+          "reason": "需匹配适用人群、测试协议和有效冠军参考。"
         }
       }
     }

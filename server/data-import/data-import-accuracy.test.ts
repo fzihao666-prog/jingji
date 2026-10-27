@@ -2329,7 +2329,7 @@ it.each([
   const batch = analyze({ 训练课次: [headers, ['张某', '2026-03-01', '专项训练', activity, 60, 5, cycling ? 220 : null, cycling ? 0 : null, 'UT_SYSTEM', 'UT2']] }, { project, athletes: scoped });
   expect(batch.items.flatMap(item => item.messages).filter(message => message.startsWith('错误：'))).toEqual([]);
   commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'SCC', conflictPolicy: 'skip', athletes: scoped, allowedTeams: new Set(['A队']) });
-  expect(db.prepare('SELECT project_code, project_status, activity_code, training_category, intensity_system, rules_version, srpe, distance_reported FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: projectCode, project_status: 'confirmed', activity_code: code, training_category: 'special', intensity_system: 'UT_SYSTEM', rules_version: 'multi-sport-v1', srpe: 300, distance_reported: 0 });
+  expect(db.prepare('SELECT project_code, project_status, activity_code, training_category, intensity_system, rules_version, srpe, distance_reported FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: projectCode, project_status: 'confirmed', activity_code: code, training_category: 'special', intensity_system: 'UT_SYSTEM', rules_version: 'multi-sport-v2', srpe: 300, distance_reported: 0 });
   if (cycling) expect(db.prepare("SELECT value_num, unit FROM training_session_metrics WHERE metric_code='cadenceRpm'").get()).toEqual({ value_num: 0, unit: 'rpm' });
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(project, [1]);

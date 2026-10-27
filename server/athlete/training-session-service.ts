@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { db } from '../core/db.ts';
 import { isValidIsoDate } from '../core/utils.ts';
-import { trainingContext, TrainingInputError } from '../../shared/training-context.ts';
+import { trainingContext, validateSessionQuantity, TrainingInputError } from '../../shared/training-context.ts';
 export { TrainingInputError } from '../../shared/training-context.ts';
 import {
   resolveTrainingPlanLink,
@@ -41,7 +41,6 @@ export const sessionSchema = z
     averagePowerW: optionalNumber(3000),
     strokeRateSpm: optionalNumber(100),
   })
-  .refine(row => row.duration !== null || (row.distance !== null && row.distance > 0), { path: ['duration'], message: '请填写有效时长或距离。' })
   .refine(
     (row) =>
       row.averageHeartRate === null ||
@@ -81,6 +80,7 @@ function saveContext(athleteId: number, sessionId: number, row: SessionInput, is
   const athlete = db.prepare('SELECT project FROM athletes WHERE id = ?').get(athleteId) as { project: string } | undefined;
   if (!athlete) throw new TrainingInputError('运动员不存在。');
   const context = trainingContext(athlete.project, row);
+  validateSessionQuantity(athlete.project, row);
   const stored = db.prepare('SELECT project_code AS project FROM training_sessions WHERE id=? AND athlete_id=?').get(sessionId,athleteId) as { project: string | null } | undefined;
   if (stored?.project && stored.project !== context.project) throw new TrainingInputError('历史课次不属于当前项目，不能修改其归属。');
   if (row.cadenceRpm != null && !db.prepare(`SELECT 1 FROM metric_definitions md

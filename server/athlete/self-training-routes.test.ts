@@ -124,12 +124,12 @@ describe('训练填报幂等接口', () => {
     expect(db.prepare('SELECT distance_reported, rpe, srpe FROM training_sessions').get()).toMatchObject({ distance_reported: 0, rpe: null, srpe: null });
   });
   it('有距离但无时长的课次保留缺失，不计算SRPE', async () => {
-    expect((await post({ ...payload, duration: '', distance: 10 })).status).toBe(201);
+    expect((await post({ ...payload, activityCode: 'cycling', duration: '', distance: 10 })).status).toBe(201);
     expect(db.prepare('SELECT duration_reported, duration_min, srpe FROM training_sessions').get()).toMatchObject({ duration_reported: 0, duration_min: 0, srpe: null });
     expect((await post({ ...payload, duration: '', distance: '' }, 'empty_training_key_0001')).status).toBe(400);
   });
   it('空白数字字符串表示未填报，不变成真实零', async () => {
-    expect((await post({ ...payload, duration: ' ', distance: 10, rpe: ' ' })).status).toBe(201);
+    expect((await post({ ...payload, activityCode: 'cycling', duration: ' ', distance: 10, rpe: ' ' })).status).toBe(201);
     expect(db.prepare('SELECT duration_reported,rpe,srpe FROM training_sessions').get()).toEqual({ duration_reported: 0, rpe: null, srpe: null });
   });
   it('真实RPE零保留SRPE零，总览与报告均计入有效覆盖', async () => {
@@ -141,6 +141,10 @@ describe('训练填报幂等接口', () => {
     const response=await fetch(`${baseUrl}/api/athletes/9001/reports/preview?from=2026-10-10&to=2026-10-10&kind=custom`,{headers:{Authorization:`Bearer ${jwt.sign({id:9001,sessionVersion:1},secret)}`}});
     const preview=await response.json() as {data:{totals:{srpe:number|null;srpeCount:number}}};
     expect(preview.data.totals).toMatchObject({srpe:0,srpeCount:1});
+  });
+  it.each([['VOLLEYBALL','volleyball_technique',400],['ROWING','on_water',400],['CYCLING_ROAD','cycling',201]])('%s在线填报按活动限制距离代替时长',async(project,activityCode,status)=>{
+    db.prepare('UPDATE athletes SET project=? WHERE id=9001').run(project);
+    expect((await post({...payload,activityCode,duration:'',distance:10})).status).toBe(status);
   });
   it('key格式保留大小写，接受边界长度且拒绝空白和非ASCII字符', () => {
     expect(idempotencyKeySchema.parse('Abc_0123456789-XY')).toBe('Abc_0123456789-XY');

@@ -13,7 +13,7 @@ export function registerSportRulesRoutes(app: Express, deps: {
     if (!deps.projects(req).includes(rules.project))
       return res.status(403).json({ message: '无权访问该项目配置。' });
     if (deps.referenceAvailable?.(rules.project))
-      rules.capabilities.reference = { status: 'available', reason: '已有有效已审核参考，评价仍须逐项匹配人群与协议。' };
+      rules.capabilities.reference = { status: 'available', reason: '已有有效冠军展示参考；正式评分另校验来源与资格，仍须逐项匹配人群与协议。' };
     return res.json({ rules, modules: SPORT_MODULES });
   });
 }

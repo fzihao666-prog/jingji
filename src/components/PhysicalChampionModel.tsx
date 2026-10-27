@@ -41,7 +41,7 @@ const sourceNatureLabel = {
   estimated: '估算',
   unverified: '待核实',
 } as const;
-const reviewStatusLabel = { draft: '草稿', reviewed: '已审核', disabled: '停用' } as const;
+const reviewStatusLabel = { draft: '草稿', reviewed: '已生效', disabled: '停用' } as const;
 
 function ReferenceEditor({
   reference,
@@ -69,7 +69,7 @@ function ReferenceEditor({
       );
       onSaved();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '审核失败。');
+      setMessage(error instanceof Error ? error.message : '停用失败。');
     } finally {
       setSaving(false);
     }
@@ -305,7 +305,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
         if (active) setPayload(result);
       })
       .catch((failure: unknown) => {
-        if (active) setError(failure instanceof Error ? failure.message : '项目参考加载失败。');
+        if (active) setError(failure instanceof Error ? failure.message : '冠军参考加载失败。');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -410,7 +410,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
       },
       {
         id: 'reference',
-        name: '项目参考 100%',
+        name: '冠军参考 100%',
         type: 'line',
         data: [
           [toTime(from), 100],
@@ -425,16 +425,16 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
   };
   return (
     <ChartCard
-      title="体能项目参考"
+      title="体能冠军参考模型"
       description={`${projectLabel(project)} · ${from} — ${to}`}
       className="physical-champion"
     >
       <div aria-live="polite">
-        {showLoading && <ContentState kind="loading" title="正在加载项目参考模型" />}
+        {showLoading && <ContentState kind="loading" title="正在加载冠军参考模型" />}
         {error && (
           <ContentState
             kind="error"
-            title="项目参考加载失败"
+            title="冠军参考加载失败"
             description={error}
             action={
               <button type="button" onClick={() => setRevision((value) => value + 1)}>
@@ -456,7 +456,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
               </p>
             ))}
           {payload.canEdit && (
-            <section aria-label="项目参考管理">
+            <section aria-label="冠军参考管理">
               <h3>参考版本管理</h3>
               <ReferenceEditor
                 project={project}
@@ -542,10 +542,10 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
             </p>
           )}
           <div className="physical-champion-section-heading">
-            <h3>项目参考指标</h3>
+            <h3>冠军参考指标</h3>
             <span>参考值 · 当前表现；估算参考，不参与正式评分</span>
           </div>
-          <section aria-label="项目参考指标" className="physical-champion-reference">
+          <section aria-label="冠军参考指标" className="physical-champion-reference">
             {rows.map(({ reference, team, personal: personalResult }) => (
               <article key={reference.id}>
                 <h3>
@@ -571,7 +571,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
             ))}
           </section>
           <section className="physical-champion-section">
-            <h3>项目参考雷达图</h3>
+            <h3>冠军参考雷达图</h3>
             <p className="physical-champion-note">
               冠军参考为 100%（估算仅用于展示）；团队仅包含当前分组的有效测试。超过 100%
               的成绩保留真实达成度，详细数值见下表。
@@ -585,7 +585,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
                   <Tooltip />
                   <Legend />
                   <Radar
-                    name="项目参考"
+                    name="冠军参考"
                     dataKey="champion"
                     stroke="var(--amber)"
                     fill="var(--amber)"
@@ -728,7 +728,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
                   <Suspense fallback={<ContentState kind="loading" title="正在加载趋势图" />}>
                     <EChart
                       option={trendOption}
-                      label={`${scopeName}参考达成度趋势，最新${format(latestTrend?.score)}%，项目参考100%。具体数值见趋势数据表。`}
+                      label={`${scopeName}参考达成度趋势，最新${format(latestTrend?.score)}%，冠军参考100%。具体数值见趋势数据表。`}
                     />
                   </Suspense>
                 </div>

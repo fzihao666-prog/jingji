@@ -758,9 +758,11 @@ route → application service → repository/query service → SQLite
 
 ### 体能冠军参考（2026-10-27）
 
-`physical-champion-references.ts` 继续使用 `radar_reference_sources` / `radar_reference_values`，兼容旧项目编码及原外键、索引、触发器与自增范围，不建立第二套标准库。历史空协议和估算基线保留原来源；迁移默认 draft，不自动升为已审核。参考记录项目、人群、指标代码/单位、方向、协议版本、测试上下文、侧别、维度版本及有效期；来源缺失的占位说明仅表示待核实，不构成科学依据。
+`physical-champion-references.ts` 继续使用 `radar_reference_sources` / `radar_reference_values`，兼容旧项目编码及原外键、索引、触发器与自增范围，不建立第二套标准库。历史空协议保留原来源；48项已知维度的 legacy-unreviewed 估算基线补维度协议、默认空版本/条件及来源年份起始有效日，仍保持 estimated 来源，不自动取得正式评分资格。参考记录项目、人群、指标代码/单位、方向、协议版本、测试上下文、侧别、维度版本及有效期；来源缺失的占位说明仅表示待核实，不构成科学依据。
 
-维护权限仍限全国、全部项目和全部队伍的 DMD。修改创建新草稿版本并保留修订与审计，审核启用检查来源、适用条件及有效期重叠；状态为 draft、reviewed、disabled。评价只使用有效期内、条件匹配的 reviewed 参考，优先精确条件，同优先级冲突不评分。估算/未核实参考及演示、估算、模拟测量不进入正式评分；年龄未知不能假定成人，相对力量仅使用同测试会话实测体重。没有已审核综合方法时不生成总分，缺少参考和维度配置保留待参考/待配置。
+维护权限仍限全国、全部项目和全部队伍的 DMD。保存新版本即 review_status=reviewed 并生效，保留修订和一条审计；来源性质保持原样，保存前检查同优先级条件和有效期重叠，冲突时先停用旧版本。旧 review 接口的 reviewed 请求兼容为空操作，不重新启用 disabled；停用仍检查修订和权限。专家/队内标签措辞不做人工流程约束，单位、有效期、估算来源性质等校验保留。
+
+冠军参考模型分展示档和评分档：展示档仍检查有效期、项目/人群、测量码、单位、协议版本/上下文/侧别及维度版本，允许草稿和估算参考；评分档额外要求 reviewed 且非 estimated/unverified。逐维结果与完整维度达成度返回 scoringEligible；完整维度取达成度均值作展示性数值和趋势，缺项不补零、不重配权重，不生成排名或新的正式综合方法。团队只汇总已逐事实匹配的达成度，不把跨版本原始均值再套入一个阈值。估算、演示、模拟测量仍排除，年龄未知不假定成人，相对力量使用同会话实测体重。
 
 历史本地模拟补充函数没有公开写入接口，也不在启动时执行；其来源标记不因 `is_demo=0` 变为实测，不再通过年龄假定参与成人参考评价。原始模拟记录和批次可追溯保留，不能为恢复评分而改成实测来源。
 
@@ -816,3 +818,9 @@ v1 快照继续按保存内容只读渲染及导出，不根据新口径重算�
 
 
 导入过期草稿清理：`GET /api/data-import/draft-cleanup?project=...` 返回最多200批本人授权范围内的候选；`POST /api/data-import/draft-cleanup` 接收严格校验的 `{ project, drafts: [{ id, revision }] }`。仅删除创建超过30天、最近30天未保存、无正式引用/入库痕迹的 reviewing 批次，暂存明细通过既有外键级联删除。草稿修订推进在同一摘要内写入 `lastActivityAt`，无活动时间且已有修订的旧草稿保守保留，不新增表或迁移。确认执行时以 `BEGIN IMMEDIATE` 重新验证所有权、项目/人员授权、期限、状态和修订；删除与 `CLEANUP_EXPIRED_IMPORT_DRAFTS` 审计原子提交，任一步失败回滚。不运行定时删除或在线VACUUM，不清理已入库批次及正式事实。
+
+### SRPE空值与历史项目核实（2026-10）
+
+training_sessions.srpe允许NULL；新填报缺少有效时长或RPE时不写占位零，真实RPE=0保留SRPE=0。migrateNullableSrpe先以VACUUM INTO在backups/before-nullable-srpe-*.db备份，再独立事务重建旧NOT NULL约束并清理缺失条件下的旧零值，保留ID、子表、索引、触发器及序列；外键校验失败完整回滚，可重复运行。导入保留原始负荷字段于回执，但缺时长/RPE的正式SRPE为空。总览与报告按有效时长、RPE及非空SRPE统计覆盖。
+
+GET /api/athletes/:id/pending-project-facts提供授权范围内的待核实训练/测试；POST /api/training-sessions/:id/verify-project与POST /api/test-sessions/:id/verify-project接收{project}。仅既有管理角色可操作，同时检查运动员访问范围与目标项目权限。BEGIN IMMEDIATE内核实为confirmed、写manual_verification来源及审计；同项目确认幂等，不同项目的已确认事实拒绝重分类，测试业务键冲突整体回滚。只确认发生时项目，不推断协议版本或改写实测。在线训练必填量由multi-sport-v2的requiredSessionFields及活动共同决定；骑行可时长或距离，其余活动需时长，历史导入兼容读取不猜补缺失量。

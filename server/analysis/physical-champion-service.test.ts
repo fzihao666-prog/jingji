@@ -437,7 +437,7 @@ describe('明确条件、日期版本及独立项目维度', () => {
       value: 60,
       achievedPercent: 120,
       referenceVersion: 1,
-      calculationVersion: 'physical-reference-v2',
+      calculationVersion: 'physical-display-v3',
     });
     expect(result.appliedReference?.value).toBe(50);
     expect(result.factMeasurementId).toBeGreaterThan(0);

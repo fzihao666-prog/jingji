@@ -140,7 +140,7 @@
       </view>
       <text class="comparison-footnote">同队、同周期参照；差异不代表训练优劣。</text>
     </view>
-    <view class="section-head"><view class="section-head-title">当前项目体能参考</view><view class="section-head-note">实测与已审核参考分开呈现</view></view>
+    <view class="section-head"><view class="section-head-title">冠军参考模型</view><view class="section-head-note">展示对标含估算参考，非正式评分</view></view>
     <view class="card">
       <template wx:if="{{physicalReferenceError}}" is="training-state" data="{{loading, error: physicalReferenceError}}" />
       <view class="notice">{{physicalReferenceNote}}</view>

@@ -379,3 +379,13 @@ describe('已发布训练课填报入口', () => {
     await expect(page.applyRequestedPlan()).rejects.toThrow('训练课已变更');
   });
 });
+
+it('小程序拒绝水上或排球只填距离，骑行距离可提交',async()=>{
+ const dictionary={exports:{}};vm.runInNewContext(readFileSync(new URL('../../data/register-data.js',import.meta.url),'utf8'),{module:dictionary});
+ let definition;const toasts=[];let saves=0;
+ vm.runInNewContext(pageSource,{Page(value){definition=value;},require(path){if(path.includes('register-data'))return dictionary.exports;if(path.includes('utils/date'))return {todayBeijing:()=> '2026-01-01'};return {};},wx:{showToast(value){toasts.push(value.title);}},getApp(){return {globalData:{user:{id:1}}};}});
+ const page={...definition,data:JSON.parse(JSON.stringify(definition.data)),setData(values){Object.assign(this.data,values);},persistDraft(){},clearDraft(){},async loadPage(){},async saveAction(){saves++;return {};}};
+ page.data.isCoach=true;
+ for(const [project,activity] of [['ROWING','on_water'],['VOLLEYBALL','volleyball_technique'],['CYCLING_ROAD','cycling']]){page.configureProject(project);page.data.form={...page.data.form,content:'实际训练',duration:'',distance:'10',activityCode:activity};await page.save();}
+ expect(saves).toBe(1);expect(toasts.filter(title=>title==='请填写有效训练时长')).toHaveLength(2);
+});

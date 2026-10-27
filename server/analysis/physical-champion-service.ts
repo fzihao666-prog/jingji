@@ -264,7 +264,7 @@ export function buildPhysicalChampion(
           referenceId: ref?.id || null,
           referenceVersion: ref?.version || null,
           factMeasurementId: row?.measurementId || null,
-          calculationVersion: 'physical-reference-v2',
+          calculationVersion: 'physical-display-v3',
           appliedReference: ref,
         };
       });
@@ -350,7 +350,7 @@ export function buildPhysicalChampion(
       event: first.event,
       weightClass: first.weightClass,
       ageGroup: first.ageGroup,
-      referenceLevel: first.referenceLabel || '已审核项目参考',
+      referenceLevel: first.referenceLabel || '冠军参考模型',
       references: refs,
       team,
       athletes: results,
@@ -362,7 +362,7 @@ export function buildPhysicalChampion(
     .map((athlete) => ({
       athleteId: athlete.id,
       reason: !effective.length
-        ? '项目参考维度待配置'
+        ? '冠军参考模型维度待配置'
         : !athlete.birthDate && effective.some((ref) => ref.ageGroup === 'adult')
           ? '无法匹配年龄组：出生日期缺失，不假定成人'
           : !athlete.gender
