@@ -97,11 +97,9 @@ export function readPhysicalReferences(db: DatabaseSync, project: string): Physi
     };
   });
 }
-export function isUsablePhysicalReference(ref: PhysicalReference, date: string) {
+export function isDisplayPhysicalReference(ref: PhysicalReference, date: string) {
   return (
-    ref.reviewStatus === 'reviewed' &&
-    ref.sourceType !== 'estimated' &&
-    !['estimated', 'unverified'].includes(ref.sourceNature) &&
+    ref.reviewStatus !== 'disabled' &&
     !!ref.effectiveFrom &&
     ref.effectiveFrom <= date &&
     (!ref.effectiveTo || ref.effectiveTo >= date) &&
@@ -112,6 +110,14 @@ export function isUsablePhysicalReference(ref: PhysicalReference, date: string) 
     ref.measurementCodes.length > 0 &&
     !!ref.measurementUnit &&
     !!ref.protocol
+  );
+}
+export function isUsablePhysicalReference(ref: PhysicalReference, date: string) {
+  return (
+    isDisplayPhysicalReference(ref, date) &&
+    ref.reviewStatus === 'reviewed' &&
+    ref.sourceType !== 'estimated' &&
+    !['estimated', 'unverified'].includes(ref.sourceNature)
   );
 }
 function applies(ref: PhysicalReference, athlete: AthleteRow, date: string) {
@@ -171,7 +177,7 @@ export function buildPhysicalChampion(
   );
   const effective = references.filter(
     (ref) =>
-      isUsablePhysicalReference(
+      isDisplayPhysicalReference(
         ref,
         ref.effectiveFrom && ref.effectiveFrom > from ? ref.effectiveFrom : from
       ) &&
@@ -207,7 +213,7 @@ export function buildPhysicalChampion(
         const row = rows.find((item) =>
           all.some(
             (ref) =>
-              isUsablePhysicalReference(ref, item.date) &&
+              isDisplayPhysicalReference(ref, item.date) &&
               applies(ref, athlete, item.date) &&
               ref.measurementCodes.includes(item.code) &&
               item.unit === ref.measurementUnit &&
@@ -217,7 +223,7 @@ export function buildPhysicalChampion(
         const compatible = row
           ? all.filter(
               (ref) =>
-                isUsablePhysicalReference(ref, row.date) &&
+                isDisplayPhysicalReference(ref, row.date) &&
                 applies(ref, athlete, row.date) &&
                 ref.measurementCodes.includes(row.code) &&
                 row.unit === ref.measurementUnit &&
@@ -244,7 +250,7 @@ export function buildPhysicalChampion(
           best.length > 1
             ? '同优先级标准冲突，暂停评价'
             : !ref
-              ? '无匹配日期、人群、协议版本、测试条件、侧别和单位的已审核标准'
+              ? '无匹配日期、人群、协议版本、测试条件、侧别和单位的冠军参考'
               : value === null
                 ? '缺少同协议实测或同课次体重'
                 : null;
@@ -252,7 +258,7 @@ export function buildPhysicalChampion(
           key: displayRef.key,
           ...(ref
             ? physicalComparison(value, ref)
-            : { value, achievedPercent: null, difference: null }),
+            : { value, achievedPercent: null, difference: null, scoringEligible: false }),
           testDate: row?.date || null,
           pendingReason,
           referenceId: ref?.id || null,
@@ -267,7 +273,13 @@ export function buildPhysicalChampion(
         athleteName: athlete.name,
         dimensions,
         coverage: dimensions.filter((item) => item.achievedPercent !== null).length,
-        score: null,
+        score:
+          dimensions.length && dimensions.every((item) => item.achievedPercent !== null)
+            ? mean(dimensions.map((item) => item.achievedPercent!))
+            : null,
+        scoringEligible:
+          dimensions.length > 0 &&
+          dimensions.every((item) => item.achievedPercent !== null && item.scoringEligible),
       };
     };
     const results = members.map((athlete) => resultAt(athlete, to));
@@ -276,22 +288,61 @@ export function buildPhysicalChampion(
         const result = athlete.dimensions.find((item) => item.key === ref.key);
         return result?.value == null ? [] : [result.value];
       });
-      // 人群或参考版本不同不能把团队均值直接套入某一参考。
+      const entries = results.flatMap((athlete) => {
+        const result = athlete.dimensions.find((item) => item.key === ref.key);
+        return result?.achievedPercent != null ? [result] : [];
+      });
+      // 只汇总已逐事实匹配的达成度；不同参考版本不把原始均值再套入某一个阈值。
       return {
         key: ref.key,
         value: mean(values),
-        achievedPercent: null,
-        difference: null,
+        achievedPercent: mean(entries.map((item) => item.achievedPercent!)),
+        difference:
+          new Set(entries.map((item) => item.referenceId)).size === 1
+            ? mean(entries.flatMap((item) => (item.difference == null ? [] : [item.difference])))
+            : null,
+        scoringEligible: entries.length > 0 && entries.every((item) => item.scoringEligible),
         testDate: null,
-        sampleCount: values.length,
-        pendingReason: '团队均值仅展示实测；未配置已审核综合方法',
+        sampleCount: entries.length,
+        pendingReason: entries.length ? null : '缺少同条件有效实测',
         referenceId: null,
         referenceVersion: null,
         factMeasurementId: null,
-        calculationVersion: 'physical-reference-v2',
+        calculationVersion: 'physical-display-v3',
         appliedReference: null,
       };
     });
+    const trend: PhysicalChampionPayload['groups'][number]['trend'] = [];
+    const dates = [
+      ...new Set(
+        measurements
+          .filter((row) => members.some((member) => member.id === row.athleteId))
+          .map((row) => row.date)
+      ),
+    ].sort();
+    for (const date of dates) {
+      const daily = members.map((athlete) => resultAt(athlete, date));
+      for (const result of daily)
+        if (result.score !== null)
+          trend.push({
+            date,
+            athleteId: result.athleteId,
+            score: result.score,
+            scoringEligible: result.scoringEligible,
+            coverage: result.coverage,
+            sampleCount: 1,
+          });
+      const complete = daily.filter((item) => item.score !== null);
+      if (complete.length)
+        trend.push({
+          date,
+          athleteId: null,
+          score: mean(complete.map((item) => item.score!)),
+          scoringEligible: complete.every((item) => item.scoringEligible),
+          coverage: refs.length,
+          sampleCount: complete.length,
+        });
+    }
     return {
       id,
       label: `${first.gender} · ${first.event} · ${first.ageGroup}`,
@@ -303,7 +354,7 @@ export function buildPhysicalChampion(
       references: refs,
       team,
       athletes: results,
-      trend: [],
+      trend,
     };
   });
   const athletePendingReasons = athletes
@@ -333,7 +384,7 @@ export function buildPhysicalChampion(
     managementReferences: canEdit ? references : [],
     measurements,
     pendingReason: effective.length
-      ? '未配置已审核综合方法，不生成综合冠军分或排名；缺项不补零、不重配权重'
-      : '当前项目暂无有效已审核参考维度；保留实测与同协议记录',
+      ? '冠军参考模型展示逐维与完整维度达成度；含估算参考不参与正式评分，不显示排名；缺项不补零'
+      : '当前项目暂无匹配的冠军参考维度；保留实测与同协议记录',
   };
 }

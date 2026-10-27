@@ -1,3 +1,4 @@
+import { physicalReferenceDraftSchema } from '../../shared/physical-champion.ts';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -112,7 +113,7 @@ describe('冠军参考值兼容迁移', () => {
         .all()
     ).toEqual([{ value_num: 2.3, source_type: 'measured', active: 0 }]);
     expect(db.prepare('SELECT count(*) AS count FROM reference_changes').get()).toEqual({
-      count: 2,
+      count: 50,
     });
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
@@ -235,7 +236,7 @@ function managerSetup() {
   return db;
 }
 describe('参考版本维护边界', () => {
-  it('旧标准和估算默认草稿，六项目约束兼容且来源未伪造审核', () => {
+  it('历史估算保留草稿来源，新保存即生效', () => {
     const db = managerSetup();
     expect(
       db
@@ -248,15 +249,25 @@ describe('参考版本维护边界', () => {
     expect(result.id).toBeGreaterThan(0);
     expect(
       db.prepare('SELECT review_status FROM radar_reference_values WHERE id=?').get(result.id)
-    ).toEqual({ review_status: 'draft' });
+    ).toEqual({ review_status: 'reviewed' });
   });
-  it('新修订保留原值，过期revision不能修改或审核，旧版本需显式停用', () => {
+  it('保存即生效，冲突保存回滚，停用幂等且旧客户端启用不复活', () => {
     const db = managerSetup();
     const first = savePhysicalReferenceDraft(db, actor, draft);
-    reviewPhysicalReference(db, actor, first.id, { expectedRevision: 0, status: 'reviewed' });
     expect(() =>
-      reviewPhysicalReference(db, actor, first.id, { expectedRevision: 0, status: 'disabled' })
-    ).toThrow('更新');
+      savePhysicalReferenceDraft(
+        db,
+        actor,
+        { ...draft, value: 60 },
+        { id: first.id, expectedRevision: 0 }
+      )
+    ).toThrow('重叠');
+    expect(
+      db.prepare('SELECT revision FROM radar_reference_values WHERE id=?').get(first.id)
+    ).toEqual({ revision: 0 });
+    reviewPhysicalReference(db, actor, first.id, { expectedRevision: 0, status: 'disabled' });
+    reviewPhysicalReference(db, actor, first.id, { expectedRevision: 0, status: 'disabled' });
+    reviewPhysicalReference(db, actor, first.id, { expectedRevision: 0, status: 'reviewed' });
     const next = savePhysicalReferenceDraft(
       db,
       actor,
@@ -265,19 +276,15 @@ describe('参考版本维护边界', () => {
     );
     expect(
       db
-        .prepare('SELECT value_num,version,review_status FROM radar_reference_values WHERE id=?')
+        .prepare('SELECT review_status,value_num FROM radar_reference_values WHERE id=?')
         .get(first.id)
-    ).toEqual({ value_num: 50, version: 1, review_status: 'reviewed' });
+    ).toEqual({ review_status: 'disabled', value_num: 50 });
+    expect(
+      db.prepare('SELECT review_status FROM radar_reference_values WHERE id=?').get(next.id)
+    ).toEqual({ review_status: 'reviewed' });
     expect(() =>
       savePhysicalReferenceDraft(db, actor, draft, { id: first.id, expectedRevision: 1 })
     ).toThrow('更新');
-    expect(() =>
-      reviewPhysicalReference(db, actor, next.id, { expectedRevision: 0, status: 'reviewed' })
-    ).toThrow('重叠');
-    reviewPhysicalReference(db, actor, first.id, { expectedRevision: 2, status: 'disabled' });
-    expect(() =>
-      reviewPhysicalReference(db, actor, next.id, { expectedRevision: 0, status: 'reviewed' })
-    ).not.toThrow();
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
   it('只允许原全国全部项目队伍管理权限，拒绝越权和未知字段且无副作用', () => {
@@ -296,16 +303,16 @@ describe('参考版本维护边界', () => {
     expect(() =>
       savePhysicalReferenceDraft(db, actor, { ...draft, reviewStatus: 'reviewed' })
     ).toThrow('无效');
-    expect(() => savePhysicalReferenceDraft(db, actor, { ...draft, sourceNature: 'team' })).toThrow(
-      '无效'
+    expect(physicalReferenceDraftSchema.safeParse({ ...draft, sourceNature: 'team' }).success).toBe(
+      true
     );
-    expect(() =>
-      savePhysicalReferenceDraft(db, actor, {
+    expect(
+      physicalReferenceDraftSchema.safeParse({
         ...draft,
         sourceNature: 'expert',
-        referenceLabel: '专家冠军金牌',
-      })
-    ).toThrow('无效');
+        referenceLabel: '冠军参考',
+      }).success
+    ).toBe(true);
     expect(() =>
       savePhysicalReferenceDraft(db, actor, { ...draft, effectiveTo: '2025-01-01' })
     ).toThrow('无效');
@@ -313,11 +320,11 @@ describe('参考版本维护边界', () => {
       before
     );
   });
-  it('不可审核历史缺协议版本，版本失败回滚无修改，审核估算仍标明估算', () => {
+  it('旧启用请求无操作，保存估算仍保留估算来源', () => {
     const db = managerSetup();
     expect(() =>
       reviewPhysicalReference(db, actor, 7, { expectedRevision: 0, status: 'reviewed' })
-    ).toThrow('补全');
+    ).not.toThrow();
     const estimated = savePhysicalReferenceDraft(db, actor, {
       ...draft,
       sourceType: 'estimated',
@@ -378,21 +385,19 @@ it('不同协议版本、条件、侧别可分别配置审核，同条件仍阻�
       side: context.side,
     });
   }
-  const conflict = savePhysicalReferenceDraft(db, actor, { ...draft, ...values[0] });
-  expect(() =>
-    reviewPhysicalReference(db, actor, conflict.id, { expectedRevision: 0, status: 'reviewed' })
-  ).toThrow('重叠');
+  expect(() => savePhysicalReferenceDraft(db, actor, { ...draft, ...values[0] })).toThrow('重叠');
 });
 
 it('新修订保留已配置协议版本、测试条件和侧别，并保全旧版本', () => {
   const db = managerSetup();
   const configured = { ...draft, protocolVersion: 'CMJ-v2', testContext: 'indoor', side: 'right' };
   const first = savePhysicalReferenceDraft(db, actor, configured);
+  reviewPhysicalReference(db, actor, first.id, { expectedRevision: 0, status: 'disabled' });
   const next = savePhysicalReferenceDraft(
     db,
     actor,
     { ...configured, value: 60 },
-    { id: first.id, expectedRevision: 0 }
+    { id: first.id, expectedRevision: 1 }
   );
   for (const id of [first.id, next.id]) {
     expect(
@@ -401,4 +406,22 @@ it('新修订保留已配置协议版本、测试条件和侧别，并保全旧�
         .get(id)
     ).toEqual({ protocol_version: 'CMJ-v2', test_context: 'indoor', side: 'right' });
   }
+});
+
+it('48项估算基线补最小展示元数据且重复执行无改写', () => {
+  const db = managerSetup();
+  db.exec(
+    "UPDATE radar_reference_values SET protocol='',effective_from=NULL WHERE source_type='estimated'"
+  );
+  initializePhysicalChampionReferences(db);
+  expect(
+    db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM radar_reference_values WHERE source_type='estimated' AND protocol<>'' AND effective_from IS NOT NULL AND source_nature='estimated'"
+      )
+      .get()
+  ).toEqual({ n: 48 });
+  const before = db.prepare('SELECT * FROM radar_reference_values').all();
+  initializePhysicalChampionReferences(db);
+  expect(db.prepare('SELECT * FROM radar_reference_values').all()).toEqual(before);
 });

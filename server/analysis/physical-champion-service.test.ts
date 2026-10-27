@@ -150,7 +150,7 @@ describe('体能冠军分析', () => {
     expect(male.team.find((dimension) => dimension.key === 'vertical_jump')).toMatchObject({
       value: 0,
       sampleCount: 1,
-      achievedPercent: null,
+      achievedPercent: 0,
     });
     expect(
       male.athletes.find((athlete) => athlete.athleteId === 6)?.dimensions[0].value
@@ -197,7 +197,7 @@ describe('体能冠军分析', () => {
         ?.team.find((dimension) => dimension.key === 'relative_squat')?.value
     ).toBe(1.6);
   });
-  it('无已审核综合方法不生成评分趋势，周期内实测保留真实变化', () => {
+  it('完整维度恢复展示趋势，按同条件实测计算达成度', () => {
     const { db, measure, build } = setup();
     PHYSICAL_CHAMPION_DIMENSIONS.filter((dimension) => dimension.key !== 'vertical_jump').forEach(
       (dimension) => {
@@ -221,10 +221,10 @@ describe('体能冠军分析', () => {
     const trend = build()
       .groups.find((group) => group.gender === '男')!
       .trend.filter((point) => point.athleteId === 1);
-    expect(trend).toEqual([]);
-    expect(build().groups[0].athletes.every((item) => item.score === null)).toBe(true);
+    expect(trend.map((point) => point.score)).toEqual([97.5, 102.5]);
+    expect(trend.every((point) => point.coverage === 8)).toBe(true);
   });
-  it('完整与稀疏样本均不自动生成综合分或排名', () => {
+  it('完整维度提供达成度，稀疏样本不补零或生成排名', () => {
     const { db, scope, measure } = setup();
     db.exec("UPDATE athletes SET gender='男' WHERE id=2");
     PHYSICAL_CHAMPION_DIMENSIONS.forEach((dimension) => {
@@ -244,7 +244,8 @@ describe('体能冠军分析', () => {
     const athletes = buildPhysicalChampion(db, scope).groups.find(
       (group) => group.gender === '男'
     )!.athletes;
-    expect(athletes[0]).toMatchObject({ athleteId: 1, coverage: 8, score: null });
+    expect(athletes[0]).toMatchObject({ athleteId: 1, coverage: 8, scoringEligible: true });
+    expect(athletes[0].score).not.toBeNull();
     expect(athletes[1]).toMatchObject({ athleteId: 2, coverage: 1, score: null });
   });
 });
@@ -316,11 +317,13 @@ describe('用户授权补充记录的成人参考假定', () => {
 });
 
 describe('参考审核与事实归属', () => {
-  it('估算与草稿均不评价但保留真实零与来源', () => {
+  it('估算与草稿提供展示对标，保留真实零与来源', () => {
     const { db, measure, build } = setup();
     measure(1, 'vertical_jump_cm', 0, 'cm', 'CMJ双手叉腰');
     db.exec("UPDATE radar_reference_values SET review_status='draft'");
-    expect(build().groups).toEqual([]);
+    expect(
+      build().groups[0].athletes[0].dimensions.find((item) => item.key === 'vertical_jump')
+    ).toMatchObject({ achievedPercent: 0, scoringEligible: false });
     expect(build().measurements[0].value).toBe(0);
     expect(
       buildPhysicalChampion(db, {
@@ -334,7 +337,9 @@ describe('参考审核与事实归属', () => {
     db.exec(
       "UPDATE radar_reference_values SET review_status='reviewed',source_type='estimated',source_nature='estimated'"
     );
-    expect(build().groups).toEqual([]);
+    expect(
+      build().groups[0].athletes[0].dimensions.find((item) => item.key === 'vertical_jump')
+    ).toMatchObject({ achievedPercent: 0, scoringEligible: false });
   });
   it('错误归属与待核实事实不得被引用', () => {
     const { db, measure, build } = setup();
@@ -462,7 +467,7 @@ describe('明确条件、日期版本及独立项目维度', () => {
     ).toBe(120);
     expect(volley.groups[0].references.map((ref) => ref.key)).toEqual(['volleyball_jump']);
     expect(volley.groups[0].athletes[0].dimensions[0].achievedPercent).toBe(150);
-    expect(volley.groups[0].athletes[0].score).toBeNull();
+    expect(volley.groups[0].athletes[0].score).toBe(150);
     expect(volley.groups[0].referenceLevel).toBe('队内纵跳参考');
   });
 });
@@ -557,3 +562,32 @@ it.each(['synthetic_30d_current_v1', 'simulation_legacy'])(
     ).toBeNull();
   }
 );
+
+it('估算参考恢复完整维度展示性达成度、团队雷达与趋势，停用仍隔离', () => {
+  const { db, measure, build } = setup();
+  db.exec(
+    "UPDATE radar_reference_values SET source_type='estimated',source_nature='estimated',review_status='draft'"
+  );
+  for (const dimension of PHYSICAL_CHAMPION_DIMENSIONS) {
+    const session = measure(
+      1,
+      dimension.codes[0],
+      50,
+      dimension.measurementUnit,
+      dimension.protocol
+    );
+    if (dimension.weightRelative)
+      db.prepare(
+        "INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit,quality,is_demo,source) VALUES(?,'weight_kg',1,'kg','valid',0,'manual')"
+      ).run(session);
+  }
+  const group = build().groups.find((item) => item.gender === '男')!;
+  expect(group.athletes[0]).toMatchObject({ coverage: 8, scoringEligible: false });
+  expect(group.athletes[0].score).not.toBeNull();
+  expect(group.team.some((item) => item.achievedPercent !== null)).toBe(true);
+  expect(group.trend.find((item) => item.athleteId === 1)).toMatchObject({
+    scoringEligible: false,
+  });
+  db.exec("UPDATE radar_reference_values SET review_status='disabled'");
+  expect(build().groups).toEqual([]);
+});

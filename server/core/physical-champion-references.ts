@@ -191,7 +191,7 @@ export function initializePhysicalChampionReferences(db: DatabaseSync) {
   );
   const existing =
     db.prepare(`SELECT 1 FROM radar_reference_values WHERE project IN (?, ?) AND radar_kind = 'physical'
-    AND metric_key = ? AND gender = ? AND trim(protocol) <> '' AND boat_class = '' AND event_group = 'open' AND weight_class = 'open' AND age_group = 'adult' LIMIT 1`);
+    AND metric_key = ? AND gender = ? AND (trim(protocol) <> '' OR (source_type='estimated' AND dimension_version='legacy-unreviewed')) AND boat_class = '' AND event_group = 'open' AND weight_class = 'open' AND age_group = 'adult' LIMIT 1`);
   const insertValue = db.prepare(`INSERT INTO radar_reference_values
     (source_id, project, radar_kind, metric_key, gender, boat_class, applicability, value_num, unit, source_type, protocol, event_group, weight_class, age_group, direction, source_nature, measurement_codes, measurement_unit, weight_relative, dimension_version)
     VALUES (?, ?, 'physical', ?, ?, '', ?, ?, ?, 'estimated', ?, 'open', 'open', 'adult', ?, 'estimated', ?, ?, ?, 'legacy-unreviewed')`);
@@ -241,6 +241,16 @@ export function initializePhysicalChampionReferences(db: DatabaseSync) {
         });
       }
     }
+    for (const dimension of PHYSICAL_CHAMPION_DIMENSIONS) {
+      db.prepare(
+        `UPDATE radar_reference_values SET
+        protocol=CASE WHEN trim(protocol)='' THEN ? ELSE protocol END,
+        protocol_version=COALESCE(protocol_version,''), test_context=COALESCE(test_context,''),
+        effective_from=COALESCE(effective_from, (SELECT printf('%04d-01-01',source_year) FROM radar_reference_sources WHERE id=source_id)),
+        source_nature='estimated'
+        WHERE radar_kind='physical' AND metric_key=? AND dimension_version='legacy-unreviewed' AND source_type='estimated' AND (trim(protocol)='' OR protocol_version IS NULL OR test_context IS NULL OR effective_from IS NULL OR source_nature<>'estimated')`
+      ).run(dimension.protocol, dimension.key);
+    }
     db.exec('COMMIT');
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');
@@ -265,6 +275,54 @@ type ReferenceActor = {
 function authorizeReference(actor: ReferenceActor) {
   if (!canManageGlobalPhysicalReferences(actor.role, actor.permissions))
     throw new PhysicalReferenceError(403, '维护全局标准需要全国、全部项目及全部队伍管理权限。');
+}
+function assertNoReferenceOverlap(
+  db: DatabaseSync,
+  row: Record<string, string | number | null>,
+  id: number
+) {
+  const fields = [
+    'gender',
+    'event_group',
+    'weight_class',
+    'age_group',
+    'position',
+    'reference_level',
+  ];
+  const rank = (item: Record<string, string | number | null>) =>
+    fields.filter((field) => item[field] !== 'open').length;
+  const others = db
+    .prepare(
+      `SELECT * FROM radar_reference_values WHERE id<>? AND project IN (?,?) AND radar_kind='physical' AND metric_key=?
+        AND review_status='reviewed' AND active=1 AND source_id IN (SELECT id FROM radar_reference_sources WHERE active=1)`
+    )
+    .all(
+      id,
+      row.project,
+      row.project === 'CANOE_SPRINT'
+        ? 'CANOE'
+        : row.project === 'CANOE_SLALOM'
+          ? 'SLALOM'
+          : row.project,
+      row.metric_key
+    ) as Array<Record<string, string | number | null>>;
+  if (
+    others.some(
+      (other) =>
+        other.protocol === row.protocol &&
+        other.protocol_version === row.protocol_version &&
+        other.test_context === row.test_context &&
+        other.side === row.side &&
+        other.unit === row.unit &&
+        rank(other) === rank(row) &&
+        fields.every(
+          (field) => other[field] === 'open' || row[field] === 'open' || other[field] === row[field]
+        ) &&
+        String(other.effective_from || '') <= String(row.effective_to || '9999-12-31') &&
+        String(row.effective_from || '') <= String(other.effective_to || '9999-12-31')
+    )
+  )
+    throw new PhysicalReferenceError(409, '存在同优先级有效期重叠标准，请先停用旧版本。');
 }
 export function savePhysicalReferenceDraft(
   db: DatabaseSync,
@@ -315,7 +373,7 @@ export function savePhysicalReferenceDraft(
     const sourceProtocol = draft.protocol;
     const sourceYear = new Date().getUTCFullYear();
     db.prepare(
-      `INSERT OR IGNORE INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,?,'',?,?,'待审核')`
+      `INSERT OR IGNORE INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,?,'',?,?,'保存生效')`
     ).run(draft.project, draft.sourceNote, sourceYear, sourceProtocol);
     const source = db
       .prepare(
@@ -327,7 +385,7 @@ export function savePhysicalReferenceDraft(
         `INSERT INTO radar_reference_values(source_id,project,radar_kind,metric_key,gender,boat_class,applicability,value_num,unit,
       source_type,protocol,event_group,weight_class,age_group,direction,review_status,source_nature,version,parent_id,reference_root_id,effective_from,effective_to,
       position,reference_level,reference_label,dimension_version,measurement_codes,measurement_unit,weight_relative,protocol_version,test_context,side)
-      VALUES(?,?,'physical',?,?,'',?,?,?, ?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      VALUES(?,?,'physical',?,?,'',?,?,?, ?,?,?,?,?,?,'reviewed',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(
         source.id,
@@ -361,11 +419,15 @@ export function savePhysicalReferenceDraft(
         draft.side
       );
     const id = Number(result.lastInsertRowid);
+    const activeRow = db
+      .prepare('SELECT * FROM radar_reference_values WHERE id=?')
+      .get(id) as Record<string, string | number | null>;
+    assertNoReferenceOverlap(db, activeRow, id);
     db.prepare(
       "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,detail) VALUES(?,'CREATE_PHYSICAL_REFERENCE_VERSION','radar_reference_values',?,?)"
     ).run(actor.id, id, JSON.stringify({ parentId: previous?.id || null, version }));
     db.exec('COMMIT');
-    return { id, version, message: '已创建新草稿版本，审核启用后生效。' };
+    return { id, version, message: '冠军参考版本已保存并生效；估算来源仅用于展示。' };
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');
     throw error;
@@ -391,88 +453,18 @@ export function reviewPhysicalReference(
       .prepare("SELECT * FROM radar_reference_values WHERE id=? AND radar_kind='physical'")
       .get(id) as Record<string, string | number | null> | undefined;
     if (!row) throw new PhysicalReferenceError(404, '参考版本不存在。');
+    // 兼容旧客户端的启用调用：不再审核，也不重新启用停用版本。
+    if (parsed.data.status === 'reviewed' || row.review_status === 'disabled') {
+      db.exec('COMMIT');
+      return {
+        message:
+          row.review_status === 'disabled'
+            ? '参考版本已停用，请另存新版本。'
+            : '保存即生效，无需另行审核。',
+      };
+    }
     if (row.revision !== parsed.data.expectedRevision)
       throw new PhysicalReferenceError(409, '参考版本已更新，请刷新。');
-    if (parsed.data.status === 'reviewed') {
-      const source = db
-        .prepare('SELECT name,active FROM radar_reference_sources WHERE id=?')
-        .get(row.source_id) as { name: string; active: number } | undefined;
-      const valid = physicalReferenceDraftSchema.safeParse({
-        project: row.project,
-        key: row.metric_key,
-        referenceLabel: row.reference_label,
-        value: row.value_num,
-        unit: row.unit,
-        protocol: row.protocol,
-        protocolVersion: row.protocol_version,
-        testContext: row.test_context,
-        side: row.side,
-        direction: row.direction,
-        sourceType: row.source_type,
-        sourceNature: row.source_nature,
-        sourceNote: source?.name,
-        gender: row.gender,
-        event: row.event_group,
-        weightClass: row.weight_class,
-        ageGroup: row.age_group,
-        position: row.position,
-        referenceLevel: row.reference_level,
-        effectiveFrom: row.effective_from,
-        effectiveTo: row.effective_to,
-        dimensionVersion: row.dimension_version,
-        measurementCodes: JSON.parse(String(row.measurement_codes)),
-        measurementUnit: row.measurement_unit,
-        weightRelative: row.weight_relative === 1,
-      });
-      if (!valid.success || !source?.active || !row.active)
-        throw new PhysicalReferenceError(
-          400,
-          '请创建并补全来源、维度、日期及适用条件的新版本后审核。'
-        );
-      const fields = [
-        'gender',
-        'event_group',
-        'weight_class',
-        'age_group',
-        'position',
-        'reference_level',
-      ];
-      const rank = (item: Record<string, string | number | null>) =>
-        fields.filter((field) => item[field] !== 'open').length;
-      const others = db
-        .prepare(
-          `SELECT * FROM radar_reference_values WHERE id<>? AND project IN (?,?) AND radar_kind='physical' AND metric_key=?
-        AND review_status='reviewed' AND active=1 AND source_id IN (SELECT id FROM radar_reference_sources WHERE active=1)`
-        )
-        .all(
-          id,
-          row.project,
-          row.project === 'CANOE_SPRINT'
-            ? 'CANOE'
-            : row.project === 'CANOE_SLALOM'
-              ? 'SLALOM'
-              : row.project,
-          row.metric_key
-        ) as Array<Record<string, string | number | null>>;
-      if (
-        others.some(
-          (other) =>
-            other.protocol === row.protocol &&
-            other.protocol_version === row.protocol_version &&
-            other.test_context === row.test_context &&
-            other.side === row.side &&
-            other.unit === row.unit &&
-            rank(other) === rank(row) &&
-            fields.every(
-              (field) =>
-                other[field] === 'open' || row[field] === 'open' || other[field] === row[field]
-            ) &&
-            String(other.effective_from || '') <= String(row.effective_to || '9999-12-31') &&
-            String(row.effective_from || '') <= String(other.effective_to || '9999-12-31')
-        )
-      )
-        throw new PhysicalReferenceError(409, '存在同优先级有效期重叠标准，请先停用旧版本。');
-    }
     db.prepare(
       `UPDATE radar_reference_values SET review_status=?,revision=revision+1,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP WHERE id=?`
     ).run(parsed.data.status, actor.id, id);
@@ -481,10 +473,7 @@ export function reviewPhysicalReference(
     ).run(actor.id, id, JSON.stringify(parsed.data));
     db.exec('COMMIT');
     return {
-      message:
-        parsed.data.status === 'reviewed'
-          ? '参考版本已审核启用；估算仍不参与正式评分。'
-          : '参考版本已停用。',
+      message: '参考版本已停用。',
     };
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');

@@ -134,7 +134,7 @@ function ReferenceEditor({
   }
   const fields = [
     ['key', '指标标识', reference?.key || ''],
-    ['referenceLabel', '参考名称（专家/队内须注明）', reference?.referenceLabel || ''],
+    ['referenceLabel', '参考名称', reference?.referenceLabel || ''],
     ['value', '参考值', String(reference?.value || '')],
     ['unit', '比较单位', reference?.unit || ''],
     ['protocol', '完整测试协议', reference?.protocol || ''],
@@ -222,7 +222,7 @@ function ReferenceEditor({
       <summary>
         {reference
           ? `版本 ${reference.version} · ${reviewStatusLabel[reference.reviewStatus]} · ${reference.referenceLabel || reference.key}`
-          : '创建项目参考草稿'}
+          : '创建冠军参考'}
       </summary>
       {reference && (
         <p>
@@ -269,17 +269,10 @@ function ReferenceEditor({
           使用同课次体重换算相对值
         </label>
         <button type="submit" className="dashboard-action-button" disabled={saving}>
-          {saving ? '保存中…' : '保存为新草稿版本'}
+          {saving ? '保存中…' : '保存并生效'}
         </button>
         {reference && (
           <>
-            <button
-              type="button"
-              disabled={saving || reference.reviewStatus === 'reviewed'}
-              onClick={() => review('reviewed')}
-            >
-              审核并启用
-            </button>
             <button
               type="button"
               disabled={saving || reference.reviewStatus === 'disabled'}
@@ -464,7 +457,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
             ))}
           {payload.canEdit && (
             <section aria-label="项目参考管理">
-              <h3>参考版本与审核</h3>
+              <h3>参考版本管理</h3>
               <ReferenceEditor
                 project={project}
                 onSaved={() => setRevision((value) => value + 1)}
@@ -550,12 +543,15 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
           )}
           <div className="physical-champion-section-heading">
             <h3>项目参考指标</h3>
-            <span>参考值 · 当前表现</span>
+            <span>参考值 · 当前表现；估算参考，不参与正式评分</span>
           </div>
           <section aria-label="项目参考指标" className="physical-champion-reference">
             {rows.map(({ reference, team, personal: personalResult }) => (
               <article key={reference.id}>
-                <h3>{reference.label}</h3>
+                <h3>
+                  {reference.label}
+                  {reference.sourceType === 'estimated' && <small>估算</small>}
+                </h3>
                 <p>
                   版本 {reference.version} · {sourceNatureLabel[reference.sourceNature]} ·{' '}
                   {reference.sourceNote} · {reference.effectiveFrom} 至{' '}
@@ -577,7 +573,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
           <section className="physical-champion-section">
             <h3>项目参考雷达图</h3>
             <p className="physical-champion-note">
-              已审核项目参考为 100%；团队仅包含当前分组的有效测试。超过 100%
+              冠军参考为 100%（估算仅用于展示）；团队仅包含当前分组的有效测试。超过 100%
               的成绩保留真实达成度，详细数值见下表。
             </p>
             <div className="physical-champion-chart" aria-hidden="true">
@@ -620,6 +616,11 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
             </div>
           </section>
           <section className="physical-champion-section">
+            <p>
+              {personal?.score != null
+                ? `${personal.scoringEligible ? '完整维度达成度' : '展示性达成度'}：${format(personal.score)}%`
+                : '完整维度待采集'}
+            </p>
             <h3>参考差距分析</h3>
             <div
               className="physical-champion-table-wrap"
@@ -671,6 +672,9 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
                         <td>
                           {format(current?.achievedPercent)}
                           {current?.achievedPercent != null && '%'}
+                          {current?.achievedPercent != null && !current.scoringEligible && (
+                            <small>估算或展示参考，不参与正式评分</small>
+                          )}
                         </td>
                         <td>{format(row.team?.sampleCount)}</td>
                       </tr>
@@ -681,7 +685,8 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
             </div>
           </section>
           <section className="physical-champion-section">
-            <h3>参考达成度趋势</h3>
+            <h3>展示性达成度趋势</h3>
+            <p>展示性达成度趋势（含估算参考，不构成正式评分）</p>
             <p className="physical-champion-note">
               展示本周期内 {scopeName} 的综合达成度；仅完整维度参与，按截至当日最近有效测试计算。
             </p>

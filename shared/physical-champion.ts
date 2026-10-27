@@ -122,6 +122,7 @@ const resultSchema = z.object({
   key: z.string(),
   value: nullableNumber,
   achievedPercent: nullableNumber,
+  scoringEligible: z.boolean().default(false),
   difference: nullableNumber,
   testDate: z.string().nullable(),
   pendingReason: z.string().nullable(),
@@ -135,6 +136,7 @@ const athleteSchema = z.object({
   athleteId: z.number(),
   athleteName: z.string(),
   score: nullableNumber,
+  scoringEligible: z.boolean().default(false),
   coverage: z.number(),
   dimensions: z.array(resultSchema),
 });
@@ -178,6 +180,7 @@ export const physicalChampionPayloadSchema = z.object({
         z.object({
           date: z.string(),
           score: nullableNumber,
+          scoringEligible: z.boolean().default(false),
           sampleCount: z.number(),
           athleteId: z.number().nullable(),
           coverage: z.number(),
@@ -190,16 +193,16 @@ export type PhysicalChampionPayload = z.infer<typeof physicalChampionPayloadSche
 export type PhysicalReference = z.infer<typeof physicalReferenceSchema>;
 export type PhysicalAthleteResult = z.infer<typeof athleteSchema>;
 export function physicalComparison(value: number | null, reference: PhysicalReference) {
-  if (
-    reference.reviewStatus !== 'reviewed' ||
-    reference.sourceNature === 'estimated' ||
-    reference.sourceType === 'estimated' ||
-    reference.sourceNature === 'unverified'
-  )
-    return { value, achievedPercent: null, difference: null };
+  const scoringEligible =
+    reference.reviewStatus === 'reviewed' &&
+    reference.sourceType !== 'estimated' &&
+    !['estimated', 'unverified'].includes(reference.sourceNature);
+  if (reference.reviewStatus === 'disabled')
+    return { value, achievedPercent: null, difference: null, scoringEligible: false };
   const comparison = buildRadarComparison(reference.direction, value, reference.value);
   return {
     value,
+    scoringEligible,
     achievedPercent: comparison.achievedPercent,
     difference:
       comparison.comparable && value !== null
@@ -253,18 +256,6 @@ export const physicalReferenceDraftSchema = z
   .refine((value) => !value.effectiveTo || value.effectiveFrom <= value.effectiveTo, {
     message: '有效日期无效',
   })
-  .refine((value) => value.sourceNature !== 'team' || /队内/.test(value.referenceLabel), {
-    message: '队内参考须明确标注',
-  })
-  .refine((value) => value.sourceNature !== 'expert' || /专家/.test(value.referenceLabel), {
-    message: '专家参考须明确标注',
-  })
-  .refine(
-    (value) =>
-      !['expert', 'team'].includes(value.sourceNature) ||
-      !/(金牌|冠军|官方)/.test(value.referenceLabel),
-    { message: '专家和队内参考不得冒充官方冠军标准' }
-  )
   .refine(
     (value) =>
       value.weightRelative

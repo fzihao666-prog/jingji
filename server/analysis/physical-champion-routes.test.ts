@@ -124,37 +124,36 @@ describe('专业参考HTTP授权与版本流程', () => {
       (await call('/api/physical-champion?project=UNKNOWN&from=2026-01-01&to=2026-01-31')).status
     ).toBe(400);
   });
-  it('创建、审核、修订、冲突拒绝、停用及重新启用保留旧值', async () => {
+  it('一次保存生效，停用后方可替换，兼容启用请求不复活旧版本', async () => {
     expect(
       (await call('/api/physical-champion/references', 'POST', { ...draft, status: 'reviewed' }))
         .status
     ).toBe(400);
-    const before = (
-      db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get() as { count: number }
-    ).count;
-    const create = await call('/api/physical-champion/references', 'POST', draft);
-    expect(create.status).toBe(200);
+    expect((await call('/api/physical-champion/references', 'POST', draft)).status).toBe(200);
     const first = db
       .prepare(
         "SELECT id FROM radar_reference_values WHERE project='VOLLEYBALL' ORDER BY id DESC LIMIT 1"
       )
       .get() as { id: number };
     expect(
-      (
-        await call(`/api/physical-champion/references/${first.id}/review`, 'POST', {
-          expectedRevision: 0,
-          status: 'reviewed',
-        })
-      ).status
-    ).toBe(200);
+      db.prepare('SELECT review_status FROM radar_reference_values WHERE id=?').get(first.id)
+    ).toEqual({ review_status: 'reviewed' });
     expect(
       (
         await call(`/api/physical-champion/references/${first.id}`, 'PUT', {
           expectedRevision: 0,
-          draft,
+          draft: { ...draft, value: 60 },
         })
       ).status
     ).toBe(409);
+    expect(
+      (
+        await call(`/api/physical-champion/references/${first.id}/review`, 'POST', {
+          expectedRevision: 0,
+          status: 'disabled',
+        })
+      ).status
+    ).toBe(200);
     expect(
       (
         await call(`/api/physical-champion/references/${first.id}`, 'PUT', {
@@ -163,41 +162,18 @@ describe('专业参考HTTP授权与版本流程', () => {
         })
       ).status
     ).toBe(200);
-    const next = db
-      .prepare(
-        "SELECT id FROM radar_reference_values WHERE project='VOLLEYBALL' ORDER BY id DESC LIMIT 1"
-      )
-      .get() as { id: number };
-    expect(
-      (
-        await call(`/api/physical-champion/references/${next.id}/review`, 'POST', {
-          expectedRevision: 0,
-          status: 'reviewed',
-        })
-      ).status
-    ).toBe(409);
     expect(
       (
         await call(`/api/physical-champion/references/${first.id}/review`, 'POST', {
-          expectedRevision: 2,
-          status: 'disabled',
-        })
-      ).status
-    ).toBe(200);
-    expect(
-      (
-        await call(`/api/physical-champion/references/${next.id}/review`, 'POST', {
           expectedRevision: 0,
           status: 'reviewed',
         })
       ).status
     ).toBe(200);
     expect(
-      db.prepare('SELECT value_num FROM radar_reference_values WHERE id=?').get(first.id)
-    ).toEqual({ value_num: 50 });
-    expect(
-      (db.prepare('SELECT COUNT(*) AS count FROM test_measurements').get() as { count: number })
-        .count
-    ).toBe(before);
+      db
+        .prepare('SELECT review_status,value_num FROM radar_reference_values WHERE id=?')
+        .get(first.id)
+    ).toEqual({ review_status: 'disabled', value_num: 50 });
   });
 });

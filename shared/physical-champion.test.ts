@@ -37,11 +37,13 @@ const reference: PhysicalReference = {
 describe('体能冠军标准化计算', () => {
   it('保留真实零成绩及超过百分之百的达成度', () => {
     expect(physicalComparison(0, reference)).toEqual({
+      scoringEligible: true,
       value: 0,
       achievedPercent: 0,
       difference: -50,
     });
     expect(physicalComparison(60, reference)).toEqual({
+      scoringEligible: true,
       value: 60,
       achievedPercent: 120,
       difference: 10,
@@ -49,6 +51,7 @@ describe('体能冠军标准化计算', () => {
   });
   it('越小越好的指标使用反向比例，差值保留原单位', () => {
     expect(physicalComparison(40, { ...reference, direction: 'lower_better' })).toEqual({
+      scoringEligible: true,
       value: 40,
       achievedPercent: 125,
       difference: -10,
@@ -60,6 +63,7 @@ describe('体能冠军标准化计算', () => {
   });
   it('缺测不生成成绩且空团队平均为空', () => {
     expect(physicalComparison(null, reference)).toEqual({
+      scoringEligible: true,
       value: null,
       achievedPercent: null,
       difference: null,
@@ -69,11 +73,17 @@ describe('体能冠军标准化计算', () => {
   });
 });
 
-it('未审核或估算标准不得评分', () => {
+it('估算与草稿可展示达成度但不进入正式评分，停用不展示', () => {
+  expect(physicalComparison(60, { ...reference, sourceType: 'estimated' })).toMatchObject({
+    achievedPercent: 120,
+    difference: 10,
+    scoringEligible: false,
+  });
+  expect(physicalComparison(60, { ...reference, reviewStatus: 'draft' })).toMatchObject({
+    achievedPercent: 120,
+    scoringEligible: false,
+  });
   expect(
-    physicalComparison(60, { ...reference, sourceType: 'estimated' }).achievedPercent
-  ).toBeNull();
-  expect(
-    physicalComparison(60, { ...reference, reviewStatus: 'draft' }).achievedPercent
+    physicalComparison(60, { ...reference, reviewStatus: 'disabled' }).achievedPercent
   ).toBeNull();
 });
