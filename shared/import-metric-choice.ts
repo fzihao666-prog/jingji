@@ -15,7 +15,8 @@ function uniqueMetrics(metrics: readonly ImportMetricDefinition[]) {
   return [...result.values()];
 }
 export function metricAppliesToProject(metric: { projects?: readonly string[] }, project: string) {
-  return !metric.projects?.length || metric.projects.some(value => value === '*' || normalizeProject(value) === normalizeProject(project));
+  const canonical=normalizeProject(project);
+  return canonical!==null && (!metric.projects?.length || metric.projects.some(value=>value==='*'||normalizeProject(value)===canonical));
 }
 export function resolveImportMetricName(name: string, unit: string, definitions: readonly ImportMetricDefinition[]): { metric?: ImportMetricDefinition; error?: string } {
   const candidates = uniqueMetrics(definitions).filter(metric => normalized(name) === normalized(metric.label) || normalized(name) === normalized(choiceName(metric)));

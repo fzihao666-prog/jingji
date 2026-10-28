@@ -1,4 +1,4 @@
-import { sessionQuantityRequirement, projectRules, isActivityCode, SPORT_RULES_VERSION, type TrainingCategory } from './sport-rules.js';
+import { allowedIntensitySystems, sessionQuantityRequirement, projectRules, isActivityCode, SPORT_RULES_VERSION, type TrainingCategory } from './sport-rules.js';
 import { INTENSITY_ZONE_SYSTEMS } from './training-intensity.js';
 
 export class TrainingInputError extends Error {
@@ -28,6 +28,7 @@ export function trainingContext(project: string, row: {
   }
   const system = row.intensitySystem || '';
   if (system) {
+    if (!allowedIntensitySystems(project, activity).includes(system)) throw new TrainingInputError('该强度体系不适用于当前项目和训练活动。');
     const definition = INTENSITY_ZONE_SYSTEMS.find(item => item.code === system);
     if (!definition || (row.intensityZone && !definition.zones.some(zone => zone === row.intensityZone)))
       throw new TrainingInputError('强度分区与所选体系不一致。');

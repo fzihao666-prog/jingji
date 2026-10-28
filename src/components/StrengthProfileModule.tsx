@@ -1,3 +1,4 @@
+import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import {
   CalendarDays,
   ClipboardList,
@@ -426,7 +427,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
                       const metrics = STRENGTH_METRICS.filter(
                         (metric) =>
                           metric.group === groupKey &&
-                          (!metric.projects || metric.projects.includes(athlete.project))
+                          (metricAppliesToProject(metric, athlete.project))
                       );
                       if (!metrics.length) return null;
                       return (
@@ -961,7 +962,7 @@ function numericValues(values: FormValues) {
   return result;
 }
 function importableMetrics(project: string) {
-  return STRENGTH_METRICS.filter((metric) => !metric.projects || metric.projects.includes(project));
+  return STRENGTH_METRICS.filter((metric) => metricAppliesToProject(metric, project));
 }
 
 function archiveDraftKey(athleteId: number) {

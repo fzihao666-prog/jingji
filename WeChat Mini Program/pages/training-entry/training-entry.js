@@ -3,7 +3,7 @@ const { loadContext } = require('../../utils/context');
 const { todayBeijing } = require('../../utils/date');
 const { draftIdentity, loadFormDraft, saveFormDraft, clearFormDraft } = require('../../utils/form-draft');
 const { submissionKey, completeSubmission, isCompletedSubmission } = require('../../utils/submission-key');
-const { sportRules = {}, activityLabels = {} } = require('../../data/register-data');
+const { sportRules = {}, activityLabels = {}, intensitySystems = [] } = require('../../data/register-data');
 
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
@@ -15,6 +15,13 @@ function emptyForm() {
   return { date: today(), startTime: '', trainingType: '专项训练', intensityZone: '', content: '', duration: '', distance: '', rpe: '', averageHeartRate: '', maxHeartRate: '', averagePowerW: '', strokeRateSpm: '' };
 }
 
+function intensityView(project,activity,system='',zone='') {
+ const codes=((sportRules[project]||{}).activityIntensitySystems||{})[activity||'unknown']||[];
+ const options=[{code:'',label:'未指定体系（只记录原文）'},...intensitySystems.filter(item=>codes.includes(item.code))];
+ const index=Math.max(0,options.findIndex(item=>item.code===system));
+ const zones=index>0?['',...options[index].zones]:[''];
+ return {intensitySystemCodes:options.map(item=>item.code),intensitySystemOptions:options.map(item=>item.label),intensitySystemIndex:index,intensityOptions:zones,intensityIndex:Math.max(0,zones.indexOf(zone))};
+}
 function quantityRule(project, activity) {
   const rules=sportRules[project];
   const allowDistance=activity==='cycling' || ((!activity || activity==='unknown') && (rules ? (rules.requiredSessionFields || []).includes('duration|distance') : ['CYCLING_ROAD','CYCLING_TRACK'].includes(project)));
@@ -59,8 +66,7 @@ Page({
     this._trainingProject = project;
     const rules = sportRules[project];
     const codes = rules ? rules.activities : ['unknown'];
-    this.setData({ ...quantityRule(project,'unknown'), activityCodes: codes, activityOptions: codes.map(code => activityLabels[code] || '未分类'), activityIndex: 0,
-      intensityOptions: ['', 'U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP', 'UT3', 'UT2', 'UT1', 'TR', 'REC'], intensityIndex: 0,
+    this.setData({ ...quantityRule(project,'unknown'), ...intensityView(project,'unknown'), activityCodes: codes, activityOptions: codes.map(code => activityLabels[code] || '未分类'), activityIndex: 0,
       form: { ...emptyForm(), activityCode: 'unknown', rulesVersion: rules ? rules.version : undefined,
         intensityZone: '', rpe: '', cadenceRpm: '' } });
   },
@@ -70,7 +76,7 @@ Page({
     const code = this.data.activityCodes[index];
     if (!code) return;
     const water = code === 'on_water' || code === 'ergometer';
-    this.setData({ ...quantityRule(this._trainingProject,code), activityIndex: index, form: { ...this.data.form, activityCode: code,
+    this.setData({ ...quantityRule(this._trainingProject,code), ...intensityView(this._trainingProject,code), activityIndex: index, form: { ...this.data.form, activityCode: code, rulesVersion: sportRules[this._trainingProject]?.version, intensitySystem: '', intensityZone: '', averagePowerW: ['cycling','on_water','ergometer'].includes(code) ? this.data.form.averagePowerW : '',
       strokeRateSpm: water ? this.data.form.strokeRateSpm : '',
       cadenceRpm: code === 'cycling' ? this.data.form.cadenceRpm : '' } });
     this.persistDraft();
@@ -153,6 +159,10 @@ Page({
     this.setData({ typeIndex, 'form.trainingType': this.data.typeOptions[typeIndex] });
     this.persistDraft();
   },
+  onIntensitySystemChange(event) {
+    const index=Number(event.detail.value)||0; const system=this.data.intensitySystemCodes[index]||'';
+    this.setData({...intensityView(this._trainingProject,this.data.form.activityCode,system),form:{...this.data.form,intensitySystem:system,intensityZone:''}});this.persistDraft();
+  },
   onIntensityChange(event) {
     const intensityIndex = Number(event.detail.value) || 0;
     this.setData({ intensityIndex, 'form.intensityZone': this.data.intensityOptions[intensityIndex] });
@@ -193,7 +203,7 @@ Page({
       success: (result) => {
         if (result.confirm) {
           this.setData({
-            ...quantityRule(this._trainingProject,draft.activityCode),
+            ...quantityRule(this._trainingProject,draft.activityCode), ...intensityView(this._trainingProject,draft.activityCode,draft.intensitySystem,draft.intensityZone),
             form: { ...emptyForm(), ...draft },
             typeIndex: Math.max(0, this.data.typeOptions.indexOf(draft.trainingType)),
             intensityIndex: Math.max(0, this.data.intensityOptions.indexOf(draft.intensityZone)),
@@ -213,7 +223,7 @@ Page({
     const form = {};
     Object.keys(emptyForm()).forEach((key) => { form[key] = session[key] === null || session[key] === undefined ? '' : String(session[key]); });
     this.setData({
-      ...quantityRule(this._trainingProject,session.activityCode),
+      ...quantityRule(this._trainingProject,session.activityCode), ...intensityView(this._trainingProject,session.activityCode,session.intensitySystem,session.intensityZone),
       editId: session.id,
       activityIndex: Math.max(0, this.data.activityCodes.indexOf(session.activityCode)),
       form: { ...form, ...(session.activityCode ? { activityCode: session.activityCode, rulesVersion: sportRules[this._trainingProject]?.version, cadenceRpm: session.cadenceRpm == null ? '' : String(session.cadenceRpm), intensitySystem: session.intensitySystem || undefined } : {}), ...(session.teamPlanId ? { teamPlanId: session.teamPlanId, planSessionId: session.planSessionId } : {}) },

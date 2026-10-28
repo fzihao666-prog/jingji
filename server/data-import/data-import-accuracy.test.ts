@@ -2326,17 +2326,17 @@ it.each([
   const scoped = [{ ...athletes[0], project }];
   const cycling = code === 'cycling';
   const headers = ['姓名', '日期', '训练类型', '训练活动', '时长分钟', 'RPE', '平均功率W', '踏频rpm', '强度体系', '强度区间'];
-  const batch = analyze({ 训练课次: [headers, ['张某', '2026-03-01', '专项训练', activity, 60, 5, cycling ? 220 : null, cycling ? 0 : null, 'UT_SYSTEM', 'UT2']] }, { project, athletes: scoped });
+  const batch = analyze({ 训练课次: [headers, ['张某', '2026-03-01', '专项训练', activity, 60, 5, cycling ? 220 : null, cycling ? 0 : null, code==='on_water'?'UT_SYSTEM':'', code==='on_water'?'UT2':'Z2']] }, { project, athletes: scoped });
   expect(batch.items.flatMap(item => item.messages).filter(message => message.startsWith('错误：'))).toEqual([]);
   commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'SCC', conflictPolicy: 'skip', athletes: scoped, allowedTeams: new Set(['A队']) });
-  expect(db.prepare('SELECT project_code, project_status, activity_code, training_category, intensity_system, rules_version, srpe, distance_reported FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: projectCode, project_status: 'confirmed', activity_code: code, training_category: 'special', intensity_system: 'UT_SYSTEM', rules_version: 'multi-sport-v2', srpe: 300, distance_reported: 0 });
+  expect(db.prepare('SELECT project_code, project_status, activity_code, training_category, intensity_system, rules_version, srpe, distance_reported FROM training_sessions WHERE athlete_id=1').get()).toEqual({ project_code: projectCode, project_status: 'confirmed', activity_code: code, training_category: 'special', intensity_system: code==='on_water'?'UT_SYSTEM':'', rules_version: 'multi-sport-v3', srpe: 300, distance_reported: 0 });
   if (cycling) expect(db.prepare("SELECT value_num, unit FROM training_session_metrics WHERE metric_code='cadenceRpm'").get()).toEqual({ value_num: 0, unit: 'rpm' });
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(project, [1]);
   const roundtrip = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '多项目往返.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project, userId: USER_ID, athletes: scoped });
   const row = roundtrip.items.find(item => item.itemType === 'training_session')!;
   expect(roundtrip.errorCount).toBe(0);
-  expect(row.payload).toMatchObject({ activityCode: code, intensitySystem: 'UT_SYSTEM', cadenceRpm: cycling ? 0 : null });
+  expect(row.payload).toMatchObject({ activityCode: code, intensitySystem: code==='on_water'?'UT_SYSTEM':'', cadenceRpm: cycling ? 0 : null });
   expect(commitDataImport({ batchId: roundtrip.id, userId: USER_ID, creatorRole: 'SCC', conflictPolicy: 'skip', athletes: scoped }).createdRecords).toBe(0);
 });
 
@@ -2364,7 +2364,7 @@ it('活动、强度体系和试次不合法在预检阻断，纠正后原子写�
   expect(batch.errorCount).toBe(1);
   expect(() => commit(batch.id, 'update')).toThrow();
   expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual({ count: 0 });
-  const corrected = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { activityCode: 'cycling', intensitySystem: 'U_SYSTEM' } }] });
+  const corrected = updateDataImportItems({ batchId: batch.id, userId: USER_ID, athletes, corrections: [{ id: batch.items[0].id, payload: { activityCode: 'cycling', intensitySystem: '', intensityZone: 'Z2' } }] });
   expect(corrected.errorCount).toBe(0);
   expect(commit(batch.id, 'update').createdRecords).toBe(1);
   const invalid = analyze({ 其他测试: [['姓名', '测试日期', '指标代码', '数值', '单位', '试次序号'], ['张某', '2026-03-03', 'grip', 30, 'kg', 1.5]] });

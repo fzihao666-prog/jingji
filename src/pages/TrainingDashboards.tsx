@@ -1,3 +1,4 @@
+import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -63,7 +64,7 @@ type StrengthProps = {
 };
 
 function configuredMetrics(project: Project) {
-  return STRENGTH_METRICS.filter((metric) => !metric.projects || metric.projects.includes(project));
+  return STRENGTH_METRICS.filter((metric) => metricAppliesToProject(metric, project));
 }
 
 function median(values: number[]) {

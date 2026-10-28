@@ -1,3 +1,4 @@
+import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
@@ -68,7 +69,7 @@ function round(value: number, digits = 1) {
 export function PhysicalTestModule({ tests, project, from, to, athleteId, athletes }: Props) {
   const metricOptions = useMemo(
     () =>
-      STRENGTH_METRICS.filter((metric) => !metric.projects || metric.projects.includes(project)),
+      STRENGTH_METRICS.filter((metric) => metricAppliesToProject(metric, project)),
     [project]
   );
   const [selectedKey, setSelectedKey] = useState<StrengthMetricKey | ''>('');

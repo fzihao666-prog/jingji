@@ -1,6 +1,6 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
-import { sessionQuantityHint, sessionQuantityRequirement, ACTIVITY_LABELS, isActivityCode, projectRules, type ActivityCode } from '../../shared/sport-rules';
+import { allowedIntensitySystems, sessionQuantityHint, sessionQuantityRequirement, ACTIVITY_LABELS, isActivityCode, projectRules, type ActivityCode } from '../../shared/sport-rules';
 import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity';
 import { AppCard } from './PageLayout';
 import './TrainingSessionEntry.css';
@@ -10,6 +10,7 @@ type Props = { athleteId: number; project: string; mode: 'self' | 'coach'; onSav
 export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Props) {
   const rules = projectRules(project);
   const [activity, setActivity] = useState<ActivityCode>('unknown');
+  const [intensitySystem,setIntensitySystem]=useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -36,7 +37,7 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Prop
         submission.current = { key: crypto.randomUUID(), content };
       await api.submitTrainingSession(mode, athleteId, data, submission.current.key);
       submission.current = null;
-      form.reset(); setActivity('unknown'); setMessage('训练记录已保存。'); onSaved();
+      form.reset(); setActivity('unknown'); setIntensitySystem(''); setMessage('训练记录已保存。'); onSaved();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '保存失败，请重试。'); }
     finally { setSaving(false); }
   }
@@ -50,13 +51,13 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved }: Prop
         <label>训练日期<input name="date" type="date" defaultValue={date} required /></label>
         <label>开始时间<input name="startTime" type="time" /></label>
         <label>训练类型<select name="trainingType"><option>专项训练</option><option>体能训练</option><option>恢复训练</option></select></label>
-        <label>训练活动<select name="activityCode" value={activity} onChange={event => { if (isActivityCode(event.target.value)) setActivity(event.target.value); }}>
+        <label>训练活动<select name="activityCode" value={activity} onChange={event => { if (isActivityCode(event.target.value)) setActivity(event.target.value); setIntensitySystem(''); }}>
           {rules.activities.map(code => <option value={code} key={code}>{ACTIVITY_LABELS[code]}</option>)}
         </select></label>
         <label>时长（分钟）<input ref={durationInput} required={!allowsDistance} name="duration" type="number" min="1" max="1440" step="any" aria-invalid={quantityError || undefined} aria-describedby={quantityError ? errorId : undefined} /></label>
         <label>距离（公里，可选）<input name="distance" type="number" min="0" max="500" step="any" aria-invalid={quantityError || undefined} aria-describedby={quantityError ? errorId : undefined} /></label>
         <label>RPE（0—10，可选）<input name="rpe" type="number" min="0" max="10" step="any" /></label>
-        <label>强度体系（可选）<select name="intensitySystem"><option value="">未指定</option>{INTENSITY_ZONE_SYSTEMS.map(system => <option key={system.code} value={system.code}>{system.label}</option>)}</select></label>
+        <label>强度体系（可选）<select name="intensitySystem" value={intensitySystem} onChange={event=>setIntensitySystem(event.target.value)}><option value="">未指定</option>{INTENSITY_ZONE_SYSTEMS.filter(system=>allowedIntensitySystems(project,activity).includes(system.code)).map(system => <option key={system.code} value={system.code}>{system.label}</option>)}</select></label>
         <label>原始强度区（可选）<input name="intensityZone" maxLength={20} /></label>
         <label>平均心率（bpm，可选）<input name="averageHeartRate" type="number" min="0" max="250" /></label>
         <label>最大心率（bpm，可选）<input name="maxHeartRate" type="number" min="0" max="250" /></label>

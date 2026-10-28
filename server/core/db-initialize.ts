@@ -5982,6 +5982,18 @@ export function initializeDatabase(
   migrateMultiSportFacts(db, databaseExistedBeforeStartup && databasePath !== ':memory:'
     ? join(dirname(databasePath), 'backups', `before-multi-sport-${randomUUID()}.db`) : undefined);
   migrateNullableSrpe(db, databaseExistedBeforeStartup && databasePath !== ':memory:' ? join(dirname(databasePath), 'backups', `before-nullable-srpe-${randomUUID()}.db`) : undefined);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    if (!db.prepare("SELECT 1 FROM app_metadata WHERE key='project_metric_applicability_v1'").get()) {
+      const previous = OVERVIEW_METRICS.flatMap(metric=> {
+        const row=db.prepare('SELECT code,projects_json FROM metric_definitions WHERE code=?').get(metric.code);
+        return row ? [row] : [];
+      });
+      for (const metric of OVERVIEW_METRICS) db.prepare('UPDATE metric_definitions SET projects_json=? WHERE code=?').run(JSON.stringify(metric.projects),metric.code);
+      db.prepare("INSERT INTO app_metadata(key,value) VALUES('project_metric_applicability_v1',?)").run(JSON.stringify({previous}));
+    }
+    db.exec('COMMIT');
+  } catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
   return { upsertAthleteOrigin };
 
 }

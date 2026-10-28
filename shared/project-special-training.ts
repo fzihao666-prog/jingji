@@ -1,3 +1,4 @@
+import { activityMetricFields } from './sport-rules.js';
 import { normalizeProject, projectCapability } from './projects.js';
 import { trainingLoadCategory } from './training-content-category.js';
 
@@ -20,7 +21,8 @@ export function projectSpecialTraining<T extends SpecialFact>(input: string, fac
     : project && projectCapability(project)
       ? [{ key: 'averagePowerW', label: '平均功率', unit: 'W' }, { key: 'strokeRateSpm', label: project === 'ROWING' ? '桨频' : '划频', unit: '次/分' }]
       : [];
-  return { rows, fields, summary: {
+  const groups=[...new Set(rows.map(row=>row.activityCode||'unknown'))].map(activity=>({activity,fields:activityMetricFields(project,activity),rows:rows.filter(row=>(row.activityCode||'unknown')===activity)}));
+  return { rows, fields, groups, summary: {
     sessions: rows.length,
     duration: measuredTotal(rows.map(row => row.durationReported === false ? null : row.durationMin)),
     distance: measuredTotal(rows.map(row => row.distanceReported ? row.distanceKm ?? null : null)),

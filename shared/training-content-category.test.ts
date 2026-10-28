@@ -22,3 +22,10 @@ it('项目类别仅含适用项，越界历史类别进入待核实而非丢弃'
  expect(trainingContentCategories('ROWING')).toContain('骑行');
  expect(projectTrainingContentCategory('VOLLEYBALL',{content:'水上训练'})).toBe('待核实');
 });
+
+it('明确力量活动不会被备注中的项目活动覆盖，活动本身不决定训练目的',()=>{
+ expect(trainingContentCategory({activityCode:'strength',content:'水上训练'})).toBe('力量训练');
+ expect(trainingContentCategory({activityCode:'strength',content:'水上专项深蹲'})).toBe('最大力量');
+ expect(trainingLoadCategory({activityCode:'cycling',content:'骑行'})).toBeNull();
+ expect(trainingLoadCategory({activityCode:'cycling',trainingType:'体能训练',content:'骑行'})).toBe('physical');
+});

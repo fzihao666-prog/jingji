@@ -2,6 +2,7 @@ import { projectRules } from './sport-rules.js';
 export const TRAINING_CONTENT_CATEGORIES = [
   '水上',
   '测功仪',
+  '力量训练',
   '功能',
   '拉伸再生',
   '力量耐力',
@@ -33,6 +34,14 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
     running: '跑步', recovery: '拉伸再生',
   };
   if (input.activityCode && Object.hasOwn(activities, input.activityCode)) return activities[input.activityCode];
+  if (input.activityCode === 'strength') {
+    const detail=`${input.structureType || ''} ${input.content || ''}`;
+    if (/最大力量|大重量|深蹲|硬拉|卧推|卧拉/.test(detail)) return '最大力量';
+    if (/速度力量|爆发力|高拉|抓举|挺举|快速力量/.test(detail)) return '速度力量';
+    if (/力量耐力|循环力量|肌耐力|重复力量/.test(detail)) return '力量耐力';
+    if (/功能训练|功能性|核心稳定|协调|灵敏|平衡/.test(detail)) return '功能';
+    return '力量训练';
+  }
   const text =
     `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (!text) return '其它';
@@ -53,10 +62,15 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
 // 专项、体能与恢复训练模块共用这一口径。优先识别明确恢复内容，无法识别的记录不强行推断。
 export function trainingLoadCategory(input: TrainingContentSource): TrainingLoadCategory | null {
   if (input.trainingCategory === 'special' || input.trainingCategory === 'physical' || input.trainingCategory === 'recovery') return input.trainingCategory;
+  const purpose = `${input.trainingType || ''} ${input.structureType || ''}`;
+  if (/恢复|再生/.test(purpose)) return 'recovery';
+  if (/体能|力量训练/.test(purpose)) return 'physical';
+  if (/专项|技术训练|水上训练/.test(purpose)) return 'special';
+  if (input.activityCode) return null;
   const text =
     `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (/拉伸|再生|恢复|放松|泡沫轴|理疗/.test(text)) return 'recovery';
-  if (/专项|水上|划行|艇上|门区|竞速|骑行|自行车|排球|发球|扣球|拦网/.test(text) && !/力量训练/.test(input.trainingType || ''))
+  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || ''))
     return 'special';
   if (/力量|体能|跑步|功能|核心|陆上|测功仪/.test(text)) return 'physical';
   return null;
@@ -64,7 +78,7 @@ export function trainingLoadCategory(input: TrainingContentSource): TrainingLoad
 
 /** 全平台词汇表不能直接作为某项目的图例。 */
 export function trainingContentCategories(project: unknown): readonly TrainingContentCategory[] {
- return projectRules(project)?.contentCategories || ['功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实'];
+ return projectRules(project)?.contentCategories || ['力量训练','功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实'];
 }
 export function projectTrainingContentCategory(project: unknown, input: TrainingContentSource): TrainingContentCategory {
  const category=trainingContentCategory(input);

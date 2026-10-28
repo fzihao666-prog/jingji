@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 const context = { module: { exports: {} } };
 vm.runInNewContext(readFileSync(new URL('./chart-placeholder.js', import.meta.url), 'utf8'), context);
-const { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder, completeRatioRows, INTENSITY_ZONE_NAMES, CONTENT_CATEGORY_NAMES } = context.module.exports;
+const { displaySeries, trendPlaceholder, ratioPlaceholder, physiologyPlaceholder, completeRatioRows, INTENSITY_ZONE_NAMES } = context.module.exports;
 
 describe('小程序图表示例数据选择', () => {
 it('真实单点优先于示例，空数据展示固定趋势', () => {
@@ -54,11 +54,11 @@ describe('占比固定展示全部分类', () => {
         { name: '水上', count: 3 },
         { name: '自定义分区', count: 1 },
       ],
-      CONTENT_CATEGORY_NAMES,
+      ['水上','测功仪','力量训练'],
       (row) => row.count,
       (value) => `${value} 课次`
     );
-    expect(rows.map((row) => row.name)).toEqual(CONTENT_CATEGORY_NAMES);
+    expect(rows.map((row) => row.name)).toEqual(['水上','测功仪','力量训练']);
     expect(rows.some((row) => row.name === '自定义分区')).toBe(false);
     expect(rows[0]).toMatchObject({ name: '水上', value: '3 课次', percentage: 100 });
   });

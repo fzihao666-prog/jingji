@@ -11,3 +11,11 @@ it('专项只读取已确认项目的实测，不推算缺失RPE或功率曲线'
   expect(projectSpecialTraining('VOLLEYBALL', []).fields).toEqual([]);
   expect(projectSpecialTraining('未知项目', []).rows).toEqual([]);
 });
+
+it('同项目骑行与水上课次使用各自指标，不按项目把桨频套到骑行',()=>{
+ const common={projectCode:'ROWING',projectStatus:'confirmed',trainingType:'专项训练',durationMin:30,rpe:5,srpe:150};
+ const data=projectSpecialTraining('ROWING',[{...common,activityCode:'on_water'},{...common,activityCode:'cycling'}]);
+ expect(data.groups[0].fields.map(field=>field.key)).toContain('strokeRateSpm');
+ expect(data.groups[1].fields.map(field=>field.key)).toContain('cadenceRpm');
+ expect(data.groups[1].fields.map(field=>field.key)).not.toContain('strokeRateSpm');
+});

@@ -146,6 +146,11 @@ describe('训练填报幂等接口', () => {
     db.prepare('UPDATE athletes SET project=? WHERE id=9001').run(project);
     expect((await post({...payload,activityCode,duration:'',distance:10})).status).toBe(status);
   });
+  it('排球声明水上强度体系被拒，训练事实与幂等编号完整回滚',async()=>{
+    db.exec("UPDATE athletes SET project='VOLLEYBALL' WHERE id=9001");
+    expect((await post({...payload,activityCode:'volleyball_technique',intensitySystem:'U_SYSTEM'})).status).toBe(400);
+    expect(count('training_sessions')).toBe(0);expect(count('training_submission_keys')).toBe(0);
+  });
   it('key格式保留大小写，接受边界长度且拒绝空白和非ASCII字符', () => {
     expect(idempotencyKeySchema.parse('Abc_0123456789-XY')).toBe('Abc_0123456789-XY');
     expect(idempotencyKeySchema.safeParse('a'.repeat(128)).success).toBe(true);

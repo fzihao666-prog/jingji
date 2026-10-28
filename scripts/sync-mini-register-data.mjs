@@ -1,3 +1,4 @@
+import { INTENSITY_ZONE_SYSTEMS } from '../shared/training-intensity.ts';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PROJECT_DEFINITIONS } from '../shared/projects.ts';
@@ -13,6 +14,7 @@ const payload = {
   sportRules: Object.fromEntries(PROJECT_DEFINITIONS.map(({ code }) => [code, projectRules(code)])),
   sportModules: SPORT_MODULES,
   activityLabels: ACTIVITY_LABELS,
+  intensitySystems: INTENSITY_ZONE_SYSTEMS,
   provinces: PROVINCES,
   provinceCities: PROVINCE_CITIES,
 };

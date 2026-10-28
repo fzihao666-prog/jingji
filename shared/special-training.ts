@@ -3,9 +3,6 @@ import {
   trainingContentCategories,
   projectTrainingContentCategory,
 } from './training-content-category.js';
-import {
-  SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
-} from './training-intensity.js';
 
 export type SpecialSession = {
   id: number;
@@ -64,17 +61,8 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
       sessionCount: rows.length,
     };
   });
-  // 当前系统各项目均保存原始分区；未知分区原样展示，不套用其他项目阈值。
-  // 强度占比固定展示全部标准分区维度：没有数据的分区保留 0 值行，不隐藏；
-  // 标准顺序之外的未知分区原样追加在后面。
-  const zoneNames = [
-    ...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
-    ...[...new Set(records.map(zoneLabel).filter(Boolean))]
-      .filter(
-        (name) => !SPECIAL_TRAINING_INTENSITY_ZONE_ORDER.includes(name as (typeof SPECIAL_TRAINING_INTENSITY_ZONE_ORDER)[number])
-      )
-      .sort((a, b) => a.localeCompare(b)),
-  ];
+  // 未配置/未知体系保留原标签，不补其他项目的零值分区。
+  const zoneNames = [...new Set(records.map(zoneLabel).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const zones = zoneNames.map((name) => {
     const rows = records.filter((row) => zoneLabel(row) === name);
     // 未出现该分区的记录时记 0 分钟（没有训练即 0）；有记录但时长未填报时保留缺失，不用 0 代替。

@@ -22,3 +22,10 @@ it('按项目和活动校验必填量，骑行距离不替代排球或水上时�
  expect(()=>validateSessionQuantity('CYCLING_ROAD',{activityCode:'cycling',duration:null,distance:10})).not.toThrow();
  expect(()=>validateSessionQuantity('CYCLING_ROAD',{activityCode:'cycling',duration:null,distance:0})).toThrow('时长');
 });
+
+it('项目和实际活动共同约束强度体系，不给排球或骑行套水上体系',()=>{
+ expect(()=>trainingContext('VOLLEYBALL',{trainingType:'专项训练',activityCode:'volleyball_technique',intensitySystem:'U_SYSTEM',intensityZone:'U2'})).toThrow('适用');
+ expect(()=>trainingContext('ROWING',{trainingType:'体能训练',activityCode:'cycling',intensitySystem:'UT_SYSTEM',intensityZone:'UT2'})).toThrow('适用');
+ expect(()=>trainingContext('ROWING',{trainingType:'专项训练',activityCode:'on_water',intensitySystem:'UT_SYSTEM',intensityZone:'UT2'})).not.toThrow();
+ expect(()=>trainingContext('CYCLING_ROAD',{trainingType:'专项训练',activityCode:'cycling',intensityZone:'Z2'})).not.toThrow();
+});

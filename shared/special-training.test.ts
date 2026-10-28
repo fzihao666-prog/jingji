@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { aggregateSpecialTraining, buildSpecialTestComparison, type SpecialSession } from './special-training.js';
-import { SPECIAL_TRAINING_INTENSITY_ZONE_ORDER } from './training-intensity.js';
 
 describe('aggregateSpecialTraining 强度分区', () => {
   const row: SpecialSession = {
@@ -25,34 +24,14 @@ describe('aggregateSpecialTraining 强度分区', () => {
     sessionSource: 'manual',
   };
 
-  it('固定展示全部强度分区维度，未训练分区保留 0 值行', () => {
-    const result = aggregateSpecialTraining([row]);
-    expect(result.intensity.map((item) => item.name)).toEqual([...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER]);
-    expect(result.intensity.map((item) => item.durationMin)).toEqual([
-      0, 60, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ]);
-    expect(result.intensity.map((item) => item.percentage)).toEqual([
-      0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ]);
+  it('仅展示实际存在的分区，不给任意项目补水上分区', () => {
+    expect(aggregateSpecialTraining([row]).intensity).toEqual([{name:'UT2',durationMin:60,percentage:100}]);
+    expect(aggregateSpecialTraining([]).intensity).toEqual([]);
   });
-
-  it('未知分区原样追加在标准顺序之后，缺失时长不记为 0', () => {
-    const result = aggregateSpecialTraining([
-      { ...row, intensityZone: 'X5' },
-      { ...row, id: 2, intensityZone: 'AN', durationReported: false },
-    ]);
-    expect(result.intensity.map((item) => item.name)).toEqual([
-      ...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
-      'X5',
-    ]);
-    const an = result.intensity.find((item) => item.name === 'AN');
-    expect(an?.durationMin).toBeNull();
-  });
-
-  it('无记录时全部分区保留 0 值行，占比为 0', () => {
-    const result = aggregateSpecialTraining([]);
-    expect(result.intensity.map((item) => item.name)).toEqual([...SPECIAL_TRAINING_INTENSITY_ZONE_ORDER]);
-    expect(result.intensity.every((item) => item.percentage === 0)).toBe(true);
+  it('未知分区保留原文，缺失时长不记为0',()=>{
+    const result=aggregateSpecialTraining([{...row,intensityZone:'X5'},{...row,id:2,intensityZone:'AN',durationReported:false}]);
+    expect(result.intensity.map(item=>item.name)).toEqual(['AN','X5']);
+    expect(result.intensity.find(item=>item.name==='AN')?.durationMin).toBeNull();
   });
   it('同名分区按体系分开，未知体系显式说明', () => {
     const result = aggregateSpecialTraining([

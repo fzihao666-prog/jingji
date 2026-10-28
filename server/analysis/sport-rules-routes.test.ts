@@ -29,7 +29,7 @@ it('项目配置需要登录和项目权限，返回规则版本且不缓存', a
   expect(response.headers.get('cache-control')).toBe('no-store');
   const data = await response.json() as { rules: SportRules; modules: typeof SPORT_MODULES };
   expect(data.rules.project).toBe('VOLLEYBALL');
-  expect(data.rules.version).toBe('multi-sport-v2');
+  expect(data.rules.version).toBe('multi-sport-v3');
   expect(data.modules.find(row => row.key === 'fitness')?.kind).toBe('common');
   expect(data.rules.capabilities.reference.status).toBe('pending_configuration');
   referenceAvailable = true;

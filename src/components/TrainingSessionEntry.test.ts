@@ -17,3 +17,9 @@ it.each(['ROWING','VOLLEYBALL','CYCLING_ROAD'])('%s提示与时长必填属性�
  expect(duration.includes('required')).toBe(project!=='CYCLING_ROAD');
  expect(html).toContain(project==='CYCLING_ROAD'?'时长或距离至少填一项':'此活动必须填写时长');
 });
+
+it.each(['VOLLEYBALL','CYCLING_ROAD'])('%s不提供水上强度体系',project=>{
+ const html=renderToStaticMarkup(createElement(TrainingSessionEntry,{athleteId:1,project,mode:'coach',onSaved:()=>{}}));
+ expect(html).not.toContain('U3/U2/U1/AT/TPT/AN/ATP');
+ expect(html).not.toContain('UT3/UT2/UT1/TR/AT/AN/REC');
+});

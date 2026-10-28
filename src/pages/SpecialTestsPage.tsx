@@ -1,3 +1,5 @@
+import { ACTIVITY_LABELS, isActivityCode, projectRules } from '../../shared/sport-rules';
+import { trainingLoadCategory } from '../../shared/training-content-category';
 import {
   Activity,
   AlertTriangle,
@@ -18,7 +20,7 @@ import {
   Waves,
   Zap,
 } from 'lucide-react';
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Area,
   AreaChart,
@@ -59,6 +61,7 @@ type Props = {
 };
 
 type Session = {
+  activity: string;
   id: string;
   date: string;
   athleteId: number;
@@ -198,10 +201,11 @@ function projectMetric(project: Project) {
 }
 
 function recordSessions(records: TrainingRecord[], project: Project): Session[] {
-  return records.filter(record => record.projectCode === project && record.projectStatus === 'confirmed').map((record) => {
+  return records.filter(record => record.projectCode === project && record.projectStatus === 'confirmed' && trainingLoadCategory(record)==='special').map((record) => {
     const rpe = record.rpe;
     return {
       id: `record-${record.id}`,
+      activity: record.activityCode || 'unknown',
       date: record.date,
       athleteId: record.athleteId,
       athleteName: record.athleteName,
@@ -896,21 +900,29 @@ function MetricPage({ section, sessions, days, project }: {
   section: SpecialPageKey; sessions: Session[]; days: ReturnType<typeof aggregateDays>; project: Project;
 }) {
   const kind = section === 'special-rate' ? 'rate' : section === 'special-heart' ? 'heart' : 'power';
+  const [selectedActivity,setSelectedActivity]=useState('');
+  const allowed=projectRules(project)?.activities || [];
+  const activities=[...new Set(sessions.map(row=>row.activity))].filter(activity=>allowed.some(code=>code===activity) && (kind==='rate'?['on_water','ergometer'].includes(activity):kind==='power'?['on_water','ergometer','cycling'].includes(activity):activity!=='unknown'));
+  const active=activities.includes(selectedActivity)?selectedActivity:activities[0];
+  const scopedSessions=sessions.filter(row=>row.activity===active);
+  const scopedDays=aggregateDays(scopedSessions);
   const metric = projectMetric(project);
   const key = kind === 'rate' ? 'strokeRate' : kind === 'heart' ? 'heartRate' : 'power';
-  const values = sessions.map(row => row[key]).filter((value): value is number => value !== null && Number.isFinite(value));
+  const values = scopedSessions.map(row => row[key]).filter((value): value is number => value !== null && Number.isFinite(value));
   const label = kind === 'rate' ? metric.label : kind === 'heart' ? '课次平均心率' : '课次平均功率';
   const unit = kind === 'rate' ? metric.unit : kind === 'heart' ? 'bpm' : 'W';
   return <>
+    <label>实际训练活动<select aria-label="专项指标活动筛选" value={active||''} onChange={event=>setSelectedActivity(event.target.value)}>{activities.map(activity=><option key={activity} value={activity}>{isActivityCode(activity)?ACTIVITY_LABELS[activity]:activity}</option>)}</select></label>
+    <p>不同活动分开展示；设备或测试条件不明时，只呈现实测描述，不作可比成绩结论。</p>
     <div className="special-metrics">
-      <MetricCard icon={<Activity />} label={`${label}均值`} value={values.length ? round(values.reduce((sum,value) => sum+value,0)/values.length) : '—'} unit={unit} change={`有效课次 ${values.length}/${sessions.length}；仅为课次值均值`} />
+      <MetricCard icon={<Activity />} label={`${label}均值`} value={values.length ? round(values.reduce((sum,value) => sum+value,0)/values.length) : '—'} unit={unit} change={`有效课次 ${values.length}/${scopedSessions.length}；仅为同活动课次值均值`} />
       <MetricCard icon={<Gauge />} label="最高课次记录值" value={values.length ? Math.max(...values) : '—'} unit={unit} change="不代表瞬时峰值，不用于达标分区" />
     </div>
     <SectionCard title={`${label}趋势`} note="仅展示实测，不推算强度阈值或效率评分" className="span-12">
-      <TrendChart data={days} metric={kind} color="#12978f" />
+      <TrendChart data={scopedDays} metric={kind} color="#12978f" />
     </SectionCard>
     <SectionCard title={`${label}课次汇总`} note="描述性统计，不作为冠军评分" className="span-12">
-      <AthleteTable sessions={sessions} metric={key} />
+      <AthleteTable sessions={scopedSessions} metric={key} />
     </SectionCard>
   </>;
 }

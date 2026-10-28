@@ -1,7 +1,7 @@
 import type { TrainingContentCategory } from './training-content-category.js';
 import { normalizeProject, projectCapability, type Project } from './projects.js';
 
-export const SPORT_RULES_VERSION = 'multi-sport-v2';
+export const SPORT_RULES_VERSION = 'multi-sport-v3';
 export type CapabilityStatus = 'available' | 'pending_configuration' | 'unsupported';
 export type SportCapability = { status: CapabilityStatus; reason: string };
 export type ActivityCode = 'unknown' | 'on_water' | 'ergometer' | 'cycling' | 'volleyball_technique' | 'strength' | 'running' | 'recovery';
@@ -33,6 +33,7 @@ export type SportRules = {
   requiredSessionFields: ('duration' | 'duration|distance')[];
   activities: ActivityCode[];
   contentCategories: TrainingContentCategory[];
+  activityIntensitySystems: Partial<Record<ActivityCode, string[]>>;
   capabilities: Record<'management' | 'training' | 'special' | 'reference', SportCapability>;
 };
 
@@ -60,8 +61,9 @@ export function projectRules(input: unknown): SportRules | null {
       ...(water ? ['水上','测功仪','骑行'] as const : []),
       ...(cycling ? ['骑行'] as const : []),
       ...(volleyball ? ['排球技术'] as const : []),
-      '功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实',
+      '力量训练','功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实',
     ],
+    activityIntensitySystems: water ? { on_water: ['U_SYSTEM','UT_SYSTEM'], ergometer: ['U_SYSTEM','UT_SYSTEM'], unknown: ['U_SYSTEM','UT_SYSTEM'] } : {},
     capabilities: {
       management: available(),
       training: firstWave ? available() : pending('公共填报可用，项目专属采集链路尚待配置。'),
@@ -83,4 +85,17 @@ export function sessionQuantityRequirement(project: unknown, activity = 'unknown
 }
 export function sessionQuantityHint(project: unknown, activity = 'unknown') {
  return sessionQuantityRequirement(project,activity)==='duration|distance' ? '时长或距离至少填一项。' : '此活动必须填写时长。';
+}
+
+export function allowedIntensitySystems(project: unknown, activity = 'unknown'): readonly string[] {
+ const rules=projectRules(project);
+ return rules?.activityIntensitySystems[activity as ActivityCode] || [];
+}
+export type ActivityMetricField = {key:'averagePowerW'|'cadenceRpm'|'strokeRateSpm';label:string;unit:string};
+export function activityMetricFields(project: unknown, activity: string): ActivityMetricField[] {
+ const rules=projectRules(project);
+ if (!rules || !rules.activities.some(code=>code===activity)) return [];
+ if (activity==='cycling') return [{key:'averagePowerW',label:'平均功率',unit:'W'},{key:'cadenceRpm',label:'踏频',unit:'rpm'}];
+ if (activity==='on_water'||activity==='ergometer') return [{key:'averagePowerW',label:'平均功率',unit:'W'},{key:'strokeRateSpm',label:rules.project==='ROWING'?'桨频':'划频',unit:'次/分'}];
+ return [];
 }

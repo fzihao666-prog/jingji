@@ -205,7 +205,7 @@ module.exports = {
   "sportRules": {
     "SWIMMING": {
       "project": "SWIMMING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -216,6 +216,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -226,6 +227,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -247,7 +249,7 @@ module.exports = {
     },
     "MARATHON_SWIMMING": {
       "project": "MARATHON_SWIMMING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -258,6 +260,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -268,6 +271,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -289,7 +293,7 @@ module.exports = {
     },
     "ARTISTIC_SWIMMING": {
       "project": "ARTISTIC_SWIMMING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -300,6 +304,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -310,6 +315,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -331,7 +337,7 @@ module.exports = {
     },
     "DIVING": {
       "project": "DIVING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -342,6 +348,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -352,6 +359,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -373,7 +381,7 @@ module.exports = {
     },
     "WATER_POLO": {
       "project": "WATER_POLO",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -384,6 +392,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -394,6 +403,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -415,7 +425,7 @@ module.exports = {
     },
     "ARCHERY": {
       "project": "ARCHERY",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -426,6 +436,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -436,6 +447,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -457,7 +469,7 @@ module.exports = {
     },
     "ATHLETICS": {
       "project": "ATHLETICS",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -468,6 +480,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -478,6 +491,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -499,7 +513,7 @@ module.exports = {
     },
     "BADMINTON": {
       "project": "BADMINTON",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -510,6 +524,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -520,6 +535,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -541,7 +557,7 @@ module.exports = {
     },
     "BASEBALL": {
       "project": "BASEBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -552,6 +568,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -562,6 +579,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -583,7 +601,7 @@ module.exports = {
     },
     "SOFTBALL": {
       "project": "SOFTBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -594,6 +612,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -604,6 +623,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -625,7 +645,7 @@ module.exports = {
     },
     "BASKETBALL": {
       "project": "BASKETBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -636,6 +656,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -646,6 +667,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -667,7 +689,7 @@ module.exports = {
     },
     "BASKETBALL_3X3": {
       "project": "BASKETBALL_3X3",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -678,6 +700,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -688,6 +711,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -709,7 +733,7 @@ module.exports = {
     },
     "BOXING": {
       "project": "BOXING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -720,6 +744,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -730,6 +755,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -751,7 +777,7 @@ module.exports = {
     },
     "CANOE_SLALOM": {
       "project": "CANOE_SLALOM",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -768,6 +794,7 @@ module.exports = {
         "水上",
         "测功仪",
         "骑行",
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -778,6 +805,20 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {
+        "on_water": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ],
+        "ergometer": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ],
+        "unknown": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ]
+      },
       "capabilities": {
         "management": {
           "status": "available",
@@ -799,7 +840,7 @@ module.exports = {
     },
     "CANOE_SPRINT": {
       "project": "CANOE_SPRINT",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -816,6 +857,7 @@ module.exports = {
         "水上",
         "测功仪",
         "骑行",
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -826,6 +868,20 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {
+        "on_water": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ],
+        "ergometer": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ],
+        "unknown": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ]
+      },
       "capabilities": {
         "management": {
           "status": "available",
@@ -847,7 +903,7 @@ module.exports = {
     },
     "CYCLING_ROAD": {
       "project": "CYCLING_ROAD",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration|distance"
       ],
@@ -860,6 +916,7 @@ module.exports = {
       ],
       "contentCategories": [
         "骑行",
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -870,6 +927,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -891,7 +949,7 @@ module.exports = {
     },
     "CYCLING_TRACK": {
       "project": "CYCLING_TRACK",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration|distance"
       ],
@@ -904,6 +962,7 @@ module.exports = {
       ],
       "contentCategories": [
         "骑行",
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -914,6 +973,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -935,7 +995,7 @@ module.exports = {
     },
     "CYCLING_MOUNTAIN_BIKE": {
       "project": "CYCLING_MOUNTAIN_BIKE",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -946,6 +1006,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -956,6 +1017,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -977,7 +1039,7 @@ module.exports = {
     },
     "BMX_RACING": {
       "project": "BMX_RACING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -988,6 +1050,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -998,6 +1061,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1019,7 +1083,7 @@ module.exports = {
     },
     "BMX_FREESTYLE": {
       "project": "BMX_FREESTYLE",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1030,6 +1094,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1040,6 +1105,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1061,7 +1127,7 @@ module.exports = {
     },
     "EQUESTRIAN_DRESSAGE": {
       "project": "EQUESTRIAN_DRESSAGE",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1072,6 +1138,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1082,6 +1149,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1103,7 +1171,7 @@ module.exports = {
     },
     "EQUESTRIAN_EVENTING": {
       "project": "EQUESTRIAN_EVENTING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1114,6 +1182,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1124,6 +1193,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1145,7 +1215,7 @@ module.exports = {
     },
     "EQUESTRIAN_JUMPING": {
       "project": "EQUESTRIAN_JUMPING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1156,6 +1226,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1166,6 +1237,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1187,7 +1259,7 @@ module.exports = {
     },
     "FENCING": {
       "project": "FENCING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1198,6 +1270,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1208,6 +1281,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1229,7 +1303,7 @@ module.exports = {
     },
     "FOOTBALL": {
       "project": "FOOTBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1240,6 +1314,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1250,6 +1325,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1271,7 +1347,7 @@ module.exports = {
     },
     "GOLF": {
       "project": "GOLF",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1282,6 +1358,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1292,6 +1369,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1313,7 +1391,7 @@ module.exports = {
     },
     "ARTISTIC_GYMNASTICS": {
       "project": "ARTISTIC_GYMNASTICS",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1324,6 +1402,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1334,6 +1413,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1355,7 +1435,7 @@ module.exports = {
     },
     "RHYTHMIC_GYMNASTICS": {
       "project": "RHYTHMIC_GYMNASTICS",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1366,6 +1446,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1376,6 +1457,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1397,7 +1479,7 @@ module.exports = {
     },
     "TRAMPOLINE": {
       "project": "TRAMPOLINE",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1408,6 +1490,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1418,6 +1501,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1439,7 +1523,7 @@ module.exports = {
     },
     "HANDBALL": {
       "project": "HANDBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1450,6 +1534,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1460,6 +1545,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1481,7 +1567,7 @@ module.exports = {
     },
     "HOCKEY": {
       "project": "HOCKEY",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1492,6 +1578,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1502,6 +1589,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1523,7 +1611,7 @@ module.exports = {
     },
     "JUDO": {
       "project": "JUDO",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1534,6 +1622,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1544,6 +1633,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1565,7 +1655,7 @@ module.exports = {
     },
     "KARATE_KATA": {
       "project": "KARATE_KATA",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1576,6 +1666,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1586,6 +1677,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1607,7 +1699,7 @@ module.exports = {
     },
     "KARATE_KUMITE": {
       "project": "KARATE_KUMITE",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1618,6 +1710,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1628,6 +1721,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1649,7 +1743,7 @@ module.exports = {
     },
     "MODERN_PENTATHLON": {
       "project": "MODERN_PENTATHLON",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1660,6 +1754,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1670,6 +1765,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1691,7 +1787,7 @@ module.exports = {
     },
     "ROWING": {
       "project": "ROWING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1708,6 +1804,7 @@ module.exports = {
         "水上",
         "测功仪",
         "骑行",
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1718,6 +1815,20 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {
+        "on_water": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ],
+        "ergometer": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ],
+        "unknown": [
+          "U_SYSTEM",
+          "UT_SYSTEM"
+        ]
+      },
       "capabilities": {
         "management": {
           "status": "available",
@@ -1739,7 +1850,7 @@ module.exports = {
     },
     "RUGBY_SEVENS": {
       "project": "RUGBY_SEVENS",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1750,6 +1861,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1760,6 +1872,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1781,7 +1894,7 @@ module.exports = {
     },
     "SAILING": {
       "project": "SAILING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1792,6 +1905,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1802,6 +1916,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1823,7 +1938,7 @@ module.exports = {
     },
     "SHOOTING": {
       "project": "SHOOTING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1834,6 +1949,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1844,6 +1960,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1865,7 +1982,7 @@ module.exports = {
     },
     "SKATEBOARDING": {
       "project": "SKATEBOARDING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1876,6 +1993,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1886,6 +2004,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1907,7 +2026,7 @@ module.exports = {
     },
     "SPORT_CLIMBING": {
       "project": "SPORT_CLIMBING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1918,6 +2037,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1928,6 +2048,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1949,7 +2070,7 @@ module.exports = {
     },
     "SURFING": {
       "project": "SURFING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -1960,6 +2081,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -1970,6 +2092,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -1991,7 +2114,7 @@ module.exports = {
     },
     "TABLE_TENNIS": {
       "project": "TABLE_TENNIS",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2002,6 +2125,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2012,6 +2136,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2033,7 +2158,7 @@ module.exports = {
     },
     "TAEKWONDO": {
       "project": "TAEKWONDO",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2044,6 +2169,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2054,6 +2180,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2075,7 +2202,7 @@ module.exports = {
     },
     "TENNIS": {
       "project": "TENNIS",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2086,6 +2213,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2096,6 +2224,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2117,7 +2246,7 @@ module.exports = {
     },
     "TRIATHLON": {
       "project": "TRIATHLON",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2128,6 +2257,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2138,6 +2268,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2159,7 +2290,7 @@ module.exports = {
     },
     "VOLLEYBALL": {
       "project": "VOLLEYBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2172,6 +2303,7 @@ module.exports = {
       ],
       "contentCategories": [
         "排球技术",
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2182,6 +2314,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2203,7 +2336,7 @@ module.exports = {
     },
     "BEACH_VOLLEYBALL": {
       "project": "BEACH_VOLLEYBALL",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2214,6 +2347,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2224,6 +2358,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2245,7 +2380,7 @@ module.exports = {
     },
     "WEIGHTLIFTING": {
       "project": "WEIGHTLIFTING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2256,6 +2391,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2266,6 +2402,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2287,7 +2424,7 @@ module.exports = {
     },
     "WRESTLING": {
       "project": "WRESTLING",
-      "version": "multi-sport-v2",
+      "version": "multi-sport-v3",
       "requiredSessionFields": [
         "duration"
       ],
@@ -2298,6 +2435,7 @@ module.exports = {
         "recovery"
       ],
       "contentCategories": [
+        "力量训练",
         "功能",
         "拉伸再生",
         "力量耐力",
@@ -2308,6 +2446,7 @@ module.exports = {
         "其它",
         "待核实"
       ],
+      "activityIntensitySystems": {},
       "capabilities": {
         "management": {
           "status": "available",
@@ -2400,6 +2539,34 @@ module.exports = {
     "running": "跑步",
     "recovery": "恢复训练"
   },
+  "intensitySystems": [
+    {
+      "code": "U_SYSTEM",
+      "label": "U3/U2/U1/AT/TPT/AN/ATP",
+      "zones": [
+        "U3",
+        "U2",
+        "U1",
+        "AT",
+        "TPT",
+        "AN",
+        "ATP"
+      ]
+    },
+    {
+      "code": "UT_SYSTEM",
+      "label": "UT3/UT2/UT1/TR/AT/AN/REC",
+      "zones": [
+        "UT3",
+        "UT2",
+        "UT1",
+        "TR",
+        "AT",
+        "AN",
+        "REC"
+      ]
+    }
+  ],
   "provinces": [
     "北京",
     "天津",

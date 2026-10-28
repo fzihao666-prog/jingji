@@ -1,3 +1,4 @@
+import { normalizeProject } from './projects.js';
 import { STRENGTH_METRICS } from './strength-model.js';
 
 export type MetricDirection = 'higher_better' | 'lower_better' | 'neutral';
@@ -15,9 +16,9 @@ export type OverviewMetricDefinition = {
   maximum: number | null;
 };
 
-const common = ['赛艇', '皮划艇', '激流'];
+const common = ['*'];
 
-export const OVERVIEW_METRICS: OverviewMetricDefinition[] = [
+const definitions: OverviewMetricDefinition[] = [
   ...STRENGTH_METRICS.map((metric) => ({
     code: metric.key,
     label: metric.label,
@@ -415,6 +416,8 @@ export const OVERVIEW_METRICS: OverviewMetricDefinition[] = [
     maximum: 3,
   },
 ];
+
+export const OVERVIEW_METRICS: OverviewMetricDefinition[] = definitions.map(metric=>({...metric,projects:metric.projects.map(project=>normalizeProject(project)||project)}));
 
 export const OVERVIEW_METRIC_MAP = Object.fromEntries(
   OVERVIEW_METRICS.map((metric) => [metric.code, metric])
