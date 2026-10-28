@@ -10,6 +10,7 @@ import {
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import './EChart.css';
+import { emptyChartOption } from './empty-chart-option';
 
 registerEChartsComponents([
   BarChart,
@@ -37,16 +38,14 @@ export function EChart({
 }) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
-  const placeholder = useRef(isPlaceholder);
-  placeholder.current = isPlaceholder;
-  const currentOption = useRef(option);
-  currentOption.current = option;
+  const displayOption = isPlaceholder ? emptyChartOption(option) : option;
+  const currentOption = useRef(displayOption);
+  currentOption.current = displayOption;
   useEffect(() => {
-    if (isPlaceholder) return;
     const container = element.current;
     if (!container) return;
     const resize = () => {
-      if (placeholder.current || !container.clientWidth || !container.clientHeight) return;
+      if (!container.clientWidth || !container.clientHeight) return;
       if (!chart.current) {
         const styles = getComputedStyle(container);
         const token = (name: string) => styles.getPropertyValue(name).trim();
@@ -73,11 +72,11 @@ export function EChart({
       chart.current?.dispose();
       chart.current = null;
     };
-  }, [isPlaceholder]);
+  }, []);
   useEffect(() => {
     // 系列数量随成绩分组/数据变化；替换系列避免残留，同时保留其他交互状态。
-    if (!isPlaceholder) chart.current?.setOption(option, { notMerge: true });
-  }, [option, isPlaceholder]);
+    chart.current?.setOption(displayOption, { notMerge: true });
+  }, [displayOption]);
   return (
     <div className="app-echart-wrap">
       <div

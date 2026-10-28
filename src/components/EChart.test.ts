@@ -48,3 +48,14 @@ it('专项options保留真实零和缺失值，不用示例替换', () => {
   });
   expect(contentOption(data)).toMatchObject({ series: [{ data: [1] }] });
 });
+
+it('空态渲染保留坐标与图例，删除示例值并禁用提示', async () => {
+  const { emptyChartOption } = await import('./empty-chart-option');
+  const option = { xAxis: { type: 'category' as const, data: ['周一'] }, legend: {}, series: [{ type: 'line' as const, data: [36] }] };
+  const result = emptyChartOption(option);
+  expect(result.xAxis).toEqual(option.xAxis);
+  expect(result.legend).toEqual(option.legend);
+  expect(result).toMatchObject({ tooltip: { show: false }, series: [{ data: [], silent: true }] });
+  expect(option.series[0].data).toEqual([36]);
+  expect(emptyChartOption({ series: [{ type: 'pie', data: [] }] })).toMatchObject({ series: [{ showEmptyCircle: true, data: [] }] });
+});
