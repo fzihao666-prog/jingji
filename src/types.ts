@@ -642,6 +642,7 @@ export type AthleteRadarDimension = {
 };
 
 export type AthleteRadarModel = {
+  unavailableReason?: string;
   kind: 'special' | 'physical';
   dimensions: AthleteRadarDimension[];
 };

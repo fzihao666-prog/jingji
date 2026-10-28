@@ -59,10 +59,11 @@ export const STRENGTH_TRAINING_ENVIRONMENTS = [
 export type StrengthTrainingEnvironment = (typeof STRENGTH_TRAINING_ENVIRONMENTS)[number];
 
 export const STRENGTH_INTENSITY_ZONES = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'] as const;
-export type StrengthIntensityZone = (typeof STRENGTH_INTENSITY_ZONES)[number];
+// 兼容原始强度标签；未声明体系时不套用赛艇分区。
+export type StrengthIntensityZone = string;
 
 export const TRAINING_INTENSITY_META: Record<
-  StrengthIntensityZone,
+  (typeof STRENGTH_INTENSITY_ZONES)[number],
   {
     label: string;
     strokeRate: string;
@@ -129,7 +130,7 @@ export function isStrengthTrainingEnvironment(
 }
 
 export function isStrengthIntensityZone(value: unknown): value is StrengthIntensityZone {
-  return STRENGTH_INTENSITY_ZONES.includes(value as StrengthIntensityZone);
+  return STRENGTH_INTENSITY_ZONES.includes(value as (typeof STRENGTH_INTENSITY_ZONES)[number]);
 }
 
 export function inferStrengthCategory(exerciseName: string): StrengthTrainingCategory {

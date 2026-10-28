@@ -1,4 +1,4 @@
-import { projectRules } from './sport-rules.js';
+import { allowedIntensitySystems, isActivityCode, projectRules } from './sport-rules.js';
 export const TRAINING_CONTENT_CATEGORIES = [
   '水上',
   '测功仪',
@@ -25,6 +25,8 @@ export type TrainingContentSource = {
   trainingType?: string | null;
   structureType?: string | null;
   content?: string | null;
+  intensitySystem?: string | null;
+  projectStatus?: string | null;
 };
 
 // 这是统计展示口径：每个训练课次只归入一个固定类别，不改写原始训练字段。
@@ -78,9 +80,45 @@ export function trainingLoadCategory(input: TrainingContentSource): TrainingLoad
 
 /** 全平台词汇表不能直接作为某项目的图例。 */
 export function trainingContentCategories(project: unknown): readonly TrainingContentCategory[] {
- return projectRules(project)?.contentCategories || ['力量训练','功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实'];
+  return (
+    projectRules(project)?.contentCategories || [
+      '力量训练',
+      '功能',
+      '拉伸再生',
+      '力量耐力',
+      '最大力量',
+      '速度力量',
+      '跑步',
+      '专项',
+      '其它',
+      '待核实',
+    ]
+  );
 }
-export function projectTrainingContentCategory(project: unknown, input: TrainingContentSource): TrainingContentCategory {
- const category=trainingContentCategory(input);
- return trainingContentCategories(project).includes(category) ? category : '待核实';
+export function projectTrainingContentCategory(
+  project: unknown,
+  input: TrainingContentSource
+): TrainingContentCategory {
+  if (trainingClassificationReason(project, input)) return '待核实';
+  return trainingContentCategory(input);
+}
+
+/** 只标注展示分类，不用文字猜测补写历史事实。 */
+export function trainingClassificationReason(
+  project: unknown,
+  input: TrainingContentSource
+): string | null {
+  const rules = projectRules(project);
+  if (!rules || (input.projectStatus && input.projectStatus !== 'confirmed'))
+    return '发生时项目待核实';
+  if (!input.activityCode || input.activityCode === 'unknown') return '训练活动未分类';
+  if (!isActivityCode(input.activityCode) || !rules.activities.includes(input.activityCode))
+    return '训练活动不适用于该项目';
+  if (!trainingLoadCategory(input)) return '训练目的待核实';
+  if (
+    input.intensitySystem &&
+    !allowedIntensitySystems(project, input.activityCode).includes(input.intensitySystem)
+  )
+    return '强度体系不适用于该项目活动';
+  return null;
 }

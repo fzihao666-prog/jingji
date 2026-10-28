@@ -251,3 +251,15 @@ it('有氧趋势只连接相同明确协议版本、条件与侧别，未知版�
     trend: null,
   });
 });
+
+it.each(['CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(
+  '%s个人雷达返回可展示空状态，不泄漏赛艇维度',
+  async (project) => {
+    db.prepare('UPDATE athletes SET project=? WHERE id=9001').run(project);
+    const result = await read(`/api/athletes/9001/radar-models?${range}`);
+    expect(result).toMatchObject({
+      special: { dimensions: [], unavailableReason: expect.stringContaining('尚未配置') },
+      physical: { dimensions: [] },
+    });
+  }
+);

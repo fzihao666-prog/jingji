@@ -179,3 +179,17 @@ it('新版体能隐藏选填数值和组次的非法文本不能静默变成空�
   expect(row.errors.join('；')).toContain('组次');
   expect(row.errors.join('；')).toContain('RPE');
 });
+
+it('力量强度缺失留空，未知原文保留，不自动填AN或套用水上体系', () => {
+  const input = {
+    athleteId: 1,
+    trainingDate: '2026-10-01',
+    exerciseName: '深蹲',
+    actualReps: 6,
+    actualWeightKg: 60,
+  };
+  expect(validateStrengthImportRow(input, 4, people).intensityZone).toBe('');
+  const raw = validateStrengthImportRow({ ...input, intensityZone: 'Z2' }, 4, people);
+  expect(raw.intensityZone).toBe('Z2');
+  expect(raw.warnings.join('')).toContain('保留原文');
+});

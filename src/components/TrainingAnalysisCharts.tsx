@@ -769,7 +769,7 @@ export function TrainingContentChart({ records, project }: { records: TrainingRe
   return (
     <div className="analysis-chart-module">
       <div className="analysis-chart-toolbar">
-        <span className="analysis-caption">按当前页面时间范围统计；每条课次仅归入一个类别</span>
+        <span className="analysis-caption">按当前页面时间范围统计；每条课次仅归入一个类别；项目、活动、目的或强度体系不明确的记录列为待核实，原始数据保留</span>
       </div>
       <div className="content-chart-layout training-ratio-layout">
         <div className="content-pie training-ratio-pie">

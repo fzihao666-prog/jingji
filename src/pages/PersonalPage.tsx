@@ -331,7 +331,7 @@ export function PersonalPage(props: Props) {
     let ignored = false;
     setRadarModels(null);
 
-    if (!selectedAthlete || selectedAthlete.project !== 'ROWING') {
+    if (!selectedAthlete) {
       setRadarModelsLoading(false);
       return;
     }
@@ -792,7 +792,7 @@ export function PersonalPage(props: Props) {
                   model={radarModels?.special ?? null}
                   loading={radarModelsLoading}
                   unavailableReason={
-                    selectedAthlete.project === 'ROWING' ? undefined : '该项目雷达维度待配置'
+                    radarModels?.special.unavailableReason
                   }
                 />
               </AppCard>
@@ -814,7 +814,7 @@ export function PersonalPage(props: Props) {
                   model={radarModels?.physical ?? null}
                   loading={radarModelsLoading}
                   unavailableReason={
-                    selectedAthlete.project === 'ROWING' ? undefined : '该项目雷达维度待配置'
+                    radarModels?.physical.unavailableReason
                   }
                 />
               </AppCard>

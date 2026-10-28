@@ -65,7 +65,7 @@ it.each([
   db.prepare("INSERT INTO users(id,username,password_hash,display_name,role,athlete_id) VALUES(?,?,'fixture_hash','合成闭环教练','SCC',?)").run(fixture.userId, `lifecycle_${project}`, athleteId);
   const data = {
     goal: '合成计划目标', focus: '专项训练',
-    sessions: [{ id: 'am', date, category: 'special', period: '上午', content: '合成专项课', durationMin: 90, distanceKm: null, intensity: '', sets: null, reps: null, load: null, notes: '' }],
+    sessions: [{ id: 'am', date, category: 'special', activityCode, intensitySystem: '', period: '上午', content: '合成专项课', durationMin: 90, distanceKm: null, intensity: '', sets: null, reps: null, load: null, notes: '' }],
     overrides: [{ athleteId, sessionId: 'am', changes: { durationMin: 60 }, reason: '合成人员目标调整' }],
   };
   const draft = await writePlan('', { teamId, title: '合成闭环计划', startDate: date, endDate: date, data });
@@ -81,7 +81,7 @@ it.each([
   expect(listSessions(athleteId)).toHaveLength(1);
   const link = db.prepare('SELECT plan_id,session_id,target_json FROM training_plan_execution_links WHERE training_session_id=?').get(created.session.id) as { plan_id: number; session_id: string; target_json: string };
   expect(link).toMatchObject({ plan_id: published.id, session_id: 'am' });
-  expect(JSON.parse(link.target_json)).toMatchObject({ id: 'am', durationMin: 60 });
+  expect(JSON.parse(link.target_json)).toMatchObject({ id: 'am', activityCode, durationMin: 60 });
   const execution = readPlanExecution(db, { athleteIds: [athleteId], project, now: new Date(`${date}T12:00:00+08:00`) });
   expect(execution.athletes[0].lessonExecution[0]).toMatchObject({ status: 'complete', completionRate: 1, target: { durationMin: 60 } });
 

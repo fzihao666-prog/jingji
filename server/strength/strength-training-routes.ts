@@ -174,7 +174,7 @@ export function validateStrengthImportRow(
   const trainingEnvironment = isStrengthTrainingEnvironment(environmentValue)
     ? environmentValue
     : '陆上';
-  const intensityZone = isStrengthIntensityZone(intensityZoneValue) ? intensityZoneValue : 'AN';
+  const intensityZone = intensityZoneValue;
   const setIndex = Math.max(
     1,
     Math.round(
@@ -272,7 +272,7 @@ export function validateStrengthImportRow(
   if (environmentValue && !isStrengthTrainingEnvironment(environmentValue))
     warnings.push(`训练环境“${environmentValue}”无法识别，已按陆上训练处理`);
   if (intensityZoneValue && !isStrengthIntensityZone(intensityZoneValue))
-    warnings.push(`强度区间“${intensityZoneValue}”无法识别，已按AN处理`);
+    warnings.push(`强度区间“${intensityZoneValue}”未声明已配置体系，保留原文，不作分区换算`);
   if (confidence !== null && confidence < 0.7) warnings.push('AI识别置信度较低，请人工核对');
   const duplicate = Boolean(
     matched &&
@@ -334,12 +334,22 @@ function validateStrengthImportBatch(
   if (simplified) {
     const groups = new Map<string, StrengthImportRow[]>();
     for (const row of rows) {
-      const key = JSON.stringify([row.athleteId ?? row.athleteName, row.trainingDate, row.sessionLabel, row.exerciseName, row.setIndex]);
-      const group = groups.get(key) || []; group.push(row); groups.set(key, group);
+      const key = JSON.stringify([
+        row.athleteId ?? row.athleteName,
+        row.trainingDate,
+        row.sessionLabel,
+        row.exerciseName,
+        row.setIndex,
+      ]);
+      const group = groups.get(key) || [];
+      group.push(row);
+      groups.set(key, group);
     }
-    for (const group of groups.values()) if (group.length > 1) {
-      for (const row of group) row.errors.push(`第${row.rowNumber}行：同人同课同动作的组次重复或缺失，请填写不同组次`);
-    }
+    for (const group of groups.values())
+      if (group.length > 1) {
+        for (const row of group)
+          row.errors.push(`第${row.rowNumber}行：同人同课同动作的组次重复或缺失，请填写不同组次`);
+      }
   }
   return rows;
 }
@@ -412,16 +422,38 @@ export async function parseStrengthImportFile(
             strengthCellText(row.getCell(index + 1).value),
           ])
         );
-        const identities = ['系统运动员编号', '运动员', '运动员姓名', '姓名', '队伍', '训练日期', '日期'].map(normalizedStrengthHeader);
-        if (Object.entries(record).some(([key, value]) => !identities.includes(key) && cleanString(value)))
-          records.push({ ...record, _templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '', originalText: `${sheet.name}!${rowNumber}` });
+        const identities = [
+          '系统运动员编号',
+          '运动员',
+          '运动员姓名',
+          '姓名',
+          '队伍',
+          '训练日期',
+          '日期',
+        ].map(normalizedStrengthHeader);
+        if (
+          Object.entries(record).some(
+            ([key, value]) => !identities.includes(key) && cleanString(value)
+          )
+        )
+          records.push({
+            ...record,
+            _templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
+            originalText: `${sheet.name}!${rowNumber}`,
+          });
       }
     });
     if (simplified) {
       const groups = new Map<string, Record<string, unknown>[]>();
       for (const record of records) {
-        const key = JSON.stringify(['系统运动员编号', '运动员', '队伍', '训练日期', '训练场次', '动作'].map(label => strengthRecordValue(record, [label])));
-        const group = groups.get(key) || []; group.push(record); groups.set(key, group);
+        const key = JSON.stringify(
+          ['系统运动员编号', '运动员', '队伍', '训练日期', '训练场次', '动作'].map((label) =>
+            strengthRecordValue(record, [label])
+          )
+        );
+        const group = groups.get(key) || [];
+        group.push(record);
+        groups.set(key, group);
       }
       for (const group of groups.values()) {
         if (group.length < 2) continue;
@@ -521,9 +553,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
           distanceKm: Number(row.sessionDistanceKm || 0),
           trainingType: cleanString(row.trainingType),
           structureType: cleanString(row.structureType),
-          intensityZone: isStrengthIntensityZone(row.sessionIntensityZone)
-            ? row.sessionIntensityZone
-            : 'AN',
+          intensityZone: cleanString(row.sessionIntensityZone),
           srpe: row.srpe == null ? null : Number(row.srpe),
           source: cleanString(row.source),
           sourceFilename: cleanString(row.sourceFilename),
@@ -551,7 +581,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
         durationMin: Number(row.durationMin || 0),
         distanceKm: Number(row.distanceKm || 0),
         intensityPercent: row.intensityPercent === null ? null : Number(row.intensityPercent),
-        intensityZone: isStrengthIntensityZone(row.setIntensityZone) ? row.setIntensityZone : 'AN',
+        intensityZone: cleanString(row.setIntensityZone),
         rpe: row.rpe === null ? null : Number(row.rpe),
         completed: Boolean(row.completed),
         note: cleanString(row.note),
@@ -591,8 +621,14 @@ export function registerStrengthTrainingRoutes(app: Express) {
         if (!athletes.length)
           return res.status(403).json({ message: '当前账号没有可导入的运动员。' });
         const parsed = await parseStrengthImportFile(req.file, athletes);
-        const simplified = parsed.records.some(record => record._templateVersion === IMPORT_TEMPLATE_VERSION);
-        const rows = validateStrengthImportBatch(parsed.records.slice(0, 1000), athletes, simplified);
+        const simplified = parsed.records.some(
+          (record) => record._templateVersion === IMPORT_TEMPLATE_VERSION
+        );
+        const rows = validateStrengthImportBatch(
+          parsed.records.slice(0, 1000),
+          athletes,
+          simplified
+        );
         const token = randomUUID();
         strengthImportCache.set(token, {
           ownerId: req.authUser!.id,
@@ -746,7 +782,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
                 (athlete_id, session_date, session_order, start_time, training_type, structure_type,
                  intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl,
                  source, quality, is_demo, created_by)
-              VALUES (?, ?, ?, '', '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, NULL, 0, ?, ?, 0, ?)
+              VALUES (?, ?, ?, '', '力量训练', '体能训练', '', ?, 0, 0, 0, 0, NULL, NULL, 0, ?, ?, 0, ?)
             `
                 )
                 .run(
@@ -918,7 +954,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
             Number(totals.distanceReported),
             averageRpe != null && totals.durationReported ? Math.round(averageRpe * duration * 10) / 10 : null,
             dominant?.environment || '陆上',
-            isStrengthIntensityZone(dominant?.zone) ? dominant.zone : 'AN',
+            cleanString(dominant?.zone),
             sessionId
           );
         }

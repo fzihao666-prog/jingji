@@ -26,7 +26,6 @@ import type { CSSProperties, PointerEvent } from 'react';
 import {
   STRENGTH_BODY_POSITIONS,
   STRENGTH_CONTENT_ANALYSIS_CATEGORIES,
-  STRENGTH_INTENSITY_ZONES,
   STRENGTH_TRAINING_CATEGORIES,
   inferStrengthBodyPosition,
   inferStrengthContentAnalysisCategory,
@@ -1079,41 +1078,29 @@ export function StrengthAnalysisPanel({ sessions }: { sessions: StrengthTraining
       volume: round(session.distanceKm || session.volume / 1000, 1),
       duration: round(session.durationMin || 0),
     }));
-    const intensity = STRENGTH_INTENSITY_ZONES.map((zone) => ({
-      name: zone,
-      value: limited.reduce(
-        (sum, session) =>
-          sum +
-          session.sets.filter((set) => (set.intensityZone || session.intensityZone) === zone)
-            .length,
-        0
-      ),
-    }));
+    const intensityCounts = new Map<string, number>();
+    limited.forEach((session) =>
+      session.sets.forEach((set) => {
+        const raw = set.intensityZone || session.intensityZone;
+        const label = raw ? `未指定体系 · ${raw}` : '未填强度';
+        intensityCounts.set(label, (intensityCounts.get(label) || 0) + 1);
+      })
+    );
+    const intensity = [...intensityCounts].map(([name, value]) => ({ name, value }));
     const environmentMap = new Map<string, number>();
     limited.forEach((session) =>
       session.sets.forEach((set) => {
-        const environment =
-          set.trainingEnvironment || (session.structureType.includes('水') ? '水上' : '陆上');
-        environmentMap.set(
-          environment,
-          (environmentMap.get(environment) || 0) +
-            (set.durationMin || session.durationMin / Math.max(1, session.sets.length) || 1)
-        );
+        const environment = set.trainingEnvironment || '未填环境';
+        environmentMap.set(environment, (environmentMap.get(environment) || 0) + 1);
       })
     );
-    const water = [...environmentMap]
-      .filter(([name]) => ['水上', '泳池'].includes(name))
-      .reduce((sum, [, value]) => sum + value, 0);
-    const land = [...environmentMap]
-      .filter(([name]) => !['水上', '泳池'].includes(name))
-      .reduce((sum, [, value]) => sum + value, 0);
     const sessionTypes = [...environmentMap]
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-    return { daily, intensity, water, land, sessionTypes };
+    return { daily, intensity, sessionTypes };
   }, [period, sessions]);
   const intensityTotal = data.intensity.reduce((sum, item) => sum + item.value, 0);
-  const environmentTotal = data.water + data.land;
+  const environmentTotal = data.sessionTypes.reduce((sum, item) => sum + item.value, 0);
 
   return (
     <>
@@ -1206,7 +1193,7 @@ export function StrengthAnalysisPanel({ sessions }: { sessions: StrengthTraining
         <article className="strength-chart-card">
           <header>
             <div>
-              <span>U3 / U2 / U1 / AT / TPT / AN / ATP</span>
+              <span>原始强度标签 · 未声明体系不换算</span>
               <h2>训练强度分布</h2>
             </div>
           </header>
@@ -1234,7 +1221,7 @@ export function StrengthAnalysisPanel({ sessions }: { sessions: StrengthTraining
             <div className="strength-chart-list">
               {data.intensity.map((item, index) => (
                 <div key={item.name}>
-                  <i style={{ background: palette[index] }} />
+                  <i style={{ background: palette[index % palette.length] }} />
                   <span>{item.name}</span>
                   <strong>
                     {intensityTotal ? round((item.value / intensityTotal) * 100, 1) : 0}%
@@ -1248,33 +1235,22 @@ export function StrengthAnalysisPanel({ sessions }: { sessions: StrengthTraining
           <header>
             <div>
               <span>环境结构</span>
-              <h2>水陆训练负荷占比</h2>
+              <h2>训练环境记录占比</h2>
             </div>
           </header>
-          <div className="water-land-ratio">
-            <strong>
-              {environmentTotal ? round((data.water / environmentTotal) * 100) : 0}
-              <small>:</small>
-              {environmentTotal ? round((data.land / environmentTotal) * 100) : 0}
-            </strong>
-            <div className="ratio-track">
-              <i
-                style={{
-                  width: `${environmentTotal ? (data.water / environmentTotal) * 100 : 0}%`,
-                }}
-              />
-            </div>
-            <div>
-              <span>
-                水上训练{' '}
-                <b>{environmentTotal ? round((data.water / environmentTotal) * 100) : 0}%</b>
-              </span>
-              <span>
-                陆上训练{' '}
-                <b>{environmentTotal ? round((data.land / environmentTotal) * 100) : 0}%</b>
-              </span>
-            </div>
-            <small>按训练时间与动作记录汇总</small>
+          <div className="strength-chart-list">
+            {environmentTotal ? (
+              data.sessionTypes.map((item, index) => (
+                <div key={item.name}>
+                  <i style={{ background: palette[index % palette.length] }} />
+                  <span>{item.name}</span>
+                  <strong>{round((item.value / environmentTotal) * 100, 1)}%</strong>
+                </div>
+              ))
+            ) : (
+              <EmptyChart text="暂无训练环境记录" />
+            )}
+            <small>按动作组次数量统计，未填环境单列，不换算为负荷。</small>
           </div>
         </article>
         <article className="strength-chart-card">

@@ -16,7 +16,6 @@ import {
   STRENGTH_TRAINING_CATEGORIES,
   STRENGTH_BODY_POSITIONS,
   STRENGTH_TRAINING_ENVIRONMENTS,
-  STRENGTH_INTENSITY_ZONES,
 } from './strength-training.js';
 import { TECHNICAL_LEVELS } from './athlete-technical-level.js';
 
@@ -294,7 +293,7 @@ const examples: Record<string, string> = {
   训练类型: '基础力量',
   训练内容: '水上耐力训练',
   训练阶段: '基础期',
-  强度区间: 'U2',
+  强度区间: '',
   时长分钟: '60',
   距离千米: '12.5',
   RPE: '6',
@@ -307,7 +306,7 @@ const examples: Record<string, string> = {
   事实项目: 'ROWING',
   项目归属状态: 'confirmed',
   训练活动: '骑行',
-  强度体系: 'U_SYSTEM',
+  强度体系: '',
   协议版本: '2026-v1',
   测试上下文: '室内/设备A',
   试次序号: '1',
@@ -380,9 +379,9 @@ const examples: Record<string, string> = {
 };
 const choices: Record<string, readonly string[]> = {
   训练活动: Object.values(ACTIVITY_LABELS),
-  强度体系: INTENSITY_ZONE_SYSTEMS.map(system => system.code),
+  强度体系: INTENSITY_ZONE_SYSTEMS.map((system) => system.code),
   性别: ['男', '女'],
-  运动项目: PROJECT_DEFINITIONS.map(project => project.nameZh),
+  运动项目: PROJECT_DEFINITIONS.map((project) => project.nameZh),
   身体状态: ['健康', '观察', '训练受限', '康复中'],
   训练状态: ['在训', '集训', '休整', '离队'],
   等级: ['巅峰', '良好', '建设', '调整'],
@@ -396,7 +395,6 @@ const choices: Record<string, readonly string[]> = {
   身体部位: STRENGTH_BODY_POSITIONS,
   身体位置: STRENGTH_BODY_POSITIONS,
   训练环境: STRENGTH_TRAINING_ENVIRONMENTS,
-  强度区间: STRENGTH_INTENSITY_ZONES,
   完成状态: ['已完成', '未完成'],
   是否完成: ['是', '否'],
 };
@@ -410,7 +408,9 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
         ? SPECIAL_IMPORT_HEADERS
         : []);
   const common = commonColumns[sheet] || original;
-  const ordered = [...common, ...original.filter((key) => !common.includes(key))].filter(key => sheet !== '其他测试' || !['指标代码', '单位'].includes(key));
+  const ordered = [...common, ...original.filter((key) => !common.includes(key))].filter(
+    (key) => sheet !== '其他测试' || !['指标代码', '单位'].includes(key)
+  );
   const fields: ImportTemplateField[] = ordered.map((key) => {
     let requirement: TemplateRequirement = '选填';
     let hint = '仅填写实际已采集数据，未提供留空。';
@@ -463,6 +463,8 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
     if (key === '项目归属状态') hint = '完整导出的归属状态；pending_verification须先核实，不能直接回导为已确认。新建记录可留空。';
     if (key === '训练活动') hint = '按本次实际活动选择；交叉训练不改变运动员项目。未提供保持未分类，不从文字猜测。';
     if (key === '踏频rpm') hint = '仅骑行活动填写实测踏频，单位rpm；不能填入桨频列。';
+    if (key === '强度区间')
+      hint = '按原始记录填写；未声明适用体系时只保留文字，不套用水上分区，未测留空。';
     if (key === '强度体系') hint = '填写原记录使用的体系；分区须与该体系一致，不自动换算。';
     if (key === '协议版本') hint = '填写测试方法实际版本；版本不同分别保存，不视为同场重复。';
     if (key === '测试上下文') hint = '填写影响比较的设备、环境等原始条件；不同条件分别保存。';

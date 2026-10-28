@@ -23,9 +23,37 @@ it('项目类别仅含适用项，越界历史类别进入待核实而非丢弃'
  expect(projectTrainingContentCategory('VOLLEYBALL',{content:'水上训练'})).toBe('待核实');
 });
 
-it('明确力量活动不会被备注中的项目活动覆盖，活动本身不决定训练目的',()=>{
- expect(trainingContentCategory({activityCode:'strength',content:'水上训练'})).toBe('力量训练');
- expect(trainingContentCategory({activityCode:'strength',content:'水上专项深蹲'})).toBe('最大力量');
- expect(trainingLoadCategory({activityCode:'cycling',content:'骑行'})).toBeNull();
- expect(trainingLoadCategory({activityCode:'cycling',trainingType:'体能训练',content:'骑行'})).toBe('physical');
+it('明确力量活动不会被备注中的项目活动覆盖，活动本身不决定训练目的', () => {
+  expect(trainingContentCategory({ activityCode: 'strength', content: '水上训练' })).toBe(
+    '力量训练'
+  );
+  expect(trainingContentCategory({ activityCode: 'strength', content: '水上专项深蹲' })).toBe(
+    '最大力量'
+  );
+  expect(trainingLoadCategory({ activityCode: 'cycling', content: '骑行' })).toBeNull();
+  expect(
+    trainingLoadCategory({ activityCode: 'cycling', trainingType: '体能训练', content: '骑行' })
+  ).toBe('physical');
+});
+
+it('历史分类不根据备注猜活动，明确跨项训练保留，待核实不改写事实', async () => {
+  const { projectTrainingContentCategory, trainingClassificationReason } =
+    await import('./training-content-category.js');
+  const legacy = { trainingType: '专项训练', content: '水上训练' };
+  expect(projectTrainingContentCategory('ROWING', legacy)).toBe('待核实');
+  expect(trainingClassificationReason('ROWING', legacy)).toBe('训练活动未分类');
+  expect(legacy).toEqual({ trainingType: '专项训练', content: '水上训练' });
+  expect(projectTrainingContentCategory('ROWING', { ...legacy, activityCode: 'cycling' })).toBe(
+    '骑行'
+  );
+  expect(
+    projectTrainingContentCategory('VOLLEYBALL', {
+      ...legacy,
+      activityCode: 'volleyball_technique',
+      intensitySystem: 'U_SYSTEM',
+    })
+  ).toBe('待核实');
+  expect(
+    projectTrainingContentCategory('ROWING', { activityCode: 'strength', content: '水上' })
+  ).toBe('待核实');
 });

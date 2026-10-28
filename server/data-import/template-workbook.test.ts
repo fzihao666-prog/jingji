@@ -133,7 +133,7 @@ it('所有固定枚举使用可见下拉，长选项使用命名区域，保存�
   await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
   const expected: Record<string, string[]> = {
     运动员基本资料: ['性别', '血型', '技术等级', '运动项目'],
-    力量训练组次: ['类别', '身体部位', '训练环境', '强度区间', '完成状态'],
+    力量训练组次: ['类别', '身体部位', '训练环境', '完成状态'],
     伤病记录: ['状态', '侧别'],
     竞技评估: ['等级'],
     其他测试: ['测试类型', '侧别'],
@@ -150,6 +150,8 @@ it('所有固定枚举使用可见下拉，长选项使用命名区域，保存�
       expect(String(validation.formulae?.[0]).length).toBeLessThanOrEqual(255);
     }
   }
+  const intensityColumn = importTemplateFields('力量训练组次').findIndex(field=>field.key==='强度区间')+1;
+  expect(loaded.getWorksheet('力量训练组次')!.getCell(4,intensityColumn).dataValidation.type).not.toBe('list');
   for (const name of ['项目', '性别组别', '上午/下午']) {
     const fields = importTemplateFields('专项训练成绩');
     const sheet = buildSpecialImportWorkbook().getWorksheet('专项训练成绩')!;

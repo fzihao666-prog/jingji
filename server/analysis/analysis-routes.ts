@@ -619,11 +619,22 @@ export function registerAnalysisRoutes(app: Express) {
       .get(athleteId) as
       { project: string; gender: string | null; currentEvent: string } | undefined;
     if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
+    res.setHeader('Cache-Control', 'no-store');
     if (athlete.project !== 'ROWING') {
-      return res.status(400).json({ message: '该项目的雷达维度尚未配置。' });
+      return res.json({
+        special: {
+          kind: 'special',
+          dimensions: [],
+          unavailableReason: '该项目的专项雷达维度尚未配置。',
+        },
+        physical: {
+          kind: 'physical',
+          dimensions: [],
+          unavailableReason: '该项目的体能雷达维度尚未配置，请查看体能冠军参考模型。',
+        },
+      });
     }
 
-    res.setHeader('Cache-Control', 'no-store');
     const metricPlaceholders = radarMeasurementCodes.map(() => '?').join(',');
     const measurementRows = db
       .prepare(
