@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { PencilLine, Save, X } from 'lucide-react';
 import {
   Legend,
   PolarAngleAxis,
@@ -156,10 +157,17 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
           <div className="physical-champion-actions">
             {editing ? (
               <>
-                <button type="submit" disabled={saving}>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={saving}
+                  aria-busy={saving}
+                >
+                  <Save size={16} aria-hidden="true" />
                   {saving ? '保存中…' : '保存'}
                 </button>
                 <button
+                  className="secondary-button"
                   type="button"
                   disabled={saving}
                   onClick={() => {
@@ -167,11 +175,13 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
                     setError('');
                   }}
                 >
+                  <X size={16} aria-hidden="true" />
                   取消
                 </button>
               </>
             ) : (
               <button
+                className="primary-button"
                 type="button"
                 onClick={(event) => {
                   // 切换为提交按钮前取消本次点击的默认行为，避免立即提交并退出编辑。
@@ -185,6 +195,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
                   setEditing(true);
                 }}
               >
+                <PencilLine size={16} aria-hidden="true" />
                 修改冠军模型
               </button>
             )}

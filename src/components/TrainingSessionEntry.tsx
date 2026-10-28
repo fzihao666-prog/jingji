@@ -227,7 +227,7 @@ export function TrainingSessionEntry({ athleteId, project, mode, onSaved, plan }
         <p role="status" aria-live="polite">
           {message}
         </p>
-        <button type="submit" disabled={saving}>
+        <button className="primary-button" type="submit" disabled={saving} aria-busy={saving}>
           {saving ? '正在保存…' : '保存训练'}
         </button>
       </form>

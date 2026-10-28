@@ -53,7 +53,11 @@ export function PhysicalChampionModel({ project, from, to }: Props) {
           title="冠军模型加载失败"
           description={error}
           action={
-            <button type="button" onClick={() => setRevision((value) => value + 1)}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => setRevision((value) => value + 1)}
+            >
               重试
             </button>
           }
