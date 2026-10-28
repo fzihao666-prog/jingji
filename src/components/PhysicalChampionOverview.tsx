@@ -26,29 +26,44 @@ const format = (value: number | null | undefined) =>
 
 export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
   const [editing, setEditing] = useState(false);
-  const [values, setValues] = useState<Record<number, string>>({});
+  const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const rows = group.references.map((reference) => ({
+  const columns =
+    group.modelDimensions ??
+    group.references.map((reference) => ({
+      id: reference.id,
+      revision: reference.revision,
+      key: reference.key,
+      label: reference.label,
+      unit: reference.unit,
+      value: reference.value,
+      estimated: reference.sourceType === 'estimated',
+    }));
+  const rows = columns.map((reference) => ({
     reference,
     team: group.team.find((item) => item.key === reference.key),
   }));
   const radar = rows.map((row) => ({
     label: row.reference.label,
-    champion: 100,
+    champion: row.reference.value == null ? null : 100,
     team: row.team?.achievedPercent ?? null,
   }));
-  const estimated = rows.some((row) => row.reference.sourceType === 'estimated');
+  const radarMax = Math.max(100, ...radar.map(point=>point.team??0));
+  const estimated = columns.some((reference) => reference.estimated);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canEdit || saving) return;
-    const changed = group.references
-      .filter((ref) => Number(values[ref.id]) !== ref.value)
-      .map((ref) => ({
-        id: ref.id,
-        expectedRevision: ref.revision,
-        value: Number(values[ref.id]),
-      }));
+    const changed = columns
+      .filter((ref) => {
+        const raw = values[ref.key] ?? '';
+        return ref.id === null ? raw.trim() !== '' : Number(raw) !== ref.value;
+      })
+      .map((ref) =>
+        ref.id === null
+          ? { key: ref.key, value: Number(values[ref.key]) }
+          : { id: ref.id, expectedRevision: ref.revision, value: Number(values[ref.key]) }
+      );
     if (!changed.length) {
       setEditing(false);
       return;
@@ -86,7 +101,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
               <tr>
                 <th scope="col">模型</th>
                 {rows.map(({ reference }) => (
-                  <th key={reference.id} scope="col">
+                  <th key={reference.key} scope="col">
                     {reference.label}
                     <small>{reference.unit}</small>
                   </th>
@@ -97,20 +112,20 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
               <tr>
                 <th scope="row">冠军模型</th>
                 {rows.map(({ reference }) => (
-                  <td key={reference.id}>
+                  <td key={reference.key}>
                     {editing ? (
                       <input
                         aria-label={`冠军模型 · ${reference.label}（${reference.unit}）`}
                         type="number"
                         step="any"
                         min="0"
-                        required
+                        required={reference.id !== null}
                         disabled={saving}
-                        value={values[reference.id] ?? ''}
+                        value={values[reference.key] ?? ''}
                         onChange={(event) =>
                           setValues((current) => ({
                             ...current,
-                            [reference.id]: event.target.value,
+                            [reference.key]: event.target.value,
                           }))
                         }
                       />
@@ -123,7 +138,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
               <tr>
                 <th scope="row">团队平均</th>
                 {rows.map(({ reference, team }) => (
-                  <td key={reference.id}>{format(team?.value)}</td>
+                  <td key={reference.key}>{format(team?.value)}</td>
                 ))}
               </tr>
             </tbody>
@@ -154,7 +169,9 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
                   // 切换为提交按钮前取消本次点击的默认行为，避免立即提交并退出编辑。
                   event.preventDefault();
                   setValues(
-                    Object.fromEntries(group.references.map((ref) => [ref.id, String(ref.value)]))
+                    Object.fromEntries(
+                      columns.map((ref) => [ref.key, ref.value == null ? '' : String(ref.value)])
+                    )
                   );
                   setError('');
                   setEditing(true);
@@ -176,7 +193,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
           <RadarChart accessibilityLayer={false} data={radar} outerRadius="70%">
             <PolarGrid />
             <PolarAngleAxis dataKey="label" />
-            <PolarRadiusAxis domain={[0, 'auto']} />
+            <PolarRadiusAxis domain={[0, radarMax]} />
             <Tooltip />
             <Legend />
             <Radar
@@ -200,7 +217,9 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
         </ResponsiveContainer>
       </div>
       <p className="physical-champion-note">
-        雷达图以冠军值为100%，团队平均自动计算。{estimated && '估算参考，不参与正式评分。'}
+        雷达图以冠军值为100%，团队平均自动计算。
+        {columns.some((ref) => ref.value === null) && '未配置冠军值的指标暂不对比。'}
+        {estimated && '估算参考，不参与正式评分。'}
       </p>
     </>
   );

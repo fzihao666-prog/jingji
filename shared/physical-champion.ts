@@ -141,6 +141,33 @@ const athleteSchema = z.object({
   coverage: z.number(),
   dimensions: z.array(resultSchema),
 });
+export const physicalModelDimensionSchema = z.object({
+  id: z.number().int().positive().nullable(),
+  revision: z.number().int().nonnegative(),
+  key: z.string(),
+  label: z.string(),
+  unit: z.string(),
+  value: z.number().positive().nullable(),
+  estimated: z.boolean(),
+});
+export type PhysicalModelDimension = z.infer<typeof physicalModelDimensionSchema>;
+export const physicalChampionGroupScopeSchema = z.tuple([
+  z.enum(['男', '女', 'open']),
+  z.string().min(1).max(100),
+  z.literal('open'),
+  z.enum(['adult', 'open']),
+  z.string().min(1).max(100),
+  z.string().min(1).max(100),
+]);
+export function physicalChampionGroupScope(id: string) {
+  try {
+    const parsed = physicalChampionGroupScopeSchema.safeParse(JSON.parse(id));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 export const physicalChampionPayloadSchema = z.object({
   project: z.string(),
   from: z.string(),
@@ -175,6 +202,7 @@ export const physicalChampionPayloadSchema = z.object({
       ageGroup: z.string(),
       referenceLevel: z.string(),
       references: z.array(physicalReferenceSchema),
+      modelDimensions: z.array(physicalModelDimensionSchema).optional(),
       team: z.array(resultSchema.extend({ sampleCount: z.number() })),
       athletes: z.array(athleteSchema),
       trend: z.array(
@@ -273,16 +301,28 @@ export type PhysicalReferenceDraft = z.infer<typeof physicalReferenceDraftSchema
 /** 快捷编辑只接收冠军数值，不接收团队均值或适用条件。 */
 export const physicalChampionValuesSchema = z.strictObject({
   project: z.string().max(80).refine(isProject),
+  groupId: z.string().max(1000).optional(),
+  effectiveFrom: z.iso.date().optional(),
   values: z
     .array(
-      z.strictObject({
-        id: z.number().int().positive(),
-        expectedRevision: z.number().int().nonnegative(),
-        value: z.number().finite().positive(),
-      })
+      z.union([
+        z.strictObject({
+          id: z.number().int().positive(),
+          expectedRevision: z.number().int().nonnegative(),
+          value: z.number().finite().positive(),
+        }),
+        z.strictObject({
+          key: z.enum(PHYSICAL_CHAMPION_DIMENSIONS.map((item) => item.key)),
+          value: z.number().finite().positive(),
+        }),
+      ])
     )
     .min(1)
     .max(64)
-    .refine((values) => new Set(values.map((item) => item.id)).size === values.length),
+    .refine(
+      (values) =>
+        new Set(values.map((item) => ('id' in item ? `id:${item.id}` : `key:${item.key}`))).size ===
+        values.length
+    ),
 });
 export type PhysicalChampionValuesInput = z.infer<typeof physicalChampionValuesSchema>;

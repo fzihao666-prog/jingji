@@ -87,7 +87,12 @@ export function PhysicalChampionModel({ project, from, to }: Props) {
             group={group}
             canEdit={current?.canEdit ?? false}
             onSave={async (values) => {
-              await api.updatePhysicalChampionValues({ project, values });
+              await api.updatePhysicalChampionValues({
+                project,
+                groupId: group.id,
+                effectiveFrom: from,
+                values,
+              });
               setPayload(null);
               setRevision((value) => value + 1);
             }}

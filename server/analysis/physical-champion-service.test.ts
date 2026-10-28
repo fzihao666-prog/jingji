@@ -119,7 +119,12 @@ describe('体能冠军分析', () => {
     const group = build().groups.find((item) => item.gender === '男')!;
     expect(group.references).toHaveLength(7);
     expect(group.references.some((reference) => reference.key === 'vertical_jump')).toBe(false);
-    expect(group.team.some((dimension) => dimension.key === 'vertical_jump')).toBe(false);
+    expect(
+      group.team.find((dimension) => dimension.key === 'vertical_jump')?.achievedPercent
+    ).toBeNull();
+    expect(
+      group.modelDimensions?.find((dimension) => dimension.key === 'vertical_jump')?.value
+    ).toBeNull();
   });
 
   it('项目、性别与授权范围隔离，未知年龄与未成年排除', () => {
@@ -269,7 +274,7 @@ describe('历史项目别名', () => {
     const { db, scope } = setup();
     db.exec("UPDATE radar_reference_values SET project='CANOE' WHERE project='CANOE_SPRINT'");
     const payload = buildPhysicalChampion(db, { ...scope, project: 'CANOE_SPRINT' });
-    expect(payload.groups).toHaveLength(1);
+    expect(payload.groups).toHaveLength(2);
     expect(payload.groups[0].references).toHaveLength(8);
     expect(payload.groups[0].references[0].value).toBe(30);
     expect(payload.groups[0].athletes.map((athlete) => athlete.athleteId)).toEqual([3]);
@@ -364,13 +369,24 @@ describe('参考审核与事实归属', () => {
     expect(dimension.achievedPercent).toBeNull();
     expect(dimension.pendingReason).toContain('冲突');
   });
-  it.each(['CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])('%s无配置不复用水上维度', (project) => {
-    const { db, scope } = setup();
-    db.prepare('UPDATE athletes SET project=? WHERE id=1').run(project);
-    const result = buildPhysicalChampion(db, { ...scope, project });
-    expect(result.groups).toEqual([]);
-    expect(result.pendingReason).toContain('暂无');
-  });
+  it.each(['CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(
+    '%s共用体能框架但不复制水上参考数值',
+    (project) => {
+      const { db, scope } = setup();
+      db.prepare('UPDATE athletes SET project=? WHERE id=1').run(project);
+      const result = buildPhysicalChampion(db, { ...scope, project });
+      expect(result.groups).toHaveLength(2);
+      expect(
+        result.groups.every(
+          (group) =>
+            group.references.length === 0 &&
+            group.modelDimensions?.length === 8 &&
+            group.modelDimensions.every((item) => item.value === null)
+        )
+      ).toBe(true);
+      expect(result.pendingReason).toContain('暂无');
+    }
+  );
 });
 
 function duplicateReference(db: DatabaseSync, changes: Record<string, string | number | null>) {
@@ -589,5 +605,10 @@ it('估算参考恢复完整维度展示性达成度、团队雷达与趋势，�
     scoringEligible: false,
   });
   db.exec("UPDATE radar_reference_values SET review_status='disabled'");
-  expect(build().groups).toEqual([]);
+  expect(
+    build().groups.every(
+      (group) =>
+        !group.references.length && group.modelDimensions?.every((item) => item.value === null)
+    )
+  ).toBe(true);
 });

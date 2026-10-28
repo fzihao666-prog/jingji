@@ -1,9 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import {
   mean,
+  PHYSICAL_CHAMPION_DIMENSIONS,
   physicalComparison,
   type PhysicalChampionPayload,
   type PhysicalReference,
+  type PhysicalModelDimension,
 } from '../../shared/physical-champion.ts';
 
 type AthleteRow = {
@@ -46,7 +48,10 @@ export function protocolMatches(actual: string | null, expected: string) {
   );
 }
 // 空版本与空条件是明确默认上下文，不作为具名版本或条件的通配符。
-function measurementContextMatches(row: Measurement, ref: PhysicalReference) {
+function measurementContextMatches(
+  row: Measurement,
+  ref: Pick<PhysicalReference, 'protocol' | 'protocolVersion' | 'testContext' | 'side'>
+) {
   return (
     protocolMatches(row.protocol, ref.protocol) &&
     row.protocolVersion === ref.protocolVersion &&
@@ -120,7 +125,14 @@ export function isUsablePhysicalReference(ref: PhysicalReference, date: string) 
     !['estimated', 'unverified'].includes(ref.sourceNature)
   );
 }
-function applies(ref: PhysicalReference, athlete: AthleteRow, date: string) {
+function applies(
+  ref: Pick<
+    PhysicalReference,
+    'gender' | 'ageGroup' | 'event' | 'weightClass' | 'position' | 'referenceLevel'
+  >,
+  athlete: AthleteRow,
+  date: string
+) {
   return (
     (ref.gender === 'open' || athlete.gender === ref.gender) &&
     (ref.ageGroup === 'open' || (ref.ageGroup === 'adult' && adultAt(athlete.birthDate, date))) &&
@@ -199,7 +211,7 @@ export function buildPhysicalChampion(
     buckets.set(id, [...(buckets.get(id) || []), ref]);
   }
   const matched = new Set<number>();
-  const groups = [...buckets].map(([id, candidates]) => {
+  const groups: PhysicalChampionPayload['groups'] = [...buckets].map(([id, candidates]) => {
     const first = candidates[0];
     const refs = [...new Map(candidates.map((ref) => [ref.key, ref])).values()];
     const members = athletes.filter((athlete) => applies(first, athlete, to));
@@ -345,7 +357,17 @@ export function buildPhysicalChampion(
     }
     return {
       id,
-      label: `${first.gender} · ${first.event} · ${first.ageGroup}`,
+      label: [
+        first.gender === '男' ? '男子' : first.gender === '女' ? '女子' : '不限性别',
+        first.event === 'open' ? '' : first.event,
+        first.ageGroup === 'adult'
+          ? '成人组'
+          : first.ageGroup === 'open'
+            ? '不限年龄'
+            : first.ageGroup,
+      ]
+        .filter(Boolean)
+        .join(' · '),
       gender: first.gender,
       event: first.event,
       weightClass: first.weightClass,
@@ -357,6 +379,100 @@ export function buildPhysicalChampion(
       trend,
     };
   });
+  // 共用指标框架不依赖已配置冠军值，不向数据库写入占位标准。
+  for (const gender of ['男', '女']) {
+    if (groups.some((group) => group.gender === gender || group.gender === 'open')) continue;
+    groups.push({
+      id: JSON.stringify([gender, 'open', 'open', 'adult', 'open', 'open']),
+      label: `${gender}子成人组`,
+      gender,
+      event: 'open',
+      weightClass: 'open',
+      ageGroup: 'adult',
+      referenceLevel: 'open',
+      references: [],
+      team: [],
+      athletes: [],
+      trend: [],
+    });
+  }
+  for (const group of groups) {
+    const members = athletes.filter((athlete) =>
+      applies(
+        {
+          gender: group.gender,
+          ageGroup: group.ageGroup,
+          event: group.event,
+          weightClass: group.weightClass,
+          position: group.references[0]?.position || 'open',
+          referenceLevel: group.references[0]?.referenceLevel || 'open',
+        },
+        athlete,
+        to
+      )
+    );
+    const columns: PhysicalModelDimension[] = group.references.map((ref) => ({
+      id: ref.id,
+      revision: ref.revision,
+      key: ref.key,
+      label: ref.label,
+      unit: ref.unit,
+      value: ref.value,
+      estimated: ref.sourceType === 'estimated',
+    }));
+    for (const dimension of PHYSICAL_CHAMPION_DIMENSIONS) {
+      if (columns.some((column) => column.key === dimension.key)) continue;
+      columns.push({
+        id: null,
+        revision: 0,
+        key: dimension.key,
+        label: dimension.label,
+        unit: dimension.unit,
+        value: null,
+        estimated: false,
+      });
+      const values = members.flatMap((athlete) => {
+        const rows = measurements.filter((row) => row.athleteId === athlete.id);
+        const row = rows.find(
+          (row) =>
+            dimension.codes.some((code) => code === row.code) &&
+            row.unit === dimension.measurementUnit &&
+            measurementContextMatches(row, {
+              protocol: dimension.protocol,
+              protocolVersion: '',
+              testContext: '',
+              side: 'center',
+            })
+        );
+        if (!row || !Number.isFinite(row.value) || row.value < 0) return [];
+        if (!dimension.weightRelative) return [row.value];
+        const weight = rows.find(
+          (item) =>
+            item.sessionId === row.sessionId &&
+            ['weight_kg', 'weightKg'].includes(item.code) &&
+            item.unit === 'kg' &&
+            item.value > 0
+        );
+        return weight ? [Math.round((row.value / weight.value) * 1000) / 1000] : [];
+      });
+      group.team.push({
+        key: dimension.key,
+        value: mean(values),
+        sampleCount: values.length,
+        achievedPercent: null,
+        difference: null,
+        scoringEligible: false,
+        testDate: null,
+        pendingReason: '冠军值待配置',
+        referenceId: null,
+        referenceVersion: null,
+        factMeasurementId: null,
+        calculationVersion: 'physical-raw-v1',
+        appliedReference: null,
+      });
+    }
+    group.modelDimensions = columns;
+  }
   const athletePendingReasons = athletes
     .filter((athlete) => !matched.has(athlete.id))
     .map((athlete) => ({

@@ -122,7 +122,15 @@ describe('专业参考HTTP授权与版本流程', () => {
       );
       expect(response.status).toBe(200);
       const result = physicalChampionPayloadSchema.parse(await response.json());
-      expect(result.groups).toEqual([]);
+      expect(result.groups).toHaveLength(2);
+      expect(
+        result.groups.every(
+          (group) =>
+            group.references.length === 0 &&
+            group.modelDimensions?.length === 8 &&
+            group.modelDimensions.every((item) => item.value === null)
+        )
+      ).toBe(true);
       expect(result.pendingReason).toContain('暂无');
     }
     expect(
@@ -339,3 +347,127 @@ describe('两行冠军模型的快捷数值维护', () => {
     ).toEqual({ value_num: 70 });
   });
 });
+
+describe('所有项目共用体能框架，冠军值按项目独立配置', () => {
+  it.each(['CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(
+    '%s无标准时展示团队实测，可直接填写冠军值并持久保存',
+    async (project) => {
+      db.prepare('UPDATE radar_reference_values SET active=0 WHERE project=?').run(project);
+      const athleteId =
+        project === 'CYCLING_ROAD' ? 9911 : project === 'CYCLING_TRACK' ? 9912 : 9913;
+      db.prepare(
+        "INSERT INTO athletes(id,name,project,gender,birth_date) VALUES(?,? ,?,'女','2000-01-01')"
+      ).run(athleteId, `合成公共体能${athleteId}`, project);
+      const session = db
+        .prepare(
+          "INSERT INTO test_sessions(athlete_id,test_date,test_type,protocol,protocol_version,context_key,project_code,project_status,source,quality,is_demo) VALUES(?,'2026-01-03','体能测试','CMJ双手叉腰','','',?,'confirmed','manual','valid',0)"
+        )
+        .run(athleteId, project);
+      db.prepare(
+        "INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit,side,source,quality,is_demo) VALUES(?,'vertical_jump_cm',40,'cm','center','manual','valid',0)"
+      ).run(Number(session.lastInsertRowid));
+      const path = `/api/physical-champion?project=${project}&from=2026-01-01&to=2026-01-31`;
+      const count = db.prepare('SELECT COUNT(*) AS n FROM radar_reference_values').get();
+      const before = physicalChampionPayloadSchema.parse(await (await call(path)).json());
+      expect(db.prepare('SELECT COUNT(*) AS n FROM radar_reference_values').get()).toEqual(count);
+      const group = before.groups.find((group) => group.gender === '女')!;
+      expect(group.modelDimensions?.find((item) => item.key === 'vertical_jump')).toMatchObject({
+        id: null,
+        value: null,
+      });
+      expect(group.team.find((item) => item.key === 'vertical_jump')).toMatchObject({
+        value: 40,
+        achievedPercent: null,
+        sampleCount: 1,
+      });
+      const save = {
+        project,
+        groupId: group.id,
+        effectiveFrom: '2026-01-01',
+        values: [{ key: 'vertical_jump', value: 50 }],
+      };
+      expect((await call('/api/physical-champion/model-values', 'PUT', save, 9003)).status).toBe(
+        200
+      );
+      expect((await call('/api/physical-champion/model-values', 'PUT', save, 9003)).status).toBe(
+        409
+      );
+      const after = physicalChampionPayloadSchema.parse(await (await call(path)).json());
+      const configured = after.groups.find((item) => item.id === group.id)!;
+      expect(configured.modelDimensions).toHaveLength(8);
+      expect(configured.modelDimensions?.find((item) => item.key === 'vertical_jump')?.value).toBe(
+        50
+      );
+      expect(configured.team.find((item) => item.key === 'vertical_jump')).toMatchObject({
+        value: 40,
+        achievedPercent: 80,
+        sampleCount: 1,
+      });
+      expect(
+        configured.modelDimensions?.find((item) => item.key === 'relative_squat')?.value
+      ).toBeNull();
+    }
+  );
+  it('初次配置校验项目、分组和指标；整批失败不留半份模型', async () => {
+    const before = db.prepare('SELECT COUNT(*) AS n FROM radar_reference_values').get();
+    const body = {
+      project: 'CYCLING_ROAD',
+      groupId: JSON.stringify(['男', 'open', 'open', 'adult', 'open', 'open']),
+      effectiveFrom: '2026-01-01',
+      values: [{ key: 'front_plank', value: 100 }],
+    };
+    expect((await call('/api/physical-champion/model-values', 'PUT', body, 9007)).status).toBe(403);
+    expect(
+      (
+        await call(
+          '/api/physical-champion/model-values',
+          'PUT',
+          { ...body, groupId: 'invalid' },
+          9003
+        )
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await call(
+          '/api/physical-champion/model-values',
+          'PUT',
+          { ...body, values: [{ key: 'fake_key', value: 100 }] },
+          9003
+        )
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await call(
+          '/api/physical-champion/model-values',
+          'PUT',
+          { ...body, values: [...body.values, { id: 9999999, expectedRevision: 0, value: 1 }] },
+          9003
+        )
+      ).status
+    ).toBe(404);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM radar_reference_values').get()).toEqual(before);
+  });
+});
+
+it.each(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(
+  '%s共用八项体能框架，项目与男女分组均隔离',
+  async (project) => {
+    const response = await call(
+      `/api/physical-champion?project=${project}&from=2026-01-01&to=2026-01-31`
+    );
+    const result = physicalChampionPayloadSchema.parse(await response.json());
+    expect(response.status).toBe(200);
+    expect(result.groups.length).toBeGreaterThan(0);
+    expect(result.groups.every((group) => (group.modelDimensions?.length || 0) >= 8)).toBe(true);
+    expect(
+      result.groups.every((group) => group.references.every((ref) => ref.project === project))
+    ).toBe(true);
+    expect(
+      result.groups.every(
+        (group) => !group.label.includes('open') && !group.label.includes('adult')
+      )
+    ).toBe(true);
+  }
+);

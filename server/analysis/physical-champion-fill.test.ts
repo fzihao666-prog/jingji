@@ -84,7 +84,12 @@ describe('用户授权体能补充', () => {
       athleteIds: [1, 2, 3],
       canEdit: false,
     });
-    expect(model.groups).toEqual([]);
+    expect(
+      model.groups.every(
+        (group) =>
+          !group.references.length && group.modelDimensions?.every((item) => item.value === null)
+      )
+    ).toBe(true);
     expect(model.measurements[0].value).toBe(0);
     expect(fillPhysicalChampionSimulation(db, options).sessionsInserted).toBe(0);
     expect(

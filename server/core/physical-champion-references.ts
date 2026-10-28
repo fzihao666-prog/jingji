@@ -9,6 +9,7 @@ import {
   PHYSICAL_CHAMPION_DIMENSIONS,
   physicalReferenceDraftSchema,
   physicalChampionValuesSchema,
+  physicalChampionGroupScope,
 } from '../../shared/physical-champion.ts';
 
 const tables = ['radar_reference_sources', 'radar_reference_values'] as const;
@@ -485,6 +486,103 @@ export function reviewPhysicalReference(
   }
 }
 
+function manualPhysicalSource(db: DatabaseSync, project: string, protocol: string) {
+  const name = '教练手工维护冠军模型';
+  const year = new Date().getUTCFullYear();
+  db.prepare(
+    "INSERT OR IGNORE INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,?,'',?,?,'手工参考')"
+  ).run(project, name, year, protocol);
+  const source = db
+    .prepare(
+      "SELECT id,active FROM radar_reference_sources WHERE project=? AND name=? AND url='' AND source_year=? AND protocol=?"
+    )
+    .get(project, name, year, protocol) as { id: number; active: number };
+  if (!source.active) throw new PhysicalReferenceError(409, '手工参考来源已停用，请联系管理员。');
+  return source.id;
+}
+
+function createPhysicalChampionValue(
+  db: DatabaseSync,
+  actor: ReferenceActor,
+  project: string,
+  groupId: string | undefined,
+  key: string,
+  value: number,
+  effectiveFrom: string
+) {
+  const scope = groupId ? physicalChampionGroupScope(groupId) : null;
+  if (!scope) throw new PhysicalReferenceError(400, '请选择有效参考分组。');
+  const [gender, event, weightClass, ageGroup, position, level] = scope;
+  const existing = db
+    .prepare(
+      "SELECT id,metric_key FROM radar_reference_values WHERE project IN (?,?) AND radar_kind='physical' AND gender=? AND event_group=? AND weight_class=? AND age_group=? AND position=? AND reference_level=?"
+    )
+    .all(
+      project,
+      project === 'CANOE_SPRINT' ? 'CANOE' : project === 'CANOE_SLALOM' ? 'SLALOM' : project,
+      ...scope
+    ) as Array<{ id: number; metric_key: string }>;
+  const common =
+    ['男', '女'].includes(gender) &&
+    event === 'open' &&
+    weightClass === 'open' &&
+    ageGroup === 'adult' &&
+    position === 'open' &&
+    level === 'open';
+  if (!common && !existing.length)
+    throw new PhysicalReferenceError(400, '参考分组不存在，请刷新。');
+  if (existing.some((row) => row.metric_key === key))
+    throw new PhysicalReferenceError(409, '该指标已有冠军标准，请刷新或检查原标准的适用条件。');
+  const dimension = PHYSICAL_CHAMPION_DIMENSIONS.find((item) => item.key === key);
+  if (!dimension) throw new PhysicalReferenceError(400, '体能指标无效。');
+  const row = {
+    source_id: manualPhysicalSource(db, project, dimension.protocol),
+    project,
+    radar_kind: 'physical',
+    metric_key: key,
+    gender,
+    boat_class: '',
+    applicability: `教练维护:${randomUUID()}`,
+    value_num: value,
+    unit: dimension.unit,
+    source_type: 'estimated',
+    source_nature: 'estimated',
+    protocol: dimension.protocol,
+    protocol_version: '',
+    test_context: '',
+    side: 'center',
+    event_group: event,
+    weight_class: weightClass,
+    age_group: ageGroup,
+    direction: dimension.direction,
+    review_status: 'reviewed',
+    position,
+    reference_level: level,
+    reference_label: dimension.label,
+    effective_from: effectiveFrom,
+    effective_to: null,
+    dimension_version: 'common-physical-v1',
+    measurement_codes: JSON.stringify(dimension.codes),
+    measurement_unit: dimension.measurementUnit,
+    weight_relative: Number(dimension.weightRelative),
+  };
+  const fields = Object.keys(row);
+  const result = db
+    .prepare(
+      `INSERT INTO radar_reference_values(${fields.join(',')}) VALUES(${fields.map(() => '?').join(',')})`
+    )
+    .run(...Object.values(row));
+  const id = Number(result.lastInsertRowid);
+  const saved = db.prepare('SELECT * FROM radar_reference_values WHERE id=?').get(id) as Record<
+    string,
+    string | number | null
+  >;
+  assertNoReferenceOverlap(db, saved, id);
+  db.prepare(
+    "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,detail) VALUES(?,'CREATE_PHYSICAL_CHAMPION_VALUE','radar_reference_values',?,?)"
+  ).run(actor.id, id, JSON.stringify({ before: null, after: saved }));
+}
+
 /** 两行模型的数值更新：同批事务、修订冲突保护，旧值与来源保存在审计中。 */
 export function updatePhysicalChampionValues(
   db: DatabaseSync,
@@ -500,6 +598,19 @@ export function updatePhysicalChampionValues(
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const value of values) {
+      if ('key' in value) {
+        createPhysicalChampionValue(
+          db,
+          actor,
+          project,
+          parsed.data.groupId,
+          value.key,
+          value.value,
+          parsed.data.effectiveFrom || new Date().toISOString().slice(0, 10)
+        );
+        continue;
+      }
+
       const old = db
         .prepare(
           "SELECT rv.*,rs.active AS source_active FROM radar_reference_values rv JOIN radar_reference_sources rs ON rs.id=rv.source_id WHERE rv.id=? AND rv.radar_kind='physical'"
@@ -519,21 +630,10 @@ export function updatePhysicalChampionValues(
       if (old.revision !== value.expectedRevision)
         throw new PhysicalReferenceError(409, '冠军模型已被更新，请刷新后修改。');
       if (old.value_num === value.value) continue;
-      const sourceName = '教练手工维护冠军模型';
-      const year = new Date().getUTCFullYear();
-      db.prepare(
-        "INSERT OR IGNORE INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,?,'',?,?,'手工参考')"
-      ).run(old.project, sourceName, year, old.protocol);
-      const source = db
-        .prepare(
-          "SELECT id,active FROM radar_reference_sources WHERE project=? AND name=? AND url='' AND source_year=? AND protocol=?"
-        )
-        .get(old.project, sourceName, year, old.protocol) as { id: number; active: number };
-      if (!source.active)
-        throw new PhysicalReferenceError(409, '手工参考来源已停用，请联系管理员。');
+      const sourceId = manualPhysicalSource(db, String(old.project), String(old.protocol));
       db.prepare(
         "UPDATE radar_reference_values SET value_num=?,source_id=?,source_type='estimated',source_nature='estimated',revision=revision+1,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=?"
-      ).run(value.value, source.id, value.id);
+      ).run(value.value, sourceId, value.id);
       db.prepare(
         "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,detail) VALUES(?,'UPDATE_PHYSICAL_CHAMPION_VALUE','radar_reference_values',?,?)"
       ).run(
@@ -543,7 +643,7 @@ export function updatePhysicalChampionValues(
           before: old,
           after: {
             value: value.value,
-            sourceId: source.id,
+            sourceId,
             sourceType: 'estimated',
             sourceNature: 'estimated',
             revision: value.expectedRevision + 1,
