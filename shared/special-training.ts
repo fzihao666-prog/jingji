@@ -1,7 +1,7 @@
 import {
-  trainingContentCategory,
   trainingLoadCategory,
-  TRAINING_CONTENT_CATEGORIES,
+  trainingContentCategories,
+  projectTrainingContentCategory,
 } from './training-content-category.js';
 import {
   SPECIAL_TRAINING_INTENSITY_ZONE_ORDER,
@@ -88,8 +88,9 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
     ...row,
     percentage: zoneTotal ? ((row.durationMin || 0) / zoneTotal) * 100 : 0,
   }));
-  const content = TRAINING_CONTENT_CATEGORIES.map((name) => {
-    const count = records.filter((row) => trainingContentCategory(row) === name).length;
+  const project = new Set(records.map(row=>row.project)).size === 1 ? records[0]?.project : undefined;
+  const content = trainingContentCategories(project).map((name) => {
+    const count = records.filter((row) => projectTrainingContentCategory(row.project, row) === name).length;
     return { name, count, percentage: records.length ? (count / records.length) * 100 : 0 };
   }).filter((row) => row.count);
   return {

@@ -101,7 +101,8 @@ describe('训练页空数据与独立失败回归', () => {
     const view = await page.loadPageData(scope, true, () => true);
     expect(view.metrics.length).toBe(5);
     expect(view.intensity).toEqual([]);
-    expect(view.content).toHaveLength(9);
+    expect(view.content.map(row=>row.name)).toContain('水上');
+    expect(view.content.map(row=>row.name)).not.toContain('排球技术');
     expect(view.trend).toEqual([]);
     expect(view.trainingError).toContain('加载失败');
     expect(await page.loadPageData(scope, true, () => false)).toBeNull();
@@ -394,4 +395,11 @@ describe('档案资料编辑入口', () => {
     page.setData({ canCoachFill: true, selectedAthleteId: 0 }); page.editMyProfile();
     expect(destinations).toEqual([]);
   });
+});
+
+it.each(['VOLLEYBALL','CYCLING_ROAD'])('%s专项空状态不补水上分类',async(project)=>{
+ const page=createPage('special',{overviewTeams:async()=>({teams:[]}),specialTrainingOverview:async()=>({training:{content:[]}})});
+ const view=await page.loadPageData({...scope,project},true,()=>true);
+ expect(view.content.map(row=>row.name)).not.toContain('水上');
+ expect(view.content.map(row=>row.name)).not.toContain('测功仪');
 });

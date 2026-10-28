@@ -13,3 +13,12 @@ describe('训练分类按活动和项目适用', () => {
     expect(trainingLoadCategory({ trainingCategory: 'physical', content: '专项训练' })).toBe('physical');
   });
 });
+
+it('项目类别仅含适用项，越界历史类别进入待核实而非丢弃', async () => {
+ const { trainingContentCategories, projectTrainingContentCategory } = await import('./training-content-category.js');
+ expect(trainingContentCategories('VOLLEYBALL')).toContain('排球技术');
+ expect(trainingContentCategories('VOLLEYBALL')).not.toContain('水上');
+ expect(trainingContentCategories('CYCLING_ROAD')).not.toContain('排球技术');
+ expect(trainingContentCategories('ROWING')).toContain('骑行');
+ expect(projectTrainingContentCategory('VOLLEYBALL',{content:'水上训练'})).toBe('待核实');
+});

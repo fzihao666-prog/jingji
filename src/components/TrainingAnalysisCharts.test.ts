@@ -175,3 +175,10 @@ it('专项趋势与占比无记录不造数，真实零仍保留', () => {
   );
   expect(charts.data.flat()).toContainEqual(expect.objectContaining({ power: 0, date: '01/01' }));
 });
+
+it.each(['ROWING','VOLLEYBALL','CYCLING_ROAD'])('%s占比图例不显示其他项目类别',project=>{
+ const html=renderToStaticMarkup(createElement(TrainingContentChart,{records:[],project}));
+ if(project==='VOLLEYBALL'){expect(html).not.toContain('水上');expect(html).not.toContain('测功仪');expect(html).toContain('排球技术');}
+ if(project==='CYCLING_ROAD'){expect(html).not.toContain('排球技术');expect(html).not.toContain('水上');}
+ if(project==='ROWING'){expect(html).toContain('骑行');expect(html).not.toContain('排球技术');}
+});

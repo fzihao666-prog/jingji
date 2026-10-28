@@ -21,8 +21,8 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'r
 import type { OverviewMeasurement, OverviewPayload, TrainingRecord } from '../types';
 import { addDays, formatNumber, percentage, startOfWeek } from '../utils';
 import {
-  TRAINING_CONTENT_CATEGORIES,
-  trainingContentCategory,
+  trainingContentCategories,
+  projectTrainingContentCategory,
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
 import './EChart.css';
@@ -751,19 +751,19 @@ export function TrainingVolumeDashboard({
   );
 }
 
-export function TrainingContentChart({ records }: { records: TrainingRecord[] }) {
+export function TrainingContentChart({ records, project }: { records: TrainingRecord[]; project?: string }) {
   const data = useMemo(() => {
-    const countByCategory = new Map(TRAINING_CONTENT_CATEGORIES.map((name) => [name, 0]));
+    const countByCategory = new Map(trainingContentCategories(project).map((name) => [name, 0]));
     for (const row of records) {
-      const category = trainingContentCategory(row);
+      const category = projectTrainingContentCategory(project, row);
       countByCategory.set(category, (countByCategory.get(category) || 0) + 1);
     }
-    return TRAINING_CONTENT_CATEGORIES.map((name, index) => ({
+    return trainingContentCategories(project).map((name, index) => ({
       name,
       value: countByCategory.get(name) || 0,
       fill: colors[index % colors.length],
     }));
-  }, [records]);
+  }, [records, project]);
   const total = data.reduce((sum, row) => sum + row.value, 0);
   const chartData = data.filter((row) => row.value > 0);
   return (

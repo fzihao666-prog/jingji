@@ -215,6 +215,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -245,6 +256,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -277,6 +299,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -307,6 +340,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -339,6 +383,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -369,6 +424,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -401,6 +467,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -431,6 +508,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -463,6 +551,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -493,6 +592,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -525,6 +635,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -556,6 +677,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -586,6 +718,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -621,6 +764,20 @@ module.exports = {
         "ergometer",
         "cycling"
       ],
+      "contentCategories": [
+        "水上",
+        "测功仪",
+        "骑行",
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -655,6 +812,20 @@ module.exports = {
         "ergometer",
         "cycling"
       ],
+      "contentCategories": [
+        "水上",
+        "测功仪",
+        "骑行",
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -686,6 +857,18 @@ module.exports = {
         "running",
         "recovery",
         "cycling"
+      ],
+      "contentCategories": [
+        "骑行",
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -719,6 +902,18 @@ module.exports = {
         "recovery",
         "cycling"
       ],
+      "contentCategories": [
+        "骑行",
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -749,6 +944,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -781,6 +987,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -811,6 +1028,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -843,6 +1071,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -873,6 +1112,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -905,6 +1155,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -935,6 +1196,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -967,6 +1239,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -997,6 +1280,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1029,6 +1323,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1059,6 +1364,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1091,6 +1407,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1121,6 +1448,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1153,6 +1491,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1183,6 +1532,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1215,6 +1575,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1246,6 +1617,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1276,6 +1658,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1311,6 +1704,20 @@ module.exports = {
         "ergometer",
         "cycling"
       ],
+      "contentCategories": [
+        "水上",
+        "测功仪",
+        "骑行",
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1341,6 +1748,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1373,6 +1791,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1403,6 +1832,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1435,6 +1875,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1465,6 +1916,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1497,6 +1959,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1527,6 +2000,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1559,6 +2043,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1590,6 +2085,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1620,6 +2126,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1653,6 +2170,18 @@ module.exports = {
         "recovery",
         "volleyball_technique"
       ],
+      "contentCategories": [
+        "排球技术",
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1683,6 +2212,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {
@@ -1715,6 +2255,17 @@ module.exports = {
         "running",
         "recovery"
       ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
+      ],
       "capabilities": {
         "management": {
           "status": "available",
@@ -1745,6 +2296,17 @@ module.exports = {
         "strength",
         "running",
         "recovery"
+      ],
+      "contentCategories": [
+        "功能",
+        "拉伸再生",
+        "力量耐力",
+        "最大力量",
+        "速度力量",
+        "跑步",
+        "专项",
+        "其它",
+        "待核实"
       ],
       "capabilities": {
         "management": {

@@ -1,3 +1,4 @@
+import type { TrainingContentCategory } from './training-content-category.js';
 import { normalizeProject, projectCapability, type Project } from './projects.js';
 
 export const SPORT_RULES_VERSION = 'multi-sport-v2';
@@ -31,6 +32,7 @@ export type SportRules = {
   version: string;
   requiredSessionFields: ('duration' | 'duration|distance')[];
   activities: ActivityCode[];
+  contentCategories: TrainingContentCategory[];
   capabilities: Record<'management' | 'training' | 'special' | 'reference', SportCapability>;
 };
 
@@ -53,6 +55,12 @@ export function projectRules(input: unknown): SportRules | null {
       ...(water ? ['on_water', 'ergometer', 'cycling'] as const : []),
       ...(cycling ? ['cycling'] as const : []),
       ...(volleyball ? ['volleyball_technique'] as const : []),
+    ],
+    contentCategories: [
+      ...(water ? ['水上','测功仪','骑行'] as const : []),
+      ...(cycling ? ['骑行'] as const : []),
+      ...(volleyball ? ['排球技术'] as const : []),
+      '功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实',
     ],
     capabilities: {
       management: available(),

@@ -35,9 +35,8 @@ function ratioPlaceholder(names, unit) {
 }
 
 // 强度占比只展示填报端与总览共用的七类标准区间（与 training-entry 的 intensityOptions 一致）；
-// 内容分类与 shared/training-content-category.ts 的 TRAINING_CONTENT_CATEGORIES 保持一致。
+// 项目分类名单由 shared/sport-rules.ts 生成，不能在图表层维护全项目类别。
 const INTENSITY_ZONE_NAMES = ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP'];
-const CONTENT_CATEGORY_NAMES = ['水上', '测功仪', '功能', '拉伸再生', '力量耐力', '最大力量', '速度力量', '跑步', '其它'];
 
 // 占比图固定展示选定的分类名单：没有数据的分类保留 0 值行，不隐藏、不用模拟值顶替，
 // 名单之外的分区/分类不展示；百分比按合计重算，合计为 0 时全部为 0。
@@ -78,6 +77,5 @@ module.exports = {
   ratioPlaceholder,
   physiologyPlaceholder,
   INTENSITY_ZONE_NAMES,
-  CONTENT_CATEGORY_NAMES,
   completeRatioRows
 };

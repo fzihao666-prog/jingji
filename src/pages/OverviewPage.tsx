@@ -548,8 +548,8 @@ export function OverviewPage(props: Props) {
     ),
     'training-content': (
       <AppCard variant="chart" className="professional-panel analysis-feature-panel">
-        <PanelHeading title="训练课占比" subtitle="九类训练课次占比（当前页面时间范围）" />
-        <TrainingContentChart records={analysisRecords} />
+        <PanelHeading title="训练课占比" subtitle="当前项目适用类别（当前页面时间范围）" />
+        <TrainingContentChart project={props.project} records={analysisRecords} />
       </AppCard>
     ),
     'water-land-load': (

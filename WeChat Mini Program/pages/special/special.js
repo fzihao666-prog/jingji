@@ -5,7 +5,7 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
-const { completeRatioRows, CONTENT_CATEGORY_NAMES } = require('../../utils/chart-placeholder');
+const { completeRatioRows } = require('../../utils/chart-placeholder');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { injuryMetricView } = require('../../utils/injury-metric');
 const { buildSpecialTestView, EVENT_PREVIEW_COUNT } = require('../../utils/special-test-view');
@@ -20,7 +20,7 @@ const RATIO_COLORS = ['#176f7f', '#32846b', '#6c9e4f', '#c97925', '#b34a42', '#6
 const withRatioColors = (rows) =>
   rows.map((row, index) => ({ ...row, color: RATIO_COLORS[index % RATIO_COLORS.length] }));
 
-function buildTrainingView(result, to) {
+function buildTrainingView(result, to, project) {
   const training = result.training || {};
   const athletes = result.athletes || [];
   const summary = training.summary || {};
@@ -55,7 +55,7 @@ function buildTrainingView(result, to) {
   }));
   const content = withRatioColors(completeRatioRows(
     training.content || [],
-    (training.content || []).length ? (training.content || []).map(row => row.name) : CONTENT_CATEGORY_NAMES,
+    (training.content || []).length ? (training.content || []).map(row => row.name) : ((sportRules[project] || {}).contentCategories || []),
     (item) => item.count,
     (value) => `${number(value, 0)} 课次`
   ));
@@ -118,7 +118,7 @@ Page({
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
   loadPage() {
-    this.setData({ ...buildTrainingView({}, ''), hasWaterSpecial: false, canEnterTest: false, viewAthleteId: 0, trainingError: '', testError: '', championError: '' });
+    this.setData({ ...buildTrainingView({}, '', this.data.project), hasWaterSpecial: false, canEnterTest: false, viewAthleteId: 0, trainingError: '', testError: '', championError: '' });
     return runPageLoad(this, {
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
@@ -139,7 +139,7 @@ Page({
       testsTask
     ]);
     if (isLatest && !isLatest()) return null;
-    const view = { ...buildTrainingView(training.value || {}, scope.to), hasWaterSpecial, canEnterTest: hasWaterSpecial && MANAGER_ROLES.includes((scope.user || this.data.user || {}).role), trainingError: training.error };
+    const view = { ...buildTrainingView(training.value || {}, scope.to, scope.project), hasWaterSpecial, canEnterTest: hasWaterSpecial && MANAGER_ROLES.includes((scope.user || this.data.user || {}).role), trainingError: training.error };
     if (!hasWaterSpecial) { this.applyTestView(view, buildSpecialTestView(null)); view.testError = ''; view.championEvents = []; view.championError = ''; }
     if (full) {
       view.teamItems = [{ id: 0, name: '全部队伍' }].concat((teams.value || {}).teams || []);
@@ -234,7 +234,7 @@ Page({
   resetTrainingView(resetTests = true) {
     const tests = resetTests ? this.applyTestView({}, buildSpecialTestView(null)) : {};
     const hasWaterSpecial = Boolean(sportRules[this.data.project]?.activities.includes('on_water'));
-    this.setData({ ...buildTrainingView({}, ''), hasWaterSpecial, canEnterTest: hasWaterSpecial && MANAGER_ROLES.includes((this.data.user || {}).role), trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
+    this.setData({ ...buildTrainingView({}, '', this.data.project), hasWaterSpecial, canEnterTest: hasWaterSpecial && MANAGER_ROLES.includes((this.data.user || {}).role), trainingError: '', ...(resetTests ? { testError: '' } : {}), ...tests });
   },
 
   showTrendDetail(event) {

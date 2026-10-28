@@ -1,3 +1,4 @@
+import { projectRules } from './sport-rules.js';
 export const TRAINING_CONTENT_CATEGORIES = [
   '水上',
   '测功仪',
@@ -11,6 +12,7 @@ export const TRAINING_CONTENT_CATEGORIES = [
   '排球技术',
   '专项',
   '其它',
+  '待核实',
 ] as const;
 
 export type TrainingContentCategory = (typeof TRAINING_CONTENT_CATEGORIES)[number];
@@ -58,4 +60,13 @@ export function trainingLoadCategory(input: TrainingContentSource): TrainingLoad
     return 'special';
   if (/力量|体能|跑步|功能|核心|陆上|测功仪/.test(text)) return 'physical';
   return null;
+}
+
+/** 全平台词汇表不能直接作为某项目的图例。 */
+export function trainingContentCategories(project: unknown): readonly TrainingContentCategory[] {
+ return projectRules(project)?.contentCategories || ['功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实'];
+}
+export function projectTrainingContentCategory(project: unknown, input: TrainingContentSource): TrainingContentCategory {
+ const category=trainingContentCategory(input);
+ return trainingContentCategories(project).includes(category) ? category : '待核实';
 }
