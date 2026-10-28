@@ -1746,9 +1746,3 @@
   font-size: 12px;
   color: var(--muted);
 }
-
-.special-dashboard-page .data-table td,
-.special-dashboard-page .data-table th {
-  padding: 10px 12px;
-  font-variant-numeric: tabular-nums;
-}
