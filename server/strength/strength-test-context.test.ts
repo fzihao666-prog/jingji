@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { DatabaseSync } from 'node:sqlite';
 import express from 'express';
 import type { Server } from 'node:http';
@@ -39,4 +40,17 @@ it('无协议的旧客户端仍可采集，非法试次和不存在的日期拒�
   expect((await save({ notes: '' })).status).toBe(200);
   expect((await save({ attemptOrder: 0 })).status).toBe(400);
   expect((await save({ testDate: '2026-02-31' })).status).toBe(400);
+});
+
+it('批量查询按周期过滤并拒绝任一无权限ID', async () => {
+  await save({ testDate: '2026-01-02' });
+  await save({ testDate: '2026-02-02' });
+  const headers = { Authorization: `Bearer ${jwt.sign({ id: 9201, sessionVersion: 1 }, secret)}` };
+  const response = await fetch(`${url}?athleteIds=9201&from=2026-01-01&to=2026-01-31`, { headers });
+  expect(response.status).toBe(200);
+  const data = z.object({ tests: z.array(z.object({ metrics: z.object({ verticalJumpCm: z.number() }) })) }).parse(await response.json());
+  expect(data.tests).toHaveLength(1);
+  expect(data.tests[0].metrics.verticalJumpCm).toBe(40);
+  expect((await fetch(`${url}?athleteIds=9201,999999`, { headers })).status).toBe(403);
+  expect((await fetch(`${url}?athleteIds=bad`, { headers })).status).toBe(400);
 });

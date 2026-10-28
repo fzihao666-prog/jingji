@@ -1,8 +1,9 @@
+import { strengthReadScope } from './strength-read-scope.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
 import { z } from 'zod';
 import type { Express } from 'express';
 import { db } from '../core/db.ts';
-import { hasAthleteAccess } from '../core/permissions.ts';
+import { accessibleAthleteIds, hasAthleteAccess } from '../core/permissions.ts';
 import { cleanString, isValidIsoDate } from '../core/utils.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../../shared/strength-model.ts';
@@ -18,33 +19,42 @@ import {
 export function registerStrengthTestRoutes(app: Express) {
   app.get('/api/strength-tests', requireAuth, (req, res) => {
     const user = req.authUser!;
-    const athleteId = Number(req.query.athleteId || user.athleteId || 0);
-    if (!athleteId) return res.status(400).json({ message: '请选择一名运动员。' });
-    if (!hasAthleteAccess(user, athleteId))
-      return res.status(403).json({ message: '无权查看该运动员的力量测试档案。' });
+    const scope = strengthReadScope(req.query, user.athleteId || 0);
+    if (!scope) return res.status(400).json({ message: '运动员或日期范围无效。' });
+    const allowedIds = new Set(accessibleAthleteIds(user));
+    if (scope.ids.some(id => !allowedIds.has(id)))
+      return res.status(403).json({ message: '无权查看所选运动员的力量测试档案。' });
     const sessions = db
       .prepare(
-        `SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, protocol_version AS protocolVersion, context_key AS contextKey, attempt_order AS attemptOrder, created_at AS updatedAt FROM test_sessions WHERE athlete_id = ? AND test_type = '力量素质测试' AND (project_code IS NULL OR project_code=(SELECT project FROM athletes WHERE athletes.id=test_sessions.athlete_id)) ORDER BY test_date DESC, id DESC`
+        `SELECT id, athlete_id AS athleteId, test_date AS testDate, protocol, protocol_version AS protocolVersion, context_key AS contextKey, attempt_order AS attemptOrder, created_at AS updatedAt FROM test_sessions WHERE athlete_id IN (${scope.ids.map(() => '?').join(',')}) ${scope.from ? 'AND test_date BETWEEN ? AND ?' : ''} AND test_type = '力量素质测试' AND (project_code IS NULL OR project_code=(SELECT project FROM athletes WHERE athletes.id=test_sessions.athlete_id)) ORDER BY test_date DESC, id DESC`
       )
-      .all(athleteId) as Array<{
+      .all(...scope.ids, ...(scope.from ? [scope.from, scope.to!] : [])) as Array<{
       id: number;
       athleteId: number;
       testDate: string;
       protocol: string;
       updatedAt: string;
     }>;
-    const measurementQuery = db.prepare(
-      `SELECT metric_code AS metricCode, value_num AS valueNum, target_value AS targetValue FROM test_measurements WHERE test_session_id = ?`
-    );
+    const measurements = sessions.length ? db.prepare(
+      `SELECT tm.test_session_id AS sessionId, tm.metric_code AS metricCode, tm.value_num AS valueNum, tm.target_value AS targetValue
+       FROM test_measurements tm JOIN test_sessions ts ON ts.id=tm.test_session_id
+       WHERE ts.athlete_id IN (${scope.ids.map(() => '?').join(',')})
+       ${scope.from ? 'AND ts.test_date BETWEEN ? AND ?' : ''} AND ts.test_type='力量素质测试'
+       AND (ts.project_code IS NULL OR ts.project_code=(SELECT project FROM athletes WHERE athletes.id=ts.athlete_id))`
+    ).all(...scope.ids, ...(scope.from ? [scope.from, scope.to!] : [])) as Array<{
+      sessionId: number; metricCode: string; valueNum: number; targetValue: number | null;
+    }> : [];
+    const bySession = new Map<number, typeof measurements>();
+    for (const measurement of measurements) {
+      const rows = bySession.get(measurement.sessionId) ?? [];
+      rows.push(measurement);
+      bySession.set(measurement.sessionId, rows);
+    }
     res.json({
       tests: sessions.map((session) => {
         const metrics: StrengthMetricValues = {};
         const targets: StrengthMetricValues = {};
-        for (const measurement of measurementQuery.all(session.id) as Array<{
-          metricCode: string;
-          valueNum: number;
-          targetValue: number | null;
-        }>) {
+        for (const measurement of bySession.get(session.id) ?? []) {
           const key = strengthMetricKeyByCode.get(measurement.metricCode);
           if (!key) continue;
           metrics[key] = Number(measurement.valueNum);

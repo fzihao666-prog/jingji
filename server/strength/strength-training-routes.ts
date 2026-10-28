@@ -1,3 +1,4 @@
+import { strengthReadScope } from './strength-read-scope.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
 import { templateHeaderKey, IMPORT_TEMPLATE_VERSION } from '../../shared/import-template-fields.ts';
@@ -488,13 +489,15 @@ export async function parseStrengthImportFile(
 
 export function registerStrengthTrainingRoutes(app: Express) {
   app.get('/api/strength-training/results', requireAuth, (req, res) => {
-    const athleteId = Number(req.query.athleteId || 0);
-    if (!athleteId || !hasAthleteAccess(req.authUser!, athleteId))
-      return res.status(403).json({ message: '无权查看该运动员的体能训练结果。' });
+    const scope = strengthReadScope(req.query);
+    if (!scope) return res.status(400).json({ message: '运动员或日期范围无效。' });
+    const allowedIds = new Set(accessibleAthleteIds(req.authUser!));
+    if (scope.ids.some(id => !allowedIds.has(id)))
+      return res.status(403).json({ message: '无权查看所选运动员的体能训练结果。' });
     const rows = db
       .prepare(
         `
-      SELECT ts.id AS sessionId, ts.session_date AS trainingDate, ts.session_order AS sessionOrder,
+      SELECT ts.athlete_id AS athleteId, ts.id AS sessionId, ts.session_date AS trainingDate, ts.session_order AS sessionOrder,
         ts.content AS sessionLabel, ts.rpe AS sessionRpe, ts.smvl AS volume, ts.source,
         ts.duration_min AS sessionDurationMin, ts.distance_km AS sessionDistanceKm,
         ts.training_type AS trainingType, ts.structure_type AS structureType,
@@ -512,14 +515,16 @@ export function registerStrengthTrainingRoutes(app: Express) {
       FROM training_sessions ts
       JOIN strength_result_sets srs ON srs.training_session_id = ts.id
       LEFT JOIN data_import_batches dib ON dib.id = srs.data_import_batch_id
-      WHERE ts.athlete_id = ?
+      WHERE ts.athlete_id IN (${scope.ids.map(() => '?').join(',')})
+      ${scope.from ? 'AND ts.session_date BETWEEN ? AND ?' : ''}
       ORDER BY ts.session_date DESC, ts.session_order DESC, srs.exercise_name, srs.set_index
     `
       )
-      .all(athleteId) as Array<Record<string, unknown> & { sessionId: number }>;
+      .all(...scope.ids, ...(scope.from ? [scope.from, scope.to!] : [])) as Array<Record<string, unknown> & { sessionId: number }>;
     const grouped = new Map<
       number,
       {
+        athleteId: number;
         id: number;
         trainingDate: string;
         sessionOrder: number;
@@ -543,6 +548,7 @@ export function registerStrengthTrainingRoutes(app: Express) {
       const sessionId = Number(row.sessionId);
       if (!grouped.has(sessionId))
         grouped.set(sessionId, {
+          athleteId: Number(row.athleteId),
           id: sessionId,
           trainingDate: cleanString(row.trainingDate),
           sessionOrder: Number(row.sessionOrder),

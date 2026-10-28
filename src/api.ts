@@ -522,6 +522,15 @@ export const api = {
       body: JSON.stringify({ project }),
     });
   },
+  async strengthDashboardData(athleteIds: number[], from: string, to: string) {
+    if (!athleteIds.length) return { sessions: [], tests: [] };
+    const params = new URLSearchParams({ athleteIds: athleteIds.join(','), from, to });
+    const [results, tests] = await Promise.all([
+      request<{ sessions: Array<StrengthTrainingSession & { athleteId: number }> }>(`/api/strength-training/results?${params}`),
+      request<{ tests: StrengthTest[] }>(`/api/strength-tests?${params}`),
+    ]);
+    return { sessions: results.sessions, tests: tests.tests };
+  },
   async strengthTests(athleteId: number) {
     return request<{ tests: StrengthTest[] }>(`/api/strength-tests?athleteId=${athleteId}`);
   },

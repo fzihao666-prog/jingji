@@ -472,25 +472,11 @@ export function StrengthTrainingDashboard({
     setLoading(true);
     setError(false);
     const athleteIds = athleteKey ? athleteKey.split(',').map(Number) : [];
-    Promise.all(
-      athleteIds.map(async (athleteId) => {
-        const [resultSessions, resultTests] = await Promise.all([
-          api.strengthTrainingResults(athleteId),
-          api.strengthTests(athleteId),
-        ]);
-        return {
-          sessions: resultSessions.sessions.map((session) => ({
-            ...session,
-            athleteId,
-          })),
-          tests: resultTests.tests,
-        };
-      })
-    )
-      .then((results) => {
+    api.strengthDashboardData(athleteIds, from, to)
+      .then((result) => {
         if (!ignored) {
-          setSessions(results.flatMap((item) => item.sessions));
-          setTests(results.flatMap((item) => item.tests));
+          setSessions(result.sessions);
+          setTests(result.tests);
         }
       })
       .catch(() => {
@@ -506,7 +492,7 @@ export function StrengthTrainingDashboard({
     return () => {
       ignored = true;
     };
-  }, [athleteKey]);
+  }, [athleteKey, from, to]);
   const periodSessions = useMemo(
     () => sessions.filter((item) => item.trainingDate >= from && item.trainingDate <= to),
     [sessions, from, to]
