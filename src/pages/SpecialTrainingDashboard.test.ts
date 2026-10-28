@@ -18,3 +18,11 @@ it('赛艇专项首页在训练数据未加载时也挂载原冠军模型', () =
 it.each(['CYCLING_ROAD', 'VOLLEYBALL'] as const)('%s不装配水上专项冠军模型', project => {
   expect(render(project)).not.toContain('data-champion-project');
 });
+
+it('全局队伍筛选由应用维护，专项首页不再显示局部队伍选择', () => {
+  const html = renderToStaticMarkup(createElement(SpecialTrainingDashboard, {
+    project: 'ROWING', teamId: 12, from: '2026-10-01', to: '2026-10-31', onPlanOpen() {},
+  }));
+  expect(html).not.toContain('专项训练队伍筛选');
+  expect(html).toContain('正在同步专项训练数据');
+});

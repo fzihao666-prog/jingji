@@ -49,6 +49,7 @@ import './SpecialTrainingPage.css';
 import '../components/EChart.css';
 
 type Props = {
+  teamId?: number | null;
   records: TrainingRecord[];
   project: Project;
   from: string;
@@ -927,6 +928,7 @@ function MetricPage({ section, sessions, days, project }: {
 }
 
 export function SpecialTestsPage({
+  teamId = null,
   records,
   project,
   from,
@@ -1002,7 +1004,7 @@ export function SpecialTestsPage({
         <>
           <AnalysisPage section={section} sessions={sessions} days={days} project={project} />
           {section === 'special-distance' && (
-            <SpecialPerformancePanel project={project} from={from} to={to} />
+            <SpecialPerformancePanel project={project} from={from} to={to} teamId={teamId} />
           )}
         </>
       ) : ['special-rate', 'special-heart', 'special-power'].includes(section) ? (

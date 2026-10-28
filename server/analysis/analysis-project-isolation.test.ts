@@ -263,3 +263,20 @@ it.each(['CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLE
     });
   }
 );
+
+it('训练记录按真实队伍过滤并拒绝非法及跨项目队伍', async () => {
+  db.exec(`INSERT INTO project_teams(id,project,name) VALUES(9901,'ROWING','合成甲队'),(9902,'ROWING','合成乙队'),(9903,'CANOE_SPRINT','合成跨项目队');
+    UPDATE athletes SET team_id=9901 WHERE id=9001;
+    INSERT INTO athletes(id,name,project,gender,birth_date,team_id) VALUES(9002,'合成乙队运动员','ROWING','男','2000-01-01',9902);`);
+  train('2026-01-01', 'ROWING', 'confirmed', 30);
+  db.exec(`INSERT INTO training_sessions(athlete_id,session_date,training_type,structure_type,intensity_zone,duration_min,distance_km,project_code,project_status)
+    VALUES(9002,'2026-01-01','专项训练','连续训练','UT2',90,10,'ROWING','confirmed');`);
+  const payload = await read(`/api/records?project=ROWING&teamId=9901&${range}`) as { records: Array<{ athleteId: number }> };
+  expect(payload.records.map((row) => row.athleteId)).toEqual([9001]);
+  for (const [teamId, status] of [['abc',400],['-1',400],['9903',403],['9999',403]]) {
+    const response = await fetch(`${baseUrl}/api/records?project=ROWING&teamId=${teamId}&${range}`, {
+      headers: { Authorization: `Bearer ${jwt.sign({ id: 9001, sessionVersion: 1 }, secret)}` },
+    });
+    expect(response.status).toBe(status);
+  }
+});

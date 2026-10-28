@@ -5,7 +5,7 @@ import { projectLabel } from '../../shared/projects';
 import type { Project, SpecialTestEvent } from '../types';
 import './SpecialPerformancePanel.css';
 
-type Props = { project: Project; from: string; to: string };
+type Props = { project: Project; from: string; to: string; teamId?: number | null };
 
 function formatTime(milliseconds: number | null) {
   if (milliseconds === null || milliseconds <= 0) return '—';
@@ -14,7 +14,7 @@ function formatTime(milliseconds: number | null) {
   return `${minutes}:${(totalSeconds - minutes * 60).toFixed(2).padStart(5, '0')}`;
 }
 
-export function SpecialPerformancePanel({ project, from, to }: Props) {
+export function SpecialPerformancePanel({ project, from, to, teamId = null }: Props) {
   const [events, setEvents] = useState<SpecialTestEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,8 +23,9 @@ export function SpecialPerformancePanel({ project, from, to }: Props) {
     let active = true;
     setLoading(true);
     setError('');
+    setEvents([]);
     api
-      .specialTests(from, to, project)
+      .specialTests(from, to, project, undefined, teamId ?? undefined)
       .then((result) => {
         if (active) setEvents(result.events);
       })
@@ -37,7 +38,7 @@ export function SpecialPerformancePanel({ project, from, to }: Props) {
     return () => {
       active = false;
     };
-  }, [project, from, to]);
+  }, [project, from, to, teamId]);
 
   const results = useMemo(() => events.flatMap((event) => event.results), [events]);
   const best = results.length ? Math.min(...results.map((result) => result.bestMs)) : null;

@@ -7,9 +7,9 @@ import { PhysicalChampionOverview } from './PhysicalChampionOverview';
 import { ChartCard, ContentState } from './PageLayout';
 import './PhysicalChampionModel.css';
 
-type Props = { project: Project; from: string; to: string };
+type Props = { project: Project; from: string; to: string; teamId?: number | null };
 
-export function PhysicalChampionModel({ project, from, to }: Props) {
+export function PhysicalChampionModel({ project, from, to, teamId = null }: Props) {
   const [payload, setPayload] = useState<PhysicalChampionPayload | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,8 +20,9 @@ export function PhysicalChampionModel({ project, from, to }: Props) {
     let active = true;
     setLoading(true);
     setError('');
+    setPayload(null);
     api
-      .physicalChampion({ project, from, to })
+      .physicalChampion({ project, from, to, teamId: teamId ?? undefined })
       .then((result) => {
         if (active) setPayload(result);
       })
@@ -34,7 +35,7 @@ export function PhysicalChampionModel({ project, from, to }: Props) {
     return () => {
       active = false;
     };
-  }, [project, from, to, revision]);
+  }, [project, from, to, teamId, revision]);
   const current =
     payload?.project === project && payload.from === from && payload.to === to ? payload : null;
   const showLoading = loading || (!error && !current);

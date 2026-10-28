@@ -834,3 +834,5 @@ training_sessions.srpe允许NULL；新填报缺少有效时长或RPE时不写占
 GET /api/athletes/:id/pending-project-facts提供授权范围内的待核实训练/测试；POST /api/training-sessions/:id/verify-project与POST /api/test-sessions/:id/verify-project接收{project}。仅既有管理角色可操作，同时检查运动员访问范围与目标项目权限。BEGIN IMMEDIATE内核实为confirmed、写manual_verification来源及审计；同项目确认幂等，不同项目的已确认事实拒绝重分类，测试业务键冲突整体回滚。只确认发生时项目，不推断协议版本或改写实测。在线训练必填量由multi-sport-v2的requiredSessionFields及活动共同决定；骑行可时长或距离，其余活动需时长，历史导入兼容读取不猜补缺失量。
 
 体能首页读取优化：`GET /api/strength-training/results` 与 `GET /api/strength-tests` 支持 `athleteIds`（逗号分隔、最多1000项）和成对的 `from`/`to` 日期；保留旧 `athleteId` 调用。服务端一次取得授权集合，整批校验后参数化查询，按周期过滤；力量测试测量项批量读取。
+
+Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team_id。复用 overviewTeams 授权队伍查询；records、special-tests、physical-champion 的现有读取接口接收可选 teamId，服务端在可访问运动员集合中再按队伍收窄，静态参考不变。体能批量查询继续逐批校验筛选后的运动员ID集合。

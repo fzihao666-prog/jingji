@@ -231,8 +231,10 @@ export const api = {
       await request<unknown>(`/api/athletes/${id}/reports/${encodeURIComponent(reportId)}`)
     );
   },
-  async physicalChampion(query: { project: string; from: string; to: string }) {
-    const payload = await request<unknown>(`/api/physical-champion?${new URLSearchParams(query)}`);
+  async physicalChampion(query: { project: string; from: string; to: string; teamId?: number | null }) {
+    const params = new URLSearchParams({ project: query.project, from: query.from, to: query.to });
+    if (query.teamId) params.set('teamId', String(query.teamId));
+    const payload = await request<unknown>(`/api/physical-champion?${params}`);
     return physicalChampionPayloadSchema.parse(payload);
   },
   async updatePhysicalChampionValues(
@@ -460,9 +462,16 @@ export const api = {
       body: JSON.stringify({ ids }),
     });
   },
-  async records(from: string, to: string, athleteId: number | null | undefined, project: Project) {
+  async records(
+    from: string,
+    to: string,
+    athleteId: number | null | undefined,
+    project: Project,
+    teamId?: number | null
+  ) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
+    if (teamId) params.set('teamId', String(teamId));
     return request<{ records: TrainingRecord[] }>(`/api/records?${params}`);
   },
   async saveSpecialTrainingSessions(
@@ -526,7 +535,9 @@ export const api = {
     if (!athleteIds.length) return { sessions: [], tests: [] };
     const params = new URLSearchParams({ athleteIds: athleteIds.join(','), from, to });
     const [results, tests] = await Promise.all([
-      request<{ sessions: Array<StrengthTrainingSession & { athleteId: number }> }>(`/api/strength-training/results?${params}`),
+      request<{ sessions: Array<StrengthTrainingSession & { athleteId: number }> }>(
+        `/api/strength-training/results?${params}`
+      ),
       request<{ tests: StrengthTest[] }>(`/api/strength-tests?${params}`),
     ]);
     return { sessions: results.sessions, tests: tests.tests };
@@ -890,9 +901,16 @@ export const api = {
       specialTestComparison: SpecialTestComparison | null;
     }>(`/api/special-training/overview?${params}`);
   },
-  async specialTests(from: string, to: string, project: Project, athleteId?: number) {
+  async specialTests(
+    from: string,
+    to: string,
+    project: Project,
+    athleteId?: number,
+    teamId?: number | null
+  ) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
+    if (teamId) params.set('teamId', String(teamId));
     return request<{ events: SpecialTestEvent[] }>(`/api/special-tests?${params}`);
   },
   async previewSpecialTests(file: File, project: Project) {

@@ -8,7 +8,6 @@ import {
   AppCard,
   ChartCard,
   ContentState,
-  FilterBar,
   PageContainer,
   PageHeader,
   SectionHeader,
@@ -22,10 +21,11 @@ import {
   loadOption,
   volumeOption,
 } from '../components/special-chart-options';
-import type { Project, ProjectTeam } from '../types';
+import type { Project } from '../types';
 import { formatNumber } from '../utils';
 
 type Props = {
+  teamId?: number | null;
   onPlanOpen: () => void;
   project: Project;
   from: string;
@@ -38,35 +38,18 @@ const empty = (title: string) => (
   <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
 );
 
-export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Props) {
-  const [teams, setTeams] = useState<{ project: Project; items: ProjectTeam[] } | null>(null);
-  const [selection, setSelection] = useState<{ project: Project; teamId: number | null }>({
-    project,
-    teamId: null,
-  });
+export function SpecialTrainingDashboard({ project, from, to, teamId = null, onPlanOpen }: Props) {
   const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(
     null
   );
   const [retry, setRetry] = useState(0);
-  const [selectedAthleteId, setSelectedAthleteId] = useState<number | null>(null);
-  const teamId = selection.project === project ? selection.teamId : null;
-  const currentTeams = teams?.project === project ? teams.items : [];
-  const selectedTeam = currentTeams.find((team) => team.id === teamId);
+  const [athleteSelection, setAthleteSelection] = useState<{ project: Project; teamId: number | null; athleteId: number | null }>({ project, teamId, athleteId: null });
+  const selectedAthleteId = athleteSelection.project === project && athleteSelection.teamId === teamId ? athleteSelection.athleteId : null;
+  const setSelectedAthleteId = (athleteId: number | null) => setAthleteSelection({ project, teamId, athleteId });
   const requestKey = JSON.stringify([project, from, to, teamId, selectedAthleteId, retry]);
   useEffect(() => {
-    let active = true;
-    api
-      .overviewTeams(project)
-      .then(({ teams: items }) => {
-        if (active) setTeams({ project, items });
-      })
-      .catch(() => {
-        if (active) setTeams({ project, items: [] });
-      });
-    return () => {
-      active = false;
-    };
-  }, [project]);
+    setAthleteSelection({ project, teamId, athleteId: null });
+  }, [project, teamId]);
   useEffect(() => {
     let active = true;
     api
@@ -95,7 +78,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
     const values = athletes.flatMap(athlete => athlete.summary[key] === null ? [] : [athlete.summary[key]]);
     return values.length ? values.reduce((sum, n) => sum + n, 0) / values.length : null;
   };
-  const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
+  const scope = teamId === null ? '当前权限范围 · 全部运动员' : '当前队伍 · 全部运动员';
   const displayedIntensity = training?.intensity ?? [];
   const intensityAnalytics = training ? { ...training, intensity: displayedIntensity } : null;
   const metricItems = training
@@ -126,30 +109,6 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
           ) : null}</>
         }
       />
-      <FilterBar label="专项训练页面筛选">
-        <label className="physical-athlete-filter special-team-filter">
-          队伍
-          <select
-            aria-label="专项训练队伍筛选"
-            value={teamId ?? ''}
-            onChange={(event) => {
-              setSelection({
-                project,
-                teamId: event.target.value ? Number(event.target.value) : null,
-              });
-              setSelectedAthleteId(null);
-            }}
-          >
-            <option value="">当前权限范围全部队伍</option>
-            {currentTeams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </FilterBar>
-
       {!current ? (
         <ContentState
           kind="loading"

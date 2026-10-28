@@ -284,8 +284,10 @@ export function registerAnalysisRoutes(app: Express) {
     const to = cleanString(req.query.to) || '2026-12-31';
     const requestedId = Number(req.query.athleteId || 0);
     const project = cleanString(req.query.project);
-    if (!isProject(project))
-      return res.status(400).json({ message: '请选择有效的运动项目。' });
+    if (!isProject(project)) return res.status(400).json({ message: '请选择有效的运动项目。' });
+    const teamId = Number(req.query.teamId || 0);
+    if (!Number.isSafeInteger(teamId) || teamId < 0)
+      return res.status(400).json({ message: '队伍筛选参数无效。' });
     let ids = accessibleAthleteIds(user);
     if (ids.length) {
       const placeholders = ids.map(() => '?').join(',');
@@ -303,6 +305,21 @@ export function registerAnalysisRoutes(app: Express) {
       if (!selected || selected.project !== project)
         return res.status(400).json({ message: '所选运动员不属于当前项目。' });
       ids = [requestedId];
+    }
+    if (teamId) {
+      const team = db
+        .prepare('SELECT id FROM project_teams WHERE id = ? AND project = ? AND active = 1')
+        .get(teamId, project);
+      const members = ids.length
+        ? (db
+            .prepare(
+              `SELECT id FROM athletes WHERE id IN (${ids.map(() => '?').join(',')}) AND team_id = ?`
+            )
+            .all(...ids, teamId) as Array<{ id: number }>)
+        : [];
+      if (!team || !members.length)
+        return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+      ids = members.map((row) => row.id);
     }
     if (!ids.length) return res.json({ records: [] });
     const placeholders = ids.map(() => '?').join(',');

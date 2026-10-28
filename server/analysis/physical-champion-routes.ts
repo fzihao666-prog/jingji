@@ -18,6 +18,7 @@ const querySchema = z
     project: z.string().max(80).refine(isProject),
     from: z.iso.date(),
     to: z.iso.date(),
+    teamId: z.coerce.number().int().nonnegative().optional(),
   })
   .refine(
     (value) =>
@@ -38,11 +39,28 @@ export function registerPhysicalChampionRoutes(app: Express) {
             .get(user.athleteId, parsed.data.project)
         : permissions.projects.includes('*') || permissions.projects.includes(parsed.data.project);
     if (!projectAllowed) return res.status(403).json({ message: '无权查看该项目冠军模型。' });
+    let athleteIds = accessibleAthleteIds(user);
+    if (parsed.data.teamId) {
+      const teamId = parsed.data.teamId;
+      const team = db
+        .prepare('SELECT id FROM project_teams WHERE id = ? AND project = ? AND active = 1')
+        .get(teamId, parsed.data.project);
+      const members = athleteIds.length
+        ? (db
+            .prepare(
+              `SELECT id FROM athletes WHERE id IN (${athleteIds.map(() => '?').join(',')}) AND project = ? AND team_id = ? AND active = 1`
+            )
+            .all(...athleteIds, parsed.data.project, teamId) as Array<{ id: number }>)
+        : [];
+      if (!team || !members.length)
+        return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+      athleteIds = members.map((row) => row.id);
+    }
     res.setHeader('Cache-Control', 'no-store');
     return res.json(
       buildPhysicalChampion(db, {
         ...parsed.data,
-        athleteIds: accessibleAthleteIds(user),
+        athleteIds,
         canEdit: canEditPhysicalChampionValues(user.role, permissions, parsed.data.project),
       })
     );

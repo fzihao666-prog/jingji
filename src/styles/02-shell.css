@@ -929,3 +929,29 @@
   .global-training-filter { padding: 14px 12px 0; }
   .global-training-filter .date-toolbar { width: 100%; }
 }
+
+/* 公共筛选栏：项目、队伍相邻，窄屏自然换行。 */
+.toolbar-team-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.toolbar-team-select select {
+  min-height: 36px;
+  max-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface, white);
+  color: var(--ink);
+  font: inherit;
+}
+
+.toolbar-team-select [role="alert"] {
+  flex-basis: 100%;
+}

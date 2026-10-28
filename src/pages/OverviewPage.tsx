@@ -16,7 +16,6 @@ import type {
   OverviewMeasurement,
   OverviewPayload,
   Project,
-  ProjectTeam,
   StrengthTest,
   TrainingRecord,
   User,
@@ -49,6 +48,7 @@ import {
 } from '../overview-analytics';
 
 type Props = {
+  teamId?: number | null;
   records: TrainingRecord[];
   athletes: Athlete[];
   from: string;
@@ -106,12 +106,6 @@ export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
-  const [trainingTeams, setTrainingTeams] = useState<ProjectTeam[]>([]);
-  const [trainingTeamId, setTrainingTeamId] = useState<number | null>(null);
-  const [teamTrainingOverview, setTeamTrainingOverview] = useState<OverviewPayload | null>(null);
-  const [teamTrainingLoading, setTeamTrainingLoading] = useState(false);
-  const [teamTrainingError, setTeamTrainingError] = useState('');
-  const [trainingTeamsError, setTrainingTeamsError] = useState('');
   const isSelfOverview = props.user.role === 'ATL';
   const isIndividualOverview = isSelfOverview;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
@@ -126,7 +120,7 @@ export function OverviewPage(props: Props) {
     setOverviewError('');
     setOverview(null);
     api
-      .overview(props.from, props.to, overviewAthleteId, props.project)
+      .overview(props.from, props.to, overviewAthleteId, props.project, props.teamId ?? null)
       .then((current) => {
         if (!active) return;
         setOverview(current.overview);
@@ -142,74 +136,10 @@ export function OverviewPage(props: Props) {
     return () => {
       active = false;
     };
-  }, [props.from, props.to, overviewAthleteId, props.project]);
-
-  useEffect(() => {
-    let active = true;
-    setTrainingTeamsError('');
-    if (isIndividualOverview) {
-      setTrainingTeams([]);
-      setTrainingTeamId(null);
-      return () => {
-        active = false;
-      };
-    }
-    api
-      .overviewTeams(props.project)
-      .then((current) => {
-        if (!active) return;
-        setTrainingTeams(current.teams);
-        setTrainingTeamId((selected) =>
-          current.teams.some((team) => team.id === selected)
-            ? selected
-            : (current.teams[0]?.id ?? null)
-        );
-      })
-      .catch((error) => {
-        if (!active) return;
-        setTrainingTeamsError(error instanceof Error ? error.message : '队伍列表读取失败');
-        setTrainingTeams([]);
-        setTrainingTeamId(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [isIndividualOverview, props.project]);
-
-  useEffect(() => {
-    let active = true;
-    setTeamTrainingError('');
-    if (isIndividualOverview || !trainingTeamId) {
-      setTeamTrainingOverview(null);
-      setTeamTrainingLoading(false);
-      return () => {
-        active = false;
-      };
-    }
-    setTeamTrainingLoading(true);
-    setTeamTrainingOverview(null);
-    api
-      .overview(props.from, props.to, null, props.project, trainingTeamId)
-      .then((current) => {
-        if (active) setTeamTrainingOverview(current.overview);
-      })
-      .catch((error) => {
-        if (active) {
-          setTeamTrainingOverview(null);
-          setTeamTrainingError(error instanceof Error ? error.message : '队伍训练量读取失败');
-        }
-      })
-      .finally(() => {
-        if (active) setTeamTrainingLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [isIndividualOverview, props.from, props.project, props.to, trainingTeamId]);
+  }, [props.from, props.to, overviewAthleteId, props.project, props.teamId]);
 
   const analysisRecords = overview?.records ?? props.records;
-  const trainingOverview = trainingTeamId && !isIndividualOverview ? teamTrainingOverview : overview;
-  const selectedTrainingTeam = trainingTeams.find((team) => team.id === trainingTeamId) ?? null;
+  const trainingOverview = overview;
   const athleteProfiles = overview?.profiles ?? [];
   const strengthTests = overview?.strengthTests ?? [];
   const strengthLoading = overviewLoading;
@@ -487,34 +417,12 @@ export function OverviewPage(props: Props) {
         <div className="training-analytics-heading-row">
           <PanelHeading
             title="训练量统计"
-            subtitle={
-              selectedTrainingTeam
-                ? `${selectedTrainingTeam.name} · 整体投入 · 专项 · 体能 · 生理生化 · RPE`
-                : '整体投入 · 专项 · 体能 · 生理生化 · RPE'
-            }
+            subtitle="整体投入 · 专项 · 体能 · 生理生化 · RPE"
           />
-          {!isIndividualOverview && (
-            <label className="training-analytics-team-filter">
-              <span>队伍</span>
-              <select
-                value={trainingTeamId ?? ''}
-                onChange={(event) =>
-                  setTrainingTeamId(event.target.value ? Number(event.target.value) : null)
-                }
-              >
-                <option value="">全部可访问队伍</option>
-                {trainingTeams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}（{team.athleteCount}人）
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         </div>
-        {trainingTeamsError || teamTrainingError ? (
-          <ContentState kind="error" title="训练量数据读取失败" description={trainingTeamsError || teamTrainingError} />
-        ) : teamTrainingLoading ? (
+        {overviewError ? (
+          <ContentState kind="error" title="训练量数据读取失败" description={overviewError} />
+        ) : overviewLoading ? (
           <ContentState
             kind="loading"
             className="professional-chart-empty"

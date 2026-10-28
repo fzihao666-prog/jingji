@@ -417,19 +417,39 @@ export function registerSpecialTrainingRoutes(app: Express) {
             { project: string } | undefined);
     if (athleteId !== null && (!athlete || athlete.project !== project))
       return res.status(400).json({ message: '所选运动员不属于当前项目。' });
+    const teamId = Number(req.query.teamId || 0);
+    if (!Number.isSafeInteger(teamId) || teamId < 0)
+      return res.status(400).json({ message: '队伍筛选参数无效。' });
+    let teamAthleteIds: Set<number> | null = null;
+    if (teamId) {
+      const accessible = accessibleAthleteIds(user);
+      const team = db
+        .prepare('SELECT id FROM project_teams WHERE id = ? AND project = ? AND active = 1')
+        .get(teamId, project);
+      const members = accessible.length
+        ? (db
+            .prepare(
+              `SELECT id FROM athletes WHERE id IN (${accessible.map(() => '?').join(',')}) AND project = ? AND team_id = ? AND active = 1`
+            )
+            .all(...accessible, project, teamId) as Array<{ id: number }>)
+        : [];
+      if (!team || !members.length)
+        return res.status(403).json({ message: '无权查看该队伍或该队伍当前没有可访问运动员。' });
+      teamAthleteIds = new Set(members.map((row) => row.id));
+    }
     const events = readSpecialTestEvents(user, project, from, to);
     res.json({
-      events:
-        athleteId === null
-          ? events
-          : events
-              .map((event) => ({
-                ...event,
-                results: event.results.filter((result) =>
-                  result.memberAthleteIds.includes(athleteId)
-                ),
-              }))
-              .filter((event) => event.results.length),
+      events: events
+        .map((event) => ({
+          ...event,
+          results: event.results.filter(
+            (result) =>
+              (athleteId === null || result.memberAthleteIds.includes(athleteId)) &&
+              (teamAthleteIds === null ||
+                result.memberAthleteIds.some((id) => teamAthleteIds.has(id)))
+          ),
+        }))
+        .filter((event) => event.results.length),
     });
   });
 

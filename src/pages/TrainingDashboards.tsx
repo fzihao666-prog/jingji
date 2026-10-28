@@ -56,6 +56,7 @@ type CurrentMetric = {
 type ScopedStrengthSession = StrengthTrainingSession & { athleteId: number };
 
 type StrengthProps = {
+  teamId?: number | null;
   athletes: Athlete[];
   project: Project;
   from: string;
@@ -455,6 +456,7 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
 }
 
 export function StrengthTrainingDashboard({
+  teamId,
   athletes,
   project,
   from,
@@ -462,6 +464,7 @@ export function StrengthTrainingDashboard({
   onNavigate,
 }: StrengthProps) {
   const [athleteId, setAthleteId] = useState<number | null>(null);
+  useEffect(() => { setAthleteId(null); }, [project, teamId]);
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -623,7 +626,7 @@ export function StrengthTrainingDashboard({
             </ChartCard>
           </section>
           <StrengthSessionAnalysis sessions={analysisSessions} />
-          <PhysicalChampionModel project={project} from={from} to={to} />
+          <PhysicalChampionModel project={project} from={from} to={to} teamId={teamId} />
           <PhysicalTestModule
             tests={periodTests}
             project={project}

@@ -1,11 +1,15 @@
 import { CalendarRange, Check, ChevronDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { Project } from '../types';
+import type { Project, ProjectTeam } from '../types';
 import { addDays, toIsoDate } from '../utils';
 import { projectEnglish, projectKey, projectLabel } from '../../shared/projects';
 import { ProjectMark } from './ProjectMark';
 
 type Props = {
+  teams?: ProjectTeam[];
+  teamId?: number | null;
+  teamError?: string;
+  onTeamChange?: (id: number | null) => void;
   from: string;
   to: string;
   onRangeChange: (from: string, to: string) => void;
@@ -17,6 +21,7 @@ type Props = {
 };
 
 export function DateToolbar({
+  teams = [], teamId = null, teamError, onTeamChange,
   from,
   to,
   onRangeChange,
@@ -182,6 +187,13 @@ export function DateToolbar({
           </div>
         </div>
       )}
+      {onTeamChange && <label className="toolbar-team-select">队伍
+        <select aria-label="全局队伍筛选" value={teamId ?? ''} onChange={event => onTeamChange(event.target.value ? Number(event.target.value) : null)}>
+          <option value="">全部队伍</option>
+          {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+        </select>
+        {teamError && <span role="alert">{teamError}</span>}
+      </label>}
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
 import { PhysiologyBiochemistryPage } from './pages/PhysiologyBiochemistryPage';
 import { StrengthTrainingDashboard } from './pages/TrainingDashboards';
-import type { Athlete, Project, TrainingRecord, User } from './types';
+import type { Athlete, Project, ProjectTeam, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
 import { isProject, normalizeProject, PROJECTS } from '../shared/projects';
 
@@ -123,13 +123,29 @@ export default function App() {
   const [records, setRecords] = useState<TrainingRecord[]>([]);
   const [from, setFrom] = useState(addDays(today, -29));
   const [to, setTo] = useState(today);
+  const [teamSelection, setTeamSelection] = useState<{ project: Project; id: number } | null>(null);
+  const [teamOptions, setTeamOptions] = useState<{ project: Project; teams: ProjectTeam[] } | null>(null);
+  const [teamError, setTeamError] = useState('');
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const teamId = teamSelection?.project === project ? teamSelection.id : null;
+  const teams = teamOptions?.project === project ? teamOptions.teams : [];
   const [authorizedProjects, setAuthorizedProjects] = useState<Project[]>([]);
   const [athletesReady, setAthletesReady] = useState(false);
   const rosterUserRef = useRef<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    if (!user || !project) return;
+    let active = true;
+    setTeamError('');
+    api.overviewTeams(project).then(({ teams }) => {
+      if (!active) return;
+      setTeamOptions({ project, teams });
+      setTeamSelection(current => current?.project === project && !teams.some(team => team.id === current.id) ? null : current);
+    }).catch(() => { if (active) { setTeamOptions(null); setTeamError('队伍列表加载失败，请刷新重试'); } });
+    return () => { active = false; };
+  }, [user, project, refreshKey]);
   const [globalError, setGlobalError] = useState('');
   const importNavigationGuard = useRef<(() => boolean) | null>(null);
   const acceptedHash = useRef(window.location.hash);
@@ -224,21 +240,23 @@ export default function App() {
       setLoading(false);
       return;
     }
+    let active = true;
     setLoading(true);
     setGlobalError('');
     api
-      .records(from, to, null, project)
-      .then(({ records: nextRecords }) => setRecords(nextRecords))
+      .records(from, to, null, project, teamId ?? undefined)
+      .then(({ records: nextRecords }) => { if (active) setRecords(nextRecords); })
       .catch((error) =>
-        setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。')
+        active && setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。')
       )
-      .finally(() => setLoading(false));
-  }, [user, athletesReady, athletes, from, to, athleteId, project, page, refreshKey]);
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [user, athletesReady, athletes, from, to, athleteId, project, teamId, page, refreshKey]);
 
   const projects = authorizedProjects;
   const projectAthletes = useMemo(
-    () => athletes.filter((athlete) => athlete.project === project),
-    [athletes, project]
+    () => athletes.filter((athlete) => athlete.project === project && (teamId === null || athlete.teamId === teamId)),
+    [athletes, project, teamId]
   );
 
   const login = (token: string, current: User) => {
@@ -261,6 +279,8 @@ export default function App() {
     setRecords([]);
     setAthleteId(null);
     setProject(null);
+    setTeamSelection(null);
+    setTeamOptions(null);
     setAuthorizedProjects([]);
     setAthletesReady(false);
   };
@@ -310,6 +330,7 @@ export default function App() {
     );
 
   const shared = {
+    teamId,
     records,
     athletes: projectAthletes,
     project,
@@ -326,6 +347,7 @@ export default function App() {
     onProjectChange: (nextProject: Project) => {
       if (nextProject !== project && importNavigationGuard.current && !importNavigationGuard.current()) return;
       setProject(nextProject);
+      setTeamSelection(null);
       setAthleteId(null);
       void api.saveCurrentProject(nextProject).catch(() => undefined);
     },
@@ -348,7 +370,11 @@ export default function App() {
       {globalError && <div className="global-error">{globalError}</div>}
       {usesGlobalTrainingFilter && (
         <div className="global-training-filter">
-          <DateToolbar {...shared} presetMode="period" />
+          <DateToolbar {...shared} presetMode="period" teams={teams} teamError={teamError} onTeamChange={(id) => {
+            setTeamSelection(id === null ? null : { project, id });
+            setAthleteId(null);
+            setRecords([]);
+          }} />
         </div>
       )}
       <Suspense
@@ -387,6 +413,7 @@ export default function App() {
         {page === 'special-overview' && (
           <SpecialTrainingDashboard
             project={project}
+            teamId={teamId}
             from={from}
             to={to}
             onPlanOpen={() => changePage('special-schedule')}
@@ -404,6 +431,7 @@ export default function App() {
           <StrengthTrainingDashboard
             athletes={projectAthletes}
             project={project}
+            teamId={teamId}
             from={from}
             to={to}
             onNavigate={changePage}
