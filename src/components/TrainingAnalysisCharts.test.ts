@@ -137,7 +137,7 @@ it('强度图保留传入体系分组，不丢失非固定区间', () => {
   const html = renderToStaticMarkup(createElement(TrainingIntensityChart, { data }));
   expect(html).toContain('FTP · Z2');
   expect(html).toContain('HR · Z2');
-  expect(charts.data).toContainEqual(data);
+  expect(charts.data).toContainEqual(data.map((row) => expect.objectContaining(row)));
 });
 it('专项趋势与占比无记录不造数，真实零仍保留', () => {
   const html = renderToStaticMarkup(
@@ -213,4 +213,13 @@ it('FMS真实零分仍显示评分与雷达，不误判为空状态', () => {
   expect(html).not.toContain('暂无FMS测试数据');
   expect(html).toContain('fms-radar-center');
   expect(html).toContain('已完成 1/7 项筛查');
+});
+
+it('强度空态保留七类图例，缺失显示横线，真实零正常显示', () => {
+  const empty = renderToStaticMarkup(createElement(TrainingIntensityChart, { data: [] }));
+  for (const zone of ['U3', 'U2', 'U1', 'AT', 'TPT', 'AN', 'ATP']) expect(empty).toContain(`<b>${zone}</b>`);
+  expect(empty).toContain('—');
+  const zero = renderToStaticMarkup(createElement(TrainingIntensityChart, { data: [{ zone: 'U3', durationMin: 0, sessionCount: 1, percentage: 0 }] }));
+  expect(zero).toContain('0 分');
+  expect(zero).toContain('0%');
 });

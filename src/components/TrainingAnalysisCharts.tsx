@@ -26,6 +26,7 @@ import {
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
 import './EChart.css';
+import { STRENGTH_INTENSITY_ZONES } from '../../shared/strength-training';
 
 const colors = [
   '#0b7f7a',
@@ -841,7 +842,17 @@ type TrainingLoadRatio = OverviewPayload['trainingLoadRatio'];
 
 export function TrainingIntensityChart({ data }: { data: IntensityDistribution }) {
   const totalDuration = data.reduce((sum, row) => sum + row.durationMin, 0);
-  const chartData = data.filter((row) => row.durationMin > 0);
+  const rows = [
+    ...STRENGTH_INTENSITY_ZONES.map((zone) => ({
+      zone,
+      record: data.find((row) => row.zone === zone),
+    })),
+    ...data.filter((row) => !STRENGTH_INTENSITY_ZONES.some((zone) => zone === row.zone))
+      .map((record) => ({ zone: record.zone, record })),
+  ].map((row, index) => ({ ...row, color: colors[index % colors.length] }));
+  const chartData = rows.flatMap(({ record, color }) =>
+    record && record.durationMin > 0 ? [{ ...record, color }] : []
+  );
   return (
     <div className="analysis-chart-module">
       <div className="analysis-chart-toolbar">
@@ -855,6 +866,8 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
             <PieChart>
               <Pie
                 data={[{ durationMin: 1 }]}
+                tooltipType="none"
+                isAnimationActive={false}
                 dataKey="durationMin"
                 innerRadius={56}
                 outerRadius={82}
@@ -870,8 +883,8 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
                 paddingAngle={2}
                 cornerRadius={5}
               >
-                {chartData.map((row, index) => (
-                  <Cell key={row.zone} fill={colors[index % colors.length]} />
+                {chartData.map((row) => (
+                  <Cell key={row.zone} fill={row.color} />
                 ))}
               </Pie>
               <Tooltip
@@ -879,7 +892,7 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
                   const row = active
                     ? (payload?.[0]?.payload as IntensityDistribution[number] | undefined)
                     : undefined;
-                  if (!row) return null;
+                  if (!row || !row.zone) return null;
                   return (
                     <div className="intensity-tooltip">
                       <strong>
@@ -899,15 +912,15 @@ export function TrainingIntensityChart({ data }: { data: IntensityDistribution }
           </div>
         </div>
         <div className="content-legend intensity-ratio-legend">
-          {data.map((row, index) => {
+          {rows.map(({ zone, record, color }) => {
             return (
-              <div key={row.zone}>
-                <i style={{ background: colors[index % colors.length] }} />
+              <div key={zone}>
+                <i style={{ background: color }} />
                 <span>
-                  <b>{row.zone}</b>
+                  <b>{zone}</b>
                 </span>
-                <em>{formatNumber(row.durationMin, 1)} 分</em>
-                <strong>{formatNumber(row.percentage, 1)}%</strong>
+                <em>{record ? `${formatNumber(record.durationMin, 1)} 分` : '—'}</em>
+                <strong>{record ? `${formatNumber(record.percentage, 1)}%` : '—'}</strong>
               </div>
             );
           })}
