@@ -1674,24 +1674,6 @@
   font-weight: 600;
 }
 
-.strength-dashboard-page .strength-metric-icon {
-  display: inline-flex;
-  flex: 0 0 36px;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--teal) 12%, transparent);
-  color: var(--teal);
-}
-
-.strength-dashboard-page .strength-metric-icon svg {
-  width: 20px;
-  height: 20px;
-  stroke-width: 1.8;
-}
-
 .strength-dashboard-page .physical-core-metrics strong {
   display: flex;
   align-items: baseline;

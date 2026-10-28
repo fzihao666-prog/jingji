@@ -1,6 +1,6 @@
 import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import { StrengthSessionAnalysis, strengthSessionSummary } from '../components/StrengthSessionAnalysis';
-import { Activity, Clock3, Dumbbell, Gauge, Users, Zap } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
@@ -145,9 +145,9 @@ function PhysicalCoreMetrics({
   // 测试结果在下方测试模块展示，顶部集中呈现训练投入。
   return (
     <section className="training-dashboard-metrics physical-core-metrics">
-      {cards.map(([label, value, unit, note], index) => (
+      {cards.map(([label, value, unit, note]) => (
         <AppCard key={label} variant="compact" className="training-dashboard-metric">
-          <div className="strength-metric-heading"><span className="strength-metric-icon" aria-hidden="true">{[<Clock3 key="duration" />, <Dumbbell key="sessions" />, <Zap key="load" />, <Gauge key="rpe" />, <Users key="people" />][index]}</span><span>{label}</span></div>
+          <span className="strength-metric-heading">{label}</span>
           <strong>
             {value}
             <small>{unit}</small>
