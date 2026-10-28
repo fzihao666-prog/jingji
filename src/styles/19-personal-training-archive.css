@@ -2,7 +2,16 @@
 
 /* Personal training archive */
 .personal-page {
+  min-width: 0;
   padding-bottom: 90px;
+}
+
+.personal-page :where(section, article, form, fieldset) {
+  min-width: 0;
+}
+
+.personal-page :where(h2, h3, h4, p, dd) {
+  overflow-wrap: anywhere;
 }
 
 .personal-empty {
@@ -163,12 +172,8 @@
     0 0 0 88px rgb(130 220 207 / 2.5%);
 }
 
-.personal-dossier .personal-detail-identity {
-  min-height: 110px;
-  align-items: center;
-}
-
 .personal-dossier .personal-avatar {
+  flex-shrink: 0;
   width: 88px;
   height: 88px;
   border-color: rgb(130 220 207 / 70%);
@@ -261,13 +266,14 @@
 }
 
 .personal-header-metrics strong {
+  overflow-wrap: anywhere;
   color: var(--dossier-value);
   font:
     900 22px/1 Bahnschrift,
     'Microsoft YaHei UI',
     sans-serif;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .personal-header-metrics strong small {
@@ -338,6 +344,7 @@
 }
 
 .personal-identity-copy > span {
+  overflow-wrap: anywhere;
   color: #168f88;
   font:
     700 10px Bahnschrift,

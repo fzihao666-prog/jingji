@@ -1,9 +1,9 @@
 /* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
 
 /* 响应式 */
-@media (width <= 900px) {
+@container (width <= 760px) {
   .body-composition-simulation-v3 .body-composition-main {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .body-composition-figure-panel {
@@ -216,7 +216,7 @@
     padding: 13px;
   }
 
-  .body-composition-simulation svg,
+  .body-composition-simulation > svg,
   .body-segment-chart svg,
   .body-timeline svg {
     display: none;
@@ -301,15 +301,16 @@
   }
 
   .body-composition-guide {
-    width: 112px;
+    width: 72px;
+    height: auto;
   }
 
   .body-composition-guide-fat {
-    right: -102px;
+    right: -62px;
   }
 
   .body-composition-guide-lean {
-    left: -102px;
+    left: -62px;
   }
 
   .body-composition-secondary-metrics {

@@ -1,4 +1,5 @@
 .training-session-entry fieldset {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 12px;
@@ -7,10 +8,19 @@
 }
 
 .training-session-entry label {
+  min-width: 0;
   display: grid;
   gap: 6px;
 }
 
 .training-session-entry .training-session-content {
   grid-column: 1 / -1;
+}
+
+.training-session-entry input,
+.training-session-entry select,
+.training-session-entry textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }

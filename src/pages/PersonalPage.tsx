@@ -719,7 +719,7 @@ export function PersonalPage(props: Props) {
             </section>
           </section>
 
-          <section className="personal-profile-section" aria-label="测试模块">
+          <section className="personal-profile-section personal-test-section" aria-label="测试模块">
             <div className="functional-test-grid">
               <AppCard variant="chart" className="professional-panel body-composition-profile-card">
                 <header className="personal-analysis-card-heading">

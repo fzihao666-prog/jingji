@@ -1095,8 +1095,8 @@ function BodyCompositionSimulationDesktop({
               className="body-composition-guide body-composition-guide-lean"
               viewBox="0 0 140 80"
             >
-              <path d="M 150 10 C 110 5, 20 -35, -40 -50" />
-              <circle cx="-40" cy="-50" r="4" />
+              <path d="M 135 8 C 90 8, 50 4, 4 4" />
+              <circle cx="4" cy="4" r="4" />
             </svg>
           </div>
 

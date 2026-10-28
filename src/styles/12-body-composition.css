@@ -3,6 +3,8 @@
 /* 身体成分图谱：整体成分层与分区实测值共同呈现。 */
 
 .body-composition-atlas {
+  container-type: inline-size;
+  min-width: 0;
   display: grid;
   gap: 14px;
   color: #173f49;
@@ -104,7 +106,7 @@
   margin-top: 9px;
 }
 
-.body-composition-simulation svg {
+.body-composition-simulation > svg {
   width: 100%;
   height: auto;
   display: block;
@@ -189,8 +191,12 @@
 
 .body-composition-simulation-v3 .body-composition-main {
   display: grid;
+  min-width: 0;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
   gap: clamp(16px, 3vw, 36px);
   align-items: stretch;
 }
 
+.body-composition-main > * {
+  min-width: 0;
+}
