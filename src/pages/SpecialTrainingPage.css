@@ -1343,3 +1343,147 @@
     grid-template-columns: repeat(7, 128px);
   }
 }
+
+/* 体能总览：限定页面作用域，保持专项训练布局独立。 */
+.strength-dashboard-page > *,
+.strength-dashboard-page .physical-dashboard-grid > *,
+.strength-dashboard-page .strength-analysis-grid > * {
+  min-width: 0;
+}
+
+.strength-dashboard-page .physical-core-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--overview-gap);
+}
+
+.strength-dashboard-page .physical-dashboard-grid {
+  align-items: stretch;
+}
+
+.strength-dashboard-page .physical-dashboard-grid > .app-card {
+  height: 100%;
+}
+
+.strength-dashboard-page .physical-chart-canvas {
+  width: 100%;
+  min-width: 0;
+  height: 260px;
+}
+
+.strength-dashboard-page .physical-trend {
+  min-height: 300px;
+}
+
+.strength-dashboard-page .physical-trend > label {
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.strength-dashboard-page .physical-trend select {
+  max-width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  font: inherit;
+}
+
+.strength-dashboard-page .physical-ability-profile,
+.strength-dashboard-page .physical-structure,
+.strength-dashboard-page .physical-dashboard-grid .app-content-state {
+  min-height: 260px;
+}
+
+.strength-dashboard-page .strength-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--overview-gap);
+  align-items: start;
+}
+
+.strength-dashboard-page .strength-section-heading {
+  margin-bottom: 12px;
+}
+
+.strength-dashboard-page .strength-insight-summary {
+  margin: 0;
+  padding: 14px 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.strength-dashboard-page .strength-data-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.strength-dashboard-page .strength-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.strength-dashboard-page .strength-data-table th,
+.strength-dashboard-page .strength-data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.strength-dashboard-page .strength-data-table th {
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.strength-dashboard-page .strength-data-table td {
+  color: var(--ink);
+}
+
+.strength-dashboard-page .athlete-analysis-selector > header {
+  flex-wrap: wrap;
+}
+
+.strength-dashboard-page .athlete-analysis-selector-search input {
+  width: 100%;
+  min-width: 0;
+}
+
+.strength-dashboard-page .athlete-analysis-selector-card {
+  overflow-wrap: anywhere;
+}
+
+@media (width <= 1024px) {
+  .strength-dashboard-page .physical-core-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .strength-dashboard-page .strength-analysis-grid,
+  .strength-dashboard-page .physical-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .strength-dashboard-page .physical-dashboard-grid > .app-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (width <= 640px) {
+  .strength-dashboard-page .physical-core-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .strength-dashboard-page .physical-ability-profile,
+  .strength-dashboard-page .physical-structure,
+  .strength-dashboard-page .strength-insight-summary {
+    padding: 16px;
+  }
+
+  .strength-dashboard-page .strength-data-table th,
+  .strength-dashboard-page .strength-data-table td {
+    padding: 10px 12px;
+  }
+}

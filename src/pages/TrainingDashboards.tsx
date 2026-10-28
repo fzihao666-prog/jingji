@@ -1,4 +1,5 @@
 import { metricAppliesToProject } from '../../shared/import-metric-choice';
+import { StrengthSessionAnalysis, strengthSessionSummary } from '../components/StrengthSessionAnalysis';
 import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -118,71 +119,22 @@ function metricsFromTests(tests: StrengthTest[], project: Project) {
 }
 
 function PhysicalCoreMetrics({
-  metrics,
   sessions,
   athleteId,
 }: {
-  metrics: CurrentMetric[];
   sessions: ScopedStrengthSession[];
   athleteId: number | null;
 }) {
-  if (athleteId) {
-    if (!metrics.length && !sessions.length)
-      return (
-        <ContentState
-          kind="empty"
-          title="暂无体能训练数据"
-          description="当前时间范围内没有可用于分析的真实训练或测试数据。"
-        />
-      );
-    return (
-      <section className="training-dashboard-metrics physical-core-metrics">
-        {metrics.slice(0, 6).map((metric) => (
-          <AppCard key={metric.key} variant="compact" className="training-dashboard-metric">
-            <span>{metric.label}</span>
-            <strong>
-              {formatNumber(metric.value, 1)}
-              <small>{metric.unit}</small>
-            </strong>
-            <em>{metric.testDate}</em>
-          </AppCard>
-        ))}
-      </section>
-    );
-  }
+  const summary = strengthSessionSummary(sessions);
   const participants = new Set(sessions.map((session) => session.athleteId)).size;
-  const totalDuration = sessions.reduce((sum, session) => sum + session.durationMin, 0);
   const cards: Array<[string, string | number, string, string]> = [
-    ['参与体能训练人数', participants, '人', '当前时间范围内有训练结果'],
-    ['体能训练总次数', sessions.length, '场', '当前组织范围内有效训练'],
-    ['总训练时长', formatNumber(totalDuration / 60, 1), 'h', '按已记录训练时长汇总'],
-    [
-      '人均训练时长',
-      participants ? formatNumber(totalDuration / participants / 60, 1) : '—',
-      participants ? 'h' : '',
-      '按参与训练运动员计算',
-    ],
-    ...metrics
-      .filter((metric) => metric.sampleCount)
-      .slice(0, 2)
-      .map(
-        (metric) =>
-          [
-            `${metric.label}均值`,
-            formatNumber(metric.value, 1),
-            metric.unit,
-            `中位数 ${formatNumber(metric.median || 0, 1)}${metric.unit} · n=${metric.sampleCount}`,
-          ] as [string, string | number, string, string]
-      ),
+    ['累计体能训练时长', sessions.length ? formatNumber(summary.duration / 60, 1) : '—', 'h', '按当前周期已记录时长汇总'],
+    ['体能训练课次', sessions.length, '课', '按运动员课次统计'],
+    ['累计训练负荷', summary.load === null ? '—' : formatNumber(summary.load), 'AU', `SRPE · 有效 ${summary.loadCount}/${sessions.length} 课`],
+    ['平均 RPE', summary.rpe === null ? '—' : formatNumber(summary.rpe, 1), '分', `课次均值 · 有效 ${summary.rpeCount}/${sessions.length} 课`],
+    ['训练参与人数', participants, '人', athleteId ? '当前运动员' : '当前周期有训练记录的运动员'],
   ];
-  if (!sessions.length && !metrics.length)
-    return (
-      <ContentState
-        kind="empty"
-        title="暂无体能训练数据"
-        description="当前项目、组织范围和时间范围内没有有效体能训练或测试数据。"
-      />
-    );
+  // 测试结果在下方测试模块展示，顶部集中呈现训练投入。
   return (
     <section className="training-dashboard-metrics physical-core-metrics">
       {cards.map(([label, value, unit, note]) => (
@@ -449,7 +401,7 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
       {isPlaceholder && <span className="app-chart-example">暂无数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}>
-          <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+          <CartesianGrid yAxisId="duration" stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="date"
             tick={{ fontSize: 10, fill: '#62767d' }}
@@ -623,13 +575,9 @@ export function StrengthTrainingDashboard({
         className="overview-page-heading training-plan-entry-heading"
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
-        actions={<><button className="dashboard-action-button" onClick={() => onNavigate('strength-plan')}>训练计划</button>{athleteId ? <button className="dashboard-action-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : null}</>}
+        actions={<><button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>训练计划</button>{athleteId ? <button type="button" className="secondary-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : null}</>}
       />
-      <PhysicalChampionModel
-        project={project}
-        from={from}
-        to={to}
-      />
+
       {loading ? (
         <ContentState
           kind="loading"
@@ -650,7 +598,6 @@ export function StrengthTrainingDashboard({
               }
             />
             <PhysicalCoreMetrics
-              metrics={displayMetrics}
               sessions={analysisSessions}
               athleteId={athleteId}
             />
@@ -689,6 +636,8 @@ export function StrengthTrainingDashboard({
               <TrainingLoadTrend sessions={analysisSessions} />
             </ChartCard>
           </section>
+          <StrengthSessionAnalysis sessions={analysisSessions} />
+          <PhysicalChampionModel project={project} from={from} to={to} />
           <PhysicalTestModule
             tests={periodTests}
             project={project}
