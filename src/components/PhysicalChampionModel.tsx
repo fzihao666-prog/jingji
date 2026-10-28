@@ -1,15 +1,4 @@
-import { lazy, Suspense, useEffect, useId, useState, type FormEvent } from 'react';
-import {
-  Legend,
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts';
-import type { EChartsOption } from 'echarts';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import type { Athlete, Project } from '../types';
 import { projectLabel } from '../../shared/projects';
@@ -18,10 +7,9 @@ import {
   type PhysicalChampionPayload,
   type PhysicalReference,
 } from '../../shared/physical-champion';
+import { PhysicalChampionOverview } from './PhysicalChampionOverview';
 import { ChartCard, ContentState } from './PageLayout';
 import './PhysicalChampionModel.css';
-
-const EChart = lazy(() => import('./EChart').then((module) => ({ default: module.EChart })));
 
 type Props = {
   project: Project;
@@ -30,10 +18,6 @@ type Props = {
   athletes: Athlete[];
   athleteId: number | null;
 };
-const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 3 });
-const format = (value: number | null | undefined) =>
-  value == null ? '—' : numberFormat.format(value);
-
 const sourceNatureLabel = {
   official_research: '研究或官方资料',
   expert: '专家经验',
@@ -112,7 +96,7 @@ function ReferenceEditor({
     // 与服务端共用配置契约，来源和日期在两端验证。
     const parsed = physicalReferenceDraftSchema.safeParse(draft);
     if (!parsed.success) {
-      setMessage('请补全适用范围、维度、来源及有效日期；专家或队内来源需在名称中明确标注。');
+      setMessage('请补全适用范围、维度、来源及有效日期。');
       return;
     }
     setSaving(true);
@@ -325,104 +309,7 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
     : undefined;
   const group =
     athleteGroup ?? payload?.groups.find((item) => item.id === groupId) ?? payload?.groups[0];
-  const personal = group?.athletes.find((item) => item.athleteId === athleteId);
-  const rows =
-    group?.references.map((reference) => ({
-      reference,
-      team: group.team.find((item) => item.key === reference.key),
-      personal: personal?.dimensions.find((item) => item.key === reference.key),
-    })) ?? [];
-  const radar = rows.map((row) => ({
-    label: row.reference.label,
-    champion: 100,
-    team: row.team?.achievedPercent ?? null,
-    personal: row.personal?.achievedPercent ?? null,
-  }));
-  const trend = (group?.trend.filter((item) => item.athleteId === (athleteId || null)) ?? []).sort(
-    (a, b) => a.date.localeCompare(b.date)
-  );
   const scopeName = athleteId ? (selectedAthlete?.name ?? '当前运动员') : '团队平均';
-  const validTrend = trend.filter((item) => item.score != null);
-  const firstTrend = validTrend[0];
-  const latestTrend = validTrend.at(-1);
-  const trendChange =
-    validTrend.length > 1 && firstTrend?.score != null && latestTrend?.score != null
-      ? Math.round((latestTrend.score - firstTrend.score) * 10) / 10
-      : null;
-  const toTime = (date: string) => Date.parse(`${date}T00:00:00Z`);
-  const trendOption: EChartsOption = {
-    animation: false,
-    grid: {
-      left: 12,
-      right: 20,
-      top: 48,
-      bottom: 16,
-      outerBoundsMode: 'same',
-      outerBoundsContain: 'axisLabel',
-    },
-    legend: { top: 0, left: 'center', type: 'scroll', selectedMode: false },
-    tooltip: {
-      trigger: 'axis',
-      renderMode: 'richText',
-      confine: true,
-      formatter: (parameters) => {
-        const points = Array.isArray(parameters) ? parameters : [parameters];
-        const point = points.find((item) => item.seriesId === 'achievement');
-        const value = point?.value;
-        if (!Array.isArray(value) || typeof value[0] !== 'number') return '';
-        const record = trend.find((item) => toTime(item.date) === value[0]);
-        return record
-          ? `${record.date}\n${scopeName}：${format(record.score)}%\n有效样本：${record.sampleCount} 人\n有效维度：${record.coverage} 项`
-          : '';
-      },
-    },
-    xAxis: {
-      type: 'time',
-      min: toTime(from),
-      max: toTime(to) + (from === to ? 86400000 : 0),
-      splitNumber: 5,
-      axisLabel: {
-        hideOverlap: true,
-        formatter: (value: number) => new Date(value).toISOString().slice(5, 10).replace('-', '/'),
-      },
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      max: (extent) => Math.ceil(Math.max(110, extent.max + 5) / 10) * 10,
-      axisLabel: { formatter: '{value}%' },
-      splitLine: { lineStyle: { type: 'dashed' } },
-    },
-    series: [
-      {
-        id: 'achievement',
-        name: scopeName,
-        type: 'line',
-        data: trend.map((item) => [toTime(item.date), item.score]),
-        connectNulls: false,
-        smooth: false,
-        showSymbol: validTrend.length <= 12,
-        symbol: 'circle',
-        symbolSize: 7,
-        lineStyle: { width: 3 },
-        areaStyle: { opacity: 0.08 },
-      },
-      {
-        id: 'reference',
-        name: '冠军参考 100%',
-        type: 'line',
-        data: [
-          [toTime(from), 100],
-          [toTime(to) + (from === to ? 86400000 : 0), 100],
-        ],
-        showSymbol: false,
-        silent: true,
-        tooltip: { show: false },
-        lineStyle: { type: 'dashed', width: 2 },
-      },
-    ],
-  };
   return (
     <ChartCard
       title="体能冠军参考模型"
@@ -444,333 +331,53 @@ export function PhysicalChampionModel({ project, from, to, athletes, athleteId }
           />
         )}
       </div>
-      {!showLoading && !error && payload && (
-        <>
-          <p role="status">{payload.pendingReason}</p>
-          {payload.athletePendingReasons
-            .filter((item) => !athleteId || item.athleteId === athleteId)
-            .map((item) => (
-              <p key={item.athleteId}>
-                {athletes.find((athlete) => athlete.id === item.athleteId)?.name || item.athleteId}
-                ：{item.reason}
-              </p>
-            ))}
-          {payload.canEdit && (
-            <section aria-label="冠军参考管理">
-              <h3>参考版本管理</h3>
-              <ReferenceEditor
-                project={project}
-                onSaved={() => setRevision((value) => value + 1)}
-              />
-              {payload.managementReferences.map((reference) => (
-                <ReferenceEditor
-                  key={`${reference.id}-${reference.revision}`}
-                  reference={reference}
-                  project={project}
-                  onSaved={() => setRevision((value) => value + 1)}
-                />
-              ))}
-            </section>
-          )}
-          <details>
-            <summary>实测记录与同协议历史（{payload.measurements.length} 条）</summary>
-            <table>
-              <caption>
-                仅含当前项目已确认有效实测；无标准时仍保留记录，按协议查看同指标的日期变化。
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">运动员</th>
-                  <th scope="col">日期</th>
-                  <th scope="col">协议 / 版本 / 条件 / 侧别</th>
-                  <th scope="col">指标</th>
-                  <th scope="col">实测</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payload.measurements
-                  .filter((row) => !athleteId || row.athleteId === athleteId)
-                  .map((row) => (
-                    <tr key={row.measurementId}>
-                      <td>
-                        {athletes.find((athlete) => athlete.id === row.athleteId)?.name ||
-                          row.athleteId}
-                      </td>
-                      <td>{row.date}</td>
-                      <td>
-                        {row.protocol || '协议未知'} /{' '}
-                        {row.protocolVersion === null
-                          ? '版本未知'
-                          : row.protocolVersion || '默认版本'}{' '}
-                        / {row.testContext || '默认条件'} / {row.side}
-                      </td>
-                      <td>{row.code}</td>
-                      <td>
-                        {format(row.value)} {row.unit}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-            {!payload.measurements.length && <p>当前周期暂无已确认实测记录。</p>}
-          </details>
-        </>
-      )}
       {!showLoading && !error && !group && (
-        <ContentState kind="empty" title="待参考" description="当前项目尚未配置适用参考模型" />
+        <ContentState
+          kind="empty"
+          title="待参考"
+          description={payload?.pendingReason || '当前项目尚未配置适用参考模型'}
+        />
       )}
       {!showLoading && !error && group && (
         <>
           <div className="physical-champion-toolbar">
-            <label htmlFor={selectorId}>参考分组</label>
-            <select
-              id={selectorId}
-              value={group.id}
-              disabled={Boolean(athleteGroup)}
-              onChange={(event) => setGroupId(event.target.value)}
-            >
-              {payload?.groups.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {athleteId && !personal && (
-            <p className="physical-champion-empty" role="status">
-              待采集：当前运动员在此参考组没有可比较测试成绩，请核对参考组与测试协议。
-            </p>
-          )}
-          <div className="physical-champion-section-heading">
-            <h3>冠军参考指标</h3>
-            <span>参考值 · 当前表现；估算参考，不参与正式评分</span>
-          </div>
-          <section aria-label="冠军参考指标" className="physical-champion-reference">
-            {rows.map(({ reference, team, personal: personalResult }) => (
-              <article key={reference.id}>
-                <h3>
-                  {reference.label}
-                  {reference.sourceType === 'estimated' && <small>估算</small>}
-                </h3>
-                <p>
-                  版本 {reference.version} · {sourceNatureLabel[reference.sourceNature]} ·{' '}
-                  {reference.sourceNote} · {reference.effectiveFrom} 至{' '}
-                  {reference.effectiveTo || '长期'}
-                </p>
-                <strong>
-                  {format(reference.value)} <span>{reference.unit}</span>
-                </strong>
-                <div className="physical-champion-card-current">
-                  <span>{scopeName}</span>
-                  <b>
-                    {format((athleteId ? personalResult : team)?.achievedPercent)}
-                    {(athleteId ? personalResult : team)?.achievedPercent != null && '%'}
-                  </b>
-                </div>
-              </article>
-            ))}
-          </section>
-          <section className="physical-champion-section">
-            <h3>冠军参考雷达图</h3>
-            <p className="physical-champion-note">
-              冠军参考为 100%（估算仅用于展示）；团队仅包含当前分组的有效测试。超过 100%
-              的成绩保留真实达成度，详细数值见下表。
-            </p>
-            <div className="physical-champion-chart" aria-hidden="true">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart accessibilityLayer={false} data={radar} outerRadius="70%">
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="label" />
-                  <PolarRadiusAxis domain={[0, 'auto']} />
-                  <Tooltip />
-                  <Legend />
-                  <Radar
-                    name="冠军参考"
-                    dataKey="champion"
-                    stroke="var(--amber)"
-                    fill="var(--amber)"
-                    fillOpacity={0.08}
-                    strokeDasharray="5 3"
-                    isAnimationActive={false}
-                  />
-                  <Radar
-                    name="团队平均"
-                    dataKey="team"
-                    stroke="var(--river)"
-                    fill="var(--river)"
-                    fillOpacity={0.12}
-                    isAnimationActive={false}
-                  />
-                  {athleteId && (
-                    <Radar
-                      name={scopeName}
-                      dataKey="personal"
-                      stroke="var(--signal)"
-                      fill="var(--signal)"
-                      fillOpacity={0.1}
-                      isAnimationActive={false}
-                    />
-                  )}
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-          <section className="physical-champion-section">
-            <p>
-              {personal?.score != null
-                ? `${personal.scoringEligible ? '完整维度达成度' : '展示性达成度'}：${format(personal.score)}%`
-                : '完整维度待采集'}
-            </p>
-            <h3>参考差距分析</h3>
-            <div
-              className="physical-champion-table-wrap"
-              role="region"
-              aria-label="参考差距分析数据，可横向滚动"
-              tabIndex={0}
-            >
-              <table className="physical-champion-table">
-                <caption>
-                  差值为当前值减参考值；达成度已按比较方向计算。— 表示待采集（缺少同协议有效测试）。
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">维度 / 单位</th>
-                    <th scope="col">参考值</th>
-                    <th scope="col">团队值</th>
-                    <th scope="col">团队达成度</th>
-                    <th scope="col">{scopeName}当前值</th>
-                    <th scope="col">差值</th>
-                    <th scope="col">达成度</th>
-                    <th scope="col">有效样本</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => {
-                    const current = athleteId ? row.personal : row.team;
-                    return (
-                      <tr key={row.reference.key}>
-                        <th scope="row">
-                          {row.reference.label} / {row.reference.unit}
-                        </th>
-                        <td>
-                          {format(current?.appliedReference?.value ?? row.reference.value)}
-                          <small>
-                            版本 {current?.appliedReference?.version ?? row.reference.version} ·{' '}
-                            {current?.appliedReference?.sourceNote ?? row.reference.sourceNote}
-                          </small>
-                        </td>
-                        <td>{format(row.team?.value)}</td>
-                        <td>
-                          {format(row.team?.achievedPercent)}
-                          {row.team?.achievedPercent != null && '%'}
-                        </td>
-                        <td>{format(current?.value)}</td>
-                        <td>
-                          {format(current?.difference)}
-                          {current?.pendingReason && <small>{current.pendingReason}</small>}
-                        </td>
-                        <td>
-                          {format(current?.achievedPercent)}
-                          {current?.achievedPercent != null && '%'}
-                          {current?.achievedPercent != null && !current.scoringEligible && (
-                            <small>估算或展示参考，不参与正式评分</small>
-                          )}
-                        </td>
-                        <td>{format(row.team?.sampleCount)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <section className="physical-champion-section">
-            <h3>展示性达成度趋势</h3>
-            <p>展示性达成度趋势（含估算参考，不构成正式评分）</p>
-            <p className="physical-champion-note">
-              展示本周期内 {scopeName} 的综合达成度；仅完整维度参与，按截至当日最近有效测试计算。
-            </p>
-            {validTrend.length > 0 ? (
+            <span>{scopeName}</span>
+            {payload && payload.groups.length > 1 ? (
               <>
-                <dl className="physical-champion-trend-summary">
-                  <div>
-                    <dt>最新达成度</dt>
-                    <dd>
-                      {format(latestTrend?.score)}
-                      <small>%</small>
-                    </dd>
-                    <dd className="physical-champion-trend-note">{latestTrend?.date}</dd>
-                  </div>
-                  <div>
-                    <dt>较周期首个有效节点</dt>
-                    <dd>
-                      {trendChange == null
-                        ? '—'
-                        : `${trendChange > 0 ? '+' : ''}${format(trendChange)}`}
-                      <small> 个百分点</small>
-                    </dd>
-                    <dd className="physical-champion-trend-note">
-                      {trendChange == null
-                        ? '至少需要两个有效日期'
-                        : `${firstTrend?.date} 至 ${latestTrend?.date}`}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>最新有效样本</dt>
-                    <dd>
-                      {format(latestTrend?.sampleCount)}
-                      <small> 人</small>
-                    </dd>
-                    <dd className="physical-champion-trend-note">仅纳入完整维度测试</dd>
-                  </div>
-                </dl>
-                <div className="physical-champion-trend-chart">
-                  <Suspense fallback={<ContentState kind="loading" title="正在加载趋势图" />}>
-                    <EChart
-                      option={trendOption}
-                      label={`${scopeName}参考达成度趋势，最新${format(latestTrend?.score)}%，冠军参考100%。具体数值见趋势数据表。`}
-                    />
-                  </Suspense>
-                </div>
-                <details>
-                  <summary>查看趋势数据</summary>
-                  <div
-                    className="physical-champion-table-wrap"
-                    role="region"
-                    aria-label="参考达成趋势数据，可横向滚动"
-                    tabIndex={0}
-                  >
-                    <table className="physical-champion-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">日期</th>
-                          <th scope="col">达成度</th>
-                          <th scope="col">样本数</th>
-                          <th scope="col">有效维度</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {trend.map((item) => (
-                          <tr key={item.date}>
-                            <th scope="row">{item.date}</th>
-                            <td>
-                              {format(item.score)}
-                              {item.score != null && '%'}
-                            </td>
-                            <td>{item.sampleCount}</td>
-                            <td>{item.coverage}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
+                <label htmlFor={selectorId}>参考分组</label>
+                <select
+                  id={selectorId}
+                  value={group.id}
+                  disabled={Boolean(athleteGroup)}
+                  onChange={(event) => setGroupId(event.target.value)}
+                >
+                  {payload.groups.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
               </>
             ) : (
-              <p className="physical-champion-empty">待采集：当前周期暂无可比较趋势数据。</p>
+              <span>{group.label}</span>
             )}
-          </section>
+          </div>
+          <PhysicalChampionOverview group={group} athleteId={athleteId} scopeName={scopeName} />
         </>
+      )}
+      {!showLoading && !error && payload?.canEdit && (
+        <details className="physical-champion-management">
+          <summary>管理参考标准</summary>
+          <ReferenceEditor project={project} onSaved={() => setRevision((value) => value + 1)} />
+          {payload.managementReferences.map((reference) => (
+            <ReferenceEditor
+              key={`${reference.id}-${reference.revision}`}
+              reference={reference}
+              project={project}
+              onSaved={() => setRevision((value) => value + 1)}
+            />
+          ))}
+        </details>
       )}
     </ChartCard>
   );
