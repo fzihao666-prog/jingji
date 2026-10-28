@@ -1,3 +1,5 @@
+import { specialWeeklyOption } from '../components/special-weekly-option';
+import './SpecialTrainingPage.css';
 import { Activity } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
@@ -89,6 +91,10 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
   const teamTraining = payload?.teamTraining;
   const athletes = payload?.athletes || [];
   const selectedAthlete = payload?.selectedAthlete || null;
+  const mean = (key: 'durationMin' | 'distanceKm' | 'load') => {
+    const values = athletes.flatMap(athlete => athlete.summary[key] === null ? [] : [athlete.summary[key]]);
+    return values.length ? values.reduce((sum, n) => sum + n, 0) / values.length : null;
+  };
   const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
   const displayedIntensity = training?.intensity ?? [];
   const intensityAnalytics = training ? { ...training, intensity: displayedIntensity } : null;
@@ -106,15 +112,15 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
       ]
     : [];
   return (
-    <PageContainer className="professional-overview training-dashboard-page">
+    <PageContainer className="professional-overview training-dashboard-page special-dashboard-page">
       <PageHeader
         variant="dashboard"
         className="overview-page-heading training-plan-entry-heading"
         eyebrow="SPECIAL TRAINING"
         title="专项训练"
         actions={
-          <><button className="dashboard-action-button" onClick={onPlanOpen}>训练计划</button>{selectedAthlete ? (
-            <button className="dashboard-action-button" onClick={() => setSelectedAthleteId(null)}>
+          <><button type="button" className="primary-button" onClick={onPlanOpen}>训练计划</button>{selectedAthlete ? (
+            <button type="button" className="secondary-button" onClick={() => setSelectedAthleteId(null)}>
               当前运动员：{selectedAthlete.name} · 清除
             </button>
           ) : null}</>
@@ -143,7 +149,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
           </select>
         </label>
       </FilterBar>
-      {projectCapability(project) && <SpecialChampionModel key={project} project={project} />}
+
       {!current ? (
         <ContentState
           kind="loading"
@@ -175,13 +181,14 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
                   </strong>
                   <em>
                     {selectedAthlete && teamTraining
-                      ? `团队均值 ${item.label === '专项训练时长' ? value(teamTraining.summary.durationMin === null ? null : teamTraining.summary.durationMin / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`
+                      ? `团队口径 ${item.label === '专项训练时长' ? value(teamTraining.summary.durationMin === null ? null : teamTraining.summary.durationMin / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`
                       : '同队共同课次去重'}
                   </em>
                 </AppCard>
               ))}
             </section>
-            <ChartCard title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
+            <section className="special-analysis-grid" aria-label="专项训练量与强度分析">
+            <ChartCard className="special-wide-card" title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
               <EChart option={volumeOption(training, from, to, !training.days.some((day) => day.durationMin !== null || day.distanceKm !== null))} label="专项训练时长与距离趋势" isPlaceholder={!training.days.some((day) => day.durationMin !== null || day.distanceKm !== null)} />
             </ChartCard>
             <ChartCard title="专项训练强度占比" description="按已记录的体系与原始分区分别统计有效时长，不跨体系换算">
@@ -244,6 +251,18 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
             >
               <EChart option={loadOption(training, from, to, !training.days.some((day) => day.load !== null))} label="每日专项SRPE负荷趋势" isPlaceholder={!training.days.some((day) => day.load !== null)} />
             </ChartCard>
+            <ChartCard title="周训练量变化" description="自然周按周一归组；边界周仅含所选周期，缺失不补零，部分缺失按已记录值合计">
+              <EChart option={specialWeeklyOption(training.days)} label="每周专项时长与距离" isPlaceholder={!training.days.some(day => day.durationMin !== null || day.distanceKm !== null)} />
+            </ChartCard>
+            {selectedAthlete && teamTraining && <ChartCard title="个人与队伍平均对照" description="同周期内各运动员有效累计值的均值；缺失者不计入分母">
+              <div className="table-scroll"><table className="data-table"><thead><tr><th>指标</th><th>个人</th><th>队伍均值</th></tr></thead><tbody>
+                <tr><th>时长（h）</th><td>{value(training.summary.durationMin === null ? null : training.summary.durationMin / 60)}</td><td>{value(mean('durationMin') === null ? null : mean('durationMin')! / 60)}</td></tr>
+                <tr><th>距离（km）</th><td>{value(training.summary.distanceKm)}</td><td>{value(mean('distanceKm'))}</td></tr>
+                <tr><th>SRPE负荷（AU）</th><td>{value(training.summary.load)}</td><td>{value(mean('load'))}</td></tr>
+              </tbody></table></div>
+            </ChartCard>}
+            </section>
+
             {selectedAthlete && (
               <ChartCard title="专项测试表现" description="当前周期最新专项测试与团队均值对照">
                 {payload?.specialTestComparison?.athlete ? (
@@ -267,6 +286,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
           </>
         )
       )}
+      {projectCapability(project) && <SpecialChampionModel key={project} project={project} />}
     </PageContainer>
   );
 }

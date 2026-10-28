@@ -1487,3 +1487,179 @@
     padding: 10px 12px;
   }
 }
+
+/* 专项总览：图表、明细与冠军模型保持独立的响应式布局。 */
+.special-dashboard-page > *,
+.special-dashboard-page .special-analysis-grid > * {
+  min-width: 0;
+}
+
+.special-dashboard-page .training-dashboard-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.special-dashboard-page .training-dashboard-metric {
+  min-width: 0;
+}
+
+.special-dashboard-page .training-dashboard-metric > span,
+.special-dashboard-page .training-dashboard-metric > em {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.special-dashboard-page .special-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--overview-gap);
+  align-items: start;
+}
+
+.special-dashboard-page .special-wide-card {
+  grid-column: 1 / -1;
+}
+
+.special-dashboard-page .app-section-header,
+.special-dashboard-page .champion-model-section-title,
+.special-dashboard-page .ergometer-model-head {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.special-dashboard-page .app-section-header h2,
+.special-dashboard-page .app-section-header p,
+.special-dashboard-page .champion-model-section-title strong,
+.special-dashboard-page .ergometer-model-head strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.special-dashboard-page .app-echart {
+  height: 300px;
+}
+
+.special-dashboard-page .table-scroll,
+.special-dashboard-page .champion-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.special-dashboard-page .data-table {
+  min-width: 380px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.special-dashboard-page .data-table th,
+.special-dashboard-page .data-table td {
+  padding: 12px 16px;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.special-dashboard-page .data-table td:first-child {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.special-dashboard-page .special-champion-model {
+  gap: 16px;
+}
+
+.special-dashboard-page .champion-model-section-title strong,
+.special-dashboard-page .ergometer-model-head strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.special-dashboard-page .champion-model-section-title span,
+.special-dashboard-page .ergometer-model-head span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.special-dashboard-page .champion-model-table th,
+.special-dashboard-page .champion-model-table td {
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.special-dashboard-page .champion-model-table thead th {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.special-dashboard-page .champion-model-table thead th:first-child {
+  width: 100px;
+}
+
+.special-dashboard-page .rowing-world-best-table thead th:first-child {
+  width: auto;
+}
+
+.special-dashboard-page .ergometer-model-tabs {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.special-dashboard-page .ergometer-model-tabs button {
+  min-height: 36px;
+  height: auto;
+  padding: 8px;
+  font-size: 11px;
+}
+
+.special-dashboard-page .athlete-analysis-selector > header {
+  flex-wrap: wrap;
+}
+
+.special-dashboard-page .athlete-analysis-selector-search input {
+  min-width: 0;
+  width: 100%;
+}
+
+.special-dashboard-page .athlete-analysis-selector-card {
+  overflow-wrap: anywhere;
+}
+
+@media (width <= 1200px) {
+  .special-dashboard-page .training-dashboard-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .special-dashboard-page .ergometer-model-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 1024px) {
+  .special-dashboard-page .special-analysis-grid,
+  .special-dashboard-page .ergometer-model-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 640px) {
+  .special-dashboard-page .training-dashboard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .special-dashboard-page .data-table th,
+  .special-dashboard-page .data-table td,
+  .special-dashboard-page .champion-model-table th,
+  .special-dashboard-page .champion-model-table td {
+    padding: 10px 12px;
+  }
+
+  .special-dashboard-page .champion-model-section-title {
+    gap: 4px;
+  }
+}
