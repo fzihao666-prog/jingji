@@ -420,14 +420,16 @@ export function TrendChart({
             </linearGradient>
           </defs>
           <CartesianGrid stroke="#e8eff0" strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#778b91' }} tickLine={false} />
-          <YAxis tick={{ fontSize: 10, fill: '#778b91' }} axisLine={false} tickLine={false} />
+          <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#62767d' }} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: '#62767d' }} axisLine={false} tickLine={false} />
           <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => `${label}`} />
           <Area
             type="monotone"
             dataKey={metric}
             stroke={color}
-            strokeWidth={2.2}
+            strokeWidth={3}
+            dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
+            activeDot={{ r: 6 }}
             fill={`url(#fill-${metric})`}
           />
           {secondary && (
@@ -435,7 +437,8 @@ export function TrendChart({
               type="monotone"
               dataKey={secondary}
               stroke="#347fe5"
-              strokeWidth={2}
+              strokeWidth={2.5}
+              strokeDasharray="5 4"
               dot={false}
             />
           )}

@@ -1,5 +1,6 @@
 import type { EChartsOption } from 'echarts';
 import type { SpecialTrainingAnalytics } from '../../shared/special-training';
+import { specialTooltip } from './special-chart-options';
 import { startOfWeek } from '../utils';
 
 /** 只合计接口已提供的日值；整周缺测仍为null，部分覆盖在图例说明。 */
@@ -22,11 +23,11 @@ export function specialWeeklyOption(days: SpecialTrainingAnalytics['days']): ECh
   return {
     animation: false,
     legend: { data: ['训练时长', '训练距离'], top: 0 },
-    tooltip: { trigger: 'axis', renderMode: 'richText', confine: true },
+    tooltip: { ...specialTooltip, trigger: 'axis' },
     grid: { top: 50, bottom: 40, left: 60, right: 60 },
     xAxis: { type: 'category', data: rows.length ? rows.map(row => `${row.week.slice(5)}周`) : ['暂无数据'] },
     yAxis: [{ type: 'value', name: 'min', min: 0 }, { type: 'value', name: 'km', min: 0 }],
-    series: [{ name: '训练时长', type: 'bar', data: rows.map(row => row.durationMin), barMaxWidth: 32 },
-      { name: '训练距离', type: 'line', yAxisIndex: 1, data: rows.map(row => row.distanceKm), connectNulls: false }],
+    series: [{ name: '训练时长', type: 'bar', data: rows.map(row => row.durationMin), barMaxWidth: 28, itemStyle: { borderRadius: [5, 5, 0, 0], opacity: 0.85 } },
+      { name: '训练距离', type: 'line', yAxisIndex: 1, data: rows.map(row => row.distanceKm), connectNulls: false, lineStyle: { width: 3 }, symbolSize: 7 }],
   };
 }

@@ -1711,3 +1711,44 @@
   margin-bottom: 6px;
   font-weight: 700;
 }
+
+/* 专项卡片内部：以数值、单位、来源区分信息层级。 */
+.special-dashboard-page .training-dashboard-metric strong {
+  font-size: clamp(26px, 2.2vw, 32px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.special-dashboard-page .training-dashboard-metric strong small {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.special-dashboard-page .champion-model-table td,
+.special-dashboard-page .rowing-world-best-table td {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.65;
+  vertical-align: top;
+}
+
+.special-dashboard-page .champion-model-table td strong,
+.special-dashboard-page .rowing-world-best-table td strong {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.special-dashboard-page .champion-model-table td small,
+.special-dashboard-page .rowing-world-best-table td small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.special-dashboard-page .data-table td,
+.special-dashboard-page .data-table th {
+  padding: 10px 12px;
+  font-variant-numeric: tabular-nums;
+}

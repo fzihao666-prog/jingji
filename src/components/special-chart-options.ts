@@ -8,14 +8,20 @@ const chartMetrics = {
   bottom: 28,
   left: 36,
   barWidth: 24,
-  lineWidth: 2,
-  symbolSize: 6,
+  lineWidth: 3,
+  symbolSize: 7,
 };
+export const specialTooltip = {
+  renderMode: 'richText' as const, confine: true, padding: [12, 16],
+  borderWidth: 1, borderColor: '#dce6e9', backgroundColor: '#ffffff',
+  textStyle: { fontSize: 12, lineHeight: 22, color: '#234b55' },
+};
+const barStyle = { borderRadius: [5, 5, 0, 0], opacity: 0.85 };
 const pointDate = (date: string) => Date.parse(`${date}T00:00:00Z`);
 const base = (from: string, to: string): EChartsOption => ({
   animation: false,
-  tooltip: { trigger: 'axis', renderMode: 'richText', confine: true },
-  legend: { top: 8 },
+  tooltip: { ...specialTooltip, trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: '#9db7b6', type: 'dashed' } } },
+  legend: { top: 4, icon: 'roundRect', itemWidth: 14, itemHeight: 8, itemGap: 20, textStyle: { fontSize: 12 } },
   grid: { ...chartMetrics, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
   xAxis: {
     type: 'time',
@@ -23,7 +29,7 @@ const base = (from: string, to: string): EChartsOption => ({
     max: pointDate(to) + 43200000,
     axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true },
   },
-  yAxis: { type: 'value', min: 0 },
+  yAxis: { type: 'value', min: 0, axisLabel: { fontSize: 11 }, splitLine: { lineStyle: { color: '#e4eded', type: 'dashed' } } },
   useUTC: true,
 });
 const calendar = (from: string, to: string) => {
@@ -51,6 +57,7 @@ export function volumeOption(
         name: '专项时长（min）',
         type: 'bar',
         barMaxWidth: chartMetrics.barWidth,
+        itemStyle: barStyle,
         data: dates.map((date) => [
           pointDate(date),
           isPlaceholder ? null : (rows.get(date)?.durationMin ?? null),
@@ -62,6 +69,9 @@ export function volumeOption(
         type: 'line',
         yAxisIndex: 1,
         connectNulls: false,
+        lineStyle: { width: chartMetrics.lineWidth },
+        itemStyle: { borderWidth: 2, borderColor: '#ffffff' },
+        emphasis: { scale: 1.4 },
         symbolSize: chartMetrics.symbolSize,
         data: dates.map((date) => [
           pointDate(date),
@@ -89,6 +99,7 @@ export function loadOption(
         connectNulls: false,
         symbolSize: chartMetrics.symbolSize,
         lineStyle: { width: chartMetrics.lineWidth },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(23,111,127,0.18)' }, { offset: 1, color: 'rgba(23,111,127,0.01)' }] } },
         data: calendar(from, to).map((date) => [
           pointDate(date),
           isPlaceholder ? null : (rows.get(date)?.load ?? null),
@@ -104,17 +115,20 @@ export function intensityOption(
   return {
     animation: false,
     tooltip: {
+      ...specialTooltip,
       trigger: 'item',
       renderMode: 'richText',
       confine: true,
       formatter: '{b}：{c} min（{d}%）',
     },
-    legend: { bottom: 4, type: 'plain' },
+    legend: { bottom: 0, type: 'scroll', icon: 'roundRect', itemWidth: 12, itemHeight: 8, itemGap: 16, textStyle: { fontSize: 12 } },
     series: [
       {
         id: 'intensity',
         type: 'pie',
-        radius: ['38%', '65%'],
+        radius: ['42%', '67%'],
+        itemStyle: { borderRadius: 4, borderColor: '#ffffff', borderWidth: 2 },
+        emphasis: { scaleSize: 4 },
         center: ['50%', '44%'],
         label: { show: false },
         data: isPlaceholder
@@ -132,6 +146,7 @@ export function contentOption(
   return {
     animation: false,
     tooltip: {
+      ...specialTooltip,
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
@@ -139,13 +154,13 @@ export function contentOption(
     },
     grid: {
       top: 16,
-      right: 24,
+      right: 44,
       bottom: 28,
-      left: 52,
+      left: 90,
       outerBoundsMode: 'same',
       outerBoundsContain: 'axisLabel',
     },
-    xAxis: { type: 'value', minInterval: 1 },
+    xAxis: { type: 'value', name: '课次', minInterval: 1, splitLine: { lineStyle: { color: '#e4eded', type: 'dashed' } } },
     yAxis: { type: 'category', data: rows.map((row) => row.name), inverse: true },
     series: [
       {
@@ -154,6 +169,8 @@ export function contentOption(
         type: 'bar',
         barMaxWidth: chartMetrics.barWidth,
         data: rows.map((row) => row.count),
+        itemStyle: { borderRadius: [0, 5, 5, 0], opacity: 0.85 },
+        label: { show: true, position: 'right', fontSize: 12 },
       },
     ],
   };
