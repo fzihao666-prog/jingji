@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Express, Request, Response } from 'express';
 import { db } from '../core/db.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
-import { readTeamPlans, teamPlanInput } from './team-plan-service.ts';
+import { readTeamPlans, teamPlanInput, validateTeamPlanContext } from './team-plan-service.ts';
 import { teamPlanScope } from './team-plan-scope.ts';
 import type { TeamPlanData } from '../../shared/team-plan.ts';
 
@@ -135,6 +135,13 @@ export function registerTeamPlanRoutes(app: Express) {
         throw new Error('403:队伍访问范围已变化，请刷新');
       if (existing) {
         const current = readTeamPlans(db).find((plan) => plan.id === id)!;
+        if (isTransition && transitionInput.safeParse(req.body).data?.action === 'publish') {
+          try {
+            validateTeamPlanContext(current.project, current.data);
+          } catch (error) {
+            throw new Error('400:' + (error instanceof Error ? error.message : '计划活动不适用'));
+          }
+        }
         if (current.revision !== req.body?.revision) throw new Error('409:计划已变化，请刷新');
         if (req.path.endsWith('/transition')) {
           const action = req.body?.action;
@@ -229,6 +236,14 @@ export function registerTeamPlanRoutes(app: Express) {
         throw new Error(
           '400:计划字段无效：' + parsed.error.issues.map((issue) => issue.message).join('；')
         );
+      try {
+        validateTeamPlanContext(
+          allowed.teams.find((team) => team.id === teamId)!.project,
+          parsed.data.data
+        );
+      } catch (error) {
+        throw new Error('400:' + (error instanceof Error ? error.message : '项目训练规则不匹配'));
+      }
       const now = new Date().toISOString();
       const data: TeamPlanData = {
         ...parsed.data.data,

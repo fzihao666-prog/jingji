@@ -57,31 +57,29 @@ it('AI输出映射到既有计划结构：编号补齐、强度校验、缺失�
   expect(data.sessions[1].intensity).toBe('');
   expect(data.focus).toBe('有氧耐力与基础力量');
   expect(dataNotes).toEqual(['晨检数据不足，强度请教练确认']);
-  expect(warnings).toEqual([]);
+  expect(warnings.join()).toContain('未声明体系');
 });
 
-it('非竞迹强度体系的代号被清空并提示，不臆造换算', () => {
+it('未声明体系的强度保留原文并提示，不臆造换算', () => {
   const bad = {
     ...rawPlan,
     sessions: [{ ...rawPlan.sessions[0], intensity: 'Z5' }],
   };
   const { data, warnings } = normalizeAiPlan(bad, '2026-10-17');
-  expect(data.sessions[0].intensity).toBe('');
+  expect(data.sessions[0].intensity).toBe('Z5');
   expect(warnings.join()).toContain('Z5');
 });
 
 it('日期不一致、重复标识或结构不合法时拒绝保存', () => {
   expect(() => normalizeAiPlan(rawPlan, '2026-10-18')).toThrow(TeamPlanAiError);
-  expect(() =>
-    normalizeAiPlan({ ...rawPlan, sessions: [] }, '2026-10-17')
-  ).toThrow(TeamPlanAiError);
+  expect(() => normalizeAiPlan({ ...rawPlan, sessions: [] }, '2026-10-17')).toThrow(
+    TeamPlanAiError
+  );
   expect(() =>
     normalizeAiPlan(
       {
         ...rawPlan,
-        sessions: [
-          { ...rawPlan.sessions[0], id: 'x', date: '2026-10-18' },
-        ],
+        sessions: [{ ...rawPlan.sessions[0], id: 'x', date: '2026-10-18' }],
       },
       '2026-10-17'
     )
@@ -139,4 +137,27 @@ it('撤销上一次AI修改恢复历史快照，无历史时拒绝', () => {
   expect(restored.data.sessions[0].durationMin).toBe(90);
   expect(restored.metadata.history).toHaveLength(0);
   expect(() => undoTeamPlanAiChange(restored)).toThrow(TeamPlanAiError);
+});
+
+it('AI计划不能把水上活动或强度体系套到排球，骑行原始Z2可保留', () => {
+  const base = { ...rawPlan, sessions: [{ ...rawPlan.sessions[0], activityCode: 'on_water' }] };
+  expect(() => normalizeAiPlan(base, '2026-10-17', 'VOLLEYBALL')).toThrow('适用');
+  const raw = {
+    ...base,
+    sessions: [{ ...base.sessions[0], activityCode: 'cycling', intensity: 'Z2' }],
+  };
+  expect(normalizeAiPlan(raw, '2026-10-17', 'CYCLING_ROAD').data.sessions[0]).toMatchObject({
+    activityCode: 'cycling',
+    intensity: 'Z2',
+  });
+  expect(() =>
+    normalizeAiPlan(
+      {
+        ...raw,
+        sessions: [{ ...raw.sessions[0], intensitySystem: 'UT_SYSTEM', intensity: 'UT2' }],
+      },
+      '2026-10-17',
+      'CYCLING_ROAD'
+    )
+  ).toThrow('适用');
 });

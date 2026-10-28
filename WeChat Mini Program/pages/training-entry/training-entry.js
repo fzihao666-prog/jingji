@@ -1,9 +1,22 @@
 const api = require('../../services/api');
 const { loadContext } = require('../../utils/context');
 const { todayBeijing } = require('../../utils/date');
-const { draftIdentity, loadFormDraft, saveFormDraft, clearFormDraft } = require('../../utils/form-draft');
-const { submissionKey, completeSubmission, isCompletedSubmission } = require('../../utils/submission-key');
-const { sportRules = {}, activityLabels = {}, intensitySystems = [] } = require('../../data/register-data');
+const {
+  draftIdentity,
+  loadFormDraft,
+  saveFormDraft,
+  clearFormDraft,
+} = require('../../utils/form-draft');
+const {
+  submissionKey,
+  completeSubmission,
+  isCompletedSubmission,
+} = require('../../utils/submission-key');
+const {
+  sportRules = {},
+  activityLabels = {},
+  intensitySystems = [],
+} = require('../../data/register-data');
 
 const MANAGER_ROLES = ['SCC', 'REG', 'TD', 'DMD'];
 
@@ -12,20 +25,56 @@ function today() {
 }
 
 function emptyForm() {
-  return { date: today(), startTime: '', trainingType: '专项训练', intensityZone: '', content: '', duration: '', distance: '', rpe: '', averageHeartRate: '', maxHeartRate: '', averagePowerW: '', strokeRateSpm: '' };
+  return {
+    date: today(),
+    startTime: '',
+    trainingType: '专项训练',
+    intensityZone: '',
+    content: '',
+    duration: '',
+    distance: '',
+    rpe: '',
+    averageHeartRate: '',
+    maxHeartRate: '',
+    averagePowerW: '',
+    strokeRateSpm: '',
+  };
 }
 
-function intensityView(project,activity,system='',zone='') {
- const codes=((sportRules[project]||{}).activityIntensitySystems||{})[activity||'unknown']||[];
- const options=[{code:'',label:'未指定体系（只记录原文）'},...intensitySystems.filter(item=>codes.includes(item.code))];
- const index=Math.max(0,options.findIndex(item=>item.code===system));
- const zones=index>0?['',...options[index].zones]:[''];
- return {intensitySystemCodes:options.map(item=>item.code),intensitySystemOptions:options.map(item=>item.label),intensitySystemIndex:index,intensityOptions:zones,intensityIndex:Math.max(0,zones.indexOf(zone))};
+function intensityView(project, activity, system = '', zone = '') {
+  const codes =
+    ((sportRules[project] || {}).activityIntensitySystems || {})[activity || 'unknown'] || [];
+  const options = [
+    { code: '', label: '未指定体系（只记录原文）' },
+    ...intensitySystems.filter((item) => codes.includes(item.code)),
+  ];
+  const index = Math.max(
+    0,
+    options.findIndex((item) => item.code === system)
+  );
+  const zones = index > 0 ? ['', ...options[index].zones] : [''];
+  return {
+    intensitySystemCodes: options.map((item) => item.code),
+    intensitySystemOptions: options.map((item) => item.label),
+    intensitySystemIndex: index,
+    intensityOptions: zones,
+    intensityIndex: Math.max(0, zones.indexOf(zone)),
+  };
 }
 function quantityRule(project, activity) {
-  const rules=sportRules[project];
-  const allowDistance=activity==='cycling' || ((!activity || activity==='unknown') && (rules ? (rules.requiredSessionFields || []).includes('duration|distance') : ['CYCLING_ROAD','CYCLING_TRACK'].includes(project)));
-  return { allowDistance, quantityHint: allowDistance ? '时长或距离至少填一项；RPE可选。' : '此活动必须填写时长；RPE可选。' };
+  const rules = sportRules[project];
+  const allowDistance =
+    activity === 'cycling' ||
+    ((!activity || activity === 'unknown') &&
+      (rules
+        ? (rules.requiredSessionFields || []).includes('duration|distance')
+        : ['CYCLING_ROAD', 'CYCLING_TRACK'].includes(project)));
+  return {
+    allowDistance,
+    quantityHint: allowDistance
+      ? '时长或距离至少填一项；RPE可选。'
+      : '此活动必须填写时长；RPE可选。',
+  };
 }
 Page({
   data: {
@@ -48,27 +97,45 @@ Page({
     activityCodes: ['unknown'],
     activityOptions: ['未分类'],
     activityIndex: 0,
-    showAdvanced: false
+    showAdvanced: false,
   },
 
   onLoad(options) {
     // 教练代填入口可携带目标运动员；本人填报忽略该参数。
     this._targetAthleteId = Number(options && options.athleteId) || 0;
-    this._planRequest = options && options.teamPlanId && options.planSessionId
-      ? { teamPlanId: Number(options.teamPlanId), planSessionId: options.planSessionId } : null;
+    this._planRequest =
+      options && options.teamPlanId && options.planSessionId
+        ? { teamPlanId: Number(options.teamPlanId), planSessionId: options.planSessionId }
+        : null;
     this.loadPage();
   },
-  onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
-  retryLoad() { this.loadPage(); },
+  onPullDownRefresh() {
+    this.loadPage().finally(() => wx.stopPullDownRefresh());
+  },
+  retryLoad() {
+    this.loadPage();
+  },
 
   configureProject(project) {
     if (!project || this._trainingProject === project) return;
     this._trainingProject = project;
     const rules = sportRules[project];
     const codes = rules ? rules.activities : ['unknown'];
-    this.setData({ ...quantityRule(project,'unknown'), ...intensityView(project,'unknown'), activityCodes: codes, activityOptions: codes.map(code => activityLabels[code] || '未分类'), activityIndex: 0,
-      form: { ...emptyForm(), activityCode: 'unknown', rulesVersion: rules ? rules.version : undefined,
-        intensityZone: '', rpe: '', cadenceRpm: '' } });
+    this.setData({
+      ...quantityRule(project, 'unknown'),
+      ...intensityView(project, 'unknown'),
+      activityCodes: codes,
+      activityOptions: codes.map((code) => activityLabels[code] || '未分类'),
+      activityIndex: 0,
+      form: {
+        ...emptyForm(),
+        activityCode: 'unknown',
+        rulesVersion: rules ? rules.version : undefined,
+        intensityZone: '',
+        rpe: '',
+        cadenceRpm: '',
+      },
+    });
   },
 
   onActivityChange(event) {
@@ -76,9 +143,23 @@ Page({
     const code = this.data.activityCodes[index];
     if (!code) return;
     const water = code === 'on_water' || code === 'ergometer';
-    this.setData({ ...quantityRule(this._trainingProject,code), ...intensityView(this._trainingProject,code), activityIndex: index, form: { ...this.data.form, activityCode: code, rulesVersion: sportRules[this._trainingProject]?.version, intensitySystem: '', intensityZone: '', averagePowerW: ['cycling','on_water','ergometer'].includes(code) ? this.data.form.averagePowerW : '',
-      strokeRateSpm: water ? this.data.form.strokeRateSpm : '',
-      cadenceRpm: code === 'cycling' ? this.data.form.cadenceRpm : '' } });
+    this.setData({
+      ...quantityRule(this._trainingProject, code),
+      ...intensityView(this._trainingProject, code),
+      activityIndex: index,
+      form: {
+        ...this.data.form,
+        activityCode: code,
+        rulesVersion: sportRules[this._trainingProject]?.version,
+        intensitySystem: '',
+        intensityZone: '',
+        averagePowerW: ['cycling', 'on_water', 'ergometer'].includes(code)
+          ? this.data.form.averagePowerW
+          : '',
+        strokeRateSpm: water ? this.data.form.strokeRateSpm : '',
+        cadenceRpm: code === 'cycling' ? this.data.form.cadenceRpm : '',
+      },
+    });
     this.persistDraft();
   },
 
@@ -87,12 +168,16 @@ Page({
       const context = await loadContext({ refreshUser: true });
       this.configureProject(context.project);
       const isCoach = MANAGER_ROLES.includes(context.user.role);
-      if (!isCoach && context.user.role !== 'ATL') throw new Error('只有运动员本人或教练可以填写训练记录。');
+      if (!isCoach && context.user.role !== 'ATL')
+        throw new Error('只有运动员本人或教练可以填写训练记录。');
       if (isCoach) {
         const athletes = context.projectAthletes || [];
         if (!athletes.length) throw new Error('当前项目暂无可代填的运动员。');
         let index = athletes.findIndex((item) => Number(item.id) === this._targetAthleteId);
-        if (index < 0) index = athletes.findIndex((item) => Number(item.id) === Number(context.selectedAthleteId));
+        if (index < 0)
+          index = athletes.findIndex(
+            (item) => Number(item.id) === Number(context.selectedAthleteId)
+          );
         if (index < 0) index = 0;
         const target = athletes[index];
         this._targetAthleteId = Number(target.id);
@@ -106,7 +191,7 @@ Page({
           athleteIndex: index,
           sessions: result.sessions || [],
           loading: false,
-          error: ''
+          error: '',
         });
         await this.applyRequestedPlan();
         this.restoreDraft();
@@ -125,17 +210,39 @@ Page({
     if (!this._planRequest) return;
     const request = this._planRequest;
     const result = await api.teamPlans(this.data.isCoach ? { athleteId: this.data.athleteId } : {});
-    const plan = result.plans.find((row) => row.id === request.teamPlanId && ['published', 'archived'].includes(row.status));
+    const plan = result.plans.find(
+      (row) => row.id === request.teamPlanId && ['published', 'archived'].includes(row.status)
+    );
     const base = plan && plan.data.sessions.find((row) => row.id === request.planSessionId);
     if (!base) throw new Error('训练课已变更，请返回队伍计划重新选择。');
     const user = getApp().globalData.user;
     const athleteId = this.data.isCoach ? this.data.athleteId : user.athleteId;
-    const override = plan.data.overrides.find((row) => row.sessionId === base.id && row.athleteId === athleteId);
+    const override = plan.data.overrides.find(
+      (row) => row.sessionId === base.id && row.athleteId === athleteId
+    );
     const target = { ...base, ...(override ? override.changes : {}) };
-    const trainingType = { special: '专项训练', physical: '体能训练', recovery: '恢复训练' }[target.category];
+    const trainingType = { special: '专项训练', physical: '体能训练', recovery: '恢复训练' }[
+      target.category
+    ];
     // 只带入任务信息；实际时长、距离与RPE由填报人确认。
-    this.setData({ form: { ...emptyForm(), ...request, date: target.date, trainingType, content: target.content, rpe: '' },
-      typeIndex: this.data.typeOptions.indexOf(trainingType), planLabel: `${plan.title} V${plan.version} · ${target.period || target.date}` });
+    this.setData({
+      ...intensityView(this._trainingProject, target.activityCode, target.intensitySystem),
+      ...quantityRule(this._trainingProject, target.activityCode),
+      activityIndex: Math.max(0, this.data.activityCodes.indexOf(target.activityCode || 'unknown')),
+      form: {
+        ...emptyForm(),
+        ...request,
+        date: target.date,
+        trainingType,
+        content: target.content,
+        activityCode: target.activityCode || 'unknown',
+        intensitySystem: target.intensitySystem || '',
+        rulesVersion: sportRules[this._trainingProject]?.version,
+        rpe: '',
+      },
+      typeIndex: this.data.typeOptions.indexOf(trainingType),
+      planLabel: `${plan.title} V${plan.version} · ${target.period || target.date}`,
+    });
     this._planRequest = null;
     this._draftPromptedFor = this.draftKeyFor();
   },
@@ -147,25 +254,50 @@ Page({
     if (!candidate) return;
     if (Number(candidate.id) === Number(this.data.athleteId)) return;
     this._targetAthleteId = Number(candidate.id);
-    this.setData({ athleteIndex: index, editId: 0, planLabel: '', form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
+    this.setData({
+      athleteIndex: index,
+      editId: 0,
+      planLabel: '',
+      form: emptyForm(),
+      typeIndex: 0,
+      intensityIndex: 1,
+      showAdvanced: false,
+    });
     this.loadPage();
   },
 
-  onInput(event) { this.setData({ [`form.${event.currentTarget.dataset.field}`]: event.detail.value }); this.persistDraft(); },
-  onDateChange(event) { this.setData({ 'form.date': event.detail.value }); this.persistDraft(); },
-  onTimeChange(event) { this.setData({ 'form.startTime': event.detail.value }); this.persistDraft(); },
+  onInput(event) {
+    this.setData({ [`form.${event.currentTarget.dataset.field}`]: event.detail.value });
+    this.persistDraft();
+  },
+  onDateChange(event) {
+    this.setData({ 'form.date': event.detail.value });
+    this.persistDraft();
+  },
+  onTimeChange(event) {
+    this.setData({ 'form.startTime': event.detail.value });
+    this.persistDraft();
+  },
   onTypeChange(event) {
     const typeIndex = Number(event.detail.value) || 0;
     this.setData({ typeIndex, 'form.trainingType': this.data.typeOptions[typeIndex] });
     this.persistDraft();
   },
   onIntensitySystemChange(event) {
-    const index=Number(event.detail.value)||0; const system=this.data.intensitySystemCodes[index]||'';
-    this.setData({...intensityView(this._trainingProject,this.data.form.activityCode,system),form:{...this.data.form,intensitySystem:system,intensityZone:''}});this.persistDraft();
+    const index = Number(event.detail.value) || 0;
+    const system = this.data.intensitySystemCodes[index] || '';
+    this.setData({
+      ...intensityView(this._trainingProject, this.data.form.activityCode, system),
+      form: { ...this.data.form, intensitySystem: system, intensityZone: '' },
+    });
+    this.persistDraft();
   },
   onIntensityChange(event) {
     const intensityIndex = Number(event.detail.value) || 0;
-    this.setData({ intensityIndex, 'form.intensityZone': this.data.intensityOptions[intensityIndex] });
+    this.setData({
+      intensityIndex,
+      'form.intensityZone': this.data.intensityOptions[intensityIndex],
+    });
     this.persistDraft();
   },
 
@@ -203,39 +335,87 @@ Page({
       success: (result) => {
         if (result.confirm) {
           this.setData({
-            ...quantityRule(this._trainingProject,draft.activityCode), ...intensityView(this._trainingProject,draft.activityCode,draft.intensitySystem,draft.intensityZone),
+            ...quantityRule(this._trainingProject, draft.activityCode),
+            ...intensityView(
+              this._trainingProject,
+              draft.activityCode,
+              draft.intensitySystem,
+              draft.intensityZone
+            ),
             form: { ...emptyForm(), ...draft },
             typeIndex: Math.max(0, this.data.typeOptions.indexOf(draft.trainingType)),
             intensityIndex: Math.max(0, this.data.intensityOptions.indexOf(draft.intensityZone)),
-            activityIndex: Math.max(0, this.data.activityCodes.indexOf(draft.activityCode))
+            activityIndex: Math.max(0, this.data.activityCodes.indexOf(draft.activityCode)),
           });
         } else {
           clearFormDraft(wx, 'training-entry', identity);
         }
-      }
+      },
     });
   },
-  toggleAdvanced() { this.setData({ showAdvanced: !this.data.showAdvanced }); },
+  toggleAdvanced() {
+    this.setData({ showAdvanced: !this.data.showAdvanced });
+  },
 
   editSession(event) {
-    const session = this.data.sessions.find((item) => Number(item.id) === Number(event.currentTarget.dataset.id));
+    const session = this.data.sessions.find(
+      (item) => Number(item.id) === Number(event.currentTarget.dataset.id)
+    );
     if (!session) return;
     const form = {};
-    Object.keys(emptyForm()).forEach((key) => { form[key] = session[key] === null || session[key] === undefined ? '' : String(session[key]); });
+    Object.keys(emptyForm()).forEach((key) => {
+      form[key] = session[key] === null || session[key] === undefined ? '' : String(session[key]);
+    });
     this.setData({
-      ...quantityRule(this._trainingProject,session.activityCode), ...intensityView(this._trainingProject,session.activityCode,session.intensitySystem,session.intensityZone),
+      ...quantityRule(this._trainingProject, session.activityCode),
+      ...intensityView(
+        this._trainingProject,
+        session.activityCode,
+        session.intensitySystem,
+        session.intensityZone
+      ),
       editId: session.id,
       activityIndex: Math.max(0, this.data.activityCodes.indexOf(session.activityCode)),
-      form: { ...form, ...(session.activityCode ? { activityCode: session.activityCode, rulesVersion: sportRules[this._trainingProject]?.version, cadenceRpm: session.cadenceRpm == null ? '' : String(session.cadenceRpm), intensitySystem: session.intensitySystem || undefined } : {}), ...(session.teamPlanId ? { teamPlanId: session.teamPlanId, planSessionId: session.planSessionId } : {}) },
-      planLabel: session.teamPlanId ? `关联计划版本 #${session.teamPlanId} · ${session.planSessionId}` : '',
+      form: {
+        ...form,
+        ...(session.activityCode
+          ? {
+              activityCode: session.activityCode,
+              rulesVersion: sportRules[this._trainingProject]?.version,
+              cadenceRpm: session.cadenceRpm == null ? '' : String(session.cadenceRpm),
+              intensitySystem: session.intensitySystem || undefined,
+            }
+          : {}),
+        ...(session.teamPlanId
+          ? { teamPlanId: session.teamPlanId, planSessionId: session.planSessionId }
+          : {}),
+      },
+      planLabel: session.teamPlanId
+        ? `关联计划版本 #${session.teamPlanId} · ${session.planSessionId}`
+        : '',
       typeIndex: Math.max(0, this.data.typeOptions.indexOf(session.trainingType)),
       intensityIndex: Math.max(0, this.data.intensityOptions.indexOf(session.intensityZone)),
-      showAdvanced: Boolean(session.averageHeartRate || session.maxHeartRate || session.averagePowerW || session.strokeRateSpm)
+      showAdvanced: Boolean(
+        session.averageHeartRate ||
+        session.maxHeartRate ||
+        session.averagePowerW ||
+        session.strokeRateSpm
+      ),
     });
     wx.pageScrollTo({ scrollTop: 0, duration: 250 });
   },
 
-  cancelEdit() { this.clearDraft(); this.setData({ editId: 0, planLabel: '', form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false }); },
+  cancelEdit() {
+    this.clearDraft();
+    this.setData({
+      editId: 0,
+      planLabel: '',
+      form: emptyForm(),
+      typeIndex: 0,
+      intensityIndex: 1,
+      showAdvanced: false,
+    });
+  },
 
   saveAction(form) {
     if (this.data.isCoach) {
@@ -253,9 +433,19 @@ Page({
   async save() {
     if (this.data.saving) return;
     const form = this.data.form;
-    const requirement=quantityRule(this._trainingProject || this.data.project,form.activityCode);
-    if (!form.content || (!(Number(form.duration)>0) && (!requirement.allowDistance || !(Number(form.distance)>0)))) {
-      wx.showToast({ title: !form.content ? '请填写训练内容' : requirement.allowDistance ? '请填写时长或有效距离' : '请填写有效训练时长', icon: 'none' });
+    const requirement = quantityRule(this._trainingProject || this.data.project, form.activityCode);
+    if (
+      !form.content ||
+      (!(Number(form.duration) > 0) && (!requirement.allowDistance || !(Number(form.distance) > 0)))
+    ) {
+      wx.showToast({
+        title: !form.content
+          ? '请填写训练内容'
+          : requirement.allowDistance
+            ? '请填写时长或有效距离'
+            : '请填写有效训练时长',
+        icon: 'none',
+      });
       return;
     }
     this.setData({ saving: true, error: '' });
@@ -269,7 +459,14 @@ Page({
       getApp().globalData.dataVersion = (getApp().globalData.dataVersion || 0) + 1;
       wx.showToast({ title: this.data.editId ? '记录已更新' : '记录已同步', icon: 'success' });
       this.clearDraft();
-      this.setData({ editId: 0, planLabel: '', form: emptyForm(), typeIndex: 0, intensityIndex: 1, showAdvanced: false });
+      this.setData({
+        editId: 0,
+        planLabel: '',
+        form: emptyForm(),
+        typeIndex: 0,
+        intensityIndex: 1,
+        showAdvanced: false,
+      });
       this._trainingProject = null;
       await this.loadPage();
       if (result && result.message) this.setData({ error: '' });
@@ -303,7 +500,7 @@ Page({
         } finally {
           this.setData({ deletingId: 0 });
         }
-      }
+      },
     });
-  }
+  },
 });

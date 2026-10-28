@@ -1,4 +1,4 @@
-import { projectRules } from '../../shared/sport-rules.ts';
+import { projectRules, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,10 +7,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { chatJson } from '../core/ai-client.ts';
 import { beijingDate } from '../core/coach-daily-todos.ts';
-import { teamPlanInput } from './team-plan-service.ts';
+import { teamPlanInput, validateTeamPlanContext } from './team-plan-service.ts';
 import { readTeamPlanChecks } from '../core/team-plan-checks.ts';
 import type { TeamPlanData, TeamPlanSession } from '../../shared/team-plan.ts';
-import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity.ts';
 
 const PROMPT_PATH = join(
   fileURLToPath(new URL('.', import.meta.url)),
@@ -19,9 +18,6 @@ const PROMPT_PATH = join(
   'training-plan-system.md'
 );
 const HISTORY_LIMIT = 10;
-const VALID_INTENSITIES = new Set(
-  INTENSITY_ZONE_SYSTEMS.flatMap((system) => [...system.zones, ''])
-);
 
 let promptCache: { text: string; version: string } | null = null;
 export function loadTrainingPlanPrompt() {
@@ -34,6 +30,8 @@ export function loadTrainingPlanPrompt() {
 
 // AI 输出的结构化草稿：与 shared/team-plan.ts 的 TeamPlanData 对齐，不另建计划模型。
 const aiSession = z.object({
+  activityCode: z.string().trim().max(40).optional(),
+  intensitySystem: z.string().trim().max(40).optional(),
   id: z.string().trim().min(1).max(100).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   category: z.enum(['special', 'physical', 'recovery']),
@@ -70,7 +68,8 @@ export class TeamPlanAiError extends Error {}
 // AI 返回结果为不可信输入：解析、编号、强度与单位校验后映射到既有计划结构。
 export function normalizeAiPlan(
   raw: unknown,
-  targetDate: string
+  targetDate: string,
+  project?: string
 ): { data: TeamPlanData; dataNotes: string[]; warnings: string[] } {
   const parsed = aiPlanOutput.safeParse(raw);
   if (!parsed.success)
@@ -83,15 +82,15 @@ export function normalizeAiPlan(
     throw new TeamPlanAiError(`AI输出日期${output.date}与目标日期${targetDate}不一致`);
   const sessionIds = new Set<string>();
   const sessions: TeamPlanSession[] = output.sessions.map((session, index) => {
-    if (session.date !== targetDate)
-      throw new TeamPlanAiError('AI输出包含非目标日期的训练课');
+    if (session.date !== targetDate) throw new TeamPlanAiError('AI输出包含非目标日期的训练课');
     const id = session.id?.trim() || `s${index + 1}`;
     if (sessionIds.has(id)) throw new TeamPlanAiError('AI输出的训练课标识重复');
     sessionIds.add(id);
     const intensity = session.intensity.trim();
-    if (!VALID_INTENSITIES.has(intensity)) {
-      warnings.push(`训练课「${session.content}」强度“${intensity}”不在竞迹强度体系内，已清空`);
-    }
+    if (intensity && !session.intensitySystem)
+      warnings.push(
+        `训练课「${session.content}」强度“${intensity}”未声明体系，仅保留原文，不进行阈值或分区换算`
+      );
     const itemIds = new Set<string>();
     return {
       id,
@@ -101,7 +100,10 @@ export function normalizeAiPlan(
       content: session.content,
       durationMin: session.durationMin,
       distanceKm: session.distanceKm,
-      intensity: VALID_INTENSITIES.has(intensity) ? intensity : '',
+      intensity,
+      ...(session.activityCode ? { activityCode: session.activityCode } : {}),
+      ...(session.intensitySystem ? { intensitySystem: session.intensitySystem } : {}),
+      ...(project ? { rulesVersion: SPORT_RULES_VERSION } : {}),
       sets: session.sets,
       reps: session.reps,
       load: session.load,
@@ -131,6 +133,13 @@ export function normalizeAiPlan(
     throw new TeamPlanAiError(
       'AI输出未通过计划校验：' + check.error.issues.map((issue) => issue.message).join('；')
     );
+  if (project) {
+    try {
+      validateTeamPlanContext(project, check.data.data);
+    } catch (error) {
+      throw new TeamPlanAiError(error instanceof Error ? error.message : 'AI计划的项目活动不适用');
+    }
+  }
   return { data: check.data.data as TeamPlanData, dataNotes: output.dataNotes, warnings };
 }
 
@@ -167,14 +176,17 @@ export function diffTeamPlanData(prev: TeamPlanData, next: TeamPlanData): TeamPl
       if (JSON.stringify(before[key]) !== JSON.stringify(session[key]))
         changes[key] = { from: before[key], to: session[key] };
     }
-    if (Object.keys(changes).length) modified.push({ id: session.id, content: session.content, changes });
+    if (Object.keys(changes).length)
+      modified.push({ id: session.id, content: session.content, changes });
   }
   return { added, removed, modified };
 }
 
 // —— 真实数据摘要：只整理与制定次日计划有关的信息，缺失显式标注，不把原始查询直接丢给模型。 ——
 
-export type TeamAiContext = Record<string, unknown>;
+export type TeamAiContext = Record<string, unknown> & {
+  team: { id: number; project: string; name: string; athleteCount: number; trainingDate: string };
+};
 
 export function buildTeamAiContext(
   db: DatabaseSync,
@@ -185,9 +197,7 @@ export function buildTeamAiContext(
     .get(input.teamId) as { id: number; project: string; name: string } | undefined;
   if (!team) throw new TeamPlanAiError('队伍不存在或已停用');
   const athletes = db
-    .prepare(
-      'SELECT id,name FROM athletes WHERE team_id=? AND active=1 ORDER BY name'
-    )
+    .prepare('SELECT id,name FROM athletes WHERE team_id=? AND active=1 ORDER BY name')
     .all(input.teamId) as Array<{ id: number; name: string }>;
   if (!athletes.length) throw new TeamPlanAiError('队伍暂无在训运动员');
   const athleteIds = athletes.map((athlete) => athlete.id);
@@ -202,8 +212,7 @@ export function buildTeamAiContext(
       ORDER BY published_at DESC LIMIT 1`
     )
     .get(input.teamId) as
-    | { title: string; startDate: string; endDate: string; planData: string }
-    | undefined;
+    { title: string; startDate: string; endDate: string; planData: string } | undefined;
   let currentPlan: unknown = null;
   if (published) {
     const data = JSON.parse(published.planData) as TeamPlanData;
@@ -289,9 +298,7 @@ export function buildTeamAiContext(
         AND start_date<=? AND end_date>=? AND published_at IS NOT NULL
       ORDER BY published_at DESC LIMIT 1`
     )
-    .get(input.teamId, yesterday, yesterday) as
-    | { id: number; planData: string }
-    | undefined;
+    .get(input.teamId, yesterday, yesterday) as { id: number; planData: string } | undefined;
   let yesterdaySummary: unknown = null;
   if (yesterdayPlanRow) {
     const data = JSON.parse(yesterdayPlanRow.planData) as TeamPlanData;
@@ -356,13 +363,16 @@ export function buildTeamAiContext(
   };
   const wellness = {
     windowDays: 7,
-    avgSleepHours: wellnessRows.sleepHours === null ? null : Math.round(wellnessRows.sleepHours * 10) / 10,
-    avgMorningPulse: wellnessRows.morningPulse === null ? null : Math.round(wellnessRows.morningPulse * 10) / 10,
+    avgSleepHours:
+      wellnessRows.sleepHours === null ? null : Math.round(wellnessRows.sleepHours * 10) / 10,
+    avgMorningPulse:
+      wellnessRows.morningPulse === null ? null : Math.round(wellnessRows.morningPulse * 10) / 10,
     avgFatigue: wellnessRows.fatigue === null ? null : Math.round(wellnessRows.fatigue * 10) / 10,
     attentionCount: wellnessRows.alerts,
-    note: wellnessRows.sleepHours === null && wellnessRows.morningPulse === null
-      ? '近7天无有效晨检数据'
-      : null,
+    note:
+      wellnessRows.sleepHours === null && wellnessRows.morningPulse === null
+        ? '近7天无有效晨检数据'
+        : null,
   };
   if (wellness.note) missing.push('晨检数据不足');
 
@@ -460,7 +470,7 @@ export async function generateTeamPlanDraft(input: GenerateInput): Promise<Gener
     temperature: 0.2,
     maxCompletionTokens: 16_000,
   });
-  const { data, dataNotes, warnings } = normalizeAiPlan(raw, input.date);
+  const { data, dataNotes, warnings } = normalizeAiPlan(raw, input.date, context.team.project);
   const now = new Date().toISOString();
   const oldMetadata = previous?.metadata;
   const metadata: TeamPlanAiMetadata = {
@@ -486,7 +496,9 @@ export async function generateTeamPlanDraft(input: GenerateInput): Promise<Gener
     ].slice(-20),
     history: [
       ...(oldMetadata?.history || []),
-      ...(previous ? [{ at: now, instruction: input.instruction || '重新生成', data: previous.data }] : []),
+      ...(previous
+        ? [{ at: now, instruction: input.instruction || '重新生成', data: previous.data }]
+        : []),
     ].slice(-HISTORY_LIMIT),
   };
   return {

@@ -109,3 +109,32 @@ it('北京凌晨发布不能关联前一天，归档版本可补填当时训练�
   expect(() => resolveTrainingPlanLink(db, 1, input)).toThrow();
   db.close();
 });
+
+it('已声明活动的计划不能关联不同活动实绩，并保存上下文到目标快照', () => {
+  const db = fixture();
+  try {
+    const row = db.prepare('SELECT plan_data FROM training_plans WHERE id=1').get() as {
+      plan_data: string;
+    };
+    const data = JSON.parse(row.plan_data);
+    data.sessions[0].activityCode = 'on_water';
+    data.sessions[0].intensitySystem = 'U_SYSTEM';
+    db.prepare('UPDATE training_plans SET plan_data=? WHERE id=1').run(JSON.stringify(data));
+    const input = {
+      date: '2026-10-16',
+      trainingType: '专项训练',
+      teamPlanId: 1,
+      planSessionId: 'am',
+      activityCode: 'cycling',
+    };
+    expect(() => resolveTrainingPlanLink(db, 1, input)).toThrow('活动');
+    const link = resolveTrainingPlanLink(db, 1, {
+      ...input,
+      activityCode: 'on_water',
+      intensitySystem: 'U_SYSTEM',
+    });
+    expect(link?.target.activityCode).toBe('on_water');
+  } finally {
+    db.close();
+  }
+});

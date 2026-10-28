@@ -1,8 +1,18 @@
+import {
+  ACTIVITY_LABELS,
+  isActivityCode,
+  projectRules,
+  allowedIntensitySystems,
+  SPORT_RULES_VERSION,
+} from '../../shared/sport-rules';
+import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity';
+import { trainingContext } from '../../shared/training-context';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { TeamPlanSession } from '../../shared/team-plan';
 import './TrainingPlanSessionEditor.css';
 type Props = {
   session: TeamPlanSession;
+  project?: string;
   startDate: string;
   endDate: string;
   mode: 'session' | 'override';
@@ -13,6 +23,7 @@ type Props = {
 };
 export function TrainingPlanSessionEditor({
   session,
+  project,
   startDate,
   endDate,
   mode,
@@ -95,6 +106,23 @@ export function TrainingPlanSessionEditor({
             reasonInput.current?.focus();
             return;
           }
+          if (project) {
+            try {
+              trainingContext(project, {
+                trainingType: { special: '专项训练', physical: '体能训练', recovery: '恢复训练' }[
+                  value.category
+                ],
+                activityCode: value.activityCode,
+                intensitySystem: value.intensitySystem,
+                intensityZone: value.intensity,
+                rulesVersion: value.rulesVersion,
+              });
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : '项目活动不适用');
+              setErrorField(null);
+              return;
+            }
+          }
           setError('');
           setErrorField(null);
           onSave({ ...value, content: value.content.trim() }, adjustmentReason.trim());
@@ -138,6 +166,53 @@ export function TrainingPlanSessionEditor({
               placeholder="上午 / 下午 / 09:00"
               onChange={(event) => setValue({ ...value, period: event.target.value })}
             />
+          </label>
+          <label htmlFor={field('activityCode')}>
+            训练活动
+            <select
+              id={field('activityCode')}
+              value={value.activityCode || 'unknown'}
+              onChange={(event) => {
+                if (isActivityCode(event.target.value))
+                  setValue({
+                    ...value,
+                    activityCode: event.target.value,
+                    intensitySystem: '',
+                    intensity: '',
+                    rulesVersion: SPORT_RULES_VERSION,
+                  });
+              }}
+            >
+              {(projectRules(project)?.activities || ['unknown']).map((activity) => (
+                <option key={activity} value={activity}>
+                  {ACTIVITY_LABELS[activity]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor={field('intensitySystem')}>
+            强度体系
+            <select
+              id={field('intensitySystem')}
+              value={value.intensitySystem || ''}
+              onChange={(event) =>
+                setValue({
+                  ...value,
+                  intensitySystem: event.target.value,
+                  intensity: '',
+                  rulesVersion: SPORT_RULES_VERSION,
+                })
+              }
+            >
+              <option value="">未指定体系，仅记录原文</option>
+              {INTENSITY_ZONE_SYSTEMS.filter((system) =>
+                allowedIntensitySystems(project, value.activityCode).includes(system.code)
+              ).map((system) => (
+                <option key={system.code} value={system.code}>
+                  {system.label}
+                </option>
+              ))}
+            </select>
           </label>
           {numeric('durationMin', '计划时长（分钟）', 100000)}
           {value.category === 'special' && (

@@ -4,6 +4,9 @@ export interface TeamPlanItem {
   description: string;
 }
 export interface TeamPlanSession {
+  activityCode?: string;
+  intensitySystem?: string;
+  rulesVersion?: string;
   id: string;
   date: string;
   category: 'special' | 'physical' | 'recovery';
@@ -63,7 +66,12 @@ export interface TeamPlan {
   aiMetadata?: TeamPlanAiInfo | null;
 }
 export function resolveTeamPlanSessions(
-  plan: Pick<TeamPlan, 'data'>,
+  plan: {
+    data: {
+      sessions: TeamPlanSession[];
+      overrides: Pick<TeamPlanOverride, 'athleteId' | 'sessionId' | 'changes'>[];
+    };
+  },
   athleteId: number
 ): TeamPlanSession[] {
   return plan.data.sessions.map((session) => ({

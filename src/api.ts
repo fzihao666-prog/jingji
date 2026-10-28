@@ -1,7 +1,13 @@
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
-import { reportPreviewSchema, reportCommentarySchema, savedReportSchema, reportHistorySchema,
-  type ReportRange, type ReportCommentary } from '../shared/training-report';
+import {
+  reportPreviewSchema,
+  reportCommentarySchema,
+  savedReportSchema,
+  reportHistorySchema,
+  type ReportRange,
+  type ReportCommentary,
+} from '../shared/training-report';
 import type { CatalogPlan, PlanExecutionRow } from '../shared/training-plan-catalog';
 import {
   resetAccountPasswordSchema,
@@ -170,25 +176,60 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
-  submitTrainingSession: (mode: 'self' | 'coach', athleteId: number, data: Record<string, string>, key?: string) =>
-    request<{ session: { id: number } }>(mode === 'self' ? '/api/me/training-sessions' : `/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`, { method: 'POST', body: JSON.stringify(data), headers: mode === 'self' && key ? { 'Idempotency-Key': key } : undefined }),
-  projectRules: (project: string) => request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(`/api/projects/rules?${new URLSearchParams({ project })}`),
+  submitTrainingSession: (
+    mode: 'self' | 'coach',
+    athleteId: number,
+    data: Record<string, string | number>,
+    key?: string
+  ) =>
+    request<{ session: { id: number } }>(
+      mode === 'self'
+        ? '/api/me/training-sessions'
+        : `/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: mode === 'self' && key ? { 'Idempotency-Key': key } : undefined,
+      }
+    ),
+  projectRules: (project: string) =>
+    request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
+      `/api/projects/rules?${new URLSearchParams({ project })}`
+    ),
   async reportPreview(id: number, range: ReportRange) {
-    return reportPreviewSchema.parse(await request<unknown>(`/api/athletes/${id}/reports/preview?${new URLSearchParams(range)}`));
+    return reportPreviewSchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports/preview?${new URLSearchParams(range)}`)
+    );
   },
   async reportCommentary(id: number, range: ReportRange, fingerprint: string) {
-    return reportCommentarySchema.parse(await request<unknown>(`/api/athletes/${id}/reports/commentary`, {
-      method: 'POST', body: JSON.stringify({ range, fingerprint, consent: true }), timeoutMs: 240000 }));
+    return reportCommentarySchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports/commentary`, {
+        method: 'POST',
+        body: JSON.stringify({ range, fingerprint, consent: true }),
+        timeoutMs: 240000,
+      })
+    );
   },
-  async saveReport(id: number, range: ReportRange, fingerprint: string, commentary: ReportCommentary) {
-    return savedReportSchema.parse(await request<unknown>(`/api/athletes/${id}/reports`, {
-      method: 'POST', body: JSON.stringify({ range, fingerprint, commentary, confirmed: true }) }));
+  async saveReport(
+    id: number,
+    range: ReportRange,
+    fingerprint: string,
+    commentary: ReportCommentary
+  ) {
+    return savedReportSchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports`, {
+        method: 'POST',
+        body: JSON.stringify({ range, fingerprint, commentary, confirmed: true }),
+      })
+    );
   },
   async reportHistory(id: number) {
     return reportHistorySchema.parse(await request<unknown>(`/api/athletes/${id}/reports`));
   },
   async reportDetail(id: number, reportId: string) {
-    return savedReportSchema.parse(await request<unknown>(`/api/athletes/${id}/reports/${encodeURIComponent(reportId)}`));
+    return savedReportSchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports/${encodeURIComponent(reportId)}`)
+    );
   },
   async physicalChampion(query: { project: string; from: string; to: string }) {
     const payload = await request<unknown>(`/api/physical-champion?${new URLSearchParams(query)}`);
@@ -196,15 +237,44 @@ export const api = {
   },
   async updatePhysicalReference(
     id: number,
-    body: { expectedRevision: number; draft: import('../shared/physical-champion').PhysicalReferenceDraft }
+    body: {
+      expectedRevision: number;
+      draft: import('../shared/physical-champion').PhysicalReferenceDraft;
+    }
   ) {
-    return z.object({message:z.string()}).parse(await request<unknown>(`/api/physical-champion/references/${id}`, {method:'PUT',body:JSON.stringify(body)}));
+    return z
+      .object({ message: z.string() })
+      .parse(
+        await request<unknown>(`/api/physical-champion/references/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        })
+      );
   },
-  async createPhysicalReference(body: import('../shared/physical-champion').PhysicalReferenceDraft) {
-    return z.object({message:z.string()}).parse(await request<unknown>('/api/physical-champion/references', {method:'POST',body:JSON.stringify(body)}));
+  async createPhysicalReference(
+    body: import('../shared/physical-champion').PhysicalReferenceDraft
+  ) {
+    return z
+      .object({ message: z.string() })
+      .parse(
+        await request<unknown>('/api/physical-champion/references', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+      );
   },
-  async reviewPhysicalReference(id:number, body:{expectedRevision:number;status:'reviewed'|'disabled'}) {
-    return z.object({message:z.string()}).parse(await request<unknown>(`/api/physical-champion/references/${id}/review`, {method:'POST',body:JSON.stringify(body)}));
+  async reviewPhysicalReference(
+    id: number,
+    body: { expectedRevision: number; status: 'reviewed' | 'disabled' }
+  ) {
+    return z
+      .object({ message: z.string() })
+      .parse(
+        await request<unknown>(`/api/physical-champion/references/${id}/review`, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+      );
   },
 
   async teams() {
@@ -437,10 +507,16 @@ export const api = {
     }>(`/api/analysis/summary?${params}`);
   },
   pendingProjectFacts(athleteId: number) {
-    return request<{ training: { id: number; date: string; content: string }[]; tests: { id: number; date: string; content: string }[] }>(`/api/athletes/${athleteId}/pending-project-facts`);
+    return request<{
+      training: { id: number; date: string; content: string }[];
+      tests: { id: number; date: string; content: string }[];
+    }>(`/api/athletes/${athleteId}/pending-project-facts`);
   },
   verifyFactProject(kind: 'training-sessions' | 'test-sessions', id: number, project: Project) {
-    return request<{ message: string }>(`/api/${kind}/${id}/verify-project`, { method: 'POST', body: JSON.stringify({ project }) });
+    return request<{ message: string }>(`/api/${kind}/${id}/verify-project`, {
+      method: 'POST',
+      body: JSON.stringify({ project }),
+    });
   },
   async strengthTests(athleteId: number) {
     return request<{ tests: StrengthTest[] }>(`/api/strength-tests?athleteId=${athleteId}`);
@@ -557,7 +633,11 @@ export const api = {
       body: JSON.stringify({ project }),
     });
   },
-  async downloadDataImportTemplate(kind: 'profile' | 'training' | 'test' | 'unified' = 'unified', project?: string, team?: string) {
+  async downloadDataImportTemplate(
+    kind: 'profile' | 'training' | 'test' | 'unified' = 'unified',
+    project?: string,
+    team?: string
+  ) {
     const params = new URLSearchParams({ kind });
     if (project) params.set('project', project);
     if (team) params.set('team', team);
@@ -626,7 +706,8 @@ export const api = {
     body.append('project', project);
     if (defaultDate) body.append('defaultDate', defaultDate);
     if (options?.reparse) body.append('reparse', '1');
-    if (options?.expectedRevision !== undefined) body.append('expectedRevision', String(options.expectedRevision));
+    if (options?.expectedRevision !== undefined)
+      body.append('expectedRevision', String(options.expectedRevision));
     return request<{ batch: DataImportBatch }>('/api/data-import/analyze', {
       method: 'POST',
       body,
@@ -643,10 +724,18 @@ export const api = {
     );
   },
   async expiredImportDrafts(project: Project) {
-    return request<import('../shared/import-draft-cleanup').ImportDraftCleanupPreview>(`/api/data-import/draft-cleanup?project=${encodeURIComponent(project)}`);
+    return request<import('../shared/import-draft-cleanup').ImportDraftCleanupPreview>(
+      `/api/data-import/draft-cleanup?project=${encodeURIComponent(project)}`
+    );
   },
-  async cleanupExpiredImportDrafts(project: Project, drafts: Array<{ id: string; revision: number }>) {
-    return request<{ message: string; deletedCount: number; deletedIds: string[] }>('/api/data-import/draft-cleanup', { method: 'POST', body: JSON.stringify({ project, drafts }) });
+  async cleanupExpiredImportDrafts(
+    project: Project,
+    drafts: Array<{ id: string; revision: number }>
+  ) {
+    return request<{ message: string; deletedCount: number; deletedIds: string[] }>(
+      '/api/data-import/draft-cleanup',
+      { method: 'POST', body: JSON.stringify({ project, drafts }) }
+    );
   },
   async discardDataImport(id: string, project: Project) {
     return request<{ message: string }>(
@@ -720,7 +809,9 @@ export const api = {
     });
   },
   async dataImportMetrics(project: Project) {
-    return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(`/api/data-import/metrics?${new URLSearchParams({ project })}`);
+    return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(
+      `/api/data-import/metrics?${new URLSearchParams({ project })}`
+    );
   },
   async dataManagementMetrics() {
     return request<{

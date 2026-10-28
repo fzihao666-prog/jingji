@@ -25,6 +25,8 @@
     <view wx:if="{{lesson}}" class="lesson-editor">
       <view>{{overrideAthleteId ? overrideName + ' · 差异调整' : '训练课编辑'}}</view>
       <picker wx:if="{{!overrideAthleteId}}" range="{{categories}}" bindchange="categoryChange"><view class="input">类别：{{lesson.category === 'special' ? '专项' : lesson.category === 'physical' ? '体能' : '恢复'}}</view></picker>
+      <picker range="{{lessonActivityLabels}}" value="{{lessonActivityIndex}}" bindchange="activityChange" aria-label="计划训练活动"><view class="input">活动：{{lessonActivityLabels[lessonActivityIndex]}}</view></picker>
+      <picker range="{{lessonSystemLabels}}" value="{{lessonSystemIndex}}" bindchange="systemChange" aria-label="计划强度体系"><view class="input">体系：{{lessonSystemLabels[lessonSystemIndex]}}</view></picker>
       <view wx:for="{{sessionFields}}" wx:key="key" wx:if="{{!overrideAthleteId || item.key !== 'date'}}" class="field"><text>{{item.label}}</text><input aria-label="{{item.label}}" class="input" value="{{lesson[item.key]}}" data-field="{{item.key}}" bindinput="lessonInput" /></view>
       <view wx:if="{{overrideAthleteId}}"><text>未改变字段继续继承队伍安排，以下为最终安排预览。</text><view>{{lesson.date}} {{lesson.period}}｜{{lesson.content}}｜{{lesson.durationMin}}分钟 / {{lesson.distanceKm}}公里</view><input aria-label="调整原因（必填）" class="input" placeholder="调整原因（必填）" value="{{overrideReason}}" bindinput="reasonInput" /><button bindtap="revokeOverride">撤销该运动员调整</button></view>
       <button bindtap="saveLesson">保存训练课{{overrideAthleteId ? '调整' : ''}}</button>
@@ -47,7 +49,7 @@
       <view wx:if="{{aiDiff}}" class="lesson"><view class="card-head-title">本次修改差异</view><view wx:for="{{aiDiff}}" wx:key="key">{{item.text}}</view><view wx:if="{{!aiDiff.length}}">无内容变化</view></view>
     </view>
     <picker wx:if="{{canManage && teamAthletes.length}}" range="{{teamAthletes}}" range-key="name" bindchange="preview"><view class="input">预览个人最终安排：{{previewName || '选择运动员'}}</view></picker>
-    <view wx:for="{{sessions}}" wx:key="id" class="lesson"><view>{{item.date}} {{item.period}}｜{{item.category === 'special' ? '专项' : item.category === 'physical' ? '体能' : '恢复'}}</view><view>{{item.content}}</view><view>{{item.durationMin === null ? '时长未设置' : item.durationMin + '分钟'}} / {{item.distanceKm === null ? '距离不适用' : item.distanceKm + '公里'}} · {{item.intensity}}</view><view>{{item.sets}} 组 · {{item.reps}} 次 · {{item.load}}｜{{item.notes}}</view>
+    <view wx:for="{{sessions}}" wx:key="id" class="lesson"><view>{{item.date}} {{item.period}}｜{{item.category === 'special' ? '专项' : item.category === 'physical' ? '体能' : '恢复'}}</view><view>{{item.content}}</view><view>{{item.durationMin === null ? '时长未设置' : item.durationMin + '分钟'}} / {{item.distanceKm === null ? '距离不适用' : item.distanceKm + '公里'}} · {{item.activityCode || '活动待核实'}} · {{item.intensitySystem || '未指定体系'}} {{item.intensity}}</view><view>{{item.sets}} 组 · {{item.reps}} 次 · {{item.load}}｜{{item.notes}}</view>
       <view wx:for="{{item.items}}" wx:for-item="contentItem" wx:key="id">①{{contentItem.title}}｜{{contentItem.description}}</view>
       <view wx:if="{{item.reason}}">个人调整：{{item.reason}}</view><view wx:if="{{canManage}}">个人调整：{{item.adjustmentCount}} 人</view><button wx:if="{{!canManage && (selected.status === 'published' || selected.status === 'archived')}}" size="mini" data-id="{{item.id}}" bindtap="enterTraining">{{selected.status === 'archived' ? '补填历史实际训练' : '填写实际训练'}}</button></view>
     <view wx:if="{{checks.length}}" class="lesson">

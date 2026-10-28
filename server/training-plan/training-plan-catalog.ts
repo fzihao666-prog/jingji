@@ -29,6 +29,10 @@ function kindOf(data: Record<string, unknown>): PlanKind {
           : []) {
         const value = object(item);
         const content = {
+          activityCode: String(value.activityCode || ''),
+          trainingCategory: ['special', 'physical', 'recovery'].includes(String(value.category))
+            ? String(value.category)
+            : undefined,
           structureType: String(value.structureType || ''),
           trainingType: String(value.trainingType || value.type || value.category || ''),
           content: String(value.name || ''),

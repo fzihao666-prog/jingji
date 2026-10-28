@@ -1,3 +1,5 @@
+import { trainingContext } from '../../shared/training-context.ts';
+import { resolveTeamPlanSessions as effectiveSessions } from '../../shared/team-plan.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import type { TeamPlan, TeamPlanData } from '../../shared/team-plan.ts';
@@ -11,6 +13,9 @@ const date = z
   );
 const metric = z.number().finite().min(0).max(100000).nullable().default(null);
 const fields = {
+  activityCode: z.string().trim().max(40).optional(),
+  intensitySystem: z.string().trim().max(40).optional(),
+  rulesVersion: z.string().trim().max(80).optional(),
   period: z.string().max(80).default(''),
   content: z.string().trim().min(1).max(4000),
   durationMin: metric,
@@ -39,6 +44,9 @@ const session = z
   .strict();
 const changes = z
   .object({
+    activityCode: fields.activityCode,
+    intensitySystem: fields.intensitySystem,
+    rulesVersion: fields.rulesVersion,
     period: fields.period.unwrap().optional(),
     content: fields.content.optional(),
     durationMin: metric.unwrap().optional(),
@@ -113,10 +121,12 @@ export function readTeamPlans(db: DatabaseSync): TeamPlan[] {
     .prepare(
       `SELECT p.id,p.root_id AS rootId,p.version,p.revision,p.status,p.team_id AS teamId,t.project,t.name AS team,p.title,p.start_date AS startDate,p.end_date AS endDate,p.plan_data AS data,${hasAiMetadata ? 'p.ai_metadata AS aiMetadata' : 'NULL AS aiMetadata'},p.published_at AS publishedAt,p.archived_at AS archivedAt FROM training_plans p JOIN project_teams t ON t.id=p.team_id WHERE p.model='team' ORDER BY p.start_date DESC,p.version DESC`
     )
-    .all() as unknown as Array<Omit<TeamPlan, 'data' | 'aiMetadata'> & {
-    data: string;
-    aiMetadata: string | null;
-  }>;
+    .all() as unknown as Array<
+    Omit<TeamPlan, 'data' | 'aiMetadata'> & {
+      data: string;
+      aiMetadata: string | null;
+    }
+  >;
   return rows.map((row) => {
     let aiMetadata: TeamPlan['aiMetadata'] = null;
     if (row.aiMetadata) {
@@ -149,4 +159,24 @@ export function readTeamPlansForAthlete(
         overrides: plan.data.overrides.filter((item) => item.athleteId === athleteId),
       },
     }));
+}
+
+/** 计划数量是目标而非测量，可留空；活动和体系与实际写入遵守相同边界。 */
+export function validateTeamPlanContext(
+  project: string,
+  data: Parameters<typeof effectiveSessions>[0]['data']
+) {
+  const check = (session: TeamPlanData['sessions'][number]) =>
+    trainingContext(project, {
+      trainingType: { special: '专项训练', physical: '体能训练', recovery: '恢复训练' }[
+        session.category
+      ],
+      activityCode: session.activityCode,
+      intensitySystem: session.intensitySystem,
+      intensityZone: session.intensity,
+      rulesVersion: session.rulesVersion,
+    });
+  data.sessions.forEach(check);
+  for (const athlete of new Set(data.overrides.map((item) => item.athleteId)))
+    effectiveSessions({ data }, athlete).forEach(check);
 }

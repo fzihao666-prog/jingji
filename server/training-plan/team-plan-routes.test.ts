@@ -131,3 +131,42 @@ it('整队授权、草稿隔离、CAS、确认发布和修订版本保留', asyn
   expect((await call(`/${id}/transition`, { revision: -1, action: 'submit' })).status).toBe(400);
   expect((await call('/bad/transition', { revision: 1, action: 'submit' })).status).toBe(400);
 });
+
+it('计划接口按队伍项目拒绝不适用活动，合法上下文保留且拒绝时无审计写入', async () => {
+  fixture.role = 'SCC';
+  fixture.ids = [1, 2, 3, 4];
+  const db = fixture.db!;
+  db.exec(
+    "INSERT INTO project_teams VALUES(2,'VOLLEYBALL','排球队',1);INSERT INTO athletes VALUES(3,'丙',2,'VOLLEYBALL',1),(4,'丁',2,'VOLLEYBALL',1)"
+  );
+  try {
+    const before = db.prepare('SELECT COUNT(*) AS n FROM audit_logs').get();
+    const body = {
+      teamId: 2,
+      title: '排球计划',
+      startDate: '2026-10-17',
+      endDate: '2026-10-17',
+      data: {
+        ...data,
+        overrides: [],
+        sessions: [{ ...data.sessions[0], activityCode: 'on_water', intensity: '' }],
+      },
+    };
+    expect((await call('', body)).status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM audit_logs').get()).toEqual(before);
+    const valid = await call('', {
+      ...body,
+      data: {
+        ...body.data,
+        sessions: [
+          { ...body.data.sessions[0], activityCode: 'volleyball_technique', intensitySystem: '' },
+        ],
+      },
+    });
+    expect(valid.status).toBe(200);
+    expect(valid.plan.data.sessions[0].activityCode).toBe('volleyball_technique');
+  } finally {
+    fixture.ids = [1, 2];
+    fixture.role = 'SCC';
+  }
+});

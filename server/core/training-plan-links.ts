@@ -23,6 +23,8 @@ export function resolveTrainingPlanLink(
   input: {
     date: string;
     trainingType: string;
+    activityCode?: string;
+    intensitySystem?: string;
     teamPlanId?: number;
     planSessionId?: string;
   }
@@ -73,6 +75,18 @@ export function resolveTrainingPlanLink(
   const category = { special: '专项训练', physical: '体能训练', recovery: '恢复训练' };
   if (!target || target.date !== input.date || category[target.category] !== input.trainingType)
     throw new TrainingPlanLinkError('计划训练课的日期或训练类别与实际记录不一致。');
+  if (
+    target.activityCode &&
+    target.activityCode !== 'unknown' &&
+    target.activityCode !== input.activityCode
+  )
+    throw new TrainingPlanLinkError('实际训练活动与计划不一致，请核对计划或个人调整。');
+  if (
+    target.intensitySystem &&
+    input.intensitySystem &&
+    target.intensitySystem !== input.intensitySystem
+  )
+    throw new TrainingPlanLinkError('实际与计划强度体系不同，不能按同一口径确认实施。');
   return { planId: row.id, sessionId: target.id, target };
 }
 export function saveTrainingPlanLink(

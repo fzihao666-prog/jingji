@@ -1,3 +1,5 @@
+import { TrainingSessionEntry } from './TrainingSessionEntry';
+import { ACTIVITY_LABELS, isActivityCode } from '../../shared/sport-rules';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { Athlete, User } from '../types';
@@ -33,6 +35,9 @@ const changeLabels: Record<string, string> = {
   durationMin: '时长（分钟）',
   distanceKm: '距离（公里）',
   intensity: '强度',
+  activityCode: '训练活动',
+  intensitySystem: '强度体系',
+  rulesVersion: '项目规则',
   sets: '组数',
   reps: '次数',
   load: '负重',
@@ -114,6 +119,9 @@ export function TrainingPlanWorkspace({
       'durationMin',
       'distanceKm',
       'intensity',
+      'activityCode',
+      'intensitySystem',
+      'rulesVersion',
       'sets',
       'reps',
       'load',
@@ -425,12 +433,31 @@ export function TrainingPlanWorkspace({
                   <span>{new Set(adjustments.map((item) => item.athleteId)).size} 人调整</span>
                 </div>
                 <p className="plan-workspace-content">{session.content}</p>
+                {['published', 'archived'].includes(draft.status) &&
+                  previewId > 0 &&
+                  scoped.some((athlete) => athlete.id === previewId) && (
+                    <details>
+                      <summary>填写此课实际训练</summary>
+                      <TrainingSessionEntry
+                        key={`${draft.id}:${session.id}:${previewId}`}
+                        athleteId={previewId}
+                        project={draft.project}
+                        mode={user.role === 'ATL' ? 'self' : 'coach'}
+                        plan={{ id: draft.id, session }}
+                        onSaved={() => setMessage('实际训练已保存并关联此计划。')}
+                      />
+                    </details>
+                  )}
                 <p>
                   时长：{session.durationMin ?? '—'} 分钟
                   {session.category === 'special' && (
                     <>
                       {' '}
-                      · 距离：{session.distanceKm ?? '—'} km · 强度：{session.intensity || '—'}
+                      · 距离：{session.distanceKm ?? '—'} km · 活动：
+                      {isActivityCode(session.activityCode)
+                        ? ACTIVITY_LABELS[session.activityCode]
+                        : '待核实'}{' '}
+                      · 强度：{session.intensitySystem || '未指定体系'} {session.intensity || '—'}
                     </>
                   )}
                   {session.category === 'physical' && (
@@ -556,6 +583,7 @@ export function TrainingPlanWorkspace({
             {editor.mode === 'session' || editor.athleteId > 0 ? (
               <TrainingPlanSessionEditor
                 key={`${editor.session.id}:${editor.mode}:${editor.athleteId}`}
+                project={plan.project}
                 session={editor.session}
                 startDate={draft.startDate}
                 endDate={draft.endDate}
@@ -682,7 +710,11 @@ export function TrainingPlanWorkspace({
               <li className="plan-workspace-content" key={session.id}>
                 {session.date} {session.period} · {categoryLabels[session.category]} ·{' '}
                 {session.content} · {session.durationMin ?? '—'} 分钟 / {session.distanceKm ?? '—'}{' '}
-                km · 强度：{session.intensity || '—'}
+                km · 活动：
+                {isActivityCode(session.activityCode)
+                  ? ACTIVITY_LABELS[session.activityCode]
+                  : '待核实'}{' '}
+                · 强度：{session.intensitySystem || '未指定体系'} {session.intensity || '—'}
                 {session.category === 'physical' && (
                   <>
                     {' '}

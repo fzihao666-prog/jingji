@@ -104,3 +104,38 @@ describe('队伍计划兼容与目标解析', () => {
     ).toBe(false);
   });
 });
+
+it('队伍计划与个人调整复用项目活动和强度适用校验', async () => {
+  const { validateTeamPlanContext } = await import('./team-plan-service.ts');
+  const base = {
+    id: 'x',
+    date: '2026-01-01',
+    category: 'special' as const,
+    period: '',
+    content: '排球技术',
+    durationMin: null,
+    distanceKm: null,
+    intensity: '',
+    sets: null,
+    reps: null,
+    load: null,
+    notes: '',
+    activityCode: 'volleyball_technique',
+  };
+  const data = { sessions: [base], overrides: [], goal: '', focus: '' };
+  expect(() => validateTeamPlanContext('VOLLEYBALL', data)).not.toThrow();
+  expect(() =>
+    validateTeamPlanContext('VOLLEYBALL', {
+      ...data,
+      sessions: [{ ...base, activityCode: 'on_water' }],
+    })
+  ).toThrow('适用');
+  expect(() =>
+    validateTeamPlanContext('VOLLEYBALL', {
+      ...data,
+      overrides: [
+        { athleteId: 1, sessionId: 'x', changes: { intensitySystem: 'U_SYSTEM', intensity: 'U2' } },
+      ],
+    })
+  ).toThrow('适用');
+});
