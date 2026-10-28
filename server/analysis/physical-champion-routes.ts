@@ -1,7 +1,8 @@
-import { canManageGlobalPhysicalReferences } from '../../shared/physical-champion-policy.ts';
+import { canEditPhysicalChampionValues } from '../../shared/physical-champion-policy.ts';
 import { isProject } from '../../shared/projects.ts';
 import {
   savePhysicalReferenceDraft,
+  updatePhysicalChampionValues,
   reviewPhysicalReference,
   PhysicalReferenceError,
 } from '../core/physical-champion-references.ts';
@@ -42,7 +43,7 @@ export function registerPhysicalChampionRoutes(app: Express) {
       buildPhysicalChampion(db, {
         ...parsed.data,
         athleteIds: accessibleAthleteIds(user),
-        canEdit: canManageGlobalPhysicalReferences(user.role, permissions),
+        canEdit: canEditPhysicalChampionValues(user.role, permissions, parsed.data.project),
       })
     );
   });
@@ -51,14 +52,22 @@ export function registerPhysicalChampionRoutes(app: Express) {
     return { id: user.id, role: user.role, permissions: accountPermissions(user.id) };
   };
   const failure = (error: unknown, res: import('express').Response) =>
-    res
-      .status(error instanceof PhysicalReferenceError ? error.status : 500)
-      .json({
-        message:
-          error instanceof PhysicalReferenceError
-            ? error.message
-            : '参考标准保存失败，请稍后重试。',
-      });
+    res.status(error instanceof PhysicalReferenceError ? error.status : 500).json({
+      message:
+        error instanceof PhysicalReferenceError ? error.message : '参考标准保存失败，请稍后重试。',
+    });
+  app.put(
+    '/api/physical-champion/model-values',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      try {
+        return res.json(updatePhysicalChampionValues(db, manage(req), req.body));
+      } catch (error) {
+        return failure(error, res);
+      }
+    }
+  );
   app.post('/api/physical-champion/references', requireAuth, requireRole('DMD'), (req, res) => {
     try {
       return res.json(savePhysicalReferenceDraft(db, manage(req), req.body));

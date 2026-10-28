@@ -2,16 +2,18 @@
   min-width: 0;
 }
 
-.physical-champion-toolbar {
+.physical-champion-toolbar,
+.physical-champion-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-block: 0.75rem;
 }
 
-.physical-champion-toolbar select {
+.physical-champion-toolbar select,
+.physical-champion-table input {
   max-width: 100%;
   padding: 0.5rem;
   border: 1px solid var(--line);
@@ -20,52 +22,16 @@
   color: var(--ink);
 }
 
-.physical-champion-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 1rem 0;
-  padding: 1rem;
-  background: var(--mist);
-  border-radius: 0.75rem;
-}
-
-.physical-champion-summary dt,
 .physical-champion-note {
   color: var(--muted);
-  font-size: 0.85rem;
-  line-height: 1.6;
-}
-
-.physical-champion-summary dd {
-  margin: 0.4rem 0 0;
-  color: var(--river);
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.physical-champion-summary small {
   font-size: 0.8rem;
-  font-weight: 400;
+  line-height: 1.6;
 }
 
 .physical-champion-chart {
   height: 20rem;
   width: 100%;
   min-width: 0;
-}
-
-.physical-champion-data,
-.physical-champion-management {
-  margin-top: 0.75rem;
-  border-top: 1px solid var(--line);
-}
-
-.physical-champion summary {
-  cursor: pointer;
-  padding-block: 0.65rem;
-  font-size: 0.85rem;
 }
 
 .physical-champion-table-wrap {
@@ -82,33 +48,33 @@
 
 .physical-champion-table th,
 .physical-champion-table td {
-  text-align: left;
-  padding: 0.65rem;
+  text-align: center;
+  padding: 0.75rem;
   border-bottom: 1px solid var(--line);
 }
 
-.physical-champion-table caption {
-  text-align: left;
-  color: var(--muted);
-  padding-block: 0.5rem;
-}
-
-.physical-champion-editor {
-  display: grid;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.physical-champion-editor input,
-.physical-champion-editor textarea,
-.physical-champion-editor select {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.5rem;
+.physical-champion-table th:first-child {
+  position: sticky;
+  left: 0;
   background: var(--paper);
-  color: var(--ink);
+  text-align: left;
+}
+
+.physical-champion-table th small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.physical-champion-table tbody tr:first-child td {
+  color: var(--river);
+  font-weight: 700;
+}
+
+.physical-champion-table input {
+  width: 6rem;
 }
 
 .physical-champion :focus-visible {
@@ -117,15 +83,6 @@
 }
 
 @media (width <= 520px) {
-  .physical-champion-summary {
-    gap: 0.5rem;
-    padding: 0.75rem;
-  }
-
-  .physical-champion-summary dd {
-    font-size: 1.2rem;
-  }
-
   .physical-champion-toolbar select {
     width: 100%;
   }

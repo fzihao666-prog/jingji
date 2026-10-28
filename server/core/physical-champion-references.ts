@@ -1,10 +1,14 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { canManageGlobalPhysicalReferences } from '../../shared/physical-champion-policy.ts';
+import {
+  canEditPhysicalChampionValues,
+  canManageGlobalPhysicalReferences,
+} from '../../shared/physical-champion-policy.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   PHYSICAL_CHAMPION_DIMENSIONS,
   physicalReferenceDraftSchema,
+  physicalChampionValuesSchema,
 } from '../../shared/physical-champion.ts';
 
 const tables = ['radar_reference_sources', 'radar_reference_values'] as const;
@@ -475,6 +479,80 @@ export function reviewPhysicalReference(
     return {
       message: '参考版本已停用。',
     };
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+/** 两行模型的数值更新：同批事务、修订冲突保护，旧值与来源保存在审计中。 */
+export function updatePhysicalChampionValues(
+  db: DatabaseSync,
+  actor: ReferenceActor,
+  input: unknown
+) {
+  const parsed = physicalChampionValuesSchema.safeParse(input);
+  if (!parsed.success)
+    throw new PhysicalReferenceError(400, '冠军模型数值无效，请填写大于0的数值。');
+  const { project, values } = parsed.data;
+  if (!canEditPhysicalChampionValues(actor.role, actor.permissions, project))
+    throw new PhysicalReferenceError(403, '无权修改该项目冠军模型。');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    for (const value of values) {
+      const old = db
+        .prepare(
+          "SELECT rv.*,rs.active AS source_active FROM radar_reference_values rv JOIN radar_reference_sources rs ON rs.id=rv.source_id WHERE rv.id=? AND rv.radar_kind='physical'"
+        )
+        .get(value.id) as Record<string, string | number | null> | undefined;
+      if (!old) throw new PhysicalReferenceError(404, '冠军模型指标不存在。');
+      const oldProject =
+        old.project === 'CANOE'
+          ? 'CANOE_SPRINT'
+          : old.project === 'SLALOM'
+            ? 'CANOE_SLALOM'
+            : old.project;
+      if (oldProject !== project)
+        throw new PhysicalReferenceError(403, '不能修改其他项目的冠军模型。');
+      if (!old.active || !old.source_active || old.review_status === 'disabled')
+        throw new PhysicalReferenceError(409, '冠军模型已停用，请刷新。');
+      if (old.revision !== value.expectedRevision)
+        throw new PhysicalReferenceError(409, '冠军模型已被更新，请刷新后修改。');
+      if (old.value_num === value.value) continue;
+      const sourceName = '教练手工维护冠军模型';
+      const year = new Date().getUTCFullYear();
+      db.prepare(
+        "INSERT OR IGNORE INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,?,'',?,?,'手工参考')"
+      ).run(old.project, sourceName, year, old.protocol);
+      const source = db
+        .prepare(
+          "SELECT id,active FROM radar_reference_sources WHERE project=? AND name=? AND url='' AND source_year=? AND protocol=?"
+        )
+        .get(old.project, sourceName, year, old.protocol) as { id: number; active: number };
+      if (!source.active)
+        throw new PhysicalReferenceError(409, '手工参考来源已停用，请联系管理员。');
+      db.prepare(
+        "UPDATE radar_reference_values SET value_num=?,source_id=?,source_type='estimated',source_nature='estimated',revision=revision+1,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=?"
+      ).run(value.value, source.id, value.id);
+      db.prepare(
+        "INSERT INTO audit_logs(user_id,action,entity_type,entity_id,detail) VALUES(?,'UPDATE_PHYSICAL_CHAMPION_VALUE','radar_reference_values',?,?)"
+      ).run(
+        actor.id,
+        value.id,
+        JSON.stringify({
+          before: old,
+          after: {
+            value: value.value,
+            sourceId: source.id,
+            sourceType: 'estimated',
+            sourceNature: 'estimated',
+            revision: value.expectedRevision + 1,
+          },
+        })
+      );
+    }
+    db.exec('COMMIT');
+    return { message: '冠军模型已保存，团队平均由系统自动计算。' };
   } catch (error) {
     if (db.isTransaction) db.exec('ROLLBACK');
     throw error;

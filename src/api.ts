@@ -235,6 +235,16 @@ export const api = {
     const payload = await request<unknown>(`/api/physical-champion?${new URLSearchParams(query)}`);
     return physicalChampionPayloadSchema.parse(payload);
   },
+  async updatePhysicalChampionValues(
+    body: import('../shared/physical-champion').PhysicalChampionValuesInput
+  ) {
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>('/api/physical-champion/model-values', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    );
+  },
   async updatePhysicalReference(
     id: number,
     body: {
@@ -242,39 +252,33 @@ export const api = {
       draft: import('../shared/physical-champion').PhysicalReferenceDraft;
     }
   ) {
-    return z
-      .object({ message: z.string() })
-      .parse(
-        await request<unknown>(`/api/physical-champion/references/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(body),
-        })
-      );
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>(`/api/physical-champion/references/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    );
   },
   async createPhysicalReference(
     body: import('../shared/physical-champion').PhysicalReferenceDraft
   ) {
-    return z
-      .object({ message: z.string() })
-      .parse(
-        await request<unknown>('/api/physical-champion/references', {
-          method: 'POST',
-          body: JSON.stringify(body),
-        })
-      );
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>('/api/physical-champion/references', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
   },
   async reviewPhysicalReference(
     id: number,
     body: { expectedRevision: number; status: 'reviewed' | 'disabled' }
   ) {
-    return z
-      .object({ message: z.string() })
-      .parse(
-        await request<unknown>(`/api/physical-champion/references/${id}/review`, {
-          method: 'POST',
-          body: JSON.stringify(body),
-        })
-      );
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>(`/api/physical-champion/references/${id}/review`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
   },
 
   async teams() {

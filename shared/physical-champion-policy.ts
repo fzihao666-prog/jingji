@@ -14,3 +14,15 @@ export function canManageGlobalPhysicalReferences(
     permissions.teams.some((team) => team.project === '*' && team.team === '*')
   );
 }
+
+/** 项目冠军值允许教练及以上维护，项目授权不能跨项目扩展。 */
+export function canEditPhysicalChampionValues(
+  role: string,
+  permissions: { projects: string[] },
+  project: string
+) {
+  return (
+    ['SCC', 'REG', 'TD', 'DMD'].includes(role) &&
+    (permissions.projects.includes('*') || permissions.projects.includes(project))
+  );
+}

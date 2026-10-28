@@ -621,8 +621,6 @@ export function StrengthTrainingDashboard({
         project={project}
         from={from}
         to={to}
-        athletes={athletes}
-        athleteId={athleteId}
       />
       {loading ? (
         <ContentState

@@ -1,3 +1,4 @@
+import { useState, type FormEvent } from 'react';
 import {
   Legend,
   PolarAngleAxis,
@@ -8,76 +9,166 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
-import type { PhysicalChampionPayload } from '../../shared/physical-champion';
+import {
+  physicalChampionValuesSchema,
+  type PhysicalChampionPayload,
+  type PhysicalChampionValuesInput,
+} from '../../shared/physical-champion';
 
 type Props = {
   group: PhysicalChampionPayload['groups'][number];
-  athleteId: number | null;
-  scopeName: string;
+  canEdit: boolean;
+  onSave: (values: PhysicalChampionValuesInput['values']) => Promise<void>;
 };
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 3 });
 const format = (value: number | null | undefined) =>
   value == null ? '—' : numberFormat.format(value);
 
-export function PhysicalChampionOverview({ group, athleteId, scopeName }: Props) {
-  const personal = group.athletes.find((item) => item.athleteId === athleteId);
+export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
+  const [editing, setEditing] = useState(false);
+  const [values, setValues] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const rows = group.references.map((reference) => ({
     reference,
     team: group.team.find((item) => item.key === reference.key),
-    personal: personal?.dimensions.find((item) => item.key === reference.key),
   }));
-  const current = rows.map((row) => (athleteId ? row.personal : row.team));
-  const coverage = current.filter((row) => row?.achievedPercent != null).length;
-  const latest = group.trend
-    .filter((item) => item.athleteId === (athleteId || null))
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .at(-1);
-  const score = athleteId ? personal?.score : latest?.score;
-  const sampleCount = athleteId
-    ? Number(coverage > 0)
-    : group.athletes.filter((item) =>
-        item.dimensions.some((dimension) => dimension.achievedPercent != null)
-      ).length;
-  const estimated = rows.some(
-    (row) =>
-      (athleteId ? row.personal : row.team)?.appliedReference?.sourceType === 'estimated' ||
-      row.reference.sourceType === 'estimated'
-  );
   const radar = rows.map((row) => ({
     label: row.reference.label,
     champion: 100,
     team: row.team?.achievedPercent ?? null,
-    personal: row.personal?.achievedPercent ?? null,
   }));
+  const estimated = rows.some((row) => row.reference.sourceType === 'estimated');
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEdit || saving) return;
+    const changed = group.references
+      .filter((ref) => Number(values[ref.id]) !== ref.value)
+      .map((ref) => ({
+        id: ref.id,
+        expectedRevision: ref.revision,
+        value: Number(values[ref.id]),
+      }));
+    if (!changed.length) {
+      setEditing(false);
+      return;
+    }
+    const parsed = physicalChampionValuesSchema.shape.values.safeParse(changed);
+    if (!parsed.success) {
+      setError('冠军值必须是大于0的有效数值。');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onSave(parsed.data);
+      setEditing(false);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '保存失败，请重试。');
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <>
-      <dl className="physical-champion-summary">
-        <div>
-          <dt>展示性达成度</dt>
-          <dd>
-            {format(score)}
-            {score != null && <small>%</small>}
-          </dd>
+      <form onSubmit={save}>
+        <div
+          className="physical-champion-table-wrap"
+          role="region"
+          aria-label="冠军模型和团队平均数值，可横向滚动"
+          tabIndex={0}
+        >
+          <table className="physical-champion-table">
+            <caption className="visually-hidden">
+              冠军模型由教练维护，团队平均由系统根据同协议有效测试自动计算，缺测显示“—”。
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">模型</th>
+                {rows.map(({ reference }) => (
+                  <th key={reference.id} scope="col">
+                    {reference.label}
+                    <small>{reference.unit}</small>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">冠军模型</th>
+                {rows.map(({ reference }) => (
+                  <td key={reference.id}>
+                    {editing ? (
+                      <input
+                        aria-label={`冠军模型 · ${reference.label}（${reference.unit}）`}
+                        type="number"
+                        step="any"
+                        min="0"
+                        required
+                        disabled={saving}
+                        value={values[reference.id] ?? ''}
+                        onChange={(event) =>
+                          setValues((current) => ({
+                            ...current,
+                            [reference.id]: event.target.value,
+                          }))
+                        }
+                      />
+                    ) : (
+                      format(reference.value)
+                    )}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <th scope="row">团队平均</th>
+                {rows.map(({ reference, team }) => (
+                  <td key={reference.id}>{format(team?.value)}</td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <div>
-          <dt>可比维度</dt>
-          <dd>
-            {coverage}
-            <small> / {rows.length} 项</small>
-          </dd>
-        </div>
-        <div>
-          <dt>可比人数</dt>
-          <dd>
-            {sampleCount}
-            <small> 人</small>
-          </dd>
-        </div>
-      </dl>
-      <p className="physical-champion-note">
-        冠军参考为 100%；{estimated ? '含估算参考，不参与正式评分。' : '仅对比同协议有效测试。'}
-        缺测显示“—”。
-      </p>
+        {canEdit && (
+          <div className="physical-champion-actions">
+            {editing ? (
+              <>
+                <button type="submit" disabled={saving}>
+                  {saving ? '保存中…' : '保存'}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setEditing(false);
+                    setError('');
+                  }}
+                >
+                  取消
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setValues(
+                    Object.fromEntries(group.references.map((ref) => [ref.id, String(ref.value)]))
+                  );
+                  setError('');
+                  setEditing(true);
+                }}
+              >
+                修改冠军模型
+              </button>
+            )}
+          </div>
+        )}
+        {error && (
+          <p role="alert" className="physical-champion-note">
+            {error}
+          </p>
+        )}
+      </form>
       <div className="physical-champion-chart" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart accessibilityLayer={false} data={radar} outerRadius="70%">
@@ -87,7 +178,7 @@ export function PhysicalChampionOverview({ group, athleteId, scopeName }: Props)
             <Tooltip />
             <Legend />
             <Radar
-              name="冠军参考"
+              name="冠军模型"
               dataKey="champion"
               stroke="var(--amber)"
               fill="var(--amber)"
@@ -103,63 +194,12 @@ export function PhysicalChampionOverview({ group, athleteId, scopeName }: Props)
               fillOpacity={0.12}
               isAnimationActive={false}
             />
-            {athleteId && (
-              <Radar
-                name={scopeName}
-                dataKey="personal"
-                stroke="var(--signal)"
-                fill="var(--signal)"
-                fillOpacity={0.1}
-                isAnimationActive={false}
-              />
-            )}
           </RadarChart>
         </ResponsiveContainer>
       </div>
-      {!coverage && (
-        <p className="physical-champion-note" role="status">
-          暂无同协议可比成绩，待采集。
-        </p>
-      )}
-      <details className="physical-champion-data">
-        <summary>查看指标数据</summary>
-        <div
-          className="physical-champion-table-wrap"
-          role="region"
-          aria-label="冠军模型指标数据，可横向滚动"
-          tabIndex={0}
-        >
-          <table className="physical-champion-table">
-            <caption>{scopeName}与冠军参考；缺测不补零。</caption>
-            <thead>
-              <tr>
-                <th scope="col">指标</th>
-                <th scope="col">当前值</th>
-                <th scope="col">参考值</th>
-                <th scope="col">达成度</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={row.reference.id}>
-                  <th scope="row">
-                    {row.reference.label}（{row.reference.unit}）
-                  </th>
-                  <td>{format(current[index]?.value)}</td>
-                  <td>
-                    {format(current[index]?.appliedReference?.value ?? row.reference.value)}
-                    {row.reference.sourceType === 'estimated' && '（估算）'}
-                  </td>
-                  <td>
-                    {format(current[index]?.achievedPercent)}
-                    {current[index]?.achievedPercent != null && '%'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+      <p className="physical-champion-note">
+        雷达图以冠军值为100%，团队平均自动计算。{estimated && '估算参考，不参与正式评分。'}
+      </p>
     </>
   );
 }

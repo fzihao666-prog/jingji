@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isProject } from './projects.js';
 import { buildRadarComparison } from './athlete-radar-model.js';
 
 // 只选择现有测试事实支持的指标；测试协议必须与参考协议相同。
@@ -268,3 +269,20 @@ export const physicalReferenceDraftSchema = z
     message: '估算来源性质必须明确',
   });
 export type PhysicalReferenceDraft = z.infer<typeof physicalReferenceDraftSchema>;
+
+/** 快捷编辑只接收冠军数值，不接收团队均值或适用条件。 */
+export const physicalChampionValuesSchema = z.strictObject({
+  project: z.string().max(80).refine(isProject),
+  values: z
+    .array(
+      z.strictObject({
+        id: z.number().int().positive(),
+        expectedRevision: z.number().int().nonnegative(),
+        value: z.number().finite().positive(),
+      })
+    )
+    .min(1)
+    .max(64)
+    .refine((values) => new Set(values.map((item) => item.id)).size === values.length),
+});
+export type PhysicalChampionValuesInput = z.infer<typeof physicalChampionValuesSchema>;

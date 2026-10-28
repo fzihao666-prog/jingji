@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { canManageGlobalPhysicalReferences } from './physical-champion-policy.js';
+import {
+  canEditPhysicalChampionValues,
+  canManageGlobalPhysicalReferences,
+} from './physical-champion-policy.js';
 
 const globalPermissions = {
   projects: ['*'],
@@ -58,5 +61,17 @@ describe('冠军参考全局管理权限', () => {
     expect(canManageGlobalPhysicalReferences('DMD', { projects: [], areas: [], teams: [] })).toBe(
       false
     );
+  });
+});
+
+describe('冠军数值快捷编辑权限', () => {
+  it.each(['SCC', 'REG', 'TD', 'DMD'])('%s仅可维护授权项目冠军值', (role) => {
+    expect(canEditPhysicalChampionValues(role, { projects: ['ROWING'] }, 'ROWING')).toBe(true);
+    expect(canEditPhysicalChampionValues(role, { projects: ['ROWING'] }, 'VOLLEYBALL')).toBe(false);
+    expect(canEditPhysicalChampionValues(role, { projects: [] }, 'ROWING')).toBe(false);
+  });
+  it('运动员和未知角色即使具有项目通配也只读', () => {
+    expect(canEditPhysicalChampionValues('ATL', { projects: ['*'] }, 'ROWING')).toBe(false);
+    expect(canEditPhysicalChampionValues('COACH', { projects: ['*'] }, 'ROWING')).toBe(false);
   });
 });
