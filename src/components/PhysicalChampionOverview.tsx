@@ -150,7 +150,9 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
             ) : (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(event) => {
+                  // 切换为提交按钮前取消本次点击的默认行为，避免立即提交并退出编辑。
+                  event.preventDefault();
                   setValues(
                     Object.fromEntries(group.references.map((ref) => [ref.id, String(ref.value)]))
                   );
