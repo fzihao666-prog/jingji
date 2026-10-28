@@ -51,3 +51,12 @@ it('骑行交叉训练即使填写水上同名强度，也不能归入水上训�
   expect(record.trainingBreakdown.waterMinutes).toBe(0);
   expect(record.trainingBreakdown.waterDistanceByZone.U2).toBe(0);
 });
+it('赛艇有效FMS测量进入总览，真实零分不丢失', async () => {
+  const id = Number(db.prepare(`INSERT INTO test_sessions(athlete_id,test_date,test_type,project_code,project_status)
+    VALUES(9101,'2026-01-02','FMS测试','ROWING','confirmed')`).run().lastInsertRowid);
+  db.prepare(`INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit)
+    VALUES(?,'fms_deep_squat',0,'分')`).run(id);
+  expect((await overview()).measurements).toEqual(expect.arrayContaining([
+    expect.objectContaining({ code: 'fms_deep_squat', value: 0, sampleCount: 1 }),
+  ]));
+});
