@@ -25,6 +25,7 @@ import {
   projectTrainingContentCategory,
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
+import { ContentState } from './PageLayout';
 import './EChart.css';
 
 const colors = [
@@ -1190,57 +1191,68 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   return (
     <div className="fms-personal-layout">
       <div className="fms-personal-chart">
-        {isPlaceholder && <TrainingAnalyticsEmpty text="暂无FMS测试数据" />}
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart
-            data={chartData}
-            outerRadius="72%"
-            margin={{ top: 28, right: 42, bottom: 28, left: 42 }}
-          >
-            <PolarGrid stroke="#d9e5e7" strokeWidth={1} />
+        {isPlaceholder ? (
+          <ContentState
+            kind="empty"
+            title="暂无FMS测试数据"
+            description="录入七项筛查后展示动作雷达与评分。"
+          />
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart
+                data={chartData}
+                outerRadius="72%"
+                margin={{ top: 28, right: 42, bottom: 28, left: 42 }}
+              >
+                <PolarGrid stroke="#d9e5e7" strokeWidth={1} />
 
-            <PolarAngleAxis
-              dataKey="name"
-              tick={{
-                fontSize: 11,
-                fill: '#36545d',
-                fontWeight: 600,
-              }}
-            />
+                <PolarAngleAxis
+                  dataKey="name"
+                  tick={{
+                    fontSize: 11,
+                    fill: '#36545d',
+                    fontWeight: 600,
+                  }}
+                />
 
-            <PolarRadiusAxis
-              domain={[0, 3]}
-              tickCount={4}
-              axisLine={false}
-              tick={{
-                fontSize: 9,
-                fill: '#8aa0a6',
-              }}
-            />
+                <PolarRadiusAxis
+                  domain={[0, 3]}
+                  tickCount={4}
+                  axisLine={false}
+                  tick={{
+                    fontSize: 9,
+                    fill: '#8aa0a6',
+                  }}
+                />
 
-            <Tooltip formatter={(value, name) => [`${formatNumber(Number(value), 1)} 分`, name]} />
+                <Tooltip
+                  formatter={(value, name) => [`${formatNumber(Number(value), 1)} 分`, name]}
+                />
 
-            <Radar
-              dataKey="score"
-              name="个人得分"
-              stroke="#178e87"
-              strokeWidth={2.4}
-              fill="#178e87"
-              fillOpacity={0.18}
-              dot={{
-                r: 3.5,
-                fill: '#ffffff',
-                stroke: '#178e87',
-                strokeWidth: 2,
-              }}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
+                <Radar
+                  dataKey="score"
+                  name="个人得分"
+                  stroke="#178e87"
+                  strokeWidth={2.4}
+                  fill="#178e87"
+                  fillOpacity={0.18}
+                  dot={{
+                    r: 3.5,
+                    fill: '#ffffff',
+                    stroke: '#178e87',
+                    strokeWidth: 2,
+                  }}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
 
-        <div className="fms-radar-center">
-          <span>FMS</span>
-          <strong>{total === null ? '—' : formatNumber(total, 1)}</strong>
-        </div>
+            <div className="fms-radar-center">
+              <span>FMS</span>
+              <strong>{total === null ? '—' : formatNumber(total, 1)}</strong>
+            </div>
+          </>
+        )}
       </div>
       <aside className="fms-personal-summary">
         <article>

@@ -1243,7 +1243,11 @@ function AerobicEndurance({
             <h4>有氧能力趋势</h4>
             <span>暂无测试数据</span>
           </header>
-          <EChart option={{}} label="有氧能力趋势" isPlaceholder />
+          <ContentState
+            kind="empty"
+            title="暂无有氧耐力测试数据"
+            description="调整日期范围或录入有效测试后展示趋势。"
+          />
         </section>
       )}
     </AppCard>

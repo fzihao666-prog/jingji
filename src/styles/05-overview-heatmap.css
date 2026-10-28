@@ -660,12 +660,12 @@
 }
 
 .fms-personal-layout {
-  min-height: 330px;
-  padding: 14px 16px 12px;
+  min-width: 0;
+  padding: 18px 20px;
   display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: minmax(220px, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
 }
 
 .personal-test-section {
@@ -689,19 +689,41 @@
 
 .aerobic-endurance-card {
   grid-column: 2;
-  display: flex;
-  flex-direction: column;
 }
 
 .personal-fms-card,
 .aerobic-endurance-card {
-  height: 100%;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.functional-test-grid > :is(.personal-fms-card, .aerobic-endurance-card) {
+  padding: 0;
+}
+
+.personal-fms-card > .personal-analysis-card-heading,
+.aerobic-endurance-card > .personal-analysis-card-heading {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  padding-block: 16px;
+}
+
+.personal-fms-card > .analysis-method-note {
+  margin: 0;
+  padding: 0 20px 18px;
+}
+
+.aerobic-endurance-card > .aerobic-trend {
+  padding: 18px 20px;
 }
 
 .aerobic-endurance-content {
+  min-width: 0;
   display: grid;
-  gap: 13px;
-  padding: 14px 16px 16px;
+  gap: 18px;
+  padding: 18px 20px;
 }
 
 .aerobic-metric-grid {
@@ -733,17 +755,17 @@
 
 .aerobic-metric-grid article > span,
 .aerobic-recent-test > span {
+  min-width: 0;
   display: block;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: #536a71;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .aerobic-metric-grid article > strong {
+  overflow-wrap: anywhere;
   display: block;
   margin-top: 4px;
   color: #173a43;
@@ -793,6 +815,8 @@
 
 .aerobic-trend > header {
   display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
@@ -810,12 +834,12 @@
 }
 
 .aerobic-trend .app-echart {
-  --chart-height: 128px;
+  --chart-height: 220px;
 }
 
 .aerobic-recent-test {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   column-gap: 8px;
   align-items: baseline;
   padding-top: 10px;
@@ -823,6 +847,8 @@
 }
 
 .aerobic-recent-test > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   overflow: hidden;
   color: #294d55;
   font-size: 10px;
@@ -1015,8 +1041,18 @@
 
 .fms-personal-chart {
   position: relative;
-  min-height: 225px;
+  min-width: 0;
+  height: 280px;
   width: 100%;
+}
+
+.fms-personal-chart > .app-content-state {
+  min-height: 0;
+  height: 100%;
+}
+
+.aerobic-trend > .app-content-state {
+  min-height: 220px;
 }
 
 .fms-radar-center {
@@ -1047,12 +1083,13 @@
 
 .fms-personal-summary {
   display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.6fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
   gap: 10px;
   align-items: stretch;
 }
 
 .fms-personal-summary article {
+  min-width: 0;
   padding: 14px 16px;
   border-radius: 12px;
   color: #e1f1ef;
@@ -1083,12 +1120,16 @@
 }
 
 .fms-personal-summary > div {
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
 .fms-personal-summary p {
+  min-width: 0;
+  align-content: start;
+  overflow-wrap: anywhere;
   margin: 0;
   padding: 12px 13px;
   border: 1px solid #dfebec;
@@ -1096,6 +1137,29 @@
   display: grid;
   gap: 4px;
   background: #f7fbfb;
+}
+
+.fms-personal-summary > div > p:only-child {
+  grid-column: 1 / -1;
+}
+
+@container (width <= 420px) {
+  .fms-personal-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aerobic-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .aerobic-metric-grid article:nth-child(n) {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .aerobic-metric-grid article:last-child {
+    border-bottom: 0;
+  }
 }
 
 .fms-personal-summary b {

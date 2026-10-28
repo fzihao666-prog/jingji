@@ -182,3 +182,34 @@ it.each(['ROWING','VOLLEYBALL','CYCLING_ROAD'])('%s占比图例不显示其他�
  if(project==='CYCLING_ROAD'){expect(html).not.toContain('排球技术');expect(html).not.toContain('水上');}
  if(project==='ROWING'){expect(html).toContain('骑行');expect(html).not.toContain('排球技术');}
 });
+
+it('FMS缺测仅显示独立空状态，不把满高提示和雷达叠放，也不伪造零分', () => {
+  const html = renderToStaticMarkup(createElement(FmsPersonalChart, { measurements: [] }));
+  expect(html).toContain('暂无FMS测试数据');
+  expect(html).toContain('录入七项筛查后展示动作雷达与评分');
+  expect(html).not.toContain('fms-radar-center');
+  expect(html).not.toContain('training-analytics-empty');
+  expect(html).toContain('已完成 0/7 项筛查');
+});
+it('FMS真实零分仍显示评分与雷达，不误判为空状态', () => {
+  const measurement: import('../types').OverviewMeasurement = {
+    code: 'fms_deep_squat',
+    label: '深蹲',
+    domain: 'fms',
+    value: 0,
+    target: 2,
+    previous: null,
+    changePct: null,
+    unit: '分',
+    quality: 'valid',
+    source: 'manual',
+    sampleCount: 1,
+    isDemo: false,
+  };
+  const html = renderToStaticMarkup(
+    createElement(FmsPersonalChart, { measurements: [measurement] })
+  );
+  expect(html).not.toContain('暂无FMS测试数据');
+  expect(html).toContain('fms-radar-center');
+  expect(html).toContain('已完成 1/7 项筛查');
+});
