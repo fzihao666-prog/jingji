@@ -1663,3 +1663,69 @@
     gap: 4px;
   }
 }
+
+/* 体能指标与图形内部统一层级，不改变计算或数据范围。 */
+.strength-dashboard-page .strength-metric-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.strength-dashboard-page .strength-metric-icon {
+  display: inline-flex;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+  color: var(--teal);
+}
+
+.strength-dashboard-page .strength-metric-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
+}
+
+.strength-dashboard-page .physical-core-metrics strong {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: clamp(24px, 2.2vw, 32px);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.strength-dashboard-page .physical-core-metrics strong small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.strength-dashboard-page .physical-radar i,
+.strength-dashboard-page .physical-structure-stack {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.strength-dashboard-page .physical-ability-profile aside {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.strength-dashboard-page .physical-chart-canvas .recharts-legend-item {
+  margin-right: 16px;
+}
+
+.strength-dashboard-page .recharts-tooltip-label {
+  margin-bottom: 6px;
+  font-weight: 700;
+}

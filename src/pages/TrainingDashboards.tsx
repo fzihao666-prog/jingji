@@ -1,6 +1,6 @@
 import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import { StrengthSessionAnalysis, strengthSessionSummary } from '../components/StrengthSessionAnalysis';
-import { Activity } from 'lucide-react';
+import { Activity, Clock3, Dumbbell, Gauge, Users, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
+  Legend,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -40,6 +41,12 @@ import {
   inferStrengthContentAnalysisCategory,
 } from '../../shared/strength-training';
 import '../pages/SpecialTrainingPage.css';
+
+const strengthTooltipStyle = {
+  borderRadius: 12, border: '1px solid var(--line)', padding: '12px 16px',
+  background: 'var(--surface, white)', color: 'var(--ink)', fontSize: 12,
+  boxShadow: '0 8px 24px rgb(18 61 74 / 12%)', lineHeight: 1.8,
+};
 
 type Navigation = (page: 'special-schedule' | 'strength-plan') => void;
 
@@ -138,9 +145,9 @@ function PhysicalCoreMetrics({
   // 测试结果在下方测试模块展示，顶部集中呈现训练投入。
   return (
     <section className="training-dashboard-metrics physical-core-metrics">
-      {cards.map(([label, value, unit, note]) => (
+      {cards.map(([label, value, unit, note], index) => (
         <AppCard key={label} variant="compact" className="training-dashboard-metric">
-          <span>{label}</span>
+          <div className="strength-metric-heading"><span className="strength-metric-icon" aria-hidden="true">{[<Clock3 key="duration" />, <Dumbbell key="sessions" />, <Zap key="load" />, <Gauge key="rpe" />, <Users key="people" />][index]}</span><span>{label}</span></div>
           <strong>
             {value}
             <small>{unit}</small>
@@ -276,10 +283,10 @@ function MetricTrend({
         {(
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}>
-              <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+              <CartesianGrid stroke="var(--line)" strokeDasharray="3 6" vertical={false} />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 10, fill: '#62767d' }}
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
                 axisLine={false}
                 tickLine={false}
               />
@@ -287,12 +294,12 @@ function MetricTrend({
                 allowDataOverflow={isPlaceholder}
                 domain={isPlaceholder ? [0, 1] : undefined}
                 ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
-                tick={{ fontSize: 10, fill: '#62767d' }}
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
                 axisLine={false}
                 tickLine={false}
                 unit={definition?.unit}
               />
-              <Tooltip
+              <Tooltip contentStyle={strengthTooltipStyle}
                 labelFormatter={(label) => `${label}`}
                 formatter={(value) => [
                   `${formatNumber(Number(value), 1)} ${definition?.unit || ''}`,
@@ -309,8 +316,9 @@ function MetricTrend({
                 type="monotone"
                 dataKey="value"
                 name={definition?.label || '测试值'}
-                stroke="#0d9488"
-                strokeWidth={2.6}
+                stroke="var(--teal)"
+                strokeWidth={3}
+                activeDot={{ r: 6, strokeWidth: 3 }}
                 dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
               />
             </ComposedChart>
@@ -402,10 +410,10 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
       {isPlaceholder && <span className="app-chart-example">暂无数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}>
-          <CartesianGrid yAxisId="duration" stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+          <CartesianGrid yAxisId="duration" stroke="var(--line)" strokeDasharray="3 6" vertical={false} />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 10, fill: '#62767d' }}
+            tick={{ fontSize: 11, fill: 'var(--muted)' }}
             axisLine={false}
             tickLine={false}
           />
@@ -414,7 +422,7 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             domain={isPlaceholder ? [0, 1] : undefined}
             ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="duration"
-            tick={{ fontSize: 10, fill: '#62767d' }}
+            tick={{ fontSize: 11, fill: 'var(--muted)' }}
             axisLine={false}
             tickLine={false}
             unit=" min"
@@ -425,27 +433,31 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="load"
             orientation="right"
-            tick={{ fontSize: 10, fill: '#62767d' }}
+            tick={{ fontSize: 11, fill: 'var(--muted)' }}
             axisLine={false}
             tickLine={false}
             unit=" AU"
           />
-          <Tooltip labelFormatter={(label) => `${label}`} />
+          <Legend verticalAlign="top" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingBottom: 12 }} />
+          <Tooltip contentStyle={strengthTooltipStyle} cursor={{ fill: 'var(--line)', fillOpacity: 0.25 }} labelFormatter={(label) => `${label}`} />
           <Bar
             yAxisId="duration"
             dataKey="duration"
             name="训练时长 min"
-            fill="#70b9b2"
-            radius={[4, 4, 0, 0]}
-            maxBarSize={32}
+            fill="var(--teal)"
+            fillOpacity={0.75}
+            radius={[6, 6, 0, 0]}
+            maxBarSize={28}
           />
           <Line
             yAxisId="load"
             type="monotone"
             dataKey="load"
             name="SRPE 训练负荷 AU"
-            stroke="#f59e0b"
-            strokeWidth={2.5}
+            stroke="var(--amber)"
+            strokeWidth={3}
+            dot={{ r: 3, fill: 'var(--surface, white)', strokeWidth: 2 }}
+            activeDot={{ r: 6 }}
             connectNulls={false}
           />
         </ComposedChart>
