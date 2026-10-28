@@ -273,3 +273,15 @@
   line-height: 1.6;
 }
 
+/* 空状态提示不参与地图和详情的两列排布。 */
+.birthplace-map-stage {
+  position: relative;
+}
+
+.birthplace-map-empty-note {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  margin: 0;
+}

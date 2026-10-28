@@ -1476,8 +1476,10 @@ export function BirthplaceMapOverview({
       className="birthplace-map-visual"
       aria-label={individual ? '个人代表和输送单位省份地图' : '队伍代表和输送单位省份分布地图'}
     >
-      {!available.length && <p className="app-chart-example">示例图形 · 暂无真实生源数据</p>}
       <div className="birthplace-map-stage">
+        {!available.length && (
+          <p className="app-chart-example birthplace-map-empty-note">暂无真实生源数据</p>
+        )}
         <svg viewBox="0 0 560 410" role="img" aria-label="中国省级代表和输送单位分布图">
           <title>
             {individual ? '个人代表和输送单位所在省份' : '队伍运动员代表和输送单位省份分布'}
