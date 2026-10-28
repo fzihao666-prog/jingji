@@ -163,8 +163,8 @@
           <text class="radar-legend-item reference">参考标准 100%</text>
           <text class="radar-legend-item scale">上限 {{item.maxValue}}%</text>
         </view>
-        <canvas wx:if="{{item.hasChart}}" type="2d" id="{{item.canvasId}}" canvas-id="{{item.canvasId}}" class="radar-canvas" aria-label="{{item.title}}：个人达成度与参考标准对照雷达图，详细数值见下方列表"></canvas>
-        <view wx:else class="profile-radar-empty"><template is="training-state" data="{{loading, error: error || radarError, message: item.emptyMessage, chart: true}}" /></view>
+        <view class="profile-radar-stage"><canvas type="2d" id="{{item.canvasId}}" canvas-id="{{item.canvasId}}" class="radar-canvas" aria-label="{{item.title}}：个人达成度与参考标准对照雷达图，详细数值见下方列表"></canvas>
+        <view wx:if="{{!item.hasChart || radarError || error}}" class="profile-radar-empty"><template is="training-state" data="{{loading, error: error || radarError, message: item.emptyMessage, chart: false}}" /></view></view>
         <view class="card-body">
           <view wx:for="{{item.dimensions}}" wx:for-item="dim" wx:key="key" class="radar-dim">
             <text class="card-label">{{dim.label}}</text>

@@ -64,6 +64,10 @@ const wxStub = {
   switchTab: (options) => tabs.push(options.url),
   navigateTo: () => {},
   nextTick: (fn) => fn(),
+  createSelectorQuery: () => {
+    const query = { in: () => query, select: () => query, fields: () => query, exec: (callback) => callback([]) };
+    return query;
+  },
 };
 // 页面与 page-scope 都直接跑真实实现，只替换网络与小程序全局对象。
 let activeApp = null;

@@ -23,7 +23,6 @@ import {
 import type { TrainingRecord } from '../types';
 import type { DailyPerformancePoint, RadarDimension } from '../overview-analytics';
 import { formatNumber, percentage } from '../utils';
-import { chartDisplay, placeholderTrend } from './chart-placeholder';
 import './EChart.css';
 
 const chartColors = ['#176f7f', '#22a99a', '#71c5aa', '#e5a72e', '#e36146', '#6a7285', '#8b6fb0'];
@@ -41,13 +40,10 @@ export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
     byDate.set(record.date, entry);
   }
   const data = [...byDate.values()];
-  const display = chartDisplay(data, placeholderTrend.map((value, index) => ({
-    date: `示例${index + 1}`, srpe: value * 5, duration: value * 2,
-  })));
+  const display = { data: [...(data.length ? [...data] : [{ date: '—', srpe: null, duration: null }])], isPlaceholder: data.length === 0 };
 
   return (
     <div className="chart-wrap" aria-label="每日训练负荷趋势图">
-      {display.isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={display.data} margin={{ top: 8, right: 6, left: 0, bottom: 0 }}>
           <defs>
@@ -64,9 +60,9 @@ export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
             tickLine={false}
             minTickGap={24}
           />
-          <YAxis tick={{ fill: '#6d8088', fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis allowDataOverflow={display.isPlaceholder} domain={display.isPlaceholder ? [0, 1] : undefined} ticks={display.isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined} tick={{ fill: '#6d8088', fontSize: 11 }} axisLine={false} tickLine={false} />
           <Tooltip
-            labelFormatter={(label) => `${display.isPlaceholder ? '示例数据，仅用于展示图表效果 · ' : ''}${label}`}
+            labelFormatter={(label) => String(label)}
             contentStyle={{
               borderRadius: 10,
               border: '1px solid #d7e4e7',
@@ -83,7 +79,7 @@ export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
           />
         </AreaChart>
       </ResponsiveContainer>
-      {display.isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</p>}
+      {display.isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据</p>}
     </div>
   );
 }
@@ -174,12 +170,12 @@ export function StructureChart({ records }: { records: TrainingRecord[] }) {
     { key: 'land' as const, name: '陆上训练', value: primary.land, color: '#e5a72e' },
   ];
   const total = primaryMeta.reduce((sum, item) => sum + item.value, 0);
-  const chartData = total
+  const chartData = [...(total
     ? primaryMeta.filter((item) => item.value > 0).map((item) => ({ ...item, ratio: percentage(item.value, total) }))
-    : primaryMeta.map((item, index) => ({ ...item, value: [52, 28, 20][index], ratio: [52, 28, 20][index] }));
+    : [])];
   const purposeEntries: Array<[string, number]> = total
     ? [...purposes.entries()]
-    : [['技术训练', 45], ['耐力训练', 35], ['恢复训练', 20]];
+    : [];
   const purposeData = purposeEntries
     .map(([name, value]) => ({ name, value, ratio: percentage(value, total || 100) }))
     .filter((item) => item.value > 0)
@@ -195,11 +191,11 @@ export function StructureChart({ records }: { records: TrainingRecord[] }) {
 
   return (
     <div className="structure-professional" aria-label="训练环境与训练目的两级结构分析">
-      {!total && <span className="app-chart-example">示例数据</span>}
       <div className="structure-primary">
         <div className="structure-donut">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
+              {!total && <Pie data={[{ value: 1 }]} dataKey="value" innerRadius={42} outerRadius={59} fill="#e4ecee" stroke="none" isAnimationActive={false} tooltipType="none" />}
               <Pie
                 data={chartData}
                 dataKey="value"
@@ -213,7 +209,7 @@ export function StructureChart({ records }: { records: TrainingRecord[] }) {
                   <Cell key={item.key} fill={item.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value, name) => [total ? `${formatNumber(Number(value))} 分钟` : '示例数据，仅用于展示图表效果', name]} />
+              <Tooltip formatter={(value, name) => [`${formatNumber(Number(value))} 分钟`, name]} />
             </PieChart>
           </ResponsiveContainer>
           <div className="structure-donut-center">
@@ -263,7 +259,7 @@ export function StructureChart({ records }: { records: TrainingRecord[] }) {
       <div className="structure-purpose">
         <div className="structure-section-title">
           <strong>训练目的构成</strong>
-          <span>{total ? `TOP ${purposeData.length}` : '示例数据'}</span>
+          <span>{total ? `TOP ${purposeData.length}` : '暂无数据'}</span>
         </div>
         {purposeData.map((item, index) => (
           <div className="structure-purpose-row" key={item.name}>
@@ -286,7 +282,7 @@ export function StructureChart({ records }: { records: TrainingRecord[] }) {
         {landTotal > 0 && landFocus
           ? `陆上训练重点为${landStructureLabels[landFocus[0]]}，占陆上时长${percentage(landFocus[1], landTotal)}%。`
           : '当前未记录陆上训练细分。'}
-      </p> : <p className="structure-insight">暂无真实训练结构数据 · 当前图形仅用于展示效果。</p>}
+      </p> : <p className="structure-insight">暂无真实训练结构数据</p>}
     </div>
   );
 }
@@ -306,13 +302,10 @@ export function IntensityChart({ records }: { records: TrainingRecord[] }) {
     minutes: grouped.get(zone) || 0,
     fill: chartColors[index],
   }));
-  const isPlaceholder = !data.some((item) => item.minutes > 0);
-  const displayData = isPlaceholder
-    ? data.map((item, index) => ({ ...item, minutes: [42, 27, 19, 12, 9, 6, 4][index] }))
-    : data;
+  const isPlaceholder = !records.some((record) => order.includes(record.intensityZone));
+  const displayData = data;
   return (
     <div className="chart-wrap compact" aria-label="训练强度分布图">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={displayData} margin={{ top: 8, right: 2, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
@@ -322,8 +315,8 @@ export function IntensityChart({ records }: { records: TrainingRecord[] }) {
             axisLine={false}
             tickLine={false}
           />
-          <YAxis tick={{ fill: '#6d8088', fontSize: 11 }} axisLine={false} tickLine={false} />
-          <Tooltip formatter={(value) => isPlaceholder ? '示例数据，仅用于展示图表效果' : `${formatNumber(Number(value))} 分钟`} />
+          <YAxis allowDataOverflow={isPlaceholder} domain={isPlaceholder ? [0, 1] : undefined} ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined} tick={{ fill: '#6d8088', fontSize: 11 }} axisLine={false} tickLine={false} />
+          <Tooltip formatter={(value) => `${formatNumber(Number(value))} 分钟`} />
           <Bar dataKey="minutes" name="训练时间" radius={[5, 5, 0, 0]}>
             {displayData.map((entry) => (
               <Cell key={entry.zone} fill={entry.fill} />
@@ -331,7 +324,7 @@ export function IntensityChart({ records }: { records: TrainingRecord[] }) {
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实强度数据 · 当前图表为示例效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实强度数据</p>}
     </div>
   );
 }
@@ -361,16 +354,12 @@ export function WaterIntensityLoadChart({ records }: { records: TrainingRecord[]
       pace: pacePer500m(minutes, distance),
     };
   });
-  const isPlaceholder = !data.some((item) => item.distance > 0 || item.minutes > 0);
-  const displayData = isPlaceholder ? data.map((item, index) => ({ ...item,
-    distance: [4.2, 3.1, 2.4, 1.5, 1.1, 0.8, 0.5][index],
-    minutes: [42, 36, 29, 22, 18, 12, 8][index],
-  })) : data;
+  const isPlaceholder = !records.some((record) => zones.some((zone) => record.trainingBreakdown?.waterDistanceByZone?.[zone] != null || record.trainingBreakdown?.waterTimeByZone?.[zone] != null));
+  const displayData = data;
   const maxDistance = Math.max(...displayData.map((item) => item.distance), 1);
   const maxMinutes = Math.max(...displayData.map((item) => item.minutes), 1);
   return (
     <div className="water-zone-analysis" aria-label="水上各强度距离与时间分析">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <div className="water-zone-head">
         <span>强度</span>
         <span>专项距离</span>
@@ -384,11 +373,11 @@ export function WaterIntensityLoadChart({ records }: { records: TrainingRecord[]
             <i
               style={{ width: `${(item.distance / maxDistance) * 100}%`, background: item.color }}
             />
-            <span>{isPlaceholder ? '示例' : `${formatNumber(item.distance, 1)} km`}</span>
+            <span>{isPlaceholder ? '—' : `${formatNumber(item.distance, 1)} km`}</span>
           </div>
           <div className="water-zone-bar time">
             <i style={{ width: `${(item.minutes / maxMinutes) * 100}%`, background: item.color }} />
-            <span>{isPlaceholder ? '示例' : `${formatNumber(item.minutes)} min`}</span>
+            <span>{isPlaceholder ? '—' : `${formatNumber(item.minutes)} min`}</span>
           </div>
           <b>
             {isPlaceholder ? '—' : item.pace}
@@ -396,7 +385,7 @@ export function WaterIntensityLoadChart({ records }: { records: TrainingRecord[]
           </b>
         </div>
       ))}
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实水上强度数据 · 当前图形仅展示效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实水上强度数据</p>}
     </div>
   );
 }
@@ -408,17 +397,12 @@ export function ProfessionalLoadChart({
   data: DailyPerformancePoint[];
   team?: boolean;
 }) {
-  const display = chartDisplay(data.some((row) => row.srpe > 0 || row.smvl > 0) ? data : [], placeholderTrend.map((value, index) => ({
-    date: `sample-${index + 1}`, label: `示例${index + 1}`,
-    srpe: value * 5, smvl: value * 3, duration: 0, distance: 0,
-    rpe: null, sleep: null, fatigue: null, pulse: null, weight: null, participantCount: 0,
-  })));
+  const display = { data: [...(data.length ? [...data] : [{ label: '—', srpe: null, smvl: null }])], isPlaceholder: data.length === 0 };
   return (
     <div className="chart-wrap professional-load-chart" aria-label="每日SRPE与SMVL训练负荷响应图">
-      {display.isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={display.data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
+          <CartesianGrid yAxisId="load" stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="label"
             tick={{ fill: '#6d8088', fontSize: 10 }}
@@ -426,20 +410,20 @@ export function ProfessionalLoadChart({
             tickLine={false}
             minTickGap={24}
           />
-          <YAxis
+          <YAxis allowDataOverflow={display.isPlaceholder} domain={display.isPlaceholder ? [0, 1] : undefined} ticks={display.isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="load"
             tick={{ fill: '#6d8088', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
           />
-          <YAxis
+          <YAxis allowDataOverflow={display.isPlaceholder} domain={display.isPlaceholder ? [0, 1] : undefined} ticks={display.isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="smvl"
             orientation="right"
             tick={{ fill: '#d45d46', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip formatter={(value, name) => [display.isPlaceholder ? '示例数据，仅用于展示图表效果' : formatNumber(Number(value), 1), name]} />
+          <Tooltip formatter={(value, name) => [formatNumber(Number(value), 1), name]} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
           <Bar
             yAxisId="load"
@@ -457,11 +441,11 @@ export function ProfessionalLoadChart({
             stroke="#dc6049"
             strokeWidth={2.2}
             dot={{ r: 2.6 }}
-            connectNulls
+            connectNulls={false}
           />
         </ComposedChart>
       </ResponsiveContainer>
-      {display.isPlaceholder && <p className="app-chart-example-note">暂无真实训练负荷数据 · 当前图表为示例效果</p>}
+      {display.isPlaceholder && <p className="app-chart-example-note">暂无真实训练负荷数据</p>}
     </div>
   );
 }
@@ -469,13 +453,12 @@ export function ProfessionalLoadChart({
 export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
   const rated = data.filter((item) => item.score !== null).length;
   const isPlaceholder = rated === 0;
-  const chartData = isPlaceholder
+  const chartData = [...(isPlaceholder
     ? (data.length ? data : ['力量', '爆发', '耐力', '技术', '恢复', '稳定'].map((label, index) => ({ key: String(index), label, score: null, basis: '' })))
-      .map((item, index) => ({ ...item, score: [64, 72, 61, 76, 68, 70][index % 6] }))
-    : data;
+      .map((item) => ({ ...item, score: null }))
+    : data)];
   return (
     <div className="performance-radar-layout">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <div className="performance-radar-chart" aria-label="六维运动表现评分雷达图">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={chartData} outerRadius="70%">
@@ -490,7 +473,7 @@ export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
               tick={{ fill: '#829399', fontSize: 8 }}
               axisLine={false}
             />
-            <Tooltip formatter={(value) => isPlaceholder ? '示例数据，仅用于展示图表效果' : value === null ? '待采集' : `${value}分`} />
+            <Tooltip formatter={(value) => value === null ? '待采集' : `${value}分`} />
             <Radar
               dataKey="score"
               name="指标评分"
@@ -512,7 +495,7 @@ export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
           </div>
         ))}
       </div>
-      {isPlaceholder && <p className="app-chart-example-note">当前无真实评分 · 雷达轮廓仅供展示</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实评分</p>}
     </div>
   );
 }
@@ -531,12 +514,7 @@ export function StrengthChangeChart({
 }) {
   const comparable = data.filter((item) => item.change !== null);
   const isPlaceholder = data.length === 0;
-  const displayComparable = isPlaceholder
-    ? ['纵跳', '卧推', '卧拉', '深蹲'].map((label, index) => ({
-        key: `sample-${index}`, label, unit: '', current: 0, previous: null,
-        change: [4, 8, 6, 10][index],
-      }))
-    : comparable;
+  const displayComparable = [...(comparable.length ? comparable : [{ key: 'empty', label: '—', change: null, previous: null, current: null, unit: '' }])];
   if (!comparable.length && !isPlaceholder)
     return (
       <div className="single-test-metrics">
@@ -554,7 +532,6 @@ export function StrengthChangeChart({
     );
   return (
     <div className="chart-wrap" aria-label="力量与爆发指标前后测变化柱状图">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={displayComparable} margin={{ top: 18, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
@@ -564,7 +541,7 @@ export function StrengthChangeChart({
             axisLine={false}
             tickLine={false}
           />
-          <YAxis
+          <YAxis allowDataOverflow={isPlaceholder} domain={isPlaceholder ? [0, 1] : undefined} ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             unit="%"
             tick={{ fill: '#6d8088', fontSize: 10 }}
             axisLine={false}
@@ -572,7 +549,7 @@ export function StrengthChangeChart({
           />
           <Tooltip
             formatter={(value, _name, item) => [
-              isPlaceholder ? '示例数据，仅用于展示图表效果' : `${formatNumber(Number(value), 1)}%`,
+              `${formatNumber(Number(value), 1)}%`,
               isPlaceholder ? '' : `${item.payload.previous} → ${item.payload.current} ${item.payload.unit}`,
             ]}
           />
@@ -583,7 +560,7 @@ export function StrengthChangeChart({
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实力量测试 · 当前图表为示例效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实力量测试</p>}
     </div>
   );
 }
@@ -594,12 +571,9 @@ export function RelativeStrengthChart({
   data: Array<{ label: string; current: number; previous: number | null }>;
 }) {
   const isPlaceholder = data.length === 0;
-  const chartData = isPlaceholder
-    ? ['卧推', '卧拉', '深蹲'].map((label, index) => ({ label, previous: [0.8, 0.7, 1.2][index], current: [0.9, 0.85, 1.35][index] }))
-    : data;
+  const chartData = [...(data.length ? data : [{ label: '—', previous: null, current: null }])];
   return (
     <div className="chart-wrap" aria-label="相对力量倍体重对比图">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 10, right: 5, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#dce6e9" strokeDasharray="3 5" vertical={false} />
@@ -609,8 +583,8 @@ export function RelativeStrengthChart({
             axisLine={false}
             tickLine={false}
           />
-          <YAxis tick={{ fill: '#6d8088', fontSize: 10 }} axisLine={false} tickLine={false} />
-          <Tooltip formatter={(value) => isPlaceholder ? '示例数据，仅用于展示图表效果' : `${formatNumber(Number(value), 2)} 倍体重`} />
+          <YAxis allowDataOverflow={isPlaceholder} domain={isPlaceholder ? [0, 1] : undefined} ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined} tick={{ fill: '#6d8088', fontSize: 10 }} axisLine={false} tickLine={false} />
+          <Tooltip formatter={(value) => `${formatNumber(Number(value), 2)} 倍体重`} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
           <Bar
             dataKey="previous"
@@ -622,7 +596,7 @@ export function RelativeStrengthChart({
           <Bar dataKey="current" name="本次" fill="#168f8a" radius={[4, 4, 0, 0]} maxBarSize={30} />
         </BarChart>
       </ResponsiveContainer>
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实相对力量数据 · 当前图表为示例效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无真实相对力量数据</p>}
     </div>
   );
 }

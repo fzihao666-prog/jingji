@@ -208,7 +208,7 @@ describe('雷达模型视图', () => {
     ]
   };
 
-  it('有效维度不足三个不画多边形，上限按达成度抬升', () => {
+  it('部分维度保留真实点和缺口，上限按达成度抬升', () => {
     const view = radarGroupView(group, { title: '专项测试雷达', canvasId: 'radarSpecial' });
     expect(view.hasChart).toBe(true);
     expect(view.maxValue).toBe(140);
@@ -221,7 +221,7 @@ describe('雷达模型视图', () => {
       { dimensions: group.dimensions.slice(0, 2) },
       { title: '体能测试雷达', canvasId: 'radarPhysical' }
     );
-    expect(small.hasChart).toBe(false);
+    expect(small.hasChart).toBe(true);
   });
 
   it('空分组输出安全默认值', () => {

@@ -25,7 +25,6 @@ import {
   projectTrainingContentCategory,
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
-import { ContentState } from './PageLayout';
 import './EChart.css';
 
 const colors = [
@@ -115,7 +114,7 @@ export function TrainingVolumeChart({
     }));
   }, [data.days, effectiveGranularity]);
   const hasData = data.totalDurationMin !== null || data.totalDistanceKm !== null;
-  const displayChartData = chartData;
+  const displayChartData = [...(chartData.length ? chartData : [{ date: from, label: '—', durationMin: null, distanceKm: null, durationCount: 0, distanceCount: 0 }])];
   const xAxisTicks = useMemo(() => {
     const labels = displayChartData.map((row) => row.label);
     const maxTicks = chartWidth > 0 ? Math.max(2, Math.floor(chartWidth / 50)) : 7;
@@ -192,7 +191,7 @@ export function TrainingVolumeChart({
           onResize={(width) => setChartWidth((current) => (current === width ? current : width))}
         >
           <ComposedChart data={displayChartData} margin={{ top: 12, right: 12, left: -12, bottom: 0 }}>
-            <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+            <CartesianGrid yAxisId="time" stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
             <XAxis
               dataKey="label"
               ticks={xAxisTicks}
@@ -201,13 +200,13 @@ export function TrainingVolumeChart({
               axisLine={false}
               tickLine={false}
             />
-            <YAxis
+            <YAxis allowDataOverflow={!hasData} domain={!hasData ? [0, 1] : undefined} ticks={!hasData ? [0, 0.25, 0.5, 0.75, 1] : undefined}
               yAxisId="time"
               tick={{ fontSize: 9, fill: '#62767d' }}
               axisLine={false}
               tickLine={false}
             />
-            <YAxis
+            <YAxis allowDataOverflow={!hasData} domain={!hasData ? [0, 1] : undefined} ticks={!hasData ? [0, 0.25, 0.5, 0.75, 1] : undefined}
               yAxisId="distance"
               orientation="right"
               tick={{ fontSize: 9, fill: '#62767d' }}
@@ -298,10 +297,11 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
       {displayMetrics.length ? (
         <div
           className="physiology-heatmap-table"
-          style={{ '--physiology-days': days.length } as CSSProperties}
+          style={{ '--physiology-days': days.length || 7 } as CSSProperties}
         >
           <div className="physiology-heatmap-head">
             <span>指标</span>
+            {!days.length && Array.from({ length: 7 }, (_, index) => <span key={index}>—</span>)}
             {days.map((day) => (
               <span key={day.date}>{day.date.slice(5).replace('-', '/')}</span>
             ))}
@@ -309,6 +309,7 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
           {displayMetrics.map((item, metricIndex) => (
             <div className="physiology-heatmap-row" key={item.code}>
               <span>{item.label}</span>
+              {!item.days.length && Array.from({ length: 7 }, (_, index) => <span key={index} className="physiology-cell missing"><i /></span>)}
               {item.days.map((itemDay, dayIndex) => (
                 <button
                   key={itemDay.date}
@@ -326,7 +327,11 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
           ))}
         </div>
       ) : (
-        <TrainingAnalyticsEmpty text="暂无生理生化数据" />
+        <div className="physiology-heatmap-table" style={{ '--physiology-days': 7 } as CSSProperties} aria-label="生理生化监测网格，暂无数据">
+          <div className="physiology-heatmap-head"><span>指标</span>{Array.from({ length: 7 }, (_, index) => <span key={index}>—</span>)}</div>
+          <div className="physiology-heatmap-row"><span>待监测</span>{Array.from({ length: 7 }, (_, index) => <span key={index} className="physiology-cell missing"><i /></span>)}</div>
+          <TrainingAnalyticsEmpty text="暂无生理生化数据" />
+        </div>
       )}
       <div className="physiology-heatmap-legend">
         {Object.entries(physiologyStatusMeta)
@@ -525,7 +530,7 @@ export function TrainingVolumeDashboard({
                 <XAxis dataKey="date" minTickGap={24}
                   tickFormatter={(date) => String(date).slice(5).replace('-', '/')}
                   tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
-                <YAxis unit=" min" domain={[0, 'auto']}
+                <YAxis allowDataOverflow={!hasVolumeData} unit=" min" domain={[0, hasVolumeData ? 'auto' : 1]}
                   tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
                 <Tooltip content={({ active, label }) => {
                   const row = displayVolumeDays.find((item) => item.date === String(label));
@@ -583,7 +588,7 @@ export function TrainingVolumeDashboard({
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis
+                  <YAxis allowDataOverflow={!hasTrainingLoad} domain={!hasTrainingLoad ? [0, 1] : undefined} ticks={!hasTrainingLoad ? [0, 0.25, 0.5, 0.75, 1] : undefined}
                     label={{
                       value: 'sRPE（AU）',
                       angle: -90,
@@ -1191,13 +1196,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   return (
     <div className="fms-personal-layout">
       <div className="fms-personal-chart">
-        {isPlaceholder ? (
-          <ContentState
-            kind="empty"
-            title="暂无FMS测试数据"
-            description="录入七项筛查后展示动作雷达与评分。"
-          />
-        ) : (
+        {isPlaceholder && <p className="analysis-empty-note">暂无FMS测试数据</p>}
           <>
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart
@@ -1252,7 +1251,6 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
               <strong>{total === null ? '—' : formatNumber(total, 1)}</strong>
             </div>
           </>
-        )}
       </div>
       <aside className="fms-personal-summary">
         <article>

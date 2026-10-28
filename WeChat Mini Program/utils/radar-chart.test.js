@@ -104,3 +104,17 @@ describe('雷达图绘制', () => {
     expect(calls.map((entry) => entry[0])).not.toContain('arc');
   });
 });
+
+
+describe('雷达缺失与零值边界', () => {
+  it('部分缺失不闭合或填充为伪造面积，真实零值仍保留顶点', () => {
+    const layout = radarLayout({ size: 200 });
+    const axes = radarAxes(3, layout);
+    const points = radarSeriesPoints([0, null, 60], axes, layout);
+    expect(points[0]).toEqual({ x: layout.center, y: layout.center });
+    const { calls, ctx } = mockContext();
+    drawRadar(ctx, layout, axes, [{ points, fill: '#eee' }]);
+    expect(calls.filter(entry => entry[0] === 'closePath')).toHaveLength(layout.rings);
+    expect(calls.map(entry => entry[0])).not.toContain('fill');
+  });
+});

@@ -5,7 +5,7 @@ const { loadWithGuard } = require('../../utils/request-guard');
 const { showTrendModal, goToAthlete: navigateToAthlete } = require('../../utils/page-actions');
 const { shortDate, ageAt } = require('../../utils/date');
 const { number } = require('../../utils/format');
-const { completeRatioRows } = require('../../utils/chart-placeholder');
+const { completeRatioRows, INTENSITY_ZONE_NAMES } = require('../../utils/chart-placeholder');
 const { paginateList, PAGE_SIZE } = require('../../utils/pagination');
 const { injuryMetricView } = require('../../utils/injury-metric');
 const { buildSpecialTestView, EVENT_PREVIEW_COUNT } = require('../../utils/special-test-view');
@@ -49,7 +49,7 @@ function buildTrainingView(result, to, project) {
   // 强度保留服务端体系与分区标签；未填时长保持缺失，真实0保留。
   const intensityRows = training.intensity || [];
   const intensityTotal = intensityRows.reduce((sum, row) => sum + (Number.isFinite(row.durationMin) ? row.durationMin : 0), 0);
-  const intensity = withRatioColors(intensityRows.map((row, index) => {
+  const intensity = withRatioColors((intensityRows.length ? intensityRows : INTENSITY_ZONE_NAMES.map(name => ({ name, durationMin: null }))).map((row, index) => {
     const percentage = intensityTotal > 0 && Number.isFinite(row.durationMin) ? row.durationMin / intensityTotal * 100 : 0;
     return { ...row, key: `${row.name || 'unknown'}:${index}`, name: row.name || '未知体系 · 未填分区', value: row.durationMin == null ? '-- min' : `${number(row.durationMin)} min`, percentage: row.durationMin == null ? '--' : Math.round(percentage * 10) / 10, width: Math.max(0, Math.min(100, percentage)) };
   }));

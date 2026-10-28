@@ -9,7 +9,6 @@ import {
   YAxis,
 } from 'recharts';
 import type { StrengthTrainingSession } from '../types';
-import { chartDisplay, placeholderTrend } from './chart-placeholder';
 import './EChart.css';
 
 type Props = {
@@ -39,10 +38,7 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
       volume: Math.round(session.volume),
       rpe: sessionRpe(session),
     }));
-  const display = chartDisplay(data, placeholderTrend.map((value, index) => ({
-    id: -(index + 1), label: `示例${index + 1}`, session: '示例数据', volume: value * 20,
-    rpe: 4 + value / 25,
-  })));
+  const display = { data: [...(data.length ? [...data] : [{ label: '—', volume: null, rpe: null }])], isPlaceholder: data.length === 0 };
 
   return (
     <section className="strength-load-visual" aria-label="训练负荷趋势">
@@ -64,10 +60,9 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
         </div>
       </header>
       <div className="strength-load-chart">
-        {display.isPlaceholder && <span className="app-chart-example">示例数据</span>}
-        <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={display.data} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
-            <CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" vertical={false} />
+            <CartesianGrid yAxisId="volume" stroke="#e1eaeb" strokeDasharray="3 5" vertical={false} />
             <XAxis
               dataKey="label"
               tick={{ fill: '#71858b', fontSize: 9 }}
@@ -75,7 +70,7 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
               tickLine={false}
               minTickGap={18}
             />
-            <YAxis
+            <YAxis allowDataOverflow={display.isPlaceholder} domain={display.isPlaceholder ? [0, 1] : undefined} ticks={display.isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
               yAxisId="volume"
               tick={{ fill: '#71858b', fontSize: 9 }}
               axisLine={false}
@@ -94,8 +89,7 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
               width={24}
             />
             <Tooltip
-              labelFormatter={(label, payload) => display.isPlaceholder
-                ? `示例数据，仅用于展示图表效果 · ${label}` :
+              labelFormatter={(label, payload) =>
                 payload?.[0]?.payload?.session
                   ? `${label} · ${payload[0].payload.session}`
                   : String(label)
@@ -129,12 +123,12 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
               stroke="#d1813f"
               strokeWidth={2.2}
               dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
-              connectNulls
+              connectNulls={false}
               animationDuration={180}
             />
           </ComposedChart>
         </ResponsiveContainer>
-        {display.isPlaceholder && <p className="app-chart-example-note">暂无真实训练量数据 · 当前图表为示例效果</p>}
+        {display.isPlaceholder && <p className="app-chart-example-note">暂无真实训练量数据</p>}
       </div>
     </section>
   );

@@ -185,6 +185,8 @@ export function PersonalPage(props: Props) {
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
   const [aerobicEndurance, setAerobicEndurance] = useState<AerobicEndurancePayload | null>(null);
   const [aerobicEnduranceLoading, setAerobicEnduranceLoading] = useState(false);
+  const [aerobicEnduranceError, setAerobicEnduranceError] = useState(false);
+  const [dossierDataError, setDossierDataError] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
   const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
   const [bodyCompositionHistory, setBodyCompositionHistory] = useState<BodyCompositionRecord[]>([]);
@@ -241,6 +243,7 @@ export function PersonalPage(props: Props) {
     }
     setAerobicEndurance(null);
     setAerobicEnduranceLoading(true);
+    setAerobicEnduranceError(false);
     api
       .aerobicEndurance(
         selectedAthlete.id,
@@ -252,7 +255,7 @@ export function PersonalPage(props: Props) {
         if (!ignored) setAerobicEndurance(result);
       })
       .catch(() => {
-        if (!ignored) setAerobicEndurance(null);
+        if (!ignored) { setAerobicEndurance(null); setAerobicEnduranceError(true); }
       })
       .finally(() => {
         if (!ignored) setAerobicEnduranceLoading(false);
@@ -362,6 +365,7 @@ export function PersonalPage(props: Props) {
       return;
     }
     setDossierDataLoading(true);
+    setDossierDataError(false);
     Promise.all([
       api.wellnessTrends(
         selectedAthlete.id,
@@ -383,6 +387,7 @@ export function PersonalPage(props: Props) {
       })
       .catch(() => {
         if (!ignored) {
+          setDossierDataError(true);
           setWellnessTrends([]);
           setSpecialTests([]);
         }
@@ -739,7 +744,7 @@ export function PersonalPage(props: Props) {
                     <div className="professional-chart-empty">正在读取身体成分…</div>
                   ) : bodyCompositionError ? (
                     <ContentState
-                      kind="empty"
+                      kind="error"
                       title="身体成分暂不可用"
                       description="读取身体成分记录失败，请稍后重试。"
                     />
@@ -766,6 +771,8 @@ export function PersonalPage(props: Props) {
                 </header>
                 {profileAnalysisLoading ? (
                   <div className="professional-chart-empty">正在读取个人FMS测试…</div>
+                ) : physiologyError ? (
+                  <ContentState kind="error" title="FMS测试读取失败" description="请刷新页面重试。" />
                 ) : (
                   <FmsPersonalChart measurements={profileMeasurements} />
                 )}
@@ -773,7 +780,7 @@ export function PersonalPage(props: Props) {
                   FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
                 </p>
               </AppCard>
-              <AerobicEndurance data={aerobicEndurance} loading={aerobicEnduranceLoading} />
+              <AerobicEndurance data={aerobicEndurance} loading={aerobicEnduranceLoading} error={aerobicEnduranceError} />
               <AppCard
                 variant="chart"
                 className="professional-panel analysis-feature-panel athlete-radar-card"
@@ -841,7 +848,7 @@ export function PersonalPage(props: Props) {
               loading={profileAnalysisLoading}
               error={physiologyError}
             />
-            <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} />
+            <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} error={dossierDataError} />
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
             <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
           </ProfileSection>
@@ -884,7 +891,13 @@ function ProfileSection({
   );
 }
 
-function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; loading: boolean }) {
+function WellnessTrendCards({ trends, loading, error }: { trends: WellnessTrend[]; loading: boolean; error: boolean }) {
+  const displayedTrends: WellnessTrend[] = trends.length ? trends : [
+    { key: 'rpe', label: 'RPE', unit: '分', points: [] },
+    { key: 'sleepHours', label: '睡眠时长', unit: 'h', points: [] },
+    { key: 'morningPulse', label: '晨脉', unit: 'bpm', points: [] },
+    { key: 'weightKg', label: '体重', unit: 'kg', points: [] },
+  ];
   const hasData = trends.some((trend) =>
     trend.points.some((point) => point.personalValue !== null)
   );
@@ -902,17 +915,10 @@ function WellnessTrendCards({ trends, loading }: { trends: WellnessTrend[]; load
         <AppCard variant="chart" className="professional-panel">
           <div className="professional-chart-empty">正在读取恢复趋势…</div>
         </AppCard>
-      ) : !hasData ? (
-        <AppCard variant="chart" className="professional-panel">
-          <ContentState
-            kind="empty"
-            title="暂无恢复趋势数据"
-            description="当前周期未找到有效的日报或训练 RPE 记录。"
-          />
-        </AppCard>
       ) : (
         <section className="personal-wellness-grid" aria-label="恢复趋势">
-          {trends.map((trend) => {
+          {error && <ContentState kind="error" title="恢复趋势读取失败" description="请刷新页面重试。" />}
+          {!error && displayedTrends.map((trend) => {
             const personalPoints = trend.points.filter(
               (point): point is typeof point & { personalValue: number } =>
                 point.personalValue !== null
@@ -1154,9 +1160,11 @@ function aerobicTrendLabel(data: NonNullable<AerobicEndurancePayload['trend']>) 
 function AerobicEndurance({
   data,
   loading,
+  error,
 }: {
   data: AerobicEndurancePayload | null;
   loading: boolean;
+  error: boolean;
 }) {
   const status = loading
     ? '有氧耐力指标读取中。'
@@ -1182,6 +1190,8 @@ function AerobicEndurance({
       </header>
       {loading ? (
         <div className="professional-chart-empty">正在读取有氧指标…</div>
+      ) : error ? (
+        <ContentState kind="error" title="有氧耐力读取失败" description="请刷新页面重试。" />
       ) : data?.metrics.length ? (
         <div className="aerobic-endurance-content">
           <section className="aerobic-metric-grid" aria-label="有氧耐力核心指标">
@@ -1243,11 +1253,7 @@ function AerobicEndurance({
             <h4>有氧能力趋势</h4>
             <span>暂无测试数据</span>
           </header>
-          <ContentState
-            kind="empty"
-            title="暂无有氧耐力测试数据"
-            description="调整日期范围或录入有效测试后展示趋势。"
-          />
+          <EChart option={{ xAxis: { type: 'category', data: [] }, yAxis: { type: 'value' }, series: [{ type: 'line', data: [] }] }} label="有氧能力趋势，暂无测试数据" isPlaceholder />
         </section>
       )}
     </AppCard>
@@ -1347,11 +1353,7 @@ function ProfilePhysiologyRecords({
       ) : error ? (
         <ContentState kind="error" title="生理生化数据读取失败" description="请刷新页面重试。" />
       ) : !records.length ? (
-        <ContentState
-          kind="empty"
-          title="当前周期暂无有效生理生化检测记录"
-          description="可调整页面日期范围查看已有检测；缺测不补零。"
-        />
+        <EChart option={option} label="生理生化检测趋势，暂无有效记录" isPlaceholder />
       ) : (
         <>
           <div className="profile-physiology-toolbar">

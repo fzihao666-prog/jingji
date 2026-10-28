@@ -71,7 +71,7 @@ function formatRadarValue(value: number | null, unit: string) {
 
   return `${formatNumber(value, 1)} ${unit}`.trim();
 }
-function radarOption(title: string, dimensions: AthleteRadarDimension[]): EChartsOption {
+function radarOption(title: string, dimensions: AthleteRadarDimension[], gridOnly = false): EChartsOption {
   const athleteValues = dimensions.map((dimension) =>
     Math.min(120, dimension.achievedPercent ?? 0)
   );
@@ -157,7 +157,7 @@ function radarOption(title: string, dimensions: AthleteRadarDimension[]): EChart
       },
     },
 
-    series: [
+    series: gridOnly ? [] : [
       {
         name: title,
         type: 'radar',
@@ -290,14 +290,13 @@ export function AthleteRadarComparison({ model, loading, title, unavailableReaso
     const summary = `${title}共 ${model.dimensions.length} 项指标，${readyDimensions.length} 项可比，${pendingCount} 项待补充；可达成度最高显示 120%。`;
 
     if (readyDimensions.length < 3) {
-      statusMessage = `${summary}可比指标不足，暂不生成雷达图。`;
+      statusMessage = `${summary}可比指标不足，保留雷达网格。`;
       content = (
         <section className="athlete-radar-comparison is-incomplete" aria-label={`${title}数据状态`}>
-          <ContentState
-            kind="empty"
-            title="可比指标不足，暂不生成雷达图"
-            description="至少需要 3 项同时具备当前值与正式参考值的指标。"
-          />
+          <div className="athlete-radar-chart">
+            <EChart option={radarOption(title, model.dimensions, true)} label={`${summary}暂无足够可比指标，显示雷达网格。`} />
+          </div>
+          <p className="analysis-empty-note">可比指标不足，至少需要 3 项同时具备当前值与正式参考值的指标。</p>
           <p className="athlete-radar-summary">{summary}</p>
           <RadarDetails dimensions={model.dimensions} />
         </section>

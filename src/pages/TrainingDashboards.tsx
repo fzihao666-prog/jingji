@@ -33,7 +33,6 @@ import type {
 } from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
-import { placeholderTrend, placeholderRatio } from '../components/chart-placeholder';
 import '../components/EChart.css';
 import {
   STRENGTH_CONTENT_ANALYSIS_CATEGORIES,
@@ -213,21 +212,21 @@ function AbilityProfile({
       ...metric,
       score: Math.min(120, (metric.value / Number(metric.target)) * 100),
     }));
-  const isPlaceholder = scored.length < 3;
+  const isPlaceholder = scored.length === 0;
   const displayScored = isPlaceholder
-    ? STRENGTH_METRICS.slice(0, 5).map((metric, index) => ({ ...metric, score: [64, 72, 61, 76, 68][index] }))
+    ? STRENGTH_METRICS.slice(0, 5).map((metric) => ({ ...metric, score: null }))
     : scored;
   const ordered = [...scored].sort((a, b) => b.score - a.score);
   return (
     <div className="physical-ability-profile">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
+      {isPlaceholder && <span className="app-chart-example">暂无数据</span>}
       <div className="physical-radar">
         {displayScored.map((metric, index) => (
           <div
             key={metric.key}
             style={
               {
-                '--profile-score': `${Math.min(metric.score, 100)}%`,
+                '--profile-score': `${metric.score === null ? 0 : Math.min(metric.score, 100)}%`,
                 '--profile-color': [
                   '#0d9488',
                   '#3b82f6',
@@ -243,12 +242,12 @@ function AbilityProfile({
             <i>
               <b />
             </i>
-            <strong>{isPlaceholder ? '示例' : formatNumber(metric.score, 0)}</strong>
+            <strong>{metric.score === null ? '—' : formatNumber(metric.score, 0)}</strong>
           </div>
         ))}
       </div>
       <aside>
-        {isPlaceholder ? <p>暂无足够真实目标，图形仅为示例效果。能力评价和优先级待配置真实标准后显示。</p> : <>
+        {isPlaceholder ? <p>暂无有效目标对照，保留指标结构；配置真实标准后显示达成度。</p> : <>
         <span>基于已配置的{athleteId ? '个人目标' : '群体目标均值'}</span>
         <h3>{athleteId ? '个人能力摘要' : '团队能力摘要'}</h3>
         <p>
@@ -290,22 +289,20 @@ function MetricTrend({
   const definition = STRENGTH_METRICS.find((metric) => metric.key === metricKey);
   const raw = [...tests]
     .sort((a, b) => a.testDate.localeCompare(b.testDate))
-    .flatMap((test) =>
-      typeof test.metrics[metricKey as StrengthMetricKey] === 'number'
-        ? [{ date: test.testDate, value: test.metrics[metricKey as StrengthMetricKey] as number }]
-        : []
-    );
+    .map((test) => {
+      const measured = test.metrics[metricKey as StrengthMetricKey];
+      return { date: test.testDate, value: typeof measured === 'number' && Number.isFinite(measured) ? measured : null };
+    });
   const data = athleteId
     ? raw
-    : [...new Map(raw.map((item) => [item.date, item.date])).keys()].map((date) => {
-        const values = raw.filter((item) => item.date === date).map((item) => item.value);
-        return { date, value: values.reduce((sum, value) => sum + value, 0) / values.length };
+    : [...new Set(raw.map((item) => item.date))].map((date) => {
+        const values = raw.filter((item) => item.date === date).flatMap((item) => item.value === null ? [] : [item.value]);
+        return { date, value: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null };
       });
-  const best = data.length ? Math.max(...data.map((item) => item.value)) : null;
-  const isPlaceholder = data.length === 0;
-  const chartData = isPlaceholder
-    ? placeholderTrend.map((value, index) => ({ date: `示例${index + 1}`, value }))
-    : data;
+  const values = data.flatMap((item) => item.value === null ? [] : [item.value]);
+  const best = values.length ? Math.max(...values) : null;
+  const isPlaceholder = values.length === 0;
+  const chartData = data.length ? data : [{ date: '', value: null }];
   return (
     <div className="physical-trend">
       <label>
@@ -321,7 +318,7 @@ function MetricTrend({
           ))}
         </select>
       </label>
-      {isPlaceholder && <p className="app-chart-example">示例数据 · 暂无真实体能测试趋势</p>}
+      {isPlaceholder && <p className="app-chart-example">暂无真实体能测试趋势</p>}
       <div className="physical-chart-canvas">
         {(
           <ResponsiveContainer width="100%" height="100%">
@@ -334,13 +331,16 @@ function MetricTrend({
                 tickLine={false}
               />
               <YAxis
+                allowDataOverflow={isPlaceholder}
+                domain={isPlaceholder ? [0, 1] : undefined}
+                ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
                 tick={{ fontSize: 10, fill: '#62767d' }}
                 axisLine={false}
                 tickLine={false}
                 unit={definition?.unit}
               />
               <Tooltip
-                labelFormatter={(label) => `${isPlaceholder ? '示例数据，仅用于展示图表效果 · ' : ''}${label}`}
+                labelFormatter={(label) => `${label}`}
                 formatter={(value) => [
                   `${formatNumber(Number(value), 1)} ${definition?.unit || ''}`,
                   definition?.label || '测试值',
@@ -364,7 +364,7 @@ function MetricTrend({
           </ResponsiveContainer>
         )}
       </div>
-      {isPlaceholder && <p className="app-chart-example-note">当前图表为示例效果，PB 仅根据真实测试显示。</p>}
+      {isPlaceholder && <p className="app-chart-example-note">PB 仅根据真实测试显示。</p>}
     </div>
   );
 }
@@ -385,11 +385,11 @@ function TrainingStructure({ sessions }: { sessions: StrengthTrainingSession[] }
     ).length,
   }));
   const total = items.reduce((sum, item) => sum + item.value, 0);
-  const displayItems = total ? items : items.slice(0, 4).map((item, index) => ({ ...item, value: placeholderRatio[index] }));
-  const displayTotal = total || 100;
+  const displayItems = items;
+  const displayTotal = total || 1;
   return (
     <div className="physical-structure">
-      {!total && <p className="app-chart-example">示例数据</p>}
+      {!total && <p className="app-chart-example">暂无数据</p>}
       <div className="physical-structure-bar">
         {displayItems
           .filter((item) => item.value)
@@ -414,15 +414,14 @@ function TrainingStructure({ sessions }: { sessions: StrengthTrainingSession[] }
           ))}
       </div>
       {displayItems
-        .filter((item) => item.value)
         .map((item) => (
           <div key={item.name}>
             <span>{item.name}</span>
-            <b>{total ? `${item.value} 项` : '示例数据'}</b>
-            <strong>{formatNumber((item.value / displayTotal) * 100, 1)}%</strong>
+            <b>{total ? `${item.value} 项` : '—'}</b>
+            <strong>{total ? `${formatNumber((item.value / displayTotal) * 100, 1)}%` : '—'}</strong>
           </div>
         ))}
-      <small>{total ? '统计口径：当前筛选范围内已记录的训练项次数。' : '暂无真实训练项 · 当前图形仅展示占比效果。'}</small>
+      <small>{total ? '统计口径：当前筛选范围内已记录的训练项次数。' : '暂无真实训练项，暂不计算占比。'}</small>
     </div>
   );
 }
@@ -441,13 +440,13 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
         load: loads.length ? loads.reduce((sum, item) => sum + (item.srpe ?? 0), 0) : null,
       };
     });
-  const isPlaceholder = !data.some((item) => item.duration > 0 || item.load !== null);
-  const chartData = isPlaceholder
-    ? placeholderTrend.map((value, index) => ({ date: `示例${index + 1}`, duration: value * 2, load: value * 5 }))
-    : data;
+  const isPlaceholder = data.length === 0;
+  const chartData: Array<{ date: string; duration: number | null; load: number | null }> = data.length
+    ? data
+    : [{ date: '', duration: null, load: null }];
   return (
     <div className="physical-chart-canvas">
-      {isPlaceholder && <span className="app-chart-example">示例数据</span>}
+      {isPlaceholder && <span className="app-chart-example">暂无数据</span>}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={chartData} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}>
           <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
@@ -458,6 +457,9 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             tickLine={false}
           />
           <YAxis
+            allowDataOverflow={isPlaceholder}
+            domain={isPlaceholder ? [0, 1] : undefined}
+            ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="duration"
             tick={{ fontSize: 10, fill: '#62767d' }}
             axisLine={false}
@@ -465,6 +467,9 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             unit=" min"
           />
           <YAxis
+            allowDataOverflow={isPlaceholder}
+            domain={isPlaceholder ? [0, 1] : undefined}
+            ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="load"
             orientation="right"
             tick={{ fontSize: 10, fill: '#62767d' }}
@@ -472,7 +477,7 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             tickLine={false}
             unit=" AU"
           />
-          <Tooltip labelFormatter={(label) => `${isPlaceholder ? '示例数据，仅用于展示图表效果 · ' : ''}${label}`} />
+          <Tooltip labelFormatter={(label) => `${label}`} />
           <Bar
             yAxisId="duration"
             dataKey="duration"
@@ -488,11 +493,11 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             name="SRPE 训练负荷 AU"
             stroke="#f59e0b"
             strokeWidth={2.5}
-            connectNulls
+            connectNulls={false}
           />
         </ComposedChart>
       </ResponsiveContainer>
-      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据 · 当前图表为示例效果</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据</p>}
     </div>
   );
 }
@@ -508,10 +513,12 @@ export function StrengthTrainingDashboard({
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const athleteKey = athletes.map((item) => item.id).join(',');
   useEffect(() => {
     let ignored = false;
     setLoading(true);
+    setError(false);
     const athleteIds = athleteKey ? athleteKey.split(',').map(Number) : [];
     Promise.all(
       athleteIds.map(async (athleteId) => {
@@ -536,6 +543,7 @@ export function StrengthTrainingDashboard({
       })
       .catch(() => {
         if (!ignored) {
+          setError(true);
           setSessions([]);
           setTests([]);
         }
@@ -575,7 +583,7 @@ export function StrengthTrainingDashboard({
               ? athleteSessions.reduce((sum, session) => sum + session.durationMin, 0)
               : null,
             distanceKm: null,
-            load: athleteSessions.length
+            load: athleteSessions.some((session) => session.srpe != null)
               ? athleteSessions.reduce((sum, session) => sum + (session.srpe ?? 0), 0)
               : null,
           },
@@ -628,6 +636,8 @@ export function StrengthTrainingDashboard({
           title="正在同步体能训练数据"
           icon={<Activity className="spin" />}
         />
+      ) : error ? (
+        <ContentState kind="error" title="体能训练数据加载失败" description="请刷新页面重试。" />
       ) : (
         <>
           <section aria-label="整体体能指标">

@@ -338,14 +338,14 @@ Page({
     });
   },
 
-  // 雷达 canvas：数据渲染完成后下一帧绘制；画布不存在或维度不足时静默跳过，明细列表兜底。
+  // 雷达 canvas 始终保留网格；数据渲染完成后下一帧绘制，实测缺失时不生成个人多边形。
   scheduleRadarDraw() {
     wx.nextTick(() => this.drawRadars());
   },
 
   drawRadars() {
     (this.data.radarGroups || []).forEach((group) => {
-      if (group.hasChart) this.drawRadarCanvas(group);
+      this.drawRadarCanvas(group);
     });
   },
 
@@ -367,7 +367,7 @@ Page({
         const size = Math.min(target.width, target.height);
         ctx.translate((target.width - size) / 2, (target.height - size) / 2);
         const layout = radarChart.radarLayout({ size, padding: 26, max: group.maxValue, rings: 4 });
-        const axes = radarChart.radarAxes(group.dimensions.length, layout);
+        const axes = radarChart.radarAxes(Math.max(3, group.dimensions.length || 5), layout);
         radarChart.drawRadar(ctx, layout, axes, [
           {
             points: radarChart.radarSeriesPoints(group.referenceValues, axes, layout),
@@ -378,7 +378,7 @@ Page({
           {
             points: radarChart.radarSeriesPoints(group.personalValues, axes, layout),
             stroke: '#168f88',
-            fill: 'rgba(22, 143, 136, 0.16)',
+            fill: group.personalValues.every(value => value != null) ? 'rgba(22, 143, 136, 0.16)' : '',
             lineWidth: 3,
             dot: 3
           }

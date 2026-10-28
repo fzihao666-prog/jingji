@@ -842,9 +842,15 @@ function ArchiveRadar({
             </g>
           );
         })}
-        <polygon className="radar-before" points={polygon(before)} />
-        <polygon className="radar-after" points={polygon(after)} />
+        {before.every((value) => value !== null) && <polygon className="radar-before" points={polygon(before)} />}
+        {after.every((value) => value !== null) && <polygon className="radar-after" points={polygon(after)} />}
+        {before.map((value, index) => {
+          if (value === null) return null;
+          const [x, y] = radarPoint(index, value, factors.length, centerX, centerY, radius);
+          return <circle key={factors[index].key} cx={x} cy={y} r="2.7" fill="var(--amber)" />;
+        })}
         {after.map((value, index) => {
+          if (value === null) return null;
           const [x, y] = radarPoint(index, value ?? 0, factors.length, centerX, centerY, radius);
           return <circle key={factors[index].key} cx={x} cy={y} r="2.7" />;
         })}

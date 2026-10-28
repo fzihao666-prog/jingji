@@ -59,7 +59,7 @@ export function ChampionModelBenchmark({
   const dimensions = benchmark?.dimensions ?? [];
   const radarData = dimensions.map((dimension) => ({
     name: splitDimensionLabel(dimension.label).cn,
-    current: dimension.current ?? 0,
+    current: dimension.current,
     champion: dimension.champion,
     gap: dimension.gap,
     comparable: dimension.comparable,
@@ -67,7 +67,15 @@ export function ChampionModelBenchmark({
   if (loading)
     return <div className="champion-benchmark-empty">正在读取冠军模型标准与个人测试数据…</div>;
   if (!benchmark || !rows.length || !radarData.length)
-    return <div className="champion-benchmark-empty">待配置</div>;
+    return <div className="champion-benchmark-empty">
+      <svg viewBox="0 0 260 220" width="100%" height="220" aria-label="冠军模型雷达网格，待配置" role="img">
+        {[30, 50, 70, 90].map((radius) => <polygon key={radius} fill="none" stroke="#d7e4e6" points={Array.from({ length: 6 }, (_, index) => {
+          const angle = index * Math.PI / 3 - Math.PI / 2;
+          return `${130 + Math.cos(angle) * radius},${110 + Math.sin(angle) * radius}`;
+        }).join(' ')} />)}
+      </svg>
+      <span>待配置</span>
+    </div>;
   const validDimensions = dimensions.filter((dimension) => dimension.current !== null);
   const weakDimensions = [...validDimensions]
     .sort((left, right) => (right.priorityIndex || 0) - (left.priorityIndex || 0))

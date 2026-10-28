@@ -106,7 +106,7 @@ button::after { border: 0; }
 .trend-day::after { border: 0; }
 .trend-day:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
 .trend-bars { height: 244rpx; display: flex; align-items: flex-end; gap: 5rpx; }
-.trend-bar { width: 15rpx; min-height: 4rpx; border-radius: 8rpx 8rpx 2rpx 2rpx; background: var(--mint); }
+.trend-bar { width: 15rpx; min-height: 0; border-radius: 8rpx 8rpx 2rpx 2rpx; background: var(--mint); }
 .trend-bar.accent { background: var(--amber); }
 .trend-bar.special { background: var(--river); }
 .trend-bar.physical { background: var(--mint); }

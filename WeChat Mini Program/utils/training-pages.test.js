@@ -100,7 +100,8 @@ describe('训练页空数据与独立失败回归', () => {
     const page = createPage('special', { overviewTeams: fail, specialChampionModels: fail, specialTests: fail, specialTrainingOverview: fail });
     const view = await page.loadPageData(scope, true, () => true);
     expect(view.metrics.length).toBe(5);
-    expect(view.intensity).toEqual([]);
+    expect(view.intensity).toHaveLength(7);
+    expect(view.intensity.every(row => row.width === 0 && row.percentage === '--')).toBe(true);
     expect(view.content.map(row=>row.name)).toContain('水上');
     expect(view.content.map(row=>row.name)).not.toContain('排球技术');
     expect(view.trend).toEqual([]);

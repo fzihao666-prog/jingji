@@ -2,7 +2,6 @@ import {
   AlarmClock,
   ArrowRight,
   BarChart3,
-  Database,
   Dumbbell,
   Gauge,
   HeartPulse,
@@ -111,6 +110,8 @@ export function OverviewPage(props: Props) {
   const [trainingTeamId, setTrainingTeamId] = useState<number | null>(null);
   const [teamTrainingOverview, setTeamTrainingOverview] = useState<OverviewPayload | null>(null);
   const [teamTrainingLoading, setTeamTrainingLoading] = useState(false);
+  const [teamTrainingError, setTeamTrainingError] = useState('');
+  const [trainingTeamsError, setTrainingTeamsError] = useState('');
   const isSelfOverview = props.user.role === 'ATL';
   const isIndividualOverview = isSelfOverview;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
@@ -145,6 +146,7 @@ export function OverviewPage(props: Props) {
 
   useEffect(() => {
     let active = true;
+    setTrainingTeamsError('');
     if (isIndividualOverview) {
       setTrainingTeams([]);
       setTrainingTeamId(null);
@@ -163,8 +165,9 @@ export function OverviewPage(props: Props) {
             : (current.teams[0]?.id ?? null)
         );
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
+        setTrainingTeamsError(error instanceof Error ? error.message : '队伍列表读取失败');
         setTrainingTeams([]);
         setTrainingTeamId(null);
       });
@@ -175,6 +178,7 @@ export function OverviewPage(props: Props) {
 
   useEffect(() => {
     let active = true;
+    setTeamTrainingError('');
     if (isIndividualOverview || !trainingTeamId) {
       setTeamTrainingOverview(null);
       setTeamTrainingLoading(false);
@@ -189,8 +193,11 @@ export function OverviewPage(props: Props) {
       .then((current) => {
         if (active) setTeamTrainingOverview(current.overview);
       })
-      .catch(() => {
-        if (active) setTeamTrainingOverview(null);
+      .catch((error) => {
+        if (active) {
+          setTeamTrainingOverview(null);
+          setTeamTrainingError(error instanceof Error ? error.message : '队伍训练量读取失败');
+        }
       })
       .finally(() => {
         if (active) setTeamTrainingLoading(false);
@@ -201,7 +208,7 @@ export function OverviewPage(props: Props) {
   }, [isIndividualOverview, props.from, props.project, props.to, trainingTeamId]);
 
   const analysisRecords = overview?.records ?? props.records;
-  const trainingOverview = teamTrainingOverview ?? overview;
+  const trainingOverview = trainingTeamId && !isIndividualOverview ? teamTrainingOverview : overview;
   const selectedTrainingTeam = trainingTeams.find((team) => team.id === trainingTeamId) ?? null;
   const athleteProfiles = overview?.profiles ?? [];
   const strengthTests = overview?.strengthTests ?? [];
@@ -505,7 +512,9 @@ export function OverviewPage(props: Props) {
             </label>
           )}
         </div>
-        {teamTrainingLoading ? (
+        {trainingTeamsError || teamTrainingError ? (
+          <ContentState kind="error" title="训练量数据读取失败" description={trainingTeamsError || teamTrainingError} />
+        ) : teamTrainingLoading ? (
           <ContentState
             kind="loading"
             className="professional-chart-empty"
@@ -607,15 +616,10 @@ export function OverviewPage(props: Props) {
           </div>
         }
       />
-      {overviewError && (
-        <div className="overview-data-provenance error">
-          <Database size={15} />
-          <strong>统一指标接口暂不可用</strong>
-          <span>{overviewError}，当前显示兼容数据。</span>
-        </div>
-      )}
       {props.loading || (overviewLoading && !overview) ? (
         <PageSkeleton />
+      ) : overviewError ? (
+        <ContentState kind="error" title="训练总览数据读取失败" description={overviewError} />
       ) : (
         <section className="professional-dashboard-grid">
           {defaultOrder.filter((id) => cardMeta[id]).map((id) => renderShell(id, cards[id]))}

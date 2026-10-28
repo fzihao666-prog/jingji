@@ -1,6 +1,5 @@
 import {
   Activity,
-  BarChart3,
   CheckCircle2,
   Clock3,
   Dumbbell,
@@ -195,10 +194,15 @@ function metricCards(sessions: StrengthTrainingSession[]) {
   };
 }
 
-function EmptyChart({ text }: { text: string }) {
+function EmptyChart({ text, ring = false }: { text: string; ring?: boolean }) {
   return (
     <div className="strength-insight-empty">
-      <BarChart3 size={24} />
+      <svg viewBox="0 0 320 160" width="100%" height="160" aria-hidden="true">
+        {ring ? <circle cx="160" cy="80" r="56" fill="none" stroke="#e1eaed" strokeWidth="20" /> : <g fill="none" stroke="#dce6e9">
+          {[30, 60, 90, 120].map((y) => <line key={y} x1="30" y1={y} x2="306" y2={y} strokeDasharray="3 5" />)}
+          <path d="M30 15V140H306" />
+        </g>}
+      </svg>
       <span>{text}</span>
     </div>
   );
@@ -225,7 +229,7 @@ function RoundRatioChart({
   const [pinned, setPinned] = useState<OrbSegment | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   const total = items.reduce((sum, item) => sum + item.value, 0);
-  if (!total) return <EmptyChart text="暂无可统计数据" />;
+  if (!total) return <EmptyChart text="暂无可统计数据" ring />;
   const segments = items.map((item, index) => ({
     ...item,
     percent: round((item.value / total) * 100, 1),
@@ -431,7 +435,7 @@ function LessonCompositionPanel({ items }: { items: LessonBreakdownItem[] }) {
     <div className="strength-lesson-composition">
       <div className="lesson-summary">
         <span>主课型</span>
-        <strong>{dominant.name}</strong>
+        <strong>{dominant?.name ?? '—'}</strong>
         <small>
           {dominant.percent}% · {dominant.value.toLocaleString()} AU · {dominant.sessions} 场
         </small>
@@ -674,7 +678,7 @@ function BodyPositionMapPanel({
       <div className="body-map-detail">
         <article>
           <span>重点部位</span>
-          <strong>{dominant.name}</strong>
+          <strong>{dominant?.name ?? '—'}</strong>
           <small>{dominant.note}</small>
         </article>
         <div>

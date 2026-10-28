@@ -66,7 +66,7 @@ function tracePolygon(ctx, points, close) {
       ctx.lineTo(point.x, point.y);
     }
   });
-  if (close && started) ctx.closePath();
+  if (close && started && points.every(Boolean)) ctx.closePath();
 }
 
 /**
@@ -100,7 +100,7 @@ function drawRadar(ctx, layout, axes, series) {
     ctx.beginPath();
     tracePolygon(ctx, points, true);
     ctx.stroke();
-    if (item.fill) {
+    if (item.fill && points.every(Boolean)) {
       ctx.setLineDash([]);
       ctx.fillStyle = item.fill;
       ctx.beginPath();

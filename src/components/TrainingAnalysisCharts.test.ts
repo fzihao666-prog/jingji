@@ -183,11 +183,12 @@ it.each(['ROWING','VOLLEYBALL','CYCLING_ROAD'])('%s占比图例不显示其他�
  if(project==='ROWING'){expect(html).toContain('骑行');expect(html).not.toContain('排球技术');}
 });
 
-it('FMS缺测仅显示独立空状态，不把满高提示和雷达叠放，也不伪造零分', () => {
+it('FMS缺测保留雷达结构和空提示，不伪造零分', () => {
   const html = renderToStaticMarkup(createElement(FmsPersonalChart, { measurements: [] }));
   expect(html).toContain('暂无FMS测试数据');
-  expect(html).toContain('录入七项筛查后展示动作雷达与评分');
-  expect(html).not.toContain('fms-radar-center');
+  expect(html).toContain('fms-radar-center');
+  expect(charts.data.at(-1)).toHaveLength(7);
+  expect(charts.data.at(-1)).toEqual(expect.arrayContaining([expect.objectContaining({ score: null })]));
   expect(html).not.toContain('training-analytics-empty');
   expect(html).toContain('已完成 0/7 项筛查');
 });

@@ -175,7 +175,7 @@ export function SpecialTrainingDashboard({ project, from, to, onPlanOpen }: Prop
                   </strong>
                   <em>
                     {selectedAthlete && teamTraining
-                      ? `团队均值 ${item.label === '专项训练时长' ? value((teamTraining.summary.durationMin || 0) / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`
+                      ? `团队均值 ${item.label === '专项训练时长' ? value(teamTraining.summary.durationMin === null ? null : teamTraining.summary.durationMin / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`
                       : '同队共同课次去重'}
                   </em>
                 </AppCard>

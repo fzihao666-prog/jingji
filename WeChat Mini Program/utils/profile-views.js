@@ -89,8 +89,8 @@ function trainingComparisonView(comparison) {
         unit: item.unit || '',
         personalText: personal == null ? '—' : number(personal, 1),
         teamText: team == null ? '—' : number(team, 1),
-        personalPct: personal != null && scale > 0 ? Math.max(4, Math.round((personal / scale) * 100)) : 0,
-        teamPct: team != null && scale > 0 ? Math.max(4, Math.round((team / scale) * 100)) : 0,
+        personalPct: personal != null && scale > 0 ? Math.max(0, Math.round((personal / scale) * 100)) : 0,
+        teamPct: team != null && scale > 0 ? Math.max(0, Math.round((team / scale) * 100)) : 0,
         diffText: diff == null ? '—' : `${diff > 0 ? '+' : ''}${number(diff, 1)}`,
         diffClass: diff == null ? '' : diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat',
         note: personal == null ? '个人未记录' : team == null ? '队均样本不足' : '个人 − 队均'
@@ -99,7 +99,7 @@ function trainingComparisonView(comparison) {
   };
 }
 
-// 雷达模型：参考标准固定 100，个人序列用达成度；不足 3 个有效维度不画多边形。
+// 雷达模型保留所有配置维度；部分缺测只绘制真实点与连续线段，参考未配置则留空。
 function radarGroupView(group, options) {
   const settings = options || {};
   const dimensions = group && Array.isArray(group.dimensions) ? group.dimensions : [];
@@ -114,10 +114,10 @@ function radarGroupView(group, options) {
   return {
     title: settings.title || '',
     canvasId: settings.canvasId || '',
-    hasChart: valid.length >= 3,
+    hasChart: valid.length > 0,
     maxValue,
     personalValues: achieved,
-    referenceValues: dimensions.map(() => 100),
+    referenceValues: dimensions.map((item) => item.referenceValue == null ? null : 100),
     dimensions: dimensions.map((item, index) => ({
       key: item.key,
       label: item.label,

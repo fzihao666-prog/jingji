@@ -17,7 +17,6 @@ import {
   STRENGTH_METRIC_MAP,
   type StrengthMetricKey,
 } from '../../shared/strength-model';
-import { chartDisplay, placeholderTrend } from './chart-placeholder';
 import { ChartCard, ContentState } from './PageLayout';
 import './PhysicalTestModule.css';
 
@@ -148,16 +147,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
   }, [current.value, standard]);
 
   const isPlaceholder = trendRows.length === 0;
-  const chartSource = chartDisplay(
-    trendRows.map((row) => row),
-    placeholderTrend.map((value, index) => ({
-      date: `示例${index + 1}`,
-      team: value,
-      personal: null,
-      count: 0,
-    }))
-  );
-  const chartData = chartSource.data;
+  const chartData = [...(trendRows.length ? trendRows : [{ date: '—', team: null, personal: null, count: 0 }])];
   const unit = definition?.unit ?? '';
   const athleteName = athletes.find((item) => item.id === athleteId)?.name ?? '当前运动员';
   const scopeLabel = athleteId ? `${athleteName}个人与团队对比` : '团队平均';
@@ -189,7 +179,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
               <label>测试协议<select aria-label="体能测试协议" value={activeProtocol || ''} onChange={event => setSelectedProtocol(event.target.value)}>
                 {protocolOptions.map(([key,label]) => <option key={key} value={key}>{label}</option>)}
               </select></label>
-              {isPlaceholder && <span className="app-chart-example">示例数据</span>}
+
             </div>
             <div className="physical-test-canvas">
               <ResponsiveContainer width="100%" height="100%">
@@ -204,7 +194,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis
+                  <YAxis allowDataOverflow={isPlaceholder} domain={isPlaceholder ? [0, 1] : undefined} ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
                     tick={{ fontSize: 10, fill: '#62767d' }}
                     axisLine={false}
                     tickLine={false}
@@ -222,7 +212,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                       return (
                         <div className="training-volume-tooltip">
                           <strong>
-                            {isPlaceholder ? '示例数据 · ' : ''}
+
                             {row.date}
                           </strong>
                           <p>
@@ -289,7 +279,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
             </div>
             <p className="physical-test-note">
               {isPlaceholder
-                ? '当前周期暂无真实体能测试数据，图形仅为示例效果，不参与任何统计与达标计算。'
+                ? '当前周期暂无真实体能测试数据。'
                 : `团队平均按测试日期汇总当日有效测试记录，不对无测试日期补值；点按柱形可查看含有效测试人数的明细。`}
             </p>
           </div>

@@ -7,7 +7,6 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
-  FileSpreadsheet,
   Gauge,
   HeartPulse,
   MapPinned,
@@ -996,14 +995,6 @@ export function SpecialTestsPage({
           className="special-loading"
           icon={<RefreshCw className="spin" />}
           title="正在同步训练数据…"
-        />
-      ) : !sessions.length ? (
-        <ContentState
-          kind="empty"
-          className="special-empty"
-          icon={<FileSpreadsheet />}
-          title="当前日期范围内暂无训练记录"
-          description="可通过全局筛选栏调整日期或项目查看数据。"
         />
       ) : section === 'special-volume' ? (
         <TrainingVolumePage sessions={sessions} days={days} />

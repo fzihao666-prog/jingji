@@ -50,6 +50,7 @@ type TeamScatterPoint = {
 };
 
 function chartDomain(values: number[], minimumPadding: number): [number, number] {
+  if (!values.length) return [0, 1];
   const low = Math.min(...values);
   const high = Math.max(...values);
   const padding = Math.max(minimumPadding, (high - low) * 0.12);
@@ -216,12 +217,7 @@ export function AthleteProfileOverview({
         ]
       : []
   );
-  const displayScatterData = scatterData.length ? scatterData : [
-    { athleteId: -1, name: '示例点', age: null, height: 172, weight: 68 },
-    { athleteId: -2, name: '示例点', age: null, height: 177, weight: 74 },
-    { athleteId: -3, name: '示例点', age: null, height: 181, weight: 77 },
-    { athleteId: -4, name: '示例点', age: null, height: 185, weight: 82 },
-  ];
+  const displayScatterData = [...(scatterData.length ? scatterData : [{ athleteId: -1, name: '', age: null, height: null, weight: null }])];
   const ageProfiles = profiles.filter(
     (profile): profile is OverviewAthleteProfile & { age: number } =>
       profile.age !== null && Number.isFinite(profile.age)
@@ -251,12 +247,7 @@ export function AthleteProfileOverview({
     }
     return bins.sort((left, right) => right.start - left.start);
   }, [ageProfiles, minAge, maxAge]);
-  const displayAgeBins: AgeBin[] = ageBins.length ? ageBins : [
-    { group: '示例D', male: -2, female: 1, start: 4, end: 5 },
-    { group: '示例C', male: -3, female: 2, start: 3, end: 4 },
-    { group: '示例B', male: -4, female: 3, start: 2, end: 3 },
-    { group: '示例A', male: -2, female: 2, start: 1, end: 2 },
-  ];
+  const displayAgeBins = [...(ageBins.length ? ageBins : [{ group: '—', male: null, female: null }])];
   const maxSideCount = useMemo(
     () => ageBins.reduce((max, bin) => Math.max(max, Math.abs(bin.male), bin.female), 0),
     [ageBins]
@@ -316,17 +307,18 @@ export function AthleteProfileOverview({
             <span>{scatterData.length} 名有效运动员</span>
           </header>
           <div className="team-profile-chart-canvas">
-            {!scatterData.length && <span className="app-chart-example">示例数据</span>}
+
             {(
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 18, right: 26, bottom: 27, left: 14 }}>
                   <CartesianGrid stroke="#e1eaeb" strokeDasharray="3 5" />
                   <XAxis
+                    allowDataOverflow={!scatterData.length}
                     type="number"
                     dataKey="height"
                     name="身高"
                     domain={chartDomain(
-                      displayScatterData.map((item) => item.height),
+                      scatterData.map((item) => item.height),
                       2
                     )}
                     tick={{ fontSize: 9, fill: '#74888f' }}
@@ -341,11 +333,12 @@ export function AthleteProfileOverview({
                     }}
                   />
                   <YAxis
+                    allowDataOverflow={!scatterData.length}
                     type="number"
                     dataKey="weight"
                     name="体重"
                     domain={chartDomain(
-                      displayScatterData.map((item) => item.weight),
+                      scatterData.map((item) => item.weight),
                       3
                     )}
                     tick={{ fontSize: 9, fill: '#74888f' }}
@@ -388,7 +381,7 @@ export function AthleteProfileOverview({
                     />
                   )}
                   <Tooltip
-                    content={scatterData.length ? <TeamProfileTooltip /> : <div className="team-profile-tooltip">示例数据，仅用于展示图表效果</div>}
+                    content={<TeamProfileTooltip />}
                     cursor={{ stroke: '#a9c5c8', strokeDasharray: '3 4' }}
                   />
                   <Scatter data={displayScatterData} fill="#12978f" stroke="#fff" strokeWidth={2} />
@@ -422,7 +415,7 @@ export function AthleteProfileOverview({
             <span>按性别分组的人数分布</span>
           </div>
           <div className="team-profile-age-canvas">
-            {!ageBins.length && <span className="app-chart-example">示例数据</span>}
+
             {(
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -433,6 +426,7 @@ export function AthleteProfileOverview({
                 >
                   <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" horizontal={false} />
                   <XAxis
+                    allowDataOverflow={!scatterData.length}
                     type="number"
                     domain={[-(maxSideCount || 4), maxSideCount || 4]}
                     tickFormatter={(value) => ageBins.length ? `${Math.abs(Number(value))}` : ''}
@@ -449,7 +443,7 @@ export function AthleteProfileOverview({
                     width={48}
                   />
                   <Tooltip
-                    content={ageBins.length ? <AgePyramidTooltip /> : <div className="team-profile-tooltip">示例数据，仅用于展示图表效果</div>}
+                    content={<AgePyramidTooltip />}
                     cursor={{ fill: 'rgba(17,139,131,.055)' }}
                   />
                   <Bar
@@ -531,7 +525,7 @@ export function AthleteProfileOverview({
             <span>{profiles.length} 名运动员</span>
           </header>
           <div className="composition-status-list">
-            {!profiles.length && <span className="app-chart-example">示例图形 · 暂无真实身体数据</span>}
+            {!profiles.length && <span className="app-chart-example">暂无真实身体数据</span>}
             {compositionRows.map((row) => (
               <div className="composition-status-row" key={row.label}>
                 <strong>{row.label}</strong>
@@ -756,7 +750,7 @@ export function BodyCompositionModelOverview({
   }, [athleteKey]);
 
   if (!profiles.length)
-    return <div className="body-composition-atlas" aria-label="身体成分示例图形">
+    return <div className="body-composition-atlas" aria-label="身体成分结构示意">
       <BodyCompositionSimulationDesktop profile={null} total={0} fatMass={0} fatFreeMass={0} isPlaceholder />
     </div>;
 
@@ -1066,14 +1060,14 @@ function BodyCompositionSimulationDesktop({
 
   return (
     <div className="body-composition-simulation body-composition-simulation-v3">
-      {isPlaceholder && <p className="app-chart-example">示例数据 · 暂无完整身体成分实测</p>}
+      {isPlaceholder && <p className="app-chart-example">暂无完整身体成分实测</p>}
       <div className="body-composition-main">
         {/* 左侧：身体成分模拟图 */}
         <div className="body-composition-figure-panel">
           <div className="body-composition-label body-composition-label-fat">
             <span>脂肪组织</span>
             <strong>{isPlaceholder ? '—' : `${formatNumber(fatPercent, 1)}%`}</strong>
-            <small>{isPlaceholder ? '示例展示' : `${formatNumber(fatMass, 1)} kg`}</small>
+            <small>{isPlaceholder ? '待采集' : `${formatNumber(fatMass, 1)} kg`}</small>
 
             <svg
               aria-hidden="true"
@@ -1088,7 +1082,7 @@ function BodyCompositionSimulationDesktop({
           <div className="body-composition-label body-composition-label-lean">
             <span>去脂组织</span>
             <strong>{isPlaceholder ? '—' : `${formatNumber(fatFreePercent, 1)}%`}</strong>
-            <small>{isPlaceholder ? '示例展示' : `${formatNumber(fatFreeMass, 1)} kg`}</small>
+            <small>{isPlaceholder ? '待采集' : `${formatNumber(fatFreeMass, 1)} kg`}</small>
 
             <svg
               aria-hidden="true"
@@ -1164,10 +1158,7 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
   const selectedTrend = trends.find((trend) => trend.key === selectedKey) ?? trends[0];
   const hasMeasuredData = trends.some((trend) => trend.latestValue !== null);
   const hasTrend = selectedTrend.points.length > 0;
-  const chartPoints = hasTrend ? selectedTrend.points : [36, 52, 44, 68, 57, 79].map((sample, index) => ({
-    measurementDate: `2026-01-${String(index + 1).padStart(2, '0')}`,
-    value: selectedTrend.key === 'bodyFatPct' ? 12 + sample / 20 : selectedTrend.key === 'totalBodyWaterKg' ? 35 + sample / 10 : 25 + sample / 12,
-  }));
+  const chartPoints = [...(selectedTrend.points.length ? selectedTrend.points : [{ measurementDate: '—', value: null }])];
   const latestDate = selectedTrend.points.at(-1)?.measurementDate ?? null;
   const firstDate = selectedTrend.points[0]?.measurementDate ?? null;
 
@@ -1192,10 +1183,10 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
       </div>
       {(
         <figure className="body-composition-trend-figure">
-          {!hasTrend && <span className="app-chart-example">示例数据</span>}
+
           <figcaption>
             <span>
-              {!hasTrend ? '暂无真实趋势 · 当前图表为示例效果' : firstDate && latestDate
+              {!hasTrend ? '暂无真实趋势' : firstDate && latestDate
                 ? `${formatTrendDate(firstDate)}—${formatTrendDate(latestDate)}，共 ${selectedTrend.points.length} 次实测`
                 : '暂无趋势数据'}
             </span>
@@ -1216,6 +1207,9 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
                   axisLine={false}
                 />
                 <YAxis
+                  allowDataOverflow={!hasTrend}
+                  domain={!hasTrend ? [0, 1] : undefined}
+                  ticks={!hasTrend ? [0, 0.25, 0.5, 0.75, 1] : undefined}
                   width={34}
                   tickFormatter={(value: number) => formatNumber(value, 1)}
                   tick={{ fill: '#6c8187', fontSize: 8 }}
@@ -1709,11 +1703,7 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
       return { level, count, color: LEVEL_COLORS[level], share: (count / gradedCount) * 100 };
     })
     .filter((point) => point.count > 0);
-  const displayLevelData: LevelPoint[] = gradedCount ? levelData : [
-    { level: '示例A', count: 4, color: '#b7d3d0', share: 0 },
-    { level: '示例B', count: 3, color: '#9fc9c3', share: 0 },
-    { level: '示例C', count: 2, color: '#d5e7e4', share: 0 },
-  ];
+  const displayLevelData = [...(levelData.length ? levelData : [{ level: '—', count: null, color: '#e3ebed', share: null }])];
 
   return (
     <section className="team-profile-chart-card team-competitive-card">
@@ -1731,7 +1721,7 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
         </span>
       </div>
       <div className="team-profile-level-canvas">
-        {!gradedCount && <span className="app-chart-example">示例数据 · 暂无真实技术等级</span>}
+        {!gradedCount && <span className="app-chart-example">暂无真实技术等级</span>}
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={displayLevelData}
@@ -1741,6 +1731,9 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
           >
             <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" horizontal={false} />
             <XAxis
+              allowDataOverflow={!gradedCount}
+              domain={!gradedCount ? [0, 1] : undefined}
+              ticks={!gradedCount ? [0, 1] : undefined}
               type="number"
               allowDecimals={false}
               tickFormatter={(value) => gradedCount ? String(value) : ''}
@@ -1758,7 +1751,7 @@ function CompetitiveLevelChart({ profiles }: { profiles: OverviewAthleteProfile[
               width={75}
             />
             <Tooltip
-              content={gradedCount ? <TechnicalLevelTooltip /> : <div className="team-profile-tooltip">示例数据，仅用于展示图表效果</div>}
+              content={<TechnicalLevelTooltip />}
               cursor={{ fill: 'rgba(17,139,131,.055)' }}
             />
             <Bar dataKey="count" name="人数" radius={[0, 3, 3, 0]} minPointSize={2}>
