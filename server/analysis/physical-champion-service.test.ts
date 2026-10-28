@@ -612,3 +612,13 @@ it('估算参考恢复完整维度展示性达成度、团队雷达与趋势，�
     )
   ).toBe(true);
 });
+
+it('模型指标名称使用中文词典，不直接展示内部指标码', () => {
+  const { build } = setup();
+  const group = build().groups.find((group) => group.gender === '男')!;
+  expect(group.references.find((ref) => ref.key === 'relative_squat')?.label).toBe('相对深蹲');
+  expect(group.references.find((ref) => ref.key === 'front_plank')?.label).toBe('核心稳定·前支撑');
+  expect(group.references.find((ref) => ref.key === 'vo2max')?.label).toBe('有氧能力·最大摄氧量');
+  expect(group.label).not.toContain('open');
+  expect(group.label).not.toContain('adult');
+});

@@ -76,7 +76,7 @@ export const PHYSICAL_CHAMPION_DIMENSIONS = [
   },
   {
     key: 'vo2max',
-    label: '有氧能力·VO₂max',
+    label: '有氧能力·最大摄氧量',
     unit: 'ml/kg/min',
     measurementUnit: 'ml/kg/min',
     codes: ['vo2max_ml_kg_min'],

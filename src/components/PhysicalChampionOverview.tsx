@@ -23,6 +23,14 @@ type Props = {
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 3 });
 const format = (value: number | null | undefined) =>
   value == null ? '—' : numberFormat.format(value);
+const unitLabels: Record<string, string> = {
+  cm: '厘米',
+  s: '秒',
+  kg: '千克',
+  W: '瓦',
+  'W/kg': '瓦/千克',
+  'ml/kg/min': '毫升/千克/分钟',
+};
 
 export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
   const [editing, setEditing] = useState(false);
@@ -41,7 +49,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
       estimated: reference.sourceType === 'estimated',
     }));
   const rows = columns.map((reference) => ({
-    reference,
+    reference: { ...reference, unitLabel: unitLabels[reference.unit] || reference.unit },
     team: group.team.find((item) => item.key === reference.key),
   }));
   const radar = rows.map((row) => ({
@@ -49,7 +57,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
     champion: row.reference.value == null ? null : 100,
     team: row.team?.achievedPercent ?? null,
   }));
-  const radarMax = Math.max(100, ...radar.map(point=>point.team??0));
+  const radarMax = Math.max(100, ...radar.map((point) => point.team ?? 0));
   const estimated = columns.some((reference) => reference.estimated);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,7 +111,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
                 {rows.map(({ reference }) => (
                   <th key={reference.key} scope="col">
                     {reference.label}
-                    <small>{reference.unit}</small>
+                    <small>{reference.unitLabel}</small>
                   </th>
                 ))}
               </tr>
@@ -115,7 +123,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
                   <td key={reference.key}>
                     {editing ? (
                       <input
-                        aria-label={`冠军模型 · ${reference.label}（${reference.unit}）`}
+                        aria-label={`冠军模型 · ${reference.label}（${reference.unitLabel}）`}
                         type="number"
                         step="any"
                         min="0"

@@ -95,7 +95,10 @@ export function readPhysicalReferences(db: DatabaseSync, project: string): Physi
     }
     return {
       ...row,
-      label: row.referenceLabel || row.key,
+      label:
+        PHYSICAL_CHAMPION_DIMENSIONS.find((dimension) => dimension.key === row.key)?.label ||
+        row.referenceLabel ||
+        '自定义体能指标',
       reviewStatus: row.active && row.sourceActive ? row.reviewStatus : 'disabled',
       measurementCodes: codes,
       weightRelative: row.weightRelative === 1,

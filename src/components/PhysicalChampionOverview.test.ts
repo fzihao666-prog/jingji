@@ -170,6 +170,12 @@ it.each([
     expect(html.match(/<th scope="row">/g) || []).toHaveLength(2);
     expect(html).toContain('相对深蹲');
     expect(html).toContain('有氧能力');
+    expect(html).toContain('最大摄氧量');
+    expect(html).toContain('厘米');
+    expect(html).toContain('瓦/千克');
+    expect(html).toContain('毫升/千克/分钟');
+    expect(html).not.toContain('<small>cm</small>');
+    expect(html).not.toContain('VO₂max');
     expect(html).toContain('<td>40</td>');
     expect(html).not.toContain('<td>0</td>');
     expect(html).not.toContain('<td>55</td>');
