@@ -1301,7 +1301,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
           ) : (
             <p>
               <b>暂无测试</b>
-              
+
             </p>
           )}
         </div>
