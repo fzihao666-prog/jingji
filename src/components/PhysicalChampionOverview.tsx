@@ -210,11 +210,11 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
       <div className="physical-champion-chart" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart accessibilityLayer={false} data={radar} outerRadius="70%">
-            <PolarGrid />
-            <PolarAngleAxis dataKey="label" />
+            <PolarGrid stroke="var(--line)" />
+            <PolarAngleAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--ink)' }} />
             <PolarRadiusAxis domain={[0, radarMax]} />
-            <Tooltip />
-            <Legend />
+            <Tooltip contentStyle={{ borderRadius: 12, padding: '12px 16px', fontSize: 12, border: '1px solid var(--line)' }} />
+            <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
             <Radar
               name="冠军模型"
               dataKey="champion"
@@ -222,6 +222,7 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
               fill="var(--amber)"
               fillOpacity={0.08}
               strokeDasharray="5 3"
+              strokeWidth={2}
               isAnimationActive={false}
             />
             <Radar
@@ -229,7 +230,8 @@ export function PhysicalChampionOverview({ group, canEdit, onSave }: Props) {
               dataKey="team"
               stroke="var(--river)"
               fill="var(--river)"
-              fillOpacity={0.12}
+              fillOpacity={0.16}
+              strokeWidth={3}
               isAnimationActive={false}
             />
           </RadarChart>

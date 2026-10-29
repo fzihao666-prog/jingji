@@ -566,3 +566,260 @@
 
 }
 
+/* 个人档案：按身份、字段、图形标注与数值明细建立阅读层级。 */
+.personal-page .personal-identity-copy > span,
+.personal-page .personal-identity-copy p {
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.personal-page .personal-dossier-group dl {
+  gap: 18px 24px;
+}
+
+.personal-page .personal-dossier-group dl > div {
+  padding-left: 12px;
+}
+
+.personal-page .personal-dossier-group dt {
+  color: #c7e3df;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.personal-page .personal-dossier-group dd {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.personal-page .personal-header-metrics span {
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.personal-page .personal-header-metrics strong {
+  font-size: clamp(24px, 2.2vw, 32px);
+  line-height: 1.2;
+}
+
+.personal-page .personal-header-metrics strong small {
+  font-size: 11px;
+}
+
+.personal-page .personal-analysis-card-heading {
+  padding: 20px 22px 16px;
+  gap: 16px;
+}
+
+.personal-page .personal-analysis-card-heading small {
+  color: var(--teal);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.personal-page .personal-analysis-card-heading h3 {
+  margin: 5px 0 6px;
+  font-size: 19px;
+  line-height: 1.4;
+}
+
+.personal-page .personal-analysis-card-heading p,
+.personal-page .analysis-method-note,
+.personal-page .body-atlas-note {
+  font-size: 12px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.personal-page .body-composition-label {
+  min-width: 100px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: none;
+}
+
+.personal-page .body-composition-label span {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.personal-page .body-composition-label strong {
+  margin: 3px 0;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+
+.personal-page .body-composition-label-fat strong {
+  color: #a9580a;
+}
+
+.personal-page .body-composition-guide path {
+  stroke-width: 1.5;
+}
+
+.personal-page .body-comp-metric-card {
+  padding: 12px;
+  background: var(--paper);
+}
+
+.personal-page .body-comp-metric-card dt {
+  flex-wrap: wrap;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.personal-page .body-comp-metric-card dt small {
+  color: #526a70;
+  font-size: 10px;
+}
+
+.personal-page .body-comp-metric-card dd strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.personal-page .body-comp-metric-card dd small {
+  color: #526a70;
+  font-size: 11px;
+}
+
+.personal-page .athlete-radar-comparison {
+  grid-template-columns: minmax(0, 1.1fr) minmax(300px, 1fr);
+  gap: 24px;
+}
+
+.personal-page .athlete-radar-summary {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.personal-page .athlete-radar-details {
+  gap: 0;
+}
+
+.personal-page .athlete-radar-details > div {
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.personal-page .athlete-radar-details dt {
+  flex-wrap: wrap;
+}
+
+.personal-page .athlete-radar-details dt strong {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.personal-page .athlete-radar-details dt span {
+  flex-shrink: 1;
+  line-height: 1.5;
+}
+
+.personal-page .athlete-radar-details dd {
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.personal-page .athlete-radar-details dd small {
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.personal-page .athlete-radar-details dd strong {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.personal-page .athlete-radar-comparison.is-incomplete {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.personal-page .profile-training-status-metrics > div {
+  gap: 16px;
+  background: var(--paper);
+}
+
+.personal-page .profile-training-status-metrics dt {
+  font-size: 13px;
+}
+
+.personal-page .profile-training-status-metrics small {
+  color: #526a70;
+  font-size: 11px;
+}
+
+.personal-page .profile-training-status-metrics strong {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.personal-page .profile-training-status-primary strong {
+  font-size: clamp(24px, 2.4vw, 32px);
+  line-height: 1.3;
+  letter-spacing: -0.03em;
+}
+
+.personal-page .profile-training-status-primary strong.is-empty {
+  font-size: 15px;
+  letter-spacing: normal;
+}
+
+@media (width <= 1100px) {
+  .personal-page .personal-dossier-identity {
+    flex-wrap: wrap;
+  }
+
+  .personal-page .personal-header-metrics {
+    width: 100%;
+    min-width: 0;
+    padding-top: 16px;
+    border-top: 1px solid var(--dossier-divider);
+    border-left: 0;
+  }
+
+  .personal-page .athlete-radar-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width <= 720px) {
+  .personal-page .personal-dossier-group dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .personal-page .personal-analysis-card-heading {
+    padding: 16px;
+  }
+
+  .personal-page .athlete-radar-comparison {
+    padding: 12px 16px 18px;
+    gap: 16px;
+  }
+
+  .personal-page .athlete-radar-details dd {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .personal-page .body-composition-label {
+    min-width: 86px;
+    padding: 9px;
+  }
+
+  .personal-page .body-composition-label strong {
+    font-size: 22px;
+  }
+}

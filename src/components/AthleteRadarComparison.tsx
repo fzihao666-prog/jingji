@@ -80,51 +80,32 @@ function radarOption(title: string, dimensions: AthleteRadarDimension[], gridOnl
 
   return {
     tooltip: {
-      trigger: 'item',
-
-      formatter: () => {
-        return dimensions
-          .map((dimension) => {
-            const current = formatRadarValue(dimension.currentValue, dimension.unit);
-
-            const reference = formatRadarValue(dimension.referenceValue, dimension.unit);
-
-            const difference = formatRadarDifference(dimension);
-
-            const achieved =
-              dimension.achievedPercent === null
-                ? '--'
-                : `${formatNumber(dimension.achievedPercent, 1)}%`;
-
-            return `
-          <div style="margin-bottom:10px;">
-            <strong>${dimension.label}</strong><br/>
-            当前值：${current}<br/>
-            参考值：${reference}<br/>
-            差值：${difference}<br/>
-            达成度：${achieved}
-          </div>
-        `;
-          })
-          .join('');
-      },
+      trigger: 'item', renderMode: 'richText', confine: true,
+      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 21 },
+      formatter: () => dimensions.map(dimension => [
+        dimension.label,
+        `当前值：${formatRadarValue(dimension.currentValue, dimension.unit)}`,
+        `参考值：${formatRadarValue(dimension.referenceValue, dimension.unit)}`,
+        `差值：${formatRadarDifference(dimension)}`,
+        `达成度：${dimension.achievedPercent === null ? '—' : `${formatNumber(dimension.achievedPercent, 1)}%`}`,
+      ].join('\n')).join('\n\n'),
     },
     animation: false,
 
     legend: {
       top: 0,
       right: 4,
-      itemWidth: 10,
-      itemHeight: 6,
+      itemWidth: 14,
+      itemHeight: 8,
       textStyle: {
         color: '#52666d',
-        fontSize: 9,
+        fontSize: 11,
       },
     },
 
     radar: {
       center: ['50%', '54%'],
-      radius: '50%',
+      radius: '52%',
       splitNumber: 4,
 
       indicator: dimensions.map((dimension) => ({
@@ -134,8 +115,8 @@ function radarOption(title: string, dimensions: AthleteRadarDimension[], gridOnl
 
       axisName: {
         color: '#365660',
-        fontSize: 9,
-        lineHeight: 13,
+        fontSize: 11,
+        lineHeight: 16,
       },
 
       axisLine: {
@@ -185,10 +166,10 @@ function radarOption(title: string, dimensions: AthleteRadarDimension[], gridOnl
             value: athleteValues,
 
             symbol: 'circle',
-            symbolSize: 6,
+            symbolSize: 7,
 
             lineStyle: {
-              width: 2,
+              width: 3,
               color: '#176f7f',
             },
 

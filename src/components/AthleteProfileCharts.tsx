@@ -1220,8 +1220,8 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
                   type="monotone"
                   dataKey="value"
                   stroke={BODY_COMPOSITION_TREND_COLORS[selectedTrend.key]}
-                  strokeWidth={2.25}
-                  dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#fff', strokeWidth: 2 }}
                   activeDot={{ r: 4 }}
                   isAnimationActive={false}
                 />

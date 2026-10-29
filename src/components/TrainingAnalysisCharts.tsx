@@ -1214,10 +1214,10 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart
                 data={chartData}
-                outerRadius="72%"
+                outerRadius="68%"
                 margin={{ top: 28, right: 42, bottom: 28, left: 42 }}
               >
-                <PolarGrid stroke="#d9e5e7" strokeWidth={1} />
+                <PolarGrid stroke="#d9e5e7" strokeWidth={0.8} />
 
                 <PolarAngleAxis
                   dataKey="name"

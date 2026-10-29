@@ -1040,6 +1040,7 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
+      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
       valueFormatter: (value) => wellnessValue(Number(value), trend),
     },
     grid: {
@@ -1077,7 +1078,7 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
         connectNulls: false,
         symbol: 'circle',
         symbolSize: 7,
-        lineStyle: { width: 2.5, color: '#176f7f' },
+        lineStyle: { width: 3, color: '#176f7f' },
         itemStyle: { color: '#176f7f' },
         areaStyle: { color: 'rgb(23 111 127 / 10%)' },
         data: trend.points.map((point) => [
@@ -1094,7 +1095,7 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
               connectNulls: false,
               symbol: 'emptyCircle',
               symbolSize: 6,
-              lineStyle: { width: 2, type: 'dashed' as const, color: '#8a651e' },
+              lineStyle: { width: 2.5, type: 'dashed' as const, color: '#8a651e' },
               itemStyle: { color: '#8a651e' },
               data: trend.points.map((point) => [
                 Date.parse(`${point.date}T00:00:00Z`),
@@ -1118,6 +1119,7 @@ function aerobicTrendOption(data: NonNullable<AerobicEndurancePayload['trend']>)
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
+      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
       valueFormatter: (value) => displayAerobicValue(Number(value), data.unit),
     },
     grid: { top: 16, right: 12, bottom: 28, left: 42, containLabel: true },
@@ -1306,6 +1308,7 @@ function ProfilePhysiologyRecords({
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
+      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
       valueFormatter: (value) => `${formatNumber(Number(value), 2)} ${selected?.unit ?? ''}`,
     },
     xAxis: {
