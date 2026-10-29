@@ -61,7 +61,7 @@ export function projectRules(input: unknown): SportRules | null {
       ...(water ? ['水上','测功仪','骑行'] as const : []),
       ...(cycling ? ['骑行'] as const : []),
       ...(volleyball ? ['排球技术'] as const : []),
-      '力量训练','功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','待核实',
+      '力量训练','功能','拉伸再生','力量耐力','最大力量','速度力量','跑步','专项','其它','未分类',
     ],
     activityIntensitySystems: water ? { on_water: ['U_SYSTEM','UT_SYSTEM'], ergometer: ['U_SYSTEM','UT_SYSTEM'], unknown: ['U_SYSTEM','UT_SYSTEM'] } : {},
     capabilities: {

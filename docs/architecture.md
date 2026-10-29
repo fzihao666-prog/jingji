@@ -838,3 +838,5 @@ GET /api/athletes/:id/pending-project-facts提供授权范围内的待核实训�
 Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team_id。复用 overviewTeams 授权队伍查询；records、special-tests、physical-champion 的现有读取接口接收可选 teamId，服务端在可访问运动员集合中再按队伍收窄，静态参考不变。体能批量查询继续逐批校验筛选后的运动员ID集合。
 
 强度展示简化：总览和专项按原始 intensity_zone 汇总时长及课次，不依赖 intensity_system，不显示“未知体系”，不做跨体系阈值换算；原始体系字段保留。训练内容展示不再因体系与活动不匹配而列为待核实，其他项目与权限边界保持不变。
+
+训练内容展示简化：projectTrainingContentCategory 优先复用活动字段和既有文字分类逻辑，不以项目核实状态、训练目的完整性阻断展示分类；无法识别或类别不适用于项目时显示“未分类”，仍计入总课次，不改写事实或放宽访问权限。

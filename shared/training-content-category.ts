@@ -13,7 +13,7 @@ export const TRAINING_CONTENT_CATEGORIES = [
   '排球技术',
   '专项',
   '其它',
-  '待核实',
+  '未分类',
 ] as const;
 
 export type TrainingContentCategory = (typeof TRAINING_CONTENT_CATEGORIES)[number];
@@ -91,7 +91,7 @@ export function trainingContentCategories(project: unknown): readonly TrainingCo
       '跑步',
       '专项',
       '其它',
-      '待核实',
+      '未分类',
     ]
   );
 }
@@ -99,8 +99,10 @@ export function projectTrainingContentCategory(
   project: unknown,
   input: TrainingContentSource
 ): TrainingContentCategory {
-  if (trainingClassificationReason(project, input)) return '待核实';
-  return trainingContentCategory(input);
+  const category = trainingContentCategory(input);
+  // 仅作展示分类，复用原始字段和明确描述；不要求人工确认，不改写事实。
+  return category !== '其它' && trainingContentCategories(project).includes(category)
+    ? category : '未分类';
 }
 
 /** 只标注展示分类，不用文字猜测补写历史事实。 */
