@@ -9,13 +9,19 @@ const changeKeys = [
   'reps',
   'load',
   'notes',
+  'items',
+  'activityCode',
+  'intensitySystem',
+  'rulesVersion',
 ] as const;
 export function planSessionChanges(
   base: TeamPlanSession,
   edited: TeamPlanSession
 ): TeamPlanOverride['changes'] {
   return Object.fromEntries(
-    changeKeys.filter((key) => base[key] !== edited[key]).map((key) => [key, edited[key]])
+    changeKeys
+      .filter((key) => JSON.stringify(base[key]) !== JSON.stringify(edited[key]))
+      .map((key) => [key, edited[key]])
   );
 }
 export function replacePlanSession(plan: TeamPlan, session: TeamPlanSession): TeamPlan {
@@ -24,7 +30,8 @@ export function replacePlanSession(plan: TeamPlan, session: TeamPlanSession): Te
   const overrides = plan.data.overrides.flatMap((item) => {
     if (item.sessionId !== session.id) return [item];
     const equal = changeKeys.filter(
-      (key) => key in item.changes && item.changes[key] === session[key]
+      (key) =>
+        key in item.changes && JSON.stringify(item.changes[key]) === JSON.stringify(session[key])
     );
     if (!equal.length) return [item];
     overridesChanged = true;

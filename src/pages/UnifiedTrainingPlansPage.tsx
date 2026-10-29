@@ -39,13 +39,8 @@ export function UnifiedTrainingPlansPage(props: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const [filters, setFilters] = useState({
-    project: props.project || '',
-    team: '',
-    from: props.from,
-    to: props.to,
-    status: '',
-  });
+  const [localFilters, setFilters] = useState({ team: '', status: '' });
+  const filters = { ...localFilters, project: props.project || '', from: props.from, to: props.to };
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [historyKey, setHistoryKey] = useState('');
   const [workspaceDirty, setWorkspaceDirty] = useState(false);
@@ -114,10 +109,10 @@ export function UnifiedTrainingPlansPage(props: Props) {
   }, [project, props.user.role, retry]);
   const permitPlanChange = () =>
     !workspaceDirty || window.confirm('当前计划有未保存修改，切换将放弃这些修改。是否继续？');
-  const changeFilter = (patch: Partial<typeof filters>) => {
+  const changeFilter = (patch: Partial<typeof localFilters>) => {
     if (!permitPlanChange()) return;
     setWorkspaceDirty(false);
-    setFilters({ ...filters, ...patch });
+    setFilters({ ...localFilters, ...patch });
     setSelectedId(null);
     setHistoryKey('');
   };
@@ -151,22 +146,11 @@ export function UnifiedTrainingPlansPage(props: Props) {
           ) : undefined
         }
       />
-      <p>队伍统一安排专项、体能与恢复训练；教练通过周视图编排草稿、调整个人目标并审核发布。</p>
+      <p>
+        队伍统一安排专项、体能与恢复训练；Web
+        查看计划与执行分析；教练优先在小程序生成、调整、审核发布和确认实施。
+      </p>
       <FilterBar label="训练计划筛选">
-        <label>
-          项目
-          <select
-            value={filters.project}
-            onChange={(event) => changeFilter({ project: event.target.value, team: '' })}
-          >
-            <option value="">全部授权项目</option>
-            {[...new Set([...plans, ...history].map((plan) => plan.project))].map((value) => (
-              <option key={value} value={value}>
-                {projectLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
         <label>
           队伍
           <select
@@ -181,27 +165,6 @@ export function UnifiedTrainingPlansPage(props: Props) {
             ))}
           </select>
         </label>
-        <label>
-          开始日期
-          <input
-            type="date"
-            value={filters.from}
-            max={filters.to || undefined}
-            onChange={(event) => changeFilter({ from: event.target.value })}
-          />
-        </label>
-        <label>
-          结束日期
-          <input
-            type="date"
-            value={filters.to}
-            min={filters.from || undefined}
-            onChange={(event) => changeFilter({ to: event.target.value })}
-          />
-        </label>
-        <button className="secondary-button" onClick={() => changeFilter({ from: '', to: '' })}>
-          全部周期
-        </button>
       </FilterBar>
       <div className="unified-plan-tabs" role="group" aria-label="发布状态">
         {[['', '全部计划'], ...Object.entries(statusLabels)].map(([value, label]) => (
@@ -318,8 +281,8 @@ export function UnifiedTrainingPlansPage(props: Props) {
             {selected.title} · V{selected.version}
           </h2>
           <p>
-            {selected.team} · {statusLabels[selected.status]} · {selected.startDate} 至{' '}
-            {selected.endDate}
+            {projectLabel(selected.project)} · {selected.team} · {statusLabels[selected.status]} ·{' '}
+            {selected.startDate} 至 {selected.endDate}
           </p>
           <p>发布时间：{selected.publishedAt || '尚未发布'}</p>
           <p>

@@ -255,6 +255,26 @@ Page({
       overrideAthleteId: 0,
     });
   },
+  addContentItem() {
+    const items = this.data.lesson.items || [];
+    if (items.length >= 50) return;
+    this.setData({
+      'lesson.items': [
+        ...items,
+        { id: `item-${Date.now()}-${items.length}`, title: '', description: '' },
+      ],
+    });
+  },
+  contentItemInput(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    const field = event.currentTarget.dataset.field;
+    if (!['title', 'description'].includes(field)) return;
+    this.setData({ [`lesson.items[${index}].${field}`]: event.detail.value });
+  },
+  removeContentItem(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    this.setData({ 'lesson.items': (this.data.lesson.items || []).filter((_, i) => i !== index) });
+  },
   lessonInput(event) {
     const field = event.currentTarget.dataset.field;
     const value = event.detail.value;
@@ -302,6 +322,10 @@ Page({
     ) {
       this.setData({ error: '计划数值必须为空或非负有效数字' });
       wx.showToast({ title: '请检查计划数值', icon: 'none' });
+      return;
+    }
+    if (lesson.items?.some((item) => !item.title.trim())) {
+      this.reportError('请填写训练项目名称，或移除空项目');
       return;
     }
     if (!lesson.date || !lesson.content) {

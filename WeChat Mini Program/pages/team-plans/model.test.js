@@ -84,3 +84,14 @@ test('AI修改差异行包含新增、删除与字段级修改', () => {
   assert.match(text, /删除：2026-10-17 基础力量/);
   assert.match(text, /修改：水上有氧训练 时长: 90 → 70/);
 });
+
+test('训练项目按内容比较，修订差异可读', () => {
+  const base = { ...emptySession(), items: [{ id: 'a', title: '主训练', description: '有氧' }] };
+  assert.deepEqual(differences(base, JSON.parse(JSON.stringify(base))), {});
+  const items = [{ ...base.items[0], description: '恢复' }];
+  assert.deepEqual(differences(base, { ...base, items }), { items });
+  const rows = localModule.exports.diffRows({
+    modified: [{ id: 's1', content: '训练', changes: { items: { from: base.items, to: items } } }],
+  });
+  assert.match(rows[0].text, /主训练：有氧 → 主训练：恢复/);
+});

@@ -69,10 +69,13 @@ export function registerTeamPlanAiRoutes(app: Express) {
 
   function readDraftWithMetadata(planId: number) {
     const row = db
-      .prepare('SELECT plan_data AS data,ai_metadata AS meta FROM training_plans WHERE id=?')
-      .get(planId) as { data: string; meta: string | null } | undefined;
+      .prepare(
+        'SELECT plan_data AS data,ai_metadata AS meta,revision FROM training_plans WHERE id=?'
+      )
+      .get(planId) as { data: string; meta: string | null; revision: number } | undefined;
     if (!row) return null;
     return {
+      revision: row.revision,
       data: JSON.parse(row.data) as TeamPlanData,
       metadata: parseAiMetadata(row.meta),
     };
@@ -82,6 +85,7 @@ export function registerTeamPlanAiRoutes(app: Express) {
     req: Request,
     input: {
       id?: number;
+      expectedRevision?: number;
       teamId: number;
       date: string;
       title: string;
@@ -94,14 +98,15 @@ export function registerTeamPlanAiRoutes(app: Express) {
       const result = db
         .prepare(
           `UPDATE training_plans SET title=?,plan_data=?,ai_metadata=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,revision=revision+1
-          WHERE id=? AND status='draft'`
+          WHERE id=? AND status='draft' AND revision=?`
         )
         .run(
           input.title,
           JSON.stringify(input.data),
           JSON.stringify(input.metadata),
           req.authUser!.id,
-          input.id
+          input.id,
+          input.expectedRevision ?? -1
         );
       if (!result.changes) throw new TeamPlanAiError('草稿已变化或已被发布，请刷新后重试');
       return input.id;
@@ -155,6 +160,7 @@ export function registerTeamPlanAiRoutes(app: Express) {
       });
       const savedId = saveDraft(req, {
         id: existing?.id,
+        expectedRevision: existingFull?.revision,
         teamId: parsed.data.teamId,
         date: parsed.data.date,
         title: `${parsed.data.date} ${team.name} AI训练计划`,
@@ -210,6 +216,7 @@ export function registerTeamPlanAiRoutes(app: Express) {
       // AI 失败由 chatJson 抛错；上一版有效草稿保持不变。
       saveDraft(req, {
         id: plan.id,
+        expectedRevision: full.revision,
         teamId: plan.teamId,
         date: plan.startDate,
         title: plan.title,
@@ -238,13 +245,13 @@ export function registerTeamPlanAiRoutes(app: Express) {
       const plan = readTeamPlans(db).find((item) => item.id === parsedId.data);
       if (!plan) return res.status(404).json({ message: '计划不存在' });
       requireTeamAccess(req, plan.teamId);
-      if (plan.status !== 'draft')
-        return res.status(409).json({ message: '只能撤销草稿的修改' });
+      if (plan.status !== 'draft') return res.status(409).json({ message: '只能撤销草稿的修改' });
       const full = readDraftWithMetadata(plan.id);
       if (!full?.metadata) return res.status(400).json({ message: '该草稿无AI修改历史' });
       const restored = undoTeamPlanAiChange({ data: full.data, metadata: full.metadata });
       saveDraft(req, {
         id: plan.id,
+        expectedRevision: full.revision,
         teamId: plan.teamId,
         date: plan.startDate,
         title: plan.title,

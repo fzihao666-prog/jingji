@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
   role: 'SCC' as string,
   // AI 返回内容由测试逐场次控制。
   aiReply: null as unknown,
+  onReply: null as (() => void) | null,
 }));
 vi.mock('../core/db.ts', () => ({
   get db() {
@@ -30,7 +31,12 @@ vi.mock('../core/auth.ts', () => ({
     },
 }));
 vi.mock('../core/ai-client.ts', () => ({
-  chatJson: async () => ({ data: fixture.aiReply, modelUsed: 'Test (mock)' }),
+  chatJson: async () => {
+    const callback = fixture.onReply;
+    fixture.onReply = null;
+    callback?.();
+    return { data: fixture.aiReply, modelUsed: 'Test (mock)' };
+  },
   chatCompletion: async () => ({ content: '{}', modelUsed: 'Test (mock)' }),
   cleanJson: (text: string) => text,
   configuredModels: () => [],
@@ -52,7 +58,7 @@ beforeAll(async () => {
     CREATE TABLE training_sessions(id INTEGER PRIMARY KEY,athlete_id INTEGER,session_date TEXT,session_order INTEGER DEFAULT 1,duration_min REAL DEFAULT 0,distance_km REAL DEFAULT 0,duration_reported INTEGER DEFAULT 1,distance_reported INTEGER DEFAULT 1,rpe REAL,srpe REAL DEFAULT 0,training_type TEXT DEFAULT '',structure_type TEXT DEFAULT '',intensity_zone TEXT DEFAULT '',content TEXT DEFAULT '',source TEXT DEFAULT 'manual',quality TEXT DEFAULT 'valid',is_demo INTEGER DEFAULT 0);
     CREATE TABLE daily_wellness(id INTEGER PRIMARY KEY,athlete_id INTEGER,wellness_date TEXT,sleep_hours REAL,morning_pulse REAL,fatigue_index REAL,status TEXT DEFAULT 'normal',quality TEXT DEFAULT 'valid',is_demo INTEGER DEFAULT 0);
     CREATE TABLE special_test_events(id INTEGER PRIMARY KEY,test_date TEXT,project TEXT,distance_m INTEGER,boat_class TEXT,gender_group TEXT,session TEXT DEFAULT '',created_by INTEGER DEFAULT 1);
-    CREATE TABLE special_test_results(id INTEGER PRIMARY KEY,event_id INTEGER,crew_name TEXT,best_ms INTEGER,average_ms INTEGER);
+    CREATE TABLE special_test_results(id INTEGER PRIMARY KEY,event_id INTEGER,crew_name TEXT,member_athlete_ids TEXT DEFAULT '[]',best_ms INTEGER,average_ms INTEGER);
     CREATE TABLE strength_result_sets(id INTEGER PRIMARY KEY,training_session_id INTEGER,exercise_name TEXT,set_index INTEGER,actual_reps REAL,actual_weight_kg REAL,completed INTEGER DEFAULT 1);`
   );
   const { migrateTeamPlans } = await import('../core/team-plan-migration.ts');
@@ -85,7 +91,7 @@ async function call(path: string, body?: unknown, method = 'POST') {
     status: response.status,
     ...((await response.json()) as {
       plan: TeamPlan;
-      diff: { added: unknown[]; removed: unknown[]; modified: unknown[] };
+      diff: { added: unknown[]; removed: unknown[]; modified: unknown[]; personal?: unknown[] };
       checks: Array<{ sessionId: string; itemId: string; status: string; revision: number }>;
       check: { status: string; revision: number };
       dataNotes: string[];
@@ -177,8 +183,8 @@ it('生成草稿、对话修改保留差异、撤销与逐项确认', async () =
   ).toBe(409);
 
   // 手工把草稿置为已发布后逐项确认。
-  fixture.db!
-    .prepare("UPDATE training_plans SET status='published',published_at=? WHERE id=?")
+  fixture
+    .db!.prepare("UPDATE training_plans SET status='published',published_at=? WHERE id=?")
     .run(new Date().toISOString(), planId);
   const checked = await call(
     `/api/team-plans/${planId}/checks`,
@@ -235,4 +241,101 @@ it('无队伍授权的教练与运动员不能生成或确认', async () => {
   expect(
     (await call('/api/team-plans/ai/generate', { teamId: 1, date: '2026-10-17' })).status
   ).toBe(403);
+});
+
+it('AI摘要覆盖完整28天，缺失测量不冒充零，忽略目标日以后的周期', async () => {
+  const { buildTeamAiContext } = await import('./team-plan-ai.ts');
+  const db = fixture.db!;
+  db.prepare(
+    `INSERT INTO training_sessions(id,athlete_id,session_date,duration_min,distance_km,duration_reported,distance_reported,rpe,srpe) VALUES(900,1,'2026-09-19',0,0,0,0,NULL,NULL)`
+  ).run();
+  const context = buildTeamAiContext(db, { teamId: 1, date: '2026-10-17' });
+  const days = context.dailyLoads as Array<Record<string, unknown>>;
+  expect(days).toHaveLength(28);
+  expect(days[0]).toMatchObject({
+    date: '2026-09-19',
+    sessions: 1,
+    durationMin: null,
+    distanceKm: null,
+  });
+  expect(days.at(-1)?.date).toBe('2026-10-16');
+  expect(context.loadTrend).toMatchObject({
+    recent7: { durationMin: null, distanceKm: null, load: null },
+  });
+  db.prepare('DELETE FROM training_sessions WHERE id=900').run();
+});
+
+it('教练指定个人减量复用现有差异，非本队调整失败保留上一版草稿', async () => {
+  fixture.role = 'SCC';
+  fixture.ids = [1, 2];
+  const reply = aiSessions(90);
+  fixture.aiReply = {
+    ...reply,
+    date: '2026-10-18',
+    sessions: reply.sessions.map((session) => ({ ...session, date: '2026-10-18' })),
+  };
+  const generated = await call('/api/team-plans/ai/generate', { teamId: 1, date: '2026-10-18' });
+  expect(generated.status).toBe(200);
+  const base = fixture.aiReply as Record<string, unknown>;
+  fixture.aiReply = {
+    ...base,
+    overrides: [
+      { athleteId: 1, sessionId: 's1', changes: { durationMin: 45 }, reason: '教练要求减量' },
+    ],
+  };
+  const revised = await call(`/api/team-plans/ai/${generated.plan.id}/revise`, {
+    instruction: '甲上午减量到45分钟',
+  });
+  expect(revised.status).toBe(200);
+  expect(revised.plan.data.overrides[0]).toMatchObject({
+    athleteId: 1,
+    changes: { durationMin: 45 },
+    createdBy: 1,
+  });
+  expect(revised.plan.data.sessions[0].durationMin).toBe(90);
+  expect(revised.diff.personal).toHaveLength(1);
+  fixture.aiReply = {
+    ...base,
+    overrides: [
+      { athleteId: 999, sessionId: 's1', changes: { durationMin: 30 }, reason: '错误队员' },
+    ],
+  };
+  const denied = await call(`/api/team-plans/ai/${generated.plan.id}/revise`, {
+    instruction: '再调整',
+  });
+  expect(denied.status).not.toBe(200);
+  const saved = JSON.parse(
+    (
+      fixture
+        .db!.prepare('SELECT plan_data FROM training_plans WHERE id=?')
+        .get(generated.plan.id) as { plan_data: string }
+    ).plan_data
+  );
+  expect(saved.overrides[0].changes.durationMin).toBe(45);
+});
+
+it('AI生成期间人工修改草稿时拒绝覆盖', async () => {
+  const reply = aiSessions(90);
+  fixture.aiReply = {
+    ...reply,
+    date: '2026-10-19',
+    sessions: reply.sessions.map((session) => ({ ...session, date: '2026-10-19' })),
+  };
+  const generated = await call('/api/team-plans/ai/generate', { teamId: 1, date: '2026-10-19' });
+  expect(generated.status).toBe(200);
+  fixture.onReply = () => {
+    const data = structuredClone(generated.plan.data);
+    data.sessions[0].durationMin = 75;
+    fixture
+      .db!.prepare('UPDATE training_plans SET plan_data=?,revision=revision+1 WHERE id=?')
+      .run(JSON.stringify(data), generated.plan.id);
+  };
+  const revised = await call(`/api/team-plans/ai/${generated.plan.id}/revise`, {
+    instruction: '修改上午训练',
+  });
+  expect(revised.status).not.toBe(200);
+  const row = fixture
+    .db!.prepare('SELECT plan_data FROM training_plans WHERE id=?')
+    .get(generated.plan.id) as { plan_data: string };
+  expect(JSON.parse(row.plan_data).sessions[0].durationMin).toBe(75);
 });

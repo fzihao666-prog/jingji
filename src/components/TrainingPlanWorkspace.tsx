@@ -1,4 +1,4 @@
-import { TrainingSessionEntry } from './TrainingSessionEntry';
+import { Waves, Dumbbell, HeartPulse } from 'lucide-react';
 import { ACTIVITY_LABELS, isActivityCode } from '../../shared/sport-rules';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
@@ -27,9 +27,12 @@ type Props = {
   onDirtyChange: (dirty: boolean) => void;
 };
 type Editor = { session: TeamPlanSession; mode: 'session' | 'override'; athleteId: number };
+const periodLabel = (period: string) =>
+  ({ morning: '上午', afternoon: '下午', evening: '晚间' })[period] || period || '未指定时段';
 const categoryLabels = { special: '专项', physical: '体能', recovery: '恢复' };
 const statusLabels = { draft: '草稿', pending: '待审核', published: '已发布', archived: '已归档' };
 const changeLabels: Record<string, string> = {
+  items: '训练项目',
   period: '时段',
   content: '内容',
   durationMin: '时长（分钟）',
@@ -47,7 +50,10 @@ const beijingToday = () =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
 const differenceText = (item: TeamPlanOverride) =>
   Object.entries(item.changes)
-    .map(([key, value]) => `${changeLabels[key] || key}：${value ?? '未设置'}`)
+    .map(
+      ([key, value]) =>
+        `${changeLabels[key] || key}：${key === 'items' && Array.isArray(value) ? value.map((row) => `${row.title}：${row.description}`).join('；') : (value ?? '未设置')}`
+    )
     .join('；');
 
 export function TrainingPlanWorkspace({
@@ -126,10 +132,11 @@ export function TrainingPlanWorkspace({
       'reps',
       'load',
       'notes',
+      'items',
     ] as const) {
-      if (session[key] !== old[key])
+      if (JSON.stringify(session[key]) !== JSON.stringify(old[key]))
         changes.push(
-          `${session.date} ${session.period} ${changeLabels[key] || (key === 'date' ? '日期' : '类别')}：${old[key] ?? '未设置'} → ${session[key] ?? '未设置'}`
+          `${session.date} ${session.period} ${changeLabels[key] || (key === 'date' ? '日期' : '类别')}：${key === 'items' ? (old.items || []).map((item) => `${item.title}：${item.description}`).join('；') || '未设置' : (old[key] ?? '未设置')} → ${key === 'items' ? (session.items || []).map((item) => `${item.title}：${item.description}`).join('；') || '未设置' : (session[key] ?? '未设置')}`
         );
     }
   }
@@ -364,6 +371,20 @@ export function TrainingPlanWorkspace({
           {dirty ? ' · 有未保存修改' : ''}
         </span>
       </div>
+      {draft.aiMetadata && (
+        <details className="plan-workspace-ai-notes">
+          <summary>AI 草稿依据与提示 · 需教练审核发布</summary>
+          {(draft.aiMetadata.dataNotes || []).map((note, index) => (
+            <p key={`note-${index}`}>{note}</p>
+          ))}
+          {(draft.aiMetadata.warnings || []).map((note, index) => (
+            <p key={`warning-${index}`}>{note}</p>
+          ))}
+          {!draft.aiMetadata.dataNotes?.length && !draft.aiMetadata.warnings?.length && (
+            <p>暂无补充依据说明。</p>
+          )}
+        </details>
+      )}
       {unsupported && (
         <p role="note">
           此计划包含当前保存接口尚不支持的扩展字段，仅供查看，以免保存时丢失原字段。
@@ -424,50 +445,54 @@ export function TrainingPlanWorkspace({
             const adjustments = draft.data.overrides.filter(
               (item) => item.sessionId === session.id
             );
+            const CategoryIcon = { special: Waves, physical: Dumbbell, recovery: HeartPulse }[
+              session.category
+            ];
             return (
-              <article className="plan-workspace-lesson" key={session.id}>
+              <article className={`plan-workspace-lesson is-${session.category}`} key={session.id}>
                 <div className="plan-workspace-lesson-heading">
                   <h4>
-                    {session.period || '未指定时段'} · {categoryLabels[session.category]}
+                    <CategoryIcon size={16} aria-hidden="true" /> {periodLabel(session.period)}｜
+                    {categoryLabels[session.category]}训练
                   </h4>
-                  <span>{new Set(adjustments.map((item) => item.athleteId)).size} 人调整</span>
+                  {adjustments.length > 0 && (
+                    <span>{new Set(adjustments.map((item) => item.athleteId)).size} 人调整</span>
+                  )}
                 </div>
                 <p className="plan-workspace-content">{session.content}</p>
-                {['published', 'archived'].includes(draft.status) &&
-                  previewId > 0 &&
-                  scoped.some((athlete) => athlete.id === previewId) && (
-                    <details>
-                      <summary>填写此课实际训练</summary>
-                      <TrainingSessionEntry
-                        key={`${draft.id}:${session.id}:${previewId}`}
-                        athleteId={previewId}
-                        project={draft.project}
-                        mode={user.role === 'ATL' ? 'self' : 'coach'}
-                        plan={{ id: draft.id, session }}
-                        onSaved={() => setMessage('实际训练已保存并关联此计划。')}
-                      />
-                    </details>
-                  )}
-                <p>
-                  时长：{session.durationMin ?? '—'} 分钟
-                  {session.category === 'special' && (
-                    <>
-                      {' '}
-                      · 距离：{session.distanceKm ?? '—'} km · 活动：
-                      {isActivityCode(session.activityCode)
+                <dl className="plan-workspace-parameters">
+                  {[
+                    ['计划时长', session.durationMin === null ? '' : `${session.durationMin} 分钟`],
+                    ['计划距离', session.distanceKm === null ? '' : `${session.distanceKm} km`],
+                    [
+                      '训练方式',
+                      isActivityCode(session.activityCode)
                         ? ACTIVITY_LABELS[session.activityCode]
-                        : '待核实'}{' '}
-                      · 强度：{session.intensitySystem || '未指定体系'} {session.intensity || '—'}
-                    </>
-                  )}
-                  {session.category === 'physical' && (
-                    <>
-                      {' '}
-                      · {session.sets ?? '—'} 组 × {session.reps ?? '—'} 次 · 负重：
-                      {session.load ?? '—'}
-                    </>
-                  )}
-                </p>
+                        : '',
+                    ],
+                    ['强度', session.intensity],
+                    ['组数', session.sets === null ? '' : `${session.sets} 组`],
+                    ['次数', session.reps === null ? '' : `${session.reps} 次`],
+                    ['负重', session.load === null ? '' : `${session.load} kg`],
+                  ]
+                    .filter(([, value]) => value !== '')
+                    .map(([label, value]) => (
+                      <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                </dl>
+                {Boolean(session.items?.length) && (
+                  <ol className="plan-workspace-items">
+                    {session.items?.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.title}</strong>
+                        {item.description && <p>{item.description}</p>}
+                      </li>
+                    ))}
+                  </ol>
+                )}
                 {session.notes && <p className="plan-workspace-content">{session.notes}</p>}
                 {adjustments.length > 0 && (
                   <details>

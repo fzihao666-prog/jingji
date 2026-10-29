@@ -96,3 +96,17 @@ describe('训练课编辑适配', () => {
     ).toBe(true);
   });
 });
+
+it('结构化内容项可编辑，相同内容不产生个人差异，修改保留其他课', () => {
+  const base = { ...session, items: [{ id: 'warmup', title: '热身', description: '低强度划行' }] };
+  expect(
+    planSessionChanges(base, { ...base, items: base.items.map((item) => ({ ...item })) })
+  ).toEqual({});
+  const edited = { ...base, items: [{ ...base.items[0], description: '恢复划行' }] };
+  expect(planSessionChanges(base, edited)).toEqual({ items: edited.items });
+  const updated = replacePlanSession(plan, edited);
+  expect(updated.data.sessions[1]).toEqual(plan.data.sessions[1]);
+  expect(hasUnsupportedPlanFields({ ...updated, data: { ...updated.data, overrides: [] } })).toBe(
+    false
+  );
+});

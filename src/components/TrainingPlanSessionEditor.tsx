@@ -100,6 +100,10 @@ export function TrainingPlanSessionEditor({
             contentInput.current?.focus();
             return;
           }
+          if (value.items?.some((item) => !item.title.trim())) {
+            setError('请填写训练项目名称，或移除空项目。');
+            return;
+          }
           if (mode === 'override' && !adjustmentReason.trim()) {
             setError('请填写调整原因，不能只包含空格。');
             setErrorField('reason');
@@ -259,6 +263,67 @@ export function TrainingPlanSessionEditor({
         <p className="muted">
           水上/测功仪、桨频、每组距离、组间恢复及多个体能动作，可按行填写在训练内容中。
         </p>
+        <fieldset>
+          <legend>训练项目（按执行顺序）</legend>
+          {(value.items || []).map((item, index) => (
+            <div key={item.id}>
+              <label htmlFor={`${prefix}-item-title-${index}`}>项目 {index + 1}</label>
+              <input
+                id={`${prefix}-item-title-${index}`}
+                value={item.title}
+                maxLength={200}
+                required
+                onChange={(event) =>
+                  setValue({
+                    ...value,
+                    items: value.items?.map((row, i) =>
+                      i === index ? { ...row, title: event.target.value } : row
+                    ),
+                  })
+                }
+              />
+              <label htmlFor={`${prefix}-item-description-${index}`}>训练内容与参数</label>
+              <textarea
+                id={`${prefix}-item-description-${index}`}
+                value={item.description}
+                maxLength={2000}
+                onChange={(event) =>
+                  setValue({
+                    ...value,
+                    items: value.items?.map((row, i) =>
+                      i === index ? { ...row, description: event.target.value } : row
+                    ),
+                  })
+                }
+              />
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  setValue({ ...value, items: value.items?.filter((_, i) => i !== index) })
+                }
+              >
+                移除项目 {index + 1}
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={(value.items?.length || 0) >= 50}
+            onClick={() =>
+              setValue({
+                ...value,
+                items: [
+                  ...(value.items || []),
+                  { id: crypto.randomUUID(), title: '', description: '' },
+                ],
+              })
+            }
+          >
+            添加训练项目
+          </button>
+        </fieldset>
         <label htmlFor={field('notes')}>技术要求及备注</label>
         <textarea
           id={field('notes')}

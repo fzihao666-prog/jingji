@@ -61,6 +61,7 @@ const aiPlanOutput = z.object({
   goal: z.string().max(4000).default(''),
   dataNotes: z.array(z.string().max(1000)).max(20).default([]),
   sessions: z.array(aiSession).min(1).max(50),
+  overrides: teamPlanInput.shape.data.shape.overrides.default([]),
 });
 
 export class TeamPlanAiError extends Error {}
@@ -121,7 +122,13 @@ export function normalizeAiPlan(
     goal: output.goal,
     focus: output.focus,
     sessions,
-    overrides: [],
+    overrides: output.overrides.map((override) => ({
+      ...override,
+      createdBy: override.createdBy || 1,
+      updatedBy: override.updatedBy || 1,
+      createdAt: override.createdAt || '',
+      updatedAt: override.updatedAt || '',
+    })),
   };
   const check = teamPlanInput.safeParse({
     title: `AI草稿 ${targetDate}`,
@@ -160,6 +167,12 @@ export type TeamPlanDiff = {
   added: TeamPlanSession[];
   removed: TeamPlanSession[];
   modified: Array<{ id: string; content: string; changes: Record<string, unknown> }>;
+  personal?: Array<{
+    athleteId: number;
+    sessionId: string;
+    changes: TeamPlanData['overrides'][number]['changes'];
+    reason: string;
+  }>;
 };
 
 export function diffTeamPlanData(prev: TeamPlanData, next: TeamPlanData): TeamPlanDiff {
@@ -179,7 +192,48 @@ export function diffTeamPlanData(prev: TeamPlanData, next: TeamPlanData): TeamPl
     if (Object.keys(changes).length)
       modified.push({ id: session.id, content: session.content, changes });
   }
-  return { added, removed, modified };
+  const personal = next.overrides
+    .filter((item) => {
+      const old = prev.overrides.find(
+        (row) => row.athleteId === item.athleteId && row.sessionId === item.sessionId
+      );
+      return (
+        !old ||
+        JSON.stringify(old.changes) !== JSON.stringify(item.changes) ||
+        old.reason !== item.reason
+      );
+    })
+    .map(({ athleteId, sessionId, changes, reason }) => ({
+      athleteId,
+      sessionId,
+      changes,
+      reason,
+    }));
+  return { added, removed, modified, ...(personal.length ? { personal } : {}) };
+}
+
+// 保留未涉及的个人差异，合并教练指定调整；删除关联课次时拒绝覆盖旧草稿。
+export function preserveAiOverrides(
+  previous: TeamPlanData,
+  next: TeamPlanData
+): TeamPlanData['overrides'] {
+  const sessionIds = new Set(next.sessions.map((session) => session.id));
+  if (previous.overrides.some((override) => !sessionIds.has(override.sessionId)))
+    throw new TeamPlanAiError('AI修订移除了已有个人调整的训练课，请先由教练处理该课个人调整');
+  const nextByKey = new Map(
+    next.overrides.map((item) => [`${item.athleteId}:${item.sessionId}`, item])
+  );
+  return [
+    ...previous.overrides.map((item) => {
+      const key = `${item.athleteId}:${item.sessionId}`;
+      const update = nextByKey.get(key);
+      nextByKey.delete(key);
+      return update
+        ? { ...item, ...update, changes: { ...item.changes, ...update.changes } }
+        : item;
+    }),
+    ...nextByKey.values(),
+  ];
 }
 
 // —— 真实数据摘要：只整理与制定次日计划有关的信息，缺失显式标注，不把原始查询直接丢给模型。 ——
@@ -197,8 +251,10 @@ export function buildTeamAiContext(
     .get(input.teamId) as { id: number; project: string; name: string } | undefined;
   if (!team) throw new TeamPlanAiError('队伍不存在或已停用');
   const athletes = db
-    .prepare('SELECT id,name FROM athletes WHERE team_id=? AND active=1 ORDER BY name')
-    .all(input.teamId) as Array<{ id: number; name: string }>;
+    .prepare(
+      'SELECT id,name FROM athletes WHERE team_id=? AND project=? AND active=1 ORDER BY name'
+    )
+    .all(input.teamId, team.project) as Array<{ id: number; name: string }>;
   if (!athletes.length) throw new TeamPlanAiError('队伍暂无在训运动员');
   const athleteIds = athletes.map((athlete) => athlete.id);
   const placeholders = athleteIds.map(() => '?').join(',');
@@ -209,9 +265,10 @@ export function buildTeamAiContext(
     .prepare(
       `SELECT title,start_date AS startDate,end_date AS endDate,plan_data AS planData
       FROM training_plans WHERE model='team' AND team_id=? AND status='published'
+      AND start_date<=? AND end_date>=?
       ORDER BY published_at DESC LIMIT 1`
     )
-    .get(input.teamId) as
+    .get(input.teamId, input.date, input.date) as
     { title: string; startDate: string; endDate: string; planData: string } | undefined;
   let currentPlan: unknown = null;
   if (published) {
@@ -228,14 +285,14 @@ export function buildTeamAiContext(
   }
 
   // 近 28 天逐日负荷（正式课次口径），并给出近 7 天对比。
-  const windowStart = beijingDate(new Date(Date.parse(`${input.date}T00:00:00Z`) - 27 * 86400_000));
+  const windowStart = beijingDate(new Date(Date.parse(`${input.date}T00:00:00Z`) - 28 * 86400_000));
   const rows = db
     .prepare(
       `SELECT session_date AS date,
         COUNT(*) AS sessions,
-        SUM(duration_min) AS durationMin,
-        SUM(distance_km) AS distanceKm,
-        SUM(srpe) AS load,
+        SUM(CASE WHEN duration_reported=1 THEN duration_min END) AS durationMin,
+        SUM(CASE WHEN distance_reported=1 THEN distance_km END) AS distanceKm,
+        SUM(CASE WHEN rpe IS NOT NULL AND duration_reported=1 THEN srpe END) AS load,
         AVG(rpe) AS avgRpe
       FROM training_sessions
       WHERE athlete_id IN (${placeholders}) AND session_date BETWEEN ? AND ? AND session_date < ?
@@ -254,7 +311,7 @@ export function buildTeamAiContext(
   }>;
   const dayMap = new Map(rows.map((row) => [row.date, row]));
   const dailyLoads = [] as Array<Record<string, unknown>>;
-  for (let offset = 27; offset >= 1; offset--) {
+  for (let offset = 28; offset >= 1; offset--) {
     const day = beijingDate(new Date(Date.parse(`${input.date}T00:00:00Z`) - offset * 86400_000));
     const row = dayMap.get(day);
     dailyLoads.push(
@@ -272,22 +329,23 @@ export function buildTeamAiContext(
   }
   const recent7 = dailyLoads.slice(-7);
   const prior7 = dailyLoads.slice(-14, -7);
-  const sum = (list: Array<Record<string, unknown>>, key: string) =>
-    list.reduce<number>((total, item) => total + Number(item[key] || 0), 0);
-  const loadTrend = {
-    recent7: {
-      sessions: sum(recent7, 'sessions'),
-      durationMin: Math.round(sum(recent7, 'durationMin')),
-      distanceKm: Math.round(sum(recent7, 'distanceKm') * 10) / 10,
-      load: Math.round(sum(recent7, 'load') * 10) / 10,
-    },
-    prior7: {
-      sessions: sum(prior7, 'sessions'),
-      durationMin: Math.round(sum(prior7, 'durationMin')),
-      distanceKm: Math.round(sum(prior7, 'distanceKm') * 10) / 10,
-      load: Math.round(sum(prior7, 'load') * 10) / 10,
-    },
+  const summarize = (list: Array<Record<string, unknown>>) => {
+    const sum = (key: string, digits = 0): number | null => {
+      const values = list
+        .map((item) => item[key])
+        .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+      return values.length
+        ? Number(values.reduce((total, value) => total + value, 0).toFixed(digits))
+        : null;
+    };
+    return {
+      sessions: sum('sessions'),
+      durationMin: sum('durationMin'),
+      distanceKm: sum('distanceKm', 1),
+      load: sum('load', 1),
+    };
   };
+  const loadTrend = { recent7: summarize(recent7), prior7: summarize(prior7) };
 
   // 昨日计划、队伍执行确认与实际记录（严格区分三个层次）。
   const yesterday = beijingDate(new Date(Date.parse(`${input.date}T00:00:00Z`) - 86400_000));
@@ -306,10 +364,14 @@ export function buildTeamAiContext(
     const checks = readTeamPlanChecks(db, yesterdayPlanRow.id);
     const actual = db
       .prepare(
-        `SELECT COUNT(*) AS sessions,SUM(duration_min) AS durationMin,SUM(distance_km) AS distanceKm,
+        `SELECT COUNT(*) AS sessions,
+          SUM(CASE WHEN duration_reported=1 THEN duration_min END) AS durationMin,
+          SUM(CASE WHEN distance_reported=1 THEN distance_km END) AS distanceKm,
           AVG(rpe) AS avgRpe
         FROM training_sessions WHERE athlete_id IN (${placeholders}) AND session_date=?
-          AND is_demo=0 AND quality NOT IN ('insufficient','outlier','estimated')`
+          AND is_demo=0 AND quality NOT IN ('insufficient','outlier','estimated')
+          AND LOWER(source) NOT LIKE '%demo%' AND LOWER(source) NOT LIKE '%seed%'
+          AND LOWER(source) NOT LIKE '%estimated%'`
       )
       .get(...athleteIds, yesterday) as {
       sessions: number;
@@ -382,16 +444,20 @@ export function buildTeamAiContext(
       `SELECT e.test_date AS date,e.distance_m AS distanceM,e.boat_class AS boatClass,
         ROUND(AVG(r.best_ms)/1000.0,2) AS avgBestSeconds
       FROM special_test_results r JOIN special_test_events e ON e.id=r.event_id
-      WHERE e.project=? AND e.test_date < ?
+      WHERE e.project=? AND e.test_date BETWEEN ? AND ?
+        AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(r.member_athlete_ids) THEN r.member_athlete_ids ELSE '[]' END) m WHERE m.value IN (${placeholders}))
       GROUP BY e.id ORDER BY e.test_date DESC LIMIT 5`
     )
-    .all(team.project, input.date) as Array<Record<string, unknown>>;
+    .all(team.project, windowStart, yesterday, ...athleteIds) as Array<Record<string, unknown>>;
   if (!specialTests.length) missing.push('近期专项测试数据缺失');
   const strengthTests = db
     .prepare(
       `SELECT COUNT(*) AS sets,SUM(actual_weight_kg*actual_reps) AS volumeKg
       FROM strength_result_sets s JOIN training_sessions t ON t.id=s.training_session_id
-      WHERE t.athlete_id IN (${placeholders}) AND t.session_date BETWEEN ? AND ? AND s.completed=1`
+      WHERE t.athlete_id IN (${placeholders}) AND t.session_date BETWEEN ? AND ? AND s.completed=1
+        AND t.is_demo=0 AND t.quality NOT IN ('insufficient','outlier','estimated')
+        AND LOWER(t.source) NOT LIKE '%demo%' AND LOWER(t.source) NOT LIKE '%seed%'
+        AND LOWER(t.source) NOT LIKE '%estimated%'`
     )
     .get(...athleteIds, windowStart, yesterday) as { sets: number; volumeKg: number | null };
   if (!strengthTests.sets) missing.push('近28天体能训练结果缺失');
@@ -443,11 +509,26 @@ export type GenerateResult = {
 // 生成或修订草稿的纯计算部分：组装上下文、调用模型、规范化输出、保留历史。
 export async function generateTeamPlanDraft(input: GenerateInput): Promise<GenerateResult> {
   const prompt = loadTrainingPlanPrompt();
+  const members = input.db
+    .prepare(
+      'SELECT a.id,a.name FROM athletes a JOIN project_teams t ON t.id=a.team_id AND t.project=a.project WHERE a.team_id=? AND a.active=1'
+    )
+    .all(input.teamId) as Array<{ id: number; name: string }>;
+  const anonymize = (text: string) =>
+    members
+      .slice()
+      .sort((a, b) => b.name.length - a.name.length)
+      .reduce(
+        (result, member) =>
+          member.name ? result.split(member.name).join(`队员#${member.id}`) : result,
+        text
+      );
   const context = buildTeamAiContext(input.db, {
     teamId: input.teamId,
     date: input.date,
-    constraints: input.constraints,
+    constraints: input.constraints ? anonymize(input.constraints) : undefined,
   });
+  context.athletes = members.map((member) => ({ id: member.id, label: `队员#${member.id}` }));
   const previous = input.existingDraft;
   const messages = [
     { role: 'system' as const, content: prompt.text },
@@ -457,10 +538,10 @@ export async function generateTeamPlanDraft(input: GenerateInput): Promise<Gener
         `目标训练日：${input.date}`,
         previous
           ? '以下是当前草稿。教练提出了修改要求，请只调整被要求的部分，保留其余训练课与内容项，输出完整修改后的计划。'
-          : '请为该队伍生成明日训练计划草稿。',
-        `当前草稿：${previous ? JSON.stringify(previous.data) : '无'}`,
-        `教练要求：${input.instruction?.trim() || input.constraints?.trim() || '按阶段目标与近期负荷常规安排'}`,
-        `训练数据摘要：${JSON.stringify(context)}`,
+          : '请为该队伍生成指定训练日的计划草稿。',
+        `当前草稿：${previous ? anonymize(JSON.stringify(previous.data)) : '无'}`,
+        `教练要求：${anonymize(input.instruction?.trim() || input.constraints?.trim() || '按阶段目标与近期负荷常规安排')}`,
+        `训练数据摘要：${anonymize(JSON.stringify(context))}`,
         '请严格按系统指令中的 JSON 结构输出。',
       ].join('\n\n'),
     },
@@ -471,7 +552,33 @@ export async function generateTeamPlanDraft(input: GenerateInput): Promise<Gener
     maxCompletionTokens: 16_000,
   });
   const { data, dataNotes, warnings } = normalizeAiPlan(raw, input.date, context.team.project);
+  if (previous) data.overrides = preserveAiOverrides(previous.data, data);
   const now = new Date().toISOString();
+  const allowedIds = new Set(members.map((member) => member.id));
+  data.overrides = data.overrides.map((override) => {
+    if (!allowedIds.has(override.athleteId))
+      throw new TeamPlanAiError('AI个人调整包含非本队运动员');
+    const existing = previous?.data.overrides.find(
+      (item) => item.athleteId === override.athleteId && item.sessionId === override.sessionId
+    );
+    return {
+      ...override,
+      createdBy: existing?.createdBy || input.userId,
+      updatedBy: input.userId,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    };
+  });
+  const validated = teamPlanInput.safeParse({
+    title: 'AI草稿',
+    startDate: input.date,
+    endDate: input.date,
+    data,
+  });
+  if (!validated.success) throw new TeamPlanAiError('AI修订未通过计划校验');
+  validateTeamPlanContext(context.team.project, validated.data.data as TeamPlanData);
+  data.sessions = validated.data.data.sessions;
+  data.overrides = validated.data.data.overrides as TeamPlanData['overrides'];
   const oldMetadata = previous?.metadata;
   const metadata: TeamPlanAiMetadata = {
     source: 'ai_generated',

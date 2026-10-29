@@ -161,3 +161,27 @@ it('AI计划不能把水上活动或强度体系套到排球，骑行原始Z2可
     )
   ).toThrow('适用');
 });
+
+it('AI修订保留教练个人差异，移除关联课次时拒绝结果', async () => {
+  const { preserveAiOverrides } = await import('./team-plan-ai.ts');
+  const { data } = normalizeAiPlan(rawPlan, '2026-10-17');
+  const previous: TeamPlanData = {
+    ...data,
+    overrides: [
+      {
+        athleteId: 1,
+        sessionId: 's1',
+        changes: { durationMin: 45 },
+        reason: '减量',
+        createdBy: 1,
+        updatedBy: 1,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
+  };
+  expect(preserveAiOverrides(previous, data)).toEqual(previous.overrides);
+  expect(() => preserveAiOverrides(previous, { ...data, sessions: [data.sessions[1]] })).toThrow(
+    '个人调整'
+  );
+});

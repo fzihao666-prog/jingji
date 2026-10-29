@@ -47,13 +47,21 @@ export function TrainingPlanWeekView({
           {dateLabel(weekStart)}—{dateLabel(days[6])}
         </h3>
         <div className="training-plan-week-actions">
-          <button type="button" onClick={() => onChangeWeek(addPlanDays(weekStart, -7))}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onChangeWeek(addPlanDays(weekStart, -7))}
+          >
             上一周
           </button>
-          <button type="button" onClick={onToday}>
+          <button type="button" className="secondary-button" onClick={onToday}>
             返回本周
           </button>
-          <button type="button" onClick={() => onChangeWeek(addPlanDays(weekStart, 7))}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onChangeWeek(addPlanDays(weekStart, 7))}
+          >
             下一周
           </button>
           <label>
@@ -136,8 +144,30 @@ export function TrainingPlanWeekView({
                   )}
                   {daily.length === 0 && <span className="training-plan-week-empty">未安排</span>}
                 </span>
+                <span className="training-plan-week-lessons">
+                  {daily.slice(0, 3).map((session) => (
+                    <span key={session.id}>
+                      <strong>
+                        {{ morning: '上午', afternoon: '下午', evening: '晚间' }[session.period] ||
+                          session.period ||
+                          '课次'}
+                      </strong>
+                      <span>{session.content}</span>
+                      <small>
+                        {[
+                          session.durationMin === null ? '' : `${session.durationMin}分钟`,
+                          session.distanceKm === null ? '' : `${session.distanceKm}km`,
+                          session.intensity,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </small>
+                    </span>
+                  ))}
+                  {daily.length > 3 && <small>另有 {daily.length - 3} 节，点击查看</small>}
+                </span>
                 <span className="training-plan-week-adjusted">
-                  {adjusted > 0 ? `个人调整 ${adjusted}人` : '无个人调整'}
+                  {adjusted > 0 ? `个人调整 ${adjusted}人` : ''}
                 </span>
               </button>
             );

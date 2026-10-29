@@ -1,3 +1,9 @@
+function readable(value) {
+  if (value == null) return '未设置';
+  if (Array.isArray(value))
+    return value.map((item) => `${item.title}：${item.description || ''}`).join('；') || '无';
+  return String(value);
+}
 const fields = [
   'date',
   'category',
@@ -13,6 +19,7 @@ const fields = [
   'reps',
   'load',
   'notes',
+  'items',
 ];
 function emptySession() {
   return {
@@ -37,7 +44,7 @@ function differences(base, edited) {
   fields
     .filter((key) => key !== 'date' && key !== 'category')
     .forEach((key) => {
-      if (edited[key] !== base[key]) changes[key] = edited[key];
+      if (JSON.stringify(edited[key]) !== JSON.stringify(base[key])) changes[key] = edited[key];
     });
   return changes;
 }
@@ -78,6 +85,7 @@ function revisionSummary(baseline, plan) {
     reps: '次数',
     load: '负重',
     notes: '备注',
+    items: '训练项目',
   };
   ['title', 'startDate', 'endDate'].forEach((key) => {
     if (baseline[key] !== plan[key]) rows.push(`${names[key]}: ${baseline[key]} → ${plan[key]}`);
@@ -93,9 +101,9 @@ function revisionSummary(baseline, plan) {
       return;
     }
     fields.forEach((key) => {
-      if (old[key] !== session[key])
+      if (JSON.stringify(old[key]) !== JSON.stringify(session[key]))
         rows.push(
-          `${session.date} ${session.content} ${names[key]}: ${old[key] == null ? '未设置' : old[key]} → ${session[key] == null ? '未设置' : session[key]}`
+          `${session.date} ${session.content} ${names[key]}: ${readable(old[key])} → ${readable(session[key])}`
         );
     });
   });
@@ -211,16 +219,25 @@ function diffRows(diff) {
     reps: '次数',
     load: '负重',
     notes: '备注',
+    items: '训练项目',
   };
   (diff.modified || []).forEach((session) => {
     Object.keys(session.changes || {}).forEach((field) => {
       const change = session.changes[field];
       rows.push({
         key: `mod-${session.id}-${field}`,
-        text: `修改：${session.content} ${names[field] || field}: ${change.from == null ? '未设置' : change.from} → ${change.to == null ? '未设置' : change.to}`,
+        text: `修改：${session.content} ${names[field] || field}: ${readable(change.from)} → ${readable(change.to)}`,
       });
     });
   });
+  (diff.personal || []).forEach((item) =>
+    rows.push({
+      key: `personal-${item.athleteId}-${item.sessionId}`,
+      text: `队员#${item.athleteId} 个人调整：${Object.keys(item.changes)
+        .map((key) => `${names[key] || key} ${readable(item.changes[key])}`)
+        .join('；')}（${item.reason}）`,
+    })
+  );
   return rows;
 }
 module.exports = {
