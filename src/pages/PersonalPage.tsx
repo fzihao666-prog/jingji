@@ -1,3 +1,4 @@
+import { RecentTestPerformance } from '../components/RecentTestPerformance';
 import { ProjectFactVerification } from '../components/ProjectFactVerification';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import { TrainingSessionEntry } from '../components/TrainingSessionEntry';
@@ -21,7 +22,7 @@ import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import type {
   Athlete,
-  AerobicEndurancePayload,
+  StrengthTest,
   AthleteRadarModelsPayload,
   BodyCompositionRecord,
   OverviewMeasurement,
@@ -183,11 +184,12 @@ export function PersonalPage(props: Props) {
   const [physiologyRecords, setPhysiologyRecords] = useState<ProfilePhysiologyRecord[]>([]);
   const [physiologyError, setPhysiologyError] = useState(false);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
-  const [aerobicEndurance, setAerobicEndurance] = useState<AerobicEndurancePayload | null>(null);
-  const [aerobicEnduranceLoading, setAerobicEnduranceLoading] = useState(false);
-  const [aerobicEnduranceError, setAerobicEnduranceError] = useState(false);
+  const [recentStrength, setRecentStrength] = useState<{ key: string; tests: StrengthTest[]; loading: boolean; error: boolean }>({ key: '', tests: [], loading: false, error: false });
+  const testScope = `${selectedAthlete?.id}:${selectedAthlete?.project}:${props.from}:${props.to}`;
   const [dossierDataError, setDossierDataError] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
+  const [specialTestScope, setSpecialTestScope] = useState('');
+  const [specialTestError, setSpecialTestError] = useState(false);
   const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
   const [bodyCompositionHistory, setBodyCompositionHistory] = useState<BodyCompositionRecord[]>([]);
   const [bodyCompositionLoading, setBodyCompositionLoading] = useState(false);
@@ -236,34 +238,14 @@ export function PersonalPage(props: Props) {
 
   useEffect(() => {
     let ignored = false;
-    if (!selectedAthlete) {
-      setAerobicEndurance(null);
-      setAerobicEnduranceLoading(false);
-      return;
-    }
-    setAerobicEndurance(null);
-    setAerobicEnduranceLoading(true);
-    setAerobicEnduranceError(false);
-    api
-      .aerobicEndurance(
-        selectedAthlete.id,
-        props.from,
-        props.to,
-        selectedAthlete.project as Project
-      )
-      .then((result) => {
-        if (!ignored) setAerobicEndurance(result);
-      })
-      .catch(() => {
-        if (!ignored) { setAerobicEndurance(null); setAerobicEnduranceError(true); }
-      })
-      .finally(() => {
-        if (!ignored) setAerobicEnduranceLoading(false);
-      });
-    return () => {
-      ignored = true;
-    };
-  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+    setRecentStrength({ key: testScope, tests: [], loading: Boolean(selectedAthlete), error: false });
+    if (selectedAthlete) api.strengthTests(selectedAthlete.id).then((result) => {
+      if (!ignored) setRecentStrength({ key: testScope, tests: result.tests, loading: false, error: false });
+    }).catch(() => {
+      if (!ignored) setRecentStrength({ key: testScope, tests: [], loading: false, error: true });
+    });
+    return () => { ignored = true; };
+  }, [testScope]);
 
   useEffect(() => {
     let ignored = false;
@@ -364,9 +346,13 @@ export function PersonalPage(props: Props) {
       setSpecialTests([]);
       return;
     }
+    setSpecialTestScope(testScope);
+    setSpecialTestError(false);
+    setWellnessTrends([]);
+    setSpecialTests([]);
     setDossierDataLoading(true);
     setDossierDataError(false);
-    Promise.all([
+    Promise.allSettled([
       api.wellnessTrends(
         selectedAthlete.id,
         props.from,
@@ -382,15 +368,10 @@ export function PersonalPage(props: Props) {
     ])
       .then(([wellness, tests]) => {
         if (ignored) return;
-        setWellnessTrends(wellness.trends);
-        setSpecialTests(tests.events);
-      })
-      .catch(() => {
-        if (!ignored) {
-          setDossierDataError(true);
-          setWellnessTrends([]);
-          setSpecialTests([]);
-        }
+        setDossierDataError(wellness.status === 'rejected');
+        setWellnessTrends(wellness.status === 'fulfilled' ? wellness.value.trends : []);
+        setSpecialTestError(tests.status === 'rejected');
+        setSpecialTests(tests.status === 'fulfilled' ? tests.value.events : []);
       })
       .finally(() => {
         if (!ignored) setDossierDataLoading(false);
@@ -776,7 +757,7 @@ export function PersonalPage(props: Props) {
                   <FmsPersonalChart measurements={profileMeasurements} />
                 )}
               </AppCard>
-              <AerobicEndurance data={aerobicEndurance} loading={aerobicEnduranceLoading} error={aerobicEnduranceError} />
+              <RecentTestPerformance key={testScope} tests={recentStrength.key === testScope ? recentStrength.tests : []} events={specialTestScope === testScope ? specialTests : []} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} strengthLoading={recentStrength.key !== testScope || recentStrength.loading} specialLoading={specialTestScope !== testScope || dossierDataLoading} strengthError={recentStrength.key === testScope && recentStrength.error} specialError={specialTestScope === testScope && specialTestError} />
               <AppCard
                 variant="chart"
                 className="professional-panel analysis-feature-panel athlete-radar-card"
@@ -846,7 +827,7 @@ export function PersonalPage(props: Props) {
             />
             <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} error={dossierDataError} />
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
-            <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
+            <StrengthProfileModule key={selectedAthlete.id} athlete={selectedAthlete} user={props.user} preloaded={recentStrength.key === testScope ? recentStrength : { tests: [], loading: true, error: false }} onTestsChanged={(tests) => setRecentStrength((current) => current.key === testScope ? { key: testScope, tests, loading: false, error: false } : current)} />
           </ProfileSection>
           {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
             <ProfileSection title="训练记录" subtitle="公共课次填写，按实际活动显示专项字段。">
@@ -1103,169 +1084,6 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
     ],
   };
 }
-
-function displayAerobicValue(value: number, unit: string) {
-  return `${formatNumber(value, 1)}${unit ? ` ${unit}` : ''}`;
-}
-
-function aerobicTrendOption(data: NonNullable<AerobicEndurancePayload['trend']>): EChartsOption {
-  return {
-    animation: false,
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(23,111,127,0.06)' } },
-      renderMode: 'richText',
-      confine: true,
-      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
-      valueFormatter: (value) => displayAerobicValue(Number(value), data.unit),
-    },
-    grid: { top: 30, right: 22, bottom: 24, left: 48, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
-    xAxis: {
-      type: 'category',
-      boundaryGap: true,
-      data: data.points.map((point) => point.date.slice(5)),
-      axisTick: { show: false },
-      axisLabel: { color: '#66767c', fontSize: 11, hideOverlap: true },
-    },
-    yAxis: {
-      type: 'value',
-      min: 0,
-      name: data.unit,
-      nameTextStyle: { color: '#66767c', fontSize: 11 },
-      axisLabel: { color: '#66767c', fontSize: 11, hideOverlap: true },
-      splitLine: { lineStyle: { color: '#e6eeee', type: 'dashed' } },
-    },
-    series: [
-      {
-        name: data.label,
-        type: 'bar',
-        data: data.points.map((point) => point.value),
-        barMaxWidth: 32,
-        barCategoryGap: '45%',
-        itemStyle: {
-          borderRadius: [6, 6, 0, 0],
-          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [
-            { offset: 0, color: '#229b91' }, { offset: 1, color: '#176f7f' },
-          ] },
-        },
-        label: {
-          show: data.points.length <= 10, position: 'top', color: '#234b55', fontSize: 12,
-          formatter: (params) => typeof params.value === 'number' ? formatNumber(params.value, 1) : '',
-        },
-        emphasis: { itemStyle: { color: '#176f7f' } },
-      },
-    ],
-  };
-}
-
-function aerobicTrendLabel(data: NonNullable<AerobicEndurancePayload['trend']>) {
-  return `${data.label}个人趋势图：${data.points
-    .map((point) => `${point.date} ${displayAerobicValue(point.value, data.unit)}`)
-    .join('；')}`;
-}
-
-function AerobicEndurance({
-  data,
-  loading,
-  error,
-}: {
-  data: AerobicEndurancePayload | null;
-  loading: boolean;
-  error: boolean;
-}) {
-  const status = loading
-    ? '有氧耐力指标读取中。'
-    : data?.metrics.length
-      ? '有氧耐力指标已更新。'
-      : '当前周期暂无有氧耐力测试数据。';
-  return (
-    <AppCard
-      variant="chart"
-      className="professional-panel analysis-feature-panel aerobic-endurance-card"
-    >
-      <p className="visually-hidden" aria-live="polite">
-        {status}
-      </p>
-      <header className="personal-analysis-card-heading">
-        <div>
-          <span>
-            <small>AEROBIC ENDURANCE</small>
-            <h3>有氧耐力</h3>
-          </span>
-        </div>
-      </header>
-      {loading ? (
-        <div className="professional-chart-empty">正在读取有氧指标…</div>
-      ) : error ? (
-        <ContentState kind="error" title="有氧耐力读取失败" description="请刷新页面重试。" />
-      ) : data?.metrics.length ? (
-        <div className="aerobic-endurance-content">
-          <section className="aerobic-metric-grid" aria-label="有氧耐力核心指标">
-            {data.metrics.map((metric) => (
-              <article key={`${metric.code}-${metric.unit}`}>
-                <span>{metric.label}</span>
-                <strong>{formatNumber(metric.personalValue, 1)}<small className="aerobic-value-unit">{metric.unit}</small></strong>
-                <dl>
-                  <div>
-                    <dt>团队平均</dt>
-                    <dd>
-                      {metric.teamMean === null
-                        ? '—'
-                        : displayAerobicValue(metric.teamMean, metric.unit)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>差值</dt>
-                    <dd>
-                      {metric.difference === null
-                        ? '—'
-                        : `${metric.difference > 0 ? '+' : ''}${displayAerobicValue(metric.difference, metric.unit)}`}
-                    </dd>
-                  </div>
-                </dl>
-                <small>
-                  {metric.teamMean === null
-                    ? metric.unavailableReason
-                    : `样本 ${metric.teamSampleCount} 人 · ${metric.measurementDate}`}
-                </small>
-              </article>
-            ))}
-          </section>
-          <section className="aerobic-trend" aria-label={`${data.trend?.label || '有氧能力'}趋势`}>
-            <header>
-              <h4>{data.trend?.label || '有氧能力'}趋势</h4>
-              <span>{data.trend?.unit || '—'}</span>
-            </header>
-            <EChart
-              option={data.trend ? aerobicTrendOption(data.trend) : {}}
-              label={data.trend ? aerobicTrendLabel(data.trend) : '有氧能力趋势'}
-              isPlaceholder={!data.trend}
-            />
-          </section>
-          {data.latestTest ? (
-            <section className="aerobic-recent-test" aria-label="最近有氧测试">
-              <span>最近有氧测试</span>
-              <strong>{data.latestTest.testType}</strong>
-              <small>
-                {data.latestTest.testDate} · {data.latestTest.label}{' '}
-                {displayAerobicValue(data.latestTest.value, data.latestTest.unit)}
-              </small>
-            </section>
-          ) : null}
-        </div>
-      ) : (
-        <section className="aerobic-trend" aria-label="有氧能力趋势">
-          <header>
-            <h4>有氧能力趋势</h4>
-            <span>暂无测试数据</span>
-          </header>
-          <EChart option={{ xAxis: { type: 'category', data: [] }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: [] }] }} label="有氧能力趋势，暂无测试数据" isPlaceholder />
-        </section>
-      )}
-    </AppCard>
-  );
-}
-
 
 function ProfilePhysiologyRecords({
   records,

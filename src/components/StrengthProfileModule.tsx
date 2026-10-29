@@ -29,7 +29,7 @@ import { formatDate, formatNumber, toIsoDate } from '../utils';
 import { BrandLogo } from './BrandLogo';
 import { SlalomChampionComparison } from './SlalomChampionComparison';
 
-type Props = { athlete: Athlete; user: User };
+type Props = { athlete: Athlete; user: User; preloaded?: { tests: StrengthTest[]; loading: boolean; error: boolean }; onTestsChanged?: (tests: StrengthTest[]) => void };
 type FormValues = Record<StrengthMetricKey, string>;
 type EditorMode = 'new' | 'edit';
 type ArchiveDraft = {
@@ -69,7 +69,7 @@ const archiveFactors: ArchiveFactor[] = [
   { key: 'flexibility', label: '柔韧能力', metricKeys: ['sitReachCm'] },
 ];
 
-export function StrengthProfileModule({ athlete, user }: Props) {
+export function StrengthProfileModule({ athlete, user, preloaded, onTestsChanged }: Props) {
   const [tests, setTests] = useState<StrengthTest[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,6 +96,7 @@ export function StrengthProfileModule({ athlete, user }: Props) {
     try {
       const result = await api.strengthTests(athlete.id);
       setTests(result.tests);
+      onTestsChanged?.(result.tests);
       setSelectedId(
         preferredId && result.tests.some((test) => test.id === preferredId)
           ? preferredId
@@ -110,8 +111,15 @@ export function StrengthProfileModule({ athlete, user }: Props) {
 
   useEffect(() => {
     setDataNotice('');
-    void loadTests();
+    if (!preloaded) void loadTests();
   }, [athlete.id]);
+
+  useEffect(() => {
+    if (!preloaded) return;
+    setTests(preloaded.tests);
+    setLoading(preloaded.loading);
+    setLoadError(preloaded.error ? '体能测试档案数据加载失败。' : '');
+  }, [preloaded?.tests, preloaded?.loading, preloaded?.error]);
 
   const selected = useMemo(
     () => tests.find((test) => test.id === selectedId) || tests[0] || null,
