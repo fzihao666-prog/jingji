@@ -1113,6 +1113,7 @@ function aerobicTrendOption(data: NonNullable<AerobicEndurancePayload['trend']>)
     animation: false,
     tooltip: {
       trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(23,111,127,0.06)' } },
       renderMode: 'richText',
       confine: true,
       padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
@@ -1121,30 +1122,37 @@ function aerobicTrendOption(data: NonNullable<AerobicEndurancePayload['trend']>)
     grid: { top: 30, right: 22, bottom: 24, left: 48, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
     xAxis: {
       type: 'category',
-      boundaryGap: false,
+      boundaryGap: true,
       data: data.points.map((point) => point.date.slice(5)),
       axisTick: { show: false },
-      axisLabel: { color: '#66767c', fontSize: 11 },
+      axisLabel: { color: '#66767c', fontSize: 11, hideOverlap: true },
     },
     yAxis: {
       type: 'value',
-      scale: true,
+      min: 0,
       name: data.unit,
       nameTextStyle: { color: '#66767c', fontSize: 11 },
-      axisLabel: { color: '#66767c', fontSize: 11 },
+      axisLabel: { color: '#66767c', fontSize: 11, hideOverlap: true },
       splitLine: { lineStyle: { color: '#e6eeee', type: 'dashed' } },
     },
     series: [
       {
-        type: 'line',
+        name: data.label,
+        type: 'bar',
         data: data.points.map((point) => point.value),
-        smooth: false,
-        connectNulls: false,
-        symbol: 'circle',
-        symbolSize: 7,
-        lineStyle: { width: 3, color: '#176f7f' },
-        itemStyle: { color: '#176f7f', borderColor: '#fff', borderWidth: 2 },
-        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(23,111,127,0.18)' }, { offset: 1, color: 'rgba(23,111,127,0.01)' }] } },
+        barMaxWidth: 32,
+        barCategoryGap: '45%',
+        itemStyle: {
+          borderRadius: [6, 6, 0, 0],
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [
+            { offset: 0, color: '#229b91' }, { offset: 1, color: '#176f7f' },
+          ] },
+        },
+        label: {
+          show: data.points.length <= 10, position: 'top', color: '#234b55', fontSize: 12,
+          formatter: (params) => typeof params.value === 'number' ? formatNumber(params.value, 1) : '',
+        },
+        emphasis: { itemStyle: { color: '#176f7f' } },
       },
     ],
   };
@@ -1251,7 +1259,7 @@ function AerobicEndurance({
             <h4>有氧能力趋势</h4>
             <span>暂无测试数据</span>
           </header>
-          <EChart option={{ xAxis: { type: 'category', data: [] }, yAxis: { type: 'value' }, series: [{ type: 'line', data: [] }] }} label="有氧能力趋势，暂无测试数据" isPlaceholder />
+          <EChart option={{ xAxis: { type: 'category', data: [] }, yAxis: { type: 'value' }, series: [{ type: 'bar', data: [] }] }} label="有氧能力趋势，暂无测试数据" isPlaceholder />
         </section>
       )}
     </AppCard>
