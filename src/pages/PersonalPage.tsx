@@ -1118,32 +1118,33 @@ function aerobicTrendOption(data: NonNullable<AerobicEndurancePayload['trend']>)
       padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
       valueFormatter: (value) => displayAerobicValue(Number(value), data.unit),
     },
-    grid: { top: 16, right: 12, bottom: 28, left: 42, containLabel: true },
+    grid: { top: 30, right: 22, bottom: 24, left: 48, outerBoundsMode: 'same', outerBoundsContain: 'axisLabel' },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: data.points.map((point) => point.date.slice(5)),
       axisTick: { show: false },
-      axisLabel: { color: '#66767c', fontSize: 9 },
+      axisLabel: { color: '#66767c', fontSize: 11 },
     },
     yAxis: {
       type: 'value',
       scale: true,
       name: data.unit,
-      nameTextStyle: { color: '#66767c', fontSize: 9 },
-      axisLabel: { color: '#66767c', fontSize: 9 },
-      splitLine: { lineStyle: { color: '#e6eeee' } },
+      nameTextStyle: { color: '#66767c', fontSize: 11 },
+      axisLabel: { color: '#66767c', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#e6eeee', type: 'dashed' } },
     },
     series: [
       {
         type: 'line',
         data: data.points.map((point) => point.value),
-        smooth: true,
+        smooth: false,
         connectNulls: false,
         symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { width: 2 },
-        areaStyle: { color: 'rgb(20 116 111 / 10%)' },
+        symbolSize: 7,
+        lineStyle: { width: 3, color: '#176f7f' },
+        itemStyle: { color: '#176f7f', borderColor: '#fff', borderWidth: 2 },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(23,111,127,0.18)' }, { offset: 1, color: 'rgba(23,111,127,0.01)' }] } },
       },
     ],
   };
@@ -1182,7 +1183,6 @@ function AerobicEndurance({
           <span>
             <small>AEROBIC ENDURANCE</small>
             <h3>有氧耐力</h3>
-            <p>当前周期内的有效测试、个人变化与同条件团队参照。</p>
           </span>
         </div>
       </header>
@@ -1196,7 +1196,7 @@ function AerobicEndurance({
             {data.metrics.map((metric) => (
               <article key={`${metric.code}-${metric.unit}`}>
                 <span>{metric.label}</span>
-                <strong>{displayAerobicValue(metric.personalValue, metric.unit)}</strong>
+                <strong>{formatNumber(metric.personalValue, 1)}<small className="aerobic-value-unit">{metric.unit}</small></strong>
                 <dl>
                   <div>
                     <dt>团队平均</dt>
