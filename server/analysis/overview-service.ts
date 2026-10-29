@@ -1056,7 +1056,7 @@ export function buildOverviewPayload(input: {
   const intensityRows = actualSessions.filter(row => row.projectStatus === 'confirmed' && row.projectCode === input.project && row.intensityZone && Boolean(row.durationReported));
   const intensityTotalDuration = intensityRows
     .reduce((sum, row) => sum + row.durationMin, 0);
-  const intensityLabel = (row: SessionRow) => `${row.intensitySystem || '未知体系'} · ${row.intensityZone}`;
+  const intensityLabel = (row: SessionRow) => row.intensityZone;
   const intensityDistribution = [...new Set(intensityRows.map(intensityLabel))].map((zone) => {
     const rows = intensityRows.filter(row => intensityLabel(row) === zone);
     const durationMin = rows.reduce((sum, row) => sum + row.durationMin, 0);

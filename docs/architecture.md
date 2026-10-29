@@ -836,3 +836,5 @@ GET /api/athletes/:id/pending-project-facts提供授权范围内的待核实训�
 体能首页读取优化：`GET /api/strength-training/results` 与 `GET /api/strength-tests` 支持 `athleteIds`（逗号分隔、最多1000项）和成对的 `from`/`to` 日期；保留旧 `athleteId` 调用。服务端一次取得授权集合，整批校验后参数化查询，按周期过滤；力量测试测量项批量读取。
 
 Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team_id。复用 overviewTeams 授权队伍查询；records、special-tests、physical-champion 的现有读取接口接收可选 teamId，服务端在可访问运动员集合中再按队伍收窄，静态参考不变。体能批量查询继续逐批校验筛选后的运动员ID集合。
+
+强度展示简化：总览和专项按原始 intensity_zone 汇总时长及课次，不依赖 intensity_system，不显示“未知体系”，不做跨体系阈值换算；原始体系字段保留。训练内容展示不再因体系与活动不匹配而列为待核实，其他项目与权限边界保持不变。

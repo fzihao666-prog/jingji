@@ -150,7 +150,7 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, onP
             <ChartCard className="special-wide-card" title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
               <EChart option={volumeOption(training, from, to, !training.days.some((day) => day.durationMin !== null || day.distanceKm !== null))} label="专项训练时长与距离趋势" isPlaceholder={!training.days.some((day) => day.durationMin !== null || day.distanceKm !== null)} />
             </ChartCard>
-            <ChartCard title="专项训练强度占比" description="按已记录的体系与原始分区分别统计有效时长，不跨体系换算">
+            <ChartCard title="专项训练强度占比" description="按原始强度分区统计有效时长，不要求额外选择体系">
               <>
                   <EChart option={intensityOption(intensityAnalytics ?? training, !displayedIntensity.some((row) => (row.durationMin ?? 0) > 0))} label="专项训练强度时长占比" isPlaceholder={!displayedIntensity.some((row) => (row.durationMin ?? 0) > 0)} />
                   {training.summary.sessionCount > 0 && (

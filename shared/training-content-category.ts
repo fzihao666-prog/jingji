@@ -1,4 +1,4 @@
-import { allowedIntensitySystems, isActivityCode, projectRules } from './sport-rules.js';
+import { isActivityCode, projectRules } from './sport-rules.js';
 export const TRAINING_CONTENT_CATEGORIES = [
   '水上',
   '测功仪',
@@ -115,10 +115,5 @@ export function trainingClassificationReason(
   if (!isActivityCode(input.activityCode) || !rules.activities.includes(input.activityCode))
     return '训练活动不适用于该项目';
   if (!trainingLoadCategory(input)) return '训练目的待核实';
-  if (
-    input.intensitySystem &&
-    !allowedIntensitySystems(project, input.activityCode).includes(input.intensitySystem)
-  )
-    return '强度体系不适用于该项目活动';
   return null;
 }

@@ -33,15 +33,13 @@ it('同日不同协议的测试时长保留，不能当成同一批测试去重'
   expect(result.meta.testCount).toBe(2);
   expect(result.trainingAnalytics.summary.testDurationMin).toBe(20);
 });
-it('总览强度按体系及原始分区分开，不把同名AT合并', async () => {
+it('总览按原始分区汇总，体系缺失不影响时长占比', async () => {
   for (const [order, system, duration] of [[1, 'U', 30], [2, 'UT', 60], [3, '', 10]] as const) {
     db.prepare(`INSERT INTO training_sessions(athlete_id,session_date,session_order,training_type,structure_type,intensity_zone,intensity_system,duration_min,project_code,project_status)
       VALUES(9101,'2026-01-01',?,'专项训练','','AT',?,?,'ROWING','confirmed')`).run(order, system, duration);
   }
   expect((await overview()).intensityDistribution).toEqual(expect.arrayContaining([
-    expect.objectContaining({ zone: 'U · AT', durationMin: 30 }),
-    expect.objectContaining({ zone: 'UT · AT', durationMin: 60 }),
-    expect.objectContaining({ zone: '未知体系 · AT', durationMin: 10 }),
+    expect.objectContaining({ zone: 'AT', durationMin: 100, sessionCount: 3, percentage: 100 }),
   ]));
 });
 it('骑行交叉训练即使填写水上同名强度，也不能归入水上训练量', async () => {

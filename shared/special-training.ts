@@ -35,7 +35,7 @@ const total = (values: Array<number | null>) => {
 };
 const duration = (row: SpecialSession) => (row.durationReported ? row.durationMin : null);
 const distance = (row: SpecialSession) => (row.distanceReported ? row.distanceKm : null);
-const zoneLabel = (row: SpecialSession) => row.intensitySystem === undefined ? row.intensityZone : row.intensityZone ? `${row.intensitySystem || '未知体系'} · ${row.intensityZone}` : '';
+const zoneLabel = (row: SpecialSession) => row.intensityZone;
 const load = (row: SpecialSession) =>
   row.durationReported && row.rpe !== null && row.srpe != null && Number.isFinite(row.srpe) && row.srpe >= 0
     ? row.srpe
@@ -61,7 +61,7 @@ export function aggregateSpecialTraining(input: SpecialSession[]) {
       sessionCount: rows.length,
     };
   });
-  // 未配置/未知体系保留原标签，不补其他项目的零值分区。
+  // 只统计原始分区标签，不要求体系字段，不换算生理强度。
   const zoneNames = [...new Set(records.map(zoneLabel).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const zones = zoneNames.map((name) => {
     const rows = records.filter((row) => zoneLabel(row) === name);

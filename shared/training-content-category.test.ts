@@ -52,7 +52,7 @@ it('历史分类不根据备注猜活动，明确跨项训练保留，待核实�
       activityCode: 'volleyball_technique',
       intensitySystem: 'U_SYSTEM',
     })
-  ).toBe('待核实');
+  ).toBe('排球技术');
   expect(
     projectTrainingContentCategory('ROWING', { activityCode: 'strength', content: '水上' })
   ).toBe('待核实');
