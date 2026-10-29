@@ -1208,16 +1208,18 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
           : { label: '整体良好', className: 'good' };
   return (
     <div className="fms-personal-layout">
-      <div className="fms-personal-chart">
+      <div className="fms-personal-chart fms-radar-redesign">
+        <div className="fms-radar-heading"><span>七项动作评分</span><span>0–3 分 · 缺测不计零分</span></div>
+        <div className="fms-radar-legend"><span><i />个人得分</span><span><i />达标参考</span></div>
         {isPlaceholder && <p className="analysis-empty-note">暂无FMS测试数据</p>}
           <>
-            <ResponsiveContainer width="100%" height="100%">
+            <div className="fms-radar-stage"><ResponsiveContainer width="100%" height="100%">
               <RadarChart
                 data={chartData}
-                outerRadius="68%"
-                margin={{ top: 28, right: 42, bottom: 28, left: 42 }}
+                outerRadius="70%"
+                margin={{ top: 30, right: 48, bottom: 30, left: 48 }}
               >
-                <PolarGrid stroke="#d9e5e7" strokeWidth={0.8} />
+                <PolarGrid gridType="circle" radialLines={true} stroke="#dce7e7" strokeWidth={1} />
 
                 <PolarAngleAxis
                   dataKey="name"
@@ -1230,40 +1232,43 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
 
                 <PolarRadiusAxis
                   domain={[0, 3]}
+                  ticks={[0, 1, 2, 3]}
                   tickCount={4}
                   axisLine={false}
                   tick={{
-                    fontSize: 9,
+                    fontSize: 10,
                     fill: '#8aa0a6',
                   }}
                 />
 
-                <Tooltip
+                <Tooltip contentStyle={{ borderRadius: 12, padding: '12px 16px', border: '1px solid var(--line)', fontSize: 12 }}
                   formatter={(value, name) => [`${formatNumber(Number(value), 1)} 分`, name]}
                 />
 
+                <Radar dataKey="target" name="达标参考" stroke="#b18a42" strokeDasharray="5 4" strokeWidth={1.5} fill="transparent" fillOpacity={0} dot={false} isAnimationActive={false} />
                 <Radar
                   dataKey="score"
                   name="个人得分"
                   stroke="#178e87"
-                  strokeWidth={2.4}
+                  strokeWidth={3}
                   fill="#178e87"
-                  fillOpacity={0.18}
+                  fillOpacity={0.14}
+                  isAnimationActive={false}
                   dot={{
-                    r: 3.5,
+                    r: 4.5,
                     fill: '#ffffff',
                     stroke: '#178e87',
                     strokeWidth: 2,
                   }}
                 />
               </RadarChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer></div>
 
-            <div className="fms-radar-center">
-              <span>FMS</span>
-              <strong>{total === null ? '—' : formatNumber(total, 1)}</strong>
-            </div>
+            <div className="fms-radar-center fms-radar-footnote">已测 {available.length}/7 项 · 总分 {total === null ? '—' : formatNumber(total, 1)} / 21</div>
           </>
+      <div className="fms-radar-score-list" aria-label="FMS各项实际得分">
+        {data.map(row => <div key={row.name}><span>{row.name}</span><strong>{row.score === null ? '—' : formatNumber(row.score, 1)}<small> / 3</small></strong></div>)}
+      </div>
       </div>
       <aside className="fms-personal-summary">
         <article>
