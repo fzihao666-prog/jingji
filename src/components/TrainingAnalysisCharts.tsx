@@ -1209,7 +1209,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   return (
     <div className="fms-personal-layout">
       <div className="fms-personal-chart fms-radar-redesign">
-        <div className="fms-radar-heading"><span>七项动作评分</span><span>0–3 分 · 缺测不计零分</span></div>
+        <div className="fms-radar-heading">动作评分 · 0–3分</div>
         <div className="fms-radar-legend"><span><i />个人得分</span><span><i />达标参考</span></div>
         {isPlaceholder && <p className="analysis-empty-note">暂无FMS测试数据</p>}
           <>
@@ -1264,10 +1264,10 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
               </RadarChart>
             </ResponsiveContainer></div>
 
-            <div className="fms-radar-center fms-radar-footnote">已测 {available.length}/7 项 · 总分 {total === null ? '—' : formatNumber(total, 1)} / 21</div>
+            <span className="visually-hidden fms-radar-center">已测 {available.length}/7 项</span>
           </>
       <div className="fms-radar-score-list" aria-label="FMS各项实际得分">
-        {data.map(row => <div key={row.name}><span>{row.name}</span><strong>{row.score === null ? '—' : formatNumber(row.score, 1)}<small> / 3</small></strong></div>)}
+        {data.map(row => <div key={row.name}><span>{row.name}</span><strong>{row.score === null ? '—' : formatNumber(row.score, 1)}</strong></div>)}
       </div>
       </div>
       <aside className="fms-personal-summary">
@@ -1301,7 +1301,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
           ) : (
             <p>
               <b>暂无测试</b>
-              <span>录入标准FMS七项后生成动作短板</span>
+              
             </p>
           )}
         </div>
