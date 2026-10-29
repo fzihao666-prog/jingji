@@ -846,3 +846,10 @@ Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team
 网页“数据管理 → 报告”调用 `GET /api/reports/weekly/preview` 或 `/pdf`，严格查询参数为 `{ project, teamId, date }`，date 为自然周内日期。管理角色服务端按现有可访问运动员集合、项目、有效队伍和在册成员交集裁剪；仅全队有效成员可见时返回队伍计划，与既有队伍计划授权边界一致。未认证返回401、角色/范围无权403、参数错误400、限流429、生成失败503；成功分别返回共享Schema JSON或私有、不缓存的PDF。
 
 `team-weekly-report.ts` 在一个只读事务中汇总 `training_sessions`、`daily_wellness`、`test_sessions/test_measurements`、`injury_records` 及已有计划/实施确认；训练计划关联读取 `training_plan_execution_links`，不向课次表新增关联列。复用个人报告统计与测试可比口径，通过共享章节定义保持预览/PDF内容一致；PDF复用现有jsPDF与本地中文字体，不发外网、不落盘。无新表、无迁移、无第二份训练事实；生成时读取最新数据，不新增历史快照。
+
+
+周总结图文与AI扩展：统计额外读取既有 `strength_result_sets` 已完成实际组次及 `daily_wellness.fatigue_index`，力量结果沿父课次的项目、日期、正式质量和授权集合过滤，组来源再次排除模拟/估算。网页与PDF共用 `shared/team-weekly-charts.ts` 图表数据和七天课表；SVG/矢量输出不截图，不新增图表依赖。
+
+`GET /api/reports/weekly/preview` 返回可用于核对的 fingerprint（排除生成时间）。`POST /api/reports/weekly/commentary` 严格接收 `{query:{project,teamId:number,date},fingerprint,consent:true,coachNotes}`，复用现有 chatJson 配置，训练数值与固定动作白名单汇总发送模型，自由备注、身份和健康均不发送；等待模型期间重新读取账号与权限并复核数据，变化返回403/409，格式异常502、服务失败503。模型只起草五段文字，不写正式训练或计划。`POST /api/reports/weekly/pdf` 接收 `{query,fingerprint,commentary,confirmed:true}`，校验五段文字（每段600/总2000字）与当前事实指纹后导出核对稿。基础GET PDF继续可用，不保存AI草稿，无新增迁移、数据库或外部依赖。
+
+周报AI生成设210秒总截止时间（短于网页240秒请求超时），响应连接关闭时取消；统一AI客户端接受可选AbortSignal，取消时中止当前供应商且不继续fallback。其他未传取消信号的调用保持原逐供应商超时策略。

@@ -151,3 +151,80 @@
   outline: 2px solid var(--river);
   outline-offset: 3px;
 }
+
+.reports-commentary-field {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.reports-commentary-field textarea {
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.reports-chart {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.reports-day p {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  font-size: 13px;
+}
+
+.reports-chart figcaption p {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.reports-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  fill: currentcolor;
+}
+
+.reports-chart summary {
+  cursor: pointer;
+  padding: 10px 0;
+}
+
+.reports-chart-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--mist);
+}
+
+.reports-timetable {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.reports-day {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.reports-day h4 {
+  margin: 0 0 12px;
+}
+
+.reports-day time {
+  color: var(--muted);
+  font-weight: normal;
+}

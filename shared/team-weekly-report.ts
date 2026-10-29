@@ -27,6 +27,7 @@ const totals = z.object({
 });
 const planSession = z.object({
   date: z.string(),
+  period: z.string().optional(),
   content: z.string(),
   duration: value,
   distance: value,
@@ -38,6 +39,7 @@ export const teamWeeklyReportSchema = z.object({
   teamId: z.number(),
   teamName: z.string(),
   generatedAt: z.string(),
+  fingerprint: z.string().optional(),
   range: reportRangeSchema,
   totals,
   previous: totals,
@@ -51,6 +53,29 @@ export const teamWeeklyReportSchema = z.object({
       rpe: value,
     })
   ),
+  strength: z
+    .array(
+      z.object({
+        athleteId: z.number(),
+        athleteName: z.string(),
+        exercise: z.string(),
+        sets: z.number(),
+        reps: z.number(),
+        volumeKg: z.number(),
+      })
+    )
+    .optional(),
+  recovery: z
+    .array(
+      z.object({
+        date: z.string(),
+        sleep: value,
+        pulse: value,
+        fatigue: value,
+        samples: z.number(),
+      })
+    )
+    .optional(),
   categories: z.array(z.object({ label: z.string(), participations: z.number(), duration: value })),
   athletes: z.array(z.object({ id: z.number(), name: z.string(), data: reportDataSchema })),
   injuries: z.array(

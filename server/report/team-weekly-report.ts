@@ -6,10 +6,13 @@ import { readReportSnapshot } from './report-service.ts';
 import { readTeamPlans } from '../training-plan/team-plan-service.ts';
 
 export class TeamWeeklyAccessError extends Error {}
-const valid = (alias: string) => `${alias}.is_demo=0 AND ${alias}.quality IN ('valid','partial')
-  AND lower(${alias}.source) NOT LIKE '%demo%' AND lower(${alias}.source) NOT LIKE '%seed%'
+const realSource = (
+  alias: string
+) => `lower(${alias}.source) NOT LIKE '%demo%' AND lower(${alias}.source) NOT LIKE '%seed%'
   AND lower(${alias}.source) NOT LIKE '%estimated%' AND lower(${alias}.source) NOT LIKE '%synthetic%'
   AND lower(${alias}.source) NOT LIKE '%simulation%'`;
+const valid = (alias: string) =>
+  `${alias}.is_demo=0 AND ${alias}.quality IN ('valid','partial') AND ${realSource(alias)}`;
 const sum = (values: (number | null)[]) => {
   const present = values.filter((v): v is number => v !== null && Number.isFinite(v));
   return present.length ? Math.round(present.reduce((a, b) => a + b, 0) * 100) / 100 : null;
@@ -102,6 +105,51 @@ export function readTeamWeeklyReport(
         rpe: d.rpe,
       };
     });
+    const strength = db
+      .prepare(
+        `
+      SELECT s.athlete_id AS athleteId,a.name AS athleteName,r.exercise_name AS exercise,
+        COUNT(*) AS sets,SUM(r.actual_reps) AS reps,
+        ROUND(SUM(r.actual_reps*r.actual_weight_kg),2) AS volumeKg
+      FROM strength_result_sets r JOIN training_sessions s ON s.id=r.training_session_id
+      JOIN athletes a ON a.id=s.athlete_id
+      WHERE s.athlete_id IN (${placeholders}) AND s.project_code=? AND s.project_status='confirmed'
+        AND s.session_date BETWEEN ? AND ? AND ${valid('s')} AND ${realSource('r')}
+        AND r.completed=1 AND r.actual_reps>=0 AND r.actual_weight_kg>=0
+      GROUP BY s.athlete_id,a.name,r.exercise_name ORDER BY a.name,s.athlete_id,r.exercise_name
+    `
+      )
+      .all(...athletes.map((a) => a.id), query.project, range.from, range.to) as NonNullable<
+      TeamWeeklyReport['strength']
+    >;
+    const wellnessRows = db
+      .prepare(
+        `
+      SELECT w.wellness_date AS date,w.sleep_hours AS sleep,w.morning_pulse AS pulse,w.fatigue_index AS fatigue
+      FROM daily_wellness w JOIN athletes a ON a.id=w.athlete_id
+      WHERE w.athlete_id IN (${placeholders}) AND a.project=?
+        AND w.wellness_date BETWEEN ? AND ? AND ${valid('w')}
+      ORDER BY w.wellness_date
+    `
+      )
+      .all(...athletes.map((a) => a.id), query.project, range.from, range.to) as {
+      date: string;
+      sleep: number | null;
+      pulse: number | null;
+      fatigue: number | null;
+    }[];
+    const recovery = daily.map(({ date }) => {
+      const records = wellnessRows.filter((w) => w.date === date);
+      return {
+        date,
+        sleep: mean(records.map((w) => w.sleep)),
+        pulse: mean(records.map((w) => w.pulse)),
+        fatigue: mean(records.map((w) => w.fatigue)),
+        samples: records.filter((w) =>
+          [w.sleep, w.pulse, w.fatigue].some((v) => v !== null && Number.isFinite(v))
+        ).length,
+      };
+    });
     const details = athletes.map((a) => ({
       ...a,
       data: readReportSnapshot(db, a.id, query.project, range),
@@ -142,6 +190,7 @@ export function readTeamWeeklyReport(
                       : 'pending');
               return {
                 date: s.date,
+                period: s.period,
                 content: s.content,
                 duration: s.durationMin,
                 distance: s.distanceKm,
@@ -187,6 +236,8 @@ export function readTeamWeeklyReport(
       previous,
       daily,
       categories,
+      strength,
+      recovery,
       athletes: details,
       injuries,
       plansAvailable,
@@ -197,6 +248,7 @@ export function readTeamWeeklyReport(
       sourceNotes: [
         '仅汇总当前权限内、当前队伍在册运动员；并非历史队伍花名册。训练和测试只取发生时项目已确认的正式事实，排除演示、模拟、估算和无效记录。',
         '队伍课次按同队同日同课次序号去重；时长、距离、SRPE为个人累计量，不能解释为队伍训练时长。RPE为有效记录均值。',
+        '力量按运动员和动作汇总已完成组的实际次数与外部重量，容量为次数×kg之和；自重或零外部重量可为0，不按容量判定能力。恢复趋势为当日有效填报均值，各指标缺失分别排除，样本为至少填报一项的日报人次，不推断健康状态或训练因果。',
         '缺失显示“—”，不代表零或未训练。上周仅列原始统计，不在覆盖不明时推算环比或训练效果。',
         '计划章节仅展示当前已发布版本及教练实施确认；关联记录人次不代表完成率，个人调整和目标达成不在此推算。伤病仅列本周起始日期的记录，不代表全部在伤人数。',
         '模板参考国家体育总局训练总结要求及澳大利亚体育学院AMS监控方法，非官方统一模板；不生成医学判断、正式评分或自动训练处方。',

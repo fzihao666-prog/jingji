@@ -40,6 +40,7 @@ import { databaseBackupDirectory, databasePath } from './core/database-path.ts';
 import { registerReportRoutes } from './report/report-routes.ts';
 import { hasAthleteAccess } from './core/permissions.ts';
 import { getAuthUser } from './core/auth.ts';
+import { teamWeeklyAiPrompt } from './report/team-weekly-ai.ts';
 import { chatJson } from './core/ai-client.ts';
 
 // 全局异常捕获：防止未处理的 Promise 拒绝或异常导致进程静默崩溃。
@@ -127,7 +128,15 @@ registerSportRulesRoutes(app, {
   referenceAvailable: project => readPhysicalReferences(db, project).some(ref => isDisplayPhysicalReference(ref, beijingDate(new Date()))),
 });
 registerStrengthTestRoutes(app);
-registerTeamWeeklyRoutes(app, { db, requireAuth, accessibleIds: accessibleAthleteIds });
+registerTeamWeeklyRoutes(app, { db, requireAuth, accessibleIds: accessibleAthleteIds,
+  currentUser: getAuthUser,
+  generate: async (data, signal) => (await chatJson<unknown>({ signal, temperature: 0.2, maxCompletionTokens: 2500,
+    messages: [
+      { role: 'system', content: teamWeeklyAiPrompt },
+      { role: 'user', content: JSON.stringify({ statistics: data }) },
+    ],
+  })).data,
+});
 registerReportRoutes(app, { db, requireAuth, hasAccess: hasAthleteAccess, currentUser: getAuthUser,
   generate: async (data) => (await chatJson<unknown>({ temperature: 0.2, maxCompletionTokens: 900,
     messages: [

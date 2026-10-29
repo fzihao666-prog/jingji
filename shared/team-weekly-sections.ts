@@ -23,6 +23,7 @@ export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
   const planTable = (plans: TeamWeeklyReport['plans']) =>
     plans.map((p) => [
       p.date,
+      p.period || '—',
       p.content,
       `${f(p.duration)} / ${f(p.distance)}`,
       status[p.status] || p.status,
@@ -88,8 +89,23 @@ export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
             ? '仅展示当前已发布版本；关联人次不是完成率，未关联不推算个人完成情况。'
             : '本周暂无已发布队伍计划。',
       ],
-      headers: ['日期', '训练内容', '计划分钟 / km', '队伍实施', '关联记录人次'],
+      headers: ['日期', '时段', '训练内容', '计划分钟 / km', '队伍实施', '关联记录人次'],
       rows: planTable(r.plans),
+    },
+    {
+      title: '力量训练个人与动作对比',
+      paragraphs: [
+        '仅汇总已完成组的实际次数与外部重量；容量为次数×kg之和，不能直接作为能力排名。',
+        ...((r.strength || []).length ? [] : ['本周暂无有效力量结果。']),
+      ],
+      headers: ['队员', '动作', '完成组数', '累计次数', '容量 / kg·次'],
+      rows: (r.strength || []).map((s) => [
+        s.athleteName,
+        s.exercise,
+        f(s.sets),
+        f(s.reps),
+        f(s.volumeKg),
+      ]),
     },
     {
       title: '四、体能与专项测试',
@@ -108,6 +124,20 @@ export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
       ],
       headers: ['队员', '指标', '周内有效均值', '测量条数'],
       rows: wellness,
+    },
+    {
+      title: '每日恢复趋势',
+      paragraphs: [
+        '各指标分别按当日有效填报求均值，样本数为至少填报一项的日报人次；缺失显示“—”，不推断健康状态或训练因果。',
+      ],
+      headers: ['日期', '睡眠 / 小时', '晨脉 / bpm', '疲劳指数', '日报样本数'],
+      rows: (r.recovery || []).map((d) => [
+        d.date,
+        f(d.sleep),
+        f(d.pulse),
+        f(d.fatigue),
+        f(d.samples),
+      ]),
     },
     {
       title: '本周新增伤病与疼痛记录',
@@ -134,7 +164,7 @@ export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
             ? '以下为已有正式计划，不由报告自动开具训练处方。'
             : '下周尚未发布队伍计划，请由教练结合训练目标安排。',
       ],
-      headers: ['日期', '训练内容', '计划分钟 / km', '队伍实施', '关联记录人次'],
+      headers: ['日期', '时段', '训练内容', '计划分钟 / km', '队伍实施', '关联记录人次'],
       rows: planTable(r.nextPlans),
     },
     {

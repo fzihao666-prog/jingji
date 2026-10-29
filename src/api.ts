@@ -1,3 +1,4 @@
+import { teamWeeklyCommentarySchema, type TeamWeeklyCommentary } from '../shared/team-weekly-ai';
 import { teamWeeklyReportSchema } from '../shared/team-weekly-report';
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
@@ -203,9 +204,40 @@ export const api = {
     request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
       `/api/projects/rules?${new URLSearchParams({ project })}`
     ),
+  async weeklyCommentary(
+    query: { project: string; teamId: number; date: string },
+    fingerprint: string
+  ) {
+    return teamWeeklyCommentarySchema.parse(
+      await request<unknown>('/api/reports/weekly/commentary', {
+        method: 'POST',
+        body: JSON.stringify({ query, fingerprint, consent: true, coachNotes: '' }),
+        timeoutMs: 240000,
+      })
+    );
+  },
+  async weeklyReviewedPdf(
+    query: { project: string; teamId: number; date: string },
+    fingerprint: string,
+    commentary: TeamWeeklyCommentary
+  ) {
+    const blob = await request<Blob>('/api/reports/weekly/pdf', {
+      method: 'POST',
+      body: JSON.stringify({ query, fingerprint, commentary, confirmed: true }),
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `队伍周总结_${query.date}.pdf`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
   async teamWeeklyPreview(query: { project: string; teamId: number; date: string }) {
     const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
-    return teamWeeklyReportSchema.parse(await request<unknown>(`/api/reports/weekly/preview?${params}`));
+    return teamWeeklyReportSchema.parse(
+      await request<unknown>(`/api/reports/weekly/preview?${params}`)
+    );
   },
   async downloadTeamWeekly(query: { project: string; teamId: number; date: string }) {
     const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
@@ -254,7 +286,12 @@ export const api = {
       await request<unknown>(`/api/athletes/${id}/reports/${encodeURIComponent(reportId)}`)
     );
   },
-  async physicalChampion(query: { project: string; from: string; to: string; teamId?: number | null }) {
+  async physicalChampion(query: {
+    project: string;
+    from: string;
+    to: string;
+    teamId?: number | null;
+  }) {
     const params = new URLSearchParams({ project: query.project, from: query.from, to: query.to });
     if (query.teamId) params.set('teamId', String(query.teamId));
     const payload = await request<unknown>(`/api/physical-champion?${params}`);

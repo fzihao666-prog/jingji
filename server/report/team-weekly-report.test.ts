@@ -1,24 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createReportFixture } from './report-fixture.ts';
+import { createTeamWeeklyFixture as fixture } from './team-weekly-fixture.ts';
 import { readTeamWeeklyReport } from './team-weekly-report.ts';
 import { teamWeeklyReportSchema, teamWeeklyQuerySchema } from '../../shared/team-weekly-report.ts';
 
-function fixture() {
-  const db = createReportFixture();
-  db.exec(`ALTER TABLE athletes ADD COLUMN name TEXT DEFAULT '示例队员';
-    ALTER TABLE athletes ADD COLUMN team_id INTEGER DEFAULT 1;
-    CREATE TABLE project_teams(id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
-    INSERT INTO project_teams VALUES(1,'ROWING','合成测试队',1),(2,'CANOE_SPRINT','其他项目队',1);
-    UPDATE athletes SET team_id=2 WHERE id=2;
-    CREATE TABLE injury_records(athlete_id INTEGER,onset_date TEXT,injury_name TEXT,status TEXT,pain_score REAL);
-    CREATE TABLE training_plans(id INTEGER,root_id INTEGER,version INTEGER,revision INTEGER,status TEXT,team_id INTEGER,model TEXT,title TEXT,start_date TEXT,end_date TEXT,plan_data TEXT,published_at TEXT,archived_at TEXT);
-    CREATE TABLE team_plan_item_checks(plan_id INTEGER,session_id TEXT,item_id TEXT,status TEXT);
-    CREATE TABLE training_plan_execution_links(training_session_id INTEGER PRIMARY KEY,plan_id INTEGER,session_id TEXT,target_json TEXT);
-    INSERT INTO athletes(id,project,active,name,team_id) VALUES(3,'ROWING',1,'队员乙',1);
-    INSERT INTO training_sessions(id,athlete_id,session_date,session_order,training_type,structure_type,content,duration_min,distance_km,duration_reported,distance_reported,rpe,srpe,project_code,project_status)
-    VALUES(20,3,'2026-10-05',1,'专项训练','','水上',60,10,1,1,5,300,'ROWING','confirmed');`);
-  return db;
-}
 const query = { project: 'ROWING', teamId: 1, date: '2026-10-05' } as const;
 describe('队伍周总结', () => {
   it('自然周校验拒绝非法日期、项目和额外字段', () => {
@@ -92,6 +76,8 @@ describe('周总结下载与权限', () => {
       sessionVersion: 1,
     };
     registerTeamWeeklyRoutes(app, {
+      currentUser: () => user,
+      generate: async () => ({}),
       db,
       accessibleIds: () => [1],
       requireAuth: (req, res, next) => {
@@ -181,6 +167,37 @@ describe('周总结下载与权限', () => {
       expect(sections.find((s) => s.title === '五、恢复反馈')?.rows).toHaveLength(2);
       const pdf = renderTeamWeeklyPdf(report);
       expect(pdf.length).toBeGreaterThan(1000);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe('真实力量结果及恢复统计', () => {
+  it('排除越权、模拟、未完成组；恢复缺失不补零', () => {
+    const db = fixture();
+    try {
+      db.exec(`INSERT INTO strength_result_sets VALUES(1,'卧推',10,20,1,'manual'),(1,'卧推',5,30,1,'manual'),(1,'卧推',20,100,0,'manual'),(1,'卧推',20,100,1,'synthetic'),(20,'卧推',8,10,1,'manual'),(4,'卧推',20,100,1,'manual');
+    UPDATE daily_wellness SET fatigue_index=0 WHERE wellness_date='2026-10-05';`);
+      const report = readTeamWeeklyReport(db, query, [1]);
+      expect(report.strength).toEqual([
+        {
+          athleteId: 1,
+          athleteName: '示例队员',
+          exercise: '卧推',
+          sets: 2,
+          reps: 15,
+          volumeKg: 350,
+        },
+      ]);
+      expect(report.recovery?.[0]).toMatchObject({ sleep: 8, pulse: 50, fatigue: 0, samples: 1 });
+      expect(report.recovery?.[1]).toMatchObject({
+        sleep: null,
+        pulse: null,
+        fatigue: null,
+        samples: 0,
+      });
+      expect(report.recovery).toHaveLength(7);
     } finally {
       db.close();
     }

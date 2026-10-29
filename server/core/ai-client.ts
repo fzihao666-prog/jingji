@@ -59,6 +59,7 @@ export type AiChatOptions = {
   temperature?: number;
   maxCompletionTokens?: number;
   responseFormat?: 'json_object' | 'text';
+  signal?: AbortSignal;
   // 图片/PDF 等附件不走纯文本消息时由调用方整体替换 user content。
 };
 
@@ -70,6 +71,7 @@ export async function chatCompletion(options: AiChatOptions): Promise<AiChatResu
   if (!models.length) throw new Error('当前环境未配置可用的AI模型。');
   let lastError: Error | null = null;
   for (const model of models) {
+    options.signal?.throwIfAborted();
     try {
       const endpoint = model.baseUrl.endsWith('/chat/completions')
         ? model.baseUrl
@@ -91,7 +93,9 @@ export async function chatCompletion(options: AiChatOptions): Promise<AiChatResu
           ...(model.model.toLowerCase().startsWith('qwen') ? { enable_thinking: false } : {}),
           messages: options.messages,
         }),
-        signal: AbortSignal.timeout(model.timeout),
+        signal: options.signal
+          ? AbortSignal.any([options.signal, AbortSignal.timeout(model.timeout)])
+          : AbortSignal.timeout(model.timeout),
       });
       if (!response.ok) throw new Error(`AI接口返回 ${response.status}`);
       const payload = (await response.json()) as {
@@ -103,6 +107,7 @@ export async function chatCompletion(options: AiChatOptions): Promise<AiChatResu
       if (!content) throw new Error('AI接口返回空内容');
       return { content, modelUsed: `${model.name} (${model.model})` };
     } catch (error) {
+      if (options.signal?.aborted) throw error;
       lastError = error instanceof Error ? error : new Error('未知AI错误');
     }
   }

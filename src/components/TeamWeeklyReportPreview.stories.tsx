@@ -61,3 +61,56 @@ export const KeyboardTables = {
       throw new Error('表格标题或列头缺失');
   },
 };
+
+export const ChartsAndTimetable = {
+  args: {
+    report: {
+      ...empty,
+      daily: empty.daily.map((d, i) => ({
+        ...d,
+        duration: i === 2 ? null : i * 30,
+        srpe: i === 2 ? null : i * 120,
+      })),
+      categories: [
+        { label: '专项训练', participations: 8, duration: 240 },
+        { label: '力量训练', participations: 4, duration: 120 },
+      ],
+      strength: [
+        {
+          athleteId: 1,
+          athleteName: '示例队员甲',
+          exercise: '深蹲',
+          sets: 3,
+          reps: 15,
+          volumeKg: 900,
+        },
+        {
+          athleteId: 2,
+          athleteName: '示例队员乙',
+          exercise: '深蹲',
+          sets: 3,
+          reps: 15,
+          volumeKg: 750,
+        },
+      ],
+      recovery: empty.daily.map((d, i) => ({
+        date: d.date,
+        sleep: i === 2 ? null : 7 + i / 10,
+        pulse: i === 2 ? null : 60 + i,
+        fatigue: i === 2 ? null : 3,
+        samples: i === 2 ? 0 : 2,
+      })),
+      plans: [
+        {
+          date: '2026-10-19',
+          period: '上午',
+          content: '有氧技术训练',
+          duration: 60,
+          distance: null,
+          status: 'pending',
+          linkedRecords: 0,
+        },
+      ],
+    } satisfies TeamWeeklyReport,
+  },
+};
