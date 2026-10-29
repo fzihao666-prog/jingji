@@ -762,7 +762,6 @@ export function PersonalPage(props: Props) {
                     <span>
                       <small>FMS SCREENING</small>
                       <h3>（FMS）功能动作筛查</h3>
-                      <p>标准七项、21分制与纠正训练优先级</p>
                     </span>
                   </div>
                   <strong>
@@ -776,9 +775,6 @@ export function PersonalPage(props: Props) {
                 ) : (
                   <FmsPersonalChart measurements={profileMeasurements} />
                 )}
-                <p className="analysis-method-note">
-                  FMS采用七项标准测试，每项0-3分，总分21分；单项低于2分或总分低于14分时优先安排纠正性训练和复测。
-                </p>
               </AppCard>
               <AerobicEndurance data={aerobicEndurance} loading={aerobicEnduranceLoading} error={aerobicEnduranceError} />
               <AppCard
