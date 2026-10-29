@@ -45,7 +45,8 @@ export function RecentTestPerformance(props: {
   );
   const option: EChartsOption = {
     animation: false,
-    grid: { top: 28, right: 28, bottom: 28, left: 120 },
+    grid: { top: 40, right: 28, bottom: 28, left: 120 },
+    legend: { data: ['测试成绩'], top: 0, icon: 'roundRect', itemWidth: 12, itemHeight: 8 },
     tooltip: {
       trigger: 'axis',
       renderMode: 'richText',
@@ -55,19 +56,19 @@ export function RecentTestPerformance(props: {
     xAxis: {
       type: 'value',
       min: 0,
-      name: selected?.unit ?? '',
+      name: selected?.unit || '成绩',
       splitLine: { lineStyle: { type: 'dashed' } },
     },
     yAxis: {
       type: 'category',
-      data: labels,
+      data: selected ? labels : ['测试记录'],
       axisTick: { show: false },
       axisLabel: { fontSize: 11 },
     },
     series: [
       {
         type: 'bar',
-        name: selected?.label ?? '测试成绩',
+        name: '测试成绩',
         data: chartPoints.map((point) => point.value),
         barMaxWidth: 18,
         itemStyle: { color: '#176f7f', borderRadius: [0, 3, 3, 0] },
@@ -97,14 +98,15 @@ export function RecentTestPerformance(props: {
       {props.specialError && (
         <ContentState kind="error" title="专项测试读取失败" description="请刷新页面重试。" />
       )}
-      {selected && summary ? (
-        <>
+      <>
           <label htmlFor={id}>测试指标</label>
           <select
             id={id}
-            value={selected.key}
+            value={selected?.key ?? ''}
+            disabled={!selected}
             onChange={(event) => setSelectedKey(event.target.value)}
           >
+            {!selected && <option value="">暂无可选测试指标</option>}
             {series.map((item) => (
               <option key={item.key} value={item.key}>
                 {item.label}
@@ -114,25 +116,28 @@ export function RecentTestPerformance(props: {
           <dl className="recent-test-summary">
             <div>
               <dt>最近成绩</dt>
-              <dd>{displayResult(summary.latest.value, selected.unit)}</dd>
+              <dd>{summary && selected ? displayResult(summary.latest.value, selected.unit) : '—'}</dd>
             </div>
             <div>
               <dt>测试日期</dt>
-              <dd>{summary.latest.date}</dd>
+              <dd>{summary?.latest.date ?? '—'}</dd>
             </div>
             <div>
               <dt>周期最好</dt>
-              <dd>{summary.best === null ? '—' : displayResult(summary.best, selected.unit)}</dd>
+              <dd>{!summary || !selected || summary.best === null ? '—' : displayResult(summary.best, selected.unit)}</dd>
             </div>
             <div>
               <dt>较上次差值</dt>
               <dd>
-                {summary.difference === null
+                {!summary || !selected || summary.difference === null
                   ? '—'
                   : `${summary.difference > 0 ? '+' : ''}${number.format(summary.difference)} ${selected.unit}`}
               </dd>
             </div>
           </dl>
+      </>
+      {selected && summary ? (
+        <>
           <p className="recent-test-description">
             {!selected.comparable
               ? '测试条件未完整记录，保留原始成绩，暂不比较。'
@@ -169,14 +174,9 @@ export function RecentTestPerformance(props: {
             </table>
           </details>
         </>
-      ) : !loading && !props.strengthError && !props.specialError ? (
-        <ContentState
-          kind="empty"
-          title="当前周期暂无测试成绩"
-          description="完成体能或专项测试后，将在这里展示原始成绩与变化。"
-        />
-      ) : null}
-      {!selected && <EChart option={option} label="测试成绩趋势，暂无可展示的成绩" isPlaceholder />}
+      ) : (
+        <EChart option={option} label="测试成绩参考坐标，暂无可展示的成绩" isPlaceholder={!loading && !props.strengthError && !props.specialError} />
+      )}
     </AppCard>
   );
 }
