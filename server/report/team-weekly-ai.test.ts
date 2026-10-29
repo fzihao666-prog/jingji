@@ -6,7 +6,7 @@ import { registerTeamWeeklyRoutes } from './team-weekly-routes.ts';
 import { readTeamWeeklyReport } from './team-weekly-report.ts';
 import { teamWeeklyAiInput, teamWeeklyFingerprint } from './team-weekly-ai.ts';
 import type { AuthUser } from '../core/shared-server.ts';
-const query = { project: 'ROWING', teamId: 1, date: '2026-10-05' } as const;
+const query = { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType:'special' } as const;
 const commentary = {
   summary: '本周有训练记录，待教练核对。',
   training: '按已记录课次回顾训练。',

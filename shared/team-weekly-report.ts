@@ -3,6 +3,7 @@ import { isProject } from './projects.js';
 import { reportDataSchema, reportRangeSchema } from './training-report.js';
 
 export const teamWeeklyQuerySchema = z.strictObject({
+  reportType: z.enum(['special', 'physical']),
   project: z.string().max(40).refine(isProject),
   teamId: z
     .string()
@@ -35,7 +36,24 @@ const planSession = z.object({
   linkedRecords: z.number(),
 });
 export const teamWeeklyReportSchema = z.object({
-  project: z.string(),
+  reportType: z.enum(['special', 'physical']),
+  stage: z.string(),
+  coachNotes: z.string(),
+  templateVersion: z.literal('weekly-v2'),
+  comparison: z.object({
+    metrics: z.array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        current: z.number(),
+        previous: z.number(),
+        unit: z.string(),
+      })
+    ),
+    notes: z.array(z.string()),
+  }),
+  dataNotes: z.array(z.string()),
+  project: z.string().refine(isProject),
   teamId: z.number(),
   teamName: z.string(),
   generatedAt: z.string(),

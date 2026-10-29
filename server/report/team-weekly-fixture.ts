@@ -2,7 +2,8 @@ import { createReportFixture } from './report-fixture.ts';
 
 export function createTeamWeeklyFixture() {
   const db = createReportFixture();
-  db.exec(`ALTER TABLE daily_wellness ADD COLUMN fatigue_index REAL;
+  db.exec(`ALTER TABLE metric_definitions ADD COLUMN domain TEXT DEFAULT 'project';
+    ALTER TABLE daily_wellness ADD COLUMN fatigue_index REAL;
     CREATE TABLE strength_result_sets(training_session_id INTEGER,exercise_name TEXT,actual_reps REAL,actual_weight_kg REAL,completed INTEGER DEFAULT 1,source TEXT DEFAULT 'manual');
     ALTER TABLE athletes ADD COLUMN name TEXT DEFAULT '示例队员';
     ALTER TABLE athletes ADD COLUMN team_id INTEGER DEFAULT 1;

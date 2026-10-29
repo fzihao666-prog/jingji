@@ -843,13 +843,14 @@ Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team
 
 ### 队伍训练周总结（2026-10）
 
-网页“数据管理 → 报告”调用 `GET /api/reports/weekly/preview` 或 `/pdf`，严格查询参数为 `{ project, teamId, date }`，date 为自然周内日期。管理角色服务端按现有可访问运动员集合、项目、有效队伍和在册成员交集裁剪；仅全队有效成员可见时返回队伍计划，与既有队伍计划授权边界一致。未认证返回401、角色/范围无权403、参数错误400、限流429、生成失败503；成功分别返回共享Schema JSON或私有、不缓存的PDF。
+网页报告按 `reportType: special | physical` 隔离正式课次、计划、测试和力量结果，仍复用 `training_sessions`、`daily_wellness`、`strength_result_sets`、测试与计划既有事实源。只读事务生成一致统计；网页和PDF共用章节及矢量图表定义。未知分类不混入另一报告，缺失与真实0分开；上周比较仅展示人员与覆盖可比的指标，不自行补造阈值。
 
-`team-weekly-report.ts` 在一个只读事务中汇总 `training_sessions`、`daily_wellness`、`test_sessions/test_measurements`、`injury_records` 及已有计划/实施确认；训练计划关联读取 `training_plan_execution_links`，不向课次表新增关联列。复用个人报告统计与测试可比口径，通过共享章节定义保持预览/PDF内容一致；PDF复用现有jsPDF与本地中文字体，不发外网、不落盘。无新表、无迁移、无第二份训练事实；生成时读取最新数据，不新增历史快照。
+`POST /api/reports/weekly/generate` 接收 `{query:{project,teamId,date,reportType},stage?,coachNotes?,consent?}`，编排统计与可选AI，返回草稿、事实指纹及确认修订号。AI使用既有供应商配置与210秒总截止时间、取消信号及并发/限流；失败返回可编辑基础稿。只发送去身份化训练汇总、固定动作与训练词表及可可靠识别的教练观察，健康/身份/未知自由文字留本地。等待后重新核验权限和事实。旧预览/点评/PDF接口仍保留，但必须明确类型，旧混合请求返回400。
 
+`POST /api/reports/weekly/save` 接收确认稿、指纹、照片ID及 `expectedRevision`，在 `BEGIN IMMEDIATE` 中重新核验当前权限、旧快照全员范围与最新事实，再按项目/队伍/周起点/类型原子替换。新增独立 `team_weekly_reports`、`team_weekly_photos` 表，初始化幂等，不重写原个人报告或训练事实；报告保存模板版本、统计与最终文字，预览不持久化。失败回滚，修订冲突返回409。回退应用时保留新增表及附件，不删除确认数据。
 
-周总结图文与AI扩展：统计额外读取既有 `strength_result_sets` 已完成实际组次及 `daily_wellness.fatigue_index`，力量结果沿父课次的项目、日期、正式质量和授权集合过滤，组来源再次排除模拟/估算。网页与PDF共用 `shared/team-weekly-charts.ts` 图表数据和七天课表；SVG/矢量输出不截图，不新增图表依赖。
+`GET /api/reports/weekly/history` 分页查询，`/history/:id` 查看快照，`/history/:id/pdf` 按快照生成PDF。历史及照片接口重新验证当前项目、队伍及快照中所有运动员权限；部分队员可见不代表有权读取旧全队快照。PDF和照片使用私有响应，不走公开静态目录。
 
-`GET /api/reports/weekly/preview` 返回可用于核对的 fingerprint（排除生成时间）。`POST /api/reports/weekly/commentary` 严格接收 `{query:{project,teamId:number,date},fingerprint,consent:true,coachNotes}`，复用现有 chatJson 配置，训练数值与固定动作白名单汇总发送模型，自由备注、身份和健康均不发送；等待模型期间重新读取账号与权限并复核数据，变化返回403/409，格式异常502、服务失败503。模型只起草五段文字，不写正式训练或计划。`POST /api/reports/weekly/pdf` 接收 `{query,fingerprint,commentary,confirmed:true}`，校验五段文字（每段600/总2000字）与当前事实指纹后导出核对稿。基础GET PDF继续可用，不保存AI草稿，无新增迁移、数据库或外部依赖。
+`POST /api/reports/weekly/photos` 使用 multipart `files`，验证真实JPEG/PNG/WebP、8MB单文件、最多8张、25MP解码限制，自动旋转、剥离元数据、最长边1600、JPEG质量78。私有目录为数据库同目录 `weekly-report-photos/`；仅存压缩结果，照片不发送AI。账号上传限频、临时数量及容量配额约束资源；确认事务绑定引用，替换后清理无引用旧照片，24小时临时回收与孤立文件清理按小时运行。
 
-周报AI生成设210秒总截止时间（短于网页240秒请求超时），响应连接关闭时取消；统一AI客户端接受可选AbortSignal，取消时中止当前供应商且不继续fallback。其他未传取消信号的调用保持原逐供应商超时策略。
+现有定时备份在SQLite在线备份后，从该备份的确认照片清单复制到 `<backupPath>.weekly-photos/`；缺文件即拒绝本次不完整备份并清理，不改业务数据。过期数据库备份连同附件目录清理。恢复必须同时还原数据库及对应照片至 `weekly-report-photos/`；新增功能不要求清空旧数据库，旧库无附件表时兼容原备份流程。

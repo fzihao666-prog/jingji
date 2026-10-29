@@ -13,6 +13,12 @@ const totals = {
   rpeCount: 0,
 };
 const empty: TeamWeeklyReport = {
+  reportType: 'special',
+  stage: '',
+  coachNotes: '',
+  templateVersion: 'weekly-v2',
+  comparison: { metrics: [], notes: [] },
+  dataNotes: ['本周暂无有效训练和恢复数据。'],
   project: 'ROWING',
   teamId: 1,
   teamName: '合成示例队',
@@ -112,5 +118,23 @@ export const ChartsAndTimetable = {
         },
       ],
     } satisfies TeamWeeklyReport,
+  },
+};
+export const LongRoster = {
+  args: {
+    report: {
+      ...empty,
+      reportType: 'physical' as const,
+      stage: '合成训练阶段',
+      coachNotes: '本周围绕既定目标完成训练，现场观察作为教练意见保留。',
+      strength: Array.from({ length: 35 }, (_, i) => ({
+        athleteId: i + 1,
+        athleteName: `合成运动员完整姓名第${i + 1}位`,
+        exercise: '深蹲',
+        sets: 3,
+        reps: 15,
+        volumeKg: i * 30,
+      })),
+    },
   },
 };

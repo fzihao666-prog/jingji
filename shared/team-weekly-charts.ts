@@ -7,6 +7,7 @@ export type WeeklyChart = {
   unit: string;
   note: string;
   kind: 'bar' | 'line';
+  domain?: { min: number; max: number };
   points: { label: string; value: number | null }[];
 };
 /** 不合并不同测试条件，不填补缺失值；网页与PDF使用同一组数值。 */
@@ -93,7 +94,48 @@ export function teamWeeklyCharts(r: TeamWeeklyReport): WeeklyChart[] {
       note: '暂无有效测试记录。',
       points: [],
     });
-  return charts;
+  if (r.templateVersion !== 'weekly-v2') return charts;
+  const selected = charts.filter(
+    (c) =>
+      !c.id.startsWith('test:') &&
+      !c.id.endsWith('-empty') &&
+      (r.reportType === 'physical' || !c.id.startsWith('strength:'))
+  );
+  const groups = new Map<string, WeeklyChart>();
+  for (const athlete of [...r.athletes].sort((a, b) => a.id - b.id)) {
+    for (const test of athlete.data.tests) {
+      // key 包含协议、侧别、版本与条件；柱图集中展示原始记录，不连接队员趋势。
+      const key = `${test.key}:${test.unit}:${test.protocol}:${test.side}`;
+      let chart = groups.get(key);
+      if (!chart) {
+        chart = {
+          id: `test:${key}`,
+          section: '四、体能与专项测试',
+          title: `${test.label} · 周内记录`,
+          unit: test.unit,
+          kind: 'bar',
+          note: `${test.protocol || '协议未记录'} / ${test.side}；展示各队员周内末次原始记录，详细条件及首末次见附录；协议未知时不作比较，数值不作为能力排名。`,
+          points: [],
+        };
+        groups.set(key, chart);
+      }
+      chart.points.push({ label: athlete.name, value: test.last.value });
+    }
+  }
+  return [...selected, ...groups.values()]
+    .filter((c) => c.points.some((p) => p.value !== null))
+    .flatMap((c) => {
+      if (c.kind !== 'bar' || c.points.length <= 12) return [c];
+      const values = c.points.flatMap((p) => (p.value === null ? [] : [p.value]));
+      const domain = { min: Math.min(0, ...values), max: Math.max(1, ...values) };
+      return Array.from({ length: Math.ceil(c.points.length / 12) }, (_, i) => ({
+        domain,
+        ...c,
+        id: `${c.id}:part${i}`,
+        title: `${c.title}（${i + 1}/${Math.ceil(c.points.length / 12)}）`,
+        points: c.points.slice(i * 12, (i + 1) * 12),
+      }));
+    });
 }
 export function weeklyTimetable(r: TeamWeeklyReport, next = false) {
   const start = Date.parse(r.range.from) + (next ? 7 : 0) * 86400000;

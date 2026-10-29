@@ -182,6 +182,12 @@
   font-size: 13px;
 }
 
+.reports-kpis p {
+  flex: 1;
+  min-width: 9rem;
+  margin: 0;
+}
+
 .reports-chart figcaption p {
   font-size: 13px;
   color: var(--muted);
@@ -227,4 +233,112 @@
 .reports-day time {
   color: var(--muted);
   font-weight: normal;
+}
+
+/* 周报正文优先图文，明细留在附录；长名单以自然高度展示。 */
+.reports-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-block: 1px solid var(--line, #d8e3e6);
+}
+
+.reports-kpis span {
+  display: block;
+  font-size: 0.8rem;
+}
+
+.reports-kpis strong {
+  font-size: 1.7rem;
+}
+
+.reports-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.reports-charts-grid .reports-chart {
+  min-width: 0;
+  margin: 0;
+}
+
+.reports-editor {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.reports-editor textarea {
+  width: 100%;
+  min-height: 7rem;
+  padding: 0.75rem;
+  font: inherit;
+  line-height: 1.7;
+}
+
+@media (width <= 760px) {
+  .reports-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.reports-supplement {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.reports-supplement > summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.reports-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.8;
+}
+
+.reports-consent input {
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
+
+.reports-photo-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+}
+
+.reports-photo-list figure {
+  margin: 0;
+}
+
+.reports-photo-list img {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.reports-history-list {
+  list-style: none;
+  padding: 0;
+}
+
+.reports-history-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
 }

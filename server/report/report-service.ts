@@ -69,7 +69,8 @@ export function readReportSnapshot(
   db: DatabaseSync,
   athleteId: number,
   project: string,
-  range: ReportRange
+  range: ReportRange,
+  reportType?: 'special' | 'physical'
 ): ReportData {
   const readSessions = (from: string, to: string) =>
     db
@@ -85,7 +86,9 @@ export function readReportSnapshot(
     ORDER BY s.session_date, s.session_order`
       )
       .all(athleteId, project, from, to) as Session[];
-  const rows = readSessions(range.from, range.to);
+  const selectSessions = (from: string, to: string) =>
+    readSessions(from, to).filter((r) => !reportType || trainingLoadCategory(r) === reportType);
+  const rows = selectSessions(range.from, range.to);
   const days = (Date.parse(range.to) - Date.parse(range.from)) / 86400000 + 1;
   const previousTo = new Date(Date.parse(range.from) - 86400000).toISOString().slice(0, 10);
   const previousFrom = new Date(Date.parse(range.from) - days * 86400000)
@@ -133,12 +136,21 @@ export function readReportSnapshot(
     t.test_date AS date, m.value_num AS value FROM test_measurements m
     JOIN test_sessions t ON t.id = m.test_session_id JOIN metric_definitions d ON d.code = m.metric_code
     JOIN athletes a ON a.id = t.athlete_id WHERE t.athlete_id = ? AND t.project_code = ? AND t.project_status = 'confirmed'
-    AND t.test_date BETWEEN ? AND ? AND ${valid('t')} AND ${valid('m')} ORDER BY t.test_date, m.id`
+    AND t.test_date BETWEEN ? AND ? AND ${valid('t')} AND ${valid('m')}
+    ${reportType === 'special' ? "AND d.domain IN ('project','technique')" : reportType === 'physical' ? "AND d.domain IN ('strength','explosive','foundation','vo2max','endurance','anaerobic','asymmetry','core','symmetry','metabolic')" : ''} ORDER BY t.test_date, m.id`
     )
     .all(athleteId, project, range.from, range.to) as Measurement[];
   const groups = new Map<string, Measurement[]>();
   for (const row of measurements) {
-    const key = JSON.stringify([project, row.code, row.unit, row.side, row.protocolCode || row.protocol.trim(), row.protocolVersion, row.context]);
+    const key = JSON.stringify([
+      project,
+      row.code,
+      row.unit,
+      row.side,
+      row.protocolCode || row.protocol.trim(),
+      row.protocolVersion,
+      row.context,
+    ]);
     groups.set(key, [...(groups.get(key) || []), row]);
   }
   type Wellness = {
@@ -165,19 +177,20 @@ export function readReportSnapshot(
     version: 2,
     rulesVersion: rules?.version || SPORT_RULES_VERSION,
     referenceVersion: null,
-    sourceNote: '来源：当前项目已确认的正式训练与测试事实、运动员恢复日报；排除演示、估算及无效记录。参考标准未接入，不生成评分。',
+    sourceNote:
+      '来源：当前项目已确认的正式训练与测试事实、运动员恢复日报；排除演示、估算及无效记录。参考标准未接入，不生成评分。',
     specialty: {
       project,
       label: `${projectLabel(project)}专项`,
       status: rules?.capabilities.special.status || 'pending_configuration',
       reason: rules?.capabilities.special.reason || '项目专项能力待配置。',
-      sessions: rows.filter(r => category(r) === 'special').length,
-      duration: sum(rows.filter(r => category(r) === 'special').map(r => r.duration)),
+      sessions: rows.filter((r) => category(r) === 'special').length,
+      duration: sum(rows.filter((r) => category(r) === 'special').map((r) => r.duration)),
     },
     range,
     project,
     totals: totals(rows),
-    previous: totals(readSessions(previousFrom, previousTo)),
+    previous: totals(selectSessions(previousFrom, previousTo)),
     days,
     daily,
     trainingDays: new Set(rows.map((r) => r.date)).size,
@@ -198,13 +211,20 @@ export function readReportSnapshot(
         key,
         label: first.label,
         unit: first.unit,
-        protocol: [first.protocolCode || first.protocol.trim(), first.protocolVersion, first.context].filter(Boolean).join(' · '),
+        protocol: [
+          first.protocolCode || first.protocol.trim(),
+          first.protocolVersion,
+          first.context,
+        ]
+          .filter(Boolean)
+          .join(' · '),
         side: first.side,
         points: values.map(({ date, value }) => ({ date, value })),
         first: { date: first.date, value: first.value },
         last: { date: last.date, value: last.value },
         change:
-          values.length > 1 && Boolean((first.protocolCode || first.protocol).trim()) &&
+          values.length > 1 &&
+          Boolean((first.protocolCode || first.protocol).trim()) &&
           !/^(unknown|未知|未记录|协议未知)$/i.test((first.protocolCode || first.protocol).trim())
             ? Math.round((last.value - first.value) * 100) / 100
             : null,

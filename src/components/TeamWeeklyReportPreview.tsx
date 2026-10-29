@@ -1,3 +1,4 @@
+import type { TeamWeeklyCommentary } from '../../shared/team-weekly-ai';
 import type { TeamWeeklyReport } from '../../shared/team-weekly-report';
 import { teamWeeklySections } from '../../shared/team-weekly-sections';
 import {
@@ -7,28 +8,89 @@ import {
 } from '../../shared/team-weekly-charts';
 import { weeklyNumber } from '../../shared/team-weekly-sections';
 import '../pages/ReportsPage.css';
-type Props = { report: TeamWeeklyReport };
-export function TeamWeeklyReportPreview({ report }: Props) {
+type Props = {
+  report: TeamWeeklyReport;
+  commentary?: TeamWeeklyCommentary;
+  commentaryErrorId?: string;
+  onCommentaryChange?: (value: TeamWeeklyCommentary) => void;
+};
+export function TeamWeeklyReportPreview({
+  report,
+  commentary,
+  onCommentaryChange,
+  commentaryErrorId,
+}: Props) {
   const charts = teamWeeklyCharts(report);
   return (
     <article className="reports-preview" aria-label="周总结预览">
-      <h2>{report.teamName} · 训练周总结</h2>
+      <h2>
+        {report.teamName} ·{' '}
+        {report.reportType === 'special' ? '专项' : report.reportType === 'physical' ? '体能' : ''}
+        训练周总结
+      </h2>
+      {report.stage && <p>{report.stage}</p>}
       <p>
         {report.range.from} 至 {report.range.to} · 当前权限范围内 {report.athletes.length} 名队员
       </p>
-      <p className="reports-note">预览为本次读取结果；下载时按最新数据生成。</p>
+      <div className="reports-kpis" aria-label="本周核心数据">
+        {[
+          ['队伍课次', report.totals.sessions, '次'],
+          ['个人累计时长', report.totals.duration, '分钟'],
+          ['记录平均RPE', report.totals.rpe, ''],
+        ].map(([label, value, unit]) => (
+          <p key={String(label)}>
+            <span>{label}</span>
+            <strong>{weeklyNumber(value as number | null)}</strong> {unit}
+          </p>
+        ))}
+      </div>
       {teamWeeklySections(report).map((section) => (
         <section key={section.title}>
           <h3>{section.title}</h3>
+          {(() => {
+            const key = (
+              {
+                '一、本周训练摘要': 'summary',
+                每日训练与负荷: 'training',
+                力量训练个人与动作对比: 'strength',
+                每日恢复趋势: 'recovery',
+                '七、下周已发布安排': 'nextWeek',
+              } as const
+            )[section.title as '一、本周训练摘要'];
+            if (!key || !commentary) return null;
+            return onCommentaryChange ? (
+              <label className="reports-editor">
+                {section.title}文案
+                <textarea
+                  aria-invalid={Boolean(commentaryErrorId)}
+                  aria-describedby={commentaryErrorId}
+                  aria-label={`${section.title}文案`}
+                  value={commentary[key]}
+                  onChange={(event) =>
+                    onCommentaryChange({ ...commentary, [key]: event.target.value })
+                  }
+                  maxLength={600}
+                  rows={4}
+                />
+              </label>
+            ) : commentary[key] ? (
+              <p>{commentary[key]}</p>
+            ) : null;
+          })()}
           {section.paragraphs.map((p) => (
             <p key={p}>{p}</p>
           ))}
-          {charts
-            .filter((c) => c.section === section.title)
-            .map((chart) => (
-              <ReportChart key={chart.id} chart={chart} />
-            ))}
+          <div className="reports-charts-grid">
+            {charts
+              .filter((c) => c.section === section.title)
+              .map((chart) => (
+                <ReportChart key={chart.id} chart={chart} />
+              ))}
+          </div>
           {report.plansAvailable &&
+            (section.title === '七、下周已发布安排'
+              ? report.nextPlans.length > 0
+              : report.plans.length > 0) &&
             (section.title === '三、计划与实施' || section.title === '七、下周已发布安排') && (
               <div className="reports-timetable" aria-label="七天训练课表">
                 {weeklyTimetable(report, section.title === '七、下周已发布安排').map((day) => (
@@ -92,10 +154,20 @@ export function TeamWeeklyReportPreview({ report }: Props) {
 
 function ReportChart({ chart }: { chart: WeeklyChart }) {
   const values = chart.points.flatMap((p) => (p.value === null ? [] : [p.value]));
-  const min = Math.min(0, ...values),
-    max = Math.max(1, ...values);
+  const min = chart.domain?.min ?? Math.min(0, ...values),
+    max = chart.domain?.max ?? Math.max(1, ...values);
   const scale = (v: number) => (v - min) / (max - min);
-  const height = chart.kind === 'bar' ? Math.max(110, chart.points.length * 34 + 24) : 220;
+  const rowHeights = chart.points.map((p) =>
+    Math.max(34, Math.ceil(p.label.length / 10) * 14 + 12)
+  );
+  const rowTop = (i: number) => rowHeights.slice(0, i).reduce((sum, n) => sum + n, 0);
+  const height =
+    chart.kind === 'bar'
+      ? Math.max(
+          110,
+          rowHeights.reduce((sum, n) => sum + n, 24)
+        )
+      : 220;
   const x = (i: number) => 45 + i * (510 / Math.max(1, chart.points.length - 1));
   const y = (value: number) => 165 - scale(value) * 125;
   return (
@@ -118,20 +190,24 @@ function ReportChart({ chart }: { chart: WeeklyChart }) {
           {chart.kind === 'bar' ? (
             chart.points.map((p, i) => (
               <g key={`${p.label}:${i}`}>
-                <text x="0" y={i * 34 + 24} fontSize="12">
-                  {p.label.length > 11 ? `${p.label.slice(0, 10)}…` : p.label}
+                <text x="0" y={rowTop(i) + 24} fontSize="12">
+                  {(p.label.match(/.{1,10}/gu) || ['']).map((line, j) => (
+                    <tspan key={j} x="0" dy={j ? 14 : 0}>
+                      {line}
+                    </tspan>
+                  ))}
                 </text>
                 {p.value !== null && (
                   <rect
-                    x="140"
-                    y={i * 34 + 9}
-                    width={scale(p.value) * 370}
+                    x={140 + Math.min(scale(0), scale(p.value)) * 370}
+                    y={rowTop(i) + 9}
+                    width={Math.abs(scale(p.value) - scale(0)) * 370}
                     height="19"
                     rx="3"
                     fill="var(--river)"
                   />
                 )}
-                <text x="525" y={i * 34 + 24} fontSize="12">
+                <text x="525" y={rowTop(i) + 24} fontSize="12">
                   {weeklyNumber(p.value)}
                 </text>
               </g>

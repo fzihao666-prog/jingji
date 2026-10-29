@@ -28,11 +28,14 @@ export const teamWeeklyGenerateSchema = z.strictObject({
   query,
   fingerprint,
   consent: z.literal(true),
-  coachNotes: z.string().trim().max(1000),
+  coachNotes: z.string().trim().max(3000).default(''),
+  stage: z.string().trim().max(100).default(''),
 });
 export const teamWeeklyExportSchema = z.strictObject({
   query,
   fingerprint,
   commentary: teamWeeklyCommentarySchema,
+  stage: z.string().trim().max(100).default(''),
+  coachNotes: z.string().trim().max(3000).default(''),
   confirmed: z.literal(true),
 });

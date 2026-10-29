@@ -13,7 +13,8 @@ let font: string | undefined;
 /** 只绘制本次授权读取的内存快照，不请求外网、不执行HTML、不落盘。 */
 export function renderTeamWeeklyPdf(
   input: TeamWeeklyReport,
-  commentary?: TeamWeeklyCommentary
+  commentary?: TeamWeeklyCommentary,
+  photos: { data: Buffer; width: number; height: number }[] = []
 ): Buffer {
   const r = teamWeeklyReportSchema.parse(input);
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true, putOnlyUsedFonts: true });
@@ -51,13 +52,23 @@ export function renderTeamWeeklyPdf(
     }
     y += 3;
   };
-  text('队伍训练周总结', 16, y, 23);
+  text(
+    `${r.reportType === 'special' ? '专项' : r.reportType === 'physical' ? '体能' : '队伍'}训练周总结`,
+    16,
+    y,
+    23
+  );
   y += 13;
   paragraph(`${projectLabel(r.project)} · ${r.teamName}`, 13);
   paragraph(`${r.range.from} 至 ${r.range.to}  /  当前权限范围内 ${r.athletes.length} 名队员`);
   paragraph(
     `生成时间：${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(r.generatedAt))}（北京时间）`,
     9
+  );
+  if (r.stage) paragraph(r.stage, 12);
+  paragraph(
+    `队伍课次 ${weeklyNumber(r.totals.sessions)} 次   ·   个人累计时长 ${weeklyNumber(r.totals.duration)} 分钟   ·   平均RPE ${weeklyNumber(r.totals.rpe)}`,
+    10
   );
   const table = (headers: string[], rows: string[][]) => {
     const width = 178 / headers.length;
@@ -102,8 +113,8 @@ export function renderTeamWeeklyPdf(
       paragraph('暂无有效数据', 9);
       return;
     }
-    const min = Math.min(0, ...values),
-      max = Math.max(1, ...values);
+    const min = chart.domain?.min ?? Math.min(0, ...values),
+      max = chart.domain?.max ?? Math.max(1, ...values);
     const ratio = (v: number) => (v - min) / (max - min);
     if (chart.kind === 'bar') {
       for (const point of chart.points) {
@@ -116,8 +127,14 @@ export function renderTeamWeeklyPdf(
         }
         labels.forEach((label, i) => text(label, 17, y + 5 + i * 4, 8));
         doc.setFillColor('#176f7f');
-        if (point.value !== null && point.value > 0)
-          doc.rect(65, y + 1, ratio(point.value) * 100, 5, 'F');
+        if (point.value !== null)
+          doc.rect(
+            65 + Math.min(ratio(0), ratio(point.value)) * 100,
+            y + 1,
+            Math.abs(ratio(point.value) - ratio(0)) * 100,
+            5,
+            'F'
+          );
         text(weeklyNumber(point.value), 169, y + 5, 8);
         y += height;
       }
@@ -148,16 +165,71 @@ export function renderTeamWeeklyPdf(
         });
         y = base + 14;
       }
-      table(
-        ['日期', `数值 / ${chart.unit}`],
-        chart.points.map((p) => [p.label, weeklyNumber(p.value)])
-      );
+      if (r.templateVersion !== 'weekly-v2')
+        table(
+          ['日期', `数值 / ${chart.unit}`],
+          chart.points.map((p) => [p.label, weeklyNumber(p.value)])
+        );
     }
     y += 4;
+  };
+  const drawBarColumns = (items: WeeklyChart[]) => {
+    for (let offset = 0; offset < items.length; offset += 2) {
+      const pair = items.slice(offset, offset + 2);
+      doc.setFontSize(8);
+      const heights = pair.map(
+        (chart) =>
+          25 +
+          chart.points.reduce(
+            (sum, p) =>
+              sum +
+              Math.max(8, (doc.splitTextToSize(clean(p.label), 32) as string[]).length * 3.6 + 2),
+            0
+          )
+      );
+      space(Math.max(...heights) + 4);
+      const start = y;
+      const ends = pair.map((chart, column) => {
+        const left = 16 + column * 92;
+        let top = start;
+        doc.setFontSize(9);
+        const title = doc.splitTextToSize(clean(`${chart.title} / ${chart.unit}`), 85) as string[];
+        title.forEach((line) => {
+          text(line, left, top, 9);
+          top += 4.5;
+        });
+        top += 4;
+        const values = chart.points.flatMap((p) => (p.value === null ? [] : [p.value]));
+        const min = chart.domain?.min ?? Math.min(0, ...values),
+          max = chart.domain?.max ?? Math.max(1, ...values);
+        const ratio = (value: number) => (value - min) / (max - min);
+        for (const point of chart.points) {
+          doc.setFontSize(8);
+          const labels = doc.splitTextToSize(clean(point.label), 32) as string[];
+          labels.forEach((label, i) => text(label, left, top + 3.6 + i * 3.6, 8));
+          if (point.value !== null) {
+            doc.setFillColor('#176f7f');
+            doc.rect(
+              left + 34 + Math.min(ratio(0), ratio(point.value)) * 30,
+              top + 0.5,
+              Math.abs(ratio(point.value) - ratio(0)) * 30,
+              4,
+              'F'
+            );
+          }
+          text(weeklyNumber(point.value), left + 67, top + 3.6, 8);
+          top += Math.max(8, labels.length * 3.6 + 2);
+        }
+        return top;
+      });
+      y = Math.max(...ends) + 7;
+    }
   };
   const commentarySections: Record<string, keyof TeamWeeklyCommentary> = {
     '一、本周训练摘要': 'summary',
     '二、训练开展与结构': 'training',
+    每日训练与负荷: 'training',
+    每日恢复趋势: 'recovery',
     力量训练个人与动作对比: 'strength',
     '五、恢复反馈': 'recovery',
     '七、下周已发布安排': 'nextWeek',
@@ -178,12 +250,16 @@ export function renderTeamWeeklyPdf(
     section.paragraphs.forEach((p) => paragraph(p));
     const key = commentarySections[section.title];
     if (commentary && key && commentary[key]) {
-      paragraph('教练核对点评', 10);
       paragraph(commentary[key]);
     }
-    charts.filter((chart) => chart.section === section.title).forEach(drawChart);
+    const sectionCharts = charts.filter((chart) => chart.section === section.title);
+    if (r.templateVersion === 'weekly-v2') {
+      drawBarColumns(sectionCharts.filter((chart) => chart.kind === 'bar'));
+      sectionCharts.filter((chart) => chart.kind !== 'bar').forEach(drawChart);
+    } else sectionCharts.forEach(drawChart);
     if (
       r.plansAvailable &&
+      (section.title === '七、下周已发布安排' ? r.nextPlans.length > 0 : r.plans.length > 0) &&
       (section.title === '三、计划与实施' || section.title === '七、下周已发布安排')
     ) {
       table(
@@ -202,6 +278,25 @@ export function renderTeamWeeklyPdf(
       );
     }
     if (section.headers && section.rows?.length) table(section.headers, section.rows);
+  }
+  for (let offset = 0; offset < photos.length; offset += 4) {
+    page();
+    paragraph('附录 · 训练照片', 14);
+    photos.slice(offset, offset + 4).forEach((photo, index) => {
+      const scale = Math.min(85 / photo.width, 105 / photo.height);
+      const width = photo.width * scale,
+        height = photo.height * scale;
+      const left = 16 + (index % 2) * 93,
+        top = 38 + Math.floor(index / 2) * 116;
+      doc.addImage(
+        photo.data,
+        'JPEG',
+        left + (85 - width) / 2,
+        top + (105 - height) / 2,
+        width,
+        height
+      );
+    });
   }
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {

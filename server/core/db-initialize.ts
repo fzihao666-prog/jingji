@@ -1,3 +1,4 @@
+import { initializeTeamWeeklyStore } from '../report/team-weekly-store.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
 import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
 import { randomUUID } from 'node:crypto';
@@ -5978,6 +5979,7 @@ export function initializeDatabase(
   initializeTrainingPlanLinks(db);
   initializeTeamPlanChecks(db);
   initializeTrainingReports(db);
+  initializeTeamWeeklyStore(db);
   // 旧初始化和历史种子完成后调整测试唯一键；部署时在开始接受写入前完成迁移。
   migrateMultiSportFacts(db, databaseExistedBeforeStartup && databasePath !== ':memory:'
     ? join(dirname(databasePath), 'backups', `before-multi-sport-${randomUUID()}.db`) : undefined);

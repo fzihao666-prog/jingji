@@ -18,7 +18,7 @@ const status: Record<string, string> = {
   rehab: '康复',
   suspended: '暂停',
 };
-export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
+function legacySections(r: TeamWeeklyReport): WeeklySection[] {
   const f = weeklyNumber;
   const planTable = (plans: TeamWeeklyReport['plans']) =>
     plans.map((p) => [
@@ -188,6 +188,67 @@ export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
         '国内参考：国家体育总局《关于开展“国家高水平体育后备人才基地”认定工作的通知》相关训练总结要求（2006，作为结构参考，不作为现行政策判定依据）。https://www.sport.gov.cn/jts/n4998/c656100/content.html',
         '国外案例：Australian Institute of Sport，AMS Coach Dashboard 的 Weekly Overview：按周集中呈现队员训练量、负荷与恢复资料，参考其队伍总览及个人明细结构。https://support.sportsintel.ausport.gov.au/hc/en-us/articles/4409472623503-AMS-Coach-Dashboard',
       ],
+    },
+  ];
+}
+
+/** 领导阅读顺序：概括、训练全貌、表现、下周、完整附录。 */
+export function teamWeeklySections(r: TeamWeeklyReport): WeeklySection[] {
+  const sections = legacySections(r);
+  if (r.templateVersion !== 'weekly-v2') return sections;
+  const find = (title: string) => sections.find((s) => s.title === title)!;
+  const compact = (title: string) => ({ ...find(title), headers: undefined, rows: undefined });
+  const details = sections.filter((s) => {
+    if (!s.rows?.length || s.title === '七、下周已发布安排') return false;
+    if (s.title === '每日训练与负荷' || s.title === '二、训练开展与结构')
+      return r.totals.participations > 0;
+    if (s.title === '每日恢复趋势') return r.recovery?.some((d) => d.samples > 0);
+    if (s.title === '训练内容结构') return r.categories.some((c) => c.duration !== null);
+    if (s.title === '附表：队员训练记录')
+      return r.athletes.some(
+        (a) => a.data.totals.sessions > 0 || a.data.wellnessDays > 0 || a.data.tests.length > 0
+      );
+    if (s.title === '力量训练个人与动作对比') return r.reportType === 'physical';
+    return true;
+  });
+  return [
+    { title: '一、本周训练摘要', paragraphs: r.summary },
+    ...(r.comparison?.metrics.length
+      ? [
+          {
+            title: '本周与上周同口径对比',
+            paragraphs: [],
+            headers: ['指标', '本周', '上周'],
+            rows: r.comparison.metrics.map((m) => [
+              `${m.label} / ${m.unit}`,
+              weeklyNumber(m.current),
+              weeklyNumber(m.previous),
+            ]),
+          },
+        ]
+      : []),
+    ...(r.coachNotes ? [{ title: '教练现场观察', paragraphs: [r.coachNotes] }] : []),
+    ...(r.concerns.length ? [{ title: '本周关注事项', paragraphs: r.concerns }] : []),
+    ...(r.daily.some((d) => d.duration !== null || d.srpe !== null)
+      ? [compact('每日训练与负荷')]
+      : []),
+    ...(r.categories.some((c) => c.duration !== null) ? [compact('训练内容结构')] : []),
+    ...(r.plans.length && r.plansAvailable ? [compact('三、计划与实施')] : []),
+    ...(r.reportType === 'physical' && r.strength?.length
+      ? [compact('力量训练个人与动作对比')]
+      : []),
+    ...(r.athletes.some((a) => a.data.tests.length) ? [compact('四、体能与专项测试')] : []),
+    ...(r.recovery?.some((d) => d.sleep !== null || d.pulse !== null || d.fatigue !== null)
+      ? [compact('每日恢复趋势')]
+      : []),
+    {
+      ...compact('七、下周已发布安排'),
+      paragraphs: r.nextPlans.length ? [] : ['下周尚无已发布安排，请结合训练目标确定重点。'],
+    },
+    ...details.map((s) => ({ ...s, title: `附录 · ${s.title}`, paragraphs: [] })),
+    {
+      title: '数据情况与口径',
+      paragraphs: [...(r.dataNotes || []), ...(r.comparison?.notes || []), ...r.sourceNotes],
     },
   ];
 }

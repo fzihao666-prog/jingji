@@ -3,7 +3,7 @@ import { createTeamWeeklyFixture as fixture } from './team-weekly-fixture.ts';
 import { readTeamWeeklyReport } from './team-weekly-report.ts';
 import { teamWeeklyReportSchema, teamWeeklyQuerySchema } from '../../shared/team-weekly-report.ts';
 
-const query = { project: 'ROWING', teamId: 1, date: '2026-10-05' } as const;
+const query = { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType: 'special' } as const;
 describe('队伍周总结', () => {
   it('自然周校验拒绝非法日期、项目和额外字段', () => {
     expect(teamWeeklyQuerySchema.safeParse({ ...query, teamId: '1' }).success).toBe(true);
@@ -23,12 +23,12 @@ describe('队伍周总结', () => {
       const report = readTeamWeeklyReport(db, query, [1, 2, 3]);
       expect(report.range).toEqual({ from: '2026-10-05', to: '2026-10-11', kind: 'week' });
       expect(report.athletes).toHaveLength(2);
-      expect(report.totals.sessions).toBe(3);
-      expect(report.totals.participations).toBe(4);
+      expect(report.totals.sessions).toBe(1);
+      expect(report.totals.participations).toBe(2);
       expect(report.totals.duration).toBe(120);
       expect(report.totals.srpe).toBe(600);
       expect(report.daily[1].duration).toBeNull();
-      expect(report.daily[2].duration).toBe(0);
+      expect(report.daily[2].duration).toBeNull();
       expect(report.athletes[0].data.tests[0].change).toBe(20);
       const scoped = readTeamWeeklyReport(db, query, [3]);
       expect(scoped.athletes.map((a) => a.id)).toEqual([3]);
@@ -92,7 +92,7 @@ describe('周总结下载与权限', () => {
     const server = app.listen(0, '127.0.0.1');
     await new Promise<void>((resolve) => server.once('listening', resolve));
     const root = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/reports/weekly`;
-    const qs = 'project=ROWING&teamId=1&date=2026-10-05';
+    const qs = 'project=ROWING&teamId=1&date=2026-10-05&reportType=special';
     try {
       expect((await fetch(`${root}/preview?${qs}`, { headers: { 'x-deny': '1' } })).status).toBe(
         401
@@ -137,13 +137,21 @@ describe('周总结下载与权限', () => {
         sessions: [
           {
             id: 's1',
+            category: 'special',
             date: '2026-10-05',
             content: '水上训练',
             durationMin: 60,
             distanceKm: 10,
             items: [{ id: 'i1' }, { id: 'i2' }],
           },
-          { id: 's2', date: '2026-10-12', content: '下周训练', durationMin: 45, distanceKm: null },
+          {
+            id: 's2',
+            category: 'special',
+            date: '2026-10-12',
+            content: '下周训练',
+            durationMin: 45,
+            distanceKm: null,
+          },
         ],
         overrides: [],
         goal: '',
@@ -163,8 +171,8 @@ describe('周总结下载与权限', () => {
       expect(report.plans[0]).toMatchObject({ status: 'partial', linkedRecords: 1 });
       expect(report.nextPlans[0].content).toBe('下周训练');
       const sections = teamWeeklySections(report);
-      expect(sections.find((s) => s.title === '四、体能与专项测试')?.rows?.[0]).toContain('20');
-      expect(sections.find((s) => s.title === '五、恢复反馈')?.rows).toHaveLength(2);
+      expect(JSON.stringify(sections)).toContain('测试功率');
+      expect(report.recovery?.[0].samples).toBe(1);
       const pdf = renderTeamWeeklyPdf(report);
       expect(pdf.length).toBeGreaterThan(1000);
     } finally {
@@ -179,7 +187,8 @@ describe('真实力量结果及恢复统计', () => {
     try {
       db.exec(`INSERT INTO strength_result_sets VALUES(1,'卧推',10,20,1,'manual'),(1,'卧推',5,30,1,'manual'),(1,'卧推',20,100,0,'manual'),(1,'卧推',20,100,1,'synthetic'),(20,'卧推',8,10,1,'manual'),(4,'卧推',20,100,1,'manual');
     UPDATE daily_wellness SET fatigue_index=0 WHERE wellness_date='2026-10-05';`);
-      const report = readTeamWeeklyReport(db, query, [1]);
+      db.exec("UPDATE training_sessions SET training_category='physical' WHERE id=1");
+      const report = readTeamWeeklyReport(db, { ...query, reportType: 'physical' }, [1]);
       expect(report.strength).toEqual([
         {
           athleteId: 1,

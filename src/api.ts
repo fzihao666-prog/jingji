@@ -1,3 +1,9 @@
+import { weeklyDraftSchema, type WeeklyDraftInput } from '../shared/team-weekly-workflow';
+import {
+  savedTeamWeeklyReportSchema,
+  teamWeeklyHistorySchema,
+  weeklyPhotoSchema,
+} from '../shared/team-weekly-storage';
 import { teamWeeklyCommentarySchema, type TeamWeeklyCommentary } from '../shared/team-weekly-ai';
 import { teamWeeklyReportSchema } from '../shared/team-weekly-report';
 import type { ImportStatistics } from '../shared/import-statistics';
@@ -105,7 +111,7 @@ export class ApiRequestError extends Error {
 type ApiRequestOptions = RequestInit & {
   /** 为 false 时不附加令牌，401 也不触发会话清理与刷新（登录、注册等免登录接口）。 */
   auth?: boolean;
-  responseType?: 'json' | 'blob';
+  responseType?: 'json' | 'blob' | 'image';
   /** 请求超时毫秒数；仅对需要快速失败的接口（如登录）启用。 */
   timeoutMs?: number;
 };
@@ -175,6 +181,11 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   if (isJson && payload === null) {
     throw new ApiRequestError('服务响应异常，请稍后重试', { status: response.status });
   }
+  if (responseType === 'image') {
+    if (!response.headers.get('content-type')?.includes('image/jpeg'))
+      throw new ApiRequestError('照片响应格式异常。');
+    return (await response.blob()) as T;
+  }
   if (responseType === 'blob') {
     if (!response.headers.get('content-type')?.includes('application/pdf'))
       throw new ApiRequestError('报告响应格式异常，请重试。');
@@ -204,10 +215,86 @@ export const api = {
     request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
       `/api/projects/rules?${new URLSearchParams({ project })}`
     ),
-  async weeklyCommentary(
-    query: { project: string; teamId: number; date: string },
-    fingerprint: string
+  async generateWeeklyReport(input: WeeklyDraftInput) {
+    return weeklyDraftSchema.parse(
+      await request<unknown>('/api/reports/weekly/generate', {
+        method: 'POST',
+        body: JSON.stringify(input),
+        timeoutMs: 240000,
+      })
+    );
+  },
+  async saveWeeklyReport(input: {
+    report: import('../shared/team-weekly-report').TeamWeeklyReport;
+    fingerprint: string;
+    commentary: TeamWeeklyCommentary;
+    photoIds: string[];
+    expectedRevision: number;
+    confirmed: true;
+  }) {
+    return savedTeamWeeklyReportSchema.parse(
+      await request<unknown>('/api/reports/weekly/save', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+    );
+  },
+  async weeklyReportHistory(query: {
+    project: string;
+    teamId: number;
+    reportType: 'special' | 'physical';
+    page: number;
+    week?: string;
+  }) {
+    const params = new URLSearchParams({
+      ...query,
+      teamId: String(query.teamId),
+      page: String(query.page),
+    });
+    return teamWeeklyHistorySchema.parse(
+      await request<unknown>(`/api/reports/weekly/history?${params}`)
+    );
+  },
+  async weeklySavedReport(id: string) {
+    return savedTeamWeeklyReportSchema.parse(
+      await request<unknown>(`/api/reports/weekly/history/${encodeURIComponent(id)}`)
+    );
+  },
+  async uploadWeeklyPhotos(
+    query: { project: string; teamId: number; reportType: 'special' | 'physical' },
+    files: File[]
   ) {
+    const form = new FormData();
+    form.append('project', query.project);
+    form.append('teamId', String(query.teamId));
+    form.append('reportType', query.reportType);
+    files.forEach((file) => form.append('files', file));
+    return z
+      .object({ photos: z.array(weeklyPhotoSchema) })
+      .parse(await request<unknown>('/api/reports/weekly/photos', { method: 'POST', body: form }))
+      .photos;
+  },
+  weeklyPhotoBlob: (id: string, signal?: AbortSignal) =>
+    request<Blob>(`/api/reports/weekly/photos/${encodeURIComponent(id)}`, {
+      responseType: 'image',
+      signal,
+    }),
+  removeWeeklyPhoto: (id: string) =>
+    request<unknown>(`/api/reports/weekly/photos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  async downloadSavedWeekly(id: string, filename: string) {
+    const blob = await request<Blob>(`/api/reports/weekly/history/${encodeURIComponent(id)}/pdf`, {
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
+  async weeklyCommentary(query: WeeklyDraftInput['query'], fingerprint: string) {
     return teamWeeklyCommentarySchema.parse(
       await request<unknown>('/api/reports/weekly/commentary', {
         method: 'POST',
@@ -217,7 +304,7 @@ export const api = {
     );
   },
   async weeklyReviewedPdf(
-    query: { project: string; teamId: number; date: string },
+    query: WeeklyDraftInput['query'],
     fingerprint: string,
     commentary: TeamWeeklyCommentary
   ) {
@@ -233,13 +320,13 @@ export const api = {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
   },
-  async teamWeeklyPreview(query: { project: string; teamId: number; date: string }) {
+  async teamWeeklyPreview(query: WeeklyDraftInput['query']) {
     const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
     return teamWeeklyReportSchema.parse(
       await request<unknown>(`/api/reports/weekly/preview?${params}`)
     );
   },
-  async downloadTeamWeekly(query: { project: string; teamId: number; date: string }) {
+  async downloadTeamWeekly(query: WeeklyDraftInput['query']) {
     const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
     const blob = await request<Blob>(`/api/reports/weekly/pdf?${params}`, { responseType: 'blob' });
     const url = URL.createObjectURL(blob);

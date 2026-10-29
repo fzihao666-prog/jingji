@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { logger } from './logger.ts';
+import { backupWeeklyReportPhotos } from './weekly-report-photo-backup.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_RETAIN_DAYS = 7;
@@ -52,6 +53,7 @@ export function cleanupOldBackups(backupDir: string, retainDays: number): number
     try {
       const stat = statSync(filePath);
       if (stat.mtimeMs < cutoff) {
+        rmSync(filePath + '.weekly-photos', { recursive: true, force: true });
         unlinkSync(filePath);
         deleted += 1;
       }
@@ -74,6 +76,18 @@ export async function runBackup(options: {
   const retainDays = options.retainDays ?? DEFAULT_RETAIN_DAYS;
   logger.info('backup started', { db: options.databasePath, dir: options.backupDir });
   const backupPath = await backupDatabase(options.databasePath, options.backupDir);
+  try {
+    await backupWeeklyReportPhotos(options.databasePath, backupPath);
+  } catch (error) {
+    logger.error('周总结附件备份失败，清理本次不完整备份', { message: (error as Error).message });
+    try {
+      unlinkSync(backupPath);
+      rmSync(backupPath + '.weekly-photos', { recursive: true, force: true });
+    } catch (cleanupError) {
+      logger.warn('清理不完整备份失败', { message: (cleanupError as Error).message });
+    }
+    throw error;
+  }
   const deletedCount = cleanupOldBackups(options.backupDir, retainDays);
   logger.info('backup completed', { backupPath, deletedCount, retainDays });
   return { backupPath, deletedCount };
