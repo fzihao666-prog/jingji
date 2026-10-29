@@ -60,6 +60,9 @@ const RegionAccessPage = lazy(() =>
 const DataImportPage = lazy(() =>
   import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage }))
 );
+const ReportsPage = lazy(() =>
+  import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage }))
+);
 const DataManagementPage = lazy(() =>
   import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage }))
 );
@@ -93,6 +96,7 @@ const pageKeys: PageKey[] = [
   'bluetooth',
   'data-import',
   'data-management',
+  'reports',
 ];
 
 function pageFromHash(): PageKey {
@@ -462,6 +466,9 @@ export default function App() {
             athletes={projectAthletes}
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
+        )}
+        {page === 'reports' && user.role !== 'ATL' && (
+          <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />
         )}
         {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage user={user} />}
         {page === 'athletes' && user.role !== 'ATL' && (

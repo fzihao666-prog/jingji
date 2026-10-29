@@ -65,7 +65,7 @@ export function readReport(
     throw error;
   }
 }
-function readReportSnapshot(
+export function readReportSnapshot(
   db: DatabaseSync,
   athleteId: number,
   project: string,

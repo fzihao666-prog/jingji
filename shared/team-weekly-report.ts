@@ -1,0 +1,72 @@
+import { z } from 'zod';
+import { isProject } from './projects.js';
+import { reportDataSchema, reportRangeSchema } from './training-report.js';
+
+export const teamWeeklyQuerySchema = z.strictObject({
+  project: z.string().max(40).refine(isProject),
+  teamId: z
+    .string()
+    .max(10)
+    .regex(/^[1-9]\d*$/)
+    .transform(Number),
+  date: z.string().max(10).pipe(z.iso.date()),
+});
+export type TeamWeeklyQuery = z.infer<typeof teamWeeklyQuerySchema>;
+const value = z.number().finite().nullable();
+const totals = z.object({
+  sessions: z.number(),
+  participations: z.number(),
+  duration: value,
+  distance: value,
+  srpe: value,
+  durationCount: z.number(),
+  srpeCount: z.number(),
+  distanceCount: z.number(),
+  rpe: value,
+  rpeCount: z.number(),
+});
+const planSession = z.object({
+  date: z.string(),
+  content: z.string(),
+  duration: value,
+  distance: value,
+  status: z.string(),
+  linkedRecords: z.number(),
+});
+export const teamWeeklyReportSchema = z.object({
+  project: z.string(),
+  teamId: z.number(),
+  teamName: z.string(),
+  generatedAt: z.string(),
+  range: reportRangeSchema,
+  totals,
+  previous: totals,
+  daily: z.array(
+    z.object({
+      date: z.string(),
+      sessions: z.number(),
+      participations: z.number(),
+      duration: value,
+      srpe: value,
+      rpe: value,
+    })
+  ),
+  categories: z.array(z.object({ label: z.string(), participations: z.number(), duration: value })),
+  athletes: z.array(z.object({ id: z.number(), name: z.string(), data: reportDataSchema })),
+  injuries: z.array(
+    z.object({
+      athlete: z.string(),
+      date: z.string(),
+      name: z.string(),
+      status: z.string(),
+      pain: value,
+    })
+  ),
+  plansAvailable: z.boolean(),
+  plans: z.array(planSession),
+  nextPlans: z.array(planSession),
+  summary: z.array(z.string()),
+  concerns: z.array(z.string()),
+  sourceNotes: z.array(z.string()),
+});
+export type TeamWeeklyReport = z.infer<typeof teamWeeklyReportSchema>;

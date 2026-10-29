@@ -1,0 +1,100 @@
+.reports-page {
+  display: grid;
+  gap: 24px;
+}
+
+.reports-heading,
+.reports-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reports-heading h2,
+.reports-heading p {
+  margin: 0 0 8px;
+}
+
+.reports-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.reports-controls label {
+  display: grid;
+  gap: 8px;
+}
+
+.reports-controls input,
+.reports-controls select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 8px;
+  font: inherit;
+}
+
+.reports-note {
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.reports-preview {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+}
+
+.reports-preview section {
+  margin-top: 28px;
+}
+
+.reports-preview p {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.reports-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.reports-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.reports-preview caption {
+  text-align: left;
+  padding-bottom: 8px;
+}
+
+.reports-preview th,
+.reports-preview td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 8px;
+  text-align: left;
+  min-width: 90px;
+  overflow-wrap: anywhere;
+}
+
+.reports-preview th {
+  background: var(--mist);
+}
+
+.reports-page :focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 3px;
+}

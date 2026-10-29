@@ -112,16 +112,16 @@ export const teamPlanInput = z
       keys.add(key);
     }
   });
-export function readTeamPlans(db: DatabaseSync): TeamPlan[] {
+export function readTeamPlans(db: DatabaseSync, teamId?: number): TeamPlan[] {
   // 兼容缺省 ai_metadata 列的旧库/测试表（生产迁移会补列）。
   const hasAiMetadata = (
     db.prepare('PRAGMA table_info(training_plans)').all() as { name: string }[]
   ).some((column) => column.name === 'ai_metadata');
   const rows = db
     .prepare(
-      `SELECT p.id,p.root_id AS rootId,p.version,p.revision,p.status,p.team_id AS teamId,t.project,t.name AS team,p.title,p.start_date AS startDate,p.end_date AS endDate,p.plan_data AS data,${hasAiMetadata ? 'p.ai_metadata AS aiMetadata' : 'NULL AS aiMetadata'},p.published_at AS publishedAt,p.archived_at AS archivedAt FROM training_plans p JOIN project_teams t ON t.id=p.team_id WHERE p.model='team' ORDER BY p.start_date DESC,p.version DESC`
+      `SELECT p.id,p.root_id AS rootId,p.version,p.revision,p.status,p.team_id AS teamId,t.project,t.name AS team,p.title,p.start_date AS startDate,p.end_date AS endDate,p.plan_data AS data,${hasAiMetadata ? 'p.ai_metadata AS aiMetadata' : 'NULL AS aiMetadata'},p.published_at AS publishedAt,p.archived_at AS archivedAt FROM training_plans p JOIN project_teams t ON t.id=p.team_id WHERE p.model='team' ${teamId === undefined ? '' : 'AND p.team_id=?'} ORDER BY p.start_date DESC,p.version DESC`
     )
-    .all() as unknown as Array<
+    .all(...(teamId === undefined ? [] : [teamId])) as unknown as Array<
     Omit<TeamPlan, 'data' | 'aiMetadata'> & {
       data: string;
       aiMetadata: string | null;

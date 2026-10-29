@@ -840,3 +840,9 @@ Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team
 强度展示简化：总览和专项按原始 intensity_zone 汇总时长及课次，不依赖 intensity_system，不显示“未知体系”，不做跨体系阈值换算；原始体系字段保留。训练内容展示不再因体系与活动不匹配而列为待核实，其他项目与权限边界保持不变。
 
 训练内容展示简化：projectTrainingContentCategory 优先复用活动字段和既有文字分类逻辑，不以项目核实状态、训练目的完整性阻断展示分类；无法识别或类别不适用于项目时显示“未分类”，仍计入总课次，不改写事实或放宽访问权限。
+
+### 队伍训练周总结（2026-10）
+
+网页“数据管理 → 报告”调用 `GET /api/reports/weekly/preview` 或 `/pdf`，严格查询参数为 `{ project, teamId, date }`，date 为自然周内日期。管理角色服务端按现有可访问运动员集合、项目、有效队伍和在册成员交集裁剪；仅全队有效成员可见时返回队伍计划，与既有队伍计划授权边界一致。未认证返回401、角色/范围无权403、参数错误400、限流429、生成失败503；成功分别返回共享Schema JSON或私有、不缓存的PDF。
+
+`team-weekly-report.ts` 在一个只读事务中汇总 `training_sessions`、`daily_wellness`、`test_sessions/test_measurements`、`injury_records` 及已有计划/实施确认；训练计划关联读取 `training_plan_execution_links`，不向课次表新增关联列。复用个人报告统计与测试可比口径，通过共享章节定义保持预览/PDF内容一致；PDF复用现有jsPDF与本地中文字体，不发外网、不落盘。无新表、无迁移、无第二份训练事实；生成时读取最新数据，不新增历史快照。

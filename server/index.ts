@@ -1,3 +1,4 @@
+import { registerTeamWeeklyRoutes } from './report/team-weekly-routes.ts';
 import { registerProjectVerificationRoutes } from './athlete/project-verification-routes.ts';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
@@ -126,6 +127,7 @@ registerSportRulesRoutes(app, {
   referenceAvailable: project => readPhysicalReferences(db, project).some(ref => isDisplayPhysicalReference(ref, beijingDate(new Date()))),
 });
 registerStrengthTestRoutes(app);
+registerTeamWeeklyRoutes(app, { db, requireAuth, accessibleIds: accessibleAthleteIds });
 registerReportRoutes(app, { db, requireAuth, hasAccess: hasAthleteAccess, currentUser: getAuthUser,
   generate: async (data) => (await chatJson<unknown>({ temperature: 0.2, maxCompletionTokens: 900,
     messages: [

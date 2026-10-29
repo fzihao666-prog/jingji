@@ -1,3 +1,4 @@
+import { teamWeeklyReportSchema } from '../shared/team-weekly-report';
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
 import {
@@ -103,12 +104,13 @@ export class ApiRequestError extends Error {
 type ApiRequestOptions = RequestInit & {
   /** 为 false 时不附加令牌，401 也不触发会话清理与刷新（登录、注册等免登录接口）。 */
   auth?: boolean;
+  responseType?: 'json' | 'blob';
   /** 请求超时毫秒数；仅对需要快速失败的接口（如登录）启用。 */
   timeoutMs?: number;
 };
 
 async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { auth = true, timeoutMs, ...init } = options;
+  const { auth = true, timeoutMs, responseType = 'json', ...init } = options;
   const headers = new Headers(init.headers);
   const token = getToken();
   if (token && auth !== false) headers.set('Authorization', `Bearer ${token}`);
@@ -172,6 +174,11 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   if (isJson && payload === null) {
     throw new ApiRequestError('服务响应异常，请稍后重试', { status: response.status });
   }
+  if (responseType === 'blob') {
+    if (!response.headers.get('content-type')?.includes('application/pdf'))
+      throw new ApiRequestError('报告响应格式异常，请重试。');
+    return (await response.blob()) as T;
+  }
   return payload as T;
 }
 
@@ -196,6 +203,22 @@ export const api = {
     request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
       `/api/projects/rules?${new URLSearchParams({ project })}`
     ),
+  async teamWeeklyPreview(query: { project: string; teamId: number; date: string }) {
+    const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
+    return teamWeeklyReportSchema.parse(await request<unknown>(`/api/reports/weekly/preview?${params}`));
+  },
+  async downloadTeamWeekly(query: { project: string; teamId: number; date: string }) {
+    const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
+    const blob = await request<Blob>(`/api/reports/weekly/pdf?${params}`, { responseType: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `竞迹_队伍周总结_${query.date}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
   async reportPreview(id: number, range: ReportRange) {
     return reportPreviewSchema.parse(
       await request<unknown>(`/api/athletes/${id}/reports/preview?${new URLSearchParams(range)}`)
