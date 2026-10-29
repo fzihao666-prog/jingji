@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Eye, FileText } from 'lucide-react';
+import { Download, Eye, FileText, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import type { Project, ProjectTeam } from '../types';
 import { projectLabel } from '../../shared/projects';
@@ -98,6 +98,21 @@ export function ReportsPage({ project, teamId }: Props) {
             <h2>训练周总结</h2>
             <p>自然周 · 全队汇总 · PDF 下载</p>
           </div>
+          {!loading && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={busy}
+              onClick={() => {
+                change();
+                setLoading(true);
+                setRetry((v) => v + 1);
+              }}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              重新加载队伍
+            </button>
+          )}
         </header>
         <form
           onSubmit={(event) => {
@@ -142,49 +157,37 @@ export function ReportsPage({ project, teamId }: Props) {
               />
             </label>
           </fieldset>
-          {range && (
-            <p>
-              报告周期：{range.from} 至 {range.to}（周一至周日）
-            </p>
-          )}
-          <div className="reports-actions">
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={busy || loading || !teams.length}
-            >
-              <Download size={16} aria-hidden="true" />
-              {busy ? '正在生成…' : '生成并下载 PDF'}
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={busy || loading || !teams.length}
-              onClick={() => void generate(false)}
-            >
-              <Eye size={16} aria-hidden="true" />
-              预览
-            </button>
+          <div className="reports-footer">
+            {range && (
+              <p className="reports-period">
+                报告周期：{range.from} 至 {range.to}（周一至周日）
+              </p>
+            )}
+            <div className="reports-actions">
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={busy || loading || !teams.length}
+              >
+                <Download size={16} aria-hidden="true" />
+                {busy ? '正在生成…' : '生成并下载 PDF'}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy || loading || !teams.length}
+                onClick={() => void generate(false)}
+              >
+                <Eye size={16} aria-hidden="true" />
+                预览
+              </button>
+            </div>
           </div>
         </form>
         <p role="status" aria-live="polite">
           {message}
         </p>
         {!loading && !teams.length && <p>当前项目暂无可访问队伍，请检查当前项目及队伍授权。</p>}
-        {!loading && (
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={() => {
-              change();
-              setLoading(true);
-              setRetry((v) => v + 1);
-            }}
-          >
-            重新加载队伍
-          </button>
-        )}
         <p className="reports-note">
           根据当前权限范围内在册队员的数据生成。缺失不计为零、未填报不计为未训练；不生成自动诊断或训练处方。
         </p>
