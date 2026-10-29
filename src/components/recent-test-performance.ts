@@ -4,7 +4,7 @@ import { SLALOM_CHAMPION_METRICS } from '../../shared/slalom-model';
 import { STRENGTH_METRICS } from '../../shared/strength-model';
 import type { SpecialTestEvent, StrengthTest } from '../types';
 
-export type TestPoint = { id: string; date: string; value: number; order: number };
+export type TestPoint = { id: string; date: string; value: number; order: number; comparisonKey?: string };
 export type TestSeries = {
   key: string;
   label: string;
@@ -25,9 +25,12 @@ export function recentTestSeries(
   const groups = new Map<string, TestSeries>();
   const add = (series: Omit<TestSeries, 'points'>, point: TestPoint) => {
     if (point.date < from || point.date > to || !Number.isFinite(point.value)) return;
-    const group = groups.get(series.key) ?? { ...series, points: [] };
-    group.points.push(point);
-    groups.set(series.key, group);
+    // 选择器只按测试项目归组，比较条件随记录保留在内部。
+    const identity = JSON.parse(series.key) as unknown[];
+    const key = JSON.stringify(identity.slice(0, identity[0] === 'strength' ? 3 : 4));
+    const group = groups.get(key) ?? { ...series, key, points: [] };
+    group.points.push({ ...point, comparisonKey: series.comparable ? series.key : undefined });
+    groups.set(key, group);
   };
   for (const test of tests.filter((item) => item.athleteId === athleteId)) {
     for (const metric of STRENGTH_METRICS) {
@@ -42,9 +45,6 @@ export function recentTestSeries(
       const comparable = Boolean(
         test.protocol?.trim() && test.protocolVersion?.trim() && test.contextKey?.trim()
       );
-      const context = [test.protocol, test.protocolVersion, test.contextKey]
-        .filter(Boolean)
-        .join(' · ');
       add(
         {
           key: JSON.stringify([
@@ -56,7 +56,7 @@ export function recentTestSeries(
             test.contextKey,
             comparable ? '' : test.id,
           ]),
-          label: `${metric.label}${context ? ` · ${context}` : ''}`,
+          label: metric.label,
           unit: metric.unit,
           direction: ['wingateLactateMmol', 'anaerobicThresholdHr'].includes(metric.key)
             ? 'neutral'
@@ -104,7 +104,7 @@ export function recentTestSeries(
         add(
           {
             key: JSON.stringify(['special', ...context, comparable ? '' : event.id]),
-            label: `专项计时 · ${context.slice(0, 5).filter(Boolean).join(' · ')}`,
+            label: `${event.distanceM}米 ${event.boatClass}测试`,
             unit: 's',
             direction: 'lower_better',
             comparable,
@@ -126,6 +126,7 @@ export function recentTestSeries(
         (a, b) => a.date.localeCompare(b.date) || a.order - b.order || a.id.localeCompare(b.id)
       ),
     }))
+    .map(group => ({ ...group, comparable: Boolean(group.points.at(-1)?.comparisonKey) }))
     .sort(
       (a, b) =>
         b.points.at(-1)!.date.localeCompare(a.points.at(-1)!.date) ||
@@ -135,11 +136,12 @@ export function recentTestSeries(
 
 export function testSeriesSummary(series: TestSeries) {
   const latest = series.points.at(-1)!;
-  const previous = series.comparable ? series.points.at(-2) : undefined;
+  const comparablePoints = latest.comparisonKey ? series.points.filter(point => point.comparisonKey === latest.comparisonKey) : [];
+  const previous = comparablePoints.at(-2);
   const best =
     !series.comparable || series.direction === 'neutral'
       ? null
-      : series.points.reduce(
+      : comparablePoints.reduce(
           (best, point) =>
             series.direction === 'lower_better'
               ? Math.min(best, point.value)

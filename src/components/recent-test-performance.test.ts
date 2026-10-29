@@ -32,13 +32,15 @@ describe('近期测试表现', () => {
       ])
     ).toEqual([]);
   });
-  it('协议版本和上下文不同的记录不合并，缺少条件仍显示原成绩', () => {
+  it('同指标仅一个选项，比较条件内部保留，缺失条件展示原成绩', () => {
     const series = build([
       strength(1, 50),
       strength(2, 60, { protocolVersion: '2' }),
       strength(3, 70, { contextKey: undefined }),
     ]);
-    expect(series).toHaveLength(3);
+    expect(series).toHaveLength(1);
+    expect(series[0].label).toBe('卧推');
+    expect(series[0].points).toHaveLength(3);
     const unknown = series.find((item) => !item.comparable)!;
     expect(testSeriesSummary(unknown)).toMatchObject({
       best: null,
