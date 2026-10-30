@@ -289,6 +289,16 @@ curl -I https://jingjity.xin/
 curl -I http://jingjity.xin/
 ```
 
+验证压缩必须使用真实 GET 请求并携带 `Accept-Encoding: gzip`，不能只检查 HTML 或普通 `curl -I`。在本地仓库执行：
+
+```bash
+node scripts/check-static-delivery.mjs https://jingjity.xin/
+```
+
+脚本只读检查入口引用的 JS/CSS，输出各资源下载耗时，资源达到站点配置的 1024 字节阈值却未启用 gzip、压缩响应缺少 `Vary: Accept-Encoding` 或未启用不可变长缓存时返回非零退出码。它不登录、不读取业务数据，不代表业务接口或用户所在地网络的性能验收。
+
+**更新应用镜像不会同步宿主机 Nginx 配置。** 如果脚本提示未压缩，先备份当前站点配置，执行 `sudo nginx -T` 确认实际处理该域名的 HTTPS `server`，将上面的 gzip 指令补入该配置（保留原证书、代理及安全头），再执行 `sudo nginx -t && sudo systemctl reload nginx` 并重新检查。配置检查失败时不要 reload；需要回滚时恢复备份并重新校验、reload。不要直接覆盖已有证书与站点配置。
+
 阿里云个人测试证书无法自动续期；到期前在控制台重新申请、下载并替换 `.pem` 和 `.key`，再执行 `nginx -t && systemctl reload nginx`。同一域名由多台服务器提供服务时，必须在每台服务器上分别安装证书及私钥。
 
 ## 6. 日常更新与回滚

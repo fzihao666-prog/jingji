@@ -504,12 +504,13 @@ export const api = {
     to: string,
     athleteId: number | null | undefined,
     project: Project,
-    teamId?: number | null
+    teamId?: number | null,
+    signal?: AbortSignal
   ) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
     if (teamId) params.set('teamId', String(teamId));
-    return request<{ records: TrainingRecord[] }>(`/api/records?${params}`);
+    return request<{ records: TrainingRecord[] }>(`/api/records?${params}`, { signal });
   },
   async saveSpecialTrainingSessions(
     sessions: Array<{

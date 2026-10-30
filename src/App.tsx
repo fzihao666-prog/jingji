@@ -1,6 +1,6 @@
-import { BluetoothConnectPage } from './pages/BluetoothConnectPage';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, getToken, setToken } from './api';
+import { trainingRecordScope } from './training-record-scope';
 import {
   AppShell,
   type PageKey,
@@ -10,11 +10,25 @@ import {
 import { BrandLogo } from './components/BrandLogo';
 import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
-import { PhysiologyBiochemistryPage } from './pages/PhysiologyBiochemistryPage';
-import { StrengthTrainingDashboard } from './pages/TrainingDashboards';
 import type { Athlete, Project, ProjectTeam, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
 import { isProject, normalizeProject, PROJECTS } from '../shared/projects';
+
+const BluetoothConnectPage = lazy(() =>
+  import('./pages/BluetoothConnectPage').then((module) => ({
+    default: module.BluetoothConnectPage,
+  }))
+);
+const PhysiologyBiochemistryPage = lazy(() =>
+  import('./pages/PhysiologyBiochemistryPage').then((module) => ({
+    default: module.PhysiologyBiochemistryPage,
+  }))
+);
+const StrengthTrainingDashboard = lazy(() =>
+  import('./pages/TrainingDashboards').then((module) => ({
+    default: module.StrengthTrainingDashboard,
+  }))
+);
 
 const OverviewPage = lazy(() =>
   import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage }))
@@ -232,30 +246,55 @@ export default function App() {
       .finally(() => setAthletesReady(true));
   }, [user, refreshKey]);
 
+  const recordScope = trainingRecordScope(
+    page,
+    user?.role === 'ATL' ? (user.athleteId ?? null) : athleteId
+  );
+  const recordsRequired = recordScope !== undefined;
+  const recordsAthleteId = recordScope?.athleteId ?? null;
+
   useEffect(() => {
     if (!user || !athletesReady || !project) return;
-    const selected = athleteId ? athletes.find((athlete) => athlete.id === athleteId) : null;
+    const selected = recordsAthleteId
+      ? athletes.find((athlete) => athlete.id === recordsAthleteId)
+      : null;
     if (selected && selected.project !== project) {
       setAthleteId(user.role === 'ATL' ? user.athleteId : null);
       return;
     }
-    if (page === 'overview' || page === 'special-overview' || page === 'training-plans') {
+    if (!recordsRequired) {
       setRecords([]);
       setLoading(false);
       return;
     }
     let active = true;
+    const controller = new AbortController();
+    setRecords([]);
     setLoading(true);
     setGlobalError('');
     api
-      .records(from, to, null, project, teamId ?? undefined)
+      .records(from, to, recordsAthleteId, project, teamId ?? undefined, controller.signal)
       .then(({ records: nextRecords }) => { if (active) setRecords(nextRecords); })
       .catch((error) =>
         active && setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。')
       )
       .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [user, athletesReady, athletes, from, to, athleteId, project, teamId, page, refreshKey]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    user,
+    athletesReady,
+    athletes,
+    from,
+    to,
+    recordsAthleteId,
+    project,
+    teamId,
+    recordsRequired,
+    refreshKey,
+  ]);
 
   const projects = authorizedProjects;
   const projectAthletes = useMemo(

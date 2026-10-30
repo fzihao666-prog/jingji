@@ -446,6 +446,7 @@ npm run start
 
 - HTTP 仅做 301 跳转 HTTPS；TLS 使用 TLSv1.2/1.3；反向代理传递 `Host`、`X-Real-IP`、`X-Forwarded-For/Proto`。
 - 配置模板见 [deploy/nginx/jingji.conf.example](deploy/nginx/jingji.conf.example)（模板含占位域名与示例路径，实际以部署手册中的配置为准）。
+- 页面代码按需加载；个人档案先显示基本信息，图表与下方模块随滚动加载，训练报告展开后加载。发布后可运行 `node scripts/check-static-delivery.mjs https://你的域名/` 检查静态资源压缩和缓存；宿主机 Nginx 配置须单独同步，更新应用镜像不会自动启用 gzip。
 - 当前使用阿里云个人测试证书，**无法自动续期**，到期需手动替换 `.pem`/`.key` 后 `nginx -t` 并 reload。
 
 ### 8.4 数据库备份

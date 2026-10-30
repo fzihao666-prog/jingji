@@ -1,25 +1,24 @@
-import { RecentTestPerformance } from '../components/RecentTestPerformance';
-import { ProjectFactVerification } from '../components/ProjectFactVerification';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
-import { TrainingSessionEntry } from '../components/TrainingSessionEntry';
-import { ProjectSpecialTraining } from '../components/ProjectSpecialTraining';
 import './ProfilePhysiology.css';
 import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import type { EChartsOption } from 'echarts';
 import { CalendarRange, Save, Search } from 'lucide-react';
-import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { projectLabel } from '../../shared/projects';
 import { api } from '../api';
-import { BodyCompositionModelOverview } from '../components/AthleteProfileCharts';
-import { AthleteRadarComparison } from '../components/AthleteRadarComparison';
-import { EChart } from '../components/EChart';
-import { InjuryRecoveryModule } from '../components/InjuryRecoveryModule';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
-import { ProfileTrainingStatus } from '../components/ProfileTrainingStatus';
-import { TrainingReport } from '../components/TrainingReport';
-import { StrengthProfileModule } from '../components/StrengthProfileModule';
-import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
 import type {
   Athlete,
   StrengthTest,
@@ -34,6 +33,63 @@ import type {
   WellnessTrend,
 } from '../types';
 import { formatNumber } from '../utils';
+
+const RecentTestPerformance = lazy(() =>
+  import('../components/RecentTestPerformance').then((module) => ({
+    default: module.RecentTestPerformance,
+  }))
+);
+const ProjectFactVerification = lazy(() =>
+  import('../components/ProjectFactVerification').then((module) => ({
+    default: module.ProjectFactVerification,
+  }))
+);
+const TrainingSessionEntry = lazy(() =>
+  import('../components/TrainingSessionEntry').then((module) => ({
+    default: module.TrainingSessionEntry,
+  }))
+);
+const ProjectSpecialTraining = lazy(() =>
+  import('../components/ProjectSpecialTraining').then((module) => ({
+    default: module.ProjectSpecialTraining,
+  }))
+);
+const BodyCompositionModelOverview = lazy(() =>
+  import('../components/AthleteProfileCharts').then((module) => ({
+    default: module.BodyCompositionModelOverview,
+  }))
+);
+const AthleteRadarComparison = lazy(() =>
+  import('../components/AthleteRadarComparison').then((module) => ({
+    default: module.AthleteRadarComparison,
+  }))
+);
+const EChart = lazy(() =>
+  import('../components/EChart').then((module) => ({ default: module.EChart }))
+);
+const InjuryRecoveryModule = lazy(() =>
+  import('../components/InjuryRecoveryModule').then((module) => ({
+    default: module.InjuryRecoveryModule,
+  }))
+);
+const ProfileTrainingStatus = lazy(() =>
+  import('../components/ProfileTrainingStatus').then((module) => ({
+    default: module.ProfileTrainingStatus,
+  }))
+);
+const TrainingReport = lazy(() =>
+  import('../components/TrainingReport').then((module) => ({ default: module.TrainingReport }))
+);
+const StrengthProfileModule = lazy(() =>
+  import('../components/StrengthProfileModule').then((module) => ({
+    default: module.StrengthProfileModule,
+  }))
+);
+const FmsPersonalChart = lazy(() =>
+  import('../components/TrainingAnalysisCharts').then((module) => ({
+    default: module.FmsPersonalChart,
+  }))
+);
 
 function daysBetweenInclusive(from: string, to: string) {
   const [fy, fm, fd] = from.split('-').map(Number);
@@ -116,6 +172,7 @@ function trainingExperience(startDate: string, date: string) {
 }
 
 export function PersonalPage(props: Props) {
+  const [reportAthleteId, setReportAthleteId] = useState<number | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [athleteQuery, setAthleteQuery] = useState('');
   const canSwitchAthlete = props.user.role !== 'ATL';
@@ -600,9 +657,19 @@ export function PersonalPage(props: Props) {
         />
       ) : (
         <>
-          <details key={`report-${selectedAthlete.id}`} className="personal-profile-section">
+          <details
+            key={`report-${selectedAthlete.id}`}
+            className="personal-profile-section"
+            onToggle={(event) => {
+              if (event.currentTarget.open) setReportAthleteId(selectedAthlete.id);
+            }}
+          >
             <summary>训练报告 · 周 / 月 / 自选日期</summary>
-            <TrainingReport key={selectedAthlete.id} athleteId={selectedAthlete.id} athleteName={selectedAthlete.name} initialDate={props.to} />
+            {reportAthleteId === selectedAthlete.id && (
+              <Suspense fallback={<p role="status">正在加载训练报告…</p>}>
+                <TrainingReport key={selectedAthlete.id} athleteId={selectedAthlete.id} athleteName={selectedAthlete.name} initialDate={props.to} />
+              </Suspense>
+            )}
           </details>
           <section className="personal-dossier">
             <header className="personal-dossier-identity">
@@ -730,7 +797,9 @@ export function PersonalPage(props: Props) {
                       description="读取身体成分记录失败，请稍后重试。"
                     />
                   ) : (
-                    <BodyCompositionModelOverview profiles={bodyCompositionProfiles} individual />
+                    <DeferredProfileContent label="身体成分">
+                      <BodyCompositionModelOverview profiles={bodyCompositionProfiles} individual />
+                    </DeferredProfileContent>
                   )}
                 </section>
               </AppCard>
@@ -754,10 +823,14 @@ export function PersonalPage(props: Props) {
                 ) : physiologyError ? (
                   <ContentState kind="error" title="FMS测试读取失败" description="请刷新页面重试。" />
                 ) : (
-                  <FmsPersonalChart measurements={profileMeasurements} />
+                  <DeferredProfileContent label="功能动作筛查">
+                    <FmsPersonalChart measurements={profileMeasurements} />
+                  </DeferredProfileContent>
                 )}
               </AppCard>
-              <RecentTestPerformance key={testScope} tests={recentStrength.key === testScope ? recentStrength.tests : []} events={specialTestScope === testScope ? specialTests : []} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} strengthLoading={recentStrength.key !== testScope || recentStrength.loading} specialLoading={specialTestScope !== testScope || dossierDataLoading} strengthError={recentStrength.key === testScope && recentStrength.error} specialError={specialTestScope === testScope && specialTestError} />
+              <DeferredProfileContent label="近期测试表现">
+                <RecentTestPerformance key={testScope} tests={recentStrength.key === testScope ? recentStrength.tests : []} events={specialTestScope === testScope ? specialTests : []} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} strengthLoading={recentStrength.key !== testScope || recentStrength.loading} specialLoading={specialTestScope !== testScope || dossierDataLoading} strengthError={recentStrength.key === testScope && recentStrength.error} specialError={specialTestScope === testScope && specialTestError} />
+              </DeferredProfileContent>
               <AppCard
                 variant="chart"
                 className="professional-panel analysis-feature-panel athlete-radar-card"
@@ -771,7 +844,8 @@ export function PersonalPage(props: Props) {
                     </span>
                   </div>
                 </header>
-                <AthleteRadarComparison
+                <DeferredProfileContent label="专项测试雷达">
+                  <AthleteRadarComparison
                   title="专项测试雷达"
                   model={radarModels?.special ?? null}
                   loading={radarModelsLoading}
@@ -779,6 +853,7 @@ export function PersonalPage(props: Props) {
                     radarModels?.special.unavailableReason
                   }
                 />
+                </DeferredProfileContent>
               </AppCard>
               <AppCard
                 variant="chart"
@@ -793,7 +868,8 @@ export function PersonalPage(props: Props) {
                     </span>
                   </div>
                 </header>
-                <AthleteRadarComparison
+                <DeferredProfileContent label="体能测试雷达">
+                  <AthleteRadarComparison
                   title="体能测试雷达"
                   model={radarModels?.physical ?? null}
                   loading={radarModelsLoading}
@@ -801,6 +877,7 @@ export function PersonalPage(props: Props) {
                     radarModels?.physical.unavailableReason
                   }
                 />
+                </DeferredProfileContent>
               </AppCard>
             </div>
             <ProfileSection
@@ -845,6 +922,58 @@ export function PersonalPage(props: Props) {
   );
 }
 
+/** 保留分区标题与占位，滚动接近时再加载图表；键盘和读屏用户也可主动展开。 */
+function DeferredProfileContent({ children, label }: { children: ReactNode; label: string }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const restoreFocus = useRef(false);
+  const reveal = useCallback(() => {
+    restoreFocus.current = Boolean(container.current?.contains(document.activeElement));
+    setVisible(true);
+  }, []);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    if (visible) {
+      if (restoreFocus.current) element.focus({ preventScroll: true });
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          reveal();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '320px' }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible, reveal]);
+  const loading = (
+    <div className="professional-chart-empty" role="status">
+      正在加载{label}…
+    </div>
+  );
+  return (
+    <div ref={container} tabIndex={-1} role="group" aria-label={label}>
+      {visible ? (
+        <Suspense fallback={loading}>{children}</Suspense>
+      ) : (
+        <div className="professional-chart-empty">
+          <button type="button" className="secondary-button" onClick={reveal}>
+            显示{label}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfileSection({
   title,
   subtitle,
@@ -863,7 +992,7 @@ function ProfileSection({
           <p>{subtitle}</p>
         </div>
       </header>
-      {children}
+      <DeferredProfileContent label={title}>{children}</DeferredProfileContent>
     </section>
   );
 }
