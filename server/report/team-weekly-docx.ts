@@ -8,7 +8,11 @@ import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import type { TeamWeeklyReport } from '../../shared/team-weekly-report.js';
 import type { TeamWeeklyCommentary } from '../../shared/team-weekly-ai.js';
-import { teamWeeklySections, weeklyReportMetadata } from '../../shared/team-weekly-sections.js';
+import {
+  teamWeeklySections,
+  weeklyReportMetadata,
+  weeklyNumber,
+} from '../../shared/team-weekly-sections.js';
 import { teamWeeklyCharts, type WeeklyChart } from '../../shared/team-weekly-charts.js';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -58,6 +62,38 @@ function metadataTable(entries: [string, string][]) {
         })
         .join('')}</w:tr>`
   ).join('')}</w:tbl>${p('')}`;
+}
+/** 首页标题区与指标均为可编辑文字表格，不把整页转成图片。 */
+function coverHeader(report: TeamWeeklyReport) {
+  const week = weeklyReportMetadata(report).find(([label]) => label === '训练周次')?.[1] || '';
+  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="180" w:type="dxa"/><w:bottom w:w="180" w:type="dxa"/><w:left w:w="220" w:type="dxa"/><w:right w:w="220" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="9360"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="9360" w:type="dxa"/><w:tcBorders><w:left w:val="single" w:sz="20" w:color="${theme.amber}"/></w:tcBorders><w:shd w:val="clear" w:fill="${theme.navy}"/></w:tcPr>${p('竞迹 JINGJI / WEEKLY TRAINING REPORT', 'CoverBrand')}${p('训练周总结', 'CoverTitle')}${p(report.teamName, 'CoverTeam')}${p(`${report.range.from} — ${report.range.to}  ·  ${week}`, 'CoverPeriod')}</w:tc></w:tr></w:tbl>${p('')}`;
+}
+function coverMetrics(report: TeamWeeklyReport, rows: string[][]) {
+  const cells: [string, string, string][] = [
+    ['队伍训练课次', weeklyNumber(report.totals.sessions), '节'],
+    [
+      '有效参与人数',
+      weeklyNumber(report.athletes.filter((a) => a.data.totals.sessions > 0).length),
+      '人',
+    ],
+    ['个人累计时长', weeklyNumber(report.totals.duration), '分钟'],
+    ['个人累计负荷', weeklyNumber(report.totals.srpe), 'SRPE / AU'],
+  ];
+  const sourceLabels = ['训练课次', '有效参与人数', '', '训练负荷 / SRPE'];
+  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="100" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${cells.map(() => '<w:gridCol w:w="2340"/>').join('')}</w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr>${cells
+    .map(([label, value, unit], i) => {
+      const row = rows.find((row) => row[0] === sourceLabels[i]);
+      const previous =
+        i === 2 ? `${weeklyNumber(report.previous.duration)} 分钟` : row?.[2] || '未记录';
+      const change =
+        i === 2 ? report.comparison.metrics.find((m) => m.key === 'duration') : undefined;
+      const delta =
+        change && change.previous !== 0
+          ? `${weeklyNumber(((change.current - change.previous) / Math.abs(change.previous)) * 100)}%`
+          : row?.[3];
+      return `<w:tc><w:tcPr><w:tcW w:w="2340" w:type="dxa"/><w:tcBorders><w:bottom w:val="single" w:sz="10" w:color="${theme.blue}"/></w:tcBorders></w:tcPr>${p(label, 'MetricLabel')}${p(value, 'MetricValue')}${p(unit, 'MetricLabel')}${p(`上周 ${previous}${delta && delta !== '—' ? ` · ${delta}` : ''}`, 'MetricNote')}</w:tc>`;
+    })
+    .join('')}</w:tr></w:tbl>${p('')}`;
 }
 function table(headers: string[], rows: string[][]) {
   const weights = headers.map((h) =>
@@ -190,35 +226,58 @@ const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:
   ['TableMetric', 18],
   ['Caption', 17],
   ['Footer', 16],
+  ['CoverBrand', 17],
+  ['CoverTitle', 42],
+  ['CoverTeam', 23],
+  ['CoverPeriod', 18],
+  ['MetricLabel', 17],
+  ['MetricValue', 40],
+  ['MetricNote', 15],
+  ['InsightTitle', 21],
 ]
   .map(([name, size]) => {
     const heading = name === 'Heading1' || name === 'Heading2';
-    const color = ['Title', 'Heading1', 'Heading2', 'TableHeading'].includes(String(name))
-      ? theme.navy
-      : name === 'Brand'
-        ? theme.teal
-        : name === 'TableMetric'
-          ? theme.blue
-          : name === 'Caption' || name === 'Footer'
-            ? theme.muted
-            : theme.text;
-    const layout =
-      name === 'Heading1'
-        ? `<w:keepNext/><w:shd w:val="clear" w:fill="${theme.pale}"/><w:spacing w:before="220" w:after="120"/><w:ind w:left="140" w:right="100"/>`
-        : name === 'Heading2'
-          ? `<w:keepNext/><w:pBdr><w:left w:val="single" w:sz="14" w:space="7" w:color="${theme.teal}"/></w:pBdr><w:spacing w:before="150" w:after="80"/>`
-          : name === 'Title'
-            ? '<w:keepNext/><w:spacing w:before="60" w:after="160"/>'
-            : name === 'Brand'
-              ? '<w:keepNext/><w:spacing w:after="40"/>'
-              : name === 'Footer'
-                ? '<w:jc w:val="right"/>'
-                : ['TableText', 'TableHeading', 'TableMetric', 'Metadata', 'Caption'].includes(
-                      String(name)
-                    )
-                  ? '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>'
-                  : '';
-    return `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/><w:pPr>${layout}${heading ? `<w:outlineLvl w:val="${name === 'Heading1' ? 0 : 1}"/>` : ''}</w:pPr><w:rPr><w:sz w:val="${size}"/><w:color w:val="${color}"/>${['Title', 'Brand', 'Heading1', 'Heading2', 'TableHeading', 'TableMetric'].includes(String(name)) ? '<w:b/>' : ''}</w:rPr></w:style>`;
+    const color = String(name).startsWith('Cover')
+      ? name === 'CoverBrand'
+        ? theme.electric
+        : theme.white
+      : name === 'MetricValue'
+        ? theme.blue
+        : name === 'MetricLabel' || name === 'MetricNote'
+          ? theme.muted
+          : name === 'InsightTitle'
+            ? theme.navy
+            : ['Title', 'Heading1', 'Heading2', 'TableHeading'].includes(String(name))
+              ? theme.navy
+              : name === 'Brand'
+                ? theme.teal
+                : name === 'TableMetric'
+                  ? theme.blue
+                  : name === 'Caption' || name === 'Footer'
+                    ? theme.muted
+                    : theme.text;
+    const layout = String(name).startsWith('Cover')
+      ? '<w:keepNext/><w:spacing w:before="0" w:after="60"/>'
+      : String(name).startsWith('Metric')
+        ? '<w:spacing w:before="0" w:after="30" w:line="240" w:lineRule="auto"/>'
+        : name === 'InsightTitle'
+          ? `<w:keepNext/><w:pBdr><w:left w:val="single" w:sz="16" w:space="8" w:color="${theme.amber}"/></w:pBdr><w:spacing w:before="140" w:after="80"/>`
+          : name === 'Heading1'
+            ? `<w:keepNext/><w:shd w:val="clear" w:fill="${theme.pale}"/><w:spacing w:before="220" w:after="120"/><w:ind w:left="140" w:right="100"/>`
+            : name === 'Heading2'
+              ? `<w:keepNext/><w:pBdr><w:left w:val="single" w:sz="14" w:space="7" w:color="${theme.teal}"/></w:pBdr><w:spacing w:before="150" w:after="80"/>`
+              : name === 'Title'
+                ? '<w:keepNext/><w:spacing w:before="60" w:after="160"/>'
+                : name === 'Brand'
+                  ? '<w:keepNext/><w:spacing w:after="40"/>'
+                  : name === 'Footer'
+                    ? '<w:jc w:val="right"/>'
+                    : ['TableText', 'TableHeading', 'TableMetric', 'Metadata', 'Caption'].includes(
+                          String(name)
+                        )
+                      ? '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>'
+                      : '';
+    return `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/><w:pPr>${layout}${heading ? `<w:outlineLvl w:val="${name === 'Heading1' ? 0 : 1}"/>` : ''}</w:pPr><w:rPr><w:sz w:val="${size}"/><w:color w:val="${color}"/>${['Title', 'Brand', 'Heading1', 'Heading2', 'TableHeading', 'TableMetric', 'CoverTitle', 'CoverTeam', 'MetricValue', 'InsightTitle'].includes(String(name)) ? '<w:b/>' : ''}</w:rPr></w:style>`;
   })
   .join('')}</w:styles>`;
 
@@ -240,10 +299,17 @@ export async function renderTeamWeeklyDocx(
     rel('styles', 'styles', 'styles.xml') + rel('footer', 'footer', 'footer.xml');
   let overrides =
     '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>';
-  let body =
-    p('竞迹  JINGJI · TRAINING REPORT', 'Brand') +
-    p('专业运动队训练周总结报告', 'Title') +
-    metadataTable(weeklyReportMetadata(report));
+  const hasCover = report.templateVersion === 'weekly-v3';
+  let body = hasCover
+    ? coverHeader(report) +
+      metadataTable(
+        weeklyReportMetadata(report).filter(
+          ([label]) => !['队伍', '报告周期', '训练周次'].includes(label)
+        )
+      )
+    : p('竞迹  JINGJI · TRAINING REPORT', 'Brand') +
+      p('专业运动队训练周总结报告', 'Title') +
+      metadataTable(weeklyReportMetadata(report));
   const charts = documentCharts(
     teamWeeklyCharts(report),
     report.templateVersion === 'weekly-v3'
@@ -333,7 +399,33 @@ export async function renderTeamWeeklyDocx(
     body += [...notes].map((note) => p(note, 'Caption')).join('');
   }
   const usedCommentary = new Set<string>();
-  for (const section of teamWeeklySections(report)) {
+  const sections = teamWeeklySections(report);
+  const overview = sections.find((s) => s.title === '1.1 本周核心指标');
+  if (hasCover) {
+    body +=
+      p('01｜本周训练概览', 'Heading1') +
+      coverMetrics(report, overview?.rows || []) +
+      p('本周概括', 'InsightTitle');
+    const summary = sections.find((s) => s.commentaryKey === 'summary');
+    if (commentary?.summary.trim()) {
+      body += p(commentary.summary);
+      usedCommentary.add('summary');
+    }
+    body += (summary?.paragraphs || [])
+      .filter((text) => !commentary?.summary.trim() || !report.summary.includes(text))
+      .map((text) => p(text))
+      .join('');
+    body += p('训练投入与节奏', 'Heading2');
+    await appendCharts(charts.filter((c) => ['duration', 'srpe'].includes(c.id)));
+  }
+  for (const section of sections) {
+    if (
+      hasCover &&
+      ['01｜本周训练概览', '1.1 本周核心指标', '1.2 本周训练目标及完成评价'].includes(section.title)
+    )
+      continue;
+    if (hasCover && section.title === '02｜训练计划与执行分析')
+      body += '<w:p><w:pPr><w:pageBreakBefore/><w:spacing w:after="0"/></w:pPr></w:p>';
     check();
     body += p(section.title, /^\d\.\d/.test(section.title) ? 'Heading2' : 'Heading1');
     const key =
@@ -381,7 +473,20 @@ export async function renderTeamWeeklyDocx(
           )
         : table(section.headers, section.rows);
     }
-    await appendCharts(charts.filter((c) => c.section === section.title));
+    if (hasCover && section.title === '2.2 周训练量和负荷' && overview?.headers && overview.rows) {
+      body += overview.paragraphs.map((text) => p(text, 'Caption')).join('');
+      body += table(
+        overview.headers,
+        overview.rows.filter(
+          (row) => !['训练课次', '有效参与人数', '训练负荷 / SRPE'].includes(row[0]!)
+        )
+      );
+    }
+    await appendCharts(
+      charts.filter(
+        (c) => c.section === section.title && (!hasCover || !['duration', 'srpe'].includes(c.id))
+      )
+    );
   }
   for (const key of ['training', 'strength', 'recovery', 'nextWeek'] as const)
     if (commentary?.[key] && !usedCommentary.has(key))

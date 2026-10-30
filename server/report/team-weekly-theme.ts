@@ -2,14 +2,15 @@ import { TRAINING_INTENSITY_COLORS } from '../../shared/training-chart-colors.js
 
 /** Word正文、表格与原生图表共用的体育科学报告主题（不含#的OOXML色值）。 */
 export const weeklyReportTheme = {
-  navy: '183655',
-  blue: '2477A9',
-  teal: '16A085',
-  amber: 'E3A54C',
+  navy: '10263F',
+  blue: '006BDB',
+  teal: '008D9C',
+  amber: 'F28C28',
   risk: 'C45150',
   text: '334155',
   muted: '64748B',
-  pale: 'EAF0F5',
+  pale: 'EEF4FA',
+  electric: '56B8FF',
   white: 'FFFFFF',
   axis: 'CCD8E3',
   neutral: '94A3B8',
