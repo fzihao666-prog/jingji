@@ -427,6 +427,7 @@
 }
 
 .athlete-person-details {
+  flex: 1;
   min-width: 0;
 }
 
@@ -455,7 +456,10 @@
 
 .athlete-person-meta > span,
 .athlete-person-notes > span {
-  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .athlete-person-notes > span {
@@ -546,20 +550,48 @@
 }
 
 .athlete-row-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  flex-wrap: wrap;
   gap: 4px;
+  min-width: 0;
 }
 
+/* 紧凑列中完整换行，不让长等级、状态及操作文字侵入相邻单元格。 */
+.athlete-directory-table th,
+.athlete-directory-table td,
 .athlete-level-tag,
 .athlete-health-tag,
 .athlete-training-status,
 .athlete-row-actions button {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.athlete-level-tag,
+.athlete-training-status {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+  line-height: 1.45;
+}
+
+.athlete-health-tag {
+  max-width: 100%;
+  line-height: 1.45;
+}
+
+.athlete-health-tag i,
+.athlete-row-actions svg {
+  flex-shrink: 0;
 }
 
 .athlete-row-actions button {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-content: center;
+  line-height: 1.45;
   min-height: 28px;
   padding: 0 4px;
   border: 0;
