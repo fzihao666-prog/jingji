@@ -306,7 +306,7 @@
 
 .athlete-directory-table {
   width: 100%;
-  min-width: 1160px;
+  min-width: 1450px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -316,56 +316,60 @@
   padding: 0 10px;
   color: #526e76;
   background: #f1f6f5;
-  font-size: 8px;
+  font-size: 12px;
   text-align: left;
 }
 
-.athlete-directory-table th:first-child {
+/* 字段列宽不依赖列序号，兼容有/无管理勾选列的账号。 */
+.athlete-col-selection {
   width: 42px;
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: #f1f6f5;
 }
-
-.athlete-directory-table th:nth-child(2) {
-  width: 155px;
+.athlete-col-person {
+  width: 260px;
 }
-
-.athlete-directory-table th:nth-child(3) {
-  width: 125px;
+.athlete-col-team {
+  width: 150px;
 }
-
-.athlete-directory-table th:nth-child(4) {
-  width: 110px;
-}
-
-.athlete-directory-table th:nth-child(5) {
-  width: 90px;
-}
-
-.athlete-directory-table th:nth-child(6) {
+.athlete-col-position {
   width: 100px;
 }
-
-.athlete-directory-table th:nth-child(7) {
-  width: 135px;
+.athlete-col-level {
+  width: 90px;
 }
-
-.athlete-directory-table th:nth-child(8) {
-  width: 80px;
+.athlete-col-health {
+  width: 100px;
 }
-
-.athlete-directory-table th:last-child {
+.athlete-col-coach {
+  width: 140px;
+}
+.athlete-col-event {
+  width: 180px;
+}
+.athlete-col-status {
+  width: 110px;
+}
+.athlete-col-actions {
   width: 220px;
+}
+
+.athlete-directory-table .athlete-selection-cell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--paper, #fff);
+}
+
+.athlete-directory-table th.athlete-selection-cell {
+  z-index: 2;
+  background: var(--mist, #f1f6f5);
 }
 
 .athlete-directory-table td {
   min-height: 64px;
-  padding: 9px 10px;
+  padding: 14px 10px;
   border-bottom: 1px solid #e1e9ea;
   color: #3f6068;
-  font-size: 9px;
+  font-size: 13px;
   vertical-align: middle;
 }
 
@@ -373,15 +377,7 @@
   background: #f8fbfa;
 }
 
-/* 横向滚动时固定首列 */
-.athlete-directory-table td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: #fff;
-}
-
-.athlete-directory-table tbody tr:hover td:first-child {
+.athlete-directory-table tbody tr:hover .athlete-selection-cell {
   background: #f8fbfa;
 }
 
@@ -431,28 +427,62 @@
   font-weight: 900;
 }
 
-.athlete-person-cell strong,
-.athlete-person-cell small,
-.athlete-team-cell strong,
-.athlete-team-cell small {
-  display: block;
+.athlete-person-details {
+  min-width: 0;
 }
 
 .athlete-person-cell strong {
-  color: #173f49;
-  font-size: 10px;
+  display: block;
+  color: var(--ink, #173f49);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
-.athlete-person-cell small,
+.athlete-person-meta,
+.athlete-person-notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.athlete-person-meta {
+  color: var(--muted, #6a7880);
+}
+
+.athlete-person-meta > span,
+.athlete-person-notes > span {
+  white-space: nowrap;
+}
+
+.athlete-person-notes > span {
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: #806028;
+  background: #faf3e7;
+  font-size: 11px;
+}
+
+.athlete-team-cell strong,
+.athlete-team-cell small {
+  display: block;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .athlete-team-cell small {
   margin-top: 3px;
-  color: #8a9ca1;
-  font-size: 8px;
+  color: var(--muted, #6a7880);
+  font-size: 12px;
 }
 
 .athlete-team-cell strong {
   color: #2d555e;
-  font-size: 9px;
+  font-size: 13px;
 }
 
 .athlete-level-tag {
@@ -461,14 +491,14 @@
   border-radius: 5px;
   color: #4d6b72;
   background: #f8fbfa;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .athlete-health-tag {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -513,14 +543,22 @@
   border-radius: 5px;
   color: #176f68;
   background: #e7f4f1;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
 }
 
 .athlete-row-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
+}
+
+.athlete-level-tag,
+.athlete-health-tag,
+.athlete-training-status,
+.athlete-row-actions button {
+  white-space: nowrap;
 }
 
 .athlete-row-actions button {
@@ -533,7 +571,7 @@
   gap: 3px;
   color: #176f76;
   background: transparent;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
@@ -992,4 +1030,3 @@
     animation: none;
   }
 }
-

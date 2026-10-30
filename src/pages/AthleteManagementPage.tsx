@@ -271,7 +271,10 @@ export function AthleteManagementPage({
           !athlete.trainingVenue.toLocaleLowerCase().includes(advanced.venue.toLocaleLowerCase())
         )
           return false;
-        if (advanced.technicalLevel && (athlete.technicalLevel || '未定级') !== advanced.technicalLevel)
+        if (
+          advanced.technicalLevel &&
+          (athlete.technicalLevel || '未定级') !== advanced.technicalLevel
+        )
           return false;
         if (advanced.athleteStatus && athlete.athleteStatus !== advanced.athleteStatus)
           return false;
@@ -572,7 +575,9 @@ export function AthleteManagementPage({
         >
           <option value="">全部项目</option>
           {projects.map((project) => (
-            <option key={project} value={project}>{projectLabel(project)}</option>
+            <option key={project} value={project}>
+              {projectLabel(project)}
+            </option>
           ))}
         </select>
         <select
@@ -682,10 +687,22 @@ export function AthleteManagementPage({
         </header>
         <div className="athlete-table-wrap">
           <table className="athlete-directory-table">
+            <colgroup>
+              {canAdmin && <col className="athlete-col-selection" />}
+              <col className="athlete-col-person" />
+              <col className="athlete-col-team" />
+              <col className="athlete-col-position" />
+              <col className="athlete-col-level" />
+              <col className="athlete-col-health" />
+              <col className="athlete-col-coach" />
+              <col className="athlete-col-event" />
+              <col className="athlete-col-status" />
+              <col className="athlete-col-actions" />
+            </colgroup>
             <thead>
               <tr>
                 {canAdmin && (
-                  <th>
+                  <th scope="col" className="athlete-selection-cell">
                     <button
                       className={`athlete-checkbox ${pageAllSelected ? 'checked' : ''}`}
                       onClick={setPageSelection}
@@ -695,22 +712,22 @@ export function AthleteManagementPage({
                     </button>
                   </th>
                 )}
-                <th>运动员</th>
-                <th>项目与队伍</th>
-                <th>位置/号位</th>
-                <th>等级</th>
-                <th>身体状态</th>
-                <th>负责教练</th>
-                <th>备战赛事</th>
-                <th>训练状态</th>
-                <th>操作</th>
+                <th scope="col">运动员</th>
+                <th scope="col">项目与队伍</th>
+                <th scope="col">位置/号位</th>
+                <th scope="col">等级</th>
+                <th scope="col">身体状态</th>
+                <th scope="col">负责教练</th>
+                <th scope="col">备战赛事</th>
+                <th scope="col">训练状态</th>
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
               {paged.map((athlete) => (
                 <tr key={athlete.id}>
                   {canAdmin && (
-                    <td>
+                    <td className="athlete-selection-cell">
                       <button
                         className={`athlete-checkbox ${selectedIds.has(athlete.id) ? 'checked' : ''}`}
                         onClick={() => toggleSelected(athlete.id)}
@@ -731,16 +748,22 @@ export function AthleteManagementPage({
                       ) : (
                         <span>{athlete.name.slice(0, 1)}</span>
                       )}
-                      <div>
+                      <div className="athlete-person-details">
                         <strong>{athlete.name}</strong>
-                        <small>
+                        <div className="athlete-person-meta">
                           <span title="系统运动员编号，导入模板预填值">编号 {athlete.id}</span>
-                          {' · '}
-                          {athlete.gender || '性别未填'} · {ageFromBirthDate(athlete.birthDate)} 岁
-                          {athlete.profileStatus === 'incomplete' ? ' · 档案待补全' : ''}
-                          {!athlete.hasAccount ? ' · 无登录账号' : ''}
-                          {athlete.source === 'self_registered' ? ' · 入队待核实' : ''}
-                        </small>
+                          <span>{athlete.gender || '性别未填'}</span>
+                          <span>{ageFromBirthDate(athlete.birthDate)} 岁</span>
+                        </div>
+                        {(athlete.profileStatus === 'incomplete' ||
+                          !athlete.hasAccount ||
+                          athlete.source === 'self_registered') && (
+                          <div className="athlete-person-notes">
+                            {athlete.profileStatus === 'incomplete' && <span>档案待补全</span>}
+                            {!athlete.hasAccount && <span>无登录账号</span>}
+                            {athlete.source === 'self_registered' && <span>入队待核实</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -1160,7 +1183,9 @@ export function AthleteManagementPage({
                           }
                         >
                           {PROJECTS.map((project) => (
-                            <option key={project} value={project}>{projectLabel(project)}</option>
+                            <option key={project} value={project}>
+                              {projectLabel(project)}
+                            </option>
                           ))}
                         </select>
                       </label>
