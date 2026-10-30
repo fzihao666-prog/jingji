@@ -241,7 +241,7 @@ it('图表采用统一轻网格与中文字体，趋势有点标记，短序列�
   expect(charts).toHaveLength(13);
   for (const chart of charts) {
     expect(chart).toContain('Microsoft YaHei');
-    expect(chart).toContain('E8EDF3');
+    expect(chart).toContain('EAF0F5');
     expect(chart).toContain('<c:majorTickMark val="none"/>');
     expect(chart).toContain('<c:externalData r:id="data">');
     if (chart.includes('<c:lineChart>')) {
@@ -253,7 +253,7 @@ it('图表采用统一轻网格与中文字体，趋势有点标记，短序列�
   }
 });
 
-it('整体版式使用双栏元信息、蓝色章节与表头、交替底色和动态页码，AI概括不重复基础概括', async () => {
+it('整体版式使用双栏元信息、海军蓝标题与浅色表头、交替底色和动态页码，AI概括不重复基础概括', async () => {
   const db = createTeamWeeklyFixture();
   const report = readTeamWeeklyReport(
     db,
@@ -274,8 +274,9 @@ it('整体版式使用双栏元信息、蓝色章节与表头、交替底色和�
   const document = await archive.file('word/document.xml')!.async('string');
   const styles = await archive.file('word/styles.xml')!.async('string');
   expect(document).toContain('w:val="Metadata"');
-  expect(styles).toContain('w:fill="1D4ED8"');
-  expect(document).toContain('w:fill="F3F7FC"');
+  expect(styles).toContain('w:fill="EAF0F5"');
+  expect(styles).toContain('<w:color w:val="183655"/>');
+  expect(document).toContain('w:fill="EAF0F5"');
   expect(document).toContain('<w:footerReference w:type="default" r:id="footer"/>');
   expect(await archive.file('word/footer.xml')!.async('string')).toContain('w:instr="PAGE"');
   expect(document).toContain('新的综合概括');
@@ -284,4 +285,39 @@ it('整体版式使用双栏元信息、蓝色章节与表头、交替底色和�
     const widths = Array.from(grid[1]!.matchAll(/w:w="(\d+)"/g), (m) => Number(m[1]));
     expect(widths.reduce((n, v) => n + v, 0)).toBe(9360);
   }
+});
+
+it('原生图表统一指标色和上周浅色，分类与总览强度颜色共用，不添加装饰性风险红', async () => {
+  const { TRAINING_INTENSITY_COLORS } = await import('../../shared/training-chart-colors.ts');
+  const { weeklyMetricColor, weeklyCategoryColor } = await import('./team-weekly-theme.ts');
+  expect(weeklyMetricColor('duration')).toBe('2477A9');
+  expect(weeklyMetricColor('strength:卧推:part0')).toBe(weeklyMetricColor('focus-summary'));
+  expect(weeklyCategoryColor('专项')).toBe('2477A9');
+  expect(weeklyCategoryColor('体能')).toBe('16A085');
+  expect(weeklyCategoryColor('恢复及未分类')).toBe('94A3B8');
+  const db = createTeamWeeklyFixture();
+  const report = readTeamWeeklyReport(
+    db,
+    { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType: 'combined' },
+    [1, 3]
+  );
+  db.close();
+  report.categories = Object.keys(TRAINING_INTENSITY_COLORS).map((label) => ({
+    label,
+    participations: 1,
+    duration: 10,
+  }));
+  const archive = await JSZip.loadAsync(await renderTeamWeeklyDocx(report));
+  const charts = await Promise.all(
+    Object.keys(archive.files)
+      .filter((p) => /charts\/chart\d+\.xml$/.test(p))
+      .map((p) => archive.file(p)!.async('string'))
+  );
+  const all = charts.join('');
+  expect(all).toContain('val="2477A9"');
+  expect(all).toContain('val="16A085"');
+  expect(all).toContain('val="5C93B5"');
+  expect(all).not.toContain('val="C45150"');
+  for (const color of Object.values(TRAINING_INTENSITY_COLORS))
+    expect(all).toContain(`val="${color.slice(1).toUpperCase()}"`);
 });

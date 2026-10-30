@@ -28,17 +28,7 @@ import {
 import './EChart.css';
 import { STRENGTH_INTENSITY_ZONES } from '../../shared/strength-training';
 
-const colors = [
-  '#0b7f7a',
-  '#25aa9d',
-  '#73c5ab',
-  '#edaa32',
-  '#df634d',
-  '#66758a',
-  '#8b6eb0',
-  '#3d7db7',
-  '#9a7f66',
-];
+import { TRAINING_ANALYSIS_PALETTE as colors } from '../../shared/training-chart-colors';
 
 export const trainingLoadCategory = classifyTrainingLoad;
 

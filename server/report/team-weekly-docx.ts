@@ -1,3 +1,9 @@
+import {
+  weeklyReportTheme as theme,
+  weeklyMetricColor,
+  weeklyPreviousColor,
+  weeklyCategoryColor,
+} from './team-weekly-theme.js';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import type { TeamWeeklyReport } from '../../shared/team-weekly-report.js';
@@ -33,15 +39,6 @@ const decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const rel = (id: string, type: string, target: string) =>
   `<Relationship Id="${id}" Type="${R}/${type}" Target="${target}"/>`;
 const relationships = (s: string) => `${decl}<Relationships xmlns="${PKG}">${s}</Relationships>`;
-const docTheme = {
-  blue: '1D4ED8',
-  teal: '0F766E',
-  cyan: '06B6D4',
-  ink: '153451',
-  muted: '64748B',
-  pale: 'EFF6FF',
-  rule: 'DCE7F3',
-};
 const p = (text: string, style = 'Normal') =>
   text
     .split(/\r?\n/)
@@ -57,7 +54,7 @@ function metadataTable(entries: [string, string][]) {
       `<w:tr><w:trPr><w:cantSplit/></w:trPr>${[0, 1]
         .map((j) => {
           const entry = entries[i * 2 + j];
-          return `<w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/><w:shd w:val="clear" w:fill="${docTheme.pale}"/></w:tcPr>${p(entry ? `${entry[0]}：${entry[1]}` : '', 'Metadata')}</w:tc>`;
+          return `<w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/><w:shd w:val="clear" w:fill="${theme.pale}"/></w:tcPr>${p(entry ? `${entry[0]}：${entry[1]}` : '', 'Metadata')}</w:tc>`;
         })
         .join('')}</w:tr>`
   ).join('')}</w:tbl>${p('')}`;
@@ -78,8 +75,8 @@ function table(headers: string[], rows: string[][]) {
   const widths = weights.map((w) => Math.floor((9360 * w) / sum));
   widths[widths.length - 1]! += 9360 - widths.reduce((n, v) => n + v, 0);
   const row = (cells: string[], head = false, index = 0) =>
-    `<w:tr><w:trPr><w:cantSplit/>${head ? '<w:tblHeader/>' : ''}</w:trPr>${cells.map((v, i) => `<w:tc><w:tcPr><w:tcW w:w="${widths[i]}" w:type="dxa"/><w:shd w:val="clear" w:fill="${head ? docTheme.blue : index % 2 ? 'F3F7FC' : 'FFFFFF'}"/></w:tcPr>${p(v, head ? 'TableHeading' : 'TableText')}</w:tc>`).join('')}</w:tr>`;
-  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>${['top', 'bottom', 'insideH'].map((v) => `<w:${v} w:val="single" w:sz="4" w:color="DCE7F3"/>`).join('')}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(headers, true)}${rows.map((v, i) => row(v, false, i)).join('')}</w:tbl>`;
+    `<w:tr><w:trPr><w:cantSplit/>${head ? '<w:tblHeader/>' : ''}</w:trPr>${cells.map((v, i) => `<w:tc><w:tcPr><w:tcW w:w="${widths[i]}" w:type="dxa"/><w:shd w:val="clear" w:fill="${index % 2 || head ? theme.pale : theme.white}"/></w:tcPr>${p(v, head ? 'TableHeading' : /本周|上周|变化/.test(headers[i] || '') && /^[+-]?\d/.test(v) ? 'TableMetric' : 'TableText')}</w:tc>`).join('')}</w:tr>`;
+  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>${['top', 'bottom', 'insideH'].map((v) => `<w:${v} w:val="single" w:sz="4" w:color="${theme.pale}"/>`).join('')}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(headers, true)}${rows.map((v, i) => row(v, false, i)).join('')}</w:tbl>`;
 }
 type Series = { name: string; values: (number | null)[] };
 function seriesFor(chart: WeeklyChart): Series[] {
@@ -126,53 +123,33 @@ function documentCharts(charts: WeeklyChart[], combined: boolean): WeeklyChart[]
   }
   return output;
 }
-const chartTheme = {
-  blue: '2563EB',
-  teal: '176F76',
-  green: '16806A',
-  amber: 'AD6800',
-  purple: '7660A5',
-  previous: '64748B',
-  text: '475569',
-  axis: 'CBD5E1',
-  grid: 'E8EDF3',
-};
 function chartText(size: number) {
-  return `<c:txPr><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${size}"><a:solidFill><a:srgbClr val="${chartTheme.text}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Microsoft YaHei"/></a:defRPr></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr>`;
+  return `<c:txPr><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${size}"><a:solidFill><a:srgbClr val="${theme.muted}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Microsoft YaHei"/></a:defRPr></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr>`;
 }
 function chartXml(chart: WeeklyChart) {
   const series = seriesFor(chart);
   const horizontal = chart.id.startsWith('strength:');
   const line = chart.kind === 'line';
-  const color =
-    chart.id === 'srpe'
-      ? chartTheme.teal
-      : chart.id === 'sleep'
-        ? chartTheme.green
-        : chart.id === 'pulse'
-          ? chartTheme.purple
-          : chart.id === 'fatigue' || chart.id === 'rpe'
-            ? chartTheme.amber
-            : chartTheme.blue;
+  const color = weeklyMetricColor(chart.id);
   const fill = (color: string) => `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>`;
   const font = chartText(horizontal ? 850 : 900);
   const strCache = `<c:strCache><c:ptCount val="${chart.points.length}"/>${chart.points.map((v, i) => `<c:pt idx="${i}"><c:v>${xml(v.label)}</c:v></c:pt>`).join('')}</c:strCache>`;
   const body = series
     .map((s, si) => {
       const col = String.fromCharCode(66 + si);
-      const seriesColor = si === 0 ? color : chartTheme.previous;
+      const seriesColor = si === 0 ? color : weeklyPreviousColor(chart.id);
       const shape = line
         ? `<a:noFill/><a:ln w="25400">${fill(seriesColor)}${si ? '<a:prstDash val="dash"/>' : ''}</a:ln>`
-        : `${fill(seriesColor)}<a:ln><a:noFill/></a:ln>`;
+        : `${fill(seriesColor)}<a:ln>${si ? fill(color) : '<a:noFill/>'}</a:ln>`;
       const marker = line
-        ? `<c:marker><c:symbol val="${si ? 'square' : 'circle'}"/><c:size val="5"/><c:spPr>${fill('FFFFFF')}<a:ln w="19050">${fill(seriesColor)}</a:ln></c:spPr></c:marker>`
+        ? `<c:marker><c:symbol val="${si ? 'square' : 'circle'}"/><c:size val="5"/><c:spPr>${fill(theme.white)}<a:ln w="19050">${fill(seriesColor)}</a:ln></c:spPr></c:marker>`
         : '';
       const categories =
-        !line && chart.id === 'composition'
+        !line && ['composition', 'categories'].includes(chart.id)
           ? chart.points
               .map(
-                (_, i) =>
-                  `<c:dPt><c:idx val="${i}"/><c:spPr>${fill([chartTheme.blue, chartTheme.teal, chartTheme.previous][i % 3])}<a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`
+                (point, i) =>
+                  `<c:dPt><c:idx val="${i}"/><c:spPr>${fill(weeklyCategoryColor(point.label))}<a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`
               )
               .join('')
           : '';
@@ -187,21 +164,21 @@ function chartXml(chart: WeeklyChart) {
       : '';
   const ticks =
     '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>';
-  const axisStyle = `<c:spPr><a:ln w="6350">${fill(chartTheme.axis)}</a:ln></c:spPr>`;
-  const grid = `<c:majorGridlines><c:spPr><a:ln w="6350">${fill(chartTheme.grid)}</a:ln></c:spPr></c:majorGridlines>`;
+  const axisStyle = `<c:spPr><a:ln w="6350">${fill(theme.axis)}</a:ln></c:spPr>`;
+  const grid = `<c:majorGridlines><c:spPr><a:ln w="6350">${fill(theme.pale)}</a:ln></c:spPr></c:majorGridlines>`;
   const axes = `<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="${horizontal ? 'maxMin' : 'minMax'}"/></c:scaling><c:axPos val="${horizontal ? 'l' : 'b'}"/>${ticks}${axisStyle}${font}<c:crossAx val="2"/><c:crosses val="autoZero"/><c:auto val="0"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="1"/><c:tickMarkSkip val="1"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>${chart.domain ? `<c:max val="${chart.domain.max}"/><c:min val="${chart.domain.min}"/>` : ''}</c:scaling><c:axPos val="${horizontal ? 'b' : 'l'}"/>${grid}<c:numFmt formatCode="0.##" sourceLinked="0"/>${ticks}${axisStyle}${font}<c:crossAx val="1"/><c:crosses val="${horizontal ? 'max' : 'autoZero'}"/></c:valAx>`;
   const legend =
     series.length > 1
       ? `<c:legend><c:legendPos val="b"/><c:layout/><c:overlay val="0"/>${chartText(900)}</c:legend>`
       : '';
-  return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${line ? '<c:grouping val="standard"/>' : `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>`}${body}${labels}${line ? '' : '<c:gapWidth val="100"/><c:overlap val="0"/>'}<c:axId val="1"/><c:axId val="2"/></c:${kind}>${axes}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr>${fill('FFFFFF')}<a:ln><a:noFill/></a:ln></c:spPr>${font}<c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
+  return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${line ? '<c:grouping val="standard"/>' : `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>`}${body}${labels}${line ? '' : '<c:gapWidth val="100"/><c:overlap val="0"/>'}<c:axId val="1"/><c:axId val="2"/></c:${kind}>${axes}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr>${fill(theme.white)}<a:ln><a:noFill/></a:ln></c:spPr>${font}<c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
 }
 function drawing(id: number, rid: string, width: number, height: number) {
   const cx = Math.round(width * 914400),
     cy = Math.round(height * 914400);
   return `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="可编辑图表 ${id}"/><a:graphic xmlns:a="${A}"><a:graphicData uri="${C}"><c:chart xmlns:c="${C}" r:id="${rid}"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
-const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Microsoft YaHei"/><w:color w:val="334155"/><w:sz w:val="20"/><w:lang w:val="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:widowControl/><w:spacing w:after="80" w:line="260" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>${[
+const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Microsoft YaHei"/><w:color w:val="${theme.text}"/><w:sz w:val="20"/><w:lang w:val="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:widowControl/><w:spacing w:after="80" w:line="260" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>${[
   ['Normal', 20],
   ['Title', 40],
   ['Brand', 20],
@@ -210,36 +187,38 @@ const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:
   ['Heading2', 22],
   ['TableText', 18],
   ['TableHeading', 18],
+  ['TableMetric', 18],
   ['Caption', 17],
   ['Footer', 16],
 ]
   .map(([name, size]) => {
     const heading = name === 'Heading1' || name === 'Heading2';
-    const color =
-      name === 'Heading1' || name === 'TableHeading'
-        ? 'FFFFFF'
-        : name === 'Title' || name === 'Heading2'
-          ? docTheme.blue
-          : name === 'Brand'
-            ? docTheme.teal
-            : name === 'Caption' || name === 'Footer'
-              ? docTheme.muted
-              : '334155';
+    const color = ['Title', 'Heading1', 'Heading2', 'TableHeading'].includes(String(name))
+      ? theme.navy
+      : name === 'Brand'
+        ? theme.teal
+        : name === 'TableMetric'
+          ? theme.blue
+          : name === 'Caption' || name === 'Footer'
+            ? theme.muted
+            : theme.text;
     const layout =
       name === 'Heading1'
-        ? `<w:keepNext/><w:shd w:val="clear" w:fill="${docTheme.blue}"/><w:spacing w:before="220" w:after="120"/><w:ind w:left="140" w:right="100"/>`
+        ? `<w:keepNext/><w:shd w:val="clear" w:fill="${theme.pale}"/><w:spacing w:before="220" w:after="120"/><w:ind w:left="140" w:right="100"/>`
         : name === 'Heading2'
-          ? `<w:keepNext/><w:pBdr><w:left w:val="single" w:sz="14" w:space="7" w:color="${docTheme.cyan}"/></w:pBdr><w:spacing w:before="150" w:after="80"/>`
+          ? `<w:keepNext/><w:pBdr><w:left w:val="single" w:sz="14" w:space="7" w:color="${theme.teal}"/></w:pBdr><w:spacing w:before="150" w:after="80"/>`
           : name === 'Title'
             ? '<w:keepNext/><w:spacing w:before="60" w:after="160"/>'
             : name === 'Brand'
               ? '<w:keepNext/><w:spacing w:after="40"/>'
               : name === 'Footer'
                 ? '<w:jc w:val="right"/>'
-                : ['TableText', 'TableHeading', 'Metadata', 'Caption'].includes(String(name))
+                : ['TableText', 'TableHeading', 'TableMetric', 'Metadata', 'Caption'].includes(
+                      String(name)
+                    )
                   ? '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>'
                   : '';
-    return `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/><w:pPr>${layout}${heading ? `<w:outlineLvl w:val="${name === 'Heading1' ? 0 : 1}"/>` : ''}</w:pPr><w:rPr><w:sz w:val="${size}"/><w:color w:val="${color}"/>${['Title', 'Brand', 'Heading1', 'Heading2', 'TableHeading'].includes(String(name)) ? '<w:b/>' : ''}</w:rPr></w:style>`;
+    return `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/><w:pPr>${layout}${heading ? `<w:outlineLvl w:val="${name === 'Heading1' ? 0 : 1}"/>` : ''}</w:pPr><w:rPr><w:sz w:val="${size}"/><w:color w:val="${color}"/>${['Title', 'Brand', 'Heading1', 'Heading2', 'TableHeading', 'TableMetric'].includes(String(name)) ? '<w:b/>' : ''}</w:rPr></w:style>`;
   })
   .join('')}</w:styles>`;
 
