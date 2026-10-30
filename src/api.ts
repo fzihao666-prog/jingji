@@ -213,11 +213,9 @@ export const api = {
       `/api/projects/rules?${new URLSearchParams({ project })}`
     ),
   async downloadWeeklyReport(input: WeeklyGenerationInput) {
-    const form = new FormData();
-    form.append('input', JSON.stringify(input));
     const blob = await request<Blob>('/api/reports/weekly/generate', {
       method: 'POST',
-      body: form,
+      body: JSON.stringify(input),
       responseType: 'docx',
       timeoutMs: 260000,
     });

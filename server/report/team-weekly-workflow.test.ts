@@ -143,3 +143,11 @@ it('同账号生成期间拒绝重复请求；导出期间权限收紧不发送�
   release();
   expect((await pending).status).toBe(403);
 });
+
+it('网页仅携带input字段的标准FormData可生成下载', async () => {
+  const s = await setup();
+  const form = new FormData();
+  form.set('input', JSON.stringify({ ...input, consent: false }));
+  const response = await fetch(s.base + '/generate', { method: 'POST', body: form });
+  expect(response.status).toBe(200);
+});

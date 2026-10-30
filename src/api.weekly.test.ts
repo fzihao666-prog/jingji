@@ -26,7 +26,12 @@ describe('周总结客户端下载与默认范围', () => {
     await api.downloadWeeklyReport({ query: { project: 'ROWING', teamId: 1, date: '2026-10-05' } });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0][0]).toBe('/api/reports/weekly/generate');
-    expect(fetcher.mock.calls[0][1].body).toBeInstanceOf(FormData);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+      query: { project: 'ROWING', teamId: 1, date: '2026-10-05' },
+    });
+    expect(new Headers(fetcher.mock.calls[0][1].headers).get('Content-Type')).toBe(
+      'application/json'
+    );
     expect(click).toHaveBeenCalledTimes(1);
   });
   it.each([

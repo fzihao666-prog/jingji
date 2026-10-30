@@ -33,14 +33,35 @@ const decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const rel = (id: string, type: string, target: string) =>
   `<Relationship Id="${id}" Type="${R}/${type}" Target="${target}"/>`;
 const relationships = (s: string) => `${decl}<Relationships xmlns="${PKG}">${s}</Relationships>`;
+const docTheme = {
+  blue: '1D4ED8',
+  teal: '0F766E',
+  cyan: '06B6D4',
+  ink: '153451',
+  muted: '64748B',
+  pale: 'EFF6FF',
+  rule: 'DCE7F3',
+};
 const p = (text: string, style = 'Normal') =>
-  `<w:p><w:pPr><w:pStyle w:val="${style}"/></w:pPr>${text
-    .split('\n')
+  text
+    .split(/\r?\n/)
     .map(
-      (v, i) =>
-        `${i ? '<w:r><w:br/></w:r>' : ''}<w:r><w:t xml:space="preserve">${xml(v)}</w:t></w:r>`
+      (line) =>
+        `<w:p><w:pPr><w:pStyle w:val="${style}"/></w:pPr><w:r><w:t xml:space="preserve">${xml(line)}</w:t></w:r></w:p>`
     )
-    .join('')}</w:p>`;
+    .join('');
+function metadataTable(entries: [string, string][]) {
+  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/></w:tblGrid>${Array.from(
+    { length: Math.ceil(entries.length / 2) },
+    (_, i) =>
+      `<w:tr><w:trPr><w:cantSplit/></w:trPr>${[0, 1]
+        .map((j) => {
+          const entry = entries[i * 2 + j];
+          return `<w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/><w:shd w:val="clear" w:fill="${docTheme.pale}"/></w:tcPr>${p(entry ? `${entry[0]}：${entry[1]}` : '', 'Metadata')}</w:tc>`;
+        })
+        .join('')}</w:tr>`
+  ).join('')}</w:tbl>${p('')}`;
+}
 function table(headers: string[], rows: string[][]) {
   const weights = headers.map((h) =>
     /备注|原文|已有处方|训练内容|内容项/.test(h)
@@ -55,9 +76,10 @@ function table(headers: string[], rows: string[][]) {
   );
   const sum = weights.reduce((a, b) => a + b, 0);
   const widths = weights.map((w) => Math.floor((9360 * w) / sum));
-  const row = (cells: string[], head = false) =>
-    `<w:tr><w:trPr><w:cantSplit/>${head ? '<w:tblHeader/>' : ''}</w:trPr>${cells.map((v, i) => `<w:tc><w:tcPr><w:tcW w:w="${widths[i]}" w:type="dxa"/>${head ? '<w:shd w:fill="E8EEF5"/>' : ''}</w:tcPr>${p(v, head ? 'TableHeading' : 'TableText')}</w:tc>`).join('')}</w:tr>`;
-  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>${['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map((v) => `<w:${v} w:val="single" w:sz="4" w:color="CBD5E1"/>`).join('')}</w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(headers, true)}${rows.map((v) => row(v)).join('')}</w:tbl>`;
+  widths[widths.length - 1]! += 9360 - widths.reduce((n, v) => n + v, 0);
+  const row = (cells: string[], head = false, index = 0) =>
+    `<w:tr><w:trPr><w:cantSplit/>${head ? '<w:tblHeader/>' : ''}</w:trPr>${cells.map((v, i) => `<w:tc><w:tcPr><w:tcW w:w="${widths[i]}" w:type="dxa"/><w:shd w:val="clear" w:fill="${head ? docTheme.blue : index % 2 ? 'F3F7FC' : 'FFFFFF'}"/></w:tcPr>${p(v, head ? 'TableHeading' : 'TableText')}</w:tc>`).join('')}</w:tr>`;
+  return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>${['top', 'bottom', 'insideH'].map((v) => `<w:${v} w:val="single" w:sz="4" w:color="DCE7F3"/>`).join('')}</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${row(headers, true)}${rows.map((v, i) => row(v, false, i)).join('')}</w:tbl>`;
 }
 type Series = { name: string; values: (number | null)[] };
 function seriesFor(chart: WeeklyChart): Series[] {
@@ -179,20 +201,46 @@ function drawing(id: number, rid: string, width: number, height: number) {
     cy = Math.round(height * 914400);
   return `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="可编辑图表 ${id}"/><a:graphic xmlns:a="${A}"><a:graphicData uri="${C}"><c:chart xmlns:c="${C}" r:id="${rid}"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
-const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Microsoft YaHei"/><w:sz w:val="20"/><w:lang w:val="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="90" w:line="260" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>${[
+const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Microsoft YaHei"/><w:color w:val="334155"/><w:sz w:val="20"/><w:lang w:val="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:widowControl/><w:spacing w:after="80" w:line="260" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>${[
   ['Normal', 20],
   ['Title', 40],
-  ['Subtitle', 20],
+  ['Brand', 20],
+  ['Metadata', 18],
   ['Heading1', 27],
-  ['Heading2', 23],
+  ['Heading2', 22],
   ['TableText', 18],
   ['TableHeading', 18],
   ['Caption', 17],
+  ['Footer', 16],
 ]
-  .map(
-    ([name, size]) =>
-      `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/><w:pPr>${String(name).startsWith('Heading') ? '<w:keepNext/><w:spacing w:before="180" w:after="100"/>' : String(name).startsWith('Table') || name === 'Caption' ? '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' : ''}</w:pPr><w:rPr><w:sz w:val="${size}"/>${['Title', 'Heading1', 'Heading2', 'TableHeading'].includes(String(name)) ? '<w:b/><w:color w:val="153451"/>' : ''}</w:rPr></w:style>`
-  )
+  .map(([name, size]) => {
+    const heading = name === 'Heading1' || name === 'Heading2';
+    const color =
+      name === 'Heading1' || name === 'TableHeading'
+        ? 'FFFFFF'
+        : name === 'Title' || name === 'Heading2'
+          ? docTheme.blue
+          : name === 'Brand'
+            ? docTheme.teal
+            : name === 'Caption' || name === 'Footer'
+              ? docTheme.muted
+              : '334155';
+    const layout =
+      name === 'Heading1'
+        ? `<w:keepNext/><w:shd w:val="clear" w:fill="${docTheme.blue}"/><w:spacing w:before="220" w:after="120"/><w:ind w:left="140" w:right="100"/>`
+        : name === 'Heading2'
+          ? `<w:keepNext/><w:pBdr><w:left w:val="single" w:sz="14" w:space="7" w:color="${docTheme.cyan}"/></w:pBdr><w:spacing w:before="150" w:after="80"/>`
+          : name === 'Title'
+            ? '<w:keepNext/><w:spacing w:before="60" w:after="160"/>'
+            : name === 'Brand'
+              ? '<w:keepNext/><w:spacing w:after="40"/>'
+              : name === 'Footer'
+                ? '<w:jc w:val="right"/>'
+                : ['TableText', 'TableHeading', 'Metadata', 'Caption'].includes(String(name))
+                  ? '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>'
+                  : '';
+    return `<w:style w:type="paragraph" w:styleId="${name}"><w:name w:val="${name}"/><w:pPr>${layout}${heading ? `<w:outlineLvl w:val="${name === 'Heading1' ? 0 : 1}"/>` : ''}</w:pPr><w:rPr><w:sz w:val="${size}"/><w:color w:val="${color}"/>${['Title', 'Brand', 'Heading1', 'Heading2', 'TableHeading'].includes(String(name)) ? '<w:b/>' : ''}</w:rPr></w:style>`;
+  })
   .join('')}</w:styles>`;
 
 /** 原生 OOXML：正文、表格、图表与各自内嵌工作簿均可在桌面办公软件编辑。 */
@@ -209,18 +257,21 @@ export async function renderTeamWeeklyDocx(
   if (Buffer.byteLength(JSON.stringify(report)) > 12 * 1024 * 1024)
     throw new Error('报告超过导出资源预算');
   const zip = new JSZip();
-  let relationshipsXml = rel('styles', 'styles', 'styles.xml');
+  let relationshipsXml =
+    rel('styles', 'styles', 'styles.xml') + rel('footer', 'footer', 'footer.xml');
   let overrides =
     '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>';
   let body =
-    p('竞迹｜专业运动队训练周总结报告', 'Title') +
-    weeklyReportMetadata(report)
-      .map(([label, value]) => p(`${label}：${value}`, 'Subtitle'))
-      .join('');
+    p('竞迹  JINGJI · TRAINING REPORT', 'Brand') +
+    p('专业运动队训练周总结报告', 'Title') +
+    metadataTable(weeklyReportMetadata(report));
   const charts = documentCharts(
     teamWeeklyCharts(report),
     report.templateVersion === 'weekly-v3'
   ).filter((c) => c.points.length > 0);
+  const compactChart = (chart: WeeklyChart) =>
+    chart.id.startsWith('strength:') ||
+    ['duration', 'srpe', 'rpe', 'sleep', 'pulse', 'fatigue'].includes(chart.id);
   let chartNumber = 0;
   async function appendChart(chart: WeeklyChart) {
     check();
@@ -260,7 +311,7 @@ export async function renderTeamWeeklyDocx(
       drawing(
         n,
         `chart${n}`,
-        chart.id.startsWith('strength:') ? 3.05 : 6.45,
+        compactChart(chart) ? 3.05 : 6.45,
         chart.id.startsWith('strength:')
           ? Math.max(
               2.6,
@@ -268,18 +319,17 @@ export async function renderTeamWeeklyDocx(
                 chart.points.length *
                   (chart.points.some((p) => [...p.label].length > 10) ? 0.2 : 0.142)
             )
-          : 2.65
+          : compactChart(chart)
+            ? 2.2
+            : 2.55
       ) +
       (chart.id.startsWith('strength:') ? '' : p(chart.note, 'Caption')) +
-      (!series.some((s) => s.values.some((v) => v !== null))
-        ? p('暂无有效数据。已保留图表及完整内嵌数据表，请在图表中选择“编辑数据”补填。', 'Caption')
-        : '');
+      (!series.some((s) => s.values.some((v) => v !== null)) ? p('数据待补充。', 'Caption') : '');
   }
-  const editGuidance =
-    p('文档编辑提示', 'Heading2') +
-    p(
-      '下载后的文档可自行编辑，无需回传，不自动同步系统。所有预设图表均保留；缺失数值在内嵌数据表中留空，可在图表的“编辑数据”中补填。修改图表数据不会自动改写正文、表格或其他图表，请核对相关数字与结论。'
-    );
+  const editGuidance = p(
+    '编辑提示：在图表“编辑数据”中补填空白数值；修改后请核对正文及其他表格。本地修改无需回传，不改变系统训练数据。',
+    'Caption'
+  );
   async function appendCharts(items: WeeklyChart[]) {
     const grid: string[] = [];
     const notes = new Set<string>();
@@ -289,12 +339,12 @@ export async function renderTeamWeeklyDocx(
       grid.length = 0;
     };
     for (const chart of items) {
-      if (!chart.id.startsWith('strength:')) {
+      if (!compactChart(chart)) {
         flush();
         await appendChart(chart);
         continue;
       }
-      notes.add(chart.note);
+      if (chart.id.startsWith('strength:')) notes.add(chart.note);
       const before = body;
       await appendChart(chart);
       grid.push(body.slice(before.length));
@@ -325,6 +375,14 @@ export async function renderTeamWeeklyDocx(
       usedCommentary.add(key);
     }
     body += section.paragraphs
+      .filter(
+        (text) =>
+          !(
+            section.commentaryKey === 'summary' &&
+            commentary?.summary.trim() &&
+            report.summary.includes(text)
+          )
+      )
       .map((v) => p(v, /口径/.test(section.title) ? 'Caption' : 'Normal'))
       .join('');
     if (section.headers && section.rows?.length) {
@@ -359,6 +417,12 @@ export async function renderTeamWeeklyDocx(
           'Heading2'
         ) + p(commentary[key]);
   body += editGuidance;
+  overrides +=
+    '<Override PartName="/word/footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>';
+  zip.file(
+    'word/footer.xml',
+    `${decl}<w:ftr xmlns:w="${W}"><w:p><w:pPr><w:pStyle w:val="Footer"/></w:pPr><w:r><w:t>竞迹 · 训练周总结 | 第 </w:t></w:r><w:fldSimple w:instr="PAGE"><w:r><w:t>1</w:t></w:r></w:fldSimple><w:r><w:t> 页</w:t></w:r></w:p></w:ftr>`
+  );
   zip.file(
     '[Content_Types].xml',
     `${decl}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>${overrides}</Types>`
@@ -368,7 +432,7 @@ export async function renderTeamWeeklyDocx(
   zip.file('word/styles.xml', styles);
   zip.file(
     'word/document.xml',
-    `${decl}<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`
+    `${decl}<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body>${body}<w:sectPr><w:footerReference w:type="default" r:id="footer"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`
   );
   check();
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }, () => check());

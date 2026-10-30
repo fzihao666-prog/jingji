@@ -252,3 +252,36 @@ it('图表采用统一轻网格与中文字体，趋势有点标记，短序列�
     else expect(chart).not.toContain('<c:showVal val="1"/>');
   }
 });
+
+it('整体版式使用双栏元信息、蓝色章节与表头、交替底色和动态页码，AI概括不重复基础概括', async () => {
+  const db = createTeamWeeklyFixture();
+  const report = readTeamWeeklyReport(
+    db,
+    { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType: 'combined' },
+    [1, 3]
+  );
+  db.close();
+  report.summary = ['基础重复概括'];
+  const archive = await JSZip.loadAsync(
+    await renderTeamWeeklyDocx(report, {
+      summary: '新的综合概括',
+      training: '',
+      strength: '',
+      recovery: '',
+      nextWeek: '',
+    })
+  );
+  const document = await archive.file('word/document.xml')!.async('string');
+  const styles = await archive.file('word/styles.xml')!.async('string');
+  expect(document).toContain('w:val="Metadata"');
+  expect(styles).toContain('w:fill="1D4ED8"');
+  expect(document).toContain('w:fill="F3F7FC"');
+  expect(document).toContain('<w:footerReference w:type="default" r:id="footer"/>');
+  expect(await archive.file('word/footer.xml')!.async('string')).toContain('w:instr="PAGE"');
+  expect(document).toContain('新的综合概括');
+  expect(document).not.toContain('基础重复概括');
+  for (const grid of document.matchAll(/<w:tblGrid>(.*?)<\/w:tblGrid>/g)) {
+    const widths = Array.from(grid[1]!.matchAll(/w:w="(\d+)"/g), (m) => Number(m[1]));
+    expect(widths.reduce((n, v) => n + v, 0)).toBe(9360);
+  }
+});

@@ -843,7 +843,7 @@ Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team
 
 ### 队伍训练周总结（2026-10）
 
-周总结是一次性下载工具：`POST /api/reports/weekly/generate` 返回标准DOCX二进制。可接收JSON；网页统一发送multipart，`input`字段为`{query:{project,teamId,date},stage?,coachNotes?,consent?}`的JSON，不接收文件附件。新接口仅支持combined，不接收浏览器提交的报告事实、人工修改文案或照片ID。返回no-store、nosniff与安全attachment文件名，客户端验证DOCX MIME后下载，错误JSON/HTML不保存为Word。
+周总结是一次性下载工具：`POST /api/reports/weekly/generate` 返回标准DOCX二进制。网页直接发送JSON `{query:{project,teamId,date},stage?,coachNotes?,consent?}`；兼容旧网页以multipart单个`input`字段传同一JSON，不接收文件附件。multipart仅允许一个字段，为结束边界保留总段数余量，避免合法单字段被误判为超限。新接口仅支持combined，不接收浏览器提交的报告事实、人工修改文案或照片ID。返回no-store、nosniff与安全attachment文件名，客户端验证DOCX MIME后下载，错误JSON/HTML不保存为Word。
 
 同一只读事务读取授权队员、项目及自然周正式训练、力量组、测试、恢复和计划，派生整体/专项/体能/恢复及未分类统计；不将计划作为完成、不猜造缺失或混合分项。正文使用五章模型；固定四动作按同动作全员分组、同坐标续组，上周仅在可比时显示。文档封面周次为ISO日历周，生成日期用上海时区；地点、负责人、目标及调整原因缺失如实说明。
 

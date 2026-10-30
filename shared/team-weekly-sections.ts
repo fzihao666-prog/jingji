@@ -316,9 +316,7 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
     { title: '01｜本周训练概览', paragraphs: [] },
     {
       title: '1.1 本周核心指标',
-      paragraphs: [
-        '时长和SRPE为队员个人累计量，课次按队伍去重。仅在覆盖与口径一致时计算变化；缺失为“未记录”，不视为0。',
-      ],
+      paragraphs: ['课次按队伍去重，时长及SRPE为个人累计。仅同口径数据比较，缺失不计为0。'],
       headers: ['指标', '本周', '上周', '变化'],
       rows: [
         ['训练课次', ...compare('sessions', r.totals.sessions, r.previous.sessions, ' 节')],
@@ -348,12 +346,7 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
     {
       title: '1.2 本周训练目标及完成评价',
       commentaryKey: 'summary',
-      paragraphs: [
-        `训练阶段：${r.stage || missing}。本周主要目标及评价见教练文案；未记录时不推测，不能以计划实施状态推断目标达成。`,
-        ...r.summary,
-        '目标完成情况、主要进展及总体评价：结合下列正式记录和教练文案说明；未提供依据时不作效果结论。',
-        ...r.concerns,
-      ],
+      paragraphs: [...r.summary, ...r.concerns],
     },
     { title: '02｜训练计划与执行分析', paragraphs: [] },
     {
@@ -422,7 +415,6 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
         r.breakdown.special.totals.participations
           ? `专项记录 ${f(r.breakdown.special.totals.participations)} 人次，累计 ${value(r.breakdown.special.totals.duration)} 分钟、${value(r.breakdown.special.totals.distance)} km。`
           : '本周暂无可识别专项训练记录。',
-        ...r.plans.filter((p) => p.category === 'special').map((p) => `${p.date}：${p.content}`),
       ],
     },
     {
@@ -484,10 +476,7 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
     },
     {
       title: '4.3 本周综合评价',
-      paragraphs: [
-        ...r.concerns,
-        '有效做法、存在不足及需要持续观察：结合教练观察与已有记录填写，单周变化不等于训练效果。',
-      ],
+      paragraphs: [...r.concerns, '单周变化不等于训练效果，需结合连续记录和教练观察。'],
     },
     { title: '05｜下周训练目标与调整计划', paragraphs: [] },
     {
@@ -507,13 +496,11 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
     },
     {
       title: '5.3 下周重点监测',
-      paragraphs: ['重点监测事项及原因未单独记录，请教练根据实际需要补充。'],
+      paragraphs: ['重点监测：未记录。'],
     },
     {
       title: '5.4 教练总结',
-      paragraphs: [
-        r.coachNotes || '未记录；可直接在下载的Word中补充本周判断、下周方向与需支持事项。',
-      ],
+      paragraphs: [r.coachNotes || '教练总结：未记录。'],
     },
   ];
   return sections;

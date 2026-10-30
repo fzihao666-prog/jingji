@@ -28,9 +28,10 @@ const docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml
 export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
   const pending = new Set<number>();
   const buckets = new Map<number, { count: number; reset: number }>();
+  // multipart结束边界也会触发段数检查，为旧网页的一字段请求保留余量。
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { files: 0, fields: 1, fieldSize: 16000, parts: 1 },
+    limits: { files: 0, fields: 1, fieldSize: 16000, parts: 2 },
   }).none();
   app.post('/api/reports/weekly/generate', deps.requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
