@@ -17,19 +17,9 @@ describe('综合周总结入口', () => {
     expect(html).not.toContain('报告类型');
     expect(html).not.toContain('体能训练周总结</option>');
     expect(html).toContain('补充信息（选填）');
-    expect(html).toContain('一键生成周总结');
+    expect(html).toContain('生成并下载 Word');
+    expect(html).not.toContain('历史报告');
+    expect(html).not.toContain('周总结预览');
+    expect(html).not.toContain('保存并下载');
   });
-});
-
-it('综合预览完整呈现五段可编辑文案，恢复与下周均可修改', async () => {
-  const { renderToStaticMarkup } = await import('react-dom/server');
-  const { createElement } = await import('react');
-  const { TeamWeeklyReportPreview } = await import('../components/TeamWeeklyReportPreview');
-  const { CombinedEditable } = await import('../components/TeamWeeklyReportPreview.stories');
-  const html = renderToStaticMarkup(createElement(TeamWeeklyReportPreview, CombinedEditable.args));
-  expect(html.match(/<textarea/g)).toHaveLength(5);
-  expect(html).toContain('aria-label="恢复分析文案"');
-  expect(html).toContain('aria-label="下周安排文案"');
-  expect(html).toContain('aria-label="3.1 本周重点训练内容 · 专项训练文案"');
-  expect(html).toContain('aria-label="3.1 本周重点训练内容 · 体能训练文案"');
 });

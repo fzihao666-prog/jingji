@@ -1,11 +1,4 @@
-import { weeklyDraftSchema, type WeeklyDraftInput } from '../shared/team-weekly-workflow';
-import {
-  savedTeamWeeklyReportSchema,
-  teamWeeklyHistorySchema,
-  weeklyPhotoSchema,
-} from '../shared/team-weekly-storage';
-import { teamWeeklyCommentarySchema, type TeamWeeklyCommentary } from '../shared/team-weekly-ai';
-import { teamWeeklyReportSchema } from '../shared/team-weekly-report';
+import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
 import {
@@ -219,127 +212,20 @@ export const api = {
     request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
       `/api/projects/rules?${new URLSearchParams({ project })}`
     ),
-  async generateWeeklyReport(input: WeeklyDraftInput) {
-    return weeklyDraftSchema.parse(
-      await request<unknown>('/api/reports/weekly/generate', {
-        method: 'POST',
-        body: JSON.stringify(input),
-        timeoutMs: 240000,
-      })
-    );
-  },
-  async saveWeeklyReport(input: {
-    report: import('../shared/team-weekly-report').TeamWeeklyReport;
-    fingerprint: string;
-    commentary: TeamWeeklyCommentary;
-    photoIds: string[];
-    expectedRevision: number;
-    confirmed: true;
-  }) {
-    return savedTeamWeeklyReportSchema.parse(
-      await request<unknown>('/api/reports/weekly/save', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      })
-    );
-  },
-  async weeklyReportHistory(query: {
-    project: string;
-    teamId: number;
-    reportType?: 'special' | 'physical' | 'combined';
-    page: number;
-    week?: string;
-  }) {
-    const params = new URLSearchParams({
-      ...query,
-      teamId: String(query.teamId),
-      page: String(query.page),
-    });
-    return teamWeeklyHistorySchema.parse(
-      await request<unknown>(`/api/reports/weekly/history?${params}`)
-    );
-  },
-  async weeklySavedReport(id: string) {
-    return savedTeamWeeklyReportSchema.parse(
-      await request<unknown>(`/api/reports/weekly/history/${encodeURIComponent(id)}`)
-    );
-  },
-  async uploadWeeklyPhotos(
-    query: { project: string; teamId: number; reportType?: 'special' | 'physical' | 'combined' },
-    files: File[]
-  ) {
+  async downloadWeeklyReport(input: WeeklyGenerationInput, files: File[] = []) {
     const form = new FormData();
-    form.append('project', query.project);
-    form.append('teamId', String(query.teamId));
-    if (query.reportType) form.append('reportType', query.reportType);
+    form.append('input', JSON.stringify(input));
     files.forEach((file) => form.append('files', file));
-    return z
-      .object({ photos: z.array(weeklyPhotoSchema) })
-      .parse(await request<unknown>('/api/reports/weekly/photos', { method: 'POST', body: form }))
-      .photos;
-  },
-  weeklyPhotoBlob: (id: string, signal?: AbortSignal) =>
-    request<Blob>(`/api/reports/weekly/photos/${encodeURIComponent(id)}`, {
-      responseType: 'image',
-      signal,
-    }),
-  removeWeeklyPhoto: (id: string) =>
-    request<unknown>(`/api/reports/weekly/photos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  async downloadSavedWeekly(id: string, filename: string, format: 'pdf' | 'docx' = 'pdf') {
-    const blob = await request<Blob>(
-      `/api/reports/weekly/history/${encodeURIComponent(id)}/${format}`,
-      {
-        responseType: format === 'docx' ? 'docx' : 'blob',
-      }
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-  },
-  async weeklyCommentary(query: WeeklyDraftInput['query'], fingerprint: string) {
-    return teamWeeklyCommentarySchema.parse(
-      await request<unknown>('/api/reports/weekly/commentary', {
-        method: 'POST',
-        body: JSON.stringify({ query, fingerprint, consent: true, coachNotes: '' }),
-        timeoutMs: 240000,
-      })
-    );
-  },
-  async weeklyReviewedPdf(
-    query: WeeklyDraftInput['query'],
-    fingerprint: string,
-    commentary: TeamWeeklyCommentary
-  ) {
-    const blob = await request<Blob>('/api/reports/weekly/pdf', {
+    const blob = await request<Blob>('/api/reports/weekly/generate', {
       method: 'POST',
-      body: JSON.stringify({ query, fingerprint, commentary, confirmed: true }),
-      responseType: 'blob',
+      body: form,
+      responseType: 'docx',
+      timeoutMs: 260000,
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `队伍周总结_${query.date}.pdf`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-  },
-  async teamWeeklyPreview(query: WeeklyDraftInput['query']) {
-    const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
-    return teamWeeklyReportSchema.parse(
-      await request<unknown>(`/api/reports/weekly/preview?${params}`)
-    );
-  },
-  async downloadTeamWeekly(query: WeeklyDraftInput['query']) {
-    const params = new URLSearchParams({ ...query, teamId: String(query.teamId) });
-    const blob = await request<Blob>(`/api/reports/weekly/pdf?${params}`, { responseType: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `竞迹_队伍周总结_${query.date}.pdf`;
+    link.download = `竞迹_训练周总结_${input.query.date}.docx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

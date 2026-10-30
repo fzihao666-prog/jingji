@@ -18,19 +18,16 @@ describe('周总结客户端下载与默认范围', () => {
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
-  it('综合稿使用 Word 路径及标准 MIME，旧稿仍默认 PDF', async () => {
+  it('一次请求生成并下载Word，不读取或保存历史', async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(new Response('word', { headers: { 'Content-Type': docxType } }))
-      .mockResolvedValueOnce(
-        new Response('pdf', { headers: { 'Content-Type': 'application/pdf' } })
-      );
+      .mockResolvedValue(new Response('word', { headers: { 'Content-Type': docxType } }));
     vi.stubGlobal('fetch', fetcher);
-    await api.downloadSavedWeekly('new/id', '综合.docx', 'docx');
-    await api.downloadSavedWeekly('old', '旧版.pdf');
-    expect(fetcher.mock.calls[0][0]).toBe('/api/reports/weekly/history/new%2Fid/docx');
-    expect(fetcher.mock.calls[1][0]).toBe('/api/reports/weekly/history/old/pdf');
-    expect(click).toHaveBeenCalledTimes(2);
+    await api.downloadWeeklyReport({ query: { project: 'ROWING', teamId: 1, date: '2026-10-05' } });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe('/api/reports/weekly/generate');
+    expect(fetcher.mock.calls[0][1].body).toBeInstanceOf(FormData);
+    expect(click).toHaveBeenCalledTimes(1);
   });
   it.each([
     [200, 'text/html', '<html>error</html>'],
@@ -42,25 +39,10 @@ describe('周总结客户端下载与默认范围', () => {
       'fetch',
       vi.fn().mockResolvedValue(new Response(body, { status, headers: { 'Content-Type': type } }))
     );
-    await expect(api.downloadSavedWeekly('new', '综合.docx', 'docx')).rejects.toThrow();
+    await expect(
+      api.downloadWeeklyReport({ query: { project: 'ROWING', teamId: 1, date: '2026-10-05' } })
+    ).rejects.toThrow();
     expect(createUrl).not.toHaveBeenCalled();
     expect(click).not.toHaveBeenCalled();
-  });
-  it('历史与照片请求省略类型，由服务端采用综合默认值', async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [], total: 0, page: 1, pageSize: 20 }), {
-          headers: { 'Content-Type': 'application/json' },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response('{"photos":[]}', { headers: { 'Content-Type': 'application/json' } })
-      );
-    vi.stubGlobal('fetch', fetcher);
-    await api.weeklyReportHistory({ project: 'ROWING', teamId: 1, page: 1 });
-    await api.uploadWeeklyPhotos({ project: 'ROWING', teamId: 1 }, []);
-    expect(fetcher.mock.calls[0][0]).not.toContain('reportType');
-    expect((fetcher.mock.calls[1][1].body as FormData).has('reportType')).toBe(false);
   });
 });

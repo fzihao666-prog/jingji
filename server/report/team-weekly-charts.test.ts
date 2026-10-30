@@ -1,10 +1,8 @@
-import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { createTeamWeeklyFixture } from './team-weekly-fixture.ts';
 import { readTeamWeeklyReport } from './team-weekly-report.ts';
 import { teamWeeklyCharts, weeklyTimetable } from '../../shared/team-weekly-charts.ts';
 import { teamWeeklySections } from '../../shared/team-weekly-sections.ts';
-import { renderTeamWeeklyPdf } from './team-weekly-pdf.ts';
 
 const query = { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType: 'physical' } as const;
 describe('周总结图表与七天课表', () => {
@@ -31,7 +29,7 @@ describe('周总结图表与七天课表', () => {
       db.close();
     }
   });
-  it('多人同动作合图并续组，不遗漏或截断姓名，PDF可生成', () => {
+  it('多人同动作合图并续组，不遗漏或截断姓名', () => {
     const db = createTeamWeeklyFixture();
     try {
       const r = readTeamWeeklyReport(db, query, [1]);
@@ -49,7 +47,6 @@ describe('周总结图表与七天课表', () => {
       expect(charts.flatMap((c) => c.points.map((p) => p.label))).toEqual(
         r.strength.map((s) => s.athleteName)
       );
-      expect(renderTeamWeeklyPdf(r).subarray(0, 4).toString()).toBe('%PDF');
     } finally {
       db.close();
     }
@@ -85,28 +82,6 @@ describe('周总结图表与七天课表', () => {
       expect(sections.some((s) => s.title === '力量训练个人与动作对比')).toBe(false);
       expect(sections.some((s) => s.title === '每日恢复趋势')).toBe(false);
       expect(sections.some((s) => s.title === '数据情况与口径')).toBe(true);
-    } finally {
-      db.close();
-    }
-  });
-  it('照片按四张一页追加且无附件时不产生照片页', async () => {
-    const db = createTeamWeeklyFixture();
-    try {
-      const r = readTeamWeeklyReport(db, { ...query, date: '2026-11-02' }, [1]);
-      const data = await sharp({
-        create: { width: 400, height: 200, channels: 3, background: '#176f7f' },
-      })
-        .jpeg()
-        .toBuffer();
-      const pages = (pdf: Buffer) =>
-        (pdf.toString('latin1').match(/\/Type \/Page\b/g) || []).length;
-      const base = renderTeamWeeklyPdf(r);
-      const attached = renderTeamWeeklyPdf(
-        r,
-        undefined,
-        Array.from({ length: 5 }, () => ({ data, width: 400, height: 200 }))
-      );
-      expect(pages(attached)).toBe(pages(base) + 2);
     } finally {
       db.close();
     }

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { teamWeeklyQuerySchema } from './team-weekly-report.js';
 
 const paragraph = z.string().trim().max(600);
 export const teamWeeklyCommentarySchema = z
@@ -18,24 +17,4 @@ export const emptyTeamWeeklyCommentary = (): TeamWeeklyCommentary => ({
   strength: '',
   recovery: '',
   nextWeek: '',
-});
-const fingerprint = z
-  .string()
-  .length(64)
-  .regex(/^[a-f0-9]+$/);
-const query = teamWeeklyQuerySchema.extend({ teamId: z.number().int().positive().max(9999999999) });
-export const teamWeeklyGenerateSchema = z.strictObject({
-  query,
-  fingerprint,
-  consent: z.literal(true),
-  coachNotes: z.string().trim().max(3000).default(''),
-  stage: z.string().trim().max(100).default(''),
-});
-export const teamWeeklyExportSchema = z.strictObject({
-  query,
-  fingerprint,
-  commentary: teamWeeklyCommentarySchema,
-  stage: z.string().trim().max(100).default(''),
-  coachNotes: z.string().trim().max(3000).default(''),
-  confirmed: z.literal(true),
 });

@@ -39,11 +39,3 @@
 @import url('./styles/39-coach-directory.css');
 @import url('./styles/40-visual-color-refinement-2026.css');
 @import url('./styles/41-overview-legend.css');
-
-/* 综合周总结：正式报告层级与紧凑的封面信息。 */
-.reports-metadata { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; }
-.reports-metadata > div { display: flex; gap: 8px; }
-.reports-metadata dt { color: var(--text-muted, #64748b); flex-shrink: 0; }
-.reports-metadata dd { margin: 0; }
-.reports-preview > h2 { color: var(--text-primary, #153451); }
-.reports-preview > section > h3 { border-bottom: 1px solid var(--border-color, #dbe3ec); padding-bottom: 8px; }
