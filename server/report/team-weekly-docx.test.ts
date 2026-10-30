@@ -223,3 +223,32 @@ it('综合成品仅保留五章正文及13个预设图表，无附录、明细�
   );
   expect(Object.keys(archive.files).some((p) => p.startsWith('word/media/'))).toBe(false);
 });
+
+it('图表采用统一轻网格与中文字体，趋势有点标记，短序列有值标签且保留可编辑数据', async () => {
+  const db = createTeamWeeklyFixture();
+  const report = readTeamWeeklyReport(
+    db,
+    { project: 'ROWING', teamId: 1, date: '2026-11-02', reportType: 'combined' },
+    [1, 3]
+  );
+  db.close();
+  const archive = await JSZip.loadAsync(await renderTeamWeeklyDocx(report));
+  const charts = await Promise.all(
+    Object.keys(archive.files)
+      .filter((p) => /charts\/chart\d+\.xml$/.test(p))
+      .map((p) => archive.file(p)!.async('string'))
+  );
+  expect(charts).toHaveLength(13);
+  for (const chart of charts) {
+    expect(chart).toContain('Microsoft YaHei');
+    expect(chart).toContain('E8EDF3');
+    expect(chart).toContain('<c:majorTickMark val="none"/>');
+    expect(chart).toContain('<c:externalData r:id="data">');
+    if (chart.includes('<c:lineChart>')) {
+      expect(chart).toContain('<c:symbol val="circle"/>');
+      expect(chart).toContain('<c:smooth val="0"/>');
+    }
+    if (!chart.includes('<c:barDir val="bar"/>')) expect(chart).toContain('<c:showVal val="1"/>');
+    else expect(chart).not.toContain('<c:showVal val="1"/>');
+  }
+});

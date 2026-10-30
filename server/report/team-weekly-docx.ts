@@ -104,19 +104,75 @@ function documentCharts(charts: WeeklyChart[], combined: boolean): WeeklyChart[]
   }
   return output;
 }
+const chartTheme = {
+  blue: '2563EB',
+  teal: '176F76',
+  green: '16806A',
+  amber: 'AD6800',
+  purple: '7660A5',
+  previous: '64748B',
+  text: '475569',
+  axis: 'CBD5E1',
+  grid: 'E8EDF3',
+};
+function chartText(size: number) {
+  return `<c:txPr><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${size}"><a:solidFill><a:srgbClr val="${chartTheme.text}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Microsoft YaHei"/></a:defRPr></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr>`;
+}
 function chartXml(chart: WeeklyChart) {
   const series = seriesFor(chart);
   const horizontal = chart.id.startsWith('strength:');
+  const line = chart.kind === 'line';
+  const color =
+    chart.id === 'srpe'
+      ? chartTheme.teal
+      : chart.id === 'sleep'
+        ? chartTheme.green
+        : chart.id === 'pulse'
+          ? chartTheme.purple
+          : chart.id === 'fatigue' || chart.id === 'rpe'
+            ? chartTheme.amber
+            : chartTheme.blue;
+  const fill = (color: string) => `<a:solidFill><a:srgbClr val="${color}"/></a:solidFill>`;
+  const font = chartText(horizontal ? 850 : 900);
   const strCache = `<c:strCache><c:ptCount val="${chart.points.length}"/>${chart.points.map((v, i) => `<c:pt idx="${i}"><c:v>${xml(v.label)}</c:v></c:pt>`).join('')}</c:strCache>`;
-  const colors = ['2563EB', '93A4B8', '0F766E'];
   const body = series
     .map((s, si) => {
       const col = String.fromCharCode(66 + si);
-      return `<c:ser><c:idx val="${si}"/><c:order val="${si}"/><c:tx><c:strRef><c:f>Data!$${col}$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${xml(s.name)}</c:v></c:pt></c:strCache></c:strRef></c:tx><c:spPr><a:solidFill><a:srgbClr val="${colors[si % colors.length]}"/></a:solidFill><a:ln w="25400"><a:solidFill><a:srgbClr val="${colors[si % colors.length]}"/></a:solidFill></a:ln></c:spPr><c:cat><c:strRef><c:f>Data!$A$2:$A$${chart.points.length + 1}</c:f>${strCache}</c:strRef></c:cat><c:val><c:numRef><c:f>Data!$${col}$2:$${col}$${chart.points.length + 1}</c:f><c:numCache><c:formatCode>0.##</c:formatCode><c:ptCount val="${chart.points.length}"/>${s.values.map((v, i) => (v === null ? '' : `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`)).join('')}</c:numCache></c:numRef></c:val></c:ser>`;
+      const seriesColor = si === 0 ? color : chartTheme.previous;
+      const shape = line
+        ? `<a:noFill/><a:ln w="25400">${fill(seriesColor)}${si ? '<a:prstDash val="dash"/>' : ''}</a:ln>`
+        : `${fill(seriesColor)}<a:ln><a:noFill/></a:ln>`;
+      const marker = line
+        ? `<c:marker><c:symbol val="${si ? 'square' : 'circle'}"/><c:size val="5"/><c:spPr>${fill('FFFFFF')}<a:ln w="19050">${fill(seriesColor)}</a:ln></c:spPr></c:marker>`
+        : '';
+      const categories =
+        !line && chart.id === 'composition'
+          ? chart.points
+              .map(
+                (_, i) =>
+                  `<c:dPt><c:idx val="${i}"/><c:spPr>${fill([chartTheme.blue, chartTheme.teal, chartTheme.previous][i % 3])}<a:ln><a:noFill/></a:ln></c:spPr></c:dPt>`
+              )
+              .join('')
+          : '';
+      return `<c:ser><c:idx val="${si}"/><c:order val="${si}"/><c:tx><c:strRef><c:f>Data!$${col}$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>${xml(s.name)}</c:v></c:pt></c:strCache></c:strRef></c:tx><c:spPr>${shape}</c:spPr>${marker}${categories}<c:cat><c:strRef><c:f>Data!$A$2:$A$${chart.points.length + 1}</c:f>${strCache}</c:strRef></c:cat><c:val><c:numRef><c:f>Data!$${col}$2:$${col}$${chart.points.length + 1}</c:f><c:numCache><c:formatCode>0.##</c:formatCode><c:ptCount val="${chart.points.length}"/>${s.values.map((v, i) => (v === null ? '' : `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`)).join('')}</c:numCache></c:numRef></c:val>${line ? '<c:smooth val="0"/>' : ''}</c:ser>`;
     })
     .join('');
-  const kind = chart.kind === 'line' ? 'lineChart' : 'barChart';
-  return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${kind === 'barChart' ? `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>` : '<c:grouping val="standard"/>'}${body}${kind === 'barChart' ? '<c:gapWidth val="70"/>' : ''}<c:axId val="1"/><c:axId val="2"/></c:${kind}><c:catAx><c:axId val="1"/><c:scaling><c:orientation val="${horizontal ? 'maxMin' : 'minMax'}"/></c:scaling><c:axPos val="${horizontal ? 'l' : 'b'}"/><c:tickLblPos val="nextTo"/><c:txPr><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="850"/></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr><c:crossAx val="2"/><c:crosses val="autoZero"/><c:auto val="0"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="1"/><c:tickMarkSkip val="1"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>${chart.domain ? `<c:max val="${chart.domain.max}"/><c:min val="${chart.domain.min}"/>` : ''}</c:scaling><c:axPos val="${horizontal ? 'b' : 'l'}"/><c:majorGridlines/><c:numFmt formatCode="0.##" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="${horizontal ? 'max' : 'autoZero'}"/></c:valAx></c:plotArea>${series.length > 1 ? '<c:legend><c:legendPos val="b"/><c:layout/></c:legend>' : ''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="850"/></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr><c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
+  const kind = line ? 'lineChart' : 'barChart';
+  // 全员横条图避免数值标签挤压姓名，短日序列和汇总图直接标数值。
+  const labels =
+    !horizontal && chart.points.length <= 7
+      ? `<c:dLbls><c:numFmt formatCode="0.##" sourceLinked="0"/>${chartText(850)}<c:dLblPos val="${line ? 't' : 'outEnd'}"/><c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/></c:dLbls>`
+      : '';
+  const ticks =
+    '<c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>';
+  const axisStyle = `<c:spPr><a:ln w="6350">${fill(chartTheme.axis)}</a:ln></c:spPr>`;
+  const grid = `<c:majorGridlines><c:spPr><a:ln w="6350">${fill(chartTheme.grid)}</a:ln></c:spPr></c:majorGridlines>`;
+  const axes = `<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="${horizontal ? 'maxMin' : 'minMax'}"/></c:scaling><c:axPos val="${horizontal ? 'l' : 'b'}"/>${ticks}${axisStyle}${font}<c:crossAx val="2"/><c:crosses val="autoZero"/><c:auto val="0"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="1"/><c:tickMarkSkip val="1"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>${chart.domain ? `<c:max val="${chart.domain.max}"/><c:min val="${chart.domain.min}"/>` : ''}</c:scaling><c:axPos val="${horizontal ? 'b' : 'l'}"/>${grid}<c:numFmt formatCode="0.##" sourceLinked="0"/>${ticks}${axisStyle}${font}<c:crossAx val="1"/><c:crosses val="${horizontal ? 'max' : 'autoZero'}"/></c:valAx>`;
+  const legend =
+    series.length > 1
+      ? `<c:legend><c:legendPos val="b"/><c:layout/><c:overlay val="0"/>${chartText(900)}</c:legend>`
+      : '';
+  return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${line ? '<c:grouping val="standard"/>' : `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>`}${body}${labels}${line ? '' : '<c:gapWidth val="100"/><c:overlap val="0"/>'}<c:axId val="1"/><c:axId val="2"/></c:${kind}>${axes}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr>${fill('FFFFFF')}<a:ln><a:noFill/></a:ln></c:spPr>${font}<c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
 }
 function drawing(id: number, rid: string, width: number, height: number) {
   const cx = Math.round(width * 914400),
