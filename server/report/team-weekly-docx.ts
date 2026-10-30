@@ -180,26 +180,11 @@ export async function renderTeamWeeklyDocx(
   const charts = documentCharts(
     teamWeeklyCharts(report),
     report.templateVersion === 'weekly-v3'
-  ).filter(
-    (c) =>
-      c.points.length &&
-      (c.id.startsWith('strength:') || seriesFor(c).some((s) => s.values.some((v) => v !== null)))
-  );
+  ).filter((c) => c.points.length > 0);
   const rendered = new Set<string>();
   let chartNumber = 0;
   async function appendChart(chart: WeeklyChart) {
     check();
-    if (!seriesFor(chart).some((s) => s.values.some((v) => v !== null))) {
-      body +=
-        p(chart.title, 'Heading2') +
-        p('本组队员暂无该动作有效记录，保留名单，不生成空图。') +
-        table(
-          ['队员', '本周记录'],
-          chart.points.map((point) => [point.label, '缺失'])
-        );
-      rendered.add(chart.id);
-      return;
-    }
     const n = ++chartNumber;
     if (n > 600) throw new Error('报告图表超过导出资源预算');
     const workbook = new ExcelJS.Workbook();
@@ -246,13 +231,16 @@ export async function renderTeamWeeklyDocx(
             )
           : 2.65
       ) +
-      (chart.id.startsWith('strength:') ? '' : p(chart.note, 'Caption'));
+      (chart.id.startsWith('strength:') ? '' : p(chart.note, 'Caption')) +
+      (!series.some((s) => s.values.some((v) => v !== null))
+        ? p('暂无有效数据。已保留图表及完整内嵌数据表，请在图表中选择“编辑数据”补填。', 'Caption')
+        : '');
     rendered.add(chart.id);
   }
   const editGuidance =
     p('文档编辑提示', 'Heading2') +
     p(
-      '下载后的文档可自行编辑，无需回传，不自动同步系统。修改图表数据不会自动改写正文、附录或其他图表，请核对相关数字与结论。'
+      '下载后的文档可自行编辑，无需回传，不自动同步系统。所有预设图表均保留；缺失数值在内嵌数据表中留空，可在图表的“编辑数据”中补填。修改图表数据不会自动改写正文、附录或其他图表，请核对相关数字与结论。'
     );
   let guidanceAdded = false;
   async function appendCharts(items: WeeklyChart[]) {

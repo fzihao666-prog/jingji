@@ -107,6 +107,14 @@ describe('原生Word周总结', () => {
       await workbook.xlsx.load(await archive.file(path)!.async('arraybuffer'));
       const sheet = workbook.getWorksheet('Data')!;
       if (sheet.getCell(1, 2).value !== '本周') continue;
+      if (
+        Array.from({ length: sheet.rowCount - 1 }, (_, i) => sheet.getCell(i + 2, 2).value).every(
+          (v) => v === null
+        )
+      ) {
+        expect(sheet.rowCount - 1).toBeOneOf([24, 16]);
+        continue;
+      }
       groupSizes.push(sheet.rowCount - 1);
       const chartXml = await archive
         .file(path.replace('embeddings/data', 'charts/chart').replace('.xlsx', '.xml'))!
@@ -165,4 +173,49 @@ describe('原生Word周总结', () => {
     active.abort();
     await expect(pending).rejects.toThrow('取消');
   });
+});
+
+it('综合报告无数据也保留13个原生图表、全部日期/名单与空白内嵌数据表', async () => {
+  const db = createTeamWeeklyFixture();
+  const report = readTeamWeeklyReport(
+    db,
+    { project: 'ROWING', teamId: 1, date: '2026-11-02', reportType: 'combined' },
+    [1, 3]
+  );
+  db.close();
+  const charts = teamWeeklyCharts(report);
+  expect(charts).toHaveLength(13);
+  expect(charts.every((c) => c.points.length > 0 && c.points.every((p) => p.value === null))).toBe(
+    true
+  );
+  expect(
+    charts.filter((c) => c.id.startsWith('strength:')).map((c) => c.points.map((p) => p.label))
+  ).toEqual(Array.from({ length: 4 }, () => report.athletes.map((a) => a.name)));
+  const zip = await JSZip.loadAsync(await renderTeamWeeklyDocx(report));
+  const parts = Object.keys(zip.files).filter((p) => /charts\/chart\d+\.xml$/.test(p));
+  expect(parts).toHaveLength(13);
+  for (const part of parts) {
+    const xml = await zip.file(part)!.async('string');
+    expect(xml).toContain('<c:catAx>');
+    expect(xml).toContain('<c:valAx>');
+    expect(xml).toContain('<c:dispBlanksAs val="gap"/>');
+    expect(xml).not.toContain('<c:v>0</c:v>');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(
+      await zip
+        .file(part.replace('charts/chart', 'embeddings/data').replace('.xml', '.xlsx'))!
+        .async('arraybuffer')
+    );
+    const sheet = workbook.getWorksheet('Data')!;
+    expect(sheet.getCell(1, 1).value).toBe('队员 / 日期');
+    expect(sheet.rowCount).toBeGreaterThan(1);
+    for (let row = 2; row <= sheet.rowCount; row++) {
+      expect(sheet.getCell(row, 1).value).toBeTruthy();
+      for (let column = 2; column <= sheet.columnCount; column++)
+        expect(sheet.getCell(row, column).value).toBeNull();
+    }
+  }
+  const document = await zip.file('word/document.xml')!.async('string');
+  expect(document).toContain('编辑数据');
+  expect(document).not.toContain('不生成空图');
 });

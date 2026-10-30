@@ -47,7 +47,14 @@ describe('综合周总结事实快照', () => {
       expect(charts.find((c) => c.id.startsWith('strength:卧推变式:'))?.section).toBe(
         '附录 · 其他力量动作'
       );
-      expect(charts.every((c) => c.points.some((p) => p.value !== null))).toBe(true);
+      expect(charts.every((c) => c.points.length > 0)).toBe(true);
+      expect(
+        charts.filter(
+          (c) =>
+            c.id.startsWith('strength:') &&
+            ['卧拉', '卧推', '深蹲', '硬拉'].some((e) => c.id.startsWith(`strength:${e}:`))
+        )
+      ).toHaveLength(4);
       expect(teamWeeklySections(r).find((s) => s.title === '2.1 周训练安排')?.rows).toHaveLength(7);
       const sections = teamWeeklySections(r);
       expect(sections.filter((s) => /^0[1-5]｜/.test(s.title))).toHaveLength(5);
@@ -117,7 +124,7 @@ describe('综合周总结事实快照', () => {
       db.close();
     }
   });
-  it('同动作共享坐标域并完整分组，缺失不强补；上周不可比不出系列', () => {
+  it('同动作共享坐标域并完整分组，缺失不强补；上周不可比保留空白系列', () => {
     const db = createTeamWeeklyFixture();
     try {
       for (let id = 10; id < 24; id++)
@@ -134,7 +141,8 @@ describe('综合周总结事实快照', () => {
       expect(charts).toHaveLength(2);
       expect(charts.flatMap((c) => c.points)).toHaveLength(16);
       expect(charts[0].domain).toEqual(charts[1].domain);
-      expect(charts.every((c) => c.series?.length === 1)).toBe(true);
+      expect(charts.every((c) => c.series?.length === 2)).toBe(true);
+      expect(charts.every((c) => c.series?.[1].values.every((v) => v === null))).toBe(true);
     } finally {
       db.close();
     }

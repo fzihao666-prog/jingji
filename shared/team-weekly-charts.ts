@@ -15,7 +15,7 @@ export type WeeklyChart = {
   points: { label: string; value: number | null }[];
   series?: { name: string; values: (number | null)[] }[];
 };
-/** 不合并不同测试条件，不填补缺失值；网页与PDF使用同一组数值。 */
+/** 不合并不同测试条件，不填补缺失值；综合Word保留预设图表供本地补填。 */
 export function teamWeeklyCharts(r: TeamWeeklyReport): WeeklyChart[] {
   if (r.templateVersion === 'weekly-v3') return combinedCharts(r);
   const charts: WeeklyChart[] = [
@@ -187,7 +187,9 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
       kind: 'bar',
       unit: '分钟',
       note: '采用已有训练分类，不将训练类型代替生理强度分区。',
-      points: r.categories.map((c) => ({ label: c.label, value: c.duration })),
+      points: r.categories.length
+        ? r.categories.map((c) => ({ label: c.label, value: c.duration }))
+        : [{ label: '训练分类（待填写）', value: null }],
     },
     {
       id: 'rpe',
@@ -207,7 +209,6 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
   ];
   for (const exercise of exercises) {
     const current = (r.strength || []).filter((s) => s.exercise === exercise);
-    if (!current.length) continue;
     const previous = r.strengthPrevious.filter((s) => s.exercise === exercise);
     const same =
       r.strengthComparable &&
@@ -235,22 +236,24 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
           ? null
           : (current.find((s) => s.athleteId === a.id)?.volumeKg ?? null),
     }));
-    if (!points.some((p) => p.value !== null)) continue;
+    if (
+      !WEEKLY_FOCUS_EXERCISES.some((e) => e === exercise) &&
+      !points.some((p) => p.value !== null)
+    )
+      continue;
     const series = [
       { name: '本周', values: points.map((p) => p.value) },
-      ...(same
-        ? [
-            {
-              name: '上周',
-              values: athletes.map(
-                (a) => previous.find((s) => s.athleteId === a.id)?.volumeKg ?? null
-              ),
-            },
-          ]
-        : []),
+      {
+        name: '上周',
+        values: athletes.map((a) =>
+          same ? (previous.find((s) => s.athleteId === a.id)?.volumeKg ?? null) : null
+        ),
+      },
     ];
     const values = series.flatMap((s) => s.values).filter((v): v is number => v !== null);
-    const domain = { min: Math.min(0, ...values), max: Math.max(1, ...values) };
+    const domain = values.length
+      ? { min: Math.min(0, ...values), max: Math.max(1, ...values) }
+      : undefined;
     const section = WEEKLY_FOCUS_EXERCISES.some((f) => f === exercise)
       ? '3.3 运动员表现与全员对比'
       : '附录 · 其他力量动作';
@@ -266,7 +269,7 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
           '仅已完成有效组的外部重量×次数；缺失不填零，容量不代表能力排名。' +
           (same
             ? '两周该动作记录人员一致；并列原始量，不计算百分比。'
-            : '上周覆盖或人员不可比，仅展示本周。'),
+            : '上周覆盖或人员不可比，数据留空，供教练在下载后补填。'),
         points: points.slice(start, start + 12),
         series: series.map((s) => ({ ...s, values: s.values.slice(start, start + 12) })),
       });
@@ -299,22 +302,19 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
     points: focusPoints,
     series: [
       { name: '本周总容量', values: focusPoints.map((p) => p.value) },
-      ...(r.strengthComparable
-        ? [
-            {
-              name: '上周总容量',
-              values: focusPoints.map((p) => {
-                const current = (r.strength || []).filter((s) => s.exercise === p.label);
-                const previous = r.strengthPrevious.filter((s) => s.exercise === p.label);
-                return p.value !== null &&
-                  current.length === previous.length &&
-                  current.every((s) => previous.some((v) => v.athleteId === s.athleteId))
-                  ? previous.reduce((n, s) => n + s.volumeKg, 0)
-                  : null;
-              }),
-            },
-          ]
-        : []),
+      {
+        name: '上周总容量',
+        values: focusPoints.map((p) => {
+          const current = (r.strength || []).filter((s) => s.exercise === p.label);
+          const previous = r.strengthPrevious.filter((s) => s.exercise === p.label);
+          return r.strengthComparable &&
+            p.value !== null &&
+            current.length === previous.length &&
+            current.every((s) => previous.some((v) => v.athleteId === s.athleteId))
+            ? previous.reduce((n, s) => n + s.volumeKg, 0)
+            : null;
+        }),
+      },
     ],
   });
   for (const [key, title, unit] of [
@@ -334,7 +334,5 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
         value: r.recovery?.find((v) => v.date === d.date)?.[key] ?? null,
       })),
     });
-  return charts.filter(
-    (c) => c.id.startsWith('strength:') || c.points.some((p) => p.value !== null)
-  );
+  return charts;
 }
