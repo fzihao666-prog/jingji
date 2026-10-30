@@ -4,10 +4,10 @@ import { readTeamWeeklyReport, readTeamWeeklyReportSnapshot } from './team-weekl
 import { teamWeeklyQuerySchema } from '../../shared/team-weekly-report.ts';
 const query = { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType: 'special' } as const;
 describe('两类周报事实快照', () => {
-  it('拒绝旧混合查询', () => {
+  it('缺省使用综合查询', () => {
     expect(
       teamWeeklyQuerySchema.safeParse({ project: 'ROWING', teamId: '1', date: query.date }).success
-    ).toBe(false);
+    ).toBe(true);
   });
   it('训练、测试、力量与全员明细隔离；恢复仅作为背景', () => {
     const db = createTeamWeeklyFixture();

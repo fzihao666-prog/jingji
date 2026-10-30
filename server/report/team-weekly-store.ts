@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { TeamWeeklyReport } from '../../shared/team-weekly-report.ts';
+import { weeklyReportTypeSchema, type TeamWeeklyReport } from '../../shared/team-weekly-report.ts';
 import type { TeamWeeklyCommentary } from '../../shared/team-weekly-ai.ts';
-import type {
-  SavedTeamWeeklyReport,
-  TeamWeeklyHistoryItem,
-  WeeklyPhoto,
+import {
+  savedTeamWeeklyReportSchema,
+  type SavedTeamWeeklyReport,
+  type TeamWeeklyHistoryItem,
+  type WeeklyPhoto,
 } from '../../shared/team-weekly-storage.ts';
 export class WeeklyStoreError extends Error {
   constructor(
@@ -52,7 +53,7 @@ export function getConfirmedWeekly(
   const row = db.prepare('SELECT * FROM team_weekly_reports WHERE id=?').get(id);
   if (!row) throw new WeeklyStoreError(404, '报告不存在。');
   assertWeeklyAccess(JSON.parse(String(row.athlete_ids)), accessible);
-  return {
+  return savedTeamWeeklyReportSchema.parse({
     ...JSON.parse(String(row.snapshot)),
     id: String(row.id),
     revision: Number(row.revision),
@@ -61,18 +62,19 @@ export function getConfirmedWeekly(
       .prepare('SELECT * FROM team_weekly_photos WHERE report_id=? ORDER BY created_at,id')
       .all(id)
       .map(photoMetadata),
-  };
+  });
 }
 export function listConfirmedWeekly(
   db: DatabaseSync,
-  filters: { project: string; teamId: number; reportType: string; week?: string; page?: number },
+  filters: { project: string; teamId: number; reportType?: string; week?: string; page?: number },
   accessible: number[]
 ) {
-  const where = `project=? AND team_id=? AND report_type=? AND (? IS NULL OR week_start=?) AND json_array_length(athlete_ids)>0 AND NOT EXISTS(SELECT 1 FROM json_each(athlete_ids) a WHERE a.value NOT IN(SELECT value FROM json_each(?)))`;
+  const where = `project=? AND team_id=? AND (? IS NULL OR report_type=?) AND (? IS NULL OR week_start=?) AND json_array_length(athlete_ids)>0 AND NOT EXISTS(SELECT 1 FROM json_each(athlete_ids) a WHERE a.value NOT IN(SELECT value FROM json_each(?)))`;
   const args = [
     filters.project,
     filters.teamId,
-    filters.reportType,
+    filters.reportType ?? null,
+    filters.reportType ?? null,
     filters.week || null,
     filters.week || null,
     JSON.stringify(accessible),
@@ -99,7 +101,7 @@ export function listConfirmedWeekly(
           teamId: Number(r.team_id),
           teamName: String(r.team_name),
           weekStart: String(r.week_start),
-          reportType: r.report_type as 'special' | 'physical',
+          reportType: weeklyReportTypeSchema.parse(r.report_type),
           revision: Number(r.revision),
           savedAt: String(r.saved_at),
         }) satisfies TeamWeeklyHistoryItem

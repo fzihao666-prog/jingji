@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Express, Request, RequestHandler, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
+import { weeklyReportTypeSchema } from '../../shared/team-weekly-report.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 import {
   weeklyPhotoScopeSchema,
@@ -23,6 +24,11 @@ type Dependencies = {
   authorizeScope: (user: AuthUser, scope: WeeklyPhotoScope) => void;
   photoStore: TeamWeeklyPhotoStore;
   renderPdf: (saved: SavedTeamWeeklyReport, photos: Buffer[]) => Buffer | Uint8Array;
+  renderDocx?: (
+    saved: SavedTeamWeeklyReport,
+    photos: Buffer[],
+    signal: AbortSignal
+  ) => Promise<Buffer>;
 };
 export function registerWeeklyHistoryRoutes(app: Express, deps: Dependencies) {
   const gate: RequestHandler = (req, res, next) => {
@@ -66,13 +72,17 @@ export function registerWeeklyHistoryRoutes(app: Express, deps: Dependencies) {
   app.get('/api/reports/weekly/history', ...handlers, (req, res) => {
     const parsed = weeklyPhotoScopeSchema
       .extend({
+        reportType: weeklyReportTypeSchema.optional(),
         page: z.coerce.number().int().min(1).max(100000).default(1),
         week: z.iso.date().optional(),
       })
       .safeParse(req.query);
     if (!parsed.success) return void res.status(400).json({ message: '报告查询条件无效。' });
     try {
-      deps.authorizeScope(req.authUser!, parsed.data);
+      deps.authorizeScope(req.authUser!, {
+        ...parsed.data,
+        reportType: parsed.data.reportType ?? 'combined',
+      });
       res.json(listConfirmedWeekly(deps.db, parsed.data, deps.accessibleIds(req.authUser!)));
     } catch (e) {
       fail(res, e);
@@ -80,39 +90,96 @@ export function registerWeeklyHistoryRoutes(app: Express, deps: Dependencies) {
   });
   app.get('/api/reports/weekly/history/:id', ...handlers, (req, res) => {
     try {
-      res.json(
-        getConfirmedWeekly(deps.db, String(req.params.id), deps.accessibleIds(req.authUser!))
-      );
-    } catch (e) {
-      fail(res, e);
-    }
-  });
-  app.get('/api/reports/weekly/history/:id/pdf', ...handlers, async (req, res) => {
-    try {
       const saved = getConfirmedWeekly(
         deps.db,
         String(req.params.id),
         deps.accessibleIds(req.authUser!)
       );
-      const photos = [];
-      for (const photo of saved.photos)
-        photos.push(
-          await deps.photoStore.read(photo.id, req.authUser!.id, deps.accessibleIds(req.authUser!))
-        );
-      const current = refreshUser(req);
-      deps.authorizeScope(current, saved.report);
-      assertWeeklyAccess(
-        saved.report.athletes.map((a) => a.id),
-        deps.accessibleIds(current)
-      );
-      const latest = getConfirmedWeekly(deps.db, saved.id, deps.accessibleIds(current));
-      if (latest.revision !== saved.revision)
-        throw new WeeklyStoreError(409, '报告已更新，请重新下载。');
-      res.type('application/pdf').send(Buffer.from(deps.renderPdf(saved, photos)));
+      deps.authorizeScope(req.authUser!, saved.report);
+      res.json(saved);
     } catch (e) {
       fail(res, e);
     }
   });
+  let exporting = 0;
+  const exportBuckets = new Map<number, { count: number; expires: number }>();
+  for (const format of ['pdf', 'docx'] as const)
+    app.get(`/api/reports/weekly/history/:id/${format}`, ...handlers, async (req, res) => {
+      const word = format === 'docx';
+      const userId = req.authUser!.id;
+      if (word) {
+        const now = Date.now();
+        for (const [id, bucket] of exportBuckets)
+          if (bucket.expires <= now) exportBuckets.delete(id);
+        const bucket = exportBuckets.get(userId) || { count: 0, expires: now + 60000 };
+        if (exporting >= 2 || bucket.count >= 6)
+          return void res.status(429).json({ message: 'Word 导出较繁忙，请稍后重试。' });
+        bucket.count++;
+        exportBuckets.set(userId, bucket);
+        exporting++;
+      }
+      const controller = new AbortController();
+      const disconnected = () => {
+        if (!res.writableEnded) controller.abort();
+      };
+      const timer = setTimeout(() => controller.abort(), 60000);
+      res.once('close', disconnected);
+      try {
+        const saved = getConfirmedWeekly(
+          deps.db,
+          String(req.params.id),
+          deps.accessibleIds(req.authUser!)
+        );
+        deps.authorizeScope(req.authUser!, saved.report);
+        if (word && saved.report.reportType !== 'combined')
+          throw new WeeklyStoreError(400, '旧版报告请使用原 PDF 下载。');
+        if (!word && saved.report.reportType === 'combined')
+          throw new WeeklyStoreError(400, '综合周总结请下载可编辑 Word。');
+        if (word && !deps.renderDocx)
+          throw new WeeklyStoreError(503, 'Word 导出暂不可用，请稍后重试。');
+        const assertCurrent = () => {
+          const current = refreshUser(req);
+          deps.authorizeScope(current, saved.report);
+          assertWeeklyAccess(
+            saved.report.athletes.map((a) => a.id),
+            deps.accessibleIds(current)
+          );
+          const latest = getConfirmedWeekly(deps.db, saved.id, deps.accessibleIds(current));
+          if (latest.revision !== saved.revision)
+            throw new WeeklyStoreError(409, '报告已更新，请重新下载。');
+          if (controller.signal.aborted) throw new Error('export cancelled');
+        };
+        const photos: Buffer[] = [];
+        for (const photo of saved.photos) {
+          assertCurrent();
+          photos.push(
+            await deps.photoStore.read(photo.id, userId, deps.accessibleIds(req.authUser!))
+          );
+        }
+        assertCurrent();
+        const bytes = word
+          ? await deps.renderDocx!(saved, photos, controller.signal)
+          : Buffer.from(deps.renderPdf(saved, photos));
+        assertCurrent();
+        res.setHeader(
+          'Content-Type',
+          word
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'application/pdf'
+        );
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="jingji-weekly-${saved.report.range.from}.${format}"; filename*=UTF-8''${encodeURIComponent(`${saved.report.teamName}_训练周总结_${saved.report.range.from}.${format}`)}`
+        );
+        res.send(bytes);
+      } catch (e) {
+        if (!res.destroyed) fail(res, e);
+      } finally {
+        if (word) exporting--;
+        clearTimeout(timer);
+        res.off('close', disconnected);
+      }
+    });
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024, files: 8, fields: 3, parts: 11 },
@@ -134,7 +201,7 @@ export function registerWeeklyHistoryRoutes(app: Express, deps: Dependencies) {
       try {
         if (error) throw new WeeklyStoreError(400, '照片最多八张，每张不超过8MB。');
         const scope = weeklyPhotoScopeSchema.safeParse(req.body);
-        if (!scope.success) throw new WeeklyStoreError(400, '请选择报告项目、队伍和类型。');
+        if (!scope.success) throw new WeeklyStoreError(400, '请选择报告项目和队伍。');
         deps.authorizeScope(req.authUser!, scope.data);
         const files = Array.isArray(req.files) ? req.files : [];
         if (!files.length) throw new WeeklyStoreError(400, '请选择照片。');

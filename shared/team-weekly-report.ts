@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { isProject } from './projects.js';
 import { reportDataSchema, reportRangeSchema } from './training-report.js';
 
+export const weeklyReportTypeSchema = z.enum(['special', 'physical', 'combined']);
 export const teamWeeklyQuerySchema = z.strictObject({
-  reportType: z.enum(['special', 'physical']),
+  reportType: weeklyReportTypeSchema.default('combined'),
   project: z.string().max(40).refine(isProject),
   teamId: z
     .string()
@@ -35,7 +36,7 @@ const planSession = z.object({
   status: z.string(),
   linkedRecords: z.number(),
 });
-export const teamWeeklyReportSchema = z.object({
+export const legacyTeamWeeklyReportSchema = z.object({
   reportType: z.enum(['special', 'physical']),
   stage: z.string(),
   coachNotes: z.string(),
@@ -112,4 +113,63 @@ export const teamWeeklyReportSchema = z.object({
   concerns: z.array(z.string()),
   sourceNotes: z.array(z.string()),
 });
+export type LegacyTeamWeeklyReport = z.infer<typeof legacyTeamWeeklyReportSchema>;
+const view = z.object({
+  totals,
+  previous: totals,
+  daily: legacyTeamWeeklyReportSchema.shape.daily,
+  categories: legacyTeamWeeklyReportSchema.shape.categories,
+});
+const combinedPlan = planSession.extend({
+  category: z.enum(['special', 'physical', 'recovery']),
+  sets: value,
+  reps: value,
+  load: value,
+  notes: z.string(),
+  items: z.array(z.object({ id: z.string(), title: z.string(), description: z.string() })),
+});
+export const combinedTeamWeeklyReportSchema = legacyTeamWeeklyReportSchema.extend({
+  reportType: z.literal('combined'),
+  templateVersion: z.literal('weekly-v3'),
+  breakdown: z.object({ special: view, physical: view, unclassified: view }),
+  trainingDetails: z.array(
+    z.object({
+      id: z.number(),
+      athleteId: z.number(),
+      athleteName: z.string(),
+      date: z.string(),
+      order: z.number(),
+      category: z.enum(['special', 'physical', 'unclassified']),
+      content: z.string(),
+      duration: value,
+      distance: value,
+      srpe: value,
+    })
+  ),
+  strengthPrevious: legacyTeamWeeklyReportSchema.shape.strength.unwrap(),
+  strengthComparable: z.boolean(),
+  strengthDetails: z.array(
+    z.object({
+      athleteId: z.number(),
+      athleteName: z.string(),
+      date: z.string(),
+      exercise: z.string(),
+      reps: value,
+      weightKg: value,
+      durationMin: value,
+      distanceKm: value,
+      note: z.string(),
+      completed: z.boolean(),
+    })
+  ),
+  plans: z.array(combinedPlan),
+  nextPlans: z.array(combinedPlan),
+});
+export type CombinedTeamWeeklyReport = z.infer<typeof combinedTeamWeeklyReportSchema>;
+export const teamWeeklyReportSchema = z.discriminatedUnion('templateVersion', [
+  legacyTeamWeeklyReportSchema,
+  combinedTeamWeeklyReportSchema,
+]);
 export type TeamWeeklyReport = z.infer<typeof teamWeeklyReportSchema>;
+/** 只匹配规范动作全名；变式及不明确名称留在附录。 */
+export const WEEKLY_FOCUS_EXERCISES = ['卧拉', '卧推', '深蹲', '硬拉'] as const;

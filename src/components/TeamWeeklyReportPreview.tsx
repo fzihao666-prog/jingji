@@ -1,3 +1,4 @@
+import { weeklyReportMetadata } from '../../shared/team-weekly-sections';
 import type { TeamWeeklyCommentary } from '../../shared/team-weekly-ai';
 import type { TeamWeeklyReport } from '../../shared/team-weekly-report';
 import { teamWeeklySections } from '../../shared/team-weekly-sections';
@@ -28,7 +29,17 @@ export function TeamWeeklyReportPreview({
         {report.reportType === 'special' ? '专项' : report.reportType === 'physical' ? '体能' : ''}
         训练周总结
       </h2>
-      {report.stage && <p>{report.stage}</p>}
+      {report.templateVersion === 'weekly-v3' && (
+        <dl className="reports-metadata">
+          {weeklyReportMetadata(report).map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {report.stage && report.templateVersion !== 'weekly-v3' && <p>{report.stage}</p>}
       <p>
         {report.range.from} 至 {report.range.to} · 当前权限范围内 {report.athletes.length} 名队员
       </p>
@@ -48,34 +59,43 @@ export function TeamWeeklyReportPreview({
         <section key={section.title}>
           <h3>{section.title}</h3>
           {(() => {
-            const key = (
-              {
-                '一、本周训练摘要': 'summary',
-                每日训练与负荷: 'training',
-                力量训练个人与动作对比: 'strength',
-                每日恢复趋势: 'recovery',
-                '七、下周已发布安排': 'nextWeek',
-              } as const
-            )[section.title as '一、本周训练摘要'];
-            if (!key || !commentary) return null;
-            return onCommentaryChange ? (
-              <label className="reports-editor">
-                {section.title}文案
-                <textarea
-                  aria-invalid={Boolean(commentaryErrorId)}
-                  aria-describedby={commentaryErrorId}
-                  aria-label={`${section.title}文案`}
-                  value={commentary[key]}
-                  onChange={(event) =>
-                    onCommentaryChange({ ...commentary, [key]: event.target.value })
-                  }
-                  maxLength={600}
-                  rows={4}
-                />
-              </label>
-            ) : commentary[key] ? (
-              <p>{commentary[key]}</p>
-            ) : null;
+            const keys: (keyof TeamWeeklyCommentary)[] = section.commentaryKey
+              ? [section.commentaryKey]
+              : (
+                  {
+                    '一、本周训练摘要': ['summary'],
+                    每日训练与负荷: ['training'],
+                    力量训练个人与动作对比: ['strength'],
+                    每日恢复趋势: ['recovery'],
+                    '七、下周已发布安排': ['nextWeek'],
+                    '三、专项分析': ['training'],
+                    '四、体能分析': ['strength'],
+                    '五、恢复与下周': ['recovery', 'nextWeek'],
+                  } as Record<string, (keyof TeamWeeklyCommentary)[]>
+                )[section.title] || [];
+            if (!commentary) return null;
+            return keys.map((key) => {
+              const label =
+                key === 'recovery' ? '恢复分析' : key === 'nextWeek' ? '下周安排' : section.title;
+              return onCommentaryChange ? (
+                <label className="reports-editor" key={key}>
+                  {label}文案
+                  <textarea
+                    aria-invalid={Boolean(commentaryErrorId)}
+                    aria-describedby={commentaryErrorId}
+                    aria-label={`${label}文案`}
+                    value={commentary[key]}
+                    onChange={(event) =>
+                      onCommentaryChange({ ...commentary, [key]: event.target.value })
+                    }
+                    maxLength={600}
+                    rows={4}
+                  />
+                </label>
+              ) : commentary[key] ? (
+                <p key={key}>{commentary[key]}</p>
+              ) : null;
+            });
           })()}
           {section.paragraphs.map((p) => (
             <p key={p}>{p}</p>
@@ -153,12 +173,15 @@ export function TeamWeeklyReportPreview({
 }
 
 function ReportChart({ chart }: { chart: WeeklyChart }) {
-  const values = chart.points.flatMap((p) => (p.value === null ? [] : [p.value]));
-  const min = chart.domain?.min ?? Math.min(0, ...values),
-    max = chart.domain?.max ?? Math.max(1, ...values);
-  const scale = (v: number) => (v - min) / (max - min);
+  const series = chart.series?.length
+    ? chart.series
+    : [{ name: '本周', values: chart.points.map((p) => p.value) }];
+  const values = series.flatMap((s) => s.values.flatMap((v) => (v === null ? [] : [v])));
+  const min = chart.domain?.min ?? Math.min(0, ...values);
+  const max = chart.domain?.max ?? Math.max(1, ...values);
+  const scale = (v: number) => (v - min) / (max - min || 1);
   const rowHeights = chart.points.map((p) =>
-    Math.max(34, Math.ceil(p.label.length / 10) * 14 + 12)
+    Math.max(36 * series.length + 12, Math.ceil(p.label.length / 10) * 14 + 12)
   );
   const rowTop = (i: number) => rowHeights.slice(0, i).reduce((sum, n) => sum + n, 0);
   const height =
@@ -167,9 +190,9 @@ function ReportChart({ chart }: { chart: WeeklyChart }) {
           110,
           rowHeights.reduce((sum, n) => sum + n, 24)
         )
-      : 220;
+      : 250;
   const x = (i: number) => 45 + i * (510 / Math.max(1, chart.points.length - 1));
-  const y = (value: number) => 165 - scale(value) * 125;
+  const y = (v: number) => 165 - scale(v) * 125;
   return (
     <figure className="reports-chart">
       <figcaption>
@@ -179,11 +202,19 @@ function ReportChart({ chart }: { chart: WeeklyChart }) {
         </strong>
         <p>{chart.note}</p>
       </figcaption>
+      <p>
+        {series
+          .map(
+            (s, i) =>
+              `${s.name}：${chart.kind === 'bar' ? (i === 0 ? '实心条' : '虚线边框条') : i === 0 ? '实线 / 圆点' : '虚线 / 方点'}`
+          )
+          .join('；')}
+      </p>
       {!values.length ? (
         <p className="reports-chart-empty">暂无有效数据</p>
       ) : (
         <svg
-          viewBox={`0 0 620 ${height}`}
+          viewBox={`0 0 720 ${height}`}
           role="img"
           aria-label={`${chart.title}，具体数值见下方数据表`}
         >
@@ -197,48 +228,70 @@ function ReportChart({ chart }: { chart: WeeklyChart }) {
                     </tspan>
                   ))}
                 </text>
-                {p.value !== null && (
-                  <rect
-                    x={140 + Math.min(scale(0), scale(p.value)) * 370}
-                    y={rowTop(i) + 9}
-                    width={Math.abs(scale(p.value) - scale(0)) * 370}
-                    height="19"
-                    rx="3"
-                    fill="var(--river)"
-                  />
-                )}
-                <text x="525" y={rowTop(i) + 24} fontSize="12">
-                  {weeklyNumber(p.value)}
-                </text>
+                {series.map((s, j) => {
+                  const value = s.values[i] ?? null;
+                  return (
+                    <g key={s.name}>
+                      {value !== null && (
+                        <rect
+                          x={140 + Math.min(scale(0), scale(value)) * 330}
+                          y={rowTop(i) + 9 + j * 36}
+                          width={Math.abs(scale(value) - scale(0)) * 330}
+                          height="19"
+                          rx="3"
+                          fill={j === 0 ? 'var(--river)' : 'none'}
+                          stroke="var(--river)"
+                          strokeDasharray={j ? '4 2' : undefined}
+                        />
+                      )}
+                      <text x="485" y={rowTop(i) + 24 + j * 36} fontSize="12">
+                        {s.name} {weeklyNumber(value)}
+                      </text>
+                    </g>
+                  );
+                })}
               </g>
             ))
           ) : (
             <>
               <line x1="45" y1="165" x2="555" y2="165" stroke="currentColor" />
-              {chart.points.map((p, i) => (
-                <g key={`${p.label}:${i}`}>
-                  {p.value !== null && (
-                    <>
-                      {i > 0 && chart.points[i - 1].value !== null && (
-                        <line
-                          x1={x(i - 1)}
-                          y1={y(chart.points[i - 1].value!)}
-                          x2={x(i)}
-                          y2={y(p.value)}
-                          stroke="var(--river)"
-                          strokeWidth="2"
-                        />
-                      )}
-                      <circle cx={x(i)} cy={y(p.value)} r="4" fill="var(--river)" />
-                      <text x={x(i)} y={y(p.value) - 10} textAnchor="middle" fontSize="11">
-                        {weeklyNumber(p.value)}
-                      </text>
-                    </>
+              {series.map((s, j) => (
+                <g key={s.name}>
+                  {s.values.map((v, i) =>
+                    v === null ? null : (
+                      <g key={i}>
+                        {i > 0 && s.values[i - 1] !== null && (
+                          <line
+                            x1={x(i - 1)}
+                            y1={y(s.values[i - 1]!)}
+                            x2={x(i)}
+                            y2={y(v)}
+                            stroke="var(--river)"
+                            strokeWidth="2"
+                            strokeDasharray={j ? '5 3' : undefined}
+                          />
+                        )}
+                        {j === 0 ? (
+                          <circle cx={x(i)} cy={y(v)} r="4" fill="var(--river)" />
+                        ) : (
+                          <rect
+                            x={x(i) - 4}
+                            y={y(v) - 4}
+                            width="8"
+                            height="8"
+                            fill="none"
+                            stroke="var(--river)"
+                          />
+                        )}
+                      </g>
+                    )
                   )}
-                  <text x={x(i)} y="187" textAnchor="middle" fontSize="10">
-                    {p.label.length > 5 ? p.label.slice(5) : p.label}
-                  </text>
                 </g>
+              ))}
+              {chart.points.map((p, i) => (
+                <text key={`${p.label}:${i}`} x={x(i)} y="187" textAnchor="middle" fontSize="10">
+                  {p.label.length > 5 ? p.label.slice(5) : p.label}
+                </text>
               ))}
               <text x="8" y="169" fontSize="10">
                 {weeklyNumber(min)}
@@ -258,14 +311,21 @@ function ReportChart({ chart }: { chart: WeeklyChart }) {
             <thead>
               <tr>
                 <th scope="col">日期 / 队员 / 类型</th>
-                <th scope="col">数值{chart.unit ? ` / ${chart.unit}` : ''}</th>
+                {series.map((s) => (
+                  <th scope="col" key={s.name}>
+                    {s.name}
+                    {chart.unit ? ` / ${chart.unit}` : ''}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {chart.points.map((p, i) => (
                 <tr key={`${p.label}:${i}`}>
                   <th scope="row">{p.label}</th>
-                  <td>{weeklyNumber(p.value)}</td>
+                  {series.map((s) => (
+                    <td key={s.name}>{weeklyNumber(s.values[i] ?? null)}</td>
+                  ))}
                 </tr>
               ))}
             </tbody>

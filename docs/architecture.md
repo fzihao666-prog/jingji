@@ -843,14 +843,22 @@ Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team
 
 ### 队伍训练周总结（2026-10）
 
-网页报告按 `reportType: special | physical` 隔离正式课次、计划、测试和力量结果，仍复用 `training_sessions`、`daily_wellness`、`strength_result_sets`、测试与计划既有事实源。只读事务生成一致统计；网页和PDF共用章节及矢量图表定义。未知分类不混入另一报告，缺失与真实0分开；上周比较仅展示人员与覆盖可比的指标，不自行补造阈值。
+新报告使用 `combined/weekly-v3`，旧 `special|physical/weekly-v2` 保持判别兼容。一次只读事务读取同项目、队伍、授权运动员和自然周的正式 `training_sessions`、`strength_result_sets`、统一测试、`daily_wellness`、计划与实施关联，再派生整体和专项/体能/恢复及未分类视图；不拼接两份旧报告。队伍课次优先按正式计划与课次ID去重，未关联时沿用原同日序号口径；同一混合课不拆分时长，未分类和完整组结果保留附录，缺失与真实0分开。个人报告统计与事实源不变。
 
-`POST /api/reports/weekly/generate` 接收 `{query:{project,teamId,date,reportType},stage?,coachNotes?,consent?}`，编排统计与可选AI，返回草稿、事实指纹及确认修订号。AI使用既有供应商配置与210秒总截止时间、取消信号及并发/限流；失败返回可编辑基础稿。只发送去身份化训练汇总、固定动作与训练词表及可可靠识别的教练观察，健康/身份/未知自由文字留本地。等待后重新核验权限和事实。旧预览/点评/PDF接口仍保留，但必须明确类型，旧混合请求返回400。
+网页预览与导出共用 `shared/team-weekly-sections.ts`、`team-weekly-charts.ts`。正文固定卧拉、卧推、深蹲、硬拉的规范全名，不模糊合并变式、不自动选动作；其他动作留附录。图表稳定排序包含全部授权队员，按人数续组并共享动作坐标域；上周系列仅在记录人员、覆盖与指标条件可比时出现，缺失不补0。已有计划的组次、负重和notes/items处方保留原义，不把计划作为完成事实。
 
-`POST /api/reports/weekly/save` 接收确认稿、指纹、照片ID及 `expectedRevision`，在 `BEGIN IMMEDIATE` 中重新核验当前权限、旧快照全员范围与最新事实，再按项目/队伍/周起点/类型原子替换。新增独立 `team_weekly_reports`、`team_weekly_photos` 表，初始化幂等，不重写原个人报告或训练事实；报告保存模板版本、统计与最终文字，预览不持久化。失败回滚，修订冲突返回409。回退应用时保留新增表及附件，不删除确认数据。
+`POST /api/reports/weekly/generate` 接收 `{query:{project,teamId,date,reportType?},stage?,coachNotes?,consent?}`，缺省类型为combined，显式旧类型维持旧语义。AI输入增加去身份化分类统计，training/strength分别用于专项/体能分析；核心数值由服务端计算。既有210秒总截止时间、取消、并发和限流保留；等待后重新核验权限与事实。训练补充只在可靠识别后外发，健康、身份、未知文字与照片留本地；失败提供可编辑基础稿，不执行模型指令或改写训练事实。
 
-`GET /api/reports/weekly/history` 分页查询，`/history/:id` 查看快照，`/history/:id/pdf` 按快照生成PDF。历史及照片接口重新验证当前项目、队伍及快照中所有运动员权限；部分队员可见不代表有权读取旧全队快照。PDF和照片使用私有响应，不走公开静态目录。
+`POST /api/reports/weekly/save` 在 `BEGIN IMMEDIATE` 内复核当前角色/范围、旧快照全部队员、事实指纹和expectedRevision，按项目/队伍/周起点/类型原子替换。沿用现有 `team_weekly_reports`、`team_weekly_photos`，无需删除类型列或重写旧JSON。新稿固定combined，故同周仅一份综合确认稿；旧同周special/physical记录独立保留。初始化幂等，失败回滚、修订冲突409；预览不持久化。回退保留所有行与附件，旧客户端按显式类型过滤，不能通过删除综合记录实现回退。
 
-`POST /api/reports/weekly/photos` 使用 multipart `files`，验证真实JPEG/PNG/WebP、8MB单文件、最多8张、25MP解码限制，自动旋转、剥离元数据、最长边1600、JPEG质量78。私有目录为数据库同目录 `weekly-report-photos/`；仅存压缩结果，照片不发送AI。账号上传限频、临时数量及容量配额约束资源；确认事务绑定引用，替换后清理无引用旧照片，24小时临时回收与孤立文件清理按小时运行。
+`GET /api/reports/weekly/history` 类型筛选可省略，按项目/队伍/可选周期分页20条，列表不预读全部快照和照片；`/history/:id` 按保存内容查看。新 `/history/:id/docx` 仅导出combined快照；旧v2继续 `/history/:id/pdf`，不重算成综合稿。新综合稿的PDF下载返回明确Word提示。正文和下载均校验队伍scope及全部快照运动员；异步照片读取和Word渲染后再次核验账号、角色、范围和revision。响应私有、no-store、nosniff并使用安全中文attachment文件名；网页明确校验DOCX MIME，拒绝将错误JSON/HTML另存文档。
 
-现有定时备份在SQLite在线备份后，从该备份的确认照片清单复制到 `<backupPath>.weekly-photos/`；缺文件即拒绝本次不完整备份并清理，不改业务数据。过期数据库备份连同附件目录清理。恢复必须同时还原数据库及对应照片至 `weekly-report-photos/`；新增功能不要求清空旧数据库，旧库无附件表时兼容原备份流程。
+`server/report/team-weekly-docx.ts` 使用服务端标准OOXML生成段落、表格、原生DrawingML图表，每图内嵌由既有ExcelJS生成的XLSX，缓存/工作簿/附录由同一快照派生。JSZip显式固定3.10.1，复用现有传递安装树，无浏览器端增量；采用MIT许可，复核既有pako的MIT/Zlib声明并保留原许可与版权，不引入新传递依赖。生产不依赖Python、LibreOffice或教练本机办公软件。XML转义及非法字符清理，姓名/备注按字符串写入，不构造用户公式、宏或外部关系。Word导出受账号限频、全局2并发、60秒截止、快照/图表/照片预算与取消约束，不截断队员以减小文件。
+
+文档下载后的修改不回传系统，不自动更新正文、其他图表/表格或正式事实，需由教练自行核对；不新增完整在线办公编辑器、动作替换配置、最终稿上传或版本管理流程。Word/WPS图表实际编辑兼容需分别实测并记录版本；结构测试和其他软件渲染不等于两者实测。
+
+照片仍走独立私有 `photos` 接口，新上传缺省combined，旧归属不改。真实JPEG/PNG/WebP、8MB单文件、最多8张、25MP解码限制，最长边1600、JPEG质量78并去元数据；目录为数据库同目录 `weekly-report-photos/`。只保留压缩图，导出内嵌图片字节而非公开链接。上传配额、临时24小时回收/孤立文件清理、确认关联与无引用旧附件清理保持原策略。
+
+定时备份按SQLite备份快照的确认照片清单复制到 `<backupPath>.weekly-photos/`，缺附件即拒绝本次不完整备份并清理，不修改业务数据；过期备份连同附件目录清理。部署前备份数据库与对应私有附件，恢复须将数据库和匹配照片一起还原，不能仅还原数据库。combined和旧快照共用该机制，回退不清空确认数据。
+
+综合报告的章节与图表由共享模型统一组织为用户指定五章布局；报告封面的ISO周次及上海生成日期为纯展示派生字段。地点、负责人、目标达成、调整原因等未记录信息不由AI补造；恢复与未分类不能可靠拆分时不展示伪造恢复分项时长。

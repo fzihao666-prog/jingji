@@ -1,12 +1,13 @@
 import { z } from 'zod';
-import { teamWeeklyReportSchema } from './team-weekly-report.js';
+import { teamWeeklyReportSchema, weeklyReportTypeSchema } from './team-weekly-report.js';
 import { teamWeeklyCommentarySchema } from './team-weekly-ai.js';
 export const weeklyPhotoScopeSchema = z.strictObject({
   project: z.string().min(1).max(40),
   teamId: z.coerce.number().int().positive(),
-  reportType: z.enum(['special', 'physical']),
+  reportType: weeklyReportTypeSchema.default('combined'),
 });
 export type WeeklyPhotoScope = z.infer<typeof weeklyPhotoScopeSchema>;
+export type WeeklyPhotoScopeInput = z.input<typeof weeklyPhotoScopeSchema>;
 export const weeklyPhotoSchema = z.strictObject({
   id: z.string().uuid(),
   width: z.number().int().positive(),
@@ -37,7 +38,7 @@ export const teamWeeklyHistoryItemSchema = z.strictObject({
   teamId: z.number().int().positive(),
   teamName: z.string(),
   weekStart: z.iso.date(),
-  reportType: z.enum(['special', 'physical']),
+  reportType: weeklyReportTypeSchema,
   revision: z.number().int().positive(),
   savedAt: z.iso.datetime(),
 });

@@ -9,9 +9,14 @@ import { createTeamWeeklyFixture } from './team-weekly-fixture.ts';
 import { registerTeamWeeklyRoutes } from './team-weekly-routes.ts';
 import { registerWeeklyHistoryRoutes } from './team-weekly-history-routes.ts';
 import { createTeamWeeklyPhotoStore } from './team-weekly-photos.ts';
+import JSZip from 'jszip';
+import { renderTeamWeeklyDocx } from './team-weekly-docx.ts';
 import { renderTeamWeeklyPdf } from './team-weekly-pdf.ts';
 import { weeklyDraftSchema } from '../../shared/team-weekly-workflow.ts';
-import { savedTeamWeeklyReportSchema } from '../../shared/team-weekly-storage.ts';
+import {
+  savedTeamWeeklyReportSchema,
+  type SavedTeamWeeklyReport,
+} from '../../shared/team-weekly-storage.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 import type { teamWeeklyAiInput } from './team-weekly-ai.ts';
 const closes: (() => Promise<void>)[] = [];
@@ -70,7 +75,20 @@ async function setup() {
     accessibleIds: () => state.ids,
   };
   registerTeamWeeklyRoutes(app, { ...deps, generate });
+  const renderDocx = vi.fn((saved: SavedTeamWeeklyReport, buffers: Buffer[], signal: AbortSignal) =>
+    renderTeamWeeklyDocx(
+      saved.report,
+      saved.commentary,
+      buffers.map((data, i) => ({
+        data,
+        width: saved.photos[i].width,
+        height: saved.photos[i].height,
+      })),
+      signal
+    )
+  );
   registerWeeklyHistoryRoutes(app, {
+    renderDocx,
     ...deps,
     authorizeScope: (_u, scope) => {
       if (scope.teamId !== 1 || scope.project !== 'ROWING') throw new Error('denied');
@@ -100,7 +118,7 @@ async function setup() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-  return { db, state, photoStore, root, post, generate };
+  return { db, state, photoStore, root, post, generate, renderDocx };
 }
 describe('两类周报的一键生成、确认和历史', () => {
   it('教练训练观察参与AI，生成不保存；敏感观察保留本地；失败仍返回基础图文', async () => {
@@ -192,7 +210,7 @@ describe('两类周报的一键生成、确认和历史', () => {
     s.state.ids = [1];
     expect((await fetch(s.root + `/history/${first.id}`)).status).toBe(403);
   });
-  it('照片与确认快照贯通；生成期间变更数据会拒绝；缺报告类型明确报错', async () => {
+  it('旧照片与确认快照贯通；事实变化拒绝；缺类型默认为综合', async () => {
     const s = await setup();
     const image = await sharp({
       create: { width: 60, height: 40, channels: 3, background: '#176f7f' },
@@ -229,7 +247,169 @@ describe('两类周报的一键生成、确认和历史', () => {
     });
     expect((await s.post('/generate', input)).status).toBe(409);
     expect((await fetch(s.root + '/preview?project=ROWING&teamId=1&date=2026-10-05')).status).toBe(
-      400
+      200
     );
+  });
+});
+
+describe('综合Word报告与旧稿兼容', () => {
+  async function draft(s: Awaited<ReturnType<typeof setup>>, reportType?: 'special' | 'physical') {
+    const response = await s.post('/generate', {
+      ...input,
+      query: {
+        project: 'ROWING',
+        teamId: 1,
+        date: '2026-10-05',
+        ...(reportType ? { reportType } : {}),
+      },
+      consent: false,
+    });
+    expect(response.status).toBe(200);
+    return weeklyDraftSchema.parse(await response.json());
+  }
+  async function save(
+    s: Awaited<ReturnType<typeof setup>>,
+    value: Awaited<ReturnType<typeof draft>>,
+    photoIds: string[] = []
+  ) {
+    const response = await s.post('/save', {
+      report: value.data,
+      fingerprint: value.fingerprint,
+      commentary: value.commentary,
+      photoIds,
+      expectedRevision: value.expectedRevision,
+      confirmed: true,
+    });
+    expect(response.status).toBe(200);
+    return savedTeamWeeklyReportSchema.parse(await response.json());
+  }
+  it('缺省综合、三类同周并存、私有照片及原生Word下载、不重算历史与同键替换', async () => {
+    const s = await setup();
+    const special = await save(s, await draft(s, 'special'));
+    await save(s, await draft(s, 'physical'));
+    const image = await sharp({
+      create: { width: 60, height: 40, channels: 3, background: '#176f7f' },
+    })
+      .png()
+      .toBuffer();
+    const form = new FormData();
+    form.set('project', 'ROWING');
+    form.set('teamId', '1');
+    form.append('files', new Blob([new Uint8Array(image)], { type: 'image/png' }), 'test.png');
+    const uploaded = await fetch(s.root + '/photos', { method: 'POST', body: form });
+    expect(uploaded.status).toBe(200);
+    const photoIds = ((await uploaded.json()) as { photos: { id: string }[] }).photos.map(
+      (p) => p.id
+    );
+    const value = await draft(s);
+    expect(value.data.reportType).toBe('combined');
+    expect(value.data.templateVersion).toBe('weekly-v3');
+    expect(
+      (
+        await s.post('/save', {
+          report: { ...value.data, templateVersion: 'weekly-v2' },
+          fingerprint: value.fingerprint,
+          commentary: value.commentary,
+          photoIds: [],
+          expectedRevision: 0,
+          confirmed: true,
+        })
+      ).status
+    ).toBe(400);
+    const first = await save(s, value, photoIds);
+    const history = (await (await fetch(s.root + '/history?project=ROWING&teamId=1')).json()) as {
+      total: number;
+      items: { reportType: string }[];
+    };
+    expect(history.total).toBe(3);
+    expect(new Set(history.items.map((i) => i.reportType))).toEqual(
+      new Set(['combined', 'physical', 'special'])
+    );
+    const response = await fetch(s.root + `/history/${first.id}/docx`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain(
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('content-disposition')).toContain('.docx');
+    const zip = await JSZip.loadAsync(await response.arrayBuffer());
+    expect(await zip.file('word/document.xml')?.async('string')).toContain('本周训练');
+    expect(Object.keys(zip.files).some((name) => name.startsWith('word/media/'))).toBe(true);
+    expect((await fetch(s.root + `/history/${first.id}/pdf`)).status).toBe(400);
+    expect((await fetch(s.root + `/history/${special.id}/docx`)).status).toBe(400);
+    expect((await fetch(s.root + `/history/${special.id}/pdf`)).status).toBe(200);
+    const replaced = await save(s, await draft(s), photoIds);
+    expect(replaced.id).toBe(first.id);
+    expect(replaced.revision).toBe(2);
+    expect(
+      (
+        await s.post('/save', {
+          report: value.data,
+          fingerprint: value.fingerprint,
+          commentary: value.commentary,
+          photoIds,
+          expectedRevision: 0,
+          confirmed: true,
+        })
+      ).status
+    ).toBe(409);
+    s.db.exec('UPDATE training_sessions SET duration_min=99 WHERE id=1');
+    const historical = savedTeamWeeklyReportSchema.parse(
+      await (await fetch(s.root + `/history/${first.id}`)).json()
+    );
+    expect(historical.report.totals.duration).toBe(first.report.totals.duration);
+    expect((await fetch(s.root + `/history/${first.id}/docx`)).status).toBe(200);
+    expect(
+      (await fetch(s.root + `/history/${first.id}/docx`, { headers: { 'x-deny': 'yes' } })).status
+    ).toBe(401);
+    s.state.ids = [1];
+    expect((await fetch(s.root + `/history/${first.id}/docx`)).status).toBe(403);
+  });
+  it('Word导出等待期间权限收紧或报告修订变化均拒绝发送文件', async () => {
+    const s = await setup();
+    const first = await save(s, await draft(s));
+    s.renderDocx.mockImplementationOnce(async () => {
+      s.state.ids = [1];
+      return Buffer.from('must-not-leak');
+    });
+    expect((await fetch(s.root + `/history/${first.id}/docx`)).status).toBe(403);
+    s.state.ids = [1, 3];
+    s.renderDocx.mockImplementationOnce(async () => {
+      s.db.prepare('UPDATE team_weekly_reports SET revision=revision+1 WHERE id=?').run(first.id);
+      return Buffer.from('must-not-leak');
+    });
+    expect((await fetch(s.root + `/history/${first.id}/docx`)).status).toBe(409);
+    expect(
+      (await s.post('/generate', { ...input, query: { ...input.query, reportType: 'unknown' } }))
+        .status
+    ).toBe(400);
+  });
+  it('Word导出并发有界且完成后释放名额', async () => {
+    const s = await setup();
+    const first = await save(s, await draft(s));
+    let release!: () => void, entered!: () => void;
+    let count = 0;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const ready = new Promise<void>((r) => {
+      entered = r;
+    });
+    s.renderDocx.mockImplementation(async () => {
+      count++;
+      if (count === 2) entered();
+      await gate;
+      return Buffer.from('synthetic-docx');
+    });
+    const path = s.root + `/history/${first.id}/docx`;
+    const a = fetch(path),
+      b = fetch(path);
+    await ready;
+    expect((await fetch(path)).status).toBe(429);
+    release();
+    expect((await a).status).toBe(200);
+    expect((await b).status).toBe(200);
+    expect((await fetch(path)).status).toBe(200);
   });
 });

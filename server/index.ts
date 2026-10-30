@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { createTeamWeeklyPhotoStore } from './report/team-weekly-photos.ts';
 import { registerWeeklyHistoryRoutes } from './report/team-weekly-history-routes.ts';
 import { WeeklyStoreError } from './report/team-weekly-store.ts';
+import { renderTeamWeeklyDocx } from './report/team-weekly-docx.ts';
 import { renderTeamWeeklyPdf } from './report/team-weekly-pdf.ts';
 import { registerTeamWeeklyRoutes } from './report/team-weekly-routes.ts';
 import { registerProjectVerificationRoutes } from './athlete/project-verification-routes.ts';
@@ -143,6 +144,7 @@ registerWeeklyHistoryRoutes(app,{db,requireAuth,currentUser:getAuthUser,accessib
     const members=db.prepare('SELECT a.id FROM athletes a JOIN project_teams t ON t.id=a.team_id WHERE a.active=1 AND t.active=1 AND a.project=? AND t.project=? AND t.id=?').all(scope.project,scope.project,scope.teamId);
     if(!members.some(row=>allowed.has(Number(row.id))))throw new WeeklyStoreError(403,'无权访问当前项目或队伍。');
   },
+  renderDocx:(saved,buffers,signal)=>renderTeamWeeklyDocx(saved.report,saved.commentary,buffers.map((data,i)=>({data,width:saved.photos[i].width,height:saved.photos[i].height})),signal),
   renderPdf:(saved,buffers)=>renderTeamWeeklyPdf(saved.report,saved.commentary,buffers.map((data,i)=>({data,width:saved.photos[i].width,height:saved.photos[i].height}))),
 });
 registerTeamWeeklyRoutes(app, { db, requireAuth, accessibleIds: accessibleAthleteIds, photoStore:weeklyPhotoStore,

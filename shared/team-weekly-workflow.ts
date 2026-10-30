@@ -16,7 +16,7 @@ export const weeklyDraftSchema = z.object({
   messages: z.array(z.string()),
 });
 export type WeeklyDraft = z.infer<typeof weeklyDraftSchema>;
-export type WeeklyDraftInput = z.infer<typeof weeklyDraftInputSchema>;
+export type WeeklyDraftInput = z.input<typeof weeklyDraftInputSchema>;
 export const weeklySaveSchema = z.strictObject({
   report: teamWeeklyReportSchema,
   fingerprint: z

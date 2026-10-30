@@ -138,3 +138,34 @@ export const LongRoster = {
     },
   },
 };
+
+const combined: TeamWeeklyReport = {
+  ...empty,
+  reportType: 'combined',
+  templateVersion: 'weekly-v3',
+  breakdown: {
+    special: { totals, previous: totals, daily: empty.daily, categories: [] },
+    physical: { totals, previous: totals, daily: empty.daily, categories: [] },
+    unclassified: { totals, previous: totals, daily: empty.daily, categories: [] },
+  },
+  strengthPrevious: [],
+  strengthComparable: false,
+  strengthDetails: [],
+  trainingDetails: [],
+  plans: [],
+  nextPlans: [],
+};
+export const CombinedEmpty = { args: { report: combined } };
+export const CombinedEditable = {
+  args: {
+    report: combined,
+    commentary: {
+      summary: '周概述',
+      training: '专项分析',
+      strength: '体能分析',
+      recovery: '恢复分析',
+      nextWeek: '下周安排',
+    },
+    onCommentaryChange: () => {},
+  },
+};

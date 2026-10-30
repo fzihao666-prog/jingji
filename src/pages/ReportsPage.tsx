@@ -21,7 +21,6 @@ export function previousWeekDate(now = new Date()) {
 export function ReportsPage({ project, teamId }: Props) {
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [selectedTeam, setSelectedTeam] = useState(teamId ? String(teamId) : '');
-  const [reportType, setReportType] = useState<'special' | 'physical'>('physical');
   const [date, setDate] = useState(previousWeekDate);
   const [stage, setStage] = useState('');
   const [coachNotes, setCoachNotes] = useState('');
@@ -83,7 +82,6 @@ export function ReportsPage({ project, teamId }: Props) {
       .weeklyReportHistory({
         project,
         teamId: Number(selectedTeam),
-        reportType,
         page: historyPage,
         ...(historyWeek ? { week: reportPeriod('week', historyWeek).from } : {}),
       })
@@ -102,7 +100,7 @@ export function ReportsPage({ project, teamId }: Props) {
     return () => {
       active = false;
     };
-  }, [project, selectedTeam, reportType, historyPage, historyRetry, historyWeek]);
+  }, [project, selectedTeam, historyPage, historyRetry, historyWeek]);
   function invalidate(scope = false) {
     state.version++;
     setDraft(null);
@@ -136,10 +134,7 @@ export function ReportsPage({ project, teamId }: Props) {
       if (files.length) {
         const uploaded = [
           ...photos,
-          ...(await api.uploadWeeklyPhotos(
-            { project, teamId: Number(selectedTeam), reportType },
-            files
-          )),
+          ...(await api.uploadWeeklyPhotos({ project, teamId: Number(selectedTeam) }, files)),
         ];
         if (version !== state.version) return;
         setPhotos(uploaded);
@@ -147,7 +142,7 @@ export function ReportsPage({ project, teamId }: Props) {
       }
       setMessage('正在生成图表与周总结，AI 不可用时将保留基础报告…');
       const result = await api.generateWeeklyReport({
-        query: { project, teamId: Number(selectedTeam), date, reportType },
+        query: { project, teamId: Number(selectedTeam), date },
         stage,
         coachNotes,
         consent,
@@ -195,13 +190,14 @@ export function ReportsPage({ project, teamId }: Props) {
       setDraft(null);
       setPhotos(result.photos);
       setHistoryRetry((v) => v + 1);
-      setMessage('报告已保存，正在下载 PDF…');
+      setMessage('报告已保存，正在下载 Word…');
       await api.downloadSavedWeekly(
         result.id,
-        `${result.report.teamName}_${reportType === 'special' ? '专项' : '体能'}周总结_${result.report.range.from}.pdf`
+        `${result.report.teamName}_综合周总结_${result.report.range.from}.docx`,
+        'docx'
       );
       if (version === state.version)
-        setMessage('报告已保存并开始下载；同队同周同类型的上一份已替换。');
+        setMessage('报告已保存并开始下载；同队同周的上一份综合稿已替换。');
     } catch (e) {
       if (version === state.version) {
         setError(e instanceof Error ? e.message : '保存或下载失败，请重试。');
@@ -223,7 +219,7 @@ export function ReportsPage({ project, teamId }: Props) {
         setDate(result.report.range.from);
         setStage(result.report.stage);
         setCoachNotes(result.report.coachNotes);
-        setPhotos(result.photos);
+        setPhotos(result.report.reportType === 'combined' ? result.photos : []);
         setFiles([]);
         setMessage('正在查看已确认快照；后续补录不会改变这份报告。');
       }
@@ -239,7 +235,8 @@ export function ReportsPage({ project, teamId }: Props) {
     try {
       await api.downloadSavedWeekly(
         value.id,
-        `${value.report.teamName}_周总结_${value.report.range.from}.pdf`
+        `${value.report.teamName}_周总结_${value.report.range.from}.${value.report.reportType === 'combined' ? 'docx' : 'pdf'}`,
+        value.report.reportType === 'combined' ? 'docx' : 'pdf'
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : '下载失败。');
@@ -260,7 +257,7 @@ export function ReportsPage({ project, teamId }: Props) {
           <FileText size={22} aria-hidden="true" />
           <div>
             <h2>生成周总结</h2>
-            <p>选择报告类型，其余内容由系统自动整理。</p>
+            <p>自动整合专项与体能训练，其余补充信息选填。</p>
           </div>
         </header>
         <form
@@ -271,19 +268,6 @@ export function ReportsPage({ project, teamId }: Props) {
         >
           <fieldset className="reports-controls" disabled={busy || loading}>
             <legend>报告范围</legend>
-            <label>
-              报告类型
-              <select
-                value={reportType}
-                onChange={(e) => {
-                  invalidate(true);
-                  setReportType(e.target.value as 'special' | 'physical');
-                }}
-              >
-                <option value="physical">体能训练周总结</option>
-                <option value="special">专项训练周总结</option>
-              </select>
-            </label>
             <label>
               项目
               <input value={projectLabel(project)} readOnly />
@@ -461,6 +445,9 @@ export function ReportsPage({ project, teamId }: Props) {
               </div>
             </AppCard>
           )}
+          <p className="reports-word-note">
+            Word 下载后可在本地修改，修改不会回传系统；修改图表数据后，请自行核对正文和其他表格。
+          </p>
           <div className="reports-actions">
             {draft ? (
               <button
@@ -470,7 +457,7 @@ export function ReportsPage({ project, teamId }: Props) {
                 onClick={() => void saveAndDownload()}
               >
                 <Download size={16} aria-hidden="true" />
-                保存并下载
+                保存并下载 Word
               </button>
             ) : (
               saved && (
@@ -490,7 +477,7 @@ export function ReportsPage({ project, teamId }: Props) {
                     onClick={() => void downloadHistory(saved)}
                   >
                     <Download size={16} aria-hidden="true" />
-                    下载已保存报告
+                    {saved.report.reportType === 'combined' ? '下载已保存 Word' : '下载旧版 PDF'}
                   </button>
                 </>
               )
@@ -537,7 +524,11 @@ export function ReportsPage({ project, teamId }: Props) {
               <li key={item.id}>
                 <span>
                   {item.teamName} · {item.weekStart} ·{' '}
-                  {item.reportType === 'special' ? '专项' : '体能'}
+                  {item.reportType === 'combined'
+                    ? '综合'
+                    : item.reportType === 'special'
+                      ? '旧版专项'
+                      : '旧版体能'}
                 </span>
                 <button
                   type="button"

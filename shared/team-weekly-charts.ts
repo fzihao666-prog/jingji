@@ -1,4 +1,8 @@
-import type { TeamWeeklyReport } from './team-weekly-report.js';
+import {
+  WEEKLY_FOCUS_EXERCISES,
+  type CombinedTeamWeeklyReport,
+  type TeamWeeklyReport,
+} from './team-weekly-report.js';
 
 export type WeeklyChart = {
   id: string;
@@ -9,9 +13,11 @@ export type WeeklyChart = {
   kind: 'bar' | 'line';
   domain?: { min: number; max: number };
   points: { label: string; value: number | null }[];
+  series?: { name: string; values: (number | null)[] }[];
 };
 /** 不合并不同测试条件，不填补缺失值；网页与PDF使用同一组数值。 */
 export function teamWeeklyCharts(r: TeamWeeklyReport): WeeklyChart[] {
+  if (r.templateVersion === 'weekly-v3') return combinedCharts(r);
   const charts: WeeklyChart[] = [
     ...(['duration', 'srpe'] as const).map((key): WeeklyChart => ({
       id: key,
@@ -147,4 +153,188 @@ export function weeklyTimetable(r: TeamWeeklyReport, next = false) {
       sessions: (next ? r.nextPlans : r.plans).filter((p) => p.date === date),
     };
   });
+}
+
+function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
+  const athletes = [...r.athletes].sort((a, b) => a.id - b.id);
+  const charts: WeeklyChart[] = (['duration', 'srpe'] as const).map((key) => ({
+    id: key,
+    section: '2.2 周训练量和负荷',
+    title: key === 'duration' ? '每日个人累计时长' : '每日个人累计SRPE',
+    unit: key === 'duration' ? '分钟' : 'AU',
+    kind: 'bar',
+    note: '缺失保留为空；整体包含恢复及未分类，不推算分项时长。',
+    points: r.daily.map((d) => ({ label: d.date.slice(5), value: d[key] })),
+  }));
+  charts.push(
+    {
+      id: 'composition',
+      section: '2.2 周训练量和负荷',
+      title: '训练时长构成',
+      kind: 'bar',
+      unit: '分钟',
+      note: '按正式记录分类；恢复与未分类未可靠拆分，保留合并名称。个人累计时长，不等于队伍课时。',
+      points: [
+        ['专项', r.breakdown.special.totals.duration],
+        ['体能', r.breakdown.physical.totals.duration],
+        ['恢复及未分类', r.breakdown.unclassified.totals.duration],
+      ].map(([label, value]) => ({ label: String(label), value: value as number | null })),
+    },
+    {
+      id: 'categories',
+      section: '2.2 周训练量和负荷',
+      title: '训练分类分布',
+      kind: 'bar',
+      unit: '分钟',
+      note: '采用已有训练分类，不将训练类型代替生理强度分区。',
+      points: r.categories.map((c) => ({ label: c.label, value: c.duration })),
+    },
+    {
+      id: 'rpe',
+      section: '4.1 运动员状态变化',
+      title: '每日记录平均 RPE',
+      kind: 'line',
+      unit: '分',
+      note: '仅有效记录均值，与SRPE分别展示，不混用单位。',
+      points: r.daily.map((d) => ({ label: d.date.slice(5), value: d.rpe })),
+    }
+  );
+  const exercises = [
+    ...WEEKLY_FOCUS_EXERCISES,
+    ...[...new Set((r.strength || []).map((s) => s.exercise))]
+      .filter((e) => !WEEKLY_FOCUS_EXERCISES.some((f) => f === e))
+      .sort(),
+  ];
+  for (const exercise of exercises) {
+    const current = (r.strength || []).filter((s) => s.exercise === exercise);
+    if (!current.length) continue;
+    const previous = r.strengthPrevious.filter((s) => s.exercise === exercise);
+    const same =
+      r.strengthComparable &&
+      previous.length === current.length &&
+      current.every((s) => previous.some((p) => p.athleteId === s.athleteId));
+    const timedOnly = (athleteId: number) => {
+      const details = r.strengthDetails.filter(
+        (s) => s.athleteId === athleteId && s.exercise === exercise && s.completed
+      );
+      return (
+        details.length > 0 && details.every((s) => (s.durationMin ?? 0) > 0 && (s.reps ?? 0) === 0)
+      );
+    };
+    const points = athletes.map((a) => ({
+      label: a.name,
+      value:
+        timedOnly(a.id) ||
+        r.strengthDetails.some(
+          (s) =>
+            s.athleteId === a.id &&
+            s.exercise === exercise &&
+            s.completed &&
+            (s.reps === null || s.weightKg === null || s.reps < 0 || s.weightKg < 0)
+        )
+          ? null
+          : (current.find((s) => s.athleteId === a.id)?.volumeKg ?? null),
+    }));
+    if (!points.some((p) => p.value !== null)) continue;
+    const series = [
+      { name: '本周', values: points.map((p) => p.value) },
+      ...(same
+        ? [
+            {
+              name: '上周',
+              values: athletes.map(
+                (a) => previous.find((s) => s.athleteId === a.id)?.volumeKg ?? null
+              ),
+            },
+          ]
+        : []),
+    ];
+    const values = series.flatMap((s) => s.values).filter((v): v is number => v !== null);
+    const domain = { min: Math.min(0, ...values), max: Math.max(1, ...values) };
+    const section = WEEKLY_FOCUS_EXERCISES.some((f) => f === exercise)
+      ? '3.3 运动员表现与全员对比'
+      : '附录 · 其他力量动作';
+    for (let start = 0; start < points.length; start += 12)
+      charts.push({
+        id: `strength:${exercise}:part${start / 12}`,
+        section,
+        title: `${exercise} · 全员训练容量${points.length > 12 ? `（${start / 12 + 1}/${Math.ceil(points.length / 12)}）` : ''}`,
+        unit: 'kg·次',
+        kind: 'bar',
+        domain,
+        note:
+          '仅已完成有效组的外部重量×次数；缺失不填零，容量不代表能力排名。' +
+          (same
+            ? '两周该动作记录人员一致；并列原始量，不计算百分比。'
+            : '上周覆盖或人员不可比，仅展示本周。'),
+        points: points.slice(start, start + 12),
+        series: series.map((s) => ({ ...s, values: s.values.slice(start, start + 12) })),
+      });
+  }
+  const focusPoints = WEEKLY_FOCUS_EXERCISES.map((exercise) => {
+    const details = r.strengthDetails.filter((s) => s.exercise === exercise && s.completed);
+    return {
+      label: exercise,
+      value:
+        details.length &&
+        details.every(
+          (s) =>
+            s.reps !== null &&
+            s.weightKg !== null &&
+            s.reps >= 0 &&
+            s.weightKg >= 0 &&
+            !((s.durationMin ?? 0) > 0 && s.reps === 0)
+        )
+          ? details.reduce((n, s) => n + s.reps! * s.weightKg!, 0)
+          : null,
+    };
+  });
+  charts.push({
+    id: 'focus-summary',
+    section: '3.2 关键力量训练统计',
+    title: '四个固定动作 · 有效容量对比',
+    unit: 'kg·次',
+    kind: 'bar',
+    note: '有效已完成组外部重量×次数；存在缺失重量或次数时不计算该动作容量。不比较不同动作的能力。',
+    points: focusPoints,
+    series: [
+      { name: '本周总容量', values: focusPoints.map((p) => p.value) },
+      ...(r.strengthComparable
+        ? [
+            {
+              name: '上周总容量',
+              values: focusPoints.map((p) => {
+                const current = (r.strength || []).filter((s) => s.exercise === p.label);
+                const previous = r.strengthPrevious.filter((s) => s.exercise === p.label);
+                return p.value !== null &&
+                  current.length === previous.length &&
+                  current.every((s) => previous.some((v) => v.athleteId === s.athleteId))
+                  ? previous.reduce((n, s) => n + s.volumeKg, 0)
+                  : null;
+              }),
+            },
+          ]
+        : []),
+    ],
+  });
+  for (const [key, title, unit] of [
+    ['sleep', '睡眠', '小时'],
+    ['pulse', '晨脉', '次/分钟'],
+    ['fatigue', '疲劳', '分'],
+  ] as const)
+    charts.push({
+      id: key,
+      section: '4.1 运动员状态变化',
+      title: `${title} · 每日有效均值`,
+      unit,
+      kind: 'line',
+      note: '各日样本可能不同；缺失不填零，不作健康推断。',
+      points: r.daily.map((d) => ({
+        label: d.date.slice(5),
+        value: r.recovery?.find((v) => v.date === d.date)?.[key] ?? null,
+      })),
+    });
+  return charts.filter(
+    (c) => c.id.startsWith('strength:') || c.points.some((p) => p.value !== null)
+  );
 }

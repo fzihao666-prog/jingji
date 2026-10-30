@@ -69,7 +69,7 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
     if (!parsed.success)
       return res
         .status(400)
-        .json({ message: '请选择专项或体能报告、队伍和周次；阶段最多100字，补充最多3000字。' });
+        .json({ message: '请选择有效队伍和周次；阶段最多100字，补充最多3000字。' });
     const user = req.authUser!;
     const input = parsed.data;
     try {
@@ -140,7 +140,7 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
       // 不保留无对应事实章节的隐藏文案，避免隐藏字段占用编辑字数。
       if (!data.daily.some((day) => day.duration !== null || day.srpe !== null))
         commentary.training = '';
-      if (data.reportType !== 'physical' || !data.strength?.length) commentary.strength = '';
+      if (data.reportType === 'special' || !data.strength?.length) commentary.strength = '';
       if (
         !data.recovery?.some(
           (day) => day.sleep !== null || day.pulse !== null || day.fatigue !== null
@@ -280,6 +280,8 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
       );
       if (teamWeeklyFingerprint(report) !== parsed.data.fingerprint)
         return res.status(409).json({ message: '训练数据已变化，请重新预览报告并核对点评。' });
+      if (report.reportType === 'combined')
+        return res.status(400).json({ message: '综合周总结请保存后下载可编辑 Word。' });
       const pdf = renderTeamWeeklyPdf(report, parsed.data.commentary);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
@@ -301,9 +303,7 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
         return res.status(403).json({ message: '当前账号无权生成队伍周总结。' });
       const parsed = teamWeeklyQuerySchema.safeParse(req.query);
       if (!parsed.success)
-        return res
-          .status(400)
-          .json({ message: '请选择专项或体能报告、有效项目、队伍和周内日期；旧页面请刷新。' });
+        return res.status(400).json({ message: '请选择有效项目、队伍和周内日期。' });
       const now = Date.now();
       for (const [id, b] of buckets) if (b.reset <= now) buckets.delete(id);
       const bucket = buckets.get(user.id) || { count: 0, reset: now + 60000 };
@@ -315,6 +315,8 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
         const report = readTeamWeeklyReport(deps.db, parsed.data, deps.accessibleIds(user));
         if (format === 'preview')
           return res.json({ ...report, fingerprint: teamWeeklyFingerprint(report) });
+        if (report.reportType === 'combined')
+          return res.status(400).json({ message: '综合周总结请保存后下载可编辑 Word。' });
         const pdf = renderTeamWeeklyPdf(report);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader(
