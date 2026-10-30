@@ -263,7 +263,6 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
   const f = weeklyNumber;
   const missing = '未记录';
   const value = (n: number | null) => (n === null ? missing : f(n));
-  const old = legacySections(r);
   const planRows = (plans: CombinedTeamWeeklyReport['plans']) =>
     plans.map((p) => [
       p.date,
@@ -443,7 +442,7 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
     {
       title: '3.2 关键力量训练统计',
       paragraphs: [
-        '固定卧拉、卧推、深蹲、硬拉，不自动替换。按规范全名匹配；总容量为有效已完成组重量×次数之和；重量、次数、组数在附录分别保留。',
+        '固定卧拉、卧推、深蹲、硬拉，不自动替换。按规范全名匹配；总容量为有效已完成组重量×次数之和；容量仅作训练量参考，不作为能力评分。',
       ],
       headers: ['动作', '本周容量 / kg·次', '上周容量 / kg·次', '变化', '备注'],
       rows: strengthRows,
@@ -453,7 +452,7 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
       paragraphs: [
         '全体在册可见队员按同一动作分组展示，不截断名单、不混用不同指标排名；未知值留空。重点发现由教练结合记录说明，不自动评选重点人员。',
         ...(r.athletes.some((a) => a.data.tests.length)
-          ? ['同协议测试成绩详见附录。']
+          ? ['同协议测试成绩可在运动员档案中查看。']
           : ['本周暂无有效测试成绩。']),
       ],
     },
@@ -514,86 +513,6 @@ function combinedSections(r: CombinedTeamWeeklyReport): WeeklySection[] {
       title: '5.4 教练总结',
       paragraphs: [
         r.coachNotes || '未记录；可直接在下载的Word中补充本周判断、下周方向与需支持事项。',
-      ],
-    },
-    ...(r.plans.length
-      ? [
-          {
-            title: '附录 A｜训练计划与处方明细',
-            paragraphs: ['计划不代表实际完成；间歇保留已有原文，不补推缺失值。'],
-            headers: ['日期', '时段', '类型', '内容', '已有处方', '内容项与间歇原文', '实施确认'],
-            rows: planRows(r.plans),
-          },
-        ]
-      : []),
-    ...old
-      .filter(
-        (s) =>
-          s.rows?.length &&
-          [
-            '四、体能与专项测试',
-            '五、恢复反馈',
-            '本周新增伤病与疼痛记录',
-            '附表：队员训练记录',
-          ].includes(s.title)
-      )
-      .map((s) => ({ ...s, title: `附录 · ${s.title}` })),
-    ...(r.trainingDetails.length
-      ? [
-          {
-            title: '附录 · 全员正式训练明细',
-            paragraphs: ['恢复、混合和未分类保留原始课内容及个人累计数值，不分摊时长。'],
-            headers: ['队员', '日期', '课次序号', '范围', '训练内容', '分钟', 'km', 'SRPE / AU'],
-            rows: r.trainingDetails.map((s) => [
-              s.athleteName,
-              s.date,
-              String(s.order),
-              { special: '专项', physical: '体能', unclassified: '恢复 / 混合 / 未分类' }[
-                s.category
-              ],
-              s.content || '—',
-              f(s.duration),
-              f(s.distance),
-              f(s.srpe),
-            ]),
-          },
-        ]
-      : []),
-    ...(r.strengthDetails.length
-      ? [
-          {
-            title: '附录 · 全员力量组明细',
-            paragraphs: ['完整保留已完成和未完成组；缺失不填零。'],
-            headers: ['队员', '日期', '动作', '实际次数', '实际kg', '分钟', 'km', '备注', '完成'],
-            rows: r.strengthDetails.map((s) => [
-              s.athleteName,
-              s.date,
-              s.exercise,
-              f(s.reps),
-              f(s.weightKg),
-              f(s.durationMin),
-              f(s.distanceKm),
-              s.note || '—',
-              s.completed ? '是' : '否',
-            ]),
-          },
-        ]
-      : []),
-    ...(r.strength?.some((s) => !WEEKLY_FOCUS_EXERCISES.some((e) => e === s.exercise))
-      ? [
-          {
-            title: '附录 · 其他力量动作',
-            paragraphs: ['仅展示本周已记录动作，不自动替换正文固定动作。'],
-          },
-        ]
-      : []),
-    {
-      title: '附录 D｜数据来源、指标口径及缺失说明',
-      paragraphs: [
-        '编制人：未记录；审核人：未记录。此建议模板并非国家统一强制格式。',
-        ...r.dataNotes,
-        ...r.comparison.notes,
-        ...r.sourceNotes,
       ],
     },
   ];

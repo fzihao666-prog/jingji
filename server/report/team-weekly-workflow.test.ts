@@ -2,7 +2,6 @@ import express from 'express';
 import type { AddressInfo } from 'node:net';
 import { afterEach, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
-import sharp from 'sharp';
 import type { AuthUser } from '../core/shared-server.ts';
 import { createTeamWeeklyFixture } from './team-weekly-fixture.ts';
 import { registerTeamWeeklyRoutes } from './team-weekly-routes.ts';
@@ -115,34 +114,12 @@ it('认证、角色、项目、非法输入及等待中权限收紧仍被服务�
   expect((await s.post()).status).toBe(403);
   expect(s.renderDocx).not.toHaveBeenCalled();
 });
-it('照片随请求压缩内嵌，不需要上传ID或持久化；无效照片拒绝', async () => {
+it('删除照片附件入口后拒绝生成请求携带文件', async () => {
   const s = await setup();
-  const photo = await sharp({ create: { width: 20, height: 10, channels: 3, background: 'blue' } })
-    .png()
-    .toBuffer();
-  const form = (buffer: Uint8Array) => {
-    const value = new FormData();
-    value.set('input', JSON.stringify({ ...input, consent: false }));
-    value.append('files', new Blob([buffer as Uint8Array<ArrayBuffer>]), 'photo.png');
-    return value;
-  };
-  const response = await fetch(s.base + '/generate', {
-    method: 'POST',
-    body: form(new Uint8Array(photo)),
-  });
-  expect(response.status).toBe(200);
-  const zip = await JSZip.loadAsync(await response.arrayBuffer());
-  expect(
-    Object.keys(zip.files).filter((p) => p.startsWith('word/media/') && !zip.files[p].dir)
-  ).toHaveLength(1);
-  expect(
-    (
-      await fetch(s.base + '/generate', {
-        method: 'POST',
-        body: form(new TextEncoder().encode('invalid')),
-      })
-    ).status
-  ).toBe(400);
+  const value = new FormData();
+  value.set('input', JSON.stringify(input));
+  value.append('files', new Blob(['unused']), 'photo.png');
+  expect((await fetch(s.base + '/generate', { method: 'POST', body: value })).status).toBe(400);
 });
 it('同账号生成期间拒绝重复请求；导出期间权限收紧不发送文件', async () => {
   const s = await setup();

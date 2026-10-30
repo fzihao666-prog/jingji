@@ -115,9 +115,3 @@
   flex: 0 0 auto;
   margin-top: 6px;
 }
-
-.reports-photo-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
-  gap: 16px;
-}

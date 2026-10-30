@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Sparkles, ImagePlus, X } from 'lucide-react';
+import { FileText, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { Project, ProjectTeam } from '../types';
 import { projectLabel } from '../../shared/projects';
@@ -20,12 +20,10 @@ export function ReportsPage({ project, teamId }: Props) {
   const [stage, setStage] = useState('');
   const [coachNotes, setCoachNotes] = useState('');
   const [consent, setConsent] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const photoInputRef = useRef<HTMLInputElement>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const state = useRef({ version: 0 }).current;
   const running = useRef(false);
@@ -34,7 +32,6 @@ export function ReportsPage({ project, teamId }: Props) {
     let active = true;
     setLoading(true);
     setTeams([]);
-    setFiles([]);
     setMessage('');
     setError('');
     api
@@ -78,10 +75,12 @@ export function ReportsPage({ project, teamId }: Props) {
     setError('');
     setMessage('正在汇总数据并生成 Word，请稍候…');
     try {
-      await api.downloadWeeklyReport(
-        { query: { project, teamId: Number(selectedTeam), date }, stage, coachNotes, consent },
-        files
-      );
+      await api.downloadWeeklyReport({
+        query: { project, teamId: Number(selectedTeam), date },
+        stage,
+        coachNotes,
+        consent,
+      });
       if (current === state.version) setMessage('已开始下载，需要修改时直接编辑下载的 Word 文件。');
     } catch (e) {
       if (current === state.version) {
@@ -155,7 +154,7 @@ export function ReportsPage({ project, teamId }: Props) {
           <details className="reports-supplement">
             <summary>补充信息（选填）</summary>
             <fieldset disabled={busy} className="reports-controls">
-              <legend>本周背景与附件</legend>
+              <legend>本周背景</legend>
               <label>
                 训练阶段名称
                 <input
@@ -181,48 +180,7 @@ export function ReportsPage({ project, teamId }: Props) {
                   }}
                 />
               </label>
-              <label>
-                训练照片（选填，自动压缩）
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const chosen = Array.from(e.target.files || []);
-                    if (chosen.length > 8) {
-                      setError('每次报告最多八张照片，请减少后重试。');
-                      return;
-                    }
-                    invalidate();
-                    setFiles(chosen);
-                  }}
-                />
-              </label>
             </fieldset>
-            {files.length > 0 && (
-              <div className="reports-photo-list">
-                {files.map((file, i) => (
-                  <p key={`${file.name}:${i}`}>
-                    <ImagePlus size={16} aria-hidden="true" />
-                    {file.name}
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        invalidate();
-                        setFiles((v) => v.filter((_, j) => j !== i));
-                        photoInputRef.current?.focus();
-                      }}
-                      aria-label={`移除 ${file.name}`}
-                    >
-                      <X size={16} aria-hidden="true" />
-                    </button>
-                  </p>
-                ))}
-              </div>
-            )}
           </details>
           <label className="reports-consent">
             <input
@@ -232,7 +190,7 @@ export function ReportsPage({ project, teamId }: Props) {
               onChange={(e) => setConsent(e.target.checked)}
             />
             允许 AI
-            结合去身份化训练统计与可发送的教练训练补充起草；身份、健康信息和照片保留本地。不启用也能生成。
+            结合去身份化训练统计与可发送的教练训练补充起草；身份和健康信息不外发。不启用也能生成。
           </label>
           <div className="reports-footer">
             <p className="reports-period">

@@ -843,13 +843,13 @@ Web 队伍筛选由 App 统一维护，以 project_teams.id 联动 athletes.team
 
 ### 队伍训练周总结（2026-10）
 
-周总结是一次性下载工具：`POST /api/reports/weekly/generate` 返回标准DOCX二进制。无照片时可接收JSON；网页统一发送multipart，`input`字段为`{query:{project,teamId,date},stage?,coachNotes?,consent?}`的JSON，`files`为最多8张照片。新接口仅支持combined，不接收浏览器提交的报告事实、人工修改文案或照片ID。返回no-store、nosniff与安全attachment文件名，客户端验证DOCX MIME后下载，错误JSON/HTML不保存为Word。
+周总结是一次性下载工具：`POST /api/reports/weekly/generate` 返回标准DOCX二进制。可接收JSON；网页统一发送multipart，`input`字段为`{query:{project,teamId,date},stage?,coachNotes?,consent?}`的JSON，不接收文件附件。新接口仅支持combined，不接收浏览器提交的报告事实、人工修改文案或照片ID。返回no-store、nosniff与安全attachment文件名，客户端验证DOCX MIME后下载，错误JSON/HTML不保存为Word。
 
 同一只读事务读取授权队员、项目及自然周正式训练、力量组、测试、恢复和计划，派生整体/专项/体能/恢复及未分类统计；不将计划作为完成、不猜造缺失或混合分项。正文使用五章模型；固定四动作按同动作全员分组、同坐标续组，上周仅在可比时显示。文档封面周次为ISO日历周，生成日期用上海时区；地点、负责人、目标及调整原因缺失如实说明。
 
 AI只接收既有去身份化训练统计和允许的教练训练观察，身份健康及照片不外发。输出经结构校验，失败或非法内容使用基础文案。角色、项目/队伍/队员权限在初始读取、AI等待及文档生成后复核，事实或范围变化拒绝发送。生成全局最多2个并发、同账号不可重复并发、每分钟6次、总截止240秒，断开连接触发取消。
 
-照片随请求在内存验证JPEG/PNG/WebP、单张8MB和25MP限制，纠正方向、最长边1600、JPEG质量78、去元数据，按比例嵌入Word；请求结束后释放，不写磁盘或数据库。生成器用JSZip3.10.1（MIT，复用原锁定依赖树）和现有ExcelJS生成原生OOXML图表及内嵌工作簿，文本XML转义，不生成用户公式、外部关系或宏，生产不依赖办公软件。文档资源预算继续保留。
+周总结删除全部附录、原始明细及照片页，网页不提供照片选择，接口拒绝文件上传。仅导出五章正文及13个预设图表。生成器用JSZip3.10.1（MIT，复用原锁定依赖树）和现有ExcelJS生成原生OOXML图表及内嵌工作簿，文本XML转义，不生成用户公式、外部关系或宏，生产不依赖办公软件。文档资源预算继续保留。
 
 网页删除预览、在线文案编辑、确认及历史组件；服务端删除save、preview、commentary、pdf、history、photos接口及报告存取/上传存储代码，数据库初始化不再创建周报历史表。现存`team_weekly_reports`、`team_weekly_photos`及旧私有文件不清除也不在线读取；既有备份只为这些旧资源保留一致性复制和恢复保全，避免删除功能时损坏已有备份。个人训练报告API与存储不变。
 

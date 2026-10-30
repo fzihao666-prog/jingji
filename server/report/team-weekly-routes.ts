@@ -1,7 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Express, Request, RequestHandler } from 'express';
 import multer from 'multer';
-import sharp from 'sharp';
 import type { AuthUser } from '../core/shared-server.ts';
 import { weeklyGenerationSchema } from '../../shared/team-weekly-generation.ts';
 import { teamWeeklyCommentarySchema } from '../../shared/team-weekly-ai.ts';
@@ -31,8 +30,8 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
   const buckets = new Map<number, { count: number; reset: number }>();
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { files: 8, fileSize: 8 * 1024 * 1024, fields: 1, fieldSize: 16000, parts: 9 },
-  }).array('files', 8);
+    limits: { files: 0, fields: 1, fieldSize: 16000, parts: 1 },
+  }).none();
   app.post('/api/reports/weekly/generate', deps.requireAuth, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -85,30 +84,6 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
       const input = parsed.data;
       const report = readTeamWeeklyReport(deps.db, input.query, deps.accessibleIds(check()), input);
       const fingerprint = teamWeeklyFingerprint(report);
-      const photos: { data: Buffer; width: number; height: number }[] = [];
-      for (const file of (req.files as Express.Multer.File[] | undefined) || []) {
-        check();
-        try {
-          const decoder = sharp(file.buffer, {
-            limitInputPixels: 25_000_000,
-            animated: false,
-            failOn: 'error',
-          });
-          const metadata = await decoder.metadata();
-          if (!['jpeg', 'png', 'webp'].includes(metadata.format || '') || (metadata.pages || 1) > 1)
-            throw new Error('format');
-          const { data, info } = await decoder
-            .rotate()
-            .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 78, mozjpeg: true })
-            .toBuffer({ resolveWithObject: true });
-          photos.push({ data, width: info.width, height: info.height });
-        } catch {
-          return res
-            .status(400)
-            .json({ message: '照片须为有效JPEG、PNG或WebP，且解码尺寸不能过大。' });
-        }
-      }
       let commentary = weeklyFallbackCommentary(report);
       if (input.consent && (report.totals.sessions || weeklyObservation(report).text)) {
         try {
@@ -135,7 +110,6 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
       const file = await (deps.renderDocx || renderTeamWeeklyDocx)(
         report,
         commentary,
-        photos,
         controller.signal
       );
       assertCurrent();
@@ -148,18 +122,14 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
     } catch (error) {
       if (res.destroyed) return;
       if (error instanceof multer.MulterError)
-        return res
-          .status(400)
-          .json({ message: '最多八张照片，每张不超过8MB；请检查附件和补充内容。' });
+        return res.status(400).json({ message: '报告请求格式无效，请检查补充内容。' });
       if (error instanceof TeamWeeklyAccessError)
         return res.status(403).json({ message: error.message });
-      return res
-        .status(503)
-        .json({
-          message: controller.signal.aborted
-            ? '生成超时，请稍后重试。'
-            : '周总结生成失败，请稍后重试。',
-        });
+      return res.status(503).json({
+        message: controller.signal.aborted
+          ? '生成超时，请稍后重试。'
+          : '周总结生成失败，请稍后重试。',
+      });
     } finally {
       clearTimeout(timer);
       res.off('close', disconnect);

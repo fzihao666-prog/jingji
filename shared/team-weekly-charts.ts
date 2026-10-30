@@ -201,12 +201,7 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
       points: r.daily.map((d) => ({ label: d.date.slice(5), value: d.rpe })),
     }
   );
-  const exercises = [
-    ...WEEKLY_FOCUS_EXERCISES,
-    ...[...new Set((r.strength || []).map((s) => s.exercise))]
-      .filter((e) => !WEEKLY_FOCUS_EXERCISES.some((f) => f === e))
-      .sort(),
-  ];
+  const exercises = WEEKLY_FOCUS_EXERCISES;
   for (const exercise of exercises) {
     const current = (r.strength || []).filter((s) => s.exercise === exercise);
     const previous = r.strengthPrevious.filter((s) => s.exercise === exercise);
@@ -254,9 +249,7 @@ function combinedCharts(r: CombinedTeamWeeklyReport): WeeklyChart[] {
     const domain = values.length
       ? { min: Math.min(0, ...values), max: Math.max(1, ...values) }
       : undefined;
-    const section = WEEKLY_FOCUS_EXERCISES.some((f) => f === exercise)
-      ? '3.3 运动员表现与全员对比'
-      : '附录 · 其他力量动作';
+    const section = '3.3 运动员表现与全员对比';
     for (let start = 0; start < points.length; start += 12)
       charts.push({
         id: `strength:${exercise}:part${start / 12}`,

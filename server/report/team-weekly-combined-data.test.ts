@@ -44,9 +44,7 @@ describe('综合周总结事实快照', () => {
       expect(
         charts.find((c) => c.id.startsWith('strength:卧推:'))?.points.map((p) => p.value)
       ).toEqual([200, null]);
-      expect(charts.find((c) => c.id.startsWith('strength:卧推变式:'))?.section).toBe(
-        '附录 · 其他力量动作'
-      );
+      expect(charts.some((c) => c.id.startsWith('strength:卧推变式:'))).toBe(false);
       expect(charts.every((c) => c.points.length > 0)).toBe(true);
       expect(
         charts.filter(

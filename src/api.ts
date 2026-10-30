@@ -212,10 +212,9 @@ export const api = {
     request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
       `/api/projects/rules?${new URLSearchParams({ project })}`
     ),
-  async downloadWeeklyReport(input: WeeklyGenerationInput, files: File[] = []) {
+  async downloadWeeklyReport(input: WeeklyGenerationInput) {
     const form = new FormData();
     form.append('input', JSON.stringify(input));
-    files.forEach((file) => form.append('files', file));
     const blob = await request<Blob>('/api/reports/weekly/generate', {
       method: 'POST',
       body: form,

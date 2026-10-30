@@ -19,6 +19,7 @@ describe('综合周总结入口', () => {
     expect(html).toContain('补充信息（选填）');
     expect(html).toContain('生成并下载 Word');
     expect(html).not.toContain('历史报告');
+    expect(html).not.toContain('训练照片');
     expect(html).not.toContain('周总结预览');
     expect(html).not.toContain('保存并下载');
   });

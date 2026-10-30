@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
-import sharp from 'sharp';
 import { renderTeamWeeklyDocx } from './team-weekly-docx.ts';
 import { createTeamWeeklyFixture } from './team-weekly-fixture.ts';
 import { readTeamWeeklyReport } from './team-weekly-report.ts';
@@ -135,41 +134,18 @@ describe('原生Word周总结', () => {
     expect(groupSizes).toEqual([24, 16]);
     expect(labels).toEqual(report.athletes.map((a) => a.name));
   });
-  it('照片四张一页保持比例，空附件不出页；拒绝预算和非法照片并响应取消', async () => {
+  it('导出预算和取消仍有效', async () => {
     const report = fixture();
-    const data = await sharp({
-      create: { width: 80, height: 40, channels: 3, background: '#cccccc' },
-    })
-      .jpeg()
-      .toBuffer();
-    const archive = await JSZip.loadAsync(
-      await renderTeamWeeklyDocx(
-        report,
-        undefined,
-        Array.from({ length: 5 }, () => ({ data, width: 80, height: 40 }))
-      )
-    );
-    const document = await archive.file('word/document.xml')!.async('string');
-    expect(document.match(/附录 C｜训练照片及说明/g)).toHaveLength(2);
-    expect(document.match(/<pic:pic /g)).toHaveLength(5);
-    expect(document).toContain('cx="2788920" cy="1394460"');
     await expect(
-      renderTeamWeeklyDocx(report, undefined, [{ data: Buffer.from('bad'), width: 1, height: 1 }])
-    ).rejects.toThrow('JPEG');
-    await expect(
-      renderTeamWeeklyDocx(
-        report,
-        undefined,
-        Array.from({ length: 13 }, () => ({ data, width: 80, height: 40 }))
-      )
+      renderTeamWeeklyDocx({ ...report, coachNotes: '长'.repeat(5 * 1024 * 1024) })
     ).rejects.toThrow('预算');
     const controller = new AbortController();
     controller.abort();
-    await expect(renderTeamWeeklyDocx(report, undefined, [], controller.signal)).rejects.toThrow(
+    await expect(renderTeamWeeklyDocx(report, undefined, controller.signal)).rejects.toThrow(
       '取消'
     );
     const active = new AbortController();
-    const pending = renderTeamWeeklyDocx(report, undefined, [], active.signal);
+    const pending = renderTeamWeeklyDocx(report, undefined, active.signal);
     active.abort();
     await expect(pending).rejects.toThrow('取消');
   });
@@ -218,4 +194,32 @@ it('综合报告无数据也保留13个原生图表、全部日期/名单与空�
   const document = await zip.file('word/document.xml')!.async('string');
   expect(document).toContain('编辑数据');
   expect(document).not.toContain('不生成空图');
+});
+
+it('综合成品仅保留五章正文及13个预设图表，无附录、明细或照片', async () => {
+  const db = createTeamWeeklyFixture();
+  const report = readTeamWeeklyReport(
+    db,
+    { project: 'ROWING', teamId: 1, date: '2026-10-05', reportType: 'combined' },
+    [1, 3]
+  );
+  db.close();
+  const archive = await JSZip.loadAsync(await renderTeamWeeklyDocx(report));
+  const document = await archive.file('word/document.xml')!.async('string');
+  expect(document).not.toContain('附录');
+  expect(document).not.toContain('全员正式训练明细');
+  expect(document).not.toContain('全员力量组明细');
+  expect(document).not.toContain('训练照片');
+  for (const title of [
+    '01｜本周训练概览',
+    '02｜训练计划与执行分析',
+    '03｜重点训练内容与运动员表现',
+    '04｜训练反应、恢复与风险管理',
+    '05｜下周训练目标与调整计划',
+  ])
+    expect(document).toContain(title);
+  expect(Object.keys(archive.files).filter((p) => /charts\/chart\d+\.xml$/.test(p))).toHaveLength(
+    13
+  );
+  expect(Object.keys(archive.files).some((p) => p.startsWith('word/media/'))).toBe(false);
 });

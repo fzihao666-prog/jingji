@@ -41,7 +41,6 @@ const p = (text: string, style = 'Normal') =>
         `${i ? '<w:r><w:br/></w:r>' : ''}<w:r><w:t xml:space="preserve">${xml(v)}</w:t></w:r>`
     )
     .join('')}</w:p>`;
-const page = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
 function table(headers: string[], rows: string[][]) {
   const weights = headers.map((h) =>
     /备注|原文|已有处方|训练内容|内容项/.test(h)
@@ -119,10 +118,10 @@ function chartXml(chart: WeeklyChart) {
   const kind = chart.kind === 'line' ? 'lineChart' : 'barChart';
   return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${kind === 'barChart' ? `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>` : '<c:grouping val="standard"/>'}${body}${kind === 'barChart' ? '<c:gapWidth val="70"/>' : ''}<c:axId val="1"/><c:axId val="2"/></c:${kind}><c:catAx><c:axId val="1"/><c:scaling><c:orientation val="${horizontal ? 'maxMin' : 'minMax'}"/></c:scaling><c:axPos val="${horizontal ? 'l' : 'b'}"/><c:tickLblPos val="nextTo"/><c:txPr><a:bodyPr wrap="square"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="850"/></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr><c:crossAx val="2"/><c:crosses val="autoZero"/><c:auto val="0"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:tickLblSkip val="1"/><c:tickMarkSkip val="1"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>${chart.domain ? `<c:max val="${chart.domain.max}"/><c:min val="${chart.domain.min}"/>` : ''}</c:scaling><c:axPos val="${horizontal ? 'b' : 'l'}"/><c:majorGridlines/><c:numFmt formatCode="0.##" sourceLinked="0"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="${horizontal ? 'max' : 'autoZero'}"/></c:valAx></c:plotArea>${series.length > 1 ? '<c:legend><c:legendPos val="b"/><c:layout/></c:legend>' : ''}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="850"/></a:pPr><a:endParaRPr lang="zh-CN"/></a:p></c:txPr><c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
 }
-function drawing(id: number, rid: string, width: number, height: number, image = false) {
+function drawing(id: number, rid: string, width: number, height: number) {
   const cx = Math.round(width * 914400),
     cy = Math.round(height * 914400);
-  return `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="${image ? '训练照片' : '可编辑图表'} ${id}"/><a:graphic xmlns:a="${A}"><a:graphicData uri="${image ? 'http://schemas.openxmlformats.org/drawingml/2006/picture' : C}">${image ? `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id}" name="训练照片"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` : `<c:chart xmlns:c="${C}" r:id="${rid}"/>`}</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+  return `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="可编辑图表 ${id}"/><a:graphic xmlns:a="${A}"><a:graphicData uri="${C}"><c:chart xmlns:c="${C}" r:id="${rid}"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
 }
 const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Microsoft YaHei"/><w:sz w:val="20"/><w:lang w:val="zh-CN"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="90" w:line="260" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>${[
   ['Normal', 20],
@@ -144,7 +143,6 @@ const styles = `${decl}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:
 export async function renderTeamWeeklyDocx(
   report: TeamWeeklyReport,
   commentary?: TeamWeeklyCommentary,
-  photos: { data: Buffer; width: number; height: number }[] = [],
   signal?: AbortSignal
 ): Promise<Buffer> {
   const check = () => {
@@ -152,22 +150,8 @@ export async function renderTeamWeeklyDocx(
   };
   check();
   // 拒绝超预算输入，不通过截断队员或明细控制资源。
-  if (
-    Buffer.byteLength(JSON.stringify(report)) > 12 * 1024 * 1024 ||
-    photos.length > 8 ||
-    photos.reduce((n, v) => n + v.data.length, 0) > 24 * 1024 * 1024
-  )
-    throw new Error('报告或照片超过导出资源预算');
-  for (const photo of photos)
-    if (
-      !Number.isFinite(photo.width) ||
-      !Number.isFinite(photo.height) ||
-      photo.width <= 0 ||
-      photo.height <= 0 ||
-      photo.data[0] !== 0xff ||
-      photo.data[1] !== 0xd8
-    )
-      throw new Error('报告照片必须为已处理的JPEG');
+  if (Buffer.byteLength(JSON.stringify(report)) > 12 * 1024 * 1024)
+    throw new Error('报告超过导出资源预算');
   const zip = new JSZip();
   let relationshipsXml = rel('styles', 'styles', 'styles.xml');
   let overrides =
@@ -181,7 +165,6 @@ export async function renderTeamWeeklyDocx(
     teamWeeklyCharts(report),
     report.templateVersion === 'weekly-v3'
   ).filter((c) => c.points.length > 0);
-  const rendered = new Set<string>();
   let chartNumber = 0;
   async function appendChart(chart: WeeklyChart) {
     check();
@@ -235,14 +218,12 @@ export async function renderTeamWeeklyDocx(
       (!series.some((s) => s.values.some((v) => v !== null))
         ? p('暂无有效数据。已保留图表及完整内嵌数据表，请在图表中选择“编辑数据”补填。', 'Caption')
         : '');
-    rendered.add(chart.id);
   }
   const editGuidance =
     p('文档编辑提示', 'Heading2') +
     p(
-      '下载后的文档可自行编辑，无需回传，不自动同步系统。所有预设图表均保留；缺失数值在内嵌数据表中留空，可在图表的“编辑数据”中补填。修改图表数据不会自动改写正文、附录或其他图表，请核对相关数字与结论。'
+      '下载后的文档可自行编辑，无需回传，不自动同步系统。所有预设图表均保留；缺失数值在内嵌数据表中留空，可在图表的“编辑数据”中补填。修改图表数据不会自动改写正文、表格或其他图表，请核对相关数字与结论。'
     );
-  let guidanceAdded = false;
   async function appendCharts(items: WeeklyChart[]) {
     const grid: string[] = [];
     const notes = new Set<string>();
@@ -269,10 +250,6 @@ export async function renderTeamWeeklyDocx(
   const usedCommentary = new Set<string>();
   for (const section of teamWeeklySections(report)) {
     check();
-    if (section.title.startsWith('附录') && !guidanceAdded) {
-      body += editGuidance;
-      guidanceAdded = true;
-    }
     body += p(section.title, /^\d\.\d/.test(section.title) ? 'Heading2' : 'Heading1');
     const key =
       section.commentaryKey ||
@@ -313,7 +290,6 @@ export async function renderTeamWeeklyDocx(
     }
     await appendCharts(charts.filter((c) => c.section === section.title));
   }
-  await appendCharts(charts.filter((c) => !rendered.has(c.id)));
   for (const key of ['training', 'strength', 'recovery', 'nextWeek'] as const)
     if (commentary?.[key] && !usedCommentary.has(key))
       body +=
@@ -326,25 +302,10 @@ export async function renderTeamWeeklyDocx(
           }[key],
           'Heading2'
         ) + p(commentary[key]);
-  if (!guidanceAdded) body += editGuidance;
-  for (let i = 0; i < photos.length; i += 4) {
-    body += page + p('附录 C｜训练照片及说明', 'Heading1');
-    const cells: string[] = [];
-    for (let j = i; j < Math.min(i + 4, photos.length); j++) {
-      const photo = photos[j]!;
-      const scale = Math.min(3.05 / photo.width, 3.2 / photo.height);
-      zip.file(`word/media/photo${j}.jpg`, photo.data);
-      relationshipsXml += rel(`photo${j}`, 'image', `media/photo${j}.jpg`);
-      cells.push(
-        `<w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/></w:tcPr>${drawing(1000 + j, `photo${j}`, photo.width * scale, photo.height * scale, true)}${p(`照片 ${j + 1}`, 'Caption')}</w:tc>`
-      );
-    }
-    if (cells.length % 2) cells.push(`<w:tc>${p('')}</w:tc>`);
-    body += `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/></w:tblGrid>${Array.from({ length: cells.length / 2 }, (_, k) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cells.slice(k * 2, k * 2 + 2).join('')}</w:tr>`).join('')}</w:tbl>`;
-  }
+  body += editGuidance;
   zip.file(
     '[Content_Types].xml',
-    `${decl}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/><Default Extension="jpg" ContentType="image/jpeg"/>${overrides}</Types>`
+    `${decl}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>${overrides}</Types>`
   );
   zip.file('_rels/.rels', relationships(rel('document', 'officeDocument', 'word/document.xml')));
   zip.file('word/_rels/document.xml.rels', relationships(relationshipsXml));
