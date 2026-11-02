@@ -237,7 +237,10 @@ it('统一数据模板预填与分用途模板一致，预填空行不入库且�
   const download = async (kind: string) => {
     const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING`, { headers: { authorization: `Bearer ${token}` } });
     expect(response.status).toBe(200);
-    return XLSX.read(Buffer.from(await response.arrayBuffer()), { type: 'buffer' });
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const styled = XLSX.read(bytes, {type:'buffer',cellStyles:true});
+    for(const name of ['运动员基本资料','训练课次']) if(styled.Sheets[name]) expect(styled.Sheets[name]['!cols']?.[0]?.hidden).toBe(true);
+    return XLSX.read(bytes, {type:'buffer'});
   };
   const rowsOf = (book: ReturnType<typeof XLSX.read>, sheetName: string) =>
     XLSX.utils.sheet_to_json(book.Sheets[sheetName], { header: 1 }) as unknown[][];

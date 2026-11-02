@@ -14,7 +14,7 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[] } = {}) {
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; includeAthleteId?: boolean } = {}) {
   const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook();
   workbook.creator = '竞迹训练监控系统';
   const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
@@ -26,7 +26,7 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
         const rules = options.project ? projectRules(options.project) : null;
         if (name === '训练课次' && field.key === '训练活动' && rules) return { ...field, choices: rules.activities.map(activity => ACTIVITY_LABELS[activity]) };
         return field;
-      }), name === '其他测试' ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。' : IMPORT_SHEET_NOTES[name]);
+      }), name === '其他测试' ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。' : IMPORT_SHEET_NOTES[name], {includeAthleteId: options.includeAthleteId});
       continue;
     }
     const sheet = workbook.addWorksheet(name, {
@@ -48,6 +48,7 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
     sheet.getRow(3).height = 32;
     headers.forEach((header, index) => {
       const column = sheet.getColumn(index + 1);
+      column.hidden = header === '系统运动员编号';
       column.width = /备注|协议|内容|地址/.test(header)
         ? 28
         : /日期|编号|姓名|队伍|项目/.test(header)

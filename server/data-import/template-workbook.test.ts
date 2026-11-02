@@ -24,8 +24,8 @@ describe('简化导入模板', () => {
     expect(loaded.getWorksheet('填写说明')!.getCell('B1').value).toBe(IMPORT_TEMPLATE_VERSION);
     for (const [name, original] of UNIFIED_IMPORT_HEADERS) {
       const sheet = loaded.getWorksheet(name)!;
-      const fields = importTemplateFields(name);
-      expect(fields.map((field) => field.key).sort()).toEqual(original.filter(key => name !== '其他测试' || !['指标代码', '单位'].includes(key)).sort());
+      const fields = importTemplateFields(name).filter(field=>field.key!=='系统运动员编号');
+      expect(fields.map((field) => field.key).sort()).toEqual(original.filter(key => key !== '系统运动员编号' && (name !== '其他测试' || !['指标代码', '单位'].includes(key))).sort());
       fields.forEach((field, index) => {
         const cell = sheet.getCell(3, index + 1);
         expect(templateHeaderKey(String(cell.value))).toBe(field.key);
@@ -91,7 +91,7 @@ it('评估协议保留表头通俗解释，不弹出提示或批注', () => {
   const workbook = buildImportWorkbook(['竞技评估']);
   const sheet = workbook.getWorksheet('竞技评估')!;
   const column =
-    importTemplateFields('竞技评估').findIndex((field) => field.key === '评估协议') + 1;
+    importTemplateFields('竞技评估').filter(field=>field.key!=='系统运动员编号').findIndex((field) => field.key === '评估协议') + 1;
   const header = String(sheet.getCell(3, column).value);
   expect(header).toContain('一般耐力/核心力量评分');
   expect(header).toContain('评分标准');
@@ -114,7 +114,7 @@ it('条件必填显示具体条件，编号和课次不只标注术语', () => {
 it('教练其他测试模板选择中文项目，不出现内部代码或单位填写列', () => {
   const workbook = buildImportWorkbook(['其他测试']);
   const sheet = workbook.getWorksheet('其他测试')!;
-  const fields = importTemplateFields('其他测试');
+  const fields = importTemplateFields('其他测试').filter(field=>field.key!=='系统运动员编号');
   const keys = fields.map(field => field.key);
   expect(keys).not.toContain('指标代码');
   expect(keys).not.toContain('单位');
@@ -141,7 +141,7 @@ it('所有固定枚举使用可见下拉，长选项使用命名区域，保存�
     每日恢复: ['状态'],
   };
   for (const [name, keys] of Object.entries(expected)) {
-    const fields = importTemplateFields(name);
+    const fields = importTemplateFields(name).filter(field=>field.key!=='系统运动员编号');
     for (const key of keys) {
       const column = fields.findIndex(field => field.key === key) + 1;
       const validation = loaded.getWorksheet(name)!.getCell(4, column).dataValidation;
@@ -151,7 +151,7 @@ it('所有固定枚举使用可见下拉，长选项使用命名区域，保存�
       expect(String(validation.formulae?.[0]).length).toBeLessThanOrEqual(255);
     }
   }
-  const intensityColumn = importTemplateFields('力量训练组次').findIndex(field=>field.key==='强度区间')+1;
+  const intensityColumn = importTemplateFields('力量训练组次').filter(field=>field.key!=='系统运动员编号').findIndex(field=>field.key==='强度区间')+1;
   expect(loaded.getWorksheet('力量训练组次')!.getCell(4,intensityColumn).dataValidation.type).not.toBe('list');
   for (const name of ['项目', '性别组别', '上午/下午']) {
     const fields = importTemplateFields('专项训练成绩');
@@ -165,7 +165,7 @@ it.each(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRAC
   const rules = projectRules(project)!;
   expect(rules).toBeTruthy();
   const workbook = buildImportWorkbook(undefined, { project });
-  const fields = importTemplateFields('训练课次');
+  const fields = importTemplateFields('训练课次').filter(field=>field.key!=='系统运动员编号');
   const index = fields.findIndex(field => field.key === '训练活动') + 1;
   const sheet = workbook.getWorksheet('训练课次')!;
   const formula = String(sheet.getCell(4, index).dataValidation.formulae?.[0]);
@@ -198,5 +198,19 @@ it('所有模板按业务表、填写说明、数据字典排列，保存重开�
     expect(names.indexOf('填写说明')).toBe(dictionary>=0 ? dictionary-1 : names.length-1);
     expect(reloaded.getWorksheet('填写说明')!.getCell('A1').value).toBeTruthy();
     if(book.definedNames.model.some(name=>name.name===IMPORT_TEMPLATE_VERSION_NAME)) expect(reloaded.definedNames.model.some(name=>name.name===IMPORT_TEMPLATE_VERSION_NAME)).toBe(true);
+  }
+});
+
+it('空白模板没有编号列，预填模板编号保留并隐藏且保存重开后不丢失',async () => {
+  for(const includeAthleteId of [false,true]) {
+    const book=buildImportWorkbook(['运动员基本资料'],{includeAthleteId});
+    const sheet=book.getWorksheet('运动员基本资料')!;
+    const headers=(sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(v=>templateHeaderKey(String(v)));
+    expect(headers.includes('系统运动员编号')).toBe(includeAthleteId);
+    if(includeAthleteId) {sheet.getCell(4,1).value=123;sheet.getCell(4,2).value='合成队员';}
+    const loaded=new ExcelJS.Workbook();await loaded.xlsx.load(await book.xlsx.writeBuffer());
+    const result=loaded.getWorksheet('运动员基本资料')!;
+    if(includeAthleteId) {expect(result.getColumn(1).hidden).toBe(true);expect(result.getCell(4,1).value).toBe(123);expect(result.getCell(4,2).value).toBe('合成队员');}
+    else expect(templateHeaderKey(String(result.getCell(3,1).value))).toBe('姓名');
   }
 });

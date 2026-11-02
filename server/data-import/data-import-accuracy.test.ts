@@ -1044,7 +1044,7 @@ it('实际统一模板保留三行表头及未填写工作表后能够往返导�
   });
   XLSX.utils.sheet_add_aoa(
     workbook.Sheets['训练课次'],
-    [{ 系统运动员编号: 1, 姓名: '张某', 日期: '2025-09-05', 课次序号: 1, 时长分钟: 60 }, { 系统运动员编号: 2, 姓名: '赵某' }].map(values => importTemplateFields('训练课次').map(field => values[field.key as keyof typeof values] ?? null)),
+    [{ 系统运动员编号: 1, 姓名: '张某', 日期: '2025-09-05', 课次序号: 1, 时长分钟: 60 }, { 系统运动员编号: 2, 姓名: '赵某' }].map(values => importTemplateFields('训练课次').filter(field=>field.key!=='系统运动员编号').map(field => values[field.key as keyof typeof values] ?? null)),
     { origin: 'A4' }
   );
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
@@ -1059,7 +1059,7 @@ it('实际统一模板保留三行表头及未填写工作表后能够往返导�
   });
   expect(batch.errorCount).toBe(0);
   expect(batch.items).toHaveLength(1);
-  expect(batch.items[0].sourceAddress).toBe('B4');
+  expect(batch.items[0].sourceAddress).toBe('A4');
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
 });
 
@@ -1289,8 +1289,8 @@ describe('统一模板按业务归属整理', () => {
     expect(workbook.SheetNames).not.toContain('竞技水平评估');
     for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
       const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as unknown[][];
-      expect(rows[2].map(value => templateHeaderKey(String(value)))).toEqual(importTemplateFields(name).map(field => field.key));
-      expect(rows[2].map(value => templateHeaderKey(String(value))).sort()).toEqual(headers.filter(key => name !== '其他测试' || !['指标代码', '单位'].includes(key)).sort());
+      expect(rows[2].map(value => templateHeaderKey(String(value)))).toEqual(importTemplateFields(name).filter(field=>field.key!=='系统运动员编号').map(field => field.key));
+      expect(rows[2].map(value => templateHeaderKey(String(value))).sort()).toEqual(headers.filter(key => key !== '系统运动员编号' && (name !== '其他测试' || !['指标代码', '单位'].includes(key))).sort());
     }
   });
 });
@@ -2098,7 +2098,7 @@ describe('简化模板的填写契约', () => {
   async function simplified(name: string, values: Record<string, unknown>, options: Partial<Parameters<typeof analyzeDataImport>[0]> = {}) {
     const { buildImportWorkbook } = await import('./template-workbook.ts');
     const { templateHeaderKey } = await import('../../shared/import-template-fields.ts');
-    const workbook = buildImportWorkbook([name]);
+    const workbook = buildImportWorkbook([name],{includeAthleteId: Boolean(values['系统运动员编号'])});
     const sheet = workbook.getWorksheet(name)!;
     sheet.getRow(3).eachCell((cell, column) => {
       const key = templateHeaderKey(String(cell.value));
@@ -2139,7 +2139,7 @@ describe('简化模板的填写契约', () => {
   });
   it('装饰表头与业务列重排后仍按字段名解析', async () => {
     const { buildImportWorkbook } = await import('./template-workbook.ts');
-    const workbook = buildImportWorkbook(['训练课次']);
+    const workbook = buildImportWorkbook(['训练课次'],{includeAthleteId:true});
     const sheet = workbook.getWorksheet('训练课次')!;
     const fields = importTemplateFields('训练课次');
     const data: Record<string, string | number> = { 系统运动员编号: 1, 日期: '2026-10-01', 时长分钟: 60, RPE: 6 };

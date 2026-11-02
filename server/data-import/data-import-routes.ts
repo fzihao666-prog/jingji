@@ -83,7 +83,7 @@ export function buildPurposeTemplate(
   metrics?: readonly ImportMetricDefinition[]
 ) {
   const sheetNames = kind === 'unified' ? UNIFIED_IMPORT_HEADERS.map(([name]) => name) : PURPOSE_SHEETS[kind];
-  const workbook = buildImportWorkbook(sheetNames, { metrics, project });
+  const workbook = buildImportWorkbook(sheetNames, { metrics, project, includeAthleteId: athletes.length > 0 });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));

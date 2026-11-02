@@ -44,8 +44,10 @@ export function addTemplateSheet(
   workbook: ExcelJS.Workbook,
   name: string,
   fields: ImportTemplateField[],
-  note: string
+  note: string,
+  options: { includeAthleteId?: boolean } = {}
 ): ExcelJS.Worksheet {
+  fields = fields.filter(field => field.key !== '系统运动员编号' || options.includeAthleteId);
   const sheet = workbook.addWorksheet(name, {
     views: [{ state: 'frozen', ySplit: 3, xSplit: fields[0]?.key === '系统运动员编号' ? 2 : 1 }],
   });
@@ -56,12 +58,13 @@ export function addTemplateSheet(
   sheet.getRow(1).height = 30;
   sheet.mergeCells(2, 1, 2, fields.length);
   sheet.getCell('A2').value =
-    `${note} 必填项在前，选填项在后；所有数据列直接显示，按需填写。填写要求见表头。`;
+    `${note} 必填项在前，选填项在后；业务数据列直接显示，按需填写。填写要求见表头。`;
   sheet.getCell('A2').alignment = { wrapText: true, vertical: 'middle' };
   sheet.getRow(2).height = 48;
   sheet.getRow(3).height = 82;
   fields.forEach((field, index) => {
     const column = sheet.getColumn(index + 1);
+    column.hidden = field.key === '系统运动员编号';
     column.width = /备注|协议|内容|地址|姓名|组合/.test(field.key) ? 28 : 22;
     if (/日期/.test(field.key)) column.numFmt = 'yyyy-mm-dd';
     if (/编号|手机|电话/.test(field.key)) column.numFmt = '@';
