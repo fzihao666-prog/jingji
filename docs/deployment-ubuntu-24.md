@@ -301,6 +301,12 @@ node scripts/check-static-delivery.mjs https://jingjity.xin/
 
 阿里云个人测试证书无法自动续期；到期前在控制台重新申请、下载并替换 `.pem` 和 `.key`，再执行 `nginx -t && systemctl reload nginx`。同一域名由多台服务器提供服务时，必须在每台服务器上分别安装证书及私钥。
 
+### 5.1 登录真实 IP 与 Docker 网关
+
+应用通过 `server/core/trusted-proxy.ts` 仅信任回环来源及当前生产 Docker 网关 `172.18.0.1` 的直接一跳。保留 Nginx 的 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`，不要改为信任所有转发来源或开放公网 8787。
+
+该修复随应用镜像发布，无需修改 Compose 或 Nginx。发布后分别使用两个不同公网出口（例如 Wi-Fi 与手机流量）发起请求，核对应用请求日志中的 `ip` 已是对应客户端 IP，而非 Docker 网关。同一公网出口的用户仍共享 IP 限流。重建 Docker 网络时先核对实际网关；若改变，需同步精确受信任地址、重新测试和发布，不能扩大为整个私网。
+
 ## 6. 日常更新与回滚
 
 每次更新都在 Mac 先构建推送，再在服务器切换标签；绝不在 ECS 使用 `docker compose build`。

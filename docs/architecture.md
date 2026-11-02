@@ -75,7 +75,7 @@ Express :8787
 3. 存在 `dist/` 时由 Express 托管静态资源；
 4. 非 API 路径回退到 `dist/index.html`，支持单页应用刷新。
 
-生产环境中 Express 默认只监听 `127.0.0.1:8787`，由同机 Nginx 在 HTTPS 域名上统一接入。仓库提供不含真实配置的 `deploy/nginx/jingji.conf.example`：它将 `/api/`、`/uploads/` 与 SPA 静态资源代理到同一 Express 进程，并传递 `Host` 与 `X-Forwarded-*` 头。Nginx 是唯一受信任的本机反向代理；应用仅信任回环来源的转发头，公网不得开放 8787。
+生产环境中 Express 默认只监听 `127.0.0.1:8787`，由同机 Nginx 在 HTTPS 域名上统一接入。仓库提供不含真实配置的 `deploy/nginx/jingji.conf.example`：它将 `/api/`、`/uploads/` 与 SPA 静态资源代理到同一 Express 进程，并传递 `Host` 与 `X-Forwarded-*` 头。Nginx 是唯一受信任的本机反向代理；应用仅信任直接连接的一跳，来源限于回环地址及当前生产 Docker 网关 `172.18.0.1`，不信任其他容器、整个内网网段或转发头内的额外代理。Nginx 将客户端实际 IP 追加到 `X-Forwarded-For`，应用按该 IP 执行登录限流，避免所有用户共用 Docker 网关的次数。公网不得开放 8787；重建 Docker 网络后若网关变化，须核对日志并同步 `server/core/trusted-proxy.ts` 的精确地址。
 
 Docker 部署时，`compose.yaml` 显式覆盖 `HOST=0.0.0.0` 与 `PORT=8787`，让容器网卡接收 Docker 转发；宿主机发布端口仍限制为 `127.0.0.1:8787`。容器内部和宿主机发布检查均访问 `/health`，验证服务与数据库可用；内部健康不代表宿主机端口转发可用。Compose 配置须单独同步到服务器。
 

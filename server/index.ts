@@ -6,6 +6,7 @@ import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { db } from './core/db.ts';
+import { configureTrustedProxy } from './core/trusted-proxy.ts';
 import {
   beijingDate,
   dailyTodoQuery,
@@ -60,8 +61,8 @@ try {
 }
 
 const app = express();
-// 生产环境仅允许本机 Nginx 作为受信任的转发代理，防止公网客户端伪造 X-Forwarded-For。
-app.set('trust proxy', 'loopback');
+// 仅信任本机 Nginx 的直接连接，兼容 Docker 网关转发。
+configureTrustedProxy(app);
 app.disable('x-powered-by');
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');

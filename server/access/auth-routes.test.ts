@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import type { Server } from 'node:http';
 import { passwordPool, PasswordPoolError } from '../core/password-pool.ts';
 import { LOGIN_ERROR_MESSAGES } from '../../shared/login-errors.ts';
+import { configureTrustedProxy } from '../core/trusted-proxy.ts';
 
 const fixture = vi.hoisted(() => {
   return { db: null as DatabaseSync | null };
@@ -68,7 +69,7 @@ beforeAll(async () => {
   `);
   const { registerAuthRoutes } = await import('./auth-routes.ts');
   const app = express();
-  app.set('trust proxy', 'loopback');
+  configureTrustedProxy(app);
   app.use(express.json());
   registerAuthRoutes(app, {
     hash: async (password) => {
@@ -435,4 +436,21 @@ it('教练自动开通失败时回滚账号和权限，保留待审核申请', a
   } finally {
     db.exec('DROP TRIGGER fail_coach_profile');
   }
+});
+
+it('不同客户端独立限流，伪造转发头前缀不能绕过限制', async () => {
+  async function attempt(forwarded: string) {
+    return fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded },
+      body: JSON.stringify({ username: '', password: '' }),
+    });
+  }
+  for (let index = 0; index < 12; index += 1) {
+    expect((await attempt('198.51.100.31')).status).toBe(400);
+  }
+  expect((await attempt('198.51.100.31')).status).toBe(429);
+  expect((await attempt('203.0.113.32')).status).toBe(400);
+  expect((await attempt('203.0.113.99, 198.51.100.31')).status).toBe(429);
+  expect((await attempt('127.0.0.1, 198.51.100.31')).status).toBe(429);
 });
