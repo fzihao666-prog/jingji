@@ -71,7 +71,9 @@ export function importFieldGuidance(key: string): ImportFieldGuidance | undefine
 
 export function importFieldFillCondition(sheet: string, key: string): string | undefined {
   if (['姓名', '运动员'].includes(key)) return '没有系统编号，或新建人员时填写';
-  if (['运动项目', '项目', '所属队伍', '队伍'].includes(key)) return '未由当前项目、队伍预填时填写';
+  if (key === '运动项目') return undefined;
+  if (key === '项目') return '未由当前项目、队伍预填时填写';
+  if (['所属队伍', '队伍'].includes(key)) return '新建人员或无法由已有档案确定时填写';
   if (['日期', '测量日期', '测试日期', '发生日期', '评估日期', '训练日期'].includes(key))
     return '上传时未选统一日期，就在本列填日期';
   if (['课次序号', '训练场次'].includes(key)) return '同一人同一天有多次训练时填写';

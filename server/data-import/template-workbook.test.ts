@@ -132,7 +132,7 @@ it('所有固定枚举使用可见下拉，长选项使用命名区域，保存�
   const loaded = new ExcelJS.Workbook();
   await loaded.xlsx.load(await workbook.xlsx.writeBuffer());
   const expected: Record<string, string[]> = {
-    运动员基本资料: ['性别', '血型', '技术等级', '运动项目'],
+    运动员基本资料: ['性别', '血型', '技术等级'],
     力量训练组次: ['类别', '身体部位', '训练环境', '完成状态'],
     伤病记录: ['状态', '侧别'],
     竞技评估: ['等级'],
@@ -173,4 +173,15 @@ it.each(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRAC
   expect(fields.some(field => field.key === '艇型')).toBe(false);
   expect(fields.find(field => field.key === '距离千米')?.requirement).toBe('条件必填');
   expect(sheet.getRow(4).actualCellCount).toBe(0);
+});
+
+it('运动员模板不重复填写项目，保留姓名与所属队伍及自动带入说明', () => {
+  const fields=importTemplateFields('运动员基本资料');
+  expect(fields.map(field=>field.key)).not.toContain('运动项目');
+  expect(fields.map(field=>field.key)).toContain('所属队伍');
+  const workbook=buildImportWorkbook(['运动员基本资料']);
+  const sheet=workbook.getWorksheet('运动员基本资料')!;
+  const headers=Array.from({length:sheet.columnCount},(_,i)=>String(sheet.getCell(3,i+1).value || '').split('\n')[0]);
+  expect(headers).not.toContain('运动项目');
+  expect(headers).toContain('所属队伍');
 });

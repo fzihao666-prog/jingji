@@ -87,7 +87,7 @@ const blankForm: AthleteForm = {
   bestResult: '',
   nativePlace: '',
   homeAddress: '',
-  project: '赛艇',
+  project: '',
   team: '',
   region: '',
   city: '',
@@ -234,9 +234,8 @@ export function AthleteManagementPage({
     () => teams.filter((team) => !projectFilter || team.project === projectFilter),
     [teams, projectFilter]
   );
-  const formTeams = useMemo(
-    () => teams.filter((team) => team.project === form.project),
-    [teams, form.project]
+  const selectedFormTeam = teams.find(
+    (team) => team.name === form.team && team.project === form.project
   );
   const events = useMemo(
     () => [...new Set(athletes.map((athlete) => athlete.currentEvent).filter(Boolean))],
@@ -339,11 +338,14 @@ export function AthleteManagementPage({
 
   const openCreate = () => {
     const first = athletes[0];
+    const initialTeam =
+      teams.find((team) => team.project === first?.project && team.name === first?.team) ||
+      (teams.length === 1 ? teams[0] : undefined);
     setEditingAthlete(null);
     setForm({
       ...blankForm,
-      project: first?.project || '赛艇',
-      team: first?.team || '',
+      project: initialTeam?.project || '',
+      team: initialTeam?.name || '',
       region: first?.region || '',
       city: first?.city || '',
       county: first?.county || '',
@@ -374,9 +376,11 @@ export function AthleteManagementPage({
     setSaving(true);
     setMessage('');
     try {
+      if (!selectedFormTeam) throw new Error('请选择有效的所属队伍。');
+      const payload = { ...form, project: selectedFormTeam.project, team: selectedFormTeam.name };
       let athleteId = editingAthlete?.id || 0;
-      if (editingAthlete) await api.updateAthlete(editingAthlete.id, form);
-      else athleteId = (await api.createAthlete(form)).id;
+      if (editingAthlete) await api.updateAthlete(editingAthlete.id, payload);
+      else athleteId = (await api.createAthlete(payload)).id;
       if (photoFile) await api.uploadAthletePhoto(athleteId, photoFile);
       await load();
       onChanged();
@@ -1171,36 +1175,29 @@ export function AthleteManagementPage({
                     </h3>
                     <div className="athlete-form-grid">
                       <label>
-                        <span>运动项目*</span>
-                        <select
-                          value={form.project}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              project: event.target.value,
-                              team: '',
-                            })
-                          }
-                        >
-                          {PROJECTS.map((project) => (
-                            <option key={project} value={project}>
-                              {projectLabel(project)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
                         <span>所属队伍*</span>
                         <select
-                          value={form.team}
-                          onChange={(event) => setForm({ ...form, team: event.target.value })}
+                          value={selectedFormTeam?.id || ''}
+                          onChange={(event) => {
+                            const team = teams.find(
+                              (team) => team.id === Number(event.target.value)
+                            );
+                            setForm({
+                              ...form,
+                              team: team?.name || '',
+                              project: team?.project || '',
+                            });
+                          }}
                           required
                         >
                           <option value="">请选择队伍</option>
-                          {formTeams.map((team) => (
-                            <option key={team.id}>{team.name}</option>
+                          {teams.map((team) => (
+                            <option key={team.id} value={team.id}>
+                              {team.name}（{projectLabel(team.project)}）
+                            </option>
                           ))}
                         </select>
+                        <small>运动项目由所属队伍自动确定，无需填写。</small>
                       </label>
                       <label>
                         <span>负责教练</span>

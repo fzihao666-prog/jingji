@@ -46,7 +46,6 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
     profileRows.map((row) => [
       row.id,
       row.name,
-      row.project,
       row.team,
       row.gender,
       row.birth_date,

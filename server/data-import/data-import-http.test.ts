@@ -251,7 +251,7 @@ it('统一数据模板预填与分用途模板一致，预填空行不入库且�
   const unified = await download('unified');
   for (const sheetName of ['运动员基本资料', '身体测量', '体能测试', 'FMS测试', '训练课次', '力量训练组次', '每日恢复', '伤病记录', '竞技评估', '其他测试'])
     expect(athleteIdentity(rowsOf(unified, sheetName)).name, sheetName).toBe('虚构队员');
-  expect(athleteIdentity(rowsOf(unified, '运动员基本资料'))).toEqual({ code: 701, name: '虚构队员', team: 'HTTP甲队', project: 'ROWING' });
+  expect(athleteIdentity(rowsOf(unified, '运动员基本资料'))).toEqual({ code: 701, name: '虚构队员', team: 'HTTP甲队', project: null });
   expect(athleteIdentity(rowsOf(unified, '运动员基本资料'))).toEqual(athleteIdentity(rowsOf(await download('profile'), '运动员基本资料')));
   expect(athleteIdentity(rowsOf(unified, '训练课次'))).toEqual(athleteIdentity(rowsOf(await download('training'), '训练课次')));
 

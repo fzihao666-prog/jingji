@@ -47,7 +47,6 @@ const commonColumns: Record<string, string[]> = {
   运动员基本资料: [
     '系统运动员编号',
     '姓名',
-    '运动项目',
     '所属队伍',
     '性别',
     '出生日期',
@@ -427,13 +426,17 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
     let fieldChoices = key === '训练类型' && sheet === '训练课次' ? undefined : choices[key];
     if (key === '系统运动员编号') {
       requirement = '系统预填';
-      hint = '已有人员编号优先定位，不可自行编造；无编号时按姓名、项目和队伍确认。';
+      hint = '已有人员编号优先定位，不可自行编造；无编号时按当前项目下的姓名和所属队伍确认。';
     }
     if (['姓名', '运动员'].includes(key)) {
       requirement = '条件必填';
       hint = '无有效系统编号或新建人员时必填；已有人员预填供核对。';
     }
-    if (['所属队伍', '队伍', '运动项目', '项目'].includes(key)) {
+    if (key === '运动项目') {
+      requirement = '系统预填';
+      hint = '项目由所属队伍和当前导入范围确定，无需重复填写。';
+    }
+    if (['所属队伍', '队伍', '项目'].includes(key)) {
       requirement = '条件必填';
       hint = '使用已明确的授权项目、队伍；可由上下文预填，不得跨项目或通过导入调队。';
     }
