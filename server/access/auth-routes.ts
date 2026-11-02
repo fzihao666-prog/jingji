@@ -331,10 +331,13 @@ export function registerAuthRoutes(
         registrationId = Number(insertResult.lastInsertRowid);
       }
 
-      if (!registrationApprovalEnabled() && requestedRole === 'ATL') {
+      if (!registrationApprovalEnabled()) {
         const activation = activateRegistrationRequest(registrationId, null);
         if (activation.ok) {
-          return res.status(201).json({ message: '注册成功，可登录；入队归属待管理员核实。', status: 'approved' });
+          return res.status(201).json({
+            message: requestedRole === 'ATL' ? '注册成功，可登录；入队归属待管理员核实。' : '注册成功，可登录。',
+            status: 'approved',
+          });
         }
         return res
           .status(activation.status)

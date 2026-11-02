@@ -62,6 +62,7 @@ beforeAll(async () => {
     CREATE TABLE user_project_permissions (user_id INTEGER,project TEXT,granted_by INTEGER);
     CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY,parent_user_id INTEGER,account_code TEXT);
+    CREATE TABLE coach_profiles (user_id INTEGER PRIMARY KEY, category TEXT);
     CREATE TABLE audit_logs (user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,detail TEXT);
     CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT);
   `);
@@ -93,7 +94,7 @@ beforeEach(() => {
   afterCompare = undefined;
   passwordFailure = undefined;
   db.exec(
-    'DELETE FROM users; DELETE FROM registration_requests; DELETE FROM athletes; DELETE FROM app_metadata; DELETE FROM athlete_origins; DELETE FROM athlete_profiles; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;'
+    'DELETE FROM coach_profiles; DELETE FROM users; DELETE FROM registration_requests; DELETE FROM athletes; DELETE FROM app_metadata; DELETE FROM athlete_origins; DELETE FROM athlete_profiles; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;'
   );
   const passwordHash = bcrypt.hashSync(correctPassword, 4);
   const insertUser = db.prepare(
@@ -365,11 +366,29 @@ it('关闭审核时已有档案冲突明确返回错误，申请保留待人工�
   ).toEqual({ status: 'pending' });
 });
 
-it('关闭审核时教练申请仍保持待审核', async () => {
+it.each(['SCC', 'coach'])('关闭审核时教练申请自动开通并可登录，权限限于申请项目队伍：%s', async (role) => {
   db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
-  const response = await registerInput({ ...registrationInput, role: 'SCC' });
+  const response = await registerInput({ ...registrationInput, role });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'approved', message: '注册成功，可登录。' });
+  const result = await login(registrationInput.username, correctPassword);
+  expect(result.status).toBe(200);
+  const user = db.prepare('SELECT id,role,athlete_id FROM users WHERE username=?').get(registrationInput.username);
+  expect(user).toMatchObject({ role: 'SCC', athlete_id: null });
+  expect(db.prepare('SELECT user_id FROM coach_profiles').get()).toEqual({ user_id: user?.id });
+  expect(db.prepare('SELECT project FROM user_project_permissions').all()).toEqual([{ project: 'ROWING' }]);
+  expect(db.prepare('SELECT project,team FROM user_team_permissions').all()).toEqual([{ project: 'ROWING', team: '测试队伍' }]);
+  expect(db.prepare('SELECT id FROM athletes').all()).toEqual([]);
+  expect(db.prepare('SELECT status,reviewed_by FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ status: 'approved', reviewed_by: null });
+  expect(db.prepare('SELECT action FROM audit_logs').all()).toEqual([{ action: 'AUTO_APPROVE_REGISTRATION' }]);
+});
+
+it.each(['ATL', 'SCC'])('开启审核时注册保持待审核且不能登录：%s', async (role) => {
+  const response = await registerInput({ ...registrationInput, role });
   expect(response.status).toBe(201);
   expect(await response.json()).toMatchObject({ status: 'pending' });
+  expect(db.prepare('SELECT id FROM users WHERE username=?').get(registrationInput.username)).toBeUndefined();
+  expect((await login(registrationInput.username, correctPassword)).body.code).toBe('ACCOUNT_PENDING');
 });
 
 it('关闭审核时运动员账号可登录，但入队来源保持待核实且归属为推测', async () => {
@@ -389,4 +408,31 @@ it('关闭审核时运动员账号可登录，但入队来源保持待核实且�
   });
   const result = await login(registrationInput.username, correctPassword);
   expect(result.status).toBe(200);
+});
+
+it.each([
+  { project: 'CANOE', team: '测试队伍' },
+  { project: 'ROWING', team: '不存在的队伍' },
+])('关闭审核时教练仍不能注册到无效项目队伍：%j', async (scope) => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'SCC', ...scope });
+  expect(response.status).toBe(400);
+  expect(db.prepare('SELECT id FROM users WHERE username=?').get(registrationInput.username)).toBeUndefined();
+  expect(db.prepare('SELECT id FROM registration_requests WHERE username=?').get(registrationInput.username)).toBeUndefined();
+});
+
+it('教练自动开通失败时回滚账号和权限，保留待审核申请', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  db.exec("CREATE TRIGGER fail_coach_profile BEFORE INSERT ON coach_profiles BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+  try {
+    const response = await registerInput({ ...registrationInput, role: 'SCC' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ status: 'pending' });
+    expect(db.prepare('SELECT id FROM users WHERE username=?').get(registrationInput.username)).toBeUndefined();
+    expect(db.prepare('SELECT user_id FROM user_team_permissions').all()).toEqual([]);
+    expect(db.prepare('SELECT action FROM audit_logs').all()).toEqual([]);
+    expect(db.prepare('SELECT status FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ status: 'pending' });
+  } finally {
+    db.exec('DROP TRIGGER fail_coach_profile');
+  }
 });

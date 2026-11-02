@@ -84,7 +84,7 @@ export function AccountsPage() {
     try {
       const result = await api.setRegistrationApproval(!approvalEnabled);
       setApprovalEnabled(result.enabled);
-      setMessage(result.enabled ? '注册审核已开启，新注册进入待审核。' : '注册审核已关闭，运动员可自动开通但入队待核实；教练仍需审核。');
+      setMessage(result.enabled ? '注册审核已开启，新注册进入待审核。' : '注册审核已关闭，运动员和教练均自动开通，运动员入队归属待核实。');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '注册审核开关更新失败。');
     } finally {
@@ -175,7 +175,7 @@ export function AccountsPage() {
               ? '正在加载开关状态…'
               : approvalEnabled
                 ? '开启：新注册进入待审核，由有权限的上级在下方通过或拒绝；仅影响开关之后的新申请。'
-                : '关闭：运动员新注册自动开通，入队归属仍需核实；体能教练仍需人工审核。历史申请不受影响。'}
+                : '关闭：运动员和体能教练新注册均自动开通；运动员入队归属仍需核实。历史申请不受影响。'}
           </p>
         </div>
         <button
