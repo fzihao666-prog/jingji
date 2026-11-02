@@ -1,3 +1,4 @@
+import { buildCompactAthleteWorkbook } from './compact-athlete-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import type { ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
@@ -74,7 +75,7 @@ const PURPOSE_TITLES: Record<TemplateKind, string> = {
 /**
  * 统一模板与分用途模板：复用统一模板的表头与解析规则，并按当前项目和权限预填
  * 系统运动员编号、姓名、所属队伍，教练无需导出历史数据即可填报。统一模板
- * 覆盖全部业务表，其余按用途取表，预填行组织方式与分用途模板保持一致。
+ * 采用单表基础体能格式，其余按用途取表。
  */
 export function buildPurposeTemplate(
   kind: TemplateKind,
@@ -82,7 +83,8 @@ export function buildPurposeTemplate(
   athletes: Array<{ id: number; name: string; team: string }>,
   metrics?: readonly ImportMetricDefinition[]
 ) {
-  const sheetNames = kind === 'unified' ? UNIFIED_IMPORT_HEADERS.map(([name]) => name) : PURPOSE_SHEETS[kind];
+  if (kind === 'unified') return buildCompactAthleteWorkbook(athletes);
+  const sheetNames = PURPOSE_SHEETS[kind];
   const workbook = buildImportWorkbook(sheetNames, { metrics, project, includeAthleteId: athletes.length > 0 });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;

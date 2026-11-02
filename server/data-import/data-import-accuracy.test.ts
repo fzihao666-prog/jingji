@@ -8,7 +8,7 @@ vi.mock('../core/db.ts', async () => {
   return { db: new DatabaseSync(':memory:') };
 });
 import { db } from '../core/db.ts';
-import { UNIFIED_IMPORT_HEADERS } from '../../shared/data-import-template.ts';
+import { COMPACT_ATHLETE_COLUMNS, compactAthleteHeader } from '../../shared/compact-athlete-template.ts';
 import { importTemplateFields, templateHeaderKey } from '../../shared/import-template-fields.ts';
 import { importReviewGroups, selectImportReviewRecord } from '../../shared/import-conflict-review.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
@@ -1038,29 +1038,17 @@ it('校对接口不能将非法可选数值静默丢弃，修正后可提交', (
   expect(db.prepare('SELECT rpe FROM training_sessions').get()).toEqual({ rpe: 5 });
 });
 
-it('实际统一模板保留三行表头及未填写工作表后能够往返导入', () => {
-  const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), {
-    type: 'buffer',
-  });
-  XLSX.utils.sheet_add_aoa(
-    workbook.Sheets['训练课次'],
-    [{ 系统运动员编号: 1, 姓名: '张某', 日期: '2025-09-05', 课次序号: 1, 时长分钟: 60 }, { 系统运动员编号: 2, 姓名: '赵某' }].map(values => importTemplateFields('训练课次').filter(field=>field.key!=='系统运动员编号').map(field => values[field.key as keyof typeof values] ?? null)),
-    { origin: 'A4' }
-  );
-  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-  const batch = analyzeDataImport({
-    buffer,
-    filename: '实际模板往返.xlsx',
-    mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    project: PROJECT,
-    userId: USER_ID,
-    athletes,
-    allowedTeams: new Set(['A队', 'B队']),
-  });
+it('实际单表模板往返导入，预填空行不产生业务记录', () => {
+  const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), { type:'buffer' });
+  XLSX.utils.sheet_add_aoa(workbook.Sheets['运动员基础体能测试'], [
+    ['1','张某','A队','2025-09-05',180], ['2','赵某','B队','2025-09-05']
+  ], {origin:'A2'});
+  const batch = analyzeDataImport({buffer:XLSX.write(workbook,{type:'buffer',bookType:'xlsx'}),filename:'实际模板往返.xlsx',mimetype:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',project:PROJECT,userId:USER_ID,athletes,allowedTeams:new Set(['A队','B队'])});
   expect(batch.errorCount).toBe(0);
   expect(batch.items).toHaveLength(1);
-  expect(batch.items[0].sourceAddress).toBe('A4');
-  expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+  expect(batch.items[0].sourceAddress).toBe('B2');
+  expect(batch.summary.unfilledRows).toBe(0);
+  expect(commit(batch.id,'skip').createdRecords).toBe(1);
 });
 
 describe('竞技水平评估为可选资料', () => {
@@ -1281,17 +1269,11 @@ describe('统一模板按业务归属整理', () => {
     expect(batch.items.flatMap(item => item.messages).join('；')).toContain('冲突');
     expect(() => commit(batch.id, 'skip')).toThrow();
   });
-  it('新统一模板没有冠军模型表，基本资料和身体测量职责分离', () => {
-    const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), { type: 'buffer' });
-    expect(workbook.SheetNames).toContain('运动员基本资料');
-    expect(workbook.SheetNames).toContain('体能测试');
-    expect(workbook.SheetNames).not.toContain('冠军模型测试');
-    expect(workbook.SheetNames).not.toContain('竞技水平评估');
-    for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as unknown[][];
-      expect(rows[2].map(value => templateHeaderKey(String(value)))).toEqual(importTemplateFields(name).filter(field=>field.key!=='系统运动员编号').map(field => field.key));
-      expect(rows[2].map(value => templateHeaderKey(String(value))).sort()).toEqual(headers.filter(key => key !== '系统运动员编号' && (name !== '其他测试' || !['指标代码', '单位'].includes(key))).sort());
-    }
+  it('新统一模板只有一张16列工作表', () => {
+    const workbook=XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'),{type:'buffer'});
+    expect(workbook.SheetNames).toEqual(['运动员基础体能测试']);
+    const rows=XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础体能测试'],{header:1});
+    expect(rows[0]).toEqual(COMPACT_ATHLETE_COLUMNS.map(compactAthleteHeader));
   });
 });
 
@@ -2453,4 +2435,181 @@ it('已确认事实项目快照往返不改变状态，待核实测试不可回�
   expect(test.messages.join('；')).toContain('归属待核实');
   expect(() => commit(pending.id, 'update')).toThrow();
   expect(db.prepare('SELECT project_code,project_status FROM test_sessions WHERE athlete_id=1').get()).toEqual({ project_code: null, project_status: 'pending_verification' });
+});
+
+describe('简洁统一模板业务映射', () => {
+  const sheet = '运动员基础体能测试';
+  const headers = COMPACT_ATHLETE_COLUMNS.map(compactAthleteHeader);
+  it('五项实测1RM与四项基础体能准确入库，身体测量独立保存', () => {
+    const values = [180, 75, 80, 90, 120, 140, 60, 0, 42, 90, -5];
+    const batch = analyze({
+      [sheet]: [headers, ['1', '张某', 'A队', '2026-10-20', ...values, '实测']],
+    });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items).toHaveLength(10);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(10);
+    expect(
+      db
+        .prepare(
+          "SELECT height_cm,weight_kg FROM athlete_body_measurements WHERE athlete_id=1 AND measurement_date='2026-10-20'",
+        )
+        .get(),
+    ).toEqual({ height_cm: 180, weight_kg: 75 });
+    const tests = db
+      .prepare(
+        'SELECT tm.metric_code AS code,tm.value_num AS value,ts.protocol,tm.unit FROM test_measurements tm JOIN test_sessions ts ON ts.id=tm.test_session_id ORDER BY tm.metric_code',
+      )
+      .all();
+    for (const [index, field] of COMPACT_ATHLETE_COLUMNS.entries()) {
+      if (field.kind !== 'test') continue;
+      expect(tests).toContainEqual({
+        code: field.code,
+        value: values[index - 4],
+        protocol: field.protocol,
+        unit: field.key === '平板支撑' ? '秒' : field.unit,
+      });
+    }
+    expect(tests).toHaveLength(9);
+  });
+  it('部分指标与多个日期可填，身份、日期、备注空行业务忽略，空白不清除已有值', () => {
+    const batch = analyze({
+      [sheet]: [
+        headers,
+        ['1', '张某', 'A队', '2026-10-21', 180, 75],
+        ['1', '张某', 'A队', '2026-10-22', 181],
+        [
+          '2',
+          '赵某',
+          'B队',
+          '2026-10-21',
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          '未测试',
+        ],
+      ],
+    });
+    expect(batch.items).toHaveLength(2);
+    expect(batch.summary.unfilledRows).toBe(0);
+    commit(batch.id, 'skip');
+    const changed = analyze({
+      [sheet]: [headers, ['1', '张某', 'A队', '2026-10-21', 182]],
+    });
+    commit(changed.id, 'update');
+    expect(
+      db
+        .prepare(
+          "SELECT height_cm,weight_kg FROM athlete_body_measurements WHERE athlete_id=1 AND measurement_date='2026-10-21'",
+        )
+        .get(),
+    ).toEqual({ height_cm: 182, weight_kg: 75 });
+  });
+  it.each(['2026-02-30', ''])('非法或缺失日期%s不能提交', (date) => {
+    const batch = analyze({
+      [sheet]: [headers, ['1', '张某', 'A队', date, null, null, 80]],
+    });
+    expect(batch.errorCount).toBeGreaterThan(0);
+    expect(() => commit(batch.id, 'skip')).toThrow();
+  });
+  it.each([
+    [11, 2.5],
+    [6, '80kg'],
+    [6, 999],
+    [14, -31],
+  ])('非法数值第%s列整行阻断且支持原行校对', (column, value) => {
+    const row: unknown[] = ['1', '张某', 'A队', '2026-10-23', 180];
+    row[column] = value;
+    const batch = analyze({ [sheet]: [headers, row] });
+    expect(batch.items).toHaveLength(1);
+    expect(batch.items[0].itemType).toBe('invalid_row');
+    expect(() => commit(batch.id, 'skip')).toThrow();
+    const fixed = updateDataImportItems({
+      batchId: batch.id,
+      userId: USER_ID,
+      expectedRevision: batch.revision,
+      athletes,
+      corrections: [
+        {
+          id: batch.items[0].id,
+          sourceCells: { [COMPACT_ATHLETE_COLUMNS[column].key]: 5 },
+        },
+      ],
+    });
+    expect(fixed.errorCount).toBe(0);
+    expect(fixed.items).toHaveLength(2);
+  });
+  it('错误单位不静默遗漏，编号与姓名冲突不误关联', () => {
+    const bad = [...headers];
+    bad[6] = '卧推最大力量（lb）';
+    expect(() =>
+      analyze({
+        [sheet]: [bad, ['1', '张某', 'A队', '2026-10-23', 180, null, 80]],
+      }),
+    ).toThrow('不支持的字段或单位');
+    const batch = analyze({
+      [sheet]: [headers, ['1', '赵某', 'A队', '2026-10-23', 180]],
+    });
+    expect(batch.athleteCandidates[0].status).toBe('pending');
+    expect(batch.items[0].athleteId).toBeNull();
+    expect(() => commit(batch.id, 'skip')).toThrow();
+  });
+  it('新人只填姓名队伍及实际成绩，确认后最小建档并关联测试', () => {
+    const batch = analyze({
+      [sheet]: [headers, ['', '虚构新人', 'A队', '2026-10-24', null, null, 80]],
+    });
+    expect(batch.athleteCandidates[0].status).toBe('pending');
+    expect(() => commit(batch.id, 'skip')).toThrow();
+    updateDataImportAthleteCandidates({
+      batchId: batch.id,
+      userId: USER_ID,
+      athletes,
+      allowedTeams: new Set(['A队']),
+      corrections: [{ id: batch.athleteCandidates[0].id, confirmed: true }],
+    });
+    expect(commit(batch.id, 'skip').createdAthletes).toBe(1);
+    const person = db
+      .prepare(
+        "SELECT id, gender, birth_date FROM athletes WHERE name='虚构新人'",
+      )
+      .get() as { id: number; gender: string | null; birth_date: string | null };
+    expect(person.gender).toBeNull();
+    expect(person.birth_date).toBeNull();
+    expect(
+      db
+        .prepare('SELECT athlete_id FROM test_sessions WHERE athlete_id=?')
+        .get(person.id),
+    ).toEqual({ athlete_id: person.id });
+  });
+  it('预览修改仍需满足引体向上整数规则', () => {
+    const row: unknown[] = ['1', '张某', 'A队', '2026-10-24'];
+    row[11] = 5;
+    const batch = analyze({ [sheet]: [headers, row] });
+    const edited = updateDataImportItems({
+      batchId: batch.id,
+      userId: USER_ID,
+      athletes,
+      corrections: [{ id: batch.items[0].id, valueNum: 2.5 }],
+    });
+    expect(edited.errorCount).toBeGreaterThan(0);
+    expect(() => commit(batch.id, 'skip')).toThrow();
+  });
+  it('同日同项目不同成绩按既有冲突流程处理', () => {
+    const batch = analyze({
+      [sheet]: [
+        headers,
+        ['1', '张某', 'A队', '2026-10-23', null, null, 80],
+        ['1', '张某', 'A队', '2026-10-23', null, null, 85],
+      ],
+    });
+    expect(batch.items.some((item) => item.conflict !== null)).toBe(true);
+    expect(() => commit(batch.id, 'skip')).toThrow();
+  });
 });

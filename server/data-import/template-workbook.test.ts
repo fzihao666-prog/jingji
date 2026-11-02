@@ -1,3 +1,5 @@
+import { buildCompactAthleteWorkbook } from './compact-athlete-workbook.ts';
+import { COMPACT_ATHLETE_COLUMNS, compactAthleteHeader } from '../../shared/compact-athlete-template.ts';
 import { describe, expect, it } from 'vitest';
 import ExcelJS from 'exceljs';
 import { buildImportWorkbook } from './template-workbook.ts';
@@ -213,4 +215,46 @@ it('空白模板没有编号列，预填模板编号保留并隐藏且保存重�
     if(includeAthleteId) {expect(result.getColumn(1).hidden).toBe(true);expect(result.getCell(4,1).value).toBe(123);expect(result.getCell(4,2).value).toBe('合成队员');}
     else expect(templateHeaderKey(String(result.getCell(3,1).value))).toBe('姓名');
   }
+});
+
+it('单表基础体能模板具有16列、分组样式、冻结及基础校验，预填身份不伪造成绩', async () => {
+  const book = buildCompactAthleteWorkbook(
+    [{ id: 1, name: '虚构队员', team: '测试队' }],
+    '2026-11-02',
+  );
+  const loaded = new ExcelJS.Workbook();
+  await loaded.xlsx.load(await book.xlsx.writeBuffer());
+  expect(loaded.worksheets.map((sheet) => sheet.name)).toEqual([
+    '运动员基础体能测试',
+  ]);
+  const sheet = loaded.worksheets[0];
+  expect(sheet.getRow(1).values).toEqual([
+    undefined,
+    ...COMPACT_ATHLETE_COLUMNS.map(compactAthleteHeader),
+  ]);
+  expect(sheet.getRow(2).values).toEqual([
+    undefined,
+    '1',
+    '虚构队员',
+    '测试队',
+    '2026-11-02',
+  ]);
+  expect(sheet.views[0]).toMatchObject({
+    state: 'frozen',
+    xSplit: 3,
+    ySplit: 1,
+  });
+  expect(sheet.getColumn(1).numFmt).toBe('@');
+  expect(sheet.getCell('D2').dataValidation.type).toBe('date');
+  expect(sheet.getCell('L2').dataValidation.type).toBe('whole');
+  expect(sheet.getCell('O2').dataValidation.formulae?.[0]).toBe(-30);
+  expect(sheet.getCell('G1').note).toContain('实测1RM');
+  expect(
+    new Set(
+      ['A1', 'E1', 'G1', 'L1', 'P1'].map((address) =>
+        JSON.stringify(sheet.getCell(address).fill),
+      ),
+    ).size,
+  ).toBe(5);
+  expect(sheet.model.merges).toEqual([]);
 });

@@ -794,7 +794,7 @@ v1 快照继续按保存内容只读渲染及导出，不根据新口径重算�
 
 导入模板授权与队伍存在性分开判断：账号须具备行政、项目及对应队伍范围授权，有权项目尚无队伍时仍可下载空模板；上传导入另校验授权范围内存在有效队伍，并返回业务前置条件提示。不得仅依据 DMD 等角色名称绕过实际授权。
 
-统一模板采用 `shared/data-import-template.ts` 定义工作表、别名、身体字段和指标代码，在线及静态构建共用 `template-workbook.ts`，导出由 `data-import-export.ts` 读取正式数据。新模板不设置冠军模型原始数据表；旧冠军模型的身体字段转换到 `athlete_body_measurements`，臂展继续使用现有 `test_sessions/test_measurements` 的 `arm_span_cm`，分析端已兼容该代码，不新增数据库列或第二套测量事实。导出按业务归属展开历史指标，不批量改写原表；同批同人同日身体事实合并、冲突阻断。每日恢复体重保持独立口径。评分协议及测试协议按文件原值保存，不再补入虚构的国家队协议。
+简洁统一模板由 `shared/compact-athlete-template.ts` 定义单表16列及指标映射，在线及静态构建共用 `compact-athlete-workbook.ts`。授权范围内预填编号（文本）、姓名、队伍及当天日期，解析复用 `data-import.ts` 的人员确认、源行校对、冲突处理、权限校验及事务入库。身高和体重进入 `athlete_body_measurements`；五项最大力量以“实测1RM”协议进入 `test_sessions/test_measurements`，纵跳使用既有 `vertical_jump_cm` 并注明CMJ协议，平板支撑以s填写并按字典“秒”保存；引体向上为整数，所有数值复用既有指标范围。空白不覆盖，身份/日期/备注空业务行忽略，真实0保留，无数据库迁移。历史多表及分用途模板仍采用 `shared/data-import-template.ts` 和 `template-workbook.ts`，导出由 `data-import-export.ts` 读取正式数据。新模板不设置冠军模型原始数据表；旧冠军模型的身体字段转换到 `athlete_body_measurements`，臂展继续使用现有 `test_sessions/test_measurements` 的 `arm_span_cm`，分析端已兼容该代码，不新增数据库列或第二套测量事实。导出按业务归属展开历史指标，不批量改写原表；同批同人同日身体事实合并、冲突阻断。每日恢复体重保持独立口径。评分协议及测试协议按文件原值保存，不再补入虚构的国家队协议。
 
 统一值冲突审查沿用 `data_import_items` 暂存和正式入库事务，跨端共用 `shared/import-conflict-review.ts` 的声明式字段、读取/写回适配及业务唯一键。所有支持的业务记录复用分组、原始来源保留、单方补齐、字段选择、草稿、确认、重开、服务端校验与并发检查；不再在解析期吞掉重复测试来源。`valueReview` 是校对接口的保留命令，服务端生成不可直接编辑的 `valueReviewDecision`（来源快照、数据库快照、最终值、选择、操作者与时间）。同一测试课次的多个指标分别保留代表记录，仅真正重复的指标/侧别跳过；统一选择协议时更新同一课次元数据并写审计，提交前在事务中一次性检查数据库快照，避免把本事务先前的写入误判为并发修改。
 

@@ -1,3 +1,4 @@
+import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey } from '../../shared/compact-athlete-template.ts';
 import { trainingContext } from '../../shared/training-context.ts';
 import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
@@ -25,7 +26,7 @@ import {
 } from '../../shared/strength-training.ts';
 
 // 解析版本绑定项目规则；旧草稿须重解析，已入库回执仍保留。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v32-fact-snapshots-' + SPORT_RULES_VERSION;
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v33-compact-athlete-' + SPORT_RULES_VERSION;
 
 export type ImportAthlete = {
   id: number;
@@ -884,6 +885,7 @@ function parseScoringSheet(matrix: Matrix, sheet: string, project: string, batch
 }
 
 const STANDARD_SHEETS = new Set([
+  COMPACT_ATHLETE_SHEET,
   ...UNIFIED_IMPORT_HEADERS.map(([name]) => name),
   '运动员信息',
   '竞技水平评估',
@@ -898,14 +900,15 @@ const STANDARD_SHEETS = new Set([
   '竞技状态',
 ]);
 
-function standardHeader(matrix: Matrix) {
+function standardHeader(matrix: Matrix, compact = false) {
   const rowIndex = matrix
     .slice(0, 12)
     .findIndex((row) => row?.some((value) => ['姓名', '系统运动员编号'].includes(normalizedText(templateHeaderKey(String(value ?? ''))))));
   if (rowIndex < 0) return null;
   const columns = new Map<string, number>();
   for (let column = 0; column < (matrix[rowIndex]?.length || 0); column += 1) {
-    const key = normalizedText(templateHeaderKey(String(matrix[rowIndex]?.[column] ?? '')));
+    const label = templateHeaderKey(String(matrix[rowIndex]?.[column] ?? ''));
+    const key = normalizedText(compact ? compactAthleteHeaderKey(label) : label);
     if (key) columns.set(key, column);
   }
   return { rowIndex, columns };
@@ -998,8 +1001,13 @@ function parseStandardSheet(
   simplified = false
 ) {
   const sheet = IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
-  const header = standardHeader(matrix);
+  const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET);
   if (!header) return [];
+  if (sheet === COMPACT_ATHLETE_SHEET) {
+    const knownHeaders = new Set<string>(COMPACT_ATHLETE_COLUMNS.map(field => normalizedText(field.key)));
+    const unknownHeaders = [...header.columns.keys()].filter(label => !knownHeaders.has(label));
+    if (unknownHeaders.length) throw new Error(`运动员基础体能测试存在不支持的字段或单位：${unknownHeaders.join('、')}，请使用下载模板的表头。`);
+  }
   const items: ParsedImportItem[] = [];
   const metricCatalog = sheet === '测试指标' ? readImportMetricDefinitions(project) : [];
   const year = workbookYear(filename);
@@ -1012,7 +1020,11 @@ function parseStandardSheet(
     const athleteCode = standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号');
     const numberedAthlete = athletes.find(athlete => String(athlete.id) === athleteCode);
     const rawName = standardText(row, header.columns, '姓名') || numberedAthlete?.name || '';
-    const hasBusiness = [...header.columns].some(([label, column]) => !identityHeaders.has(label) && text(row[column]) !== '');
+    const hasBusiness = sheet === COMPACT_ATHLETE_SHEET
+      ? COMPACT_ATHLETE_COLUMNS.some(field =>
+          (field.kind === 'body' || field.kind === 'test') &&
+          text(standardValue(row, header.columns, field.key)) !== '')
+      : [...header.columns].some(([label, column]) => !identityHeaders.has(label) && text(row[column]) !== '');
     if (sheet !== '运动员信息' && !hasBusiness) continue;
     if (simplified && sheet === '运动员信息' && numberedAthlete && !hasBusiness) continue;
     if (/^示例/.test(rawName)) continue;
@@ -1097,7 +1109,34 @@ function parseStandardSheet(
     if (sheet !== '运动员信息' && !validIsoDate(rowDate))
       messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
 
-    if (sheet === '运动员信息') {
+    if (sheet === COMPACT_ATHLETE_SHEET) {
+      const bodyFields: Record<string, number> = {};
+      for (const field of COMPACT_ATHLETE_COLUMNS) {
+        if (field.kind !== 'body' && field.kind !== 'test') continue;
+        const value = readNumber(field.key);
+        if (value === null) continue;
+        const limits = METRICS[field.code];
+        if (value < limits.min || value > limits.max || ('integer' in field && !Number.isInteger(value))) {
+          const address = cellAddress(rowIndex, header.columns.get(normalizedText(field.key)) ?? 0);
+          numericErrors.set(field.key, {
+            address, raw: String(value),
+            message: `错误：${field.key}须为${limits.min}至${limits.max}的${'integer' in field ? '整数' : '数值'}`,
+          });
+          continue;
+        }
+        if (field.kind === 'body') bodyFields[field.field] = value;
+        else appendMetric(field.key, field.code, limits.label, limits.unit,
+          field.protocol === '实测1RM' ? '力量素质测试' : '体能测试', field.protocol);
+      }
+      if (Object.keys(bodyFields).length) items.push(itemBase({
+        ...base, itemType: 'body_measurement', eventDate: rowDate,
+        metricCode: 'body_composition', metricLabel: '身体测量',
+        valueNum: bodyFields.weightKg ?? bodyFields.heightCm ?? null,
+        payload: { ...base.payload, ...bodyFields, note: standardText(row, header.columns, '备注') },
+        rawValue: JSON.stringify(bodyFields), messages: [...messages], quality: makeQuality(messages),
+        businessKey: `${rawName}|${rowDate}|body`,
+      }));
+    } else if (sheet === '运动员信息') {
       const gender = standardText(row, header.columns, '性别');
       const rawBirthDate = standardValue(row, header.columns, '出生日期');
       const parsedBirthDate = parseImportBirthDate(rawBirthDate);
@@ -2141,7 +2180,7 @@ export function analyzeDataImport(input: {
         input.filename,
         input.defaultDate || '',
         input.athletes,
-        (workbook.Workbook?.Names?.some(name => name.Name === IMPORT_TEMPLATE_VERSION_NAME) === true
+        sheetName === COMPACT_ATHLETE_SHEET || (workbook.Workbook?.Names?.some(name => name.Name === IMPORT_TEMPLATE_VERSION_NAME) === true
           && workbook.Sheets['填写说明']?.B1?.v === IMPORT_TEMPLATE_VERSION)
           || matrix.slice(0, 12).some(row => row.some(value => /\n(?:必填|条件必填|选填|系统预填)(?:：[^\n]*)?(?:｜|\n)/.test(String(value ?? ''))))
       );
@@ -2201,7 +2240,7 @@ export function analyzeDataImport(input: {
       type = '历史测试对比';
       note = '仅提取各日期原始值，忽略差值公式';
     }
-    if (STANDARD_SHEETS.has(sheetName)) {
+    if (STANDARD_SHEETS.has(sheetName) && sheetName !== COMPACT_ATHLETE_SHEET) {
       const header = standardHeader(matrix);
       if (header) {
         const represented = new Set(parsed.map(item => XLSX.utils.decode_cell(item.sourceAddress).r));
@@ -2814,6 +2853,8 @@ function validateImportItem(
     }
     if (item.valueNum === null || !Number.isFinite(item.valueNum))
       messages.push('错误：测试值不能为空');
+    if (item.sourceSheet === COMPACT_ATHLETE_SHEET && item.metricCode === 'pull_ups_reps' && item.valueNum !== null && !Number.isInteger(item.valueNum))
+      messages.push('错误：引体向上须填写整数次数');
     if (item.testType === 'FMS测试' && item.valueNum !== null) {
       if (!Number.isInteger(item.valueNum) || item.valueNum < 0 || item.valueNum > 3)
         messages.push('错误：FMS各项须填写0、1、2或3分');

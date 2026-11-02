@@ -935,7 +935,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
               <FileSpreadsheet size={19} />
               <div>
                 <strong>统一数据模板</strong>
-                <span>按资料、测量、训练与测试分类，预填已有人员</span>
+                <span>单表填写身体指标、实测1RM及基础体能，预填已有人员</span>
               </div>
             </button>
             <button
