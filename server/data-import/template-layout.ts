@@ -17,9 +17,14 @@ const requirementColors: Record<TemplateRequirement, { background: string; text:
   系统计算: { background: 'FFEDE9FE', text: 'FF5B21B6' },
 };
 
-export function createTemplateWorkbook(title: string): ExcelJS.Workbook {
+export function createTemplateWorkbook(): ExcelJS.Workbook {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '竞迹训练监控系统';
+  return workbook;
+}
+
+/** 业务表生成后再追加说明，确保说明紧邻数据字典之前。 */
+export function addTemplateInstructions(workbook: ExcelJS.Workbook, title: string) {
   const instructions = workbook.addWorksheet('填写说明');
   instructions.getColumn(1).width = 110;
   instructions.getColumn(2).hidden = true;
@@ -33,7 +38,6 @@ export function createTemplateWorkbook(title: string): ExcelJS.Workbook {
     cell.alignment = { wrapText: true, vertical: 'middle' };
     instructions.getRow(index + 3).height = 42;
   });
-  return workbook;
 }
 
 export function addTemplateSheet(

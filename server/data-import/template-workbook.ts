@@ -2,7 +2,7 @@ import { projectRules, ACTIVITY_LABELS } from '../../shared/sport-rules.ts';
 import { DEFAULT_IMPORT_METRICS, importMetricChoices, type ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
 import ExcelJS from 'exceljs';
 import { importTemplateFields } from '../../shared/import-template-fields.ts';
-import { createTemplateWorkbook, addTemplateSheet } from './template-layout.ts';
+import { createTemplateWorkbook, addTemplateSheet, addTemplateInstructions } from './template-layout.ts';
 import {
   UNIFIED_IMPORT_HEADERS,
   BODY_TEMPLATE_FIELDS,
@@ -15,19 +15,8 @@ import {
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
 export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[] } = {}) {
-  const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook('竞迹训练监控系统｜简化数据导入模板');
+  const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook();
   workbook.creator = '竞迹训练监控系统';
-  const instructions = workbook.getWorksheet('填写说明') || workbook.addWorksheet('填写说明');
-  if (options.mode === 'export') {
-    instructions.getCell('A1').value = '竞迹训练监控系统｜统一数据导入模板';
-    instructions.getCell('A1').font = { bold: true, size: 18 };
-    instructions.getColumn(1).width = 110;
-    TEMPLATE_INSTRUCTIONS.forEach((line, index) => {
-      instructions.getCell(index + 3, 1).value = `${index + 1}. ${line}`;
-      instructions.getCell(index + 3, 1).alignment = { wrapText: true, vertical: 'middle' };
-      instructions.getRow(index + 3).height = 36;
-    });
-  }
   const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
   for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
     if (!sheetNames.includes(name)) continue;
@@ -67,6 +56,19 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
       if (/日期/.test(header)) column.numFmt = 'yyyy-mm-dd';
     });
     sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: headers.length } };
+  }
+  if (options.mode === 'export') {
+    const instructions = workbook.addWorksheet('填写说明');
+    instructions.getCell('A1').value = '竞迹训练监控系统｜统一数据导入模板';
+    instructions.getCell('A1').font = { bold: true, size: 18 };
+    instructions.getColumn(1).width = 110;
+    TEMPLATE_INSTRUCTIONS.forEach((line, index) => {
+      instructions.getCell(index + 3, 1).value = `${index + 1}. ${line}`;
+      instructions.getCell(index + 3, 1).alignment = { wrapText: true, vertical: 'middle' };
+      instructions.getRow(index + 3).height = 36;
+    });
+  } else {
+    addTemplateInstructions(workbook, '竞迹训练监控系统｜简化数据导入模板');
   }
   const dictionary = workbook.addWorksheet('数据字典');
   if (options.mode !== 'export') {

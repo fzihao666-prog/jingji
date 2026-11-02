@@ -9,6 +9,7 @@ import {
   importTemplateFields,
   templateHeaderKey,
   IMPORT_TEMPLATE_VERSION,
+  IMPORT_TEMPLATE_VERSION_NAME,
 } from '../../shared/import-template-fields.ts';
 import {
   buildStrengthImportWorkbook,
@@ -184,4 +185,18 @@ it('运动员模板不重复填写项目，保留姓名与所属队伍及自动�
   const headers=Array.from({length:sheet.columnCount},(_,i)=>String(sheet.getCell(3,i+1).value || '').split('\n')[0]);
   expect(headers).not.toContain('运动项目');
   expect(headers).toContain('所属队伍');
+});
+
+it('所有模板按业务表、填写说明、数据字典排列，保存重开仍保持顺序及版本命名区域', async () => {
+  const books=[buildImportWorkbook(),buildImportWorkbook(undefined,{mode:'export'}),...Object.values(IMPORT_PURPOSE_SHEETS).map(names=>buildImportWorkbook(names)),buildStrengthImportWorkbook(),buildSpecialImportWorkbook()];
+  for(const book of books) {
+    const reloaded=new ExcelJS.Workbook();
+    await reloaded.xlsx.load(await book.xlsx.writeBuffer());
+    const names=reloaded.worksheets.filter(sheet=>sheet.state==='visible').map(sheet=>sheet.name);
+    expect(names[0]).not.toBe('填写说明');
+    const dictionary=names.indexOf('数据字典');
+    expect(names.indexOf('填写说明')).toBe(dictionary>=0 ? dictionary-1 : names.length-1);
+    expect(reloaded.getWorksheet('填写说明')!.getCell('A1').value).toBeTruthy();
+    if(book.definedNames.model.some(name=>name.name===IMPORT_TEMPLATE_VERSION_NAME)) expect(reloaded.definedNames.model.some(name=>name.name===IMPORT_TEMPLATE_VERSION_NAME)).toBe(true);
+  }
 });
