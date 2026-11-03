@@ -1,3 +1,5 @@
+import { deepseekReasoningOptions, type DeepSeekReasoningEffort } from './deepseek-reasoning.ts';
+
 // 统一的 OpenAI 兼容模型调用封装：多供应商 fallback 链与 JSON 清洗。
 // 体能导入识别与训练计划生成共用此客户端，不再各自维护模型配置。
 export type AiModelConfig = {
@@ -6,6 +8,7 @@ export type AiModelConfig = {
   apiKey: string;
   model: string;
   timeout: number;
+  reasoningEffort?: DeepSeekReasoningEffort;
 };
 
 export function configuredModels(): AiModelConfig[] {
@@ -36,6 +39,10 @@ export function configuredModels(): AiModelConfig[] {
             apiKey,
             model,
             timeout,
+            reasoningEffort: deepseekReasoningOptions(
+              baseUrl,
+              name === 'Primary' ? process.env.AI_REASONING_EFFORT : undefined
+            ).reasoning_effort,
           },
         ]
       : []
@@ -84,6 +91,7 @@ export async function chatCompletion(options: AiChatOptions): Promise<AiChatResu
         },
         body: JSON.stringify({
           model: model.model,
+          ...(model.reasoningEffort ? { reasoning_effort: model.reasoningEffort } : {}),
           temperature: options.temperature ?? 0,
           // DeepSeek 等 OpenAI 兼容服务以 max_tokens 为准（DashScope/Gemini 兼容层亦支持）。
           max_tokens: options.maxCompletionTokens ?? 12_000,

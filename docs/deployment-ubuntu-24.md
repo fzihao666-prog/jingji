@@ -429,6 +429,38 @@ curl --fail http://127.0.0.1:8787/ >/dev/null && echo '服务正常'
 - 未配置上述密钥时 `deploy.yml` 只打印警告并跳过发布，不会让工作流失败，便于先合并再补凭据。
 - 运行器是原生 `linux/amd64`，不需要 Rosetta/QEMU；请勿用 Apple Silicon 本机运行 amd64 镜像做启动冒烟（见第 3 节说明）。
 
+### 6.5 AI 模型、Key 与推理强度
+
+本地配置与生产配置分离，发布脚本不会上传 `.env`。首次使用 `AI_REASONING_EFFORT`，必须先发布包含该能力的代码；之后仅修改模型或 Key 等配置，不需要构建新镜像。
+
+1. Mac 项目根目录用 `nano .env` 修改 `AI_BASE_URL`、`AI_MODEL`、`AI_API_KEY`、`AI_REASONING_EFFORT`；不修改其他变量，不提交实际 Key。停止旧开发服务后运行 `npm run dev`，手动检查实际 AI 结果和模型标识，不能把备用模型或规则建议当成主模型成功。
+2. 服务器以有权管理配置的账户进入 `/srv/jingji`，执行下方备份并编辑 `.env`，修改相同四项。主模型使用 DeepSeek 官方接口时，地址为 `https://api.deepseek.com`，推理强度可填 `none`、`low`、`high`、`max`，留空保持默认。备份包含凭据，权限同样必须为 0600。
+
+```bash
+cd /srv/jingji
+umask 077
+AI_CONFIG_BACKUP="/srv/jingji/.env.before-ai-$(date +%Y%m%d-%H%M%S)"
+cp -p .env "$AI_CONFIG_BACKUP"
+chmod 600 "$AI_CONFIG_BACKUP"
+nano .env
+chmod 600 .env
+```
+
+3. 首次发布该能力：完成本地测试、提交后，在 Mac 按 6.1 节执行 `bash scripts/release.sh`，新容器会读取服务器刚设置的配置。选择低峰，避免中断正在执行的录入、上传和 AI 请求。以后只改生产配置时，在服务器执行以下命令重新注入变量；`docker compose restart` 仍沿用旧容器环境，不能代替重建。
+
+```bash
+docker compose --env-file .env.compose up -d --force-recreate --no-deps --wait --wait-timeout 120 app
+curl --fail http://127.0.0.1:8787/health
+```
+
+4. 可用以下只读命令确认容器收到配置，不输出 Key。输出只证明变量存在，仍需在系统中手动触发 AI、核对实际模型及是否兜底，成功后再停用旧 Key。
+
+```bash
+docker compose --env-file .env.compose exec -T app node -e 'console.log({baseUrl:process.env.AI_BASE_URL,model:process.env.AI_MODEL,reasoningEffort:process.env.AI_REASONING_EFFORT || "供应商默认",keyConfigured:Boolean(process.env.AI_API_KEY)})'
+```
+
+5. 配置有误时，在同一服务器会话执行 `cp -p "$AI_CONFIG_BACKUP" .env`、`chmod 600 .env`，再执行上面的容器重建与健康检查。重新登录需先恢复实际备份路径；旧 Key 若已撤销，不能靠恢复配置重新启用。镜像代码回退仍遵循本节既有数据库兼容规则。
+
 ## 7. 备份、排障与维护
 
 容器更新不会删除 `./data`，但数据仍需异机备份。以下由 root 设置每日 SQLite 一致性备份（先安装 sqlite3）：

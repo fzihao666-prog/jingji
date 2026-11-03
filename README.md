@@ -386,7 +386,21 @@ npm run dev
 | `NODE_ENV` / `LOG_LEVEL`                                   | 运行环境 / 日志级别                  | `development` / 默认级别                              |
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`                  | OpenAI 兼容 AI 服务（可选）          | 未配置时 AI 功能回退为内置规则草案                    |
 | `AI_TIMEOUT_MS`、`AI_FALLBACK_*`、`AI_CN_*`、`AI_GEMINI_*` | AI 超时与备用/多区域模型配置（可选） | 见 `server/core/ai-client.ts`                         |
+| `AI_REASONING_EFFORT`                                    | DeepSeek 官方主模型推理强度：`none` / `low` / `high` / `max` | 留空不发送参数，沿用供应商默认；不影响备用模型和其他供应商 |
 | `AI_PLAN_GENERATE_HOUR`                                   | AI 每日生成训练计划草稿的时刻（0-23） | 默认 18（北京时区），生成下一训练日草稿               |
+
+模型、Key 与推理强度在本地项目根目录 `.env`、生产服务器 `/srv/jingji/.env` 分别设置，互不自动同步。示例（Key 仅在实际环境填写）：
+
+```dotenv
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-v4-pro
+AI_API_KEY=填写实际Key但不要提交
+AI_REASONING_EFFORT=high
+```
+
+`AI_REASONING_EFFORT` 同时用于统一 AI 客户端（训练计划、报告及导入等调用）和体能建议，仅在主模型接口主机名为 `api.deepseek.com` 时传递；其他兼容平台不发送此参数。`none` 关闭思考，`low` / `high` / `max` 控制推理强度；未填或留空保持供应商默认行为，非法值在调用前明确报错，不通过备用模型或规则兜底掩盖配置错误。提高强度可能增加等待时间和输出 Token 消耗；现有超时与输出上限仍有效，不代表可无限推理。
+
+本地修改后停止旧开发进程并执行 `npm run dev`。首次接入该配置能力需要发布新代码；生产 `.env` 不打入镜像，也不被发布脚本上传。生产只改配置时，用 `docker compose --env-file .env.compose up -d --force-recreate --no-deps --wait --wait-timeout 120 app` 重新创建容器，`restart` 不重新注入环境变量。重建期间会短暂中断服务，须低峰操作；细节见部署手册的 AI 配置章节。
 
 ### 7.4 数据库初始化
 

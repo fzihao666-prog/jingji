@@ -625,6 +625,8 @@ Excel / PDF / 图片
 
 ### 11.2 AI 边界
 
+AI 主模型的 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 与可选 `AI_REASONING_EFFORT` 均从服务端环境读取。`server/core/deepseek-reasoning.ts` 统一校验 DeepSeek 官方主模型推理强度（`none` / `low` / `high` / `max`），由统一 AI 客户端与体能建议两处请求复用；仅向 `api.deepseek.com` 发送 `reasoning_effort`，不传给备用模型或其他供应商。未配置时保持原请求，非法值在调用前报错，不静默降级掩盖错误。该改动不新增 API、数据库字段或正式数据写入路径。
+
 AI 服务支持主模型和多个备用配置，并按顺序失败切换。API 密钥只存在服务端环境变量中。
 
 AI 适合：

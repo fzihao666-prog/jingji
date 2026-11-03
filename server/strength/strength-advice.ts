@@ -1,4 +1,5 @@
 import { db } from '../core/db.ts';
+import { deepseekReasoningOptions } from '../core/deepseek-reasoning.ts';
 import { cleanString } from '../core/utils.ts';
 import { strengthMetricKeyByCode } from './strength-metrics.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../../shared/strength-model.ts';
@@ -220,6 +221,7 @@ export async function buildAiAdvice(test: AdviceTestRow) {
     return { content: buildRuleAdvice(test), source: 'rules' as const, model: '内置规则' };
   }
 
+  const reasoningOptions = deepseekReasoningOptions(baseUrl, process.env.AI_REASONING_EFFORT);
   const metrics = JSON.parse(test.metricsJson || '{}') as StrengthMetricValues;
   const targets = JSON.parse(test.targetsJson || '{}') as StrengthMetricValues;
   const comparison = adviceComparisons(test, metrics, targets);
@@ -242,6 +244,7 @@ export async function buildAiAdvice(test: AdviceTestRow) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,
+        ...reasoningOptions,
         temperature: 0.2,
         ...(model.toLowerCase().startsWith('qwen') ? { enable_thinking: false } : {}),
         max_completion_tokens: 12000,
