@@ -100,7 +100,10 @@ Page({
     this.setData({ displayName: event.detail.value.trim(), error: '' });
   },
   onPhoneInput(event) {
-    this.setData({ phone: event.detail.value.replace(/\s/g, ''), error: '' });
+    const phone = event.detail.value.replace(/\s/g, '');
+    const username = !this.data.username || this.data.username === this.data.phone
+      ? phone : this.data.username;
+    this.setData({ phone, username, error: '' });
   },
   onBirthDateChange(event) {
     const fieldErrors = { ...this.data.fieldErrors };

@@ -236,3 +236,23 @@ describe('教练新增队伍', () => {
     expect(page.data.team).toBe('');
   });
 });
+
+describe('注册账号默认使用手机号', () => {
+  it('手机号填写、修改和清空时同步默认账号', () => {
+    const page = createPage();
+    page.data.username = '';
+    page.data.phone = '';
+    page.onPhoneInput({ detail: { value: '138 0000 0000' } });
+    expect(page.data.username).toBe('13800000000');
+    page.onPhoneInput({ detail: { value: '13900000000' } });
+    expect(page.data.username).toBe('13900000000');
+    page.onPhoneInput({ detail: { value: '' } });
+    expect(page.data.username).toBe('');
+  });
+  it('手动修改账号后不被手机号覆盖', () => {
+    const page = createPage();
+    page.onUsernameInput({ detail: { value: 'my_coach' } });
+    page.onPhoneInput({ detail: { value: '13900000000' } });
+    expect(page.data.username).toBe('my_coach');
+  });
+});

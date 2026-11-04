@@ -381,6 +381,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
 
   const switchMode = (next: Mode) => {
     setMode(next);
+    if (next === 'register') setUsername(phone);
     setError('');
     setSuccess('');
     setFieldErrors({});
@@ -675,7 +676,11 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     <span>手机号</span>
                     <input
                       value={phone}
-                      onChange={(event) => setPhone(event.target.value.replace(/\s/g, ''))}
+                      onChange={(event) => {
+                        const nextPhone = event.target.value.replace(/\s/g, '');
+                        if (!username || username === phone) setUsername(nextPhone);
+                        setPhone(nextPhone);
+                      }}
                       maxLength={11}
                       pattern="1[3-9][0-9]{9}"
                       title="请输入11位大陆手机号"
