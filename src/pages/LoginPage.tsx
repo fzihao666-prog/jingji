@@ -704,67 +704,67 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                       ))}
                     </select>
                   </label>
-                  <label>
-                    <span>队伍</span>
-                    <select
-                      ref={teamSelectRef}
-                      value={team}
-                      onChange={(event) => setTeam(event.target.value)}
-                      disabled={!project || (!projectTeams.length && !(role === 'SCC' && customTeam?.project === project))}
-                      required
-                    >
-                      <option value="">
-                        {!project
-                          ? '请先选择项目'
-                          : projectTeams.length
-                            ? '请选择队伍'
-                            : '该项目暂无队伍'}
-                      </option>
-                      {projectTeams.map((item) => (
-                        <option key={item.id} value={item.name}>
-                          {item.name}
+                  <div className="register-team-field">
+                    <label htmlFor="register-team"><span>队伍</span></label>
+                    <div className="register-team-select">
+                      <select
+                        id="register-team"
+                        ref={teamSelectRef}
+                        value={team}
+                        onChange={(event) => setTeam(event.target.value)}
+                        disabled={!project || (!projectTeams.length && !(role === 'SCC' && customTeam?.project === project))}
+                        required
+                      >
+                        <option value="">
+                          {!project
+                            ? '请先选择项目'
+                            : projectTeams.length
+                              ? '请选择队伍'
+                              : '该项目暂无队伍'}
                         </option>
-                      ))}
-                      {role === 'SCC' && customTeam?.project === project &&
-                        !projectTeams.some((item) => item.name === customTeam.name) && (
-                          <option value={customTeam.name}>{customTeam.name}（随注册新增）</option>
-                        )}
-                    </select>
-                  </label>
-                  {role === 'SCC' && (
-                    <div className="register-team-create">
-                      {!addingTeam ? (
-                        <button type="button" className="secondary-button"
+                        {projectTeams.map((item) => (
+                          <option key={item.id} value={item.name}>
+                            {item.name}
+                          </option>
+                        ))}
+                        {role === 'SCC' && customTeam?.project === project &&
+                          !projectTeams.some((item) => item.name === customTeam.name) && (
+                            <option value={customTeam.name}>{customTeam.name}（随注册新增）</option>
+                          )}
+                      </select>
+                      {role === 'SCC' && !addingTeam && (
+                        <button type="button" className="secondary-button register-team-add"
                           disabled={!project || submitting}
                           onClick={() => { setAddingTeam(true); setTeamName(''); }}>
                           <Plus size={16} aria-hidden="true" />新增队伍
                         </button>
-                      ) : (
-                        <>
-                          <label>
-                            <span>新队伍名称</span>
-                            <input value={teamName} maxLength={30}
-                              autoFocus disabled={submitting}
-                              placeholder="请输入2—30个字符"
-                              onChange={(event) => setTeamName(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') { event.preventDefault(); confirmTeam(); }
-                              }} />
-                          </label>
-                          <div className="register-team-actions">
-                            <button type="button" className="primary-button" disabled={submitting}
-                              onClick={confirmTeam}>确认队伍</button>
-                            <button type="button" className="secondary-button" disabled={submitting}
-                              onClick={() => {
-                                setAddingTeam(false);
-                                requestAnimationFrame(() => teamSelectRef.current?.focus());
-                              }}>取消</button>
-                          </div>
-                          <p className="muted">队伍随注册提交，账号开通时正式创建。</p>
-                        </>
                       )}
                     </div>
-                  )}
+                    {role === 'SCC' && addingTeam && (
+                      <div className="register-team-create">
+                        <label>
+                          <span>新队伍名称</span>
+                          <input value={teamName} maxLength={30}
+                            autoFocus disabled={submitting}
+                            placeholder="请输入2—30个字符"
+                            onChange={(event) => setTeamName(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') { event.preventDefault(); confirmTeam(); }
+                            }} />
+                        </label>
+                        <div className="register-team-actions">
+                          <button type="button" className="primary-button" disabled={submitting}
+                            onClick={confirmTeam}>确认队伍</button>
+                          <button type="button" className="secondary-button" disabled={submitting}
+                            onClick={() => {
+                              setAddingTeam(false);
+                              requestAnimationFrame(() => teamSelectRef.current?.focus());
+                            }}>取消</button>
+                        </div>
+                        <p className="muted">队伍随注册提交，账号开通时正式创建。</p>
+                      </div>
+                    )}
+                  </div>
                   <label>
                     <span>性别（必填）</span>
                     <select

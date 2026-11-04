@@ -746,7 +746,29 @@
 
 
 /* 注册新增队伍沿用公共表单与按钮。 */
+.register-team-field {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+.register-team-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.register-team-select select {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+}
+.register-team-add {
+  flex: none;
+  width: auto;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
 .register-team-create {
+  margin-top: 12px;
   display: grid;
   gap: 12px;
 }

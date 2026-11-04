@@ -98,23 +98,22 @@
 
         <view class="field">
           <text class="field-label">队伍</text>
-          <view wx:if="{{teamsLoading}}" class="picker-value placeholder">队伍加载中…</view>
-          <view wx:elif="{{teamsError}}" class="picker-value teams-retry" bindtap="retryTeams">
-            {{teamsError}}，点按重试
-          </view>
-          <picker wx:elif="{{project && teamOptions.length}}" mode="selector" range="{{teamOptions}}" value="{{teamIndex}}" bindchange="onTeamChange">
-            <view class="picker-value {{team ? '' : 'placeholder'}}">
-              {{team || '请选择队伍'}}
+          <view class="team-select-row">
+            <view wx:if="{{teamsLoading}}" class="picker-value placeholder">队伍加载中…</view>
+            <view wx:elif="{{teamsError}}" class="picker-value teams-retry" bindtap="retryTeams">
+              {{teamsError}}，点按重试
             </view>
-          </picker>
-          <view wx:else class="picker-value teams-retry" bindtap="retryTeams">
-            {{!project ? '请先选择项目' : '该项目暂无队伍，点按刷新'}}
+            <picker wx:elif="{{project && teamOptions.length}}" mode="selector" range="{{teamOptions}}" value="{{teamIndex}}" bindchange="onTeamChange">
+              <view class="picker-value {{team ? '' : 'placeholder'}}">
+                {{team || '请选择队伍'}}
+              </view>
+            </picker>
+            <view wx:else class="picker-value teams-retry" bindtap="retryTeams">
+              {{!project ? '请先选择项目' : '该项目暂无队伍，点按刷新'}}
+            </view>
+            <button wx:if="{{role === 'SCC' && !addingTeam}}" class="secondary-button team-add-button" disabled="{{!project || submitting}}" bindtap="startAddTeam">新增队伍</button>
           </view>
-        </view>
-
-        <view wx:if="{{role === 'SCC'}}" class="field">
-          <button wx:if="{{!addingTeam}}" class="secondary-button" disabled="{{!project || submitting}}" bindtap="startAddTeam">新增队伍</button>
-          <block wx:else>
+          <block wx:if="{{role === 'SCC' && addingTeam}}">
             <text class="field-label">新队伍名称</text>
             <input value="{{teamName}}" maxlength="30" placeholder="请输入2—30个字符" focus="{{addingTeam}}" disabled="{{submitting}}" bindinput="onTeamNameInput" bindconfirm="confirmTeam" />
             <view class="team-create-actions">
