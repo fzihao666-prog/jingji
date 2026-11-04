@@ -8,7 +8,7 @@ description: 'Images, SVG, icons, fonts, video, favicons, responsive delivery, l
 ## The two invariants
 
 1. **No CLS**: every image/video/embed has intrinsic dimensions — `width`+`height` attributes or CSS `aspect-ratio` on the container. No exceptions.
-2. **The LCP element is not lazy-loaded**: for `next/image`, inspect the installed Next.js major. In Next.js 16+, prefer `loading="eager"` or `fetchPriority="high"`; use `preload` only for a single unambiguous LCP candidate (`priority` is deprecated in 16). Use the API supported by older installed majors rather than copying the newest prop blindly. For plain `<img>`, use `loading="eager"` plus `fetchpriority="high"` on the actual LCP candidate. Everything below the fold: `loading="lazy"` + `decoding="async"`. Do not preload several viewport-dependent candidates. (Target: LCP ≤ 2.5 s at p75 — the budget lives in `governance`.)
+2. **The LCP element is not lazy-loaded**: for `next/image`, inspect the installed Next.js major. In Next.js 16+, prefer `loading="eager"` or `fetchPriority="high"`; use `preload` only for a single unambiguous LCP candidate (`priority` is deprecated in 16). Use the API supported by older installed majors rather than copying the newest prop blindly. For plain `<img>`, use `loading="eager"` plus `fetchpriority="high"` on the actual LCP candidate. Everything below the fold: `loading="lazy"` + `decoding="async"`. Do not preload several viewport-dependent candidates. (Target: LCP ≤ 2.5 s at p75 — 具体预算遵循项目现有配置.)
 
 ## Use the framework's pipeline first
 
@@ -24,7 +24,7 @@ description: 'Images, SVG, icons, fonts, video, favicons, responsive delivery, l
 
 ## SVG
 
-- Styled/animated/recolorable SVG: inline as a component, `fill="currentColor"` (icon system rules in `design-system`).
+- Styled/animated/recolorable SVG: inline as a component, `fill="currentColor"` (图标规范遵循项目现有组件和全局 `frontend-ui-standards`).
 - Static decorative SVG: `<img src="*.svg">` is fine and cacheable.
 - Run bundled SVGs through SVGO. User-supplied SVG is executable content — never inline it; see `frontend-security` uploads.
 - Accessibility: decorative → `alt=""` when loaded via `<img>`, `aria-hidden="true"` when inlined; meaningful → `alt` text on `<img>`, or `role="img"` + `<title>`/`aria-label` inline (see `a11y`).

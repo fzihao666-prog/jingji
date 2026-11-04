@@ -17,9 +17,9 @@ Every mechanical rule in this rule-set should be backed by a tool so `lint`/CI c
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | No `any` (AGENTS.md)                                             | `@typescript-eslint/no-explicit-any`                                                                                                  |
 | `@ts-expect-error` needs reason, `@ts-ignore` banned (AGENTS.md) | `@typescript-eslint/ban-ts-comment` with `ts-expect-error: 'allow-with-description'`                                                  |
-| Hooks rules + complete effect deps (react-patterns)              | `eslint-plugin-react-hooks` (`rules-of-hooks`, `exhaustive-deps`) — suppression comments banned                                       |
-| No array-index keys (react-patterns)                             | `react/no-array-index-key`                                                                                                            |
-| Named exports only, with exceptions (react-patterns)             | `import/no-default-export` + overrides allowing `app/**`, `pages/**`, `src/pages/**`, `*.stories.*`, `*.config.*`, `.storybook/**`    |
+| Hooks rules + complete effect deps              | `eslint-plugin-react-hooks` (`rules-of-hooks`, `exhaustive-deps`) — suppression comments banned                                       |
+| No array-index keys                             | `react/no-array-index-key`                                                                                                            |
+| Named exports only, with exceptions             | `import/no-default-export` + overrides allowing `app/**`, `pages/**`, `src/pages/**`, `*.stories.*`, `*.config.*`, `.storybook/**`    |
 | No inline styles (AGENTS.md)                                     | `react/forbid-dom-props` (`style`)                                                                                                    |
 | No `dangerouslySetInnerHTML` / eval family (frontend-security)   | `react/no-danger`, `no-eval`, `no-implied-eval`, `no-new-func`                                                                        |
 | Semantic HTML, labels, keyboard, no positive tabindex (a11y)     | `eslint-plugin-jsx-a11y` (recommended config, as errors)                                                                              |

@@ -5,7 +5,7 @@ description: 'Frontend/BFF security for forms and external input, auth, cookies,
 
 # Frontend Security
 
-Order of defense: don't accept untrusted data → validate at the boundary → encode/sanitize at output → restrict with platform policy (CSP, cookies, headers). Apply all layers, not one. These rules are policy: changing or weakening them requires human security review (see `governance`).
+Order of defense: don't accept untrusted data → validate at the boundary → encode/sanitize at output → restrict with platform policy (CSP, cookies, headers). Apply all layers, not one. These rules are policy: changing or weakening them requires human security review（遵循项目 `AGENTS.md`）。
 
 ## XSS
 
@@ -68,7 +68,7 @@ Relevant whenever the app sends content to an LLM or renders model output (chat,
 ## Secrets, env, logging
 
 - Secrets never appear in: client bundles (`NEXT_PUBLIC_`/`VITE_`/`PUBLIC_` vars are public by definition), repo files, logs, client-bound error messages, or URL query strings (query strings leak via logs and referrers).
-- `.env*` in `.gitignore`; commit `.env.example` with placeholders. A secret ever committed = rotate it; deleting the file does not unpublish it. Secrets scanning in CI is mandatory (see `governance`).
+- `.env*` in `.gitignore`; commit `.env.example` with placeholders. A secret ever committed = rotate it; deleting the file does not unpublish it. Secrets scanning in CI is mandatory（遵循项目 `AGENTS.md`）。
 - No PII, credentials, or tokens in server logs, analytics events, or error-tracker payloads — configure scrubbing (e.g. Sentry `beforeSend`). Server errors: record only scrubbed diagnostics server-side, then return a generic message + correlation ID. Stack traces and DB errors never cross the wire.
 - Conversely, DO record security events for audit (A09 / ASVS V7): authentication success & failure, authorization denials (IDOR / 403), privilege/role changes, webhook signature-verification failures, password/email changes, and admin actions — each with a policy-approved actor identifier, action, result, correlation ID, and a minimized/masked source-network signal only when justified. IP addresses and stable actor identifiers can be personal data: restrict access, define retention, and hash or truncate where incident-response needs permit. Silent auth failures are unacceptable, but audit metadata is not exempt from privacy policy. Make logs tamper-evident and retained per policy.
 - Data minimization & retention: collect only what's needed; set a retention window on logs/analytics containing personal data and honor deletion requests — don't keep PII indefinitely "just in case".
@@ -84,12 +84,12 @@ Set and keep (next.config / astro config / hosting headers):
 
 ## Third-party scripts & embeds
 
-- Third-party scripts require approval (see `governance`), exact version pinning, and `integrity` (SRI) when loaded from a CDN; prefer self-hosting. Tag managers that load arbitrary scripts defeat CSP — avoid, or strictly govern what they may inject.
+- Third-party scripts require approval（遵循项目 `AGENTS.md`）， exact version pinning, and `integrity` (SRI) when loaded from a CDN; prefer self-hosting. Tag managers that load arbitrary scripts defeat CSP — avoid, or strictly govern what they may inject.
 - iframes/embeds: explicit `sandbox` attribute; `postMessage` handlers must check `event.origin` against an allow-list.
 
 ## Dependencies
 
-- Before adding: maintenance, downloads, install scripts (`postinstall`), transitive weight, license (see `governance`), and the EXACT package name (typosquatting).
+- Before adding: maintenance, downloads, install scripts (`postinstall`), transitive weight, license （遵循项目 `AGENTS.md`）, and the EXACT package name (typosquatting).
 - Dependency confusion: publish private packages under the org scope (`@company/`); pin scope→registry mapping in `.npmrc`; assert registry URLs with `lockfile-lint` in CI.
 - Prefer a release cooldown: avoid versions published within the last few days (compromise/worm window). Pin CI actions by commit SHA, not tag.
 - Lockfile always committed; CI uses the canonical package manager's frozen/immutable install mode, with lifecycle scripts disabled where the build allows. Never translate the command to a different package manager.

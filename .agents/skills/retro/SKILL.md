@@ -18,7 +18,7 @@ The rules improve only if what went wrong feeds back into them. This skill is th
 - Happened twice, or cost real time once, AND is generalizable beyond today's file. One-off trivia stays out.
 - Not already covered: grep the relevant skill first. If covered but didn't fire, the fix is the skill's `description` (trigger), not a new rule — say which.
 - Decidable: the rule must be checkable by a reader ("prefer X" is not a rule; "X unless Y, because Z" is).
-- Security/a11y candidates go to `frontend-security`/`a11y` and need human security review per `governance`.
+- Security/a11y candidates go to `frontend-security`/`a11y` and need human security review，按项目 `AGENTS.md` 执行。
 
 ## Propose
 
@@ -29,6 +29,6 @@ For each candidate, output:
 - **Evidence**: the concrete moment(s) that motivated it.
 - **Enforcement**: can ESLint/Stylelint/Semgrep catch it instead (see `tooling`)? A machine check beats a prose rule — propose the config change if so.
 
-Also propose DELETIONS: a rule nobody has hit in months is a pruning candidate (security/a11y rules are exempt — see `governance`).
+Also propose DELETIONS: a rule nobody has hit in months is a pruning candidate (security/a11y rules are exempt，遵循项目 `AGENTS.md`）。
 
 End with the proposals as ready-to-apply diffs and wait for sign-off. After applying any, add a `CHANGELOG.md` entry.

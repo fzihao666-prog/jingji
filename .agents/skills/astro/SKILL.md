@@ -15,7 +15,7 @@ description: 'Astro-specific pages, routing/rendering, islands, client directive
 ## Components
 
 - `.astro` for layout/static content; framework components (React) only inside islands that need them.
-- Props typed via `interface Props` + `Astro.props` destructuring in `.astro` files; React island components follow `react-patterns` (`type Props`).
+- Props typed via `interface Props` + `Astro.props` destructuring in `.astro` files; React 岛组件遵循项目现有约定。
 - Styles follow the active styling profile for both `.astro` files and framework islands. Astro scoped `<style>` is allowed for purely local, single-file styling; pick one approach per component and do not introduce a parallel styling system.
 
 ## Content Collections

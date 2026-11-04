@@ -39,7 +39,7 @@
 ## 5. Skills 与专项知识（条件触发）
 
 - `.agents/skills/` 存在时按任务需求选择技能，**不要求每次编辑代码都预加载**；Skill 的说明与具体规范仅在相关任务中读取。
-- 典型映射：图表/仪表板 → `data-viz`；React 组件/Hook → `react-patterns`（存在且确有专项约束时）；安全敏感 → `frontend-security`；无障碍 → `a11y`；定向单测/E2E → 对应测试 Skill。
+- 典型映射：图表/仪表板 → `data-viz`；React 页面/组件 → `jingji-frontend-designer`（全局已启用时）；安全敏感 → `frontend-security`；无障碍 → `a11y`；定向单测/E2E → 对应测试 Skill。
 - CSS 文案或局部配置修改不默认加载多项前端 Skill；不默认运行 `pre-ship` 或调用多个审查子 Agent。
 - 不修改 `.agents/`、生成器或其托管区块，除非任务明确要求。原文件中 `codex-frontend-skills` 区块由安装脚本管理：**替换本文件前先确认安装器是否会重新注入旧规则**；不能在不检查来源的情况下假设删除后永久生效。
 
