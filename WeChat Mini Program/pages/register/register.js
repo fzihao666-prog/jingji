@@ -23,6 +23,9 @@ Page({
     project: '',
     projectLabel: '',
     team: '',
+    customTeam: '',
+    addingTeam: false,
+    teamName: '',
     teamIndex: 0,
     nativePlaceProvince: '',
     nativePlaceCity: '',
@@ -55,7 +58,8 @@ Page({
   onRoleChange(event) {
     const index = Number(event.detail.value);
     const role = this.data.roleCodes[index] || 'ATL';
-    this.setData({ role, error: '', success: '' });
+    this.setData({ role, customTeam: '', addingTeam: false, teamName: '', error: '', success: '' });
+    this.syncTeamOptions();
   },
 
   async loadTeams() {
@@ -115,7 +119,7 @@ Page({
     const project = this.data.projectCodes[index] || '';
     const projectLabel = this.data.projectOptions[index] || '';
     const currentTeam = this.data.team;
-    this.setData({ project, projectLabel, error: '' }, () => {
+    this.setData({ project, projectLabel, customTeam: '', addingTeam: false, teamName: '', error: '' }, () => {
       this.syncTeamOptions();
       if (!this.data.teamOptions.length && !this.data.teamsLoading) {
         this.loadTeams();
@@ -126,6 +130,31 @@ Page({
         this.setData({ teamIndex: this.data.teamOptions.indexOf(currentTeam) });
       }
     });
+  },
+
+  startAddTeam() {
+    if (this.data.role !== 'SCC' || !this.data.project || this.data.submitting) return;
+    this.setData({ addingTeam: true, teamName: '', error: '' });
+  },
+
+  onTeamNameInput(event) {
+    this.setData({ teamName: event.detail.value, error: '' });
+  },
+
+  cancelAddTeam() {
+    this.setData({ addingTeam: false, teamName: '' });
+  },
+
+  confirmTeam() {
+    if (this.data.role !== 'SCC' || !this.data.project || this.data.submitting) return;
+    const name = this.data.teamName.trim();
+    if (name.length < 2 || name.length > 30) {
+      this.showValidationError('队伍名称须为2—30个字符。', {});
+      return;
+    }
+    const existing = this.data.allTeams.some((item) => item.project === this.data.project && item.name === name);
+    this.setData({ customTeam: existing ? '' : name, team: name, addingTeam: false, teamName: '', error: '' });
+    this.syncTeamOptions();
   },
 
   onTeamChange(event) {
@@ -154,6 +183,9 @@ Page({
     const teamOptions = allTeams
       .filter((item) => item.project === project)
       .map((item) => item.name);
+    if (this.data.role === 'SCC' && this.data.customTeam && !teamOptions.includes(this.data.customTeam)) {
+      teamOptions.push(this.data.customTeam);
+    }
     const teamIndex = Math.max(
       0,
       teamOptions.indexOf(this.data.teamOptions.includes(this.data.team) ? this.data.team : '')
@@ -189,6 +221,7 @@ Page({
     if (!phone) return '请填写手机号。';
     if (!/^1[3-9]\d{9}$/.test(phone)) return '手机号须为11位大陆手机号。';
     if (!project) return '请选择运动项目。';
+    if (role === 'SCC' && this.data.addingTeam) return '请先确认新增队伍，或取消新增后选择已有队伍。';
     if (!team) return '请选择所属队伍。';
     if (!username) return '请填写账号。';
     if (!/^[a-z0-9_]{4,24}$/.test(username)) return '账号须为4至24位字母、数字或下划线。';
@@ -241,6 +274,7 @@ Page({
         role,
         project,
         team,
+        createTeam: role === 'SCC' && this.data.customTeam === team,
         phone,
         gender,
         birthDate

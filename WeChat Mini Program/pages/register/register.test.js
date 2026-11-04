@@ -201,3 +201,38 @@ describe('注册错误可感知性', () => {
     expect(registerTemplate).toContain("fieldErrors.gender || ''");
   });
 });
+
+describe('教练新增队伍', () => {
+  it('新增后选中并随注册提交，不调用独立建队接口', async () => {
+    const register = vi.fn().mockResolvedValue({ status: 'pending' });
+    const page = createPage({ register });
+    page.data.role = 'SCC';
+    page.data.teamName = '  新队伍  ';
+    page.confirmTeam();
+    expect(page.data.team).toBe('新队伍');
+    await page.submit();
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ team: '新队伍', createTeam: true }));
+  });
+  it('同项目同名直接选用，切换项目清除新增队伍', () => {
+    const page = createPage();
+    page.data.role = 'SCC';
+    page.data.allTeams = [{ project: page.data.project, name: '测试队' }];
+    page.data.teamName = '测试队';
+    page.confirmTeam();
+    expect(page.data.customTeam).toBe('');
+    expect(page.data.team).toBe('测试队');
+    page.data.teamName = '新队伍';
+    page.confirmTeam();
+    page.onProjectChange({ detail: { value: 0 } });
+    expect(page.data.customTeam).toBe('');
+  });
+  it('切换为运动员后不能提交自建队伍', () => {
+    const page = createPage();
+    page.data.role = 'SCC';
+    page.data.teamName = '新队伍';
+    page.confirmTeam();
+    page.onRoleChange({ detail: { value: 0 } });
+    expect(page.data.customTeam).toBe('');
+    expect(page.data.team).toBe('');
+  });
+});

@@ -28,8 +28,11 @@ describe('注册人口信息历史迁移', () => {
             birth_date: null,
           }
         );
+        expect(db.prepare('SELECT create_team FROM registration_requests WHERE id=1').get()).toEqual({ create_team: 0 });
+        db.exec('UPDATE registration_requests SET create_team=1 WHERE id=1');
         db.exec("UPDATE registration_requests SET birth_date='1999-01-01' WHERE id=1");
         initializeDatabase(db, options);
+        expect(db.prepare('SELECT create_team FROM registration_requests WHERE id=1').get()).toEqual({ create_team: 1 });
         expect(db.prepare('SELECT birth_date FROM registration_requests WHERE id=1').get()).toEqual(
           { birth_date: '1999-01-01' }
         );

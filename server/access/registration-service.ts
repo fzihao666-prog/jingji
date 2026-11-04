@@ -1,6 +1,7 @@
 import { db } from '../core/db.ts';
 import { validateAccountAreas } from '../../shared/account-regions.ts';
 import { canManageRole, type AreaLevel } from '../../shared/access.ts';
+import { isProject } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import {
   accountPermissions,
@@ -50,6 +51,7 @@ export type RegistrationActivationRow = {
   requested_role: 'ATL' | 'SCC';
   project: string;
   team: string;
+  create_team: number;
   gender: string | null;
   status: string;
   birth_date: string | null;
@@ -98,7 +100,7 @@ export function activateRegistrationRequest(
     .prepare(
       `
     SELECT id, username, password_hash, display_name, requested_role,
-      project, team, gender, birth_date, native_place, phone, status
+      project, team, create_team, gender, birth_date, native_place, phone, status
     FROM registration_requests WHERE id = ?
   `
     )
@@ -115,7 +117,7 @@ export function activateRegistrationRequest(
     ) {
       return { ok: false, status: 403, message: '该申请超出当前账号的管辖范围。' };
     }
-  } else {
+  } else if (!request.create_team) {
     const team = db
       .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
       .get(request.project, request.team);
@@ -124,6 +126,24 @@ export function activateRegistrationRequest(
 
   db.exec('BEGIN');
   try {
+    const activeTeam = db.prepare(
+      'SELECT id, active FROM project_teams WHERE project = ? AND name = ?'
+    ).get(request.project, request.team) as { id: number; active: number } | undefined;
+    if (request.create_team) {
+      if (request.requested_role !== 'SCC' || !isProject(request.project) ||
+          request.team.trim() !== request.team || request.team.length < 2 || request.team.length > 30) {
+        throw new RegistrationActivationError('新增队伍申请无效。');
+      }
+      if (activeTeam && !activeTeam.active) {
+        throw new RegistrationActivationError('该队伍已停用，请联系管理员。');
+      }
+      if (!activeTeam) {
+        db.prepare('INSERT INTO project_teams (project, name, active) VALUES (?, ?, 1)')
+          .run(request.project, request.team);
+      }
+    } else if (!activeTeam?.active) {
+      throw new RegistrationActivationError('申请所属队伍不存在或已停用。');
+    }
     let athleteId: number | null = null;
     if (request.requested_role === 'ATL') {
       const team = db

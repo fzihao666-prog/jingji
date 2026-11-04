@@ -199,6 +199,15 @@ export function registerAuthRoutes(
             : requestedRoleInput;
       const project = cleanString(req.body?.project);
       const team = cleanString(req.body?.team);
+      const createTeamInput = z.boolean().optional().safeParse(req.body?.createTeam);
+      if (!createTeamInput.success) {
+        return res.status(400).json({ message: '新增队伍参数无效。' });
+      }
+      const createTeam = createTeamInput.data === true;
+      const newTeamName = z.string().trim().min(2).max(30).safeParse(req.body?.team);
+      if (createTeam && (requestedRole !== 'SCC' || !newTeamName.success)) {
+        return res.status(400).json({ message: '仅教练可新增队伍，队伍名称须为2—30个字符。' });
+      }
       if (
         Object.hasOwn(req.body || {}, 'identityNumber') ||
         Object.hasOwn(req.body || {}, 'identity_number')
@@ -242,7 +251,7 @@ export function registerAuthRoutes(
       const validTeam = db
         .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
         .get(project, team);
-      if (!validTeam) errors.push('请选择该项目下的有效队伍');
+      if (!validTeam && !createTeam) errors.push('请选择该项目下的有效队伍');
       if (requestedRole === 'ATL') {
         if (
           nativePlaceRest.length ||
@@ -270,11 +279,16 @@ export function registerAuthRoutes(
       const passwordHash = await passwords.hash(password);
       // 密码计算让出主线程后，重新检查账号、申请和队伍，避免并发申请覆盖已提交状态。
       if (
-        !db
+        !createTeam && !db
           .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
           .get(project, team)
       ) {
         return res.status(400).json({ message: '请选择该项目下的有效队伍。' });
+      }
+      if (createTeam && db.prepare(
+        'SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 0'
+      ).get(project, team)) {
+        return res.status(400).json({ message: '该队伍已停用，请联系管理员。' });
       }
       const existingUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
       if (existingUser) return res.status(409).json({ message: '该账号已存在。' });
@@ -291,7 +305,7 @@ export function registerAuthRoutes(
         db.prepare(
           `
         UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
-          project = ?, team = ?, gender = ?, birth_date = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
+          project = ?, team = ?, create_team = ?, gender = ?, birth_date = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
           reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
       `
         ).run(
@@ -300,6 +314,7 @@ export function registerAuthRoutes(
           requestedRole,
           project,
           team,
+          createTeam ? 1 : 0,
           gender,
           birthDate,
           nativePlace,
@@ -312,8 +327,8 @@ export function registerAuthRoutes(
           .prepare(
             `
         INSERT INTO registration_requests (
-          username, password_hash, display_name, requested_role, project, team, gender, birth_date, native_place, phone
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          username, password_hash, display_name, requested_role, project, team, create_team, gender, birth_date, native_place, phone
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
           )
           .run(
@@ -323,6 +338,7 @@ export function registerAuthRoutes(
             requestedRole,
             project,
             team,
+            createTeam ? 1 : 0,
             gender,
             birthDate,
             nativePlace,

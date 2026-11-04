@@ -398,7 +398,7 @@ export function registerAccessRoutes(app: Express) {
       db.exec('BEGIN');
       try {
         db.prepare(
-          "UPDATE registration_requests SET project=?,team=? WHERE id=? AND status='pending'"
+          "UPDATE registration_requests SET project=?,team=?,create_team=0 WHERE id=? AND status='pending'"
         ).run(input.data.project, input.data.team, id.data);
         db.prepare(
           'INSERT INTO audit_logs (user_id,action,entity_type,entity_id,detail) VALUES (?,?,?,?,?)'

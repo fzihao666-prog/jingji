@@ -6,6 +6,7 @@ import {
   Eye,
   EyeOff,
   LockKeyhole,
+  Plus,
   UserRound,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
@@ -327,6 +328,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [displayName, setDisplayName] = useState('');
   const [project, setProject] = useState('');
   const [team, setTeam] = useState('');
+  const [customTeam, setCustomTeam] = useState<{ project: string; name: string } | null>(null);
+  const [addingTeam, setAddingTeam] = useState(false);
+  const [teamName, setTeamName] = useState('');
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [gender, setGender] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -335,6 +339,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
     {}
   );
   const registerFormRef = useRef<HTMLFormElement>(null);
+  const teamSelectRef = useRef<HTMLSelectElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const successHeadingRef = useRef<HTMLHeadingElement>(null);
   const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -354,8 +359,25 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   }, []);
 
   useEffect(() => {
-    if (!projectTeams.some((item) => item.name === team)) setTeam(projectTeams[0]?.name || '');
-  }, [project, teams]);
+    if (!projectTeams.some((item) => item.name === team) &&
+        !(role === 'SCC' && customTeam?.project === project && customTeam.name === team)) {
+      setTeam(projectTeams[0]?.name || '');
+    }
+  }, [project, teams, role, customTeam, team]);
+
+  const confirmTeam = () => {
+    const name = teamName.trim();
+    if (name.length < 2 || name.length > 30) {
+      reportRegistrationError('队伍名称须为2—30个字符。');
+      return;
+    }
+    setCustomTeam(projectTeams.some((item) => item.name === name) ? null : { project, name });
+    setTeam(name);
+    setAddingTeam(false);
+    setTeamName('');
+    setError('');
+    requestAnimationFrame(() => teamSelectRef.current?.focus());
+  };
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -434,6 +456,10 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
       reportRegistrationError('请选择运动项目。');
       return;
     }
+    if (role === 'SCC' && addingTeam) {
+      reportRegistrationError('请先确认新增队伍，或取消新增后选择已有队伍。');
+      return;
+    }
     if (!team) {
       reportRegistrationError('请选择所属队伍。');
       return;
@@ -447,6 +473,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
         role,
         project,
         team,
+        createTeam: role === 'SCC' && customTeam?.project === project && customTeam.name === team,
         gender,
         birthDate,
         phone,
@@ -632,7 +659,12 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     <span>注册身份</span>
                     <select
                       value={role}
-                      onChange={(event) => setRole(event.target.value === 'SCC' ? 'SCC' : 'ATL')}
+                      onChange={(event) => {
+                        setRole(event.target.value === 'SCC' ? 'SCC' : 'ATL');
+                        setCustomTeam(null);
+                        setAddingTeam(false);
+                        setTeamName('');
+                      }}
                       required
                     >
                       <option value="ATL">运动员</option>
@@ -656,7 +688,12 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     <span>项目</span>
                     <select
                       value={project}
-                      onChange={(event) => setProject(event.target.value)}
+                      onChange={(event) => {
+                        setProject(event.target.value);
+                        setCustomTeam(null);
+                        setAddingTeam(false);
+                        setTeamName('');
+                      }}
                       required
                     >
                       <option value="">请选择项目</option>
@@ -670,9 +707,10 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                   <label>
                     <span>队伍</span>
                     <select
+                      ref={teamSelectRef}
                       value={team}
                       onChange={(event) => setTeam(event.target.value)}
-                      disabled={!project || !projectTeams.length}
+                      disabled={!project || (!projectTeams.length && !(role === 'SCC' && customTeam?.project === project))}
                       required
                     >
                       <option value="">
@@ -687,8 +725,46 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                           {item.name}
                         </option>
                       ))}
+                      {role === 'SCC' && customTeam?.project === project &&
+                        !projectTeams.some((item) => item.name === customTeam.name) && (
+                          <option value={customTeam.name}>{customTeam.name}（随注册新增）</option>
+                        )}
                     </select>
                   </label>
+                  {role === 'SCC' && (
+                    <div className="register-team-create">
+                      {!addingTeam ? (
+                        <button type="button" className="secondary-button"
+                          disabled={!project || submitting}
+                          onClick={() => { setAddingTeam(true); setTeamName(''); }}>
+                          <Plus size={16} aria-hidden="true" />新增队伍
+                        </button>
+                      ) : (
+                        <>
+                          <label>
+                            <span>新队伍名称</span>
+                            <input value={teamName} maxLength={30}
+                              autoFocus disabled={submitting}
+                              placeholder="请输入2—30个字符"
+                              onChange={(event) => setTeamName(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') { event.preventDefault(); confirmTeam(); }
+                              }} />
+                          </label>
+                          <div className="register-team-actions">
+                            <button type="button" className="primary-button" disabled={submitting}
+                              onClick={confirmTeam}>确认队伍</button>
+                            <button type="button" className="secondary-button" disabled={submitting}
+                              onClick={() => {
+                                setAddingTeam(false);
+                                requestAnimationFrame(() => teamSelectRef.current?.focus());
+                              }}>取消</button>
+                          </div>
+                          <p className="muted">队伍随注册提交，账号开通时正式创建。</p>
+                        </>
+                      )}
+                    </div>
+                  )}
                   <label>
                     <span>性别（必填）</span>
                     <select

@@ -43,7 +43,7 @@ beforeAll(async () => {
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT,updated_at TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER, category TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER, UNIQUE(coach_user_id,athlete_id));
-    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT, birth_date TEXT, status TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, create_team INTEGER DEFAULT 0, gender TEXT, birth_date TEXT, status TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT);
   `);
   const service = await import('./registration-service.ts');
@@ -480,4 +480,57 @@ it('更正队伍或拒绝申请的审计失败时状态回滚', async () => {
   expect((await callRegistration('/1/reject','POST')).status).toBe(500);
   expect(db.prepare('SELECT team,status FROM registration_requests').get()).toEqual({team:'测试队',status:'pending'});
   db.exec('DROP TRIGGER fail_registration_audit');
+});
+
+describe('教练新增队伍激活', () => {
+  function newTeam() {
+    db.exec("UPDATE registration_requests SET requested_role='SCC',team='新教练队',create_team=1");
+  }
+  it('项目全队审核人通过后创建队伍', () => {
+    newTeam();
+    db.exec("UPDATE user_team_permissions SET team='*'");
+    expect(activate(1, reviewer).ok).toBe(true);
+    expect(db.prepare("SELECT active FROM project_teams WHERE name='新教练队'").get()).toEqual({ active: 1 });
+  });
+  it('无队伍授权的审核人不能创建队伍', () => {
+    newTeam();
+    expect(activate(1, reviewer)).toMatchObject({ ok: false, status: 403 });
+    expect(db.prepare("SELECT id FROM project_teams WHERE name='新教练队'").get()).toBeUndefined();
+  });
+  it('账号写入失败回滚新队伍', () => {
+    newTeam();
+    db.exec("CREATE TRIGGER fail_new_coach BEFORE INSERT ON coach_profiles BEGIN SELECT RAISE(ABORT,'test failure'); END");
+    try {
+      expect(activate(1, null).ok).toBe(false);
+      expect(db.prepare("SELECT id FROM project_teams WHERE name='新教练队'").get()).toBeUndefined();
+      expect(db.prepare("SELECT status FROM registration_requests WHERE id=1").get()).toEqual({ status: 'pending' });
+    } finally { db.exec('DROP TRIGGER fail_new_coach'); }
+  });
+  it('批准前出现同名有效队伍时复用', () => {
+    newTeam();
+    db.exec("INSERT INTO project_teams VALUES (2,'ROWING','新教练队',1)");
+    expect(activate(1, null).ok).toBe(true);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM project_teams WHERE name='新教练队'").get()).toEqual({ count: 1 });
+  });
+  it('拒绝申请不创建队伍，之后不能再开通', async () => {
+    newTeam();
+    db.exec("UPDATE user_team_permissions SET team='*'");
+    expect((await callRegistration('/1/reject', 'POST')).status).toBe(200);
+    expect(activate(1, reviewer)).toMatchObject({ ok: false, status: 409 });
+    expect(db.prepare("SELECT id FROM project_teams WHERE name='新教练队'").get()).toBeUndefined();
+  });
+  it('更正到已有队伍时清除新增标记', async () => {
+    newTeam();
+    db.exec("UPDATE user_team_permissions SET team='*'");
+    expect((await callRegistration('/1/team', 'PUT', { project: 'ROWING', team: '测试队' })).status).toBe(200);
+    expect(db.prepare('SELECT create_team FROM registration_requests WHERE id=1').get()).toEqual({ create_team: 0 });
+    expect(activate(1, reviewer).ok).toBe(true);
+    expect(db.prepare("SELECT id FROM project_teams WHERE name='新教练队'").get()).toBeUndefined();
+  });
+  it('不自动恢复已停用的同名队伍', () => {
+    newTeam();
+    db.exec("INSERT INTO project_teams VALUES (2,'ROWING','新教练队',0)");
+    expect(activate(1, null).ok).toBe(false);
+    expect(db.prepare("SELECT active FROM project_teams WHERE id=2").get()).toEqual({ active: 0 });
+  });
 });

@@ -50,7 +50,7 @@ beforeAll(async () => {
     CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT,
       role TEXT, athlete_id INTEGER, active INTEGER DEFAULT 1, session_version INTEGER DEFAULT 0);
     CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT UNIQUE, status TEXT DEFAULT 'pending',
-      password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, gender TEXT,
+      password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, create_team INTEGER NOT NULL DEFAULT 0, gender TEXT,
       birth_date TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
@@ -453,4 +453,31 @@ it('不同客户端独立限流，伪造转发头前缀不能绕过限制', asyn
   expect((await attempt('203.0.113.32')).status).toBe(400);
   expect((await attempt('203.0.113.99, 198.51.100.31')).status).toBe(429);
   expect((await attempt('127.0.0.1, 198.51.100.31')).status).toBe(429);
+});
+
+describe('教练注册新增队伍', () => {
+  it('需审核时仅保存申请，不提前创建队伍', async () => {
+    const response = await registerInput({ ...registrationInput, role: 'SCC', team: '新教练队', createTeam: true });
+    expect(response.status).toBe(201);
+    expect(db.prepare('SELECT create_team FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ create_team: 1 });
+    expect(db.prepare("SELECT id FROM project_teams WHERE name='新教练队'").get()).toBeUndefined();
+  });
+  it('自动开通同时创建队伍并限定教练权限', async () => {
+    db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+    const response = await registerInput({ ...registrationInput, role: 'SCC', team: '新教练队', createTeam: true });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ status: 'approved' });
+    expect(db.prepare("SELECT active FROM project_teams WHERE project='ROWING' AND name='新教练队'").get()).toEqual({ active: 1 });
+    expect(db.prepare("SELECT project,team FROM user_team_permissions").get()).toEqual({ project: 'ROWING', team: '新教练队' });
+  });
+  it.each([
+    { role: 'ATL', team: '新教练队', createTeam: true },
+    { role: 'SCC', team: '新教练队', createTeam: 'true' },
+    { role: 'SCC', team: ' ', createTeam: true },
+    { role: 'SCC', team: '队', createTeam: true },
+    { role: 'SCC', team: '队'.repeat(31), createTeam: true },
+    { role: 'SCC', project: 'INVALID', team: '新教练队', createTeam: true },
+  ])('拒绝无效新增申请 %j', async (input) => {
+    expect((await registerInput({ ...registrationInput, ...input })).status).toBe(400);
+  });
 });

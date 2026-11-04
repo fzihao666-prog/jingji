@@ -353,6 +353,7 @@ export const api = {
     role: 'ATL' | 'SCC';
     project?: string;
     team?: string;
+    createTeam?: boolean;
     gender: string;
     birthDate: string;
     phone: string;

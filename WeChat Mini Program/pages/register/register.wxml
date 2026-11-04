@@ -112,6 +112,19 @@
           </view>
         </view>
 
+        <view wx:if="{{role === 'SCC'}}" class="field">
+          <button wx:if="{{!addingTeam}}" class="secondary-button" disabled="{{!project || submitting}}" bindtap="startAddTeam">新增队伍</button>
+          <block wx:else>
+            <text class="field-label">新队伍名称</text>
+            <input value="{{teamName}}" maxlength="30" placeholder="请输入2—30个字符" focus="{{addingTeam}}" disabled="{{submitting}}" bindinput="onTeamNameInput" bindconfirm="confirmTeam" />
+            <view class="team-create-actions">
+              <button class="primary-button" disabled="{{submitting}}" bindtap="confirmTeam">确认队伍</button>
+              <button class="secondary-button" disabled="{{submitting}}" bindtap="cancelAddTeam">取消</button>
+            </view>
+            <text class="field-label">队伍随注册提交，账号开通时正式创建。</text>
+          </block>
+        </view>
+
         <view class="section-title">
           <b>03</b>
           <strong>账号设置</strong>
