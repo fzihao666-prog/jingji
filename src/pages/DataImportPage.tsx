@@ -880,142 +880,75 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
         eyebrow="DATA IMPORT"
         title="数据导入"
       />
-      <EnodeImport key={project} project={project} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy)} onView={onViewEnode} />
-      <div className="data-import-hero-actions">
-        <label className="data-import-template-team">
-          <span>模板预填队伍</span>
-          <select
-            value={templateTeamsProject === project ? templateTeam : ''}
-            disabled={Boolean(busy) || templateTeamsProject !== project}
-            onChange={(event) => setTemplateTeam(event.target.value)}
-          >
-            <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '全部授权队伍' : '暂无队伍（空模板）'}</option>
-            {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="data-import-template"
-          disabled={Boolean(busy) || templateTeamsProject !== project}
-          onClick={() => downloadTemplate('profile')}
-        >
-          <Download size={19} />
-          <div>
-            <strong>{busy === 'template' ? '正在准备模板…' : '队员资料模板'}</strong>
-            <span>批量建档与补全，预填已有人员</span>
-          </div>
-        </button>
-        <button
-          type="button"
-          className="data-import-template"
-          disabled={Boolean(busy) || templateTeamsProject !== project}
-          onClick={() => downloadTemplate('training')}
-        >
-          <Download size={19} />
-          <div>
-            <strong>训练记录模板</strong>
-            <span>课次、组次与恢复，预填已有人员</span>
-          </div>
-        </button>
-        <button
-          type="button"
-          className="data-import-template"
-          disabled={Boolean(busy) || templateTeamsProject !== project}
-          onClick={() => downloadTemplate('test')}
-        >
-          <Download size={19} />
-          <div>
-            <strong>测试成绩模板</strong>
-            <span>专项测试与体能测试，预填已有人员</span>
-          </div>
-        </button>
-        <button
-          type="button"
-          className="data-import-template"
-          disabled={Boolean(busy) || templateTeamsProject !== project}
-          onClick={() => downloadTemplate('unified')}
-        >
-          <FileSpreadsheet size={19} />
-          <div>
-            <strong>统一数据模板</strong>
-            <span>单表填写身体指标、实测1RM及基础体能，预填已有人员</span>
-          </div>
-        </button>
-        <button
-          type="button"
-          className="data-import-template"
-          disabled={Boolean(busy)}
-          onClick={exportUnifiedData}
-        >
-          <Database size={19} />
-          <div>
-            <strong>导出统一数据</strong>
-            <span>导出当前项目及权限范围内已入库数据</span>
-          </div>
-        </button>
-      </div>
-
-      <ol className="data-import-steps" aria-label="数据导入进度">
-        {['上传并检查', '确认运动员', '数据校对与确认导入', '导入结果'].map((label, index) => {
-          const current = !batch ? 0 : batch.status === 'committed' ? 3 : unconfirmedPersons.length ? 1 : 2;
-          return <li key={label} aria-current={index === current ? 'step' : undefined}>
-            <span>{index + 1}</span>{label}{index === 1 && batch && !unconfirmedPersons.length ? '（已自动通过）' : ''}
-          </li>;
-        })}
-      </ol>
-
       <div className="data-import-grid">
-        <section className="data-import-upload-card">
-          <div className="data-import-card-heading">
-            <FileSpreadsheet size={20} />
-            <div>
-              <strong>上传源文件</strong>
-              <span>支持 XLS / XLSX，单文件不超过 80MB</span>
+        <div className="data-import-sources">
+          <section className="data-import-upload-card" aria-label="Excel 导入">
+            <div className="data-import-card-heading">
+              <FileSpreadsheet size={20} />
+              <div>
+                <strong>Excel 导入</strong>
+                <span>支持 XLS / XLSX，单文件不超过 80MB</span>
+              </div>
             </div>
-          </div>
-          <button
-            type="button"
-            className="data-import-drop"
-            onClick={() => fileRef.current?.click()}
-          >
-            <UploadCloud size={28} />
-            <strong>{file ? file.name : '选择 Excel 文件'}</strong>
-            <span>
-              {file
-                ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
-                : '上传后先识别运动员，再校对业务数据'}
-            </span>
-          </button>
-          <input
-            ref={fileRef}
-            className="visually-hidden"
-            type="file"
-            accept=".xls,.xlsx"
-            aria-label="Excel文件"
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
-          />
-          <label className="data-import-date">
-            <span>缺失日期时使用</span>
+            <ol className="data-import-steps" aria-label="Excel 导入进度">
+              {['上传并检查', '确认运动员', '数据校对与确认导入', '导入结果'].map((label, index) => {
+                const current = !batch ? 0 : batch.status === 'committed' ? 3 : unconfirmedPersons.length ? 1 : 2;
+                return <li key={label} aria-current={index === current ? 'step' : undefined}>
+                  <span>{index + 1}</span>{label}{index === 1 && batch && !unconfirmedPersons.length ? '（已自动通过）' : ''}
+                </li>;
+              })}
+            </ol>
+            <button
+              type="button"
+              className="data-import-drop"
+              onClick={() => fileRef.current?.click()}
+            >
+              <UploadCloud size={28} />
+              <strong>{file ? file.name : '选择 Excel 文件'}</strong>
+              <span>
+                {file
+                  ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                  : '上传后先识别运动员，再校对业务数据'}
+              </span>
+            </button>
             <input
-              type="date"
-              value={defaultDate}
-              onChange={(event) => setDefaultDate(event.target.value)}
+              ref={fileRef}
+              className="visually-hidden"
+              type="file"
+              accept=".xls,.xlsx"
+              aria-label="Excel文件"
+              onChange={(event) => setFile(event.target.files?.[0] || null)}
             />
-            <small>表内日期优先；新模板缺日期须在此选择。旧文件使用当天日期时会在审查中提示</small>
-          </label>
-          <button
-            className="data-import-primary"
-            disabled={!file || Boolean(busy)}
-            onClick={() => void analyze()}
-          >
-            {busy === 'analyze' ? (
-              <RefreshCw className="spin" size={17} />
-            ) : (
-              <FileCheck2 size={17} />
-            )}
-            上传并检查
-          </button>
-        </section>
+            <label className="data-import-date">
+              <span>缺失日期时使用</span>
+              <input
+                type="date"
+                value={defaultDate}
+                onChange={(event) => setDefaultDate(event.target.value)}
+              />
+              <small>表内日期优先；新模板缺日期须在此选择。旧文件使用当天日期时会在审查中提示</small>
+            </label>
+            <button
+              className="data-import-primary"
+              disabled={!file || Boolean(busy)}
+              onClick={() => void analyze()}
+            >
+              {busy === 'analyze' ? (
+                <RefreshCw className="spin" size={17} />
+              ) : (
+                <FileCheck2 size={17} />
+              )}
+              上传并检查
+            </button>
+          </section>
+
+          <section className="data-import-upload-card data-import-device-card" aria-label="Enode 设备导入">
+            <div className="data-import-card-heading">
+              <div><strong>Enode 设备导入</strong><span>支持动作测量、每日状态和训练 RPE</span></div>
+            </div>
+            <EnodeImport key={project} project={project} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy)} onView={onViewEnode} />
+          </section>
+        </div>
 
         <section className="data-import-history-card">
           <div className="data-import-card-heading">
@@ -1069,6 +1002,83 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
           </div>
         </section>
       </div>
+
+      <details className="data-import-template-panel">
+        <summary>模板下载与数据导出</summary>
+        <div className="data-import-hero-actions">
+          <label className="data-import-template-team">
+            <span>模板预填队伍</span>
+            <select
+              value={templateTeamsProject === project ? templateTeam : ''}
+              disabled={Boolean(busy) || templateTeamsProject !== project}
+              onChange={(event) => setTemplateTeam(event.target.value)}
+            >
+              <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '全部授权队伍' : '暂无队伍（空模板）'}</option>
+              {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project}
+            onClick={() => downloadTemplate('profile')}
+          >
+            <Download size={19} />
+            <div>
+              <strong>{busy === 'template' ? '正在准备模板…' : '队员资料模板'}</strong>
+              <span>批量建档与补全，预填已有人员</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project}
+            onClick={() => downloadTemplate('training')}
+          >
+            <Download size={19} />
+            <div>
+              <strong>训练记录模板</strong>
+              <span>课次、组次与恢复，预填已有人员</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project}
+            onClick={() => downloadTemplate('test')}
+          >
+            <Download size={19} />
+            <div>
+              <strong>测试成绩模板</strong>
+              <span>专项测试与体能测试，预填已有人员</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project}
+            onClick={() => downloadTemplate('unified')}
+          >
+            <FileSpreadsheet size={19} />
+            <div>
+              <strong>统一数据模板</strong>
+              <span>单表填写身体指标、实测1RM及基础体能，预填已有人员</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy)}
+            onClick={exportUnifiedData}
+          >
+            <Database size={19} />
+            <div>
+              <strong>导出统一数据</strong>
+              <span>导出当前项目及权限范围内已入库数据</span>
+            </div>
+          </button>
+        </div>
+      </details>
 
       {createPortal(
         <div className="data-import-notifications" aria-live="polite" aria-atomic="true">
