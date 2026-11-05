@@ -9,7 +9,7 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  color: #fff;
+  color: var(--muted);
   font-size: 12px;
 }
 

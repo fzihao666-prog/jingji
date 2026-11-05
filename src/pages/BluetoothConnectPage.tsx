@@ -286,7 +286,6 @@ export function BluetoothConnectPage({ user }: Props) {
       <PageHeader
         eyebrow="DEVICE MANAGEMENT"
         title="设备管理"
-        className="data-management-header"
         actions={
           <div className="bluetooth-actions">
             <button

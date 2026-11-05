@@ -874,7 +874,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   return (
     <PageContainer className="data-import-page">
       <PageHeader
-        className="data-management-header data-import-header"
+        className="data-import-header"
         eyebrow="DATA IMPORT"
         title="数据导入"
         actions={

@@ -91,7 +91,6 @@ export function DataManagementPage({ user }: Props) {
   return (
     <PageContainer className="data-import-page">
       <PageHeader
-        className="data-management-header"
         eyebrow="METRICS & STANDARDS"
         title="指标与标准"
       />
