@@ -9,14 +9,14 @@ import {
   Plus,
   UserRound,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { LOGIN_ERROR_MESSAGES, loginFailureMessage } from '../../shared/login-errors';
+import { PROJECTS, projectLabel } from '../../shared/projects';
+import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
 import { ApiRequestError, api } from '../api';
 import { BrandLogo } from '../components/BrandLogo';
 import { IcpFooter } from '../components/IcpFooter';
 import type { ProjectTeam, User } from '../types';
-import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
-import { PROJECTS, projectLabel } from '../../shared/projects';
-import { LOGIN_ERROR_MESSAGES, loginFailureMessage } from '../../shared/login-errors';
 
 import {
   REGISTRATION_GENDERS,
@@ -83,7 +83,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 1,
     row: 1,
   },
-  { label: '拳击', english: 'Boxing', gif: '/assets/olympic-sports-login-v1/boxing.gif', col: 2, row: 1 },
+  {
+    label: '拳击',
+    english: 'Boxing',
+    gif: '/assets/olympic-sports-login-v1/boxing.gif',
+    col: 2,
+    row: 1,
+  },
   {
     label: '激流回旋',
     english: 'Canoe Slalom',
@@ -133,7 +139,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 2,
     row: 2,
   },
-  { label: '跳水', english: 'Diving', gif: '/assets/olympic-sports-login-v1/diving.gif', col: 3, row: 2 },
+  {
+    label: '跳水',
+    english: 'Diving',
+    gif: '/assets/olympic-sports-login-v1/diving.gif',
+    col: 3,
+    row: 2,
+  },
   {
     label: '盛装舞步',
     english: 'Equestrian Dressage',
@@ -155,7 +167,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 6,
     row: 2,
   },
-  { label: '击剑', english: 'Fencing', gif: '/assets/olympic-sports-login-v1/fencing.gif', col: 0, row: 3 },
+  {
+    label: '击剑',
+    english: 'Fencing',
+    gif: '/assets/olympic-sports-login-v1/fencing.gif',
+    col: 0,
+    row: 3,
+  },
   {
     label: '足球',
     english: 'Football',
@@ -163,7 +181,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 1,
     row: 3,
   },
-  { label: '高尔夫', english: 'Golf', gif: '/assets/olympic-sports-login-v1/golf.gif', col: 2, row: 3 },
+  {
+    label: '高尔夫',
+    english: 'Golf',
+    gif: '/assets/olympic-sports-login-v1/golf.gif',
+    col: 2,
+    row: 3,
+  },
   {
     label: '竞技体操',
     english: 'Artistic Gymnastics',
@@ -185,8 +209,20 @@ const OLYMPIC_DISCIPLINES = [
     col: 5,
     row: 3,
   },
-  { label: '曲棍球', english: 'Hockey', gif: '/assets/olympic-sports-login-v1/hockey.gif', col: 6, row: 3 },
-  { label: '柔道', english: 'Judo', gif: '/assets/olympic-sports-login-v1/judo.gif', col: 0, row: 4 },
+  {
+    label: '曲棍球',
+    english: 'Hockey',
+    gif: '/assets/olympic-sports-login-v1/hockey.gif',
+    col: 6,
+    row: 3,
+  },
+  {
+    label: '柔道',
+    english: 'Judo',
+    gif: '/assets/olympic-sports-login-v1/judo.gif',
+    col: 0,
+    row: 4,
+  },
   {
     label: '空手道·型',
     english: 'Karate Kata',
@@ -215,7 +251,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 4,
     row: 4,
   },
-  { label: '赛艇', english: 'Rowing', gif: '/assets/olympic-sports-login-v1/rowing.gif', col: 5, row: 4 },
+  {
+    label: '赛艇',
+    english: 'Rowing',
+    gif: '/assets/olympic-sports-login-v1/rowing.gif',
+    col: 5,
+    row: 4,
+  },
   {
     label: '七人制橄榄球',
     english: 'Rugby',
@@ -223,7 +265,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 6,
     row: 4,
   },
-  { label: '帆船', english: 'Sailing', gif: '/assets/olympic-sports-login-v1/sailing.gif', col: 0, row: 5 },
+  {
+    label: '帆船',
+    english: 'Sailing',
+    gif: '/assets/olympic-sports-login-v1/sailing.gif',
+    col: 0,
+    row: 5,
+  },
   {
     label: '射击',
     english: 'Shooting',
@@ -245,7 +293,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 3,
     row: 5,
   },
-  { label: '冲浪', english: 'Surfing', gif: '/assets/olympic-sports-login-v1/surfing.gif', col: 4, row: 5 },
+  {
+    label: '冲浪',
+    english: 'Surfing',
+    gif: '/assets/olympic-sports-login-v1/surfing.gif',
+    col: 4,
+    row: 5,
+  },
   {
     label: '游泳',
     english: 'Swimming',
@@ -267,7 +321,13 @@ const OLYMPIC_DISCIPLINES = [
     col: 0,
     row: 6,
   },
-  { label: '网球', english: 'Tennis', gif: '/assets/olympic-sports-login-v1/tennis.gif', col: 1, row: 6 },
+  {
+    label: '网球',
+    english: 'Tennis',
+    gif: '/assets/olympic-sports-login-v1/tennis.gif',
+    col: 1,
+    row: 6,
+  },
   {
     label: '蹦床',
     english: 'Trampoline Gymnastics',
@@ -359,8 +419,10 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   }, []);
 
   useEffect(() => {
-    if (!projectTeams.some((item) => item.name === team) &&
-        !(role === 'SCC' && customTeam?.project === project && customTeam.name === team)) {
+    if (
+      !projectTeams.some((item) => item.name === team) &&
+      !(role === 'SCC' && customTeam?.project === project && customTeam.name === team)
+    ) {
       setTeam(projectTeams[0]?.name || '');
     }
   }, [project, teams, role, customTeam, team]);
@@ -539,7 +601,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
         <div className={`login-box login-box-${mode}`}>
           <div className="login-heading">
             <p>{mode === 'login' ? '竞技表现管理平台' : '账号准入'}</p>
-            <h2 ref={headingRef} tabIndex={-1}>{mode === 'login' ? '欢迎回来' : '账号注册'}</h2>
+            <h2 ref={headingRef} tabIndex={-1}>
+              {mode === 'login' ? '欢迎回来' : '账号注册'}
+            </h2>
             <span>
               {mode === 'login' ? '请输入账号和密码进入系统' : '提交资料，审核通过后即可登录'}
             </span>
@@ -633,7 +697,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
           ) : success ? (
             <div className="registration-complete" role="status" aria-live="polite">
               <CheckCircle2 size={42} />
-              <h3 ref={successHeadingRef} tabIndex={-1}>申请已提交</h3>
+              <h3 ref={successHeadingRef} tabIndex={-1}>
+                申请已提交
+              </h3>
               <p>{success}</p>
               <button className="primary-button" onClick={() => switchMode('login')}>
                 <ArrowLeft size={17} />
@@ -710,14 +776,20 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     </select>
                   </label>
                   <div className="register-team-field">
-                    <label htmlFor="register-team"><span>队伍</span></label>
+                    <label htmlFor="register-team">
+                      <span>队伍</span>
+                    </label>
                     <div className="register-team-select">
                       <select
                         id="register-team"
                         ref={teamSelectRef}
                         value={team}
                         onChange={(event) => setTeam(event.target.value)}
-                        disabled={!project || (!projectTeams.length && !(role === 'SCC' && customTeam?.project === project))}
+                        disabled={
+                          !project ||
+                          (!projectTeams.length &&
+                            !(role === 'SCC' && customTeam?.project === project))
+                        }
                         required
                       >
                         <option value="">
@@ -725,23 +797,31 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                             ? '请先选择项目'
                             : projectTeams.length
                               ? '请选择队伍'
-                              : '该项目暂无队伍'}
+                              : '暂无队伍'}
                         </option>
                         {projectTeams.map((item) => (
                           <option key={item.id} value={item.name}>
                             {item.name}
                           </option>
                         ))}
-                        {role === 'SCC' && customTeam?.project === project &&
+                        {role === 'SCC' &&
+                          customTeam?.project === project &&
                           !projectTeams.some((item) => item.name === customTeam.name) && (
                             <option value={customTeam.name}>{customTeam.name}（随注册新增）</option>
                           )}
                       </select>
                       {role === 'SCC' && !addingTeam && (
-                        <button type="button" className="secondary-button register-team-add"
+                        <button
+                          type="button"
+                          className="secondary-button register-team-add"
                           disabled={!project || submitting}
-                          onClick={() => { setAddingTeam(true); setTeamName(''); }}>
-                          <Plus size={16} aria-hidden="true" />新增队伍
+                          onClick={() => {
+                            setAddingTeam(true);
+                            setTeamName('');
+                          }}
+                        >
+                          <Plus size={16} aria-hidden="true" />
+                          新增队伍
                         </button>
                       )}
                     </div>
@@ -749,22 +829,41 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                       <div className="register-team-create">
                         <label>
                           <span>新队伍名称</span>
-                          <input value={teamName} maxLength={30}
-                            autoFocus disabled={submitting}
+                          <input
+                            value={teamName}
+                            maxLength={30}
+                            autoFocus
+                            disabled={submitting}
                             placeholder="请输入2—30个字符"
                             onChange={(event) => setTeamName(event.target.value)}
                             onKeyDown={(event) => {
-                              if (event.key === 'Enter') { event.preventDefault(); confirmTeam(); }
-                            }} />
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                confirmTeam();
+                              }
+                            }}
+                          />
                         </label>
                         <div className="register-team-actions">
-                          <button type="button" className="primary-button" disabled={submitting}
-                            onClick={confirmTeam}>确认队伍</button>
-                          <button type="button" className="secondary-button" disabled={submitting}
+                          <button
+                            type="button"
+                            className="primary-button"
+                            disabled={submitting}
+                            onClick={confirmTeam}
+                          >
+                            确认队伍
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={submitting}
                             onClick={() => {
                               setAddingTeam(false);
                               requestAnimationFrame(() => teamSelectRef.current?.focus());
-                            }}>取消</button>
+                            }}
+                          >
+                            取消
+                          </button>
                         </div>
                         <p className="muted">队伍随注册提交，账号开通时正式创建。</p>
                       </div>
