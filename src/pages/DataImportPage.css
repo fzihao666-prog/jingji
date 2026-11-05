@@ -1980,9 +1980,9 @@
   background: var(--paper, #fff);
 }
 
-.data-import-template-panel > summary {
-  cursor: pointer;
-  font-weight: 700;
+.data-import-template-panel > h2 {
+  margin: 0;
+  font-size: 16px;
 }
 
 .data-import-template-panel .data-import-hero-actions {
