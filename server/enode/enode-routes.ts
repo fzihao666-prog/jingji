@@ -1,3 +1,9 @@
+import {
+  commitEnodePeople,
+  EnodeDecisionError,
+  enodeDecisions,
+  previewEnodePeople,
+} from './enode-people.ts';
 import type { Express, RequestHandler } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
@@ -12,7 +18,7 @@ import { importEnodeFile, readEnodeData } from './enode.ts';
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 12 * 1024 * 1024, files: 12, fields: 2, fieldSize: 128 * 1024 },
+  limits: { fileSize: 12 * 1024 * 1024, files: 12, fields: 3, fieldSize: 128 * 1024 },
 }).array('files', 12);
 const receive: RequestHandler = (req, res, next) => {
   upload(req, res, (error) => {
@@ -25,14 +31,16 @@ const receive: RequestHandler = (req, res, next) => {
 };
 export function registerEnodeRoutes(app: Express) {
   app.post(
-    '/api/enode/import',
+    ['/api/enode/import', '/api/enode/preview'],
     requireAuth,
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     receive,
     (req, res) => {
       const project: unknown = req.body?.project;
-      if (!isProject(project) || !dataImportScope(req.authUser!, project).allowed)
+      if (!isProject(project))
         return res.status(403).json({ message: '当前账号无权向该项目导入。' });
+      const scope = dataImportScope(req.authUser!, project);
+      if (!scope.allowed) return res.status(403).json({ message: '当前账号无权向该项目导入。' });
       let matches: Record<string, number>;
       try {
         const parsed = z
@@ -48,11 +56,42 @@ export function registerEnodeRoutes(app: Express) {
         return res.status(400).json({ message: '请选择 enode 导出文件。' });
       const ids = new Set(accessibleAthleteIds(req.authUser!));
       const candidates = (
-        db.prepare('SELECT id,name FROM athletes WHERE project=? AND active=1').all(project) as {
+        db
+          .prepare('SELECT id,name,team FROM athletes WHERE project=? AND active=1')
+          .all(project) as {
           id: number;
           name: string;
+          team: string;
         }[]
       ).filter((p) => ids.has(p.id));
+      if (req.path === '/api/enode/preview' || req.body?.decisions !== undefined) {
+        const batch = previewEnodePeople(files, candidates, scope.allowedTeams);
+        if (req.path === '/api/enode/preview') return res.json(batch.preview);
+        let choices: unknown;
+        try {
+          choices = JSON.parse(req.body.decisions);
+        } catch {
+          return res.status(400).json({ message: '人员确认数据无效。' });
+        }
+        const validated = enodeDecisions.safeParse(choices);
+        if (!validated.success) return res.status(400).json({ message: '人员确认数据无效。' });
+        try {
+          return res.json(
+            commitEnodePeople(db, {
+              batch,
+              choices: validated.data,
+              project,
+              userId: req.authUser!.id,
+              teams: scope.allowedTeams,
+              area: scope.defaultArea,
+            })
+          );
+        } catch (error) {
+          if (error instanceof EnodeDecisionError)
+            return res.status(409).json({ message: error.message });
+          throw error;
+        }
+      }
       if (Object.values(matches).some((id) => !candidates.some((p) => p.id === id)))
         return res.status(403).json({ message: '选择的运动员不在当前项目授权范围内。' });
       const results: EnodeImportResult[] = [];

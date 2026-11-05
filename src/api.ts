@@ -1,4 +1,4 @@
-import type { EnodeImportResult, EnodeQuery, EnodeData } from '../shared/enode';
+import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
 import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
@@ -193,12 +193,18 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
-  async importEnode(files: File[], project: Project, matches: Record<string, number> = {}) {
+  previewEnode(files: File[], project: Project) {
     const body = new FormData();
     files.forEach(file => body.append('files', file));
     body.append('project', project);
-    body.append('matches', JSON.stringify(matches));
-    return request<{ results: EnodeImportResult[] }>('/api/enode/import', { method: 'POST', body });
+    return request<EnodePreview>('/api/enode/preview', { method: 'POST', body });
+  },
+  async importEnode(files: File[], project: Project, decisions: Record<string, EnodePersonDecision>) {
+    const body = new FormData();
+    files.forEach(file => body.append('files', file));
+    body.append('project', project);
+    body.append('decisions', JSON.stringify(decisions));
+    return request<{ results: EnodeImportResult[]; summary: { linked: number; created: number; skipped: number } }>('/api/enode/import', { method: 'POST', body });
   },
   enodeData(query: EnodeQuery) {
     const params = new URLSearchParams();

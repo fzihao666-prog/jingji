@@ -167,10 +167,12 @@ export function importEnodeFile(
     userId: number;
     candidates: { id: number; name: string }[];
     matches?: Record<string, number>;
+    decisions?: ReadonlyMap<string, number | null>;
+    parsed?: ReturnType<typeof parseEnodeFile>;
   }
 ): EnodeImportResult {
   const { buffer, filename, project, userId, candidates, matches = {} } = options;
-  const parsed = parseEnodeFile(buffer);
+  const parsed = options.parsed ?? parseEnodeFile(buffer);
   const result: EnodeImportResult = {
     filename,
     kind: parsed.kind,
@@ -190,17 +192,20 @@ export function importEnodeFile(
   const insert =
     db.prepare(`INSERT INTO enode_records(athlete_id,project_code,kind,recorded_at,exercise_name,side,values_json,context_json,raw_json,fingerprint,occurrence,file_id,source_row)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(athlete_id,project_code,kind,fingerprint,occurrence) DO NOTHING`);
-  db.exec('BEGIN IMMEDIATE');
+  const ownsTransaction = !db.isTransaction;
+  if (ownsTransaction) db.exec('BEGIN IMMEDIATE');
   try {
     db.prepare(
       'INSERT INTO enode_import_files(id,project_code,filename,file_hash,kind,created_by) VALUES(?,?,?,?,?,?)'
     ).run(fileId, project, filename, hash(buffer), parsed.kind, userId);
     for (const row of parsed.rows) {
       const normalized = normalizeImportPersonName(row.name);
+      if (options.decisions?.get(normalized) === null) continue;
       const ids = people.get(normalized) || [];
       const mapped = matches[row.name];
-      const athleteId =
-        mapped !== undefined
+      const athleteId = options.decisions
+        ? options.decisions.get(normalized)
+        : mapped !== undefined
           ? candidates.find((p) => p.id === mapped)?.id
           : ids.length === 1
             ? ids[0]
@@ -253,9 +258,9 @@ export function importEnodeFile(
         failed: result.failed,
       })
     );
-    db.exec('COMMIT');
+    if (ownsTransaction) db.exec('COMMIT');
   } catch (error) {
-    if (db.isTransaction) db.exec('ROLLBACK');
+    if (ownsTransaction && db.isTransaction) db.exec('ROLLBACK');
     throw error;
   }
   return result;

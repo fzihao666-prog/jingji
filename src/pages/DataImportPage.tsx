@@ -56,7 +56,6 @@ type Props = {
   athletes: Athlete[];
   onChanged: () => void;
   onViewEnode: () => void;
-  enodeAthletes: Athlete[];
   onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
 };
 
@@ -118,7 +117,7 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode, enodeAthletes }: Props) {
+export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -881,7 +880,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
         eyebrow="DATA IMPORT"
         title="数据导入"
       />
-      <EnodeImport key={project} project={project} athletes={enodeAthletes} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy)} onView={onViewEnode} />
+      <EnodeImport key={project} project={project} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy)} onView={onViewEnode} />
       <div className="data-import-hero-actions">
         <label className="data-import-template-team">
           <span>模板预填队伍</span>

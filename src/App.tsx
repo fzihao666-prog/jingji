@@ -503,7 +503,6 @@ export default function App() {
         {page === 'data-import' && user.role !== 'ATL' && (
           <DataImportPage
             onViewEnode={() => changePage('strength-enode')}
-            enodeAthletes={athletes.filter(athlete => athlete.project === project)}
             onNavigationGuardChange={setImportNavigationGuard}
             user={user}
             project={project}

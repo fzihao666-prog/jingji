@@ -70,3 +70,16 @@ export type EnodeData = {
   page: number;
   pageSize: number;
 };
+
+export type EnodePersonDecision =
+  { action: 'link'; athleteId: number } | { action: 'create'; team: string } | { action: 'skip' };
+export type EnodePreview = {
+  people: {
+    key: string;
+    name: string;
+    counts: Partial<Record<EnodeKind, number>>;
+    candidates: { id: number; name: string; team: string }[];
+  }[];
+  teams: string[];
+  files: { filename: string; error?: string }[];
+};

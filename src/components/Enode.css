@@ -73,3 +73,21 @@
     width: 100%;
   }
 }
+
+.enode-people-dialog {
+  width: min(900px, calc(100vw - 32px));
+  max-height: 90vh;
+  padding: 20px;
+  color: var(--ink);
+  background: var(--paper, white);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.enode-people-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.enode-people-dialog td > button {
+  margin-inline-start: 8px;
+}

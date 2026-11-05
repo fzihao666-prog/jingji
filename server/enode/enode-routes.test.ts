@@ -108,3 +108,48 @@ it('混合文件分别报告成功、空文件和格式失败，不重复写入�
     ],
   });
 });
+
+it('整队预览合并跨文件人员，确认后建档与设备记录一起保存', async () => {
+  db.prepare('INSERT INTO project_teams(project,name) VALUES(?,?)').run('ROWING', '合成设备队');
+  const contents =
+    csv +
+    '\n2026-10-03,01:00:00,合成新队员,4,5,5,5,4,23\n2026-10-03,01:00:00,合成跳过,4,5,5,5,4,23';
+  const send = (endpoint: string, decisions?: object) => {
+    const body = new FormData();
+    body.append('project', 'ROWING');
+    body.append('files', new Blob([contents]), '状态一');
+    body.append('files', new Blob([contents]), '状态二');
+    if (decisions) body.append('decisions', JSON.stringify(decisions));
+    return fetch(url + '/api/enode/' + endpoint, { method: 'POST', body, headers: auth() });
+  };
+  const preview = await send('preview');
+  expect(preview.status).toBe(200);
+  expect(await preview.json()).toMatchObject({
+    people: [
+      { name: '合成设备人员', counts: { wellness: 2 }, candidates: [{ id: 9401 }] },
+      { name: '合成新队员', counts: { wellness: 2 }, candidates: [] },
+      { name: '合成跳过', counts: { wellness: 2 } },
+    ],
+  });
+  const athlete = () => db.prepare('SELECT id FROM athletes WHERE name=?').get('合成新队员');
+  expect(athlete()).toBeUndefined();
+  const decisions = {
+    合成设备人员: { action: 'link', athleteId: 9401 },
+    合成新队员: { action: 'create', team: '合成设备队' },
+    合成跳过: { action: 'skip' },
+  };
+  expect(
+    (await send('import', { ...decisions, 合成跳过: { action: 'create', team: '未授权队伍' } }))
+      .status
+  ).toBe(409);
+  expect(athlete()).toBeUndefined();
+  const committed = await send('import', decisions);
+  expect(committed.status).toBe(200);
+  expect(await committed.json()).toMatchObject({ summary: { linked: 1, created: 1, skipped: 1 } });
+  expect(
+    db
+      .prepare('SELECT COUNT(*) AS n FROM enode_records WHERE athlete_id=?')
+      .get(Number(athlete()?.id))
+  ).toEqual({ n: 1 });
+  expect(db.prepare('SELECT id FROM athletes WHERE name=?').get('合成跳过')).toBeUndefined();
+});
