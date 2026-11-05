@@ -874,85 +874,82 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   return (
     <PageContainer className="data-import-page">
       <PageHeader
-        className="data-import-header"
         eyebrow="DATA IMPORT"
         title="数据导入"
-        actions={
-          <div className="data-import-hero-actions">
-            <label className="data-import-template-team">
-              <span>模板预填队伍</span>
-              <select
-                value={templateTeamsProject === project ? templateTeam : ''}
-                disabled={Boolean(busy) || templateTeamsProject !== project}
-                onChange={(event) => setTemplateTeam(event.target.value)}
-              >
-                <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '全部授权队伍' : '暂无队伍（空模板）'}</option>
-                {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="data-import-template"
-              disabled={Boolean(busy) || templateTeamsProject !== project}
-              onClick={() => downloadTemplate('profile')}
-            >
-              <Download size={19} />
-              <div>
-                <strong>{busy === 'template' ? '正在准备模板…' : '队员资料模板'}</strong>
-                <span>批量建档与补全，预填已有人员</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="data-import-template"
-              disabled={Boolean(busy) || templateTeamsProject !== project}
-              onClick={() => downloadTemplate('training')}
-            >
-              <Download size={19} />
-              <div>
-                <strong>训练记录模板</strong>
-                <span>课次、组次与恢复，预填已有人员</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="data-import-template"
-              disabled={Boolean(busy) || templateTeamsProject !== project}
-              onClick={() => downloadTemplate('test')}
-            >
-              <Download size={19} />
-              <div>
-                <strong>测试成绩模板</strong>
-                <span>专项测试与体能测试，预填已有人员</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="data-import-template"
-              disabled={Boolean(busy) || templateTeamsProject !== project}
-              onClick={() => downloadTemplate('unified')}
-            >
-              <FileSpreadsheet size={19} />
-              <div>
-                <strong>统一数据模板</strong>
-                <span>单表填写身体指标、实测1RM及基础体能，预填已有人员</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              className="data-import-template"
-              disabled={Boolean(busy)}
-              onClick={exportUnifiedData}
-            >
-              <Database size={19} />
-              <div>
-                <strong>导出统一数据</strong>
-                <span>导出当前项目及权限范围内已入库数据</span>
-              </div>
-            </button>
-          </div>
-        }
       />
+      <div className="data-import-hero-actions">
+        <label className="data-import-template-team">
+          <span>模板预填队伍</span>
+          <select
+            value={templateTeamsProject === project ? templateTeam : ''}
+            disabled={Boolean(busy) || templateTeamsProject !== project}
+            onChange={(event) => setTemplateTeam(event.target.value)}
+          >
+            <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '全部授权队伍' : '暂无队伍（空模板）'}</option>
+            {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="data-import-template"
+          disabled={Boolean(busy) || templateTeamsProject !== project}
+          onClick={() => downloadTemplate('profile')}
+        >
+          <Download size={19} />
+          <div>
+            <strong>{busy === 'template' ? '正在准备模板…' : '队员资料模板'}</strong>
+            <span>批量建档与补全，预填已有人员</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          className="data-import-template"
+          disabled={Boolean(busy) || templateTeamsProject !== project}
+          onClick={() => downloadTemplate('training')}
+        >
+          <Download size={19} />
+          <div>
+            <strong>训练记录模板</strong>
+            <span>课次、组次与恢复，预填已有人员</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          className="data-import-template"
+          disabled={Boolean(busy) || templateTeamsProject !== project}
+          onClick={() => downloadTemplate('test')}
+        >
+          <Download size={19} />
+          <div>
+            <strong>测试成绩模板</strong>
+            <span>专项测试与体能测试，预填已有人员</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          className="data-import-template"
+          disabled={Boolean(busy) || templateTeamsProject !== project}
+          onClick={() => downloadTemplate('unified')}
+        >
+          <FileSpreadsheet size={19} />
+          <div>
+            <strong>统一数据模板</strong>
+            <span>单表填写身体指标、实测1RM及基础体能，预填已有人员</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          className="data-import-template"
+          disabled={Boolean(busy)}
+          onClick={exportUnifiedData}
+        >
+          <Database size={19} />
+          <div>
+            <strong>导出统一数据</strong>
+            <span>导出当前项目及权限范围内已入库数据</span>
+          </div>
+        </button>
+      </div>
 
       <ol className="data-import-steps" aria-label="数据导入进度">
         {['上传并检查', '确认运动员', '数据校对与确认导入', '导入结果'].map((label, index) => {

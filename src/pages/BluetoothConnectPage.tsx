@@ -286,29 +286,27 @@ export function BluetoothConnectPage({ user }: Props) {
       <PageHeader
         eyebrow="DEVICE MANAGEMENT"
         title="设备管理"
-        actions={
-          <div className="bluetooth-actions">
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={connectDevice}
-              disabled={busy}
-            >
-              {busy ? <LoaderCircle size={16} className="spin" /> : <Bluetooth size={16} />}
-              扫描并连接
-            </button>
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={disconnectDevice}
-              disabled={!device && !server}
-            >
-              <Unplug size={16} />
-              断开
-            </button>
-          </div>
-        }
       />
+      <div className="bluetooth-actions">
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={connectDevice}
+          disabled={busy}
+        >
+          {busy ? <LoaderCircle size={16} className="spin" /> : <Bluetooth size={16} />}
+          扫描并连接
+        </button>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={disconnectDevice}
+          disabled={!device && !server}
+        >
+          <Unplug size={16} />
+          断开
+        </button>
+      </div>
 
       <section className="bluetooth-status-grid">
         <div className="bluetooth-status-card">
