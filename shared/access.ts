@@ -35,6 +35,8 @@ export type Role = keyof typeof ROLE_META;
 
 export const ROLES = Object.keys(ROLE_META) as Role[];
 
+export const SYSTEM_MANAGEMENT_ROLES: readonly Role[] = ['REG', 'TD', 'DMD'];
+
 export const ROLE_HIERARCHY: Role[][] = [['DMD'], ['TD'], ['REG'], ['SCC'], ['ATL']];
 
 export const AREA_LEVEL_META = {

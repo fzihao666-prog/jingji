@@ -33,6 +33,7 @@ import {
   ROLES,
   ROLE_META,
   ROLE_HIERARCHY,
+  SYSTEM_MANAGEMENT_ROLES,
   AREA_LEVEL_META,
   canManageRole,
   type Role,
@@ -44,6 +45,7 @@ import {
   registrationApprovalEnabled,
   setRegistrationApprovalEnabled,
   activateRegistrationRequest,
+  canReviewRegistration,
   verifyRegistrationTeam,
 } from './registration-service.ts';
 import type { AuthUser, AreaPermission } from '../core/shared-server.ts';
@@ -166,7 +168,7 @@ export function registerAccessRoutes(app: Express) {
   app.get(
     '/api/admin/registrations/approval',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (_req, res) => {
       res.json({ enabled: registrationApprovalEnabled() });
     }
@@ -201,15 +203,13 @@ export function registerAccessRoutes(app: Express) {
   app.get(
     '/api/admin/registrations',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (req, res) => {
       const requestedStatus = cleanString(req.query.status);
       const status = ['pending', 'approved', 'rejected'].includes(requestedStatus)
         ? requestedStatus
         : 'pending';
-      const allRequests = db
-        .prepare(
-          `
+      const registrationRows = db.prepare(`
       SELECT r.id, r.username, r.display_name AS displayName, r.requested_role AS requestedRole,
         CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
         CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team, r.gender, r.birth_date AS birthDate, r.native_place AS nativePlace, r.phone, r.status,
@@ -220,9 +220,8 @@ export function registerAccessRoutes(app: Express) {
       LEFT JOIN athletes a ON a.id=u.athlete_id
       LEFT JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
       WHERE r.status = ? ORDER BY r.created_at ASC
-    `
-        )
-        .all(status) as Array<{
+    `);
+      type RegistrationRow = {
         id: number;
         username: string;
         displayName: string;
@@ -236,31 +235,15 @@ export function registerAccessRoutes(app: Express) {
         status: string;
         createdAt: string;
         reviewedAt: string | null;
-      }>;
+      };
       const reviewer = req.authUser!;
       const permissions = accountPermissions(reviewer.id);
-      const requests = allRequests.filter(
-        (request) =>
-          canManageRole(reviewer.role, request.requestedRole) &&
-          permissionsAllowProjectTeam(permissions, request.project, request.team)
-      );
-      const pending =
-        status === 'pending'
-          ? requests.length
-          : (
-              db
-                .prepare(
-                  `
-      SELECT requested_role AS requestedRole, project, team
-      FROM registration_requests WHERE status = 'pending'
-    `
-                )
-                .all() as Array<{ requestedRole: 'ATL' | 'SCC'; project: string; team: string }>
-            ).filter(
-              (request) =>
-                canManageRole(reviewer.role, request.requestedRole) &&
-                permissionsAllowProjectTeam(permissions, request.project, request.team)
-            ).length;
+      const visibleRequests = (status: string) =>
+        (registrationRows.all(status) as RegistrationRow[]).filter((request) =>
+          canReviewRegistration(reviewer, request, permissions)
+        );
+      const requests = visibleRequests(status);
+      const pending = status === 'pending' ? requests.length : visibleRequests('pending').length;
       res.json({ requests, pending });
     }
   );
@@ -268,7 +251,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/admin/registrations/:id/name',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (req, res) => {
       const requestId = Number(req.params.id);
       const registration = db
@@ -291,7 +274,7 @@ export function registerAccessRoutes(app: Express) {
       const registrationScope = db
         .prepare(
           `
-      SELECT r.requested_role AS requestedRole,
+      SELECT r.requested_role AS requestedRole, r.native_place AS nativePlace,
         CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
         CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team
       FROM registration_requests r LEFT JOIN users u ON u.username=r.username AND u.role='ATL'
@@ -300,15 +283,8 @@ export function registerAccessRoutes(app: Express) {
       WHERE r.id = ?
     `
         )
-        .get(requestId) as { requestedRole: Role; project: string; team: string };
-      if (
-        !canManageRole(req.authUser!.role, registrationScope.requestedRole) ||
-        !permissionsAllowProjectTeam(
-          accountPermissions(req.authUser!.id),
-          registrationScope.project,
-          registrationScope.team
-        )
-      )
+        .get(requestId) as { requestedRole: Role; project: string; team: string; nativePlace: string | null };
+      if (!canReviewRegistration(req.authUser!, { ...registration, ...registrationScope }))
         return res.status(403).json({ message: '无权修改该注册申请。' });
       const { name, error } = validatePersonName(req.body?.name);
       if (error) return res.status(400).json({ message: error });
@@ -363,7 +339,7 @@ export function registerAccessRoutes(app: Express) {
   app.put(
     '/api/admin/registrations/:id/team',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (req, res) => {
       const id = z.coerce.number().int().positive().safeParse(req.params.id);
       const input = z
@@ -373,18 +349,18 @@ export function registerAccessRoutes(app: Express) {
         return res.status(400).json({ message: '项目或队伍参数无效。' });
       const request = db
         .prepare(
-          'SELECT requested_role AS role,project,team,status FROM registration_requests WHERE id=?'
+          `SELECT requested_role AS requestedRole, project, team, status, username,
+            display_name AS displayName, native_place AS nativePlace FROM registration_requests WHERE id=?`
         )
-        .get(id.data) as { role: Role; project: string; team: string; status: string } | undefined;
+        .get(id.data) as Parameters<typeof canReviewRegistration>[1] | undefined;
       if (!request) return res.status(404).json({ message: '注册申请不存在。' });
       if (request.status !== 'pending')
         return res.status(409).json({ message: '只能更正待审核申请的队伍。' });
       const reviewer = req.authUser!;
       const permissions = accountPermissions(reviewer.id);
       if (
-        !canManageRole(reviewer.role, request.role) ||
-        !permissionsAllowProjectTeam(permissions, request.project, request.team) ||
-        !permissionsAllowProjectTeam(permissions, input.data.project, input.data.team)
+        !canReviewRegistration(reviewer, request, permissions) ||
+        !canReviewRegistration(reviewer, { ...request, ...input.data }, permissions)
       ) {
         return res.status(403).json({ message: '原队伍或新队伍超出当前账号的管辖范围。' });
       }
@@ -421,7 +397,7 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/admin/registrations/:id/verify-team',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (req, res) => {
       const id = z.coerce.number().int().positive().safeParse(req.params.id);
       const input = z.strictObject({ approved: z.boolean() }).safeParse(req.body);
@@ -440,7 +416,7 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/admin/registrations/:id/approve',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (req, res) => {
       const requestId = Number(req.params.id);
       const outcome = activateRegistrationRequest(requestId, req.authUser!);
@@ -452,32 +428,20 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/admin/registrations/:id/reject',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
     (req, res) => {
       const requestId = Number(req.params.id);
       const registration = db
         .prepare(
           `
-      SELECT requested_role AS requestedRole, project, team
+      SELECT requested_role AS requestedRole, project, team, status, username,
+        display_name AS displayName, native_place AS nativePlace
       FROM registration_requests WHERE id = ?
     `
         )
-        .get(requestId) as
-        | {
-            requestedRole: Role;
-            project: string;
-            team: string;
-          }
-        | undefined;
+        .get(requestId) as Parameters<typeof canReviewRegistration>[1] | undefined;
       if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
-      if (
-        !canManageRole(req.authUser!.role, registration.requestedRole) ||
-        !permissionsAllowProjectTeam(
-          accountPermissions(req.authUser!.id),
-          registration.project,
-          registration.team
-        )
-      )
+      if (!canReviewRegistration(req.authUser!, registration))
         return res.status(403).json({ message: '无权处理该注册申请。' });
       db.exec('BEGIN');
       try {
@@ -672,15 +636,17 @@ export function registerAccessRoutes(app: Express) {
       const currentUser = req.authUser!;
       const rows = allAccountRows();
       const current = rows.find((row) => row.id === currentUser.id);
-      const accounts = rows.filter(
-        (row) => row.id !== currentUser.id && canManageAccount(currentUser, row)
-      );
-      const visibleParents = rows.filter(
-        (row) =>
-          row.active === 1 &&
-          (row.id === currentUser.id || canManageAccount(currentUser, row)) &&
-          canManageRole(currentUser.role, 'ATL')
-      );
+      const accounts = currentUser.role === 'SCC'
+        ? []
+        : rows.filter((row) => row.id !== currentUser.id && canManageAccount(currentUser, row));
+      const visibleParents = currentUser.role === 'SCC'
+        ? []
+        : rows.filter(
+            (row) =>
+              row.active === 1 &&
+              (row.id === currentUser.id || canManageAccount(currentUser, row)) &&
+              canManageRole(currentUser.role, 'ATL')
+          );
       res.json({
         current: current ? serializeAccount(current) : null,
         accounts: accounts.map(serializeAccount),
@@ -704,7 +670,7 @@ export function registerAccessRoutes(app: Express) {
   app.post(
     '/api/access/accounts',
     requireAuth,
-    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    requireRole('REG', 'TD', 'DMD'),
     (req, res) => {
       const currentUser = req.authUser!;
       const credentials = accountCredentialsSchema.safeParse({

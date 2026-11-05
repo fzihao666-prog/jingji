@@ -12,6 +12,7 @@ import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
 import type { Athlete, Project, ProjectTeam, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
+import { SYSTEM_MANAGEMENT_ROLES } from '../shared/access';
 import { isProject, normalizeProject, PROJECTS } from '../shared/projects';
 
 const BluetoothConnectPage = lazy(() =>
@@ -137,7 +138,11 @@ function orderedProjects(values: string[]) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
-  const [page, setPage] = useState<PageKey>(() => pageFromHash());
+  const [requestedPage, setPage] = useState<PageKey>(() => pageFromHash());
+  const canOpenSystemPages = Boolean(user && SYSTEM_MANAGEMENT_ROLES.includes(user.role));
+  const page = !canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts')
+    ? 'overview'
+    : requestedPage;
   const [routeHash, setRouteHash] = useState(() => window.location.hash);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
@@ -537,8 +542,8 @@ export default function App() {
           />
         )}
         {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
-        {page === 'regions' && user.role !== 'ATL' && <RegionAccessPage user={user} />}
-        {page === 'accounts' && user.role !== 'ATL' && <AccountsPage />}
+        {page === 'regions' && canOpenSystemPages && <RegionAccessPage user={user} />}
+        {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
       </Suspense>
     </AppShell>
   );

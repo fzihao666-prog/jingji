@@ -1,3 +1,4 @@
+import { SYSTEM_MANAGEMENT_ROLES } from '../../shared/access';
 import {
   ChartNoAxesCombined,
   Dumbbell,
@@ -101,14 +102,14 @@ const systemGroups: Array<{
   key: Extract<PageKey, 'regions' | 'accounts'>;
   label: string;
   icon: typeof ChartNoAxesCombined;
-  roles: Role[];
+  roles: readonly Role[];
 }> = [
-  { key: 'regions', label: '账号权限', icon: MapPinned, roles: ['SCC', 'REG', 'TD', 'DMD'] },
+  { key: 'regions', label: '账号权限', icon: MapPinned, roles: SYSTEM_MANAGEMENT_ROLES },
   {
     key: 'accounts',
     label: '账户审核',
     icon: UserCheck,
-    roles: ['SCC', 'REG', 'TD', 'DMD'],
+    roles: SYSTEM_MANAGEMENT_ROLES,
   },
 ];
 

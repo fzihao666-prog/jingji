@@ -437,7 +437,7 @@ describe('注册入队审核路由', () => {
 it('待核实运动员转队后列表、改名和核实均按当前队伍授权', async () => {
   expect(activate(1, null).ok).toBe(true);
   db.exec(`INSERT INTO project_teams VALUES (2,'ROWING','新队',1);
-    INSERT INTO users (id,username,role,display_name) VALUES (3,'oldcoach','SCC','旧队教练'),(4,'newcoach','SCC','新队教练');
+    INSERT INTO users (id,username,role,display_name) VALUES (3,'oldmanager','REG','旧队负责人'),(4,'newmanager','REG','新队负责人');
     INSERT INTO user_area_permissions VALUES (3,'national','','','',1),(4,'national','','','',1);
     INSERT INTO user_project_permissions VALUES (3,'ROWING',1),(4,'ROWING',1);
     INSERT INTO user_team_permissions VALUES (3,'ROWING','测试队',1),(4,'ROWING','新队',1);
@@ -458,7 +458,7 @@ it('待核实运动员转队后列表、改名和核实均按当前队伍授权'
 it('转队后拒绝入队的历史记录仍只向当前队伍审核人展示', async () => {
   expect(activate(1,null).ok).toBe(true);
   db.exec(`INSERT INTO project_teams VALUES (2,'ROWING','新队',1);
-    INSERT INTO users (id,username,role,display_name) VALUES (3,'oldcoach','SCC','旧队教练'),(4,'newcoach','SCC','新队教练');
+    INSERT INTO users (id,username,role,display_name) VALUES (3,'oldmanager','REG','旧队负责人'),(4,'newmanager','REG','新队负责人');
     INSERT INTO user_area_permissions VALUES (3,'national','','','',1),(4,'national','','','',1);
     INSERT INTO user_project_permissions VALUES (3,'ROWING',1),(4,'ROWING',1);
     INSERT INTO user_team_permissions VALUES (3,'ROWING','测试队',1),(4,'ROWING','新队',1);
@@ -532,5 +532,43 @@ describe('教练新增队伍激活', () => {
     db.exec("INSERT INTO project_teams VALUES (2,'ROWING','新教练队',0)");
     expect(activate(1, null).ok).toBe(false);
     expect(db.prepare("SELECT active FROM project_teams WHERE id=2").get()).toEqual({ active: 0 });
+  });
+});
+
+it('教练不能访问注册审核接口，区域管理员不能处理辖区外申请', async () => {
+  db.exec("UPDATE users SET role='SCC' WHERE id=1");
+  for (const [path, method, body] of [
+    ['', 'GET', undefined],
+    ['/approval', 'GET', undefined],
+    ['/approval', 'PUT', { enabled: false }],
+    ['/1/name', 'PUT', { name: '测试姓名' }],
+    ['/1/team', 'PUT', { project: 'ROWING', team: '测试队' }],
+    ['/1/approve', 'POST', undefined],
+    ['/1/reject', 'POST', undefined],
+    ['/1/verify-team', 'POST', { approved: true }],
+  ] as const) {
+    expect((await callRegistration(path, method, body)).status).toBe(403);
+  }
+  db.exec("UPDATE users SET role='REG' WHERE id=1; UPDATE user_area_permissions SET area_level='province',province='四川'");
+  const list = await callRegistration('');
+  expect(await list.json()).toMatchObject({ requests: [], pending: 0 });
+  expect((await callRegistration('/1/name', 'PUT', { name: '测试姓名' })).status).toBe(403);
+  expect((await callRegistration('/1/team', 'PUT', { project: 'ROWING', team: '测试队' })).status).toBe(403);
+  expect((await callRegistration('/1/approve', 'POST')).status).toBe(403);
+  expect((await callRegistration('/1/reject', 'POST')).status).toBe(403);
+  expect(db.prepare('SELECT status FROM registration_requests').get()).toEqual({ status: 'pending' });
+});
+
+it('已开通教练转队后，原队负责人不能查看申请或改名', async () => {
+  db.exec("UPDATE registration_requests SET requested_role='SCC'");
+  expect(activate(1, reviewer).ok).toBe(true);
+  db.exec(`INSERT INTO project_teams VALUES (2,'ROWING','新队',1);
+    UPDATE user_team_permissions SET team='新队' WHERE user_id=2;
+    UPDATE users SET role='REG' WHERE id=1;`);
+  const list = await callRegistration('?status=approved');
+  expect(await list.json()).toMatchObject({ requests: [] });
+  expect((await callRegistration('/1/name', 'PUT', { name: '越权改名' })).status).toBe(403);
+  expect(db.prepare('SELECT display_name FROM users WHERE id=2').get()).toEqual({
+    display_name: '测试运动员',
   });
 });

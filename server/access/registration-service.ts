@@ -1,11 +1,12 @@
 import { db } from '../core/db.ts';
 import { validateAccountAreas } from '../../shared/account-regions.ts';
-import { canManageRole, type AreaLevel } from '../../shared/access.ts';
+import { canManageRole, SYSTEM_MANAGEMENT_ROLES, type AreaLevel, type Role } from '../../shared/access.ts';
 import { isProject } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import {
   accountPermissions,
   areaAllowsAthlete,
+  canManageAccount,
   initializeAccountScope,
   permissionsAllowProjectTeam,
 } from '../core/permissions.ts';
@@ -72,6 +73,51 @@ function registrationOrigin(nativePlace: string | null): Origin {
   return { province, city, county: '' };
 }
 
+export function canReviewRegistration(
+  reviewer: AuthUser,
+  request: {
+    requestedRole: Role;
+    project: string;
+    team: string;
+    nativePlace: string | null;
+    username: string;
+    displayName: string;
+    status: string;
+  },
+  permissions = accountPermissions(reviewer.id)
+) {
+  if (!SYSTEM_MANAGEMENT_ROLES.includes(reviewer.role) || !canManageRole(reviewer.role, request.requestedRole)) return false;
+
+  const linked = request.status !== 'pending'
+    ? db.prepare(`SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId,
+        session_version AS sessionVersion FROM users WHERE username=?`).get(request.username) as AuthUser | undefined
+    : undefined;
+  if (linked && (linked.role !== 'ATL' || request.requestedRole !== 'ATL'))
+    return canManageAccount(reviewer, linked);
+
+  if (!permissionsAllowProjectTeam(permissions, request.project, request.team)) return false;
+  // 教练注册没有行政归属字段，缺少归属的申请由全国范围审核人处理。
+  const estimated = request.requestedRole === 'ATL'
+    ? registrationOrigin(request.nativePlace)
+    : { province: '', city: '', county: '' };
+  const origin = linked?.athleteId
+    ? db.prepare('SELECT province, city, county FROM athlete_origins WHERE athlete_id=?')
+        .get(linked.athleteId) as Origin | undefined
+    : request.requestedRole === 'ATL' && request.status === 'pending'
+      ? db.prepare(`SELECT ao.province, ao.city, ao.county FROM athletes a
+          JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
+          JOIN athlete_origins ao ON ao.athlete_id=a.id AND ao.quality='valid'
+          WHERE a.name=? AND a.project=? AND pt.name=?`)
+          .get(request.displayName, request.project, request.team) as Origin | undefined
+      : undefined;
+  const { province, city, county } = origin ?? estimated;
+  return permissions.areas.some((area) =>
+    areaAllowsAthlete(area, {
+      id: 0, region: province, city, county, project: request.project, team: request.team,
+    })
+  );
+}
+
 function assertReviewerArea(reviewer: AuthUser, origin: Origin, project: string, team: string) {
   if (
     !accountPermissions(reviewer.id).areas.some((area) =>
@@ -112,8 +158,12 @@ export function activateRegistrationRequest(
   }
   if (reviewer) {
     if (
-      !canManageRole(reviewer.role, request.requested_role) ||
-      !permissionsAllowProjectTeam(accountPermissions(reviewer.id), request.project, request.team)
+      !canReviewRegistration(reviewer, {
+        ...request,
+        requestedRole: request.requested_role,
+        displayName: request.display_name,
+        nativePlace: request.native_place,
+      })
     ) {
       return { ok: false, status: 403, message: '该申请超出当前账号的管辖范围。' };
     }
@@ -367,7 +417,7 @@ export function verifyRegistrationTeam(
     (Origin & { userId: number; athleteId: number; project: string; team: string }) | undefined;
   if (!candidate) return { ok: false, status: 409, message: '该申请没有待核实的入队记录。' };
   if (
-    !canManageRole(reviewer.role, 'ATL') ||
+    !SYSTEM_MANAGEMENT_ROLES.includes(reviewer.role) || !canManageRole(reviewer.role, 'ATL') ||
     !permissionsAllowProjectTeam(accountPermissions(reviewer.id), candidate.project, candidate.team)
   ) {
     return { ok: false, status: 403, message: '该申请超出当前账号的管辖范围。' };
