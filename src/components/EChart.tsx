@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { init, use as registerEChartsComponents, type EChartsType } from 'echarts/core';
-import { BarChart, LineChart, PieChart, RadarChart } from 'echarts/charts';
+import { BarChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts';
 import {
   GridComponent,
   TooltipComponent,
@@ -14,6 +14,7 @@ import { emptyChartOption } from './empty-chart-option';
 
 registerEChartsComponents([
   BarChart,
+  ScatterChart,
   LineChart,
   PieChart,
   RadarChart,

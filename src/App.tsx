@@ -24,6 +24,7 @@ const PhysiologyBiochemistryPage = lazy(() =>
     default: module.PhysiologyBiochemistryPage,
   }))
 );
+const EnodePage = lazy(() => import('./pages/EnodePage').then(module => ({ default: module.EnodePage })));
 const StrengthTrainingDashboard = lazy(() =>
   import('./pages/TrainingDashboards').then((module) => ({
     default: module.StrengthTrainingDashboard,
@@ -100,6 +101,7 @@ const pageKeys: PageKey[] = [
   'strength-records',
   'strength-analysis',
   'strength-assessment',
+  'strength-enode',
   'physiology-biochemistry',
   'athletes',
   'personal',
@@ -480,7 +482,8 @@ export default function App() {
             onNavigate={changePage}
           />
         )}
-        {page.startsWith('strength-') && page !== 'strength-overview' && (
+        {page === 'strength-enode' && <EnodePage athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={changePage} />}
+        {page.startsWith('strength-') && page !== 'strength-overview' && page !== 'strength-enode' && (
           <StrengthTrainingAnalysisPage
             onPlanOpen={() => changePage('strength-plan')}
             section={page as Exclude<StrengthPageKey, 'strength-overview'>}
@@ -499,6 +502,8 @@ export default function App() {
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && (
           <DataImportPage
+            onViewEnode={() => changePage('strength-enode')}
+            enodeAthletes={athletes.filter(athlete => athlete.project === project)}
             onNavigationGuardChange={setImportNavigationGuard}
             user={user}
             project={project}

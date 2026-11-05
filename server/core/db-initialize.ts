@@ -1,3 +1,4 @@
+import { initializeEnodeDatabase } from '../enode/enode.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
 import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
 import { randomUUID } from 'node:crypto';
@@ -5999,6 +6000,7 @@ export function initializeDatabase(
     }
     db.exec('COMMIT');
   } catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
+  initializeEnodeDatabase(db);
   return { upsertAthleteOrigin };
 
 }

@@ -1,3 +1,4 @@
+import { EnodeAthletePanel } from './EnodePage';
 import {
   CalendarRange,
   CheckCircle2,
@@ -165,6 +166,7 @@ export function StrengthTrainingAnalysisPage(props: Props) {
     'strength-records': '训练记录',
     'strength-analysis': '体能分析',
     'strength-assessment': '体能分析',
+    'strength-enode': 'Enode VBT',
   }[props.section];
   const showLocalFilters = ['strength-plan', 'strength-records', 'strength-analysis'].includes(
     props.section
@@ -225,6 +227,7 @@ export function StrengthTrainingAnalysisPage(props: Props) {
               ['strength-overview', '训练总览'],
               ['strength-analysis', '训练分析'],
               ['strength-assessment', '体能评估'],
+              ['strength-enode', 'Enode VBT'],
             ] as Array<[StrengthPageKey, string]>
           ).map(([key, label]) => (
             <button
@@ -238,6 +241,7 @@ export function StrengthTrainingAnalysisPage(props: Props) {
         </nav>
       )}
 
+      {['strength-records', 'strength-analysis'].includes(props.section) && <EnodeAthletePanel athletes={props.athletes} athleteId={props.athleteId} from={props.from} to={props.to} kind="sessionRpe" />}
       {showLocalFilters && (
         <FilterBar
           className="strength-filter-bar"

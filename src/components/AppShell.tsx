@@ -45,7 +45,8 @@ export type StrengthPageKey =
   | 'strength-plan'
   | 'strength-records'
   | 'strength-analysis'
-  | 'strength-assessment';
+  | 'strength-assessment'
+  | 'strength-enode';
 export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-management' | 'reports';
 export type PageKey =
   | 'overview'

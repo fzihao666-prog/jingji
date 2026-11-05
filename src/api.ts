@@ -1,3 +1,4 @@
+import type { EnodeImportResult, EnodeQuery, EnodeData } from '../shared/enode';
 import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { TeamPlan } from '../shared/team-plan';
@@ -192,6 +193,18 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
+  async importEnode(files: File[], project: Project, matches: Record<string, number> = {}) {
+    const body = new FormData();
+    files.forEach(file => body.append('files', file));
+    body.append('project', project);
+    body.append('matches', JSON.stringify(matches));
+    return request<{ results: EnodeImportResult[] }>('/api/enode/import', { method: 'POST', body });
+  },
+  enodeData(query: EnodeQuery) {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => { if (value !== undefined) params.set(key, String(value)); });
+    return request<EnodeData>(`/api/enode/data?${params}`);
+  },
   submitTrainingSession: (
     mode: 'self' | 'coach',
     athleteId: number,

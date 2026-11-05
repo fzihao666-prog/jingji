@@ -48,7 +48,7 @@ const strengthTooltipStyle = {
   boxShadow: '0 8px 24px rgb(18 61 74 / 12%)', lineHeight: 1.8,
 };
 
-type Navigation = (page: 'special-schedule' | 'strength-plan') => void;
+type Navigation = (page: 'special-schedule' | 'strength-plan' | 'strength-enode') => void;
 
 type CurrentMetric = {
   key: StrengthMetricKey;
@@ -576,7 +576,7 @@ export function StrengthTrainingDashboard({
         className="overview-page-heading training-plan-entry-heading"
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
-        actions={<><button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>训练计划</button>{athleteId ? <button type="button" className="secondary-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : null}</>}
+        actions={<><button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>训练计划</button><button type="button" className="secondary-button" onClick={() => onNavigate('strength-enode')}>Enode VBT</button>{athleteId ? <button type="button" className="secondary-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : null}</>}
       />
 
       {loading ? (

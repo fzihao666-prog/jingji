@@ -1,0 +1,75 @@
+.enode-import,
+.enode-trends {
+  margin-block: 16px;
+}
+
+.enode-actions,
+.enode-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-block: 12px;
+}
+
+.enode-filters label {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+  max-width: 100%;
+}
+
+.enode-filters input,
+.enode-filters select {
+  min-height: 40px;
+  max-width: 100%;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--paper, white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.enode-trends p,
+.enode-import p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.enode-import-result {
+  padding-block: 12px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.enode-table-wrap {
+  max-height: 480px;
+  overflow: auto;
+  margin-block: 12px;
+}
+
+.enode-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.enode-table-wrap th,
+.enode-table-wrap td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.enode-trends summary {
+  cursor: pointer;
+  padding-block: 12px;
+  font-weight: 600;
+}
+
+@media (width <= 640px) {
+  .enode-filters label {
+    width: 100%;
+  }
+}

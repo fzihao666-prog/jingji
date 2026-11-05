@@ -1,3 +1,4 @@
+import { EnodeImport } from '../components/EnodeImport';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics';
 import { isImportException, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
 import { ImportConflictReview } from '../components/ImportConflictReview';
@@ -54,6 +55,8 @@ type Props = {
   project: Project;
   athletes: Athlete[];
   onChanged: () => void;
+  onViewEnode: () => void;
+  enodeAthletes: Athlete[];
   onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
 };
 
@@ -115,13 +118,14 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange }: Props) {
+export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode, enodeAthletes }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [metrics, setMetrics] = useState<Array<{ code: string; label: string; unit: string }>>([]);
   const [mobileIndex, setMobileIndex] = useState(0);
   const [isCompact, setIsCompact] = useState(() => window.matchMedia('(max-width: 720px)').matches);
+  const [enodeBusy, setEnodeBusy] = useState(false);
   const navigationState = useRef({ unsaved: false, busy: false });
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -557,7 +561,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   }, [corrections, athleteCorrections.size, batch]);
 
   const hasUnsavedChanges = corrections.size > 0 || athleteCorrections.size > 0 || pendingSelections.size > 0;
-  navigationState.current = { unsaved: hasUnsavedChanges, busy: Boolean(busy) || savingReviewGroups.size > 0 };
+  navigationState.current = { unsaved: hasUnsavedChanges, busy: enodeBusy || Boolean(busy) || savingReviewGroups.size > 0 };
   useEffect(() => {
     onNavigationGuardChange?.(() => {
       if (navigationState.current.busy) {
@@ -580,11 +584,11 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   }, [positionKey, project, batch, filter, query, page, reviewGroupPage, selectedPersonId]);
   useEffect(() => { setMobileIndex(0); }, [filter, query, page]);
   useEffect(() => {
-    if (!hasUnsavedChanges) return;
+    if (!hasUnsavedChanges && !enodeBusy) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, enodeBusy]);
 
   useEffect(() => {
     if (!personDialogOpen && !confirmDialogOpen && !duplicateDialogOpen) return;
@@ -877,6 +881,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
         eyebrow="DATA IMPORT"
         title="数据导入"
       />
+      <EnodeImport key={project} project={project} athletes={enodeAthletes} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy)} onView={onViewEnode} />
       <div className="data-import-hero-actions">
         <label className="data-import-template-team">
           <span>模板预填队伍</span>

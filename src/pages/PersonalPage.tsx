@@ -1,3 +1,4 @@
+import { EnodeTrends } from '../components/EnodeTrends';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import './ProfilePhysiology.css';
 import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
@@ -903,11 +904,13 @@ export function PersonalPage(props: Props) {
               error={physiologyError}
             />
             <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} error={dossierDataError} />
+            <EnodeTrends key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} kind="wellness" />
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
             <StrengthProfileModule key={selectedAthlete.id} athlete={selectedAthlete} user={props.user} preloaded={recentStrength.key === testScope ? recentStrength : { tests: [], loading: true, error: false }} onTestsChanged={(tests) => setRecentStrength((current) => current.key === testScope ? { key: testScope, tests, loading: false, error: false } : current)} />
           </ProfileSection>
           {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
             <ProfileSection title="训练记录" subtitle="公共课次填写，按实际活动显示专项字段。">
+              <EnodeTrends key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} kind="sessionRpe" />
               {props.user.role !== 'ATL' && <ProjectFactVerification athleteId={selectedAthlete.id} project={selectedAthlete.project} onChanged={props.onChanged} />}
               <TrainingSessionEntry key={`${selectedAthlete.id}:${selectedAthlete.project}`} athleteId={selectedAthlete.id}
                 project={selectedAthlete.project} mode={props.user.role === 'ATL' ? 'self' : 'coach'} onSaved={props.onChanged} />

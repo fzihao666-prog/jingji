@@ -1,3 +1,4 @@
+import { registerEnodeRoutes } from './enode/enode-routes.ts';
 import { registerTeamWeeklyRoutes } from './report/team-weekly-routes.ts';
 import { registerProjectVerificationRoutes } from './athlete/project-verification-routes.ts';
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -119,6 +120,7 @@ registerSelfDailyRoutes(app);
 registerCoachReportRoutes(app);
 registerTrainingPlanRoutes(app);
 registerStrengthTrainingRoutes(app);
+registerEnodeRoutes(app);
 registerDataImportRoutes(app);
 registerSpecialTrainingRoutes(app);
 registerAccessRoutes(app);
