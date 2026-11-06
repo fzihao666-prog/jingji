@@ -1890,3 +1890,85 @@
 .data-import-device-card .enode-actions {
   align-items: center;
 }
+
+.data-import-review-entry {
+  margin-block: 16px;
+}
+
+.data-import-review-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1440px, 100%);
+  height: min(920px, calc(100dvh - 48px));
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.data-import-review-dialog .data-import-review-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.data-import-review-dialog .data-import-review-actions .data-import-icon-button {
+  justify-content: center;
+}
+
+.data-import-review-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.data-import-review-scroll .data-import-table-wrap {
+  max-height: none;
+}
+
+.data-import-review-dialog .data-import-commit-bar {
+  position: static;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+}
+
+@media (width <= 720px) {
+  .data-import-review-backdrop {
+    padding: 0;
+  }
+
+  .data-import-review-dialog {
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .data-import-review-dialog .data-import-review-head {
+    align-items: stretch;
+    padding: max(12px, env(safe-area-inset-top)) 14px 8px;
+    gap: 8px;
+  }
+
+  .data-import-review-dialog .data-import-review-actions {
+    flex-direction: row;
+  }
+
+  .data-import-review-dialog .data-import-search {
+    flex: 1 1 130px;
+    min-width: 0;
+  }
+
+  .data-import-review-dialog .data-import-commit-bar {
+    padding: 10px 14px max(10px, env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+
+  .data-import-review-dialog .data-import-commit-bar > div:last-child {
+    flex-direction: row;
+  }
+
+  .data-import-review-dialog .data-import-commit-bar > div:last-child > button {
+    flex: 1;
+  }
+}

@@ -23,7 +23,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { dataImportPersonKey, importPersonNeedsConfirmation, normalizeImportPersonName } from '../../shared/data-import-person';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
@@ -120,6 +120,9 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
 export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
+  const reviewScrollRef = useRef<HTMLDivElement>(null);
+  const reviewScrollTop = useRef(0);
+  const reviewEntryRef = useRef<HTMLButtonElement>(null);
   const [saveFailed, setSaveFailed] = useState(false);
   const [metrics, setMetrics] = useState<Array<{ code: string; label: string; unit: string }>>([]);
   const [mobileIndex, setMobileIndex] = useState(0);
@@ -159,6 +162,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   const [athleteCorrections, setAthleteCorrections] = useState<Map<number, AthleteCorrection>>(
     new Map()
   );
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [personDialogOpen, setPersonDialogOpen] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
@@ -226,6 +230,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     void api.dataImportMetrics(project).then(result => { if (!cancelled) setMetrics(result.metrics); })
       .catch(error => { if (!cancelled) setError(error instanceof Error ? error.message : '测试项目加载失败。'); });
     setBatch(null);
+    setReviewOpen(false);
     setBatches([]);
     setSaveFailed(false);
     setFile(null);
@@ -273,6 +278,8 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     const unresolved = next.athleteCandidates.filter(
       (candidate) => importPersonNeedsConfirmation(candidate, next.items)
     );
+    if (batch?.id !== next.id) reviewScrollTop.current = 0;
+    setReviewOpen(next.status === 'reviewing');
     setPersonDialogOpen(next.status === 'reviewing' && unresolved.length > 0);
     setDuplicateDialogOpen(false);
     setConfirmDialogOpen(false);
@@ -303,6 +310,9 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
       if (info.batch.status === 'reviewing' && info.batch.summary.duplicateFile && !options?.reparse) {
         rememberRevision(info.batch);
         setBatch(info.batch);
+        setReviewOpen(false);
+        setPersonDialogOpen(false);
+        setConfirmDialogOpen(false);
         setDuplicateDialogOpen(true);
         setMessage('该文件已上传过，可继续上次校对，或按当前参数重新解析。');
         await refreshBatches();
@@ -570,26 +580,58 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasUnsavedChanges, enodeBusy]);
 
+  const showReview = reviewOpen && Boolean(batch) && !personDialogOpen &&
+    !confirmDialogOpen && !duplicateDialogOpen;
+
+  const closeReview = useCallback(() => {
+    if (navigationState.current.busy) return;
+    if (navigationState.current.unsaved) {
+      setError('请先保存校对修改，再关闭弹窗。');
+      return;
+    }
+    setReviewOpen(false);
+  }, []);
+
   useEffect(() => {
-    if (!personDialogOpen && !confirmDialogOpen && !duplicateDialogOpen) return;
+    if (showReview && reviewScrollRef.current) reviewScrollRef.current.scrollTop = reviewScrollTop.current;
+    if (!showReview && !personDialogOpen && !confirmDialogOpen && !duplicateDialogOpen) return;
     const previous = document.activeElement;
     const dialog = document.querySelector<HTMLElement>('.data-import-dialog-backdrop [role="dialog"]');
     if (!dialog) return;
-    const focusable = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]')];
-    focusable()[0]?.focus();
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, a[href], [tabindex="0"]'
+    )].filter(element => element.getClientRects().length > 0);
+    (showReview ? dialog : focusable()[0])?.focus({ preventScroll: true });
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busyRef.current) {
-        setPersonDialogOpen(false); setConfirmDialogOpen(false); setDuplicateDialogOpen(false);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (showReview) closeReview();
+        else if (!busyRef.current) {
+          setPersonDialogOpen(false);
+          setConfirmDialogOpen(false);
+          setDuplicateDialogOpen(false);
+        }
       }
       if (event.key !== 'Tab') return;
       const elements = focusable();
       const first = elements[0], last = elements.at(-1);
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      if (!first) {
+        event.preventDefault();
+      } else if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     dialog.addEventListener('keydown', handleKey);
-    return () => { dialog.removeEventListener('keydown', handleKey); if (previous instanceof HTMLElement) previous.focus(); };
-  }, [personDialogOpen, confirmDialogOpen, duplicateDialogOpen]);
+    return () => {
+      dialog.removeEventListener('keydown', handleKey);
+      if (showReview && reviewEntryRef.current) reviewEntryRef.current.focus({ preventScroll: true });
+      else if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
+    };
+  }, [showReview, personDialogOpen, confirmDialogOpen, duplicateDialogOpen, closeReview]);
 
   const unconfirmedPersons = useMemo(() => {
     if (!batch) return [];
@@ -628,12 +670,13 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
 
   const doCommit = async () => {
     if (!batch) return;
-    setConfirmDialogOpen(false);
     setBusy('commit');
     try {
       const info = await api.commitDataImport(batch.id, 'update', expectedRevision(batch));
       rememberRevision(info.batch);
       setBatch(info.batch);
+      setConfirmDialogOpen(false);
+      setReviewOpen(false);
       setMessage(info.message);
       setResult({
         message: info.message,
@@ -649,6 +692,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
       await refreshBatches();
       onChanged();
     } catch (nextError) {
+      setConfirmDialogOpen(false);
       setError(nextError instanceof Error ? nextError.message : '正式入库失败。');
     } finally {
       setBusy('');
@@ -673,11 +717,13 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
       return;
     }
     if (!nextMap.size) {
+      setReviewOpen(true);
       setPersonDialogOpen(false);
       return;
     }
     const saved = await saveCorrections(nextMap);
     if (!saved) return;
+    setReviewOpen(true);
     setPersonDialogOpen(false);
     setMessage('运动员信息已保存，请继续数据校对。');
   };
@@ -774,7 +820,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     setPage(0);
     setReviewGroupPage(0);
     setMobileIndex(0);
-    reviewRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    reviewScrollRef.current?.scrollTo({ top: 0 });
     reviewRef.current?.focus({ preventScroll: true });
   };
 
@@ -1131,11 +1177,25 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             </div>
           </section>
 
-          <section ref={reviewRef} className="data-import-review" tabIndex={-1}>
+          <div className="data-import-review-entry">
+            <button ref={reviewEntryRef} type="button" className="primary-button" disabled={Boolean(busy) || enodeBusy}
+              onClick={() => {
+                setReviewOpen(true);
+                if (batch.status === 'reviewing' && unconfirmedPersons.length) setPersonDialogOpen(true);
+              }}>
+              <FileCheck2 size={16} aria-hidden="true" />
+              {batch.status === 'reviewing' ? '继续校对' : '查看记录'}
+            </button>
+          </div>
+
+          {showReview && (
+            <div className="data-import-dialog-backdrop data-import-review-backdrop">
+              <section ref={reviewRef} className="data-import-dialog data-import-review data-import-review-dialog"
+                role="dialog" aria-modal="true" aria-labelledby="data-import-review-title" tabIndex={-1}>
             <div className="data-import-review-head">
               <div>
                 <span>REVIEW QUEUE</span>
-                <h2>数据审查与校对</h2>
+                <h2 id="data-import-review-title">数据审查与校对</h2>
                 <p>
                   修改后自动保存并重新校验；空白不覆盖已有数据，真实0值会保留。
                   {unconfirmedPersons.length > 0 && (
@@ -1158,28 +1218,21 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                       setPage(0);
                       setReviewGroupPage(0);
                     }}
+                    aria-label="搜索姓名、动作或指标"
                     placeholder="搜索姓名、动作或指标"
                   />
                 </label>
                 <button
                   type="button"
                   disabled={Boolean(busy) || batch.status !== 'reviewing'}
-                  title="重新校验当前草稿并刷新数据库差异"
-                  onClick={() => void saveCorrections()}
-                >
-                  <Save size={15} />
-                  {busy === 'save' ? '正在重新校验…' : '保存校对'}
-                  {corrections.size + athleteCorrections.size
-                    ? `（${corrections.size + athleteCorrections.size}）`
-                    : ''}
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(busy) || batch.status !== 'reviewing'}
                   onClick={() => setPersonDialogOpen(true)}
                 >
-                  <Users size={15} />
+                  <Users size={16} aria-hidden="true" />
                   运动员名单
+                </button>
+                <button type="button" className="data-import-icon-button" aria-label="关闭数据校对"
+                  disabled={navigationState.current.busy} onClick={closeReview}>
+                  <X size={16} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -1197,6 +1250,8 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
               ).map(([key, label]) => (
                 <button
                   key={key}
+                  type="button"
+                  aria-pressed={filter === key}
                   className={filter === key ? 'active' : ''}
                   onClick={() => {
                     setFilter(key);
@@ -1207,6 +1262,8 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                 </button>
               ))}
             </div>
+            <div className="data-import-review-scroll" ref={reviewScrollRef}
+              onScroll={event => { reviewScrollTop.current = event.currentTarget.scrollTop; }}>
             {reviewGroups.length > 0 && <div className="import-value-review-groups">
               <div className="import-value-review-heading">
                 <h3>导入数据集中审查 · {reviewGroups.length} 组</h3>
@@ -1564,7 +1621,8 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                 </button>
               </div>
             </footer>
-            <footer className="data-import-commit-bar">
+            </div>
+            {batch.status === 'reviewing' && <footer className="data-import-commit-bar">
               <div className="data-import-next-actions" aria-live="polite">
                 <strong>{batch.errorCount || unconfirmedPersons.length ? `还需处理：${unconfirmedPersons.length}名人员、${batch.errorCount}条错误` : hasUnsavedChanges ? '修改待保存，校验后可确认导入' : '校对完成，可以确认导入'}</strong>
                 {unconfirmedPersons.length > 0 && <button type="button" disabled={Boolean(busy)} onClick={() => setPersonDialogOpen(true)}>去确认人员</button>}
@@ -1572,11 +1630,22 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                 {saveFailed && <button type="button" disabled={Boolean(busy)} onClick={() => void saveCorrections()}>重试保存</button>}
               </div>
               <div>
-                <small>
-                  所有数据采用本次导入的非空值，空白保留原值；同一文件内不同值需先审查。整批在同一事务内提交，失败自动回滚。
-                </small>
                 <button
-                  className="data-import-primary"
+                  type="button"
+                  className="secondary-button"
+                  disabled={Boolean(busy) || batch.status !== 'reviewing'}
+                  title="重新校验当前草稿并刷新数据库差异"
+                  onClick={() => void saveCorrections()}
+                >
+                  <Save size={16} aria-hidden="true" />
+                  {busy === 'save' ? '正在重新校验…' : '保存校对'}
+                  {corrections.size + athleteCorrections.size
+                    ? `（${corrections.size + athleteCorrections.size}）`
+                    : ''}
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
                   disabled={
                     Boolean(busy) ||
                     batch.status !== 'reviewing' ||
@@ -1586,16 +1655,14 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                   }
                   onClick={() => void commit()}
                 >
-                  <Database size={17} />
-                  {busy === 'commit'
-                    ? '正在写入…'
-                    : batch.status === 'committed'
-                      ? '已写入数据库'
-                      : hasUnsavedChanges ? '校验后确认导入' : `确认导入：新增${summaryPreview?.createPersons ?? 0}名运动员、写入${(summaryPreview?.newRecords ?? 0) + (summaryPreview?.updateRecords ?? 0)}条记录`}
+                  <Database size={16} aria-hidden="true" />
+                  {hasUnsavedChanges ? '校验后确认导入' : '确认导入'}
                 </button>
               </div>
-            </footer>
-          </section>
+            </footer>}
+              </section>
+            </div>
+          )}
         </>
       )}
 
