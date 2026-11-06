@@ -1625,23 +1625,6 @@
   color: var(--text-muted, #667085);
 }
 
-.data-import-final-differences {
-  max-height: 300px;
-  overflow: auto;
-  margin: 12px 0;
-}
-
-.data-import-final-differences table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-import-final-differences th, .data-import-final-differences td {
-  padding: 8px;
-  text-align: left;
-  border-bottom: 1px solid var(--border, #e4e7ec);
-}
-
 .data-import-main-summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

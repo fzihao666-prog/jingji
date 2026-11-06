@@ -1756,46 +1756,24 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
         >
           <section className="data-import-dialog" role="dialog" aria-modal="true" aria-label="确认导入">
             <header>
-              <div>
-                <span>FINAL CONFIRM</span>
-                <h2>确认导入</h2>
-                <p>以下数量来自最终校对结果，而非原始 Excel 行数；整个批次在同一事务内提交。</p>
-              </div>
-              <button
-                type="button"
-                className="data-import-icon-button"
-                onClick={() => setConfirmDialogOpen(false)}
-                disabled={Boolean(busy)}
-                aria-label="关闭确认"
-              >
-                <X size={19} />
-              </button>
+              <h2>确认导入</h2>
             </header>
             <div className="data-import-summary data-import-main-summary">
-              <div><span>待处理</span><strong>{batch.errorCount}</strong><small>新建运动员{summaryPreview.createPersons}名</small></div>
+              <div><span>新建运动员</span><strong>{summaryPreview.createPersons}</strong></div>
               <div><span>新增记录</span><strong>{summaryPreview.newRecords}</strong></div>
-              <div><span>更新记录</span><strong>{summaryPreview.updateRecords}</strong><small>仅更新本次提供的非空字段</small></div>
+              <div><span>更新记录</span><strong>{summaryPreview.updateRecords}</strong></div>
             </div>
-            <ImportCountSummary counts={summaryPreview.statistics} />
-            <details className="data-import-final-differences">
-              <summary>查看本次更新的原值与新值</summary>
-              <p>空白不清空原值，真实0正常写入；完整差异也可在校对列表中按“将更新”查看。</p>
-              <table><caption>更新差异（最多显示前100项）</caption><thead><tr><th scope="col">运动员 / 来源</th><th scope="col">字段</th><th scope="col">原值</th><th scope="col">新值</th></tr></thead><tbody>
-                {batch.items.filter(item => item.quality !== 'error' && item.quality !== 'skipped' && item.resolution !== 'skip' && !item.payload.valueAutoMerged).flatMap(item => (item.conflict?.fields || []).filter(field => field.oldValue !== field.newValue).map(field => ({ item, field }))).slice(0, 100).map(({ item, field }) => <tr key={`${item.id}-${field.field}`}><td>{item.rawAthleteName} · {item.sourceSheet}!{item.sourceAddress}</td><td>{field.label}</td><td>{field.oldValue === '' ? '空' : field.oldValue}</td><td>{field.newValue === '' ? '空' : field.newValue}</td></tr>)}
-              </tbody></table>
-            </details>
             <div className="data-import-dialog-actions">
-              <button type="button" disabled={Boolean(busy)} onClick={() => setConfirmDialogOpen(false)}>
+              <button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => setConfirmDialogOpen(false)}>
                 取消
               </button>
               <button
                 type="button"
-                className="data-import-primary"
+                className="primary-button"
                 disabled={Boolean(busy)}
                 onClick={() => void doCommit()}
               >
-                <Database size={16} />
-                确认导入：新增{summaryPreview.createPersons}名运动员、写入{summaryPreview.newRecords + summaryPreview.updateRecords}条记录
+                {busy ? '正在导入…' : '确认导入'}
               </button>
             </div>
           </section>
