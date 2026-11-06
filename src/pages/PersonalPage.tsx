@@ -675,15 +675,11 @@ export function PersonalPage(props: Props) {
           <section className="personal-dossier">
             <header className="personal-dossier-identity">
               <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
-                {selectedAthlete.photoUrl ? (
-                  <ProtectedAthletePhoto
-                    athleteId={selectedAthlete.id}
-                    photoUrl={selectedAthlete.photoUrl}
-                    alt={`${selectedAthlete.name}证件照`}
-                  />
-                ) : (
-                  selectedAthlete.name.slice(0, 1)
-                )}
+                <ProtectedAthletePhoto
+                  athlete={selectedAthlete}
+                  alt={`${selectedAthlete.name}证件照`}
+                  fallback={selectedAthlete.name.slice(0, 1)}
+                />
               </div>
               <div className="personal-identity-copy">
                 <span>

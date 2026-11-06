@@ -691,6 +691,9 @@ export const api = {
       }
     );
   },
+  athletePhoto(athleteId: number, signal?: AbortSignal) {
+    return request<Blob>(`/api/athletes/${athleteId}/photo`, { responseType: 'image', signal });
+  },
   async uploadAthletePhoto(athleteId: number, file: File) {
     const body = new FormData();
     body.append('photo', file);

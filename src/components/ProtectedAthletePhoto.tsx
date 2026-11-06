@@ -1,50 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { api } from '../api';
+import type { Athlete } from '../types';
+
+type PhotoSource = Pick<Athlete, 'id' | 'photoUrl'>;
 
 interface ProtectedAthletePhotoProps {
-  athleteId: number;
-  photoUrl: string;
+  athlete: PhotoSource;
   alt: string;
+  fallback: ReactNode;
   className?: string;
 }
 
 export default function ProtectedAthletePhoto({
-  athleteId,
-  photoUrl,
+  athlete,
   alt,
+  fallback,
   className,
 }: ProtectedAthletePhotoProps) {
-  const [blobUrl, setBlobUrl] = useState<string>('');
-  const [error, setError] = useState(false);
+  const [photo, setPhoto] = useState<{ athlete: PhotoSource; url: string } | null>(null);
 
   useEffect(() => {
-    if (!photoUrl) return;
-    let revoked = false;
-    let objectUrl = '';
+    if (!athlete.photoUrl) return;
+    const controller = new AbortController();
+    let url = '';
 
-    async function fetchPhoto() {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(photoUrl, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!response.ok) throw new Error('photo fetch failed');
-        const blob = await response.blob();
-        if (revoked) return;
-        objectUrl = URL.createObjectURL(blob);
-        setBlobUrl(objectUrl);
-        setError(false);
-      } catch {
-        if (!revoked) setError(true);
-      }
-    }
+    // 档案刷新时重新读取照片，更换照片后的读取地址仍相同。
+    api
+      .athletePhoto(athlete.id, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        url = URL.createObjectURL(blob);
+        setPhoto({ athlete, url });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setPhoto(null);
+      });
 
-    fetchPhoto();
     return () => {
-      revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      controller.abort();
+      if (url) URL.revokeObjectURL(url);
     };
-  }, [athleteId, photoUrl]);
+  }, [athlete]);
 
-  if (error || !blobUrl) return null;
-  return <img src={blobUrl} alt={alt} className={className} />;
+  if (photo?.athlete !== athlete) return fallback;
+  return <img src={photo.url} alt={alt} className={className} onError={() => setPhoto(null)} />;
 }

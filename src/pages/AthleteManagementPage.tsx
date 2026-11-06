@@ -359,15 +359,19 @@ export function AthleteManagementPage({
     setEditingAthlete(athlete);
     setForm(formFromAthlete(athlete));
     setPhotoFile(null);
-    setPhotoPreview(athlete.photoUrl || '');
+    setPhotoPreview('');
     setEditorOpen(true);
   };
 
   const choosePhoto = (file: File | null) => {
     setPhotoFile(file);
-    if (photoPreview.startsWith('blob:')) URL.revokeObjectURL(photoPreview);
-    setPhotoPreview(file ? URL.createObjectURL(file) : editingAthlete?.photoUrl || '');
+    setPhotoPreview(file ? URL.createObjectURL(file) : '');
   };
+
+  useEffect(() => {
+    if (!editorOpen || !photoPreview) return;
+    return () => URL.revokeObjectURL(photoPreview);
+  }, [editorOpen, photoPreview]);
 
   const saveAthlete = async (event: FormEvent, requestedOpenProfile = false) => {
     event.preventDefault();
@@ -743,15 +747,11 @@ export function AthleteManagementPage({
                   )}
                   <td>
                     <div className="athlete-person-cell">
-                      {athlete.photoUrl ? (
-                        <ProtectedAthletePhoto
-                          athleteId={athlete.id}
-                          photoUrl={athlete.photoUrl}
-                          alt=""
-                        />
-                      ) : (
-                        <span>{athlete.name.slice(0, 1)}</span>
-                      )}
+                      <ProtectedAthletePhoto
+                        athlete={athlete}
+                        alt=""
+                        fallback={<span>{athlete.name.slice(0, 1)}</span>}
+                      />
                       <div className="athlete-person-details">
                         <strong>{athlete.name}</strong>
                         <div className="athlete-person-meta">
@@ -1040,6 +1040,12 @@ export function AthleteManagementPage({
                   <div>
                     {photoPreview ? (
                       <img src={photoPreview} alt="运动员照片预览" />
+                    ) : editingAthlete ? (
+                      <ProtectedAthletePhoto
+                        athlete={editingAthlete}
+                        alt="运动员照片预览"
+                        fallback={<UserRound size={34} aria-hidden="true" />}
+                      />
                     ) : (
                       <UserRound size={34} />
                     )}
