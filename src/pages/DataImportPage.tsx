@@ -128,7 +128,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   const navigationState = useRef({ unsaved: false, busy: false });
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [defaultDate, setDefaultDate] = useState(() => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
   const [bulkCandidateTeam, setBulkCandidateTeam] = useState('');
   const [templateTeam, setTemplateTeam] = useState('');
   const [templateTeamsProject, setTemplateTeamsProject] = useState<Project | null>(null);
@@ -234,7 +233,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     setBatches([]);
     setSaveFailed(false);
     setFile(null);
-    setDefaultDate('');
     setPendingSelections(new Set());
     setCorrections(new Map());
     setAthleteCorrections(new Map());
@@ -305,7 +303,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     setError('');
     setMessage('');
     try {
-      const info = await api.analyzeDataImport(file, project, defaultDate || undefined, { ...options, expectedRevision: options?.reparse && batch ? expectedRevision(batch) : undefined });
+      const info = await api.analyzeDataImport(file, project, undefined, { ...options, expectedRevision: options?.reparse && batch ? expectedRevision(batch) : undefined });
       if (info.batch.status === 'committed') {
         startReview(info.batch);
         await refreshBatches();
@@ -962,7 +960,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
               <FileSpreadsheet size={20} />
               <div>
                 <strong>Excel 导入</strong>
-                <span>支持 XLS / XLSX，单文件不超过 80MB</span>
+                <span>支持 XLS / XLSX，单文件不超过 80MB。缺失日期按解析当天处理</span>
               </div>
             </div>
             <ol className="data-import-steps" aria-label="Excel 导入进度">
@@ -994,15 +992,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
               aria-label="Excel文件"
               onChange={(event) => setFile(event.target.files?.[0] || null)}
             />
-            <label className="data-import-date">
-              <span>缺失日期时使用</span>
-              <input
-                type="date"
-                value={defaultDate}
-                onChange={(event) => setDefaultDate(event.target.value)}
-              />
-              <small>默认选中北京时间当天，仅补齐表内空白日期</small>
-            </label>
             <button
               className="data-import-primary"
               disabled={!file || Boolean(busy)}
@@ -1679,7 +1668,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                 <span>DUPLICATE FILE</span>
                 <h2>该文件已上传过</h2>
                 <p>
-                  “{batch.filename}”已有导入批次。可继续上次校对，或按当前项目、队伍和默认日期重新解析。
+                  “{batch.filename}”已有导入批次。可继续上次校对，或按当前项目和队伍重新解析。
                 </p>
               </div>
               <button

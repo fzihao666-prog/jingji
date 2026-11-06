@@ -2088,11 +2088,11 @@ describe('简化模板的填写契约', () => {
     });
     return analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: `简化${++unique}.xlsx`, mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']), ...options });
   }
-  it('新模板无日期阻断，选定统一日期后只填距离可提交且不伪造SRPE', async () => {
+  it('新模板缺日期自动补齐，只填距离可提交且不伪造SRPE', async () => {
     const values = { 姓名: '张某', 距离千米: 12.5 };
     const missing = await simplified('训练课次', values);
-    expect(missing.errorCount).toBeGreaterThan(0);
-    expect(missing.items[0].eventDate).toBe('');
+    expect(missing.errorCount).toBe(0);
+    expect(missing.items[0].eventDate).toBe(new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
     const valid = await simplified('训练课次', values, { defaultDate: '2026-10-01', reparse: true });
     expect(valid.errorCount).toBe(0);
     expect(valid.items[0].payload.srpe).toBeNull();
@@ -2110,7 +2110,7 @@ describe('简化模板的填写契约', () => {
     const invalid = await simplified('每日恢复', { 姓名: '张某', 日期: '2026-10-01', 备注: '未采集' });
     expect(invalid.errorCount).toBeGreaterThan(0);
     const legacy = analyze({ 训练课次: [['姓名', '时长分钟'], ['张某', 60]] });
-    expect(legacy.items[0].messages.join('；')).toContain('北京时间当天');
+    expect(legacy.items[0].messages.join('；')).toContain('解析当天的北京时间日期');
   });
   it('新模板复用RPE与恢复量表边界并定位原列', async () => {
     const training = await simplified('训练课次', { 姓名: '张某', 日期: '2026-10-01', 时长分钟: 60, RPE: 11 });
@@ -2176,12 +2176,12 @@ it('重复解析不改写未变化的指标字典元数据', () => {
   expect(db.prepare("SELECT updated_at AS value FROM metric_definitions WHERE code='squat_kg'").get()).toEqual({ value: '2000-01-01 00:00:00' });
 });
 
-it('复制带通俗条件说明的部分列后，仍识别新版模板并阻止缺日期', async () => {
+it('复制带通俗条件说明的部分列后，仍识别新版模板并补齐缺失日期', async () => {
   const { templateFieldHeader } = await import('../../shared/import-template-fields.ts');
   const fields = importTemplateFields('训练课次').filter(field => ['姓名', '时长分钟'].includes(field.key));
   const batch = analyze({ 训练课次: [fields.map(templateFieldHeader), fields.map(field => field.key === '姓名' ? '张某' : 60)] });
-  expect(batch.items[0].eventDate).toBe('');
-  expect(batch.errorCount).toBeGreaterThan(0);
+  expect(batch.items[0].eventDate).toBe(new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
+  expect(batch.errorCount).toBe(0);
 });
 
 it('教练只填中文测试项目与成绩，系统确定代码和单位并支持完整往返', async () => {
@@ -2512,7 +2512,7 @@ describe('简洁统一模板业务映射', () => {
         .get(),
     ).toEqual({ height_cm: 182, weight_kg: 75 });
   });
-  it.each(['2026-02-30', ''])('非法或缺失日期%s不能提交', (date) => {
+  it.each(['2026-02-30'])('非法日期%s不能提交', (date) => {
     const batch = analyze({
       [sheet]: [headers, ['1', '张某', 'A队', date, null, null, 80]],
     });

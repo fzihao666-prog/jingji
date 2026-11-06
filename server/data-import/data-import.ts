@@ -998,7 +998,8 @@ function parseStandardSheet(
   filename: string,
   defaultDate: string,
   athletes: ImportAthlete[],
-  simplified = false
+  simplified = false,
+  fallbackDate = defaultDate || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
 ) {
   const sheet = IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
   const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET);
@@ -1011,7 +1012,6 @@ function parseStandardSheet(
   const items: ParsedImportItem[] = [];
   const metricCatalog = sheet === '测试指标' ? readImportMetricDefinitions(project) : [];
   const year = workbookYear(filename);
-  const fallbackDate = defaultDate || (simplified ? '' : new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
   const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目', '日期', '测量日期', '测试日期', '发生日期', '评估日期']);
   const dateLabels = ['日期', '测量日期', '测试日期', '发生日期', '评估日期'];
@@ -1030,7 +1030,7 @@ function parseStandardSheet(
     if (/^示例/.test(rawName)) continue;
     const sourceRow = {
       rowIndex, columns: [...header.columns], values: row.map(value => typeof value === 'number' ? value : text(value)),
-      filename, defaultDate, simplified,
+      filename, defaultDate, simplified, fallbackDate,
     };
     const rowHasContent = row.some((value) => text(value) !== '');
     if (!rawName) {
@@ -1088,7 +1088,7 @@ function parseStandardSheet(
         team: standardText(row, header.columns, '所属队伍'),
         templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
         rawDate: text(rawDate),
-        dateSource: text(rawDate) ? 'row' : defaultDate ? 'selected' : simplified ? 'missing' : 'legacy_today',
+        dateSource: text(rawDate) ? 'row' : defaultDate ? 'selected' : 'legacy_today',
         defaultedDate: text(rawDate) ? '' : rowDate,
         dateAddress: cellAddress(rowIndex, dateColumn ?? nameColumn),
         ...(simplified ? { fieldAddresses: Object.fromEntries([...header.columns].map(([label, column]) => [label, cellAddress(rowIndex, column)])) } : {}),
@@ -2728,7 +2728,7 @@ function validateImportItem(
     if (rows.some(row => !importSnapshotMatches(item, row))) messages.push('错误：正式课次的项目归属不匹配，请核实后处理，不能通过导入覆盖。');
   }
   if (payload.dateSource === 'legacy_today' && item.eventDate === payload.defaultedDate)
-    messages.push(`警告：旧模板日期留空，使用北京时间当天${item.eventDate}；请核对后确认导入，历史记录请修改日期`);
+    messages.push(`提示：原日期缺失，已使用解析当天的北京时间日期 ${item.eventDate}`);
   if (payload.dateSource === 'selected' && item.eventDate === payload.defaultedDate)
     messages.push(`提示：日期使用上传页所选统一日期${item.eventDate}`);
   if (payload.missingSessionOrder) messages.push('错误：同人同日有多课，请在原文件补充不同课次序号后重新上传');
@@ -3284,7 +3284,7 @@ export function updateDataImportItems(input: {
       sourceGroups.set(key, { item, cells: correction.sourceCells });
     }
     for (const { item, cells } of sourceGroups.values()) {
-      const source = item.payload.sourceRow as { rowIndex: number; columns: [string, number][]; values: (string | number)[]; filename: string; defaultDate: string; simplified: boolean };
+      const source = item.payload.sourceRow as { rowIndex: number; columns: [string, number][]; values: (string | number)[]; filename: string; defaultDate: string; simplified: boolean; fallbackDate?: string };
       if (!cells || typeof cells !== 'object' || Array.isArray(cells) || Object.keys(cells).length > 200) throw new Error('源行修复格式无效');
       const related = batch.items.filter(entry => entry.sourceSheet === item.sourceSheet && (entry.payload.sourceRow as { rowIndex?: number } | undefined)?.rowIndex === source.rowIndex);
       if (related.some(entry => entry.payload.sourceRowOutdated)) throw new Error('该源行已通过业务字段校对，请继续使用业务字段校对；如需修改源单元格请修正原文件后重新上传');
@@ -3299,7 +3299,7 @@ export function updateDataImportItems(input: {
       const matrix: Matrix = Array.from({ length: source.rowIndex + 1 }, () => []);
       for (const [label, column] of source.columns) matrix[0][column] = label;
       matrix[source.rowIndex] = values;
-      const parsed = parseStandardSheet(matrix, item.sourceSheet, batch.project, source.filename, source.defaultDate, input.athletes, source.simplified);
+      const parsed = parseStandardSheet(matrix, item.sourceSheet, batch.project, source.filename, source.defaultDate, input.athletes, source.simplified, source.fallbackDate);
       if (!parsed.length) throw new Error('修复后没有可导入业务记录；如不需导入请明确排除此行');
       const projectColumn = source.columns.find(([label]) => label === '运动项目')?.[1];
       if (projectColumn !== undefined && text(values[projectColumn]) && normalizeProject(text(values[projectColumn])) !== normalizeProject(batch.project)) throw new Error('源行运动项目与当前批次不一致');

@@ -190,7 +190,7 @@ it('人员确认后撤回行政授权，最终HTTP提交拒绝新建及业务写
   }
 });
 
-it('简化模板HTTP下载预填正确，缺日期不可提交，校对后成功写入', async () => {
+it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', async () => {
   const { templateHeaderKey, IMPORT_TEMPLATE_VERSION } = await import('../../shared/import-template-fields.ts');
   for (const kind of ['profile', 'training', 'test', 'unified']) {
     const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING&team=${encodeURIComponent('HTTP甲队')}`, { headers: { authorization: `Bearer ${token}` } });
@@ -224,8 +224,8 @@ it('简化模板HTTP下载预填正确，缺日期不可提交，校对后成功
     const analyzed = await request('/analyze', 'POST', form);
     expect(analyzed.status).toBe(200);
     const batch = analyzed.body.batch!;
-    expect(batch.errorCount).toBeGreaterThan(0);
-    expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(400);
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items[0].eventDate).toBe(new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
     const saved = await request(`/batches/${batch.id}/items`, 'PUT', { corrections: [{ id: batch.items[0].id, eventDate: '2026-10-15' }] });
     expect(saved.body.batch!.errorCount).toBe(0);
     expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);

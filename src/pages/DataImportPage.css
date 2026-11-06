@@ -146,21 +146,6 @@
   font-size: 8px;
 }
 
-.data-import-date {
-  margin-top: 13px;
-  display: grid;
-  grid-template-columns: 120px 170px 1fr;
-  align-items: center;
-  gap: 9px;
-}
-
-.data-import-date > span {
-  color: #5e767d;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.data-import-date input,
 .data-import-table input,
 .data-import-table select {
   height: 34px;
@@ -171,11 +156,6 @@
   background: #fff;
   font-size: 9px;
   outline: 0;
-}
-
-.data-import-date small {
-  color: #8ba0a5;
-  font-size: 8px;
 }
 
 .data-import-primary {
@@ -832,10 +812,6 @@
     grid-template-columns: 1fr;
   }
 
-  .data-import-date {
-    grid-template-columns: 1fr;
-  }
-
   .data-import-review-head,
   .data-import-commit-bar {
     align-items: stretch;
@@ -858,17 +834,6 @@
     align-items: stretch;
     flex-direction: column;
   }
-}
-
-.data-import-date select {
-  height: 34px;
-  padding: 0 9px;
-  border: 1px solid #d8e3e5;
-  border-radius: 8px;
-  color: #153540;
-  background: #fff;
-  font-size: 9px;
-  outline: 0;
 }
 
 .data-import-candidates {

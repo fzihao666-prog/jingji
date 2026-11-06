@@ -75,7 +75,7 @@ export function importFieldFillCondition(sheet: string, key: string): string | u
   if (key === '项目') return '未由当前项目、队伍预填时填写';
   if (['所属队伍', '队伍'].includes(key)) return '新建人员或无法由已有档案确定时填写';
   if (['日期', '测量日期', '测试日期', '发生日期', '评估日期', '训练日期'].includes(key))
-    return '上传时未选统一日期，就在本列填日期';
+    return '留空时使用解析当天的北京时间日期';
   if (['课次序号', '训练场次'].includes(key)) return '同一人同一天有多次训练时填写';
   if (['组序', '组次'].includes(key)) return '同一动作做了多组时填写';
   if (['时长分钟', '距离千米'].includes(key)) return '时长、距离至少填一项';
