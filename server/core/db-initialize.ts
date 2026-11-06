@@ -1,5 +1,6 @@
 import { initializeEnodeDatabase } from '../enode/enode.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
+import { COMPACT_ATHLETE_COLUMNS } from '../../shared/compact-athlete-template.ts';
 import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -17,6 +18,12 @@ import { OVERVIEW_METRICS } from '../../shared/overview-metrics.ts';
 import { preserveLegacySpecialChampionModels } from './db-migrations.ts';
 import { initializeSystemData } from './db-system-data.ts';
 import { initializePhysicalChampionReferences } from './physical-champion-references.ts';
+
+const compactTestMetricCodes = new Set<string>(
+  COMPACT_ATHLETE_COLUMNS.filter(field => field.kind === 'test').map(field => field.code)
+);
+const legacyBaseMetricProjects = '["赛艇","皮划艇","激流"]';
+const commonMetricProjects = '["*"]';
 
 export function initializeDatabase(
   db: DatabaseSync,
@@ -1799,9 +1806,13 @@ export function initializeDatabase(
   // 补齐兼容导入字典，只插入缺失项，不覆盖管理员配置或启停状态。
   const insertImportMetric = db.prepare(`INSERT OR IGNORE INTO metric_definitions
     (code,label,domain,unit,direction,frequency,projects_json,minimum,maximum)
-    VALUES (?,?,?,?,'higher_better','phase','["赛艇","皮划艇","激流"]',?,?)`);
+    VALUES (?,?,?,?,'higher_better','phase',?,?,?)`);
   for (const [code, metric] of Object.entries(IMPORT_BASE_METRICS))
-    insertImportMetric.run(code, metric.label, metric.domain, metric.unit, metric.min, metric.max);
+    insertImportMetric.run(
+      code, metric.label, metric.domain, metric.unit,
+      compactTestMetricCodes.has(code) ? commonMetricProjects : legacyBaseMetricProjects,
+      metric.min, metric.max
+    );
 
   function seed() {
     const athleteCount = db.prepare('SELECT COUNT(*) AS count FROM athletes').get() as {
@@ -5997,6 +6008,21 @@ export function initializeDatabase(
       });
       for (const metric of OVERVIEW_METRICS) db.prepare('UPDATE metric_definitions SET projects_json=? WHERE code=?').run(JSON.stringify(metric.projects),metric.code);
       db.prepare("INSERT INTO app_metadata(key,value) VALUES('project_metric_applicability_v1',?)").run(JSON.stringify({previous}));
+    }
+    const compactScopeMigration = 'compact_athlete_common_metric_scope_v1';
+    if (!db.prepare('SELECT 1 FROM app_metadata WHERE key=?').get(compactScopeMigration)) {
+      const readLegacyScope = db.prepare(`SELECT code, projects_json FROM metric_definitions
+        WHERE code=? AND active=1 AND projects_json IN (?,?)`);
+      const updateScope = db.prepare('UPDATE metric_definitions SET projects_json=? WHERE code=?');
+      const previous = [];
+      for (const code of compactTestMetricCodes) {
+        const row = readLegacyScope.get(code, legacyBaseMetricProjects, '["ROWING","CANOE_SPRINT","CANOE_SLALOM"]');
+        if (!row) continue;
+        previous.push(row);
+        updateScope.run(commonMetricProjects, code);
+      }
+      db.prepare('INSERT INTO app_metadata(key,value) VALUES(?,?)')
+        .run(compactScopeMigration, JSON.stringify({ previous }));
     }
     db.exec('COMMIT');
   } catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }

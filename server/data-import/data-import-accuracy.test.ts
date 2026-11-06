@@ -2441,6 +2441,26 @@ it('已确认事实项目快照往返不改变状态，待核实测试不可回�
 describe('简洁统一模板业务映射', () => {
   const sheet = '运动员基础体能测试';
   const headers = COMPACT_ATHLETE_COLUMNS.map(compactAthleteHeader);
+  it('举重项目可以从统一模板导入实测卧推', () => {
+    const project = 'WEIGHTLIFTING';
+    const athlete = { id: 8, name: '合成队员', team: '合成举重队', project, gender: '' };
+    const team = db.prepare('INSERT INTO project_teams(project,name) VALUES(?,?)')
+      .run(project, athlete.team);
+    db.prepare('INSERT INTO athletes(id,name,project,team,team_id) VALUES(?,?,?,?,?)')
+      .run(athlete.id, athlete.name, project, athlete.team, Number(team.lastInsertRowid));
+    const batch = analyze({
+      [sheet]: [headers, [athlete.id, athlete.name, athlete.team, '2026-10-20', null, null, 80]],
+    }, { project, athletes: [athlete], allowedTeams: new Set([athlete.team]) });
+    expect(batch.errorCount).toBe(0);
+    expect(commitDataImport({
+      batchId: batch.id, userId: USER_ID, creatorRole: 'SCC', athletes: [athlete],
+      allowedTeams: new Set([athlete.team]), conflictPolicy: 'skip',
+    }).createdRecords).toBe(1);
+    expect(db.prepare(`SELECT ts.project_code AS project, tm.value_num AS value
+      FROM test_sessions ts JOIN test_measurements tm ON tm.test_session_id=ts.id
+      WHERE ts.athlete_id=? AND tm.metric_code='bench_press_kg'`).get(athlete.id))
+      .toEqual({ project, value: 80 });
+  });
   it('五项实测1RM与四项基础体能准确入库，身体测量独立保存', () => {
     const values = [180, 75, 80, 90, 120, 140, 60, 0, 42, 90, -5];
     const batch = analyze({
