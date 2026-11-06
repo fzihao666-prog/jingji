@@ -22,16 +22,16 @@ const item: ImportReviewItem = {
   sourceSheet: '身体测量',
   sourceAddress: 'B2',
 };
-it('异常同时包含错误和待复核，已排除和自动跳过的来源不计入', () => {
+it('待处理仅包含阻断错误，普通警告及跳过记录不计入', () => {
   const rows = [
-    { ...item, quality: 'warning' },
+    { ...item, quality: 'error' },
     { ...item, id: 2, quality: 'warning' },
     { ...item, id: 3, quality: 'warning' },
     { ...item, id: 4, quality: 'valid' },
     { ...item, id: 5, resolution: 'skip' },
     { ...item, id: 6, quality: 'skipped', itemType: 'invalid_row' },
   ];
-  expect(rows.filter(isImportException).map(row => row.id)).toEqual([1, 2, 3]);
+  expect(rows.filter(isImportException).map(row => row.id)).toEqual([1]);
   expect(isImportException(item)).toBe(true);
   expect(isImportException({ ...item, itemType: 'invalid_row', quality: 'valid' })).toBe(true);
 });

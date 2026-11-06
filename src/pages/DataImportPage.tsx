@@ -260,11 +260,11 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
 
-  const startReview = (next: DataImportBatch) => {
+  const startReview = (next: DataImportBatch, confirmIfReady = false) => {
     setCleanupPreview(null);
     rememberRevision(next);
     const savedPosition = readImportReviewPosition(positionKey);
-    const restoring = savedPosition?.batchId === next.id ? savedPosition : null;
+    const restoring = !confirmIfReady && savedPosition?.batchId === next.id ? savedPosition : null;
     setReviewGroupPage(restoring?.reviewGroupPage ?? 0);
     setFilter(restoring?.filter ?? 'exception');
     setQuery(restoring?.query ?? '');
@@ -278,17 +278,22 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     const unresolved = next.athleteCandidates.filter(
       (candidate) => importPersonNeedsConfirmation(candidate, next.items)
     );
+    const readyToConfirm = confirmIfReady && next.status === 'reviewing' && !unresolved.length &&
+      next.errorCount === 0 && next.items.some(item =>
+        (item.quality === 'valid' || item.quality === 'warning') &&
+        item.resolution !== 'skip' && !item.payload.valueAutoMerged
+      );
     if (batch?.id !== next.id) reviewScrollTop.current = 0;
     setReviewOpen(next.status === 'reviewing');
     setPersonDialogOpen(next.status === 'reviewing' && unresolved.length > 0);
     setDuplicateDialogOpen(false);
-    setConfirmDialogOpen(false);
+    setConfirmDialogOpen(readyToConfirm);
     if (next.status === 'committed') {
       setMessage(`该文件已完成入库：写入${next.importedCount}条、跳过${next.skippedCount}条；无需再次确认人员或提交。当前显示历史导入结果。`);
     } else if (next.status === 'reviewing') {
       setMessage(unresolved.length
         ? `已识别${next.itemCount}条候选数据；还有${unresolved.length}名人员待确认，请完成人员确认后校对数据。`
-        : `已识别${next.itemCount}条候选数据；人员已确认，请校对数据后确认导入。`);
+        : readyToConfirm ? '' : `已识别${next.itemCount}条候选数据，请校对后确认导入。`);
     } else {
       setMessage('该历史批次当前不能提交，请检查批次状态后重新上传文件。');
     }
@@ -318,7 +323,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
         await refreshBatches();
         return;
       }
-      startReview(info.batch);
+      startReview(info.batch, true);
       await refreshBatches();
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '文件解析失败。');
@@ -607,7 +612,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     const focusable = () => [...dialog.querySelectorAll<HTMLElement>(
       'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, a[href], [tabindex="0"]'
     )].filter(element => element.getClientRects().length > 0);
-    (showReview ? dialog : focusable()[0])?.focus({ preventScroll: true });
+    (showReview ? dialog : focusable()[0] ?? dialog).focus({ preventScroll: true });
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -735,9 +740,15 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   };
 
   const reviewGroups = useMemo(() => importReviewGroups(batch?.items || []), [batch]);
-  const pendingReviewGroups = reviewGroups.filter(group => !group.some(item => item.payload.valueReviewDecision || importSessionChoices(item).length > 1));
-  const recordCount = Math.max(0, ...pendingReviewGroups.map(group => group.length));
-  const matchingReviewGroups = reviewGroups.filter(group => !query.trim() || group.some(item => `${item.rawAthleteName} ${item.athleteName} ${item.eventDate} ${item.metricLabel} ${item.metricCode} ${item.testType} ${item.exerciseName}`.includes(query.trim())));
+  const pendingReviewGroups = reviewGroups.filter(group => group.some(isImportException));
+  const bulkReviewGroups = pendingReviewGroups.filter(group => !group.some(item =>
+    item.payload.valueReviewDecision || importSessionChoices(item).length > 1
+  ));
+  const recordCount = Math.max(0, ...bulkReviewGroups.map(group => group.length));
+  const visibleReviewGroups = filter === 'exception' ? pendingReviewGroups
+    : filter === 'overwrite' ? reviewGroups.filter(group => group.some(item => item.conflict?.fields.some(field => field.overwrites)))
+    : reviewGroups;
+  const matchingReviewGroups = visibleReviewGroups.filter(group => !query.trim() || group.some(item => `${item.rawAthleteName} ${item.athleteName} ${item.eventDate} ${item.metricLabel} ${item.metricCode} ${item.testType} ${item.exerciseName}`.includes(query.trim())));
   const reviewGroupPages = Math.max(1, Math.ceil(matchingReviewGroups.length / 8));
   const currentReviewPage = Math.min(reviewGroupPage, reviewGroupPages - 1);
   const reviewGroupIds = useMemo(() => new Set(reviewGroups.flatMap(group => group.map(item => item.id))), [reviewGroups]);
@@ -1252,7 +1263,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             <div className="data-import-filters">
               {(
                 [
-                  ['exception', `异常 ${batch.items.filter(isImportException).length}`],
+                  ['exception', `待处理 ${batch.items.filter(isImportException).length}`],
                   ['duplicate', `重复 ${batch.counts.duplicateCount}`],
                   ['overwrite', `将更新 ${batch.counts.overwriteCount}`],
                   ['all', `全部 ${batch.itemCount}`],
@@ -1274,9 +1285,9 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             </div>
             <div className="data-import-review-scroll" ref={reviewScrollRef}
               onScroll={event => { reviewScrollTop.current = event.currentTarget.scrollTop; }}>
-            {reviewGroups.length > 0 && <div className="import-value-review-groups">
+            {matchingReviewGroups.length > 0 && <div className="import-value-review-groups">
               <div className="import-value-review-heading">
-                <h3>导入数据集中审查 · {reviewGroups.length} 组</h3>
+                <h3>导入数据集中审查 · {matchingReviewGroups.length} 组</h3>
                 {recordCount > 0 && <div className="import-value-review-actions" role="group" aria-label="全选待审查记录">
                   <span>全选：</span>
                   {Array.from({ length: recordCount }, (_, index) => <button
@@ -1284,7 +1295,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                     disabled={Boolean(busy) || savingReviewGroups.size > 0 || batch.items.some(item => pendingSelections.has(item.id)) || batch.status !== 'reviewing'}
                     title={`将记录 ${index + 1} 应用到所有页面的待审查组；缺少该记录的组保持不变`}
                     onClick={() => {
-                      const updates = selectImportReviewRecord(pendingReviewGroups, index);
+                      const updates = selectImportReviewRecord(bulkReviewGroups, index);
                       if (updates.length) void handleValueReview(updates, true);
                     }}
                   >记录 {index + 1}</button>)}
@@ -1601,7 +1612,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                   {!pageItems.length && (
                     <tr>
                       <td colSpan={8} className="data-import-empty">
-                        {reviewGroups.length ? '重复数据请在上方卡片中审查；此处展示其他数据。' : '当前筛选条件下没有数据。'}
+                        {matchingReviewGroups.length ? '重复数据请在上方卡片中审查。' : filter === 'exception' && !batch.errorCount ? '没有待处理记录，可切换到“全部”查看数据。' : '当前筛选条件下没有数据。'}
                       </td>
                     </tr>
                   )}
@@ -1836,6 +1847,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             role="dialog"
             aria-modal="true"
             aria-labelledby="data-import-confirm-title"
+            tabIndex={-1}
           >
             <header>
               <h2 id="data-import-confirm-title">确认导入</h2>
@@ -1848,6 +1860,18 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             <footer className="data-import-confirm-actions">
               <button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => setConfirmDialogOpen(false)}>
                 取消
+              </button>
+              <button type="button" className="secondary-button" disabled={Boolean(busy)}
+                onClick={() => {
+                  if (filter === 'exception' && !batch.errorCount) {
+                    setFilter('all');
+                    setPage(0);
+                    setReviewGroupPage(0);
+                  }
+                  setReviewOpen(true);
+                  setConfirmDialogOpen(false);
+                }}>
+                查看校对
               </button>
               <button
                 type="button"

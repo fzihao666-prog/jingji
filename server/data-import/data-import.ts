@@ -2459,7 +2459,9 @@ function mapItem(row: Record<string, unknown>): DataImportItemView {
     sourceAddress: text(row.sourceAddress),
     rawValue: text(row.rawValue),
     quality: row.quality as DataImportQuality,
-    messages: JSON.parse(text(row.messagesJson) || '[]') as string[],
+    messages: (JSON.parse(text(row.messagesJson) || '[]') as string[]).filter(message =>
+      !message.startsWith('提示：原日期缺失，已使用解析当天的北京时间日期 ')
+    ),
     businessKey: text(row.businessKey),
     resolution: (text(row.resolution) || '') as DataImportResolution,
     conflict: (() => {
@@ -2729,8 +2731,6 @@ function validateImportItem(
     const rows = db.prepare('SELECT project_code FROM training_sessions WHERE athlete_id=? AND session_date=? AND (? IS NULL OR session_order=?)').all(item.athleteId, item.eventDate, order, order) as Array<Record<string, unknown>>;
     if (rows.some(row => !importSnapshotMatches(item, row))) messages.push('错误：正式课次的项目归属不匹配，请核实后处理，不能通过导入覆盖。');
   }
-  if (payload.dateSource === 'legacy_today' && item.eventDate === payload.defaultedDate)
-    messages.push(`提示：原日期缺失，已使用解析当天的北京时间日期 ${item.eventDate}`);
   if (payload.dateSource === 'selected' && item.eventDate === payload.defaultedDate)
     messages.push(`提示：日期使用上传页所选统一日期${item.eventDate}`);
   if (payload.missingSessionOrder) messages.push('错误：同人同日有多课，请在原文件补充不同课次序号后重新上传');

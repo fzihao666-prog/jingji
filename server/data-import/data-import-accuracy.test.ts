@@ -2104,13 +2104,14 @@ describe('简化模板的填写契约', () => {
     expect(batch.items[0].athleteId).toBe(1);
     await expect(simplified('训练课次', { 姓名: '张某', 日期: '2026-10-01' })).rejects.toThrow('未填写业务数据');
   });
-  it('恢复只填睡眠合法，只填备注报错；旧文件日期回退明确提示', async () => {
+  it('恢复只填睡眠合法，只填备注报错；旧文件日期回退仅显示日期', async () => {
     const valid = await simplified('每日恢复', { 姓名: '张某', 日期: '2026-10-01', 睡眠小时: 8 });
     expect(valid.errorCount).toBe(0);
     const invalid = await simplified('每日恢复', { 姓名: '张某', 日期: '2026-10-01', 备注: '未采集' });
     expect(invalid.errorCount).toBeGreaterThan(0);
     const legacy = analyze({ 训练课次: [['姓名', '时长分钟'], ['张某', 60]] });
-    expect(legacy.items[0].messages.join('；')).toContain('解析当天的北京时间日期');
+    expect(legacy.items[0].eventDate).toBe(new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()));
+    expect(legacy.items[0].messages.join('；')).not.toContain('原日期缺失');
   });
   it('新模板复用RPE与恢复量表边界并定位原列', async () => {
     const training = await simplified('训练课次', { 姓名: '张某', 日期: '2026-10-01', 时长分钟: 60, RPE: 11 });
