@@ -1806,7 +1806,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
               </div>
             </div>
             <footer className="data-import-dialog-actions">
-              <button type="button" disabled={Boolean(busy)} onClick={() => setPersonDialogOpen(false)}>
+              <button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => setPersonDialogOpen(false)}>
                 关闭
               </button>
               <button
