@@ -3406,6 +3406,8 @@ export function updateDataImportAthleteCandidates(input: {
         if (existing.length === 1) {
           matchedAthleteId = existing[0].id;
           confirmed = true;
+        } else if (existing.length > 1 && confirmed) {
+          messages.push('同队存在多名同名运动员，请选择具体档案');
         }
       }
       if (!excluded) {

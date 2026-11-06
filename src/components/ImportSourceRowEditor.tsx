@@ -45,61 +45,97 @@ export function ImportSourceRowEditor({
       <p>此草稿缺少可编辑的源字段，请修正原文件后重新上传，或排除此行。</p>
     ) : null;
   const definitions = importTemplateFields(item.sourceSheet);
+  const dateHeader = row.columns.find(([header]) =>
+    ['日期', '测量日期', '测试日期', '发生日期', '评估日期'].includes(templateHeaderKey(header))
+  )?.[0];
+  const needsDate =
+    dateHeader &&
+    item.messages.some((message) => message.includes('无效或缺失') && message.includes('日期'));
+  const correctedDate = dateHeader ? String(pending?.[dateHeader] ?? '') : '';
   return (
-    <details
-      className="import-source-editor"
-      open={open}
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-    >
-      <summary>编辑原行字段</summary>
-      <p>修改完成后点击保存并校验，该源行的全部记录会一起重新校验。</p>
-      <div className="import-source-editor-fields">
-        {row.columns.map(([header, index]) => {
-          const key = templateHeaderKey(header);
-          const field = definitions.find((definition) => definition.key === key);
-          const value =
-            pending && Object.hasOwn(pending, header)
-              ? (pending[header] ?? '')
-              : (row.values[index] ?? '');
-          const metricNames = ['指标名称', '测试项目'].includes(key)
-            ? metrics.map((metric) => `${metric.label}${metric.unit ? `（${metric.unit}）` : ''}`)
-            : null;
-          const choices = metricNames?.length ? metricNames : field?.choices;
-          return (
-            <label key={`${header}-${index}`}>
-              <span>
-                {field?.displayName || key}
-                {field?.unit ? `（${field.unit}）` : ''}
-              </span>
-              {choices?.length ? (
-                <select
-                  disabled={disabled}
-                  value={String(value)}
-                  onChange={(event) => onChange({ [header]: event.target.value })}
-                >
-                  <option value="">未填写</option>
-                  {value !== '' && !choices.includes(String(value)) && (
-                    <option value={String(value)}>{String(value)}（原值，需修正）</option>
-                  )}
-                  {choices.map((choice) => (
-                    <option key={choice} value={choice}>
-                      {choice}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  disabled={disabled}
-                  value={String(value)}
-                  onChange={(event) => onChange({ [header]: event.target.value })}
-                />
-              )}
-              {field?.fillCondition && <small>{field.fillCondition}</small>}
-            </label>
-          );
-        })}
-      </div>
-      <button type="button" disabled={disabled || !pending || !Object.keys(pending).length} onClick={onSave}>保存并校验</button>
-    </details>
+    <>
+      {needsDate && dateHeader && (
+        <div className="import-source-editor-fields">
+          <label>
+            <span>修正日期</span>
+            <input
+              type="date"
+              disabled={disabled}
+              value={correctedDate}
+              onChange={(event) => onChange({ [dateHeader]: event.target.value })}
+            />
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={disabled || !correctedDate}
+            onClick={onSave}
+          >
+            保存日期并校验
+          </button>
+        </div>
+      )}
+      <details
+        className="import-source-editor"
+        open={open}
+        onToggle={(event) => setOpen(event.currentTarget.open)}
+      >
+        <summary>编辑原行字段</summary>
+        <p>修改完成后点击保存并校验，该源行的全部记录会一起重新校验。</p>
+        <div className="import-source-editor-fields">
+          {row.columns.map(([header, index]) => {
+            const key = templateHeaderKey(header);
+            const field = definitions.find((definition) => definition.key === key);
+            const value =
+              pending && Object.hasOwn(pending, header)
+                ? (pending[header] ?? '')
+                : (row.values[index] ?? '');
+            const metricNames = ['指标名称', '测试项目'].includes(key)
+              ? metrics.map((metric) => `${metric.label}${metric.unit ? `（${metric.unit}）` : ''}`)
+              : null;
+            const choices = metricNames?.length ? metricNames : field?.choices;
+            return (
+              <label key={`${header}-${index}`}>
+                <span>
+                  {field?.displayName || key}
+                  {field?.unit ? `（${field.unit}）` : ''}
+                </span>
+                {choices?.length ? (
+                  <select
+                    disabled={disabled}
+                    value={String(value)}
+                    onChange={(event) => onChange({ [header]: event.target.value })}
+                  >
+                    <option value="">未填写</option>
+                    {value !== '' && !choices.includes(String(value)) && (
+                      <option value={String(value)}>{String(value)}（原值，需修正）</option>
+                    )}
+                    {choices.map((choice) => (
+                      <option key={choice} value={choice}>
+                        {choice}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    disabled={disabled}
+                    value={String(value)}
+                    onChange={(event) => onChange({ [header]: event.target.value })}
+                  />
+                )}
+                {field?.fillCondition && <small>{field.fillCondition}</small>}
+              </label>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          disabled={disabled || !pending || !Object.keys(pending).length}
+          onClick={onSave}
+        >
+          保存并校验
+        </button>
+      </details>
+    </>
   );
 }
