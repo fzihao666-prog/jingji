@@ -2040,6 +2040,7 @@ type PersonRecord = {
   suggested: DataImportPersonSuggestion[];
   messages: string[];
   matched: boolean;
+  readyToCreate?: boolean;
 };
 
 function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
@@ -2330,7 +2331,8 @@ export function analyzeDataImport(input: {
       person.team = [...allowedTeams][0];
     }
     if (!person.matched && !person.team)
-      person.messages.push('请在人员确认中选择所属队伍');
+      person.messages.push('请在名单中选择所属队伍');
+    person.readyToCreate = resolution.kind === 'none' && person.name.length <= 40 && Boolean(allowedTeams?.has(person.team));
   }
   const personOf = (item: ParsedImportItem) => {
     if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') return null;
@@ -2410,7 +2412,7 @@ export function analyzeDataImport(input: {
         person.matched ? 'matched' : 'pending',
         person.matchedAthleteId,
         JSON.stringify(person.suggested),
-        person.matched ? 1 : 0,
+        person.matched || person.readyToCreate ? 1 : 0,
         person.sourceSheet,
         JSON.stringify(
           person.messages.length

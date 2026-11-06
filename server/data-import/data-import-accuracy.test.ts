@@ -2561,19 +2561,12 @@ describe('简洁统一模板业务映射', () => {
     expect(batch.items[0].athleteId).toBeNull();
     expect(() => commit(batch.id, 'skip')).toThrow();
   });
-  it('新人只填姓名队伍及实际成绩，确认后最小建档并关联测试', () => {
+  it('新人只填姓名队伍及实际成绩，无需逐人确认即可在提交时最小建档并关联测试', () => {
     const batch = analyze({
       [sheet]: [headers, ['', '虚构新人', 'A队', '2026-10-24', null, null, 80]],
     });
-    expect(batch.athleteCandidates[0].status).toBe('pending');
-    expect(() => commit(batch.id, 'skip')).toThrow();
-    updateDataImportAthleteCandidates({
-      batchId: batch.id,
-      userId: USER_ID,
-      athletes,
-      allowedTeams: new Set(['A队']),
-      corrections: [{ id: batch.athleteCandidates[0].id, confirmed: true }],
-    });
+    expect(batch.athleteCandidates[0]).toMatchObject({ status: 'pending', confirmed: true });
+    expect(db.prepare("SELECT id FROM athletes WHERE name='虚构新人'").get()).toBeUndefined();
     expect(commit(batch.id, 'skip').createdAthletes).toBe(1);
     const person = db
       .prepare(

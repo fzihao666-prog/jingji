@@ -128,7 +128,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   const navigationState = useRef({ unsaved: false, busy: false });
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [bulkCandidateTeam, setBulkCandidateTeam] = useState('');
   const [templateTeam, setTemplateTeam] = useState('');
   const [templateTeamsProject, setTemplateTeamsProject] = useState<Project | null>(null);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
@@ -161,9 +160,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     new Map()
   );
   const [personDialogOpen, setPersonDialogOpen] = useState(false);
-  const [personTab, setPersonTab] = useState<'all' | 'pending' | 'ambiguous'>('all');
-  const [personQuery, setPersonQuery] = useState('');
-  const [selectedPersonId, setSelectedPersonId] = useState<number | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [result, setResult] = useState<{
@@ -251,9 +247,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
         setTeams(available);
         setTemplateTeam(available.length === 1 ? available[0].name : '');
         setTemplateTeamsProject(project);
-        setBulkCandidateTeam((current) =>
-          available.some((team) => team.name === current) ? current : ''
-        );
       })
       .catch((nextError) => {
         if (!cancelled) setError(nextError instanceof Error ? nextError.message : '队伍列表加载失败。');
@@ -265,7 +258,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   const startReview = (next: DataImportBatch) => {
     setCleanupPreview(null);
     rememberRevision(next);
-    setBulkCandidateTeam('');
     const savedPosition = readImportReviewPosition(positionKey);
     const restoring = savedPosition?.batchId === next.id ? savedPosition : null;
     setReviewGroupPage(restoring?.reviewGroupPage ?? 0);
@@ -281,7 +273,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     const unresolved = next.athleteCandidates.filter(
       (candidate) => importPersonNeedsConfirmation(candidate, next.items)
     );
-    setSelectedPersonId(restoring?.selectedPersonId && next.athleteCandidates.some(person => person.id === restoring.selectedPersonId) ? restoring.selectedPersonId : unresolved[0]?.id ?? null);
     setPersonDialogOpen(next.status === 'reviewing' && unresolved.length > 0);
     setDuplicateDialogOpen(false);
     setConfirmDialogOpen(false);
@@ -484,16 +475,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     return teamSuggestions(candidate).length === 0 ? '新建' : '';
   };
 
-  const applyBulkCandidateTeam = (team: string) => {
-    setBulkCandidateTeam(team);
-    if (!batch || !team) return;
-    const pending = batch.athleteCandidates.filter(
-      (candidate) => candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId
-    );
-    if (!pending.length) return;
-    for (const candidate of pending) patchAthleteCandidate(candidate.id, { team });
-    setMessage(`已为${pending.length}名待建档运动员填入“${team}”，保存后生效。`);
-  };
 
   const saveCorrections = async (
     overrideAthlete?: Map<number, AthleteCorrection>,
@@ -579,8 +560,8 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   }, []);
   useEffect(() => {
     if (!batch || batch.project !== project) return;
-    writeImportReviewPosition(positionKey, { batchId: batch.id, filter, query, page, reviewGroupPage, selectedPersonId });
-  }, [positionKey, project, batch, filter, query, page, reviewGroupPage, selectedPersonId]);
+    writeImportReviewPosition(positionKey, { batchId: batch.id, filter, query, page, reviewGroupPage, selectedPersonId: null });
+  }, [positionKey, project, batch, filter, query, page, reviewGroupPage]);
   useEffect(() => { setMobileIndex(0); }, [filter, query, page]);
   useEffect(() => {
     if (!hasUnsavedChanges && !enodeBusy) return;
@@ -678,28 +659,27 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     if (!batch) return;
     const nextMap = new Map(athleteCorrections);
     for (const candidate of batch.athleteCandidates) {
-      if (candidate.status !== 'pending' || candidate.excluded) continue;
+      if (!importPersonNeedsConfirmation(candidate, batch.items)) continue;
       if (!candidate.matchedAthleteId && (!candidate.team || needsIdentityChoice(candidate))) continue;
       nextMap.set(candidate.id, { ...(nextMap.get(candidate.id) || { id: candidate.id }), confirmed: true });
     }
-    const pendingFix = batch.athleteCandidates.filter((candidate) => {
-      if (candidate.status !== 'pending' || candidate.excluded) return false;
-      if (!candidate.matchedAthleteId && (!candidate.team || needsIdentityChoice(candidate))) return true;
-      return false;
-    });
-    if (pendingFix.length) {
-      setPersonTab('all');
-      setPersonQuery('');
-      setSelectedPersonId(pendingFix[0].id);
-      setError(
-        `还有${pendingFix.length}人需要处理，已定位到“${pendingFix[0].name}”：${pendingFix[0].team && needsIdentityChoice(pendingFix[0]) ? '请在右侧选择要关联的已有运动员' : '请在右侧选择所属队伍'}。`
-      );
+    const pendingFix = batch.athleteCandidates.find(candidate =>
+      candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId &&
+      (!candidate.team || needsIdentityChoice(candidate)) &&
+      importPersonNeedsConfirmation(candidate, batch.items)
+    );
+    if (pendingFix) {
+      setError(`请在名单中处理“${pendingFix.name}”的${pendingFix.team ? '档案匹配' : '所属队伍'}。`);
+      return;
+    }
+    if (!nextMap.size) {
+      setPersonDialogOpen(false);
       return;
     }
     const saved = await saveCorrections(nextMap);
     if (!saved) return;
     setPersonDialogOpen(false);
-    setMessage('人员确认完成，已保存人员映射草稿；请继续数据校对。');
+    setMessage('运动员信息已保存，请继续数据校对。');
   };
 
   const reviewGroups = useMemo(() => importReviewGroups(batch?.items || []), [batch]);
@@ -834,41 +814,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
       overwriteFields,
     };
   }, [batch]);
-
-  const selectedPerson = useMemo(
-    () =>
-      batch?.athleteCandidates.find((candidate) => candidate.id === selectedPersonId) || null,
-    [batch, selectedPersonId]
-  );
-
-  const visiblePersons = useMemo(() => {
-    if (!batch) return [];
-    const needle = personQuery.trim().toLowerCase();
-    return batch.athleteCandidates.filter((candidate) => {
-      if (personTab === 'pending' && !(candidate.status === 'pending' && !candidate.matchedAthleteId && !candidate.suggested.length))
-        return false;
-      if (personTab === 'ambiguous' && !(candidate.status === 'pending' && !candidate.matchedAthleteId && candidate.suggested.length))
-        return false;
-      if (!needle) return true;
-      return [candidate.name, candidate.team, candidate.sourceSheet].some((value) =>
-        value.toLowerCase().includes(needle)
-      );
-    });
-  }, [batch, personTab, personQuery]);
-
-  const batchConfirmNoConflict = () => {
-    if (!batch) return;
-    const ready = batch.athleteCandidates.filter(
-      (candidate) =>
-        candidate.status === 'pending' &&
-        !candidate.excluded &&
-        !candidate.confirmed &&
-        candidate.suggested.length === 0 &&
-        (candidate.matchedAthleteId || (candidate.team && !needsIdentityChoice(candidate)))
-    );
-    for (const candidate of ready) patchAthleteCandidate(candidate.id, { confirmed: true });
-    setMessage(`已批量确认${ready.length}名无冲突人员，请保存后继续。`);
-  };
 
   return (
     <PageContainer className="data-import-page">
@@ -1234,7 +1179,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                   onClick={() => setPersonDialogOpen(true)}
                 >
                   <Users size={15} />
-                  人员确认
+                  运动员名单
                 </button>
               </div>
             </div>
@@ -1722,256 +1667,79 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
           >
             <header>
               <div>
-                <span>PERSON CONFIRM</span>
-                <h2 id="data-import-person-title">待确认运动员</h2>
-                <p>
-                  已匹配 {batch.athleteCandidates.filter(candidate => !candidate.excluded && Boolean(candidate.matchedAthleteId)).length} 人 · 待新建 {batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && !candidate.suggested.length).length} 人 ·
-                  身份待确认 {batch.athleteCandidates.filter(candidate => !candidate.excluded && candidate.status === 'pending' && !candidate.matchedAthleteId && candidate.suggested.length > 0).length} 人。
-                  只需姓名与所属队伍即可最小建档；关闭本窗口不会丢失已确认内容。
-                </p>
+                <span>IMPORT ROSTER</span>
+                <h2 id="data-import-person-title">导入运动员名单</h2>
+                <p>本次涉及 {batch.athleteCandidates.length} 名运动员。标注“新建”的档案随数据一起保存。</p>
               </div>
               <button
                 type="button"
                 className="data-import-icon-button"
                 onClick={() => setPersonDialogOpen(false)}
                 disabled={Boolean(busy)}
-                aria-label="关闭人员确认"
+                aria-label="关闭运动员名单"
               >
                 <X size={19} />
               </button>
             </header>
-            <div className="data-import-person-toolbar">
-              <p role="status" aria-live="polite" className="data-import-save-status">
-              {busy === 'save' ? '正在保存修改并重新校验…' : saveFailed ? '保存失败，修改仍保留在当前页面，请重试保存。' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
-            </p>
-            <div className="data-import-filters">
-                {(
-                  [
-                    ['all', '全部'],
-                    ['pending', '待建档'],
-                    ['ambiguous', '身份待确认'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    className={personTab === key ? 'active' : ''}
-                    onClick={() => setPersonTab(key)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <label className="data-import-search">
-                <Search size={15} />
-                <input
-                  value={personQuery}
-                  onChange={(event) => setPersonQuery(event.target.value)}
-                  placeholder="搜索姓名或队伍"
-                />
-              </label>
-              <div className="data-import-candidate-bulk">
-                <select
-                  value={bulkCandidateTeam}
-                  disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                  aria-label="批量选择所属队伍，选择后立即应用"
-                  onChange={(event) => applyBulkCandidateTeam(event.target.value)}
-                >
-                  <option value="">批量选择所属队伍</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.name}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                  onClick={batchConfirmNoConflict}
-                >
-                  批量确认无冲突
-                </button>
-              </div>
-            </div>
             <div className="data-import-person-body">
-              <div className="data-import-person-list">
+              <div className="data-import-person-list" tabIndex={0} role="region" aria-label="导入运动员名单">
                 <table>
-                  <thead>
-                    <tr>
-                      <th>姓名</th>
-                      <th>项目</th>
-                      <th>所属队伍</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th scope="col">姓名</th><th scope="col">项目</th><th scope="col">所属队伍</th></tr></thead>
                   <tbody>
-                    {visiblePersons.map((candidate) => (
-                      <tr
-                        key={candidate.id}
-                        className={[
-                          selectedPersonId === candidate.id ? 'selected' : '',
-                          candidate.excluded ? 'excluded' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                        onClick={() => setSelectedPersonId(candidate.id)}
-                      >
-                        <td>
-                          <button type="button" className="data-import-person-name"
-                            aria-pressed={selectedPersonId === candidate.id}
-                            onClick={() => setSelectedPersonId(candidate.id)}>{candidate.name}</button>
-                          {personBadge(candidate) && (
-                            <span className="person-state pending">{personBadge(candidate)}</span>
-                          )}
-                        </td>
-                        <td>{candidate.project}</td>
-                        <td>{candidate.team || '—'}</td>
-                      </tr>
-                    ))}
-                    {!visiblePersons.length && (
-                      <tr>
-                        <td colSpan={3} className="data-import-empty">
-                          没有符合条件的人员。
-                        </td>
-                      </tr>
-                    )}
+                    {batch.athleteCandidates.map(candidate => {
+                      const pending = batch.status === 'reviewing' && candidate.status === 'pending' &&
+                        !candidate.excluded;
+                      const draft = athleteCorrections.get(candidate.id);
+                      const chooseTeam = pending && (!candidate.team || draft?.team !== undefined);
+                      const chooseAthlete = pending && candidate.team && needsIdentityChoice(candidate) &&
+                        (!candidate.matchedAthleteId || draft?.matchedAthleteId !== undefined);
+                      const suggestions = chooseAthlete ? teamSuggestions(candidate) : [];
+                      const badge = personBadge(candidate);
+                      return (
+                        <tr key={candidate.id}>
+                          <th scope="row">{candidate.name}{badge && <span className="person-state pending">{badge}</span>}</th>
+                          <td>{candidate.project}</td>
+                          <td>
+                            {chooseTeam ? (
+                              <select aria-label={`${candidate.name}所属队伍`} disabled={Boolean(busy)} value={candidate.team}
+                                onChange={event => patchAthleteCandidate(candidate.id, { team: event.target.value, matchedAthleteId: null, confirmed: false })}>
+                                <option value="" disabled>请选择所属队伍</option>
+                                {teams.map(team => <option key={team.id} value={team.name}>{team.name}</option>)}
+                              </select>
+                            ) : candidate.team || '—'}
+                            {chooseAthlete && (
+                              <div className="data-import-person-exception">
+                                <p className="data-import-person-hint">{candidate.messages[0] || '请确认对应的运动员档案。'}</p>
+                                <select aria-label={`${candidate.name}对应档案`} disabled={Boolean(busy)} value={candidate.matchedAthleteId ?? ''}
+                                  onChange={event => patchAthleteCandidate(candidate.id, { matchedAthleteId: Number(event.target.value), confirmed: true })}>
+                                  <option value="" disabled>选择对应档案</option>
+                                  {(suggestions.length ? suggestions : candidate.suggested).map(entry => (
+                                    <option key={entry.id} value={entry.id}>{entry.name} · {entry.team || '未分队'} · 编号 {entry.id}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!batch.athleteCandidates.length && <tr><td colSpan={3}>暂无运动员。</td></tr>}
                   </tbody>
                 </table>
               </div>
-              <aside className="data-import-person-detail">
-                {!selectedPerson ? (
-                  <p className="data-import-empty">点击左侧人员查看和修改必要信息。</p>
-                ) : (
-                  <>
-                    <h3>{selectedPerson.name}</h3>
-                    {selectedPerson.messages.map((entry, index) => (
-                      <p key={index} className="data-import-person-hint">
-                        {entry}
-                      </p>
-                    ))}
-                    <label>
-                      <span>姓名</span>
-                      <input
-                        disabled={
-                          batch.status !== 'reviewing' ||
-                          selectedPerson.status !== 'pending' ||
-                          Boolean(selectedPerson.matchedAthleteId) ||
-                          selectedPerson.excluded
-                        }
-                        value={selectedPerson.name}
-                        onChange={(event) =>
-                          patchAthleteCandidate(selectedPerson.id, { name: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>性别（可留空）</span>
-                      <select
-                        disabled={
-                          batch.status !== 'reviewing' ||
-                          selectedPerson.status !== 'pending' ||
-                          Boolean(selectedPerson.matchedAthleteId) ||
-                          selectedPerson.excluded
-                        }
-                        value={selectedPerson.gender}
-                        onChange={(event) =>
-                          patchAthleteCandidate(selectedPerson.id, { gender: event.target.value })
-                        }
-                      >
-                        <option value="">暂不填写</option>
-                        <option>男</option>
-                        <option>女</option>
-                      </select>
-                    </label>
-                    {selectedPerson.status === 'pending' && (
-                      <button type="button" className="secondary-button" disabled={batch.status !== 'reviewing' || Boolean(busy)}
-                        onClick={() => patchAthleteCandidate(selectedPerson.id, {
-                          excluded: !selectedPerson.excluded,
-                          confirmed: selectedPerson.excluded ? Boolean(selectedPerson.matchedAthleteId) : true,
-                        })}>
-                        {selectedPerson.excluded ? '恢复此人' : '排除此人'}
-                      </button>
-                    )}
-                    {!selectedPerson.excluded && !selectedPerson.matchedAthleteId && selectedPerson.team && needsIdentityChoice(selectedPerson) ? (
-                      <label>
-                        <span>关联已有运动员（请选择具体人员）</span>
-                        <select
-                          disabled={batch.status !== 'reviewing'}
-                          value={selectedPerson.matchedAthleteId || ''}
-                          onChange={(event) =>
-                            patchAthleteCandidate(selectedPerson.id, {
-                              matchedAthleteId: Number(event.target.value) || null,
-                              confirmed: false,
-                            })
-                          }
-                        >
-                          <option value="">请选择</option>
-                          {(teamSuggestions(selectedPerson).length
-                            ? teamSuggestions(selectedPerson)
-                            : selectedPerson.suggested
-                          ).map((entry) => (
-                            <option key={entry.id} value={entry.id}>
-                              {entry.name} · {entry.team || '无队伍'} · 编号 {entry.id}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    {!selectedPerson.excluded && !selectedPerson.matchedAthleteId ? (
-                      <label>
-                        <span>所属队伍（必选）</span>
-                        <select
-                          disabled={batch.status !== 'reviewing'}
-                          value={selectedPerson.team}
-                          onChange={(event) =>
-                            patchAthleteCandidate(selectedPerson.id, {
-                              team: event.target.value,
-                              confirmed: false,
-                            })
-                          }
-                        >
-                          <option value="">请选择所属队伍</option>
-                          {teams.map((team) => (
-                            <option key={team.id} value={team.name}>
-                              {team.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                    {selectedPerson.status === 'pending' && !selectedPerson.excluded && (
-                      <button
-                        type="button"
-                        className="data-import-primary"
-                        disabled={
-                          Boolean(busy) ||
-                          (selectedPerson.matchedAthleteId
-                            ? false
-                            : !selectedPerson.team || needsIdentityChoice(selectedPerson))
-                        }
-                        onClick={() => {
-                          patchAthleteCandidate(selectedPerson.id, { confirmed: true });
-                          setMessage(`已确认“${selectedPerson.name}”，记得保存并继续。`);
-                        }}
-                      >
-                        <CheckCircle2 size={16} />
-                        {selectedPerson.confirmed ? '已确认' : '确认此人'}
-                      </button>
-                    )}
-                  </>
-                )}
-              </aside>
             </div>
             <footer className="data-import-dialog-actions">
               <button type="button" disabled={Boolean(busy)} onClick={() => setPersonDialogOpen(false)}>
-                返回上传
+                关闭
               </button>
               <button
                 type="button"
-                className="data-import-primary"
+                className="primary-button"
                 disabled={Boolean(busy) || batch.status !== 'reviewing'}
                 onClick={() => void confirmAndContinue()}
               >
-                <Users size={16} />
-                确认人员并继续
+                <Users size={16} aria-hidden="true" />
+                继续校对
               </button>
             </footer>
           </section>
