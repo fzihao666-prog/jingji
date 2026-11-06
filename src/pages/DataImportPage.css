@@ -359,6 +359,20 @@
 .data-import-message.success {
   color: #0b766d;
   background: #e4f5f1;
+  pointer-events: none;
+  animation: data-import-notice-fade 250ms ease 3s forwards;
+}
+
+@keyframes data-import-notice-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-import-message.success {
+    animation: none;
+  }
 }
 
 .data-import-message.error {

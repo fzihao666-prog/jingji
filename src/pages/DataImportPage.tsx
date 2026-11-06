@@ -580,6 +580,12 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasUnsavedChanges, enodeBusy]);
 
+  useEffect(() => {
+    if (!message || error) return;
+    const timer = window.setTimeout(() => setMessage(''), 3250);
+    return () => window.clearTimeout(timer);
+  }, [message, error]);
+
   const showReview = reviewOpen && Boolean(batch) && !personDialogOpen &&
     !confirmDialogOpen && !duplicateDialogOpen;
 
@@ -1061,17 +1067,21 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
       {createPortal(
         <div className="data-import-notifications" aria-live="polite" aria-atomic="true">
           {(message || error) && (
-            <div className={`data-import-message ${error ? 'error' : 'success'}`} role={error ? 'alert' : 'status'}>
+            <div key={error ? `error:${error}` : message}
+              className={`data-import-message ${error ? 'error' : 'success'}`}
+              role={error ? 'alert' : 'status'}>
               {error ? <AlertTriangle size={20} aria-hidden="true" /> : <CheckCircle2 size={20} aria-hidden="true" />}
               <span>{error || message}</span>
-              <button
-                type="button"
-                className="data-import-message-close"
-                aria-label="关闭提示"
-                onClick={() => { setError(''); setMessage(''); }}
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
+              {error && (
+                <button
+                  type="button"
+                  className="data-import-message-close"
+                  aria-label="关闭提示"
+                  onClick={() => { setError(''); setMessage(''); }}
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
+              )}
             </div>
           )}
         </div>,
