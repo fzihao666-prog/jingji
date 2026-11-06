@@ -1754,16 +1754,21 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             if (event.target === event.currentTarget && !busy) setConfirmDialogOpen(false);
           }}
         >
-          <section className="data-import-dialog" role="dialog" aria-modal="true" aria-label="确认导入">
+          <section
+            className="data-import-dialog data-import-confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="data-import-confirm-title"
+          >
             <header>
-              <h2>确认导入</h2>
+              <h2 id="data-import-confirm-title">确认导入</h2>
             </header>
-            <div className="data-import-summary data-import-main-summary">
-              <div><span>新建运动员</span><strong>{summaryPreview.createPersons}</strong></div>
-              <div><span>新增记录</span><strong>{summaryPreview.newRecords}</strong></div>
-              <div><span>更新记录</span><strong>{summaryPreview.updateRecords}</strong></div>
-            </div>
-            <div className="data-import-dialog-actions">
+            <dl className="data-import-confirm-counts">
+              <div><dt>新建运动员</dt><dd>{summaryPreview.createPersons}</dd></div>
+              <div><dt>新增记录</dt><dd>{summaryPreview.newRecords}</dd></div>
+              <div><dt>更新记录</dt><dd>{summaryPreview.updateRecords}</dd></div>
+            </dl>
+            <footer className="data-import-confirm-actions">
               <button type="button" className="secondary-button" disabled={Boolean(busy)} onClick={() => setConfirmDialogOpen(false)}>
                 取消
               </button>
@@ -1775,7 +1780,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
               >
                 {busy ? '正在导入…' : '确认导入'}
               </button>
-            </div>
+            </footer>
           </section>
         </div>
       )}

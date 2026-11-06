@@ -1175,6 +1175,67 @@
   background: #148a81;
 }
 
+.data-import-confirm-dialog {
+  --confirm-inset: clamp(14px, 4vw, 24px);
+
+  width: min(480px, 100%);
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.data-import-confirm-dialog > header {
+  min-height: auto;
+  padding: var(--confirm-inset) var(--confirm-inset) 0;
+  border-bottom: 0;
+  background: var(--paper);
+}
+
+.data-import-confirm-dialog h2 {
+  margin: 0;
+}
+
+.data-import-confirm-counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: var(--confirm-inset);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--line);
+}
+
+.data-import-confirm-counts > div {
+  min-width: 0;
+  padding: 14px 6px;
+  text-align: center;
+  background: var(--mist);
+}
+
+.data-import-confirm-counts dt {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.data-import-confirm-counts dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(20px, 5vw, 28px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.data-import-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 var(--confirm-inset) var(--confirm-inset);
+}
+
 .data-import-dialog .data-import-summary {
   margin: 16px 18px;
 }
