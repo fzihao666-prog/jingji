@@ -6009,14 +6009,14 @@ export function initializeDatabase(
       for (const metric of OVERVIEW_METRICS) db.prepare('UPDATE metric_definitions SET projects_json=? WHERE code=?').run(JSON.stringify(metric.projects),metric.code);
       db.prepare("INSERT INTO app_metadata(key,value) VALUES('project_metric_applicability_v1',?)").run(JSON.stringify({previous}));
     }
-    const compactScopeMigration = 'compact_athlete_common_metric_scope_v1';
+    const compactScopeMigration = 'compact_athlete_common_metric_scope_v2';
     if (!db.prepare('SELECT 1 FROM app_metadata WHERE key=?').get(compactScopeMigration)) {
-      const readLegacyScope = db.prepare(`SELECT code, projects_json FROM metric_definitions
-        WHERE code=? AND active=1 AND projects_json IN (?,?)`);
+      const readRestrictedScope = db.prepare(`SELECT code, projects_json FROM metric_definitions
+        WHERE code=? AND projects_json<>?`);
       const updateScope = db.prepare('UPDATE metric_definitions SET projects_json=? WHERE code=?');
       const previous = [];
       for (const code of compactTestMetricCodes) {
-        const row = readLegacyScope.get(code, legacyBaseMetricProjects, '["ROWING","CANOE_SPRINT","CANOE_SLALOM"]');
+        const row = readRestrictedScope.get(code, commonMetricProjects);
         if (!row) continue;
         previous.push(row);
         updateScope.run(commonMetricProjects, code);
