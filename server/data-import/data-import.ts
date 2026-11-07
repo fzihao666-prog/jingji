@@ -1,3 +1,4 @@
+import { isIdentityField } from '../core/identity-removal.ts';
 import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey } from '../../shared/compact-athlete-template.ts';
 import { trainingContext } from '../../shared/training-context.ts';
 import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
@@ -906,12 +907,17 @@ function standardHeader(matrix: Matrix, compact = false) {
     .findIndex((row) => row?.some((value) => ['姓名', '系统运动员编号'].includes(normalizedText(templateHeaderKey(String(value ?? ''))))));
   if (rowIndex < 0) return null;
   const columns = new Map<string, number>();
+  const identityColumns = new Set<number>();
   for (let column = 0; column < (matrix[rowIndex]?.length || 0); column += 1) {
     const label = templateHeaderKey(String(matrix[rowIndex]?.[column] ?? ''));
+    if (isIdentityField(label)) {
+      identityColumns.add(column);
+      continue;
+    }
     const key = normalizedText(compact ? compactAthleteHeaderKey(label) : label);
     if (key) columns.set(key, column);
   }
-  return { rowIndex, columns };
+  return { rowIndex, columns, identityColumns };
 }
 
 function standardValue(row: unknown[], columns: Map<string, number>, ...labels: string[]) {
@@ -1016,7 +1022,10 @@ function parseStandardSheet(
   const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目', '日期', '测量日期', '测试日期', '发生日期', '评估日期']);
   const dateLabels = ['日期', '测量日期', '测试日期', '发生日期', '评估日期'];
   for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
-    const row = matrix[rowIndex] || [];
+    const rawRow = matrix[rowIndex] || [];
+    const row = header.identityColumns.size
+      ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
+      : rawRow;
     const athleteCode = standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号');
     const numberedAthlete = athletes.find(athlete => String(athlete.id) === athleteCode);
     const rawName = standardText(row, header.columns, '姓名') || numberedAthlete?.name || '';
@@ -2431,6 +2440,20 @@ export function analyzeDataImport(input: {
 }
 
 function mapItem(row: Record<string, unknown>): DataImportItemView {
+  const payload = JSON.parse(text(row.payloadJson) || '{}') as Record<string, unknown>;
+  let rawValue = text(row.rawValue);
+  // 旧草稿的源行列号用于校对，清除敏感单元格时保留其他列的原位置。
+  const source = payload.sourceRow as { columns?: [string, number][]; values?: unknown[] } | undefined;
+  if (Array.isArray(source?.columns) && Array.isArray(source.values)) {
+    const values = source.values;
+    source.columns = source.columns.filter(([label, index]) => {
+      if (!isIdentityField(label)) return true;
+      const value = text(values[index]);
+      if (value) rawValue = rawValue.replaceAll(value, '[已清除敏感信息]');
+      values[index] = '';
+      return false;
+    });
+  }
   return {
     id: Number(row.id),
     batchId: text(row.batchId),
@@ -2454,10 +2477,10 @@ function mapItem(row: Record<string, unknown>): DataImportItemView {
     actualReps: row.actualReps === null ? null : Number(row.actualReps),
     actualWeightKg: row.actualWeightKg === null ? null : Number(row.actualWeightKg),
     intensityPercent: row.intensityPercent === null ? null : Number(row.intensityPercent),
-    payload: JSON.parse(text(row.payloadJson) || '{}') as Record<string, unknown>,
+    payload,
     sourceSheet: text(row.sourceSheet),
     sourceAddress: text(row.sourceAddress),
-    rawValue: text(row.rawValue),
+    rawValue,
     quality: row.quality as DataImportQuality,
     messages: (JSON.parse(text(row.messagesJson) || '[]') as string[]).filter(message =>
       !message.startsWith('提示：原日期缺失，已使用解析当天的北京时间日期 ')

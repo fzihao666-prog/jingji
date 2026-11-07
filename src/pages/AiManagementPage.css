@@ -1,0 +1,44 @@
+.ai-management {
+  display: grid;
+  gap: 1rem;
+}
+
+.ai-management-controls,
+.ai-management-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-block: 0.75rem;
+}
+
+.ai-management-controls label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ai-management-controls label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  min-height: 2.5rem;
+}
+
+.ai-management-summary dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.ai-management-table {
+  overflow: auto;
+}
+
+.ai-management-table table {
+  width: 100%;
+  text-align: left;
+}
+
+.ai-management-table th,
+.ai-management-table td {
+  padding: 0.5rem;
+  vertical-align: top;
+}

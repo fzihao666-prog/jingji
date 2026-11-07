@@ -1,3 +1,4 @@
+import { runAiJob } from '../core/ai-usage.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Express, Request, RequestHandler } from 'express';
 import multer from 'multer';
@@ -88,7 +89,9 @@ export function registerTeamWeeklyRoutes(app: Express, deps: Dependencies) {
       let commentary = weeklyFallbackCommentary(report);
       if (input.consent && (report.totals.sessions || weeklyObservation(report).text)) {
         try {
-          const result = await deps.generate(teamWeeklyAiInput(report), controller.signal);
+          const result = await runAiJob(user.id, '队伍周总结', () =>
+            deps.generate(teamWeeklyAiInput(report), controller.signal)
+          );
           const valid = teamWeeklyCommentarySchema.safeParse(result);
           if (valid.success && Object.values(valid.data).some((text) => text.trim()))
             commentary = valid.data;

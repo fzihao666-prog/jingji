@@ -1,5 +1,5 @@
+import { chatCompletion, configuredModels } from '../core/ai-client.ts';
 import { db } from '../core/db.ts';
-import { deepseekReasoningOptions } from '../core/deepseek-reasoning.ts';
 import { cleanString } from '../core/utils.ts';
 import { strengthMetricKeyByCode } from './strength-metrics.ts';
 import { STRENGTH_METRICS, type StrengthMetricValues } from '../../shared/strength-model.ts';
@@ -214,14 +214,11 @@ export function buildRuleAdvice(test: AdviceTestRow): StrengthAdviceContent {
 }
 
 export async function buildAiAdvice(test: AdviceTestRow) {
-  const apiKey = cleanString(process.env.AI_API_KEY);
-  const baseUrl = cleanString(process.env.AI_BASE_URL).replace(/\/+$/, '');
-  const model = cleanString(process.env.AI_MODEL);
-  if (!apiKey || !baseUrl || !model) {
+  const primary = configuredModels().find((model) => model.name === 'Primary');
+  if (!primary) {
     return { content: buildRuleAdvice(test), source: 'rules' as const, model: '内置规则' };
   }
 
-  const reasoningOptions = deepseekReasoningOptions(baseUrl, process.env.AI_REASONING_EFFORT);
   const metrics = JSON.parse(test.metricsJson || '{}') as StrengthMetricValues;
   const targets = JSON.parse(test.targetsJson || '{}') as StrengthMetricValues;
   const comparison = adviceComparisons(test, metrics, targets);
@@ -237,18 +234,11 @@ export async function buildAiAdvice(test: AdviceTestRow) {
   `
     )
     .all(test.athleteId, test.testDate, test.testDate);
-  const endpoint = baseUrl.endsWith('/chat/completions') ? baseUrl : `${baseUrl}/chat/completions`;
   try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        ...reasoningOptions,
+    const result = await chatCompletion(
+      {
         temperature: 0.2,
-        ...(model.toLowerCase().startsWith('qwen') ? { enable_thinking: false } : {}),
-        max_completion_tokens: 12000,
-        response_format: { type: 'json_object' },
+        completionLimitField: 'max_completion_tokens',
         messages: [
           {
             role: 'system',
@@ -268,19 +258,16 @@ export async function buildAiAdvice(test: AdviceTestRow) {
             }),
           },
         ],
-      }),
-      signal: AbortSignal.timeout(Number(process.env.AI_TIMEOUT_MS) || 180000),
-    });
-    if (!response.ok) throw new Error(`AI service returned ${response.status}`);
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const raw = cleanString(payload.choices?.[0]?.message?.content).replace(
-      /^```json\s*|\s*```$/g,
-      ''
+      },
+      [primary]
     );
+    const raw = cleanString(result.content).replace(/^```json\s*|\s*```$/g, '');
     if (!raw) throw new Error('AI service returned empty content');
-    return { content: normalizeAdviceContent(JSON.parse(raw)), source: 'ai' as const, model };
+    return {
+      content: normalizeAdviceContent(JSON.parse(raw)),
+      source: 'ai' as const,
+      model: primary.model,
+    };
   } catch {
     return {
       content: buildRuleAdvice(test),

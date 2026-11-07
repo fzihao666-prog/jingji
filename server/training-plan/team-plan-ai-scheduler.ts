@@ -1,3 +1,4 @@
+import { runAiJob } from '../core/ai-usage.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import { logger } from '../core/logger.ts';
 import { beijingDate } from '../core/coach-daily-todos.ts';
@@ -64,19 +65,21 @@ export async function generateDailyDrafts(db: DatabaseSync, targetDate: string) 
         });
         continue;
       }
-      const result = await generateTeamPlanDraft({
-        db,
-        teamId: team.teamId,
-        date: targetDate,
-        userId: 0,
-        existingDraft: existing
-          ? {
-              id: existing.id,
-              data: existing.data,
-              metadata: metadata as TeamPlanAiMetadata | null,
-            }
-          : undefined,
-      });
+      const result = await runAiJob(null, '自动训练计划', () =>
+        generateTeamPlanDraft({
+          db,
+          teamId: team.teamId,
+          date: targetDate,
+          userId: 0,
+          existingDraft: existing
+            ? {
+                id: existing.id,
+                data: existing.data,
+                metadata: metadata as TeamPlanAiMetadata | null,
+              }
+            : undefined,
+        })
+      );
       const now = new Date().toISOString();
       const payload = JSON.stringify(result.data);
       const metaPayload = JSON.stringify(result.metadata);

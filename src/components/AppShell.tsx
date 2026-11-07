@@ -1,6 +1,7 @@
 import { SYSTEM_MANAGEMENT_ROLES } from '../../shared/access';
 import {
   ChartNoAxesCombined,
+  Bot,
   Dumbbell,
   KeyRound,
   Layers3,
@@ -61,6 +62,7 @@ export type PageKey =
   | 'teams'
   | 'regions'
   | 'accounts'
+  | 'ai-management'
   | DataCollectionPageKey;
 
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
@@ -99,11 +101,12 @@ const organizationGroups: Array<{
 ];
 
 const systemGroups: Array<{
-  key: Extract<PageKey, 'regions' | 'accounts'>;
+  key: Extract<PageKey, 'regions' | 'accounts' | 'ai-management'>;
   label: string;
   icon: typeof ChartNoAxesCombined;
   roles: readonly Role[];
 }> = [
+  { key: 'ai-management', label: 'AI 管理', icon: Bot, roles: ['DMD'] },
   { key: 'regions', label: '账号权限', icon: MapPinned, roles: SYSTEM_MANAGEMENT_ROLES },
   {
     key: 'accounts',
@@ -486,7 +489,7 @@ function isOrganizationPage(page: PageKey) {
 }
 
 function isSystemPage(page: PageKey) {
-  return page === 'regions' || page === 'accounts';
+  return page === 'regions' || page === 'accounts' || page === 'ai-management';
 }
 
 function itemIcon(key: DataCollectionPageKey) {

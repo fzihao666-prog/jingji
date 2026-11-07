@@ -1,6 +1,20 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { chatCompletion } from './ai-client.ts';
+import { DatabaseSync } from 'node:sqlite';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { chatCompletion as sendChat } from './ai-client.ts';
+import { aiDate, currentAiLedger, initializeAiLedger, runAiJob } from './ai-usage.ts';
+
+let db: DatabaseSync;
+beforeEach(() => {
+  db = new DatabaseSync(':memory:');
+  initializeAiLedger(db);
+});
+
+function chatCompletion(options: Parameters<typeof sendChat>[0]) {
+  return runAiJob(1, '体能建议', () => sendChat(options));
+}
+
 afterEach(() => {
+  db.close();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -9,6 +23,7 @@ function configure() {
     vi.stubEnv(`AI${suffix}_BASE_URL`, 'https://example.invalid');
     vi.stubEnv(`AI${suffix}_API_KEY`, 'synthetic-test');
     vi.stubEnv(`AI${suffix}_MODEL`, 'synthetic-model');
+    vi.stubEnv(`AI${suffix}_PRICING`, '100000,1,2');
   }
 }
 describe('模型调用取消边界', () => {
@@ -35,7 +50,7 @@ describe('模型调用取消边界', () => {
     );
     vi.stubGlobal('fetch', fetcher);
     await expect(chatCompletion({ messages: [], signal: controller.signal })).rejects.toThrow(
-      'aborted'
+      '未自动重试'
     );
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
@@ -43,13 +58,14 @@ describe('模型调用取消边界', () => {
     configure();
     const fetcher = vi
       .fn()
-      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 })
       );
     vi.stubGlobal('fetch', fetcher);
     expect((await chatCompletion({ messages: [] })).content).toBe('{}');
     expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(currentAiLedger().summary(aiDate())).toMatchObject({ requests: 1, attempts: 2 });
   });
 });
 
@@ -78,7 +94,7 @@ describe('主模型 DeepSeek 推理强度', () => {
     vi.stubEnv('AI_FALLBACK_BASE_URL', 'https://api.deepseek.com');
     const fetcher = vi
       .fn()
-      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
       .mockResolvedValueOnce(successfulResponse());
     vi.stubGlobal('fetch', fetcher);
     await chatCompletion({ messages: [] });
@@ -105,5 +121,57 @@ describe('主模型 DeepSeek 推理强度', () => {
     vi.stubGlobal('fetch', fetcher);
     await expect(chatCompletion({ messages: [] })).rejects.toThrow('AI_REASONING_EFFORT');
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe('模型费用防护', () => {
+  it('无账号来源、无定价或预算不足时禁止请求供应商', async () => {
+    configure();
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await expect(sendChat({ messages: [] })).rejects.toThrow('调用者信息');
+    vi.stubEnv('AI_PRICING', '');
+    await expect(chatCompletion({ messages: [] })).rejects.toThrow('计费上界');
+    vi.stubEnv('AI_PRICING', '1000000,10,10');
+    await expect(chatCompletion({ messages: [] })).rejects.toThrow('预算不足');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('断线保留占用，已返回的 token 用量按配置结算', async () => {
+    configure();
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: '{}' } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20 },
+          })
+        )
+      );
+    vi.stubGlobal('fetch', fetcher);
+    await expect(chatCompletion({ messages: [] })).rejects.toThrow('未自动重试');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(currentAiLedger().summary(aiDate()).pending).toBe(124000);
+    await chatCompletion({ messages: [] });
+    expect(currentAiLedger().summary(aiDate())).toMatchObject({
+      requests: 2,
+      attempts: 2,
+      input: 100,
+      output: 20,
+      settled: 140,
+      pending: 124000,
+    });
+  });
+
+  it('备用模型也受预算约束', async () => {
+    configure();
+    vi.stubEnv('AI_PRICING', '1000000,6,10');
+    vi.stubEnv('AI_FALLBACK_PRICING', '1000000,6,10');
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 429 }));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(chatCompletion({ messages: [] })).rejects.toThrow('预算不足');
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

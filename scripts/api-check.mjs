@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { once } from 'node:events';
 import { resolve } from 'node:path';
 import vm from 'node:vm';
 import * as XLSX from '@e965/xlsx';
@@ -9,21 +11,23 @@ import { checkMiniDailyTodoFlow } from './coach-daily-todos-mini-check.mjs';
 import { checkDailyExampleCreation } from './coach-daily-todos-example-check.mjs';
 
 const root = process.cwd();
-const databasePath = resolve(root, 'data', 'api-check.db');
+const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'jingji-api-check-'));
+const databasePath = resolve(fixtureRoot, 'api-check.db');
 const port = 8791;
 const base = `http://127.0.0.1:${port}`;
-const cleanupTargets = [databasePath, `${databasePath}-wal`, `${databasePath}-shm`];
-
-for (const target of cleanupTargets) {
-  if (target.startsWith(resolve(root, 'data')) && existsSync(target)) rmSync(target);
-}
-
 const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
   cwd: root,
   env: {
     ...process.env,
     PORT: String(port),
     DATABASE_PATH: databasePath,
+    ATHLETE_PHOTO_ROOT: resolve(fixtureRoot, 'photos'),
+    NODE_ENV: 'test',
+    JWT_SECRET: 'synthetic-api-check-only',
+    AI_API_KEY: '',
+    AI_FALLBACK_API_KEY: '',
+    AI_CN_API_KEY: '',
+    AI_GEMINI_API_KEY: '',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -167,11 +171,19 @@ try {
     adminToken
   );
   assert(
-    nonRowingRadarResult.status === 400 &&
-      invalidRadarDateResult.status === 400 &&
+    nonRowingRadarResult.status === 200 &&
+      ['special', 'physical'].every((kind) =>
+        Array.isArray(nonRowingRadarResult.payload[kind]?.dimensions) &&
+        nonRowingRadarResult.payload[kind].dimensions.length === 0 &&
+        Boolean(nonRowingRadarResult.payload[kind].unavailableReason)
+      ),
+    '非赛艇运动员的个人雷达应返回带说明的空状态'
+  );
+  assert(
+    invalidRadarDateResult.status === 400 &&
       extraRadarQueryResult.status === 400 &&
       arrayRadarDateResult.status === 400,
-    '赛艇个人雷达接口未拒绝非赛艇运动员、非法日期或额外查询参数'
+    '个人雷达接口未拒绝非法日期、额外参数或重复日期参数'
   );
   const saveRadarBodyWeight = await request(
     `/api/athletes/${analysisAthlete.id}/body-composition`,
@@ -274,7 +286,7 @@ try {
       legacyImport.payload.batch.items[0].payload.gender === '女' &&
       !JSON.stringify(legacyImport.payload).includes('LEGACY_IDENTIFIER_MUST_NOT_BE_STORED') &&
       !JSON.stringify(legacyImport.payload).includes('identityNumber'),
-    '旧模板身份证列未被忽略或独立生日性别未保存'
+    `旧模板身份证列未被忽略或独立生日性别未保存（HTTP ${legacyImport.status}，条数 ${legacyImport.payload.batch?.items.length ?? 0}）`
   );
   const verificationDb = new DatabaseSync(databasePath, { readOnly: true });
   try {
@@ -321,6 +333,27 @@ try {
     CANOE_SPRINT: ['sprint_200_sec', 'left_paddle_power_w', 'fms_shoulder_mobility'],
     CANOE_SLALOM: ['gate_technique_score', 'fms_rotary_stability'],
   };
+  // 总览主动排除演示种子；仅在临时验收库建立每个项目的有效测量。
+  const overviewFixture = new DatabaseSync(databasePath);
+  try {
+    const insertSession = overviewFixture.prepare(`
+      INSERT INTO test_sessions (athlete_id, test_date, test_type, project_code, project_status)
+      VALUES (?, '2026-08-20', '专业综合评估', ?, 'confirmed')
+    `);
+    const insertMeasurement = overviewFixture.prepare(`
+      INSERT INTO test_measurements (test_session_id, metric_code, value_num, unit)
+      SELECT ?, code, 1, unit FROM metric_definitions WHERE code = ?
+    `);
+    for (const [project, codes] of Object.entries(overviewRequiredMetrics)) {
+      const athlete = adminAthletesForAnalysis.payload.athletes.find((item) => item.project === project);
+      const id = insertSession.run(athlete.id, project).lastInsertRowid;
+      for (const code of codes) {
+        assert(insertMeasurement.run(id, code).changes === 1, `验收指标定义缺失：${code}`);
+      }
+    }
+  } finally {
+    overviewFixture.close();
+  }
   for (const [overviewProject, requiredCodes] of Object.entries(overviewRequiredMetrics)) {
     const result = await request(
       `/api/overview?from=2020-01-01&to=2100-12-31&project=${encodeURIComponent(overviewProject)}`,
@@ -331,7 +364,7 @@ try {
     const profiles = result.payload.overview?.profiles || [];
     assert(
       result.status === 200 &&
-        result.payload.overview.strengthTests.length >= 2 &&
+        result.payload.overview.strengthTests.length > 0 &&
         profiles.length > 0 &&
         profiles.every(
           (profile) =>
@@ -1495,14 +1528,14 @@ try {
     }),
   });
   assert(
-    coachWhileApprovalOff.status === 201 && coachWhileApprovalOff.payload.status === 'pending',
-    '关闭审核时教练注册仍应进入待审核'
+    coachWhileApprovalOff.status === 201 && coachWhileApprovalOff.payload.status === 'approved',
+    '关闭审核时教练应自动开通'
   );
   const coachWhileApprovalOffLogin = await request('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username: 'coach_auto_approve_test', password: 'Secure123' }),
   });
-  assert(coachWhileApprovalOffLogin.status === 403, '关闭审核时待审核教练不应登录');
+  assert(coachWhileApprovalOffLogin.status === 200 && coachWhileApprovalOffLogin.payload.user.role === 'SCC', '自动开通的教练应以教练身份登录');
 
   const historicalStillPending = (
     await request('/api/admin/registrations?status=pending', {}, adminToken)
@@ -1642,6 +1675,19 @@ try {
   const demoAthlete = athletesWithCoachIds.payload.athletes.find(
     (athlete) => athlete.name === '林舟'
   );
+  const renameFixtureDb = new DatabaseSync(databasePath);
+  let renameSessionId;
+  try {
+    renameSessionId = Number(renameFixtureDb.prepare(`
+      INSERT INTO training_sessions
+        (athlete_id, session_date, session_order, training_type, structure_type, intensity_zone,
+         project_code, project_status, duration_min)
+      SELECT ?, '2026-07-21', COALESCE(MAX(session_order), 0) + 1, '体能训练', '', '', ?, 'confirmed', 30
+      FROM training_sessions WHERE athlete_id = ? AND session_date = '2026-07-21'
+    `).run(demoAthlete.id, demoAthlete.project, demoAthlete.id).lastInsertRowid);
+  } finally {
+    renameFixtureDb.close();
+  }
   const renameAthlete = await request(
     `/api/admin/athletes/${demoAthlete.id}/name`,
     {
@@ -1657,7 +1703,8 @@ try {
   );
   assert(
     renameAthlete.status === 200 &&
-      renamedAthleteRecords.payload.records.length > 0 &&
+      renamedAthleteRecords.status === 200 &&
+      renamedAthleteRecords.payload.records.some((record) => record.id === renameSessionId) &&
       renamedAthleteRecords.payload.records.every((record) => record.athleteName === '林舟修订'),
     '管理员修改运动员姓名未同步训练记录'
   );
@@ -1968,9 +2015,9 @@ try {
     )
   );
 } finally {
-  server.kill();
-  await new Promise((resolveWait) => setTimeout(resolveWait, 300));
-  for (const target of cleanupTargets) {
-    if (target.startsWith(resolve(root, 'data')) && existsSync(target)) rmSync(target);
+  if (server.exitCode === null && server.signalCode === null) {
+    server.kill();
+    await once(server, 'exit');
   }
+  rmSync(fixtureRoot, { recursive: true, force: true });
 }

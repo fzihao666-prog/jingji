@@ -173,8 +173,9 @@ Page({
       const result = await api.teamPlanChecks(plan.id);
       if (!this.data.selected || this.data.selected.id !== plan.id) return;
       this.setData({ checks: checkRows(plan, result.checks || []) });
-    } catch (error) {
-      // 确认状态加载失败不阻塞计划查看。
+    } catch {
+      // 确认状态加载失败不阻塞计划查看，也不覆盖已切换的计划。
+      if (!this.data.selected || this.data.selected.id !== plan.id) return;
       this.setData({ checks: checkRows(plan, []) });
     }
   },

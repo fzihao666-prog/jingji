@@ -1,3 +1,4 @@
+import { AiGuardError } from '../core/ai-usage.ts';
 type ImportAthleteCandidate = {
   id: number;
   name: string;
@@ -73,6 +74,7 @@ ${JSON.stringify(athleteDirectory)}
     if (!Array.isArray(parsed.rows)) throw new Error('识别结果缺少rows数组');
     return { rows: parsed.rows.slice(0, 1000), modelUsed: result.modelUsed };
   } catch (error) {
+    if (error instanceof AiGuardError) throw error;
     const message = error instanceof Error ? error.message : '未知错误';
     throw new Error(`AI未能识别该文件：${message}。可改用Excel模板导入。`);
   }

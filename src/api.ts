@@ -1,3 +1,4 @@
+import type { AiManagementData, AiSettings } from '../shared/ai-management';
 import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
 import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
 import type { ImportStatistics } from '../shared/import-statistics';
@@ -1124,3 +1125,14 @@ export const api = {
     return request<{ logs: AuditLog[] }>('/api/access/audit-logs');
   },
 };
+
+export function getAiManagement(filters: URLSearchParams, signal: AbortSignal) {
+  return request<AiManagementData>(`/api/ai-management?${filters}`, { signal });
+}
+
+export function saveAiSettings(settings: AiSettings) {
+  return request<AiSettings>('/api/ai-management/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}

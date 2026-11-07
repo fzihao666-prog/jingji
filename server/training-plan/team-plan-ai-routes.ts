@@ -1,3 +1,4 @@
+import { runAiJob } from '../core/ai-usage.ts';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Express, Request, Response } from 'express';
@@ -146,18 +147,20 @@ export function registerTeamPlanAiRoutes(app: Express) {
       const team = requireTeamAccess(req, parsed.data.teamId);
       const existing = findDraft(parsed.data.teamId, parsed.data.date);
       const existingFull = existing?.id ? readDraftWithMetadata(existing.id) : null;
-      const result = await generateTeamPlanDraft({
-        db,
-        teamId: parsed.data.teamId,
-        date: parsed.data.date,
-        constraints: parsed.data.constraints,
-        userId: req.authUser!.id,
-        existingDraft: existingFull?.metadata
-          ? { id: existing!.id, data: existingFull.data, metadata: existingFull.metadata }
-          : existingFull
-            ? { id: existing!.id, data: existingFull.data, metadata: null }
-            : undefined,
-      });
+      const result = await runAiJob(req.authUser!.id, '训练计划', () =>
+        generateTeamPlanDraft({
+          db,
+          teamId: parsed.data.teamId,
+          date: parsed.data.date,
+          constraints: parsed.data.constraints,
+          userId: req.authUser!.id,
+          existingDraft: existingFull?.metadata
+            ? { id: existing!.id, data: existingFull.data, metadata: existingFull.metadata }
+            : existingFull
+              ? { id: existing!.id, data: existingFull.data, metadata: null }
+              : undefined,
+        })
+      );
       const savedId = saveDraft(req, {
         id: existing?.id,
         expectedRevision: existingFull?.revision,
@@ -204,15 +207,17 @@ export function registerTeamPlanAiRoutes(app: Express) {
         return res.status(409).json({ message: '只能修改草稿，已发布计划请创建修订' });
       const full = readDraftWithMetadata(plan.id);
       if (!full) return res.status(404).json({ message: '草稿不存在' });
-      const result = await generateTeamPlanDraft({
-        db,
-        teamId: plan.teamId,
-        date: plan.startDate,
-        constraints: parsedBody.data.constraints,
-        userId: req.authUser!.id,
-        existingDraft: { id: plan.id, data: full.data, metadata: full.metadata },
-        instruction: parsedBody.data.instruction,
-      });
+      const result = await runAiJob(req.authUser!.id, '训练计划', () =>
+        generateTeamPlanDraft({
+          db,
+          teamId: plan.teamId,
+          date: plan.startDate,
+          constraints: parsedBody.data.constraints,
+          userId: req.authUser!.id,
+          existingDraft: { id: plan.id, data: full.data, metadata: full.metadata },
+          instruction: parsedBody.data.instruction,
+        })
+      );
       // AI 失败由 chatJson 抛错；上一版有效草稿保持不变。
       saveDraft(req, {
         id: plan.id,

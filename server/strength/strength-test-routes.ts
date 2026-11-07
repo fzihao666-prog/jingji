@@ -1,3 +1,4 @@
+import { runAiJob } from '../core/ai-usage.ts';
 import { strengthReadScope } from './strength-read-scope.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
 import { z } from 'zod';
@@ -166,7 +167,7 @@ export function registerStrengthTestRoutes(app: Express) {
         if (!hasAthleteAccess(user, test.athleteId)) {
           return res.status(403).json({ message: '无权为该运动员生成训练建议。' });
         }
-        const generated = await buildAiAdvice(test);
+        const generated = await runAiJob(req.authUser!.id, '体能建议', () => buildAiAdvice(test));
         const nextVersion = Number(
           (
             db

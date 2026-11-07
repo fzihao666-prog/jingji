@@ -67,6 +67,9 @@ const CoachManagementPage = lazy(() =>
 const TeamsPage = lazy(() =>
   import('./pages/TeamsPage').then((module) => ({ default: module.TeamsPage }))
 );
+const AiManagementPage = lazy(() =>
+  import('./pages/AiManagementPage').then((module) => ({ default: module.AiManagementPage }))
+);
 const AccountsPage = lazy(() =>
   import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage }))
 );
@@ -110,6 +113,7 @@ const pageKeys: PageKey[] = [
   'teams',
   'regions',
   'accounts',
+  'ai-management',
   'bluetooth',
   'data-import',
   'data-management',
@@ -140,9 +144,10 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
   const [requestedPage, setPage] = useState<PageKey>(() => pageFromHash());
   const canOpenSystemPages = Boolean(user && SYSTEM_MANAGEMENT_ROLES.includes(user.role));
-  const page = !canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts')
-    ? 'overview'
-    : requestedPage;
+  const restrictedPage =
+    (requestedPage === 'ai-management' && user?.role !== 'DMD') ||
+    (!canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts'));
+  const page = restrictedPage ? 'overview' : requestedPage;
   const [routeHash, setRouteHash] = useState(() => window.location.hash);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
@@ -544,6 +549,7 @@ export default function App() {
         {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
         {page === 'regions' && canOpenSystemPages && <RegionAccessPage user={user} />}
         {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
+        {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}
       </Suspense>
     </AppShell>
   );

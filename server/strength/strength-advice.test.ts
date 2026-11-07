@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import { initializeAiLedger, runAiJob } from '../core/ai-usage.ts';
 
 const fixture = vi.hoisted(() => ({ db: null as DatabaseSync | null }));
 vi.mock('../core/db.ts', () => ({
@@ -7,7 +8,11 @@ vi.mock('../core/db.ts', () => ({
     return fixture.db;
   },
 }));
-import { buildAiAdvice, type AdviceTestRow } from './strength-advice.ts';
+import { buildAiAdvice as generateAdvice, type AdviceTestRow } from './strength-advice.ts';
+
+function buildAiAdvice(test: AdviceTestRow) {
+  return runAiJob(1, '体能建议', () => generateAdvice(test));
+}
 
 const testRow: AdviceTestRow = {
   strengthTestId: 1,
@@ -37,11 +42,14 @@ function configure(effort: string) {
   vi.stubEnv('AI_BASE_URL', 'https://api.deepseek.com');
   vi.stubEnv('AI_MODEL', 'deepseek-v4-pro');
   vi.stubEnv('AI_API_KEY', 'synthetic-test-key');
+  vi.stubEnv('AI_PRICING', '1000000,9,27,0.30');
+  initializeAiLedger(fixture.db);
   vi.stubEnv('AI_REASONING_EFFORT', effort);
   const fetcher = vi.fn().mockResolvedValue(
     new Response(
       JSON.stringify({
         choices: [{ message: { content: '{"title":"测试建议"}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 10 },
       })
     )
   );

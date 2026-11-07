@@ -1,3 +1,4 @@
+import { AiGuardError, runAiJob } from '../core/ai-usage.ts';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Express, Request, RequestHandler } from 'express';
@@ -101,7 +102,9 @@ export function registerReportRoutes(app: Express, deps: Dependencies) {
         return res.status(409).json({ message: '训练数据已变化，请重新预览报告。' });
       if (!data.totals.sessions)
         return res.status(400).json({ message: '暂无有效训练记录，无需生成 AI 点评。' });
-      const result = await deps.generate(reportAiInput(data));
+      const result = await runAiJob(userId, '个人报告点评', () =>
+        deps.generate(reportAiInput(data))
+      );
       // 等待模型期间账号、授权或项目可能变化，返回数据前再次校验。
       const current = deps.currentUser(req);
       const currentAthlete = db
@@ -123,7 +126,8 @@ export function registerReportRoutes(app: Express, deps: Dependencies) {
       if (!commentary.success)
         return res.status(502).json({ message: 'AI 点评格式不符合要求，可重试或手动填写。' });
       return res.json(commentary.data);
-    } catch {
+    } catch (error) {
+      if (error instanceof AiGuardError) return res.status(error.status).json({ message: error.message });
       return res
         .status(503)
         .json({ message: 'AI 点评暂不可用，请检查服务端模型配置；图表可照常查看和保存。' });

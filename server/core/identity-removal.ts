@@ -4,7 +4,7 @@ export const IDENTITY_REMOVAL_VERSION = 'identity_removal_v1';
 type Column = { table: string; column: string };
 type Schema = { type: string; name: string; sql: string | null };
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
-const identityKey = (key: string) =>
+export const isIdentityField = (key: string) =>
   /^(identitynumber|idcard|idcardnumber|身份证|身份证号|身份证号码)$/i.test(
     key.replace(/[_\s-]/g, '')
   );
@@ -41,7 +41,7 @@ export function inspectIdentityRemoval(db: DatabaseSync) {
     for (const field of fields) {
       if (field.hidden) continue;
       const item = { table: table.name, column: field.name };
-      if (identityKey(field.name)) columns.push(item);
+      if (isIdentityField(field.name)) columns.push(item);
       else if (
         field.name.endsWith('_json') ||
         field.name === 'plan_data' ||
@@ -60,7 +60,7 @@ export function inspectIdentityRemoval(db: DatabaseSync) {
   const dependencies = schema
     .filter(
       (item) =>
-        item.type !== 'table' && (item.sql ?? '').split(/[^\p{L}\p{N}_-]+/u).some(identityKey)
+        item.type !== 'table' && (item.sql ?? '').split(/[^\p{L}\p{N}_-]+/u).some(isIdentityField)
     )
     .map(({ type, name }) => ({ type, name }));
   return { pending: columns.length > 0, columns, dependencies, jsonColumns, textColumns };
@@ -71,7 +71,7 @@ function scrub(value: unknown): unknown {
   if (value && typeof value === 'object')
     return Object.fromEntries(
       Object.entries(value)
-        .filter(([key]) => !identityKey(key))
+        .filter(([key]) => !isIdentityField(key))
         .map(([key, item]) => [key, scrub(item)])
     );
   return value;

@@ -63,6 +63,9 @@ async function special(workbook: ExcelJS.Workbook) {
 describe('独立简化模板往返', () => {
   it('体能最小实际组次可解析，编号可替代姓名，空验证行不产生记录', async () => {
     const workbook = buildStrengthImportWorkbook();
+    // 空白模板不带编号列，模拟仍含系统编号的旧文件。
+    const sheet = workbook.getWorksheet('训练结果数据')!;
+    sheet.getRow(3).getCell(sheet.getRow(3).cellCount + 1).value = '系统运动员编号';
     fill(workbook, '训练结果数据', {
       系统运动员编号: 1,
       训练日期: '2026-10-01',

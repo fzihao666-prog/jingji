@@ -1,3 +1,4 @@
+import { runAiJob } from '../core/ai-usage.ts';
 import { strengthReadScope } from './strength-read-scope.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
@@ -626,7 +627,10 @@ export function registerStrengthTrainingRoutes(app: Express) {
         const athletes = strengthImportCandidates(req.authUser!);
         if (!athletes.length)
           return res.status(403).json({ message: '当前账号没有可导入的运动员。' });
-        const parsed = await parseStrengthImportFile(req.file, athletes);
+        const file = req.file;
+        const parsed = await runAiJob(req.authUser!.id, '体能导入识别', () =>
+          parseStrengthImportFile(file, athletes)
+        );
         const simplified = parsed.records.some(
           (record) => record._templateVersion === IMPORT_TEMPLATE_VERSION
         );

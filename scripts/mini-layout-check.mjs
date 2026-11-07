@@ -64,7 +64,7 @@ try {
           }
         }
         if (getComputedStyle(document.querySelector('.exec-row')).display !== 'grid') errors.push('执行人员网格被公共按钮样式覆盖');
-        if (document.documentElement.scrollWidth > innerWidth) errors.push('页面横向溢出');
+        if (document.documentElement.scrollWidth > document.documentElement.clientWidth) errors.push('页面横向溢出');
         return errors;
       });
       assert.deepEqual(failures, [], `${width}px，${longText ? '超长' : '普通'}文本`);

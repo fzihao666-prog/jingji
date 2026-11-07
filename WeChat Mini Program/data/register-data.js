@@ -225,7 +225,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -269,7 +269,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -313,7 +313,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -357,7 +357,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -401,7 +401,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -445,7 +445,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -489,7 +489,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -533,7 +533,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -577,7 +577,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -621,7 +621,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -665,7 +665,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -709,7 +709,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -753,7 +753,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -803,7 +803,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {
         "on_water": [
@@ -866,7 +866,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {
         "on_water": [
@@ -925,7 +925,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -971,7 +971,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1015,7 +1015,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1059,7 +1059,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1103,7 +1103,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1147,7 +1147,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1191,7 +1191,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1235,7 +1235,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1279,7 +1279,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1323,7 +1323,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1367,7 +1367,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1411,7 +1411,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1455,7 +1455,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1499,7 +1499,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1543,7 +1543,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1587,7 +1587,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1631,7 +1631,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1675,7 +1675,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1719,7 +1719,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1763,7 +1763,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1813,7 +1813,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {
         "on_water": [
@@ -1870,7 +1870,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1914,7 +1914,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -1958,7 +1958,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2002,7 +2002,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2046,7 +2046,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2090,7 +2090,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2134,7 +2134,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2178,7 +2178,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2222,7 +2222,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2266,7 +2266,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2312,7 +2312,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2356,7 +2356,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2400,7 +2400,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {
@@ -2444,7 +2444,7 @@ module.exports = {
         "跑步",
         "专项",
         "其它",
-        "待核实"
+        "未分类"
       ],
       "activityIntensitySystems": {},
       "capabilities": {

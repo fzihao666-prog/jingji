@@ -1,3 +1,5 @@
+import { registerAiManagementRoutes } from './core/ai-management-routes.ts';
+import { AiGuardError, initializeAiLedger } from './core/ai-usage.ts';
 import { registerEnodeRoutes } from './enode/enode-routes.ts';
 import { registerTeamWeeklyRoutes } from './report/team-weekly-routes.ts';
 import { registerProjectVerificationRoutes } from './athlete/project-verification-routes.ts';
@@ -112,6 +114,12 @@ app.get('/health', (_req, res) => {
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';
 
+try {
+  initializeAiLedger(db);
+} catch {
+  logger.error('AI 用量账本初始化失败，模型调用已暂停');
+}
+registerAiManagementRoutes(app);
 registerAuthRoutes(app);
 registerAthleteRoutes(app);
 registerSelfTrainingRoutes(app);
@@ -325,6 +333,7 @@ if (existsSync(distPath)) {
 }
 
 app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
+  if (error instanceof AiGuardError) return res.status(error.status).json({ message: error.message });
   const status = Number((error as Error & { status?: number }).status || 0);
   if (error instanceof multer.MulterError || error.message.startsWith('证件照仅支持')) {
     return res.status(400).json({ message: error.message });

@@ -1,0 +1,301 @@
+import { useEffect, useState } from 'react';
+import {
+  AI_FEATURES,
+  AI_STATES,
+  type AiManagementData,
+  type AiSettings,
+} from '../../shared/ai-management';
+import { getAiManagement, saveAiSettings } from '../api';
+import { AppCard, PageHeader, SectionHeader } from '../components/PageLayout';
+import './AiManagementPage.css';
+
+const yuan = new Intl.NumberFormat('zh-CN', {
+  style: 'currency',
+  currency: 'CNY',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+});
+const money = (micros: number) => yuan.format(micros / 1_000_000);
+const beijingTime = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  dateStyle: 'short',
+  timeStyle: 'medium',
+});
+const emptySettings = { enabled: false, budgetYuan: 10 };
+
+export function AiManagementPage() {
+  const [data, setData] = useState<AiManagementData>();
+  const [settings, setSettings] = useState<AiSettings>(emptySettings);
+  const [budget, setBudget] = useState('10');
+  const [query, setQuery] = useState('');
+  const [before, setBefore] = useState<number[]>([]);
+  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const cursor = before.at(-1);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams(query);
+    if (cursor) params.set('before', String(cursor));
+    getAiManagement(params, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setData(result);
+        setSettings(result.settings);
+        setBudget(String(result.settings.budgetYuan));
+        setLoading(false);
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(reason instanceof Error ? reason.message : '无法读取 AI 用量。');
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [query, cursor, refresh]);
+
+  function reload() {
+    setLoading(true);
+    setError('');
+    setRefresh((value) => value + 1);
+  }
+
+  return (
+    <div className="ai-management">
+      <PageHeader
+        title="AI 管理"
+        eyebrow="系统管理"
+        supportingContent={<p>预算和用量按北京时间统计。</p>}
+      />
+      <div role="status">{loading ? '正在读取 AI 用量…' : notice}</div>
+      {error && <p role="alert">{error}</p>}
+      <AppCard>
+        <SectionHeader
+          title="全站调用设置"
+          description="总开关覆盖网页、小程序和自动任务。关闭后，已发出的请求仍会结算。"
+        />
+        <form
+          className="ai-management-controls"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setSaving(true);
+            setNotice('');
+            setError('');
+            try {
+              const result = await saveAiSettings({
+                enabled: settings.enabled,
+                budgetYuan: Number(budget),
+              });
+              setSettings(result);
+              setNotice('AI 设置已保存。');
+              reload();
+            } catch (reason) {
+              setError(reason instanceof Error ? reason.message : '无法保存 AI 设置。');
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          <label>
+            <input
+              type="checkbox"
+              checked={settings.enabled}
+              disabled={!data || loading || saving}
+              onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })}
+            />{' '}
+            启用 AI 调用
+          </label>
+          <label>
+            每日预算（元）
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={budget}
+              disabled={!data || loading || saving}
+              onChange={(event) => setBudget(event.target.value)}
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={!data || loading || saving}>
+            {saving ? '正在保存…' : '保存设置'}
+          </button>
+        </form>
+      </AppCard>
+      <AppCard>
+        <SectionHeader
+          title="今日用量"
+          description={data?.today}
+          actions={
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={loading || saving}
+              onClick={reload}
+            >
+              刷新
+            </button>
+          }
+        />
+        {data && (
+          <dl className="ai-management-summary">
+            {[
+              ['业务请求', data.summary.requests],
+              ['模型尝试', data.summary.attempts],
+              ['输入 token', data.summary.input],
+              ['输出 token', data.summary.output],
+              ['已结算估算费用', money(data.summary.settled)],
+              ['待确认及请求中占用', money(data.summary.pending)],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </AppCard>
+      <AppCard>
+        <SectionHeader
+          title="请求明细"
+          description="同一个请求编号下可能有多次模型尝试。筛选仅影响明细。"
+        />
+        <form
+          className="ai-management-controls"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const fields = new FormData(event.currentTarget);
+            const params = new URLSearchParams();
+            for (const [key, value] of fields)
+              if (typeof value === 'string' && value.trim()) params.set(key, value.trim());
+            setQuery(params.toString());
+            setBefore([]);
+            reload();
+          }}
+        >
+          <label>
+            日期
+            <input type="date" name="date" />
+          </label>
+          <label>
+            账号 ID
+            <input name="account" pattern="[1-9][0-9]{0,14}|system" placeholder="系统填 system" />
+          </label>
+          <label>
+            功能
+            <select name="feature">
+              <option value="">全部</option>
+              {AI_FEATURES.map((feature) => (
+                <option key={feature}>{feature}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            状态
+            <select name="state">
+              <option value="">全部</option>
+              {Object.entries(AI_STATES).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="secondary-button" type="submit" disabled={loading || saving}>
+            筛选
+          </button>
+        </form>
+        {data &&
+          (data.attempts.length === 0 ? (
+            <p>暂无符合条件的模型请求。</p>
+          ) : (
+            <div
+              className="ai-management-table"
+              tabIndex={0}
+              role="region"
+              aria-label="模型请求明细"
+            >
+              <table>
+                <thead>
+                  <tr>
+                    {[
+                      '请求编号',
+                      '时间',
+                      '调用者',
+                      '功能',
+                      '供应商及模型',
+                      '状态',
+                      '输入 / 输出 token',
+                      '费用 / 占用',
+                    ].map((label) => (
+                      <th key={label} scope="col">
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.attempts.map((attempt) => (
+                    <tr key={attempt.id}>
+                      <td>{attempt.job.slice(0, 8)}</td>
+                      <td>{beijingTime.format(new Date(attempt.started))}</td>
+                      <td>
+                        {attempt.account === null
+                          ? '系统'
+                          : `${attempt.username ?? '账号'} #${attempt.account}`}
+                      </td>
+                      <td>{attempt.feature}</td>
+                      <td>
+                        {attempt.provider}
+                        <br />
+                        {attempt.model}
+                      </td>
+                      <td>{AI_STATES[attempt.state]}</td>
+                      <td>
+                        {attempt.input ?? '—'} / {attempt.output ?? '—'}
+                      </td>
+                      <td>
+                        {attempt.cost === null
+                          ? `占用 ${money(attempt.reserved)}`
+                          : money(attempt.cost)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        {(Boolean(before.length) || data?.next) && (
+          <div className="ai-management-controls">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={loading || saving || !before.length}
+              onClick={() => {
+                setLoading(true);
+                setError('');
+                setBefore((values) => values.slice(0, -1));
+              }}
+            >
+              上一页
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={loading || saving || !data?.next}
+              onClick={() => {
+                if (!data?.next) return;
+                setLoading(true);
+                setError('');
+                setBefore([...before, data.next]);
+              }}
+            >
+              下一页
+            </button>
+          </div>
+        )}
+      </AppCard>
+    </div>
+  );
+}
