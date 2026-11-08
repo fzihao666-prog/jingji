@@ -87,7 +87,7 @@ it('Excel 只展示需修正项，最终一次确认使用修正后的最新修�
   await page.commitExcel();
   expect(importer.updatePeople).toHaveBeenCalledWith(expect.objectContaining({ revision: 2 }), [{ id: 1, confirmed: true }]);
   expect(importer.commitExcel).toHaveBeenCalledWith(expect.objectContaining({ revision: 3 }));
-  expect(page.data.receipt).toBe('导入完成');
+  expect(page.data.receipts.excel).toBe('导入完成');
   expect(app.globalData.dataVersion).toBe(1);
 });
 
@@ -100,11 +100,11 @@ it('队伍新列保存映射前不产生成功回执，重用原文件和队伍'
     { key: 'ride', label: '骑行 · km', unit: 'km' }
   ] }).mockResolvedValueOnce({ status: 'imported', created: 1, updated: 0, unchanged: 0, undatedRows: 1 });
   await page.uploadTeam();
-  expect(page.data.receipt).toBe('');
+  expect(page.data.receipts.team).toBe('');
   expect(page.data.mappings[0]).toMatchObject({ fixedUnit: true, category: '骑行' });
   await page.saveMappings();
   expect(importer.teamExcel).toHaveBeenLastCalledWith(file, 'ROWING', 1, { ride: { category: '骑行', unit: 'km' } });
-  expect(page.data.receipt).toContain('跳过无日期 1 行');
+  expect(page.data.receipts.team).toContain('跳过无日期 1 行');
 });
 
 it('Enode 统一预览两份文件，同名明确选择、新人同批建档', async () => {
@@ -129,5 +129,34 @@ it('Enode 统一预览两份文件，同名明确选择、新人同批建档', a
     known: { action: 'link', athleteId: 12 }, same: { action: 'link', athleteId: 11 },
     new: { action: 'create', team: '测试队伍' }
   });
-  expect(page.data.receipt).toContain('新建 1 人');
+  expect(page.data.receipts.enode).toContain('新建 1 人');
+});
+
+
+it('切换导入类型时保留各自的校对草稿和结果，处理期间不能切换', async () => {
+  const { page, importer, wx } = setup();
+  await page.onLoad();
+  wx.chooseMessageFile.mockImplementation(({ success }) => success({ tempFiles: [file] }));
+  importer.excel.mockResolvedValue({ batch });
+  await page.uploadExcel();
+  expect(page.data.activeImport).toBe('excel');
+
+  page.onImportModeChange(event({ mode: 'team' }));
+  importer.teamExcel.mockResolvedValue({ status: 'imported', created: 2, updated: 0, unchanged: 0, undatedRows: 0 });
+  const importing = page.uploadTeam();
+  page.onImportModeChange(event({ mode: 'enode' }));
+  expect(page.data.activeImport).toBe('team');
+  await importing;
+
+  page.onImportModeChange(event({ mode: 'excel' }));
+  expect(page.data.excel.filename).toBe(file.name);
+  expect(page.data.receipts.excel).toBe('');
+  importer.updatePeople.mockResolvedValue({ batch: { ...batch, revision: 2, athleteCandidates: [{ ...person, confirmed: true }] } });
+  importer.commitExcel.mockResolvedValue({ message: 'Excel 已导入' });
+  await page.commitExcel();
+
+  expect(page.data.receipts.excel).toBe('Excel 已导入');
+  expect(page.data.receipts.team).toContain('新增 2 项');
+  page.onProjectChange(event({}, '1'));
+  expect(page.data.receipts).toEqual({ excel: '', team: '', enode: '' });
 });

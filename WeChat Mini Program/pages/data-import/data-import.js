@@ -10,10 +10,16 @@ const templates = [
   { id: 'team', label: '队伍训练统计' }
 ];
 
+const importModes = [
+  { id: 'excel', label: '普通 Excel' },
+  { id: 'team', label: '队伍训练' },
+  { id: 'enode', label: 'Enode VBT' }
+];
+
 const blankReview = {
   excel: null, people: [], peopleMore: false, issues: [], issuesMore: false, editor: null,
   mappings: [], enode: null, enodeTeam: '', enodePeople: [], enodeMore: false,
-  receipt: '', enodeResults: []
+  receipts: { excel: '', team: '', enode: '' }, enodeResults: []
 };
 
 function chooseFiles(enode) {
@@ -45,7 +51,7 @@ function ask(title, content) {
 
 Page({
   data: {
-    ...blankReview, templates, allowed: false, project: '', projects: [], projectIndex: 0,
+    ...blankReview, receipts: { ...blankReview.receipts }, templates, importModes, activeImport: 'excel', allowed: false, project: '', projects: [], projectIndex: 0,
     teams: [], teamIndex: -1, busy: '', error: ''
   },
 
@@ -102,7 +108,7 @@ Page({
     this._batch = this._teamFile = this._enodeFiles = this._enodePreview = null;
     this._enodeChoices = new Map();
     this.setData({
-      ...blankReview, project, projectIndex: index, teams, teamIndex: teams.length === 1 ? 0 : -1, error: ''
+      ...blankReview, receipts: { ...blankReview.receipts }, project, projectIndex: index, teams, teamIndex: teams.length === 1 ? 0 : -1, error: ''
     });
   },
 
@@ -110,10 +116,16 @@ Page({
     if (!this.data.busy) this.setProject(Number(event.detail.value));
   },
 
+  onImportModeChange(event) {
+    const mode = event.currentTarget.dataset.mode;
+    if (this.data.busy || mode === this.data.activeImport || !importModes.some(({ id }) => id === mode)) return;
+    this.setData({ activeImport: mode, error: '' });
+  },
+
   onTeamChange(event) {
     if (this.data.busy) return;
     this._teamFile = null;
-    this.setData({ teamIndex: Number(event.detail.value), mappings: [], error: '', receipt: '', enodeResults: [] });
+    this.setData({ teamIndex: Number(event.detail.value), mappings: [], error: '', 'receipts.team': '' });
   },
 
   downloadTemplate(event) {
@@ -134,7 +146,7 @@ Page({
       if (!file || this._closed) return;
       const { batch } = await importer.excel(file, this.data.project);
       if (this._closed) return;
-      this.setData({ receipt: '', enodeResults: [] });
+      this.setData({ 'receipts.excel': '' });
       this.renderExcel(batch, true);
     });
   },
@@ -251,7 +263,7 @@ Page({
       if (this._closed) return;
       const result = await importer.commitExcel(this._batch);
       this._batch = null;
-      this.finish(result.message || 'Excel 导入完成。', { excel: null, people: [], issues: [], editor: null });
+      this.finish('excel', result.message || 'Excel 导入完成。', { excel: null, people: [], issues: [], editor: null });
     });
   },
 
@@ -262,7 +274,7 @@ Page({
       const [file] = await chooseFiles(false);
       if (!file || this._closed) return;
       this._teamFile = file;
-      this.setData({ mappings: [], receipt: '', enodeResults: [] });
+      this.setData({ mappings: [], 'receipts.team': '' });
       await this.submitTeam(team.id, {});
     });
   },
@@ -295,7 +307,7 @@ Page({
       return;
     }
     this._teamFile = null;
-    this.finish(`新增 ${result.created} 项，更新 ${result.updated} 项，相同 ${result.unchanged} 项，跳过无日期 ${result.undatedRows} 行。`, { mappings: [] });
+    this.finish('team', `新增 ${result.created} 项，更新 ${result.updated} 项，相同 ${result.unchanged} 项，跳过无日期 ${result.undatedRows} 行。`, { mappings: [] });
   },
 
   uploadEnode() {
@@ -308,7 +320,7 @@ Page({
       this._enodePreview = preview;
       this._enodeChoices = new Map();
       this._enodePage = 0;
-      this.setData({ enodeTeam: preview.teams.length === 1 ? preview.teams[0] : '', receipt: '', enodeResults: [] });
+      this.setData({ enodeTeam: preview.teams.length === 1 ? preview.teams[0] : '', 'receipts.enode': '', enodeResults: [] });
       this.renderEnode();
     });
   },
@@ -359,7 +371,7 @@ Page({
       ]));
       const { summary, results } = await importer.enodeImport(this._enodeFiles, this.data.project, decisions);
       this._enodePreview = this._enodeFiles = null;
-      this.finish(`已关联 ${summary.linked} 人，新建 ${summary.created} 人。`, {
+      this.finish('enode', `已关联 ${summary.linked} 人，新建 ${summary.created} 人。`, {
         enode: null, enodePeople: [], enodeResults: results.map(({ filename, inserted, skipped, failed, issues }, index) => ({
           index, filename, inserted, skipped, failed, issues: issues.slice(0, 3)
         }))
@@ -367,10 +379,10 @@ Page({
     });
   },
 
-  finish(receipt, data) {
+  finish(mode, receipt, data) {
     const app = getApp();
     app.globalData.dataVersion = (app.globalData.dataVersion || 0) + 1;
-    if (!this._closed) this.setData({ receipt, ...data }, () => {
+    if (!this._closed) this.setData({ [`receipts.${mode}`]: receipt, ...data }, () => {
       if (!this._closed) wx.pageScrollTo({ selector: '#import-receipt', duration: 0 });
     });
   }
