@@ -115,6 +115,26 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
   }
 });
 
+it('队伍模板按项目选择，下载仍受登录和项目权限限制', async () => {
+  const path = '/api/data-import/template?kind=team&project=';
+  expect((await fetch(`${base}${path}ROWING`)).status).toBe(401);
+  expect((await request('/template?kind=team&project=CYCLING_ROAD')).status).toBe(403);
+  db.prepare("INSERT INTO user_project_permissions (user_id, project, granted_by) VALUES (701, 'CYCLING_ROAD', 701)").run();
+  db.prepare("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (701, 'CYCLING_ROAD', '*', 701)").run();
+  try {
+    for (const [project, sheet] of [['ROWING', '全队训练负荷'], ['CYCLING_ROAD', '队伍训练统计']]) {
+      const response = await fetch(`${base}${path}${project}`, { headers: { authorization: `Bearer ${token}` } });
+      expect(response.status).toBe(200);
+      const book = XLSX.read(await response.arrayBuffer(), { type: 'array' });
+      expect(book.SheetNames).toEqual([sheet]);
+      expect(JSON.stringify(book.Sheets)).not.toContain('虚构队员');
+    }
+  } finally {
+    db.prepare("DELETE FROM user_team_permissions WHERE user_id=701 AND project='CYCLING_ROAD'").run();
+    db.prepare("DELETE FROM user_project_permissions WHERE user_id=701 AND project='CYCLING_ROAD'").run();
+  }
+});
+
 async function upload(rows: unknown[][], sheet = '身体测量') {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheet);

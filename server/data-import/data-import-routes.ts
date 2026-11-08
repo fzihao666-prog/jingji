@@ -31,7 +31,7 @@ import { strengthImportCandidates } from '../strength/strength-training-routes.t
 import { cleanString } from '../core/utils.ts';
 import { dataImportUpload } from '../core/uploads.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
-import { isProject, normalizeProject } from '../../shared/projects.ts';
+import { isProject, normalizeProject, projectCapability } from '../../shared/projects.ts';
 import { INTENSITY_ZONE_SYSTEMS } from '../../shared/training-intensity.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 
@@ -53,11 +53,9 @@ function dataImportCandidates(user: AuthUser) {
 }
 
 export const unifiedTemplateName = '竞迹统一数据导入模板.xlsx';
-export const unifiedTemplatePath = () =>
-  [
-    resolve(process.cwd(), 'public', 'templates', unifiedTemplateName),
-    resolve(process.cwd(), 'dist', 'templates', unifiedTemplateName),
-  ].find(existsSync);
+const importTemplatePath = (name: string) =>
+  ['public', 'dist'].map(directory => resolve(process.cwd(), directory, 'templates', name)).find(existsSync);
+export const unifiedTemplatePath = () => importTemplatePath(unifiedTemplateName);
 
 export const unifiedExportHeaders = UNIFIED_IMPORT_HEADERS;
 
@@ -175,8 +173,8 @@ export function registerDataImportRoutes(app: Express) {
     requireAuth,
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
-      const kind = (cleanString(req.query.kind) || 'unified') as TemplateKind;
-      if (!['profile', 'training', 'test', 'unified'].includes(kind))
+      const kind = (cleanString(req.query.kind) || 'unified') as TemplateKind | 'team';
+      if (!['profile', 'training', 'test', 'unified', 'team'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {
         const team = cleanString(req.query.team);
@@ -198,6 +196,14 @@ export function registerDataImportRoutes(app: Express) {
           return res.status(403).json({ message: '当前账号无权导出该项目模板。' });
         if (team && !scope.allowedTeams.has(team))
           return res.status(403).json({ message: '所选队伍不存在、已停用或不在当前授权范围内。' });
+        if (kind === 'team') {
+          const variant = projectCapability(project) ? '水上' : '通用';
+          const filename = `竞迹队伍训练统计模板（${variant}）.xlsx`;
+          const templatePath = importTemplatePath(filename);
+          if (!templatePath) return res.status(404).json({ message: '队伍训练统计模板尚未部署。' });
+          res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          return res.download(templatePath, filename);
+        }
         const athletes = strengthImportCandidates(req.authUser!)
           .filter((athlete) => athlete.project === project && (!team || athlete.team === team))
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));

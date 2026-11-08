@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { Server } from 'node:http';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { beforeAll, afterAll, expect, it, vi } from 'vitest';
@@ -152,4 +154,34 @@ it('整队预览合并跨文件人员，确认后建档与设备记录一起保�
       .get(Number(athlete()?.id))
   ).toEqual({ n: 1 });
   expect(db.prepare('SELECT id FROM athletes WHERE name=?').get('合成跳过')).toBeUndefined();
+});
+
+it('小程序多文件请求可用 UTF-8 文件名预览并在同一批次写入', async () => {
+  const data = new TextEncoder().encode(csv.replace('2026-10-03', '2026-10-29'));
+  const mini = { exports: {} };
+  vm.runInNewContext(readFileSync(new URL('../../WeChat Mini Program/utils/import-multipart.js', import.meta.url), 'utf8'), {
+    module: mini, Uint8Array,
+    wx: { getFileSystemManager: () => ({ readFile: ({ success }: { success: (value: { data: ArrayBuffer }) => void }) => success({ data: data.buffer }) }) },
+  });
+  type Multipart = (fields: Record<string, string>, files: Array<{ name: string; path: string; size: number }>, field: string) =>
+    Promise<{ data: ArrayBuffer; header: Record<string, string> }>;
+  const { importMultipart } = mini.exports as { importMultipart: Multipart };
+  const files = ['状态一', '状态二.csv'].map(name => ({ name, path: name, size: data.length }));
+  const send = async (endpoint: 'preview' | 'import', fields: Record<string, string>) => {
+    const packet = await importMultipart({ project: 'ROWING', ...fields }, files, 'files');
+    return fetch(`${url}/api/enode/${endpoint}`, {
+      method: 'POST', headers: { ...auth(), ...packet.header }, body: packet.data,
+    });
+  };
+  const preview = await send('preview', {});
+  expect(preview.status).toBe(200);
+  expect(await preview.json()).toMatchObject({
+    files: [{ filename: '状态一' }, { filename: '状态二.csv' }],
+    people: [{ name: '合成设备人员', counts: { wellness: 2 } }],
+  });
+  const committed = await send('import', { decisions: JSON.stringify({ 合成设备人员: { action: 'link', athleteId: 9401 } }) });
+  expect(committed.status).toBe(200);
+  expect(await committed.json()).toMatchObject({
+    results: [{ inserted: 1 }, { skipped: 1 }], summary: { linked: 1, created: 0 },
+  });
 });

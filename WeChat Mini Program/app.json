@@ -14,6 +14,7 @@
     "pages/injury-report/injury-report",
     "pages/test-entry/test-entry",
     "pages/mine/mine",
+    "pages/data-import/data-import",
     "pages/privacy/privacy",
     "pages/team-plans/team-plans"
   ],

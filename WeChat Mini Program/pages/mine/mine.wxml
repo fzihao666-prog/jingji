@@ -14,6 +14,7 @@
   </view>
 
   <view class="card settings-list">
+    <button wx:if="{{canImport}}" bindtap="openDataImport"><view><text class="setting-title">数据导入</text><text>下载模板，导入 Excel 和 Enode VBT 数据</text></view><text class="setting-arrow">›</text></button>
     <button bindtap="togglePasswordForm"><view><text class="setting-title">修改密码</text><text>管理当前账号的登录密码</text></view><text class="setting-arrow {{showPasswordForm ? 'open' : ''}}">›</text></button>
     <button bindtap="openPrivacy"><view><text class="setting-title">隐私保护说明</text><text>查看敏感信息处理范围与用户权利</text></view><text class="setting-arrow">›</text></button>
   </view>

@@ -1,0 +1,164 @@
+<view class="page import-page">
+  <view class="page-head">
+    <view class="page-title">数据导入</view>
+    <view class="page-description">从微信会话选取文件，导入当前项目。手机本地文件可先发送到「文件传输助手」。</view>
+  </view>
+  <view wx:if="{{!allowed}}" class="card">当前账号没有数据导入权限。</view>
+  <block wx:else>
+    <view wx:if="{{project}}" class="card">
+      <picker range="{{projects}}" range-key="label" value="{{projectIndex}}" disabled="{{!!busy}}" bindchange="onProjectChange">
+        <view class="import-picker">当前项目：{{projects[projectIndex].label}} <text>›</text></view>
+      </picker>
+    </view>
+    <view id="import-error" wx:if="{{error}}" class="error-box" aria-role="alert">{{error}}</view>
+    <view wx:if="{{busy}}" class="import-status" aria-live="polite">正在{{busy}}…</view>
+    <button wx:if="{{!project && !busy}}" class="secondary-button" bindtap="loadScope">重新加载</button>
+    <block wx:if="{{project}}">
+      <view class="card import-card">
+        <view class="card-head-title">模板下载</view>
+        <view class="import-template-grid">
+          <button wx:for="{{templates}}" wx:key="id" class="secondary-button"
+            disabled="{{!!busy}}" data-kind="{{item.id}}" bindtap="downloadTemplate">{{item.label}}</button>
+        </view>
+      </view>
+
+      <view class="card import-card">
+        <view class="card-head-title">Excel 导入</view>
+        <view class="card-head-note">导入队员资料、训练记录和测试成绩。</view>
+        <button class="secondary-button" disabled="{{!!busy || !teams.length}}" bindtap="uploadExcel">{{excel ? '重新选文件' : '选择 Excel'}}</button>
+        <view wx:if="{{!teams.length}}" class="card-head-note">当前项目暂无授权队伍。</view>
+        <block wx:if="{{excel}}">
+          <view class="import-review">
+            <view class="import-filename">{{excel.filename}}</view>
+            <view>新增 {{excel.newCount}} 条 · 更新 {{excel.overwriteCount}} 条 · 新建 {{excel.newPeople}} 人</view>
+            <view wx:if="{{excel.needsPeople || excel.issues}}" class="import-attention">
+              待处理 {{excel.needsPeople}} 名运动员、{{excel.issues}} 条记录
+            </view>
+          </view>
+          <block wx:if="{{people.length}}">
+            <view class="import-subtitle">运动员</view>
+            <view wx:for="{{people}}" wx:key="id" class="import-item">
+              <view class="import-person-title">{{item.name}} <text wx:if="{{item.isNew}}" class="import-tag">新建</text></view>
+              <view wx:if="{{item.team}}" class="card-head-note">{{item.team}}</view>
+              <view wx:if="{{item.message}}" class="import-attention">{{item.message}}</view>
+              <picker wx:if="{{item.needsTeam}}" range="{{teams}}" range-key="name" disabled="{{!!busy}}"
+                data-id="{{item.id}}" data-kind="team" bindchange="changeExcelPerson">
+                <view class="import-picker">选择所属队伍 <text>›</text></view>
+              </picker>
+              <picker wx:if="{{item.needsMatch && item.candidates.length}}" range="{{item.candidates}}" range-key="label"
+                disabled="{{!!busy}}" data-id="{{item.id}}" data-kind="match" bindchange="changeExcelPerson">
+                <view class="import-picker">选择对应档案 <text>›</text></view>
+              </picker>
+              <view wx:if="{{item.needsMatch && !item.candidates.length}}" class="card-head-note">请核对原文件中的运动员编号后重新上传。</view>
+            </view>
+            <view wx:if="{{peopleBack || peopleMore}}" class="import-actions">
+              <button wx:if="{{peopleBack}}" class="secondary-button" disabled="{{!!busy}}" data-list="people" data-step="-1" bindtap="pageReview">上一组</button>
+              <button wx:if="{{peopleMore}}" class="secondary-button" disabled="{{!!busy}}" data-list="people" data-step="1" bindtap="pageReview">下一组</button>
+            </view>
+          </block>
+          <block wx:if="{{issues.length}}">
+            <view class="import-subtitle">待修正记录</view>
+            <view wx:for="{{issues}}" wx:key="id" class="import-item">
+              <view class="import-person-title">{{item.title}}</view>
+              <view class="card-head-note">{{item.source}} {{item.value}}</view>
+              <view wx:for="{{item.messages}}" wx:for-item="message" wx:key="*this" class="import-attention">{{message}}</view>
+              <view class="import-actions">
+                <button wx:if="{{item.canEdit}}" class="secondary-button" disabled="{{!!busy}}" data-id="{{item.id}}" bindtap="editIssue">修正</button>
+                <button class="secondary-button" disabled="{{!!busy}}" data-id="{{item.id}}" bindtap="skipIssue">跳过记录</button>
+              </view>
+              <view wx:if="{{editor && editor.id === item.id}}" class="import-editor">
+                <picker wx:if="{{editor.sessions.length}}" range="{{editor.sessions}}" range-key="label"
+                  disabled="{{!!busy}}" bindchange="chooseSession">
+                  <view class="import-picker">选择对应课次 <text>›</text></view>
+                </picker>
+                <block wx:if="{{editor.fields.length}}">
+                  <picker range="{{editor.fields}}" range-key="name" value="{{editor.index}}"
+                    disabled="{{!!busy}}" bindchange="changeSourceField">
+                    <view class="import-picker">{{editor.fields[editor.index].name}} <text>›</text></view>
+                  </picker>
+                  <picker wx:if="{{editor.fields[editor.index].date}}" mode="date" disabled="{{!!busy}}" bindchange="changeSourceValue">
+                    <view class="import-picker">{{editor.value || '选择日期'}} <text>›</text></view>
+                  </picker>
+                  <input wx:else class="input" aria-label="{{editor.fields[editor.index].name}}" value="{{editor.value}}" placeholder="填写正确的值"
+                    disabled="{{!!busy}}" maxlength="10000" bindinput="changeSourceValue" />
+                  <button class="secondary-button" disabled="{{!!busy}}" bindtap="saveSource">保存并校验</button>
+                </block>
+              </view>
+            </view>
+            <view wx:if="{{issuesBack || issuesMore}}" class="import-actions">
+              <button wx:if="{{issuesBack}}" class="secondary-button" disabled="{{!!busy}}" data-list="issues" data-step="-1" bindtap="pageReview">上一组</button>
+              <button wx:if="{{issuesMore}}" class="secondary-button" disabled="{{!!busy}}" data-list="issues" data-step="1" bindtap="pageReview">下一组</button>
+            </view>
+          </block>
+          <button class="primary-button" disabled="{{!!busy || excel.issues > 0 || excel.needsPeople > 0}}" bindtap="commitExcel">确认导入 Excel</button>
+        </block>
+      </view>
+
+      <view class="card import-card">
+        <view class="card-head-title">队伍训练统计</view>
+        <view class="card-head-note">导入队伍每日训练分项。无日期的行自动跳过。</view>
+        <picker wx:if="{{teams.length > 1}}" range="{{teams}}" range-key="name" value="{{teamIndex < 0 ? 0 : teamIndex}}"
+          disabled="{{!!busy}}" bindchange="onTeamChange">
+          <view class="import-picker">{{teamIndex < 0 ? '选择队伍' : teams[teamIndex].name}} <text>›</text></view>
+        </picker>
+        <view wx:elif="{{teams.length === 1}}">{{teams[0].name}}</view>
+        <view wx:else class="card-head-note">当前项目暂无授权队伍。</view>
+        <button class="secondary-button" disabled="{{!!busy || teamIndex < 0}}" bindtap="uploadTeam">选择队伍训练 Excel</button>
+        <block wx:if="{{mappings.length}}">
+          <view class="import-subtitle">确认首次出现的分项</view>
+          <view wx:for="{{mappings}}" wx:key="key" class="import-editor">
+            <view class="import-person-title">{{item.label}}</view>
+            <view class="card-head-note">分项名称</view>
+            <input class="input" aria-label="分项名称" value="{{item.category}}" placeholder="分项名称" disabled="{{!!busy}}" maxlength="80"
+              data-index="{{index}}" data-field="category" bindinput="changeMapping" />
+            <view class="card-head-note">单位</view>
+            <view wx:if="{{item.fixedUnit}}">{{item.unit}}</view>
+            <input wx:else class="input" aria-label="单位" value="{{item.unit}}" placeholder="如 min 或 km" disabled="{{!!busy}}" maxlength="20"
+              data-index="{{index}}" data-field="unit" bindinput="changeMapping" />
+          </view>
+          <button class="primary-button" disabled="{{!!busy}}" bindtap="saveMappings">保存映射并导入</button>
+        </block>
+      </view>
+
+      <view class="card import-card">
+        <view class="card-head-title">Enode VBT 导入</view>
+        <view class="card-head-note">动作测量、每日状态和训练 RPE 可一次选择多份。</view>
+        <button class="secondary-button" disabled="{{!!busy}}" bindtap="uploadEnode">选择 Enode 文件</button>
+        <block wx:if="{{enode}}">
+          <view class="import-review">共识别 {{enode.count}} 人<text wx:if="{{enode.pending}}"> · 待处理 {{enode.pending}} 人</text></view>
+          <view wx:for="{{enode.errors}}" wx:key="filename" class="import-attention">{{item.filename}}：{{item.error}}</view>
+          <picker wx:if="{{enodeHasNew && enode.teams.length > 1}}" range="{{enode.teams}}"
+            disabled="{{!!busy}}" bindchange="changeEnodeTeam">
+            <view class="import-picker">新建人员队伍：{{enodeTeam || '请选择'}} <text>›</text></view>
+          </picker>
+          <view wx:if="{{enodeHasNew && !enode.teams.length}}" class="import-attention">暂无可用于新建人员的授权队伍。</view>
+          <view wx:for="{{enodePeople}}" wx:key="key" class="import-item">
+            <view class="import-person-title">{{item.name}} <text wx:if="{{!item.candidates.length}}" class="import-tag">新建</text></view>
+            <view wx:if="{{item.candidates.length === 1}}" class="card-head-note">{{item.candidates[0].team}}</view>
+            <view wx:if="{{!item.candidates.length && enodeTeam}}" class="card-head-note">{{enodeTeam}}</view>
+            <picker wx:if="{{item.candidates.length > 1}}" range="{{item.options}}" range-key="label"
+              data-key="{{item.key}}" disabled="{{!!busy}}" bindchange="changeEnodePerson">
+              <view class="import-picker">{{item.selectedLabel || '选择同名运动员档案'}} <text>›</text></view>
+            </picker>
+          </view>
+          <view wx:if="{{enodeBack || enodeMore}}" class="import-actions">
+            <button wx:if="{{enodeBack}}" class="secondary-button" disabled="{{!!busy}}" data-step="-1" bindtap="pageEnode">上一组</button>
+            <button wx:if="{{enodeMore}}" class="secondary-button" disabled="{{!!busy}}" data-step="1" bindtap="pageEnode">下一组</button>
+          </view>
+          <button class="primary-button" disabled="{{!!busy || enode.pending > 0 || !enode.count}}" bindtap="commitEnode">确认导入 Enode</button>
+        </block>
+      </view>
+
+      <view id="import-receipt" wx:if="{{receipt}}" class="card import-card" aria-live="polite">
+        <view class="card-head-title">导入结果</view>
+        <view>{{receipt}}</view>
+        <view wx:for="{{enodeResults}}" wx:key="index" class="import-item">
+          <view class="import-filename">{{item.filename}}</view>
+          <view>新增 {{item.inserted}} · 重复跳过 {{item.skipped}} · 失败 {{item.failed}}</view>
+          <view wx:for="{{item.issues}}" wx:for-item="issue" wx:key="row" class="import-attention">{{issue.message}}</view>
+        </view>
+      </view>
+    </block>
+  </block>
+  <icp-filing />
+</view>

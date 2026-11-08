@@ -1,10 +1,12 @@
 const api = require('../../services/api');
 const { ROLE_LABELS } = require('../../utils/format');
+const { canImport } = require('../../services/data-import');
 const { projectLabel } = require('../../utils/project-label');
 
 Page({
   data: {
     user: null,
+    canImport: false,
     avatar: '',
     roleLabel: '',
     projectLabel: '',
@@ -25,6 +27,7 @@ Page({
     const user = app.globalData.user;
     this.setData({
       user,
+      canImport: canImport(user),
       avatar: user && user.displayName ? user.displayName.slice(0, 1) : '竞',
       roleLabel: user ? ROLE_LABELS[user.role] || user.role : '',
       projectLabel: projectLabel(app.globalData.currentProject)
@@ -43,6 +46,7 @@ Page({
       error: ''
     });
   },
+  openDataImport() { wx.navigateTo({ url: '/pages/data-import/data-import' }); },
   openPrivacy() { wx.navigateTo({ url: '/pages/privacy/privacy' }); },
 
   onAvatarTap() {
