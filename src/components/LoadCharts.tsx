@@ -452,11 +452,12 @@ export function ProfessionalLoadChart({
 
 export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
   const rated = data.filter((item) => item.score !== null).length;
-  const isPlaceholder = rated === 0;
-  const chartData = [...(isPlaceholder
-    ? (data.length ? data : ['力量', '爆发', '耐力', '技术', '恢复', '稳定'].map((label, index) => ({ key: String(index), label, score: null, basis: '' })))
-      .map((item) => ({ ...item, score: null }))
-    : data)];
+  const hasMissingScores = rated < data.length;
+  const chartData = data.length
+    ? data
+    : ['最大力量', '爆发功率', '核心稳定', '力量耐力', '左右对称', '恢复状态'].map(
+        (label) => ({ key: label, label, score: null, basis: '' })
+      );
   return (
     <div className="performance-radar-layout">
       <div className="performance-radar-chart" aria-label="六维运动表现评分雷达图">
@@ -469,20 +470,31 @@ export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
             />
             <PolarRadiusAxis
               domain={[0, 100]}
-              tickCount={5}
+              allowDataOverflow
+              ticks={[0, 25, 50, 75, 100]}
               tick={{ fill: '#829399', fontSize: 8 }}
               axisLine={false}
             />
-            <Tooltip formatter={(value) => value === null ? '待采集' : `${value}分`} />
-            <Radar
-              dataKey="score"
-              name="指标评分"
-              stroke="#138d87"
-              strokeWidth={2.2}
-              fill="#20a89a"
-              fillOpacity={0.28}
-              connectNulls={false}
-            />
+            {rated > 0 && (
+              <>
+                <Tooltip formatter={(value) => value === null ? '待采集' : `${value}分`} />
+                <Radar
+                  dataKey="score"
+                  name="指标评分"
+                  stroke={hasMissingScores ? 'none' : '#138d87'}
+                  strokeWidth={2.2}
+                  fill={hasMissingScores ? 'none' : '#20a89a'}
+                  fillOpacity={0.28}
+                  activeDot={!hasMissingScores}
+                  dot={({ cx, cy, value }) =>
+                    typeof value === 'number' ? (
+                      <circle cx={cx} cy={cy} r={3} fill="#138d87" />
+                    ) : null
+                  }
+                  isAnimationActive={false}
+                />
+              </>
+            )}
           </RadarChart>
         </ResponsiveContainer>
       </div>
@@ -495,7 +507,7 @@ export function PerformanceRadarChart({ data }: { data: RadarDimension[] }) {
           </div>
         ))}
       </div>
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实评分</p>}
+      {rated === 0 && <p className="performance-radar-empty">暂无真实评分</p>}
     </div>
   );
 }

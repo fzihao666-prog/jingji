@@ -1,17 +1,27 @@
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-const captured = vi.hoisted(() => ({ rows: [] as Array<{ chart: string; data: Array<Record<string, unknown>> }> }));
+const captured = vi.hoisted(() => ({
+  rows: [] as Array<{ chart: string; data: Array<Record<string, unknown>> }>,
+  radiusAxis: undefined as Record<string, unknown> | undefined,
+  radar: undefined as Record<string, unknown> | undefined,
+}));
 vi.mock('recharts', () => Object.fromEntries([
   'Area', 'AreaChart', 'Bar', 'BarChart', 'CartesianGrid', 'Cell', 'ComposedChart', 'Legend', 'Line', 'Pie', 'PieChart',
   'PolarAngleAxis', 'PolarGrid', 'PolarRadiusAxis', 'Radar', 'RadarChart', 'ResponsiveContainer', 'Tooltip', 'XAxis', 'YAxis',
-].map((chart) => [chart, ({ children, data }: { children?: ReactNode; data?: Array<Record<string, unknown>> }) => {
+].map((chart) => [chart, ({ children, data, ...props }: { children?: ReactNode; data?: Array<Record<string, unknown>> }) => {
   if (data) captured.rows.push({ chart, data });
+  if (chart === 'PolarRadiusAxis') captured.radiusAxis = props;
+  if (chart === 'Radar') captured.radar = props;
   return createElement('svg', { 'data-chart': chart }, children);
 }])));
 import { LoadTrendChart, ProfessionalLoadChart, PerformanceRadarChart, RelativeStrengthChart, StrengthChangeChart, StructureChart } from './LoadCharts';
 import { StrengthTrainingLoadChart } from './StrengthTrainingLoadChart';
-beforeEach(() => { captured.rows = []; });
+beforeEach(() => {
+  captured.rows = [];
+  captured.radiusAxis = undefined;
+  captured.radar = undefined;
+});
 it('无训练、力量或测试数据时保留坐标结构，不注入成绩趋势', () => {
   for (const element of [createElement(LoadTrendChart, { records: [] }), createElement(ProfessionalLoadChart, { data: [] }),
     createElement(RelativeStrengthChart, { data: [] }), createElement(StrengthChangeChart, { data: [] }), createElement(StrengthTrainingLoadChart, { sessions: [] })]) {
@@ -25,10 +35,18 @@ it('雷达全空保留维度，真实零分和部分缺失不被替换', () => {
   renderToStaticMarkup(createElement(PerformanceRadarChart, { data: [] }));
   expect(captured.rows[0].data).toHaveLength(6);
   expect(captured.rows[0].data.every((row) => row.score === null)).toBe(true);
+  expect(captured.radiusAxis).toMatchObject({ domain: [0, 100], allowDataOverflow: true });
+  expect(captured.radar).toBeUndefined();
   captured.rows = [];
   const data = [{ key: 'a', label: '力量', score: 0, basis: '' }, { key: 'b', label: '耐力', score: null, basis: '' }];
   renderToStaticMarkup(createElement(PerformanceRadarChart, { data }));
   expect(captured.rows[0].data).toEqual(data);
+  expect(captured.radar).toMatchObject({ stroke: 'none', fill: 'none' });
+  const dot = captured.radar?.dot;
+  expect(typeof dot).toBe('function');
+  if (typeof dot !== 'function') throw new Error('部分评分需要独立绘制实测点');
+  expect(dot({ cx: 50, cy: 50, value: null })).toBeNull();
+  expect(renderToStaticMarkup(dot({ cx: 50, cy: 50, value: 0 }))).toContain('<circle');
 });
 it('训练结构无数据时只有中性环轨，不绘制假训练比例', () => {
   const html = renderToStaticMarkup(createElement(StructureChart, { records: [] }));

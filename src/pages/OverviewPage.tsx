@@ -1,3 +1,4 @@
+import { ArrowRight } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../api';
@@ -476,9 +477,29 @@ export function OverviewPage(props: Props) {
           isSelfOverview ? '我的训练总览' : isIndividualOverview ? '运动员训练总览' : '训练总览'
         }
         supportingContent={
-          <p className="overview-principle">
-            记录训练数据，汇总统计、分析表现并对标
-          </p>
+          <div
+            className="overview-principle"
+            role="note"
+            aria-label="有训练就要有数据，有数据就要有统计，有统计就要有分析，有分析就要对标对表"
+          >
+            <div className="overview-principle-flow" aria-hidden="true">
+              <span>
+                有训练就要有<strong>数据</strong>
+              </span>
+              <ArrowRight />
+              <span>
+                有数据就要有<strong>统计</strong>
+              </span>
+              <ArrowRight />
+              <span>
+                有统计就要有<strong>分析</strong>
+              </span>
+              <ArrowRight />
+              <span>
+                有分析就要<strong>对标对表</strong>
+              </span>
+            </div>
+          </div>
         }
       />
       {props.loading || (overviewLoading && !overview) ? (

@@ -172,7 +172,15 @@
 }
 
 .performance-radar-chart {
+  min-width: 0;
   height: 270px;
+}
+
+.performance-radar-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .radar-dimension-list {
