@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { z } from 'zod';
+import { TEAM_TRAINING_PERIODS } from '../../shared/team-training-stats.ts';
 import { isProject, projectCapability } from '../../shared/projects.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { db } from '../core/db.ts';
@@ -98,25 +99,32 @@ export function registerTeamTrainingStatisticsRoutes(app: Express) {
 
   app.get('/api/team-training-stats', requireAuth, managers, (req, res) => {
     const parsed = targetSchema
-      .extend({ date: z.string().refine(isTeamTrainingDate).optional() })
+      .extend({
+        date: z.string().length(10).refine(isTeamTrainingDate).optional(),
+        period: z.enum(TEAM_TRAINING_PERIODS).default('week'),
+      })
+      .strict()
       .safeParse(req.query);
-    if (!parsed.success) return res.status(400).json({ message: '请选择有效队伍和日期。' });
+    if (!parsed.success)
+      return res.status(400).json({ message: '请选择有效队伍、日期和统计周期。' });
     const target = parsed.data;
     try {
       assertTeamAccess(req.authUser!, target);
-      const latest = db
-        .prepare(
-          `SELECT MAX(training_date) AS date FROM team_training_day_values
+      const latest = target.date
+        ? undefined
+        : db
+            .prepare(
+              `SELECT MAX(training_date) AS date FROM team_training_day_values
         WHERE team_id=? AND project_code=?`
-        )
-        .get(target.teamId, target.project);
+            )
+            .get(target.teamId, target.project);
       const date =
         target.date ??
         String(
           latest?.date ??
             new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
         );
-      return res.json(readTeamTrainingStatistics(db, target, date));
+      return res.json(readTeamTrainingStatistics(db, target, date, target.period));
     } catch (error) {
       if (error instanceof TeamTrainingAccessError)
         return res.status(403).json({ message: error.message });

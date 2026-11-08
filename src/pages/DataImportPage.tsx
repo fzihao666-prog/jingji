@@ -58,7 +58,7 @@ type Props = {
   onChanged: () => void;
   onViewEnode: () => void;
   teamId: number | null;
-  onViewTeamTraining: (teamId: number) => void;
+  onViewTeamTraining: (teamId: number, date: string | null) => void;
   onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
 };
 

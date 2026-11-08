@@ -4,7 +4,8 @@ import type {
   TeamTrainingImportResult,
   TeamTrainingMeasure,
   TeamTrainingStatistics,
-  TeamTrainingWeek,
+  TeamTrainingBucket,
+  TeamTrainingPeriod,
 } from '../../shared/team-training-stats.ts';
 import {
   defaultTeamTrainingMapping,
@@ -136,8 +137,10 @@ export function importTeamTrainingStatistics(
       updated: 0,
       unchanged: 0,
       undatedRows: workbook.undatedRows,
+      latestDate: null as string | null,
     };
     for (const { entry, mapping } of records.values()) {
+      if (!result.latestDate || entry.date > result.latestDate) result.latestDate = entry.date;
       const identity = [teamId, project, entry.date, mapping.category, mapping.unit] as const;
       const previous = read.get(...identity);
       if (previous?.value === entry.value) {
@@ -177,8 +180,9 @@ const addDays = (date: string, days: number) => {
 };
 const monday = (date: string) =>
   addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7));
-const emptyWeek = (start: string): TeamTrainingWeek => ({
+const emptyBucket = (start: string): TeamTrainingBucket => ({
   start,
+  distance: null,
   minutes: null,
   water: null,
   slalomProxy: null,
@@ -188,72 +192,80 @@ const emptyWeek = (start: string): TeamTrainingWeek => ({
   functionalCore: null,
 });
 
+const nextMonth = (date: string) => {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCMonth(value.getUTCMonth() + 1);
+  return value.toISOString().slice(0, 10);
+};
+
+const slalomCategories = new Set(['无氧能力', '无氧功率', '测功仪']);
+
 export function readTeamTrainingStatistics(
   db: DatabaseSync,
   scope: Scope,
-  selectedDate: string
+  selectedDate: string,
+  period: TeamTrainingPeriod
 ): TeamTrainingStatistics {
-  const weekStart = monday(selectedDate);
-  const weekEnd = addDays(weekStart, 6);
-  const weekYear = Number(addDays(weekStart, 3).slice(0, 4));
-  const yearStart = monday(`${weekYear}-01-04`);
-  const nextYearStart = monday(`${weekYear + 1}-01-04`);
+  const monthStart = `${selectedDate.slice(0, 7)}-01`;
+  const yearStart = `${selectedDate.slice(0, 4)}-01-01`;
+  const start =
+    period === 'week' ? monday(selectedDate) : period === 'month' ? monthStart : yearStart;
+  const next =
+    period === 'week'
+      ? addDays(start, 7)
+      : period === 'month'
+        ? nextMonth(start)
+        : `${String(Number(start.slice(0, 4)) + 1).padStart(4, '0')}-01-01`;
   const rows = db
     .prepare(
       `SELECT training_date AS date,category,unit,value,
     water_group AS waterGroup,lesson_group AS lessonGroup FROM team_training_day_values
-    WHERE team_id=? AND project_code=? AND training_date>=? AND training_date<? ORDER BY training_date, category`
+    WHERE team_id=? AND project_code=? AND training_date>=? AND training_date<? ORDER BY training_date, category, unit`
     )
-    .all(scope.teamId, scope.project, yearStart, nextYearStart) as RecordValue[];
-  const days = Array.from({ length: 7 }, (_, index) => ({
-    date: addDays(weekStart, index),
-    minutes: null as number | null,
-    distance: null as number | null,
-  }));
-  const daily = new Map(days.map((day) => [day.date, day]));
+    .all(scope.teamId, scope.project, start, next) as RecordValue[];
+  const buckets = new Map<string, TeamTrainingBucket>();
+  const advance = period === 'year' ? nextMonth : (date: string) => addDays(date, 1);
+  for (let date = start; date < next; date = advance(date)) buckets.set(date, emptyBucket(date));
   const categories = new Map<string, TeamTrainingMeasure>();
   const otherMeasures: RecordValue[] = [];
-  const weeks = new Map<string, TeamTrainingWeek>();
-  for (let date = yearStart; date < nextYearStart; date = addDays(date, 7))
-    weeks.set(date, emptyWeek(date));
-  const slalomCategories = new Set(['无氧能力', '无氧功率', '测功仪']);
   for (const { date, ...measure } of rows) {
-    const day = daily.get(date);
-    if (day && measure.unit !== 'min' && measure.unit !== 'km') {
+    if (measure.unit !== 'min' && measure.unit !== 'km') {
       otherMeasures.push({ date, ...measure });
-    } else if (day) {
-      if (measure.unit === 'min') day.minutes = (day.minutes ?? 0) + measure.value;
-      if (measure.unit === 'km') day.distance = (day.distance ?? 0) + measure.value;
-      const key = JSON.stringify([
-        measure.category,
-        measure.unit,
-        measure.waterGroup,
-        measure.lessonGroup,
-      ]);
-      const category = categories.get(key);
-      if (category) category.value += measure.value;
-      else categories.set(key, { ...measure });
+      continue;
     }
-    const week = weeks.get(monday(date));
-    if (!week || measure.unit !== 'min') continue;
-    week.minutes = (week.minutes ?? 0) + measure.value;
-    if (measure.waterGroup === 'water') week.water = (week.water ?? 0) + measure.value;
+    const key = JSON.stringify([
+      measure.category,
+      measure.unit,
+      measure.waterGroup,
+      measure.lessonGroup,
+    ]);
+    const category = categories.get(key);
+    if (category) category.value += measure.value;
+    else categories.set(key, { ...measure });
+
+    const bucket = buckets.get(period === 'year' ? `${date.slice(0, 7)}-01` : date)!;
+    if (measure.unit === 'km') {
+      bucket.distance = (bucket.distance ?? 0) + measure.value;
+      continue;
+    }
+    bucket.minutes = (bucket.minutes ?? 0) + measure.value;
+    if (measure.waterGroup === 'water') bucket.water = (bucket.water ?? 0) + measure.value;
     // 激流训练采用原表 AF 列三项口径，仅作为报表派生值。
     if (measure.waterGroup === 'water' && slalomCategories.has(measure.category))
-      week.slalomProxy = (week.slalomProxy ?? 0) + measure.value;
-    if (measure.category === '大力量') week.maxStrength = (week.maxStrength ?? 0) + measure.value;
-    if (measure.category === '耐力') week.endurance = (week.endurance ?? 0) + measure.value;
-    if (measure.category === '爆发力') week.explosive = (week.explosive ?? 0) + measure.value;
+      bucket.slalomProxy = (bucket.slalomProxy ?? 0) + measure.value;
+    if (measure.category === '大力量')
+      bucket.maxStrength = (bucket.maxStrength ?? 0) + measure.value;
+    if (measure.category === '耐力') bucket.endurance = (bucket.endurance ?? 0) + measure.value;
+    if (measure.category === '爆发力') bucket.explosive = (bucket.explosive ?? 0) + measure.value;
     if (['功能训练', '核心力量'].includes(measure.category))
-      week.functionalCore = (week.functionalCore ?? 0) + measure.value;
+      bucket.functionalCore = (bucket.functionalCore ?? 0) + measure.value;
   }
   return {
-    weekStart,
-    weekEnd,
-    weekYear,
-    daily: days,
+    start,
+    end: addDays(next, -1),
+    anchorDate: selectedDate,
+    buckets: [...buckets.values()],
     categories: [...categories.values()],
     otherMeasures,
-    weekly: [...weeks.values()],
   };
 }

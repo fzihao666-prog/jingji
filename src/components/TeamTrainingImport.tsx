@@ -22,7 +22,7 @@ export function TeamTrainingImport({
   teams: ProjectTeam[];
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
-  onView: (id: number) => void;
+  onView: (id: number, date: string | null) => void;
 }) {
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [pendingFile, setPendingFile] = useState<File>();
@@ -184,7 +184,7 @@ export function TeamTrainingImport({
             新增 {receipt.created} 项，更新 {receipt.updated} 项，相同值 {receipt.unchanged}{' '}
             项。忽略 {receipt.undatedRows} 行无日期数据。
           </p>
-          <button type="button" className="secondary-button" onClick={() => onView(team.id)}>
+          <button type="button" className="secondary-button" onClick={() => onView(team.id, receipt.latestDate)}>
             查看队伍训练统计
           </button>
         </div>

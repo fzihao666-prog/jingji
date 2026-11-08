@@ -48,49 +48,127 @@
   overflow-wrap: anywhere;
 }
 
-.team-training-page section[aria-label] {
+.team-training-module {
   margin-block: 24px;
+  padding-block-start: 20px;
+  border-block-start: 1px solid var(--line);
+  scroll-margin-block-start: 24px;
+}
+
+.team-training-module h2 small {
+  display: inline-block;
+  margin-inline-start: 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.team-training-periods {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.team-training-periods legend {
+  margin-block-end: 6px;
+}
+
+.team-training-periods label {
+  position: relative;
+  cursor: pointer;
+}
+
+.team-training-periods label input {
+  position: absolute;
+  width: 1px;
+  min-height: 0;
+  height: 1px;
+  opacity: 0;
+}
+
+.team-training-periods label span {
+  display: grid;
+  min-width: 44px;
+  min-height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.team-training-periods input:checked + span {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.team-training-periods input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.team-training-range {
+  margin-block: 12px 16px;
+  color: var(--muted);
 }
 
 .team-training-chart-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  align-items: start;
   gap: 16px;
 }
 
-.team-training-chart {
+.team-training-chart,
+.team-training-other {
   min-width: 0;
 }
 
-.team-training-chart h3 {
-  margin-block: 0 8px;
+.team-training-other {
+  grid-column: 1 / -1;
 }
 
 .team-training-table {
-  margin-block: 14px;
-  overflow: auto;
+  margin-block-start: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .team-training-table summary {
+  padding: 10px 12px;
+  color: var(--ink);
   cursor: pointer;
+}
+
+.team-training-table-scroll {
+  max-height: 288px;
+  overflow: auto;
 }
 
 .team-training-table table {
   width: 100%;
-  margin-block: 12px;
   border-collapse: collapse;
   background: var(--paper);
-}
-
-.team-training-table caption {
-  text-align: start;
-  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .team-training-table th,
 .team-training-table td {
   padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
+  border-block-end: 1px solid var(--line);
   text-align: start;
+}
+
+.team-training-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+}
+
+.team-training-table :is(th, td):not(:first-child) {
+  text-align: end;
   white-space: nowrap;
 }

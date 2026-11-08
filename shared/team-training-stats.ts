@@ -16,6 +16,7 @@ export type TeamTrainingImportResult =
       updated: number;
       unchanged: number;
       undatedRows: number;
+      latestDate: string | null;
     };
 
 export type TeamTrainingMeasure = {
@@ -26,9 +27,11 @@ export type TeamTrainingMeasure = {
   lessonGroup: TeamTrainingLessonGroup | null;
 };
 
-export type TeamTrainingDay = { date: string; minutes: number | null; distance: number | null };
-export type TeamTrainingWeek = {
+export const TEAM_TRAINING_PERIODS = ['week', 'month', 'year'] as const;
+export type TeamTrainingPeriod = (typeof TEAM_TRAINING_PERIODS)[number];
+export type TeamTrainingBucket = {
   start: string;
+  distance: number | null;
   minutes: number | null;
   water: number | null;
   slalomProxy: number | null;
@@ -38,11 +41,10 @@ export type TeamTrainingWeek = {
   functionalCore: number | null;
 };
 export type TeamTrainingStatistics = {
-  weekStart: string;
-  weekEnd: string;
-  weekYear: number;
-  daily: TeamTrainingDay[];
+  start: string;
+  end: string;
+  anchorDate: string;
+  buckets: TeamTrainingBucket[];
   categories: TeamTrainingMeasure[];
   otherMeasures: (TeamTrainingMeasure & { date: string })[];
-  weekly: TeamTrainingWeek[];
 };

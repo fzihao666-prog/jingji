@@ -1,7 +1,7 @@
 import { specialWeeklyOption } from '../components/special-weekly-option';
 import './SpecialTrainingPage.css';
 import { Activity } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { api } from '../api';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
@@ -24,7 +24,12 @@ import {
 import type { Project } from '../types';
 import { formatNumber } from '../utils';
 
+const TeamTrainingStats = lazy(() => import('../components/TeamTrainingStats').then(
+  ({ TeamTrainingStats }) => ({ default: TeamTrainingStats })
+));
+
 type Props = {
+  teamTraining?: { teamId: number | null; date?: string; focus: boolean; onImport: () => void };
   teamId?: number | null;
   onPlanOpen: () => void;
   project: Project;
@@ -38,7 +43,7 @@ const empty = (title: string) => (
   <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
 );
 
-export function SpecialTrainingDashboard({ project, from, to, teamId = null, onPlanOpen }: Props) {
+export function SpecialTrainingDashboard({ project, from, to, teamId = null, onPlanOpen, teamTraining: teamTrainingStats }: Props) {
   const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(
     null
   );
@@ -244,6 +249,18 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, onP
             </ChartCard>
           </>
         )
+      )}
+      {teamTrainingStats && (
+        <Suspense fallback={<ContentState kind="loading" title="正在打开队伍训练统计" />}>
+          <TeamTrainingStats
+            key={`${project}:${teamTrainingStats.teamId}:${teamTrainingStats.date ?? ''}`}
+            project={project}
+            teamId={teamTrainingStats.teamId}
+            initialDate={teamTrainingStats.date}
+            focusOnOpen={teamTrainingStats.focus && Boolean(current)}
+            onImport={teamTrainingStats.onImport}
+          />
+        </Suspense>
       )}
       {projectCapability(project) && <SpecialChampionModel key={project} project={project} />}
     </PageContainer>

@@ -37,9 +37,11 @@ beforeAll(async () => {
     INSERT INTO user_project_permissions VALUES
       (9701,'ROWING',9701,CURRENT_TIMESTAMP),(9701,'CYCLING_ROAD',9701,CURRENT_TIMESTAMP);
     INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES
-      (9701,'ROWING','合成一队',9701),(9701,'CYCLING_ROAD','合成公路队',9701);
+      (9701,'ROWING','合成一队',9701),(9701,'CYCLING_ROAD','合成公路队',9701),
+      (9701,'CYCLING_ROAD','合成周期队',9701);
     INSERT INTO project_teams(id,project,name) VALUES
-      (9701,'ROWING','合成一队'),(9702,'ROWING','合成二队'),(9703,'CYCLING_ROAD','合成公路队');
+      (9701,'ROWING','合成一队'),(9702,'ROWING','合成二队'),
+      (9703,'CYCLING_ROAD','合成公路队'),(9704,'CYCLING_ROAD','合成周期队');
   `);
   const { registerTeamTrainingStatisticsRoutes } = await import('./team-training-routes.ts');
   const app = express();
@@ -135,6 +137,7 @@ it('保存带日期的原始分项，忽略无日期和公式，重传更新非�
     updated: 0,
     unchanged: 0,
     undatedRows: 1,
+    latestDate: date,
   });
   expect(await (await upload(original)).json()).toMatchObject({
     created: 0,
@@ -149,11 +152,11 @@ it('保存带日期的原始分项，忽略无日期和公式，重传更新非�
   expect(response.status).toBe(200);
   const stats = (await response.json()) as TeamTrainingStatistics;
   expect(stats).toMatchObject({
-    weekStart: date,
-    weekEnd: '2026-01-04',
-    weekYear: 2026,
-    daily: [
-      { date, minutes: 80, distance: 2 },
+    start: date,
+    end: '2026-01-04',
+    anchorDate: '2026-01-01',
+    buckets: [
+      { start: date, minutes: 80, distance: 2 },
       ...Array.from({ length: 6 }, () => ({ minutes: null, distance: null })),
     ],
   });
@@ -165,7 +168,7 @@ it('保存带日期的原始分项，忽略无日期和公式，重传更新非�
     lessonGroup: 'main',
   });
   expect(stats.categories.map((item) => item.category)).not.toContain('测功仪');
-  expect(stats.weekly[0]).toMatchObject({ start: date, water: 0, maxStrength: 20, minutes: 80 });
+  expect(stats.buckets[0]).toMatchObject({ start: date, water: 0, maxStrength: 20, minutes: 80 });
   expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual(before);
 });
 
@@ -205,7 +208,7 @@ it('新列须先映射，映射随同数据事务保存，其他队伍不共用'
   const stats = (await (
     await fetch(`${base}?project=CYCLING_ROAD&teamId=9703`, { headers: auth() })
   ).json()) as TeamTrainingStatistics;
-  expect(stats.daily[0]).toMatchObject({ distance: 20, minutes: null });
+  expect(stats.buckets[0]).toMatchObject({ distance: 20, minutes: null });
   expect(stats.otherMeasures).toContainEqual({
     date,
     category: '轮组重量',
@@ -254,4 +257,75 @@ it('无效日期和重复来源冲突都不写入，数据库写入失败时回�
   }
   expect(counts()).toEqual(before);
   expect(await (await upload(bytes)).json()).toMatchObject({ status: 'mapping_required' });
+});
+
+it('按自然周、月和年取数，年视图按月汇总并保留非加总指标的原值', async () => {
+  const target = { project: 'CYCLING_ROAD', teamId: 9704 };
+  const bytes = workbook('队伍训练统计', [
+    ['日期', '公路骑行（km）', '轮组重量（kg）'],
+    ['2023-12-31', 100, 1.1],
+    ['2024-01-01', 10, 1.2],
+    ['2024-02-28', 0, 1.3],
+    ['2024-02-29', 8, 1.4],
+    ['2024-03-01', 2, 1.5],
+    ['2024-12-31', 5, 1.6],
+    ['2025-01-01', 200, 1.7],
+  ]);
+  const preview = (await (await upload(bytes, target)).json()) as TeamTrainingImportResult;
+  if (preview.status !== 'mapping_required') throw Error('预期收到待映射列');
+  const mappings = Object.fromEntries(
+    preview.columns.map((column) => [
+      column.key,
+      { category: column.unit === 'km' ? '公路骑行' : '轮组重量', unit: column.unit },
+    ])
+  );
+  expect(await (await upload(bytes, target, mappings)).json()).toMatchObject({
+    status: 'imported',
+    latestDate: '2025-01-01',
+  });
+  const get = (query: string) =>
+    fetch(`${base}?project=${target.project}&teamId=${target.teamId}${query}`, { headers: auth() });
+  const monthly = (await (
+    await get('&period=month&date=2024-02-29')
+  ).json()) as TeamTrainingStatistics;
+  expect(monthly).toMatchObject({ start: '2024-02-01', end: '2024-02-29' });
+  expect(monthly.buckets).toHaveLength(29);
+  expect(monthly.buckets.slice(-3)).toMatchObject([
+    { start: '2024-02-27', distance: null },
+    { start: '2024-02-28', distance: 0 },
+    { start: '2024-02-29', distance: 8 },
+  ]);
+  expect(monthly.categories).toMatchObject([{ category: '公路骑行', unit: 'km', value: 8 }]);
+  expect(monthly.otherMeasures.map(({ value }) => value)).toEqual([1.3, 1.4]);
+
+  const annual = (await (
+    await get('&period=year&date=2024-12-31')
+  ).json()) as TeamTrainingStatistics;
+  expect(annual).toMatchObject({ start: '2024-01-01', end: '2024-12-31' });
+  expect(annual.buckets).toHaveLength(12);
+  expect(annual.buckets.map(({ distance }) => distance)).toEqual([
+    10,
+    8,
+    2,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    5,
+  ]);
+  expect(annual.categories).toMatchObject([{ value: 25 }]);
+  expect(annual.otherMeasures.map(({ value }) => value)).toEqual([1.2, 1.3, 1.4, 1.5, 1.6]);
+
+  const latest = (await (await get('')).json()) as TeamTrainingStatistics;
+  expect(latest).toMatchObject({
+    start: '2024-12-30',
+    end: '2025-01-05',
+    anchorDate: '2025-01-01',
+  });
+  expect((await get('&period=quarter')).status).toBe(400);
+  expect((await get('&period=month&date=2025-02-29')).status).toBe(400);
 });

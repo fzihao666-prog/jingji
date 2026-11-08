@@ -76,9 +76,6 @@ const AccountsPage = lazy(() =>
 const RegionAccessPage = lazy(() =>
   import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage }))
 );
-const TeamTrainingStatsPage = lazy(() => import('./pages/TeamTrainingStatsPage').then(module => ({
-  default: module.TeamTrainingStatsPage,
-})));
 const DataImportPage = lazy(() =>
   import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage }))
 );
@@ -119,7 +116,6 @@ const pageKeys: PageKey[] = [
   'ai-management',
   'bluetooth',
   'data-import',
-  'team-training-stats',
   'data-management',
   'reports',
 ];
@@ -128,13 +124,14 @@ function pageFromHash(): PageKey {
   const key =
     window.location.hash.replace(/^#\/?/, '').split('?')[0] ||
     (window.location.pathname === '/training-plans' ? 'training-plans' : '');
+  if (key === 'team-training-stats') return 'special-overview';
   if (key === 'data-import-history') return 'data-import';
   if (key === 'special-schedule' || key === 'strength-plan') return 'training-plans';
   return pageKeys.includes(key as PageKey) ? (key as PageKey) : 'overview';
 }
 
-function writePageHash(page: PageKey) {
-  const nextHash = `#/${page}`;
+function writePageHash(page: PageKey, query = '') {
+  const nextHash = `#/${page}${query}`;
   if (window.location.hash !== nextHash) window.history.pushState(null, '', nextHash);
 }
 
@@ -202,7 +199,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', syncPageFromHash);
   }, []);
 
-  const changePage = (nextPage: PageKey) => {
+  const changePage = (nextPage: PageKey, query?: string) => {
     if (nextPage !== page && importNavigationGuard.current && !importNavigationGuard.current()) return false;
     if (nextPage === 'special-schedule' || nextPage === 'strength-plan') {
       const kind = nextPage === 'special-schedule' ? 'special' : 'physical';
@@ -218,7 +215,7 @@ export default function App() {
       return true;
     }
     setPage(nextPage);
-    writePageHash(nextPage);
+    writePageHash(nextPage, query);
     acceptedHash.current = window.location.hash;
     setRouteHash(window.location.hash);
     return true;
@@ -389,6 +386,14 @@ export default function App() {
       </div>
     );
 
+  const trainingQuery = new URLSearchParams(routeHash.split('?')[1]);
+  const trainingTarget = trainingQuery.get('teamTraining');
+  const importedTeamId = trainingQuery.get('project') === project && trainingTarget
+    ? Number(trainingTarget) || null : null;
+  const focusTrainingStats = trainingTarget !== null || /^#\/?team-training-stats(?:\?|$)/.test(routeHash);
+  const importedDate = trainingQuery.get('date');
+  const canViewTrainingStats = ['SCC', 'REG', 'TD', 'DMD'].includes(user.role);
+
   const shared = {
     teamId,
     records,
@@ -406,6 +411,7 @@ export default function App() {
     onAthleteChange: setAthleteId,
     onProjectChange: (nextProject: Project) => {
       if (nextProject !== project && importNavigationGuard.current && !importNavigationGuard.current()) return;
+      if (nextProject !== project && page === 'special-overview' && focusTrainingStats) changePage(page);
       setProject(nextProject);
       setTeamSelection(null);
       setAthleteId(null);
@@ -431,6 +437,7 @@ export default function App() {
       {usesGlobalTrainingFilter && (
         <div className="global-training-filter">
           <DateToolbar {...shared} presetMode="period" teams={teams} teamError={teamError} onTeamChange={(id) => {
+            if (page === 'special-overview' && focusTrainingStats) changePage(page);
             setTeamSelection(id === null ? null : { project, id });
             setAthleteId(null);
             setRecords([]);
@@ -477,6 +484,13 @@ export default function App() {
             from={from}
             to={to}
             onPlanOpen={() => changePage('special-schedule')}
+            teamTraining={canViewTrainingStats ? {
+              teamId: importedTeamId ?? teamId,
+              date: importedTeamId && importedDate && /^\d{4}-\d{2}-\d{2}$/.test(importedDate)
+                ? importedDate : undefined,
+              focus: focusTrainingStats,
+              onImport: () => changePage('data-import'),
+            } : undefined}
           />
         )}
         {page.startsWith('special-') && page !== 'special-overview' && (
@@ -519,8 +533,10 @@ export default function App() {
           <DataImportPage
             onViewEnode={() => changePage('strength-enode')}
             teamId={teamId}
-            onViewTeamTraining={id => {
-              if (changePage('team-training-stats')) setTeamSelection({ project, id });
+            onViewTeamTraining={(id, date) => {
+              const params = new URLSearchParams({ teamTraining: String(id), project });
+              if (date) params.set('date', date);
+              changePage('special-overview', `?${params}`);
             }}
             onNavigationGuardChange={setImportNavigationGuard}
             user={user}
@@ -528,10 +544,6 @@ export default function App() {
             athletes={projectAthletes}
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
-        )}
-        {page === 'team-training-stats' && user.role !== 'ATL' && (
-          <TeamTrainingStatsPage key={`${project}:${teamId}`} project={project} teamId={teamId}
-            onImport={() => changePage('data-import')} />
         )}
         {page === 'reports' && user.role !== 'ATL' && (
           <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />
