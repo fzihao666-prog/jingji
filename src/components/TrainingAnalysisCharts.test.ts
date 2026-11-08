@@ -2,7 +2,7 @@ import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { OverviewPayload } from '../types';
-const charts = vi.hoisted(() => ({ data: [] as unknown[][] }));
+const charts = vi.hoisted(() => ({ data: [] as unknown[][], axes: [] as unknown[] }));
 vi.mock('recharts', () => {
   const component = ({ children, data }: { children?: ReactNode; data?: unknown[] }) => {
     if (data) charts.data.push(data);
@@ -31,7 +31,15 @@ vi.mock('recharts', () => {
       'PolarGrid',
       'PolarAngleAxis',
       'PolarRadiusAxis',
-    ].map((key) => [key, component])
+    ].map((key) => [
+      key,
+      key === 'XAxis' || key === 'YAxis'
+        ? (props: Parameters<typeof component>[0]) => {
+            charts.axes.push(props);
+            return component(props);
+          }
+        : component,
+    ])
   );
 });
 import {
@@ -46,6 +54,7 @@ import {
 import { TrendChart, TypeDonut } from '../pages/SpecialTestsPage';
 beforeEach(() => {
   charts.data = [];
+  charts.axes = [];
 });
 const summary: OverviewPayload['trainingAnalytics']['summary'] = {
   totalDurationMin: null,
@@ -222,4 +231,47 @@ it('强度空态保留七类图例，缺失显示横线，真实零正常显示'
   const zero = renderToStaticMarkup(createElement(TrainingIntensityChart, { data: [{ zone: 'U3', durationMin: 0, sessionCount: 1, percentage: 0 }] }));
   expect(zero).toContain('0 分');
   expect(zero).toContain('0%');
+});
+
+it('训练时长全缺失时保留数轴，负荷与距离仍保留各自数据', () => {
+  const day: OverviewPayload['trainingAnalytics']['days'][number] = {
+    date: '2026-01-02',
+    specialDistanceKm: 5,
+    specialLoad: 120,
+    physicalLoad: null,
+    specialDurationMin: null,
+    physicalDurationMin: null,
+    averageRpe: null,
+    upperRpe: null,
+    lowerRpe: null,
+    stdRpe: null,
+    rpeCount: 0,
+    morningPulse: null,
+    averageHeartRate: null,
+  };
+  const html = renderToStaticMarkup(createElement(TrainingVolumeDashboard, {
+    data: { summary, days: [day] },
+    physiology: { metrics: [] },
+    from: '2026-01-01',
+    to: '2026-01-03',
+  }));
+  expect(charts.axes).toContainEqual(expect.objectContaining({ domain: [0, 1], allowDataOverflow: true }));
+  expect(charts.data.flat()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ date: day.date, specialDistanceKm: 5, specialDurationMin: null }),
+    expect.objectContaining({ date: day.date, specialLoad: 120 }),
+  ]));
+  expect(html).toContain('暂无训练时长记录');
+  expect(html).toContain('01/03');
+  expect(html).toContain('暂无生理生化数据');
+});
+
+it('团队 FMS 缺测时保留七个动作及 0–3 分坐标', () => {
+  renderToStaticMarkup(createElement(FmsTeamChart, { measurements: [] }));
+  expect(charts.axes).toContainEqual(expect.objectContaining({
+    domain: [0, 3],
+    ticks: [0, 1, 2, 3],
+    allowDataOverflow: true,
+  }));
+  expect(charts.data[0]).toHaveLength(7);
+  expect(charts.data[0][0]).toMatchObject({ name: '深蹲', score: null });
 });

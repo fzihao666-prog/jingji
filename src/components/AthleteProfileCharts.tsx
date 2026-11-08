@@ -152,19 +152,6 @@ export function AthleteProfileOverview({
   const [pinnedTrainingYearsBand, setPinnedTrainingYearsBand] = useState<TrainingYearsBand | null>(
     null
   );
-  if (
-    individual && (!profiles.length ||
-    !profiles.some(
-      (profile) => profile.age !== null || profile.heightCm !== null || profile.weightKg !== null
-    ))
-  ) {
-    return (
-      <ProfileEmpty
-        title={individual ? '暂无档案画像数据' : '暂无队伍身体数据'}
-        detail="完善出生日期和身体测量后自动生成。"
-      />
-    );
-  }
   const age = average(profiles.map((profile) => profile.age));
   const height = average(profiles.map((profile) => profile.heightCm));
   const weight = average(profiles.map((profile) => profile.weightKg));
@@ -182,13 +169,13 @@ export function AthleteProfileOverview({
             label="年龄"
             value={age === null ? '—' : formatNumber(age, 1)}
             unit="岁"
-            note={current.birthDate || '出生日期未录入'}
+            note={current?.birthDate || '出生日期未录入'}
           />
           <ProfileStat
             label="身高"
             value={height === null ? '—' : formatNumber(height, 1)}
             unit="cm"
-            note={current.bodyMeasurementDate || '未测量'}
+            note={current?.bodyMeasurementDate || '未测量'}
           />
           <ProfileStat
             label="体重"
@@ -201,6 +188,9 @@ export function AthleteProfileOverview({
             }
           />
         </div>
+        {age === null && height === null && weight === null && (
+          <p className="app-chart-example-note">暂无档案画像数据</p>
+        )}
       </div>
     );
 
@@ -307,6 +297,7 @@ export function AthleteProfileOverview({
             <span>{scatterData.length} 名有效运动员</span>
           </header>
           <div className="team-profile-chart-canvas">
+            {!scatterData.length && <span className="app-chart-example">暂无完整身高体重记录</span>}
 
             {(
               <ResponsiveContainer width="100%" height="100%">
@@ -415,6 +406,7 @@ export function AthleteProfileOverview({
             <span>按性别分组的人数分布</span>
           </div>
           <div className="team-profile-age-canvas">
+            {!ageBins.length && <span className="app-chart-example">暂无年龄记录</span>}
 
             {(
               <ResponsiveContainer width="100%" height="100%">
@@ -426,7 +418,7 @@ export function AthleteProfileOverview({
                 >
                   <CartesianGrid stroke="#e3ebed" strokeDasharray="3 5" horizontal={false} />
                   <XAxis
-                    allowDataOverflow={!scatterData.length}
+                    allowDataOverflow={!ageBins.length}
                     type="number"
                     domain={[-(maxSideCount || 4), maxSideCount || 4]}
                     tickFormatter={(value) => ageBins.length ? `${Math.abs(Number(value))}` : ''}
@@ -451,7 +443,7 @@ export function AthleteProfileOverview({
                     name="男"
                     fill="#2f7fa3"
                     radius={[3, 0, 0, 3]}
-                    minPointSize={2}
+                    minPointSize={ageBins.length ? 2 : 0}
                   >
                     {ageBins.length > 0 && <LabelList
                       dataKey="male"
@@ -467,7 +459,7 @@ export function AthleteProfileOverview({
                     name="女"
                     fill="#d96e8b"
                     radius={[0, 3, 3, 0]}
-                    minPointSize={2}
+                    minPointSize={ageBins.length ? 2 : 0}
                   >
                     {ageBins.length > 0 && <LabelList
                       dataKey="female"
@@ -1793,15 +1785,6 @@ function ProfileStat({
         <small>{unit}</small>
       </strong>
       <p>{note}</p>
-    </div>
-  );
-}
-
-function ProfileEmpty({ detail, title = '暂无档案画像数据' }: { detail: string; title?: string }) {
-  return (
-    <div className="profile-visual-empty">
-      <strong>{title}</strong>
-      <span>{detail}</span>
     </div>
   );
 }

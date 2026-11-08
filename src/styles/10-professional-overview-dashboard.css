@@ -503,13 +503,13 @@
 
 .team-age-card .team-profile-age-canvas {
   position: relative;
-  min-height: 178px;
+  height: 178px;
   padding: 0 8px;
   flex: 1 1 auto;
 }
 
 .team-competitive-card .team-profile-level-canvas {
-  min-height: 164px;
+  height: 164px;
   padding: 0 8px;
   flex: 1 1 auto;
 }

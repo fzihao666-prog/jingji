@@ -26,6 +26,7 @@ import {
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
 import './EChart.css';
+import { OVERVIEW_METRIC_MAP } from '../../shared/overview-metrics';
 import { STRENGTH_INTENSITY_ZONES } from '../../shared/strength-training';
 
 import { TRAINING_ANALYSIS_PALETTE as colors } from '../../shared/training-chart-colors';
@@ -270,60 +271,66 @@ const physiologyStatusMeta = {
   MISSING: { label: '未监测', color: '#e7edef' },
 } as const;
 
-function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
-  const [active, setActive] = useState<{
-    metricIndex: number;
-    dayIndex: number;
-  } | null>(null);
-  const isPlaceholder = !data.metrics.some((item) => item.days.length > 0);
-  const displayMetrics = data.metrics;
-  const days = displayMetrics[0]?.days || [];
-  const cell = active ? displayMetrics[active.metricIndex]?.days[active.dayIndex] : null;
-  const metric = active ? displayMetrics[active.metricIndex] : null;
+function PhysiologyBiochemistryHeatmap({
+  data,
+  dates,
+}: {
+  data: PhysiologyHeatmap;
+  dates: string[];
+}) {
+  const [active, setActive] = useState<{ metricIndex: number; date: string } | null>(null);
+  const isPlaceholder = !data.metrics.some((item) =>
+    item.days.some((day) => day.status !== 'MISSING')
+  );
+  const displayMetrics = data.metrics.length
+    ? data.metrics
+    : [{ code: 'empty', label: '待监测', days: [] }];
+  const displayDates = dates.length ? dates : ['—'];
+  const metric = active ? data.metrics[active.metricIndex] : null;
+  const cell = metric?.days.find((day) => day.date === active?.date);
   return (
     <div className="physiology-heatmap">
       <div className="physiology-heatmap-toolbar">
         <span>团队状态趋势</span>
       </div>
-      {displayMetrics.length ? (
-        <div
-          className="physiology-heatmap-table"
-          style={{ '--physiology-days': days.length || 7 } as CSSProperties}
-        >
-          <div className="physiology-heatmap-head">
-            <span>指标</span>
-            {!days.length && Array.from({ length: 7 }, (_, index) => <span key={index}>—</span>)}
-            {days.map((day) => (
-              <span key={day.date}>{day.date.slice(5).replace('-', '/')}</span>
-            ))}
-          </div>
-          {displayMetrics.map((item, metricIndex) => (
-            <div className="physiology-heatmap-row" key={item.code}>
-              <span>{item.label}</span>
-              {!item.days.length && Array.from({ length: 7 }, (_, index) => <span key={index} className="physiology-cell missing"><i /></span>)}
-              {item.days.map((itemDay, dayIndex) => (
-                <button
-                  key={itemDay.date}
-                  type="button"
-                  className={`physiology-cell ${itemDay.status.toLowerCase()}`}
-                  aria-label={`${item.label} ${itemDay.date} ${physiologyStatusMeta[itemDay.status].label}`}
-                  onMouseEnter={() => setActive({ metricIndex, dayIndex })}
-                  onFocus={() => setActive({ metricIndex, dayIndex })}
-                  onClick={() => setActive({ metricIndex, dayIndex })}
-                >
-                  <i />
-                </button>
-              ))}
-            </div>
+      <div
+        className="physiology-heatmap-table"
+        style={{ '--physiology-days': displayDates.length } as CSSProperties}
+        aria-label="生理生化监测网格"
+      >
+        <div className="physiology-heatmap-head">
+          <span>指标</span>
+          {displayDates.map((date) => (
+            <span key={date}>{date === '—' ? date : date.slice(5).replace('-', '/')}</span>
           ))}
         </div>
-      ) : (
-        <div className="physiology-heatmap-table" style={{ '--physiology-days': 7 } as CSSProperties} aria-label="生理生化监测网格，暂无数据">
-          <div className="physiology-heatmap-head"><span>指标</span>{Array.from({ length: 7 }, (_, index) => <span key={index}>—</span>)}</div>
-          <div className="physiology-heatmap-row"><span>待监测</span>{Array.from({ length: 7 }, (_, index) => <span key={index} className="physiology-cell missing"><i /></span>)}</div>
-          <TrainingAnalyticsEmpty text="暂无生理生化数据" />
-        </div>
-      )}
+        {displayMetrics.map((item, metricIndex) => {
+          const daysByDate = new Map(item.days.map((day) => [day.date, day]));
+          return (
+            <div className="physiology-heatmap-row" key={item.code}>
+              <span>{item.label}</span>
+              {displayDates.map((date) => {
+                const day = daysByDate.get(date);
+                return day ? (
+                  <button
+                    key={date}
+                    type="button"
+                    className={`physiology-cell ${day.status.toLowerCase()}`}
+                    aria-label={`${item.label} ${date} ${physiologyStatusMeta[day.status].label}`}
+                    onMouseEnter={() => setActive({ metricIndex, date })}
+                    onFocus={() => setActive({ metricIndex, date })}
+                    onClick={() => setActive({ metricIndex, date })}
+                  >
+                    <i />
+                  </button>
+                ) : (
+                  <span key={date} className="physiology-cell missing" aria-label="未监测"><i /></span>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
       <div className="physiology-heatmap-legend">
         {Object.entries(physiologyStatusMeta)
           .slice(0, 4)
@@ -340,9 +347,11 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
             {metric.label} · {cell.date}
           </strong>
           <span>
-            {cell.isEstimated
-              ? 'V1 模拟状态（等待实测导入）'
-              : `团队中位数：${formatNumber(cell.median || 0, 1)} ${metric.unit}`}{' '}
+            {cell.status === 'MISSING'
+              ? '未监测'
+              : cell.isEstimated
+                ? 'V1 模拟状态（等待实测导入）'
+                : `团队中位数：${cell.median === null ? '—' : `${formatNumber(cell.median, 1)} ${metric.unit}`}`}{' '}
             · 监测人数：{cell.sampleCount} 人
           </span>
           <span>
@@ -354,7 +363,7 @@ function PhysiologyBiochemistryHeatmap({ data }: { data: PhysiologyHeatmap }) {
           </span>
         </div>
       )}
-      {isPlaceholder && <p className="app-chart-example-note">暂无真实生理生化数据</p>}
+      {isPlaceholder && <p className="app-chart-example-note">暂无生理生化数据</p>}
     </div>
   );
 }
@@ -388,10 +397,6 @@ export function TrainingVolumeDashboard({
       physicalLoad: row?.physicalLoad ?? null,
     });
   }
-  const hasVolumeData = days.some((row) =>
-    row.physicalDurationMin !== null || row.specialDurationMin !== null ||
-    row.specialDistanceKm !== null || row.physicalLoad !== null || row.specialLoad !== null
-  );
   const volumeChartDays = trainingLoadDays.map(({ date }) => ({
     date,
     physicalDurationMin: loadByDate.get(date)?.physicalDurationMin ?? null,
@@ -399,6 +404,14 @@ export function TrainingVolumeDashboard({
     specialDistanceKm: loadByDate.get(date)?.specialDistanceKm ?? null,
   }));
   const displayVolumeDays = volumeChartDays;
+  const hasVolumeData = displayVolumeDays.some(
+    (row) => row.physicalDurationMin !== null || row.specialDurationMin !== null
+  );
+  const hasVisibleVolumeData = displayVolumeDays.some(
+    (row) =>
+      (!hiddenVolumeSeries.physical && row.physicalDurationMin !== null) ||
+      (!hiddenVolumeSeries.special && row.specialDurationMin !== null)
+  );
   const hasTrainingLoad = trainingLoadDays.some((row) => row.specialLoad !== null || row.physicalLoad !== null);
   const trainingLoadChartDays = trainingLoadDays;
   const rpeByDate = new Map(days.map((row) => [row.date, row]));
@@ -510,7 +523,11 @@ export function TrainingVolumeDashboard({
             </button>
           </div>
           <div className="training-analytics-canvas">
-            {!hasVolumeData && <p className="analysis-empty-note">暂无当前周期真实数据</p>}
+            {!hasVisibleVolumeData && (
+              <p className="analysis-empty-note">
+                {hasVolumeData ? '当前显示的训练类型暂无时长数据' : '暂无训练时长记录'}
+              </p>
+            )}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={displayVolumeDays} accessibilityLayer
                 margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
@@ -518,7 +535,7 @@ export function TrainingVolumeDashboard({
                 <XAxis dataKey="date" minTickGap={24}
                   tickFormatter={(date) => String(date).slice(5).replace('-', '/')}
                   tick={{ fontSize: 11, fill: '#52636a' }} axisLine={false} tickLine={false} />
-                <YAxis allowDataOverflow={!hasVolumeData} domain={[0, hasVolumeData ? 'auto' : 1]}
+                <YAxis allowDataOverflow={!hasVisibleVolumeData} domain={[0, hasVisibleVolumeData ? 'auto' : 1]}
                   tick={{ fontSize: 11, fill: '#52636a' }} axisLine={false} tickLine={false} />
                 <Tooltip content={({ active, label }) => {
                   const row = displayVolumeDays.find((item) => item.date === String(label));
@@ -653,7 +670,10 @@ export function TrainingVolumeDashboard({
             </div>
             <small>团队风险状态热力图</small>
           </header>
-          <PhysiologyBiochemistryHeatmap data={physiology} />
+          <PhysiologyBiochemistryHeatmap
+            data={physiology}
+            dates={trainingLoadDays.map(({ date }) => date)}
+          />
         </article>
         <article className="training-analytics-chart training-analytics-rpe">
           <header>
@@ -771,6 +791,8 @@ export function TrainingContentChart({ records, project }: { records: TrainingRe
             <PieChart>
               <Pie
                 data={[{ value: 1 }]}
+                tooltipType="none"
+                isAnimationActive={false}
                 dataKey="value"
                 innerRadius={56}
                 outerRadius={82}
@@ -1033,7 +1055,7 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
     const row = measurements.find((item) => item.code === key);
     const score = row?.value ?? null;
     return {
-      name: row?.label || key,
+      name: row?.label || OVERVIEW_METRIC_MAP[key].label,
       score,
       sampleCount: row?.sampleCount || 0,
     };
@@ -1072,6 +1094,7 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
               <XAxis
                 type="number"
                 domain={[0, 3]}
+                allowDataOverflow
                 ticks={[0, 1, 2, 3]}
                 tick={{ fontSize: 9 }}
                 axisLine={false}
@@ -1091,7 +1114,7 @@ export function FmsTeamChart({ measurements }: { measurements: OverviewMeasureme
                   name,
                 ]}
               />
-              {!isPlaceholder && <ReferenceLine x={2} stroke="#d89222" strokeWidth={1.6} strokeDasharray="4 3" />}
+              <ReferenceLine x={2} stroke="#d89222" strokeWidth={1.6} strokeDasharray="4 3" />
               <Bar dataKey="score" name="本次队均" fill="#178e87" radius={[0, 5, 5, 0]}>
                 {chartData.map((row) => (
                   <Cell
@@ -1333,6 +1356,8 @@ export function InjuryAssessmentChart({
             <PieChart>
               <Pie
                 data={[{ value: 1 }]}
+                tooltipType="none"
+                isAnimationActive={false}
                 dataKey="value"
                 innerRadius={56}
                 outerRadius={82}

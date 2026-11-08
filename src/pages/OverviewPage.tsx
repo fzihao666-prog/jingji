@@ -198,10 +198,8 @@ export function OverviewPage(props: Props) {
     };
   }, [analysisRecords]);
   const scopeAthleteCount =
-    overview?.meta.athleteCount ||
-    new Set(analysisRecords.map((record) => record.athleteId)).size ||
-    props.athletes.length ||
-    1;
+    overview?.meta.athleteCount ??
+    (new Set(analysisRecords.map((record) => record.athleteId)).size || props.athletes.length);
   const injurySummary = useMemo(() => {
     const injuries = overview?.injuries || [];
     const counts = { healthy: 0, observation: 0, restricted: 0, rehab: 0, suspended: 0 };
