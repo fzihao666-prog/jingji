@@ -16,7 +16,7 @@ export function PageContainer({
 
 type PageHeaderProps = ClassNameProps & {
   title: ReactNode;
-  eyebrow: ReactNode;
+  eyebrow?: ReactNode;
   supportingContent?: ReactNode;
   actions?: ReactNode;
   variant?: 'default' | 'compact' | 'dashboard';
@@ -41,7 +41,7 @@ export function PageHeader({
       className={`page-heading app-page-header app-page-header-${variant} ${className}`.trim()}
     >
       <div className="app-page-header-copy">
-        <span className="app-page-header-eyebrow">{eyebrow}</span>
+        {eyebrow != null && <span className="app-page-header-eyebrow">{eyebrow}</span>}
         <h1 ref={headingRef} tabIndex={-1}>
           {title}
         </h1>

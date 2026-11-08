@@ -495,13 +495,10 @@ export function TrainingVolumeDashboard({
       <section className="training-analytics-grid" aria-label="训练量统计分析图表">
         <article className="training-analytics-chart training-analytics-volume-comparison">
           <header>
-            <div>
-              <span>TRAINING DURATION</span>
-              <h3>体能与专项训练量对比</h3>
-            </div>
-            <small>训练时长 · 分钟 · 按日</small>
+            <h3>体能与专项训练时长</h3>
+            <small>每日 · 分钟</small>
           </header>
-          <p className="analysis-caption">比较每日体能与专项训练时长；缺失留空，已记录的 0 保留为 0。</p>
+          <p className="analysis-caption">缺失记录留空，已记录的 0 保留为 0</p>
           <div className="training-volume-legend" role="group" aria-label="训练类型图例">
             <button type="button" aria-pressed={!hiddenVolumeSeries.physical}
               onClick={() => setHiddenVolumeSeries((current) => ({ ...current, physical: !current.physical }))}>
@@ -516,13 +513,13 @@ export function TrainingVolumeDashboard({
             {!hasVolumeData && <p className="analysis-empty-note">暂无当前周期真实数据</p>}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={displayVolumeDays} accessibilityLayer
-                margin={{ top: 12, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+                margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#e0e7e8" vertical={false} />
                 <XAxis dataKey="date" minTickGap={24}
                   tickFormatter={(date) => String(date).slice(5).replace('-', '/')}
-                  tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
-                <YAxis allowDataOverflow={!hasVolumeData} unit=" min" domain={[0, hasVolumeData ? 'auto' : 1]}
-                  tick={{ fontSize: 9, fill: '#62767d' }} axisLine={false} tickLine={false} />
+                  tick={{ fontSize: 11, fill: '#52636a' }} axisLine={false} tickLine={false} />
+                <YAxis allowDataOverflow={!hasVolumeData} domain={[0, hasVolumeData ? 'auto' : 1]}
+                  tick={{ fontSize: 11, fill: '#52636a' }} axisLine={false} tickLine={false} />
                 <Tooltip content={({ active, label }) => {
                   const row = displayVolumeDays.find((item) => item.date === String(label));
                   if (!active || !row) return null;
@@ -533,10 +530,10 @@ export function TrainingVolumeDashboard({
                     {row.specialDistanceKm !== null && <p>专项距离：{value(row.specialDistanceKm)} km</p>}
                   </div>;
                 }} />
-                <Bar dataKey="physicalDurationMin" name="体能训练" fill="#64aeb3"
-                  hide={hiddenVolumeSeries.physical} radius={[4, 4, 0, 0]} maxBarSize={28} />
-                <Bar dataKey="specialDurationMin" name="专项训练" fill="#178e87"
-                  hide={hiddenVolumeSeries.special} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                <Bar dataKey="physicalDurationMin" name="体能训练" fill="var(--volume-physical)"
+                  hide={hiddenVolumeSeries.physical} radius={[2, 2, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+                <Bar dataKey="specialDurationMin" name="专项训练" fill="var(--volume-special)"
+                  hide={hiddenVolumeSeries.special} radius={[2, 2, 0, 0]} maxBarSize={28} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>

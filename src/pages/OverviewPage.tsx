@@ -1,13 +1,3 @@
-import {
-  AlarmClock,
-  ArrowRight,
-  BarChart3,
-  Dumbbell,
-  Gauge,
-  HeartPulse,
-  Layers3,
-  UsersRound,
-} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../api';
@@ -266,19 +256,16 @@ export function OverviewPage(props: Props) {
   const cards: Record<string, ReactNode> = {
     duration: (
       <Metric
-        icon={<AlarmClock />}
         label="训练时长"
         value={
           displayTrainingDuration === null ? '—' : formatNumber(displayTrainingDuration / 60, 1)
         }
         unit={displayTrainingDuration === null ? '' : '小时'}
         note={`体能 ${displayPhysicalDuration === null ? '—' : formatNumber(displayPhysicalDuration / 60, 1)}h · 专项 ${displaySpecialDuration === null ? '—' : formatNumber(displaySpecialDuration / 60, 1)}h`}
-        tone="navy"
       />
     ),
     distance: (
       <Metric
-        icon={<Gauge />}
         label="疲劳指数"
         value={fatigueSummary.average === null ? '—' : formatNumber(fatigueSummary.average, 1)}
         unit={fatigueSummary.average === null ? '' : '分'}
@@ -287,44 +274,36 @@ export function OverviewPage(props: Props) {
             ? '暂无疲劳记录'
             : `有效 ${fatigueSummary.validDays}人日 · 偏高 ${fatigueSummary.highDays}人日`
         }
-        tone="teal"
       />
     ),
     srpe: (
       <Metric
-        icon={<Gauge />}
         label="平均负荷"
         value={formatNumber(perAthlete(summary.totalSrpe))}
         unit="AU"
         note={`体能 ${formatNumber(perAthlete(trainingLoadBreakdown.physical))}AU · 专项 ${formatNumber(perAthlete(trainingLoadBreakdown.special))}AU`}
-        tone="orange"
       />
     ),
     rpe: (
       <Metric
-        icon={<UsersRound />}
         label={isIndividualOverview ? '当前运动员' : '运动员总数'}
         value={formatNumber(scopeAthleteCount)}
         unit="人"
         note={
           isIndividualOverview ? '个人视图 · 本人数据' : `${projectLabel(props.project)} · 权限范围内全部运动员`
         }
-        tone="blue"
       />
     ),
     'acute-load': (
       <Metric
-        icon={<BarChart3 />}
         label="训练负荷"
         value={formatNumber(trainingLoad)}
         unit="AU"
         note={`体能 ${formatNumber(trainingLoadBreakdown.physical)}AU · 专项 ${formatNumber(trainingLoadBreakdown.special)}AU`}
-        tone="purple"
       />
     ),
     'recovery-time': (
       <Metric
-        icon={<HeartPulse />}
         label="损伤情况"
         value={formatNumber(injurySummary.active)}
         unit="人"
@@ -333,7 +312,6 @@ export function OverviewPage(props: Props) {
             ? `观察 ${injurySummary.observation}人 · 受限/康复/停训 ${injurySummary.limited}人`
             : '当前无活动性损伤'
         }
-        tone="green"
       />
     ),
     'athlete-profile': (
@@ -494,34 +472,13 @@ export function OverviewPage(props: Props) {
       <PageHeader
         variant="dashboard"
         className="overview-page-heading"
-        eyebrow="TRAINING OVERVIEW"
         title={
           isSelfOverview ? '我的训练总览' : isIndividualOverview ? '运动员训练总览' : '训练总览'
         }
         supportingContent={
-          <div
-            className="overview-principle"
-            role="note"
-            aria-label="有训练就要有数据，有数据就要有统计，有统计就要有分析，有分析就要对标对表"
-          >
-            <div className="overview-principle-flow" aria-hidden="true">
-              <span>
-                有训练就要有<strong>数据</strong>
-              </span>
-              <ArrowRight />
-              <span>
-                有数据就要有<strong>统计</strong>
-              </span>
-              <ArrowRight />
-              <span>
-                有统计就要有<strong>分析</strong>
-              </span>
-              <ArrowRight />
-              <span>
-                有分析就要<strong>对标对表</strong>
-              </span>
-            </div>
-          </div>
+          <p className="overview-principle">
+            记录训练数据，汇总统计、分析表现并对标
+          </p>
         }
       />
       {props.loading || (overviewLoading && !overview) ? (
@@ -557,32 +514,24 @@ function PanelHeading({
 }
 
 function Metric({
-  icon,
   label,
   value,
   unit,
   note,
-  tone,
 }: {
-  icon: ReactNode;
   label: string;
   value: string;
   unit: string;
   note: string;
-  tone: string;
 }) {
   return (
-    <article className={`metric-card tone-${tone}`}>
-      <div className="metric-icon">{icon}</div>
-      <div className="metric-copy">
-        <span>{label}</span>
-        <strong>
-          {value}
-          <small>{unit}</small>
-        </strong>
-        <p>{note}</p>
-      </div>
-      <div className="metric-waterline" aria-hidden="true" />
+    <article className="overview-metric">
+      <span>{label}</span>
+      <strong>
+        {value}
+        {unit && <small>{unit}</small>}
+      </strong>
+      <p>{note}</p>
     </article>
   );
 }

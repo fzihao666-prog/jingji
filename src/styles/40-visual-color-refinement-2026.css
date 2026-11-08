@@ -212,7 +212,6 @@
     opacity: 0.58;
   }
 
-  .overview-card-shell.card-size-metric:hover .metric-card,
   .metric-card:hover {
     filter: saturate(1.06) brightness(1.015);
   }
