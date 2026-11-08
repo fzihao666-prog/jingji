@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
-import { Upload } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
 import { api } from '../api';
 import type { Project, ProjectTeam } from '../types';
+import { projectCapability } from '../../shared/projects';
 import type {
   TeamTrainingColumnMapping,
   TeamTrainingImportResult,
@@ -36,6 +37,9 @@ export function TeamTrainingImport({
   const fileInput = useRef<HTMLInputElement>(null);
   const targetId = teamId ?? selectedTeam ?? (teams.length === 1 ? teams[0].id : null);
   const team = teams.find((item) => item.id === targetId);
+  const templateName = projectCapability(project)
+    ? '竞迹队伍训练统计模板（水上）.xlsx'
+    : '竞迹队伍训练统计模板（通用）.xlsx';
 
   async function upload(file: File, choices: Record<string, TeamTrainingColumnMapping> = {}) {
     if (!team || pending.current) return;
@@ -113,6 +117,14 @@ export function TeamTrainingImport({
           <Upload size={16} aria-hidden="true" />
           {busy ? '正在导入…' : '上传队伍训练 Excel'}
         </button>
+        <a
+          className="secondary-button"
+          href={`${import.meta.env.BASE_URL}templates/${encodeURIComponent(templateName)}`}
+          download={templateName}
+        >
+          <Download size={16} aria-hidden="true" />
+          下载模板
+        </a>
         <input
           ref={fileInput}
           type="file"

@@ -1026,7 +1026,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
           </section>
           <section className="data-import-upload-card data-import-device-card" aria-label="队伍训练统计导入">
             <div className="data-import-card-heading">
-              <div><strong>队伍训练统计</strong><span>读取每日训练分项，导入后可查看周统计和年度趋势。</span></div>
+              <div><strong>队伍训练统计</strong><span>下载模板填写每日训练分项，导入后可按周、月、年查看统计。</span></div>
             </div>
             <TeamTrainingImport key={`${project}:${teamId}`} project={project} teamId={teamId}
               teams={templateTeamsProject === project ? teams : []} disabled={Boolean(busy) || enodeBusy}
