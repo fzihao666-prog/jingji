@@ -1,0 +1,96 @@
+.team-training-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-block: 12px;
+}
+
+.team-training-controls label,
+.team-training-mappings label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.team-training-controls input,
+.team-training-controls select,
+.team-training-mappings input {
+  min-height: 42px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}
+
+.team-training-controls p,
+.team-training-chart p,
+.team-training-mappings p {
+  color: var(--muted);
+}
+
+.team-training-mappings fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+  margin-block: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.team-training-mappings legend {
+  overflow-wrap: anywhere;
+}
+
+.team-training-page section[aria-label] {
+  margin-block: 24px;
+}
+
+.team-training-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
+}
+
+.team-training-chart {
+  min-width: 0;
+}
+
+.team-training-chart h3 {
+  margin-block: 0 8px;
+}
+
+.team-training-table {
+  margin-block: 14px;
+  overflow: auto;
+}
+
+.team-training-table summary {
+  cursor: pointer;
+}
+
+.team-training-table table {
+  width: 100%;
+  margin-block: 12px;
+  border-collapse: collapse;
+  background: var(--paper);
+}
+
+.team-training-table caption {
+  text-align: start;
+  font-weight: 700;
+}
+
+.team-training-table th,
+.team-training-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+  white-space: nowrap;
+}

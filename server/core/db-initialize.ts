@@ -1,3 +1,4 @@
+import { initializeTeamTrainingStatistics } from '../team-training/team-training-stats.ts';
 import { initializeEnodeDatabase } from '../enode/enode.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
 import { COMPACT_ATHLETE_COLUMNS } from '../../shared/compact-athlete-template.ts';
@@ -6027,6 +6028,7 @@ export function initializeDatabase(
     db.exec('COMMIT');
   } catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
   initializeEnodeDatabase(db);
+  initializeTeamTrainingStatistics(db);
   return { upsertAthleteOrigin };
 
 }

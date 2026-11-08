@@ -1,3 +1,4 @@
+import { TeamTrainingImport } from '../components/TeamTrainingImport';
 import { EnodeImport } from '../components/EnodeImport';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics';
 import { isImportException, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
@@ -56,6 +57,8 @@ type Props = {
   athletes: Athlete[];
   onChanged: () => void;
   onViewEnode: () => void;
+  teamId: number | null;
+  onViewTeamTraining: (teamId: number) => void;
   onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
 };
 
@@ -117,7 +120,7 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode }: Props) {
+export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode, teamId, onViewTeamTraining }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
   const reviewScrollRef = useRef<HTMLDivElement>(null);
@@ -127,6 +130,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   const [metrics, setMetrics] = useState<Array<{ code: string; label: string; unit: string }>>([]);
   const [mobileIndex, setMobileIndex] = useState(0);
   const [isCompact, setIsCompact] = useState(() => window.matchMedia('(max-width: 720px)').matches);
+  const [teamTrainingBusy, setTeamTrainingBusy] = useState(false);
   const [enodeBusy, setEnodeBusy] = useState(false);
   const navigationState = useRef({ unsaved: false, busy: false });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -556,7 +560,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   }, [corrections, athleteCorrections.size, batch]);
 
   const hasUnsavedChanges = corrections.size > 0 || athleteCorrections.size > 0 || pendingSelections.size > 0;
-  navigationState.current = { unsaved: hasUnsavedChanges, busy: enodeBusy || Boolean(busy) || savingReviewGroups.size > 0 };
+  navigationState.current = { unsaved: hasUnsavedChanges, busy: enodeBusy || teamTrainingBusy || Boolean(busy) || savingReviewGroups.size > 0 };
   useEffect(() => {
     onNavigationGuardChange?.(() => {
       if (navigationState.current.busy) {
@@ -579,11 +583,11 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   }, [positionKey, project, batch, filter, query, page, reviewGroupPage]);
   useEffect(() => { setMobileIndex(0); }, [filter, query, page]);
   useEffect(() => {
-    if (!hasUnsavedChanges && !enodeBusy) return;
+    if (!hasUnsavedChanges && !enodeBusy && !teamTrainingBusy) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [hasUnsavedChanges, enodeBusy]);
+  }, [hasUnsavedChanges, enodeBusy, teamTrainingBusy]);
 
   useEffect(() => {
     if (!message || error) return;
@@ -1002,7 +1006,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             />
             <button
               className="data-import-primary"
-              disabled={!file || Boolean(busy)}
+              disabled={!file || Boolean(busy) || teamTrainingBusy || enodeBusy}
               onClick={() => void analyze()}
             >
               {busy === 'analyze' ? (
@@ -1018,7 +1022,15 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             <div className="data-import-card-heading">
               <div><strong>Enode 设备导入</strong><span>支持动作测量、每日状态和训练 RPE</span></div>
             </div>
-            <EnodeImport key={project} project={project} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy)} onView={onViewEnode} />
+            <EnodeImport key={project} project={project} onChanged={onChanged} onBusyChange={setEnodeBusy} disabled={Boolean(busy) || teamTrainingBusy} onView={onViewEnode} />
+          </section>
+          <section className="data-import-upload-card data-import-device-card" aria-label="队伍训练统计导入">
+            <div className="data-import-card-heading">
+              <div><strong>队伍训练统计</strong><span>读取每日训练分项，导入后可查看周统计和年度趋势。</span></div>
+            </div>
+            <TeamTrainingImport key={`${project}:${teamId}`} project={project} teamId={teamId}
+              teams={templateTeamsProject === project ? teams : []} disabled={Boolean(busy) || enodeBusy}
+              onBusyChange={setTeamTrainingBusy} onView={onViewTeamTraining} />
           </section>
         </div>
 

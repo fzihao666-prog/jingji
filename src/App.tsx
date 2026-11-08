@@ -76,6 +76,9 @@ const AccountsPage = lazy(() =>
 const RegionAccessPage = lazy(() =>
   import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage }))
 );
+const TeamTrainingStatsPage = lazy(() => import('./pages/TeamTrainingStatsPage').then(module => ({
+  default: module.TeamTrainingStatsPage,
+})));
 const DataImportPage = lazy(() =>
   import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage }))
 );
@@ -116,6 +119,7 @@ const pageKeys: PageKey[] = [
   'ai-management',
   'bluetooth',
   'data-import',
+  'team-training-stats',
   'data-management',
   'reports',
 ];
@@ -199,7 +203,7 @@ export default function App() {
   }, []);
 
   const changePage = (nextPage: PageKey) => {
-    if (nextPage !== page && importNavigationGuard.current && !importNavigationGuard.current()) return;
+    if (nextPage !== page && importNavigationGuard.current && !importNavigationGuard.current()) return false;
     if (nextPage === 'special-schedule' || nextPage === 'strength-plan') {
       const kind = nextPage === 'special-schedule' ? 'special' : 'physical';
       const source =
@@ -211,12 +215,13 @@ export default function App() {
       window.location.hash = `/training-plans?type=${kind}&source=${source}`;
       acceptedHash.current = window.location.hash;
       setPage('training-plans');
-      return;
+      return true;
     }
     setPage(nextPage);
     writePageHash(nextPage);
     acceptedHash.current = window.location.hash;
     setRouteHash(window.location.hash);
+    return true;
   };
 
   useEffect(() => {
@@ -513,12 +518,20 @@ export default function App() {
         {page === 'data-import' && user.role !== 'ATL' && (
           <DataImportPage
             onViewEnode={() => changePage('strength-enode')}
+            teamId={teamId}
+            onViewTeamTraining={id => {
+              if (changePage('team-training-stats')) setTeamSelection({ project, id });
+            }}
             onNavigationGuardChange={setImportNavigationGuard}
             user={user}
             project={project}
             athletes={projectAthletes}
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
+        )}
+        {page === 'team-training-stats' && user.role !== 'ATL' && (
+          <TeamTrainingStatsPage key={`${project}:${teamId}`} project={project} teamId={teamId}
+            onImport={() => changePage('data-import')} />
         )}
         {page === 'reports' && user.role !== 'ATL' && (
           <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />

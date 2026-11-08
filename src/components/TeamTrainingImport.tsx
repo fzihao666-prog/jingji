@@ -1,0 +1,194 @@
+import { useRef, useState } from 'react';
+import { Upload } from 'lucide-react';
+import { api } from '../api';
+import type { Project, ProjectTeam } from '../types';
+import type {
+  TeamTrainingColumnMapping,
+  TeamTrainingImportResult,
+  TeamTrainingUnknownColumn,
+} from '../../shared/team-training-stats';
+import './TeamTrainingStats.css';
+
+export function TeamTrainingImport({
+  project,
+  teamId,
+  teams,
+  disabled,
+  onBusyChange,
+  onView,
+}: {
+  project: Project;
+  teamId: number | null;
+  teams: ProjectTeam[];
+  disabled: boolean;
+  onBusyChange: (busy: boolean) => void;
+  onView: (id: number) => void;
+}) {
+  const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
+  const [pendingFile, setPendingFile] = useState<File>();
+  const [columns, setColumns] = useState<TeamTrainingUnknownColumn[]>([]);
+  const [mappings, setMappings] = useState<Record<string, TeamTrainingColumnMapping>>({});
+  const [receipt, setReceipt] =
+    useState<Extract<TeamTrainingImportResult, { status: 'imported' }>>();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const targetId = teamId ?? selectedTeam ?? (teams.length === 1 ? teams[0].id : null);
+  const team = teams.find((item) => item.id === targetId);
+
+  async function upload(file: File, choices: Record<string, TeamTrainingColumnMapping> = {}) {
+    if (!team || pending.current) return;
+    pending.current = true;
+    setError('');
+    setBusy(true);
+    onBusyChange(true);
+    setReceipt(undefined);
+    try {
+      const result = await api.importTeamTrainingStats(file, project, team.id, choices);
+      if (result.status === 'mapping_required') {
+        setPendingFile(file);
+        setColumns(result.columns);
+        setMappings(
+          Object.fromEntries(
+            result.columns.map((column) => [
+              column.key,
+              {
+                category: column.unit
+                  ? column.label.slice(0, -column.unit.length - 3)
+                  : column.label,
+                unit: column.unit,
+              },
+            ])
+          )
+        );
+      } else {
+        setPendingFile(undefined);
+        setColumns([]);
+        setReceipt(result);
+      }
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '队伍训练数据导入失败。');
+    } finally {
+      pending.current = false;
+      setBusy(false);
+      onBusyChange(false);
+    }
+  }
+
+  return (
+    <div className="team-training-import" aria-busy={busy}>
+      <div className="team-training-controls">
+        {teamId === null ? (
+          <label>
+            <span>导入队伍</span>
+            <select
+              value={team?.id ?? ''}
+              disabled={busy || disabled}
+              onChange={(event) => {
+                setSelectedTeam(Number(event.target.value) || null);
+                setColumns([]);
+                setPendingFile(undefined);
+                setReceipt(undefined);
+                setError('');
+              }}
+            >
+              <option value="">请选择队伍</option>
+              {teams.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span>导入队伍：{team?.name ?? '当前队伍不可用'}</span>
+        )}
+        <button
+          type="button"
+          className="primary-button"
+          disabled={busy || disabled || !team}
+          onClick={() => fileInput.current?.click()}
+        >
+          <Upload size={16} aria-hidden="true" />
+          {busy ? '正在导入…' : '上传队伍训练 Excel'}
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          hidden
+          accept=".xls,.xlsx"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            setColumns([]);
+            setPendingFile(undefined);
+            void upload(file);
+          }}
+        />
+      </div>
+      {error && <p role="alert">{error}</p>}
+      {!!columns.length && pendingFile && (
+        <form
+          className="team-training-mappings"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void upload(pendingFile, mappings);
+          }}
+        >
+          <h3>匹配新列</h3>
+          <p>为新列填写分项名称和原单位。本次保存后，本队再次上传同名列会自动识别。</p>
+          {columns.map((column) => (
+            <fieldset key={column.key} disabled={busy || disabled}>
+              <legend>{column.label}</legend>
+              <label>
+                <span>分项名称</span>
+                <input
+                  required
+                  maxLength={80}
+                  value={mappings[column.key]?.category ?? ''}
+                  onChange={(event) =>
+                    setMappings((current) => ({
+                      ...current,
+                      [column.key]: { ...current[column.key], category: event.target.value },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>单位</span>
+                <input
+                  required
+                  maxLength={20}
+                  readOnly={Boolean(column.unit)}
+                  value={mappings[column.key]?.unit ?? ''}
+                  onChange={(event) =>
+                    setMappings((current) => ({
+                      ...current,
+                      [column.key]: { ...current[column.key], unit: event.target.value },
+                    }))
+                  }
+                />
+              </label>
+            </fieldset>
+          ))}
+          <button type="submit" className="primary-button" disabled={busy || disabled}>
+            保存映射并导入
+          </button>
+        </form>
+      )}
+      {receipt && team && (
+        <div className="team-training-controls">
+          <p role="status">
+            新增 {receipt.created} 项，更新 {receipt.updated} 项，相同值 {receipt.unchanged}{' '}
+            项。忽略 {receipt.undatedRows} 行无日期数据。
+          </p>
+          <button type="button" className="secondary-button" onClick={() => onView(team.id)}>
+            查看队伍训练统计
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

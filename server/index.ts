@@ -1,3 +1,4 @@
+import { registerTeamTrainingStatisticsRoutes } from './team-training/team-training-routes.ts';
 import { registerAiManagementRoutes } from './core/ai-management-routes.ts';
 import { AiGuardError, initializeAiLedger } from './core/ai-usage.ts';
 import { registerEnodeRoutes } from './enode/enode-routes.ts';
@@ -130,6 +131,7 @@ registerTrainingPlanRoutes(app);
 registerStrengthTrainingRoutes(app);
 registerEnodeRoutes(app);
 registerDataImportRoutes(app);
+registerTeamTrainingStatisticsRoutes(app);
 registerSpecialTrainingRoutes(app);
 registerAccessRoutes(app);
 registerAnalysisRoutes(app);

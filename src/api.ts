@@ -1,3 +1,4 @@
+import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingStatistics } from '../shared/team-training-stats';
 import type { AiManagementData, AiSettings } from '../shared/ai-management';
 import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
 import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
@@ -194,6 +195,19 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
+  async importTeamTrainingStats(file: File, project: Project, teamId: number, mappings: Record<string, TeamTrainingColumnMapping>) {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('project', project);
+    body.append('teamId', String(teamId));
+    body.append('mappings', JSON.stringify(mappings));
+    return request<TeamTrainingImportResult>('/api/team-training-stats/import', { method: 'POST', body });
+  },
+  teamTrainingStats(project: Project, teamId: number, date?: string, signal?: AbortSignal) {
+    const params = new URLSearchParams({ project, teamId: String(teamId) });
+    if (date) params.set('date', date);
+    return request<TeamTrainingStatistics>(`/api/team-training-stats?${params}`, { signal });
+  },
   previewEnode(files: File[], project: Project) {
     const body = new FormData();
     files.forEach(file => body.append('files', file));
