@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const importer = require('../../services/data-import');
+const { sportRules = {} } = require('../../data/register-data');
 const { projectOptions } = require('../../utils/project-label');
 const { PAGE_SIZE, reviewPeople, reviewIssues, issuePreview, sourceFields } = require('./review');
 
@@ -15,6 +16,11 @@ const importModes = [
   { id: 'team', label: '队伍训练' },
   { id: 'enode', label: 'Enode VBT' }
 ];
+
+const mappingGroups = {
+  lessonGroup: ['', 'main', 'auxiliary'],
+  waterGroup: ['', 'water', 'land']
+};
 
 const blankReview = {
   excel: null, people: [], peopleMore: false, issues: [], issuesMore: false, editor: null,
@@ -51,7 +57,7 @@ function ask(title, content) {
 
 Page({
   data: {
-    ...blankReview, receipts: { ...blankReview.receipts }, templates, importModes, activeImport: 'excel', allowed: false, project: '', projects: [], projectIndex: 0,
+    ...blankReview, waterMapping: false, receipts: { ...blankReview.receipts }, templates, importModes, activeImport: 'excel', allowed: false, project: '', projects: [], projectIndex: 0,
     teams: [], teamIndex: -1, busy: '', error: ''
   },
 
@@ -108,7 +114,7 @@ Page({
     this._batch = this._teamFile = this._enodeFiles = this._enodePreview = null;
     this._enodeChoices = new Map();
     this.setData({
-      ...blankReview, receipts: { ...blankReview.receipts }, project, projectIndex: index, teams, teamIndex: teams.length === 1 ? 0 : -1, error: ''
+      ...blankReview, waterMapping: ((sportRules[project] || {}).activities || []).includes('on_water'), receipts: { ...blankReview.receipts }, project, projectIndex: index, teams, teamIndex: teams.length === 1 ? 0 : -1, error: ''
     });
   },
 
@@ -284,10 +290,19 @@ Page({
     this.setData({ [`mappings[${index}].${field}`]: event.detail.value });
   },
 
+  changeMappingGroup(event) {
+    const { index, field } = event.currentTarget.dataset;
+    this.setData({ [`mappings[${index}].${field}Index`]: Number(event.detail.value) });
+  },
+
   saveMappings() {
     const { teams, teamIndex, mappings } = this.data;
     const choices = Object.fromEntries(mappings.map((entry) => [
-      entry.key, { category: entry.category.trim(), unit: entry.unit.trim() }
+      entry.key, {
+        category: entry.category.trim(), unit: entry.unit.trim(),
+        ...(entry.lessonGroupIndex ? { lessonGroup: mappingGroups.lessonGroup[entry.lessonGroupIndex] } : {}),
+        ...(entry.waterGroupIndex ? { waterGroup: mappingGroups.waterGroup[entry.waterGroupIndex] } : {})
+      }
     ]));
     if (Object.values(choices).some(({ category, unit }) => !category || !unit)) {
       this.showError('请填写分项名称和单位。');
@@ -301,8 +316,9 @@ Page({
     const result = await importer.teamExcel(this._teamFile, this.data.project, teamId, mappings);
     if (this._closed) return;
     if (result.status === 'mapping_required') {
-      this.setData({ mappings: result.columns.map(({ key, label, unit }) => ({
-        key, label, unit, fixedUnit: !!unit, category: unit ? label.slice(0, -unit.length - 3) : label
+      this.setData({ mappings: result.columns.map(({ key, label, unit, category }) => ({
+        key, label, unit, fixedUnit: !!unit, category: category ?? (unit ? label.slice(0, -unit.length - 3) : label),
+        lessonGroupIndex: 0, waterGroupIndex: 0
       })) });
       return;
     }

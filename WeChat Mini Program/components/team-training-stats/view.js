@@ -2,31 +2,18 @@ const { shortDate } = require('../../utils/date');
 const { number } = require('../../utils/format');
 
 const display = (value) => value == null ? '—' : number(value, 2);
+const ratioColor = (name) => name === '未分类' ? '#737e88' : name === '主课' || name === '水上' ? '#176f7f' : '#be7329';
+const dateLabel = (date, year) => year ? `${Number(date.slice(5, 7))}月` : shortDate(date);
 
-const SPECIAL_METRICS = [
-  ['water', '水上时长'],
-  ['slalomProxy', '激流训练口径', '无氧能力、无氧功率与测功仪时长合计'],
-  ['maxStrength', '大力量时长'],
-  ['endurance', '力量耐力时长'],
-  ['explosive', '爆发力时长'],
-  ['functionalCore', '功能与核心训练时长']
-];
-
-function sum(values) {
-  const valid = values.filter(Number.isFinite);
-  return valid.length ? valid.reduce((total, value) => total + value, 0) : null;
-}
-
-function trend(title, unit, rows, field, monthly, note = '') {
-  const max = Math.max(0, ...rows.map((row) => row[field] || 0));
+function volume(stats, metric, title, unit, year) {
+  const max = Math.max(0, ...stats.buckets.map((bucket) => bucket[metric] || 0));
   return {
-    title, unit, note, monthly,
-    hasValues: rows.some((row) => Number.isFinite(row[field])),
-    points: rows.map((row) => {
-      const value = row[field];
-      const date = monthly ? row.start.slice(0, 7) : row.start;
+    title, unit, total: display(stats.totals[metric]), hasValues: stats.totals[metric] !== null,
+    points: stats.buckets.map((bucket) => {
+      const value = bucket[metric];
       return {
-        date, label: monthly ? `${Number(date.slice(5))}月` : shortDate(date),
+        date: year ? bucket.start.slice(0, 7) : bucket.start,
+        label: dateLabel(bucket.start, year),
         value: display(value), missing: value == null, zero: value === 0,
         height: value > 0 ? Math.max(2, value / max * 100) : 0
       };
@@ -34,70 +21,55 @@ function trend(title, unit, rows, field, monthly, note = '') {
   };
 }
 
-function composition(title, unit, rows) {
-  const total = sum(rows.map((row) => row.value));
-  return {
-    title, unit, hasShare: total > 0,
-    rows: rows.map(({ name, value }) => ({
-      name, value: display(value), share: total > 0 ? `${display(value / total * 100)}%` : '—',
-      width: total > 0 ? value / total * 100 : 0
-    }))
-  };
-}
-
-function breakdown(categories, property, labels, title) {
-  const groups = labels.map(([key, name]) => ({
-    name, value: sum(categories.filter((row) => row[property] === key).map((row) => row.value))
-  })).filter((row) => row.value !== null);
-  return composition(title, 'min', groups);
-}
-
-function buildView(stats, period, water) {
-  const monthly = period === 'year';
-  const categories = ['min', 'km'].map((unit) => {
-    const totals = new Map();
-    for (const row of stats.categories) {
-      if (row.unit === unit) totals.set(row.category, (totals.get(row.category) || 0) + row.value);
+function ratio(title, groups) {
+  let offset = 0;
+  const slices = [];
+  const rows = groups.map(({ name, value, percentage }) => {
+    const color = ratioColor(name);
+    if (percentage > 0) {
+      slices.push(`${color} ${offset}% ${offset + percentage}%`);
+      offset += percentage;
     }
-    return composition(unit === 'min' ? '训练时长分项' : '训练距离分项', unit,
-      [...totals].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value));
-  }).filter(({ rows }) => rows.length);
-  const waterGroups = water ? [
-    breakdown(stats.categories.filter(({ unit }) => unit === 'min'), 'waterGroup',
-      [['water', '水上'], ['land', '陆上'], [null, '未分类']], '水上与陆上时长'),
-    breakdown(stats.categories.filter(({ unit }) => unit === 'min'), 'lessonGroup',
-      [['main', '主课'], ['auxiliary', '辅课'], [null, '未分类']], '主课与辅课时长')
-  ].filter(({ rows }) => rows.length) : [];
+    return { name, value: display(value), color, share: percentage === null ? '—' : `${display(percentage)}%` };
+  });
+  return { title, rows, background: slices.length ? `conic-gradient(${slices.join(',')})` : '' };
+}
+
+function buildView(stats, period) {
+  const ratios = [ratio('主辅训练比例', stats.lessonRatio)];
+  if (stats.waterProject) ratios.push(ratio('水陆训练比例', stats.waterRatio));
   return {
-    start: stats.start, end: stats.end, hasData: !!(stats.categories.length || stats.otherMeasures.length),
-    minutes: display(sum(stats.buckets.map(({ minutes }) => minutes))),
-    distance: display(sum(stats.buckets.map(({ distance }) => distance))),
-    trends: [
-      trend('训练时长趋势', 'min', stats.buckets, 'minutes', monthly),
-      trend('训练距离趋势', 'km', stats.buckets, 'distance', monthly)
-    ].filter(({ hasValues }) => hasValues),
-    categories, waterGroups,
-    annual: monthly && water ? SPECIAL_METRICS.map(([key, title]) => ({ key, title })) : []
+    start: stats.start, end: stats.end, hasData: stats.details.length > 0,
+    volumes: [
+      volume(stats, 'minutes', '训练时长', 'min', period === 'year'),
+      volume(stats, 'distance', '训练距离', 'km', period === 'year'),
+    ],
+    ratios,
+    timeAnalysis: stats.timeAnalysis.map(({ title, points }) => {
+      const max = Math.max(0, ...points.map(({ value }) => value));
+      return { title, points: points.map(({ name, value }) => ({ name, value: display(value), width: max ? value / max * 100 : 0 })) };
+    }),
+    hasTotals: stats.details.some(({ total }) => total !== null),
+    hasRaw: stats.details.some(({ total }) => total === null),
   };
 }
 
-function annualTrend(stats, index) {
-  const [key, title, note] = SPECIAL_METRICS[index];
-  return trend(title, 'min', stats.buckets, key, true, note);
+function buildDetails(stats, period, raw, page) {
+  const rows = stats.details.filter(({ total }) => (total === null) === raw);
+  const dates = raw
+    ? [...new Set(rows.flatMap(({ values }) => Object.keys(values)))].sort()
+    : stats.buckets.map(({ start }) => start);
+  const year = period === 'year' && !raw;
+  const size = year ? 12 : 7;
+  const visible = dates.slice(page * size, (page + 1) * size);
+  return {
+    columns: visible.map((date) => ({ date, label: dateLabel(date, year) })),
+    datesCount: dates.length, pageCount: Math.ceil(dates.length / size),
+    rows: rows.map(({ category, unit, total, values }) => ({
+      key: JSON.stringify([category, unit]), name: `${category} · ${unit}`,
+      total: display(total), cells: visible.map((date) => ({ date, text: display(values[date]) })),
+    })),
+  };
 }
 
-function rawMetrics(rows) {
-  const grouped = new Map();
-  for (const row of rows) {
-    const key = JSON.stringify([row.category, row.unit]);
-    if (!grouped.has(key)) grouped.set(key, { title: row.category, unit: row.unit, rows: [] });
-    grouped.get(key).rows.push({ start: row.date, value: row.value });
-  }
-  return [...grouped.values()];
-}
-
-function rawTrend(metric, page, size) {
-  return trend(metric.title, metric.unit, metric.rows.slice(page * size, (page + 1) * size), 'value', false);
-}
-
-module.exports = { buildView, annualTrend, rawMetrics, rawTrend };
+module.exports = { buildView, buildDetails };

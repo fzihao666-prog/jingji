@@ -121,6 +121,14 @@
             <view wx:if="{{item.fixedUnit}}">{{item.unit}}</view>
             <input wx:else class="input" aria-label="单位" value="{{item.unit}}" placeholder="如 min 或 km" disabled="{{!!busy}}" maxlength="20"
               data-index="{{index}}" data-field="unit" bindinput="changeMapping" />
+            <picker range="{{['自动判断', '主课', '辅课']}}" value="{{item.lessonGroupIndex}}" disabled="{{!!busy}}"
+              data-index="{{index}}" data-field="lessonGroup" bindchange="changeMappingGroup">
+              <view class="import-picker"><text class="import-picker-label">主辅分组（选填） · {{['自动判断', '主课', '辅课'][item.lessonGroupIndex]}}</text><text class="import-picker-arrow" aria-hidden="true">›</text></view>
+            </picker>
+            <picker wx:if="{{waterMapping}}" range="{{['自动判断', '水上', '陆上']}}" value="{{item.waterGroupIndex}}" disabled="{{!!busy}}"
+              data-index="{{index}}" data-field="waterGroup" bindchange="changeMappingGroup">
+              <view class="import-picker"><text class="import-picker-label">水陆分组（选填） · {{['自动判断', '水上', '陆上'][item.waterGroupIndex]}}</text><text class="import-picker-arrow" aria-hidden="true">›</text></view>
+            </picker>
           </view>
           <button class="primary-button" disabled="{{!!busy}}" bindtap="saveMappings">保存映射并导入</button>
         </block>
@@ -158,7 +166,7 @@
       <view id="import-receipt" wx:if="{{receipts[activeImport]}}" class="card import-card" aria-live="polite">
         <view class="card-head-title">导入结果</view>
         <view>{{receipts[activeImport]}}</view>
-        <button wx:if="{{activeImport === 'team' && teamStatsTarget}}" class="secondary-button" disabled="{{!!busy}}" bindtap="openTeamStats">查看队伍训练统计</button>
+        <button wx:if="{{activeImport === 'team' && teamStatsTarget}}" class="secondary-button" disabled="{{!!busy}}" bindtap="openTeamStats">查看周训练数据看板</button>
         <view wx:if="{{activeImport === 'enode'}}" wx:for="{{enodeResults}}" wx:key="index" class="import-item">
           <view class="import-filename">{{item.filename}}</view>
           <view>新增 {{item.inserted}} · 重复跳过 {{item.skipped}} · 失败 {{item.failed}}</view>

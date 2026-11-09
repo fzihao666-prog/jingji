@@ -20,6 +20,7 @@ function setup(role = 'SCC') {
   };
   const mocks = {
     '../../services/api': { currentProject: async () => ({ project: 'ROWING', projects: ['ROWING', 'CYCLING_ROAD'] }) },
+    '../../data/register-data': { sportRules: { ROWING: { activities: ['on_water'] } } },
     '../../services/data-import': importer, '../../utils/project-label': {
       projectOptions: (codes) => codes.map((code) => ({ code, label: code }))
     }, './review': review.exports
@@ -102,8 +103,9 @@ it('队伍新列保存映射前不产生成功回执，重用原文件和队伍'
   await page.uploadTeam();
   expect(page.data.receipts.team).toBe('');
   expect(page.data.mappings[0]).toMatchObject({ fixedUnit: true, category: '骑行' });
+  page.changeMappingGroup(event({ index: 0, field: 'lessonGroup' }, '2'));
   await page.saveMappings();
-  expect(importer.teamExcel).toHaveBeenLastCalledWith(file, 'ROWING', 1, { ride: { category: '骑行', unit: 'km' } });
+  expect(importer.teamExcel).toHaveBeenLastCalledWith(file, 'ROWING', 1, { ride: { category: '骑行', unit: 'km', lessonGroup: 'auxiliary' } });
   expect(page.data.receipts.team).toContain('跳过无日期 1 行');
   page.openTeamStats();
   expect(wx.switchTab).toHaveBeenCalledWith(expect.objectContaining({ url: '/pages/special/special' }));

@@ -7,7 +7,12 @@ export type TeamTrainingColumnMapping = {
   lessonGroup?: TeamTrainingLessonGroup;
 };
 
-export type TeamTrainingUnknownColumn = { key: string; label: string; unit: string };
+export type TeamTrainingUnknownColumn = {
+  key: string;
+  label: string;
+  category: string;
+  unit: string;
+};
 export type TeamTrainingImportResult =
   | { status: 'mapping_required'; columns: TeamTrainingUnknownColumn[] }
   | {
@@ -47,4 +52,29 @@ export type TeamTrainingStatistics = {
   buckets: TeamTrainingBucket[];
   categories: TeamTrainingMeasure[];
   otherMeasures: (TeamTrainingMeasure & { date: string })[];
+};
+
+export type TeamTrainingBoardPoint = {
+  start: string;
+  minutes: number | null;
+  distance: number | null;
+};
+export type TeamTrainingBoardDetail = {
+  category: string;
+  unit: string;
+  total: number | null;
+  values: Record<string, number>;
+};
+export type TeamTrainingBoardGroup = { name: string; value: number; percentage: number | null };
+export type TeamTrainingBoard = {
+  start: string;
+  end: string;
+  anchorDate: string;
+  waterProject: boolean;
+  totals: { minutes: number | null; distance: number | null };
+  buckets: TeamTrainingBoardPoint[];
+  lessonRatio: TeamTrainingBoardGroup[];
+  waterRatio: TeamTrainingBoardGroup[];
+  timeAnalysis: { title: string; points: { name: string; value: number }[] }[];
+  details: TeamTrainingBoardDetail[];
 };

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { initializeDatabase } from '../core/db-initialize.ts';
 import type {
   TeamTrainingImportResult,
+  TeamTrainingBoard,
   TeamTrainingStatistics,
 } from '../../shared/team-training-stats.ts';
 
@@ -328,4 +329,92 @@ it('按自然周、月和年取数，年视图按月汇总并保留非加总指�
   });
   expect((await get('&period=quarter')).status).toBe(400);
   expect((await get('&period=month&date=2025-02-29')).status).toBe(400);
+});
+
+it('看板复用同一原始事实，补齐分类，保存手选分组并按周期提供可对账明细', async () => {
+  const target = { project: 'CYCLING_ROAD', teamId: 9704 };
+  const bytes = workbook('队伍训练统计', [
+    [
+      '日期',
+      '公路骑行（min）',
+      '恢复训练（min）',
+      '队内自定义（min）',
+      '未知（min）',
+      '看板负重（kg）',
+    ],
+    ['2028-02-01', 30, 10, 10, 10, 2],
+    ['2028-02-29', 0, null, null, null, 3],
+  ]);
+  const preview = (await (await upload(bytes, target)).json()) as TeamTrainingImportResult;
+  if (preview.status !== 'mapping_required') throw Error('预期需要映射');
+  const mappings = Object.fromEntries(
+    preview.columns.map(({ key, category, unit }) => [
+      key,
+      { category, unit, ...(category === '队内自定义' ? { lessonGroup: 'auxiliary' } : {}) },
+    ])
+  );
+  expect((await upload(bytes, target, mappings)).status).toBe(200);
+  expect(await (await upload(bytes, target)).json()).toMatchObject({
+    status: 'imported',
+    unchanged: 7,
+  });
+  const get = async (period: string, date: string) => {
+    const response = await fetch(
+      `${base}?project=CYCLING_ROAD&teamId=9704&view=board&period=${period}&date=${date}`,
+      { headers: auth() }
+    );
+    expect(response.status).toBe(200);
+    return (await response.json()) as TeamTrainingBoard;
+  };
+  const month = await get('month', '2028-02-29');
+  expect(month.buckets).toHaveLength(29);
+  expect(month.totals).toEqual({ minutes: 60, distance: null });
+  expect(month.lessonRatio).toMatchObject([
+    { name: '主课', value: 30, percentage: 50 },
+    { name: '辅课', value: 20 },
+    { name: '未分类', value: 10 },
+  ]);
+  expect(month.waterRatio).toEqual([]);
+  expect(month.details.find(({ category }) => category === '公路骑行')?.values).toEqual({
+    '2028-02-01': 30,
+    '2028-02-29': 0,
+  });
+  const year = await get('year', '2028-02-29');
+  expect(year.buckets).toHaveLength(12);
+  expect(year.details.find(({ category }) => category === '公路骑行')?.values).toEqual({
+    '2028-02-01': 30,
+  });
+  expect(year.details.find(({ category }) => category === '看板负重')).toMatchObject({
+    total: null,
+    values: { '2028-02-01': 2, '2028-02-29': 3 },
+  });
+  const week = await get('week', '2028-02-29');
+  expect(week.lessonRatio).toEqual([{ name: '主课', value: 0, percentage: null }]);
+  expect(
+    (await fetch(`${base}?project=ROWING&teamId=9702&view=board`, { headers: auth() })).status
+  ).toBe(403);
+});
+
+it('旧映射表可以原地升级，重复启动保留既有映射', async () => {
+  const { initializeTeamTrainingStatistics } = await import('./team-training-stats.ts');
+  const legacy = new DatabaseSync(':memory:');
+  try {
+    legacy.exec(`CREATE TABLE team_training_column_mappings (
+      team_id INTEGER, project_code TEXT, source_key TEXT, category TEXT, unit TEXT,
+      PRIMARY KEY(team_id,project_code,source_key));
+      INSERT INTO team_training_column_mappings VALUES (1,'ROWING','source','原分项','min');`);
+    initializeTeamTrainingStatistics(legacy);
+    initializeTeamTrainingStatistics(legacy);
+    expect(
+      legacy
+        .prepare('SELECT category,water_group,lesson_group FROM team_training_column_mappings')
+        .get()
+    ).toEqual({
+      category: '原分项',
+      water_group: null,
+      lesson_group: null,
+    });
+  } finally {
+    legacy.close();
+  }
 });

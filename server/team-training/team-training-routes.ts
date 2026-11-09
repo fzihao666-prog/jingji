@@ -8,7 +8,11 @@ import type { AuthUser } from '../core/shared-server.ts';
 import { dataImportUpload } from '../core/uploads.ts';
 import { dataImportScope } from '../data-import/data-import-access.ts';
 import { normalizeImportFilename } from '../data-import/import-filename.ts';
-import { importTeamTrainingStatistics, readTeamTrainingStatistics } from './team-training-stats.ts';
+import {
+  importTeamTrainingStatistics,
+  readTeamTrainingBoard,
+  readTeamTrainingStatistics,
+} from './team-training-stats.ts';
 import {
   defaultTeamTrainingMapping,
   isTeamTrainingDate,
@@ -28,6 +32,8 @@ const mappingSchema = z
       .object({
         category: z.string().trim().min(1).max(80),
         unit: z.string().trim().min(1).max(20).transform(normalizeTeamTrainingUnit),
+        lessonGroup: z.enum(['main', 'auxiliary']).optional(),
+        waterGroup: z.enum(['water', 'land']).optional(),
       })
       .strict()
   )
@@ -101,6 +107,7 @@ export function registerTeamTrainingStatisticsRoutes(app: Express) {
     const parsed = targetSchema
       .extend({
         date: z.string().length(10).refine(isTeamTrainingDate).optional(),
+        view: z.literal('board').optional(),
         period: z.enum(TEAM_TRAINING_PERIODS).default('week'),
       })
       .strict()
@@ -124,7 +131,8 @@ export function registerTeamTrainingStatisticsRoutes(app: Express) {
           latest?.date ??
             new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
         );
-      return res.json(readTeamTrainingStatistics(db, target, date, target.period));
+      const read = target.view === 'board' ? readTeamTrainingBoard : readTeamTrainingStatistics;
+      return res.json(read(db, target, date, target.period));
     } catch (error) {
       if (error instanceof TeamTrainingAccessError)
         return res.status(403).json({ message: error.message });

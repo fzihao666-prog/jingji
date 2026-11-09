@@ -131,7 +131,7 @@ module.exports = {
     return request(`/api/overview/teams?${query({ project })}`);
   },
   teamTrainingStats(project, teamId, period, date) {
-    return request(`/api/team-training-stats?${query({ project, teamId, period, date })}`);
+    return request(`/api/team-training-stats?${query({ project, teamId, period, date, view: 'board' })}`);
   },
   specialTrainingOverview(from, to, project, teamId, athleteId) {
     return request(`/api/special-training/overview?${query({ from, to, project, teamId: teamId || null, athleteId: athleteId || null })}`);

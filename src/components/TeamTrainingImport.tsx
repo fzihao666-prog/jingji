@@ -25,6 +25,28 @@ export function TeamTrainingImport({
   onBusyChange: (busy: boolean) => void;
   onView: (id: number, date: string | null) => void;
 }) {
+  const groupFields = [
+    {
+      key: 'lessonGroup',
+      label: '主辅分组',
+      choices: [
+        ['main', '主课'],
+        ['auxiliary', '辅课'],
+      ],
+    },
+    ...(projectCapability(project)
+      ? [
+          {
+            key: 'waterGroup',
+            label: '水陆分组',
+            choices: [
+              ['water', '水上'],
+              ['land', '陆上'],
+            ],
+          } as const,
+        ]
+      : []),
+  ] as const;
   const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [pendingFile, setPendingFile] = useState<File>();
   const [columns, setColumns] = useState<TeamTrainingUnknownColumn[]>([]);
@@ -58,9 +80,9 @@ export function TeamTrainingImport({
             result.columns.map((column) => [
               column.key,
               {
-                category: column.unit
-                  ? column.label.slice(0, -column.unit.length - 3)
-                  : column.label,
+                category:
+                  column.category ??
+                  (column.unit ? column.label.slice(0, -column.unit.length - 3) : column.label),
                 unit: column.unit,
               },
             ])
@@ -150,7 +172,7 @@ export function TeamTrainingImport({
           }}
         >
           <h3>匹配新列</h3>
-          <p>为新列填写分项名称和原单位。本次保存后，本队再次上传同名列会自动识别。</p>
+          <p>填写分项名称和原单位。分组选填，保存后本队上传同名列会自动沿用。</p>
           {columns.map((column) => (
             <fieldset key={column.key} disabled={busy || disabled}>
               <legend>{column.label}</legend>
@@ -183,6 +205,28 @@ export function TeamTrainingImport({
                   }
                 />
               </label>
+              {groupFields.map(({ key, label, choices }) => (
+                <label key={key}>
+                  <span>{label}（选填）</span>
+                  <select
+                    value={mappings[column.key]?.[key] ?? ''}
+                    onChange={(event) => {
+                      const choice = choices.find(([value]) => value === event.target.value);
+                      setMappings((current) => ({
+                        ...current,
+                        [column.key]: { ...current[column.key], [key]: choice?.[0] },
+                      }));
+                    }}
+                  >
+                    <option value="">自动判断</option>
+                    {choices.map(([value, name]) => (
+                      <option key={value} value={value}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
             </fieldset>
           ))}
           <button type="submit" className="primary-button" disabled={busy || disabled}>
@@ -196,8 +240,12 @@ export function TeamTrainingImport({
             新增 {receipt.created} 项，更新 {receipt.updated} 项，相同值 {receipt.unchanged}{' '}
             项。忽略 {receipt.undatedRows} 行无日期数据。
           </p>
-          <button type="button" className="secondary-button" onClick={() => onView(team.id, receipt.latestDate)}>
-            查看队伍训练统计
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => onView(team.id, receipt.latestDate)}
+          >
+            查看周训练数据看板
           </button>
         </div>
       )}

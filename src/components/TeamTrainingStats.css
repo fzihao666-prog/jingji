@@ -16,7 +16,8 @@
 
 .team-training-controls input,
 .team-training-controls select,
-.team-training-mappings input {
+.team-training-mappings input,
+.team-training-mappings select {
   min-height: 42px;
   max-width: 100%;
   padding: 8px 10px;
@@ -123,52 +124,107 @@
 }
 
 .team-training-chart,
-.team-training-other {
+.team-training-volume-chart {
   min-width: 0;
 }
 
-.team-training-other {
-  grid-column: 1 / -1;
+.team-training-module .team-training-chart {
+  margin-block-end: 16px;
 }
 
-.team-training-table {
-  margin-block-start: 12px;
+.team-training-volume-chart h4 {
+  margin-block: 0 8px;
+}
+
+.team-training-ratio .app-echart {
+  --chart-height: 205px;
+}
+
+.team-training-ratio-legend,
+.team-training-bars {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-training-ratio-legend li,
+.team-training-bars li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  overflow-wrap: anywhere;
+}
+
+.team-training-ratio-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: 8px;
+  border-radius: 50%;
+}
+
+.team-training-bar-track {
+  grid-column: 1 / -1;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--line);
+}
+
+.team-training-bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+}
+
+.team-training-table-scroll {
+  max-height: 440px;
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
-.team-training-table summary {
-  padding: 10px 12px;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.team-training-table-scroll {
-  max-height: 288px;
-  overflow: auto;
-}
-
-.team-training-table table {
+.team-training-table-scroll table {
   width: 100%;
-  border-collapse: collapse;
-  background: var(--paper);
+  border-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 
-.team-training-table th,
-.team-training-table td {
+.team-training-table-scroll :is(th, td) {
   padding: 8px 12px;
   border-block-end: 1px solid var(--line);
-  text-align: start;
+  text-align: end;
+  white-space: nowrap;
 }
 
-.team-training-table thead th {
+.team-training-table-scroll thead th {
   position: sticky;
   top: 0;
+  z-index: 1;
   background: var(--paper);
 }
 
-.team-training-table :is(th, td):not(:first-child) {
-  text-align: end;
-  white-space: nowrap;
+.team-training-table-scroll tr > th:first-child {
+  position: sticky;
+  left: 0;
+  max-width: 160px;
+  border-inline-end: 1px solid var(--line);
+  background: var(--paper);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.team-training-table-scroll thead th:first-child {
+  z-index: 2;
+}
+
+.team-training-week-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

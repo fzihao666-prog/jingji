@@ -1,4 +1,4 @@
-import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingStatistics } from '../shared/team-training-stats';
+import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
 import type { AiManagementData, AiSettings } from '../shared/ai-management';
 import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
 import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
@@ -204,9 +204,9 @@ export const api = {
     return request<TeamTrainingImportResult>('/api/team-training-stats/import', { method: 'POST', body });
   },
   teamTrainingStats(project: Project, teamId: number, period: TeamTrainingPeriod, date?: string, signal?: AbortSignal) {
-    const params = new URLSearchParams({ project, teamId: String(teamId), period });
+    const params = new URLSearchParams({ project, teamId: String(teamId), period, view: 'board' });
     if (date) params.set('date', date);
-    return request<TeamTrainingStatistics>(`/api/team-training-stats?${params}`, { signal });
+    return request<TeamTrainingBoard>(`/api/team-training-stats?${params}`, { signal });
   },
   previewEnode(files: File[], project: Project) {
     const body = new FormData();

@@ -21,7 +21,7 @@ function stats(days = 7, options = {}) {
     minutes: null, distance: null,
   }));
   return { start: buckets[0].start, end: buckets.at(-1).start, anchorDate: buckets.at(-1).start,
-    buckets, categories: [], otherMeasures: [], ...options };
+    buckets, totals: { minutes: null, distance: null }, lessonRatio: [], waterRatio: [], timeAnalysis: [], details: [], ...options };
 }
 
 function setup() {
@@ -63,14 +63,21 @@ it('闰年 2 月保留完整日期桶，缺失和零值分别展示', () => {
   const source = stats(29);
   source.buckets[0].minutes = 0;
   source.buckets[28].minutes = 60;
-  source.categories = [{ category: '耐力', unit: 'min', value: 60, waterGroup: 'land', lessonGroup: 'auxiliary' }];
-  const result = view.buildView(source, 'month', true);
-  expect(result.trends[0].points).toHaveLength(29);
-  expect(result.trends[0].points[0]).toMatchObject({ value: '0', zero: true, missing: false });
-  expect(result.trends[0].points[1]).toMatchObject({ value: '—', zero: false, missing: true });
-  expect(result.minutes).toBe('60');
-  expect(result.distance).toBe('—');
-  expect(result.waterGroups.map(({ rows }) => rows[0].name)).toEqual(['陆上', '辅课']);
+  source.totals.minutes = 60;
+  source.details = [{ category: '耐力', unit: 'min', total: 60, values: { '2024-02-01': 0, '2024-02-29': 60 } }];
+  source.waterProject = true;
+  source.lessonRatio = [{ name: '辅课', value: 60, percentage: 100 }];
+  source.waterRatio = [{ name: '陆上', value: 60, percentage: 100 }];
+  const result = view.buildView(source, 'month');
+  expect(result.volumes[0].points).toHaveLength(29);
+  expect(result.volumes[0].points[0]).toMatchObject({ value: '0', zero: true, missing: false });
+  expect(result.volumes[0].points[1]).toMatchObject({ value: '—', zero: false, missing: true });
+  expect(result.volumes.map(({ total }) => total)).toEqual(['60', '—']);
+  expect(result.ratios.map(({ rows }) => rows[0].name)).toEqual(['辅课', '陆上']);
+  const detail = view.buildDetails(source, 'month', false, 0);
+  expect(detail.pageCount).toBe(5);
+  expect(detail.rows[0].cells.slice(0, 2).map(({ text }) => text)).toEqual(['0', '—']);
+  expect(view.buildDetails(source, 'month', false, 4).rows[0].cells[0].text).toBe('60');
 });
 
 it('仅有原始单位也可显示，年度总量和其他单位原值分别处理', () => {
@@ -78,16 +85,13 @@ it('仅有原始单位也可显示，年度总量和其他单位原值分别处�
     buckets: Array.from({ length: 12 }, (_, index) => ({
       start: `2024-${String(index + 1).padStart(2, '0')}-01`, minutes: null, distance: null, water: index === 0 ? 0 : null,
     })),
-    otherMeasures: [
-      { category: '负重', unit: 'kg', date: '2024-02-01', value: 20 },
-      { category: '负重', unit: 'kg', date: '2024-02-02', value: 15 },
-    ],
+    details: [{ category: '负重', unit: 'kg', total: null, values: { '2024-02-01': 20, '2024-02-02': 15 } }],
   });
-  const result = view.buildView(source, 'year', true);
+  const result = view.buildView(source, 'year');
   expect(result.hasData).toBe(true);
-  expect(result.trends).toHaveLength(0);
-  expect(view.annualTrend(source, 0).points).toHaveLength(12);
-  expect(view.rawTrend(view.rawMetrics(source.otherMeasures)[0], 0, 31).points.map(({ value }) => value)).toEqual(['20', '15']);
+  expect(result.hasTotals).toBe(false);
+  expect(result.volumes[0].points).toHaveLength(12);
+  expect(view.buildDetails(source, 'year', true, 0).rows[0].cells.map(({ text }) => text)).toEqual(['20', '15']);
 });
 
 it('切换项目时旧响应不能覆盖新结果，越范围的导入队伍不发统计请求', async () => {
