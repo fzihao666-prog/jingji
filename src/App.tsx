@@ -418,6 +418,7 @@ export default function App() {
       void api.saveCurrentProject(nextProject).catch(() => undefined);
     },
   };
+  const isTrainingDashboard = page === 'special-overview' || page === 'strength-overview';
   const usesGlobalTrainingFilter =
     page === 'overview' ||
     page === 'physiology-biochemistry' ||
@@ -435,7 +436,9 @@ export default function App() {
     >
       {globalError && <div className="global-error">{globalError}</div>}
       {usesGlobalTrainingFilter && (
-        <div className="global-training-filter">
+        <div
+          className={`global-training-filter${isTrainingDashboard ? ' global-training-filter-in-flow' : ''}`}
+        >
           <DateToolbar {...shared} presetMode="period" teams={teams} teamError={teamError} onTeamChange={(id) => {
             if (page === 'special-overview' && focusTrainingStats) changePage(page);
             setTeamSelection(id === null ? null : { project, id });

@@ -692,8 +692,8 @@
 }
 
 
-/* 计划入口放在标题区第二行，避开顶部全局日期筛选器。 */
+/* 页头空间不足时，操作区和其中的按钮都允许换行。 */
+.training-plan-entry-heading,
 .training-plan-entry-heading .app-page-header-actions {
-  grid-column: 1 / -1;
-  justify-self: end;
+  flex-wrap: wrap;
 }
