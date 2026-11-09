@@ -104,7 +104,7 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, fil
     <PageContainer className="professional-overview training-dashboard-page special-dashboard-page">
       <PageHeader
         variant="dashboard"
-        className="overview-page-heading training-plan-entry-heading"
+        className="overview-page-heading"
         title="专项训练"
         filters={filters}
         filterActions={

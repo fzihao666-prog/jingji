@@ -39,6 +39,7 @@ import {
 } from '../overview-analytics';
 
 type Props = {
+  filters?: ReactNode;
   teamId?: number | null;
   records: TrainingRecord[];
   athletes: Athlete[];
@@ -471,6 +472,7 @@ export function OverviewPage(props: Props) {
       <PageHeader
         variant="dashboard"
         className="overview-page-heading"
+        filters={props.filters}
         title={
           isSelfOverview ? '我的训练总览' : isIndividualOverview ? '运动员训练总览' : '训练总览'
         }

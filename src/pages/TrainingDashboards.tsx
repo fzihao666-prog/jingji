@@ -576,7 +576,7 @@ export function StrengthTrainingDashboard({
     <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
       <PageHeader
         variant="dashboard"
-        className="overview-page-heading training-plan-entry-heading"
+        className="overview-page-heading"
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
         filters={filters}

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Activity, ClipboardList, FlaskConical, TrendingUp } from 'lucide-react';
 import { ChartCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import type { Project } from '../types';
@@ -5,12 +6,13 @@ import { projectLabel } from '../../shared/projects';
 import './SpecialTrainingPage.css';
 
 type Props = {
+  filters?: ReactNode;
   project: Project;
   from: string;
   to: string;
 };
 
-export function PhysiologyBiochemistryPage({ project, from, to }: Props) {
+export function PhysiologyBiochemistryPage({ filters, project, from, to }: Props) {
   return (
     <PageContainer className="professional-overview training-dashboard-page">
       <PageHeader
@@ -18,6 +20,7 @@ export function PhysiologyBiochemistryPage({ project, from, to }: Props) {
         className="overview-page-heading"
         eyebrow="PHYSIOLOGY & BIOCHEMISTRY"
         title="生理生化"
+        filters={filters}
       />
       <section className="training-dashboard-grid" aria-label="生理生化数据展示区域">
         <ChartCard

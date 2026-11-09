@@ -9,7 +9,7 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { projectLabel } from '../../shared/projects';
 import { StrengthTrainingLoadChart } from '../components/StrengthTrainingLoadChart';
@@ -33,6 +33,7 @@ import type { Athlete, StrengthTest, StrengthTrainingSession, User } from '../ty
 import './StrengthTrainingAnalysisPage.css';
 
 type Props = {
+  filters?: ReactNode;
   onPlanOpen: () => void;
   section: StrengthPageKey;
   user: User;
@@ -191,9 +192,25 @@ export function StrengthTrainingAnalysisPage(props: Props) {
     };
   }, [periodSessions]);
 
+  const header = (
+    <PageHeader
+      variant="dashboard"
+      className="overview-page-heading strength-page-head"
+      eyebrow="STRENGTH TRAINING"
+      title={pageTitle}
+      filters={props.filters}
+      filterActions={
+        <button type="button" className="primary-button" onClick={props.onPlanOpen}>
+          训练计划
+        </button>
+      }
+    />
+  );
+
   if (!props.athletes.length)
     return (
       <PageContainer className="professional-overview strength-workbench">
+        {header}
         <ContentState
           kind="empty"
           className="strength-empty"
@@ -206,17 +223,7 @@ export function StrengthTrainingAnalysisPage(props: Props) {
 
   return (
     <PageContainer className="professional-overview strength-workbench">
-      <PageHeader
-        variant="dashboard"
-        className="overview-page-heading strength-page-head training-plan-entry-heading"
-        eyebrow="STRENGTH TRAINING"
-        title={pageTitle}
-        actions={
-          <button className="dashboard-action-button" onClick={props.onPlanOpen}>
-            训练计划
-          </button>
-        }
-      />
+      {header}
 
       {['strength-overview', 'strength-analysis', 'strength-assessment'].includes(
         props.section

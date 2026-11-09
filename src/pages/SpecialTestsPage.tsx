@@ -49,6 +49,7 @@ import './SpecialTrainingPage.css';
 import '../components/EChart.css';
 
 type Props = {
+  filters?: ReactNode;
   teamId?: number | null;
   records: TrainingRecord[];
   project: Project;
@@ -931,6 +932,7 @@ function MetricPage({ section, sessions, days, project }: {
 }
 
 export function SpecialTestsPage({
+  filters,
   teamId = null,
   records,
   project,
@@ -951,8 +953,21 @@ export function SpecialTestsPage({
   );
   const days = useMemo(() => aggregateDays(sessions), [sessions]);
   const meta = SECTION_META[section];
-  if (!projectCapability(project)) return <PageContainer>
-    <PageHeader eyebrow="SPECIAL TRAINING" title="专项训练" actions={<button onClick={onPlanOpen}>训练计划</button>} />
+  const supportsSpecialAnalysis = Boolean(projectCapability(project));
+  const header = (
+    <PageHeader
+      variant="dashboard"
+      className="overview-page-heading special-page-heading"
+      eyebrow={supportsSpecialAnalysis ? meta.english : 'SPECIAL TRAINING'}
+      title="专项训练"
+      filters={filters}
+      filterActions={
+        <button type="button" className="primary-button" onClick={onPlanOpen}>训练计划</button>
+      }
+    />
+  );
+  if (!supportsSpecialAnalysis) return <PageContainer>
+    {header}
     <ProjectSpecialTraining project={project} records={records.filter(record => record.date >= from && record.date <= to)} />
   </PageContainer>;
   const analysisTabs: Array<{ key: SpecialPageKey; label: string }> = [
@@ -973,13 +988,7 @@ export function SpecialTestsPage({
       : [];
   return (
     <PageContainer className="professional-overview special-training-page">
-      <PageHeader
-        variant="dashboard"
-        className="overview-page-heading special-page-heading training-plan-entry-heading"
-        eyebrow={meta.english}
-        title="专项训练"
-        actions={<button className="dashboard-action-button" onClick={onPlanOpen}>训练计划</button>}
-      />
+      {header}
       {pageTabs.length > 0 && (
         <nav className="special-page-tabs" aria-label={`${meta.group}指标切换`}>
           {pageTabs.map((item) => (

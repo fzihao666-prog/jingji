@@ -40,6 +40,50 @@
   align-items: center;
 }
 
+/* 训练筛选与页面入口共用一行，空间不足时各自换行。 */
+.app-page-header.app-page-header-with-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.app-page-header-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+}
+
+.app-page-header-filters {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-page-header-actions.app-page-header-filter-actions {
+  width: auto;
+  max-width: 100%;
+  margin-inline-start: auto;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-page-header-filters .date-toolbar {
+  padding: 8px;
+  gap: 8px 12px;
+  border-color: var(--line);
+  background: var(--paper);
+  box-shadow: none;
+}
+
+@media (width <= 820px) {
+  .app-page-header-filters {
+    width: 100%;
+  }
+}
+
 .app-card {
   min-width: 0;
   border-radius: 13px;

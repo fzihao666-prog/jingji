@@ -35,6 +35,7 @@ export function PageHeader({
   className = '',
   children,
 }: PageHeaderProps) {
+  const hasFilterRow = Boolean(filters || filterActions);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
@@ -42,7 +43,7 @@ export function PageHeader({
 
   return (
     <header
-      className={`page-heading app-page-header app-page-header-${variant} ${className}`.trim()}
+      className={`page-heading app-page-header app-page-header-${variant}${hasFilterRow ? ' app-page-header-with-filters' : ''} ${className}`.trim()}
     >
       <div className="app-page-header-copy">
         {eyebrow != null && <span className="app-page-header-eyebrow">{eyebrow}</span>}
@@ -57,7 +58,7 @@ export function PageHeader({
           {children}
         </div>
       )}
-      {(filters || filterActions) && (
+      {hasFilterRow && (
         <div className="app-page-header-filter-row">
           {filters && <div className="app-page-header-filters">{filters}</div>}
           {filterActions && (

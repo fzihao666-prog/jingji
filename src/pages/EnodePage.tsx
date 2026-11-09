@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { EnodeTrends } from '../components/EnodeTrends';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 import type { Athlete } from '../types';
@@ -56,6 +56,7 @@ export function EnodeAthletePanel({
   );
 }
 export function EnodePage({
+  filters,
   athletes,
   athleteId,
   project,
@@ -63,6 +64,7 @@ export function EnodePage({
   to,
   onNavigate,
 }: {
+  filters?: ReactNode;
   athletes: Athlete[];
   athleteId: number | null;
   project: string;
@@ -72,7 +74,7 @@ export function EnodePage({
 }) {
   return (
     <PageContainer>
-      <PageHeader eyebrow="ENODE VBT" title="Enode VBT" />
+      <PageHeader eyebrow="ENODE VBT" title="Enode VBT" filters={filters} />
       <nav className="strength-category-tabs" aria-label="体能分析视图">
         <button type="button" onClick={() => onNavigate('strength-overview')}>
           训练总览

@@ -529,24 +529,6 @@
   display: none;
 }
 
-.global-training-filter {
-  position: absolute;
-  z-index: 20;
-  top: 34px;
-  right: 0;
-  left: 0;
-  padding: 0 clamp(24px, 3.3vw, 52px);
-  display: flex;
-  justify-content: flex-end;
-  pointer-events: none;
-}
-
-.global-training-filter .date-toolbar {
-  width: fit-content;
-  max-width: 100%;
-  pointer-events: auto;
-}
-
 .page-content {
   padding: 34px clamp(24px, 3.3vw, 52px) 56px;
   max-width: 1720px;
@@ -925,22 +907,6 @@
   height: 100%;
   object-fit: cover;
   object-position: center top;
-}
-
-
-@media (width <= 1180px) {
-  .global-training-filter {
-    position: relative;
-    inset: auto;
-    padding: 18px clamp(24px, 3.3vw, 52px) 0;
-  }
-
-  .global-training-filter .date-toolbar { width: 100%; }
-}
-
-@media (width <= 820px) {
-  .global-training-filter { padding: 14px 12px 0; }
-  .global-training-filter .date-toolbar { width: 100%; }
 }
 
 /* 公共筛选栏：项目、队伍相邻，窄屏自然换行。 */

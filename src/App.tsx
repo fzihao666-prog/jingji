@@ -418,7 +418,6 @@ export default function App() {
       void api.saveCurrentProject(nextProject).catch(() => undefined);
     },
   };
-  const isTrainingDashboard = page === 'special-overview' || page === 'strength-overview';
   const usesGlobalTrainingFilter =
     page === 'overview' ||
     page === 'physiology-biochemistry' ||
@@ -430,7 +429,7 @@ export default function App() {
     <DateToolbar
       {...shared}
       presetMode="period"
-      layout={isTrainingDashboard ? 'scope-first' : 'default'}
+      layout="scope-first"
       teams={teams}
       teamError={teamError}
       onTeamChange={(id) => {
@@ -451,9 +450,6 @@ export default function App() {
       onProfileNameChange={renameOwnProfile}
     >
       {globalError && <div className="global-error">{globalError}</div>}
-      {trainingFilters && !isTrainingDashboard && (
-        <div className="global-training-filter">{trainingFilters}</div>
-      )}
       <Suspense
         fallback={
           <div className="route-loading">
@@ -486,7 +482,7 @@ export default function App() {
             })()}
           />
         )}
-        {page === 'overview' && <OverviewPage {...shared} user={user} />}
+        {page === 'overview' && <OverviewPage {...shared} user={user} filters={trainingFilters} />}
         {page === 'special-overview' && (
           <SpecialTrainingDashboard
             filters={trainingFilters}
@@ -506,6 +502,7 @@ export default function App() {
         )}
         {page.startsWith('special-') && page !== 'special-overview' && (
           <SpecialTestsPage
+            filters={trainingFilters}
             {...shared}
             onPlanOpen={() => changePage('special-schedule')}
             section={page as Exclude<SpecialPageKey, 'special-overview'>}
@@ -523,9 +520,10 @@ export default function App() {
             onNavigate={changePage}
           />
         )}
-        {page === 'strength-enode' && <EnodePage athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={changePage} />}
+        {page === 'strength-enode' && <EnodePage filters={trainingFilters} athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={changePage} />}
         {page.startsWith('strength-') && page !== 'strength-overview' && page !== 'strength-enode' && (
           <StrengthTrainingAnalysisPage
+            filters={trainingFilters}
             onPlanOpen={() => changePage('strength-plan')}
             section={page as Exclude<StrengthPageKey, 'strength-overview'>}
             user={user}
@@ -538,7 +536,7 @@ export default function App() {
           />
         )}
         {page === 'physiology-biochemistry' && (
-          <PhysiologyBiochemistryPage project={project} from={from} to={to} />
+          <PhysiologyBiochemistryPage filters={trainingFilters} project={project} from={from} to={to} />
         )}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && (
@@ -574,7 +572,7 @@ export default function App() {
           />
         )}
         {page === 'personal' && (
-          <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />
+          <PersonalPage filters={trainingFilters} {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />
         )}
         {page === 'coaches' && user.role !== 'ATL' && (
           <CoachManagementPage

@@ -109,6 +109,7 @@ function getLoadPeriodLabel(from: string, to: string) {
 }
 
 type Props = {
+  filters?: ReactNode;
   user: User;
   records: TrainingRecord[];
   athletes: Athlete[];
@@ -587,7 +588,7 @@ export function PersonalPage(props: Props) {
 
   return (
     <PageContainer className="personal-page">
-      <PageHeader eyebrow="ATHLETE PROFILE" title="运动员档案" />
+      <PageHeader eyebrow="ATHLETE PROFILE" title="运动员档案" filters={props.filters} />
 
       {canSwitchAthlete && (
         <section className="performance-athlete-picker">
