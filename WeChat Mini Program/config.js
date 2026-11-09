@@ -2,7 +2,7 @@
 const API_ENVIRONMENT = 'production';
 const LOCAL_API_BASE_URL = 'http://127.0.0.1:8787';
 // www 域名对应当前使用的服务器；根域名目前仍指向另一台旧服务器。
-const API_BASE_URL = 'https://www.jingjity.xin';
+const API_BASE_URL = 'https://jingjity.xin';
 // 正式版默认关闭追踪；开发版、体验版自动启用脱敏诊断，人工排查开关保持 false。
 const NETWORK_DEBUG = false;
 
