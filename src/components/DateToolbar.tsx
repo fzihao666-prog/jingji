@@ -17,6 +17,7 @@ type Props = {
   projects: Project[];
   onProjectChange: (project: Project) => void;
   presetMode?: 'default' | 'period';
+  layout?: 'default' | 'scope-first';
   projectControl?: 'select' | 'segments';
 };
 
@@ -29,6 +30,7 @@ export function DateToolbar({
   projects,
   onProjectChange,
   presetMode = 'default',
+  layout = 'default',
   projectControl = 'select',
 }: Props) {
   const [teamOpen, setTeamOpen] = useState(false);
@@ -90,46 +92,50 @@ export function DateToolbar({
       projectEnglish(item).toLocaleLowerCase().includes(keyword)
     );
   });
+  const scopeFirst = layout === 'scope-first';
+  const quickPeriods = (
+    <div className="range-presets" aria-label="快速选择时间范围">
+      {presets.map(([key, label, title]) => {
+        const range = presetRanges[key]!;
+        const active = from === range.from && to === range.to;
+        return (
+          <button
+            key={key}
+            type="button"
+            className={active ? 'active' : ''}
+            aria-pressed={active}
+            title={title}
+            onClick={() => setPreset(key)}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+  const dateInputs = (
+    <label className="date-input">
+      <CalendarRange size={17} />
+      <input
+        aria-label="开始日期"
+        type="date"
+        value={from}
+        max={to}
+        onChange={(event) => onRangeChange(event.target.value, to)}
+      />
+      <span>至</span>
+      <input
+        aria-label="结束日期"
+        type="date"
+        value={to}
+        min={from}
+        onChange={(event) => onRangeChange(from, event.target.value)}
+      />
+    </label>
+  );
   return (
-    <div className="date-toolbar">
-      <div className="range-presets" aria-label="快速选择时间范围">
-        {presets.map(([key, label, title]) => {
-          const range = presetRanges[key]!;
-          const active = from === range.from && to === range.to;
-          return (
-            <button
-              key={key}
-              type="button"
-              className={active ? 'active' : ''}
-              aria-pressed={active}
-              title={title}
-              onClick={() => setPreset(key)}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      <label className="date-input">
-        <CalendarRange size={17} />
-        <input
-          aria-label="开始日期"
-          type="date"
-          value={from}
-          max={to}
-          onChange={(event) => onRangeChange(event.target.value, to)}
-        />
-        <span>至</span>
-        <input
-          aria-label="结束日期"
-          type="date"
-          value={to}
-          min={from}
-          onChange={(event) => onRangeChange(from, event.target.value)}
-        />
-      </label>
-
+    <div className={scopeFirst ? 'date-toolbar date-toolbar-scope-first' : 'date-toolbar'}>
+      {!scopeFirst && <>{quickPeriods}{dateInputs}</>}
       {projectControl === 'segments' ? (
         <div className="toolbar-project-segments" aria-label="选择运动种类">
           {projects.map((item) => (
@@ -212,7 +218,7 @@ export function DateToolbar({
         </div>
         {teamError && <span role="alert">{teamError}</span>}
       </div>}
-
+      {scopeFirst && <>{dateInputs}{quickPeriods}</>}
     </div>
   );
 }

@@ -430,6 +430,7 @@ export default function App() {
     <DateToolbar
       {...shared}
       presetMode="period"
+      layout={isTrainingDashboard ? 'scope-first' : 'default'}
       teams={teams}
       teamError={teamError}
       onTeamChange={(id) => {

@@ -957,3 +957,36 @@
 .toolbar-team-select [role="alert"] {
   flex-basis: 100%;
 }
+
+.date-toolbar-scope-first .range-presets button.active {
+  box-shadow: none;
+}
+
+.date-toolbar-scope-first .project-select:not(.open) > .project-select-menu {
+  visibility: hidden;
+}
+
+@media (width > 820px) {
+  .date-toolbar-scope-first > .date-input,
+  .date-toolbar-scope-first > .project-select {
+    border-inline: 0;
+  }
+}
+
+@media (width <= 820px) {
+  .date-toolbar.date-toolbar-scope-first {
+    display: flex;
+  }
+
+  .date-toolbar-scope-first > .project-select {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 112px;
+    max-width: 100%;
+  }
+
+  .date-toolbar-scope-first > .date-input,
+  .date-toolbar-scope-first > .range-presets {
+    flex: 0 0 100%;
+  }
+}
