@@ -7,6 +7,7 @@ vi.mock('../components/SpecialChampionModel', () => ({
 }));
 vi.mock('../components/EChart', () => ({ EChart: () => null }));
 import { SpecialTrainingDashboard } from './SpecialTrainingDashboard';
+import { StrengthTrainingDashboard } from './TrainingDashboards';
 function render(project: Project) {
   return renderToStaticMarkup(createElement(SpecialTrainingDashboard, { project, from: '2026-10-01', to: '2026-10-31', onPlanOpen() {} }));
 }
@@ -27,14 +28,17 @@ it('全局队伍筛选由应用维护，专项首页不再显示局部队伍选�
   expect(html).toContain('正在同步专项训练数据');
 });
 
-it('页头按标题、筛选栏、训练计划入口的顺序渲染', () => {
-  const html = renderToStaticMarkup(createElement(SpecialTrainingDashboard, {
-    project: 'ROWING',
-    from: '2026-10-01',
-    to: '2026-10-31',
-    filters: createElement('div', null, '全局训练筛选'),
-    onPlanOpen() {},
-  }));
-  const header = html.match(/<header[^>]*>[\s\S]*?<\/header>/)?.[0] ?? '';
-  expect(header).toMatch(/专项训练<\/h1>[\s\S]*全局训练筛选[\s\S]*训练计划<\/button>/);
+it('专项和体能页头将训练计划放在筛选栏之前', () => {
+  const filters = createElement('div', null, '全局训练筛选');
+  const shared = { project: 'ROWING' as const, from: '2026-10-01', to: '2026-10-31', filters };
+  const pages = [
+    createElement(SpecialTrainingDashboard, { ...shared, onPlanOpen() {} }),
+    createElement(StrengthTrainingDashboard, { ...shared, athletes: [], onNavigate() {} }),
+  ];
+
+  for (const page of pages) {
+    const html = renderToStaticMarkup(page);
+    const header = html.match(/<header[^>]*>[\s\S]*?<\/header>/)?.[0] ?? '';
+    expect(header).toMatch(/训练<\/h1>[\s\S]*训练计划<\/button>[\s\S]*全局训练筛选/);
+  }
 });

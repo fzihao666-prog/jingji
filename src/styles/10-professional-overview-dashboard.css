@@ -692,26 +692,36 @@
 }
 
 
-/* 训练总览页头：标题和筛选栏共用首行，操作区独占下一行。 */
-.training-plan-entry-heading {
+/* 标题与页面操作共用首行，数据筛选横跨下一行。 */
+.overview-page-heading.training-plan-entry-heading {
   display: grid;
   grid-template-columns: minmax(max-content, 1fr) minmax(0, auto);
-  align-items: start;
+  align-items: center;
   gap: 12px 24px;
 }
 
-.training-plan-entry-heading .app-page-header-filters {
-  min-width: 0;
-}
-
 .training-plan-entry-heading .app-page-header-actions {
-  grid-column: 1 / -1;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-@media (width <= 1180px) {
-  .training-plan-entry-heading {
+.training-plan-entry-heading .app-page-header-filters {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.training-plan-entry-heading .date-toolbar {
+  padding: 8px;
+  gap: 8px 12px;
+  border-color: var(--line);
+  background: var(--paper);
+  box-shadow: none;
+}
+
+@media (width <= 820px) {
+  .overview-page-heading.training-plan-entry-heading {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 
   .training-plan-entry-heading .app-page-header-actions {

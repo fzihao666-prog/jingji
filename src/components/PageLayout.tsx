@@ -49,13 +49,13 @@ export function PageHeader({
         </h1>
         {supportingContent}
       </div>
-      {filters && <div className="app-page-header-filters">{filters}</div>}
       {(actions || children) && (
         <div className="app-page-header-actions">
           {actions}
           {children}
         </div>
       )}
+      {filters && <div className="app-page-header-filters">{filters}</div>}
     </header>
   );
 }
