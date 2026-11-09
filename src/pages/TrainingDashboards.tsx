@@ -580,13 +580,11 @@ export function StrengthTrainingDashboard({
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
         filters={filters}
-        actions={
-          <button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>
-            训练计划
-          </button>
-        }
         filterActions={
           <>
+            <button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>
+              训练计划
+            </button>
             <button type="button" className="secondary-button" onClick={() => onNavigate('strength-enode')}>
               Enode VBT
             </button>

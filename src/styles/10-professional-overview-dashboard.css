@@ -692,7 +692,7 @@
 }
 
 
-/* 标题与训练计划共用首行，筛选和辅助入口在下一行。 */
+/* 页头操作按页面分组，总览的入口与筛选并排。 */
 .overview-page-heading.training-plan-entry-heading {
   display: grid;
   grid-template-columns: minmax(max-content, 1fr) minmax(0, auto);

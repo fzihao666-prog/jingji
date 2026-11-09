@@ -28,7 +28,7 @@ it('全局队伍筛选由应用维护，专项首页不再显示局部队伍选�
   expect(html).toContain('正在同步专项训练数据');
 });
 
-it('专项和体能页头将训练计划放在筛选栏之前', () => {
+it('专项和体能总览将训练计划放到筛选栏同一组', () => {
   const filters = createElement('div', null, '全局训练筛选');
   const shared = { project: 'ROWING' as const, from: '2026-10-01', to: '2026-10-31', filters };
   const pages = [
@@ -39,9 +39,9 @@ it('专项和体能页头将训练计划放在筛选栏之前', () => {
   for (const page of pages) {
     const html = renderToStaticMarkup(page);
     const header = html.match(/<header[^>]*>[\s\S]*?<\/header>/)?.[0] ?? '';
-    expect(header).toMatch(/训练<\/h1>[\s\S]*训练计划<\/button>[\s\S]*全局训练筛选/);
+    expect(header).toMatch(/训练<\/h1>[\s\S]*app-page-header-filter-row[\s\S]*全局训练筛选[\s\S]*app-page-header-filter-actions[\s\S]*训练计划<\/button>/);
     if (page.type === StrengthTrainingDashboard) {
-      expect(header).toMatch(/app-page-header-filter-row[\s\S]*全局训练筛选[\s\S]*app-page-header-filter-actions[\s\S]*Enode VBT<\/button>/);
+      expect(header).toMatch(/训练计划<\/button>[\s\S]*Enode VBT<\/button>/);
     }
   }
 });
