@@ -692,7 +692,7 @@
 }
 
 
-/* 标题与页面操作共用首行，数据筛选横跨下一行。 */
+/* 标题与页面操作共用首行，数据筛选在下一行靠左。 */
 .overview-page-heading.training-plan-entry-heading {
   display: grid;
   grid-template-columns: minmax(max-content, 1fr) minmax(0, auto);
@@ -707,7 +707,9 @@
 
 .training-plan-entry-heading .app-page-header-filters {
   grid-column: 1 / -1;
+  width: fit-content;
   min-width: 0;
+  max-width: 100%;
 }
 
 .training-plan-entry-heading .date-toolbar {
@@ -726,5 +728,9 @@
 
   .training-plan-entry-heading .app-page-header-actions {
     justify-content: flex-start;
+  }
+
+  .training-plan-entry-heading .app-page-header-filters {
+    width: 100%;
   }
 }
