@@ -1,7 +1,7 @@
 import { specialWeeklyOption } from '../components/special-weekly-option';
 import './SpecialTrainingPage.css';
 import { Activity } from 'lucide-react';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
@@ -29,6 +29,7 @@ const TeamTrainingStats = lazy(() => import('../components/TeamTrainingStats').t
 ));
 
 type Props = {
+  filters?: ReactNode;
   teamTraining?: { teamId: number | null; date?: string; focus: boolean; onImport: () => void };
   teamId?: number | null;
   onPlanOpen: () => void;
@@ -43,7 +44,7 @@ const empty = (title: string) => (
   <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
 );
 
-export function SpecialTrainingDashboard({ project, from, to, teamId = null, onPlanOpen, teamTraining: teamTrainingStats }: Props) {
+export function SpecialTrainingDashboard({ project, from, to, teamId = null, filters, onPlanOpen, teamTraining: teamTrainingStats }: Props) {
   const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(
     null
   );
@@ -105,6 +106,7 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, onP
         variant="dashboard"
         className="overview-page-heading training-plan-entry-heading"
         title="专项训练"
+        filters={filters}
         actions={
           <><button type="button" className="primary-button" onClick={onPlanOpen}>训练计划</button>{selectedAthlete ? (
             <button type="button" className="secondary-button" onClick={() => setSelectedAthleteId(null)}>

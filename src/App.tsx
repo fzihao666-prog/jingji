@@ -426,6 +426,21 @@ export default function App() {
     page.startsWith('special-') ||
     page.startsWith('strength-');
 
+  const trainingFilters = usesGlobalTrainingFilter ? (
+    <DateToolbar
+      {...shared}
+      presetMode="period"
+      teams={teams}
+      teamError={teamError}
+      onTeamChange={(id) => {
+        if (page === 'special-overview' && focusTrainingStats) changePage(page);
+        setTeamSelection(id === null ? null : { project, id });
+        setAthleteId(null);
+        setRecords([]);
+      }}
+    />
+  ) : null;
+
   return (
     <AppShell
       user={user}
@@ -435,17 +450,8 @@ export default function App() {
       onProfileNameChange={renameOwnProfile}
     >
       {globalError && <div className="global-error">{globalError}</div>}
-      {usesGlobalTrainingFilter && (
-        <div
-          className={`global-training-filter${isTrainingDashboard ? ' global-training-filter-in-flow' : ''}`}
-        >
-          <DateToolbar {...shared} presetMode="period" teams={teams} teamError={teamError} onTeamChange={(id) => {
-            if (page === 'special-overview' && focusTrainingStats) changePage(page);
-            setTeamSelection(id === null ? null : { project, id });
-            setAthleteId(null);
-            setRecords([]);
-          }} />
-        </div>
+      {trainingFilters && !isTrainingDashboard && (
+        <div className="global-training-filter">{trainingFilters}</div>
       )}
       <Suspense
         fallback={
@@ -482,6 +488,7 @@ export default function App() {
         {page === 'overview' && <OverviewPage {...shared} user={user} />}
         {page === 'special-overview' && (
           <SpecialTrainingDashboard
+            filters={trainingFilters}
             project={project}
             teamId={teamId}
             from={from}
@@ -506,6 +513,7 @@ export default function App() {
         )}
         {page === 'strength-overview' && (
           <StrengthTrainingDashboard
+            filters={trainingFilters}
             athletes={projectAthletes}
             project={project}
             teamId={teamId}

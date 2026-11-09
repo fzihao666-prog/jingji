@@ -26,3 +26,15 @@ it('全局队伍筛选由应用维护，专项首页不再显示局部队伍选�
   expect(html).not.toContain('专项训练队伍筛选');
   expect(html).toContain('正在同步专项训练数据');
 });
+
+it('页头按标题、筛选栏、训练计划入口的顺序渲染', () => {
+  const html = renderToStaticMarkup(createElement(SpecialTrainingDashboard, {
+    project: 'ROWING',
+    from: '2026-10-01',
+    to: '2026-10-31',
+    filters: createElement('div', null, '全局训练筛选'),
+    onPlanOpen() {},
+  }));
+  const header = html.match(/<header[^>]*>[\s\S]*?<\/header>/)?.[0] ?? '';
+  expect(header).toMatch(/专项训练<\/h1>[\s\S]*全局训练筛选[\s\S]*训练计划<\/button>/);
+});

@@ -18,6 +18,7 @@ type PageHeaderProps = ClassNameProps & {
   title: ReactNode;
   eyebrow?: ReactNode;
   supportingContent?: ReactNode;
+  filters?: ReactNode;
   actions?: ReactNode;
   variant?: 'default' | 'compact' | 'dashboard';
 };
@@ -26,6 +27,7 @@ export function PageHeader({
   title,
   eyebrow,
   supportingContent,
+  filters,
   actions,
   variant = 'default',
   className = '',
@@ -47,6 +49,7 @@ export function PageHeader({
         </h1>
         {supportingContent}
       </div>
+      {filters && <div className="app-page-header-filters">{filters}</div>}
       {(actions || children) && (
         <div className="app-page-header-actions">
           {actions}

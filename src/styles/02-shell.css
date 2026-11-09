@@ -541,13 +541,6 @@
   pointer-events: none;
 }
 
-/* 专项、体能总览的筛选栏先占位，再渲染带操作按钮的页头。 */
-.global-training-filter-in-flow {
-  position: relative;
-  inset: auto;
-  padding-top: 18px;
-}
-
 .global-training-filter .date-toolbar {
   width: fit-content;
   max-width: 100%;
