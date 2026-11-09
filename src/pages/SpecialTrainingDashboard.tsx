@@ -104,7 +104,6 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, onP
       <PageHeader
         variant="dashboard"
         className="overview-page-heading training-plan-entry-heading"
-        eyebrow="SPECIAL TRAINING"
         title="专项训练"
         actions={
           <><button type="button" className="primary-button" onClick={onPlanOpen}>训练计划</button>{selectedAthlete ? (

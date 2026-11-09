@@ -1489,6 +1489,24 @@
 }
 
 /* 专项总览：图表、明细与冠军模型保持独立的响应式布局。 */
+.special-dashboard-page .app-page-header-actions > .primary-button {
+  background: #08716b;
+  box-shadow: none;
+  transition: background-color 0.18s ease;
+}
+
+.special-dashboard-page .app-page-header-actions > .primary-button:hover {
+  background: #065d58;
+  box-shadow: none;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .special-dashboard-page .app-page-header-actions > .primary-button {
+    transition: none;
+  }
+}
+
 .special-dashboard-page > *,
 .special-dashboard-page .special-analysis-grid > * {
   min-width: 0;
@@ -1498,12 +1516,22 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.special-dashboard-page .training-dashboard-metric {
+.special-dashboard-page .app-card.training-dashboard-metric {
   min-width: 0;
+  padding: 16px;
+  gap: 4px;
+  align-content: start;
+  background: var(--paper);
+  border-color: var(--line);
+  border-radius: 12px;
+  box-shadow: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .special-dashboard-page .training-dashboard-metric > span,
 .special-dashboard-page .training-dashboard-metric > em {
+  color: #52636a;
+  font-size: 12px;
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.5;
@@ -1538,6 +1566,10 @@
 
 .special-dashboard-page .app-echart {
   height: 300px;
+}
+
+.special-dashboard-page .special-wide-card .app-echart {
+  height: 360px;
 }
 
 .special-dashboard-page .table-scroll,
@@ -1632,7 +1664,7 @@
 
 @media (width <= 1200px) {
   .special-dashboard-page .training-dashboard-metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .special-dashboard-page .ergometer-model-head {
@@ -1648,8 +1680,8 @@
 }
 
 @media (width <= 640px) {
-  .special-dashboard-page .training-dashboard-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .special-dashboard-page .special-wide-card .app-echart {
+    height: 320px;
   }
 
   .special-dashboard-page .data-table th,
@@ -1714,16 +1746,19 @@
 
 /* 专项卡片内部：以数值、单位、来源区分信息层级。 */
 .special-dashboard-page .training-dashboard-metric strong {
-  font-size: clamp(26px, 2.2vw, 32px);
-  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: clamp(24px, 2.2vw, 32px);
+  font-weight: 600;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .special-dashboard-page .training-dashboard-metric strong small {
-  margin-left: 6px;
+  margin-left: 4px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--muted);
+  color: #52636a;
+  white-space: nowrap;
 }
 
 .special-dashboard-page .champion-model-table td,

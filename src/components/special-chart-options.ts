@@ -57,7 +57,7 @@ export function volumeOption(
         name: '专项时长（min）',
         type: 'bar',
         barMaxWidth: chartMetrics.barWidth,
-        itemStyle: barStyle,
+        itemStyle: { ...barStyle, color: '#087c75', opacity: 1 },
         data: dates.map((date) => [
           pointDate(date),
           isPlaceholder ? null : (rows.get(date)?.durationMin ?? null),
@@ -69,9 +69,9 @@ export function volumeOption(
         type: 'line',
         yAxisIndex: 1,
         connectNulls: false,
-        lineStyle: { width: chartMetrics.lineWidth },
-        itemStyle: { borderWidth: 2, borderColor: '#ffffff' },
-        emphasis: { scale: 1.4 },
+        lineStyle: { width: chartMetrics.lineWidth, color: '#526c77' },
+        itemStyle: { color: '#526c77', borderWidth: 2, borderColor: '#ffffff' },
+        emphasis: { scale: false },
         symbolSize: chartMetrics.symbolSize,
         data: dates.map((date) => [
           pointDate(date),
