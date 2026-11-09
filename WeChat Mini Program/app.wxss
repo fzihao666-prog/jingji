@@ -12,6 +12,8 @@ page {
   --line: #d8e3e6;
   --muted: #52636a;
   --action-fill: #08716b;
+  --volume-special: #087c75;
+  --volume-physical: #7e9299;
   --radius-card: 24rpx;
   --radius-item: 18rpx;
   --shadow-card: 0 14rpx 38rpx rgba(13, 55, 69, 0.06);
@@ -80,25 +82,19 @@ button::after { border: 0; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
 .metric-card {
-  position: relative;
-  min-height: 174rpx;
-  overflow: hidden;
+  min-height: 152rpx;
   padding: 24rpx;
-  border-radius: 22rpx;
-  color: #f7fbfb;
-  background: linear-gradient(145deg, #164654, #0a303c);
-  box-shadow: 0 15rpx 34rpx rgba(8, 48, 59, 0.16);
+  border: 1rpx solid var(--line);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+  background: var(--paper);
+  font-variant-numeric: tabular-nums;
 }
-.metric-card::before { content: ""; position: absolute; top: -45rpx; right: -36rpx; width: 150rpx; height: 150rpx; border-radius: 50%; background: rgba(255,255,255,.1); }
-.metric-card.tone-teal { background: linear-gradient(145deg, #19877f, #0c5e60); }
-.metric-card.tone-orange { background: linear-gradient(145deg, #b86b22, #7f3e19); }
-.metric-card.tone-blue { background: linear-gradient(145deg, #2f708a, #17475d); }
-.metric-card.tone-green { background: linear-gradient(145deg, #32846b, #1d5b4c); }
-.metric-card.tone-red { background: linear-gradient(145deg, #b34a42, #7c2f29); }
-.metric-label { position: relative; color: rgba(239,250,249,.78); font-size: 22rpx; font-weight: 700; }
-.metric-value { position: relative; display: block; margin-top: 16rpx; font-size: 48rpx; font-weight: 800; }
-.metric-value text { margin-left: 5rpx; font-size: 21rpx; font-weight: 600; }
-.metric-note { position: relative; display: block; margin-top: 12rpx; color: rgba(239,250,249,.66); font-size: 19rpx; line-height: 1.45; }
+.metric-card.tone-red .metric-value { color: #a64234; }
+.metric-label { color: var(--muted); font-size: 24rpx; font-weight: 500; }
+.metric-value { display: block; margin-top: 8rpx; font-size: 40rpx; font-weight: 600; }
+.metric-value text { margin-left: 8rpx; color: var(--muted); font-size: 22rpx; font-weight: 500; }
+.metric-note { display: block; margin-top: 8rpx; color: var(--muted); font-size: 22rpx; line-height: 1.45; }
 
 .trend-scroll { width: 100%; white-space: nowrap; }
 .trend-chart { height: 330rpx; display: flex; align-items: flex-end; gap: 14rpx; padding: 20rpx 4rpx 4rpx; }
@@ -109,8 +105,8 @@ button::after { border: 0; }
 .trend-bars { height: 244rpx; display: flex; align-items: flex-end; gap: 5rpx; }
 .trend-bar { width: 15rpx; min-height: 0; border-radius: 8rpx 8rpx 2rpx 2rpx; background: var(--mint); }
 .trend-bar.accent { background: var(--amber); }
-.trend-bar.special { background: var(--river); }
-.trend-bar.physical { background: var(--mint); }
+.trend-bar.special { background: var(--volume-special); }
+.trend-bar.physical { background: var(--volume-physical); }
 .trend-label { margin-top: 10rpx; color: var(--muted); font-size: 18rpx; }
 .chart-meta { margin-bottom: 10rpx; display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
 .chart-example { display: inline-block; margin-bottom: 12rpx; padding: 4rpx 12rpx; border: 1rpx solid #b5c9c7; border-radius: 8rpx; color: #41615d; background: #edf5f3; font-size: 22rpx; font-weight: 600; }
@@ -119,8 +115,8 @@ button::after { border: 0; }
 .legend-item { display: flex; align-items: center; gap: 7rpx; }
 .legend-dot { width: 14rpx; height: 14rpx; border-radius: 4rpx; background: var(--mint); }
 .legend-dot.accent { background: var(--amber); }
-.legend-dot.special { background: var(--river); }
-.legend-dot.physical { background: var(--mint); }
+.legend-dot.special { background: var(--volume-special); }
+.legend-dot.physical { background: var(--volume-physical); }
 .chart-hint { flex: none; color: var(--muted); font-size: 18rpx; }
 
 .segment-control { display: flex; flex-wrap: wrap; gap: 12rpx; margin: 4rpx 0 18rpx; }

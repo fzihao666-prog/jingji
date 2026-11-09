@@ -616,14 +616,9 @@
   gap: 16px;
 }
 
-.personal-page .personal-analysis-card-heading small {
-  color: var(--teal);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-}
-
 .personal-page .personal-analysis-card-heading h3 {
-  margin: 5px 0 6px;
+  margin: 0 0 4px;
+  font-weight: 600;
   font-size: 19px;
   line-height: 1.4;
 }
@@ -677,7 +672,7 @@
 
 .personal-page .body-comp-metric-card dt small {
   color: #526a70;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .personal-page .body-comp-metric-card dd strong {
@@ -733,7 +728,7 @@
 }
 
 .personal-page .athlete-radar-details dd small {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 

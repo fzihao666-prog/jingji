@@ -947,42 +947,6 @@
   gap: var(--overview-gap);
 }
 
-.special-metric {
-  min-width: 0;
-}
-
-.special-metric .metric-copy {
-  min-width: 0;
-}
-
-.special-metric .metric-copy > strong {
-  white-space: nowrap;
-}
-
-.special-metric .metric-copy > strong small {
-  margin-left: 5px;
-}
-
-.special-metric.tone-blue {
-  --metric-start: #173f5b;
-  --metric-end: #12364d;
-}
-
-.special-metric.tone-green {
-  --metric-start: #245545;
-  --metric-end: #173f36;
-}
-
-.special-metric.tone-orange {
-  --metric-start: #6d4930;
-  --metric-end: #473323;
-}
-
-.special-metric.tone-purple {
-  --metric-start: #4b3b69;
-  --metric-end: #32284b;
-}
-
 .special-grid {
   min-width: 0;
   display: grid;

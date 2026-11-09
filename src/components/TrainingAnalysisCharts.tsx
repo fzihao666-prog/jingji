@@ -572,7 +572,6 @@ export function TrainingVolumeDashboard({
         <article className="training-analytics-chart training-analytics-load-trend">
           <header>
             <div>
-              <span>TRAINING LOAD</span>
               <h3>训练负荷分析</h3>
             </div>
             <small>sRPE · AU</small>
@@ -665,7 +664,6 @@ export function TrainingVolumeDashboard({
         <article className="training-analytics-chart physiology-heatmap-card">
           <header>
             <div>
-              <span>PHYSIOLOGY & BIOCHEMISTRY</span>
               <h3>生理生化</h3>
             </div>
             <small>团队风险状态热力图</small>
@@ -678,7 +676,6 @@ export function TrainingVolumeDashboard({
         <article className="training-analytics-chart training-analytics-rpe">
           <header>
             <div>
-              <span>SUBJECTIVE EXERTION</span>
               <h3>RPE</h3>
             </div>
           </header>

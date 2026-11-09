@@ -36,12 +36,6 @@
   min-width: 0;
 }
 
-.strength-page-head .app-page-header-eyebrow {
-  color: var(--strength-teal);
-  font-weight: 800;
-  letter-spacing: 0.18em;
-}
-
 .strength-filter-bar {
   position: relative;
   min-width: 0;
@@ -88,13 +82,13 @@
 
 .strength-filter-intro strong {
   color: var(--strength-ink);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .strength-filter-intro small {
   margin-top: 3px;
-  color: #8a9ba0;
-  font-size: 7px;
+  color: var(--muted);
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -118,9 +112,9 @@
   align-items: center;
   gap: 5px;
   margin: 0 0 6px 2px;
-  color: #73878d;
-  font-size: 8px;
-  font-weight: 760;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .strength-command-controls select,
@@ -134,8 +128,8 @@
   outline: 0;
   color: var(--strength-ink);
   background: #fff;
-  font-size: 10px;
-  font-weight: 720;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .exercise-cell select {
@@ -146,7 +140,7 @@
   border-radius: 6px;
   color: var(--strength-ink);
   background: #fff;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .exercise-meta-row {
@@ -159,8 +153,8 @@
 .exercise-meta-row label span {
   display: block;
   margin-bottom: 2px;
-  color: #7b8f95;
-  font-size: 7px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .exercise-meta-row input {
@@ -169,7 +163,7 @@
   padding: 0 6px;
   border: 1px solid #cbdadc;
   border-radius: 6px;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-command-controls select:focus,
@@ -199,8 +193,8 @@
   gap: 2px;
   color: #71858b;
   background: #f8fbfb;
-  font-size: 7px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -222,8 +216,8 @@
   gap: 6px;
   color: var(--strength-ink);
   background: #fff;
-  font-size: 9px;
-  font-weight: 780;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -313,8 +307,8 @@
   gap: 7px;
   color: #365660;
   background: transparent;
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -351,7 +345,7 @@
   background: linear-gradient(145deg, #0d9488, #075d68);
   box-shadow: 0 7px 16px rgb(13 148 136 / 20%);
   font-size: 15px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .strength-training-athlete {
@@ -363,7 +357,7 @@
 .strength-training-athlete > span {
   display: block;
   color: #83949a;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-training-athlete strong {
@@ -377,7 +371,7 @@
   display: block;
   margin-top: 5px;
   color: var(--strength-muted);
-  font-size: 8px;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -408,7 +402,7 @@
 
 .strength-training-context dt {
   color: #83949a;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-training-context dd {
@@ -444,8 +438,8 @@
   gap: 6px;
   color: #667b82;
   background: transparent;
-  font-size: 9px;
-  font-weight: 760;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -492,8 +486,8 @@
 .strength-status-rail span {
   grid-column: 1 / span 2;
   color: #72868c;
-  font-size: 9px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .strength-status-rail strong {
@@ -544,7 +538,7 @@
 .strength-results-panel header p {
   margin-top: 4px;
   color: var(--strength-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-mini-week {
@@ -587,17 +581,17 @@
 
 .comparison-head {
   min-height: 36px;
-  color: #84969b;
+  color: var(--muted);
   background: #f7fafa;
-  font-size: 8px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .comparison-row {
   min-height: 54px;
   border-top: 1px solid #edf1f2;
   color: #425e67;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .comparison-row > strong {
@@ -653,8 +647,8 @@
   gap: 4px;
   color: #5e757d;
   background: #fff;
-  font-size: 8px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -677,8 +671,8 @@
   position: absolute;
   top: 10px;
   right: 9px;
-  color: #7c8f95;
-  font-size: 8px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .strength-add-exercise {
@@ -693,8 +687,8 @@
   gap: 5px;
   color: var(--strength-teal);
   background: #f2faf8;
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -740,7 +734,7 @@
 .strength-load-visual p {
   margin-top: 3px;
   color: var(--strength-muted);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-load-legend {
@@ -748,7 +742,7 @@
   align-items: center;
   gap: 13px;
   color: #60777f;
-  font-size: 8px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -811,20 +805,20 @@
 
 .strength-record-browser > div:first-child strong {
   color: var(--strength-ink);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .strength-record-browser > div:first-child span {
   color: var(--strength-muted);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-record-browser label {
   display: grid;
   gap: 4px;
   color: #60777f;
-  font-size: 8px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .strength-record-browser label > span {
@@ -856,8 +850,8 @@
   gap: 5px;
   color: var(--strength-teal);
   background: #fff;
-  font-size: 8px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -912,7 +906,7 @@
 }
 
 .strength-session-card header strong {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .strength-session-card header span {
@@ -920,7 +914,7 @@
   border-radius: 99px;
   color: #5f767e;
   background: #e5eeee;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-session-card header small {
@@ -929,7 +923,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #85979c;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-result-table {
@@ -948,17 +942,17 @@
 
 .result-head {
   min-height: 30px;
-  color: #87989d;
+  color: var(--muted);
   background: #fbfcfc;
-  font-size: 8px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .result-row {
   min-height: 42px;
   border-top: 1px solid #edf1f2;
   color: #536c74;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .result-row > strong {
@@ -993,7 +987,7 @@
 }
 
 .strength-empty span {
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-empty.compact {
@@ -1018,7 +1012,7 @@
   gap: 6px;
   color: #1a746d;
   background: #edf8f6;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-inline-message.error {
@@ -1055,7 +1049,7 @@
 .strength-import-dialog header p {
   margin-top: 3px;
   color: var(--strength-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-import-start {
@@ -1092,7 +1086,7 @@
 
 .strength-dropzone span {
   color: var(--strength-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-import-guidance {
@@ -1103,7 +1097,7 @@
   border-radius: 8px;
   color: #5f767e;
   background: #eaf2f2;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-import-guidance strong {
@@ -1144,7 +1138,7 @@
 
 .strength-import-summary span {
   color: #a9c4cb;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-import-summary strong {
@@ -1160,7 +1154,7 @@
 .strength-import-summary small {
   justify-self: end;
   color: #c7d9dc;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .strength-import-table-wrap {
@@ -1179,9 +1173,9 @@
 .strength-import-table th {
   height: 33px;
   padding: 0 6px;
-  color: #7c8f95;
+  color: var(--muted);
   background: #f3f7f7;
-  font-size: 8px;
+  font-size: 11px;
   text-align: left;
 }
 
@@ -1205,7 +1199,7 @@
 .strength-import-table select {
   height: 32px;
   padding: 0 7px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-import-table tr.invalid {
@@ -1228,7 +1222,7 @@
 .import-row-state small {
   display: block;
   margin-top: 2px;
-  font-size: 7px;
+  font-size: 11px;
 }
 
 .strength-conflict-policy {
@@ -1240,13 +1234,13 @@
   align-items: center;
   gap: 18px;
   color: #526a72;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .strength-conflict-policy legend {
   padding: 0 5px;
   color: var(--strength-ink);
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .strength-conflict-policy label {
@@ -1316,7 +1310,7 @@
   .strength-command-actions .strength-button {
     width: 100%;
     padding: 0 7px;
-    font-size: 8px;
+    font-size: 11px;
   }
 
   .strength-command-actions .strength-more {

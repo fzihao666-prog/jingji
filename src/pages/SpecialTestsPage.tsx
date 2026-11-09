@@ -1,23 +1,9 @@
 import { ACTIVITY_LABELS, isActivityCode, projectRules } from '../../shared/sport-rules';
 import { trainingLoadCategory } from '../../shared/training-content-category';
 import {
-  Activity,
   AlertTriangle,
-  BarChart3,
-  CalendarDays,
   CheckCircle2,
-  Clock3,
-  Gauge,
-  HeartPulse,
-  MapPinned,
   RefreshCw,
-  Route,
-  Sparkles,
-  Target,
-  TimerReset,
-  TrendingUp,
-  Waves,
-  Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
@@ -84,60 +70,51 @@ type Session = {
 
 const SECTION_META: Record<
   Exclude<SpecialPageKey, 'special-overview'>,
-  { group: string; title: string; english: string; description: string }
+  { group: string; title: string; description: string }
 > = {
   'special-volume': {
     group: '综合分析',
     title: '训练量分析',
-    english: 'TRAINING VOLUME',
     description: '汇总专项训练次数、训练距离与训练时间，观察周期训练量变化。',
   },
   'special-time': {
     group: '综合分析',
     title: '时间分析',
-    english: 'TRAINING TIME',
     description: '按周期、训练类型和运动员拆解专项训练时长与完成质量。',
   },
   'special-distance': {
     group: '综合分析',
     title: '距离分析',
-    english: 'TRAINING DISTANCE',
     description: '监测专项里程、强度分布与运动员距离完成情况。',
   },
   'special-load': {
     group: '综合分析',
     title: '负荷分析',
-    english: 'TRAINING LOAD',
     description: '结合 sRPE、急慢性负荷比与恢复状态识别训练风险。',
   },
   'special-rate': {
     group: '专项指标',
     title: '桨频分析',
-    english: 'STROKE RATE',
     description: '观察不同训练区间的桨频效率、稳定性与专项节奏。',
   },
   'special-heart': {
     group: '专项指标',
     title: '心率分析',
-    english: 'HEART RATE',
     description: '分析心率响应、训练区间与负荷后的恢复能力。',
   },
   'special-power': {
     group: '专项指标',
     title: '功率分析',
-    english: 'POWER OUTPUT',
     description: '评估平均功率、峰值能力、功率体重比与持续输出。',
   },
   'special-records': {
     group: '训练记录',
     title: '训练记录',
-    english: 'TRAINING RECORDS',
     description: '按当前项目和日期范围查看专项训练历史记录。',
   },
   'special-schedule': {
     group: '训练执行',
     title: '训练安排',
-    english: 'TRAINING SCHEDULE',
     description: '协调技术、战术、体能与恢复训练，形成清晰可执行的周计划。',
   },
 };
@@ -365,33 +342,25 @@ function SectionCard({
   );
 }
 function MetricCard({
-  icon,
   label,
   value,
   unit,
   change,
-  tone = 'teal',
 }: {
-  icon: ReactNode;
   label: string;
   value: string | number;
   unit?: string;
   change: string;
-  tone?: string;
 }) {
   return (
     <div className="overview-card-shell card-size-metric special-metric-shell">
-      <article className={`metric-card special-metric tone-${tone}`}>
-        <div className="metric-icon">{icon}</div>
-        <div className="metric-copy">
-          <span>{label}</span>
-          <strong>
-            {value}
-            <small>{unit}</small>
-          </strong>
-          <p>{change}</p>
-        </div>
-        <div className="metric-waterline" aria-hidden="true" />
+      <article className="overview-metric">
+        <span>{label}</span>
+        <strong>
+          {value}
+          {unit && <small>{unit}</small>}
+        </strong>
+        <p>{change}</p>
       </article>
     </div>
   );
@@ -657,35 +626,28 @@ function AnalysisPage({
       <>
         <div className="special-metrics">
           <MetricCard
-            icon={<Clock3 />}
             label="总训练时长"
             value={round(total / 60, 1)}
             unit="h"
             change={`来自 ${sessions.length} 条训练记录`}
           />
           <MetricCard
-            icon={<CalendarDays />}
             label="日均训练"
             value={round(total / Math.max(days.length, 1))}
             unit="min"
             change={`${days.length} 个有效训练日`}
-            tone="blue"
           />
           <MetricCard
-            icon={<TimerReset />}
             label="单次平均"
             value={round(total / Math.max(sessions.length, 1))}
             unit="min"
             change="按实际训练记录计算"
-            tone="green"
           />
           <MetricCard
-            icon={<CheckCircle2 />}
             label="专项课时占比"
             value={specialtyShare}
             unit="%"
             change={`${round(specialtyMinutes / 60)} 小时专项与技术训练`}
-            tone="purple"
           />
         </div>
         <div className="special-grid">
@@ -722,35 +684,28 @@ function AnalysisPage({
       <>
         <div className="special-metrics">
           <MetricCard
-            icon={<Route />}
             label="总训练距离"
             value={round(total, 1)}
             unit="km"
             change={`来自 ${sessions.length} 条训练记录`}
           />
           <MetricCard
-            icon={<Target />}
             label="日均距离"
             value={round(total / Math.max(days.length, 1))}
             unit="km"
             change={`${days.length} 个有效训练日`}
-            tone="blue"
           />
           <MetricCard
-            icon={<MapPinned />}
             label="最长单次"
             value={round(Math.max(...sessions.map((item) => item.distance), 0))}
             unit="km"
             change="按单次训练记录统计"
-            tone="green"
           />
           <MetricCard
-            icon={<Zap />}
             label="高强度距离"
             value={round(highIntensityDistance)}
             unit="km"
             change={`RPE ≥ 8，占总距离 ${highShare}%`}
-            tone="orange"
           />
         </div>
         <div className="special-grid">
@@ -776,36 +731,29 @@ function AnalysisPage({
     <>
       <div className="special-metrics">
         <MetricCard
-          icon={<Activity />}
           label="总训练负荷"
           value={Math.round(total)}
           unit="AU"
           change={`来自 ${sessions.length} 条训练记录`}
         />
         <MetricCard
-          icon={<TrendingUp />}
           label="急性负荷（7天）"
           value={Math.round(acute)}
           unit="AU"
           change="近 7 天滚动值"
-          tone="blue"
         />
         <MetricCard
-          icon={<BarChart3 />}
           label="慢性负荷（28天）"
           value={Math.round(chronic)}
           unit="AU"
           change="近 28 天周均值"
-          tone="green"
         />
         <MetricCard
-          icon={<AlertTriangle />}
           label="负荷风险 ACWR"
           value={round(acwr, 2)}
           change={
             acwr > 1.5 ? '负荷增长偏快，建议复核' : acwr < 0.8 ? '近期刺激偏低' : '处于常用监测区间'
           }
-          tone="purple"
         />
       </div>
       <div className="special-grid">
@@ -842,35 +790,28 @@ function TrainingVolumePage({
     <>
       <div className="special-metrics">
         <MetricCard
-          icon={<CalendarDays />}
           label="专项训练次数"
           value={sessions.length}
           unit="场"
           change={`${days.length} 个有效训练日`}
         />
         <MetricCard
-          icon={<Clock3 />}
           label="专项训练时间"
           value={round(totalDuration / 60, 1)}
           unit="h"
           change={`日均 ${round(averageDailyDuration)} min`}
-          tone="blue"
         />
         <MetricCard
-          icon={<Route />}
           label="专项训练量"
           value={round(totalDistance, 1)}
           unit="km"
           change="按训练距离累计"
-          tone="green"
         />
         <MetricCard
-          icon={<TimerReset />}
           label="单次训练时间"
           value={round(averageDuration)}
           unit="min"
           change="按实际训练记录计算"
-          tone="purple"
         />
       </div>
       <div className="special-grid">
@@ -919,8 +860,8 @@ function MetricPage({ section, sessions, days, project }: {
     <label>实际训练活动<select aria-label="专项指标活动筛选" value={active||''} onChange={event=>setSelectedActivity(event.target.value)}>{activities.map(activity=><option key={activity} value={activity}>{isActivityCode(activity)?ACTIVITY_LABELS[activity]:activity}</option>)}</select></label>
     <p>不同活动分开展示；设备或测试条件不明时，只呈现实测描述，不作可比成绩结论。</p>
     <div className="special-metrics">
-      <MetricCard icon={<Activity />} label={`${label}均值`} value={values.length ? round(values.reduce((sum,value) => sum+value,0)/values.length) : '—'} unit={unit} change={`有效课次 ${values.length}/${scopedSessions.length}；仅为同活动课次值均值`} />
-      <MetricCard icon={<Gauge />} label="最高课次记录值" value={values.length ? Math.max(...values) : '—'} unit={unit} change="不代表瞬时峰值，不用于达标分区" />
+      <MetricCard label={`${label}均值`} value={values.length ? round(values.reduce((sum,value) => sum+value,0)/values.length) : '—'} unit={unit} change={`有效课次 ${values.length}/${scopedSessions.length}；仅为同活动课次值均值`} />
+      <MetricCard label="最高课次记录值" value={values.length ? Math.max(...values) : '—'} unit={unit} change="不代表瞬时峰值，不用于达标分区" />
     </div>
     <SectionCard title={`${label}趋势`} note="仅展示实测，不推算强度阈值或效率评分" className="span-12">
       <TrendChart data={scopedDays} metric={kind} color="#12978f" />
@@ -958,7 +899,6 @@ export function SpecialTestsPage({
     <PageHeader
       variant="dashboard"
       className="overview-page-heading special-page-heading"
-      eyebrow={supportsSpecialAnalysis ? meta.english : 'SPECIAL TRAINING'}
       title="专项训练"
       filters={filters}
       filterActions={

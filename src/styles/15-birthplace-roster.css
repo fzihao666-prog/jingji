@@ -7,8 +7,6 @@
   height: 6px;
   border-radius: 50%;
   background: #20ae89;
-  box-shadow: 0 0 0 4px rgb(32 174 137 / 12%);
-  animation: birthplace-live-pulse 2.2s ease-in-out infinite;
 }
 
 .birthplace-detail-heading > div:first-child > strong {
@@ -207,19 +205,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   line-height: 1.2;
-}
-
-@keyframes birthplace-live-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.55;
-    transform: scale(0.78);
-  }
 }
 
 .profile-visual-empty {

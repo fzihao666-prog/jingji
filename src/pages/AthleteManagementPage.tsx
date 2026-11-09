@@ -497,7 +497,6 @@ export function AthleteManagementPage({
     <PageContainer className="athlete-management-page">
       <PageHeader
         className="athlete-management-heading"
-        eyebrow="ATHLETE OPERATIONS"
         title="运动员管理"
         actions={
           canEdit && (

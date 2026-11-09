@@ -157,7 +157,6 @@ export function AccountsPage() {
     <PageContainer className="accounts-page">
       <PageHeader
         variant="compact"
-        eyebrow="ACCOUNT REVIEW"
         title="账户审核"
         actions={
           <span className="pending-count">

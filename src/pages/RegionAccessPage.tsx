@@ -501,7 +501,6 @@ export function RegionAccessPage({ user }: { user: User }) {
       <PageHeader
         variant="compact"
         className="access-heading"
-        eyebrow="ACCOUNT AUTHORITY"
         title="账号权限"
         actions={
           <div className="authority-formula">

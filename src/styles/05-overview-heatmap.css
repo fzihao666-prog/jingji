@@ -529,18 +529,20 @@
 
 .fms-summary {
   padding: 16px;
+  border: 1px solid var(--line);
   border-radius: 12px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  color: #d9efec;
-  background: linear-gradient(145deg, #073f4c, #0d696b);
+  color: var(--ink);
+  background: var(--paper);
+  font-variant-numeric: tabular-nums;
 }
 
 .fms-summary > strong {
-  color: #fff;
+  color: var(--ink);
   font:
-    800 34px Bahnschrift,
+    600 34px Bahnschrift,
     sans-serif;
 }
 
@@ -551,9 +553,9 @@
 
 .fms-summary > span {
   margin-top: 3px;
-  color: #79d1c6;
-  font-size: 9px;
-  font-weight: 800;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .fms-summary-grid {
@@ -569,7 +571,7 @@
   padding: 7px 3px;
   border-radius: 7px;
   text-align: center;
-  background: rgb(255 255 255 / 8%);
+  background: var(--mist);
 }
 
 .fms-summary-grid b,
@@ -578,30 +580,30 @@
 }
 
 .fms-summary-grid b {
-  color: #fff;
+  color: var(--ink);
   font:
-    800 15px Bahnschrift,
+    600 15px Bahnschrift,
     sans-serif;
 }
 
 .fms-summary-grid small {
   margin-top: 2px;
-  color: #9ed6cf;
-  font-size: 7px;
-  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .fms-summary > em {
   margin-top: 9px;
-  color: #8dcac3;
-  font-size: 7.5px;
+  color: var(--muted);
+  font-size: 11px;
   font-style: normal;
 }
 
 .fms-summary > p {
   margin-top: 11px;
-  color: #c4ddda;
-  font-size: 8.5px;
+  color: var(--muted);
+  font-size: 11px;
   line-height: 1.55;
 }
 
@@ -1091,26 +1093,28 @@
 .fms-personal-summary article {
   min-width: 0;
   padding: 14px 16px;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  color: #e1f1ef;
-  background: linear-gradient(145deg, #083f4b, #136c68);
+  color: var(--ink);
+  background: var(--paper);
+  font-variant-numeric: tabular-nums;
 }
 
 .fms-personal-summary article span,
 .fms-personal-summary article em {
   display: block;
-  color: #90d8cf;
-  font-size: 9px;
+  color: var(--muted);
+  font-size: 11px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .fms-personal-summary article strong {
   display: block;
   margin-top: 5px;
-  color: #fff;
+  color: var(--ink);
   font:
-    900 30px Bahnschrift,
+    600 30px Bahnschrift,
     sans-serif;
 }
 
@@ -1181,31 +1185,31 @@
 
 .fms-status {
   padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 9px;
+  border-radius: 8px;
+  font-size: 11px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .fms-status.good {
-  color: #b9f1df;
+  color: #166047;
   background: rgb(39 181 132 / 18%);
 }
 
 .fms-status.watch {
-  color: #ffe3a8;
+  color: #785416;
   background: rgb(238 172 61 / 18%);
 }
 
 .fms-status.attention {
-  color: #ffc7c1;
+  color: #993e34;
   background: rgb(220 87 73 / 20%);
 }
 
 .fms-status.pending {
-  color: #c4d5d8;
-  background: rgb(255 255 255 / 8%);
+  color: var(--muted);
+  background: var(--mist);
 }
 
 .champion-benchmark-empty {

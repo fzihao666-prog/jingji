@@ -63,7 +63,6 @@ export function TeamsPage() {
     <PageContainer className="teams-page">
       <PageHeader
         variant="compact"
-        eyebrow="PROJECT TEAM DIRECTORY"
         title="队伍管理"
         actions={
           <span className="count-chip large">

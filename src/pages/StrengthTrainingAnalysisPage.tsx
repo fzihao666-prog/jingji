@@ -196,7 +196,6 @@ export function StrengthTrainingAnalysisPage(props: Props) {
     <PageHeader
       variant="dashboard"
       className="overview-page-heading strength-page-head"
-      eyebrow="STRENGTH TRAINING"
       title={pageTitle}
       filters={props.filters}
       filterActions={

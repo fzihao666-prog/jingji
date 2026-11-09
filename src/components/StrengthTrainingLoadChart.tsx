@@ -44,7 +44,6 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
     <section className="strength-load-visual" aria-label="训练负荷趋势">
       <header>
         <div>
-          <span>TRAINING LOAD</span>
           <h3>训练负荷趋势</h3>
           <p>柱形表示每场训练量，折线表示平均RPE；同日多场分别记录。</p>
         </div>

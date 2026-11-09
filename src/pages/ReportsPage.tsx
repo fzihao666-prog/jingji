@@ -96,7 +96,6 @@ export function ReportsPage({ project, teamId }: Props) {
   return (
     <PageContainer className="reports-page">
       <PageHeader
-        eyebrow="WEEKLY TRAINING REPORT"
         title="训练周总结"
         supportingContent={<p>一键生成并下载 Word，内容需要修改时直接编辑下载的文件。</p>}
       />

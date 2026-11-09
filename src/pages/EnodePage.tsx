@@ -74,7 +74,7 @@ export function EnodePage({
 }) {
   return (
     <PageContainer>
-      <PageHeader eyebrow="ENODE VBT" title="Enode VBT" filters={filters} />
+      <PageHeader title="Enode VBT" filters={filters} />
       <nav className="strength-category-tabs" aria-label="体能分析视图">
         <button type="button" onClick={() => onNavigate('strength-overview')}>
           训练总览

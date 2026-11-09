@@ -588,12 +588,11 @@ export function PersonalPage(props: Props) {
 
   return (
     <PageContainer className="personal-page">
-      <PageHeader eyebrow="ATHLETE PROFILE" title="运动员档案" filters={props.filters} />
+      <PageHeader title="运动员档案" filters={props.filters} />
 
       {canSwitchAthlete && (
         <section className="performance-athlete-picker">
           <div className="performance-picker-copy">
-            <span>ATHLETE PROFILE</span>
             <strong>选择运动员</strong>
             {selectedAthlete && (
               <small>
@@ -776,7 +775,6 @@ export function PersonalPage(props: Props) {
                 <header className="personal-analysis-card-heading">
                   <div>
                     <span>
-                      <small>BODY COMPOSITION</small>
                       <h3>身体成分</h3>
                       <p>身体组成、肌肉量与节段分布</p>
                     </span>
@@ -808,7 +806,6 @@ export function PersonalPage(props: Props) {
                 <header className="personal-analysis-card-heading">
                   <div>
                     <span>
-                      <small>FMS SCREENING</small>
                       <h3>（FMS）功能动作筛查</h3>
                     </span>
                   </div>
@@ -836,7 +833,6 @@ export function PersonalPage(props: Props) {
                 <header className="personal-analysis-card-heading">
                   <div>
                     <span>
-                      <small>SPECIAL TEST RADAR</small>
                       <h3>专项测试雷达</h3>
                       <p>当前周期测试与正式参考标准的可达成度对照</p>
                     </span>
@@ -860,7 +856,6 @@ export function PersonalPage(props: Props) {
                 <header className="personal-analysis-card-heading">
                   <div>
                     <span>
-                      <small>PHYSICAL TEST RADAR</small>
                       <h3>体能测试雷达</h3>
                       <p>力量、爆发力与核心能力的正式参考标准对照</p>
                     </span>

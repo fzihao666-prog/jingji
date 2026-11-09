@@ -885,7 +885,6 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   return (
     <PageContainer className="data-import-page">
       <PageHeader
-        eyebrow="DATA IMPORT"
         title="数据导入"
       />
       <section className="data-import-template-panel" aria-labelledby="data-import-template-title">

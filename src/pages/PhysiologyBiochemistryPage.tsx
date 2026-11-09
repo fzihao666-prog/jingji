@@ -18,7 +18,6 @@ export function PhysiologyBiochemistryPage({ filters, project, from, to }: Props
       <PageHeader
         variant="dashboard"
         className="overview-page-heading"
-        eyebrow="PHYSIOLOGY & BIOCHEMISTRY"
         title="生理生化"
         filters={filters}
       />

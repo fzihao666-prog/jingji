@@ -166,7 +166,6 @@ export function RosterPage({
     <PageContainer className="roster-page">
       <PageHeader
         variant="compact"
-        eyebrow="ATHLETE RELATIONSHIPS"
         title="人员关系"
         actions={
           <span className="count-chip large">

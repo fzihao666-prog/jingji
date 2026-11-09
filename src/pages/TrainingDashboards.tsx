@@ -577,7 +577,6 @@ export function StrengthTrainingDashboard({
       <PageHeader
         variant="dashboard"
         className="overview-page-heading"
-        eyebrow="PHYSICAL TRAINING"
         title="体能训练"
         filters={filters}
         filterActions={

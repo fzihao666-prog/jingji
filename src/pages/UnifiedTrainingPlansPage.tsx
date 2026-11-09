@@ -131,7 +131,6 @@ export function UnifiedTrainingPlansPage(props: Props) {
   return (
     <PageContainer className="unified-plans-page">
       <PageHeader
-        eyebrow="TRAINING PLANS"
         title="训练计划"
         actions={
           props.onBack ? (

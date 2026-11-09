@@ -324,7 +324,6 @@ export function CoachManagementPage({
     <PageContainer className="coach-directory-page">
       <PageHeader
         className="coach-directory-heading"
-        eyebrow="COACH DIRECTORY"
         title="教练管理"
         actions={
           <div className="coach-directory-summary" aria-label="教练管理概览">

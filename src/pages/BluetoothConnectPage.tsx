@@ -284,7 +284,6 @@ export function BluetoothConnectPage({ user }: Props) {
   return (
     <PageContainer className="bluetooth-page">
       <PageHeader
-        eyebrow="DEVICE MANAGEMENT"
         title="设备管理"
       />
       <div className="bluetooth-actions">

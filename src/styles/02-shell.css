@@ -20,7 +20,7 @@
   padding: 25px 18px 18px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #0b3444 0%, #072834 100%);
+  background: var(--ink);
   color: #fff;
   z-index: 30;
 }
@@ -172,8 +172,8 @@
 
 .primary-nav button.active {
   color: #fff;
-  background: linear-gradient(105deg, rgb(36 168 155 / 36%), rgb(36 168 155 / 13%));
-  box-shadow: inset 3px 0 #58ccbb;
+  background: #18515b;
+  box-shadow: inset 3px 0 var(--mint);
 }
 
 .primary-nav button span,
@@ -200,8 +200,8 @@
 
 .special-nav.active {
   padding-bottom: 7px;
-  background: rgb(19 118 119 / 12%);
-  box-shadow: inset 3px 0 #58ccbb;
+  background: #15434f;
+  box-shadow: inset 3px 0 var(--mint);
 }
 
 .primary-nav .special-nav-parent {
