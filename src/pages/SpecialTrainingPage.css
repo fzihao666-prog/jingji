@@ -1489,24 +1489,6 @@
 }
 
 /* 专项总览：图表、明细与冠军模型保持独立的响应式布局。 */
-.special-dashboard-page .app-page-header-actions > .primary-button {
-  background: #08716b;
-  box-shadow: none;
-  transition: background-color 0.18s ease;
-}
-
-.special-dashboard-page .app-page-header-actions > .primary-button:hover {
-  background: #065d58;
-  box-shadow: none;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .special-dashboard-page .app-page-header-actions > .primary-button {
-    transition: none;
-  }
-}
-
 .special-dashboard-page > *,
 .special-dashboard-page .special-analysis-grid > * {
   min-width: 0;

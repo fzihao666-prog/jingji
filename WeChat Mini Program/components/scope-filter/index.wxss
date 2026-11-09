@@ -37,7 +37,7 @@
 }
 .scope-picker-label {
   flex: none;
-  color: #829399;
+  color: var(--muted, #52636a);
   font-size: 18rpx;
 }
 .scope-picker-value {
@@ -74,7 +74,7 @@
   flex: 1;
   border: 0;
   border-radius: 10rpx;
-  color: #657b83;
+  color: var(--muted, #52636a);
   background: transparent;
   box-shadow: none;
   font-size: 20rpx;
@@ -92,8 +92,7 @@
 
 .scope-range-button.active {
   color: #ffffff;
-  background: #176f7f;
-  box-shadow: 0 5rpx 12rpx rgba(23, 111, 127, 0.2);
+  background: var(--action-fill, #08716b);
 }
 
 /* 搜索与添加入口共用首行，有添加权限时等分可用宽度。 */

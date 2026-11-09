@@ -168,15 +168,14 @@
   align-items: center;
   gap: 7px;
   color: #fff;
-  background: #08746f;
-  box-shadow: 0 7px 16px rgb(8 116 111 / 18%);
+  background: var(--action-fill);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }
 
 .coach-create-button:hover {
-  background: #075f5c;
+  background: var(--action-hover);
 }
 
 .coach-directory-card {

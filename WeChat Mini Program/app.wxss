@@ -10,7 +10,8 @@ page {
   --mist: #edf3f4;
   --paper: #ffffff;
   --line: #d8e3e6;
-  --muted: #6d8088;
+  --muted: #52636a;
+  --action-fill: #08716b;
   --radius-card: 24rpx;
   --radius-item: 18rpx;
   --shadow-card: 0 14rpx 38rpx rgba(13, 55, 69, 0.06);
@@ -200,7 +201,7 @@ button::after { border: 0; }
   font-size: 25rpx;
   font-weight: 700;
 }
-.primary-button { color: #ffffff; background: var(--ink); box-shadow: 0 14rpx 30rpx rgba(9,43,57,.18); }
+.primary-button { color: #ffffff; background: var(--action-fill); }
 .secondary-button { color: #123f4b; border: 1rpx solid #cbdadd; background: var(--paper); }
 .danger-button { color: #a64234; border: 1rpx solid #e4b8af; background: #fff8f6; }
 .button-stack { display: grid; gap: 16rpx; }

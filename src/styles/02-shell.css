@@ -580,7 +580,7 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: #627780;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   padding: 0 9px;
@@ -594,13 +594,12 @@
 
 .range-presets button.active {
   color: #fff;
-  background: #118b83;
-  box-shadow: 0 5px 12px rgb(17 139 131 / 20%);
+  background: var(--action-fill);
 }
 
 .range-presets button.active:hover {
   color: #fff;
-  background: #0e7c75;
+  background: var(--action-hover);
 }
 
 .date-input {
@@ -922,10 +921,6 @@
 
 .toolbar-team-select [role="alert"] {
   flex-basis: 100%;
-}
-
-.date-toolbar-scope-first .range-presets button.active {
-  box-shadow: none;
 }
 
 .date-toolbar-scope-first .project-select:not(.open) > .project-select-menu {

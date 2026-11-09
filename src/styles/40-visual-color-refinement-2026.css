@@ -15,7 +15,6 @@
     --mist: #edf4f5;
     --paper: #fff;
     --line: #d7e4e7;
-    --muted: #6b8088;
     --shadow: 0 16px 42px rgb(12 52 66 / 7.5%);
   }
 
@@ -253,17 +252,6 @@
     box-shadow: 0 7px 16px rgb(15 132 128 / 19%);
   }
 
-  .analysis-period-tabs button.active,
-  .range-presets button.active {
-    background: #159c93;
-    box-shadow: 0 5px 13px rgb(21 156 147 / 23%);
-  }
-
-  .analysis-period-tabs button.active:hover,
-  .range-presets button.active:hover {
-    background: #108b84;
-  }
-
   .fms-summary,
   .fms-personal-summary article {
     background:
@@ -288,19 +276,8 @@
 
   /* ---------------------------------------------------------------------- */
 
-  .primary-button,
-  .coach-create-button {
-    background: linear-gradient(105deg, #087382, #0f9089);
-    box-shadow: 0 7px 17px rgb(8 115 125 / 20%);
-  }
-
-  .primary-button:hover,
-  .coach-create-button:hover {
-    background: linear-gradient(105deg, #076777, #0d837d);
-  }
-
   .project-select-option.selected {
-    color: #087970;
+    color: var(--action-fill);
     background: #e0f5f0;
   }
 

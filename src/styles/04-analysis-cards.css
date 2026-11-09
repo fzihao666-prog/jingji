@@ -43,14 +43,17 @@
 
 .analysis-period-tabs button.active {
   color: #fff;
-  background: #138a84;
-  box-shadow: 0 5px 12px rgb(19 138 132 / 20%);
+  background: var(--action-fill);
+}
+
+.analysis-period-tabs button.active:hover {
+  background: var(--action-hover);
 }
 
 .analysis-stage-calendar footer button.confirm {
-  border-color: #168f87;
+  border-color: var(--action-fill);
   color: #fff;
-  background: #168f87;
+  background: var(--action-fill);
 }
 
 @keyframes analysis-calendar-in {
