@@ -1201,6 +1201,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   });
   const available = data.filter((row) => typeof row.score === 'number');
   const isPlaceholder = available.length === 0;
+  const hasMissingScores = available.length < data.length;
   const chartData = data;
   const total = available.length ? available.reduce((sum, row) => sum + (row.score || 0), 0) : null;
   const weakest = [...available]
@@ -1242,6 +1243,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
 
                 <PolarRadiusAxis
                   domain={[0, 3]}
+                  allowDataOverflow
                   ticks={[0, 1, 2, 3]}
                   tickCount={4}
                   axisLine={false}
@@ -1256,21 +1258,23 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
                 />
 
                 <Radar dataKey="target" name="达标参考" stroke="#b18a42" strokeDasharray="5 4" strokeWidth={1.5} fill="transparent" fillOpacity={0} dot={false} isAnimationActive={false} />
-                <Radar
-                  dataKey="score"
-                  name="个人得分"
-                  stroke="#178e87"
-                  strokeWidth={3}
-                  fill="#178e87"
-                  fillOpacity={0.14}
-                  isAnimationActive={false}
-                  dot={{
-                    r: 4.5,
-                    fill: '#ffffff',
-                    stroke: '#178e87',
-                    strokeWidth: 2,
-                  }}
-                />
+                {!isPlaceholder && (
+                  <Radar
+                    dataKey="score"
+                    name="个人得分"
+                    stroke={hasMissingScores ? 'none' : '#178e87'}
+                    strokeWidth={3}
+                    fill={hasMissingScores ? 'none' : '#178e87'}
+                    fillOpacity={0.14}
+                    isAnimationActive={false}
+                    activeDot={!hasMissingScores}
+                    dot={({ cx, cy, value }) =>
+                      typeof value === 'number' ? (
+                        <circle cx={cx} cy={cy} r={4.5} fill="#fff" stroke="#178e87" strokeWidth={2} />
+                      ) : null
+                    }
+                  />
+                )}
               </RadarChart>
             </ResponsiveContainer></div>
 

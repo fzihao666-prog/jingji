@@ -82,6 +82,7 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
               yAxisId="rpe"
               orientation="right"
               domain={[0, 10]}
+              allowDataOverflow
               ticks={[0, 2, 4, 6, 8, 10]}
               tick={{ fill: '#c07135', fontSize: 9 }}
               axisLine={false}

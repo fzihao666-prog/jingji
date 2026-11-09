@@ -402,6 +402,7 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
       };
     });
   const isPlaceholder = data.length === 0;
+  const hasLoad = data.some((item) => item.load !== null);
   const chartData: Array<{ date: string; duration: number | null; load: number | null }> = data.length
     ? data
     : [{ date: '', duration: null, load: null }];
@@ -428,9 +429,9 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             unit=" min"
           />
           <YAxis
-            allowDataOverflow={isPlaceholder}
-            domain={isPlaceholder ? [0, 1] : undefined}
-            ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
+            allowDataOverflow={!hasLoad}
+            domain={!hasLoad ? [0, 1] : undefined}
+            ticks={!hasLoad ? [0, 0.25, 0.5, 0.75, 1] : undefined}
             yAxisId="load"
             orientation="right"
             tick={{ fontSize: 11, fill: 'var(--muted)' }}

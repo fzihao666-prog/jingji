@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 const captured = vi.hoisted(() => ({
   rows: [] as Array<{ chart: string; data: Array<Record<string, unknown>> }>,
+  yAxes: [] as Array<Record<string, unknown>>,
   radiusAxis: undefined as Record<string, unknown> | undefined,
   radar: undefined as Record<string, unknown> | undefined,
 }));
@@ -11,6 +12,7 @@ vi.mock('recharts', () => Object.fromEntries([
   'PolarAngleAxis', 'PolarGrid', 'PolarRadiusAxis', 'Radar', 'RadarChart', 'ResponsiveContainer', 'Tooltip', 'XAxis', 'YAxis',
 ].map((chart) => [chart, ({ children, data, ...props }: { children?: ReactNode; data?: Array<Record<string, unknown>> }) => {
   if (data) captured.rows.push({ chart, data });
+  if (chart === 'YAxis') captured.yAxes.push(props);
   if (chart === 'PolarRadiusAxis') captured.radiusAxis = props;
   if (chart === 'Radar') captured.radar = props;
   return createElement('svg', { 'data-chart': chart }, children);
@@ -19,6 +21,7 @@ import { LoadTrendChart, ProfessionalLoadChart, PerformanceRadarChart, RelativeS
 import { StrengthTrainingLoadChart } from './StrengthTrainingLoadChart';
 beforeEach(() => {
   captured.rows = [];
+  captured.yAxes = [];
   captured.radiusAxis = undefined;
   captured.radar = undefined;
 });
@@ -58,4 +61,11 @@ it('真实零负荷不会被示例数据替换', () => {
   const data = [{ date: '2026-10-01', label: '10/01', srpe: 0, smvl: 0, duration: 0, distance: 0, rpe: null, sleep: null, fatigue: null, pulse: null, weight: null, participantCount: 1 }];
   renderToStaticMarkup(createElement(ProfessionalLoadChart, { data }));
   expect(captured.rows[0].data).toEqual(data);
+});
+
+it('没有 RPE 时仍保留体能训练图的 0–10 分坐标', () => {
+  renderToStaticMarkup(createElement(StrengthTrainingLoadChart, { sessions: [] }));
+  expect(captured.yAxes).toContainEqual(expect.objectContaining({
+    yAxisId: 'rpe', domain: [0, 10], allowDataOverflow: true,
+  }));
 });

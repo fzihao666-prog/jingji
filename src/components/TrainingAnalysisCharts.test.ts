@@ -2,7 +2,7 @@ import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { OverviewPayload } from '../types';
-const charts = vi.hoisted(() => ({ data: [] as unknown[][], axes: [] as unknown[] }));
+const charts = vi.hoisted(() => ({ data: [] as unknown[][], axes: [] as unknown[], radars: [] as unknown[] }));
 vi.mock('recharts', () => {
   const component = ({ children, data }: { children?: ReactNode; data?: unknown[] }) => {
     if (data) charts.data.push(data);
@@ -33,9 +33,9 @@ vi.mock('recharts', () => {
       'PolarRadiusAxis',
     ].map((key) => [
       key,
-      key === 'XAxis' || key === 'YAxis'
+      ['XAxis', 'YAxis', 'Radar'].includes(key)
         ? (props: Parameters<typeof component>[0]) => {
-            charts.axes.push(props);
+            (key === 'Radar' ? charts.radars : charts.axes).push(props);
             return component(props);
           }
         : component,
@@ -55,6 +55,7 @@ import { TrendChart, TypeDonut } from '../pages/SpecialTestsPage';
 beforeEach(() => {
   charts.data = [];
   charts.axes = [];
+  charts.radars = [];
 });
 const summary: OverviewPayload['trainingAnalytics']['summary'] = {
   totalDurationMin: null,
@@ -200,6 +201,7 @@ it('FMS缺测保留雷达结构和空提示，不伪造零分', () => {
   expect(charts.data.at(-1)).toEqual(expect.arrayContaining([expect.objectContaining({ score: null })]));
   expect(html).not.toContain('training-analytics-empty');
   expect(html).toContain('已完成 0/7 项筛查');
+  expect(charts.radars).not.toContainEqual(expect.objectContaining({ dataKey: 'score' }));
 });
 it('FMS真实零分仍显示评分与雷达，不误判为空状态', () => {
   const measurement: import('../types').OverviewMeasurement = {
@@ -222,6 +224,7 @@ it('FMS真实零分仍显示评分与雷达，不误判为空状态', () => {
   expect(html).not.toContain('暂无FMS测试数据');
   expect(html).toContain('fms-radar-center');
   expect(html).toContain('已完成 1/7 项筛查');
+  expect(charts.radars).toContainEqual(expect.objectContaining({ dataKey: 'score', stroke: 'none', fill: 'none' }));
 });
 
 it('强度空态保留七类图例，缺失显示横线，真实零正常显示', () => {

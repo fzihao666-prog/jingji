@@ -216,7 +216,7 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, onP
               <EChart option={loadOption(training, from, to, !training.days.some((day) => day.load !== null))} label="每日专项SRPE负荷趋势" isPlaceholder={!training.days.some((day) => day.load !== null)} />
             </ChartCard>
             <ChartCard title="周训练量变化" description="自然周按周一归组；边界周仅含所选周期，缺失不补零，部分缺失按已记录值合计">
-              <EChart option={specialWeeklyOption(training.days)} label="每周专项时长与距离" isPlaceholder={!training.days.some(day => day.durationMin !== null || day.distanceKm !== null)} />
+              <EChart option={specialWeeklyOption(training.days, from, to)} label="每周专项时长与距离" isPlaceholder={!training.days.some(day => day.durationMin !== null || day.distanceKm !== null)} />
             </ChartCard>
             {selectedAthlete && teamTraining && <ChartCard title="个人与队伍平均对照" description="同周期内各运动员有效累计值的均值；缺失者不计入分母">
               <div className="table-scroll"><table className="data-table"><thead><tr><th>指标</th><th>个人</th><th>队伍均值</th></tr></thead><tbody>

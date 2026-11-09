@@ -899,7 +899,13 @@ export function PersonalPage(props: Props) {
               loading={profileAnalysisLoading}
               error={physiologyError}
             />
-            <WellnessTrendCards trends={wellnessTrends} loading={dossierDataLoading} error={dossierDataError} />
+            <WellnessTrendCards
+              trends={wellnessTrends}
+              loading={dossierDataLoading}
+              error={dossierDataError}
+              from={props.from}
+              to={props.to}
+            />
             <EnodeTrends key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} kind="wellness" />
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
             <StrengthProfileModule key={selectedAthlete.id} athlete={selectedAthlete} user={props.user} preloaded={recentStrength.key === testScope ? recentStrength : { tests: [], loading: true, error: false }} onTestsChanged={(tests) => setRecentStrength((current) => current.key === testScope ? { key: testScope, tests, loading: false, error: false } : current)} />
@@ -996,7 +1002,13 @@ function ProfileSection({
   );
 }
 
-function WellnessTrendCards({ trends, loading, error }: { trends: WellnessTrend[]; loading: boolean; error: boolean }) {
+function WellnessTrendCards({ trends, loading, error, from, to }: {
+  trends: WellnessTrend[];
+  loading: boolean;
+  error: boolean;
+  from: string;
+  to: string;
+}) {
   const displayedTrends: WellnessTrend[] = trends.length ? trends : [
     { key: 'rpe', label: 'RPE', unit: '分', points: [] },
     { key: 'sleepHours', label: '睡眠时长', unit: 'h', points: [] },
@@ -1065,7 +1077,7 @@ function WellnessTrendCards({ trends, loading, error }: { trends: WellnessTrend[
                       </div>
                     </dl>
                     <EChart
-                      option={wellnessTrendOption(trend)}
+                      option={wellnessTrendOption(trend, from, to)}
                       label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。缺失日期不连线。`}
                     />
                     <p className="personal-wellness-axis-note">横轴：日期 · 纵轴：{axisLabel}</p>
@@ -1105,11 +1117,14 @@ function WellnessTrendCards({ trends, loading, error }: { trends: WellnessTrend[
                     </div>
                   </>
                 ) : (
-                  <EChart
-                    option={wellnessTrendOption(trend)}
-                    label={`${trend.label}趋势`}
-                    isPlaceholder
-                  />
+                  <>
+                    <EChart
+                      option={wellnessTrendOption(trend, from, to)}
+                      label={`${trend.label}趋势${hasTeamMean ? '，仅有团队平均记录' : ''}`}
+                      isPlaceholder={!hasTeamMean}
+                    />
+                    {hasTeamMean && <p className="analysis-empty-note">暂无个人记录，图中显示团队平均</p>}
+                  </>
                 )}
               </AppCard>
             );
@@ -1128,8 +1143,9 @@ function wellnessValue(value: number, trend: WellnessTrend) {
   return `${formatNumber(value, 1)}${trend.unit ? ` ${trend.unit}` : ' 分'}`;
 }
 
-function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
-  const dates = trend.points.map((point) => Date.parse(`${point.date}T00:00:00Z`));
+function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EChartsOption {
+  const fromTime = Date.parse(`${from}T00:00:00Z`);
+  const toTime = Date.parse(`${to}T00:00:00Z`);
   const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
   return {
     animation: false,
@@ -1158,8 +1174,8 @@ function wellnessTrendOption(trend: WellnessTrend): EChartsOption {
     },
     xAxis: {
       type: 'time',
-      min: dates[0],
-      max: dates.at(-1),
+      min: fromTime === toTime ? fromTime - 43200000 : fromTime,
+      max: fromTime === toTime ? toTime + 43200000 : toTime,
       name: '日期',
       nameLocation: 'middle',
       nameGap: 26,
