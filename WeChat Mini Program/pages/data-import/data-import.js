@@ -19,7 +19,7 @@ const importModes = [
 const blankReview = {
   excel: null, people: [], peopleMore: false, issues: [], issuesMore: false, editor: null,
   mappings: [], enode: null, enodeTeam: '', enodePeople: [], enodeMore: false,
-  receipts: { excel: '', team: '', enode: '' }, enodeResults: []
+  receipts: { excel: '', team: '', enode: '' }, teamStatsTarget: null, enodeResults: []
 };
 
 function chooseFiles(enode) {
@@ -125,7 +125,7 @@ Page({
   onTeamChange(event) {
     if (this.data.busy) return;
     this._teamFile = null;
-    this.setData({ teamIndex: Number(event.detail.value), mappings: [], error: '', 'receipts.team': '' });
+    this.setData({ teamIndex: Number(event.detail.value), mappings: [], error: '', 'receipts.team': '', teamStatsTarget: null });
   },
 
   downloadTemplate(event) {
@@ -274,7 +274,7 @@ Page({
       const [file] = await chooseFiles(false);
       if (!file || this._closed) return;
       this._teamFile = file;
-      this.setData({ mappings: [], 'receipts.team': '' });
+      this.setData({ mappings: [], 'receipts.team': '', teamStatsTarget: null });
       await this.submitTeam(team.id, {});
     });
   },
@@ -307,7 +307,23 @@ Page({
       return;
     }
     this._teamFile = null;
-    this.finish('team', `新增 ${result.created} 项，更新 ${result.updated} 项，相同 ${result.unchanged} 项，跳过无日期 ${result.undatedRows} 行。`, { mappings: [] });
+    this.finish('team', `新增 ${result.created} 项，更新 ${result.updated} 项，相同 ${result.unchanged} 项，跳过无日期 ${result.undatedRows} 行。`, {
+      mappings: [], teamStatsTarget: { project: this.data.project, teamId, date: result.latestDate || '' }
+    });
+  },
+
+  openTeamStats() {
+    const target = this.data.teamStatsTarget;
+    if (!target || this.data.busy) return;
+    const global = getApp().globalData;
+    global.teamTrainingImportTarget = target;
+    wx.switchTab({
+      url: '/pages/special/special',
+      fail: () => {
+        if (global.teamTrainingImportTarget === target) delete global.teamTrainingImportTarget;
+        this.showError('暂时无法打开专项训练，请重试。');
+      }
+    });
   },
 
   uploadEnode() {

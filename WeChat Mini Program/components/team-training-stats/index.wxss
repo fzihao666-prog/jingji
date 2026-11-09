@@ -1,0 +1,149 @@
+.team-stat-card {
+  min-width: 0;
+}
+
+.team-stat-picker,
+.team-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.team-stat-picker {
+  padding: 18rpx 20rpx;
+  margin-bottom: 12rpx;
+  border-radius: var(--radius-item);
+  background: var(--mist);
+}
+
+.team-stat-picker text:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  word-break: break-word;
+}
+
+.team-stat-periods {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.team-stat-card .team-stat-periods button,
+.team-stat-card .team-stat-toggle {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 12rpx 16rpx;
+  line-height: 1.35;
+}
+
+.team-stat-card .team-stat-period-active {
+  color: var(--paper);
+  background: var(--river);
+  border-color: var(--river);
+}
+
+.team-stat-card .team-stat-toggle,
+.team-stat-card .compact-grid,
+.team-stat-chart {
+  margin-top: 16rpx;
+}
+
+.team-stat-chart + picker,
+.team-stat-toggle + picker {
+  margin-top: 16rpx;
+}
+
+.team-stat-chart {
+  border-top: 1rpx solid var(--line);
+  padding-top: 16rpx;
+}
+
+.team-stat-status {
+  padding: 28rpx 0;
+  color: var(--muted);
+}
+
+.team-stat-scroll {
+  width: 100%;
+}
+
+.team-stat-plot {
+  display: inline-flex;
+  min-width: 100%;
+  padding: 10rpx 0;
+}
+
+.team-stat-point {
+  flex: 1 0 76rpx;
+  min-width: 76rpx;
+  margin: 0;
+  padding: 0 12rpx;
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.3;
+}
+
+.team-stat-track {
+  height: 146rpx;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.team-stat-bar {
+  width: 28rpx;
+  border-radius: 6rpx 6rpx 0 0;
+  background: var(--river);
+}
+
+.team-stat-zero {
+  min-height: 3rpx;
+  background: var(--muted);
+}
+
+.team-stat-label {
+  display: block;
+  padding-top: 8rpx;
+  color: var(--muted);
+  font-size: 20rpx;
+  white-space: nowrap;
+}
+
+.team-stat-row {
+  padding: 10rpx 0;
+  border-bottom: 1rpx solid var(--line);
+  font-size: 24rpx;
+}
+
+.team-stat-row text:first-child {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.team-stat-row text:last-child {
+  text-align: right;
+}
+
+.team-stat-table-head {
+  font-weight: 700;
+}
+
+.team-stat-distribution-track {
+  height: 8rpx;
+  margin-bottom: 8rpx;
+  border-radius: 8rpx;
+  background: var(--mist);
+  overflow: hidden;
+}
+
+.team-stat-distribution-track view {
+  height: 100%;
+  background: var(--teal);
+}

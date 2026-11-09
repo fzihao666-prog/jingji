@@ -74,6 +74,8 @@
       </view>
     </view>
 
+    <view wx:if="{{teamStatsScope}}" id="team-training-stats-section"><team-training-stats scope="{{teamStatsScope}}" /></view>
+
     <block wx:if="{{hasWaterSpecial}}">
     <view class="section-head">
       <view class="section-head-title">专项测试成绩</view>

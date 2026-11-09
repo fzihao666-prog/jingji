@@ -16,7 +16,7 @@ function setup(role = 'SCC') {
   };
   const wx = {
     chooseMessageFile: vi.fn(), openDocument: vi.fn(({ success }) => success()),
-    pageScrollTo: vi.fn(), showModal: vi.fn(({ success }) => success({ confirm: true }))
+    pageScrollTo: vi.fn(), switchTab: vi.fn(), showModal: vi.fn(({ success }) => success({ confirm: true }))
   };
   const mocks = {
     '../../services/api': { currentProject: async () => ({ project: 'ROWING', projects: ['ROWING', 'CYCLING_ROAD'] }) },
@@ -92,19 +92,22 @@ it('Excel 只展示需修正项，最终一次确认使用修正后的最新修�
 });
 
 it('队伍新列保存映射前不产生成功回执，重用原文件和队伍', async () => {
-  const { page, importer, wx } = setup();
+  const { page, importer, wx, app } = setup();
   await page.onLoad();
   expect(page.data.teamIndex).toBe(0);
   wx.chooseMessageFile.mockImplementation(({ success }) => success({ tempFiles: [file] }));
   importer.teamExcel.mockResolvedValueOnce({ status: 'mapping_required', columns: [
     { key: 'ride', label: '骑行 · km', unit: 'km' }
-  ] }).mockResolvedValueOnce({ status: 'imported', created: 1, updated: 0, unchanged: 0, undatedRows: 1 });
+  ] }).mockResolvedValueOnce({ status: 'imported', created: 1, updated: 0, unchanged: 0, undatedRows: 1, latestDate: '2026-09-20' });
   await page.uploadTeam();
   expect(page.data.receipts.team).toBe('');
   expect(page.data.mappings[0]).toMatchObject({ fixedUnit: true, category: '骑行' });
   await page.saveMappings();
   expect(importer.teamExcel).toHaveBeenLastCalledWith(file, 'ROWING', 1, { ride: { category: '骑行', unit: 'km' } });
   expect(page.data.receipts.team).toContain('跳过无日期 1 行');
+  page.openTeamStats();
+  expect(wx.switchTab).toHaveBeenCalledWith(expect.objectContaining({ url: '/pages/special/special' }));
+  expect(app.globalData.teamTrainingImportTarget).toEqual({ project: 'ROWING', teamId: 1, date: '2026-09-20' });
 });
 
 it('Enode 统一预览两份文件，同名明确选择、新人同批建档', async () => {

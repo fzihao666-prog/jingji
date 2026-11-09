@@ -1,0 +1,94 @@
+<template name="team-trend">
+  <view class="team-stat-chart">
+    <view class="card-head-title">{{series.title}}（{{series.unit}}）</view>
+    <view wx:if="{{series.note}}" class="card-head-note">{{series.note}}</view>
+    <view wx:if="{{!series.hasValues}}" class="card-head-note">此周期暂无该指标数据。</view>
+    <block wx:else>
+      <scroll-view class="team-stat-scroll" scroll-x aria-label="{{series.title}}">
+        <view class="team-stat-plot">
+          <button wx:for="{{series.points}}" wx:key="date" class="team-stat-point"
+            aria-label="{{item.date}}，{{item.missing ? '未填报' : item.value + ' ' + series.unit}}"
+            data-title="{{series.title}}" data-unit="{{series.unit}}" data-date="{{item.date}}" data-value="{{item.value}}" bindtap="onPoint">
+            <view class="team-stat-track">
+              <view wx:if="{{!item.missing}}" class="team-stat-bar {{item.zero ? 'team-stat-zero' : ''}}" style="{{'height: ' + item.height + '%;'}}"></view>
+            </view>
+            <text class="team-stat-label">{{item.label}}</text>
+          </button>
+        </view>
+      </scroll-view>
+      <view wx:if="{{detail}}" class="team-stat-table" aria-label="{{series.title}}明细">
+        <view class="team-stat-row team-stat-table-head"><text>{{series.monthly ? '月份' : '日期'}}</text><text>数值（{{series.unit}}）</text></view>
+        <view wx:for="{{series.points}}" wx:key="date" class="team-stat-row"><text>{{item.date}}</text><text>{{item.value}}</text></view>
+      </view>
+    </block>
+  </view>
+</template>
+
+<template name="team-composition">
+  <view class="team-stat-chart">
+    <view class="card-head-title">{{group.title}}（{{group.unit}}）</view>
+    <view wx:if="{{!group.hasShare}}" class="card-head-note">数值均为 0，暂无占比。</view>
+    <view wx:for="{{group.rows}}" wx:key="name" class="team-stat-distribution">
+      <view class="team-stat-row"><text>{{item.name}}</text><text>{{item.value}} {{group.unit}}<text wx:if="{{group.hasShare}}"> · {{item.share}}</text></text></view>
+      <view wx:if="{{group.hasShare}}" class="team-stat-distribution-track" aria-hidden="true"><view style="{{'width: ' + item.width + '%;'}}"></view></view>
+    </view>
+  </view>
+</template>
+
+<view class="section-head">
+  <view class="section-head-title">队伍训练统计</view>
+  <view class="section-head-note">Excel 导入 · {{projectLabel}} · 按队伍统计</view>
+</view>
+<view class="card team-stat-card">
+  <picker wx:if="{{teams.length}}" mode="selector" range="{{teamOptions}}"
+    value="{{teamIndex + 1}}" bindchange="onTeamChange" disabled="{{loading && teamIndex < 0}}">
+    <view class="team-stat-picker"><text>统计队伍</text><text>{{teamName || '请选择'}}</text><text aria-hidden="true">⌄</text></view>
+  </picker>
+  <block wx:if="{{teamIndex >= 0}}">
+    <view class="team-stat-periods" aria-label="统计周期">
+      <button wx:for="{{periods}}" wx:key="id" class="secondary-button {{period === item.id ? 'team-stat-period-active' : ''}}"
+        aria-label="{{item.label}}{{period === item.id ? '，已选中' : ''}}" data-period="{{item.id}}" bindtap="onPeriodChange">{{item.label}}</button>
+    </view>
+    <picker mode="date" fields="{{dateFields.fields}}" value="{{pickerDate}}" start="0002-01-01" end="9998-12-31" bindchange="onDateChange">
+      <view class="team-stat-picker"><text>{{dateFields.label}}</text><text>{{dateText || '最近有数据的日期'}}</text><text aria-hidden="true">⌄</text></view>
+    </picker>
+  </block>
+  <view wx:if="{{loading}}" class="team-stat-status" aria-live="polite">正在读取队伍训练统计…</view>
+  <view wx:elif="{{error}}" class="error-box"><text>{{error}}</text><button class="error-retry" bindtap="onRetry">重试</button></view>
+  <view wx:elif="{{teamIndex < 0}}" class="team-stat-status">{{teams.length ? '请选择要查看的队伍' : '当前项目暂无可查看的队伍'}}</view>
+  <block wx:elif="{{view}}">
+    <view class="card-head-note">{{view.start}} 至 {{view.end}} · {{period === 'year' ? '按月汇总' : '按日汇总'}}</view>
+    <view wx:if="{{!view.hasData}}" class="team-stat-status">此周期暂无已导入的队伍训练数据。</view>
+    <block wx:else>
+      <view class="compact-grid" wx:if="{{view.trends.length}}">
+        <view class="compact-stat"><view class="compact-stat-label">总时长</view><view class="compact-stat-value">{{view.minutes}}<text> min</text></view></view>
+        <view class="compact-stat"><view class="compact-stat-label">总距离</view><view class="compact-stat-value">{{view.distance}}<text> km</text></view></view>
+      </view>
+      <button wx:if="{{view.trends.length}}" class="secondary-button team-stat-toggle" bindtap="onToggleDetail">{{showDetail ? '收起趋势明细' : '查看趋势明细'}}</button>
+      <block wx:for="{{view.trends}}" wx:key="title">
+        <template is="team-trend" data="{{series: item, detail: showDetail}}" />
+      </block>
+      <block wx:for="{{view.categories}}" wx:key="title">
+        <template is="team-composition" data="{{group: item}}" />
+      </block>
+
+      <button wx:if="{{view.waterGroups.length || view.annual.length || rawOptions.length}}" class="secondary-button team-stat-toggle" bindtap="onToggleSpecial">{{showSpecial ? '收起专项与其他指标' : '查看专项与其他指标'}}</button>
+      <block wx:if="{{showSpecial}}">
+        <block wx:for="{{view.waterGroups}}" wx:key="title"><template is="team-composition" data="{{group: item}}" /></block>
+        <block wx:if="{{view.annual.length}}">
+          <picker mode="selector" range="{{view.annual}}" range-key="title" value="{{annualIndex}}" bindchange="onAnnualChange">
+            <view class="team-stat-picker"><text>年度专项指标</text><text>{{view.annual[annualIndex].title}}</text><text aria-hidden="true">⌄</text></view>
+          </picker>
+          <template wx:if="{{annualChart}}" is="team-trend" data="{{series: annualChart, detail: showDetail}}" />
+        </block>
+        <block wx:if="{{rawOptions.length}}">
+          <picker mode="selector" range="{{rawOptions}}" value="{{rawIndex}}" bindchange="onRawChange">
+            <view class="team-stat-picker"><text>按日原始值</text><text>{{rawOptions[rawIndex]}}</text><text aria-hidden="true">⌄</text></view>
+          </picker>
+          <template wx:if="{{rawChart}}" is="team-trend" data="{{series: rawChart, detail: true}}" />
+          <pager-nav wx:if="{{rawPages > 1}}" page="{{rawPage}}" page-count="{{rawPages}}" total="{{rawTotal}}" unit="条" label="原始值" bind:pagechange="onRawPage" />
+        </block>
+      </block>
+    </block>
+  </block>
+</view>

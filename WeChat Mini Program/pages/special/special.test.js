@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const pageSource = readFileSync(new URL('./special.js', import.meta.url), 'utf8');
 const templateSource = readFileSync(new URL('./special.wxml', import.meta.url), 'utf8');
@@ -46,17 +46,18 @@ function makeEvents(count, resultsPerEvent) {
   }));
 }
 
-function loadPage() {
+function loadPage({ globalData = {}, fresh = false, wx = {} } = {}) {
   let definition;
   vm.runInNewContext(pageSource, {
     Page(value) { definition = value; },
-    wx: {},
+    wx,
     require(path) {
+      if (path.includes('utils/page-scope')) return { isPageCacheFresh: () => fresh };
       if (path.includes('utils/special-test-view')) return specialTestView;
       if (path.includes('/utils/')) return loadModule(new URL(`${path}.js`, import.meta.url));
       return {};
     },
-    getApp: () => ({ globalData: {} }),
+    getApp: () => ({ globalData }),
     Date,
     Number,
     String,
@@ -117,4 +118,20 @@ describe('专项训练页测试成绩展示', () => {
     page.onToggleTestEvent({ currentTarget: { dataset: { index: 0 } } });
     expect(page.data.specialTests[0].expanded).toBe(false);
   });
+});
+
+
+it('专项页缓存命中时也消费导入定位，只把目标项目和队伍应用到统计模块', () => {
+  const globalData = { teamTrainingImportTarget: { project: 'ROWING', teamId: 11, date: '2026-09-20' } };
+  const wx = { nextTick: (callback) => callback(), pageScrollTo: vi.fn() };
+  const { page } = loadPage({ globalData, fresh: true, wx });
+  page.setData({ user: { role: 'SCC' }, project: 'CYCLING_ROAD', projects: ['CYCLING_ROAD', 'ROWING'] });
+  page.onShow();
+  expect(globalData.teamTrainingImportTarget).toBeUndefined();
+  expect(page.data.teamStatsScope).toMatchObject({ project: 'ROWING', teamId: 11, date: '2026-09-20', open: true });
+  expect(page.data.project).toBe('CYCLING_ROAD');
+  expect(wx.pageScrollTo).toHaveBeenCalledWith({ selector: '#team-training-stats-section', duration: 0 });
+  page.setData({ user: { role: 'ATL' } });
+  page.updateTeamStatsScope(page.data);
+  expect(page.data.teamStatsScope).toBeNull();
 });

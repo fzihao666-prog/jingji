@@ -94,7 +94,7 @@ Page({
     loading: true,
     error: '',
     user: null,
-    canEnterTest: false, hasWaterSpecial: false,
+    canEnterTest: false, hasWaterSpecial: false, teamStatsScope: null,
     projects: [],
     project: '',
     range: 'month',
@@ -114,15 +114,59 @@ Page({
     specialTestsMoreCount: 0
   },
 
-  onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
+  onShow() {
+    const global = getApp().globalData;
+    const target = global.teamTrainingImportTarget;
+    if (target) delete global.teamTrainingImportTarget;
+    const fresh = isPageCacheFresh(this);
+    if (!target && fresh) return;
+    if (fresh) {
+      this.updateTeamStatsScope(this.data, target);
+      this.scrollToTeamStats();
+      return;
+    }
+    return this.loadPage(target).then(() => {
+      if (target) this.scrollToTeamStats();
+    });
+  },
+
+  scrollToTeamStats() {
+    wx.nextTick(() => {
+      if (this.data.teamStatsScope) wx.pageScrollTo({ selector: '#team-training-stats-section', duration: 0 });
+    });
+  },
+
+  updateTeamStatsScope(scope, target) {
+    if (!scope.user || !MANAGER_ROLES.includes(scope.user.role)) {
+      this._teamStatsTarget = null;
+      this.setData({ teamStatsScope: null });
+      return;
+    }
+    if (this._teamStatsBaseProject !== scope.project) this._teamStatsTarget = null;
+    this._teamStatsBaseProject = scope.project;
+    if (target && (scope.projects || []).includes(target.project)) this._teamStatsTarget = target;
+    const selected = this._teamStatsTarget;
+    this._teamStatsRevision = (this._teamStatsRevision || 0) + 1;
+    this.setData({ teamStatsScope: {
+      project: selected ? selected.project : scope.project,
+      teamId: selected ? selected.teamId : scope.teamId || 0,
+      date: selected ? selected.date : '',
+      open: !!target && selected === target,
+      revision: this._teamStatsRevision
+    } });
+  },
   onPullDownRefresh() { this.loadPage().finally(() => wx.stopPullDownRefresh()); },
 
-  loadPage() {
+  loadPage(target) {
     this.setData({ ...buildTrainingView({}, '', this.data.project), hasWaterSpecial: false, canEnterTest: false, viewAthleteId: 0, trainingError: '', testError: '', championError: '' });
     return runPageLoad(this, {
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
-      prepare: (page, scope) => page.setData({ ...scope, teamId: 0, teamIndex: 0, hasWaterSpecial: Boolean(sportRules[scope.project]?.activities.includes('on_water')), canEnterTest: MANAGER_ROLES.includes(scope.user.role) && Boolean(sportRules[scope.project]?.activities.includes('on_water')) }),
+      prepare: (page, scope) => {
+        page.setData({ ...scope, teamId: 0, teamIndex: 0, hasWaterSpecial: Boolean(sportRules[scope.project]?.activities.includes('on_water')), canEnterTest: MANAGER_ROLES.includes(scope.user.role) && Boolean(sportRules[scope.project]?.activities.includes('on_water')) });
+        if (page._teamStatsTarget && !(scope.projects || []).includes(page._teamStatsTarget.project)) page._teamStatsTarget = null;
+        page.updateTeamStatsScope(scope, target);
+      },
       load: (page, scope, isLatest) => page.loadPageData({ ...scope, teamId: 0 }, true, isLatest)
     });
   },
@@ -211,7 +255,9 @@ Page({
     if (!change) return Promise.resolve();
     if (change.field === 'project') {
       this._loadedProject = '';
+      this._teamStatsTarget = null;
       this.setData({ teamId: 0, teamIndex: 0, teamItems: [{ id: 0, name: '全部队伍' }], championEvents: [], championError: '' });
+      this.updateTeamStatsScope(this.data);
     }
     this.resetTrainingView();
     return loadWithGuard(this, this._guard, async (isLatest) => {
@@ -226,7 +272,9 @@ Page({
     const teamIndex = Number(event.detail.value);
     const team = this.data.teamItems[teamIndex] || this.data.teamItems[0];
     const teamId = Number(team.id) || 0;
+    this._teamStatsTarget = null;
     this.setData({ teamIndex, teamId });
+    this.updateTeamStatsScope(this.data);
     this.resetTrainingView(false);
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest), '队伍数据加载失败。');
   },
