@@ -19,6 +19,7 @@ type PageHeaderProps = ClassNameProps & {
   eyebrow?: ReactNode;
   supportingContent?: ReactNode;
   filters?: ReactNode;
+  filterActions?: ReactNode;
   actions?: ReactNode;
   variant?: 'default' | 'compact' | 'dashboard';
 };
@@ -28,6 +29,7 @@ export function PageHeader({
   eyebrow,
   supportingContent,
   filters,
+  filterActions,
   actions,
   variant = 'default',
   className = '',
@@ -55,7 +57,16 @@ export function PageHeader({
           {children}
         </div>
       )}
-      {filters && <div className="app-page-header-filters">{filters}</div>}
+      {(filters || filterActions) && (
+        <div className="app-page-header-filter-row">
+          {filters && <div className="app-page-header-filters">{filters}</div>}
+          {filterActions && (
+            <div className="app-page-header-actions app-page-header-filter-actions">
+              {filterActions}
+            </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }

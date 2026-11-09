@@ -580,7 +580,23 @@ export function StrengthTrainingDashboard({
         eyebrow="PHYSICAL TRAINING"
         title="体能训练"
         filters={filters}
-        actions={<><button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>训练计划</button><button type="button" className="secondary-button" onClick={() => onNavigate('strength-enode')}>Enode VBT</button>{athleteId ? <button type="button" className="secondary-button" onClick={() => setAthleteId(null)}>当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除</button> : null}</>}
+        actions={
+          <button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>
+            训练计划
+          </button>
+        }
+        filterActions={
+          <>
+            <button type="button" className="secondary-button" onClick={() => onNavigate('strength-enode')}>
+              Enode VBT
+            </button>
+            {athleteId ? (
+              <button type="button" className="secondary-button" onClick={() => setAthleteId(null)}>
+                当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除
+              </button>
+            ) : null}
+          </>
+        }
       />
 
       {loading ? (

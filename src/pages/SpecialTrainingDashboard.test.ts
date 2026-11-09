@@ -40,5 +40,8 @@ it('专项和体能页头将训练计划放在筛选栏之前', () => {
     const html = renderToStaticMarkup(page);
     const header = html.match(/<header[^>]*>[\s\S]*?<\/header>/)?.[0] ?? '';
     expect(header).toMatch(/训练<\/h1>[\s\S]*训练计划<\/button>[\s\S]*全局训练筛选/);
+    if (page.type === StrengthTrainingDashboard) {
+      expect(header).toMatch(/app-page-header-filter-row[\s\S]*全局训练筛选[\s\S]*app-page-header-filter-actions[\s\S]*Enode VBT<\/button>/);
+    }
   }
 });

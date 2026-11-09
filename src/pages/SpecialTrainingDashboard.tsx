@@ -108,12 +108,15 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, fil
         title="专项训练"
         filters={filters}
         actions={
-          <><button type="button" className="primary-button" onClick={onPlanOpen}>训练计划</button>{selectedAthlete ? (
-            <button type="button" className="secondary-button" onClick={() => setSelectedAthleteId(null)}>
-              当前运动员：{selectedAthlete.name} · 清除
-            </button>
-          ) : null}</>
+          <button type="button" className="primary-button" onClick={onPlanOpen}>
+            训练计划
+          </button>
         }
+        filterActions={selectedAthlete && (
+          <button type="button" className="secondary-button" onClick={() => setSelectedAthleteId(null)}>
+            当前运动员：{selectedAthlete.name} · 清除
+          </button>
+        )}
       />
       {!current ? (
         <ContentState
