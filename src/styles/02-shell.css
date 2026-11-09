@@ -654,6 +654,13 @@
   border-left: 1px solid var(--line);
 }
 
+@media (width > 820px) {
+  /* 日期区右边框已分隔项目筛选。 */
+  .date-input + .project-select {
+    border-left: 0;
+  }
+}
+
 .project-select-trigger {
   width: 100%;
   height: 100%;
