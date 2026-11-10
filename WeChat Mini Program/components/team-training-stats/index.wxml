@@ -23,6 +23,12 @@
   </view>
 </template>
 
+<template name="team-donut">
+  <view class="team-stat-donut" style="{{'background: ' + chart.background}}" aria-hidden="true">
+    <view class="team-stat-donut-center"><text>{{chart.total}}</text><text class="team-stat-donut-unit">min</text></view>
+  </view>
+</template>
+
 <view class="section-head">
   <view class="section-head-title">周训练数据看板</view>
   <view class="section-head-note">Excel 导入 · {{projectLabel}} · 按队伍统计</view>
@@ -49,17 +55,20 @@
   <view wx:elif="{{error}}" class="error-box"><text>{{error}}</text><button class="error-retry" bindtap="onRetry">重试</button></view>
   <view wx:elif="{{teamIndex < 0}}" class="team-stat-status">{{teams.length ? '请选择要查看的队伍' : '当前项目暂无可查看的队伍'}}</view>
   <block wx:elif="{{view}}">
-    <view class="card-head-note">{{teamName}} · {{view.start}} 至 {{view.end}} · {{period === 'year' ? '按月汇总' : '按日汇总'}}</view>
+    <view class="team-stat-context">
+      <text class="card-head-title">{{teamName}}</text>
+      <text class="card-head-note">{{view.start}} 至 {{view.end}} · {{period === 'year' ? '按月汇总' : '按日汇总'}}</text>
+    </view>
     <view wx:if="{{!view.hasData}}" class="team-stat-status">此周期暂无已导入的队伍训练数据。</view>
     <block wx:else>
+      <view class="team-stat-volume-totals">
+        <view wx:for="{{view.summary}}" wx:key="title" class="team-stat-tone-{{item.tone}}">
+          <text class="team-stat-summary-label">{{item.title}}</text>
+          <text class="team-stat-volume-value">{{item.total}} <text>{{item.unit}}</text></text>
+        </view>
+      </view>
       <view class="team-stat-section">
         <view class="card-head-title">训练量统计</view>
-        <view class="team-stat-volume-totals">
-          <view wx:for="{{view.volumes}}" wx:key="title">
-            <text><text class="team-stat-dot team-stat-tone-{{item.tone}}" aria-hidden="true"></text>总{{item.title}}</text>
-            <text class="team-stat-volume-value">{{item.total}} <text>{{item.unit}}</text></text>
-          </view>
-        </view>
         <view class="team-stat-volume-selection" aria-live="polite">
           <block wx:if="{{volumeSelection}}">
             <text>{{volumeSelection.date}}</text>
@@ -73,23 +82,33 @@
         </block>
         <view class="card-head-note">{{period === 'year' ? '横轴为月份' : '横轴为日期'}} · 空位表示未填报，基线短线表示实测 0</view>
       </view>
-      <view wx:for="{{view.ratios}}" wx:for-item="ratio" wx:key="title" class="team-stat-section">
-        <view class="card-head-title">{{ratio.title}}</view>
-        <view wx:if="{{ratio.background}}" class="team-stat-donut" style="{{'background: ' + ratio.background}}" aria-hidden="true">
-          <view class="team-stat-donut-center"><text>{{ratio.total}}</text><text>min</text></view>
-        </view>
-        <view wx:else class="card-head-note">{{ratio.rows.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}}</view>
-        <view wx:for="{{ratio.rows}}" wx:key="name" class="team-stat-row">
-          <text><text class="team-stat-dot" style="{{'background: ' + item.color}}" aria-hidden="true"></text>{{item.name}}</text>
-          <text>{{item.value}} min · {{item.share}}</text>
+      <view class="team-stat-section team-stat-ratio-grid {{view.ratios.length > 1 ? 'team-stat-ratio-pair' : ''}}">
+        <view wx:for="{{view.ratios}}" wx:for-item="ratio" wx:key="title" class="team-stat-ratio-panel">
+          <view class="card-head-title">{{ratio.title}}</view>
+          <template wx:if="{{ratio.background}}" is="team-donut" data="{{chart: ratio}}" />
+          <view wx:else class="card-head-note">{{ratio.rows.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}}</view>
+          <view wx:for="{{ratio.rows}}" wx:key="name" class="team-stat-legend-row">
+            <text><text class="team-stat-dot" style="{{'background: ' + item.color}}" aria-hidden="true"></text>{{item.name}}</text>
+            <text class="team-stat-legend-value">{{item.value}} min</text>
+            <text class="team-stat-legend-share">{{item.share}}</text>
+          </view>
         </view>
       </view>
-      <view wx:for="{{view.timeAnalysis}}" wx:for-item="group" wx:key="title" class="team-stat-section team-stat-tone-{{group.tone}}">
+      <view wx:for="{{view.timeAnalysis}}" wx:for-item="group" wx:key="title" class="team-stat-section">
         <view class="card-head-title">{{group.title}}（min）</view>
-        <view wx:if="{{!group.points.length}}" class="card-head-note">此周期暂无该类训练时长。</view>
-        <view wx:for="{{group.points}}" wx:key="name">
-          <view class="team-stat-row"><text>{{item.name}}</text><text>{{item.value}} min · {{item.share}}</text></view>
-          <view class="team-stat-distribution-track" aria-hidden="true"><view style="{{'width: ' + item.width + '%;'}}"></view></view>
+        <view wx:if="{{!group.rows.length}}" class="card-head-note">此周期暂无该类训练时长。</view>
+        <view wx:else class="team-stat-analysis {{group.background ? 'team-stat-analysis-with-donut' : ''}}">
+          <template wx:if="{{group.background}}" is="team-donut" data="{{chart: group}}" />
+          <view class="team-stat-analysis-list">
+            <view wx:for="{{group.rows}}" wx:key="name">
+              <view class="team-stat-legend-row">
+                <text><text class="team-stat-dot" style="{{'background: ' + item.color}}" aria-hidden="true"></text>{{item.name}}</text>
+                <text class="team-stat-legend-value">{{item.value}} min</text>
+                <text class="team-stat-legend-share">{{item.share}}</text>
+              </view>
+              <view class="team-stat-distribution-track" aria-hidden="true"><view style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}"></view></view>
+            </view>
+          </view>
         </view>
       </view>
       <view class="team-stat-section">

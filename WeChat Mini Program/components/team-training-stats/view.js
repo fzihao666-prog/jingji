@@ -33,12 +33,17 @@ function volume(stats, metric, title, unit, period) {
   };
 }
 
-function ratio(title, groups, total) {
+const analysisPalettes = [
+  ['#2458a6', '#167381', '#387c68', '#5d5fa3', '#427ca9', '#536171'],
+  ['#b44716', '#9a4d70', '#75599a', '#ac6542', '#996334', '#536171'],
+];
+
+function ratio(title, groups, total, colorFor = ratioColor) {
   let offset = 0;
   const slices = [];
   const hasMultipleSlices = groups.filter(({ percentage }) => percentage > 0).length > 1;
-  const rows = groups.map(({ name, value, percentage }) => {
-    const color = ratioColor(name);
+  const rows = groups.map(({ name, value, percentage }, index) => {
+    const color = colorFor(name, index);
     if (percentage > 0) {
       const end = offset + percentage;
       const gap = hasMultipleSlices ? Math.min(0.6, percentage / 4) : 0;
@@ -46,7 +51,7 @@ function ratio(title, groups, total) {
       if (gap) slices.push(`var(--paper) ${end - gap}% ${end}%`);
       offset = end;
     }
-    return { name, value: display(value), color, share: percentage === null ? '—' : `${display(percentage)}%` };
+    return { name, value: display(value), color, share: percentage == null ? '—' : `${display(percentage)}%` };
   });
   return { title, rows, total: display(total), background: slices.length ? `conic-gradient(${slices.join(',')})` : '' };
 }
@@ -54,16 +59,31 @@ function ratio(title, groups, total) {
 function buildView(stats, period) {
   const ratios = [ratio('主辅训练比例', stats.lessonRatio, stats.totals.minutes)];
   if (stats.waterProject) ratios.push(ratio('水陆训练比例', stats.waterRatio, stats.totals.minutes));
+  const volumes = [
+    volume(stats, 'minutes', '训练时长', 'min', period),
+    volume(stats, 'distance', '训练距离', 'km', period),
+  ];
+  const summary = volumes.map(({ title, unit, total, tone }) => ({ title: `总${title}`, unit, total, tone }));
+  if (stats.waterProject) {
+    for (const [name, tone] of [['水上', 'blue'], ['陆上', 'orange']]) {
+      const group = stats.waterRatio.find((entry) => entry.name === name);
+      summary.push({ title: `${name}时长`, tone, unit: 'min', total: display(group && group.value) });
+    }
+  }
   return {
     start: stats.start, end: stats.end, hasData: stats.details.length > 0,
-    volumes: [
-      volume(stats, 'minutes', '训练时长', 'min', period),
-      volume(stats, 'distance', '训练距离', 'km', period),
-    ],
-    ratios,
-    timeAnalysis: stats.timeAnalysis.map(({ title, points }, index) => {
+    volumes, ratios, summary,
+    timeAnalysis: stats.timeAnalysis.map(({ title, total, points }, index) => {
       const max = Math.max(0, ...points.map(({ value }) => value));
-      return { title, tone: stats.waterProject ? (index === 0 ? 'blue' : 'orange') : 'teal', points: points.map(({ name, value, percentage }) => ({ name, value: display(value), share: percentage == null ? '—' : `${display(percentage)}%`, width: max ? value / max * 100 : 0 })) };
+      const palette = analysisPalettes[index % analysisPalettes.length];
+      const distribution = ratio(title, points, total, (_, i) =>
+        stats.waterProject ? palette[i % palette.length] : 'var(--team-chart-teal)'
+      );
+      return {
+        ...distribution,
+        background: stats.waterProject ? distribution.background : '',
+        rows: distribution.rows.map((row, i) => ({ ...row, width: max ? points[i].value / max * 100 : 0 })),
+      };
     }),
     hasTotals: stats.details.some(({ total }) => total !== null),
     hasRaw: stats.details.some(({ total }) => total === null),

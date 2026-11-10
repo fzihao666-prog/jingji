@@ -156,6 +156,10 @@ it('水陆分项使用服务端组内占比，明细按归属分组', () => {
       { category: '未知分项', unit: 'min', total: 0, values: {}, waterGroup: null },
     ],
   });
-  expect(view.buildView(source, 'week').timeAnalysis[0].points[0].share).toBe('100%');
+  source.waterRatio = [{ name: '水上', value: 60, percentage: 2 / 3 * 100 }, { name: '陆上', value: 30, percentage: 1 / 3 * 100 }];
+  const dashboard = view.buildView(source, 'week');
+  expect(dashboard.summary.map(({ total }) => total)).toEqual(['90', '—', '60', '30']);
+  expect(dashboard.timeAnalysis[0].rows[0].share).toBe('100%');
+  expect(dashboard.timeAnalysis[0].background).toContain(dashboard.timeAnalysis[0].rows[0].color);
   expect(view.buildDetails(source, 'week', false, 0).rows.map(({ group }) => group)).toEqual(['水上', '陆上', '未分类']);
 });
