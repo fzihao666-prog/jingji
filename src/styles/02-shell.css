@@ -701,7 +701,7 @@
   position: absolute;
   z-index: 60;
   top: calc(100% + 7px);
-  right: 0;
+  inset-inline-start: 0;
   width: 252px;
   max-height: min(440px, calc(100vh - 110px));
   overflow: auto;
@@ -713,7 +713,7 @@
   backdrop-filter: blur(14px);
   opacity: 0;
   transform: translateY(-6px) scale(0.96);
-  transform-origin: top right;
+  transform-origin: top left;
   pointer-events: none;
   transition:
     opacity 0.18s ease,
@@ -765,8 +765,10 @@
 }
 
 .project-select-option > span {
+  min-width: 0;
   display: grid;
   gap: 1px;
+  overflow-wrap: anywhere;
   text-align: left;
 }
 
@@ -794,6 +796,7 @@
 }
 
 .project-select-option svg:last-child {
+  flex-shrink: 0;
   margin-left: auto;
   color: #118b83;
 }
@@ -915,6 +918,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  max-width: 252px;
   color: var(--muted);
   font-size: 12px;
 }
