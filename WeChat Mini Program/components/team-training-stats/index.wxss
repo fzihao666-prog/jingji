@@ -63,20 +63,95 @@
   width: 100%;
 }
 
+.team-stat-volume-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 12rpx;
+}
+
+.team-stat-volume-totals > view {
+  display: grid;
+  min-width: 0;
+  gap: 4rpx;
+  padding: 12rpx;
+  border-radius: var(--radius-item);
+  background: var(--mist);
+  color: var(--ink);
+  font-size: 22rpx;
+}
+
+.team-stat-volume-value {
+  overflow-wrap: anywhere;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.team-stat-volume-value text {
+  font-size: 20rpx;
+}
+
+.team-stat-volume-selection {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4rpx 14rpx;
+  min-height: 48rpx;
+  padding-top: 10rpx;
+  color: var(--muted);
+  font-size: 22rpx;
+}
+
+.team-stat-frame {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+  padding-top: 10rpx;
+}
+
+.team-stat-axis {
+  display: flex;
+  flex: 0 0 76rpx;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 146rpx;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 18rpx;
+  text-align: right;
+}
+
 .team-stat-plot {
-  display: inline-flex;
-  min-width: 100%;
-  padding: 10rpx 0;
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.team-stat-gridlines {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 146rpx;
+  pointer-events: none;
+}
+
+.team-stat-gridlines view {
+  height: 1rpx;
+  background: var(--line);
 }
 
 .team-stat-point {
-  flex: 1 0 76rpx;
-  min-width: 76rpx;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   margin: 0;
-  padding: 0 12rpx;
+  padding: 0;
   border-radius: 0;
+  overflow: visible;
   background: transparent;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .team-stat-track {
@@ -84,26 +159,49 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  border-bottom: 1rpx solid var(--line);
+}
+
+.team-stat-point-selected .team-stat-track {
+  background: rgba(23, 111, 127, 0.14);
 }
 
 .team-stat-bar {
-  width: 28rpx;
-  border-radius: 6rpx 6rpx 0 0;
+  width: 65%;
+  max-width: 32rpx;
+  min-height: 1rpx;
+  border-radius: 5rpx 5rpx 0 0;
   background: var(--river);
 }
 
 .team-stat-zero {
-  min-height: 3rpx;
+  min-height: 4rpx;
   background: var(--muted);
 }
 
+.team-stat-label-slot {
+  position: relative;
+  height: 32rpx;
+}
+
 .team-stat-label {
-  display: block;
-  padding-top: 8rpx;
+  position: absolute;
+  left: 50%;
+  padding-top: 6rpx;
+  transform: translateX(-50%);
   color: var(--muted);
-  font-size: 20rpx;
+  font-size: 18rpx;
   white-space: nowrap;
+}
+
+.team-stat-label-first {
+  left: 0;
+  transform: none;
+}
+
+.team-stat-label-last {
+  right: 0;
+  left: auto;
+  transform: none;
 }
 
 .team-stat-row {

@@ -1,22 +1,25 @@
 <template name="team-trend">
   <view class="team-stat-chart">
-    <view class="card-head-title">{{series.title}} · {{series.total}} {{series.unit}}</view>
+    <view class="card-head-title">{{series.title}}（{{series.unit}}）</view>
+    <view class="team-stat-frame" aria-label="{{series.title}}">
+      <view class="team-stat-axis" aria-hidden="true">
+        <text wx:for="{{series.ticks}}" wx:key="index">{{item.label}}</text>
+      </view>
+      <view class="team-stat-plot">
+        <view class="team-stat-gridlines" aria-hidden="true"><view></view><view></view><view></view></view>
+        <button wx:for="{{series.points}}" wx:key="date" class="team-stat-point {{selected === index ? 'team-stat-point-selected' : ''}}"
+          aria-label="{{item.date}}，{{item.missing ? '未填报' : item.value + ' ' + series.unit}}{{selected === index ? '，已选中' : ''}}"
+          data-index="{{index}}" bindtap="onPoint">
+          <view class="team-stat-track">
+            <view wx:if="{{!item.missing}}" class="team-stat-bar {{item.zero ? 'team-stat-zero' : ''}}" style="{{'height: ' + item.height + '%;'}}"></view>
+          </view>
+          <view class="team-stat-label-slot">
+            <text wx:if="{{item.label}}" class="team-stat-label team-stat-label-{{item.edge}}">{{item.label}}</text>
+          </view>
+        </button>
+      </view>
+    </view>
     <view wx:if="{{!series.hasValues}}" class="card-head-note">此周期暂无该指标数据。</view>
-    <block wx:else>
-      <scroll-view class="team-stat-scroll" scroll-x aria-label="{{series.title}}">
-        <view class="team-stat-plot">
-          <button wx:for="{{series.points}}" wx:key="date" class="team-stat-point"
-            aria-label="{{item.date}}，{{item.missing ? '未填报' : item.value + ' ' + series.unit}}"
-            data-title="{{series.title}}" data-unit="{{series.unit}}" data-date="{{item.date}}" data-value="{{item.value}}" bindtap="onPoint">
-            <view class="team-stat-track">
-              <view wx:if="{{!item.missing}}" class="team-stat-bar {{item.zero ? 'team-stat-zero' : ''}}" style="{{'height: ' + item.height + '%;'}}"></view>
-            </view>
-            <text class="team-stat-label">{{item.label}}</text>
-          </button>
-        </view>
-      </scroll-view>
-
-    </block>
   </view>
 </template>
 
@@ -51,9 +54,24 @@
     <block wx:else>
       <view class="team-stat-section">
         <view class="card-head-title">训练量统计</view>
+        <view class="team-stat-volume-totals">
+          <view wx:for="{{view.volumes}}" wx:key="title">
+            <text>总{{item.title}}</text>
+            <text class="team-stat-volume-value">{{item.total}} <text>{{item.unit}}</text></text>
+          </view>
+        </view>
+        <view class="team-stat-volume-selection" aria-live="polite">
+          <block wx:if="{{volumeSelection}}">
+            <text>{{volumeSelection.date}}</text>
+            <text>时长 {{volumeSelection.minutes}} min</text>
+            <text>距离 {{volumeSelection.distance}} km</text>
+          </block>
+          <text wx:else>点选柱位可同时查看时长和距离</text>
+        </view>
         <block wx:for="{{view.volumes}}" wx:key="title">
-          <template is="team-trend" data="{{series: item}}" />
+          <template is="team-trend" data="{{series: item, selected: volumeIndex}}" />
         </block>
+        <view class="card-head-note">{{period === 'year' ? '横轴为月份' : '横轴为日期'}} · 空位表示未填报，基线短线表示实测 0</view>
       </view>
       <view wx:for="{{view.ratios}}" wx:for-item="ratio" wx:key="title" class="team-stat-section">
         <view class="card-head-title">{{ratio.title}}</view>

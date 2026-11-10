@@ -5,17 +5,27 @@ const display = (value) => value == null ? '—' : number(value, 2);
 const ratioColor = (name) => name === '未分类' ? '#737e88' : name === '主课' || name === '水上' ? '#176f7f' : '#be7329';
 const dateLabel = (date, year) => year ? `${Number(date.slice(5, 7))}月` : shortDate(date);
 
-function volume(stats, metric, title, unit, year) {
+function volume(stats, metric, title, unit, period) {
   const max = Math.max(0, ...stats.buckets.map((bucket) => bucket[metric] || 0));
+  const power = max > 0 ? 10 ** Math.floor(Math.log10(max)) : 1;
+  const top = ([1, 2, 5, 10].find((step) => step * power >= max) || 10) * power;
+  const hasValues = stats.totals[metric] !== null;
+  const lastDay = Number(stats.end.slice(8));
   return {
-    title, unit, total: display(stats.totals[metric]), hasValues: stats.totals[metric] !== null,
-    points: stats.buckets.map((bucket) => {
+    title, unit, total: display(stats.totals[metric]), hasValues,
+    ticks: [top, top / 2, 0].map((value, index) => ({ index, label: hasValues ? display(value) : '—' })),
+    points: stats.buckets.map((bucket, index) => {
       const value = bucket[metric];
+      const day = Number(bucket.start.slice(8));
+      const first = index === 0;
+      const last = index === stats.buckets.length - 1;
+      const label = period === 'year' ? String(Number(bucket.start.slice(5, 7))) :
+        period === 'week' ? shortDate(bucket.start) : first || last || (day % 5 === 0 && lastDay - day >= 3) ? String(day) : '';
       return {
-        date: year ? bucket.start.slice(0, 7) : bucket.start,
-        label: dateLabel(bucket.start, year),
+        date: period === 'year' ? bucket.start.slice(0, 7) : bucket.start,
+        label, edge: first ? 'first' : last ? 'last' : '',
         value: display(value), missing: value == null, zero: value === 0,
-        height: value > 0 ? Math.max(2, value / max * 100) : 0
+        height: value > 0 ? value / top * 100 : 0
       };
     })
   };
@@ -41,8 +51,8 @@ function buildView(stats, period) {
   return {
     start: stats.start, end: stats.end, hasData: stats.details.length > 0,
     volumes: [
-      volume(stats, 'minutes', '训练时长', 'min', period === 'year'),
-      volume(stats, 'distance', '训练距离', 'km', period === 'year'),
+      volume(stats, 'minutes', '训练时长', 'min', period),
+      volume(stats, 'distance', '训练距离', 'km', period),
     ],
     ratios,
     timeAnalysis: stats.timeAnalysis.map(({ title, points }) => {

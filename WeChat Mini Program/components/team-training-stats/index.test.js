@@ -110,3 +110,36 @@ it('切换项目时旧响应不能覆盖新结果，越范围的导入队伍不�
   expect(component.data.error).toContain('不在可查看范围');
   expect(teamTrainingStats).toHaveBeenCalledTimes(2);
 });
+
+
+it('训练量保留所有柱位，月末标签不挤在一起，刻度按指标独立计算', () => {
+  const source = stats(31);
+  source.buckets = source.buckets.map((bucket) => ({ ...bucket, start: bucket.start.replace('2024-02', '2024-03') }));
+  source.end = '2024-03-31';
+  source.buckets[0].minutes = 80;
+  source.buckets[0].distance = 3;
+  source.totals = { minutes: 80, distance: 3 };
+  const [duration, distance] = view.buildView(source, 'month').volumes;
+  expect(duration.points).toHaveLength(31);
+  expect(distance.points.map(({ date }) => date)).toEqual(duration.points.map(({ date }) => date));
+  expect(duration.points.map(({ label }) => label).filter(Boolean)).toEqual(['1', '5', '10', '15', '20', '25', '31']);
+  expect(duration.ticks.map(({ label }) => label)).toEqual(['100', '50', '0']);
+  expect(distance.ticks.map(({ label }) => label)).toEqual(['5', '2.50', '0']);
+  expect(duration.points[0].height).toBe(80);
+  expect(distance.points[0].height).toBe(60);
+});
+
+it('点选柱位联动显示两项数值，切换周期后清除旧选中', async () => {
+  const { component, teamTrainingStats } = setup();
+  const source = stats();
+  source.buckets[1].minutes = 0;
+  source.totals.minutes = 0;
+  teamTrainingStats.mockResolvedValue(source);
+  await component.applyScope({ project: 'ROWING', teamId: 2 });
+  component.onPoint({ currentTarget: { dataset: { index: 1 } } });
+  expect(component.data.volumeIndex).toBe(1);
+  expect(component.data.volumeSelection).toEqual({ date: '2024-02-02', minutes: '0', distance: '—' });
+  await component.onPeriodChange({ currentTarget: { dataset: { period: 'year' } } });
+  expect(component.data.volumeIndex).toBe(-1);
+  expect(component.data.volumeSelection).toBeNull();
+});

@@ -15,7 +15,7 @@ Component({
   data: {
     periods: PERIODS, period: 'week', dateFields: DATE_FIELDS.week, dateText: '', pickerDate: '',
     projectLabel: '', teams: [], teamOptions: [], teamIndex: -1, teamName: '', loading: false, error: '', view: null,
-    rawDetail: false, detailPage: 0, detail: null
+    rawDetail: false, detailPage: 0, detail: null, volumeIndex: -1, volumeSelection: null
   },
   lifetimes: {
     detached() { this._request = (this._request || 0) + 1; }
@@ -65,7 +65,7 @@ Component({
       const dateFields = DATE_FIELDS[period];
       this.setData({
         dateFields, pickerDate: this._anchor, dateText: this._anchor.slice(0, dateFields.length),
-        loading: true, error: '', view: null, detail: null
+        loading: true, error: '', view: null, detail: null, volumeIndex: -1, volumeSelection: null
       });
       try {
         const stats = await api.teamTrainingStats(project, team.id, period, this._anchor);
@@ -134,8 +134,15 @@ Component({
     },
 
     onPoint(event) {
-      const { title, date, value, unit } = event.currentTarget.dataset;
-      wx.showModal({ title: date, content: `${title}：${value === '—' ? '未填报' : `${value} ${unit}`}`, showCancel: false });
+      const volumeIndex = Number(event.currentTarget.dataset.index);
+      const view = this.data.view;
+      if (!view || !Number.isInteger(volumeIndex)) return;
+      const [duration, distance] = view.volumes.map(({ points }) => points[volumeIndex]);
+      if (!duration || !distance) return;
+      this.setData({
+        volumeIndex,
+        volumeSelection: { date: duration.date, minutes: duration.value, distance: distance.value }
+      });
     }
   }
 });
