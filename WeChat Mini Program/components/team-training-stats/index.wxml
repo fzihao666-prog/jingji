@@ -49,7 +49,7 @@
   <view wx:elif="{{error}}" class="error-box"><text>{{error}}</text><button class="error-retry" bindtap="onRetry">重试</button></view>
   <view wx:elif="{{teamIndex < 0}}" class="team-stat-status">{{teams.length ? '请选择要查看的队伍' : '当前项目暂无可查看的队伍'}}</view>
   <block wx:elif="{{view}}">
-    <view class="card-head-note">{{view.start}} 至 {{view.end}} · {{period === 'year' ? '按月汇总' : '按日汇总'}}</view>
+    <view class="card-head-note">{{teamName}} · {{view.start}} 至 {{view.end}} · {{period === 'year' ? '按月汇总' : '按日汇总'}}</view>
     <view wx:if="{{!view.hasData}}" class="team-stat-status">此周期暂无已导入的队伍训练数据。</view>
     <block wx:else>
       <view class="team-stat-section">
@@ -76,7 +76,7 @@
       <view wx:for="{{view.ratios}}" wx:for-item="ratio" wx:key="title" class="team-stat-section">
         <view class="card-head-title">{{ratio.title}}</view>
         <view wx:if="{{ratio.background}}" class="team-stat-donut" style="{{'background: ' + ratio.background}}" aria-hidden="true">
-          <view class="team-stat-donut-center"></view>
+          <view class="team-stat-donut-center"><text>{{ratio.total}}</text><text>min</text></view>
         </view>
         <view wx:else class="card-head-note">{{ratio.rows.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}}</view>
         <view wx:for="{{ratio.rows}}" wx:key="name" class="team-stat-row">
@@ -88,7 +88,7 @@
         <view class="card-head-title">{{group.title}}（min）</view>
         <view wx:if="{{!group.points.length}}" class="card-head-note">此周期暂无该类训练时长。</view>
         <view wx:for="{{group.points}}" wx:key="name">
-          <view class="team-stat-row"><text>{{item.name}}</text><text>{{item.value}}</text></view>
+          <view class="team-stat-row"><text>{{item.name}}</text><text>{{item.value}} min · {{item.share}}</text></view>
           <view class="team-stat-distribution-track" aria-hidden="true"><view style="{{'width: ' + item.width + '%;'}}"></view></view>
         </view>
       </view>
@@ -105,11 +105,14 @@
               <text wx:for="{{detail.columns}}" wx:key="date" class="team-stat-cell">{{item.label}}</text>
               <text wx:if="{{!rawDetail}}" class="team-stat-cell">周期合计</text>
             </view>
-            <view wx:for="{{detail.rows}}" wx:for-item="row" wx:key="key" class="team-stat-matrix-row">
-              <text class="team-stat-matrix-label">{{row.name}}</text>
-              <text wx:for="{{row.cells}}" wx:key="date" class="team-stat-cell">{{item.text}}</text>
-              <text wx:if="{{!rawDetail}}" class="team-stat-cell">{{row.total}}</text>
-            </view>
+            <block wx:for="{{detail.rows}}" wx:for-item="row" wx:key="key">
+              <view wx:if="{{row.group}}" class="team-stat-matrix-row team-stat-matrix-group"><text class="team-stat-matrix-label">{{row.group}}</text></view>
+              <view class="team-stat-matrix-row">
+                <text class="team-stat-matrix-label">{{row.name}}</text>
+                <text wx:for="{{row.cells}}" wx:key="date" class="team-stat-cell">{{item.text}}</text>
+                <text wx:if="{{!rawDetail}}" class="team-stat-cell">{{row.total}}</text>
+              </view>
+            </block>
           </view>
         </scroll-view>
         <pager-nav wx:if="{{detail.pageCount > 1}}" page="{{detailPage}}" page-count="{{detail.pageCount}}" total="{{detail.datesCount}}" unit="天" label="明细日期" bind:pagechange="onDetailPage" />

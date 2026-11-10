@@ -22,6 +22,10 @@ const labelFor = (date: string, year: boolean) =>
 const ratioColor = (name: string) =>
   name === '未分类' ? '#737e88' : name === '主课' || name === '水上' ? '#176f7f' : '#be7329';
 
+const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'short', timeZone: 'UTC' });
+const weekLabel = (date: string) => weekday.format(new Date(`${date}T00:00:00Z`));
+const percent = (value: number | null | undefined) => (value == null ? '—' : `${show(value)}%`);
+
 function VolumeChart({
   stats,
   period,
@@ -41,8 +45,12 @@ function VolumeChart({
     grid: { left: 48, right: 16, top: 30, bottom: 32 },
     xAxis: {
       type: 'category',
-      data: stats.buckets.map(({ start }) => labelFor(start, period === 'year')),
-      axisLabel: { hideOverlap: true },
+      data: stats.buckets.map(({ start }) => (period === 'year' ? start.slice(0, 7) : start)),
+      axisLabel: {
+        hideOverlap: true,
+        formatter: (value: string) =>
+          period === 'week' ? weekLabel(value) : labelFor(value, period === 'year'),
+      },
     },
     yAxis: { type: 'value', name: unit, min: 0 },
     series: [
@@ -51,6 +59,12 @@ function VolumeChart({
         name: `${title}（${unit}）`,
         data: stats.buckets.map((bucket) => bucket[metric]),
         barMaxWidth: 32,
+        barMinHeight: 2,
+        itemStyle: {
+          color: metric === 'minutes' ? '#2458a6' : '#b44716',
+          borderRadius: [4, 4, 0, 0],
+        },
+        label: { show: period === 'week', position: 'top' },
       },
     ],
   };
@@ -68,23 +82,64 @@ function VolumeChart({
   );
 }
 
-function RatioChart({ title, groups }: { title: string; groups: TeamTrainingBoardGroup[] }) {
-  const hasRatio = groups.some(({ percentage }) => percentage !== null);
+function Donut({
+  title,
+  groups,
+  colors,
+  total,
+}: {
+  title: string;
+  groups: TeamTrainingBoardGroup[];
+  colors: string[];
+  total: number | null | undefined;
+}) {
+  if (!total) return <p>{groups.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}</p>;
+  return (
+    <div className="team-training-donut">
+      <EChart
+        label={title}
+        option={{
+          animation: false,
+          color: colors,
+          tooltip: { trigger: 'item', renderMode: 'richText', formatter: '{b}：{c} min（{d}%）' },
+          series: [
+            {
+              type: 'pie',
+              radius: ['58%', '84%'],
+              label: { show: false },
+              itemStyle: { borderColor: '#fff', borderWidth: 2 },
+              data: groups.flatMap((group, index) =>
+                group.value > 0 ? [{ ...group, itemStyle: { color: colors[index] } }] : []
+              ),
+            },
+          ],
+        }}
+      />
+      <div className="team-training-donut-total" aria-hidden="true">
+        <strong>{show(total)}</strong>
+        <span className="team-training-donut-unit">min</span>
+      </div>
+    </div>
+  );
+}
+
+function RatioChart({
+  title,
+  groups,
+  total,
+}: {
+  title: string;
+  groups: TeamTrainingBoardGroup[];
+  total: number | null;
+}) {
   return (
     <ChartCard title={title} className="team-training-chart team-training-ratio">
-      {hasRatio ? (
-        <EChart
-          label={title}
-          option={{
-            animation: false,
-            color: groups.map(({ name }) => ratioColor(name)),
-            tooltip: { trigger: 'item', renderMode: 'richText', formatter: '{b}：{c} min（{d}%）' },
-            series: [{ type: 'pie', radius: ['52%', '80%'], label: { show: false }, data: groups }],
-          }}
-        />
-      ) : (
-        <p>{groups.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}</p>
-      )}
+      <Donut
+        title={title}
+        groups={groups}
+        colors={groups.map(({ name }) => ratioColor(name))}
+        total={total}
+      />
       <ul className="team-training-ratio-legend">
         {groups.map(({ name, value, percentage }) => (
           <li key={name}>
@@ -93,7 +148,7 @@ function RatioChart({ title, groups }: { title: string; groups: TeamTrainingBoar
               {name}
             </span>
             <strong>
-              {show(value)} min · {percentage === null ? '—' : `${show(percentage)}%`}
+              {show(value)} min · {percent(percentage)}
             </strong>
           </li>
         ))}
@@ -102,24 +157,56 @@ function RatioChart({ title, groups }: { title: string; groups: TeamTrainingBoar
   );
 }
 
-function TimeAnalysis({ group }: { group: TeamTrainingBoard['timeAnalysis'][number] }) {
+const analysisPalettes = [
+  ['#2458a6', '#167381', '#387c68', '#5d5fa3', '#427ca9', '#536171'],
+  ['#b44716', '#9a4d70', '#75599a', '#ac6542', '#996334', '#536171'],
+];
+
+function TimeAnalysis({
+  group,
+  index,
+  water,
+}: {
+  group: TeamTrainingBoard['timeAnalysis'][number];
+  index: number;
+  water: boolean;
+}) {
   const maximum = Math.max(0, ...group.points.map(({ value }) => value));
+  const palette = analysisPalettes[index % analysisPalettes.length];
+  const colors = group.points.map((_, i) => palette[i % palette.length]);
   return (
     <ChartCard title={`${group.title}（min）`} className="team-training-chart">
       {group.points.length === 0 ? (
         <p>此周期暂无该类训练时长。</p>
       ) : (
-        <ul className="team-training-bars">
-          {group.points.map(({ name, value }) => (
-            <li key={name}>
-              <span>{name}</span>
-              <strong>{show(value)}</strong>
-              <span className="team-training-bar-track" aria-hidden="true">
-                <i style={{ width: maximum ? `${(value / maximum) * 100}%` : '0%' }} />
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className={water ? 'team-training-analysis-grid' : ''}>
+          <ul className="team-training-bars">
+            {group.points.map(({ name, value, percentage }, i) => (
+              <li key={name}>
+                <span>{name}</span>
+                <strong>
+                  {show(value)} min · {percent(percentage)}
+                </strong>
+                <span className="team-training-bar-track" aria-hidden="true">
+                  <i
+                    style={{
+                      width: maximum ? `${(value / maximum) * 100}%` : '0%',
+                      background: colors[i],
+                    }}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+          {water && (
+            <Donut
+              title={`${group.title}分项占比`}
+              groups={group.points}
+              colors={colors}
+              total={group.total}
+            />
+          )}
+        </div>
       )}
     </ChartCard>
   );
@@ -143,6 +230,13 @@ function TrainingDetails({
   const size = showRaw || period !== 'year' ? 7 : 12;
   const visible = dates.slice(page * size, (page + 1) * size);
   const year = period === 'year' && !showRaw;
+  const rowGroups = stats.waterProject
+    ? [
+        { name: '水上', rows: rows.filter(({ waterGroup }) => waterGroup === 'water') },
+        { name: '陆上', rows: rows.filter(({ waterGroup }) => waterGroup === 'land') },
+        { name: '未分类', rows: rows.filter(({ waterGroup }) => !waterGroup) },
+      ].filter((group) => group.rows.length)
+    : [{ name: '', rows }];
   return (
     <ChartCard title="具体训练统计" className="team-training-chart">
       {totals.length > 0 && raw.length > 0 && (
@@ -172,26 +266,34 @@ function TrainingDetails({
             <tr>
               <th scope="col">分项 · 单位</th>
               {visible.map((date) => (
-                <th key={date} scope="col">
-                  {labelFor(date, year)}
+                <th key={date} scope="col" title={date}>
+                  {period === 'week' ? weekLabel(date) : labelFor(date, year)}
                 </th>
               ))}
               {!showRaw && <th scope="col">周期合计</th>}
             </tr>
           </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={JSON.stringify([row.category, row.unit])}>
-                <th scope="row">
-                  {row.category} · {row.unit}
-                </th>
-                {visible.map((date) => (
-                  <td key={date}>{show(row.values[date])}</td>
-                ))}
-                {!showRaw && <td>{show(row.total)}</td>}
-              </tr>
-            ))}
-          </tbody>
+          {rowGroups.map((group) => (
+            <tbody key={group.name}>
+              {group.name && (
+                <tr className="team-training-table-group">
+                  <th scope="rowgroup">{group.name}</th>
+                  <td colSpan={visible.length + Number(!showRaw)} />
+                </tr>
+              )}
+              {group.rows.map((row) => (
+                <tr key={JSON.stringify([row.category, row.unit])}>
+                  <th scope="row">
+                    {row.category} · {row.unit}
+                  </th>
+                  {visible.map((date) => (
+                    <td key={date}>{show(row.values[date])}</td>
+                  ))}
+                  {!showRaw && <td>{show(row.total)}</td>}
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
       </div>
       {dates.length > size && (
@@ -228,25 +330,80 @@ function TrainingBoard({
   stats: TeamTrainingBoard;
   period: TeamTrainingPeriod;
 }) {
+  const [metric, setMetric] = useState<'minutes' | 'distance'>(
+    stats.totals.minutes === null && stats.totals.distance !== null ? 'distance' : 'minutes'
+  );
   if (!stats.details.length)
     return <ContentState kind="empty" title="此周期暂无已导入的队伍训练数据" />;
+  const summary = [
+    { name: '总训练时长', value: stats.totals.minutes, unit: 'min' },
+    ...(stats.waterProject
+      ? ['水上', '陆上'].map((name) => ({
+          name,
+          value: stats.waterRatio.find((group) => group.name === name)?.value,
+          unit: 'min',
+        }))
+      : [{ name: '总训练距离', value: stats.totals.distance, unit: 'km' }]),
+  ];
   return (
     <>
-      <p className="team-training-range">
-        {stats.start} 至 {stats.end} · {period === 'year' ? '按月汇总' : '按日汇总'}
-      </p>
-      <ChartCard title="训练量统计" className="team-training-chart">
-        <div className="team-training-chart-grid">
-          <VolumeChart stats={stats} period={period} metric="minutes" unit="min" title="训练时长" />
-          <VolumeChart stats={stats} period={period} metric="distance" unit="km" title="训练距离" />
-        </div>
-      </ChartCard>
-      <div className="team-training-chart-grid">
-        <RatioChart title="主辅训练比例" groups={stats.lessonRatio} />
-        {stats.waterProject && <RatioChart title="水陆训练比例" groups={stats.waterRatio} />}
+      <dl className="team-training-kpis">
+        {summary.map(({ name, value, unit }) => (
+          <div key={name}>
+            <dt>{name}</dt>
+            <dd>
+              {show(value)} <small className="team-training-kpi-unit">{unit}</small>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div
+        className={`team-training-overview ${stats.waterProject ? 'team-training-overview-water' : ''}`}
+      >
+        <ChartCard title="训练量统计" className="team-training-chart">
+          <div className="team-training-metric-switch" aria-label="训练量指标">
+            <button
+              type="button"
+              className="secondary-button"
+              aria-pressed={metric === 'minutes'}
+              onClick={() => setMetric('minutes')}
+            >
+              训练时长
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              aria-pressed={metric === 'distance'}
+              onClick={() => setMetric('distance')}
+            >
+              训练距离
+            </button>
+          </div>
+          {metric === 'minutes' ? (
+            <VolumeChart
+              stats={stats}
+              period={period}
+              metric="minutes"
+              unit="min"
+              title="训练时长"
+            />
+          ) : (
+            <VolumeChart
+              stats={stats}
+              period={period}
+              metric="distance"
+              unit="km"
+              title="训练距离"
+            />
+          )}
+        </ChartCard>
+        <RatioChart title="主辅训练比例" groups={stats.lessonRatio} total={stats.totals.minutes} />
+        {stats.waterProject && (
+          <RatioChart title="水陆训练比例" groups={stats.waterRatio} total={stats.totals.minutes} />
+        )}
       </div>
-      {stats.timeAnalysis.map((group) => (
-        <TimeAnalysis key={group.title} group={group} />
+      {stats.timeAnalysis.map((group, index) => (
+        <TimeAnalysis key={group.title} group={group} index={index} water={stats.waterProject} />
       ))}
       <TrainingDetails stats={stats} period={period} />
     </>
@@ -345,7 +502,11 @@ export function TeamTrainingStats({
             周训练数据看板 <small>Excel 导入</small>
           </span>
         }
-        description="统计教练填报的队级分项，与上方课次数据分别计算。"
+        description={
+          data
+            ? `${teams?.find((team) => team.id === selectedId)?.name ?? ''} · ${data.start} 至 ${data.end} · ${periodLabels[period]}统计`
+            : '统计教练填报的队级分项，与上方课次数据分别计算。'
+        }
         actions={
           <button type="button" className="secondary-button" onClick={onImport}>
             <Upload size={16} aria-hidden="true" />

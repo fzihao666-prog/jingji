@@ -3,6 +3,8 @@ const { number } = require('../../utils/format');
 
 const display = (value) => value == null ? '—' : number(value, 2);
 const ratioColor = (name) => name === '未分类' ? 'var(--team-chart-neutral)' : name === '主课' || name === '水上' ? 'var(--team-chart-blue)' : 'var(--team-chart-orange)';
+const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+const weekLabel = (date) => weekday[new Date(`${date}T00:00:00Z`).getUTCDay()];
 const dateLabel = (date, year) => year ? `${Number(date.slice(5, 7))}月` : shortDate(date);
 
 function volume(stats, metric, title, unit, period) {
@@ -20,7 +22,7 @@ function volume(stats, metric, title, unit, period) {
       const first = index === 0;
       const last = index === stats.buckets.length - 1;
       const label = period === 'year' ? String(Number(bucket.start.slice(5, 7))) :
-        period === 'week' ? shortDate(bucket.start) : first || last || (day % 5 === 0 && lastDay - day >= 3) ? String(day) : '';
+        period === 'week' ? weekLabel(bucket.start) : first || last || (day % 5 === 0 && lastDay - day >= 3) ? String(day) : '';
       return {
         date: period === 'year' ? bucket.start.slice(0, 7) : bucket.start,
         label, edge: first ? 'first' : last ? 'last' : '',
@@ -31,7 +33,7 @@ function volume(stats, metric, title, unit, period) {
   };
 }
 
-function ratio(title, groups) {
+function ratio(title, groups, total) {
   let offset = 0;
   const slices = [];
   const hasMultipleSlices = groups.filter(({ percentage }) => percentage > 0).length > 1;
@@ -46,12 +48,12 @@ function ratio(title, groups) {
     }
     return { name, value: display(value), color, share: percentage === null ? '—' : `${display(percentage)}%` };
   });
-  return { title, rows, background: slices.length ? `conic-gradient(${slices.join(',')})` : '' };
+  return { title, rows, total: display(total), background: slices.length ? `conic-gradient(${slices.join(',')})` : '' };
 }
 
 function buildView(stats, period) {
-  const ratios = [ratio('主辅训练比例', stats.lessonRatio)];
-  if (stats.waterProject) ratios.push(ratio('水陆训练比例', stats.waterRatio));
+  const ratios = [ratio('主辅训练比例', stats.lessonRatio, stats.totals.minutes)];
+  if (stats.waterProject) ratios.push(ratio('水陆训练比例', stats.waterRatio, stats.totals.minutes));
   return {
     start: stats.start, end: stats.end, hasData: stats.details.length > 0,
     volumes: [
@@ -61,7 +63,7 @@ function buildView(stats, period) {
     ratios,
     timeAnalysis: stats.timeAnalysis.map(({ title, points }, index) => {
       const max = Math.max(0, ...points.map(({ value }) => value));
-      return { title, tone: stats.waterProject ? (index === 0 ? 'blue' : 'orange') : 'teal', points: points.map(({ name, value }) => ({ name, value: display(value), width: max ? value / max * 100 : 0 })) };
+      return { title, tone: stats.waterProject ? (index === 0 ? 'blue' : 'orange') : 'teal', points: points.map(({ name, value, percentage }) => ({ name, value: display(value), share: percentage == null ? '—' : `${display(percentage)}%`, width: max ? value / max * 100 : 0 })) };
     }),
     hasTotals: stats.details.some(({ total }) => total !== null),
     hasRaw: stats.details.some(({ total }) => total === null),
@@ -76,13 +78,19 @@ function buildDetails(stats, period, raw, page) {
   const year = period === 'year' && !raw;
   const size = year ? 12 : 7;
   const visible = dates.slice(page * size, (page + 1) * size);
+  const groups = stats.waterProject ? [
+    { label: '水上', rows: rows.filter(({ waterGroup }) => waterGroup === 'water') },
+    { label: '陆上', rows: rows.filter(({ waterGroup }) => waterGroup === 'land') },
+    { label: '未分类', rows: rows.filter(({ waterGroup }) => !waterGroup) }
+  ].filter((group) => group.rows.length) : [{ label: '', rows }];
   return {
-    columns: visible.map((date) => ({ date, label: dateLabel(date, year) })),
+    columns: visible.map((date) => ({ date, label: period === 'week' ? weekLabel(date) : dateLabel(date, year) })),
     datesCount: dates.length, pageCount: Math.ceil(dates.length / size),
-    rows: rows.map(({ category, unit, total, values }) => ({
+    rows: groups.flatMap(({ label, rows: members }) => members.map(({ category, unit, total, values }, index) => ({
+      group: index === 0 ? label : '',
       key: JSON.stringify([category, unit]), name: `${category} · ${unit}`,
       total: display(total), cells: visible.map((date) => ({ date, text: display(values[date]) })),
-    })),
+    }))),
   };
 }
 

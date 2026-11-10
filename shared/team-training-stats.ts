@@ -64,6 +64,7 @@ export type TeamTrainingBoardDetail = {
   unit: string;
   total: number | null;
   values: Record<string, number>;
+  waterGroup: TeamTrainingWaterGroup | null;
 };
 export type TeamTrainingBoardGroup = { name: string; value: number; percentage: number | null };
 export type TeamTrainingBoard = {
@@ -75,6 +76,6 @@ export type TeamTrainingBoard = {
   buckets: TeamTrainingBoardPoint[];
   lessonRatio: TeamTrainingBoardGroup[];
   waterRatio: TeamTrainingBoardGroup[];
-  timeAnalysis: { title: string; points: { name: string; value: number }[] }[];
+  timeAnalysis: { title: string; total: number | null; points: TeamTrainingBoardGroup[] }[];
   details: TeamTrainingBoardDetail[];
 };

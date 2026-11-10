@@ -143,3 +143,19 @@ it('点选柱位联动显示两项数值，切换周期后清除旧选中', asyn
   expect(component.data.volumeIndex).toBe(-1);
   expect(component.data.volumeSelection).toBeNull();
 });
+
+
+it('水陆分项使用服务端组内占比，明细按归属分组', () => {
+  const source = stats(7, {
+    waterProject: true,
+    totals: { minutes: 90, distance: null },
+    timeAnalysis: [{ title: '水上训练时间分析', total: 60, points: [{ name: '测功仪', value: 60, percentage: 100 }] }],
+    details: [
+      { category: '大力量', unit: 'min', total: 30, values: {}, waterGroup: 'land' },
+      { category: '测功仪', unit: 'min', total: 60, values: {}, waterGroup: 'water' },
+      { category: '未知分项', unit: 'min', total: 0, values: {}, waterGroup: null },
+    ],
+  });
+  expect(view.buildView(source, 'week').timeAnalysis[0].points[0].share).toBe('100%');
+  expect(view.buildDetails(source, 'week', false, 0).rows.map(({ group }) => group)).toEqual(['水上', '陆上', '未分类']);
+});

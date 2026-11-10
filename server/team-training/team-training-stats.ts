@@ -367,7 +367,13 @@ export function readTeamTrainingBoard(
   for (const row of rows) {
     const { category, unit, date, value } = row;
     const key = JSON.stringify([category, unit]);
-    const detail = details.get(key) ?? { category, unit, total: null, values: {} };
+    const inferred =
+      inferredGroups.get(category) ?? inferTeamTrainingGroups(scope.project, category);
+    inferredGroups.set(category, inferred);
+    const waterGroup = waterProject ? (row.waterGroup ?? inferred.waterGroup ?? null) : null;
+    const detail = details.get(key) ?? { category, unit, total: null, values: {}, waterGroup };
+    // 同一分项在周期内的分组不一致时，明细单列为未分类。
+    if (detail.waterGroup !== waterGroup) detail.waterGroup = null;
     details.set(key, detail);
     const metric = unit === 'min' ? 'minutes' : unit === 'km' ? 'distance' : null;
     const slot = period === 'year' && metric ? `${date.slice(0, 7)}-01` : date;
@@ -382,16 +388,12 @@ export function readTeamTrainingBoard(
     totals[metric] = (totals[metric] ?? 0) + value;
     if (unit !== 'min') continue;
 
-    const inferred =
-      inferredGroups.get(category) ?? inferTeamTrainingGroups(scope.project, category);
-    inferredGroups.set(category, inferred);
     const lessonGroup = row.lessonGroup ?? inferred.lessonGroup;
     add(
       lesson,
       lessonGroup === 'main' ? '主课' : lessonGroup === 'auxiliary' ? '辅课' : '未分类',
       value
     );
-    const waterGroup = row.waterGroup ?? inferred.waterGroup;
     const environment = waterGroup === 'water' ? '水上' : waterGroup === 'land' ? '陆上' : '未分类';
     if (waterProject) add(water, environment, value);
     const group = waterProject ? environment : '全部';
@@ -405,12 +407,17 @@ export function readTeamTrainingBoard(
         ? []
         : [{ name, value, percentage: totals.minutes ? (value / totals.minutes) * 100 : null }];
     });
-  const timeGroup = (group: string, title: string) => ({
-    title,
-    points: [...(analysis.get(group) ?? [])]
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value),
-  });
+  const timeGroup = (group: string, title: string) => {
+    const values = [...(analysis.get(group) ?? [])];
+    const total = values.length ? values.reduce((sum, [, value]) => sum + value, 0) : null;
+    return {
+      title,
+      total,
+      points: values
+        .map(([name, value]) => ({ name, value, percentage: total ? (value / total) * 100 : null }))
+        .sort((a, b) => b.value - a.value),
+    };
+  };
   return {
     start,
     end,

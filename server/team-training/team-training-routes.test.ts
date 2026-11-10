@@ -170,6 +170,26 @@ it('保存带日期的原始分项，忽略无日期和公式，重传更新非�
   });
   expect(stats.categories.map((item) => item.category)).not.toContain('测功仪');
   expect(stats.buckets[0]).toMatchObject({ start: date, water: 0, maxStrength: 20, minutes: 80 });
+  const boardResponse = await fetch(
+    `${base}?project=ROWING&teamId=9701&date=2026-01-01&view=board`,
+    { headers: auth() }
+  );
+  expect(boardResponse.status).toBe(200);
+  const board = (await boardResponse.json()) as TeamTrainingBoard;
+  expect(board.timeAnalysis).toMatchObject([
+    { total: 0, points: [{ name: '3级有氧', value: 0, percentage: null }] },
+    {
+      total: 80,
+      points: [
+        { name: '恢复再生', value: 60, percentage: 75 },
+        { name: '大力量', value: 20, percentage: 25 },
+      ],
+    },
+  ]);
+  expect(board.details.filter(({ category }) => category === '3级有氧')).toMatchObject([
+    { unit: 'km', waterGroup: 'water' },
+    { unit: 'min', waterGroup: 'water' },
+  ]);
   expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()).toEqual(before);
 });
 
