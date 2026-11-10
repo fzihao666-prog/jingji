@@ -87,11 +87,13 @@ function Donut({
   groups,
   colors,
   total,
+  showLegend = true,
 }: {
   title: string;
   groups: TeamTrainingBoardGroup[];
   colors: string[];
   total: number | null | undefined;
+  showLegend?: boolean;
 }) {
   return (
     <div className="team-training-donut-layout">
@@ -128,7 +130,7 @@ function Donut({
       ) : (
         <p>{groups.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}</p>
       )}
-      {groups.length > 0 && (
+      {showLegend && groups.length > 0 && (
         <ul className="team-training-ratio-legend" aria-label={`${title}图例`}>
           {groups.map(({ name, value, percentage }, index) => (
             <li key={name}>
@@ -214,6 +216,7 @@ function TimeAnalysis({
               groups={group.points}
               colors={colors}
               total={group.total}
+              showLegend={false}
             />
           )}
         </div>

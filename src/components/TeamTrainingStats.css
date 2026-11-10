@@ -169,6 +169,11 @@
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     align-items: center;
   }
+
+  .team-training-analysis-grid > .team-training-donut-layout {
+    padding-inline-start: 16px;
+    border-inline-start: 1px solid var(--line);
+  }
 }
 
 @container training-board (min-width: 900px) {
@@ -178,24 +183,6 @@
 
   .team-training-overview-water > :first-child {
     grid-column: auto;
-  }
-}
-
-@container training-board (min-width: 1040px) {
-  .team-training-analysis-grid {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    column-gap: 24px;
-  }
-
-  .team-training-analysis-grid .team-training-donut-layout:has(.team-training-donut) {
-    grid-template-columns: minmax(140px, 1fr) minmax(0, 1.4fr);
-    align-items: center;
-    padding-inline-start: 16px;
-    border-inline-start: 1px solid var(--line);
-  }
-
-  .team-training-analysis-grid .team-training-donut .app-echart {
-    --chart-height: 165px;
   }
 }
 
