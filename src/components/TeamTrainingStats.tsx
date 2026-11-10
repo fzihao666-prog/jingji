@@ -136,9 +136,8 @@ function Donut({
                 <i style={{ background: colors[index] }} aria-hidden="true" />
                 {name}
               </span>
-              <strong>
-                {show(value)} min · {percent(percentage)}
-              </strong>
+              <strong>{show(value)} min</strong>
+              <span className="team-training-legend-share">{percent(percentage)}</span>
             </li>
           ))}
         </ul>
