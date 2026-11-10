@@ -93,32 +93,56 @@ function Donut({
   colors: string[];
   total: number | null | undefined;
 }) {
-  if (!total) return <p>{groups.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}</p>;
   return (
-    <div className="team-training-donut">
-      <EChart
-        label={title}
-        option={{
-          animation: false,
-          color: colors,
-          tooltip: { trigger: 'item', renderMode: 'richText', formatter: '{b}：{c} min（{d}%）' },
-          series: [
-            {
-              type: 'pie',
-              radius: ['58%', '84%'],
-              label: { show: false },
-              itemStyle: { borderColor: '#fff', borderWidth: 2 },
-              data: groups.flatMap((group, index) =>
-                group.value > 0 ? [{ ...group, itemStyle: { color: colors[index] } }] : []
-              ),
-            },
-          ],
-        }}
-      />
-      <div className="team-training-donut-total" aria-hidden="true">
-        <strong>{show(total)}</strong>
-        <span className="team-training-donut-unit">min</span>
-      </div>
+    <div className="team-training-donut-layout">
+      {total ? (
+        <div className="team-training-donut">
+          <EChart
+            label={title}
+            option={{
+              animation: false,
+              color: colors,
+              tooltip: {
+                trigger: 'item',
+                renderMode: 'richText',
+                formatter: '{b}：{c} min（{d}%）',
+              },
+              series: [
+                {
+                  type: 'pie',
+                  radius: ['58%', '84%'],
+                  label: { show: false },
+                  itemStyle: { borderColor: '#fff', borderWidth: 2 },
+                  data: groups.flatMap((group, index) =>
+                    group.value > 0 ? [{ ...group, itemStyle: { color: colors[index] } }] : []
+                  ),
+                },
+              ],
+            }}
+          />
+          <div className="team-training-donut-total" aria-hidden="true">
+            <strong>{show(total)}</strong>
+            <span className="team-training-donut-unit">min</span>
+          </div>
+        </div>
+      ) : (
+        <p>{groups.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}</p>
+      )}
+      {groups.length > 0 && (
+        <ul className="team-training-ratio-legend" aria-label={`${title}图例`}>
+          {groups.map(({ name, value, percentage }, index) => (
+            <li key={name}>
+              <span>
+                <i style={{ background: colors[index] }} aria-hidden="true" />
+                {name}
+              </span>
+              <strong>
+                {show(value)} min · {percent(percentage)}
+              </strong>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -140,19 +164,6 @@ function RatioChart({
         colors={groups.map(({ name }) => ratioColor(name))}
         total={total}
       />
-      <ul className="team-training-ratio-legend">
-        {groups.map(({ name, value, percentage }) => (
-          <li key={name}>
-            <span>
-              <i style={{ background: ratioColor(name) }} aria-hidden="true" />
-              {name}
-            </span>
-            <strong>
-              {show(value)} min · {percent(percentage)}
-            </strong>
-          </li>
-        ))}
-      </ul>
     </ChartCard>
   );
 }

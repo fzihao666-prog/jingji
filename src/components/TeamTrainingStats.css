@@ -202,6 +202,10 @@
   margin-block: 0 8px;
 }
 
+.team-training-donut-layout {
+  min-width: 0;
+}
+
 .team-training-donut {
   position: relative;
   min-width: 0;
