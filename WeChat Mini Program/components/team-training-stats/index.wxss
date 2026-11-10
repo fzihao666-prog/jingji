@@ -1,6 +1,17 @@
 .team-stat-card {
+  --team-chart-blue: #2458a6;
+  --team-chart-orange: #b44716;
+  --team-chart-teal: #17645d;
+  --team-chart-neutral: #536171;
+  --team-chart-label: #45566b;
+  --team-chart-grid: #c9d3df;
+
   min-width: 0;
 }
+
+.team-stat-tone-blue { --team-chart-series: var(--team-chart-blue); }
+.team-stat-tone-orange { --team-chart-series: var(--team-chart-orange); }
+.team-stat-tone-teal { --team-chart-series: var(--team-chart-teal); }
 
 .team-stat-picker,
 .team-stat-row {
@@ -97,7 +108,7 @@
   gap: 4rpx 14rpx;
   min-height: 48rpx;
   padding-top: 10rpx;
-  color: var(--muted);
+  color: var(--team-chart-label);
   font-size: 22rpx;
 }
 
@@ -115,7 +126,7 @@
   justify-content: space-between;
   height: 146rpx;
   overflow: hidden;
-  color: var(--muted);
+  color: var(--team-chart-label);
   font-size: 18rpx;
   text-align: right;
 }
@@ -139,7 +150,7 @@
 
 .team-stat-gridlines view {
   height: 1rpx;
-  background: var(--line);
+  background: var(--team-chart-grid);
 }
 
 .team-stat-point {
@@ -162,7 +173,8 @@
 }
 
 .team-stat-point-selected .team-stat-track {
-  background: rgba(23, 111, 127, 0.14);
+  background: #e5ebf4;
+  box-shadow: inset 0 2rpx var(--ink);
 }
 
 .team-stat-bar {
@@ -170,12 +182,12 @@
   max-width: 32rpx;
   min-height: 1rpx;
   border-radius: 5rpx 5rpx 0 0;
-  background: var(--river);
+  background: var(--team-chart-series);
 }
 
 .team-stat-zero {
   min-height: 4rpx;
-  background: var(--muted);
+  background: var(--team-chart-neutral);
 }
 
 .team-stat-label-slot {
@@ -188,9 +200,15 @@
   left: 50%;
   padding-top: 6rpx;
   transform: translateX(-50%);
-  color: var(--muted);
+  color: var(--team-chart-label);
   font-size: 18rpx;
   white-space: nowrap;
+}
+
+.team-stat-point-selected .team-stat-label {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
 }
 
 .team-stat-label-first {
@@ -233,7 +251,7 @@
 
 .team-stat-distribution-track view {
   height: 100%;
-  background: var(--teal);
+  background: var(--team-chart-series);
 }
 
 .team-stat-donut {
@@ -258,6 +276,7 @@
   height: 14rpx;
   margin-right: 8rpx;
   border-radius: 50%;
+  background: var(--team-chart-series);
 }
 
 .team-stat-matrix {

@@ -1,5 +1,5 @@
 <template name="team-trend">
-  <view class="team-stat-chart">
+  <view class="team-stat-chart team-stat-tone-{{series.tone}}">
     <view class="card-head-title">{{series.title}}（{{series.unit}}）</view>
     <view class="team-stat-frame" aria-label="{{series.title}}">
       <view class="team-stat-axis" aria-hidden="true">
@@ -56,7 +56,7 @@
         <view class="card-head-title">训练量统计</view>
         <view class="team-stat-volume-totals">
           <view wx:for="{{view.volumes}}" wx:key="title">
-            <text>总{{item.title}}</text>
+            <text><text class="team-stat-dot team-stat-tone-{{item.tone}}" aria-hidden="true"></text>总{{item.title}}</text>
             <text class="team-stat-volume-value">{{item.total}} <text>{{item.unit}}</text></text>
           </view>
         </view>
@@ -84,7 +84,7 @@
           <text>{{item.value}} min · {{item.share}}</text>
         </view>
       </view>
-      <view wx:for="{{view.timeAnalysis}}" wx:for-item="group" wx:key="title" class="team-stat-section">
+      <view wx:for="{{view.timeAnalysis}}" wx:for-item="group" wx:key="title" class="team-stat-section team-stat-tone-{{group.tone}}">
         <view class="card-head-title">{{group.title}}（min）</view>
         <view wx:if="{{!group.points.length}}" class="card-head-note">此周期暂无该类训练时长。</view>
         <view wx:for="{{group.points}}" wx:key="name">

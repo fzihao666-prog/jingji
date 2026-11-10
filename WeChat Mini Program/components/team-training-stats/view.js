@@ -2,7 +2,7 @@ const { shortDate } = require('../../utils/date');
 const { number } = require('../../utils/format');
 
 const display = (value) => value == null ? '—' : number(value, 2);
-const ratioColor = (name) => name === '未分类' ? '#737e88' : name === '主课' || name === '水上' ? '#176f7f' : '#be7329';
+const ratioColor = (name) => name === '未分类' ? 'var(--team-chart-neutral)' : name === '主课' || name === '水上' ? 'var(--team-chart-blue)' : 'var(--team-chart-orange)';
 const dateLabel = (date, year) => year ? `${Number(date.slice(5, 7))}月` : shortDate(date);
 
 function volume(stats, metric, title, unit, period) {
@@ -12,7 +12,7 @@ function volume(stats, metric, title, unit, period) {
   const hasValues = stats.totals[metric] !== null;
   const lastDay = Number(stats.end.slice(8));
   return {
-    title, unit, total: display(stats.totals[metric]), hasValues,
+    title, unit, tone: metric === 'minutes' ? 'blue' : 'orange', total: display(stats.totals[metric]), hasValues,
     ticks: [top, top / 2, 0].map((value, index) => ({ index, label: hasValues ? display(value) : '—' })),
     points: stats.buckets.map((bucket, index) => {
       const value = bucket[metric];
@@ -34,11 +34,15 @@ function volume(stats, metric, title, unit, period) {
 function ratio(title, groups) {
   let offset = 0;
   const slices = [];
+  const hasMultipleSlices = groups.filter(({ percentage }) => percentage > 0).length > 1;
   const rows = groups.map(({ name, value, percentage }) => {
     const color = ratioColor(name);
     if (percentage > 0) {
-      slices.push(`${color} ${offset}% ${offset + percentage}%`);
-      offset += percentage;
+      const end = offset + percentage;
+      const gap = hasMultipleSlices ? Math.min(0.6, percentage / 4) : 0;
+      slices.push(`${color} ${offset}% ${end - gap}%`);
+      if (gap) slices.push(`var(--paper) ${end - gap}% ${end}%`);
+      offset = end;
     }
     return { name, value: display(value), color, share: percentage === null ? '—' : `${display(percentage)}%` };
   });
@@ -55,9 +59,9 @@ function buildView(stats, period) {
       volume(stats, 'distance', '训练距离', 'km', period),
     ],
     ratios,
-    timeAnalysis: stats.timeAnalysis.map(({ title, points }) => {
+    timeAnalysis: stats.timeAnalysis.map(({ title, points }, index) => {
       const max = Math.max(0, ...points.map(({ value }) => value));
-      return { title, points: points.map(({ name, value }) => ({ name, value: display(value), width: max ? value / max * 100 : 0 })) };
+      return { title, tone: stats.waterProject ? (index === 0 ? 'blue' : 'orange') : 'teal', points: points.map(({ name, value }) => ({ name, value: display(value), width: max ? value / max * 100 : 0 })) };
     }),
     hasTotals: stats.details.some(({ total }) => total !== null),
     hasRaw: stats.details.some(({ total }) => total === null),
