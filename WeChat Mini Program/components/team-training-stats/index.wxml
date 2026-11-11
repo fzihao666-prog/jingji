@@ -31,7 +31,7 @@
 
 <view class="section-head">
   <view class="section-head-title">周训练数据看板</view>
-  <view class="section-head-note">Excel 导入 · {{projectLabel}} · 按队伍统计</view>
+  <view class="section-head-note">{{projectLabel}} · 按队伍统计</view>
 </view>
 <view class="card team-stat-card">
   <picker wx:if="{{teams.length}}" mode="selector" range="{{teamOptions}}"

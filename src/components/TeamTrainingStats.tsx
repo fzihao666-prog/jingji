@@ -512,7 +512,7 @@ export function TeamTrainingStats({
       <SectionHeader
         title={
           <span id="team-training-heading">
-            周训练数据看板 <small>Excel 导入</small>
+            周训练数据看板
           </span>
         }
         description={
