@@ -58,3 +58,21 @@ it('赛艇有效FMS测量进入总览，真实零分不丢失', async () => {
     expect.objectContaining({ code: 'fms_deep_squat', value: 0, sampleCount: 1 }),
   ]));
 });
+
+it('总览分别读取最近有效的身高和体重，较新的部分测量不清空历史值', async () => {
+  const insert = db.prepare(`INSERT INTO athlete_body_measurements(athlete_id,measurement_date,height_cm,weight_kg)
+    VALUES(9101,?,?,?)`);
+  insert.run('2025-12-15', 182, null);
+  insert.run('2026-01-04', null, 76);
+  insert.run('2026-01-15', null, 78);
+  insert.run('2026-01-30', null, null);
+  insert.run('2026-02-02', 190, 90);
+
+  expect((await overview()).profiles[0]).toMatchObject({
+    heightCm: 182,
+    heightMeasurementDate: '2025-12-15',
+    weightKg: 78,
+    previousWeightKg: 76,
+    bodyMeasurementDate: '2026-01-30',
+  });
+});

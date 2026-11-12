@@ -1165,15 +1165,20 @@ export function buildOverviewPayload(input: {
     const bodyHistory = bodyRows.filter((row) => row.athleteId === profile.athleteId);
     const stateHistory = competitiveRows.filter((row) => row.athleteId === profile.athleteId);
     const body = bodyHistory[0];
+    const height = bodyHistory.find((row) => row.heightCm !== null && row.heightCm > 0);
+    const [weight, previousWeight] = bodyHistory.filter(
+      (row) => row.weightKg !== null && row.weightKg > 0
+    );
     const state = stateHistory[0];
     return {
       ...profile,
       age: ageAt(profile.birthDate, input.to),
       startSportDate: profile.startSportDate || null,
       bodyMeasurementDate: body?.measurementDate || null,
-      heightCm: body?.heightCm ?? null,
-      weightKg: body?.weightKg ?? null,
-      previousWeightKg: bodyHistory[1]?.weightKg ?? null,
+      heightMeasurementDate: height?.measurementDate ?? null,
+      heightCm: height?.heightCm ?? null,
+      weightKg: weight?.weightKg ?? null,
+      previousWeightKg: previousWeight?.weightKg ?? null,
       bodyFatPct: body?.bodyFatPct ?? null,
       skeletalMuscleKg: body?.skeletalMuscleKg ?? null,
       muscleMassKg: body?.muscleMassKg ?? null,
@@ -1242,7 +1247,7 @@ export function buildOverviewPayload(input: {
       originSource: profile.originSource,
       originIsDemo: Boolean(profile.originIsDemo),
       source: [...new Set([body?.source, state?.source].filter(Boolean))].join('、'),
-      isDemo: Boolean(profile.originIsDemo || body?.isDemo || state?.isDemo),
+      isDemo: Boolean(profile.originIsDemo || body?.isDemo || height?.isDemo || weight?.isDemo || previousWeight?.isDemo || state?.isDemo),
     };
   });
 

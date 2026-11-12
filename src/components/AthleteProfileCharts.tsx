@@ -175,7 +175,11 @@ export function AthleteProfileOverview({
             label="身高"
             value={height === null ? '—' : formatNumber(height, 1)}
             unit="cm"
-            note={current?.bodyMeasurementDate || '未测量'}
+            note={
+              current?.heightMeasurementDate ??
+              (current?.heightCm != null ? current.bodyMeasurementDate : null) ??
+              '未测量'
+            }
           />
           <ProfileStat
             label="体重"

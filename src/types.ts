@@ -932,6 +932,7 @@ export type OverviewAthleteProfile = {
   bodyMeasurementDate: string | null;
   heightCm: number | null;
   weightKg: number | null;
+  heightMeasurementDate?: string | null;
   previousWeightKg: number | null;
   bodyFatPct: number | null;
   skeletalMuscleKg: number | null;
