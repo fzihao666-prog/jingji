@@ -1,3 +1,4 @@
+import { latestStrengthMetricTests } from '../components/strength-test-samples';
 import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import { StrengthSessionAnalysis, strengthSessionSummary } from '../components/StrengthSessionAnalysis';
 import { Activity } from 'lucide-react';
@@ -55,10 +56,8 @@ type CurrentMetric = {
   label: string;
   unit: string;
   value: number;
-  testDate: string;
-  target?: number;
-  sampleCount?: number;
-  median?: number;
+  score: number | null;
+  sampleCount: number;
 };
 type ScopedStrengthSession = StrengthTrainingSession & { athleteId: number };
 
@@ -76,52 +75,26 @@ function configuredMetrics(project: Project) {
   return STRENGTH_METRICS.filter((metric) => metricAppliesToProject(metric, project));
 }
 
-function median(values: number[]) {
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function latestTestsByAthlete(tests: StrengthTest[]) {
-  const latest = new Map<number, StrengthTest>();
-  [...tests]
-    .sort((left, right) => right.testDate.localeCompare(left.testDate))
-    .forEach((test) => {
-      if (!latest.has(test.athleteId)) latest.set(test.athleteId, test);
-    });
-  return [...latest.values()];
-}
-
 function metricsFromTests(tests: StrengthTest[], project: Project) {
   return configuredMetrics(project).flatMap((definition) => {
-    const rows = tests.flatMap((test) =>
-      typeof test.metrics[definition.key] === 'number'
-        ? [
-            {
-              test,
-              value: test.metrics[definition.key] as number,
-              target: test.targets[definition.key],
-            },
-          ]
-        : []
-    );
+    const rows = latestStrengthMetricTests(tests, definition.key).map((test) => ({
+      value: Number(test.metrics[definition.key]),
+      target: test.targets[definition.key],
+    }));
     if (!rows.length) return [];
     const values = rows.map((row) => row.value);
-    const targets = rows.flatMap((row) =>
-      typeof row.target === 'number' && row.target > 0 ? [row.target] : []
-    );
+    const paired = rows.filter((row) => typeof row.target === 'number' && Number.isFinite(row.target) && row.target > 0);
+    const score = paired.length
+      ? paired.reduce((sum, row) => sum + row.value / Number(row.target) * 100, 0) / paired.length
+      : null;
     return [
       {
         key: definition.key,
         label: definition.label,
         unit: definition.unit,
         value: values.reduce((sum, value) => sum + value, 0) / values.length,
-        median: median(values),
-        testDate: `n=${values.length}`,
         sampleCount: values.length,
-        target: targets.length
-          ? targets.reduce((sum, value) => sum + value, 0) / targets.length
-          : undefined,
+        score,
       },
     ];
   });
@@ -167,22 +140,14 @@ function AbilityProfile({
   metrics: CurrentMetric[];
   athleteId: number | null;
 }) {
-  const scored = metrics
-    .filter((metric) => typeof metric.target === 'number' && metric.target > 0)
-    .map((metric) => ({
-      ...metric,
-      score: Math.min(120, (metric.value / Number(metric.target)) * 100),
-    }));
-  const isPlaceholder = scored.length === 0;
-  const displayScored = isPlaceholder
-    ? STRENGTH_METRICS.slice(0, 5).map((metric) => ({ ...metric, score: null }))
-    : scored;
-  const ordered = [...scored].sort((a, b) => b.score - a.score);
+  const ordered = metrics.flatMap((metric) =>
+    metric.score === null ? [] : [{ ...metric, score: metric.score }]
+  ).sort((a, b) => b.score - a.score);
   return (
     <div className="physical-ability-profile">
-      {isPlaceholder && <span className="app-chart-example">暂无数据</span>}
+      {!metrics.length && <span className="app-chart-example">当前周期暂无体能测试</span>}
       <div className="physical-radar">
-        {displayScored.map((metric, index) => (
+        {metrics.map((metric, index) => (
           <div
             key={metric.key}
             style={
@@ -195,21 +160,24 @@ function AbilityProfile({
                   '#8b5cf6',
                   '#ef6b5b',
                   '#22a06b',
-                ][index],
+                ][index % 6],
               } as CSSProperties
             }
           >
             <span>{metric.label}</span>
-            <i>
-              <b />
-            </i>
-            <strong>{metric.score === null ? '—' : formatNumber(metric.score, 0)}</strong>
+            <strong title={athleteId ? undefined : `${metric.sampleCount} 人实测`}>{formatNumber(metric.value, 1)} {metric.unit}</strong>
+            {metric.score !== null && (
+              <>
+                <i aria-hidden="true"><b /></i>
+                <strong>{formatNumber(metric.score, 0)}%</strong>
+              </>
+            )}
           </div>
         ))}
       </div>
       <aside>
-        {isPlaceholder ? <p>暂无有效目标对照，保留指标结构；配置真实标准后显示达成度。</p> : <>
-        <span>基于已配置的{athleteId ? '个人目标' : '群体目标均值'}</span>
+        {ordered.length ? <>
+        <span>{athleteId ? '按个人目标计算' : '仅汇总已有对应目标的运动员达成率'}</span>
         <h3>{athleteId ? '个人能力摘要' : '团队能力摘要'}</h3>
         <p>
           <b>相对达成</b>
@@ -230,7 +198,7 @@ function AbilityProfile({
               </em>
             ))}
         </p>
-        </>}
+        </> : <p>{metrics.length ? '已展示实测成绩，填写目标后可查看达成率。' : '调整日期范围可查看其他周期。'}</p>}
       </aside>
     </div>
   );
@@ -246,7 +214,7 @@ function MetricTrend({
   athleteId: number | null;
 }) {
   const [selected, setSelected] = useState<StrengthMetricKey | ''>('');
-  const metricKey = selected || metrics[0]?.key || STRENGTH_METRICS[0].key;
+  const metricKey = metrics.some((metric) => metric.key === selected) ? selected : metrics[0]?.key ?? STRENGTH_METRICS[0].key;
   const definition = STRENGTH_METRICS.find((metric) => metric.key === metricKey);
   const raw = [...tests]
     .sort((a, b) => a.testDate.localeCompare(b.testDate))
@@ -307,7 +275,7 @@ function MetricTrend({
                   definition?.label || '测试值',
                 ]}
               />
-              {best !== null && <ReferenceLine
+              {athleteId && best !== null && <ReferenceLine
                 y={best ?? undefined}
                 stroke="#f59e0b"
                 strokeDasharray="4 3"
@@ -547,31 +515,10 @@ export function StrengthTrainingDashboard({
       }),
     [athletes, periodSessions]
   );
-  const latestTest = useMemo(() => latestTestsByAthlete(selectedTests)[0], [selectedTests]);
-  const currentMetrics = useMemo(
-    () =>
-      configuredMetrics(project).flatMap((definition) => {
-        const value = latestTest?.metrics[definition.key];
-        return typeof value === 'number'
-          ? [
-              {
-                key: definition.key,
-                label: definition.label,
-                unit: definition.unit,
-                value,
-                testDate: latestTest.testDate,
-                target: latestTest.targets[definition.key],
-              },
-            ]
-          : [];
-      }),
-    [latestTest, project]
+  const displayMetrics = useMemo(
+    () => metricsFromTests(selectedTests, project),
+    [selectedTests, project]
   );
-  const teamMetrics = useMemo(
-    () => metricsFromTests(latestTestsByAthlete(periodTests), project),
-    [periodTests, project]
-  );
-  const displayMetrics = athleteId ? currentMetrics : teamMetrics;
   return (
     <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
       <PageHeader
@@ -611,7 +558,7 @@ export function StrengthTrainingDashboard({
               title={athleteId ? '体能核心指标概览' : '整体体能指标概览'}
               description={
                 athleteId
-                  ? '当前运动员本时间范围内最近一次真实测试'
+                  ? '当前运动员在所选周期内的体能训练汇总'
                   : '当前项目、权限与组织范围内的整体体能训练数据'
               }
             />
@@ -624,7 +571,7 @@ export function StrengthTrainingDashboard({
             <ChartCard
               title={athleteId ? '体能能力画像' : '团队体能能力画像'}
               description={
-                athleteId ? '仅使用已配置的个人目标进行标准化' : '仅使用真实目标标准化后的团队均值'
+                athleteId ? '各指标最近有效实测与目标达成率' : '各指标按每名运动员最近有效实测汇总'
               }
               className="dashboard-span-5"
             >

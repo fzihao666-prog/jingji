@@ -1,3 +1,4 @@
+import { latestStrengthMetricTests } from './strength-test-samples';
 import { metricAppliesToProject } from '../../shared/import-metric-choice';
 import { useMemo, useState } from 'react';
 import {
@@ -50,16 +51,6 @@ function coachTarget(tests: StrengthTest[], metricKey: StrengthMetricKey) {
   return targets.length ? targets.reduce((sum, value) => sum + value, 0) / targets.length : null;
 }
 
-function latestTestsByAthlete(tests: StrengthTest[]) {
-  const latest = new Map<number, StrengthTest>();
-  [...tests]
-    .sort((left, right) => right.testDate.localeCompare(left.testDate))
-    .forEach((test) => {
-      if (!latest.has(test.athleteId)) latest.set(test.athleteId, test);
-    });
-  return [...latest.values()];
-}
-
 function round(value: number, digits = 1) {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
@@ -72,26 +63,30 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
     [project]
   );
   const [selectedKey, setSelectedKey] = useState<StrengthMetricKey | ''>('');
+  const measuredMetric = metricOptions.find(({ key }) => tests.some((test) =>
+    (!athleteId || test.athleteId === athleteId) && typeof test.metrics[key] === 'number'
+  ));
   const metricKey = (
     selectedKey && metricOptions.some((item) => item.key === selectedKey)
       ? selectedKey
-      : metricOptions[0]?.key
+      : measuredMetric?.key ?? metricOptions[0]?.key
   ) as StrengthMetricKey | undefined;
   const definition = metricKey ? STRENGTH_METRIC_MAP[metricKey] : undefined;
   const [selectedProtocol, setSelectedProtocol] = useState('');
   const protocolKey = (test: StrengthTest) => JSON.stringify([test.protocol || '', test.protocolVersion || '', test.contextKey || '']);
-  const protocolOptions = [...new Map(tests.filter(test => metricKey && typeof test.metrics[metricKey] === 'number')
+  const protocolOptions = [...new Map(tests.filter(test => (!athleteId || test.athleteId === athleteId) && metricKey && typeof test.metrics[metricKey] === 'number')
     .map(test => [protocolKey(test), [test.protocol || '未知协议', test.protocolVersion && `版本 ${test.protocolVersion}`, test.contextKey && `条件 ${test.contextKey}`].filter(Boolean).join(' · ')])).entries()];
   const activeProtocol = protocolOptions.some(([key]) => key === selectedProtocol) ? selectedProtocol : protocolOptions[0]?.[0];
   const scopedTests = tests.filter(test => (!athleteId || test.athleteId === athleteId) && protocolKey(test) === activeProtocol);
+  const hasKnownProtocol = scopedTests.some((test) => Boolean(test.protocol));
 
   const trendRows = useMemo<TrendRow[]>(() => {
     if (!metricKey) return [];
     const teamByDate = new Map<string, Map<number, number>>();
     const personalByDate = new Map<string, number>();
-    for (const test of tests.filter(test => protocolKey(test) === activeProtocol && test.protocol)) {
+    for (const test of tests.filter(test => protocolKey(test) === activeProtocol)) {
       const value = test.metrics[metricKey];
-      if (typeof value !== 'number') continue;
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
       const perAthlete = teamByDate.get(test.testDate) ?? new Map<number, number>();
       perAthlete.set(test.athleteId, value);
       teamByDate.set(test.testDate, perAthlete);
@@ -125,7 +120,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
 
   const current = useMemo(() => {
     if (!metricKey) return { value: null as number | null, sampleCount: 0 };
-    const sources = athleteId ? scopedTests : latestTestsByAthlete(scopedTests);
+    const sources = latestStrengthMetricTests(scopedTests, metricKey);
     const values = sources
       .map((test) => test.metrics[metricKey])
       .filter((value): value is number => typeof value === 'number');
@@ -135,7 +130,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
         : null,
       sampleCount: values.length,
     };
-  }, [athleteId, metricKey, scopedTests]);
+  }, [metricKey, scopedTests]);
 
   const comparison = useMemo(() => {
     if (current.value === null || !standard)
@@ -258,7 +253,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                     dataKey="team"
                     name="团队平均"
                     stroke="#0d9488"
-                    strokeWidth={2.6}
+                    strokeWidth={hasKnownProtocol ? 2.6 : 0}
                     dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
                     connectNulls={false}
                   />
@@ -268,7 +263,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                       dataKey="personal"
                       name={athleteName}
                       stroke="#3b82f6"
-                      strokeWidth={2.2}
+                      strokeWidth={hasKnownProtocol ? 2.2 : 0}
                       strokeDasharray="6 3"
                       dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
                       connectNulls={false}
@@ -280,7 +275,9 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
             <p className="physical-test-note">
               {isPlaceholder
                 ? '当前周期暂无真实体能测试数据。'
-                : `团队平均按测试日期汇总当日有效测试记录，不对无测试日期补值；点按柱形可查看含有效测试人数的明细。`}
+                : hasKnownProtocol
+                  ? '按测试日期汇总有效记录，查看数据点可见测试人数。'
+                  : '历史记录缺少测试协议，以独立数据点展示。'}
             </p>
           </div>
           <aside className="physical-test-standard">
