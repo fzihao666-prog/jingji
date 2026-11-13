@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Download, Upload } from 'lucide-react';
 import { api } from '../api';
 import type { Project, ProjectTeam } from '../types';
@@ -57,6 +57,29 @@ export function TeamTrainingImport({
   const [busy, setBusy] = useState(false);
   const pending = useRef(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const uploadButton = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  const needsMapping = Boolean(pendingFile && columns.length);
+
+  useEffect(() => {
+    const modal = dialog.current;
+    if (needsMapping && !modal?.open) modal?.showModal();
+    if (!needsMapping && modal?.open) {
+      modal.close();
+      uploadButton.current?.focus();
+    }
+  }, [needsMapping]);
+
+  function cancelMapping() {
+    if (pending.current) return;
+    setPendingFile(undefined);
+    setColumns([]);
+    setMappings({});
+    setError('');
+  }
+
   const targetId = teamId ?? selectedTeam ?? (teams.length === 1 ? teams[0].id : null);
   const team = teams.find((item) => item.id === targetId);
   const templateName = projectCapability(project)
@@ -134,6 +157,7 @@ export function TeamTrainingImport({
           type="button"
           className="primary-button"
           disabled={busy || disabled || !team}
+          ref={uploadButton}
           onClick={() => fileInput.current?.click()}
         >
           <Upload size={16} aria-hidden="true" />
@@ -162,78 +186,95 @@ export function TeamTrainingImport({
           }}
         />
       </div>
-      {error && <p role="alert">{error}</p>}
-      {!!columns.length && pendingFile && (
-        <form
-          className="team-training-mappings"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void upload(pendingFile, mappings);
-          }}
-        >
-          <h3>匹配新列</h3>
-          <p>填写分项名称和原单位。分组选填，保存后本队上传同名列会自动沿用。</p>
-          {columns.map((column) => (
-            <fieldset key={column.key} disabled={busy || disabled}>
-              <legend>{column.label}</legend>
-              <label>
-                <span>分项名称</span>
-                <input
-                  required
-                  maxLength={80}
-                  value={mappings[column.key]?.category ?? ''}
-                  onChange={(event) =>
-                    setMappings((current) => ({
-                      ...current,
-                      [column.key]: { ...current[column.key], category: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                <span>单位</span>
-                <input
-                  required
-                  maxLength={20}
-                  readOnly={Boolean(column.unit)}
-                  value={mappings[column.key]?.unit ?? ''}
-                  onChange={(event) =>
-                    setMappings((current) => ({
-                      ...current,
-                      [column.key]: { ...current[column.key], unit: event.target.value },
-                    }))
-                  }
-                />
-              </label>
-              {groupFields.map(({ key, label, choices }) => (
-                <label key={key}>
-                  <span>{label}（选填）</span>
-                  <select
-                    value={mappings[column.key]?.[key] ?? ''}
-                    onChange={(event) => {
-                      const choice = choices.find(([value]) => value === event.target.value);
+      {error && !needsMapping && <p role="alert">{error}</p>}
+      <dialog
+        ref={dialog}
+        className="team-training-mapping-dialog"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        onCancel={(event) => {
+          event.preventDefault();
+          cancelMapping();
+        }}
+      >
+        {needsMapping && pendingFile && (
+          <form
+            className="team-training-mappings"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!disabled) void upload(pendingFile, mappings);
+            }}
+          >
+            <h3 id={titleId}>确认队伍训练列映射</h3>
+            <p id={descriptionId}>以下 Excel 列需要确认分项名称和单位。分组选填，保存后本队上传同名列会自动沿用。</p>
+            {columns.map((column) => (
+              <fieldset key={column.key} disabled={busy || disabled}>
+                <legend>{column.label}</legend>
+                <label>
+                  <span>分项名称</span>
+                  <input
+                    required
+                    maxLength={80}
+                    value={mappings[column.key]?.category ?? ''}
+                    onChange={(event) =>
                       setMappings((current) => ({
                         ...current,
-                        [column.key]: { ...current[column.key], [key]: choice?.[0] },
-                      }));
-                    }}
-                  >
-                    <option value="">自动判断</option>
-                    {choices.map(([value, name]) => (
-                      <option key={value} value={value}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+                        [column.key]: { ...current[column.key], category: event.target.value },
+                      }))
+                    }
+                  />
                 </label>
-              ))}
-            </fieldset>
-          ))}
-          <button type="submit" className="primary-button" disabled={busy || disabled}>
-            保存映射并导入
-          </button>
-        </form>
-      )}
+                <label>
+                  <span>单位</span>
+                  <input
+                    required
+                    maxLength={20}
+                    readOnly={Boolean(column.unit)}
+                    value={mappings[column.key]?.unit ?? ''}
+                    onChange={(event) =>
+                      setMappings((current) => ({
+                        ...current,
+                        [column.key]: { ...current[column.key], unit: event.target.value },
+                      }))
+                    }
+                  />
+                </label>
+                {groupFields.map(({ key, label, choices }) => (
+                  <label key={key}>
+                    <span>{label}（选填）</span>
+                    <select
+                      value={mappings[column.key]?.[key] ?? ''}
+                      onChange={(event) => {
+                        const choice = choices.find(([value]) => value === event.target.value);
+                        setMappings((current) => ({
+                          ...current,
+                          [column.key]: { ...current[column.key], [key]: choice?.[0] },
+                        }));
+                      }}
+                    >
+                      <option value="">自动判断</option>
+                      {choices.map(([value, name]) => (
+                        <option key={value} value={value}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </fieldset>
+            ))}
+            {error && <p role="alert">{error}</p>}
+            <div className="team-training-controls">
+              <button type="button" className="secondary-button" disabled={busy} onClick={cancelMapping}>
+                取消
+              </button>
+              <button type="submit" className="primary-button" disabled={busy || disabled}>
+                {busy ? '正在导入…' : '保存映射并导入'}
+              </button>
+            </div>
+          </form>
+        )}
+      </dialog>
       {receipt && team && (
         <div className="team-training-controls">
           <p role="status">

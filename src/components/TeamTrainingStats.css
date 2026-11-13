@@ -1,3 +1,17 @@
+.team-training-mapping-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: 90vh;
+  padding: 20px;
+  color: var(--ink);
+  background: var(--paper, white);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.team-training-mapping-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
 .team-training-controls {
   display: flex;
   flex-wrap: wrap;
