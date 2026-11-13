@@ -1,5 +1,5 @@
 import { ArrowDownRight, Layers3, Plus, Search, Trash2, UsersRound } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PROJECTS, projectLabel, type Project } from '../../shared/projects';
 import { api } from '../api';
 import type { ProjectTeam } from '../types';
@@ -11,7 +11,8 @@ export function TeamsPage() {
   const [project, setProject] = useState<Project>('ROWING');
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
+  const createDialog = useRef<HTMLDialogElement>(null);
+  const [createError, setCreateError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -35,15 +36,20 @@ export function TeamsPage() {
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
+    setCreateError('');
     setMessage('');
     try {
       const result = await api.createTeam(project, name.trim());
       setMessage(result.message);
       setName('');
+      createDialog.current?.close();
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '添加失败。');
+      const errorMessage = error instanceof Error ? error.message : '添加失败。';
+      if (createDialog.current?.open) setCreateError(errorMessage);
+      else setMessage(errorMessage);
     } finally {
       setBusy(false);
     }
@@ -109,9 +115,11 @@ export function TeamsPage() {
           <button
             type="button"
             className="primary-button team-create-toggle"
-            aria-expanded={showCreate}
-            aria-controls="team-create-form"
-            onClick={() => setShowCreate(!showCreate)}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setCreateError('');
+              createDialog.current?.showModal();
+            }}
           >
             <Plus size={16} aria-hidden="true" />
             添加队伍
@@ -137,30 +145,46 @@ export function TeamsPage() {
         </div>
       )}
       {canCreateProjects.length > 0 && (
-        <form id="team-create-form" className="team-create-panel" hidden={!showCreate} onSubmit={create}>
-          <label>
-            <span>所属项目</span>
-            <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
-              {canCreateProjects.map((item) => (
-                <option key={item} value={item}>{projectLabel(item)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>队伍名称</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="如：女子双桨组"
-              minLength={2}
-              maxLength={30}
-              required
-            />
-          </label>
-          <button type="submit" className="primary-button" disabled={busy}>
-            {busy ? '添加中…' : '确认添加'}
-          </button>
-        </form>
+        <dialog
+          ref={createDialog}
+          className="team-create-dialog"
+          aria-labelledby="team-create-title"
+          onCancel={(event) => {
+            if (busy) event.preventDefault();
+          }}
+        >
+          <h2 id="team-create-title">添加队伍</h2>
+          <form className="team-create-panel" onSubmit={create}>
+            <label>
+              <span>所属项目</span>
+              <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
+                {canCreateProjects.map((item) => (
+                  <option key={item} value={item}>{projectLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>队伍名称</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="如：女子双桨组"
+                minLength={2}
+                maxLength={30}
+                required
+              />
+            </label>
+            {createError && <p className="message-banner error" role="alert">{createError}</p>}
+            <div className="team-create-actions">
+              <button type="button" className="secondary-button" disabled={busy} onClick={() => createDialog.current?.close()}>
+                取消
+              </button>
+              <button type="submit" className="primary-button" disabled={busy}>
+                {busy ? '添加中…' : '确认添加'}
+              </button>
+            </div>
+          </form>
+        </dialog>
       )}
       {message && <div className="message-banner success">{message}</div>}
 

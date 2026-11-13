@@ -404,23 +404,39 @@
   outline-offset: 2px;
 }
 
-.team-create-panel[hidden] {
-  display: none;
+.team-create-dialog {
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 24px;
+  border: 1px solid #d5e2e4;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.team-create-dialog::backdrop {
+  background: rgb(14 55 68 / 40%);
+}
+
+.team-create-dialog h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
 }
 
 .team-create-panel {
-  width: fit-content;
-  margin-inline-start: auto;
-  margin-bottom: 16px;
-  max-width: 100%;
-  padding: 10px 12px;
   display: grid;
-  grid-template-columns: minmax(0, 174px) minmax(0, 210px) auto;
-  align-items: center;
+  gap: 16px;
+}
+
+.team-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
-  border: 1px solid #d5e2e4;
-  border-radius: 13px;
-  background: #fff;
+}
+
+.team-create-panel .message-banner {
+  margin: 0;
 }
 
 .team-total-count {
@@ -429,9 +445,7 @@
 
 .team-create-panel label {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .team-create-panel label span {
