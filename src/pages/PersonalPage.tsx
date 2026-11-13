@@ -1,7 +1,3 @@
-import { EnodeTrends } from '../components/EnodeTrends';
-import { trainingPeriodSummary } from '../../shared/training-period-summary';
-import './ProfilePhysiology.css';
-import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import type { EChartsOption } from 'echarts';
 import { CalendarRange, Save, Search } from 'lucide-react';
 import {
@@ -16,24 +12,28 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import { projectLabel } from '../../shared/projects';
+import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import { api } from '../api';
-import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
+import { EnodeTrends } from '../components/EnodeTrends';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import type {
   Athlete,
-  StrengthTest,
   AthleteRadarModelsPayload,
   BodyCompositionRecord,
   OverviewMeasurement,
-  Project,
   ProfileTrainingStatusPayload,
+  Project,
   SpecialTestEvent,
+  StrengthTest,
   TrainingRecord,
   User,
   WellnessTrend,
 } from '../types';
 import { formatNumber } from '../utils';
+import './ProfilePhysiology.css';
 
 const RecentTestPerformance = lazy(() =>
   import('../components/RecentTestPerformance').then((module) => ({
@@ -243,7 +243,12 @@ export function PersonalPage(props: Props) {
   const [physiologyRecords, setPhysiologyRecords] = useState<ProfilePhysiologyRecord[]>([]);
   const [physiologyError, setPhysiologyError] = useState(false);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
-  const [recentStrength, setRecentStrength] = useState<{ key: string; tests: StrengthTest[]; loading: boolean; error: boolean }>({ key: '', tests: [], loading: false, error: false });
+  const [recentStrength, setRecentStrength] = useState<{
+    key: string;
+    tests: StrengthTest[];
+    loading: boolean;
+    error: boolean;
+  }>({ key: '', tests: [], loading: false, error: false });
   const testScope = `${selectedAthlete?.id}:${selectedAthlete?.project}:${props.from}:${props.to}`;
   const [dossierDataError, setDossierDataError] = useState(false);
   const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
@@ -297,13 +302,31 @@ export function PersonalPage(props: Props) {
 
   useEffect(() => {
     let ignored = false;
-    setRecentStrength({ key: testScope, tests: [], loading: Boolean(selectedAthlete), error: false });
-    if (selectedAthlete) api.strengthTests(selectedAthlete.id).then((result) => {
-      if (!ignored) setRecentStrength({ key: testScope, tests: result.tests, loading: false, error: false });
-    }).catch(() => {
-      if (!ignored) setRecentStrength({ key: testScope, tests: [], loading: false, error: true });
+    setRecentStrength({
+      key: testScope,
+      tests: [],
+      loading: Boolean(selectedAthlete),
+      error: false,
     });
-    return () => { ignored = true; };
+    if (selectedAthlete)
+      api
+        .strengthTests(selectedAthlete.id)
+        .then((result) => {
+          if (!ignored)
+            setRecentStrength({
+              key: testScope,
+              tests: result.tests,
+              loading: false,
+              error: false,
+            });
+        })
+        .catch(() => {
+          if (!ignored)
+            setRecentStrength({ key: testScope, tests: [], loading: false, error: true });
+        });
+    return () => {
+      ignored = true;
+    };
   }, [testScope]);
 
   useEffect(() => {
@@ -461,10 +484,7 @@ export function PersonalPage(props: Props) {
     }
   };
 
-  const rangeAnalysis = useMemo(
-    () => trainingPeriodSummary(selectedRecords),
-    [selectedRecords]
-  );
+  const rangeAnalysis = useMemo(() => trainingPeriodSummary(selectedRecords), [selectedRecords]);
   const athleteLocation = selectedAthlete
     ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county]
         .filter(Boolean)
@@ -668,7 +688,12 @@ export function PersonalPage(props: Props) {
             <summary>训练报告 · 周 / 月 / 自选日期</summary>
             {reportAthleteId === selectedAthlete.id && (
               <Suspense fallback={<p role="status">正在加载训练报告…</p>}>
-                <TrainingReport key={selectedAthlete.id} athleteId={selectedAthlete.id} athleteName={selectedAthlete.name} initialDate={props.to} />
+                <TrainingReport
+                  key={selectedAthlete.id}
+                  athleteId={selectedAthlete.id}
+                  athleteName={selectedAthlete.name}
+                  initialDate={props.to}
+                />
               </Suspense>
             )}
           </details>
@@ -816,7 +841,11 @@ export function PersonalPage(props: Props) {
                 {profileAnalysisLoading ? (
                   <div className="professional-chart-empty">正在读取个人FMS测试…</div>
                 ) : physiologyError ? (
-                  <ContentState kind="error" title="FMS测试读取失败" description="请刷新页面重试。" />
+                  <ContentState
+                    kind="error"
+                    title="FMS测试读取失败"
+                    description="请刷新页面重试。"
+                  />
                 ) : (
                   <DeferredProfileContent label="功能动作筛查">
                     <FmsPersonalChart measurements={profileMeasurements} />
@@ -824,7 +853,19 @@ export function PersonalPage(props: Props) {
                 )}
               </AppCard>
               <DeferredProfileContent label="近期测试表现">
-                <RecentTestPerformance key={testScope} tests={recentStrength.key === testScope ? recentStrength.tests : []} events={specialTestScope === testScope ? specialTests : []} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} strengthLoading={recentStrength.key !== testScope || recentStrength.loading} specialLoading={specialTestScope !== testScope || dossierDataLoading} strengthError={recentStrength.key === testScope && recentStrength.error} specialError={specialTestScope === testScope && specialTestError} />
+                <RecentTestPerformance
+                  key={testScope}
+                  tests={recentStrength.key === testScope ? recentStrength.tests : []}
+                  events={specialTestScope === testScope ? specialTests : []}
+                  athleteId={selectedAthlete.id}
+                  project={selectedAthlete.project}
+                  from={props.from}
+                  to={props.to}
+                  strengthLoading={recentStrength.key !== testScope || recentStrength.loading}
+                  specialLoading={specialTestScope !== testScope || dossierDataLoading}
+                  strengthError={recentStrength.key === testScope && recentStrength.error}
+                  specialError={specialTestScope === testScope && specialTestError}
+                />
               </DeferredProfileContent>
               <AppCard
                 variant="chart"
@@ -840,13 +881,11 @@ export function PersonalPage(props: Props) {
                 </header>
                 <DeferredProfileContent label="专项测试雷达">
                   <AthleteRadarComparison
-                  title="专项测试雷达"
-                  model={radarModels?.special ?? null}
-                  loading={radarModelsLoading}
-                  unavailableReason={
-                    radarModels?.special.unavailableReason
-                  }
-                />
+                    title="专项测试雷达"
+                    model={radarModels?.special ?? null}
+                    loading={radarModelsLoading}
+                    unavailableReason={radarModels?.special.unavailableReason}
+                  />
                 </DeferredProfileContent>
               </AppCard>
               <AppCard
@@ -863,13 +902,11 @@ export function PersonalPage(props: Props) {
                 </header>
                 <DeferredProfileContent label="体能测试雷达">
                   <AthleteRadarComparison
-                  title="体能测试雷达"
-                  model={radarModels?.physical ?? null}
-                  loading={radarModelsLoading}
-                  unavailableReason={
-                    radarModels?.physical.unavailableReason
-                  }
-                />
+                    title="体能测试雷达"
+                    model={radarModels?.physical ?? null}
+                    loading={radarModelsLoading}
+                    unavailableReason={radarModels?.physical.unavailableReason}
+                  />
                 </DeferredProfileContent>
               </AppCard>
             </div>
@@ -902,19 +939,63 @@ export function PersonalPage(props: Props) {
               from={props.from}
               to={props.to}
             />
-            <EnodeTrends key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} kind="wellness" />
+            <EnodeTrends
+              key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
+              athleteId={selectedAthlete.id}
+              project={selectedAthlete.project}
+              from={props.from}
+              to={props.to}
+              kind="wellness"
+            />
             <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
-            <StrengthProfileModule key={selectedAthlete.id} athlete={selectedAthlete} user={props.user} preloaded={recentStrength.key === testScope ? recentStrength : { tests: [], loading: true, error: false }} onTestsChanged={(tests) => setRecentStrength((current) => current.key === testScope ? { key: testScope, tests, loading: false, error: false } : current)} />
+            <StrengthProfileModule
+              key={selectedAthlete.id}
+              athlete={selectedAthlete}
+              user={props.user}
+              preloaded={
+                recentStrength.key === testScope
+                  ? recentStrength
+                  : { tests: [], loading: true, error: false }
+              }
+              onTestsChanged={(tests) =>
+                setRecentStrength((current) =>
+                  current.key === testScope
+                    ? { key: testScope, tests, loading: false, error: false }
+                    : current
+                )
+              }
+            />
           </ProfileSection>
           {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
             <ProfileSection title="训练记录" subtitle="公共课次填写，按实际活动显示专项字段。">
-              <EnodeTrends key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`} athleteId={selectedAthlete.id} project={selectedAthlete.project} from={props.from} to={props.to} kind="sessionRpe" />
-              {props.user.role !== 'ATL' && <ProjectFactVerification athleteId={selectedAthlete.id} project={selectedAthlete.project} onChanged={props.onChanged} />}
-              <TrainingSessionEntry key={`${selectedAthlete.id}:${selectedAthlete.project}`} athleteId={selectedAthlete.id}
-                project={selectedAthlete.project} mode={props.user.role === 'ATL' ? 'self' : 'coach'} onSaved={props.onChanged} />
+              <EnodeTrends
+                key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
+                athleteId={selectedAthlete.id}
+                project={selectedAthlete.project}
+                from={props.from}
+                to={props.to}
+                kind="sessionRpe"
+              />
+              {props.user.role !== 'ATL' && (
+                <ProjectFactVerification
+                  athleteId={selectedAthlete.id}
+                  project={selectedAthlete.project}
+                  onChanged={props.onChanged}
+                />
+              )}
+              <TrainingSessionEntry
+                key={`${selectedAthlete.id}:${selectedAthlete.project}`}
+                athleteId={selectedAthlete.id}
+                project={selectedAthlete.project}
+                mode={props.user.role === 'ATL' ? 'self' : 'coach'}
+                onSaved={props.onChanged}
+              />
             </ProfileSection>
           )}
-          <ProfileSection title="项目专项" subtitle="按当前项目加载专项规则，公共内容沿用统一模块。">
+          <ProfileSection
+            title="项目专项"
+            subtitle="按当前项目加载专项规则，公共内容沿用统一模块。"
+          >
             <ProjectSpecialTraining project={selectedAthlete.project} records={selectedRecords} />
           </ProfileSection>
         </>
@@ -998,19 +1079,27 @@ function ProfileSection({
   );
 }
 
-function WellnessTrendCards({ trends, loading, error, from, to }: {
+function WellnessTrendCards({
+  trends,
+  loading,
+  error,
+  from,
+  to,
+}: {
   trends: WellnessTrend[];
   loading: boolean;
   error: boolean;
   from: string;
   to: string;
 }) {
-  const displayedTrends: WellnessTrend[] = trends.length ? trends : [
-    { key: 'rpe', label: 'RPE', unit: '分', points: [] },
-    { key: 'sleepHours', label: '睡眠时长', unit: 'h', points: [] },
-    { key: 'morningPulse', label: '晨脉', unit: 'bpm', points: [] },
-    { key: 'weightKg', label: '体重', unit: 'kg', points: [] },
-  ];
+  const displayedTrends: WellnessTrend[] = trends.length
+    ? trends
+    : [
+        { key: 'rpe', label: 'RPE', unit: '分', points: [] },
+        { key: 'sleepHours', label: '睡眠时长', unit: 'h', points: [] },
+        { key: 'morningPulse', label: '晨脉', unit: 'bpm', points: [] },
+        { key: 'weightKg', label: '体重', unit: 'kg', points: [] },
+      ];
   const hasData = trends.some((trend) =>
     trend.points.some((point) => point.personalValue !== null)
   );
@@ -1030,101 +1119,106 @@ function WellnessTrendCards({ trends, loading, error, from, to }: {
         </AppCard>
       ) : (
         <section className="personal-wellness-grid" aria-label="恢复趋势">
-          {error && <ContentState kind="error" title="恢复趋势读取失败" description="请刷新页面重试。" />}
-          {!error && displayedTrends.map((trend) => {
-            const personalPoints = trend.points.filter(
-              (point): point is typeof point & { personalValue: number } =>
-                point.personalValue !== null
-            );
-            const first = personalPoints[0];
-            const latest = personalPoints.at(-1);
-            const change =
-              first && latest && first !== latest
-                ? latest.personalValue - first.personalValue
-                : null;
-            const axisLabel = wellnessAxisLabel(trend);
-            const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
-            return (
-              <AppCard
-                key={trend.key}
-                variant="chart"
-                className="professional-panel personal-wellness-card"
-              >
-                <header>
-                  <h3>{trend.label}</h3>
-                  <small>{trend.unit || '0–10 分'}</small>
-                </header>
-                {latest ? (
-                  <>
-                    <dl className="personal-wellness-summary">
-                      <div>
-                        <dt>最近记录</dt>
-                        <dd>{wellnessValue(latest.personalValue, trend)}</dd>
-                        <small>{latest.date}</small>
-                      </div>
-                      <div>
-                        <dt>周期变化</dt>
-                        <dd>
-                          {change === null
-                            ? '暂无对比'
-                            : `${change > 0 ? '+' : ''}${wellnessValue(change, trend)}`}
-                        </dd>
-                        <small>{change === null ? '仅 1 次有效记录' : '首条至最近'}</small>
-                      </div>
-                    </dl>
-                    <EChart
-                      option={wellnessTrendOption(trend, from, to)}
-                      label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。缺失日期不连线。`}
-                    />
-                    <p className="personal-wellness-axis-note">横轴：日期 · 纵轴：{axisLabel}</p>
-                    <div
-                      className="personal-wellness-data visually-hidden"
-                      role="region"
-                      tabIndex={0}
-                      aria-label={`${trend.label}按日期查看数值，按 Tab 键显示`}
-                    >
-                      <table>
-                        <caption>{trend.label}每日数据</caption>
-                        <thead>
-                          <tr>
-                            <th scope="col">日期</th>
-                            <th scope="col">当前运动员</th>
-                            <th scope="col">团队平均</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {trend.points.map((point) => (
-                            <tr key={point.date}>
-                              <td>{point.date}</td>
-                              <td>
-                                {point.personalValue === null
-                                  ? '暂无数据'
-                                  : wellnessValue(point.personalValue, trend)}
-                              </td>
-                              <td>
-                                {point.teamMean === null
-                                  ? '暂无可比数据'
-                                  : wellnessValue(point.teamMean, trend)}
-                              </td>
+          {error && (
+            <ContentState kind="error" title="恢复趋势读取失败" description="请刷新页面重试。" />
+          )}
+          {!error &&
+            displayedTrends.map((trend) => {
+              const personalPoints = trend.points.filter(
+                (point): point is typeof point & { personalValue: number } =>
+                  point.personalValue !== null
+              );
+              const first = personalPoints[0];
+              const latest = personalPoints.at(-1);
+              const change =
+                first && latest && first !== latest
+                  ? latest.personalValue - first.personalValue
+                  : null;
+              const axisLabel = wellnessAxisLabel(trend);
+              const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
+              return (
+                <AppCard
+                  key={trend.key}
+                  variant="chart"
+                  className="professional-panel personal-wellness-card"
+                >
+                  <header>
+                    <h3>{trend.label}</h3>
+                    <small>{trend.unit || '0–10 分'}</small>
+                  </header>
+                  {latest ? (
+                    <>
+                      <dl className="personal-wellness-summary">
+                        <div>
+                          <dt>最近记录</dt>
+                          <dd>{wellnessValue(latest.personalValue, trend)}</dd>
+                          <small>{latest.date}</small>
+                        </div>
+                        <div>
+                          <dt>周期变化</dt>
+                          <dd>
+                            {change === null
+                              ? '暂无对比'
+                              : `${change > 0 ? '+' : ''}${wellnessValue(change, trend)}`}
+                          </dd>
+                          <small>{change === null ? '仅 1 次有效记录' : '首条至最近'}</small>
+                        </div>
+                      </dl>
+                      <EChart
+                        option={wellnessTrendOption(trend, from, to)}
+                        label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。缺失日期不连线。`}
+                      />
+                      <p className="personal-wellness-axis-note">横轴：日期 · 纵轴：{axisLabel}</p>
+                      <div
+                        className="personal-wellness-data visually-hidden"
+                        role="region"
+                        tabIndex={0}
+                        aria-label={`${trend.label}按日期查看数值，按 Tab 键显示`}
+                      >
+                        <table>
+                          <caption>{trend.label}每日数据</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">日期</th>
+                              <th scope="col">当前运动员</th>
+                              <th scope="col">团队平均</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <EChart
-                      option={wellnessTrendOption(trend, from, to)}
-                      label={`${trend.label}趋势${hasTeamMean ? '，仅有团队平均记录' : ''}`}
-                      isPlaceholder={!hasTeamMean}
-                    />
-                    {hasTeamMean && <p className="analysis-empty-note">暂无个人记录，图中显示团队平均</p>}
-                  </>
-                )}
-              </AppCard>
-            );
-          })}
+                          </thead>
+                          <tbody>
+                            {trend.points.map((point) => (
+                              <tr key={point.date}>
+                                <td>{point.date}</td>
+                                <td>
+                                  {point.personalValue === null
+                                    ? '暂无数据'
+                                    : wellnessValue(point.personalValue, trend)}
+                                </td>
+                                <td>
+                                  {point.teamMean === null
+                                    ? '暂无可比数据'
+                                    : wellnessValue(point.teamMean, trend)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <EChart
+                        option={wellnessTrendOption(trend, from, to)}
+                        label={`${trend.label}趋势${hasTeamMean ? '，仅有团队平均记录' : ''}`}
+                        isPlaceholder={!hasTeamMean}
+                      />
+                      {hasTeamMean && (
+                        <p className="analysis-empty-note">暂无个人记录，图中显示团队平均</p>
+                      )}
+                    </>
+                  )}
+                </AppCard>
+              );
+            })}
         </section>
       )}
     </div>
@@ -1157,7 +1251,8 @@ function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EC
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
-      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
+      padding: [12, 16],
+      textStyle: { fontSize: 12, lineHeight: 22 },
       valueFormatter: (value) => wellnessValue(Number(value), trend),
     },
     grid: {
@@ -1270,7 +1365,8 @@ function ProfilePhysiologyRecords({
       trigger: 'axis',
       renderMode: 'richText',
       confine: true,
-      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 22 },
+      padding: [12, 16],
+      textStyle: { fontSize: 12, lineHeight: 22 },
       valueFormatter: (value) => `${formatNumber(Number(value), 2)} ${selected?.unit ?? ''}`,
     },
     xAxis: {
