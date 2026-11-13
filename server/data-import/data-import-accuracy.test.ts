@@ -2567,14 +2567,23 @@ describe('简洁统一模板业务映射', () => {
     expect(fixed.errorCount).toBe(0);
     expect(fixed.items).toHaveLength(2);
   });
-  it('错误单位不静默遗漏，编号与姓名冲突不误关联', () => {
-    const bad = [...headers];
-    bad[6] = '卧推最大力量（lb）';
-    expect(() =>
-      analyze({
-        [sheet]: [bad, ['1', '张某', 'A队', '2026-10-23', 180, null, 80]],
-      }),
-    ).toThrow('不支持的字段或单位');
+  it('忽略不支持的字段和单位，保留有效测试数据', () => {
+    const mixedHeaders = [...headers, '立定跳远m', '30ms'];
+    mixedHeaders[6] = '卧推最大力量（lb）';
+    const batch = analyze({
+      [sheet]: [
+        mixedHeaders,
+        ['1', '张某', 'A队', '2026-10-23', 180, null, 80, 70, ...Array(8).fill(null), 2.5, 4.2],
+        ['1', '张某', 'A队', '2026-10-24', null, null, 80],
+      ],
+    });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.map(item => [item.metricCode, item.valueNum])).toEqual([
+      ['bench_pull_kg', 70],
+      ['body_composition', 180],
+    ]);
+  });
+  it('编号与姓名冲突不误关联', () => {
     const batch = analyze({
       [sheet]: [headers, ['1', '赵某', 'A队', '2026-10-23', 180]],
     });

@@ -1012,8 +1012,9 @@ function parseStandardSheet(
   if (!header) return [];
   if (sheet === COMPACT_ATHLETE_SHEET) {
     const knownHeaders = new Set<string>(COMPACT_ATHLETE_COLUMNS.map(field => normalizedText(field.key)));
-    const unknownHeaders = [...header.columns.keys()].filter(label => !knownHeaders.has(label));
-    if (unknownHeaders.length) throw new Error(`运动员基础体能测试存在不支持的字段或单位：${unknownHeaders.join('、')}，请使用下载模板的表头。`);
+    for (const label of header.columns.keys()) {
+      if (!knownHeaders.has(label)) header.columns.delete(label);
+    }
   }
   const items: ParsedImportItem[] = [];
   const metricCatalog = sheet === '测试指标' ? readImportMetricDefinitions(project) : [];
