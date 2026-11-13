@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight, Filter, RefreshCw, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   AI_FEATURES,
@@ -6,7 +7,13 @@ import {
   type AiSettings,
 } from '../../shared/ai-management';
 import { getAiManagement, saveAiSettings } from '../api';
-import { AppCard, PageHeader, SectionHeader } from '../components/PageLayout';
+import {
+  AppCard,
+  ContentState,
+  FilterBar,
+  PageHeader,
+  SectionHeader,
+} from '../components/PageLayout';
 import './AiManagementPage.css';
 
 const yuan = new Intl.NumberFormat('zh-CN', {
@@ -65,11 +72,47 @@ export function AiManagementPage() {
     <div className="ai-management">
       <PageHeader
         title="AI 管理"
-        eyebrow="系统管理"
         supportingContent={<p>预算和用量按北京时间统计。</p>}
+        actions={
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={loading || saving}
+            onClick={reload}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+            刷新
+          </button>
+        }
       />
-      <div role="status">{loading ? '正在读取 AI 用量…' : notice}</div>
-      {error && <p role="alert">{error}</p>}
+      <div role="status" className="ai-management-status">
+        {loading ? <ContentState kind="loading" title="正在读取 AI 用量…" /> : notice}
+      </div>
+      {error && <ContentState kind="error" title="AI 管理操作失败" description={error} />}
+      <AppCard>
+        <SectionHeader title="今日用量" description={data?.today} />
+        {data && (
+          <dl className="ai-management-summary">
+            {[
+              ['业务请求', data.summary.requests],
+              ['模型尝试', data.summary.attempts],
+              ['输入 token', data.summary.input],
+              ['输出 token', data.summary.output],
+              ['已结算估算费用', money(data.summary.settled)],
+              ['待确认及请求中占用', money(data.summary.pending)],
+            ].map(([label, value]) => (
+              <div key={label} className="overview-metric">
+                <dt>{label}</dt>
+                <dd>
+                  <strong>
+                    {typeof value === 'number' ? value.toLocaleString('zh-CN') : value}
+                  </strong>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </AppCard>
       <AppCard>
         <SectionHeader
           title="全站调用设置"
@@ -119,42 +162,10 @@ export function AiManagementPage() {
             />
           </label>
           <button className="primary-button" type="submit" disabled={!data || loading || saving}>
+            <Save size={16} aria-hidden="true" />
             {saving ? '正在保存…' : '保存设置'}
           </button>
         </form>
-      </AppCard>
-      <AppCard>
-        <SectionHeader
-          title="今日用量"
-          description={data?.today}
-          actions={
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={loading || saving}
-              onClick={reload}
-            >
-              刷新
-            </button>
-          }
-        />
-        {data && (
-          <dl className="ai-management-summary">
-            {[
-              ['业务请求', data.summary.requests],
-              ['模型尝试', data.summary.attempts],
-              ['输入 token', data.summary.input],
-              ['输出 token', data.summary.output],
-              ['已结算估算费用', money(data.summary.settled)],
-              ['待确认及请求中占用', money(data.summary.pending)],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
       </AppCard>
       <AppCard>
         <SectionHeader
@@ -162,7 +173,6 @@ export function AiManagementPage() {
           description="同一个请求编号下可能有多次模型尝试。筛选仅影响明细。"
         />
         <form
-          className="ai-management-controls"
           onSubmit={(event) => {
             event.preventDefault();
             const fields = new FormData(event.currentTarget);
@@ -174,49 +184,52 @@ export function AiManagementPage() {
             reload();
           }}
         >
-          <label>
-            日期
-            <input type="date" name="date" />
-          </label>
-          <label>
-            账号 ID
-            <input name="account" pattern="[1-9][0-9]{0,14}|system" placeholder="系统填 system" />
-          </label>
-          <label>
-            功能
-            <select name="feature">
-              <option value="">全部</option>
-              {AI_FEATURES.map((feature) => (
-                <option key={feature}>{feature}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            状态
-            <select name="state">
-              <option value="">全部</option>
-              {Object.entries(AI_STATES).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="secondary-button" type="submit" disabled={loading || saving}>
-            筛选
-          </button>
+          <FilterBar
+            label="请求明细筛选"
+            className="ai-management-filters"
+            actions={
+              <button className="secondary-button" type="submit" disabled={loading || saving}>
+                <Filter size={16} aria-hidden="true" />
+                筛选
+              </button>
+            }
+          >
+            <label>
+              日期
+              <input type="date" name="date" />
+            </label>
+            <label>
+              账号 ID
+              <input name="account" pattern="[1-9][0-9]{0,14}|system" placeholder="系统填 system" />
+            </label>
+            <label>
+              功能
+              <select name="feature">
+                <option value="">全部</option>
+                {AI_FEATURES.map((feature) => (
+                  <option key={feature}>{feature}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              状态
+              <select name="state">
+                <option value="">全部</option>
+                {Object.entries(AI_STATES).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </FilterBar>
         </form>
         {data &&
           (data.attempts.length === 0 ? (
-            <p>暂无符合条件的模型请求。</p>
+            <ContentState kind="empty" title="暂无符合条件的模型请求" />
           ) : (
-            <div
-              className="ai-management-table"
-              tabIndex={0}
-              role="region"
-              aria-label="模型请求明细"
-            >
-              <table>
+            <div className="table-scroll" tabIndex={0} role="region" aria-label="模型请求明细">
+              <table className="data-table">
                 <thead>
                   <tr>
                     {[
@@ -247,9 +260,8 @@ export function AiManagementPage() {
                       </td>
                       <td>{attempt.feature}</td>
                       <td>
-                        {attempt.provider}
-                        <br />
-                        {attempt.model}
+                        <strong>{attempt.provider}</strong>
+                        <small>{attempt.model}</small>
                       </td>
                       <td>{AI_STATES[attempt.state]}</td>
                       <td>
@@ -267,7 +279,7 @@ export function AiManagementPage() {
             </div>
           ))}
         {(Boolean(before.length) || data?.next) && (
-          <div className="ai-management-controls">
+          <div className="ai-management-pagination" role="group" aria-label="请求明细分页">
             <button
               className="secondary-button"
               type="button"
@@ -278,6 +290,7 @@ export function AiManagementPage() {
                 setBefore((values) => values.slice(0, -1));
               }}
             >
+              <ChevronLeft size={16} aria-hidden="true" />
               上一页
             </button>
             <button
@@ -292,6 +305,7 @@ export function AiManagementPage() {
               }}
             >
               下一页
+              <ChevronRight size={16} aria-hidden="true" />
             </button>
           </div>
         )}
