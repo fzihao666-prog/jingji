@@ -225,7 +225,7 @@ export function AccountsPage() {
                       label="申请人姓名"
                     />
                   </h2>
-                  <span>{request.requestedRole === 'SCC' ? '队伍教练' : '运动员'}</span>
+                  <span>{request.requestedRole === 'SCC' ? request.coachCategory || '队伍教练' : '运动员'}</span>
                 </div>
                 <p>
                   @{request.username} · 性别：{request.gender || '未录入'} · 出生日期：

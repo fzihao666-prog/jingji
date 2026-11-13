@@ -528,6 +528,7 @@ export type RegistrationRequest = {
   username: string;
   displayName: string;
   requestedRole: 'ATL' | 'SCC';
+  coachCategory: CoachCategory | null;
   project: string | null;
   team: string | null;
   gender: string | null;

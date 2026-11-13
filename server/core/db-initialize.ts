@@ -898,6 +898,10 @@ export function initializeDatabase(
   }
 
   // 仅增加标记列，历史申请默认不建队；放在旧角色表迁移之后，重复启动保持幂等。
+  if (!hasColumn('registration_requests', 'coach_category')) {
+    db.exec(`ALTER TABLE registration_requests ADD COLUMN coach_category TEXT
+      CHECK(coach_category IS NULL OR (requested_role = 'SCC' AND coach_category IN (${coachCategoryValues})))`);
+  }
   if (!hasColumn('registration_requests', 'create_team')) {
     db.exec('ALTER TABLE registration_requests ADD COLUMN create_team INTEGER NOT NULL DEFAULT 0 CHECK(create_team IN (0, 1))');
   }

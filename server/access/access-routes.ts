@@ -210,7 +210,7 @@ export function registerAccessRoutes(app: Express) {
         ? requestedStatus
         : 'pending';
       const registrationRows = db.prepare(`
-      SELECT r.id, r.username, r.display_name AS displayName, r.requested_role AS requestedRole,
+      SELECT r.id, r.username, r.display_name AS displayName, r.requested_role AS requestedRole, r.coach_category AS coachCategory,
         CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
         CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team, r.gender, r.birth_date AS birthDate, r.native_place AS nativePlace, r.phone, r.status,
         r.created_at AS createdAt, r.reviewed_at AS reviewedAt,

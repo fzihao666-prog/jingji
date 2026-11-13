@@ -10,7 +10,7 @@ import {
   initializeAccountScope,
   permissionsAllowProjectTeam,
 } from '../core/permissions.ts';
-import { DEFAULT_COACH_CATEGORY } from '../../shared/coach-categories.ts';
+import { DEFAULT_COACH_CATEGORY, type CoachCategory } from '../../shared/coach-categories.ts';
 import type { AuthUser } from '../core/shared-server.ts';
 
 // 仅业务错误允许返回客户端，数据库等内部异常使用统一提示。
@@ -50,6 +50,7 @@ export type RegistrationActivationRow = {
   password_hash: string;
   display_name: string;
   requested_role: 'ATL' | 'SCC';
+  coach_category: CoachCategory | null;
   project: string;
   team: string;
   create_team: number;
@@ -145,7 +146,7 @@ export function activateRegistrationRequest(
   const request = db
     .prepare(
       `
-    SELECT id, username, password_hash, display_name, requested_role,
+    SELECT id, username, password_hash, display_name, requested_role, coach_category,
       project, team, create_team, gender, birth_date, native_place, phone, status
     FROM registration_requests WHERE id = ?
   `
@@ -330,7 +331,7 @@ export function activateRegistrationRequest(
     if (request.requested_role === 'SCC') {
       db.prepare('INSERT OR IGNORE INTO coach_profiles (user_id, category) VALUES (?, ?)').run(
         newUserId,
-        DEFAULT_COACH_CATEGORY
+        request.coach_category ?? DEFAULT_COACH_CATEGORY
       );
     }
     let accountArea = reviewer

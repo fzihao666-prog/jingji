@@ -58,7 +58,7 @@ describe('注册页流程', () => {
 
   it('注册页提供运动员/教练身份单选且按身份切换字段', () => {
     expect(registerSource).toContain("role: 'ATL'");
-    expect(registerSource).toContain("roleCodes: ['ATL', 'SCC']");
+    expect(registerSource).toContain("roleOptions: ['运动员', ...coachCategories]");
     expect(registerSource).toContain('onRoleChange');
     expect(registerTemplate).toContain('bindchange="onRoleChange"');
     expect(registerTemplate).toContain('注册身份');
@@ -146,6 +146,14 @@ describe('注册资料提交与纠错', () => {
     await page.submit();
     expect(register).toHaveBeenCalledWith(expect.objectContaining({ role, birthDate: '2000-02-29', gender: '女' }));
     expect(register.mock.calls[0][0]).not.toHaveProperty('identityNumber');
+  });
+  it.each(['主管教练', '专项教练', '体能教练', '康复治疗师'])('提交所选教练角色 %s', async (coachCategory) => {
+    const register = vi.fn().mockResolvedValue({ status: 'pending' });
+    const page = createPage({ register });
+    page.data.allTeams = [{ project: page.data.project, name: page.data.team }];
+    page.onRoleChange({ detail: { value: page.data.roleOptions.indexOf(coachCategory) } });
+    await page.submit();
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({ role: 'SCC', coachCategory }));
   });
   it.each(['', '2026-02-30', '9999-01-01'])('拒绝无效生日 %s 并就近提供错误', async (birthDate) => {
     const register = vi.fn();

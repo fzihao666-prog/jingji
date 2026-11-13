@@ -1,5 +1,11 @@
 // 由 scripts/sync-mini-register-data.mjs 从 shared/ 生成，请勿手工修改。
 module.exports = {
+  "coachCategories": [
+    "主管教练",
+    "专项教练",
+    "体能教练",
+    "康复治疗师"
+  ],
   "projects": [
     {
       "code": "SWIMMING",

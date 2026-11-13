@@ -50,7 +50,7 @@ beforeAll(async () => {
     CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT,
       role TEXT, athlete_id INTEGER, active INTEGER DEFAULT 1, session_version INTEGER DEFAULT 0);
     CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT UNIQUE, status TEXT DEFAULT 'pending',
-      password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, create_team INTEGER NOT NULL DEFAULT 0, gender TEXT,
+      password_hash TEXT, display_name TEXT, requested_role TEXT, coach_category TEXT, project TEXT, team TEXT, create_team INTEGER NOT NULL DEFAULT 0, gender TEXT,
       birth_date TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
@@ -277,6 +277,7 @@ it('注册快速查重不占用已满的密码池', async () => {
   expect(response.status).toBe(409);
 });
 
+let registrationSource = 0;
 const registrationInput = {
   username: 'new_person',
   password: correctPassword,
@@ -289,9 +290,10 @@ const registrationInput = {
   nativePlace: '浙江/杭州市',
 };
 async function registerInput(input: Record<string, unknown>) {
+  registrationSource += 1;
   return fetch(`${baseUrl}/api/auth/register`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': `192.0.2.${registrationSource}` },
     body: JSON.stringify(input),
   });
 }
@@ -382,6 +384,20 @@ it.each(['SCC', 'coach'])('关闭审核时教练申请自动开通并可登录�
   expect(db.prepare('SELECT id FROM athletes').all()).toEqual([]);
   expect(db.prepare('SELECT status,reviewed_by FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ status: 'approved', reviewed_by: null });
   expect(db.prepare('SELECT action FROM audit_logs').all()).toEqual([{ action: 'AUTO_APPROVE_REGISTRATION' }]);
+});
+
+it.each(['主管教练', '专项教练', '体能教练', '康复治疗师'])('自动开通保留申请角色 %s', async (coachCategory) => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'SCC', coachCategory });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'approved' });
+  expect(db.prepare('SELECT category FROM coach_profiles').get()).toEqual({ category: coachCategory });
+});
+
+it.each([['SCC', 'DMD'], ['ATL', '主管教练']])('拒绝非法身份组合 %s / %s', async (role, coachCategory) => {
+  const response = await registerInput({ ...registrationInput, role, coachCategory });
+  expect(response.status).toBe(400);
+  expect(db.prepare('SELECT id FROM registration_requests WHERE username = ?').get(registrationInput.username)).toBeUndefined();
 });
 
 it.each(['ATL', 'SCC'])('开启审核时注册保持待审核且不能登录：%s', async (role) => {

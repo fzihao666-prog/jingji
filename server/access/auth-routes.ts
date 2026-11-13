@@ -198,6 +198,7 @@ export function registerAuthRoutes(
       const username = cleanString(req.body?.username).toLowerCase();
       const password = cleanString(req.body?.password);
       const displayName = cleanString(req.body?.displayName);
+      const coachCategory = req.body?.coachCategory ?? null;
       const requestedRoleInput = cleanString(req.body?.role);
       const requestedRole =
         requestedRoleInput === 'athlete'
@@ -254,6 +255,9 @@ export function registerAuthRoutes(
         errors.push('密码须为8—72位，并同时包含字母和数字');
       }
       if (displayName.length < 2 || displayName.length > 20) errors.push('姓名须为2—20个字符');
+      if (coachCategory !== null && (requestedRole !== 'SCC' || !isCoachCategory(coachCategory))) {
+        errors.push('请选择有效的教练角色');
+      }
       if (requestedRole !== 'ATL' && requestedRole !== 'SCC') errors.push('仅支持注册运动员或教练');
       if (!isProject(project)) errors.push('请选择有效的运动项目');
       const validTeam = db
@@ -312,7 +316,7 @@ export function registerAuthRoutes(
       if (existingRequest?.status === 'rejected') {
         db.prepare(
           `
-        UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?,
+        UPDATE registration_requests SET password_hash = ?, display_name = ?, requested_role = ?, coach_category = ?,
           project = ?, team = ?, create_team = ?, gender = ?, birth_date = ?, native_place = ?, phone = ?, region = NULL, city = NULL, county = NULL, status = 'pending', reviewed_by = NULL,
           reviewed_at = NULL, created_at = CURRENT_TIMESTAMP WHERE id = ?
       `
@@ -320,6 +324,7 @@ export function registerAuthRoutes(
           passwordHash,
           displayName,
           requestedRole,
+          coachCategory,
           project,
           team,
           createTeam ? 1 : 0,
@@ -335,8 +340,8 @@ export function registerAuthRoutes(
           .prepare(
             `
         INSERT INTO registration_requests (
-          username, password_hash, display_name, requested_role, project, team, create_team, gender, birth_date, native_place, phone
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          username, password_hash, display_name, requested_role, coach_category, project, team, create_team, gender, birth_date, native_place, phone
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
           )
           .run(
@@ -344,6 +349,7 @@ export function registerAuthRoutes(
             passwordHash,
             displayName,
             requestedRole,
+            coachCategory,
             project,
             team,
             createTeam ? 1 : 0,

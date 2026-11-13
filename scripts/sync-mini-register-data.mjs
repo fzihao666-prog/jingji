@@ -9,7 +9,10 @@ import { STRENGTH_METRICS } from '../shared/strength-model.ts';
 import { LOGIN_ERROR_MESSAGES } from '../shared/login-errors.ts';
 
 const target = fileURLToPath(new URL('../WeChat Mini Program/data/register-data.js', import.meta.url));
+import { COACH_CATEGORIES } from '../shared/coach-categories.ts';
+
 const payload = {
+  coachCategories: COACH_CATEGORIES,
   projects: PROJECT_DEFINITIONS.map(({ code, nameZh }) => ({ code, label: nameZh })),
   sportRules: Object.fromEntries(PROJECT_DEFINITIONS.map(({ code }) => [code, projectRules(code)])),
   sportModules: SPORT_MODULES,

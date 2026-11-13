@@ -43,7 +43,7 @@ beforeAll(async () => {
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT,updated_at TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER, category TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER, UNIQUE(coach_user_id,athlete_id));
-    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, project TEXT, team TEXT, create_team INTEGER DEFAULT 0, gender TEXT, birth_date TEXT, status TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, requested_role TEXT, coach_category TEXT, project TEXT, team TEXT, create_team INTEGER DEFAULT 0, gender TEXT, birth_date TEXT, status TEXT, native_place TEXT, phone TEXT, reviewed_by INTEGER, reviewed_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT);
   `);
   const service = await import('./registration-service.ts');
@@ -486,6 +486,15 @@ describe('教练新增队伍激活', () => {
   function newTeam() {
     db.exec("UPDATE registration_requests SET requested_role='SCC',team='新教练队',create_team=1");
   }
+  it('审核列表及批准开户保留申请角色', async () => {
+    db.exec("UPDATE registration_requests SET requested_role='SCC', coach_category='康复治疗师'");
+    const list = await callRegistration('');
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({ requests: [{ coachCategory: '康复治疗师' }] });
+    expect((await callRegistration('/1/approve', 'POST')).status).toBe(200);
+    expect(db.prepare('SELECT category FROM coach_profiles').get()).toEqual({ category: '康复治疗师' });
+  });
+
   it('项目全队审核人通过后创建队伍', () => {
     newTeam();
     db.exec("UPDATE user_team_permissions SET team='*'");

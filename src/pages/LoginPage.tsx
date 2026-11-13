@@ -1,3 +1,4 @@
+import { COACH_CATEGORIES, isCoachCategory, type CoachCategory } from '../../shared/coach-categories';
 import {
   AlertCircle,
   ArrowLeft,
@@ -394,7 +395,8 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [gender, setGender] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [role, setRole] = useState<'ATL' | 'SCC'>('ATL');
+  const [identity, setIdentity] = useState<'ATL' | CoachCategory>('ATL');
+  const role = identity === 'ATL' ? 'ATL' : 'SCC';
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<'gender' | 'birthDate', string>>>(
     {}
   );
@@ -534,6 +536,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
         password,
         displayName,
         role,
+        coachCategory: identity === 'ATL' ? undefined : identity,
         project,
         team,
         createTeam: role === 'SCC' && customTeam?.project === project && customTeam.name === team,
@@ -725,9 +728,10 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                   <label>
                     <span>注册身份</span>
                     <select
-                      value={role}
+                      value={identity}
                       onChange={(event) => {
-                        setRole(event.target.value === 'SCC' ? 'SCC' : 'ATL');
+                        const selected = event.target.value;
+                        setIdentity(isCoachCategory(selected) ? selected : 'ATL');
                         setCustomTeam(null);
                         setAddingTeam(false);
                         setTeamName('');
@@ -735,7 +739,9 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                       required
                     >
                       <option value="ATL">运动员</option>
-                      <option value="SCC">教练员</option>
+                      {COACH_CATEGORIES.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
                     </select>
                   </label>
                   <label>

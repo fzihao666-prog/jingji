@@ -1,5 +1,5 @@
 const api = require('../../services/api');
-const { projects, provinces, provinceCities } = require('../../data/register-data');
+const { projects, provinces, provinceCities, coachCategories } = require('../../data/register-data');
 
 const { todayBeijing } = require('../../utils/date');
 const { validateRegistrationDemographics } = require('../../utils/registration-demographics');
@@ -7,8 +7,9 @@ const { validateRegistrationDemographics } = require('../../utils/registration-d
 Page({
   data: {
     role: 'ATL',
-    roleOptions: ['运动员', '教练'],
-    roleCodes: ['ATL', 'SCC'],
+    roleOptions: ['运动员', ...coachCategories],
+    roleIndex: 0,
+    coachCategory: '',
     username: '',
     password: '',
     confirmPassword: '',
@@ -56,9 +57,10 @@ Page({
   },
 
   onRoleChange(event) {
-    const index = Number(event.detail.value);
-    const role = this.data.roleCodes[index] || 'ATL';
-    this.setData({ role, customTeam: '', addingTeam: false, teamName: '', error: '', success: '' });
+    const coachCategory = coachCategories[Number(event.detail.value) - 1] || '';
+    const role = coachCategory ? 'SCC' : 'ATL';
+    const roleIndex = coachCategory ? coachCategories.indexOf(coachCategory) + 1 : 0;
+    this.setData({ role, roleIndex, coachCategory, customTeam: '', addingTeam: false, teamName: '', error: '', success: '' });
     this.syncTeamOptions();
   },
 
@@ -282,6 +284,7 @@ Page({
         gender,
         birthDate
       };
+      if (role === 'SCC') payload.coachCategory = this.data.coachCategory;
       if (role === 'ATL') {
         payload.nativePlace = `${nativePlaceProvince}/${nativePlaceCity}`;
       }

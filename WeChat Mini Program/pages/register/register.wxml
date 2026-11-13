@@ -24,9 +24,9 @@
 
         <view class="field">
           <text class="field-label">身份</text>
-          <picker mode="selector" range="{{roleOptions}}" bindchange="onRoleChange">
+          <picker mode="selector" range="{{roleOptions}}" value="{{roleIndex}}" bindchange="onRoleChange">
             <view class="picker-value">
-              {{role === 'SCC' ? '教练' : '运动员'}}
+              {{roleOptions[roleIndex]}}
             </view>
           </picker>
         </view>

@@ -385,6 +385,7 @@ export const api = {
     password: string;
     displayName: string;
     role: 'ATL' | 'SCC';
+    coachCategory?: CoachCategory;
     project?: string;
     team?: string;
     createTeam?: boolean;
