@@ -582,7 +582,7 @@ export default function App() {
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
         )}
-        {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
+        {page === 'teams' && user.role !== 'ATL' && <TeamsPage onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'regions' && canOpenSystemPages && <RegionAccessPage user={user} />}
         {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
         {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}

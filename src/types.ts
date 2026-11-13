@@ -31,6 +31,7 @@ export type ProjectTeam = {
   project: Project;
   name: string;
   athleteCount: number;
+  canRename?: boolean;
   canDelete?: boolean;
 };
 

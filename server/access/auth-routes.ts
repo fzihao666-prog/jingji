@@ -105,6 +105,7 @@ export function registerAuthRoutes(
         .map((team) => ({
           ...team,
           athleteCount: athleteCounts.get(`${team.project}\u0000${team.name}`) || 0,
+          canRename: currentUser.role === 'TD' || currentUser.role === 'DMD',
           canDelete: currentUser.role !== 'SCC',
         }));
       const canCreateProjects =
@@ -151,6 +152,58 @@ export function registerAuthRoutes(
         .prepare('INSERT INTO project_teams (project, name) VALUES (?, ?)')
         .run(project, name);
       res.status(201).json({ message: '队伍已添加。', id: Number(result.lastInsertRowid) });
+    }
+  );
+
+  app.patch(
+    '/api/admin/teams/:id',
+    requireAuth,
+    requireRole('TD', 'DMD'),
+    (req, res) => {
+      const id = Number(req.params.id);
+      const input = z.object({ name: z.string().trim().min(2).max(30) }).strict().safeParse(req.body);
+      if (!Number.isSafeInteger(id) || id < 1 || !input.success || input.data.name === '*')
+        return res.status(400).json({ message: '请提供有效队伍和2—30个字符的队伍名称。' });
+      const { name } = input.data;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const team = db.prepare('SELECT project, name FROM project_teams WHERE id = ? AND active = 1')
+          .get(id) as { project: Project; name: string } | undefined;
+        if (!team) return res.status(404).json({ message: '队伍不存在。' });
+        const permissions = accountPermissions(req.authUser!.id);
+        if (!permissionsAllowProjectTeam(permissions, team.project, team.name))
+          return res.status(403).json({ message: '无权修改该队伍。' });
+        if (name === team.name) return res.json({ message: '队伍名称未变化。' });
+        if (db.prepare('SELECT 1 FROM project_teams WHERE project = ? AND name = ?').get(team.project, name))
+          return res.status(409).json({ message: '该项目下已存在同名队伍。' });
+        if (db.prepare("SELECT 1 FROM user_team_permissions WHERE project IN (?, '*') AND team = ?")
+          .get(team.project, name))
+          return res.status(409).json({ message: '该名称存在队伍授权冲突，请换一个名称。' });
+
+        db.prepare('UPDATE project_teams SET name = ? WHERE id = ?').run(name, id);
+        db.prepare('UPDATE athletes SET team = ? WHERE team_id = ?').run(name, id);
+        const copyPermissions = db.prepare(`
+          INSERT INTO user_team_permissions (user_id, project, team, granted_by, created_at)
+          SELECT user_id, ?, ?, granted_by, created_at FROM user_team_permissions
+          WHERE project = ? AND team = ? ON CONFLICT(user_id, project, team) DO NOTHING
+        `);
+        copyPermissions.run(team.project, name, team.project, team.name);
+        for (const project of PROJECTS) {
+          copyPermissions.run(project, project === team.project ? name : team.name, '*', team.name);
+        }
+        db.prepare("DELETE FROM user_team_permissions WHERE project IN (?, '*') AND team = ?")
+          .run(team.project, team.name);
+        db.prepare("UPDATE registration_requests SET team = ? WHERE project = ? AND team = ? AND status = 'pending'")
+          .run(name, team.project, team.name);
+        db.prepare(`
+          UPDATE data_import_athlete_candidates SET team = ? WHERE project = ? AND team = ?
+          AND batch_id IN (SELECT id FROM data_import_batches WHERE status = 'reviewing')
+        `).run(name, team.project, team.name);
+        db.exec('COMMIT');
+        return res.json({ message: '队伍名称已更新。' });
+      } finally {
+        if (db.isTransaction) db.exec('ROLLBACK');
+      }
     }
   );
 

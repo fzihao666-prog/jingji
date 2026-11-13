@@ -1,11 +1,11 @@
-import { ArrowDownRight, Layers3, Plus, Search, Trash2, UsersRound } from 'lucide-react';
+import { ArrowDownRight, Layers3, Pencil, Plus, Search, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PROJECTS, projectLabel, type Project } from '../../shared/projects';
 import { api } from '../api';
 import type { ProjectTeam } from '../types';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 
-export function TeamsPage() {
+export function TeamsPage({ onChanged }: { onChanged: () => void }) {
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [canCreateProjects, setCanCreateProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project>('ROWING');
@@ -16,6 +16,30 @@ export function TeamsPage() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const renameDialog = useRef<HTMLDialogElement>(null);
+  const [renameTarget, setRenameTarget] = useState<ProjectTeam>();
+  const [renameName, setRenameName] = useState('');
+  const [renameError, setRenameError] = useState('');
+
+  async function rename(event: FormEvent) {
+    event.preventDefault();
+    if (!renameTarget || busy) return;
+    const name = renameName.trim();
+    setBusy(true);
+    setRenameError('');
+    try {
+      const result = await api.renameTeam(renameTarget.id, name);
+      setTeams((current) => current.map((team) => team.id === renameTarget.id ? { ...team, name } : team));
+      setMessage(result.message);
+      renameDialog.current?.close();
+      onChanged();
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : '修改队伍名称失败。');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const load = async () => {
     setLoading(true);
@@ -186,6 +210,32 @@ export function TeamsPage() {
           </form>
         </dialog>
       )}
+      <dialog
+        ref={renameDialog}
+        className="team-create-dialog"
+        aria-labelledby="team-rename-title"
+        onCancel={(event) => {
+          if (busy) event.preventDefault();
+        }}
+      >
+        <h2 id="team-rename-title">修改队伍名</h2>
+        <form className="team-create-panel" onSubmit={rename}>
+          <label>
+            <span>队伍名称</span>
+            <input value={renameName} onChange={(event) => setRenameName(event.target.value)}
+              minLength={2} maxLength={30} required />
+          </label>
+          {renameError && <p className="message-banner error" role="alert">{renameError}</p>}
+          <div className="team-create-actions">
+            <button type="button" className="secondary-button" disabled={busy} onClick={() => renameDialog.current?.close()}>
+              取消
+            </button>
+            <button type="submit" className="primary-button" disabled={busy}>
+              {busy ? '保存中…' : '保存'}
+            </button>
+          </div>
+        </form>
+      </dialog>
       {message && <div className="message-banner success">{message}</div>}
 
       {loading ? (
@@ -220,17 +270,35 @@ export function TeamsPage() {
                                 : `${team.athleteCount}名运动员`}
                             </small>
                           </span>
-                          {team.canDelete && (
-                            <button
-                              className="icon-button"
-                              onClick={() => void remove(team)}
-                              disabled={team.athleteCount > 0}
-                              title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'}
-                              aria-label={`删除${team.name}`}
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          )}
+                          <div className="team-row-actions">
+                            {team.canRename && (
+                              <button
+                                type="button"
+                                className="icon-button"
+                                title="修改队伍名"
+                                aria-label={`修改${team.name}的名称`}
+                                onClick={() => {
+                                  setRenameTarget(team);
+                                  setRenameName(team.name);
+                                  setRenameError('');
+                                  renameDialog.current?.showModal();
+                                }}
+                              >
+                                <Pencil size={16} aria-hidden="true" />
+                              </button>
+                            )}
+                            {team.canDelete && (
+                              <button
+                                className="icon-button"
+                                onClick={() => void remove(team)}
+                                disabled={team.athleteCount > 0}
+                                title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'}
+                                aria-label={`删除${team.name}`}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))
                     ) : (

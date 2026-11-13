@@ -61,7 +61,9 @@ beforeAll(async () => {
     CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY,native_place TEXT,phone TEXT,created_at TEXT,updated_at TEXT);
     CREATE TABLE user_area_permissions (user_id INTEGER,area_level TEXT,province TEXT,city TEXT,county TEXT,granted_by INTEGER);
     CREATE TABLE user_project_permissions (user_id INTEGER,project TEXT,granted_by INTEGER);
-    CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER);
+    CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, project, team));
+    CREATE TABLE data_import_batches (id TEXT PRIMARY KEY, status TEXT);
+    CREATE TABLE data_import_athlete_candidates (batch_id TEXT, project TEXT, team TEXT);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY,parent_user_id INTEGER,account_code TEXT);
     CREATE TABLE coach_profiles (user_id INTEGER PRIMARY KEY, category TEXT);
     CREATE TABLE audit_logs (user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,detail TEXT);
@@ -495,5 +497,42 @@ describe('教练注册新增队伍', () => {
     { role: 'SCC', project: 'INVALID', team: '新教练队', createTeam: true },
   ])('拒绝无效新增申请 %j', async (input) => {
     expect((await registerInput({ ...registrationInput, ...input })).status).toBe(400);
+  });
+});
+
+describe('队伍改名', () => {
+  it('校验角色和队伍范围，并保留关联、历史与跨项目授权', async () => {
+    db.exec(`
+      INSERT INTO project_teams (id, project, name) VALUES (99, 'ROWING', '旧队名'), (98, 'ROWING', '同名冲突');
+      INSERT INTO athletes (id, name, project, team, team_id) VALUES (99, '运动员', 'ROWING', '旧队名', 99);
+      INSERT INTO user_project_permissions VALUES (1, '*', 1);
+      UPDATE registration_requests SET project = 'ROWING', team = '旧队名';
+      INSERT INTO data_import_batches VALUES ('open', 'reviewing'), ('done', 'committed');
+      INSERT INTO data_import_athlete_candidates VALUES ('open', 'ROWING', '旧队名'), ('done', 'ROWING', '旧队名');
+    `);
+    const patch = async (role: string, name: string) => {
+      db.prepare('UPDATE users SET role = ? WHERE id = 1').run(role);
+      const { body } = await login('active_user', correctPassword);
+      return fetch(`${baseUrl}/api/admin/teams/99`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${body.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    };
+    expect((await patch('REG', '新队名')).status).toBe(403);
+    expect((await patch('TD', '新队名')).status).toBe(403);
+    db.exec("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, '*', '旧队名', 1)");
+    expect((await patch('TD', '同名冲突')).status).toBe(409);
+    db.exec("CREATE TRIGGER reject_import_update BEFORE UPDATE ON data_import_athlete_candidates BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
+    expect((await patch('TD', '新队名')).status).toBe(500);
+    expect(db.prepare('SELECT name FROM project_teams WHERE id = 99').get()).toEqual({ name: '旧队名' });
+    expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('*')).toEqual({ team: '旧队名' });
+    db.exec('DROP TRIGGER reject_import_update');
+    expect((await patch('TD', '新队名')).status).toBe(200);
+    expect(db.prepare('SELECT team, team_id FROM athletes WHERE id = 99').get()).toEqual({ team: '新队名', team_id: 99 });
+    expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('CANOE_SPRINT')).toEqual({ team: '旧队名' });
+    expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('ROWING')).toEqual({ team: '新队名' });
+    expect(db.prepare('SELECT team FROM registration_requests ORDER BY id').all()).toEqual([{ team: '新队名' }, { team: '旧队名' }]);
+    expect(db.prepare('SELECT team FROM data_import_athlete_candidates ORDER BY batch_id').all()).toEqual([{ team: '旧队名' }, { team: '新队名' }]);
   });
 });

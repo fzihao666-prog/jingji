@@ -519,6 +519,12 @@
   background: #f9fbfb;
 }
 
+.team-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
 .team-directory-list > div > span {
   min-width: 0;
   display: grid;
