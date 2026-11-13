@@ -61,7 +61,7 @@ describe('运动员转队同步上级', () => {
       detail: '{"from":2,"to":1}',
     });
   });
-  it('管理岗父级不覆盖新行政归属时重新绑定', () => expect(resolve(3)).toBe(1));
+  it('项目队伍匹配时保留原上级，即使生源地不同', () => expect(resolve(3)).toBe(3));
   it('管理岗覆盖新行政归属时保留', () => {
     database.prepare("UPDATE user_area_permissions SET province = '四川' WHERE user_id = 3").run();
     expect(resolve(3)).toBe(3);

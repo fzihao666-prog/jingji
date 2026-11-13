@@ -15,10 +15,9 @@ import {
   accountPermissions,
   canManageAccount,
   hasAthleteAccess,
-  permissionsAllowAthlete,
   permissionsAllowProjectTeam,
 } from '../core/permissions.ts';
-import type { AreaPermission, AuthUser, ScopeAthlete } from '../core/shared-server.ts';
+import type { AuthUser } from '../core/shared-server.ts';
 import { cleanString, userById, validatePersonName } from '../core/utils.ts';
 import { legacyCoachIdSchema } from '../core/coach-team-responsibility.ts';
 
@@ -97,18 +96,7 @@ export function athleteScopeError(
   const permissions = accountPermissions(user.id);
   if (!permissionsAllowProjectTeam(permissions, payload.project, payload.team))
     return '运动员项目或队伍不能超出当前账号权限';
-  if (user.role === 'SCC') return '';
-  if ([payload.region, payload.city, payload.county].some((value) => !value || value === '未设置'))
-    return '';
-  const athlete: ScopeAthlete = {
-    id: 0,
-    project: payload.project,
-    team: payload.team,
-    region: payload.region,
-    city: payload.city,
-    county: payload.county,
-  };
-  return permissionsAllowAthlete(permissions, athlete) ? '' : '运动员地区不能超出当前账号权限';
+  return '';
 }
 
 export function upsertAthleteProfile(

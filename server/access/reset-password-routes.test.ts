@@ -140,7 +140,7 @@ describe('上级重置下级账号密码', () => {
         .status
     ).toBe(200);
   });
-  it.each([1, 3, 5, 6, 7, 8, 999])('拒绝本人、同级、上级、范围外或不存在的目标 %s', async (id) => {
+  it.each([1, 3, 6, 7, 8, 999])('拒绝本人、同级、上级、范围外或不存在的目标 %s', async (id) => {
     const before = snapshot(id);
     expect((await reset(id)).status).toBe(404);
     expect(snapshot(id)).toEqual(before);

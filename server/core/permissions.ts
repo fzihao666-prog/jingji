@@ -1,16 +1,12 @@
 import {
   AREA_LEVELS,
-  AREA_LEVEL_META,
-  ROLES,
-  ROLE_HIERARCHY,
   ROLE_META,
   canManageRole,
   type AreaLevel,
   type Role,
 } from '../../shared/access.ts';
-import { isProject, PROJECTS, type Project } from '../../shared/projects.ts';
+import { isProject, PROJECT_META, PROJECTS, type Project } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
-import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
 import { db } from './db.ts';
 import { coachAthleteIds } from './coach-team-responsibility.ts';
 import type { AreaPermission, AuthUser, ScopeAthlete } from './shared-server.ts';
@@ -43,28 +39,11 @@ export function accountPermissions(userId: number) {
   return { areas, projects, teams };
 }
 
-export function areaAllowsAthlete(area: AreaPermission, athlete: ScopeAthlete) {
-  if (area.areaLevel === 'national') return true;
-  if (area.province !== athlete.region) return false;
-  if (area.areaLevel === 'province') return true;
-  if (area.city !== athlete.city) return false;
-  if (area.areaLevel === 'city') return true;
-  return area.county === athlete.county;
-}
-
 export function permissionsAllowAthlete(
   permissions: ReturnType<typeof accountPermissions>,
-  athlete: ScopeAthlete
+  athlete: Pick<ScopeAthlete, 'project' | 'team'> & Partial<ScopeAthlete>
 ) {
-  const areaAllowed = permissions.areas.some((area) => areaAllowsAthlete(area, athlete));
-  const projectAllowed =
-    permissions.projects.includes('*') || permissions.projects.includes(athlete.project);
-  const teamAllowed = permissions.teams.some(
-    (item) =>
-      (item.project === '*' || item.project === athlete.project) &&
-      (item.team === '*' || item.team === athlete.team)
-  );
-  return areaAllowed && projectAllowed && teamAllowed;
+  return permissionsAllowProjectTeam(permissions, athlete.project, athlete.team);
 }
 
 export function permissionsAllowProjectTeam(
@@ -82,26 +61,16 @@ export function permissionsAllowProjectTeam(
   );
 }
 
-export function areaContains(manager: AreaPermission, target: AreaPermission) {
-  if (manager.areaLevel === 'national') return true;
-  if (manager.province !== target.province) return false;
-  if (manager.areaLevel === 'province') return true;
-  if (manager.city !== target.city) return false;
-  if (manager.areaLevel === 'city') return true;
-  return target.areaLevel === 'county' && manager.county === target.county;
-}
-
 export function canManageAccount(manager: AuthUser, target: AuthUser) {
   if (!canManageRole(manager.role, target.role)) return false;
   const managerPermissions = accountPermissions(manager.id);
   const targetPermissions = accountPermissions(target.id);
   if (target.role === 'SCC' && !targetPermissions.teams.length) {
-    // 无归属历史账号仅允许完整全国授权的上级修复，不能猜测其组织范围。
-    const globalManager = managerPermissions.areas.some((area) => area.areaLevel === 'national') &&
-      managerPermissions.projects.includes('*') &&
+    // 无归属历史账号仅允许全部项目和队伍授权的上级修复，不能猜测其组织范围。
+    const globalManager = managerPermissions.projects.includes('*') &&
       managerPermissions.teams.some((team) => team.project === '*' && team.team === '*');
     if (globalManager) return true;
-    // 已有区域/项目但尚未绑队的教练，须由覆盖其区域和项目全部队伍的上级管理。
+    // 已有项目但尚未绑队的教练，须由覆盖其项目全部队伍的上级管理。
     return permissionsContain(managerPermissions, {
       ...targetPermissions,
       teams: targetPermissions.projects.map((project) => ({ project, team: '*' })),
@@ -114,15 +83,7 @@ export function permissionsContain(
   managerPermissions: ReturnType<typeof accountPermissions>,
   targetPermissions: ReturnType<typeof accountPermissions>
 ) {
-  if (
-    !targetPermissions.areas.length ||
-    !targetPermissions.projects.length ||
-    !targetPermissions.teams.length
-  )
-    return false;
-  const areasContained = targetPermissions.areas.every((targetArea) =>
-    managerPermissions.areas.some((managerArea) => areaContains(managerArea, targetArea))
-  );
+  if (!targetPermissions.projects.length || !targetPermissions.teams.length) return false;
   const projectsContained =
     managerPermissions.projects.includes('*') ||
     targetPermissions.projects.every((project) => managerPermissions.projects.includes(project));
@@ -135,13 +96,12 @@ export function permissionsContain(
           (managerTeam.team === '*' || managerTeam.team === targetTeam.team)
       )
     );
-  return areasContained && projectsContained && teamsContained;
+  return projectsContained && teamsContained;
 }
 
-export function accountCodeFor(userId: number, role: Role, province: string, project: string) {
-  const areaCodes: Record<string, string> = { 四川: '510000', 浙江: '330000', 广东: '440000' };
-  const projectCodes: Record<string, string> = { 赛艇: 'ROW', 皮划艇: 'CAN' };
-  return `${areaCodes[province] || '000000'}-${projectCodes[project] || 'ALL'}-${role}-${String(userId).padStart(4, '0')}`;
+export function accountCodeFor(userId: number, role: Role, project: string) {
+  const projectCode = isProject(project) ? PROJECT_META[project].code : 'ALL';
+  return `${projectCode}-${role}-${String(userId).padStart(4, '0')}`;
 }
 
 export function initializeAccountScope(input: {
@@ -167,14 +127,16 @@ export function initializeAccountScope(input: {
   ).run(
     input.userId,
     input.parentUserId,
-    accountCodeFor(input.userId, input.role, input.province, input.project)
+    accountCodeFor(input.userId, input.role, input.project)
   );
-  db.prepare(
+  if (input.role === 'ATL') {
+    db.prepare(
+      `
+      INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
+      VALUES (?, ?, ?, ?, ?, ?)
     `
-    INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `
-  ).run(input.userId, areaLevel, input.province, input.city, input.county, input.grantedBy);
+    ).run(input.userId, areaLevel, input.province, input.city, input.county, input.grantedBy);
+  }
   db.prepare(
     `
     INSERT INTO user_project_permissions (user_id, project, granted_by)
@@ -217,7 +179,6 @@ export function parseScopePayload(body: any) {
 }
 
 export function validateScopePayload(permissions: ReturnType<typeof parseScopePayload>) {
-  if (!permissions.areas.length) return '至少绑定一个行政区域。';
   if (!permissions.projects.length) return '至少绑定一个运动项目。';
   if (!permissions.teams.length) return '至少绑定一个队伍范围。';
   for (const area of permissions.areas) {
@@ -241,22 +202,15 @@ export function replaceAccountScope(input: {
   permissions: ReturnType<typeof parseScopePayload>;
   grantedBy: number;
 }) {
-  db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(input.userId);
   db.prepare('DELETE FROM user_project_permissions WHERE user_id = ?').run(input.userId);
   db.prepare('DELETE FROM user_team_permissions WHERE user_id = ?').run(input.userId);
-  const areaInsert = db.prepare(`
-    INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  for (const area of input.permissions.areas) {
-    areaInsert.run(
-      input.userId,
-      area.areaLevel,
-      area.province,
-      area.city,
-      area.county,
-      input.grantedBy
-    );
+  if (input.role === 'ATL' && input.permissions.areas.length) {
+    db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(input.userId);
+    const area = input.permissions.areas[0];
+    db.prepare(`
+      INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(input.userId, area.areaLevel, area.province, area.city, area.county, input.grantedBy);
   }
   const projectInsert = db.prepare(`
     INSERT INTO user_project_permissions (user_id, project, granted_by) VALUES (?, ?, ?)
@@ -268,39 +222,23 @@ export function replaceAccountScope(input: {
   `);
   for (const team of input.permissions.teams)
     teamInsert.run(input.userId, team.project, team.team, input.grantedBy);
-  const firstArea = input.permissions.areas[0];
-  const firstProject = input.permissions.projects[0];
-  db.prepare(
-    `
-    UPDATE account_profiles SET parent_user_id = ?, account_code = ?, updated_at = CURRENT_TIMESTAMP
+  db.prepare(`
+    UPDATE account_profiles SET parent_user_id = ?, updated_at = CURRENT_TIMESTAMP
     WHERE user_id = ?
-  `
-  ).run(
-    input.parentUserId,
-    accountCodeFor(input.userId, input.role, firstArea?.province || '', firstProject || '*'),
-    input.userId
-  );
+  `).run(input.parentUserId, input.userId);
 }
 
 export function standardAccountName(input: {
   displayName: string;
   role: Role;
-  areas: AreaPermission[];
   projects: string[];
   teams: Array<{ project: string; team: string }>;
 }) {
-  const area = input.areas[0];
-  const areaLabel =
-    input.role === 'ATL' && !athleteAccountAreaComplete(input.areas)
-      ? '行政归属待完善'
-      : area?.areaLevel === 'national'
-        ? '全国'
-        : [area?.province, area?.city, area?.county].filter(Boolean).join('·') || '未设置区域';
   const projectLabel = input.projects.includes('*') ? '全部项目' : input.projects.join('、');
   const teamLabel = input.teams.some((team) => team.team === '*')
     ? ''
     : `·${input.teams.map((team) => team.team).join('、')}`;
-  return `${areaLabel}·${projectLabel}${teamLabel}·${ROLE_META[input.role].label}·${input.displayName}`;
+  return `${projectLabel}${teamLabel}·${ROLE_META[input.role].label}·${input.displayName}`;
 }
 
 export function accessibleAthleteIds(user: AuthUser): number[] {
@@ -310,15 +248,13 @@ export function accessibleAthleteIds(user: AuthUser): number[] {
   const candidates = db
     .prepare(
       `
-      SELECT a.id, COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county,
-        a.project, COALESCE(pt.name, a.team, '') AS team
+      SELECT a.id, a.project, COALESCE(pt.name, a.team, '') AS team
       FROM athletes a
-      LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
       LEFT JOIN project_teams pt ON pt.id = a.team_id
       WHERE a.active = 1
     `
     )
-    .all() as ScopeAthlete[];
+    .all() as Array<Pick<ScopeAthlete, 'id' | 'project' | 'team'>>;
   return candidates
     .filter((athlete) => permissionsAllowAthlete(permissions, athlete))
     .map((athlete) => athlete.id);

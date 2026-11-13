@@ -147,8 +147,7 @@ describe('运动员转队真实 PUT 路由', () => {
       database.prepare("SELECT action FROM audit_logs WHERE action='UPDATE_ATHLETE_PARENT'").all()
     ).toEqual([]);
   });
-  it('旧父级失效且当前操作者不覆盖待完善区域时，整次回滚', async () => {
-    // 现有地区待完善检查允许进入事务，父级委派仍须严格覆盖新区域。
+  it('旧父级不覆盖新队伍时，操作者可接管生源地待完善的成员', async () => {
     expect(
       (
         await update(
@@ -156,26 +155,28 @@ describe('运动员转队真实 PUT 路由', () => {
           5
         )
       ).status
-    ).toBe(409);
+    ).toBe(200);
     expect(
       database.prepare('SELECT name, team, team_id, region FROM athletes WHERE id=101').get()
-    ).toEqual({ name: '测试队员', team: 'A队', team_id: 10, region: '四川' });
+    ).toEqual({ name: '修改队员', team: 'B队', team_id: 11, region: '未设置' });
     expect(
       database
         .prepare('SELECT province, city, county FROM athlete_origins WHERE athlete_id=101')
         .get()
-    ).toEqual({ province: '四川', city: '成都市', county: '武侯区' });
+    ).toEqual({ province: '未设置', city: '未设置', county: '未设置' });
     expect(database.prepare('SELECT display_name FROM users WHERE id=4').get()).toEqual({
-      display_name: '测试队员',
+      display_name: '修改队员',
     });
     expect(
       database.prepare('SELECT parent_user_id FROM account_profiles WHERE user_id=4').get()
-    ).toEqual({ parent_user_id: 2 });
+    ).toEqual({ parent_user_id: 5 });
     expect(
       database.prepare('SELECT team FROM user_team_permissions WHERE user_id=4').get()
-    ).toEqual({ team: 'A队' });
-    expect(database.prepare('SELECT * FROM athlete_profiles').all()).toEqual([]);
-    expect(database.prepare('SELECT * FROM audit_logs').all()).toEqual([]);
+    ).toEqual({ team: 'B队' });
+    expect(database.prepare('SELECT athlete_id FROM athlete_profiles').all()).toEqual([{ athlete_id: 101 }]);
+    expect(database.prepare('SELECT action FROM audit_logs ORDER BY rowid').all()).toEqual([
+      { action: 'UPDATE_ATHLETE_PARENT' }, { action: 'UPDATE_ATHLETE_PROFILE' },
+    ]);
   });
 });
 
@@ -197,7 +198,7 @@ describe('小程序复用运动员创建接口', () => {
     expect(response.status).toBe(200);
     const result = await response.json() as { teams: Array<{ id: number; project: string; name: string }>; areas: unknown[] };
     expect(result.teams).toEqual([{ id: 10, project: 'ROWING', name: 'A队' }]);
-    expect(result.areas).toHaveLength(1);
+    expect(result).not.toHaveProperty('areas');
     expect((await creationRequest('/api/admin/athletes/create-options', 4)).status).toBe(403);
   });
   it('读取选项后撤销队伍授权，原有创建接口仍拒绝保存', async () => {

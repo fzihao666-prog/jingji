@@ -342,7 +342,7 @@ export function OverviewPage(props: Props) {
         />
         <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} />
         <p className="analysis-method-note">
-          生源地读取运动员籍贯档案，与账号所属区域及数据权限分开管理；地图仅展示当前账号有权访问的运动员。
+          生源地读取运动员籍贯档案，用于档案和统计；地图仅展示当前账号有权访问的运动员。
         </p>
       </AppCard>
     ),

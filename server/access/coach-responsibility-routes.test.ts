@@ -195,7 +195,7 @@ describe('队伍责任范围 HTTP 集成', () => {
       'special_training_plans:1',
     ]);
     expect((await read(6)).plans.map((plan) => plan.key)).toEqual(['training_plans:1']);
-    expect((await read(5)).plans.map((plan) => plan.key)).toEqual(['training_plans:1']);
+    expect((await read(5)).plans.map((plan) => plan.key)).toEqual(['training_plans:1', 'training_plans:2', 'training_plans:3']);
     expect((await read(1)).plans).toHaveLength(8);
     expect((await fetch(`${baseUrl}/api/training-plans/catalog`)).status).toBe(401);
   });
@@ -225,11 +225,9 @@ describe('队伍责任范围 HTTP 集成', () => {
     await expectFullTeam();
   });
 
-  it('区域管理者只返回本区域且项目队伍匹配成员，不泄露完整责任名单', async () => {
+  it('管理者返回授权队伍的跨省和缺失生源地成员', async () => {
     const payload = await assignments(5);
-    expect(payload.athletes.map((athlete) => athlete.id)).toEqual([101]);
-    expect(JSON.stringify(payload)).not.toContain('浙江队员');
-    expect(JSON.stringify(payload)).not.toContain('未填归属队员');
+    expect(payload.athletes.map((athlete) => athlete.id).sort()).toEqual([101, 102, 103]);
     expect(payload.athletes[0].coachUsers).toHaveLength(2);
   });
 
@@ -296,7 +294,7 @@ describe('队伍责任范围 HTTP 集成', () => {
   it('拒绝角色越权、不可见运动员及无效路径 ID', async () => {
     expect((await update(newOrigin, 2)).status).toBe(403);
     expect((await update(newOrigin, 6)).status).toBe(403);
-    expect((await update(newOrigin, 5, '102')).status).toBe(400);
+    expect((await update(newOrigin, 5, '104')).status).toBe(400);
     expect((await update(newOrigin, 1, '101x')).status).toBe(400);
     expect(database.prepare('SELECT * FROM audit_logs').all()).toEqual([]);
   });
@@ -311,11 +309,11 @@ describe('队伍责任范围 HTTP 集成', () => {
     ]);
   });
 
-  it('ATL 本人访问及上级管理者原有区域项目队伍过滤保持', async () => {
+  it('ATL 本人访问及上级管理者按项目队伍过滤', async () => {
     const { accessibleAthleteIds } = await import('../core/permissions.ts');
     const { userById } = await import('../core/utils.ts');
     expect(accessibleAthleteIds(userById(6)!)).toEqual([101]);
-    expect(accessibleAthleteIds(userById(5)!)).toEqual([101]);
+    expect(accessibleAthleteIds(userById(5)!)).toEqual([101, 102, 103]);
     const response = await fetch(`${baseUrl}/api/admin/assignments`, { headers: headers(6) });
     expect(response.status).toBe(403);
   });
@@ -353,7 +351,7 @@ describe('队伍责任范围 HTTP 集成', () => {
     ]);
   });
 
-  it('未绑队 SCC 只允许覆盖其区域和项目全部队伍的上级管理，跨区域仍拒绝', async () => {
+  it('未绑队 SCC 只允许覆盖其项目全部队伍的上级管理', async () => {
     database.exec('DELETE FROM user_team_permissions WHERE user_id=2');
     const { canManageAccount } = await import('../core/permissions.ts');
     const { userById } = await import('../core/utils.ts');
@@ -361,7 +359,7 @@ describe('队伍责任范围 HTTP 集成', () => {
     database.exec("UPDATE user_team_permissions SET team='*' WHERE user_id=5");
     expect(canManageAccount(userById(5)!, userById(2)!)).toBe(true);
     expect((await assignments(5)).coaches.map((coach) => coach.id)).toContain(2);
-    database.exec("UPDATE user_area_permissions SET province='浙江' WHERE user_id=5");
+    database.exec("UPDATE user_project_permissions SET project='CANOE_SPRINT' WHERE user_id=5");
     expect(canManageAccount(userById(5)!, userById(2)!)).toBe(false);
     expect((await assignments(5)).coaches.map((coach) => coach.id)).not.toContain(2);
   });
@@ -397,7 +395,6 @@ describe('队伍责任范围 HTTP 集成', () => {
   it.each([
     "UPDATE user_project_permissions SET project='ROWING' WHERE user_id=1",
     "UPDATE user_team_permissions SET project='ROWING' WHERE user_id=1",
-    "UPDATE user_area_permissions SET area_level='province',province='四川' WHERE user_id=1",
   ])('历史无范围 SCC 不向缺少任一全国完整授权的上级开放 %#', async (restriction) => {
     database.exec(`
       DELETE FROM user_area_permissions WHERE user_id=2;

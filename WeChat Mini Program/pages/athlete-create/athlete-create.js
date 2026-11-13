@@ -10,7 +10,7 @@ Page({
     name: '', gender: '', birthDate: '', notes: '', project: '', teamId: 0,
     projectItems: [], projectIndex: 0, teamItems: [], teamIndex: 0,
     genderItems: ['暂不填写', '男', '女'], genderIndex: 0,
-    areaItems: [], areaIndex: 0, needsArea: false, today: '',
+    today: '',
   },
 
   onLoad(options = {}) {
@@ -24,21 +24,15 @@ Page({
     try {
       const { user } = await api.me();
       if (!MANAGER_ROLES.includes(user.role)) throw new Error('当前账号无权添加运动员。');
-      const { teams = [], areas = [] } = await api.athleteCreateOptions();
+      const { teams = [] } = await api.athleteCreateOptions();
       this._teams = teams;
       if (!teams.length) throw new Error('当前没有可管理的队伍，请联系管理员配置队伍权限。');
       const projectItems = projectOptions([...new Set(teams.map((team) => team.project))]);
       const preferred = this._preferred || {};
       const project = projectItems.some((item) => item.code === this.data.project) ? this.data.project
         : projectItems.some((item) => item.code === preferred.project) ? preferred.project : projectItems[0].code;
-      const needsArea = user.role !== 'SCC' && !areas.some((area) => area.areaLevel === 'national');
-      const areaItems = [{ label: '请选择档案行政归属', value: null }].concat(areas.map((area) => ({
-        label: [area.province, area.city, area.county].filter(Boolean).join(' / '), value: area,
-      })));
-      if (needsArea && !areas.length) throw new Error('当前账号尚未配置行政管理范围，请联系管理员。');
-      this.setData({ allowed: true, projectItems, areaItems, needsArea, project,
+      this.setData({ allowed: true, projectItems, project,
         projectIndex: projectItems.findIndex((item) => item.code === project),
-        areaIndex: this.data.areaIndex < areaItems.length ? this.data.areaIndex : 0,
       });
       this.updateTeams(this.data.teamId || preferred.teamId);
     } catch (error) {
@@ -96,14 +90,6 @@ Page({
     this.setData({ teamIndex, teamId: Number(team.id) });
     this.markDirty();
   },
-  areaChange(event) {
-    if (this.data.saving || this.data.saved) return;
-    const areaIndex = Number(event.detail.value);
-    if (!this.data.areaItems[areaIndex]) return;
-    this.setData({ areaIndex });
-    this.markDirty();
-  },
-
   async save() {
     if (this.data.saving || this.data.saved || !this.data.allowed) return;
     const fieldErrors = {};
@@ -112,12 +98,9 @@ Page({
     catch (error) { fieldErrors[this.data.name.trim().length < 2 || this.data.name.trim().length > 20 || /[\r\n\t<>]/.test(this.data.name) ? 'name' : 'birthDate'] = error.message; }
     const team = (this._teams || []).find((item) => item.project === this.data.project && Number(item.id) === this.data.teamId);
     if (!team) fieldErrors.team = '请选择有权管理的所属队伍。';
-    const area = this.data.areaItems[this.data.areaIndex];
-    if (this.data.needsArea && (!area || !area.value)) fieldErrors.area = '请选择档案行政归属。';
     if (Object.keys(fieldErrors).length) { this.setData({ fieldErrors }); return; }
     const payload = { name: profile.name, gender: profile.gender, birthDate: profile.birthDate,
       notes: profile.notes, project: team.project, team: team.name, createAccount: false };
-    if (this.data.needsArea) Object.assign(payload, { region: area.value.province, city: area.value.city, county: area.value.county });
     this.setData({ saving: true, error: '' });
     try {
       const result = await api.createAthlete(payload);

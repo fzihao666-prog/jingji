@@ -173,28 +173,17 @@ describe('账号接口行政区域从属校验', () => {
     expect(db.prepare("SELECT id FROM users WHERE username = 'old_role_test'").get()).toBeUndefined();
   });
 
-  it.each([
-    { ...validArea, city: '杭州市' },
-    { ...validArea, county: '西湖区' },
-    { ...validArea, province: '重庆', city: '重庆市', county: '渝北区' },
-  ])('创建和更新拒绝非法或废止区域 %#', async (area) => {
-    expect((await createArea([area])).status).toBe(400);
-    expect((await updateArea([area])).status).toBe(400);
-    expect(db.prepare('SELECT * FROM audit_logs').all()).toHaveLength(0);
+  it('仅用项目和队伍创建账号，新编号无区域前缀，编辑保留旧编号', async () => {
+    const existing = db.prepare('SELECT account_code FROM account_profiles WHERE user_id=4').get();
+    expect((await createArea([])).status).toBe(201);
+    expect(db.prepare(`SELECT account_code FROM account_profiles JOIN users
+      ON users.id=account_profiles.user_id WHERE username='newtest'`).get()).toEqual({
+      account_code: expect.stringMatching(/^ROWING-REG-\d+$/),
+    });
+    expect((await updateArea([])).status).toBe(200);
+    expect(db.prepare('SELECT account_code FROM account_profiles WHERE user_id=4').get()).toEqual(existing);
   });
-  it('创建和更新接受有效字典选择', async () => {
-    expect((await createArea([validArea])).status).toBe(201);
-    expect((await updateArea([validArea])).status).toBe(200);
-  });
-  it('只允许目标数据库中完全一致的历史范围原样保留', async () => {
-    const legacy = { ...validArea, province: '重庆', city: '重庆市', county: '渝北区' };
-    db.prepare(
-      "UPDATE user_area_permissions SET area_level='county',province='重庆',city='重庆市',county='渝北区' WHERE user_id=4"
-    ).run();
-    expect((await updateArea([legacy])).status).toBe(200);
-    expect((await createArea([legacy])).status).toBe(400);
-    expect((await updateArea([{ ...legacy, city: '成都市' }])).status).toBe(400);
-  });
+
 });
 
 async function updateAthlete(body: unknown, actor = 8, id = '2') {
@@ -219,9 +208,6 @@ describe('运动员待完善行政归属', () => {
     expect(payload.accounts.find((account) => account.id === 2)).toMatchObject({
       areaPending: true,
     });
-    expect(payload.accounts.find((account) => account.id === 2)?.standardName).toContain(
-      '行政归属待完善'
-    );
     expect(
       db.prepare('SELECT area_level FROM user_area_permissions WHERE user_id=2').get()
     ).toEqual({ area_level: 'national' });
@@ -252,12 +238,11 @@ describe('运动员待完善行政归属', () => {
       permissions: { areas: [validArea] },
     });
   });
-  it('未知归属允许全国范围上级补全，不扩大其他管理者的原有权限', async () => {
+  it('授权队伍的上级可补全未知生源地', async () => {
     db.exec(
       "UPDATE user_area_permissions SET area_level='county',province='',city='',county='' WHERE user_id=2"
     );
-    expect((await updateAthlete(input([validArea], 'ATL'), 1)).status).toBe(404);
-    expect((await updateAthlete(input([validArea], 'ATL'))).status).toBe(200);
+    expect((await updateAthlete({ ...input([validArea], 'ATL'), parentUserId: 1 }, 1)).status).toBe(200);
   });
   it('已知省市的待完善账号可由覆盖该范围的上级补全', async () => {
     db.exec(
@@ -298,7 +283,7 @@ describe('运动员待完善行政归属', () => {
     expect((await updateAthlete(input([validArea], 'ATL'), 8, '2.5')).status).toBe(400);
     expect(db.prepare('SELECT * FROM audit_logs').all()).toHaveLength(0);
   });
-  it('已有归属不可移到管理者范围之外', async () => {
+  it('允许授权队伍的上级更正为跨省生源地', async () => {
     db.exec(
       "UPDATE user_area_permissions SET area_level='county',city='成都市',county='武侯区' WHERE user_id=2"
     );
@@ -312,8 +297,8 @@ describe('运动员待完善行政归属', () => {
           1
         )
       ).status
-    ).toBe(403);
-    expect(db.prepare('SELECT * FROM audit_logs').all()).toHaveLength(0);
+    ).toBe(200);
+    expect(db.prepare('SELECT province FROM athlete_origins WHERE athlete_id=2').get()).toEqual({ province: '浙江' });
   });
   it('审计写入失败时账号范围、运动员归属和上级一起回滚', async () => {
     db.exec(

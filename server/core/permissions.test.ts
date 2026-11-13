@@ -51,15 +51,15 @@ describe('按角色裁剪运动员访问范围', () => {
     expect(permissions.hasAthleteAccess(user('SCC'), 13)).toBe(false);
     expect(permissions.hasAthleteAccess(user('SCC'), 14)).toBe(false);
   });
-  it.each(['REG', 'TD', 'DMD'] as const)('%s 保留行政区域、项目和队伍交集', (role) => {
-    expect(permissions.accessibleAthleteIds(user(role))).toEqual([10]);
-    expect(permissions.hasAthleteAccess(user(role), 11)).toBe(false);
+  it.each(['REG', 'TD', 'DMD'] as const)('%s 只按项目和队伍授权', (role) => {
+    expect(permissions.accessibleAthleteIds(user(role))).toEqual([10, 11, 12]);
+    expect(permissions.hasAthleteAccess(user(role), 13)).toBe(false);
   });
   it('ATL 仅本人', () => {
     expect(permissions.accessibleAthleteIds(user('ATL'))).toEqual([11]);
     expect(permissions.hasAthleteAccess(user('ATL'), 10)).toBe(false);
   });
-  it('权限三元组助手保留地区校验', () => {
+  it('授权允许同队跨省队员', () => {
     expect(
       permissions.permissionsAllowAthlete(permissions.accountPermissions(1), {
         id: 11,
@@ -69,6 +69,6 @@ describe('按角色裁剪运动员访问范围', () => {
         city: '',
         county: '',
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });

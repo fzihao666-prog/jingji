@@ -119,8 +119,6 @@ Page({
       if (editingManaged) {
         const options = await api.athleteCreateOptions();
         this._teams = options.teams || [];
-        this._areas = options.areas || [];
-        this._managerRole = context.user.role;
         projectItems = projectOptions([...new Set(this._teams.map((team) => team.project))]);
         if (!this._teams.some((team) => team.project === athlete.project && team.name === athlete.team)) {
           throw new Error('当前账号无权维护该运动员所属队伍。');
@@ -174,12 +172,6 @@ Page({
     if (!rawRegion || !rawCity || !county) return;
     const region = provinces.find((province) => rawRegion.startsWith(province)) || rawRegion;
     const city = ['北京', '天津', '上海', '重庆'].includes(region) ? `${region}市` : rawCity;
-    const allowed = this._managerRole === 'SCC' || (this._areas || []).some((area) =>
-      area.areaLevel === 'national' || (area.province === region &&
-        (area.areaLevel === 'province' || (area.city === city &&
-          (area.areaLevel === 'city' || area.county === county))))
-    );
-    if (!allowed) { this.setData({ error: '档案行政归属不能超出当前账号权限。' }); return; }
     this.setData({ 'form.region': region, 'form.city': city, 'form.county': county, error: '' });
     this.markDirty();
   },

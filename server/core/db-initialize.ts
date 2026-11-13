@@ -2126,11 +2126,6 @@ export function initializeDatabase(
 
   runInitializationOnce('athlete_origins_seed_v1', seedAthleteOrigins);
 
-  function areaCode(province: string) {
-    const codes: Record<string, string> = { 四川: '510000', 浙江: '330000', 广东: '440000' };
-    return codes[province] || '000000';
-  }
-
   function projectCode(project: string) {
     return project in PROJECT_META
       ? PROJECT_META[project as keyof typeof PROJECT_META].code
@@ -2212,14 +2207,8 @@ export function initializeDatabase(
       else if (user.role === 'SCC') parentId = director.id;
       else if (user.role === 'ATL') parentId = admin.id;
 
-      let primaryProvince = athlete?.region || '';
-      let primaryProject = athlete?.project || '*';
-      if (user.role === 'DMD' || user.role === 'TD') {
-        primaryProvince = '';
-        primaryProject = '*';
-      }
-      if (user.role === 'REG') primaryProvince = '四川';
-      const code = `${areaCode(primaryProvince)}-${projectCode(primaryProject)}-${user.role}-${String(user.id).padStart(4, '0')}`;
+      const primaryProject = athlete?.project || '*';
+      const code = `${projectCode(primaryProject)}-${user.role}-${String(user.id).padStart(4, '0')}`;
       insertProfile.run(user.id, parentId, code);
 
       // 演示初始化不得扩展已有授权；旧项目账号没有授权时保持默认拒绝。
@@ -2230,16 +2219,9 @@ export function initializeDatabase(
         continue;
 
       if (user.role === 'DMD' || user.role === 'TD') {
-        insertArea.run(user.id, 'national', '', '', '', admin.id);
         insertProject.run(user.id, '*', admin.id);
         insertTeam.run(user.id, '*', '*', admin.id);
       } else if (user.role === 'REG') {
-        const legacyAreas = db
-          .prepare('SELECT region FROM regional_manager_regions WHERE manager_user_id = ?')
-          .all(user.id) as { region: string }[];
-        const areas = legacyAreas.length ? legacyAreas.map((item) => item.region) : ['四川'];
-        for (const province of areas)
-          insertArea.run(user.id, 'province', province, '', '', admin.id);
         insertProject.run(user.id, '*', admin.id);
         insertTeam.run(user.id, '*', '*', admin.id);
       } else if (user.role === 'SCC') {

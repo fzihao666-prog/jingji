@@ -16,17 +16,12 @@ export function dataImportScope(user: AuthUser, project: string) {
     item => (item.project === '*' || item.project === project) && Boolean(item.team)
   );
   const allowedTeams = new Set(allTeams.filter(team => permissionsAllowProjectTeam(permissions, project, team)));
-  const area = permissions.areas[0];
   return {
-    // 授权来自账号范围；项目尚未建队不代表无权下载模板或查看空结果。
-    allowed: permissions.areas.length > 0 && projectAllowed && teamScopeGranted,
+    // 项目尚未建队时，仍可下载模板或查看空结果。
+    allowed: projectAllowed && teamScopeGranted,
     allowedTeams,
-    defaultArea: {
-      region: area?.areaLevel === 'national' ? '未设置' : area?.province || '未设置',
-      city: area && ['city', 'county'].includes(area.areaLevel) ? area.city || '未设置' : '未设置',
-      county: area?.areaLevel === 'county' ? area.county || '未设置' : '未设置',
-    },
   };
+
 }
 
 /** 所有草稿读取和写入共用：所有者身份不替代当前业务授权。 */
@@ -50,7 +45,7 @@ export function assertDataImportBatchAccess(user: AuthUser, batchId: string, can
     if (linked && !allowed.has(linked)) deny();
     const suggestions = JSON.parse(person.suggested || '[]') as { id: number }[];
     if (suggestions.some(suggestion => !allowed.has(suggestion.id))) deny();
-    if (!linked && (Array.isArray(originalTeams) ? originalTeams.includes(person.team) : Boolean(person.team)) && !permissionsAllowAthlete(permissions, { ...person, id: 0 })) deny();
+    if (!linked && (Array.isArray(originalTeams) ? originalTeams.includes(person.team) : Boolean(person.team)) && !permissionsAllowAthlete(permissions, person)) deny();
   }
   return scope;
 }

@@ -233,12 +233,11 @@ describe('资料与附件分步保存恢复', () => {
 
 
 describe('管理者维护档案行政归属', () => {
-  it('区域管理者仅可选择自身授权内的地区，本人不能调整', async () => {
+  it('队伍管理者可以维护跨省生源地，运动员本人不能调整', async () => {
     const { page } = managedEditor('REG');
     await page.loadPage();
-    page._areas = [{ areaLevel: 'province', province: '四川' }];
     page.onManagedAreaChange({ detail: { value: ['浙江', '杭州市', '西湖区'] } });
-    expect(page.data.form.region).toBe('四川'); expect(page.data.error).toContain('权限');
+    expect(page.data.form.region).toBe('浙江'); expect(page.data.error).toBe('');
     page.onManagedAreaChange({ detail: { value: ['四川省', '绵阳市', '涪城区'] } });
     expect(page.data.form).toMatchObject({ region: '四川', city: '绵阳市', county: '涪城区' });
     const { page: self } = managedEditor('ATL'); await self.loadPage();

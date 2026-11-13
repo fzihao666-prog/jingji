@@ -43,8 +43,8 @@ describe('模板访问权限独立于是否已有队伍', () => {
     database.exec('DELETE FROM user_team_permissions');
     expect(dataImportScope(manager, 'ROWING').allowed).toBe(false);
   });
-  it('缺少行政授权时仍拒绝', () => {
+  it('只有项目与队伍授权即可下载模板', () => {
     database.exec("DELETE FROM user_area_permissions; INSERT INTO project_teams VALUES ('ROWING','A队',1)");
-    expect(dataImportScope(manager, 'ROWING').allowed).toBe(false);
+    expect(dataImportScope(manager, 'ROWING').allowed).toBe(true);
   });
 });

@@ -37,7 +37,6 @@ import { PageContainer, PageHeader } from '../components/PageLayout';
 import type {
   AccessAccount,
   AccessPayload,
-  AreaLevel,
   AreaPermission,
   AuditLog,
   Role,
@@ -45,32 +44,23 @@ import type {
   TeamPermission,
   User,
 } from '../types';
-import { AREA_LEVEL_META, ROLE_META, ROLES, canManageRole } from '../../shared/access';
+import { ROLE_META, ROLES, canManageRole } from '../../shared/access';
 import { DEFAULT_PROJECT, normalizeProject, projectLabel } from '../../shared/projects';
 
 const blankArea = (): AreaPermission => ({
-  areaLevel: 'province',
-  province: '四川',
+  areaLevel: 'county',
+  province: '',
   city: '',
   county: '',
 });
 
 const blankTeam = (): TeamPermission => ({ project: DEFAULT_PROJECT, team: '' });
 
-function areaLabel(area: AreaPermission) {
-  if (area.areaLevel === 'national') return '全国';
-  return [area.province, area.city, area.county].filter(Boolean).join(' / ');
-}
-
 function compactScope(account: AccessAccount) {
-  const areas =
-    account.role === 'ATL' && !athleteAccountAreaComplete(account.areas)
-      ? '行政归属待完善'
-      : account.areas.map(areaLabel).join('、');
   const projects = account.projects.includes('*')
     ? '全部项目'
     : account.projects.map((project) => projectLabel(project)).join('、');
-  return `${areas} · ${projects}`;
+  return projects;
 }
 
 const auditLabels: Record<string, string> = {
@@ -145,7 +135,6 @@ export function RegionAccessPage({ user }: { user: User }) {
     password: '',
     role: 'ATL' as Role,
     parentUserId: user.id,
-    areaLevel: 'county' as AreaLevel,
     province: '',
     city: '',
     county: '',
@@ -239,10 +228,6 @@ export function RegionAccessPage({ user }: { user: User }) {
         const next = { ...area, [key]: value } as AreaPermission;
         if (key === 'province') return { ...next, city: '', county: '' };
         if (key === 'city') return { ...next, county: '' };
-        if (key === 'areaLevel' && value === 'national')
-          return { areaLevel: 'national', province: '', city: '', county: '' };
-        if (key === 'areaLevel' && value === 'province') return { ...next, city: '', county: '' };
-        if (key === 'areaLevel' && value === 'city') return { ...next, county: '' };
         return next;
       })
     );
@@ -282,7 +267,10 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const save = async () => {
     if (!selected) return;
-    const areaError = validateAccountAreas(areas, selected.areas);
+    const athleteAreas = selected.role === 'ATL' &&
+      JSON.stringify(areas[0]) !== JSON.stringify(athleteAccountAreaForEdit(selected.areas))
+      ? areas.filter((area) => area.province) : [];
+    const areaError = validateAccountAreas(athleteAreas, selected.areas);
     if (areaError) {
       setError(areaError);
       const index = areas.findIndex((area) => validateAccountAreas([area], selected.areas));
@@ -309,7 +297,7 @@ export function RegionAccessPage({ user }: { user: User }) {
       const result = await api.updateAccessAccount(selected.id, {
         role,
         parentUserId,
-        areas,
+        areas: athleteAreas,
         projects,
         teams,
       });
@@ -360,17 +348,13 @@ export function RegionAccessPage({ user }: { user: User }) {
     setMessage('');
     setError('');
     const createArea: AreaPermission = {
-      areaLevel: createForm.role === 'ATL' ? 'county' : createForm.areaLevel,
-      province:
-        createForm.areaLevel === 'national' && createForm.role !== 'ATL' ? '' : createForm.province,
-      city:
-        ['city', 'county'].includes(createForm.areaLevel) || createForm.role === 'ATL'
-          ? createForm.city
-          : '',
-      county:
-        createForm.areaLevel === 'county' || createForm.role === 'ATL' ? createForm.county : '',
+      areaLevel: 'county',
+      province: createForm.province,
+      city: createForm.city,
+      county: createForm.county,
     };
-    const areaError = validateAccountAreas([createArea]);
+    const createAreas = createForm.role === 'ATL' && createArea.province ? [createArea] : [];
+    const areaError = validateAccountAreas(createAreas);
     if (areaError) {
       setCreateError(areaError);
       setSaving(false);
@@ -384,7 +368,7 @@ export function RegionAccessPage({ user }: { user: User }) {
         role: createForm.role,
         parentUserId: createForm.parentUserId,
         gender: createForm.role === 'ATL' ? createForm.gender : undefined,
-        areas: [createArea],
+        areas: createAreas,
         projects: [createForm.project],
         teams: [{ project: createForm.project, team: createForm.team }],
       });
@@ -488,13 +472,6 @@ export function RegionAccessPage({ user }: { user: User }) {
   const canEditAccess = user.role !== 'SCC';
   const feedbackInFooter = canEditAccess && Boolean(selected);
   const activeCount = payload?.accounts.filter((account) => account.active).length || 0;
-  const areaCount = new Set(
-    payload?.accounts.flatMap((account) =>
-      account.role === 'ATL' && !athleteAccountAreaComplete(account.areas)
-        ? []
-        : account.areas.map(areaLabel)
-    )
-  ).size;
 
   return (
     <PageContainer className="access-center-page">
@@ -506,8 +483,6 @@ export function RegionAccessPage({ user }: { user: User }) {
           <div className="authority-formula">
             <Fingerprint size={18} />
             <span>角色</span>
-            <i>×</i>
-            <span>行政区域</span>
             <i>×</i>
             <span>项目 / 队伍</span>
           </div>
@@ -525,12 +500,6 @@ export function RegionAccessPage({ user }: { user: User }) {
           <CirclePower />
           <span>
             正常启用<strong>{activeCount}</strong>
-          </span>
-        </div>
-        <div>
-          <MapPinned />
-          <span>
-            授权区域<strong>{areaCount}</strong>
           </span>
         </div>
         <div>
@@ -647,7 +616,6 @@ export function RegionAccessPage({ user }: { user: User }) {
                         ...createForm,
                         role: nextRole,
                         team: nextRole === 'ATL' && createForm.team === '*' ? '' : createForm.team,
-                        areaLevel: nextRole === 'ATL' ? 'county' : createForm.areaLevel,
                         parentUserId: parents[0]?.id || user.id,
                       });
                     }}
@@ -739,38 +707,10 @@ export function RegionAccessPage({ user }: { user: User }) {
                     ))}
                   </select>
                 </label>
-                {createForm.role !== 'ATL' && (
-                  <label>
-                    <span>区域级别</span>
-                    <select
-                      value={createForm.areaLevel}
-                      onChange={(event) =>
-                        setCreateForm({
-                          ...createForm,
-                          areaLevel: event.target.value as AreaLevel,
-                          ...(event.target.value === 'national'
-                            ? { province: '', city: '', county: '' }
-                            : event.target.value === 'province'
-                              ? { city: '', county: '' }
-                              : event.target.value === 'city'
-                                ? { county: '' }
-                                : {}),
-                        })
-                      }
-                    >
-                      {Object.entries(AREA_LEVEL_META).map(([key, meta]) => (
-                        <option key={key} value={key}>
-                          {meta.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {(createForm.areaLevel !== 'national' || createForm.role === 'ATL') && (
+                {createForm.role === 'ATL' && (
                   <label>
                     <span>省份</span>
                     <select
-                      required
                       aria-label="创建账号省份"
                       value={createForm.province}
                       onChange={(event) =>
@@ -789,8 +729,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </select>
                   </label>
                 )}
-                {(['city', 'county'].includes(createForm.areaLevel) ||
-                  createForm.role === 'ATL') && (
+                {createForm.role === 'ATL' && (
                   <label>
                     <span>城市</span>
                     <select
@@ -799,7 +738,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       onChange={(event) =>
                         setCreateForm({ ...createForm, city: event.target.value, county: '' })
                       }
-                      required
+                      required={Boolean(createForm.province)}
                       disabled={!createForm.province}
                     >
                       <option value="">请选择城市</option>
@@ -809,7 +748,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </select>
                   </label>
                 )}
-                {(createForm.areaLevel === 'county' || createForm.role === 'ATL') && (
+                {createForm.role === 'ATL' && (
                   <label>
                     <span>区县</span>
                     <select
@@ -818,7 +757,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       onChange={(event) =>
                         setCreateForm({ ...createForm, county: event.target.value })
                       }
-                      required
+                      required={Boolean(createForm.province)}
                       disabled={!createForm.city}
                     >
                       <option value="">请选择区县</option>
@@ -1121,23 +1060,13 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </div>
               </section>
 
-              <section className="coordinate-section" aria-label="行政区域范围">
+              {selected.role === 'ATL' && <section className="coordinate-section" aria-label="运动员生源地">
                 <div className="coordinate-title">
                   <MapPinned size={18} />
                   <div>
-                    <h3>行政区域范围</h3>
-                    <p>
-                      {selected.role === 'ATL'
-                        ? '运动员绑定一个具体区县，保存后同步本人档案并记录日志'
-                        : '同级区域相互隔离，可为负责人增加多个授权区域'}
-                    </p>
+                    <h3>运动员生源地</h3>
+                    <p>填写后同步到运动员档案</p>
                   </div>
-                  {canEditAccess && selected.role !== 'ATL' && (
-                    <button onClick={() => setAreas([...areas, blankArea()])}>
-                      <Plus size={15} />
-                      增加区域
-                    </button>
-                  )}
                 </div>
                 {selected.role === 'ATL' && !athleteAccountAreaComplete(selected.areas) && (
                   <p className="message-banner" role="status">
@@ -1147,28 +1076,10 @@ export function RegionAccessPage({ user }: { user: User }) {
                 <div className="area-scope-list">
                   {areas.map((area, index) => (
                     <div className="area-scope-row" key={index}>
-                      <select
-                        disabled={!canEditAccess || selected.role === 'ATL'}
-                        aria-label={`区域范围 ${index + 1} 的级别`}
-                        ref={(element) => {
-                          areaSelectRefs.current[index] ||= {};
-                          areaSelectRefs.current[index].areaLevel = element;
-                        }}
-                        value={area.areaLevel}
-                        onChange={(event) => updateArea(index, 'areaLevel', event.target.value)}
-                      >
-                        {Object.entries(AREA_LEVEL_META)
-                          .filter(([key]) => selected.role !== 'ATL' || key === 'county')
-                          .map(([key, meta]) => (
-                            <option key={key} value={key}>
-                              {meta.label}
-                            </option>
-                          ))}
-                      </select>
                       {area.areaLevel !== 'national' && (
                         <select
                           disabled={!canEditAccess}
-                          aria-label={`区域范围 ${index + 1} 的省份`}
+                          aria-label={`运动员生源地省份`}
                           aria-invalid={
                             (areaValidationError?.index === index &&
                               areaValidationError.field === 'province') ||
@@ -1196,7 +1107,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       {['city', 'county'].includes(area.areaLevel) && (
                         <select
                           disabled={!canEditAccess || !area.province}
-                          aria-label={`区域范围 ${index + 1} 的城市`}
+                          aria-label={`运动员生源地城市`}
                           aria-invalid={
                             (areaValidationError?.index === index &&
                               areaValidationError.field === 'city') ||
@@ -1229,7 +1140,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       {area.areaLevel === 'county' && (
                         <select
                           disabled={!canEditAccess || !area.city}
-                          aria-label={`区域范围 ${index + 1} 的区县`}
+                          aria-label={`运动员生源地区县`}
                           aria-invalid={
                             (areaValidationError?.index === index &&
                               areaValidationError.field === 'county') ||
@@ -1268,34 +1179,17 @@ export function RegionAccessPage({ user }: { user: User }) {
                           )}
                         </select>
                       )}
-                      {canEditAccess && selected.role !== 'ATL' && areas.length > 1 && (
-                        <button
-                          onClick={() => {
-                            if (areaValidationError) setError('');
-                            setAreaValidationError(null);
-                            setAreas(areas.filter((_, itemIndex) => itemIndex !== index));
-                            requestAnimationFrame(() =>
-                              areaSelectRefs.current[
-                                Math.min(index, areas.length - 2)
-                              ]?.areaLevel?.focus()
-                            );
-                          }}
-                          aria-label={`移除区域范围 ${index + 1}`}
-                        >
-                          <X size={16} />
-                        </button>
-                      )}
                     </div>
                   ))}
                 </div>
-              </section>
+              </section>}
 
               <section className="coordinate-section">
                 <div className="coordinate-title">
                   <Activity size={18} />
                   <div>
                     <h3>项目与队伍范围</h3>
-                    <p>查询时行政区域、项目和队伍三个条件必须同时满足</p>
+                    <p>访问范围需同时满足项目与队伍授权</p>
                   </div>
                 </div>
                 <div className="project-options">
@@ -1445,7 +1339,7 @@ export function RegionAccessPage({ user }: { user: User }) {
             <div className="access-editor-empty">
               <ShieldCheck size={42} />
               <strong>选择一个下级账号</strong>
-              <p>查看并设置角色、上级、区域和项目队伍范围。</p>
+              <p>查看并设置角色、上级、项目和队伍范围。</p>
             </div>
           )}
         </section>

@@ -11,7 +11,6 @@ import {
   accountCodeFor,
   canManageAccount,
   hasAthleteAccess,
-  permissionsAllowAthlete,
   permissionsAllowProjectTeam,
   replaceAccountScope,
   accessibleAthleteIds,
@@ -156,7 +155,7 @@ export function registerAthleteRoutes(app: Express) {
       ).all() as Array<{ id: number; project: string; name: string }>).filter((team) =>
         permissionsAllowProjectTeam(permissions, team.project, team.name)
       );
-      res.json({ teams, areas: permissions.areas });
+      res.json({ teams });
     }
   );
   app.post(
@@ -198,11 +197,6 @@ export function registerAthleteRoutes(app: Express) {
       };
       const scopeError = athleteScopeError(currentUser, payload);
       if (scopeError) errors.push(scopeError);
-      if (
-        createAccount &&
-        [payload.region, payload.city, payload.county].some((value) => value === '未设置')
-      )
-        errors.push('创建登录账号前请补全省、市、区县');
       if (createAccount && db.prepare('SELECT id FROM users WHERE username = ?').get(username))
         errors.push('该登录账号已存在');
       const selectedTeam = db
@@ -269,7 +263,7 @@ export function registerAthleteRoutes(app: Express) {
           ).run(
             userId,
             currentUser.id,
-            accountCodeFor(userId, 'ATL', payload.region, payload.project)
+            accountCodeFor(userId, 'ATL', payload.project)
           );
           replaceAccountScope({
             userId,

@@ -84,8 +84,8 @@ const accountAccessUpdateSchema = z.strictObject({
         county: z.string().trim().max(120),
       })
     )
-    .min(1)
-    .max(100),
+    .max(100)
+    .default([]),
   projects: z.array(z.string().trim().min(1).max(100)).min(1).max(100),
   teams: z
     .array(
@@ -127,11 +127,10 @@ export function serializeAccount(row: AccountRow) {
     standardName: standardAccountName({
       displayName: row.displayName,
       role: row.role,
-      areas: permissions.areas,
       projects: permissions.projects,
       teams: permissions.teams,
     }),
-    areas: permissions.areas,
+    areas: row.role === 'ATL' ? permissions.areas : [],
     projects: permissions.projects,
     teams: permissions.teams,
   };
@@ -386,7 +385,7 @@ export function registerAccessRoutes(app: Express) {
           JSON.stringify({ from: { project: request.project, team: request.team }, to: input.data })
         );
         db.exec('COMMIT');
-        res.json({ message: '申请队伍已更正，请核对身份与行政归属后审核。' });
+        res.json({ message: '申请队伍已更正，请核对身份后审核。' });
       } catch {
         db.exec('ROLLBACK');
         res.status(500).json({ message: '申请队伍更正失败。' });
@@ -701,6 +700,7 @@ export function registerAccessRoutes(app: Express) {
       const gender = cleanString(req.body?.gender);
       const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
       const permissions = parseScopePayload(req.body);
+      if (role !== 'ATL') permissions.areas = [];
       const errors: string[] = [];
       if (displayNameResult.error) errors.push(displayNameResult.error);
       if (!canManageRole(currentUser.role, role))
@@ -711,8 +711,8 @@ export function registerAccessRoutes(app: Express) {
       if (!permissionsContain(accountPermissions(currentUser.id), permissions))
         errors.push('账号权限范围不能超出当前账号');
       if (role === 'ATL') {
-        if (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county') {
-          errors.push('运动员必须绑定一个省、市、区县');
+        if (permissions.areas.length && (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county')) {
+          errors.push('填写运动员生源地时请选择一个省、市、区县');
         }
         if (permissions.projects.length !== 1 || permissions.projects[0] === '*')
           errors.push('运动员必须绑定一个具体项目');
@@ -756,7 +756,7 @@ export function registerAccessRoutes(app: Express) {
             )
             .run(displayNameResult.name, project, team, teamRow.id, gender);
           athleteId = Number(athleteResult.lastInsertRowid);
-          upsertAthleteOrigin({
+          if (area) upsertAthleteOrigin({
             athleteId,
             province: area.province,
             city: area.city,
@@ -791,7 +791,7 @@ export function registerAccessRoutes(app: Express) {
         INSERT INTO account_profiles (user_id, parent_user_id, account_code)
         VALUES (?, ?, ?)
       `
-        ).run(userId, parentUserId, accountCodeFor(userId, role, area.province, project));
+        ).run(userId, parentUserId, accountCodeFor(userId, role, project));
         replaceAccountScope({ userId, role, parentUserId, permissions, grantedBy: currentUser.id });
         db.prepare(
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
@@ -826,7 +826,7 @@ export function registerAccessRoutes(app: Express) {
       const targetIdResult = z.coerce.number().int().positive().safeParse(req.params.id);
       const input = accountAccessUpdateSchema.safeParse(req.body);
       if (!targetIdResult.success || !input.success) {
-        return res.status(400).json({ message: '账号权限参数无效，请核对区域、项目和队伍。' });
+        return res.status(400).json({ message: '账号权限参数无效，请核对项目和队伍。' });
       }
       const targetId = targetIdResult.data;
       const target = userById(targetId);
@@ -835,6 +835,7 @@ export function registerAccessRoutes(app: Express) {
       }
       const { role, parentUserId } = input.data;
       const permissions = parseScopePayload(input.data);
+      if (target.role !== 'ATL') permissions.areas = [];
       const previousAreas = accountPermissions(targetId).areas;
       const scopeError =
         validateScopePayload(permissions) || validateAccountAreas(permissions.areas, previousAreas);
@@ -854,14 +855,14 @@ export function registerAccessRoutes(app: Express) {
         return res.status(400).json({ message: '上级账号不能选择本人。' });
       if (target.role === 'ATL') {
         if (
-          permissions.areas.length !== 1 ||
-          permissions.areas[0].areaLevel !== 'county' ||
+          (permissions.areas.length > 0 &&
+            (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county')) ||
           permissions.projects.length !== 1 ||
           permissions.projects[0] === '*' ||
           permissions.teams.length !== 1 ||
           permissions.teams[0].team === '*'
         ) {
-          return res.status(400).json({ message: '运动员必须绑定一个具体区县、项目和队伍。' });
+          return res.status(400).json({ message: '运动员必须绑定一个具体项目和队伍，填写生源地时须选择区县。' });
         }
       }
       if (role === 'SCC') {
@@ -897,9 +898,10 @@ export function registerAccessRoutes(app: Express) {
             .get(project, team) as { id: number } | undefined;
           if (!teamRow) throw new Error('所选队伍不存在或已停用。');
           db.prepare(
-            `UPDATE athletes SET project = ?, team_id = ?, team = ?, region = ?, city = ?, county = ? WHERE id = ?`
-          ).run(project, teamRow.id, team, area.province, area.city, area.county, target.athleteId);
-          upsertAthleteOrigin({
+            `UPDATE athletes SET project = ?, team_id = ?, team = ?, region = COALESCE(?, region),
+              city = COALESCE(?, city), county = COALESCE(?, county) WHERE id = ?`
+          ).run(project, teamRow.id, team, area?.province ?? null, area?.city ?? null, area?.county ?? null, target.athleteId);
+          if (area) upsertAthleteOrigin({
             athleteId: target.athleteId,
             province: area.province,
             city: area.city,
@@ -912,7 +914,7 @@ export function registerAccessRoutes(app: Express) {
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
         ).run(
           currentUser.id,
-          target.role === 'ATL' && !athleteAccountAreaComplete(previousAreas)
+          target.role === 'ATL' && permissions.areas.length && !athleteAccountAreaComplete(previousAreas)
             ? 'COMPLETE_ATHLETE_AREA'
             : 'UPDATE_ACCOUNT_ACCESS',
           'user',

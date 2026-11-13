@@ -149,16 +149,13 @@ describe('运动员注册行政归属', () => {
       county: '西湖区',
     });
   });
-  it('教练注册保留既有审核范围继承规则', () => {
+  it('教练注册只授予申请的项目和队伍', () => {
     db.exec("UPDATE registration_requests SET requested_role='SCC'");
     const result = activate(1, reviewer);
     if (!result.ok) throw new Error(result.message);
-    expect(area(result.userId)).toEqual({
-      area_level: 'national',
-      province: '',
-      city: '',
-      county: '',
-    });
+    expect(area(result.userId)).toBeUndefined();
+    expect(db.prepare('SELECT project,team FROM user_team_permissions WHERE user_id=?').get(result.userId))
+      .toEqual({ project: 'ROWING', team: '测试队' });
   });
   it('审核人超出项目队伍范围时拒绝开通', () => {
     db.exec("UPDATE user_team_permissions SET team='其他队'");
@@ -298,9 +295,9 @@ describe('P1 入队核实与审核范围', () => {
     });
     expect(db.prepare('SELECT * FROM athlete_origins').all()).toHaveLength(1);
   });
-  it.each(['REG', 'SCC'] as const)('%s 审核人区域不含推测归属时拒绝并回滚全部开通写入', (role) => {
+  it('教练角色开通失败且保留待审申请', () => {
     db.exec("UPDATE user_area_permissions SET area_level='province',province='四川'");
-    expect(activate(1, { ...reviewer, role })).toMatchObject({ ok: false, status: 403 });
+    expect(activate(1, { ...reviewer, role: 'SCC' })).toMatchObject({ ok: false, status: 403 });
     expect(db.prepare('SELECT * FROM athletes').all()).toEqual([]);
     expect(db.prepare('SELECT * FROM athlete_origins').all()).toEqual([]);
     expect(db.prepare('SELECT * FROM account_profiles').all()).toEqual([]);
@@ -308,10 +305,10 @@ describe('P1 入队核实与审核范围', () => {
       status: 'pending',
     });
   });
-  it('区域审核以已确认档案归属为准，籍贯不能绕过审核范围', () => {
+  it('跨省审核保留已确认档案生源地', () => {
     existingOrigin();
     db.exec("UPDATE user_area_permissions SET area_level='province',province='浙江'");
-    expect(activate(1, reviewer)).toMatchObject({ ok: false, status: 403 });
+    expect(activate(1, reviewer).ok).toBe(true);
     expect(db.prepare('SELECT province,source,quality FROM athlete_origins').get()).toEqual({
       province: '四川',
       source: 'manual',
@@ -338,16 +335,16 @@ describe('P1 入队核实与审核范围', () => {
       quality: 'estimated',
     });
   });
-  it('入队核实拒绝外队操作者及区域不覆盖的审核人', () => {
+  it('入队核实拒绝外队操作者，允许授权队伍的跨省审核', () => {
     expect(activate(1, null).ok).toBe(true);
     db.exec("UPDATE user_team_permissions SET team='其他队'");
     expect(verifyTeam(1, reviewer, true)).toMatchObject({ ok: false, status: 403 });
     db.exec(
       "UPDATE user_team_permissions SET team='测试队'; UPDATE user_area_permissions SET area_level='province',province='四川'"
     );
-    expect(verifyTeam(1, reviewer, false)).toMatchObject({ ok: false, status: 403 });
+    expect(verifyTeam(1, reviewer, true).ok).toBe(true);
     expect(db.prepare('SELECT source,active FROM athletes').get()).toEqual({
-      source: 'self_registered',
+      source: 'registration_verified',
       active: 1,
     });
   });
@@ -544,7 +541,7 @@ describe('教练新增队伍激活', () => {
   });
 });
 
-it('教练不能访问注册审核接口，区域管理员不能处理辖区外申请', async () => {
+it('教练不能访问注册审核接口，业务负责人不能处理授权队伍外的申请', async () => {
   db.exec("UPDATE users SET role='SCC' WHERE id=1");
   for (const [path, method, body] of [
     ['', 'GET', undefined],
@@ -558,7 +555,7 @@ it('教练不能访问注册审核接口，区域管理员不能处理辖区外�
   ] as const) {
     expect((await callRegistration(path, method, body)).status).toBe(403);
   }
-  db.exec("UPDATE users SET role='REG' WHERE id=1; UPDATE user_area_permissions SET area_level='province',province='四川'");
+  db.exec("UPDATE users SET role='REG' WHERE id=1; UPDATE user_team_permissions SET team='其他队' WHERE user_id=1");
   const list = await callRegistration('');
   expect(await list.json()).toMatchObject({ requests: [], pending: 0 });
   expect((await callRegistration('/1/name', 'PUT', { name: '测试姓名' })).status).toBe(403);

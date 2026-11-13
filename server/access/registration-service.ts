@@ -5,7 +5,6 @@ import { isProject } from '../../shared/projects.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import {
   accountPermissions,
-  areaAllowsAthlete,
   canManageAccount,
   initializeAccountScope,
   permissionsAllowProjectTeam,
@@ -96,47 +95,7 @@ export function canReviewRegistration(
   if (linked && (linked.role !== 'ATL' || request.requestedRole !== 'ATL'))
     return canManageAccount(reviewer, linked);
 
-  if (!permissionsAllowProjectTeam(permissions, request.project, request.team)) return false;
-  // 教练注册没有行政归属字段，缺少归属的申请由全国范围审核人处理。
-  const estimated = request.requestedRole === 'ATL'
-    ? registrationOrigin(request.nativePlace)
-    : { province: '', city: '', county: '' };
-  const origin = linked?.athleteId
-    ? db.prepare('SELECT province, city, county FROM athlete_origins WHERE athlete_id=?')
-        .get(linked.athleteId) as Origin | undefined
-    : request.requestedRole === 'ATL' && request.status === 'pending'
-      ? db.prepare(`SELECT ao.province, ao.city, ao.county FROM athletes a
-          JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
-          JOIN athlete_origins ao ON ao.athlete_id=a.id AND ao.quality='valid'
-          WHERE a.name=? AND a.project=? AND pt.name=?`)
-          .get(request.displayName, request.project, request.team) as Origin | undefined
-      : undefined;
-  const { province, city, county } = origin ?? estimated;
-  return permissions.areas.some((area) =>
-    areaAllowsAthlete(area, {
-      id: 0, region: province, city, county, project: request.project, team: request.team,
-    })
-  );
-}
-
-function assertReviewerArea(reviewer: AuthUser, origin: Origin, project: string, team: string) {
-  if (
-    !accountPermissions(reviewer.id).areas.some((area) =>
-      areaAllowsAthlete(area, {
-        id: 0,
-        region: origin.province,
-        city: origin.city,
-        county: origin.county,
-        project,
-        team,
-      })
-    )
-  ) {
-    throw new RegistrationActivationError(
-      '运动员行政归属超出当前账号的管辖范围，请由覆盖该区域的上级核对。',
-      403
-    );
-  }
+  return permissionsAllowProjectTeam(permissions, request.project, request.team);
 }
 
 export function activateRegistrationRequest(
@@ -284,7 +243,6 @@ export function activateRegistrationRequest(
       const origin = db
         .prepare('SELECT province,city,county FROM athlete_origins WHERE athlete_id=?')
         .get(athleteId) as Origin;
-      if (reviewer) assertReviewerArea(reviewer, origin, request.project, request.team);
       db.prepare('UPDATE athletes SET region=?,city=?,county=? WHERE id=?').run(
         origin.province,
         origin.city,
@@ -334,21 +292,9 @@ export function activateRegistrationRequest(
         request.coach_category ?? DEFAULT_COACH_CATEGORY
       );
     }
-    let accountArea = reviewer
-      ? accountPermissions(reviewer.id).areas[0] || {
-          areaLevel: 'national' as AreaLevel,
-          province: '',
-          city: '',
-          county: '',
-        }
-      : {
-          areaLevel: 'national' as AreaLevel,
-          province: '',
-          city: '',
-          county: '',
-        };
+    let accountArea = { areaLevel: 'national' as AreaLevel, province: '', city: '', county: '' };
     if (request.requested_role === 'ATL') {
-      // 账号范围取正式归属或注册推测归属；缺失区县仍明确标记待完善。
+      // 保留正式归属或注册推测归属；缺失区县仍明确标记待完善。
       const origin = db
         .prepare('SELECT province, city, county FROM athlete_origins WHERE athlete_id = ?')
         .get(athleteId) as { province: string; city: string; county: string } | undefined;
@@ -425,7 +371,6 @@ export function verifyRegistrationTeam(
   }
   db.exec('BEGIN');
   try {
-    assertReviewerArea(reviewer, candidate, candidate.project, candidate.team);
     if (approved) {
       db.prepare("UPDATE athletes SET source='registration_verified' WHERE id=?").run(
         candidate.athleteId

@@ -94,13 +94,12 @@ describe('独立添加运动员页面', () => {
     expect(page.data.error).toContain('同名'); expect(wx.disableAlertBeforeUnload).not.toHaveBeenCalled();
     await page.save(); expect(api.createAthlete).toHaveBeenCalledTimes(2);
   });
-  it('区域管理者选择授权行政归属，保存进入原有行政查询范围', async () => {
-    const { page, api } = createPage({ me: async () => ({ user: { role: 'REG' } }),
-      athleteCreateOptions: async () => ({ teams, areas: [{ areaLevel: 'province', province: '四川', city: '', county: '' }] }) }, { project: 'ROWING', teamId: 10 });
+  it('业务负责人只需有队伍权限即可新增运动员', async () => {
+    const { page, api } = createPage({ me: async () => ({ user: { role: 'REG' } }) },
+      { project: 'ROWING', teamId: 10 });
     await page.loadPage(); input(page, 'name', '新建队员'); await page.save();
-    expect(page.data.fieldErrors.area).toBeTruthy();
-    page.areaChange({ detail: { value: 1 } }); await page.save();
-    expect(api.createAthlete).toHaveBeenCalledWith(expect.objectContaining({ region: '四川', city: '', county: '' }));
+    expect(api.createAthlete).toHaveBeenCalledWith(expect.objectContaining({ project: 'ROWING' }));
+    expect(api.createAthlete.mock.calls[0][0]).not.toHaveProperty('region');
   });
   it('日期格式验证和页面注册，表单不包含证件及账号字段', async () => {
     const { page, api } = createPage({}, { project: 'ROWING', teamId: 10 });

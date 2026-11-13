@@ -323,7 +323,6 @@ export function registerDataImportRoutes(app: Express) {
           mimetype: req.file.mimetype,
           project,
           defaultDate: cleanString(req.body?.defaultDate),
-          defaultArea: scope.defaultArea,
           userId: req.authUser!.id,
           athletes,
           allowedTeams: scope.allowedTeams,
@@ -364,7 +363,7 @@ export function registerDataImportRoutes(app: Express) {
     authorizeImportBatch(user, id);
     const permissions = accountPermissions(user.id);
     const pending = db.prepare('SELECT project,team,region,city,county FROM data_import_athlete_candidates WHERE batch_id=? AND matched_athlete_id IS NULL AND created_athlete_id IS NULL').all(id) as Array<{ project: string; team: string; region: string; city: string; county: string }>;
-    if (pending.some(person => !person.team || !permissionsAllowAthlete(permissions, { ...person, id: 0 }))) throw new ImportRequestError('该草稿人员范围无法按当前权限确认，已保留。', 403);
+    if (pending.some(person => !person.team || !permissionsAllowAthlete(permissions, person))) throw new ImportRequestError('该草稿人员范围无法按当前权限确认，已保留。', 403);
   };
   app.get('/api/data-import/draft-cleanup', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     res.setHeader('Cache-Control', 'no-store');

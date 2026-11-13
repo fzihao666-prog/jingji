@@ -83,7 +83,7 @@ export function registerEnodeRoutes(app: Express) {
               project,
               userId: req.authUser!.id,
               teams: scope.allowedTeams,
-              area: scope.defaultArea,
+              area: { region: '未设置', city: '未设置', county: '未设置' },
             })
           );
         } catch (error) {

@@ -12,15 +12,14 @@ export function registerTrainingPlanCatalogRoutes(app: Express) {
     const plans = readTrainingPlanCatalog(db, {
       athleteIds: accessibleAthleteIds(user),
       normalizeTrainingPlan: readStoredTrainingPlanData,
-      // 旧专项计划只有项目归属；项目授权不代表全队、全地区授权。
+      // 旧专项计划只有项目归属；项目授权不代表全部队伍授权。
       canReadProjectPlan: (project, creatorId) =>
         user.role !== 'ATL' &&
         (permissions.projects.includes('*') || permissions.projects.includes(project)) &&
         (creatorId === user.id ||
-          (permissions.areas.some((area) => area.areaLevel === 'national') &&
-            permissions.teams.some(
-              (team) => (team.project === '*' || team.project === project) && team.team === '*'
-            ))),
+          permissions.teams.some(
+            (team) => (team.project === '*' || team.project === project) && team.team === '*'
+          )),
     });
     res.json({ plans });
   });

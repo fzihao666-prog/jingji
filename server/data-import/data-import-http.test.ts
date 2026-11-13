@@ -196,17 +196,17 @@ it('真实HTTP校对后并发更新拒绝覆盖，权限外队伍拒绝建档', 
 });
 
 
-it('人员确认后撤回行政授权，最终HTTP提交拒绝新建及业务写入', async () => {
+it('人员确认后撤回队伍授权，最终HTTP提交拒绝新建及业务写入', async () => {
   const batch = await upload([['姓名', '所属队伍', '日期', '睡眠小时'], ['撤权虚构新人', 'HTTP甲队', '2026-10-09', 8]], '每日恢复');
   expect((await request(`/batches/${batch.id}/athletes`, 'PUT', { corrections: [{ id: batch.athleteCandidates[0].id, confirmed: true }] })).status).toBe(200);
   const previousCount = db.prepare('SELECT COUNT(*) AS count FROM daily_wellness').get();
-  db.prepare('DELETE FROM user_area_permissions WHERE user_id = 701').run();
+  db.prepare('DELETE FROM user_team_permissions WHERE user_id = 701').run();
   try {
     expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(403);
     expect(db.prepare("SELECT COUNT(*) AS count FROM athletes WHERE name = '撤权虚构新人'").get()).toEqual({ count: 0 });
     expect(db.prepare('SELECT COUNT(*) AS count FROM daily_wellness').get()).toEqual(previousCount);
   } finally {
-    db.prepare("INSERT INTO user_area_permissions (user_id, area_level, granted_by) VALUES (701, 'national', 701)").run();
+    db.prepare("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (701, 'ROWING', 'HTTP甲队', 701)").run();
   }
 });
 
@@ -344,7 +344,7 @@ it('P0 HTTP：修订号必需，过期保存/人员确认/提交返回409且不�
   const current = await request(`/batches/${batch.id}`);
   expect(current.body.batch!.items[0].payload.sleepHours).toBe(9);
   expect(current.body.batch!.revision).toBe(1);
-  expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE wellness_date='2026-11-11'").get()).toEqual({ count: 0 });
+  expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE athlete_id=701 AND wellness_date='2026-11-11'").get()).toEqual({ count: 0 });
   expect((await request(`/batches/${batch.id}/commit`, 'POST', { expectedRevision: 1 })).status).toBe(200);
   expect((await request(`/batches/${batch.id}/commit`, 'POST', { expectedRevision: 0 })).status).toBe(200);
 });
@@ -400,7 +400,7 @@ it('P0 HTTP：相同文件不同账号独立，重复上传本人旧稿不串账
 
 it('P0 HTTP：事务中的授权变化使正式写入整体回滚', async () => {
   const batch = await upload([['姓名', '日期', '睡眠小时'], ['虚构队员', '2026-11-14', 8]], '每日恢复');
-  db.exec("CREATE TRIGGER p0_revoke_in_transaction AFTER INSERT ON daily_wellness WHEN NEW.wellness_date='2026-11-14' BEGIN DELETE FROM user_area_permissions WHERE user_id=701; END");
+  db.exec("CREATE TRIGGER p0_revoke_in_transaction AFTER INSERT ON daily_wellness WHEN NEW.wellness_date='2026-11-14' BEGIN DELETE FROM user_team_permissions WHERE user_id=701; END");
   try {
     expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(403);
     expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE wellness_date='2026-11-14'").get()).toEqual({ count: 0 });
@@ -420,16 +420,16 @@ it('P0 HTTP：运动员停用后已提交历史批次也不能向普通教练泄
   } finally { db.prepare('UPDATE athletes SET active=1 WHERE id=701').run(); }
 });
 
-it('P0 HTTP：旧草稿没有权限快照时，待建档人员也按当前地域范围保护', async () => {
+it('P0 HTTP：旧草稿没有权限快照时，待建档人员也按当前队伍范围保护', async () => {
   const batch = await upload([['姓名', '所属队伍', '日期', '睡眠小时'], ['旧草稿虚构新人', 'HTTP甲队', '2026-11-16', 8]], '每日恢复');
   db.prepare("UPDATE data_import_batches SET summary_json=json_remove(summary_json,'$.accessTeams','$.revision') WHERE id=?").run(batch.id);
   expect((await request(`/batches/${batch.id}`)).body.batch!.revision).toBe(0);
-  db.prepare("UPDATE user_area_permissions SET area_level='province',province='广东' WHERE user_id=701").run();
+  db.prepare("UPDATE user_team_permissions SET team='HTTP乙队' WHERE user_id=701").run();
   try {
     const result = await request(`/batches/${batch.id}/errors`);
     expect(result.status).toBe(403);
     expect(JSON.stringify(result.body)).not.toContain('旧草稿虚构新人');
-  } finally { db.prepare("UPDATE user_area_permissions SET area_level='national',province='' WHERE user_id=701").run(); }
+  } finally { db.prepare("UPDATE user_team_permissions SET team='HTTP甲队' WHERE user_id=701").run(); }
   expect((await request(`/batches/${batch.id}`)).status).toBe(200);
 });
 
