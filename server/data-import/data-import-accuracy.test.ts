@@ -139,7 +139,7 @@ it('同协议更新数值与目标且保留空白元数据，不同协议独立�
   const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '力量素质测试', 'single_leg_squat_reps', 25, '次', '旧协议', 15, 35, '']] });
   expect(changed.errorCount).toBe(0);
   expect(importReviewGroups(changed.items)).toEqual([]);
-  expect(commit(changed.id, 'skip').updatedRecords).toBe(1);
+  expect(commit(changed.id, 'update').updatedRecords).toBe(1);
   expect(db.prepare('SELECT m.value_num, m.target_value, m.note, s.protocol, s.duration_min FROM test_measurements m JOIN test_sessions s ON s.id = m.test_session_id').get()).toEqual({ value_num: 25, target_value: 35, note: '原备注', protocol: '旧协议', duration_min: 15 });
   const { buildUnifiedDataExport } = await import('./data-import-export.ts');
   const workbook = await buildUnifiedDataExport(PROJECT, [1]);
@@ -147,6 +147,26 @@ it('同协议更新数值与目标且保留空白元数据，不同协议独立�
   expect(roundtrip.items.filter(item => item.itemType === 'test_measurement').map(item => item.valueNum)).toEqual([25]);
   expect(roundtrip.items.flatMap(item => item.messages).some(message => message.includes('255'))).toBe(false);
   expect(commit(roundtrip.id, 'skip').updatedRecords).toBe(0);
+});
+
+it.each([[12, 12, 0], [null, 15, 1]])('跳过冲突保留成绩，测试时长 %s 只补空缺', (initial, expected, filled) => {
+  const headers = ['姓名', '测试日期', '测试类型', '指标代码', '数值', '单位', '协议', '测试时长分钟'];
+  commit(analyze({ 其他测试: [headers, ['张某', '2026-02-13', '专项测试', 'grip', 30, 'kg', 'A', initial]] }).id, 'update');
+  const changed = analyze({ 其他测试: [headers, ['张某', '2026-02-13', '专项测试', 'grip', 35, 'kg', 'A', 15]] });
+  const result = commit(changed.id, 'skip');
+  expect(result.updatedRecords).toBe(filled);
+  expect(result.filledProfileFields).toBe(filled);
+  expect(db.prepare('SELECT value_num FROM test_measurements').get()).toEqual({ value_num: 30 });
+  expect(db.prepare('SELECT duration_min FROM test_sessions').get()).toEqual({ duration_min: expected });
+});
+
+it('在工作表转换前拒绝过大的工作表范围', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([['姓名']]);
+  sheet['!ref'] = 'A1:T20001';
+  XLSX.utils.book_append_sheet(workbook, sheet, '测试指标');
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  expect(() => analyze({}, { buffer })).toThrow(/单元格范围.*过大/);
 });
 
 it('力量组次、伤病和竞技评估统一自动更新，零值有效，空白文本不清空', () => {

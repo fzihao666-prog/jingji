@@ -490,7 +490,7 @@ export function registerDataImportRoutes(app: Express) {
     (req, res) => {
       try {
         const conflictPolicy =
-          cleanString(req.body?.conflictPolicy) === 'update' ? 'update' : 'skip';
+          cleanString(req.body?.conflictPolicy) === 'skip' ? 'skip' : 'update';
         authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
         const scope = dataImportScope(req.authUser!, batch.project);

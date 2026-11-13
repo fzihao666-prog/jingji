@@ -1,3 +1,4 @@
+import { assertImportWorkbookSize } from './import-workbook-limits.ts';
 import { isIdentityField } from '../core/identity-removal.ts';
 import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey } from '../../shared/compact-athlete-template.ts';
 import { trainingContext } from '../../shared/training-context.ts';
@@ -1748,9 +1749,10 @@ function consolidateImportFacts(items: ParsedImportItem[]) {
   return items;
 }
 
-function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string): Matrix {
+function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string, range: XLSX.Range | undefined): Matrix {
   return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
     header: 1,
+    range,
     raw: true,
     defval: null,
     blankrows: true,
@@ -2161,6 +2163,7 @@ export function analyzeDataImport(input: {
     assertImportRevision(replacing.id, input.userId, input.expectedRevision);
     fileHash = replacing.fileHash;
   }
+  assertImportWorkbookSize(input.buffer);
   const workbook = XLSX.read(input.buffer, {
     type: 'buffer',
     cellDates: true,
@@ -2175,10 +2178,22 @@ export function analyzeDataImport(input: {
   let unfilledRows = 0;
   const batchId = replacing?.id || randomUUID();
   const batchVersion = `IMPORT-${new Date().toISOString().slice(0, 10)}-${batchId.slice(0, 8)}`;
+  let cellCount = 0;
   for (const sheetName of workbook.SheetNames) {
-    const matrix = matrixForSheet(workbook, sheetName);
-    const cellCount = matrix.reduce((sum, row) => sum + row.length, 0);
-    if (cellCount > 400_000) throw new Error(`工作表“${sheetName}”单元格范围过大，已拒绝解析。`);
+    const reference = workbook.Sheets[sheetName]?.['!ref'];
+    const range = reference ? XLSX.utils.decode_range(reference) : undefined;
+    if (range) {
+      const { s, e } = range;
+      const rows = e.r - s.r + 1;
+      const columns = e.c - s.c + 1;
+      const cells = rows * columns;
+      if (s.r < 0 || s.c < 0 || e.r >= 1_048_576 || e.c >= 16_384 ||
+          !Number.isSafeInteger(cells) || rows < 1 || columns < 1 || cells > 400_000)
+        throw new Error(`工作表“${sheetName}”单元格范围无效或过大，已拒绝解析。`);
+      cellCount += cells;
+      if (cellCount > 1_000_000) throw new Error('工作簿单元格范围合计超过 100 万，已拒绝解析。');
+    }
+    const matrix = matrixForSheet(workbook, sheetName, range);
     const firstRows = matrix.slice(0, 6).flat().map(text).join('|');
     let parsed: ParsedImportItem[] = [];
     let type = '';
@@ -3673,12 +3688,17 @@ function upsertTestItem(
   const existingConflict = detectItemConflict(item);
   if (existingConflict.identical && existingConflict.entityType === 'test_measurement' && existingConflict.entityId !== null)
     return { skipped: true, entityId: existingConflict.entityId, created: false, filled: 0, overwritten: 0 };
-  const sessionFields = existingConflict.fields.filter(field => ['protocol', 'durationMin'].includes(field.field) && (field.overwrites || field.oldValue === ''));
-  const policy = resolveItemPolicy(item, batchPolicy);
-  const durationMin = optionalNumber(item.payload.durationMin);
-  const validDurationMin = durationMin !== null && durationMin > 0 ? durationMin : null;
-  const session = saveTestSession(db, { ...importedTestIdentity(item), source: 'file_import',
-    durationMin: validDurationMin, quality: item.quality === 'warning' ? 'partial' : 'valid', createdBy: userId });
+  const identity = importedTestIdentity(item);
+  const stored = findTestSession(db, identity);
+  const policy = item.resolution === 'update' ? 'update' : batchPolicy;
+  const duration = optionalNumber(item.payload.durationMin);
+  const durationMin = duration !== null && duration > 0 &&
+    (policy === 'update' || stored?.durationMin == null) ? duration : null;
+  const durationChanged = stored !== undefined && durationMin !== null && stored.durationMin !== durationMin;
+  const durationFilled = durationChanged && stored.durationMin === null ? 1 : 0;
+  const durationOverwritten = Number(durationChanged) - durationFilled;
+  const session = saveTestSession(db, { ...identity, source: 'file_import',
+    durationMin, quality: item.quality === 'warning' ? 'partial' : 'valid', createdBy: userId });
   const existing = db
     .prepare(
       'SELECT id, value_num AS valueNum, target_value AS targetValue, unit, note FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
@@ -3692,14 +3712,14 @@ function upsertTestItem(
     const keys = ['valueNum', 'targetValue', 'unit', 'note'] as const;
     const changed = keys.filter(key => isProvided(proposed[key]) && !importReviewValuesEqual(proposed[key], existing[key])
       && (policy === 'update' || !isProvided(existing[key])));
-    if (!changed.length) return { skipped: sessionFields.length === 0, entityId: existing.id, created: false, filled: sessionFields.filter(field => field.oldValue === '').length, overwritten: sessionFields.filter(field => field.overwrites).length };
+    if (!changed.length) return { skipped: !durationChanged, entityId: existing.id, created: false, filled: durationFilled, overwritten: durationOverwritten };
     const next = { ...existing };
     for (const key of changed) Object.assign(next, { [key]: proposed[key] });
     db.prepare(`UPDATE test_measurements SET value_num = ?, target_value = ?, unit = ?, note = ?, quality = ?, source = 'file_import', is_demo = 0,
       data_import_batch_id = ?, source_ref = ? WHERE id = ?`).run(next.valueNum, next.targetValue, next.unit, next.note,
       item.quality === 'warning' ? 'partial' : 'valid', batchId, `${item.sourceSheet}!${item.sourceAddress}`, existing.id);
     const filled = changed.filter(key => !isProvided(existing[key])).length;
-    return { skipped: false, entityId: existing.id, created: false, filled, overwritten: changed.length - filled };
+    return { skipped: false, entityId: existing.id, created: false, filled: filled + durationFilled, overwritten: changed.length - filled + durationOverwritten };
   }
   const inserted = db
     .prepare(
