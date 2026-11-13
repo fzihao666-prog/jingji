@@ -1144,7 +1144,12 @@
   }
 
   .team-create-panel {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-create-panel .primary-button {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 
   .weekday-row,
