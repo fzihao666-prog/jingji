@@ -105,52 +105,54 @@ export function TeamsPage() {
         <ContentState kind="loading" title="正在加载队伍目录…" />
       ) : (
         <section className="team-project-grid">
-          {PROJECTS.filter(
-            (item) =>
-              teams.some((team) => team.project === item) || canCreateProjects.includes(item)
-          ).map((item) => {
-            const projectTeams = teams.filter((team) => team.project === item);
-            return (
-              <article className="team-project-card" key={item}>
-                <header>
-                  <div>
-                  <strong>{projectLabel(item)}</strong>
-                    <small>{projectTeams.length}支队伍</small>
+          {PROJECTS.map((item) => ({
+            item,
+            projectTeams: teams.filter((team) => team.project === item),
+          }))
+            .filter(({ item, projectTeams }) => projectTeams.length || canCreateProjects.includes(item))
+            .sort((left, right) => right.projectTeams.length - left.projectTeams.length)
+            .map(({ item, projectTeams }) => {
+              return (
+                <article className="team-project-card" key={item}>
+                  <header>
+                    <div>
+                    <strong>{projectLabel(item)}</strong>
+                      <small>{projectTeams.length}支队伍</small>
+                    </div>
+                  </header>
+                  <div className="team-directory-list">
+                    {projectTeams.length ? (
+                      projectTeams.map((team) => (
+                        <div key={team.id}>
+                          <span>
+                            <UsersRound size={15} />
+                            <strong>{team.name}</strong>
+                            <small>
+                              {team.athleteCount > 0
+                                ? `${team.athleteCount}名运动员 · 仍有运动员，不能删除`
+                                : `${team.athleteCount}名运动员`}
+                            </small>
+                          </span>
+                          {team.canDelete && (
+                            <button
+                              className="icon-button"
+                              onClick={() => void remove(team)}
+                              disabled={team.athleteCount > 0}
+                              title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'}
+                              aria-label={`删除${team.name}`}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p>暂无队伍，可在上方添加。</p>
+                    )}
                   </div>
-                </header>
-                <div className="team-directory-list">
-                  {projectTeams.length ? (
-                    projectTeams.map((team) => (
-                      <div key={team.id}>
-                        <span>
-                          <UsersRound size={15} />
-                          <strong>{team.name}</strong>
-                          <small>
-                            {team.athleteCount > 0
-                              ? `${team.athleteCount}名运动员 · 仍有运动员，不能删除`
-                              : `${team.athleteCount}名运动员`}
-                          </small>
-                        </span>
-                        {team.canDelete && (
-                          <button
-                            className="icon-button"
-                            onClick={() => void remove(team)}
-                            disabled={team.athleteCount > 0}
-                            title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'}
-                            aria-label={`删除${team.name}`}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <p>暂无队伍，可在上方添加。</p>
-                  )}
-                </div>
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
         </section>
       )}
     </PageContainer>
