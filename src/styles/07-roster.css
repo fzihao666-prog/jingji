@@ -330,28 +330,28 @@
   font-size: 8px;
 }
 
-.team-create-panel {
-  margin-bottom: 14px;
-  padding: 18px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 190px) minmax(0, 1fr) auto;
-  align-items: end;
+.team-directory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
+  margin-bottom: 14px;
+}
+
+.team-create-panel {
+  max-width: 100%;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 128px) minmax(0, 176px) auto;
+  align-items: end;
+  gap: 8px;
   border: 1px solid #d5e2e4;
   border-radius: 13px;
   background: #fff;
-  box-shadow: 0 10px 30px rgb(14 55 68 / 4%);
 }
 
 .team-total-count {
-  align-self: end;
-  justify-self: start;
-  min-height: 42px;
   white-space: nowrap;
-}
-
-.team-total-row {
-  margin-bottom: 14px;
 }
 
 .team-create-panel label span {

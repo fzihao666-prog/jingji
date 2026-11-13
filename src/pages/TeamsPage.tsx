@@ -70,36 +70,36 @@ export function TeamsPage() {
     <PageContainer className="teams-page">
       <PageHeader variant="compact" title="队伍管理" />
 
-      {canCreateProjects.length > 0 ? (
-        <form className="team-create-panel" onSubmit={create}>
-          {teamCount}
-          <label>
-            <span>所属项目</span>
-            <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
-              {canCreateProjects.map((item) => (
-                <option key={item} value={item}>{projectLabel(item)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>队伍名称</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="如：女子双桨组"
-              minLength={2}
-              maxLength={30}
-              required
-            />
-          </label>
-          <button type="submit" className="primary-button" disabled={busy}>
-            <Plus size={16} aria-hidden="true" />
-            {busy ? '添加中…' : '添加队伍'}
-          </button>
-        </form>
-      ) : (
-        <div className="team-total-row">{teamCount}</div>
-      )}
+      <div className="team-directory-toolbar">
+        {teamCount}
+        {canCreateProjects.length > 0 && (
+          <form className="team-create-panel" onSubmit={create}>
+            <label>
+              <span>所属项目</span>
+              <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
+                {canCreateProjects.map((item) => (
+                  <option key={item} value={item}>{projectLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>队伍名称</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="如：女子双桨组"
+                minLength={2}
+                maxLength={30}
+                required
+              />
+            </label>
+            <button type="submit" className="primary-button" disabled={busy}>
+              <Plus size={16} aria-hidden="true" />
+              {busy ? '添加中…' : '添加队伍'}
+            </button>
+          </form>
+        )}
+      </div>
       {message && <div className="message-banner success">{message}</div>}
 
       {loading ? (
