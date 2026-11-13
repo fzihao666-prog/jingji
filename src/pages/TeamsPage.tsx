@@ -59,21 +59,20 @@ export function TeamsPage() {
     }
   };
 
+  const teamCount = (
+    <span className="count-chip large team-total-count">
+      <Layers3 size={17} aria-hidden="true" />
+      {teams.length}支队伍
+    </span>
+  );
+
   return (
     <PageContainer className="teams-page">
-      <PageHeader
-        variant="compact"
-        title="队伍管理"
-        actions={
-          <span className="count-chip large">
-            <Layers3 size={17} />
-            {teams.length}支队伍
-          </span>
-        }
-      />
+      <PageHeader variant="compact" title="队伍管理" />
 
-      {canCreateProjects.length > 0 && (
+      {canCreateProjects.length > 0 ? (
         <form className="team-create-panel" onSubmit={create}>
+          {teamCount}
           <label>
             <span>所属项目</span>
             <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
@@ -93,11 +92,13 @@ export function TeamsPage() {
               required
             />
           </label>
-          <button className="primary-button" disabled={busy}>
-            <Plus size={17} />
+          <button type="submit" className="primary-button" disabled={busy}>
+            <Plus size={16} aria-hidden="true" />
             {busy ? '添加中…' : '添加队伍'}
           </button>
         </form>
+      ) : (
+        <div className="team-total-row">{teamCount}</div>
       )}
       {message && <div className="message-banner success">{message}</div>}
 
