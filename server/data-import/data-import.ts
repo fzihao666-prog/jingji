@@ -2699,20 +2699,25 @@ export function getDataImportBatch(
   };
 }
 
-export function listDataImportBatches(project: string, userId: number) {
-  return (
-    db
-      .prepare(
-        `
+export function listDataImportBatches(project: string, userId: number, canView: (id: string) => boolean) {
+  const rows = db
+    .prepare(
+      `
     SELECT id, source_filename AS filename, project, status, parser_version AS parserVersion,
       item_count AS itemCount, valid_count AS validCount, warning_count AS warningCount,
       error_count AS errorCount, imported_count AS importedCount, skipped_count AS skippedCount,
       created_at AS createdAt, committed_at AS committedAt
-    FROM data_import_batches WHERE project = ? AND created_by = ? ORDER BY created_at DESC LIMIT 30
+    FROM data_import_batches WHERE project = ? AND created_by = ? ORDER BY created_at DESC, rowid DESC
   `
-      )
-      .all(project, userId) as Record<string, unknown>[]
-  ).map((row) => ({
+    )
+    .iterate(project, userId);
+  const visible = [];
+  for (const row of rows) {
+    if (!canView(text(row.id))) continue;
+    visible.push(row);
+    if (visible.length === 30) break;
+  }
+  return visible.map((row) => ({
     id: text(row.id),
     filename: normalizeImportFilename(text(row.filename)),
     project: text(row.project),

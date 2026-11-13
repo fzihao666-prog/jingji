@@ -355,7 +355,20 @@ export function registerDataImportRoutes(app: Express) {
         return res.status(400).json({ message: '请选择有效的运动项目。' });
       if (!dataImportScope(req.authUser!, project).allowed)
         return res.status(403).json({ message: '当前账号无权查看该项目的导入记录。' });
-      res.json({ batches: listDataImportBatches(project, req.authUser!.id) });
+      const user = req.authUser!;
+      const candidates = dataImportCandidates(user);
+      const batches = listDataImportBatches(project, user.id, id => {
+        try {
+          assertDataImportBatchAccess(user, id, candidates);
+          return true;
+        } catch (error) {
+          if (error instanceof ImportRequestError && (error.status === 403 || error.status === 404))
+            return false;
+          throw error;
+        }
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ batches });
     }
   );
 

@@ -33,12 +33,12 @@ describe('独立导入出生日期', () => {
 
 it('历史批次列表恢复乱码文件名，并保留项目和账号筛选', () => {
   const filename = '赛艇训练数据.xlsx';
-  const all = vi
+  const iterate = vi
     .fn()
     .mockReturnValue([
       { id: 'batch-1', filename: Buffer.from(filename).toString('latin1'), project: '赛艇' },
     ]);
-  vi.mocked(db.prepare).mockReturnValue({ all } as unknown as ReturnType<typeof db.prepare>);
-  expect(listDataImportBatches('赛艇', 7)[0].filename).toBe(filename);
-  expect(all).toHaveBeenCalledWith('赛艇', 7);
+  vi.mocked(db.prepare).mockReturnValue({ iterate } as unknown as ReturnType<typeof db.prepare>);
+  expect(listDataImportBatches('赛艇', 7, () => true)[0].filename).toBe(filename);
+  expect(iterate).toHaveBeenCalledWith('赛艇', 7);
 });

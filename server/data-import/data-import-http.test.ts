@@ -153,6 +153,31 @@ async function upload(rows: unknown[][], sheet = '身体测量', team?: string) 
   return response.body.batch!;
 }
 
+it('收回部分队伍权限后，历史列表只返回仍有权限的批次', async () => {
+  const path = '/batches?project=ROWING';
+  const headers = ['姓名', '测量日期', '身高cm'];
+  const visible = await upload([headers, ['虚构队员', '2026-02-10', 180]], '身体测量', 'HTTP甲队');
+  const revoke = () => db.prepare("DELETE FROM user_team_permissions WHERE user_id=701 AND team='HTTP乙队'").run();
+  db.prepare("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (701, 'ROWING', 'HTTP乙队', 701)").run();
+  try {
+    const hidden = await upload([headers, ['虚构乙队新人', '2026-02-10', 175]], '身体测量', 'HTTP乙队');
+    const list = async () => {
+      const result = await request(path);
+      expect(result.status).toBe(200);
+      return (result.body as { batches?: Array<{ id: string }> }).batches?.map(batch => batch.id);
+    };
+    expect(await list()).toEqual(expect.arrayContaining([visible.id, hidden.id]));
+    expect((await request(path, 'GET', undefined, otherToken)).body).toEqual({ batches: [] });
+    revoke();
+    expect((await request(`/batches/${hidden.id}`)).status).toBe(403);
+    const remaining = await list();
+    expect(remaining).toContain(visible.id);
+    expect(remaining).not.toContain(hidden.id);
+  } finally {
+    revoke();
+  }
+});
+
 it('名单使用页面队伍，忽略旧队伍列并阻止关联其他队伍编号', async () => {
   const denied = new FormData();
   denied.set('project', 'ROWING');
