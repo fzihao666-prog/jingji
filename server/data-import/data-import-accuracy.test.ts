@@ -55,6 +55,21 @@ const athletes: ImportAthlete[] = [
   { id: 3, name: '钱某', project: PROJECT, team: 'A队', gender: '男', birthDate: '' },
 ];
 
+it('档案导入保留 Excel 耗时显示值和毫秒精度', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['姓名', '最好成绩', '出生日期'],
+    ['张某', 98.83 / 86400, '1990-01-01'],
+  ]);
+  sheet.B2.z = 'm:ss.000';
+  XLSX.utils.book_append_sheet(workbook, sheet, '运动员基本资料');
+  const batch = analyze({}, { buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) });
+  expect(batch.items.find(item => item.itemType === 'athlete_profile')?.payload).toMatchObject({
+    bestResult: '1:38.830',
+    birthDate: '1990-01-01',
+  });
+});
+
 const commit = (batchId: string, conflictPolicy: 'skip' | 'update', allowedTeams?: Set<string>) =>
   commitDataImport({
     batchId,

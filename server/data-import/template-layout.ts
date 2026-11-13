@@ -67,7 +67,7 @@ export function addTemplateSheet(
     column.hidden = field.key === '系统运动员编号';
     column.width = /备注|协议|内容|地址|姓名|组合/.test(field.key) ? 28 : 22;
     if (/日期/.test(field.key)) column.numFmt = 'yyyy-mm-dd';
-    if (/编号|手机|电话/.test(field.key)) column.numFmt = '@';
+    if (/编号|手机|电话/.test(field.key) || field.key === '最好成绩') column.numFmt = '@';
     const cell = sheet.getCell(3, index + 1);
     cell.value = templateFieldHeader(field);
     const wrappedLines = String(cell.value)

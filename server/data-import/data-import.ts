@@ -28,7 +28,7 @@ import {
 } from '../../shared/strength-training.ts';
 
 // 解析版本绑定项目规则；旧草稿须重解析，已入库回执仍保留。
-export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v33-compact-athlete-' + SPORT_RULES_VERSION;
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v34-compact-athlete-' + SPORT_RULES_VERSION;
 
 export type ImportAthlete = {
   id: number;
@@ -1753,13 +1753,28 @@ function consolidateImportFacts(items: ParsedImportItem[]) {
 }
 
 function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string, range: XLSX.Range | undefined): Matrix {
-  return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+  const sheet = workbook.Sheets[sheetName];
+  const matrix = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     range,
     raw: true,
     defval: null,
     blankrows: true,
   }) as Matrix;
+  if ((IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '运动员信息') {
+    const header = standardHeader(matrix);
+    const column = header?.columns.get('最好成绩');
+    if (header && column !== undefined) {
+      for (let row = header.rowIndex + 1; row < matrix.length; row += 1) {
+        const cell = sheet[cellAddress(row + (range?.s.r ?? 0), column + (range?.s.c ?? 0))];
+        // Excel 耗时可能被读取成日期，档案成绩保留原有显示值和小数精度。
+        if ((cell?.t === 'd' || cell?.t === 'n') && /^\d+:\d{2}(?::\d{2})?(?:[.,]\d+)?$/.test(cell.w ?? '')) {
+          matrix[row][column] = cell.w;
+        }
+      }
+    }
+  }
+  return matrix;
 }
 
 function summarizeItems(items: ParsedImportItem[]) {
