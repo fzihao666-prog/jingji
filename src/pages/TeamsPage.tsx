@@ -1,4 +1,4 @@
-import { Layers3, Plus, Trash2, UsersRound } from 'lucide-react';
+import { ArrowDownRight, Layers3, Plus, Search, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { PROJECTS, projectLabel, type Project } from '../../shared/projects';
 import { api } from '../api';
@@ -10,6 +10,8 @@ export function TeamsPage() {
   const [canCreateProjects, setCanCreateProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project>('ROWING');
   const [name, setName] = useState('');
+  const [query, setQuery] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -59,6 +61,19 @@ export function TeamsPage() {
     }
   };
 
+  const searchTerm = query.trim().normalize('NFKC').toLowerCase();
+  const matches = searchTerm
+    ? teams.filter(team => team.name.normalize('NFKC').toLowerCase().includes(searchTerm))
+    : [];
+
+  const jumpToTeam = (team: ProjectTeam) => {
+    const row = document.getElementById(`team-row-${team.id}`);
+    if (!row) return;
+    setQuery('');
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: 'center' });
+  };
+
   const teamCount = (
     <span className="count-chip large team-total-count">
       <Layers3 size={17} aria-hidden="true" />
@@ -72,34 +87,81 @@ export function TeamsPage() {
 
       <div className="team-directory-toolbar">
         {teamCount}
+        <form
+          className="team-search"
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (matches.length === 1) jumpToTeam(matches[0]);
+          }}
+        >
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="搜索队伍名称"
+            placeholder="搜索队伍名称"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            disabled={loading}
+          />
+        </form>
         {canCreateProjects.length > 0 && (
-          <form className="team-create-panel" onSubmit={create}>
-            <label>
-              <span>所属项目</span>
-              <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
-                {canCreateProjects.map((item) => (
-                  <option key={item} value={item}>{projectLabel(item)}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>队伍名称</span>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="如：女子双桨组"
-                minLength={2}
-                maxLength={30}
-                required
-              />
-            </label>
-            <button type="submit" className="primary-button" disabled={busy}>
-              <Plus size={16} aria-hidden="true" />
-              {busy ? '添加中…' : '添加队伍'}
-            </button>
-          </form>
+          <button
+            type="button"
+            className="primary-button team-create-toggle"
+            aria-expanded={showCreate}
+            aria-controls="team-create-form"
+            onClick={() => setShowCreate(!showCreate)}
+          >
+            <Plus size={16} aria-hidden="true" />
+            添加队伍
+          </button>
         )}
       </div>
+      {searchTerm && !loading && (
+        <div className="team-search-results">
+          <p role="status">{matches.length ? `找到 ${matches.length} 支队伍` : '没有找到匹配的队伍'}</p>
+          {matches.length > 0 && (
+            <ul>
+              {matches.map(team => (
+                <li key={team.id}>
+                  <button type="button" className="secondary-button" onClick={() => jumpToTeam(team)}>
+                    <span>{team.name}</span>
+                    <small>{projectLabel(team.project)}</small>
+                    <ArrowDownRight size={16} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {canCreateProjects.length > 0 && (
+        <form id="team-create-form" className="team-create-panel" hidden={!showCreate} onSubmit={create}>
+          <label>
+            <span>所属项目</span>
+            <select value={project} onChange={(event) => setProject(event.target.value as Project)}>
+              {canCreateProjects.map((item) => (
+                <option key={item} value={item}>{projectLabel(item)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>队伍名称</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="如：女子双桨组"
+              minLength={2}
+              maxLength={30}
+              required
+            />
+          </label>
+          <button type="submit" className="primary-button" disabled={busy}>
+            {busy ? '添加中…' : '确认添加'}
+          </button>
+        </form>
+      )}
       {message && <div className="message-banner success">{message}</div>}
 
       {loading ? (
@@ -117,14 +179,14 @@ export function TeamsPage() {
                 <article className="team-project-card" key={item}>
                   <header>
                     <div>
-                    <strong>{projectLabel(item)}</strong>
+                      <strong>{projectLabel(item)}</strong>
                       <small>{projectTeams.length}支队伍</small>
                     </div>
                   </header>
                   <div className="team-directory-list">
                     {projectTeams.length ? (
                       projectTeams.map((team) => (
-                        <div key={team.id}>
+                        <div id={`team-row-${team.id}`} key={team.id} tabIndex={-1}>
                           <span>
                             <UsersRound size={15} />
                             <strong>{team.name}</strong>
