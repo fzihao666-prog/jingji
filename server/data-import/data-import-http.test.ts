@@ -97,6 +97,10 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       const content = JSON.stringify(workbook.SheetNames.map(name => XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 })));
       expect(content).toContain('模板虚构队员');
       expect(content).not.toContain('"虚构队员"');
+      if (kind === 'profile') {
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基本资料'], { header: 1 }) as unknown[][];
+        expect(rows[2]).not.toContain('所属队伍');
+      }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'unified', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
     expect(empty.status).toBe(200);
@@ -135,18 +139,47 @@ it('队伍模板按项目选择，下载仍受登录和项目权限限制', asyn
   }
 });
 
-async function upload(rows: unknown[][], sheet = '身体测量') {
+async function upload(rows: unknown[][], sheet = '身体测量', team?: string) {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), sheet);
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[++workbookIndex]]), '说明');
   const form = new FormData();
   form.set('project', 'ROWING');
+  if (team) form.set('team', team);
   form.set('file', new Blob([XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })]), '虚构测试.xlsx');
   const response = await request('/analyze', 'POST', form);
   expect(response.status, JSON.stringify(response.body)).toBe(200);
   expect(response.body.batch).toBeDefined();
   return response.body.batch!;
 }
+
+it('名单使用页面队伍，忽略旧队伍列并阻止关联其他队伍编号', async () => {
+  const denied = new FormData();
+  denied.set('project', 'ROWING');
+  denied.set('team', 'HTTP乙队');
+  denied.set('file', new Blob(['test']), '虚构名单.xlsx');
+  expect((await request('/analyze', 'POST', denied)).status).toBe(403);
+  const grant = db.prepare("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (701, 'ROWING', 'HTTP乙队', 701)");
+  grant.run();
+  try {
+    const batch = await upload([
+      ['系统运动员编号', '姓名', '所属队伍', '性别'],
+      ['', '名单虚构新队员', 'HTTP甲队', '女'],
+      [701, '虚构队员', 'HTTP乙队', '男'],
+    ], '运动员基本资料', 'HTTP乙队');
+    expect(batch.athleteCandidates).toHaveLength(1);
+    expect(batch.athleteCandidates[0]).toMatchObject({ name: '名单虚构新队员', team: 'HTTP乙队' });
+    const conflict = batch.items.find(item => item.itemType === 'invalid_row');
+    expect(conflict).toMatchObject({ quality: 'error', athleteId: null });
+    expect(conflict?.messages.join('')).toContain('编号属于其他队伍');
+    expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(400);
+    expect((await request(`/batches/${batch.id}/items`, 'PUT', { corrections: [{ id: conflict!.id, resolution: 'skip' }] })).status).toBe(200);
+    expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+    expect(db.prepare("SELECT team FROM athletes WHERE name='名单虚构新队员'").get()).toMatchObject({ team: 'HTTP乙队' });
+  } finally {
+    db.prepare("DELETE FROM user_team_permissions WHERE user_id=701 AND project='ROWING' AND team='HTTP乙队'").run();
+  }
+});
 
 it('真实HTTP上传、校对、提交与重复提交使用最终值；未登录及跨账号请求被拒绝', async () => {
   const batch = await upload([['姓名', '日期', '体重kg'], ['虚构队员', '2026-10-01', 70]]);

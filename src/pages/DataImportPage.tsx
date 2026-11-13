@@ -54,6 +54,8 @@ function ImportCountSummary({ counts }: { counts: ImportStatistics }) {
 type Props = {
   user: User;
   project: Project;
+  projects: Project[];
+  onProjectChange: (project: Project) => void;
   athletes: Athlete[];
   onChanged: () => void;
   onViewEnode: () => void;
@@ -120,7 +122,7 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ user, project, athletes, onChanged, onNavigationGuardChange, onViewEnode, teamId, onViewTeamTraining }: Props) {
+export function DataImportPage({ user, project, projects, onProjectChange, athletes, onChanged, onNavigationGuardChange, onViewEnode, teamId, onViewTeamTraining }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
   const reviewScrollRef = useRef<HTMLDivElement>(null);
@@ -304,13 +306,13 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
   };
 
   const analyze = async (options?: { reparse?: boolean }) => {
-    if (!file) return;
+    if (!file || !templateTeam || templateTeamsProject !== project) return;
     if (hasUnsavedChanges && !window.confirm('当前批次有未保存修改，上传其他文件会丢失这些修改。是否继续？')) return;
     setBusy('analyze');
     setError('');
     setMessage('');
     try {
-      const info = await api.analyzeDataImport(file, project, undefined, { ...options, expectedRevision: options?.reparse && batch ? expectedRevision(batch) : undefined });
+      const info = await api.analyzeDataImport(file, project, undefined, { ...options, team: templateTeam, expectedRevision: options?.reparse && batch ? expectedRevision(batch) : undefined });
       if (info.batch.status === 'committed') {
         startReview(info.batch);
         await refreshBatches();
@@ -887,24 +889,35 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
       <PageHeader
         title="数据导入"
       />
+      <section className="data-import-template-panel data-import-scope" aria-label="导入范围">
+        <label className="data-import-template-team">
+          <span>项目</span>
+          <select value={project} disabled={Boolean(busy)} onChange={event => {
+            const nextProject = projects.find(item => item === event.target.value);
+            if (nextProject) onProjectChange(nextProject);
+          }}>
+            {projects.map(item => <option key={item} value={item}>{projectLabel(item)}</option>)}
+          </select>
+        </label>
+        <label className="data-import-template-team">
+          <span>队伍</span>
+          <select
+            value={templateTeamsProject === project ? templateTeam : ''}
+            disabled={Boolean(busy) || templateTeamsProject !== project}
+            onChange={(event) => setTemplateTeam(event.target.value)}
+          >
+            <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '请选择队伍' : '暂无授权队伍'}</option>
+            {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
+          </select>
+        </label>
+      </section>
       <section className="data-import-template-panel" aria-labelledby="data-import-template-title">
         <h2 id="data-import-template-title">模板下载与数据导出</h2>
         <div className="data-import-hero-actions">
-          <label className="data-import-template-team">
-            <span>模板预填队伍</span>
-            <select
-              value={templateTeamsProject === project ? templateTeam : ''}
-              disabled={Boolean(busy) || templateTeamsProject !== project}
-              onChange={(event) => setTemplateTeam(event.target.value)}
-            >
-              <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '全部授权队伍' : '暂无队伍（空模板）'}</option>
-              {teams.map((team) => <option key={team.id} value={team.name}>{team.name}</option>)}
-            </select>
-          </label>
           <button
             type="button"
             className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project}
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
             onClick={() => downloadTemplate('profile')}
           >
             <Download size={19} />
@@ -916,7 +929,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
           <button
             type="button"
             className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project}
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
             onClick={() => downloadTemplate('training')}
           >
             <Download size={19} />
@@ -928,7 +941,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
           <button
             type="button"
             className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project}
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
             onClick={() => downloadTemplate('test')}
           >
             <Download size={19} />
@@ -940,7 +953,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
           <button
             type="button"
             className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project}
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
             onClick={() => downloadTemplate('unified')}
           >
             <FileSpreadsheet size={19} />
@@ -1005,7 +1018,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
             />
             <button
               className="data-import-primary"
-              disabled={!file || Boolean(busy) || teamTrainingBusy || enodeBusy}
+              disabled={!file || !templateTeam || templateTeamsProject !== project || Boolean(busy) || teamTrainingBusy || enodeBusy}
               onClick={() => void analyze()}
             >
               {busy === 'analyze' ? (
@@ -1789,7 +1802,7 @@ export function DataImportPage({ user, project, athletes, onChanged, onNavigatio
                       const pending = batch.status === 'reviewing' && candidate.status === 'pending' &&
                         !candidate.excluded;
                       const draft = athleteCorrections.get(candidate.id);
-                      const chooseTeam = pending && (!candidate.team || draft?.team !== undefined);
+                      const chooseTeam = !batch.summary.team && pending && (!candidate.team || draft?.team !== undefined);
                       const chooseAthlete = pending && candidate.team && needsIdentityChoice(candidate) &&
                         (!candidate.matchedAthleteId || draft?.matchedAthleteId !== undefined);
                       const suggestions = chooseAthlete ? teamSuggestions(candidate) : [];

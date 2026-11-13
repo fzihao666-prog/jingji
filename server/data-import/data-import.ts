@@ -124,6 +124,7 @@ export type DataImportPreview = {
     unfilledRows?: number;
     receipt?: ImportStatistics;
     duplicateFile?: boolean;
+    team?: string;
     revision?: number;
   };
   counts: {
@@ -1006,7 +1007,8 @@ function parseStandardSheet(
   defaultDate: string,
   athletes: ImportAthlete[],
   simplified = false,
-  fallbackDate = defaultDate || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
+  fallbackDate = defaultDate || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()),
+  selectedTeam = ''
 ) {
   const sheet = IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
   const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET);
@@ -1037,7 +1039,8 @@ function parseStandardSheet(
           text(standardValue(row, header.columns, field.key)) !== '')
       : [...header.columns].some(([label, column]) => !identityHeaders.has(label) && text(row[column]) !== '');
     if (sheet !== '运动员信息' && !hasBusiness) continue;
-    if (simplified && sheet === '运动员信息' && numberedAthlete && !hasBusiness) continue;
+    if (simplified && sheet === '运动员信息' && numberedAthlete && !hasBusiness &&
+        (!selectedTeam || numberedAthlete.team === selectedTeam)) continue;
     if (/^示例/.test(rawName)) continue;
     const sourceRow = {
       rowIndex, columns: [...header.columns], values: row.map(value => typeof value === 'number' ? value : text(value)),
@@ -2136,6 +2139,7 @@ export function analyzeDataImport(input: {
   userId: number;
   athletes: ImportAthlete[];
   allowedTeams?: Set<string>;
+  team?: string;
   /** 重复上传时选择“重新解析文件”，按当前参数解析成功后原子替换旧草稿 */
   reparse?: boolean;
   expectedRevision?: number;
@@ -2146,13 +2150,16 @@ export function analyzeDataImport(input: {
     throw new Error('统一数据导入当前支持 XLS 和 XLSX 文件。');
   if (input.defaultDate && !validIsoDate(input.defaultDate))
     throw new Error('默认日期格式应为 YYYY-MM-DD。');
+  const team = input.team || '';
+  if (team && !input.allowedTeams?.has(team)) throw new Error('当前账号无权向所选队伍导入。');
   const originalHash = createHash('sha256').update(input.buffer).digest('hex');
-  const scopedHash = createHash('sha256').update(`import-v2:${input.userId}:${input.project}:${originalHash}`).digest('hex');
+  const scopedHash = createHash('sha256').update(team ? JSON.stringify([input.userId, input.project, team, originalHash]) : `import-v2:${input.userId}:${input.project}:${originalHash}`).digest('hex');
+  const legacyHash = team ? scopedHash : originalHash;
   let fileHash = scopedHash;
   const existing = db.prepare(`SELECT id, file_hash AS fileHash, parser_version AS parserVersion, status,
     summary_json AS summaryJson FROM data_import_batches
     WHERE created_by=? AND project=? AND (file_hash=? OR file_hash LIKE ? OR file_hash=? OR file_hash LIKE ?)
-    ORDER BY rowid DESC LIMIT 1`).get(input.userId, input.project, scopedHash, `${scopedHash}:%`, originalHash, `${originalHash}:%`) as
+    ORDER BY rowid DESC LIMIT 1`).get(input.userId, input.project, scopedHash, `${scopedHash}:%`, legacyHash, `${legacyHash}:%`) as
     { id: string; fileHash: string; parserVersion: string; status: string; summaryJson: string } | undefined;
   if (existing) input.authorizeBatch?.(existing.id);
   const replacing = existing && existing.status !== 'committed' ? existing : undefined;
@@ -2208,7 +2215,9 @@ export function analyzeDataImport(input: {
         input.athletes,
         sheetName === COMPACT_ATHLETE_SHEET || (workbook.Workbook?.Names?.some(name => name.Name === IMPORT_TEMPLATE_VERSION_NAME) === true
           && workbook.Sheets['填写说明']?.B1?.v === IMPORT_TEMPLATE_VERSION)
-          || matrix.slice(0, 12).some(row => row.some(value => /\n(?:必填|条件必填|选填|系统预填)(?:：[^\n]*)?(?:｜|\n)/.test(String(value ?? ''))))
+          || matrix.slice(0, 12).some(row => row.some(value => /\n(?:必填|条件必填|选填|系统预填)(?:：[^\n]*)?(?:｜|\n)/.test(String(value ?? '')))),
+        undefined,
+        team
       );
       type = `统一模板·${sheetName}`;
       note = '按稳定字段名识别模板，支持字段说明及列重排';
@@ -2288,11 +2297,27 @@ export function analyzeDataImport(input: {
   }
   if (!items.length) throw new Error('未填写业务数据或未识别到支持的数据模板，请填写实际记录后重新上传。');
   // ---- 运动员识别与人员映射（先人员、后数据）----
+  const matchingAthletes = team ? input.athletes.filter(athlete => athlete.team === team) : input.athletes;
+  const athletesByCode = new Map(input.athletes.map(athlete => [String(athlete.id), athlete]));
+  if (team) {
+    for (const item of items) {
+      if (item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
+      const numbered = athletesByCode.get(text(item.payload.athleteCode));
+      if (numbered && numbered.team !== team) {
+        item.itemType = 'invalid_row';
+        item.athleteId = null;
+        item.payload = {};
+        item.messages = ['错误：系统运动员编号属于其他队伍，请切换队伍后重新上传，或排除此行。'];
+      } else {
+        item.payload.team = team;
+      }
+    }
+  }
   const persons = collectPersons(items);
   // 仅复用同账号、同项目、同一文件最近一次已提交的真实关联，草稿不能作为身份依据。
   const previous = db.prepare(`SELECT id FROM data_import_batches
     WHERE (file_hash = ? OR file_hash LIKE ? OR file_hash = ? OR file_hash LIKE ?) AND project = ? AND created_by = ? AND status = 'committed'
-    ORDER BY rowid DESC LIMIT 1`).get(scopedHash, `${scopedHash}:%`, originalHash, `${originalHash}:%`, input.project, input.userId) as { id: string } | undefined;
+    ORDER BY rowid DESC LIMIT 1`).get(scopedHash, `${scopedHash}:%`, legacyHash, `${legacyHash}:%`, input.project, input.userId) as { id: string } | undefined;
   const priorIds = new Map<string, Set<number>>();
   if (previous) {
     const priorItems = db.prepare(`SELECT raw_athlete_name AS name, payload_json AS payload, athlete_id AS athleteId
@@ -2309,7 +2334,7 @@ export function analyzeDataImport(input: {
   for (const person of persons.values()) {
     const prior = priorIds.get(person.key);
     const priorId = prior?.size === 1 ? [...prior][0] : null;
-    const priorAthlete = input.athletes.find(athlete => athlete.id === priorId && athlete.project === input.project);
+    const priorAthlete = matchingAthletes.find(athlete => athlete.id === priorId && athlete.project === input.project);
     let resolution: PersonResolution = priorAthlete
       ? { kind: 'matched', athlete: priorAthlete, method: '同文件已提交关联' }
       : resolvePerson(
@@ -2320,13 +2345,13 @@ export function analyzeDataImport(input: {
         birthDate: person.birthDate,
         athleteCode: person.athleteCode,
       },
-      input.athletes
+      matchingAthletes
     );
     // 弹窗打开前完成唯一队伍内的匹配，无需等待用户再次选择队伍。
     if (resolution.kind === 'ambiguous' && !person.team && allowedTeams?.size === 1) {
       const team = [...allowedTeams][0];
       const scoped = resolvePerson({ name: person.name, project: input.project, team,
-        birthDate: person.birthDate, athleteCode: person.athleteCode }, input.athletes);
+        birthDate: person.birthDate, athleteCode: person.athleteCode }, matchingAthletes);
       if (scoped.kind === 'matched') resolution = scoped;
     }
     if (resolution.kind === 'matched' && resolution.athlete.active === false) {
@@ -2386,7 +2411,7 @@ export function analyzeDataImport(input: {
     item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item as DataImportItemView);
   }
   const counts = summarizeItems(items);
-  const summary = { recognizedSheets, ignoredSheets, unfilledRows, accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
+  const summary = { recognizedSheets, ignoredSheets, unfilledRows, ...(team ? { team } : {}), accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
   db.exec('BEGIN IMMEDIATE');
   try {
     if (replacing) {
@@ -3340,11 +3365,12 @@ export function updateDataImportItems(input: {
       const matrix: Matrix = Array.from({ length: source.rowIndex + 1 }, () => []);
       for (const [label, column] of source.columns) matrix[0][column] = label;
       matrix[source.rowIndex] = values;
-      const parsed = parseStandardSheet(matrix, item.sourceSheet, batch.project, source.filename, source.defaultDate, input.athletes, source.simplified, source.fallbackDate);
+      const parsed = parseStandardSheet(matrix, item.sourceSheet, batch.project, source.filename, source.defaultDate, input.athletes, source.simplified, source.fallbackDate, batch.summary.team);
       if (!parsed.length) throw new Error('修复后没有可导入业务记录；如不需导入请明确排除此行');
       const projectColumn = source.columns.find(([label]) => label === '运动项目')?.[1];
       if (projectColumn !== undefined && text(values[projectColumn]) && normalizeProject(text(values[projectColumn])) !== normalizeProject(batch.project)) throw new Error('源行运动项目与当前批次不一致');
       for (const entry of parsed) {
+        if (batch.summary.team) entry.payload.team = batch.summary.team;
         const candidate = batch.athleteCandidates.find(person => person.normalizedName === dataImportPersonKey(entry));
         if (candidate?.status === 'pending' && candidate.confirmed) entry.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
         else if (entry.itemType !== 'invalid_row') {

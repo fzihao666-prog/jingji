@@ -379,6 +379,7 @@ export type DataImportBatch = {
     unfilledRows?: number;
     receipt?: ImportStatistics;
     duplicateFile?: boolean;
+    team?: string;
   };
   counts: {
     newCount: number;

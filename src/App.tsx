@@ -541,6 +541,8 @@ export default function App() {
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
         {page === 'data-import' && user.role !== 'ATL' && (
           <DataImportPage
+            projects={shared.projects}
+            onProjectChange={shared.onProjectChange}
             onViewEnode={() => changePage('strength-enode')}
             teamId={teamId}
             onViewTeamTraining={(id, date) => {

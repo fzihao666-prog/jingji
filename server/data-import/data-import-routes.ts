@@ -83,7 +83,7 @@ export function buildPurposeTemplate(
 ) {
   if (kind === 'unified') return buildCompactAthleteWorkbook(athletes);
   const sheetNames = PURPOSE_SHEETS[kind];
-  const workbook = buildImportWorkbook(sheetNames, { metrics, project, includeAthleteId: athletes.length > 0 });
+  const workbook = buildImportWorkbook(sheetNames, { metrics, project, includeAthleteId: athletes.length > 0, omitProfileTeam: kind === 'profile' });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
@@ -317,6 +317,11 @@ export function registerDataImportRoutes(app: Express) {
         const athletes = dataImportCandidates(req.authUser!).filter(
           (athlete) => athlete.project === project
         );
+        const team = cleanString(req.body?.team);
+        if (req.body?.team !== undefined && (typeof req.body.team !== 'string' || !team))
+          return res.status(400).json({ message: '请选择有效的导入队伍。' });
+        if (team && !scope.allowedTeams.has(team))
+          return res.status(403).json({ message: '当前账号无权向所选队伍导入。' });
         const batch = analyzeDataImport({
           buffer: req.file.buffer,
           filename: req.file.originalname,
@@ -325,7 +330,8 @@ export function registerDataImportRoutes(app: Express) {
           defaultDate: cleanString(req.body?.defaultDate),
           userId: req.authUser!.id,
           athletes,
-          allowedTeams: scope.allowedTeams,
+          allowedTeams: team ? new Set([team]) : scope.allowedTeams,
+          team,
           reparse: cleanString(req.body?.reparse) === '1',
           expectedRevision: cleanString(req.body?.reparse) === '1' ? expectedImportRevision(req.body?.expectedRevision) : undefined,
           authorizeBatch: batchId => { authorizeImportBatch(req.authUser!, batchId); },
@@ -430,11 +436,11 @@ export function registerDataImportRoutes(app: Express) {
         if (req.body?.corrections !== undefined && !Array.isArray(req.body.corrections))
           return res.status(400).json({ message: '校对修改格式无效。' });
         const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections : [];
-        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
+        const scope = authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = updateDataImportItems({
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
-          athletes: dataImportCandidates(req.authUser!),
+          athletes: dataImportCandidates(req.authUser!).filter(athlete => !scope.team || scope.allowedTeams.has(athlete.team) && athlete.project === scope.project),
           corrections,
           reviewTargetId: req.body?.reviewTargetId,
           expectedRevision: expectedImportRevision(req.body?.expectedRevision),
@@ -455,9 +461,8 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
-        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
+        const scope = authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
-        const scope = dataImportScope(req.authUser!, batch.project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号无权在该项目创建运动员。' });
         if (req.body?.corrections !== undefined && !Array.isArray(req.body.corrections))
@@ -470,7 +475,7 @@ export function registerDataImportRoutes(app: Express) {
           userId: req.authUser!.id,
           allowedTeams: scope.allowedTeams,
           athletes: dataImportCandidates(req.authUser!).filter(
-            (athlete) => athlete.project === batch.project
+            (athlete) => athlete.project === batch.project && (!scope.team || scope.allowedTeams.has(athlete.team))
           ),
           corrections,
         });
@@ -491,9 +496,8 @@ export function registerDataImportRoutes(app: Express) {
       try {
         const conflictPolicy =
           cleanString(req.body?.conflictPolicy) === 'skip' ? 'skip' : 'update';
-        authorizeImportBatch(req.authUser!, cleanString(req.params.id));
+        const scope = authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
-        const scope = dataImportScope(req.authUser!, batch.project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号已无该项目导入权限，请重新核对授权。' });
         const result = commitDataImport({
@@ -502,7 +506,7 @@ export function registerDataImportRoutes(app: Express) {
           batchId: cleanString(req.params.id),
           userId: req.authUser!.id,
           creatorRole: req.authUser!.role,
-          athletes: dataImportCandidates(req.authUser!),
+          athletes: dataImportCandidates(req.authUser!).filter(athlete => !scope.team || scope.allowedTeams.has(athlete.team) && athlete.project === batch.project),
           allowedTeams: scope.allowedTeams,
           conflictPolicy,
         });

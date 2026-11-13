@@ -800,12 +800,13 @@ export const api = {
     file: File,
     project: Project,
     defaultDate?: string,
-    options?: { reparse?: boolean; expectedRevision?: number }
+    options?: { reparse?: boolean; expectedRevision?: number; team?: string }
   ) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
     if (defaultDate) body.append('defaultDate', defaultDate);
+    if (options?.team) body.append('team', options.team);
     if (options?.reparse) body.append('reparse', '1');
     if (options?.expectedRevision !== undefined)
       body.append('expectedRevision', String(options.expectedRevision));
