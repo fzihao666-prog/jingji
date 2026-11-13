@@ -12,15 +12,13 @@ import './TeamTrainingStats.css';
 
 export function TeamTrainingImport({
   project,
-  teamId,
-  teams,
+  team,
   disabled,
   onBusyChange,
   onView,
 }: {
   project: Project;
-  teamId: number | null;
-  teams: ProjectTeam[];
+  team: ProjectTeam | undefined;
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
   onView: (id: number, date: string | null) => void;
@@ -47,7 +45,6 @@ export function TeamTrainingImport({
         ]
       : []),
   ] as const;
-  const [selectedTeam, setSelectedTeam] = useState<number | null>(null);
   const [pendingFile, setPendingFile] = useState<File>();
   const [columns, setColumns] = useState<TeamTrainingUnknownColumn[]>([]);
   const [mappings, setMappings] = useState<Record<string, TeamTrainingColumnMapping>>({});
@@ -80,8 +77,6 @@ export function TeamTrainingImport({
     setError('');
   }
 
-  const targetId = teamId ?? selectedTeam ?? (teams.length === 1 ? teams[0].id : null);
-  const team = teams.find((item) => item.id === targetId);
   const templateName = projectCapability(project)
     ? '竞迹队伍训练统计模板（水上）.xlsx'
     : '竞迹队伍训练统计模板（通用）.xlsx';
@@ -128,31 +123,7 @@ export function TeamTrainingImport({
   return (
     <div className="team-training-import" aria-busy={busy}>
       <div className="team-training-controls">
-        {teamId === null ? (
-          <label>
-            <span>导入队伍</span>
-            <select
-              value={team?.id ?? ''}
-              disabled={busy || disabled}
-              onChange={(event) => {
-                setSelectedTeam(Number(event.target.value) || null);
-                setColumns([]);
-                setPendingFile(undefined);
-                setReceipt(undefined);
-                setError('');
-              }}
-            >
-              <option value="">请选择队伍</option>
-              {teams.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <span>导入队伍：{team?.name ?? '当前队伍不可用'}</span>
-        )}
+        {!team && <span>请先在页面顶部选择队伍</span>}
         <button
           type="button"
           className="primary-button"

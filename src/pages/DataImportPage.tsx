@@ -59,7 +59,6 @@ type Props = {
   athletes: Athlete[];
   onChanged: () => void;
   onViewEnode: () => void;
-  teamId: number | null;
   onViewTeamTraining: (teamId: number, date: string | null) => void;
   onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
 };
@@ -122,7 +121,7 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ user, project, projects, onProjectChange, athletes, onChanged, onNavigationGuardChange, onViewEnode, teamId, onViewTeamTraining }: Props) {
+export function DataImportPage({ user, project, projects, onProjectChange, athletes, onChanged, onNavigationGuardChange, onViewEnode, onViewTeamTraining }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
   const reviewScrollRef = useRef<HTMLDivElement>(null);
@@ -884,6 +883,10 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     };
   }, [batch]);
 
+  const selectedTeam = templateTeamsProject === project
+    ? teams.find(team => team.name === templateTeam)
+    : undefined;
+
   return (
     <PageContainer className="data-import-page">
       <PageHeader
@@ -903,7 +906,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
           <span>队伍</span>
           <select
             value={templateTeamsProject === project ? templateTeam : ''}
-            disabled={Boolean(busy) || templateTeamsProject !== project}
+            disabled={Boolean(busy) || teamTrainingBusy || templateTeamsProject !== project}
             onChange={(event) => setTemplateTeam(event.target.value)}
           >
             <option value="">{templateTeamsProject !== project ? '正在加载队伍…' : teams.length ? '请选择队伍' : '暂无授权队伍'}</option>
@@ -1040,8 +1043,8 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             <div className="data-import-card-heading">
               <div><strong>队伍训练统计</strong><span>下载模板填写每日训练分项，导入后可按周、月、年查看统计。</span></div>
             </div>
-            <TeamTrainingImport key={`${project}:${teamId}`} project={project} teamId={teamId}
-              teams={templateTeamsProject === project ? teams : []} disabled={Boolean(busy) || enodeBusy}
+            <TeamTrainingImport key={`${project}:${selectedTeam?.id ?? ''}`} project={project} team={selectedTeam}
+              disabled={Boolean(busy) || enodeBusy}
               onBusyChange={setTeamTrainingBusy} onView={onViewTeamTraining} />
           </section>
         </div>
