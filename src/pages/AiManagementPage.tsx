@@ -89,7 +89,7 @@ export function AiManagementPage() {
         {loading ? <ContentState kind="loading" title="正在读取 AI 用量…" /> : notice}
       </div>
       {error && <ContentState kind="error" title="AI 管理操作失败" description={error} />}
-      <AppCard>
+      <AppCard variant="compact">
         <SectionHeader title="今日用量" description={data?.today} />
         {data && (
           <dl className="ai-management-summary">
@@ -113,7 +113,7 @@ export function AiManagementPage() {
           </dl>
         )}
       </AppCard>
-      <AppCard>
+      <AppCard variant="compact">
         <SectionHeader
           title="全站调用设置"
           description="总开关覆盖网页、小程序和自动任务。关闭后，已发出的请求仍会结算。"
@@ -167,7 +167,7 @@ export function AiManagementPage() {
           </button>
         </form>
       </AppCard>
-      <AppCard>
+      <AppCard variant="compact">
         <SectionHeader
           title="请求明细"
           description="同一个请求编号下可能有多次模型尝试。筛选仅影响明细。"
