@@ -26,6 +26,34 @@ function businessCounts(db: DatabaseSync) {
 }
 
 describe('队伍责任关系初始化兼容', () => {
+  it('旧单类别迁移保留已知角色和队伍授权，重复启动保留兼任与空值', () => {
+    const db = new DatabaseSync(':memory:');
+    try {
+      initializeDatabase(db, options);
+      const coachId = userId(db, 'coach01');
+      const otherId = userId(db, 'coach02');
+      const originalAthletes = coachAthleteIds(db, coachId);
+      db.exec(`
+        DROP TABLE coach_profiles;
+        CREATE TABLE coach_profiles (
+          user_id INTEGER PRIMARY KEY, category TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+      `);
+      db.prepare("INSERT INTO coach_profiles VALUES (?, '专项教练', '2025-01-01')").run(coachId);
+      initializeDatabase(db, options);
+      expect(db.prepare('SELECT * FROM coach_profiles ORDER BY user_id').all()).toEqual([
+        { user_id: coachId, category: '专项教练', updated_at: '2025-01-01' },
+      ]);
+      db.prepare("INSERT INTO coach_profiles (user_id, category) VALUES (?, '主管教练')").run(coachId);
+      initializeDatabase(db, options);
+      expect(db.prepare('SELECT category FROM coach_profiles WHERE user_id = ?').all(coachId)).toHaveLength(2);
+      expect(db.prepare('SELECT category FROM coach_profiles WHERE user_id = ?').all(otherId)).toEqual([]);
+      expect(coachAthleteIds(db, coachId)).toEqual(originalAthletes);
+    } finally {
+      db.close();
+    }
+  });
+
   it('全新演示库直接建立项目和队伍授权，不生成逐人关系', () => {
     const db = new DatabaseSync(':memory:');
     try {

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import { HEAD_COACH_CATEGORY } from '../../shared/coach-categories.ts';
 
 export const coachScopeConflict = {
   code: 'COACH_SCOPE_DERIVED_FROM_TEAM',
@@ -39,18 +40,22 @@ export function readTeamCoaches(database: DatabaseSync, project: string, team: s
     .all(project, team) as Array<{ id: number; displayName: string }>;
 }
 
-export function readCoachAthleteRelations(database: DatabaseSync, athleteIds?: number[]) {
+export function readCoachAthleteRelations(database: DatabaseSync, athleteIds?: number[], headCoachesOnly = false) {
   if (athleteIds && !athleteIds.length) return [];
   const filter = athleteIds ? `AND a.id IN (${athleteIds.map(() => '?').join(',')})` : '';
+  const categoryFilter = headCoachesOnly
+    ? `AND utp.project = pt.project AND utp.team = pt.name
+       AND EXISTS (SELECT 1 FROM coach_profiles cp WHERE cp.user_id = u.id AND cp.category = ?)`
+    : '';
   return database
     .prepare(
       `SELECT DISTINCT a.id AS athleteId, u.id, u.display_name AS displayName
       ${teamCoachJoin}
       JOIN athletes a ON a.team_id = pt.id AND a.project = pt.project AND a.active = 1
-      WHERE pt.active = 1 ${filter}
+      WHERE pt.active = 1 ${filter} ${categoryFilter}
       ORDER BY u.display_name, u.id, a.id`
     )
-    .all(...(athleteIds || [])) as Array<{ athleteId: number; id: number; displayName: string }>;
+    .all(...(athleteIds || []), ...(headCoachesOnly ? [HEAD_COACH_CATEGORY] : [])) as Array<{ athleteId: number; id: number; displayName: string }>;
 }
 
 export function coachAthleteIds(database: DatabaseSync, coachId: number) {

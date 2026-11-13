@@ -29,7 +29,7 @@ Page({
       user,
       canImport: canImport(user),
       avatar: user && user.displayName ? user.displayName.slice(0, 1) : '竞',
-      roleLabel: user ? ROLE_LABELS[user.role] || user.role : '',
+      roleLabel: user ? user.coachCategories?.join('、') || ROLE_LABELS[user.role] || user.role : '',
       projectLabel: projectLabel(app.globalData.currentProject)
     });
   },

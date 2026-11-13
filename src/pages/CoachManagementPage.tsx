@@ -27,7 +27,7 @@ type AssignmentAthlete = Athlete & { coachIds: string };
 type CoachAccount = Pick<
   AccessAccount,
   'id' | 'username' | 'displayName' | 'active' | 'projects' | 'teams'
-> & { category: CoachCategory };
+> & { categories: CoachCategory[] };
 type StatusFilter = 'all' | 'active' | 'inactive';
 
 const emptyCoachForm = {
@@ -90,7 +90,7 @@ export function CoachManagementPage({
       setCurrentAccount(accessResult.current);
       setTeamDirectory(teamResult.teams);
       const categoryByCoachId = new Map(
-        assignmentResult.coaches.map((coach) => [coach.id, coach.category])
+        assignmentResult.coaches.map((coach) => [coach.id, coach.categories])
       );
       const accessCoaches = [
         ...(accessResult.current?.role === 'SCC' ? [accessResult.current] : []),
@@ -102,7 +102,7 @@ export function CoachManagementPage({
         active: account.active,
         projects: account.projects,
         teams: account.teams,
-        category: categoryByCoachId.get(account.id) || DEFAULT_COACH_CATEGORY,
+        categories: categoryByCoachId.get(account.id) ?? [],
       }));
       const assignmentCoaches = assignmentResult.coaches.map((coach) => ({
         ...coach,
@@ -179,7 +179,7 @@ export function CoachManagementPage({
     const query = searchTerm.trim().toLocaleLowerCase();
     return coachProfiles.filter((coach) => {
       if (projectFilter && !coach.projectNames.includes(projectFilter)) return false;
-      if (categoryFilter && coach.category !== categoryFilter) return false;
+      if (categoryFilter && !coach.categories.some((category) => category === categoryFilter)) return false;
       if (statusFilter === 'active' && !coach.active) return false;
       if (statusFilter === 'inactive' && coach.active) return false;
       if (!query) return true;
@@ -232,17 +232,18 @@ export function CoachManagementPage({
     setMessage('教练姓名已同步更新。');
   };
 
-  const updateCoachCategory = async (coachId: number, category: CoachCategory) => {
+  const updateCoachCategory = async (coachId: number, categories: CoachCategory[]) => {
     setSaving(true);
     try {
-      const result = await api.updateCoachCategory(coachId, category);
+      const result = await api.updateCoachCategory(coachId, categories);
       setCoaches((current) =>
         current.map((coach) =>
-          coach.id === coachId ? { ...coach, category: result.category } : coach
+          coach.id === coachId ? { ...coach, categories: result.categories } : coach
         )
       );
       setMessageTone('success');
       setMessage(result.message);
+      onChanged();
     } catch (error) {
       setMessageTone('error');
       setMessage(error instanceof Error ? error.message : '教练类别更新失败。');
@@ -465,7 +466,7 @@ export function CoachManagementPage({
                     </div>
                   </td>
                   <td>
-                    <span className="coach-role-tag">{coach.category}</span>
+                    <span className="coach-role-tag">{coach.categories.join('、') || '未设置'}</span>
                   </td>
                   <td>
                     <div className="coach-project-tags">
@@ -572,7 +573,7 @@ export function CoachManagementPage({
                   />
                 </h3>
                 <p>
-                  {selectedCoach.category} · @{selectedCoach.username || '账号未登记'}
+                  {selectedCoach.categories.join('、') || '未设置'} · @{selectedCoach.username || '账号未登记'}
                 </p>
               </div>
               <b className={selectedCoach.active ? 'active' : 'inactive'}>
@@ -597,20 +598,26 @@ export function CoachManagementPage({
               </div>
             </div>
             {canManage && (
-              <label className="coach-detail-category">
-                <span>教练类别</span>
-                <select
-                  value={selectedCoach.category}
-                  disabled={saving}
-                  onChange={(event) =>
-                    void updateCoachCategory(selectedCoach.id, event.target.value as CoachCategory)
-                  }
-                >
-                  {COACH_CATEGORIES.map((category) => (
-                    <option key={category}>{category}</option>
-                  ))}
-                </select>
-              </label>
+              <fieldset className="coach-detail-category" disabled={saving}>
+                <legend>教练类别</legend>
+                {COACH_CATEGORIES.map((category) => (
+                  <label key={category}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCoach.categories.includes(category)}
+                      onChange={(event) =>
+                        void updateCoachCategory(
+                          selectedCoach.id,
+                          event.target.checked
+                            ? [...selectedCoach.categories, category]
+                            : selectedCoach.categories.filter((role) => role !== category)
+                        )
+                      }
+                    />
+                    {category}
+                  </label>
+                ))}
+              </fieldset>
             )}
             <section className="coach-detail-section">
               <header>

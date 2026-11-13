@@ -20,6 +20,7 @@ function setup() {
       id INTEGER PRIMARY KEY, project TEXT, team_id INTEGER, active INTEGER,
       province TEXT, city TEXT, county TEXT
     );
+    CREATE TABLE coach_profiles (user_id INTEGER, category TEXT, PRIMARY KEY (user_id, category));
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER);
     INSERT INTO users VALUES
       (9, 'SCC', 1, '教练九'), (2, 'SCC', 1, '教练二'),
@@ -77,6 +78,25 @@ describe('队伍派生教练责任关系', () => {
       { id: 2, displayName: '教练二' },
     ]);
     expect(coachAthleteIds(database, 9)).toEqual([101, 102, 103, 104]);
+  });
+
+  it('主管教练须有明确类别和当前队伍关联，兼任、转队及撤权即时生效', () => {
+    const database = setup();
+    database.exec(`
+      INSERT INTO coach_profiles VALUES
+        (9, '专项教练'), (2, '体能教练'), (2, '康复治疗师'),
+        (4, '主管教练'), (5, '主管教练');
+    `);
+    expect(readCoachAthleteRelations(database, [101], true)).toEqual([]);
+    database.exec("INSERT INTO coach_profiles VALUES (2, '主管教练')");
+    expect(readCoachAthleteRelations(database, [101, 104, 201], true)).toEqual([
+      { athleteId: 101, id: 2, displayName: '教练二' },
+    ]);
+    database.exec("UPDATE athletes SET team_id = 11 WHERE id = 101");
+    expect(readCoachAthleteRelations(database, [101], true)).toEqual([]);
+    database.exec("UPDATE athletes SET team_id = 10 WHERE id = 101");
+    database.exec("DELETE FROM user_team_permissions WHERE user_id = 2");
+    expect(readCoachAthleteRelations(database, [101], true)).toEqual([]);
   });
 
   it('同名跨项目队伍隔离，项目不匹配及无效队伍不产生关系', () => {

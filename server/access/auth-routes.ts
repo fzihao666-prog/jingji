@@ -1,3 +1,4 @@
+import { isCoachCategory } from '../../shared/coach-categories.ts';
 import { z } from 'zod';
 import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
 import { beijingDate } from '../core/coach-daily-todos.ts';
@@ -34,6 +35,13 @@ import {
   registrationApprovalEnabled,
   activateRegistrationRequest,
 } from './registration-service.ts';
+
+function withCoachCategories(user: AuthUser) {
+  if (user.role !== 'SCC') return user;
+  const categories = db.prepare('SELECT category FROM coach_profiles WHERE user_id = ? ORDER BY category')
+    .all(user.id).map((row) => row.category).filter(isCoachCategory);
+  return { ...user, coachCategories: categories };
+}
 
 export function registerAuthRoutes(
   app: Express,
@@ -467,7 +475,7 @@ export function registerAuthRoutes(
       };
       const token = jwt.sign(user, jwtSecret, { expiresIn: '12h' });
       clearRateLimit(req, 'login');
-      res.json({ token, user });
+      res.json({ token, user: withCoachCategories(user) });
     } catch (error) {
       if (error instanceof PasswordPoolError) {
         res.setHeader('Retry-After', '1');
@@ -485,7 +493,7 @@ export function registerAuthRoutes(
   app.get('/api/me', requireAuth, (req, res) => {
     const user = userById(req.authUser!.id);
     if (!user) return res.status(404).json({ message: '账户不存在。' });
-    res.json({ user });
+    res.json({ user: withCoachCategories(user) });
   });
 
   app.post('/api/auth/logout', requireAuth, (req, res) => {

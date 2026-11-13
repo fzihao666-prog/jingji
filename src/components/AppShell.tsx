@@ -220,7 +220,7 @@ export function AppShell({
             <ShieldCheck size={17} />
           </div>
           <div>
-            <span>{roleMeta[user.role].label}</span>
+            <span>{user.coachCategories?.join('、') || roleMeta[user.role].label}</span>
           </div>
         </div>
 

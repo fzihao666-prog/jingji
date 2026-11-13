@@ -721,9 +721,12 @@ export function registerAthleteRoutes(app: Express) {
       coaches: string | null;
     }>;
     const coachRows = readCoachAthleteRelations(db, ids);
+    const headCoachRows = readCoachAthleteRelations(db, ids, true);
     res.json({
       athletes: athletes.map((athlete) => ({
         ...athlete,
+        headCoaches: headCoachRows.filter((coach) => coach.athleteId === athlete.id)
+          .map((coach) => coach.displayName).join('、'),
         coaches: coachRows.filter((coach) => coach.athleteId === athlete.id)
           .map((coach) => coach.displayName).join('、'),
         coachUsers: coachRows

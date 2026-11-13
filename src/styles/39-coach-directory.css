@@ -694,38 +694,25 @@
 }
 
 .coach-detail-category {
-  min-height: 58px;
+  margin: 0;
   padding: 10px 20px;
+  border: 0;
   border-bottom: 1px solid #e0e8e9;
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
-  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   background: #fbfcfc;
 }
 
-.coach-detail-category > span {
-  color: #6f858c;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.coach-detail-category select {
-  width: 100%;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid #c9d8db;
-  border-radius: 7px;
+.coach-detail-category legend {
+  padding: 0 4px;
   color: #244b56;
-  background: #fff;
-  font-size: 10px;
-  font-weight: 700;
 }
 
-.coach-detail-category select:focus {
-  outline: 0;
-  border-color: #5da8a1;
-  box-shadow: 0 0 0 3px rgb(27 157 149 / 9%);
+.coach-detail-category label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .coach-detail-section {

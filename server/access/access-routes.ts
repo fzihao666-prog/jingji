@@ -503,16 +503,19 @@ export function registerAccessRoutes(app: Express) {
         .prepare(
           `
       SELECT u.id, u.username, u.display_name AS displayName, u.role, u.athlete_id AS athleteId,
-        COALESCE(cp.category, '体能教练') AS category
+        GROUP_CONCAT(cp.category) AS categories
       FROM users u
       LEFT JOIN coach_profiles cp ON cp.user_id = u.id
-      WHERE u.role = 'SCC' AND u.active = 1 ORDER BY u.id
+      WHERE u.role = 'SCC' GROUP BY u.id ORDER BY u.id
     `
         )
-        .all() as Array<AuthUser & { displayName: string; category: string }>;
+        .all() as Array<AuthUser & { displayName: string; categories: string | null }>;
       const coaches = allCoaches
         .filter((coach) => coach.id === req.authUser!.id || canManageAccount(req.authUser!, coach))
-        .map(({ id, displayName, category }) => ({ id, displayName, category }));
+        .map(({ id, displayName, categories }) => {
+          const roles = (categories ?? '').split(',').filter(isCoachCategory);
+          return { id, displayName, categories: roles, category: roles[0] ?? null };
+        });
       res.json({ athletes, coaches });
     }
   );
@@ -524,22 +527,28 @@ export function registerAccessRoutes(app: Express) {
     (req, res) => {
       const currentUser = req.authUser!;
       const coachId = Number(req.params.id);
-      const category = cleanString(req.body?.category);
+      const categories: unknown = req.body?.categories ?? [req.body?.category];
       const coach = userById(coachId);
       if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach)) {
         return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
       }
-      if (!isCoachCategory(category)) return res.status(400).json({ message: '教练类别无效。' });
-      db.prepare(
-        `
-      INSERT INTO coach_profiles (user_id, category, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(user_id) DO UPDATE SET category = excluded.category, updated_at = CURRENT_TIMESTAMP
-    `
-      ).run(coachId, category);
-      db.prepare(
-        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
-      ).run(currentUser.id, 'UPDATE_COACH_CATEGORY', 'user', coachId, JSON.stringify({ category }));
-      res.json({ message: '教练类别已更新。', category });
+      if (!Array.isArray(categories) || !categories.every(isCoachCategory))
+        return res.status(400).json({ message: '教练类别无效。' });
+      const roles = [...new Set(categories)];
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM coach_profiles WHERE user_id = ?').run(coachId);
+        const insert = db.prepare('INSERT INTO coach_profiles (user_id, category) VALUES (?, ?)');
+        for (const category of roles) insert.run(coachId, category);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(currentUser.id, 'UPDATE_COACH_CATEGORY', 'user', coachId, JSON.stringify({ categories: roles }));
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+      res.json({ message: '教练类别已更新。', categories: roles, category: roles[0] });
     }
   );
 

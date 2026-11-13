@@ -13,12 +13,15 @@ import { initializeTrainingPlanLinks } from './training-plan-links.ts';
 import { initializeTeamPlanChecks } from './team-plan-checks.ts';
 import type { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
+import { COACH_CATEGORIES, DEFAULT_COACH_CATEGORY } from '../../shared/coach-categories.ts';
 import { PROVINCES } from '../../shared/regions.ts';
 import { PROJECT_META, normalizeProject } from '../../shared/projects.ts';
 import { OVERVIEW_METRICS } from '../../shared/overview-metrics.ts';
 import { preserveLegacySpecialChampionModels } from './db-migrations.ts';
 import { initializeSystemData } from './db-system-data.ts';
 import { initializePhysicalChampionReferences } from './physical-champion-references.ts';
+
+const coachCategoryValues = COACH_CATEGORIES.map((category) => `'${category}'`).join(', ');
 
 const compactTestMetricCodes = new Set<string>(
   COMPACT_ATHLETE_COLUMNS.filter(field => field.kind === 'test').map(field => field.code)
@@ -921,10 +924,11 @@ export function initializeDatabase(
   );
 
   CREATE TABLE IF NOT EXISTS coach_profiles (
-    user_id INTEGER PRIMARY KEY,
-    category TEXT NOT NULL DEFAULT '体能教练'
-      CHECK(category IN ('体能教练', '专项教练')),
+    user_id INTEGER NOT NULL,
+    category TEXT NOT NULL DEFAULT '${DEFAULT_COACH_CATEGORY}'
+      CHECK(category IN (${coachCategoryValues})),
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, category),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
@@ -1992,31 +1996,33 @@ export function initializeDatabase(
   const coachProfilesDefinition = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'coach_profiles'")
     .get() as { sql?: string } | undefined;
-  if (coachProfilesDefinition?.sql && !coachProfilesDefinition.sql.includes("'体能教练'")) {
-    db.exec(`
-    BEGIN;
-    CREATE TABLE coach_profiles_v2 (
-      user_id INTEGER PRIMARY KEY,
-      category TEXT NOT NULL DEFAULT '体能教练'
-        CHECK(category IN ('体能教练', '专项教练')),
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-    INSERT INTO coach_profiles_v2 (user_id, category, updated_at)
-    SELECT user_id,
-      CASE WHEN category = '体能师' THEN '体能教练' ELSE '专项教练' END,
-      updated_at
-    FROM coach_profiles;
-    DROP TABLE coach_profiles;
-    ALTER TABLE coach_profiles_v2 RENAME TO coach_profiles;
-    COMMIT;
-  `);
+  if (coachProfilesDefinition?.sql && !coachProfilesDefinition.sql.includes('PRIMARY KEY (user_id, category)')) {
+    db.exec('BEGIN');
+    try {
+      db.exec(`
+        CREATE TABLE coach_profiles_v2 (
+          user_id INTEGER NOT NULL,
+          category TEXT NOT NULL DEFAULT '${DEFAULT_COACH_CATEGORY}'
+            CHECK(category IN (${coachCategoryValues})),
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, category),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO coach_profiles_v2 (user_id, category, updated_at)
+        SELECT user_id,
+          CASE WHEN category = '体能师' THEN '${DEFAULT_COACH_CATEGORY}' ELSE category END,
+          updated_at
+        FROM coach_profiles
+        WHERE category IN ('体能师', ${coachCategoryValues});
+        DROP TABLE coach_profiles;
+        ALTER TABLE coach_profiles_v2 RENAME TO coach_profiles;
+      `);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
   }
-
-  db.exec(`
-  INSERT OR IGNORE INTO coach_profiles (user_id, category)
-  SELECT id, '体能教练' FROM users WHERE role = 'SCC';
-`);
 
   db.exec(`
   INSERT OR IGNORE INTO athlete_profiles (athlete_id, created_at)

@@ -174,7 +174,7 @@ export function AccountsPage() {
               ? '正在加载开关状态…'
               : approvalEnabled
                 ? '开启：新注册进入待审核，由有权限的上级在下方通过或拒绝；仅影响开关之后的新申请。'
-                : '关闭：运动员和体能教练新注册均自动开通；运动员入队归属仍需核实。历史申请不受影响。'}
+                : '关闭：运动员和教练新注册均自动开通；运动员入队归属仍需核实。历史申请不受影响。'}
           </p>
         </div>
         <button
@@ -225,7 +225,7 @@ export function AccountsPage() {
                       label="申请人姓名"
                     />
                   </h2>
-                  <span>{request.requestedRole === 'SCC' ? '队伍体能教练' : '运动员'}</span>
+                  <span>{request.requestedRole === 'SCC' ? '队伍教练' : '运动员'}</span>
                 </div>
                 <p>
                   @{request.username} · 性别：{request.gender || '未录入'} · 出生日期：

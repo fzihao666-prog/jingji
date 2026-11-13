@@ -1027,7 +1027,7 @@ export const api = {
   async assignments() {
     return request<{
       athletes: Array<Athlete & { coachIds: string }>;
-      coaches: Array<{ id: number; displayName: string; category: CoachCategory }>;
+      coaches: Array<{ id: number; displayName: string; categories: CoachCategory[] }>;
     }>('/api/admin/assignments');
   },
   async updateAssignment(athleteId: number, region: string, city: string, county: string) {
@@ -1126,12 +1126,12 @@ export const api = {
       body: JSON.stringify({ active }),
     });
   },
-  async updateCoachCategory(id: number, category: CoachCategory) {
-    return request<{ message: string; category: CoachCategory }>(
+  async updateCoachCategory(id: number, categories: CoachCategory[]) {
+    return request<{ message: string; categories: CoachCategory[] }>(
       `/api/admin/coaches/${id}/category`,
       {
         method: 'PUT',
-        body: JSON.stringify({ category }),
+        body: JSON.stringify({ categories }),
       }
     );
   },

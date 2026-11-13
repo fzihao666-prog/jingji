@@ -1,4 +1,5 @@
-export const COACH_CATEGORIES = ['体能教练', '专项教练'] as const;
+export const HEAD_COACH_CATEGORY = '主管教练';
+export const COACH_CATEGORIES = [HEAD_COACH_CATEGORY, '专项教练', '体能教练', '康复治疗师'] as const;
 
 export type CoachCategory = (typeof COACH_CATEGORIES)[number];
 

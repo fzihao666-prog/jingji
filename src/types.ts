@@ -15,11 +15,14 @@ import type {
 export type { AreaLevel, ChampionModelStandardType, Project, Role };
 export type TrainingStatus = 'normal' | 'attention' | 'alert' | 'rest' | 'missing';
 
+import type { CoachCategory } from '../shared/coach-categories';
+
 export type User = {
   id: number;
   username: string;
   displayName: string;
   role: Role;
+  coachCategories?: CoachCategory[];
   athleteId: number | null;
 };
 
@@ -60,6 +63,7 @@ export type Athlete = {
   city: string;
   county: string;
   coaches: string;
+  headCoaches?: string;
   photoUrl: string;
   birthDate: string | null;
   profileStatus: 'incomplete' | 'complete';

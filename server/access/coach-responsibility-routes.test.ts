@@ -55,7 +55,7 @@ beforeAll(async () => {
     CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER,
       active INTEGER, gender TEXT);
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
-    CREATE TABLE coach_profiles (user_id INTEGER PRIMARY KEY, category TEXT, updated_at TEXT);
+    CREATE TABLE coach_profiles (user_id INTEGER, category TEXT, updated_at TEXT, PRIMARY KEY (user_id, category));
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER);
     CREATE TABLE training_plans (id INTEGER, athlete_id INTEGER, title TEXT, start_date TEXT, end_date TEXT, created_by INTEGER, plan_data TEXT, model TEXT DEFAULT 'legacy');
     CREATE TABLE special_training_plans (id INTEGER, project TEXT, week_start TEXT, title TEXT, status TEXT, created_by INTEGER);
@@ -140,6 +140,22 @@ function update(body: unknown, actor = 1, athleteId = '101') {
 }
 
 describe('队伍责任范围 HTTP 集成', () => {
+  it('仅范围内上级可分配多个教练类别，非法类别不会覆盖原分配', async () => {
+    const save = (actor: number, coach: number, categories: string[]) =>
+      fetch(`${baseUrl}/api/admin/coaches/${coach}/category`, {
+        method: 'PUT', headers: headers(actor), body: JSON.stringify({ categories }),
+      });
+    const categories = ['主管教练', '专项教练', '体能教练', '康复治疗师'];
+    expect((await save(2, 2, categories)).status).toBe(403);
+    expect((await save(5, 4, categories)).status).toBe(404);
+    expect((await save(1, 2, categories)).status).toBe(200);
+    expect((await save(1, 2, ['DMD'])).status).toBe(400);
+    const payload = await assignments(2);
+    expect(payload.coaches[0]).toMatchObject({ id: 2, categories: expect.arrayContaining(categories) });
+    expect((await save(1, 2, [])).status).toBe(200);
+    expect((await assignments(2)).coaches[0]).toMatchObject({ categories: [] });
+  });
+
   it('SCC 可见跨生源与缺失归属的全队，关系来自队伍且不受错误旧关联影响', async () => {
     const payload = await assignments(2);
     expect(payload.athletes.map((athlete) => athlete.id).sort()).toEqual([101, 102, 103]);

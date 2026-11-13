@@ -7,7 +7,7 @@ export const ROLE_META = {
   },
   SCC: {
     code: 'SCC',
-    label: '队伍体能教练',
+    label: '队伍教练',
     level: 2,
     scope: '本人负责队伍',
   },

@@ -490,7 +490,7 @@ export function PersonalPage(props: Props) {
           fields: [
             { label: '运动项目', value: projectLabel(selectedAthlete.project) },
             { label: '所属队伍', value: selectedAthlete.team },
-            { label: '主管教练', value: selectedAthlete.coaches },
+            { label: '主管教练', value: selectedAthlete.headCoaches || '—' },
             {
               label: '训练年限',
               value: trainingExperience(selectedAthlete.startSportDate, props.to),
