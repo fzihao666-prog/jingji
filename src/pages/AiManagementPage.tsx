@@ -11,6 +11,7 @@ import {
   AppCard,
   ContentState,
   FilterBar,
+  PageContainer,
   PageHeader,
   SectionHeader,
 } from '../components/PageLayout';
@@ -69,7 +70,7 @@ export function AiManagementPage() {
   }
 
   return (
-    <div className="ai-management">
+    <PageContainer className="ai-management">
       <PageHeader
         title="AI 管理"
         supportingContent={<p>预算和用量按北京时间统计。</p>}
@@ -310,6 +311,6 @@ export function AiManagementPage() {
           </div>
         )}
       </AppCard>
-    </div>
+    </PageContainer>
   );
 }
