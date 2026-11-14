@@ -244,7 +244,7 @@ export function summarizeSubmissions(input: {
   };
   for (const person of people) {
     for (const team of person.teams) {
-      if (filters.team && filters.team !== team) continue;
+      if (filters.team !== undefined && filters.team !== team) continue;
       for (const role of person.roles) {
         addRow(team, role);
         addRow(team, role, person);
@@ -255,7 +255,7 @@ export function summarizeSubmissions(input: {
     const athlete =
       athleteMap.get(fact.athleteId) ??
       (fact.team !== undefined ? { team: fact.team, name: '' } : undefined);
-    if (!athlete || (filters.team && filters.team !== athlete.team)) continue;
+    if (!athlete || (filters.team !== undefined && filters.team !== athlete.team)) continue;
     const id = `${fact.entity}:${fact.id}`;
     const source =
       evidence.get(fact.evidenceKey ?? id) ??

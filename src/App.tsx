@@ -559,7 +559,7 @@ export default function App() {
           />
         )}
         {page === 'submission-report' && ['REG', 'TD', 'DMD'].includes(user.role) && (
-          <SubmissionReportPage key={project} project={project} />
+          <SubmissionReportPage key={project} project={project} projects={shared.projects} onProjectChange={shared.onProjectChange} />
         )}
         {page === 'reports' && user.role !== 'ATL' && (
           <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />

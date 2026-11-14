@@ -134,3 +134,33 @@ it('通过历史导入批次找回首次提交，不重复计入覆盖批次', a
     expect.objectContaining({ name: '甲教练', direct: 1, total: 1 })
   );
 });
+
+it('未分队记录可单独筛选，查看和导出均要求未分队范围授权', async () => {
+  db.exec(`
+    INSERT INTO athletes(id,name,project,team) VALUES (9310,'未分队运动员','ROWING','');
+    INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES (9301,'ROWING','*',9301);
+    INSERT INTO training_sessions(id,athlete_id,session_date,training_type,structure_type,intensity_zone,created_by)
+      VALUES (9310,9310,'2025-12-12','体能训练','','',9302);
+    UPDATE submission_provenance SET submitted_at='2026-11-08 12:00:00'
+      WHERE entity='training_session' AND entity_id=9310;
+  `);
+  try {
+    const query = 'project=ROWING&team=&from=2026-11-08&to=2026-11-08';
+    const response = await request(query);
+    expect(response.status).toBe(200);
+    const report = (await response.json()) as SubmissionReport;
+    expect(report.teams).toContain('');
+    expect(report.total).toBe(1);
+    expect(report.rows.every((row) => row.team === '')).toBe(true);
+    expect((await request(query, 9304)).status).toBe(403);
+    expect((await request(`${query}&format=xlsx`, 9304)).status).toBe(403);
+    const excel = await request(`${query}&format=xlsx`);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await excel.arrayBuffer());
+    expect(workbook.getWorksheet('汇总')?.getCell('A2').value).toBe('未分队');
+  } finally {
+    db.exec(
+      "DELETE FROM athletes WHERE id=9310; DELETE FROM user_team_permissions WHERE user_id=9301 AND project='ROWING' AND team='*';"
+    );
+  }
+});

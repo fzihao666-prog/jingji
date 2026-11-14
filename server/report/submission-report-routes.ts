@@ -21,7 +21,7 @@ const querySchema = z
     project: z.enum(PROJECTS),
     from: z.iso.date().optional(),
     to: z.iso.date().optional(),
-    team: z.string().min(1).max(200).optional(),
+    team: z.string().max(200).optional(),
     roles: z
       .string()
       .max(100)
@@ -60,12 +60,12 @@ export function registerSubmissionReportRoutes(app: Express) {
           .prepare(
             `
       SELECT a.id,a.name,COALESCE(t.name,a.team,'') AS team FROM athletes a
-      LEFT JOIN project_teams t ON t.id=a.team_id WHERE a.project=?
+      LEFT JOIN project_teams t ON t.id=a.team_id AND t.project=a.project WHERE a.project=?
     `
           )
           .all(project) as Array<{ id: number; name: string; team: string }>
       ).filter(({ team }) => canSeeTeam(team));
-      if (filters.team && !canSeeTeam(filters.team)) {
+      if (filters.team !== undefined && !canSeeTeam(filters.team)) {
         return res.status(403).json({ message: '当前账号无权查看该队伍。' });
       }
       const teamNames = [
@@ -138,7 +138,7 @@ export function registerSubmissionReportRoutes(app: Express) {
         ...types,
       ]);
       summary.addRow([
-        filters.team ?? '全部授权队伍',
+        filters.team === undefined ? '全部授权队伍' : filters.team || '未分队',
         '所有岗位',
         '系统总数（去重）',
         null,

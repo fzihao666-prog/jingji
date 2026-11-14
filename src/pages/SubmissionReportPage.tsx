@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
 import { COACH_CATEGORIES } from '../../shared/coach-categories';
-import type { Project } from '../../shared/projects';
+import { isProject, projectLabel, type Project } from '../../shared/projects';
 import type { SubmissionReport, SubmissionSummary } from '../../shared/submission-report';
 import { api } from '../api';
 import { PageContainer, PageHeader } from '../components/PageLayout';
@@ -14,15 +14,27 @@ const kinds = (types: Record<string, number>) =>
     .map(([type, value]) => `${type} ${count(value)}`)
     .join('、') || '—';
 
-export default function SubmissionReportPage({ project }: { project: Project }) {
+export default function SubmissionReportPage({
+  project,
+  projects,
+  onProjectChange,
+}: {
+  project: Project;
+  projects: Project[];
+  onProjectChange: (project: Project) => void;
+}) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [team, setTeam] = useState('');
+  const [team, setTeam] = useState<string>();
   const [roles, setRoles] = useState<string[]>([]);
   const [selection, setSelection] = useState<SubmissionSummary | null>(null);
   const [page, setPage] = useState(1);
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [result, setResult] = useState<{ query: string; report: SubmissionReport }>();
+  const [result, setResult] = useState<{
+    query: string;
+    filters: string;
+    report: SubmissionReport;
+  }>();
   const [failure, setFailure] = useState<{ query: string; message: string }>();
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -32,7 +44,7 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
     const query = new URLSearchParams({ project });
     if (from) query.set('from', from);
     if (to) query.set('to', to);
-    if (team) query.set('team', team);
+    if (team !== undefined) query.set('team', team);
     if (roles.length) query.set('roles', roles.join(','));
     return query;
   }, [project, from, to, team, roles]);
@@ -45,6 +57,7 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
     return params;
   }, [filters, selection, page]);
   const queryKey = query.toString();
+  const filterKey = filters.toString();
   useEffect(() => {
     if (!valid) return;
     const controller = new AbortController();
@@ -52,7 +65,7 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
       (report) => {
         if (!controller.signal.aborted) {
           setFailure(undefined);
-          setResult({ query: queryKey, report });
+          setResult({ query: queryKey, filters: filterKey, report });
         }
       },
       (error: unknown) => {
@@ -65,10 +78,18 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
       }
     );
     return () => controller.abort();
-  }, [query, queryKey, retry, valid]);
+  }, [query, queryKey, filterKey, retry, valid]);
 
   const report = result?.query === queryKey && valid ? result.report : undefined;
-  const summary = valid ? result?.report : undefined;
+  const summary = valid && result?.filters === filterKey ? result.report : undefined;
+  const peopleByGroup = new Map<string, SubmissionSummary[]>();
+  for (const row of summary?.rows ?? []) {
+    if (row.group) continue;
+    const key = JSON.stringify([row.team, row.role]);
+    const people = peopleByGroup.get(key) ?? [];
+    people.push(row);
+    peopleByGroup.set(key, people);
+  }
   const error = failure?.query === queryKey ? failure.message : '';
   const resetSelection = () => {
     setSelection(null);
@@ -109,17 +130,36 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
       <PageHeader title="数据提交检查" />
       <div className="submission-filters">
         <label>
+          项目
+          <select
+            value={project}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (isProject(value)) onProjectChange(value);
+            }}
+          >
+            {projects.map((value) => (
+              <option key={value} value={value}>
+                {projectLabel(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           队伍
           <select
-            value={team}
+            value={team === undefined ? '' : JSON.stringify(team)}
             onChange={(event) => {
-              setTeam(event.target.value);
+              const value = event.target.value;
+              setTeam(result?.report.teams.find((name) => JSON.stringify(name) === value));
               resetSelection();
             }}
           >
             <option value="">全部授权队伍</option>
-            {result?.report.teams.filter(Boolean).map((name) => (
-              <option key={name}>{name}</option>
+            {result?.report.teams.map((name) => (
+              <option key={name} value={JSON.stringify(name)}>
+                {name || '未分队'}
+              </option>
             ))}
           </select>
         </label>
@@ -159,7 +199,7 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
         <button
           type="button"
           className="primary-button"
-          disabled={!report || exporting}
+          disabled={!summary || exporting}
           onClick={exportReport}
         >
           <Download size={16} aria-hidden="true" />
@@ -267,22 +307,17 @@ export default function SubmissionReportPage({ project }: { project: Project }) 
                             <td>{kinds(group.types)}</td>
                           </tr>
                           {open &&
-                            summary.rows
-                              .filter(
-                                (row) =>
-                                  !row.group && row.team === group.team && row.role === group.role
-                              )
-                              .map((row) => (
-                                <tr key={row.key}>
-                                  <td>{row.team || '未分队'}</td>
-                                  <th scope="row">{row.name}</th>
-                                  <td>{count(row.direct)}</td>
-                                  <td>{row.delegated ? count(row.delegated) : '—'}</td>
-                                  <td>—</td>
-                                  <td>{renderCount(row)}</td>
-                                  <td>{kinds(row.types)}</td>
-                                </tr>
-                              ))}
+                            (peopleByGroup.get(group.key) ?? []).map((row) => (
+                              <tr key={row.key}>
+                                <td>{row.team || '未分队'}</td>
+                                <th scope="row">{row.name}</th>
+                                <td>{count(row.direct)}</td>
+                                <td>{row.delegated ? count(row.delegated) : '—'}</td>
+                                <td>—</td>
+                                <td>{renderCount(row)}</td>
+                                <td>{kinds(row.types)}</td>
+                              </tr>
+                            ))}
                         </Fragment>
                       );
                     })}

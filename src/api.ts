@@ -108,7 +108,7 @@ export class ApiRequestError extends Error {
 type ApiRequestOptions = RequestInit & {
   /** 为 false 时不附加令牌，401 也不触发会话清理与刷新（登录、注册等免登录接口）。 */
   auth?: boolean;
-  responseType?: 'json' | 'blob' | 'image' | 'docx';
+  responseType?: 'json' | 'blob' | 'image' | 'docx' | 'xlsx';
   /** 请求超时毫秒数；仅对需要快速失败的接口（如登录）启用。 */
   timeoutMs?: number;
 };
@@ -183,13 +183,15 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
       throw new ApiRequestError('照片响应格式异常。');
     return (await response.blob()) as T;
   }
-  if (responseType === 'blob' || responseType === 'docx') {
+  if (responseType === 'blob' || responseType === 'docx' || responseType === 'xlsx') {
     const expectedType =
       responseType === 'docx'
         ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        : 'application/pdf';
+        : responseType === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/pdf';
     if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== expectedType)
-      throw new ApiRequestError('报告响应格式异常，请重试。');
+      throw new ApiRequestError(responseType === 'xlsx' ? 'Excel 响应格式异常，请重试。' : '报告响应格式异常，请重试。');
     return (await response.blob()) as T;
   }
   return payload as T;
@@ -202,7 +204,7 @@ export const api = {
   async exportSubmissionReport(query: URLSearchParams) {
     const params = new URLSearchParams(query);
     params.set('format', 'xlsx');
-    const blob = await request<Blob>(`/api/reports/submissions?${params}`, { responseType: 'blob' });
+    const blob = await request<Blob>(`/api/reports/submissions?${params}`, { responseType: 'xlsx' });
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
