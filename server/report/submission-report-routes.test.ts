@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server } from 'node:http';
 import express from 'express';
-import ExcelJS from 'exceljs';
 import jwt from 'jsonwebtoken';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { initializeDatabase } from '../core/db-initialize.ts';
@@ -86,129 +85,44 @@ function request(query = 'project=ROWING', id = 9301) {
   });
 }
 
-it('本人、代导入和零提交各自显示，覆盖保留原归属，角色筛选保持系统总数', async () => {
-  const report = (await (
-    await request('project=ROWING&from=2026-11-14&to=2026-11-14')
-  ).json()) as SubmissionReport;
-  expect(report.total).toBe(2);
-  expect(report.rows).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ group: true, role: '体能教练', direct: 1, delegated: 1, total: 2 }),
-      expect.objectContaining({ name: '甲教练', direct: 1, delegated: 0, total: 1 }),
-      expect.objectContaining({ name: '乙教练', direct: 0, total: 0 }),
-    ])
-  );
-  const role = encodeURIComponent('康复治疗师');
-  const filtered = (await (
-    await request(`project=ROWING&from=2026-11-14&roles=${role}`)
-  ).json()) as SubmissionReport;
-  expect(filtered.total).toBe(2);
-  expect(filtered.rows).toEqual([]);
-});
-
-it('网页与 Excel 使用同一范围与首次归属，越权和无效日期被拒绝', async () => {
-  expect((await request('project=VOLLEYBALL')).status).toBe(403);
-  expect((await request('project=ROWING', 9302)).status).toBe(403);
-  expect(
-    (await request(`project=ROWING&team=${encodeURIComponent('合成一队')}`, 9304)).status
-  ).toBe(403);
-  expect((await request('project=ROWING&from=2026-11-31')).status).toBe(400);
-  const query = 'project=ROWING&from=2026-11-14&to=2026-11-14';
-  const report = (await (await request(query)).json()) as SubmissionReport;
-  const group = report.rows.find((row) => row.group)!;
-  const response = await request(`${query}&key=${encodeURIComponent(group.key)}`);
-  const detail = (await response.json()) as SubmissionReport;
-  expect(detail.details.map(({ name, operator }) => [name, operator])).toEqual([
-    ['', '管理员'],
-    ['甲教练', '甲教练'],
-  ]);
-  const workbook = new ExcelJS.Workbook();
-  const excel = await request(`${query}&format=xlsx`);
-  expect(excel.status).toBe(200);
-  await workbook.xlsx.load(await excel.arrayBuffer());
-  expect(workbook.getWorksheet('汇总')?.getCell('G2').value).toBe(2);
-  expect(workbook.getWorksheet('明细')?.rowCount).toBe(3);
-});
-
-it('通过历史导入批次找回首次提交，不重复计入覆盖批次', async () => {
-  const query = 'project=ROWING&from=2026-11-12&to=2026-11-12';
-  const response = await request(query);
+it('同队多人共享队伍存量，管理员录入只计一次，服务端裁切权限', async () => {
+  db.exec(`
+    INSERT OR IGNORE INTO project_teams(project,name) VALUES ('ROWING','合成一队'),('ROWING','合成二队'),('ROWING','合成空队');
+    INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES (9301,'ROWING','合成空队',9301);
+    UPDATE athletes SET team_id=(SELECT id FROM project_teams WHERE project='ROWING' AND name=team) WHERE id IN (9301,9302);
+  `);
+  const response = await request('');
   expect(response.status).toBe(200);
   const report = (await response.json()) as SubmissionReport;
-  expect(report.total).toBe(1);
-  expect(report.types).toEqual({ 日常监测: 1 });
-  expect(report.rows).toContainEqual(
-    expect.objectContaining({ name: '甲教练', direct: 1, total: 1 })
-  );
+  const index = report.teams.findIndex(({ name }) => name === '合成一队');
+  expect(report.teams[index].coaches).toEqual([9302, 9303]);
+  expect(
+    report.records
+      .filter(([team]) => team === index)
+      .map(([, , , id]) => id)
+      .sort()
+  ).toEqual([
+    'athlete:9301',
+    'daily_wellness:9301',
+    'training_session:9301',
+    'training_session:9302',
+  ]);
+  expect(report.teams.find(({ name }) => name === '合成空队')?.coaches).toEqual([]);
+  expect(report.teams.some(({ name }) => name === '合成二队')).toBe(false);
+  expect((await request('', 9302)).status).toBe(403);
 });
 
-it('未分队记录可单独筛选，查看和导出均要求未分队范围授权', async () => {
+it('转队后历史随新队，离队清空归最后一队', async () => {
   db.exec(`
-    INSERT INTO athletes(id,name,project,team) VALUES (9310,'未分队运动员','ROWING','');
-    INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES (9301,'ROWING','*',9301);
-    INSERT INTO training_sessions(id,athlete_id,session_date,training_type,structure_type,intensity_zone,created_by)
-      VALUES (9310,9310,'2025-12-12','体能训练','','',9302);
-    UPDATE submission_provenance SET submitted_at='2026-11-08 12:00:00'
-      WHERE entity='training_session' AND entity_id=9310;
+    UPDATE athletes SET team='合成二队',team_id=(SELECT id FROM project_teams WHERE project='ROWING' AND name='合成二队') WHERE id=9301;
+    UPDATE athletes SET active=0,team='',team_id=NULL WHERE id=9301;
   `);
-  try {
-    const query = 'project=ROWING&team=&from=2026-11-08&to=2026-11-08';
-    const response = await request(query);
-    expect(response.status).toBe(200);
-    const report = (await response.json()) as SubmissionReport;
-    expect(report.teams).toContain('');
-    expect(report.total).toBe(1);
-    expect(report.rows.every((row) => row.team === '' || row.team === '未分队')).toBe(true);
-    expect((await request(query, 9304)).status).toBe(403);
-    expect((await request(`${query}&format=xlsx`, 9304)).status).toBe(403);
-    const excel = await request(`${query}&format=xlsx`);
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(await excel.arrayBuffer());
-    expect(workbook.getWorksheet('汇总')?.getCell('A2').value).toBe('未分队');
-  } finally {
-    db.exec(
-      "DELETE FROM athletes WHERE id=9310; DELETE FROM user_team_permissions WHERE user_id=9301 AND project='ROWING' AND team='*';"
-    );
-  }
-});
-
-it('默认合并授权项目，同一教练只出现一次且能查看跨项目明细', async () => {
-  db.exec(`
-    INSERT INTO user_project_permissions(user_id,project,granted_by) VALUES (9301,'VOLLEYBALL',9301);
-    INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES (9301,'VOLLEYBALL','合成一队',9301);
-    INSERT INTO athletes(id,name,project,team) VALUES (9320,'第二项目运动员','VOLLEYBALL','合成一队');
-    INSERT INTO training_sessions(id,athlete_id,session_date,training_type,structure_type,intensity_zone,created_by)
-      VALUES (9320,9320,'2025-12-12','体能训练','','',9302);
-    UPDATE submission_provenance SET submitted_at='2026-11-13 19:00:00'
-      WHERE entity='training_session' AND entity_id=9320;
-  `);
-  const query = 'from=2026-11-14&to=2026-11-14';
-  const report = (await (await request(query)).json()) as SubmissionReport;
-  expect(report.total).toBe(3);
-  const coach = report.rows.filter((row) => row.name === '甲教练');
-  expect(coach).toHaveLength(1);
-  expect(coach[0]).toMatchObject({ total: 2, lastSubmitted: '2026-11-14' });
-  expect(report.rows.filter((row) => row.group)).toHaveLength(2);
-  const detail = (await (
-    await request(`${query}&key=${encodeURIComponent(coach[0].key)}`)
-  ).json()) as SubmissionReport;
-  expect(detail.details.map((row) => row.project).sort()).toEqual(['ROWING', 'VOLLEYBALL']);
-});
-
-it('跨项目明细每页最多返回 50 条，保留准确总数', async () => {
-  db.exec(`
-    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<61)
-    INSERT INTO training_sessions(athlete_id,session_date,session_order,training_type,structure_type,intensity_zone,created_by)
-      SELECT CASE WHEN n<=30 THEN 9301 ELSE 9320 END,'2025-11-01',n,'体能训练','','',9302 FROM seq;
-    UPDATE submission_provenance SET submitted_at='2026-10-15 02:00:00'
-      WHERE entity='training_session' AND entity_id IN (SELECT id FROM training_sessions WHERE session_date='2025-11-01');
-  `);
-  const query = 'from=2026-10-15&to=2026-10-15&key=%5B9302%5D';
-  const first = (await (await request(`${query}&page=1`)).json()) as SubmissionReport;
-  const next = (await (await request(`${query}&page=2`)).json()) as SubmissionReport;
-  expect(first.detailTotal).toBe(61);
-  expect(next.detailTotal).toBe(61);
-  expect(first.details).toHaveLength(50);
-  expect(next.details).toHaveLength(11);
-  expect(new Set([...first.details, ...next.details].map(({ id }) => id)).size).toBe(61);
+  const response = await request('', 9304);
+  expect(response.status).toBe(200);
+  const report = (await response.json()) as SubmissionReport;
+  const record = report.records.find(([, , , id]) => id === 'training_session:9301');
+  expect(record?.[2]).toBe('2025-12-12');
+  expect(report.teams[record![0]].name).toBe('合成二队');
+  const original = (await (await request('')).json()) as SubmissionReport;
+  expect(original.records.some(([, , , id]) => id === 'training_session:9301')).toBe(false);
 });

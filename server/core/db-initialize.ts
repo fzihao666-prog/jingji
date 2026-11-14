@@ -1,4 +1,4 @@
-import { initializeSubmissionProvenance } from '../report/submission-provenance.ts';
+import { initializeAthleteLastTeam, initializeSubmissionProvenance } from '../report/submission-provenance.ts';
 import { initializeTeamTrainingStatistics } from '../team-training/team-training-stats.ts';
 import { initializeEnodeDatabase } from '../enode/enode.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
@@ -6023,6 +6023,7 @@ export function initializeDatabase(
   initializeEnodeDatabase(db);
   initializeTeamTrainingStatistics(db);
   initializeSubmissionProvenance(db);
+  initializeAthleteLastTeam(db);
   return { upsertAthleteOrigin };
 
 }

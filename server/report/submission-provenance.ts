@@ -43,3 +43,20 @@ export function saveSubmissionProvenance(
     VALUES(?,?,?) ON CONFLICT DO NOTHING`
   ).run(entity, id, actor);
 }
+
+export function initializeAthleteLastTeam(db: DatabaseSync) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS athlete_last_team (
+      athlete_id INTEGER PRIMARY KEY REFERENCES athletes(id) ON DELETE CASCADE,
+      project TEXT NOT NULL,
+      team_id INTEGER NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS capture_athlete_last_team BEFORE UPDATE OF team_id, team ON athletes
+    WHEN NEW.team_id IS NULL AND NULLIF(NEW.team,'') IS NULL AND OLD.project=NEW.project BEGIN
+      INSERT INTO athlete_last_team(athlete_id,project,team_id)
+      SELECT OLD.id,OLD.project,id FROM project_teams
+      WHERE project=OLD.project AND (id=OLD.team_id OR (OLD.team_id IS NULL AND name=OLD.team))
+      ON CONFLICT(athlete_id) DO UPDATE SET project=excluded.project,team_id=excluded.team_id;
+    END;
+  `);
+}
