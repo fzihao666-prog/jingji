@@ -31,13 +31,17 @@
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.4;
 }
 
 .submission-table :is(td, th) {
-  padding: 0.65rem;
+  padding: 0.375rem 0.5rem;
   border-bottom: 1px solid var(--line, #d5dde3);
 }
 
-.submission-group {
-  font-weight: 600;
+.submission-table .secondary-button {
+  min-height: 1.75rem;
+  padding: 0.125rem 0.5rem;
+  font-size: inherit;
 }

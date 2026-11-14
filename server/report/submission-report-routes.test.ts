@@ -151,7 +151,7 @@ it('未分队记录可单独筛选，查看和导出均要求未分队范围授�
     const report = (await response.json()) as SubmissionReport;
     expect(report.teams).toContain('');
     expect(report.total).toBe(1);
-    expect(report.rows.every((row) => row.team === '')).toBe(true);
+    expect(report.rows.every((row) => row.team === '' || row.team === '未分队')).toBe(true);
     expect((await request(query, 9304)).status).toBe(403);
     expect((await request(`${query}&format=xlsx`, 9304)).status).toBe(403);
     const excel = await request(`${query}&format=xlsx`);
@@ -163,4 +163,27 @@ it('未分队记录可单独筛选，查看和导出均要求未分队范围授�
       "DELETE FROM athletes WHERE id=9310; DELETE FROM user_team_permissions WHERE user_id=9301 AND project='ROWING' AND team='*';"
     );
   }
+});
+
+it('默认合并授权项目，同一教练只出现一次且能查看跨项目明细', async () => {
+  db.exec(`
+    INSERT INTO user_project_permissions(user_id,project,granted_by) VALUES (9301,'VOLLEYBALL',9301);
+    INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES (9301,'VOLLEYBALL','合成一队',9301);
+    INSERT INTO athletes(id,name,project,team) VALUES (9320,'第二项目运动员','VOLLEYBALL','合成一队');
+    INSERT INTO training_sessions(id,athlete_id,session_date,training_type,structure_type,intensity_zone,created_by)
+      VALUES (9320,9320,'2025-12-12','体能训练','','',9302);
+    UPDATE submission_provenance SET submitted_at='2026-11-13 19:00:00'
+      WHERE entity='training_session' AND entity_id=9320;
+  `);
+  const query = 'from=2026-11-14&to=2026-11-14';
+  const report = (await (await request(query)).json()) as SubmissionReport;
+  expect(report.total).toBe(3);
+  const coach = report.rows.filter((row) => row.name === '甲教练');
+  expect(coach).toHaveLength(1);
+  expect(coach[0]).toMatchObject({ total: 2, lastSubmitted: '2026-11-14' });
+  expect(report.rows.filter((row) => row.group)).toHaveLength(2);
+  const detail = (await (
+    await request(`${query}&key=${encodeURIComponent(coach[0].key)}`)
+  ).json()) as SubmissionReport;
+  expect(detail.details.map((row) => row.project).sort()).toEqual(['ROWING', 'VOLLEYBALL']);
 });

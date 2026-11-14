@@ -190,7 +190,7 @@ type Filters = {
 };
 
 const groupKey = (team: string, role: string) => JSON.stringify([team, role]);
-const personKey = (team: string, role: string, id: number) => JSON.stringify([team, role, id]);
+const personKey = (id: number) => JSON.stringify([id]);
 const increment = (counts: Record<string, number>, type: string) => {
   counts[type] = (counts[type] ?? 0) + 1;
 };
@@ -215,6 +215,7 @@ export function summarizeSubmissions(input: {
   evidence: Map<string, Evidence & { original?: boolean }>;
   filters: Filters;
   exporting?: boolean;
+  project?: string;
 }): SubmissionReport {
   const { facts, athletes, people, operators, evidence, filters, exporting } = input;
   const athleteMap = new Map(athletes.map((athlete) => [athlete.id, athlete]));
@@ -226,7 +227,9 @@ export function summarizeSubmissions(input: {
   let total = 0;
   let detailTotal = 0;
   const addRow = (team: string, role: string, person?: Person) => {
-    const key = person ? personKey(team, role, person.id) : groupKey(team, role);
+    const key = person
+      ? personKey(person.id)
+      : groupKey(input.project ? `${input.project}:${team}` : team, role);
     if (!rows.has(key))
       rows.set(key, {
         key,
@@ -240,12 +243,22 @@ export function summarizeSubmissions(input: {
         total: 0,
         types: Object.create(null),
       });
-    return rows.get(key)!;
+    const row = rows.get(key)!;
+    if (person) {
+      row.team = [
+        ...new Set([...row.team.split('、').map((name) => name || '未分队'), team || '未分队']),
+      ]
+        .filter(Boolean)
+        .join('、');
+      row.role = [...new Set([...row.role.split('、'), role])].join('、');
+    }
+    return row;
   };
   for (const person of people) {
     for (const team of person.teams) {
       if (filters.team !== undefined && filters.team !== team) continue;
       for (const role of person.roles) {
+        if (filters.roles?.length && !filters.roles.includes(role)) continue;
         addRow(team, role);
         addRow(team, role, person);
       }
@@ -285,6 +298,7 @@ export function summarizeSubmissions(input: {
         ? fact.role
         : (person.roles[0] ?? unknown)
       : fact.role || unknown;
+    if (filters.roles?.length && !filters.roles.includes(role)) continue;
     const group = addRow(athlete.team, role);
     const personal = person ? addRow(athlete.team, role, person) : undefined;
     const field = personal
@@ -296,16 +310,20 @@ export function summarizeSubmissions(input: {
       row[field]++;
       row.total++;
       increment(row.types, fact.type);
+      if (date && date > (row.lastSubmitted ?? '')) row.lastSubmitted = date;
     }
     const key = personal?.key ?? group.key;
-    if (filters.roles?.length && !filters.roles.includes(role)) continue;
-    if (!exporting && (!filters.key || (filters.key !== key && filters.key !== group.key)))
+    if (
+      (!exporting || filters.key) &&
+      (!filters.key || (filters.key !== key && filters.key !== group.key))
+    )
       continue;
     const index = detailTotal++;
     const offset = ((filters.page ?? 1) - 1) * 50;
     if (!exporting && (index < offset || index >= offset + 50)) continue;
     details.push({
       id,
+      project: input.project,
       key,
       groupKey: group.key,
       team: athlete.team,
@@ -323,9 +341,7 @@ export function summarizeSubmissions(input: {
           : '归属待确认',
     });
   }
-  const visible = [...rows.values()].filter(
-    (row) => !filters.roles?.length || filters.roles.includes(row.role)
-  );
+  const visible = [...rows.values()];
   visible.sort(
     (a, b) =>
       a.team.localeCompare(b.team, 'zh-CN') ||

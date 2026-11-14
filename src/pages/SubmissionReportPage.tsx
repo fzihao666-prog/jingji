@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
 import { COACH_CATEGORIES } from '../../shared/coach-categories';
 import { isProject, projectLabel, type Project } from '../../shared/projects';
@@ -14,25 +14,18 @@ const kinds = (types: Record<string, number>) =>
     .map(([type, value]) => `${type} ${count(value)}`)
     .join('、') || '—';
 
-export default function SubmissionReportPage({
-  project,
-  projects,
-  onProjectChange,
-}: {
-  project: Project;
-  projects: Project[];
-  onProjectChange: (project: Project) => void;
-}) {
+export default function SubmissionReportPage({ projects }: { projects: Project[] }) {
+  const [project, setProject] = useState<Project>();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [team, setTeam] = useState<string>();
   const [roles, setRoles] = useState<string[]>([]);
   const [selection, setSelection] = useState<SubmissionSummary | null>(null);
   const [page, setPage] = useState(1);
-  const [collapsed, setCollapsed] = useState<string[]>([]);
   const [result, setResult] = useState<{
     query: string;
     filters: string;
+    project: Project | undefined;
     report: SubmissionReport;
   }>();
   const [failure, setFailure] = useState<{ query: string; message: string }>();
@@ -41,7 +34,8 @@ export default function SubmissionReportPage({
   const [retry, setRetry] = useState(0);
   const valid = !from || !to || from <= to;
   const filters = useMemo(() => {
-    const query = new URLSearchParams({ project });
+    const query = new URLSearchParams();
+    if (project) query.set('project', project);
     if (from) query.set('from', from);
     if (to) query.set('to', to);
     if (team !== undefined) query.set('team', team);
@@ -65,7 +59,7 @@ export default function SubmissionReportPage({
       (report) => {
         if (!controller.signal.aborted) {
           setFailure(undefined);
-          setResult({ query: queryKey, filters: filterKey, report });
+          setResult({ query: queryKey, filters: filterKey, project, report });
         }
       },
       (error: unknown) => {
@@ -78,18 +72,11 @@ export default function SubmissionReportPage({
       }
     );
     return () => controller.abort();
-  }, [query, queryKey, filterKey, retry, valid]);
+  }, [query, queryKey, filterKey, project, retry, valid]);
 
   const report = result?.query === queryKey && valid ? result.report : undefined;
   const summary = valid && result?.filters === filterKey ? result.report : undefined;
-  const peopleByGroup = new Map<string, SubmissionSummary[]>();
-  for (const row of summary?.rows ?? []) {
-    if (row.group) continue;
-    const key = JSON.stringify([row.team, row.role]);
-    const people = peopleByGroup.get(key) ?? [];
-    people.push(row);
-    peopleByGroup.set(key, people);
-  }
+  const teams = result?.project === project ? result?.report.teams : undefined;
   const error = failure?.query === queryKey ? failure.message : '';
   const resetSelection = () => {
     setSelection(null);
@@ -132,12 +119,15 @@ export default function SubmissionReportPage({
         <label>
           项目
           <select
-            value={project}
+            value={project ?? ''}
             onChange={(event) => {
               const value = event.target.value;
-              if (isProject(value)) onProjectChange(value);
+              setProject(isProject(value) ? value : undefined);
+              setTeam(undefined);
+              resetSelection();
             }}
           >
+            <option value="">全部授权项目</option>
             {projects.map((value) => (
               <option key={value} value={value}>
                 {projectLabel(value)}
@@ -151,12 +141,12 @@ export default function SubmissionReportPage({
             value={team === undefined ? '' : JSON.stringify(team)}
             onChange={(event) => {
               const value = event.target.value;
-              setTeam(result?.report.teams.find((name) => JSON.stringify(name) === value));
+              setTeam(teams?.find((name) => JSON.stringify(name) === value));
               resetSelection();
             }}
           >
             <option value="">全部授权队伍</option>
-            {result?.report.teams.map((name) => (
+            {teams?.map((name) => (
               <option key={name} value={JSON.stringify(name)}>
                 {name || '未分队'}
               </option>
@@ -252,85 +242,103 @@ export default function SubmissionReportPage({
               系统总数覆盖所有岗位。
             </p>
             <p>{kinds(summary.types)}</p>
-            <div
-              className="submission-table"
-              role="region"
-              aria-label="人员与岗位汇总"
-              tabIndex={0}
-            >
+            <h3>人员提交明细</h3>
+            <p>按已确认提交量降序排列，包含零提交人员。提交量供检查参考。</p>
+            <div className="submission-table" role="region" aria-label="人员提交明细" tabIndex={0}>
               <table>
                 <thead>
                   <tr>
-                    <th scope="col">队伍</th>
-                    <th scope="col">岗位 / 人员</th>
-                    <th scope="col">本人导入</th>
-                    <th scope="col">管理员代导入</th>
-                    <th scope="col">来源待确认</th>
-                    <th scope="col">总导入</th>
-                    <th scope="col">数据类型</th>
+                    {[
+                      '人员',
+                      '岗位',
+                      '项目',
+                      '队伍',
+                      '本人提交',
+                      '已确认代导入',
+                      '已确认总量',
+                      '最近提交',
+                      '数据类型',
+                    ].map((label) => (
+                      <th scope="col" key={label}>
+                        {label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {!summary.rows.length && (
+                  {!summary.rows.some((row) => !row.group) && (
                     <tr>
-                      <td colSpan={7}>当前范围没有符合条件的人员或记录。</td>
+                      <td colSpan={9}>当前范围无人员。</td>
                     </tr>
                   )}
                   {summary.rows
-                    .filter((row) => row.group)
-                    .map((group) => {
-                      const open = !collapsed.includes(group.key);
-                      return (
-                        <Fragment key={group.key}>
-                          <tr className="submission-group">
-                            <td>{group.team || '未分队'}</td>
-                            <th scope="row">
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                aria-expanded={open}
-                                onClick={() =>
-                                  setCollapsed(
-                                    open
-                                      ? [...collapsed, group.key]
-                                      : collapsed.filter((key) => key !== group.key)
-                                  )
-                                }
-                              >
-                                {group.role}汇总
-                              </button>
-                            </th>
-                            <td>{count(group.direct)}</td>
-                            <td>{count(group.delegated)}</td>
-                            <td>{count(group.unknown)}</td>
-                            <td>{renderCount(group)}</td>
-                            <td>{kinds(group.types)}</td>
-                          </tr>
-                          {open &&
-                            (peopleByGroup.get(group.key) ?? []).map((row) => (
-                              <tr key={row.key}>
-                                <td>{row.team || '未分队'}</td>
-                                <th scope="row">{row.name}</th>
-                                <td>{count(row.direct)}</td>
-                                <td>{row.delegated ? count(row.delegated) : '—'}</td>
-                                <td>—</td>
-                                <td>{renderCount(row)}</td>
-                                <td>{kinds(row.types)}</td>
-                              </tr>
-                            ))}
-                        </Fragment>
-                      );
-                    })}
+                    .filter((row) => !row.group)
+                    .map((row) => (
+                      <tr key={row.key}>
+                        <th scope="row">{row.name}</th>
+                        <td>{row.role}</td>
+                        <td>{row.projects?.join('、')}</td>
+                        <td>{row.team || '未分队'}</td>
+                        <td>{count(row.direct)}</td>
+                        <td>{row.delegated ? count(row.delegated) : '—'}</td>
+                        <td>{renderCount(row)}</td>
+                        <td>{row.lastSubmitted || '—'}</td>
+                        <td>{kinds(row.types)}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
-            <p>个人数量为已确认归属的记录。个人来源未记录的代导入数据计入岗位汇总。</p>
+            <details>
+              <summary>查看队伍岗位汇总与管理员代导入</summary>
+              <div
+                className="submission-table"
+                role="region"
+                aria-label="队伍岗位汇总"
+                tabIndex={0}
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      {[
+                        '项目',
+                        '队伍',
+                        '岗位',
+                        '本人提交',
+                        '管理员代导入',
+                        '来源待确认',
+                        '总量',
+                        '数据类型',
+                      ].map((label) => (
+                        <th scope="col" key={label}>
+                          {label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.rows
+                      .filter((row) => row.group)
+                      .map((row) => (
+                        <tr key={row.key}>
+                          <td>{row.projects?.join('、')}</td>
+                          <td>{row.team || '未分队'}</td>
+                          <th scope="row">{row.role}</th>
+                          <td>{count(row.direct)}</td>
+                          <td>{count(row.delegated)}</td>
+                          <td>{count(row.unknown)}</td>
+                          <td>{renderCount(row)}</td>
+                          <td>{kinds(row.types)}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           </section>
           {selection && (
             <section aria-labelledby="submission-detail-heading">
-              <h2 id="submission-detail-heading">
-                {selection.team || '未分队'} · {selection.name}明细
-              </h2>
+              <h2 id="submission-detail-heading">{selection.name} · 提交记录</h2>
               <button type="button" className="secondary-button" onClick={resetSelection}>
                 关闭明细
               </button>
@@ -349,6 +357,8 @@ export default function SubmissionReportPage({
                       <thead>
                         <tr>
                           {[
+                            '项目',
+                            '队伍',
                             '数据类型',
                             '运动员',
                             '业务日期',
@@ -365,7 +375,9 @@ export default function SubmissionReportPage({
                       </thead>
                       <tbody>
                         {report.details.map((row) => (
-                          <tr key={row.id}>
+                          <tr key={`${row.project}:${row.id}`}>
+                            <td>{row.project ? projectLabel(row.project) : '—'}</td>
+                            <td>{row.team || '未分队'}</td>
                             <td>{row.type}</td>
                             <td>{row.athlete || '—'}</td>
                             <td>{row.businessDate}</td>

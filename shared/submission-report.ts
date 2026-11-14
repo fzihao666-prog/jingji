@@ -3,6 +3,8 @@ export const UNASSIGNED_SUBMISSION_ROLE = '待确认';
 export type SubmissionSummary = {
   key: string;
   team: string;
+  projects?: string[];
+  lastSubmitted?: string;
   role: string;
   name: string;
   group: boolean;
@@ -14,6 +16,7 @@ export type SubmissionSummary = {
 };
 
 export type SubmissionDetail = {
+  project?: string;
   id: string;
   key: string;
   groupKey: string;
