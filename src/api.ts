@@ -1,3 +1,4 @@
+import type { SubmissionReport } from '../shared/submission-report';
 import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
 import type { AiManagementData, AiSettings } from '../shared/ai-management';
 import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
@@ -195,6 +196,22 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 }
 
 export const api = {
+  submissionReport(query: URLSearchParams, signal?: AbortSignal) {
+    return request<SubmissionReport>(`/api/reports/submissions?${query}`, { signal });
+  },
+  async exportSubmissionReport(query: URLSearchParams) {
+    const params = new URLSearchParams(query);
+    params.set('format', 'xlsx');
+    const blob = await request<Blob>(`/api/reports/submissions?${params}`, { responseType: 'blob' });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = '数据提交检查.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  },
   async importTeamTrainingStats(file: File, project: Project, teamId: number, mappings: Record<string, TeamTrainingColumnMapping>) {
     const body = new FormData();
     body.append('file', file);

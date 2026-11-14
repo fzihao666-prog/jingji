@@ -1,3 +1,4 @@
+import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { insertSession, sessionSchema } from '../athlete/training-session-service.ts';
 import { templateHeaderKey } from '../../shared/import-template-fields.ts';
 import ExcelJS from 'exceljs';
@@ -533,44 +534,54 @@ export function registerSpecialTrainingRoutes(app: Express) {
         });
       }
     }
-    const saved = upsertEvent.get(
-      project,
-      row.testDate,
-      row.distanceM,
-      row.boatClass,
-      row.genderGroup,
-      row.session || '',
-      row.windConditions || '',
-      row.location || '',
-      row.note || '',
-      user.id
-    ) as { id: number };
-    // 同一事件下同一组合重复录入时覆盖原成绩，保证幂等。
-    db.prepare('DELETE FROM special_test_results WHERE event_id = ? AND crew_name = ?').run(saved.id, row.crewName);
-    const inserted = db.prepare(`
+    db.exec('SAVEPOINT record_special_submission');
+    try {
+      const saved = upsertEvent.get(
+        project,
+        row.testDate,
+        row.distanceM,
+        row.boatClass,
+        row.genderGroup,
+        row.session || '',
+        row.windConditions || '',
+        row.location || '',
+        row.note || '',
+        user.id
+      ) as { id: number };
+      // 同一事件下同一组合重复录入时覆盖原成绩，保证幂等。
+      const prior = db.prepare('SELECT 1 FROM special_test_results WHERE event_id=? AND crew_name=?')
+        .get(saved.id, row.crewName);
+      db.prepare('DELETE FROM special_test_results WHERE event_id = ? AND crew_name = ?').run(saved.id, row.crewName);
+      const inserted = db.prepare(`
       INSERT INTO special_test_results
         (event_id, crew_name, member_athlete_ids, member_names, previous_best_ms, attempts_ms, average_ms, best_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      saved.id,
-      row.crewName,
-      JSON.stringify(row.memberAthleteIds),
-      JSON.stringify(memberNames),
-      previousBestMs,
-      JSON.stringify(attemptsMs),
-      averageMs,
-      bestMs
-    );
-    db.prepare(
-      "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, 'CREATE_SPECIAL_TEST_RESULT', 'special_test_event', ?, ?)"
-    ).run(user.id, saved.id, JSON.stringify({ crewName: row.crewName, testDate: row.testDate }));
-    return res.status(201).json({
-      message: '专项测试成绩已保存。',
-      eventId: saved.id,
-      resultId: Number(inserted.lastInsertRowid),
-      averageMs,
-      bestMs,
-    });
+      `).run(
+        saved.id,
+        row.crewName,
+        JSON.stringify(row.memberAthleteIds),
+        JSON.stringify(memberNames),
+        previousBestMs,
+        JSON.stringify(attemptsMs),
+        averageMs,
+        bestMs
+      );
+      db.prepare(
+        "INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, 'CREATE_SPECIAL_TEST_RESULT', 'special_test_event', ?, ?)"
+      ).run(user.id, saved.id, JSON.stringify({ crewName: row.crewName, testDate: row.testDate }));
+      if (!prior) saveSubmissionProvenance(db, `special_test_result:${row.crewName}`, saved.id, user.id);
+      db.exec('RELEASE record_special_submission');
+      return res.status(201).json({
+        message: '专项测试成绩已保存。',
+        eventId: saved.id,
+        resultId: Number(inserted.lastInsertRowid),
+        averageMs,
+        bestMs,
+      });
+    } catch (error) {
+      db.exec('ROLLBACK TO record_special_submission; RELEASE record_special_submission');
+      throw error;
+    }
   });
 
   app.post(
@@ -701,6 +712,9 @@ export function registerSpecialTrainingRoutes(app: Express) {
               row.averageMs,
               row.bestMs
             );
+            if (!sameCrew.length) {
+              saveSubmissionProvenance(db, `special_test_result:${row.crewName}`, saved.id, req.authUser!.id);
+            }
             imported += 1;
           }
         }

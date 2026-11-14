@@ -1,0 +1,43 @@
+.submission-report {
+  display: grid;
+  gap: 1rem;
+}
+
+.submission-filters,
+.submission-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.submission-filters label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.submission-roles label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.submission-table {
+  margin-block: 0.75rem;
+  overflow: auto;
+}
+
+.submission-table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.submission-table :is(td, th) {
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--line, #d5dde3);
+}
+
+.submission-group {
+  font-weight: 600;
+}

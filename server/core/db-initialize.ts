@@ -1,3 +1,4 @@
+import { initializeSubmissionProvenance } from '../report/submission-provenance.ts';
 import { initializeTeamTrainingStatistics } from '../team-training/team-training-stats.ts';
 import { initializeEnodeDatabase } from '../enode/enode.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
@@ -6021,6 +6022,7 @@ export function initializeDatabase(
   } catch(error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
   initializeEnodeDatabase(db);
   initializeTeamTrainingStatistics(db);
+  initializeSubmissionProvenance(db);
   return { upsertAthleteOrigin };
 
 }

@@ -49,7 +49,7 @@ export function registerSelfDailyRoutes(app: Express) {
         .json({ message: firstIssueMessage(parsed.error, '恢复日报内容格式无效。') });
     const row = parsed.data;
     const date = row.date || wellnessWindow(new Date()).today;
-    upsertWellness(athleteId, date, row, WELLNESS_SOURCE);
+    upsertWellness(athleteId, date, row, WELLNESS_SOURCE, req.authUser!.id);
     res.setHeader('Cache-Control', 'no-store');
     res.json({ date, record: readWellness(athleteId, date) });
   });

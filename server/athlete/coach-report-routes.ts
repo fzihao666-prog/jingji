@@ -130,7 +130,7 @@ export function registerCoachReportRoutes(app: Express) {
       return res.status(400).json({ message: firstIssueMessage(parsed.error, '恢复日报内容格式无效。') });
     const row = parsed.data;
     const date = row.date || wellnessWindow(new Date()).today;
-    upsertWellness(athleteId, date, row, COACH_REPORT_SOURCE);
+    upsertWellness(athleteId, date, row, COACH_REPORT_SOURCE, user.id);
     audit(user.id, 'CREATE_COACH_WELLNESS', 'daily_wellness', athleteId, { date });
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ date, record: readWellness(athleteId, date) });

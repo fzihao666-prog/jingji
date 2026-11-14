@@ -76,6 +76,7 @@ const AccountsPage = lazy(() =>
 const RegionAccessPage = lazy(() =>
   import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage }))
 );
+const SubmissionReportPage = lazy(() => import('./pages/SubmissionReportPage'));
 const DataImportPage = lazy(() =>
   import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage }))
 );
@@ -116,6 +117,7 @@ const pageKeys: PageKey[] = [
   'ai-management',
   'bluetooth',
   'data-import',
+  'submission-report',
   'data-management',
   'reports',
 ];
@@ -555,6 +557,9 @@ export default function App() {
             athletes={projectAthletes}
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
+        )}
+        {page === 'submission-report' && ['REG', 'TD', 'DMD'].includes(user.role) && (
+          <SubmissionReportPage key={project} project={project} />
         )}
         {page === 'reports' && user.role !== 'ATL' && (
           <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />

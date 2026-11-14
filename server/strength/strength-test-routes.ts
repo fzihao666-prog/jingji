@@ -1,3 +1,4 @@
+import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { runAiJob } from '../core/ai-usage.ts';
 import { strengthReadScope } from './strength-read-scope.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
@@ -107,18 +108,23 @@ export function registerStrengthTestRoutes(app: Express) {
       const measurement = db.prepare(
         `INSERT INTO test_measurements (test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo) VALUES (?, ?, ?, ?, ?, 'center', 'valid', 'manual', 0) ON CONFLICT(test_session_id, metric_code, side) DO UPDATE SET value_num = excluded.value_num, target_value = excluded.target_value, unit = excluded.unit, source = 'manual', quality = 'valid'`
       );
+      const readMeasurement = db.prepare(
+        "SELECT id FROM test_measurements WHERE test_session_id=? AND metric_code=? AND side='center'"
+      );
       for (const metric of STRENGTH_METRICS) {
         const value = metricsResult.values[metric.key];
         if (value === undefined) continue;
         const code = strengthMetricCode(metric.key);
         definition.run(code, metric.label, metric.unit, metric.min, metric.max);
-        measurement.run(
+        const prior = readMeasurement.get(saved.id, code);
+        const write = measurement.run(
           saved.id,
           code,
           value,
           targetsResult.values[metric.key] ?? null,
           metric.unit
         );
+        if (!prior) saveSubmissionProvenance(db, 'test_measurement', Number(write.lastInsertRowid), user.id);
       }
       db.prepare(
         `

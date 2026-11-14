@@ -1,3 +1,4 @@
+import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { db } from '../core/db.ts';
 
 export type WellnessRow = {
@@ -38,9 +39,22 @@ export function readWellness(athleteId: number, date: string): WellnessRow | nul
 }
 
 // 按 (athlete_id, wellness_date) 幂等 upsert：同日重复提交只保留一条。
-export function upsertWellness(athleteId: number, date: string, row: WellnessInput, source: string): void {
-  db.prepare(
-    `INSERT INTO daily_wellness
+export function upsertWellness(
+  athleteId: number,
+  date: string,
+  row: WellnessInput,
+  source: string,
+  actor: number
+): void {
+  db.exec('SAVEPOINT record_wellness_submission');
+  try {
+    const existing = db.prepare(
+      'SELECT id FROM daily_wellness WHERE athlete_id=? AND wellness_date=?'
+    );
+    const wasPresent = existing.get(athleteId, date);
+    const saved = db
+      .prepare(
+        `INSERT INTO daily_wellness
       (athlete_id, wellness_date, sleep_hours, sleep_quality, morning_pulse, weight_kg,
        fatigue_index, soreness_index, mood_index, status, source, quality, is_demo)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'valid', 0)
@@ -49,18 +63,26 @@ export function upsertWellness(athleteId: number, date: string, row: WellnessInp
        morning_pulse = excluded.morning_pulse, weight_kg = excluded.weight_kg,
        fatigue_index = excluded.fatigue_index, soreness_index = excluded.soreness_index,
        mood_index = excluded.mood_index, status = excluded.status,
-       source = excluded.source, quality = 'valid', is_demo = 0, updated_at = CURRENT_TIMESTAMP`
-  ).run(
-    athleteId,
-    date,
-    row.sleepHours,
-    row.sleepQuality,
-    row.morningPulse,
-    row.weightKg,
-    row.fatigueIndex,
-    row.sorenessIndex,
-    row.moodIndex,
-    row.status || 'normal',
-    source
-  );
+       source = excluded.source, quality = 'valid', is_demo = 0, updated_at = CURRENT_TIMESTAMP
+     RETURNING id`
+      )
+      .get(
+        athleteId,
+        date,
+        row.sleepHours,
+        row.sleepQuality,
+        row.morningPulse,
+        row.weightKg,
+        row.fatigueIndex,
+        row.sorenessIndex,
+        row.moodIndex,
+        row.status || 'normal',
+        source
+      ) as { id: number };
+    if (!wasPresent) saveSubmissionProvenance(db, 'daily_wellness', saved.id, actor);
+    db.exec('RELEASE record_wellness_submission');
+  } catch (error) {
+    db.exec('ROLLBACK TO record_wellness_submission; RELEASE record_wellness_submission');
+    throw error;
+  }
 }

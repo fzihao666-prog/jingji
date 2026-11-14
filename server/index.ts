@@ -43,6 +43,7 @@ import { startBackupScheduler } from './core/backup.ts';
 import { startAiPlanScheduler } from './training-plan/team-plan-ai-scheduler.ts';
 import { databaseBackupDirectory, databasePath } from './core/database-path.ts';
 import { registerReportRoutes } from './report/report-routes.ts';
+import { registerSubmissionReportRoutes } from './report/submission-report-routes.ts';
 import { hasAthleteAccess } from './core/permissions.ts';
 import { getAuthUser } from './core/auth.ts';
 import { teamWeeklyAiPrompt } from './report/team-weekly-ai.ts';
@@ -121,6 +122,7 @@ try {
   logger.error('AI 用量账本初始化失败，模型调用已暂停');
 }
 registerAiManagementRoutes(app);
+registerSubmissionReportRoutes(app);
 registerAuthRoutes(app);
 registerAthleteRoutes(app);
 registerSelfTrainingRoutes(app);

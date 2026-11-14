@@ -49,7 +49,7 @@ export type StrengthPageKey =
   | 'strength-analysis'
   | 'strength-assessment'
   | 'strength-enode';
-export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-management' | 'reports';
+export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-management' | 'reports' | 'submission-report';
 export type PageKey =
   | 'overview'
   | 'training-plans'
@@ -68,6 +68,7 @@ export type PageKey =
 const dataCollectionGroups: Array<{ key: DataCollectionPageKey; label: string; roles?: Role[] }> = [
   { key: 'bluetooth', label: '设备管理' },
   { key: 'data-import', label: '数据导入', roles: ['SCC', 'REG', 'TD', 'DMD'] },
+  { key: 'submission-report', label: '数据提交检查', roles: ['REG', 'TD', 'DMD'] },
   { key: 'reports', label: '报告', roles: ['SCC', 'REG', 'TD', 'DMD'] },
   { key: 'data-management', label: '指标与标准', roles: ['SCC', 'REG', 'TD', 'DMD'] },
 ];
@@ -480,7 +481,7 @@ export function AppShell({
 
 function isDataCollectionPage(page: PageKey) {
   return (
-    page === 'bluetooth' || page === 'data-import' || page === 'data-management' || page === 'reports'
+    page === 'bluetooth' || page === 'data-import' || page === 'data-management' || page === 'reports' || page === 'submission-report'
   );
 }
 

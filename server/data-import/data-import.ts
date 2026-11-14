@@ -1,3 +1,4 @@
+import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { assertImportWorkbookSize } from './import-workbook-limits.ts';
 import { isIdentityField } from '../core/identity-removal.ts';
 import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey } from '../../shared/compact-athlete-template.ts';
@@ -3631,13 +3632,12 @@ function upsertTrainingItem(
       return { skipped: true, entityId: Number(existing.id), sessionId, created: false, filled: 0, overwritten: 0 };
     const setSql = changed.map(([column]) => `${column} = ?`).join(', ');
     db.prepare(
-      `UPDATE strength_result_sets SET ${setSql}, source = 'file_import', data_import_batch_id = ?, source_row = ?, original_text = ?, created_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      `UPDATE strength_result_sets SET ${setSql}, source = 'file_import', data_import_batch_id = ?, source_row = ?, original_text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(
       ...sqlList(changed.map(([, value]) => value)),
       batchId,
       sourceRow,
       item.rawValue,
-      userId,
       Number(existing.id)
     );
     return { skipped: false, entityId: Number(existing.id), sessionId, created: false, filled, overwritten };
@@ -4843,7 +4843,10 @@ export function commitDataImport(input: {
         skipped += 1;
       } else {
         imported += 1;
-        if (result.created) createdRecords += 1;
+        if (result.created) {
+          createdRecords += 1;
+          saveSubmissionProvenance(db, entityType, result.entityId, input.userId);
+        }
         else updatedRecords += 1;
         filledProfileFields += result.filled;
         overwrittenProfileFields += result.overwritten;
