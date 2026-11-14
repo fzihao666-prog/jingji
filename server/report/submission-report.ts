@@ -61,9 +61,15 @@ export function collectSubmissionFacts(
   project: string,
   athletes: Athlete[],
   teams: string[],
-  allTeams: boolean
+  allTeams: boolean,
+  selectedTeam?: string,
+  orderDetails = false
 ) {
-  const ids = JSON.stringify(athletes.map(({ id }) => id));
+  const ids = JSON.stringify(
+    athletes
+      .filter(({ team }) => selectedTeam === undefined || team === selectedTeam)
+      .map(({ id }) => id)
+  );
   const facts = db
     .prepare(
       `
@@ -72,9 +78,10 @@ export function collectSubmissionFacts(
     )
     SELECT * FROM facts WHERE (project IS NULL OR project='' OR project=?)
       AND athleteId IN (SELECT value FROM json_each(?))
+    ${orderDetails ? 'ORDER BY businessDate DESC, entity, id DESC' : ''}
   `
     )
-    .all(project, ids) as Fact[];
+    .iterate(project, ids) as Iterable<Fact>;
   const teamFacts = db
     .prepare(
       `
@@ -86,7 +93,12 @@ export function collectSubmissionFacts(
     WHERE d.project_code=? AND t.name IN (SELECT value FROM json_each(?))
   `
     )
-    .all(project, JSON.stringify(teams)) as Fact[];
+    .all(
+      project,
+      JSON.stringify(
+        selectedTeam === undefined ? teams : teams.filter((team) => team === selectedTeam)
+      )
+    ) as Fact[];
   const special = db
     .prepare(
       `
@@ -108,7 +120,7 @@ export function collectSubmissionFacts(
     const members = Array.isArray(parsed) ? parsed.map(Number) : [];
     if (!allTeams && (!members.length || !members.every((id) => athleteMap.has(id)))) continue;
     const memberTeams = new Set(members.map((id) => athleteMap.get(id)?.team));
-    facts.push({
+    teamFacts.push({
       ...fact,
       athleteId: members.length === 1 ? Number(members[0]) : 0,
       team: memberTeams.size === 1 ? ([...memberTeams][0] ?? '') : '',
@@ -118,26 +130,44 @@ export function collectSubmissionFacts(
       project,
     });
   }
-  return [...facts, ...teamFacts].sort(
+  if (!orderDetails)
+    return (function* () {
+      yield* facts;
+      yield* teamFacts;
+    })();
+  teamFacts.sort(
     (a, b) =>
       (b.businessDate ?? '').localeCompare(a.businessDate ?? '') ||
       a.entity.localeCompare(b.entity) ||
       b.id - a.id
   );
+  return (function* () {
+    let index = 0;
+    for (const fact of facts) {
+      while (
+        index < teamFacts.length &&
+        (teamFacts[index].businessDate ?? '') >= (fact.businessDate ?? '')
+      ) {
+        yield teamFacts[index++];
+      }
+      yield fact;
+    }
+    while (index < teamFacts.length) yield teamFacts[index++];
+  })();
 }
 
-export function readSubmissionEvidence(db: DatabaseSync, project: string) {
-  const evidence = new Map<string, Evidence & { original?: boolean }>();
-  const originals = db
-    .prepare(
-      `SELECT entity,entity_id AS id,user_id AS actor,submitted_at AS at
-    FROM submission_provenance`
-    )
-    .all() as Array<Evidence & { entity: string; id: number }>;
-  for (const row of originals) evidence.set(`${row.entity}:${row.id}`, { ...row, original: true });
-  const rows = db
-    .prepare(
-      `
+type EvidenceMap = Map<string, Evidence & { original?: boolean }>;
+
+export function readSubmissionEvidence(
+  db: DatabaseSync,
+  project?: string,
+  global?: EvidenceMap
+): EvidenceMap {
+  if (project !== undefined && global) {
+    const evidence = new Map<string, Evidence & { original?: boolean }>();
+    const rows = db
+      .prepare(
+        `
     SELECT i.committed_entity_type AS entity,i.committed_entity_id AS id,
       b.created_by AS actor,b.committed_at AS at
     FROM data_import_items i JOIN data_import_batches b ON b.id=i.batch_id
@@ -147,12 +177,22 @@ export function readSubmissionEvidence(db: DatabaseSync, project: string) {
       AND CASE WHEN json_valid(i.conflict_json) THEN json_extract(i.conflict_json,'$.exists')=0 ELSE 0 END
     ORDER BY b.committed_at,b.rowid,i.id
   `
-    )
-    .all(project) as Array<Evidence & { entity: string; id: number }>;
-  for (const row of rows) {
-    const key = `${row.entity}:${row.id}`;
-    if (!evidence.has(key)) evidence.set(key, row);
+      )
+      .iterate(project) as Iterable<Evidence & { entity: string; id: number }>;
+    for (const row of rows) {
+      const key = `${row.entity}:${row.id}`;
+      if (!evidence.has(key) && !global.get(key)?.original) evidence.set(key, row);
+    }
+    return evidence;
   }
+  const evidence: EvidenceMap = new Map();
+  const originals = db
+    .prepare(
+      `SELECT entity,entity_id AS id,user_id AS actor,submitted_at AS at
+    FROM submission_provenance`
+    )
+    .iterate() as Iterable<Evidence & { entity: string; id: number }>;
+  for (const row of originals) evidence.set(`${row.entity}:${row.id}`, { ...row, original: true });
   const audit = db
     .prepare(
       `
@@ -165,7 +205,7 @@ export function readSubmissionEvidence(db: DatabaseSync, project: string) {
     ORDER BY created_at,id
   `
     )
-    .all() as Array<
+    .iterate() as Iterable<
     Evidence & { entity: string; id: number; businessDate: string | null; crew: string | null }
   >;
   for (const row of audit) {
@@ -180,7 +220,7 @@ export function readSubmissionEvidence(db: DatabaseSync, project: string) {
   return evidence;
 }
 
-type Filters = {
+export type Filters = {
   team?: string;
   roles?: string[];
   from?: string;
@@ -208,7 +248,7 @@ function submissionDate(value: string | null) {
 }
 
 export function summarizeSubmissions(input: {
-  facts: Fact[];
+  facts: Iterable<Fact>;
   athletes: Athlete[];
   people: Person[];
   operators: Map<number, { name: string; role: string }>;
@@ -216,6 +256,8 @@ export function summarizeSubmissions(input: {
   filters: Filters;
   exporting?: boolean;
   project?: string;
+  globalEvidence?: EvidenceMap;
+  detailWindow?: { start: number; end: number };
 }): SubmissionReport {
   const { facts, athletes, people, operators, evidence, filters, exporting } = input;
   const athleteMap = new Map(athletes.map((athlete) => [athlete.id, athlete]));
@@ -226,6 +268,9 @@ export function summarizeSubmissions(input: {
   const details: SubmissionDetail[] = [];
   let total = 0;
   let detailTotal = 0;
+  const teamsByPerson = new Map<string, Set<string>>();
+  const rolesByPerson = new Map<string, Set<string>>();
+  const { start, end } = input.detailWindow ?? { start: 0, end: 50 };
   const addRow = (team: string, role: string, person?: Person) => {
     const key = person
       ? personKey(person.id)
@@ -245,12 +290,12 @@ export function summarizeSubmissions(input: {
       });
     const row = rows.get(key)!;
     if (person) {
-      row.team = [
-        ...new Set([...row.team.split('、').map((name) => name || '未分队'), team || '未分队']),
-      ]
-        .filter(Boolean)
-        .join('、');
-      row.role = [...new Set([...row.role.split('、'), role])].join('、');
+      let personTeams = teamsByPerson.get(key);
+      if (!personTeams) teamsByPerson.set(key, (personTeams = new Set()));
+      personTeams.add(team || '未分队');
+      let personRoles = rolesByPerson.get(key);
+      if (!personRoles) rolesByPerson.set(key, (personRoles = new Set()));
+      personRoles.add(role);
     }
     return row;
   };
@@ -270,11 +315,15 @@ export function summarizeSubmissions(input: {
       (fact.team !== undefined ? { team: fact.team, name: '' } : undefined);
     if (!athlete || (filters.team !== undefined && filters.team !== athlete.team)) continue;
     const id = `${fact.entity}:${fact.id}`;
-    const source =
-      evidence.get(fact.evidenceKey ?? id) ??
+    const evidenceKey = fact.evidenceKey ?? id;
+    const historical = evidence.get(evidenceKey);
+    const global =
+      input.globalEvidence?.get(evidenceKey) ??
       (fact.entity === 'daily_wellness'
-        ? evidence.get(`daily_wellness:${fact.athleteId}:${fact.businessDate}`)
+        ? input.globalEvidence?.get(`daily_wellness:${fact.athleteId}:${fact.businessDate}`)
         : undefined);
+    const source =
+      global && (global.original || !historical || global.at < historical.at) ? global : historical;
     const original =
       source &&
       (source.original ||
@@ -319,8 +368,7 @@ export function summarizeSubmissions(input: {
     )
       continue;
     const index = detailTotal++;
-    const offset = ((filters.page ?? 1) - 1) * 50;
-    if (!exporting && (index < offset || index >= offset + 50)) continue;
+    if (!exporting && (index < start || index >= end)) continue;
     details.push({
       id,
       project: input.project,
@@ -342,6 +390,11 @@ export function summarizeSubmissions(input: {
     });
   }
   const visible = [...rows.values()];
+  for (const row of visible) {
+    if (row.group) continue;
+    row.team = [...(teamsByPerson.get(row.key) ?? [])].join('、');
+    row.role = [...(rolesByPerson.get(row.key) ?? [])].join('、');
+  }
   visible.sort(
     (a, b) =>
       a.team.localeCompare(b.team, 'zh-CN') ||

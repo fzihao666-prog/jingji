@@ -122,12 +122,13 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
     headers.set('Content-Type', 'application/json');
   const controller = timeoutMs ? new AbortController() : undefined;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  const signal = controller && init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller?.signal ?? init.signal;
   let response: Response;
   try {
     response = await fetch(path, {
       ...init,
       headers,
-      signal: controller?.signal ?? init.signal,
+      signal,
     });
   } catch {
     const timedOut = controller?.signal.aborted ?? false;
@@ -199,12 +200,12 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 
 export const api = {
   submissionReport(query: URLSearchParams, signal?: AbortSignal) {
-    return request<SubmissionReport>(`/api/reports/submissions?${query}`, { signal });
+    return request<SubmissionReport>(`/api/reports/submissions?${query}`, { signal, timeoutMs: 35_000 });
   },
   async exportSubmissionReport(query: URLSearchParams) {
     const params = new URLSearchParams(query);
     params.set('format', 'xlsx');
-    const blob = await request<Blob>(`/api/reports/submissions?${params}`, { responseType: 'xlsx' });
+    const blob = await request<Blob>(`/api/reports/submissions?${params}`, { responseType: 'xlsx', timeoutMs: 35_000 });
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;

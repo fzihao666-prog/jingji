@@ -1,3 +1,4 @@
+import { allowsTeam } from './permission-scope.ts';
 import {
   AREA_LEVELS,
   ROLE_META,
@@ -43,23 +44,10 @@ export function permissionsAllowAthlete(
   permissions: ReturnType<typeof accountPermissions>,
   athlete: Pick<ScopeAthlete, 'project' | 'team'> & Partial<ScopeAthlete>
 ) {
-  return permissionsAllowProjectTeam(permissions, athlete.project, athlete.team);
+  return allowsTeam(permissions, athlete.project, athlete.team);
 }
 
-export function permissionsAllowProjectTeam(
-  permissions: ReturnType<typeof accountPermissions>,
-  project: string,
-  team: string
-) {
-  return (
-    (permissions.projects.includes('*') || permissions.projects.includes(project)) &&
-    permissions.teams.some(
-      (item) =>
-        (item.project === '*' || item.project === project) &&
-        (item.team === '*' || item.team === team)
-    )
-  );
-}
+export { allowsTeam as permissionsAllowProjectTeam };
 
 export function canManageAccount(manager: AuthUser, target: AuthUser) {
   if (!canManageRole(manager.role, target.role)) return false;

@@ -1,4 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Server } from 'node:http';
 import express from 'express';
 import ExcelJS from 'exceljs';
@@ -18,10 +21,13 @@ const secret = 'synthetic-submissions';
 let db: DatabaseSync;
 let server: Server;
 let url: string;
+let directory: string;
 
 beforeAll(async () => {
   vi.stubEnv('JWT_SECRET', secret);
-  db = new DatabaseSync(':memory:');
+  directory = mkdtempSync(join(tmpdir(), 'submission-report-test-'));
+  db = new DatabaseSync(join(directory, 'test.db'));
+  db.exec('PRAGMA journal_mode=WAL');
   fixture.db = db;
   initializeDatabase(db, { databasePath: ':memory:', databaseExistedBeforeStartup: true });
   db.exec(`
@@ -70,6 +76,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server?.close(() => resolve()));
   db?.close();
+  if (directory) rmSync(directory, { recursive: true, force: true });
   vi.unstubAllEnvs();
 });
 
@@ -186,4 +193,22 @@ it('默认合并授权项目，同一教练只出现一次且能查看跨项目�
     await request(`${query}&key=${encodeURIComponent(coach[0].key)}`)
   ).json()) as SubmissionReport;
   expect(detail.details.map((row) => row.project).sort()).toEqual(['ROWING', 'VOLLEYBALL']);
+});
+
+it('跨项目明细每页最多返回 50 条，保留准确总数', async () => {
+  db.exec(`
+    WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM seq WHERE n<61)
+    INSERT INTO training_sessions(athlete_id,session_date,session_order,training_type,structure_type,intensity_zone,created_by)
+      SELECT CASE WHEN n<=30 THEN 9301 ELSE 9320 END,'2025-11-01',n,'体能训练','','',9302 FROM seq;
+    UPDATE submission_provenance SET submitted_at='2026-10-15 02:00:00'
+      WHERE entity='training_session' AND entity_id IN (SELECT id FROM training_sessions WHERE session_date='2025-11-01');
+  `);
+  const query = 'from=2026-10-15&to=2026-10-15&key=%5B9302%5D';
+  const first = (await (await request(`${query}&page=1`)).json()) as SubmissionReport;
+  const next = (await (await request(`${query}&page=2`)).json()) as SubmissionReport;
+  expect(first.detailTotal).toBe(61);
+  expect(next.detailTotal).toBe(61);
+  expect(first.details).toHaveLength(50);
+  expect(next.details).toHaveLength(11);
+  expect(new Set([...first.details, ...next.details].map(({ id }) => id)).size).toBe(61);
 });
