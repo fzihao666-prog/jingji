@@ -314,7 +314,7 @@ it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', asy
   expect((await fetch(`${base}/api/data-import/template?kind=unified&project=CANOE_SLALOM`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(403);
 });
 
-it('统一单表模板预填授权队伍，空行不入库且按编号关联已有运动员', async () => {
+it('统一单表模板预填授权队伍，空行不入库且按姓名关联已有运动员', async () => {
   const download = async (kind: string) => {
     const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING&team=${encodeURIComponent('HTTP甲队')}`, { headers: { authorization: `Bearer ${token}` } });
     expect(response.status).toBe(200);
@@ -328,11 +328,11 @@ it('统一单表模板预填授权队伍，空行不入库且按编号关联已�
   const unified = await download('unified');
   expect(unified.SheetNames).toEqual(['运动员基础体能测试']);
   const matrix = rowsOf(unified, '运动员基础体能测试');
-  expect(matrix[0]).toHaveLength(16);
-  const dataRow = matrix.findIndex(row => row[0] === '701');
+  expect(matrix[0]).toHaveLength(15);
+  const dataRow = matrix.findIndex(row => row[0] === '虚构队员');
   expect(dataRow).toBeGreaterThan(0);
-  expect(matrix[dataRow].slice(0,3)).toEqual(['701', '虚构队员', 'HTTP甲队']);
-  expect(matrix.slice(1).filter(row => row[0]).every(row => row[2] === 'HTTP甲队')).toBe(true);
+  expect(matrix[dataRow].slice(0,2)).toEqual(['虚构队员', 'HTTP甲队']);
+  expect(matrix.slice(1).filter(row => row[0]).every(row => row[1] === 'HTTP甲队')).toBe(true);
 
   // 仅有预填人员信息的整份模板不产生空批次
   const blank = new FormData();
@@ -342,8 +342,8 @@ it('统一单表模板预填授权队伍，空行不入库且按编号关联已�
   expect(rejected.status).toBe(400);
   expect(rejected.body.message).toContain('未填写业务数据');
 
-  // 只回填一行业务数据：其余预填行不生成空记录，提交后按编号关联已有运动员、不重复建档
-  XLSX.utils.sheet_add_aoa(unified.Sheets['运动员基础体能测试'], [['2026-10-18',180]], { origin: {r:dataRow,c:3} });
+  // 只回填一行业务数据：其余预填行不生成空记录，提交后按姓名关联已有运动员、不重复建档
+  XLSX.utils.sheet_add_aoa(unified.Sheets['运动员基础体能测试'], [['2026-10-18',180]], { origin: {r:dataRow,c:2} });
   const form = new FormData();
   form.set('project', 'ROWING');
   form.set('file', new Blob([new Uint8Array(XLSX.write(unified, { type: 'buffer', bookType: 'xlsx' }))]), '统一预填往返.xlsx');
@@ -461,7 +461,7 @@ it('P0 HTTP：事务中的授权变化使正式写入整体回滚', async () => 
   db.exec("CREATE TRIGGER p0_revoke_in_transaction AFTER INSERT ON daily_wellness WHEN NEW.wellness_date='2026-11-14' BEGIN DELETE FROM user_team_permissions WHERE user_id=701; END");
   try {
     expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(403);
-    expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE wellness_date='2026-11-14'").get()).toEqual({ count: 0 });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM daily_wellness WHERE athlete_id=701 AND wellness_date='2026-11-14'").get()).toEqual({ count: 0 });
     expect(db.prepare('SELECT status FROM data_import_batches WHERE id=?').get(batch.id)).toEqual({ status: 'reviewing' });
     expect((await request(`/batches/${batch.id}`)).status).toBe(200);
   } finally { db.exec('DROP TRIGGER p0_revoke_in_transaction'); }

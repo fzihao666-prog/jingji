@@ -217,9 +217,9 @@ it('空白模板没有编号列，预填模板编号保留并隐藏且保存重�
   }
 });
 
-it('单表基础体能模板具有16列、分组样式、冻结及基础校验，预填身份不伪造成绩', async () => {
+it('单表基础体能模板具有15列、分组样式、冻结及基础校验，预填身份不伪造成绩', async () => {
   const book = buildCompactAthleteWorkbook(
-    [{ id: 1, name: '虚构队员', team: '测试队' }],
+    [{ name: '虚构队员', team: '测试队' }],
     '2026-11-02',
   );
   const loaded = new ExcelJS.Workbook();
@@ -230,25 +230,24 @@ it('单表基础体能模板具有16列、分组样式、冻结及基础校验�
   const sheet = loaded.worksheets[0];
   expect(sheet.getRow(1).values).toEqual([
     undefined,
-    ...COMPACT_ATHLETE_COLUMNS.map(compactAthleteHeader),
+    ...COMPACT_ATHLETE_COLUMNS.filter(field => field.key !== '运动员编号').map(compactAthleteHeader),
   ]);
   expect(sheet.getRow(2).values).toEqual([
     undefined,
-    '1',
     '虚构队员',
     '测试队',
     '2026-11-02',
   ]);
   expect(sheet.views[0]).toMatchObject({
     state: 'frozen',
-    xSplit: 3,
+    xSplit: 2,
     ySplit: 1,
   });
   expect(sheet.getColumn(1).numFmt).toBe('@');
-  expect(sheet.getCell('D2').dataValidation.type).toBe('date');
-  expect(sheet.getCell('L2').dataValidation.type).toBe('whole');
-  expect(sheet.getCell('O2').dataValidation.formulae?.[0]).toBe(-30);
-  expect(sheet.getCell('G1').note).toContain('实测1RM');
+  expect(sheet.getCell('C2').dataValidation.type).toBe('date');
+  expect(sheet.getCell('K2').dataValidation.type).toBe('whole');
+  expect(sheet.getCell('N2').dataValidation.formulae?.[0]).toBe(-30);
+  expect(sheet.getCell('F1').note).toContain('实测1RM');
   expect(
     new Set(
       ['A1', 'E1', 'G1', 'L1', 'P1'].map((address) =>

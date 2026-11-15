@@ -1076,12 +1076,12 @@ it('校对接口不能将非法可选数值静默丢弃，修正后可提交', (
 it('实际单表模板往返导入，预填空行不产生业务记录', () => {
   const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), { type:'buffer' });
   XLSX.utils.sheet_add_aoa(workbook.Sheets['运动员基础体能测试'], [
-    ['1','张某','A队','2025-09-05',180], ['2','赵某','B队','2025-09-05']
+    ['张某','A队','2025-09-05',180], ['赵某','B队','2025-09-05']
   ], {origin:'A2'});
   const batch = analyzeDataImport({buffer:XLSX.write(workbook,{type:'buffer',bookType:'xlsx'}),filename:'实际模板往返.xlsx',mimetype:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',project:PROJECT,userId:USER_ID,athletes,allowedTeams:new Set(['A队','B队'])});
   expect(batch.errorCount).toBe(0);
   expect(batch.items).toHaveLength(1);
-  expect(batch.items[0].sourceAddress).toBe('B2');
+  expect(batch.items[0].sourceAddress).toBe('A2');
   expect(batch.summary.unfilledRows).toBe(0);
   expect(commit(batch.id,'skip').createdRecords).toBe(1);
 });
@@ -1304,11 +1304,11 @@ describe('统一模板按业务归属整理', () => {
     expect(batch.items.flatMap(item => item.messages).join('；')).toContain('冲突');
     expect(() => commit(batch.id, 'skip')).toThrow();
   });
-  it('新统一模板只有一张16列工作表', () => {
+  it('新统一模板只有一张15列工作表', () => {
     const workbook=XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'),{type:'buffer'});
     expect(workbook.SheetNames).toEqual(['运动员基础体能测试']);
     const rows=XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础体能测试'],{header:1});
-    expect(rows[0]).toEqual(COMPACT_ATHLETE_COLUMNS.map(compactAthleteHeader));
+    expect(rows[0]).toEqual(COMPACT_ATHLETE_COLUMNS.filter(field => field.key !== '运动员编号').map(compactAthleteHeader));
   });
 });
 

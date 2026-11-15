@@ -8,7 +8,7 @@ import {
 
 /** 单表模板复用现有授权人员查询与上传服务，不写演示成绩或添加说明工作表。 */
 export function buildCompactAthleteWorkbook(
-  athletes: Array<{ id: number; name: string; team: string }> = [],
+  athletes: Array<{ name: string; team: string }> = [],
   today = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Shanghai',
   }).format(new Date()),
@@ -16,7 +16,7 @@ export function buildCompactAthleteWorkbook(
   const book = new ExcelJS.Workbook();
   book.creator = '竞迹训练监控系统';
   const sheet = book.addWorksheet(COMPACT_ATHLETE_SHEET, {
-    views: [{ state: 'frozen', xSplit: 3, ySplit: 1 }],
+    views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }],
   });
   const colors = {
     identity: 'FFEAF0F5',
@@ -26,7 +26,8 @@ export function buildCompactAthleteWorkbook(
     note: 'FFF1F3F6',
   };
   sheet.getRow(1).height = 44;
-  COMPACT_ATHLETE_COLUMNS.forEach((field, index) => {
+  const columns = COMPACT_ATHLETE_COLUMNS.filter(field => field.key !== '运动员编号');
+  columns.forEach((field, index) => {
     const column = sheet.getColumn(index + 1);
     column.width =
       field.kind === 'note'
@@ -58,7 +59,7 @@ export function buildCompactAthleteWorkbook(
       field.kind === 'test' && field.protocol === '实测1RM'
         ? '只填实测1RM；日常训练重量、估算值不能作为实测最大力量。'
         : field.kind === 'identity'
-          ? '已有人员由系统预填，编号请勿修改；新人员编号留空，填写姓名和已有队伍。'
+          ? '已有人员由系统预填；新增行填写姓名，导入时使用页面所选项目和队伍。'
           : field.kind === 'date'
             ? '本次测试日期必填，可修改默认日期。'
             : '未测留空，不填占位文字；真实0保留。';
@@ -88,7 +89,6 @@ export function buildCompactAthleteWorkbook(
   });
   athletes.forEach((athlete, index) => {
     sheet.getRow(index + 2).values = [
-      String(athlete.id),
       athlete.name,
       athlete.team,
       today,
@@ -96,7 +96,7 @@ export function buildCompactAthleteWorkbook(
   });
   sheet.autoFilter = {
     from: { row: 1, column: 1 },
-    to: { row: 1, column: 16 },
+    to: { row: 1, column: columns.length },
   };
   return book;
 }
