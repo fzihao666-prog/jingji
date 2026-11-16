@@ -834,7 +834,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                     {role === 'SCC' && addingTeam && (
                       <div className="register-team-create">
                         <label>
-                          <span>新队伍名称</span>
+                          <span>新队伍名称（示例：江西（女子）赛艇）</span>
                           <input
                             value={teamName}
                             maxLength={30}

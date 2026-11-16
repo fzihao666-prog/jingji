@@ -114,7 +114,7 @@
             <button wx:if="{{role === 'SCC' && !addingTeam}}" class="secondary-button team-add-button" disabled="{{!project || submitting}}" bindtap="startAddTeam">新增队伍</button>
           </view>
           <block wx:if="{{role === 'SCC' && addingTeam}}">
-            <text class="field-label">新队伍名称</text>
+            <text class="field-label">新队伍名称（示例：江西（女子）赛艇）</text>
             <input value="{{teamName}}" maxlength="30" placeholder="请输入2—30个字符" focus="{{addingTeam}}" disabled="{{submitting}}" bindinput="onTeamNameInput" bindconfirm="confirmTeam" />
             <view class="team-create-actions">
               <button class="primary-button" disabled="{{submitting}}" bindtap="confirmTeam">确认队伍</button>
