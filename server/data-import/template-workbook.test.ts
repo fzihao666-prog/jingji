@@ -27,7 +27,7 @@ describe('简化导入模板', () => {
     for (const [name, original] of UNIFIED_IMPORT_HEADERS) {
       const sheet = loaded.getWorksheet(name)!;
       const fields = importTemplateFields(name).filter(field=>field.key!=='系统运动员编号');
-      expect(fields.map((field) => field.key).sort()).toEqual(original.filter(key => key !== '系统运动员编号' && (name !== '其他测试' || !['指标代码', '单位'].includes(key))).sort());
+      expect(fields.map((field) => field.key).sort()).toEqual(original.filter(key => key !== '系统运动员编号' && (name !== '其他测试' || !['指标代码', '单位'].includes(key)) && (name !== '训练课次' || key !== '课次序号')).sort());
       fields.forEach((field, index) => {
         const cell = sheet.getCell(3, index + 1);
         expect(templateHeaderKey(String(cell.value))).toBe(field.key);
@@ -107,9 +107,8 @@ it('评估协议保留表头通俗解释，不弹出提示或批注', () => {
 it('条件必填显示具体条件，编号和课次不只标注术语', () => {
   const sheet = buildImportWorkbook(['训练课次']).getWorksheet('训练课次')!;
   const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(String);
-  expect(headers.find((value) => value.startsWith('课次序号\n'))).toContain(
-    '同一人同一天有多次训练'
-  );
+  expect(headers.some((value) => value.startsWith('课次序号'))).toBe(false);
+  expect(headers.some((value) => value.startsWith('开始时间'))).toBe(true);
   expect(headers.find((value) => value.startsWith('姓名\n'))).toContain('没有系统编号');
 });
 

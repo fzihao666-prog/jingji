@@ -408,7 +408,8 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
         : []);
   const common = commonColumns[sheet] || original;
   const ordered = [...common, ...original.filter((key) => !common.includes(key))].filter(
-    (key) => sheet !== '其他测试' || !['指标代码', '单位'].includes(key)
+    (key) => (sheet !== '其他测试' || !['指标代码', '单位'].includes(key)) &&
+      (sheet !== '训练课次' || key !== '课次序号')
   );
   const fields: ImportTemplateField[] = ordered.map((key) => {
     let requirement: TemplateRequirement = '选填';

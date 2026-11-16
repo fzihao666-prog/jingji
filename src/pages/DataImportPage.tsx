@@ -1331,6 +1331,8 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
               {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
                 key={`${reviewRevision}-${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
                 items={group} disabled={Boolean(busy) || group.some(item => savingReviewGroups.has(item.id)) || batch.status !== 'reviewing'}
+                onSeparateTrainingSession={id => void handleValueReview([{ id, payload: { separateTrainingSession: true } }])}
+                onStartTimeChange={(id, startTime) => void handleValueReview([{ id, payload: { startTime } }])}
                 onAssignSession={(id, sessionOrder) => void handleValueReview([{ id, payload: { sessionOrder } }])}
                 onPending={id => setPendingSelections(current => new Set(current).add(id))}
                 onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}

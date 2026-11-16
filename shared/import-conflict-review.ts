@@ -334,7 +334,8 @@ export function importReviewGroups<T extends ImportReviewItem>(items: T[]): T[][
   return [...groups.values()].filter((group) => {
     if (group.length < 2)
       return (
-        group.some(requiresDatabaseReview) || group.some((item) => item.payload.valueReviewDecision)
+        group.some(requiresDatabaseReview) ||
+        group.some((item) => item.payload.valueReviewDecision || item.payload.missingSessionOrder)
       );
     if (
       group[0].itemType !== 'test_measurement' ||

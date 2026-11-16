@@ -2168,10 +2168,38 @@ describe('简化模板的填写契约', () => {
     expect(batch.items[0].payload).toMatchObject({ durationMin: 60, rpe: 6, srpe: 360 });
     expect(commit(batch.id, 'skip').createdRecords).toBe(1);
   });
+  it('用 Excel 时间识别同日多课，补传早课及重复上传沿用已有序号', () => {
+    const headers = ['姓名', '日期', '开始时间', '时长分钟', 'RPE'];
+    const evening = ['张某', '2026-10-19', 16.5 / 24, 60, 5];
+    const morning = ['张某', '2026-10-19', '8:30', 60, 7];
+    expect(commit(analyze({ 训练课次: [headers, evening] }).id, 'skip').createdRecords).toBe(1);
+    const batch = analyze({ 训练课次: [headers, morning, evening] });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.map(item => [item.payload.startTime, item.payload.sessionOrder])).toEqual([
+      ['08:30', 2], ['16:30', 1],
+    ]);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(1);
+    expect(commit(analyze({ 训练课次: [headers, evening, morning] }).id, 'skip').createdRecords).toBe(0);
+  });
+  it('同一开始时间的不同事实可确认分别保留，由系统分配序号', () => {
+    const batch = analyze({ 训练课次: [
+      ['姓名', '日期', '开始时间', '时长分钟', 'RPE'],
+      ['张某', '2026-10-20', '08:30', 60, 7],
+      ['张某', '2026-10-20', '08:30', 60, 5],
+    ] });
+    expect(batch.errorCount).toBe(2);
+    const reviewed = updateDataImportItems({
+      batchId: batch.id, userId: USER_ID, athletes,
+      corrections: [{ id: batch.items[1].id, payload: { separateTrainingSession: true } }],
+    });
+    expect(reviewed.errorCount).toBe(0);
+    expect(reviewed.items.map(item => item.payload.sessionOrder)).toEqual([1, 2]);
+    expect(commit(reviewed.id, 'skip').createdRecords).toBe(2);
+  });
   it('同人同日多课缺序号时不静默合并', async () => {
     const batch = analyze({ 训练课次: [['姓名', '日期', '时长分钟', '训练内容'], ['张某', '2026-10-01', 60, '上午'], ['张某', '2026-10-01', 30, '下午']] });
     expect(batch.errorCount).toBeGreaterThan(0);
-    expect(batch.items.flatMap(item => item.messages).join('；')).toContain('课次序号');
+    expect(batch.items.flatMap(item => item.messages).join('；')).toContain('实际开始时间');
   });
 });
 

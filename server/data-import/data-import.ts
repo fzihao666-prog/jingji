@@ -1326,7 +1326,7 @@ function parseStandardSheet(
         ...base.payload,
         sessionOrder: readNumber('课次序号') ?? 1,
         sessionOrderProvided: text(standardValue(row, header.columns, '课次序号')) !== '',
-        startTime: standardText(row, header.columns, '开始时间'),
+        startTime: normalizedSessionTime(standardValue(row, header.columns, '开始时间')),
         trainingType: standardText(row, header.columns, '训练类型'),
         structureType: standardText(row, header.columns, '训练阶段'),
         intensityZone: standardText(row, header.columns, '强度区间'),
@@ -1644,6 +1644,10 @@ function resolveImportStrengthSessions(items: Array<ParsedImportItem | DataImpor
   for (const item of items) {
     if (item.itemType !== 'training_set' || item.resolution === 'skip') continue;
     delete item.payload.sessionChoices;
+    if (item.payload.sessionOrderInferred) {
+      delete item.payload.sessionOrder;
+      delete item.payload.sessionOrderInferred;
+    }
     if (isProvided(item.payload.sessionOrder)) continue;
     const identity = key(item, item.sessionLabel);
     let candidates = resolved.get(identity);
@@ -1651,7 +1655,10 @@ function resolveImportStrengthSessions(items: Array<ParsedImportItem | DataImpor
       candidates = new Map([...importStrengthSessions(item), ...(staged.get(identity) || [])].map(session => [session.sessionOrder, session]));
       resolved.set(identity, candidates);
     }
-    if (candidates.size === 1) item.payload.sessionOrder = [...candidates.keys()][0];
+    if (candidates.size === 1) {
+      item.payload.sessionOrder = [...candidates.keys()][0];
+      item.payload.sessionOrderInferred = true;
+    }
     else if (candidates.size > 1) item.payload.sessionChoices = [...candidates.values()];
   }
   const sessionIdentity = (item: ParsedImportItem | DataImportItemView) => JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, optionalNumber(item.payload.sessionOrder) ?? 1]);
@@ -1664,20 +1671,101 @@ function resolveImportStrengthSessions(items: Array<ParsedImportItem | DataImpor
 
 }
 
+function normalizedSessionTime(value: unknown) {
+  const raw = text(value);
+  if (!raw) return '';
+  const fraction = Number(raw);
+  if (Number.isFinite(fraction) && fraction >= 0 && fraction < 1) {
+    const minutes = Math.min(1439, Math.round(fraction * 1440));
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(raw);
+  if (match && Number(match[1]) < 24 && Number(match[2]) < 60) {
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+  }
+  return raw;
+}
+
+function assignImportSessionOrders(items: Array<ParsedImportItem | DataImportItemView>) {
+  const groups = new Map<string, Array<ParsedImportItem | DataImportItemView>>();
+  for (const item of items) {
+    if (item.itemType !== 'training_session' || !Object.hasOwn(item.payload, 'sessionOrderProvided')) continue;
+    delete item.payload.missingSessionOrder;
+    if (item.resolution === 'skip' || item.quality === 'skipped') continue;
+    const key = JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate]);
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    const first = group[0];
+    const stored = first.athleteId
+      ? db.prepare('SELECT session_order, start_time, project_code FROM training_sessions WHERE athlete_id = ? AND session_date = ?')
+          .all(first.athleteId, first.eventDate) as Array<{ session_order: number; start_time: string | null; project_code: string | null }>
+      : [];
+    const reserved = new Set(stored.map(row => row.session_order));
+    const byTime = new Map<string, Set<number>>();
+    const addTime = (time: string, order: number) => {
+      if (!/^\d{2}:\d{2}$/.test(time)) return;
+      const orders = byTime.get(time) ?? new Set<number>();
+      orders.add(order);
+      byTime.set(time, orders);
+    };
+    const compatible = stored.filter(row => importSnapshotMatches(first, row));
+    for (const row of compatible) addTime(normalizedSessionTime(row.start_time), row.session_order);
+    for (const item of group) {
+      if (!item.payload.sessionOrderProvided) continue;
+      const order = Number(item.payload.sessionOrder);
+      reserved.add(order);
+      addTime(normalizedSessionTime(item.payload.startTime), order);
+    }
+    const separatelyConfirmed = group.filter(item => !item.payload.sessionOrderProvided && item.payload.separateTrainingSession === true);
+    const inferred = group.filter(item => !item.payload.sessionOrderProvided && item.payload.separateTrainingSession !== true)
+      .sort((a, b) => normalizedSessionTime(a.payload.startTime).localeCompare(normalizedSessionTime(b.payload.startTime)));
+    let untimedOrder: number | undefined;
+    const hasTimedRows = group.some(item => /^\d{2}:\d{2}$/.test(normalizedSessionTime(item.payload.startTime)));
+    for (const item of inferred) {
+      const time = normalizedSessionTime(item.payload.startTime);
+      const hasTime = /^\d{2}:\d{2}$/.test(time);
+      const matches = byTime.get(time);
+      if ((matches?.size ?? 0) > 1 || (!hasTime && (compatible.length > 1 || (group.length - separatelyConfirmed.length > 1 &&
+          (item.payload.templateVersion === IMPORT_TEMPLATE_VERSION || hasTimedRows))))) {
+        item.payload.missingSessionOrder = true;
+        item.payload.sessionOrder = 1;
+        continue;
+      }
+      const existing = matches?.values().next().value ??
+        (!hasTime ? untimedOrder ?? (compatible.length === 1 ? compatible[0].session_order : undefined) : undefined);
+      let order = existing ?? 1;
+      if (existing === undefined) {
+        while (reserved.has(order)) order += 1;
+      }
+      item.payload.sessionOrder = order;
+      reserved.add(order);
+      addTime(time, order);
+      if (!hasTime) untimedOrder = order;
+    }
+    for (const item of separatelyConfirmed) {
+      let order = 1;
+      while (reserved.has(order)) order += 1;
+      item.payload.sessionOrder = order;
+      reserved.add(order);
+    }
+  }
+}
+
 function validateTemplateOrders(items: Array<ParsedImportItem | DataImportItemView>) {
   const groups = new Map<string, Array<ParsedImportItem | DataImportItemView>>();
   for (const item of items) {
-    delete item.payload.missingSessionOrder;
     delete item.payload.missingSetIndex;
     if (item.resolution === 'skip' || item.quality === 'skipped') continue;
-    if (item.payload.templateVersion !== IMPORT_TEMPLATE_VERSION || !['training_session', 'training_set'].includes(item.itemType)) continue;
+    if (item.payload.templateVersion !== IMPORT_TEMPLATE_VERSION || item.itemType !== 'training_set') continue;
     const key = JSON.stringify([item.itemType, item.athleteId ?? dataImportPersonKey(item), item.eventDate, item.itemType === 'training_set' ? [item.payload.sessionOrder, item.sessionLabel, item.exerciseName] : '']);
     const group = groups.get(key) || []; group.push(item); groups.set(key, group);
   }
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     for (const item of group) {
-      if (item.itemType === 'training_session' && !item.payload.sessionOrderProvided) item.payload.missingSessionOrder = true;
       if (item.itemType === 'training_set' && !item.payload.setIndexProvided) item.payload.missingSetIndex = true;
     }
   }
@@ -1686,6 +1774,7 @@ function validateTemplateOrders(items: Array<ParsedImportItem | DataImportItemVi
 /** 相同及互补事实自动合并；不同值继续使用统一字段审查。 */
 function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
   for (const item of items) normalizeImportEnums(item);
+  assignImportSessionOrders(items);
   validateTemplateOrders(items);
   resolveImportStrengthSessions(items);
   for (const item of items) {
@@ -2818,13 +2907,13 @@ function validateImportItem(
   }
   if (payload.dateSource === 'selected' && item.eventDate === payload.defaultedDate)
     messages.push(`提示：日期使用上传页所选统一日期${item.eventDate}`);
-  if (payload.missingSessionOrder) messages.push('错误：同人同日有多课，请在原文件补充不同课次序号后重新上传');
+  if (payload.missingSessionOrder) messages.push('错误：同人同日课次无法区分，请在集中审查确认同一课次，或补充不同的实际开始时间');
   if (payload.missingSetIndex) messages.push('错误：同动作有多组，请在原文件补充不同组序后重新上传');
   if (payload.valueReviewPending) messages.push('错误：存在重复业务数据，请在集中审查卡片确认最终值或填写真实日期后分别保留');
   if (Array.isArray(payload.valueImportConflicts))
-    messages.push(...payload.valueImportConflicts.filter((value): value is string => typeof value === 'string').map(value => item.itemType === 'training_session' ? `${value}；若为同日不同课次，请填写不同课次序号` : value));
+    messages.push(...payload.valueImportConflicts.filter((value): value is string => typeof value === 'string').map(value => item.itemType === 'training_session' ? `${value}；若为同日不同课次，请补充不同的实际开始时间` : value));
   if (Array.isArray(payload.importConflicts))
-    messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string').map(value => item.itemType === 'training_session' ? `${value}；若为同日不同课次，请填写不同课次序号` : value));
+    messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string').map(value => item.itemType === 'training_session' ? `${value}；若为同日不同课次，请补充不同的实际开始时间` : value));
   if (payload.protocolRequired && !text(payload.protocol))
     messages.push(item.testType === '竞技评估' ? '错误：人工评分必须填写评估协议' : '错误：不对称指数必须填写测试协议或测试方法');
   if (typeof payload.unitConflict === 'string' && payload.unitConflict) messages.push(payload.unitConflict);
@@ -3032,6 +3121,7 @@ const PAYLOAD_EDITABLE: Record<DataImportItemType, Set<string>> = {
   training_session: new Set([
     'sessionOrder',
     'startTime',
+    'separateTrainingSession',
     'trainingType',
     'structureType',
     'intensityZone',
@@ -3125,6 +3215,8 @@ function applyCorrection(
   if (correction.payload) {
     for (const [key, value] of Object.entries(correction.payload)) {
       if (!editable.has(key)) continue;
+      if (key === 'separateTrainingSession' && (value !== true || current.payload.sessionOrderProvided !== false))
+        throw new Error('只有未填写课次序号的训练记录可确认作为另一课次');
       if (key === 'technicalLevel') { next.payload[key] = normalizeTechnicalLevel(value); continue; }
       if (value === null) delete next.payload[key];
       else next.payload[key] = typeof value === 'string' || typeof value === 'number' ? canonicalEnumField(next.itemType, key, value) : value;
@@ -3411,7 +3503,10 @@ export function updateDataImportItems(input: {
     const nextItems = currentItems.map(item => {
       const correction = corrected.get(item.id);
       const next = correction ? applyCorrection(item, correction) : { ...item, payload: { ...item.payload } };
-      if (correction?.payload && Object.hasOwn(correction.payload, 'sessionOrder')) next.payload.sessionOrderProvided = true;
+      if (correction?.payload && Object.hasOwn(correction.payload, 'sessionOrder')) {
+        next.payload.sessionOrderProvided = true;
+        delete next.payload.sessionOrderInferred;
+      }
       if (correction?.payload && Object.hasOwn(correction.payload, 'srpe')) next.payload.srpeCalculated = false;
       if (next.itemType !== 'scoring_rule' && !next.athleteId && !correction?.athleteId) {
         const candidate = batch.athleteCandidates.find(candidate => candidate.normalizedName === dataImportPersonKey(next) && !candidate.excluded);
@@ -4787,7 +4882,7 @@ export function commitDataImport(input: {
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && revalidateItem(item, allowed, candidateNames).quality === 'error'))
       throw new Error('数据或指标配置已变化，请重新校验后提交。');
     refreshImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
-    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
+    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.missingSessionOrder || item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
       throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
     const savedConflicts = new Map((db.prepare('SELECT id, conflict_json AS conflictJson FROM data_import_items WHERE batch_id = ?')
       .all(input.batchId) as Array<{ id: number; conflictJson: string }>).map(row => [row.id, JSON.parse(row.conflictJson || '{}') as DataImportConflict]));

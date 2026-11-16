@@ -28,6 +28,8 @@ type Props = {
     manual: Record<string, string>
   ) => void;
   onAssignSession?: (itemId: number, sessionOrder: number) => void;
+  onSeparateTrainingSession?: (itemId: number) => void;
+  onStartTimeChange?: (itemId: number, startTime: string) => void;
   onPending?: (targetId: number) => void;
   onSplit: (dates: Array<{ id: number; eventDate: string }>) => void;
 };
@@ -42,6 +44,8 @@ export function ImportConflictReview({
   onDraft,
   onPending,
   onAssignSession,
+  onStartTimeChange,
+  onSeparateTrainingSession,
 }: Props) {
   const target = items.find((item) => item.payload.valueReviewDecision) || items[0];
   const decision = target.payload.valueReviewDecision as
@@ -198,6 +202,30 @@ export function ImportConflictReview({
         </div>
       ) : (
         <>
+          {!decision && onStartTimeChange && items.some(item => item.itemType === 'training_session') && (
+            <div className="import-value-review-actions">
+              {items.map((item, index) => (
+                <div key={item.id}>
+                  <label>
+                    <span>记录 {index + 1} 的开始时间</span>
+                    <input
+                      type="time"
+                      disabled={disabled}
+                      value={String(item.payload.startTime ?? '')}
+                      onChange={event => {
+                        if (event.target.value) onStartTimeChange(item.id, event.target.value);
+                      }}
+                    />
+                  </label>
+                  {onSeparateTrainingSession && item.payload.sessionOrderProvided === false && (
+                    <button type="button" disabled={disabled} onClick={() => onSeparateTrainingSession(item.id)}>
+                      确认为另一节课
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="import-value-review-comparison-wrap" hidden={visibleFields.length === 0 && !items.some(item => importSessionChoices(item).length > 1)}>
             <table className="import-value-review-comparison">
               <caption>{items.some(item => importSessionChoices(item).length > 1) ? '请先选择每条记录所属课次' : '点击要采用的记录值，选中后自动保存'}</caption>
