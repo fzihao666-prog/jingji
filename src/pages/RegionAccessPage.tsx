@@ -89,6 +89,7 @@ const auditLabels: Record<string, string> = {
 export function RegionAccessPage({ user }: { user: User }) {
   const [payload, setPayload] = useState<AccessPayload | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [accountSearch, setAccountSearch] = useState('');
   const [role, setRole] = useState<Role>('ATL');
   const [parentUserId, setParentUserId] = useState<number>(user.id);
   const [areas, setAreas] = useState<AreaPermission[]>([blankArea()]);
@@ -152,16 +153,24 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const selected = payload?.accounts.find((account) => account.id === selectedId) || null;
   const manageableRoles = ROLES.filter((item) => canManageRole(user.role, item));
+  const accountQuery = accountSearch.trim().toLowerCase();
   const accountGroups = useMemo(() => {
     if (!payload) return [];
+    const accounts = accountQuery
+      ? payload.accounts.filter((account) =>
+          [account.displayName, account.username, account.accountCode].some((value) =>
+            value.toLowerCase().includes(accountQuery)
+          )
+        )
+      : payload.accounts;
     return payload.meta.hierarchy
       .map((group) => ({
         roles: group,
         label: group.map((item) => payload.meta.roles[item].label).join(' / '),
-        accounts: payload.accounts.filter((account) => group.includes(account.role)),
+        accounts: accounts.filter((account) => group.includes(account.role)),
       }))
       .filter((group) => group.accounts.length);
-  }, [payload]);
+  }, [payload, accountQuery]);
 
   const load = async (preferredId?: number) => {
     setLoading(true);
@@ -834,6 +843,19 @@ export function RegionAccessPage({ user }: { user: User }) {
             </form>
           )}
 
+          <label className="account-tree-search">
+            <span className="visually-hidden">按姓名、登录账号或账号编号搜索</span>
+            <input
+              type="search"
+              placeholder="搜索姓名、登录账号或账号编号"
+              value={accountSearch}
+              onChange={(event) => setAccountSearch(event.target.value)}
+            />
+          </label>
+          <div className="visually-hidden" role="status">
+            {!loading && accountQuery &&
+              `找到 ${accountGroups.reduce((count, group) => count + group.accounts.length, 0)} 个账号`}
+          </div>
           <div className="account-tree-scroll">
             {loading ? (
               <div className="access-empty">正在加载账号…</div>
@@ -868,7 +890,9 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </section>
               ))
             ) : (
-              <div className="access-empty">暂无可管理的下级账号</div>
+              <div className="access-empty">
+                {accountQuery ? '未找到匹配的账号' : '暂无可管理的下级账号'}
+              </div>
             )}
           </div>
         </aside>
