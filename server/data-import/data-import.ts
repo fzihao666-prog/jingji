@@ -1851,6 +1851,17 @@ function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string, range: XLSX.
     defval: null,
     blankrows: true,
   }) as Matrix;
+  if ((IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '训练课次') {
+    const header = standardHeader(matrix);
+    const column = header?.columns.get('开始时间');
+    if (header && column !== undefined) {
+      for (let row = header.rowIndex + 1; row < matrix.length; row += 1) {
+        const cell = sheet[cellAddress(row + (range?.s.r ?? 0), column + (range?.s.c ?? 0))];
+        // Excel 的时间是墙上时钟读数，使用单元格显示值避免历史时区偏移。
+        if (cell?.t === 'd' && cell.w) matrix[row][column] = cell.w;
+      }
+    }
+  }
   if ((IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '运动员信息') {
     const header = standardHeader(matrix);
     const column = header?.columns.get('最好成绩');

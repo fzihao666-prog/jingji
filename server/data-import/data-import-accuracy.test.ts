@@ -2181,6 +2181,25 @@ describe('简化模板的填写契约', () => {
     expect(commit(batch.id, 'skip').createdRecords).toBe(1);
     expect(commit(analyze({ 训练课次: [headers, evening, morning] }).id, 'skip').createdRecords).toBe(0);
   });
+  it('Excel 时间格式单元格保留时分，同日两节课按实际开始时间区分', () => {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['姓名', '日期', '课次序号', '开始时间', '训练类型', '时长分钟', 'RPE'],
+      ['张某', '2026-11-02', null, 15.5 / 24, '爆发力', 60, 8],
+      ['张某', '2026-11-02', null, 8.5 / 24, '激流训练', 60, 6],
+    ]);
+    sheet.D2.z = sheet.D3.z = 'h:mm';
+    XLSX.utils.book_append_sheet(workbook, sheet, '训练课次');
+    const batch = analyze({}, {
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }),
+    });
+    expect(batch.errorCount).toBe(0);
+    expect(batch.items.map(({ payload }) => [payload.startTime, payload.sessionOrder, payload.srpe])).toEqual([
+      ['15:30', 2, 480],
+      ['08:30', 1, 360],
+    ]);
+    expect(commit(batch.id, 'skip').createdRecords).toBe(2);
+  });
   it('同一开始时间的不同事实可确认分别保留，由系统分配序号', () => {
     const batch = analyze({ 训练课次: [
       ['姓名', '日期', '开始时间', '时长分钟', 'RPE'],
