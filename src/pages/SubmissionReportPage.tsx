@@ -9,6 +9,8 @@ import './SubmissionReportPage.css';
 
 const count = new Intl.NumberFormat('zh-CN').format;
 const pageSize = 50;
+const teamName = (row: SubmissionReport['teams'][number]) =>
+  `${projectLabel(row.project)} · ${row.name || '未分队'}`;
 
 export default function SubmissionReportPage({ projects }: { projects: Project[] }) {
   const [report, setReport] = useState<SubmissionReport>();
@@ -17,6 +19,7 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
   const [project, setProject] = useState('');
   const [team, setTeam] = useState('');
   const [role, setRole] = useState('');
+  const [coachSearch, setCoachSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [coachId, setCoachId] = useState<number>();
@@ -95,7 +98,13 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
     setDetailTeam(undefined);
     setPage(1);
   };
-  const selected = view?.coaches.find(({ id }) => id === coachId);
+  const coachQuery = coachSearch.trim().toLowerCase();
+  const visibleCoaches = view?.coaches.filter(({ name, teams }) =>
+    !coachQuery ||
+    name.toLowerCase().includes(coachQuery) ||
+    teams.some((row) => teamName(row).toLowerCase().includes(coachQuery))
+  ) ?? [];
+  const selected = visibleCoaches.find(({ id }) => id === coachId);
   const detail = useMemo(
     () =>
       detailTeam === undefined
@@ -105,8 +114,6 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
   );
   const kinds = (counts: Map<number, number>) =>
     [...counts].map(([type, value]) => `${report?.types[type]} ${count(value)}`).join('、') || '—';
-  const teamName = (row: SubmissionReport['teams'][number]) =>
-    `${projectLabel(row.project)} · ${row.name || '未分队'}`;
   const exportReport = async () => {
     if (!report || !view) return;
     setExporting(true);
@@ -260,6 +267,20 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
         <>
           <h2>系统总数（去重） {count(view.records.length)} 条</h2>
           <p>数据量按当前带队关系展示。同队有多位教练时，每人显示该队的完整数量。</p>
+          <div className="submission-filters">
+            <label>
+              <span>搜索教练或队伍</span>
+              <input
+                type="search"
+                value={coachSearch}
+                onChange={(event) => {
+                  setCoachSearch(event.target.value);
+                  resetDetails();
+                }}
+              />
+            </label>
+            <span role="status">{coachQuery && `匹配 ${count(visibleCoaches.length)} 位教练`}</span>
+          </div>
           <div className="submission-table" role="region" aria-label="教练汇总" tabIndex={0}>
             <table>
               <thead>
@@ -272,12 +293,14 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
                 </tr>
               </thead>
               <tbody>
-                {view.coaches.length === 0 && (
+                {visibleCoaches.length === 0 && (
                   <tr>
-                    <td colSpan={5}>当前范围无关联教练。</td>
+                    <td colSpan={5}>
+                      {coachQuery ? '没有匹配的教练或队伍。' : '当前范围无关联教练。'}
+                    </td>
                   </tr>
                 )}
-                {view.coaches.map((row) => (
+                {visibleCoaches.map((row) => (
                   <tr key={row.id}>
                     <th scope="row" className="submission-coach-name">{row.name}</th>
                     <td>{row.roles.join('、') || '—'}</td>
