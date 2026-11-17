@@ -14,7 +14,7 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; includeAthleteId?: boolean; omitProfileTeam?: boolean } = {}) {
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; omitProfileTeam?: boolean } = {}) {
   const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook();
   workbook.creator = '竞迹训练监控系统';
   const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
@@ -34,8 +34,8 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
         ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。'
         : IMPORT_SHEET_NOTES[name];
       addTemplateSheet(workbook, name, fields, profileUsesPageTeam
-        ? '建档仅需姓名，所属项目和队伍使用导入页面的选择。已有人员优先按系统编号匹配。'
-        : note, { includeAthleteId: options.includeAthleteId });
+        ? '建档仅需姓名，所属项目和队伍使用导入页面的选择。已有人员按姓名匹配。'
+        : note);
       continue;
     }
     const sheet = workbook.addWorksheet(name, {

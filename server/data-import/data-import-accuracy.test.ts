@@ -2115,8 +2115,9 @@ describe('简化模板的填写契约', () => {
   async function simplified(name: string, values: Record<string, unknown>, options: Partial<Parameters<typeof analyzeDataImport>[0]> = {}) {
     const { buildImportWorkbook } = await import('./template-workbook.ts');
     const { templateHeaderKey } = await import('../../shared/import-template-fields.ts');
-    const workbook = buildImportWorkbook([name],{includeAthleteId: Boolean(values['系统运动员编号'])});
+    const workbook = buildImportWorkbook([name]);
     const sheet = workbook.getWorksheet(name)!;
+    if ('系统运动员编号' in values) sheet.getRow(3).getCell(sheet.getRow(3).cellCount + 1).value = '系统运动员编号';
     sheet.getRow(3).eachCell((cell, column) => {
       const key = templateHeaderKey(String(cell.value));
       if (key in values) sheet.getCell(4, column).value = values[key] as string | number;
@@ -2132,6 +2133,16 @@ describe('简化模板的填写契约', () => {
     expect(valid.errorCount).toBe(0);
     expect(valid.items[0].payload.srpe).toBeNull();
     expect(commit(valid.id, 'skip').createdRecords).toBe(1);
+  });
+  it('新版名单跳过仅有姓名的已有人员，保留仅有姓名的新建人员', async () => {
+    await expect(simplified('运动员基本资料', { 姓名: '张某' }, {
+      team: 'A队',
+    })).rejects.toThrow('未填写业务数据');
+    const batch = await simplified('运动员基本资料', { 姓名: '新建虚构队员' }, {
+      team: 'A队',
+    });
+    expect(batch.items).toHaveLength(1);
+    expect(batch.athleteCandidates[0]).toMatchObject({ name: '新建虚构队员', team: 'A队' });
   });
   it('有效编号无需重复填姓名；只预填身份和日期不产生业务行', async () => {
     const batch = await simplified('身体测量', { 系统运动员编号: 1, 测量日期: '2026-10-01', 体重kg: 75 });
@@ -2157,10 +2168,10 @@ describe('简化模板的填写契约', () => {
   });
   it('装饰表头与业务列重排后仍按字段名解析', async () => {
     const { buildImportWorkbook } = await import('./template-workbook.ts');
-    const workbook = buildImportWorkbook(['训练课次'],{includeAthleteId:true});
+    const workbook = buildImportWorkbook(['训练课次']);
     const sheet = workbook.getWorksheet('训练课次')!;
-    const fields = importTemplateFields('训练课次');
-    const data: Record<string, string | number> = { 系统运动员编号: 1, 日期: '2026-10-01', 时长分钟: 60, RPE: 6 };
+    const fields = importTemplateFields('训练课次').filter(field => field.key !== '系统运动员编号');
+    const data: Record<string, string | number> = { 姓名: '张某', 日期: '2026-10-01', 时长分钟: 60, RPE: 6 };
     sheet.getRow(3).values = fields.map(field => String(sheet.getCell(3, fields.indexOf(field) + 1).value)).reverse();
     sheet.getRow(4).values = fields.map(field => data[field.key] ?? null).reverse();
     const batch = analyzeDataImport({ buffer: Buffer.from(await workbook.xlsx.writeBuffer()), filename: '列重排.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes });

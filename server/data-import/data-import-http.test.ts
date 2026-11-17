@@ -292,7 +292,7 @@ it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', asy
     const sheet = workbook.Sheets['训练课次'];
     const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
     const keys = matrix[2].map(value => templateHeaderKey(String(value)));
-    const dataRow = matrix.findIndex((row, index) => index >= 3 && row[keys.indexOf('系统运动员编号')] === 701);
+    const dataRow = matrix.findIndex((row, index) => index >= 3 && row[keys.indexOf('姓名')] === '虚构队员');
     expect(dataRow).toBeGreaterThanOrEqual(3);
     expect(matrix[dataRow][keys.indexOf('姓名')]).toBe('虚构队员');
     XLSX.utils.sheet_add_aoa(sheet, [[60]], { origin: { r: dataRow, c: keys.indexOf('时长分钟') } });
@@ -320,7 +320,7 @@ it('统一单表模板预填授权队伍，空行不入库且按姓名关联已�
     expect(response.status).toBe(200);
     const bytes = Buffer.from(await response.arrayBuffer());
     const styled = XLSX.read(bytes, {type:'buffer',cellStyles:true});
-    for(const name of ['运动员基本资料','训练课次']) if(styled.Sheets[name]) expect(styled.Sheets[name]['!cols']?.[0]?.hidden).toBe(true);
+    for (const name of ['运动员基本资料', '训练课次']) if (styled.Sheets[name]) expect(styled.Sheets[name].A3.v).toMatch(/^姓名\n/);
     return XLSX.read(bytes, {type:'buffer'});
   };
   const rowsOf = (book: ReturnType<typeof XLSX.read>, sheetName: string) =>

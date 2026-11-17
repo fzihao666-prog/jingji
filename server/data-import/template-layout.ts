@@ -44,12 +44,11 @@ export function addTemplateSheet(
   workbook: ExcelJS.Workbook,
   name: string,
   fields: ImportTemplateField[],
-  note: string,
-  options: { includeAthleteId?: boolean } = {}
+  note: string
 ): ExcelJS.Worksheet {
-  fields = fields.filter(field => field.key !== '系统运动员编号' || options.includeAthleteId);
+  fields = fields.filter(field => field.key !== '系统运动员编号');
   const sheet = workbook.addWorksheet(name, {
-    views: [{ state: 'frozen', ySplit: 3, xSplit: fields[0]?.key === '系统运动员编号' ? 2 : 1 }],
+    views: [{ state: 'frozen', ySplit: 3, xSplit: 1 }],
   });
   sheet.mergeCells(1, 1, 1, fields.length);
   sheet.getCell('A1').value = name;
@@ -64,7 +63,6 @@ export function addTemplateSheet(
   sheet.getRow(3).height = 82;
   fields.forEach((field, index) => {
     const column = sheet.getColumn(index + 1);
-    column.hidden = field.key === '系统运动员编号';
     column.width = /备注|协议|内容|地址|姓名|组合/.test(field.key) ? 28 : 22;
     if (/日期/.test(field.key)) column.numFmt = 'yyyy-mm-dd';
     if (/编号|手机|电话/.test(field.key) || field.key === '最好成绩') column.numFmt = '@';

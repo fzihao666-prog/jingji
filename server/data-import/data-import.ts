@@ -1040,8 +1040,14 @@ function parseStandardSheet(
           text(standardValue(row, header.columns, field.key)) !== '')
       : [...header.columns].some(([label, column]) => !identityHeaders.has(label) && text(row[column]) !== '');
     if (sheet !== '运动员信息' && !hasBusiness) continue;
-    if (simplified && sheet === '运动员信息' && numberedAthlete && !hasBusiness &&
-        (!selectedTeam || numberedAthlete.team === selectedTeam)) continue;
+    if (simplified && sheet === '运动员信息' && !hasBusiness) {
+      const team = selectedTeam || standardText(row, header.columns, '所属队伍');
+      if (numberedAthlete && (!selectedTeam || numberedAthlete.team === selectedTeam)) continue;
+      if (!athleteCode && rawName && athletes.some(athlete =>
+        athlete.active !== false && athlete.project === project && (!team || athlete.team === team) &&
+        normalizedName(athlete.name) === normalizedName(rawName)
+      )) continue;
+    }
     if (/^示例/.test(rawName)) continue;
     const sourceRow = {
       rowIndex, columns: [...header.columns], values: row.map(value => typeof value === 'number' ? value : text(value)),

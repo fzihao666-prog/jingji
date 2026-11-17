@@ -202,18 +202,13 @@ it('所有模板按业务表、填写说明、数据字典排列，保存重开�
   }
 });
 
-it('空白模板没有编号列，预填模板编号保留并隐藏且保存重开后不丢失',async () => {
-  for(const includeAthleteId of [false,true]) {
-    const book=buildImportWorkbook(['运动员基本资料'],{includeAthleteId});
-    const sheet=book.getWorksheet('运动员基本资料')!;
-    const headers=(sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(v=>templateHeaderKey(String(v)));
-    expect(headers.includes('系统运动员编号')).toBe(includeAthleteId);
-    if(includeAthleteId) {sheet.getCell(4,1).value=123;sheet.getCell(4,2).value='合成队员';}
-    const loaded=new ExcelJS.Workbook();await loaded.xlsx.load(await book.xlsx.writeBuffer());
-    const result=loaded.getWorksheet('运动员基本资料')!;
-    if(includeAthleteId) {expect(result.getColumn(1).hidden).toBe(true);expect(result.getCell(4,1).value).toBe(123);expect(result.getCell(4,2).value).toBe('合成队员');}
-    else expect(templateHeaderKey(String(result.getCell(3,1).value))).toBe('姓名');
-  }
+it('分用途模板省略编号，完整导出隐藏编号', () => {
+  const template = buildImportWorkbook(['运动员基本资料']);
+  expect(templateHeaderKey(String(template.getWorksheet('运动员基本资料')!.getCell('A3').value))).toBe('姓名');
+  const exported = buildImportWorkbook(['运动员基本资料'], { mode: 'export' });
+  const sheet = exported.getWorksheet('运动员基本资料')!;
+  expect(sheet.getCell('A3').value).toBe('系统运动员编号');
+  expect(sheet.getColumn(1).hidden).toBe(true);
 });
 
 it('单表基础体能模板具有15列、分组样式、冻结及基础校验，预填身份不伪造成绩', async () => {

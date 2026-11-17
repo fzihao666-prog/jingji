@@ -72,7 +72,7 @@ const PURPOSE_TITLES: Record<TemplateKind, string> = {
 
 /**
  * 统一模板与分用途模板：复用统一模板的表头与解析规则，并按当前项目和权限预填
- * 系统运动员编号、姓名、所属队伍，教练无需导出历史数据即可填报。统一模板
+ * 姓名、所属队伍，教练无需导出历史数据即可填报。统一模板
  * 采用单表基础体能格式，其余按用途取表。
  */
 export function buildPurposeTemplate(
@@ -83,13 +83,12 @@ export function buildPurposeTemplate(
 ) {
   if (kind === 'unified') return buildCompactAthleteWorkbook(athletes);
   const sheetNames = PURPOSE_SHEETS[kind];
-  const workbook = buildImportWorkbook(sheetNames, { metrics, project, includeAthleteId: athletes.length > 0, omitProfileTeam: kind === 'profile' });
+  const workbook = buildImportWorkbook(sheetNames, { metrics, project, omitProfileTeam: kind === 'profile' });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
     athletes.forEach((athlete, index) => {
       sheet.getRow(index + 4).values = headers.map(label => {
-        if (label === '系统运动员编号') return athlete.id;
         if (label === '姓名') return athlete.name;
         if (label === '所属队伍') return athlete.team;
         if (label === '运动项目') return project;
