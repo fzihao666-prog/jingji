@@ -477,7 +477,9 @@
 }
 
 .team-project-card {
-  min-height: 260px;
+  height: 360px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: 18px;
   border: 1px solid #d9e4e7;
   border-radius: 13px;
@@ -503,8 +505,10 @@
 
 .team-directory-list {
   display: grid;
+  align-content: start;
   gap: 8px;
   padding-top: 12px;
+  overflow-y: auto;
 }
 
 .team-directory-list > div {

@@ -257,7 +257,12 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
                       <small>{projectTeams.length}支队伍</small>
                     </div>
                   </header>
-                  <div className="team-directory-list">
+                  <div
+                    className="team-directory-list"
+                    role="region"
+                    aria-label={`${projectLabel(item)}队伍列表`}
+                    tabIndex={0}
+                  >
                     {projectTeams.length ? (
                       projectTeams.map((team) => (
                         <div id={`team-row-${team.id}`} key={team.id} tabIndex={-1}>
