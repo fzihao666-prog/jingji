@@ -279,7 +279,7 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
                 )}
                 {view.coaches.map((row) => (
                   <tr key={row.id}>
-                    <th scope="row">{row.name}</th>
+                    <th scope="row" className="submission-coach-name">{row.name}</th>
                     <td>{row.roles.join('、') || '—'}</td>
                     <td>{row.teams.map(teamName).join('、')}</td>
                     <td>
