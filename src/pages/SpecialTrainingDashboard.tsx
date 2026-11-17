@@ -149,11 +149,9 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, fil
                     {item.amount}
                     <small>{item.unit}</small>
                   </strong>
-                  <em>
-                    {selectedAthlete && teamTraining
-                      ? `团队口径 ${item.label === '专项训练时长' ? value(teamTraining.summary.durationMin === null ? null : teamTraining.summary.durationMin / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`
-                      : '同队共同课次去重'}
-                  </em>
+                  {selectedAthlete && teamTraining && (
+                    <em>{`团队口径 ${item.label === '专项训练时长' ? value(teamTraining.summary.durationMin === null ? null : teamTraining.summary.durationMin / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`}</em>
+                  )}
                 </AppCard>
               ))}
             </section>

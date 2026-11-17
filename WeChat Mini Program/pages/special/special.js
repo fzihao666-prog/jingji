@@ -25,7 +25,7 @@ function buildTrainingView(result, to, project) {
   const athletes = result.athletes || [];
   const summary = training.summary || {};
   const metrics = [
-    { label: '专项训练时长', value: metricValue(summary.durationMin == null ? null : summary.durationMin / 60), unit: 'h', note: '同队共同课次去重' },
+    { label: '专项训练时长', value: metricValue(summary.durationMin == null ? null : summary.durationMin / 60), unit: 'h' },
     { label: '专项训练距离', value: metricValue(summary.distanceKm), unit: 'km', note: '只统计已填报距离' },
     { label: '专项训练课次', value: metricValue(summary.sessionCount, 0), unit: '课次', note: '当前筛选时间范围' },
     { label: '专项训练负荷', value: metricValue(summary.load), unit: 'AU', note: summary.loadSampleCount == null ? '使用既有SRPE' : `有效时长与RPE ${summary.loadSampleCount}/${summary.sessionCount}课次` },

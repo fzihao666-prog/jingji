@@ -21,7 +21,7 @@
       <view wx:for="{{metrics}}" wx:key="label" class="compact-stat {{item.tone}}">
         <view class="compact-stat-label">{{item.label}}</view>
         <view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view>
-        <text class="compact-stat-note">{{item.note}}</text>
+        <text wx:if="{{item.note}}" class="compact-stat-note">{{item.note}}</text>
       </view>
     </view>
 
