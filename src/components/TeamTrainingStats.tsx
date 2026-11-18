@@ -467,8 +467,10 @@ export function TeamTrainingStats({
 
   useEffect(() => {
     let live = true;
+    // 使用权限范围内的队伍列表（而非仅管理员可用的 /api/admin/teams），
+    // 观察员等只读角色同样能加载看板。
     api
-      .adminTeams()
+      .teams()
       .then((result) => {
         if (live) setTeams(result.teams.filter((team) => team.project === project));
       })
