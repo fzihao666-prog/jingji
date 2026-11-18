@@ -273,8 +273,8 @@ export function TrainingReportFigures({ data }: FiguresProps) {
   );
 }
 
-type Props = { athleteId: number; athleteName: string; initialDate: string };
-export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
+type Props = { athleteId: number; athleteName: string; initialDate: string; readOnly?: boolean };
+export function TrainingReport({ athleteId, athleteName, initialDate, readOnly = false }: Props) {
   const [range, setRange] = useState<ReportRange>(() => reportPeriod('week', initialDate));
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [commentary, setCommentary] = useState(emptyReportCommentary);
@@ -291,6 +291,20 @@ export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
       alive.current = false;
     };
   }, []);
+  useEffect(() => {
+    if (!readOnly) return;
+    let active = true;
+    setBusy(true);
+    api.reportHistory(athleteId).then((list) => {
+      if (active) {
+        setHistory(list);
+        if (!list.length) setMessage('暂无历史报告。');
+      }
+    }).catch((error: unknown) => {
+      if (active) setMessage(error instanceof Error ? error.message : '历史报告读取失败。');
+    }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [athleteId, readOnly]);
   async function action(work: () => Promise<void>) {
     if (busy) return;
     setBusy(true);
@@ -368,10 +382,10 @@ export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
           </p>
         )}
         <small>
-          {saved ? `已确认 · ${new Date(saved).toLocaleString('zh-CN')}` : '预览草稿 · 核对后保存'}
+          {saved ? `已确认 · ${new Date(saved).toLocaleString('zh-CN')}` : readOnly ? '已保存报告' : '预览草稿 · 核对后保存'}
         </small>
       </header>
-      <fieldset disabled={busy} className="training-report-controls">
+      {!readOnly && <fieldset disabled={busy} className="training-report-controls">
         <legend>报告范围</legend>
         <label>
           报告类型
@@ -432,7 +446,7 @@ export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
         >
           历史报告
         </button>
-      </fieldset>
+      </fieldset>}
       <div role="status" aria-live="polite">
         {busy ? '正在处理，请稍候…' : message}
       </div>
@@ -464,7 +478,7 @@ export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
       {preview ? (
         <>
           <TrainingReportFigures data={preview.data} />
-          <section>
+          {!readOnly && <section>
             <h3>
               简短点评 <small>{saved ? '已确认' : '待人工核对'}</small>
             </h3>
@@ -522,8 +536,8 @@ export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
               AI
               内容仅供参考，不作伤病诊断，不自动调整训练计划。保存后是当时数据快照，训练补录不会改写历史报告。
             </p>
-          </section>
-          <div className="training-report-controls">
+          </section>}
+          {!readOnly && <div className="training-report-controls">
             {!saved && (
               <button type="button" disabled={busy} onClick={save}>
                 确认并保存报告
@@ -543,11 +557,11 @@ export function TrainingReport({ athleteId, athleteName, initialDate }: Props) {
             >
               打印 / 保存为 PDF
             </button>
-          </div>
+          </div>}
         </>
       ) : (
         <p className="training-report-empty">
-          选择范围后预览：训练结构、负荷趋势、测试变化和恢复图表。
+          {readOnly ? '选择已保存报告查看训练结构、负荷趋势和测试变化。' : '选择范围后预览：训练结构、负荷趋势、测试变化和恢复图表。'}
         </p>
       )}
     </section>

@@ -157,6 +157,8 @@ Page({
     to: '',
     canSelfReport: false,
     canViewTodos: false,
+    canBrowseTeam: false,
+    readOnly: false,
     todos: null,
     todosLoading: false,
     todosError: '',
@@ -218,8 +220,10 @@ Page({
       prepare: (page, scope) => {
         const canSelfReport = scope.user.role === 'ATL';
         const canViewTodos = ['SCC', 'REG', 'TD', 'DMD'].includes(scope.user.role);
+        const readOnly = scope.user.role === 'OBS';
+        const canBrowseTeam = canViewTodos || readOnly;
         page.setData({ ...scope, selectedAthleteId: canSelfReport ? scope.selectedAthleteId : 0,
-          canSelfReport, canViewTodos, showAthlete: canViewTodos, showTeam: canViewTodos });
+          canSelfReport, canViewTodos, readOnly, canBrowseTeam, showAthlete: canBrowseTeam, showTeam: canBrowseTeam });
       },
       load: async (page, scope, isLatest) => {
         const [overview] = await Promise.all([
@@ -238,7 +242,7 @@ Page({
   async loadPageData(scope, isLatest = () => true) {
     this.setData({ ...buildView({}, null, scope.from, scope.to), overviewError: '', comparisonError: '' });
     let teamsError = '';
-    const isManager = this.data.canViewTodos;
+    const isManager = this.data.canBrowseTeam;
     let teams = this.data.teams || [];
     if (isManager && this._teamsProject !== scope.project) {
       const result = await sectionRequest(() => api.overviewTeams(scope.project), '队伍加载失败');
@@ -470,7 +474,7 @@ Page({
 
   // 教练今日训练计划与执行情况：执行率复用服务端 plan-execution 结果，不在客户端重算。
   async loadPlanExecution(project) {
-    if (!this.data.canViewTodos) return;
+    if (!this.data.canBrowseTeam) return;
     this._planGuard = this._planGuard || createRequestGuard();
     const id = this._planGuard.next();
     this.setData({ planLoading: true, planError: '' });
@@ -577,7 +581,7 @@ Page({
   // 个人周期视图下钻/返回团队：scope-filter 运动员选择与队伍运动员卡片共用同一入口。
   selectOverviewAthlete(athleteId) {
     const valid = athleteId === 0 || this.data.scopeAthletes.some((item) => Number(item.id) === athleteId && (!item.project || item.project === this.data.project));
-    if (!valid || !this.data.canViewTodos) return Promise.resolve();
+    if (!valid || !this.data.canBrowseTeam) return Promise.resolve();
     if (athleteId === (Number(this.data.selectedAthleteId) || 0)) return Promise.resolve();
     this.setData({ selectedAthleteId: athleteId });
     return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, isLatest), '训练总览加载失败。');

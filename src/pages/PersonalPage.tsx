@@ -510,7 +510,7 @@ export function PersonalPage(props: Props) {
           fields: [
             { label: '运动项目', value: projectLabel(selectedAthlete.project) },
             { label: '所属队伍', value: selectedAthlete.team },
-            { label: '主管教练', value: selectedAthlete.headCoaches || '—' },
+            { label: '负责教练', value: selectedAthlete.coaches || selectedAthlete.headCoaches || '—' },
             {
               label: '训练年限',
               value: trainingExperience(selectedAthlete.startSportDate, props.to),
@@ -522,7 +522,7 @@ export function PersonalPage(props: Props) {
               value: athletePositionValue(selectedAthlete.athletePosition),
             },
             { label: '运动员状态', value: selectedAthlete.athleteStatus },
-            { label: '健康状态', value: selectedAthlete.healthStatus },
+            ...(props.user.role === 'OBS' ? [] : [{ label: '健康状态', value: selectedAthlete.healthStatus }]),
             {
               label: '身高 / 体重',
               value:
@@ -537,9 +537,11 @@ export function PersonalPage(props: Props) {
                   ? selectedAthlete.gender
                   : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}`,
             },
-            { label: '血型', value: selectedAthlete.bloodType },
-            { label: '籍贯', value: selectedAthlete.nativePlace },
-            { label: '所属区域', value: athleteAffiliationLocation },
+            ...(props.user.role === 'OBS' ? [] : [
+              { label: '血型', value: selectedAthlete.bloodType },
+              { label: '籍贯', value: selectedAthlete.nativePlace },
+              { label: '所属区域', value: athleteAffiliationLocation },
+            ]),
             { label: '专项特长', value: selectedAthlete.specialties },
           ] satisfies ProfileDetail[],
         },
@@ -693,6 +695,7 @@ export function PersonalPage(props: Props) {
                   athleteId={selectedAthlete.id}
                   athleteName={selectedAthlete.name}
                   initialDate={props.to}
+                  readOnly={props.user.role === 'OBS'}
                 />
               </Suspense>
             )}
@@ -712,7 +715,7 @@ export function PersonalPage(props: Props) {
                 </span>
                 <h2>{selectedAthlete.name}</h2>
                 <p>
-                  {athleteLocation || '地区待补充'} · {selectedAthlete.coaches || '未绑定教练'}
+                  {props.user.role !== 'OBS' && <>{athleteLocation || '地区待补充'} · </>}{selectedAthlete.coaches || '未绑定教练'}
                 </p>
                 {canEditOwnPosition && (
                   <form className="personal-position-editor" onSubmit={savePosition}>
@@ -947,7 +950,7 @@ export function PersonalPage(props: Props) {
               to={props.to}
               kind="wellness"
             />
-            <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />
+            {props.user.role !== 'OBS' && <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />}
             <StrengthProfileModule
               key={selectedAthlete.id}
               athlete={selectedAthlete}

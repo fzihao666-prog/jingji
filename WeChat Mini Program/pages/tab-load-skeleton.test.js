@@ -424,3 +424,52 @@ it('档案项目参考失败保持其他模块可用，无标准时保留原始�
   expect(pending.physicalReferenceNote).toBe('项目参考维度待配置');
   expect(pending.physicalReferenceRows[0]).toMatchObject({ value: '40', source: '待配置', reference: '--', achieved: '--' });
 });
+
+
+it('观察员在原档案页读取训练与测试，跳过医疗请求并隐藏内部资料', async () => {
+  const api = profileApi();
+  let medicalCalls = 0;
+  api.painTrend = async () => { medicalCalls += 1; return {}; };
+  api.wellnessTrends = async () => { medicalCalls += 1; return {}; };
+  const { page } = createPageModule(new URL('./profile/profile.js', import.meta.url), api);
+  const person = { ...athlete, phone: 'private', healthStatus: 'private' };
+  const view = await page.loadPageData({ user: { role: 'OBS' }, selectedAthleteId: 1,
+    athletes: [person], project: 'ROWING', from: '2026-10-01', to: '2026-10-31' }, () => true);
+  expect(view.athleteName).toBe(athlete.name);
+  expect(api.calls.injuryRecords).toBe(0);
+  expect(medicalCalls).toBe(0);
+  expect([...view.primaryCells, ...view.moreCells].some(cell => ['健康状态', '联系电话'].includes(cell.label))).toBe(false);
+});
+
+it('观察员使用原总览筛选和计划统计，同时跳过内部待办与恢复日报', async () => {
+  let privateCalls = 0;
+  let planCalls = 0;
+  const api = {
+    overviewTeams: async () => ({ teams: [{ id: 10, name: '一队' }] }),
+    overview: async () => ({ overview: {} }),
+    planExecution: async () => { planCalls += 1; return {}; },
+    dailyTodos: async () => { privateCalls += 1; return {}; },
+    teamOverview: async () => { privateCalls += 1; return {}; }
+  };
+  const formatDependencies = { './format': formatModule, './pagination': paginationModule };
+  const previousUser = contextData.user;
+  contextData.user = { role: 'OBS' };
+  try {
+    const { page } = createPageModule(new URL('./index/index.js', import.meta.url), api, {
+      '../../utils/today-status': loadCjs(new URL('../utils/today-status.js', import.meta.url), formatDependencies),
+      '../../utils/wellness-form': loadCjs(new URL('../utils/wellness-form.js', import.meta.url), { './date': dateModule }),
+      '../../utils/morning-check': loadCjs(new URL('../utils/morning-check.js', import.meta.url), formatDependencies),
+      '../../utils/today-plan': loadCjs(new URL('../utils/today-plan.js', import.meta.url), formatDependencies)
+    });
+    await page.loadPage();
+    expect(page.data.error).toBe('');
+    expect(page.data.readOnly).toBe(true);
+    expect(page.data.showTeam).toBe(true);
+    expect(page.data.showAthlete).toBe(true);
+    expect(page.data.canViewTodos).toBe(false);
+    expect(privateCalls).toBe(0);
+    expect(planCalls).toBe(1);
+  } finally {
+    contextData.user = previousUser;
+  }
+});

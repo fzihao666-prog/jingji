@@ -16,9 +16,16 @@ const observerReads = new Set([
   '/api/training-plans',
   '/api/training-plans/catalog',
   '/api/projects/rules',
+  '/api/analysis/model',
+  '/api/analysis/summary',
+  '/api/physical-champion',
+  '/api/special-champion-models',
+  '/api/enode/data',
+  '/api/team-training-stats',
+  '/api/coach/plan-execution',
 ]);
 const athleteRead =
-  /^\/api\/athletes\/[1-9]\d*\/(?:overview|training-sessions|reports(?:\/[a-f0-9-]{36})?)$/;
+  /^\/api\/athletes\/[1-9]\d*\/(?:overview|training-sessions|body-composition|photo|wellness-trends|aerobic-endurance|profile-comparison|radar-models|champion-model|reports(?:\/[a-f0-9-]{36})?)$/;
 
 export function observerRequestAllowed(method: string, path: string) {
   if (method === 'POST' && ['/api/auth/logout', '/api/auth/change-password'].includes(path))
@@ -81,6 +88,8 @@ const privateFields = new Set([
   'importedAt',
   'importBatchId',
   'confidence',
+  'filename',
+  'sourceRow',
 ]);
 
 const observerAthleteFields = new Set([
@@ -100,20 +109,56 @@ const observerAthleteFields = new Set([
   'coaches',
   'headCoaches',
   'coachUsers',
+  'photoUrl',
+  'birthDate',
+  'startSportDate',
+  'trainingVenue',
+  'campPeriod',
+  'heightCm',
+  'weightKg',
+  'bodyFatPct',
+  'skeletalMuscleKg',
+  'muscleMassKg',
+  'upperLimbMuscleKg',
+  'lowerLimbMuscleKg',
+  'trunkMuscleKg',
+  'subcutaneousFatMm',
+  'tricepsSkinfoldMm',
+  'abdominalSkinfoldMm',
+  'thighSkinfoldMm',
+  'calfSkinfoldMm',
+  'visceralFatLevel',
+  'basalMetabolismKcal',
+  'totalBodyWaterKg',
+  'ecwTbwRatio',
+  'phaseAngleDeg',
+  'visceralFatAreaCm2',
+  'leftArmLeanKg',
+  'rightArmLeanKg',
+  'trunkLeanKg',
+  'leftLegLeanKg',
+  'rightLegLeanKg',
+  'bodyMeasurementDate',
 ]);
 
-export function observerResponse(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(observerResponse);
+export function observerResponse(value: unknown, roster = false): unknown {
+  if (Array.isArray(value)) return value.map((item) => observerResponse(item));
   if (!value || typeof value !== 'object') return value;
   const result: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (key === 'athletes' && Array.isArray(item)) {
+    if (roster && key === 'athletes' && Array.isArray(item)) {
       result[key] = item.map((athlete) => {
         if (!athlete || typeof athlete !== 'object') return athlete;
         return Object.fromEntries(
           Object.entries(athlete).filter(([field]) => observerAthleteFields.has(field))
         );
       });
+    } else if (key === 'context' && item && typeof item === 'object' && !Array.isArray(item)) {
+      result[key] = Object.fromEntries(
+        Object.entries(item).filter(([field]) =>
+          ['workoutStart', 'workoutEnd', 'exercises'].includes(field)
+        )
+      );
     } else if (key === 'commentary') {
       result[key] = { highlights: [], concerns: [], suggestions: [] };
     } else if (!privateFields.has(key)) {

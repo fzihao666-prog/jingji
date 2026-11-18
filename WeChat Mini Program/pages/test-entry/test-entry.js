@@ -70,7 +70,7 @@ Page({
 
   onLoad(options) {
     if (getApp().globalData.user?.role === 'OBS') {
-      wx.reLaunch({ url: '/pages/observer/observer' });
+      wx.reLaunch({ url: '/pages/index/index' });
       return;
     }
     this._mode = options && options.mode === 'special' ? 'special' : 'strength';

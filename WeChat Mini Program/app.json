@@ -16,8 +16,7 @@
     "pages/mine/mine",
     "pages/data-import/data-import",
     "pages/privacy/privacy",
-    "pages/team-plans/team-plans",
-    "pages/observer/observer"
+    "pages/team-plans/team-plans"
   ],
   "window": {
     "navigationBarBackgroundColor": "#092b39",

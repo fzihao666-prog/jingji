@@ -146,8 +146,9 @@ export function UnifiedTrainingPlansPage(props: Props) {
         }
       />
       <p>
-        队伍统一安排专项、体能与恢复训练；Web
-        查看计划与执行分析；教练优先在小程序生成、调整、审核发布和确认实施。
+        {props.user.role === 'OBS'
+          ? '查看队伍的专项、体能与恢复训练安排及执行分析。'
+          : '队伍统一安排专项、体能与恢复训练；Web 查看计划与执行分析；教练优先在小程序生成、调整、审核发布和确认实施。'}
       </p>
       <FilterBar label="训练计划筛选">
         <label>
@@ -189,7 +190,7 @@ export function UnifiedTrainingPlansPage(props: Props) {
             </div>
           ))}
         </div>
-        <p>草稿和待审核计划仅供教练查看，运动员执行以已发布版本为准。</p>
+        <p>运动员执行以已发布版本为准。</p>
       </AppCard>
       <AppCard>
         <h2>队伍训练计划</h2>
@@ -259,7 +260,7 @@ export function UnifiedTrainingPlansPage(props: Props) {
           <h2>周安排</h2>
           <p>
             {plans.length
-              ? '请选择一份队伍计划查看与编排。'
+              ? props.user.role === 'OBS' ? '请选择一份队伍计划查看。' : '请选择一份队伍计划查看与编排。'
               : '暂无队伍计划，周视图保留空状态。教练可通过既有小程序入口创建队伍主计划。'}
           </p>
           <TrainingPlanWeekView

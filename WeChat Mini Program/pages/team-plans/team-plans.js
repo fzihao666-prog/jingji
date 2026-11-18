@@ -92,10 +92,6 @@ Page({
     wx.showToast({ title: message, icon: 'none', duration: 2500 });
   },
   onShow() {
-    if (getApp().globalData.user?.role === 'OBS') {
-      wx.reLaunch({ url: '/pages/observer/observer' });
-      return;
-    }
     this.load();
   },
   async load() {
@@ -110,6 +106,7 @@ Page({
       this.setData({
         ...result,
         canManage: ['SCC', 'REG', 'TD', 'DMD'].includes(user.role),
+        readOnly: user.role === 'OBS',
         ownAthleteId: user.athleteId || 0,
       });
       if (this.data.selected)
@@ -169,7 +166,7 @@ Page({
       aiWarnings: meta && meta.warnings ? meta.warnings : [],
       checks: [],
     });
-    if (plan && (plan.status === 'published' || plan.status === 'archived')) this.loadChecks(plan);
+    if (plan && !this.data.readOnly && (plan.status === 'published' || plan.status === 'archived')) this.loadChecks(plan);
     if (plan && this.data.canManage) this.loadExecution(plan);
   },
   async loadChecks(plan) {

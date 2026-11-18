@@ -291,7 +291,7 @@ app.get('/api/coach/team-overview', requireAuth, requireRole('SCC', 'REG', 'TD',
 });
 
 // 训练计划执行率
-app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
+app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD', 'OBS'), (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const now = new Date();
   const parsed = teamOverviewQuery(now).safeParse(req.query);

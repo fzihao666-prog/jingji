@@ -2,7 +2,7 @@
 <view class="page">
   <view class="page-head">
     <view class="page-title">运动员档案</view>
-    <view class="page-description">个人画像、训练、测试与伤病恢复</view>
+    <view class="page-description">{{readOnly ? '个人画像、训练与测试' : '个人画像、训练、测试与伤病恢复'}}</view>
   </view>
 
   <view wx:if="{{createAccessError}}" class="error-box"><text>{{createAccessError}}</text><button class="error-retry" bindtap="loadPage">重试</button></view>
@@ -44,6 +44,7 @@
     <view class="section-head"><view class="section-head-title">力量测试个人评价</view><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view></view>
     <view class="card"><template wx:if="{{!latestTestDate || overviewError}}" is="training-state" data="{{loading, error: error || overviewError, message: '待采集'}}" /><view wx:if="{{testMetrics.length}}" class="ratio-list"><view wx:for="{{testMetrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">待采集</view></view></view>
 
+    <block wx:if="{{!readOnly}}">
     <view class="section-head injury-head">
       <view class="injury-head-copy">
         <view class="section-head-title">运动损伤与恢复</view>
@@ -100,6 +101,7 @@
         </scroll-view></view>
       </view>
     </view>
+    </block>
     <view class="section-head"><view class="section-head-title">身体成分</view><view class="section-head-note">最近实测与个人变化</view></view>
     <view class="card body-summary">
       <block wx:if="{{!bodyCompositionSummary.hasData || bodyError || error}}"><template is="training-state" data="{{loading, error: error || bodyError, message: '暂无身体成分数据', chart: false}}" /></block>

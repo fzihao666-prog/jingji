@@ -64,7 +64,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['健康状态', athlete.healthStatus || '--'],
     ['最好成绩', athlete.bestResult || '--'],
     ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--']
-  ].map(([label, value]) => ({ label, value }));
+  ].map(([label, value]) => ({ label, value })).filter(item => period.user?.role !== 'OBS' || !['健康状态', '联系电话'].includes(item.label));
   const primaryLabels = new Set(['项目', '队伍', '主管教练', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));
   const moreCells = cells.filter((item) => !primaryLabels.has(item.label));
@@ -187,7 +187,7 @@ Page({
     from: '',
     to: '',
     ...emptyProfileView(),
-    canEditSelf: false, canReportRole: false, canCoachFill: false
+    readOnly: false, canEditSelf: false, canReportRole: false, canCoachFill: false
   },
 
   onShow() { if (!isPageCacheFresh(this)) this.loadPage(); },
@@ -212,6 +212,7 @@ Page({
         page.setData({
           ...emptyProfileView(scope.athletes.find((item) => Number(item.id) === Number(scope.selectedAthleteId)), scope),
           ...scope,
+          readOnly: scope.user.role === 'OBS',
           canEditSelf: scope.user.role === 'ATL',
           canReportRole: scope.user.role === 'ATL' || MANAGER_ROLES.includes(scope.user.role),
           canCoachFill: MANAGER_ROLES.includes(scope.user.role)
@@ -228,12 +229,15 @@ Page({
     if (!athleteId) return emptyProfileView();
     const athlete = scope.athletes.find((item) => Number(item.id) === Number(athleteId));
     if (!athlete) throw new Error('当前项目中未找到该运动员。');
+    const privateSection = (load, message) => scope.user?.role === 'OBS'
+      ? Promise.resolve({ value: null, error: '' })
+      : sectionRequest(load, message);
     const [injury, overview, benchmark, pain, wellness, body, comparison, radar, photo, physical] = await Promise.all([
-      sectionRequest(() => api.injuryRecords(athleteId), '伤病记录加载失败'),
+      privateSection(() => api.injuryRecords(athleteId), '伤病记录加载失败'),
       sectionRequest(() => api.personalOverview(athleteId, scope.from, scope.to, scope.project), '训练概览加载失败'),
       sectionRequest(() => api.championBenchmark(athleteId), '冠军模型加载失败'),
-      sectionRequest(() => api.painTrend(athleteId, 30), '疼痛趋势加载失败'),
-      sectionRequest(() => api.wellnessTrends(athleteId, scope.from, scope.to, scope.project), '恢复趋势加载失败'),
+      privateSection(() => api.painTrend(athleteId, 30), '疼痛趋势加载失败'),
+      privateSection(() => api.wellnessTrends(athleteId, scope.from, scope.to, scope.project), '恢复趋势加载失败'),
       sectionRequest(() => api.getBodyCompositionHistory(athleteId), '身体成分加载失败'),
       sectionRequest(() => api.profileComparison(athleteId, scope.from, scope.to, scope.project), '训练对比加载失败'),
       sectionRequest(() => api.radarModels(athleteId, scope.from, scope.to), '雷达模型加载失败'),

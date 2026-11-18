@@ -438,3 +438,21 @@ it('旧映射表可以原地升级，重复启动保留既有映射', async () =
     legacy.close();
   }
 });
+
+it('特邀观察员复用队伍训练统计读取，范围外及导入均被拒绝', async () => {
+  db.prepare("UPDATE users SET role='OBS' WHERE id=9701").run();
+  try {
+    const allowed = await fetch(`${base}?project=ROWING&teamId=9701&date=${date}`, {
+      headers: auth(),
+    });
+    expect(allowed.status).toBe(200);
+    const denied = await fetch(`${base}?project=ROWING&teamId=9702&date=${date}`, {
+      headers: auth(),
+    });
+    expect(denied.status).toBe(403);
+    const write = await fetch(`${base}/import`, { method: 'POST', headers: auth() });
+    expect(write.status).toBe(403);
+  } finally {
+    db.prepare("UPDATE users SET role='SCC' WHERE id=9701").run();
+  }
+});

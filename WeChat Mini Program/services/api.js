@@ -18,7 +18,6 @@ function requestAiPlan(path, data) {
 }
 
 module.exports = {
-  observerTeams() { return request('/api/observer/teams'); },
   projectRules(project) { return request(`/api/projects/rules?${query({ project })}`); },
   reportPreview(id, range) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/preview?${query(range)}`); },
   reportHistory(id) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`); },

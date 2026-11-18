@@ -13,7 +13,7 @@ Page({
   onLoad(options) {
     this._alive = true;
     this.run(async () => {
-      const context = await loadContext({ refreshUser: true, allowObserver: true });
+      const context = await loadContext({ refreshUser: true });
       if (!this._alive) return;
       const id = Number(options.athleteId);
       const available = context.user?.role === 'OBS' ? context.athletes : context.projectAthletes;

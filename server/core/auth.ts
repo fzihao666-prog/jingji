@@ -74,7 +74,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       return res.status(403).json({ message: '该账号仅可阅览授权队伍的信息。' });
     res.setHeader('Cache-Control', 'no-store');
     const sendJson = res.json.bind(res);
-    res.json = (body: unknown) => sendJson(observerResponse(body));
+    res.json = (body: unknown) => sendJson(observerResponse(body, req.path === '/api/athletes'));
   }
   next();
 }

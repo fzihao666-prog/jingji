@@ -434,7 +434,7 @@ export function TeamTrainingStats({
   teamId: number | null;
   initialDate?: string;
   focusOnOpen: boolean;
-  onImport: () => void;
+  onImport?: () => void;
 }) {
   const [teams, setTeams] = useState<ProjectTeam[]>();
   const [teamsError, setTeamsError] = useState('');
@@ -521,10 +521,12 @@ export function TeamTrainingStats({
             : '统计教练填报的队级分项，与上方课次数据分别计算。'
         }
         actions={
-          <button type="button" className="secondary-button" onClick={onImport}>
-            <Upload size={16} aria-hidden="true" />
-            导入 Excel
-          </button>
+          onImport && (
+            <button type="button" className="secondary-button" onClick={onImport}>
+              <Upload size={16} aria-hidden="true" />
+              导入 Excel
+            </button>
+          )
         }
       />
       <div className="team-training-controls">

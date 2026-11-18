@@ -50,14 +50,14 @@ describe('页面上下文并发', () => {
 });
 
 
-it('观察员打开内部业务页面时跳转专属阅览入口', async () => {
-  const app = { globalData: { token: 'token', user: { role: 'OBS' } } };
-  const api = { currentProject: vi.fn(), athletes: vi.fn() };
+it('观察员复用正常页面上下文和已授权队伍数据', async () => {
+  const app = { globalData: { token: 'token', user: { role: 'OBS' } }, setProject(project) { this.globalData.currentProject = project; } };
+  const api = { currentProject: vi.fn(async () => ({ project: 'ROWING', projects: ['ROWING'] })), athletes: vi.fn(async () => ({ athletes: [{ id: 1, project: 'ROWING' }] })) };
   const wx = { reLaunch: vi.fn() };
   const context = { module: { exports: {} }, require: () => api, getApp: () => app, wx };
   vm.runInNewContext(readFileSync(new URL('./context.js', import.meta.url), 'utf8'), context);
-  await expect(context.module.exports.loadContext()).rejects.toThrow('阅览入口');
-  expect(wx.reLaunch).toHaveBeenCalledWith({ url: '/pages/observer/observer' });
-  expect(api.currentProject).not.toHaveBeenCalled();
-  expect(api.athletes).not.toHaveBeenCalled();
+  const result = await context.module.exports.loadContext();
+  expect(result.user.role).toBe('OBS');
+  expect(result.athletes).toHaveLength(1);
+  expect(wx.reLaunch).not.toHaveBeenCalled();
 });

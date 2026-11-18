@@ -1,8 +1,0 @@
-.observer-filters, .observer-grid { display: flex; gap: 16rpx; flex-wrap: wrap; }
-.observer-filters picker { flex: 1; min-width: 220rpx; }
-.observer-grid > view { flex: 1; min-width: 150rpx; }
-.observer-value { font-size: 38rpx; font-weight: 600; margin: 10rpx 0; }
-.observer-value text { font-size: 24rpx; margin-left: 8rpx; }
-.observer-row { padding: 18rpx 0; border-bottom: 1rpx solid var(--line, #dce5e8); }
-.observer-row text { display: block; margin-top: 6rpx; }
-.observer-plan { margin-top: 14rpx; }

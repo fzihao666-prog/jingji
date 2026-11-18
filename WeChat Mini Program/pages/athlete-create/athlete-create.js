@@ -15,7 +15,7 @@ Page({
 
   onLoad(options = {}) {
     if (getApp().globalData.user?.role === 'OBS') {
-      wx.reLaunch({ url: '/pages/observer/observer' });
+      wx.reLaunch({ url: '/pages/index/index' });
       return;
     }
     this._preferred = { project: options.project || '', teamId: Number(options.teamId) || 0 };

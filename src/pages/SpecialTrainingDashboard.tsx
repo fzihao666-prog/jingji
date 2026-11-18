@@ -30,7 +30,7 @@ const TeamTrainingStats = lazy(() => import('../components/TeamTrainingStats').t
 
 type Props = {
   filters?: ReactNode;
-  teamTraining?: { teamId: number | null; date?: string; focus: boolean; onImport: () => void };
+  teamTraining?: { teamId: number | null; date?: string; focus: boolean; onImport?: () => void };
   teamId?: number | null;
   onPlanOpen: () => void;
   project: Project;

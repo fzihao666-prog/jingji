@@ -87,7 +87,6 @@ const DataManagementPage = lazy(() =>
   import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage }))
 );
 
-const ObserverPortal = lazy(() => import('./pages/ObserverPortal').then((module) => ({ default: module.ObserverPortal })));
 
 const today = toIsoDate(new Date());
 const pageKeys: PageKey[] = [
@@ -151,7 +150,8 @@ export default function App() {
   const canOpenSystemPages = Boolean(user && SYSTEM_MANAGEMENT_ROLES.includes(user.role));
   const restrictedPage =
     (requestedPage === 'ai-management' && user?.role !== 'DMD') ||
-    (!canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts'));
+    (!canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts')) ||
+    (user?.role === 'OBS' && ['athletes', 'coaches', 'teams', 'data-import', 'data-management', 'reports', 'submission-report', 'bluetooth'].includes(requestedPage));
   const page = restrictedPage ? 'overview' : requestedPage;
   const [routeHash, setRouteHash] = useState(() => window.location.hash);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
@@ -171,7 +171,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
-    if (!user || user.role === 'OBS' || !project) return;
+    if (!user || !project) return;
     let active = true;
     setTeamError('');
     api.overviewTeams(project).then(({ teams }) => {
@@ -235,7 +235,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user || user.role === 'OBS') return;
+    if (!user) return;
     // 同账号刷新保留页面和导入回执；账号变化仍等待新名册。
     if (rosterUserRef.current !== user) setAthletesReady(false);
     rosterUserRef.current = user;
@@ -272,7 +272,7 @@ export default function App() {
   const recordsAthleteId = recordScope?.athleteId ?? null;
 
   useEffect(() => {
-    if (!user || user.role === 'OBS' || !athletesReady || !project) return;
+    if (!user || !athletesReady || !project) return;
     const selected = recordsAthleteId
       ? athletes.find((athlete) => athlete.id === recordsAthleteId)
       : null;
@@ -373,11 +373,6 @@ export default function App() {
       </div>
     );
   if (!user) return <LoginPage onLogin={login} />;
-  if (user.role === 'OBS') return (
-    <Suspense fallback={<p role="status">正在加载队伍阅览…</p>}>
-      <ObserverPortal user={user} onLogout={logout} />
-    </Suspense>
-  );
   if (!athletesReady)
     return (
       <div className="boot-screen">
@@ -401,7 +396,7 @@ export default function App() {
     ? Number(trainingTarget) || null : null;
   const focusTrainingStats = trainingTarget !== null || /^#\/?team-training-stats(?:\?|$)/.test(routeHash);
   const importedDate = trainingQuery.get('date');
-  const canViewTrainingStats = ['SCC', 'REG', 'TD', 'DMD'].includes(user.role);
+  const canViewTrainingStats = ['SCC', 'REG', 'TD', 'DMD', 'OBS'].includes(user.role);
 
   const shared = {
     teamId,
@@ -505,7 +500,7 @@ export default function App() {
               date: importedTeamId && importedDate && /^\d{4}-\d{2}-\d{2}$/.test(importedDate)
                 ? importedDate : undefined,
               focus: focusTrainingStats,
-              onImport: () => changePage('data-import'),
+              onImport: user.role === 'OBS' ? undefined : () => changePage('data-import'),
             } : undefined}
           />
         )}

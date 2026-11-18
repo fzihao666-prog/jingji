@@ -63,7 +63,7 @@ Page({
 
   onLoad() {
     if (getApp().globalData.user?.role === 'OBS') {
-      wx.reLaunch({ url: '/pages/observer/observer' });
+      wx.reLaunch({ url: '/pages/index/index' });
       return;
     }
     const { token, user } = getApp().globalData;

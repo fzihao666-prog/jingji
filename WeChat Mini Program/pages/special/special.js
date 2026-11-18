@@ -137,7 +137,7 @@ Page({
   },
 
   updateTeamStatsScope(scope, target) {
-    if (!scope.user || !MANAGER_ROLES.includes(scope.user.role)) {
+    if (!scope.user || ![...MANAGER_ROLES, 'OBS'].includes(scope.user.role)) {
       this._teamStatsTarget = null;
       this.setData({ teamStatsScope: null });
       return;
@@ -163,7 +163,7 @@ Page({
       error: '专项训练数据加载失败。',
       scope: { range: this.data.range, showAthlete: false },
       prepare: (page, scope) => {
-        page.setData({ ...scope, teamId: 0, teamIndex: 0, hasWaterSpecial: Boolean(sportRules[scope.project]?.activities.includes('on_water')), canEnterTest: MANAGER_ROLES.includes(scope.user.role) && Boolean(sportRules[scope.project]?.activities.includes('on_water')) });
+        page.setData({ ...scope, readOnly: scope.user.role === 'OBS', teamId: 0, teamIndex: 0, hasWaterSpecial: Boolean(sportRules[scope.project]?.activities.includes('on_water')), canEnterTest: MANAGER_ROLES.includes(scope.user.role) && Boolean(sportRules[scope.project]?.activities.includes('on_water')) });
         if (page._teamStatsTarget && !(scope.projects || []).includes(page._teamStatsTarget.project)) page._teamStatsTarget = null;
         page.updateTeamStatsScope(scope, target);
       },

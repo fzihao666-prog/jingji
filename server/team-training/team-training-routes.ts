@@ -103,7 +103,7 @@ export function registerTeamTrainingStatisticsRoutes(app: Express) {
     }
   );
 
-  app.get('/api/team-training-stats', requireAuth, managers, (req, res) => {
+  app.get('/api/team-training-stats', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD', 'OBS'), (req, res) => {
     const parsed = targetSchema
       .extend({
         date: z.string().length(10).refine(isTeamTrainingDate).optional(),

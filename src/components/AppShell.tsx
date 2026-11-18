@@ -102,19 +102,6 @@ const organizationGroups: Array<{
   { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'REG', 'TD', 'DMD'] },
 ];
 
-export const observerNavigation: Array<{
-  key: PageKey;
-  label: string;
-  icon: typeof ChartNoAxesCombined;
-}> = [
-  { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
-  { key: 'personal', label: '队伍人员', icon: UsersRound },
-  { key: 'special-records', label: '训练明细', icon: TimerReset },
-  { key: 'strength-assessment', label: '测试结果', icon: Dumbbell },
-  { key: 'training-plans', label: '训练计划', icon: ClipboardList },
-  { key: 'reports', label: '训练报告', icon: FileSpreadsheet },
-];
-
 const systemGroups: Array<{
   key: Extract<PageKey, 'regions' | 'accounts' | 'ai-management'>;
   label: string;
@@ -170,9 +157,7 @@ export function AppShell({
   );
   const visibleSystemGroups = systemGroups.filter((item) => item.roles.includes(user.role));
   const current =
-    user.role === 'OBS'
-      ? observerNavigation.find((item) => item.key === page) || observerNavigation[0]
-      : page.startsWith('special-')
+    page.startsWith('special-')
     ? { label: '专项训练', icon: TimerReset }
     : page.startsWith('strength-')
       ? { label: '体能训练', icon: Dumbbell }
@@ -243,25 +228,6 @@ export function AppShell({
         </div>
 
         <nav className="primary-nav" aria-label="主导航">
-          {user.role === 'OBS' ? (
-            observerNavigation.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  type="button"
-                  key={item.key}
-                  className={page === item.key ? 'active' : ''}
-                  onClick={() => choosePage(item.key)}
-                >
-                  <Icon size={19} aria-hidden="true" />
-                  <span>
-                    <strong>{item.label}</strong>
-                  </span>
-                </button>
-              );
-            })
-          ) : (
-            <>
           {directNavItems.slice(0, 1).map((item) => {
             const Icon = item.icon;
             return (
@@ -310,7 +276,7 @@ export function AppShell({
               </button>
             );
           })}
-          <div
+          {user.role !== 'OBS' && <div
             className={`special-nav data-collection-nav ${dataCollectionActive ? 'active' : ''} ${dataCollectionOpen ? 'open' : 'collapsed'}`}
           >
             <button
@@ -337,7 +303,7 @@ export function AppShell({
                 ))}
               </div>
             )}
-          </div>
+          </div>}
           {visibleOrganizationGroups.length > 0 && (
             <div
               className={`special-nav ${organizationActive ? 'active' : ''} ${organizationOpen ? 'open' : 'collapsed'}`}
@@ -399,8 +365,6 @@ export function AppShell({
                 </div>
               )}
             </div>
-          )}
-            </>
           )}
         </nav>
 

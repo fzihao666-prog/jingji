@@ -102,7 +102,7 @@ Page({
 
   onLoad(options) {
     if (getApp().globalData.user?.role === 'OBS') {
-      wx.reLaunch({ url: '/pages/observer/observer' });
+      wx.reLaunch({ url: '/pages/index/index' });
       return;
     }
     // 教练代填入口可携带目标运动员；本人填报忽略该参数。

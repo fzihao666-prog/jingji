@@ -297,6 +297,7 @@ export function StrengthProfileModule({ athlete, user, preloaded, onTestsChanged
               编辑本次数据
             </button>
           )}
+          {user.role !== 'OBS' && (
           <button
             className="primary-button"
             onClick={() => {
@@ -311,6 +312,7 @@ export function StrengthProfileModule({ athlete, user, preloaded, onTestsChanged
             {pdfBusy ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}
             {pdfBusy ? '生成中…' : '导出体能测试档案'}
           </button>
+          )}
         </div>
       </header>
 
