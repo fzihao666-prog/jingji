@@ -2,6 +2,8 @@
 /* 总览按手机纵向阅读组织，图表内容始终受卡片宽度约束。 */
 .overview-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16rpx; }
 .overview-metrics .metric-card { min-width: 0; padding: 20rpx 16rpx; }
+/* 观察员隐藏损伤指标后为奇数张，末张铺满避免右侧留空。 */
+.overview-metrics .metric-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .overview-metrics .metric-value { font-size: 36rpx; line-height: 1.2; overflow-wrap: anywhere; }
 .chart-card, .structure-card, .focus-card, .team-overview { box-sizing: border-box; width: 100%; max-width: 100%; overflow: hidden; }
 /* 今日队伍恢复日报：人数卡片与紧凑人员状态列表优先于训练图表，适配手机纵向阅读。 */

@@ -132,6 +132,25 @@
     box-shadow 0.18s ease;
 }
 
+/* 指标卡片单独成行，按实际卡片数量均分宽度，角色差异不会留下空位。 */
+.overview-metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: var(--overview-gap);
+}
+
+.overview-metric-row > .overview-card-shell {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+
+@media (width <= 620px) {
+  .overview-metric-row > .overview-card-shell {
+    flex-basis: 100%;
+  }
+}
+
 .overview-card-shell.card-size-metric {
   grid-column: span 2;
 }

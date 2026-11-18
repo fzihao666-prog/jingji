@@ -467,6 +467,15 @@ export function OverviewPage(props: Props) {
     ),
   };
 
+  // 观察员不展示损伤与输送单位模块（服务端会整体剔除这些字段），
+  // 指标卡片单独成行，按实际数量均分，避免固定 6 列时留空位。
+  const hiddenForObserver = new Set(['recovery-time', 'injury-analysis', 'birthplace-map']);
+  const visibleCardIds = defaultOrder.filter(
+    (id) => cardMeta[id] && (props.user.role !== 'OBS' || !hiddenForObserver.has(id))
+  );
+  const metricCardIds = visibleCardIds.filter((id) => cardMeta[id].size === 'metric');
+  const panelCardIds = visibleCardIds.filter((id) => cardMeta[id].size !== 'metric');
+
   return (
     <PageContainer className="professional-overview">
       <PageHeader
@@ -508,9 +517,12 @@ export function OverviewPage(props: Props) {
         <ContentState kind="error" title="训练总览数据读取失败" description={overviewError} />
       ) : (
         <section className="professional-dashboard-grid">
-          {defaultOrder
-            .filter((id) => cardMeta[id] && (props.user.role !== 'OBS' || !['recovery-time', 'injury-analysis', 'birthplace-map'].includes(id)))
-            .map((id) => renderShell(id, cards[id]))}
+          {metricCardIds.length > 0 && (
+            <div className="overview-metric-row">
+              {metricCardIds.map((id) => renderShell(id, cards[id]))}
+            </div>
+          )}
+          {panelCardIds.map((id) => renderShell(id, cards[id]))}
         </section>
       )}
     </PageContainer>
