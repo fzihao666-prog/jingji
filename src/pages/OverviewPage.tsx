@@ -98,36 +98,6 @@ export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
-  const [coachTeams, setCoachTeams] = useState<
-    Awaited<ReturnType<typeof api.observerTeams>>['teams']
-  >([]);
-  const [coachLoading, setCoachLoading] = useState(false);
-  const [coachError, setCoachError] = useState('');
-  const [coachRetry, setCoachRetry] = useState(0);
-  useEffect(() => {
-    if (props.user.role !== 'OBS') return;
-    let active = true;
-    setCoachTeams([]);
-    setCoachLoading(true);
-    setCoachError('');
-    api.observerTeams()
-      .then(({ teams }) => {
-        if (active) {
-          setCoachTeams(teams.filter((team) =>
-            team.project === props.project && (!props.teamId || team.id === props.teamId)
-          ));
-        }
-      })
-      .catch((error: unknown) => {
-        if (active) setCoachError(error instanceof Error ? error.message : '队伍教练读取失败');
-      })
-      .finally(() => {
-        if (active) setCoachLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [props.user.id, props.user.role, props.project, props.teamId, coachRetry]);
   const isSelfOverview = props.user.role === 'ATL';
   const isIndividualOverview = isSelfOverview;
   // 日期、项目和运动员只由应用级筛选栏维护，所有训练页面读取同一份状态。
@@ -532,35 +502,6 @@ export function OverviewPage(props: Props) {
           </div>
         }
       />
-      {props.user.role === 'OBS' && (
-        <AppCard>
-          <SectionHeader title="队伍教练" />
-          {coachLoading ? (
-            <p role="status">正在读取队伍教练…</p>
-          ) : coachError ? (
-            <div role="alert">
-              <p>{coachError}</p>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setCoachRetry((value) => value + 1)}
-              >
-                重试
-              </button>
-            </div>
-          ) : coachTeams.length ? (
-            <ul>
-              {coachTeams.map((team) => (
-                <li key={team.id}>
-                  {team.name} · {team.coaches.map((coach) => coach.displayName).join('、') || '未关联教练'}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>当前范围暂无授权队伍</p>
-          )}
-        </AppCard>
-      )}
       {props.loading || (overviewLoading && !overview) ? (
         <PageSkeleton />
       ) : overviewError ? (

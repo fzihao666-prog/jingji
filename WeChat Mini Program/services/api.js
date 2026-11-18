@@ -26,7 +26,6 @@ module.exports = {
   reportCommentary(id, range, fingerprint) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/commentary`, { method: 'POST', timeout: 240000, data: { range, fingerprint, consent: true } }); },
   saveReport(id, range, fingerprint, commentary) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`, { method: 'POST', data: { range, fingerprint, commentary, confirmed: true } }); },
   assetUrl,
-  observerTeams() { return request('/api/observer/teams'); },
   teamPlans(params = {}) { return request(`/api/team-plans?${query(params)}`); },
   createTeamPlan(data) { return request('/api/team-plans', { method: 'POST', data }); },
   updateTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}`, { method: 'PUT', data }); },

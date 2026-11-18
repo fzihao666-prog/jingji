@@ -159,7 +159,6 @@ Page({
     canViewTodos: false,
     canBrowseTeam: false,
     readOnly: false,
-    coachTeams: [], coachError: '',
     todos: null,
     todosLoading: false,
     todosError: '',
@@ -241,7 +240,7 @@ Page({
   },
 
   async loadPageData(scope, isLatest = () => true) {
-    this.setData({ ...buildView({}, null, scope.from, scope.to), overviewError: '', comparisonError: '', coachTeams: [], coachError: '' });
+    this.setData({ ...buildView({}, null, scope.from, scope.to), overviewError: '', comparisonError: '' });
     let teamsError = '';
     const isManager = this.data.canBrowseTeam;
     let teams = this.data.teams || [];
@@ -267,22 +266,16 @@ Page({
     const teamPromise = isManager && athleteId
       ? sectionRequest(() => api.overview(scope.from, scope.to, 0, scope.project, teamId), '团队参照加载失败')
       : Promise.resolve(null);
-    const [personalResult, comparisonResult, coachResult] = await Promise.all([
+    const [personalResult, comparisonResult] = await Promise.all([
       sectionRequest(() => athleteId
         ? api.personalOverview(athleteId, scope.from, scope.to, scope.project)
         : api.overview(scope.from, scope.to, 0, scope.project, teamId), '训练总览加载失败'),
-      teamPromise,
-      scope.user?.role === 'OBS'
-        ? sectionRequest(() => api.observerTeams(), '教练名单加载失败')
-        : Promise.resolve(null)
+      teamPromise
     ]);
     if (!isLatest()) return null;
     const view = {
       ...buildView((personalResult.value || {}).overview || {}, athleteId && comparisonResult && comparisonResult.value ? comparisonResult.value.overview : null, scope.from, scope.to),
-      overviewError: personalResult.error || teamsError, comparisonError: comparisonResult ? comparisonResult.error : '',
-      coachTeams: ((coachResult?.value || {}).teams || []).filter(team =>
-        team.project === scope.project && (!teamId || Number(team.id) === teamId)),
-      coachError: coachResult?.error || ''
+      overviewError: personalResult.error || teamsError, comparisonError: comparisonResult ? comparisonResult.error : ''
     };
     const focus = this.buildFocusRows(this.data.todos, this.data.todoPagerPages.focus, teams, teamId);
     const filteredRoster = this.buildTeamView(this.data.teamOverview, teams, teamId);

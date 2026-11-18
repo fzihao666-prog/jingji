@@ -447,7 +447,6 @@ it('观察员使用原总览筛选和计划统计，同时跳过内部待办与�
   let planCalls = 0;
   const api = {
     overviewTeams: async () => ({ teams: [{ id: 10, name: '一队' }] }),
-    observerTeams: async () => ({ teams: [{ id: 10, project: 'ROWING', name: '一队', coaches: [{ id: 21, displayName: '教练甲' }] }] }),
     overview: async () => ({ overview: {} }),
     planExecution: async () => { planCalls += 1; return {}; },
     dailyTodos: async () => { privateCalls += 1; return {}; },
@@ -471,39 +470,11 @@ it('观察员使用原总览筛选和计划统计，同时跳过内部待办与�
     expect(page.data.canViewTodos).toBe(false);
     expect(privateCalls).toBe(0);
     expect(planCalls).toBe(1);
-    expect(page.data.coachTeams[0].coaches[0].displayName).toBe('教练甲');
   } finally {
     contextData.user = previousUser;
   }
 });
 
-
-it('观察员的空队仍显示全部负责教练，切队后名单跟随队伍', async () => {
-  const api = {
-    overviewTeams: async () => ({ teams: [{ id: 10, name: '空队' }, { id: 11, name: '二队' }] }),
-    observerTeams: async () => ({ teams: [
-      { id: 10, project: 'ROWING', name: '空队', coaches: [{ id: 21, displayName: '教练甲' }] },
-      { id: 11, project: 'ROWING', name: '二队', coaches: [{ id: 22, displayName: '教练乙' }] },
-      { id: 12, project: 'CANOE_SPRINT', name: '空队', coaches: [{ id: 23, displayName: '其他项目教练' }] }
-    ] }),
-    overview: async () => ({ overview: {} })
-  };
-  const formatDependencies = { './format': formatModule, './pagination': paginationModule };
-  const { page } = createPageModule(new URL('./index/index.js', import.meta.url), api, {
-    '../../utils/today-status': loadCjs(new URL('../utils/today-status.js', import.meta.url), formatDependencies),
-    '../../utils/wellness-form': loadCjs(new URL('../utils/wellness-form.js', import.meta.url), { './date': dateModule }),
-    '../../utils/morning-check': loadCjs(new URL('../utils/morning-check.js', import.meta.url), formatDependencies),
-    '../../utils/today-plan': loadCjs(new URL('../utils/today-plan.js', import.meta.url), formatDependencies)
-  });
-  page.setData({ canBrowseTeam: true });
-  const scope = { user: { role: 'OBS' }, project: 'ROWING', athletes: [], from: '2026-10-01', to: '2026-10-31' };
-  await page.loadPageData(scope);
-  expect(page.data.scopeAthletes).toEqual([]);
-  expect(page.data.coachTeams.map(team => team.coaches[0].displayName)).toEqual(['教练甲']);
-  page.setData({ teamId: 11 });
-  await page.loadPageData(scope);
-  expect(page.data.coachTeams.map(team => team.coaches[0].displayName)).toEqual(['教练乙']);
-});
 
 it('专项测试在切队和选择运动员后同步传递筛选条件', async () => {
   const calls = [];
