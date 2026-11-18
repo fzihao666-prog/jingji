@@ -2,7 +2,7 @@ import { registerPhysicalChampionRoutes } from './physical-champion-routes.ts';
 import { z } from 'zod';
 import type { Express } from 'express';
 import { db } from '../core/db.ts';
-import { accessibleAthleteIds, accountPermissions, hasAthleteAccess } from '../core/permissions.ts';
+import { accessibleAthleteIds, hasAthleteAccess, selectableProjects } from '../core/permissions.ts';
 import {
   cleanString,
   formatServerNumber,
@@ -378,27 +378,19 @@ export function registerAnalysisRoutes(app: Express) {
     const project = cleanString(req.query.project);
     if (!isProject(project))
       return res.status(400).json({ message: '请选择有效的运动项目。' });
+    if (!selectableProjects(req.authUser!).includes(project))
+      return res.status(403).json({ message: '无权查看当前项目的分析标准。' });
     if (!hasSpecialAnalysis(project))
       return res.status(409).json({ message: '该项目专项分析功能暂未配置。' });
     res.json({ standard: analysisStandardForProject(project) });
   });
 
   app.get('/api/special-champion-models', requireAuth, (req, res) => {
-    const user = req.authUser!;
     const project = cleanString(req.query.project);
     if (!isProject(project))
       return res.status(400).json({ message: '请选择有效的运动项目。' });
-
-    const projectAllowed =
-      user.role === 'ATL'
-        ? db
-            .prepare('SELECT 1 FROM athletes WHERE id = ? AND project = ? AND active = 1')
-            .get(user.athleteId, project) !== undefined
-        : (() => {
-            const permissions = accountPermissions(user.id);
-            return permissions.projects.includes('*') || permissions.projects.includes(project);
-          })();
-    if (!projectAllowed) return res.status(403).json({ message: '无权查看当前项目的冠军模型。' });
+    if (!selectableProjects(req.authUser!).includes(project))
+      return res.status(403).json({ message: '无权查看当前项目的冠军模型。' });
 
     const events = db
       .prepare(
@@ -420,8 +412,12 @@ export function registerAnalysisRoutes(app: Express) {
     res.json({ project, events });
   });
 
-  app.get('/api/special-champion-models/ergometer', (req, res) => {
-    const project = String(req.query.project || 'ROWING');
+  app.get('/api/special-champion-models/ergometer', requireAuth, (req, res) => {
+    const project = cleanString(req.query.project || 'ROWING');
+    if (!isProject(project))
+      return res.status(400).json({ message: '请选择有效的运动项目。' });
+    if (!selectableProjects(req.authUser!).includes(project))
+      return res.status(403).json({ message: '无权查看当前项目的冠军模型。' });
     const gender = String(req.query.gender || 'MALE');
     const testType = String(req.query.testType || '2000M');
 

@@ -124,7 +124,7 @@ describe('档案与训练总览空数据', () => {
   it('无运动员时档案保留资料、测试、恢复、身体成分和两个雷达分组', async () => {
     const page = createPage('profile');
     const view = await page.loadPageData({ ...scope, selectedAthleteId: 0, athletes: [] });
-    expect(view.primaryCells).toHaveLength(8);
+    expect(view.primaryCells).toHaveLength(9);
     expect(view.trainingSummary).toHaveLength(4);
     expect(view.trainingSummary.every((row) => row.value === '--')).toBe(true);
     expect(view.testMetrics.length).toBeGreaterThan(0);
@@ -146,7 +146,7 @@ describe('档案与训练总览空数据', () => {
     expect(view.wellnessError).toContain('加载失败');
     expect(view.benchmarkError).toContain('加载失败');
     expect(view.radarGroups).toHaveLength(2);
-    expect(view.primaryCells).toHaveLength(8);
+    expect(view.primaryCells).toHaveLength(9);
   });
   it('总览首屏固定生成核心卡片、分类和空人员分页', () => {
     const page = createPage('index');
@@ -174,7 +174,7 @@ describe('档案与训练总览空数据', () => {
     let view = await page.loadPageData(scope);
     expect(view.metrics).toHaveLength(6);
     expect(view.overviewError).toContain('加载失败');
-    page.data.canViewTodos = true;
+    page.data.canBrowseTeam = true;
     page.data.teams = [];
     page._teamsProject = scope.project;
     page.data.selectedAthleteId = 1;
@@ -333,7 +333,7 @@ describe('教练今日训练计划与执行情况', () => {
     const page = createPage('index', {
       planExecution: async () => ({ summary: { avgCompletion: null }, athletes: pendingRows, today: { plan: { hasPlan: false, focus: [], specialItems: [], physicalItems: [], items: [] } } }),
     });
-    page.data.canViewTodos = true;
+    page.data.canBrowseTeam = true;
     page.data.teams = [{ id: 1, name: '一队' }, { id: 2, name: '二队' }];
     page.data.teamId = 0;
     page._guard = { next: () => 1, isLatest: () => true };
@@ -348,7 +348,7 @@ describe('教练今日训练计划与执行情况', () => {
     expect(page.data.coachExecutionView.listEmpty).toBe(true);
     expect(page.data.todoPagerPages.exec).toBe(0);
     const failing = createPage('index', { planExecution: () => Promise.reject(new Error('加载失败，请重试')) });
-    failing.data.canViewTodos = true;
+    failing.data.canBrowseTeam = true;
     await failing.loadPlanExecution('rowing');
     expect(failing.data.planError).toContain('加载失败');
     expect(failing.data.coachPlanView.hasPlan).toBe(false);
@@ -368,7 +368,7 @@ describe('档案添加入口与列表刷新', () => {
     page.scheduleRadarDraw = () => {};
     await page.loadPage();
     expect(page.data.canAddAthlete).toBe(role !== 'ATL');
-    expect(page.data.primaryCells).toHaveLength(8);
+    expect(page.data.primaryCells).toHaveLength(9);
   });
   it('入口传递当前项目与队伍作为预选，未获权限不能导航', () => {
     const destinations = [];

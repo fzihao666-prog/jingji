@@ -74,7 +74,7 @@
         </block>
       </view>
     </view>
-    <view wx:if="{{canManage}}" class="lesson">
+    <view wx:if="{{canManage || readOnly}}" class="lesson">
       <view class="card-head-title">执行情况</view>
       <view wx:if="{{executionLoading}}">正在加载执行情况…</view>
       <view wx:if="{{executionError}}" aria-role="alert">{{executionError}}</view>

@@ -50,7 +50,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const cells = [
     ['项目', athlete.project ? projectLabel(athlete.project) : '--'],
     ['队伍', athlete.team || '--'],
-    ['主管教练', athlete.headCoaches || '—'],
+    ['负责教练', athlete.coaches || athlete.headCoaches || '—'],
     ['性别', athlete.gender || '--'],
     ['年龄', age == null ? '--' : `${age}岁`],
     ['身高', athlete.heightCm == null ? '--' : `${number(athlete.heightCm)} cm`],
@@ -65,7 +65,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['最好成绩', athlete.bestResult || '--'],
     ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--']
   ].map(([label, value]) => ({ label, value })).filter(item => period.user?.role !== 'OBS' || !['健康状态', '联系电话'].includes(item.label));
-  const primaryLabels = new Set(['项目', '队伍', '主管教练', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
+  const primaryLabels = new Set(['项目', '队伍', '负责教练', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));
   const moreCells = cells.filter((item) => !primaryLabels.has(item.label));
 

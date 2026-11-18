@@ -166,8 +166,8 @@ Page({
       aiWarnings: meta && meta.warnings ? meta.warnings : [],
       checks: [],
     });
-    if (plan && !this.data.readOnly && (plan.status === 'published' || plan.status === 'archived')) this.loadChecks(plan);
-    if (plan && this.data.canManage) this.loadExecution(plan);
+    if (plan && (plan.status === 'published' || plan.status === 'archived')) this.loadChecks(plan);
+    if (plan && (this.data.canManage || this.data.readOnly)) this.loadExecution(plan);
   },
   async loadChecks(plan) {
     try {

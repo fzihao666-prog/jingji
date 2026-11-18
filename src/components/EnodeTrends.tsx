@@ -325,7 +325,7 @@ export function EnodeTrends({
                         </>
                       )}
                       <td>
-                        {r.filename} · 第{r.sourceRow}行
+                        {r.filename ? `${r.filename}${r.sourceRow == null ? '' : ` · 第${r.sourceRow}行`}` : '—'}
                       </td>
                     </tr>
                   ))}

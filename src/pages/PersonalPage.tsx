@@ -969,32 +969,37 @@ export function PersonalPage(props: Props) {
               }
             />
           </ProfileSection>
-          {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
-            <ProfileSection title="训练记录" subtitle="公共课次填写，按实际活动显示专项字段。">
-              <EnodeTrends
-                key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
-                athleteId={selectedAthlete.id}
-                project={selectedAthlete.project}
-                from={props.from}
-                to={props.to}
-                kind="sessionRpe"
-              />
-              {props.user.role !== 'ATL' && (
-                <ProjectFactVerification
+          <ProfileSection
+            title="训练记录"
+            subtitle={props.user.role === 'OBS' ? '训练课次与 RPE 趋势。' : '公共课次填写，按实际活动显示专项字段。'}
+          >
+            <EnodeTrends
+              key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
+              athleteId={selectedAthlete.id}
+              project={selectedAthlete.project}
+              from={props.from}
+              to={props.to}
+              kind="sessionRpe"
+            />
+            {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
+              <>
+                {props.user.role !== 'ATL' && (
+                  <ProjectFactVerification
+                    athleteId={selectedAthlete.id}
+                    project={selectedAthlete.project}
+                    onChanged={props.onChanged}
+                  />
+                )}
+                <TrainingSessionEntry
+                  key={`${selectedAthlete.id}:${selectedAthlete.project}`}
                   athleteId={selectedAthlete.id}
                   project={selectedAthlete.project}
-                  onChanged={props.onChanged}
+                  mode={props.user.role === 'ATL' ? 'self' : 'coach'}
+                  onSaved={props.onChanged}
                 />
-              )}
-              <TrainingSessionEntry
-                key={`${selectedAthlete.id}:${selectedAthlete.project}`}
-                athleteId={selectedAthlete.id}
-                project={selectedAthlete.project}
-                mode={props.user.role === 'ATL' ? 'self' : 'coach'}
-                onSaved={props.onChanged}
-              />
-            </ProfileSection>
-          )}
+              </>
+            )}
+          </ProfileSection>
           <ProfileSection
             title="项目专项"
             subtitle="按当前项目加载专项规则，公共内容沿用统一模块。"

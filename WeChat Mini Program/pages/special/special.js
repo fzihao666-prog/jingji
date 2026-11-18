@@ -174,7 +174,7 @@ Page({
   async loadPageData(scope, full, isLatest, withTests = full) {
     const hasWaterSpecial = Boolean(sportRules[scope.project]?.activities.includes('on_water'));
     const testsTask = withTests && hasWaterSpecial
-      ? sectionRequest(() => api.specialTests(scope.from, scope.to, scope.project), '专项测试加载失败')
+      ? sectionRequest(() => api.specialTests(scope.from, scope.to, scope.project, scope.viewAthleteId || 0, scope.teamId || 0), '专项测试加载失败')
       : Promise.resolve(null);
     const [teams, model, training, tests] = await Promise.all([
       full ? sectionRequest(() => api.overviewTeams(scope.project), '队伍加载失败') : Promise.resolve(null),
@@ -238,8 +238,8 @@ Page({
     if (id && !item) return Promise.resolve();
     if (id === (Number(this.data.viewAthleteId) || 0)) return Promise.resolve();
     this.setData({ viewAthleteId: id, viewAthleteName: id ? (item.name || '') : '' });
-    this.resetTrainingView(false);
-    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest), '专项训练数据加载失败。');
+    this.resetTrainingView();
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest, true), '专项训练数据加载失败。');
   },
 
   onBackToTeam() {
@@ -273,10 +273,10 @@ Page({
     const team = this.data.teamItems[teamIndex] || this.data.teamItems[0];
     const teamId = Number(team.id) || 0;
     this._teamStatsTarget = null;
-    this.setData({ teamIndex, teamId });
+    this.setData({ teamIndex, teamId, viewAthleteId: 0, viewAthleteName: '' });
     this.updateTeamStatsScope(this.data);
-    this.resetTrainingView(false);
-    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest), '队伍数据加载失败。');
+    this.resetTrainingView();
+    return loadWithGuard(this, this._guard, (isLatest) => this.loadPageData(this.data, this._loadedProject !== this.data.project, isLatest, true), '队伍数据加载失败。');
   },
 
   resetTrainingView(resetTests = true) {

@@ -1,5 +1,4 @@
 const api = require('../../services/api');
-const { teams: readTeams } = require('../../services/data-import');
 const { projectLabel } = require('../../utils/project-label');
 const { buildView, buildDetails } = require('./view');
 
@@ -40,7 +39,7 @@ Component({
       const request = this._request = (this._request || 0) + 1;
       this.setData({ loading: true, error: '', teams: [], teamOptions: [], teamIndex: -1, teamName: '', view: null });
       try {
-        const result = await readTeams();
+        const result = await api.overviewTeams(scope.project);
         if (this._request !== request) return;
         const teams = result.teams.filter((team) => team.project === scope.project);
         const preferred = teams.findIndex(({ id }) => id === this._teamId);

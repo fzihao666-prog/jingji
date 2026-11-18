@@ -41,7 +41,7 @@ describe('外部阅览接口边界', () => {
         data: {
           totals: { duration: 10 },
           injuries: [{ note: 'private' }],
-          nested: { identityNumber: 'private', phone: 'private' },
+          nested: { identityNumber: 'private', phone: 'private', education: 'private' },
         },
         commentary: { highlights: ['私人医疗信息'], concerns: [], suggestions: [] },
       })
@@ -111,7 +111,7 @@ it('队伍执行与分析的athletes集合保留训练指标，档案列表保�
           },
         ],
       },
-      true
+      '/api/athletes'
     )
   ).toEqual({ athletes: [{ id: 1, birthDate: '2000-01-01', heightCm: 180, weightKg: 75 }] });
 });
@@ -144,4 +144,49 @@ it('Enode训练数值与已知训练上下文可见，内部文件与来源行�
       },
     ],
   });
+});
+
+it('观察员只读授权计划实施确认，不能更改确认状态', () => {
+  expect(observerRequestAllowed('GET', '/api/team-plans/1/checks')).toBe(true);
+  expect(observerRequestAllowed('PUT', '/api/team-plans/1/checks')).toBe(false);
+  expect(observerRequestAllowed('GET', '/api/team-plans/0/checks')).toBe(false);
+});
+
+it.each(['/api/team-plans', '/api/training-plans', '/api/training-plans/catalog'])(
+  '训练计划保留技术要求，继续排除内部医疗资料 %s',
+  (path) => {
+    const payload = {
+      plans: [
+        {
+          data: {
+            notes: '划桨动作要求',
+            sessions: [
+              {
+                note: '保持节奏',
+                notes: '控制回桨速度',
+                diagnosis: 'private',
+                internalNotes: 'private',
+              },
+            ],
+          },
+          aiMetadata: { notes: 'private' },
+        },
+      ],
+    };
+    expect(observerResponse(payload, path)).toEqual({
+      plans: [
+        {
+          data: { notes: '划桨动作要求', sessions: [{ note: '保持节奏', notes: '控制回桨速度' }] },
+        },
+      ],
+    });
+    expect(observerResponse(payload, '/api/records')).toEqual({
+      plans: [{ data: { sessions: [{}] } }],
+    });
+  }
+);
+
+it('观察员可读已授权测功仪参考，禁止对应写入', () => {
+  expect(observerRequestAllowed('GET', '/api/special-champion-models/ergometer')).toBe(true);
+  expect(observerRequestAllowed('POST', '/api/special-champion-models/ergometer')).toBe(false);
 });

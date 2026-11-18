@@ -26,6 +26,7 @@ module.exports = {
   reportCommentary(id, range, fingerprint) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/commentary`, { method: 'POST', timeout: 240000, data: { range, fingerprint, consent: true } }); },
   saveReport(id, range, fingerprint, commentary) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`, { method: 'POST', data: { range, fingerprint, commentary, confirmed: true } }); },
   assetUrl,
+  observerTeams() { return request('/api/observer/teams'); },
   teamPlans(params = {}) { return request(`/api/team-plans?${query(params)}`); },
   createTeamPlan(data) { return request('/api/team-plans', { method: 'POST', data }); },
   updateTeamPlan(id, data) { return request(`/api/team-plans/${encodeURIComponent(id)}`, { method: 'PUT', data }); },
@@ -184,11 +185,12 @@ module.exports = {
   radarModels(athleteId, from, to) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/radar-models?${query({ from, to })}`);
   },
-  specialTests(from, to, project, athleteId) {
+  specialTests(from, to, project, athleteId, teamId) {
     const params = { project };
     if (from) params.from = from;
     if (to) params.to = to;
     if (athleteId != null) params.athleteId = athleteId;
+    if (teamId) params.teamId = teamId;
     return request(`/api/special-tests?${query(params)}`);
   }
 };

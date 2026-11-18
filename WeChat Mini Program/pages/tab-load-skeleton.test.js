@@ -432,10 +432,11 @@ it('观察员在原档案页读取训练与测试，跳过医疗请求并隐藏�
   api.painTrend = async () => { medicalCalls += 1; return {}; };
   api.wellnessTrends = async () => { medicalCalls += 1; return {}; };
   const { page } = createPageModule(new URL('./profile/profile.js', import.meta.url), api);
-  const person = { ...athlete, phone: 'private', healthStatus: 'private' };
+  const person = { ...athlete, phone: 'private', healthStatus: 'private', coaches: '体能教练甲', headCoaches: '' };
   const view = await page.loadPageData({ user: { role: 'OBS' }, selectedAthleteId: 1,
     athletes: [person], project: 'ROWING', from: '2026-10-01', to: '2026-10-31' }, () => true);
   expect(view.athleteName).toBe(athlete.name);
+  expect(view.primaryCells.find(cell => cell.label === '负责教练').value).toBe('体能教练甲');
   expect(api.calls.injuryRecords).toBe(0);
   expect(medicalCalls).toBe(0);
   expect([...view.primaryCells, ...view.moreCells].some(cell => ['健康状态', '联系电话'].includes(cell.label))).toBe(false);
@@ -446,6 +447,7 @@ it('观察员使用原总览筛选和计划统计，同时跳过内部待办与�
   let planCalls = 0;
   const api = {
     overviewTeams: async () => ({ teams: [{ id: 10, name: '一队' }] }),
+    observerTeams: async () => ({ teams: [{ id: 10, project: 'ROWING', name: '一队', coaches: [{ id: 21, displayName: '教练甲' }] }] }),
     overview: async () => ({ overview: {} }),
     planExecution: async () => { planCalls += 1; return {}; },
     dailyTodos: async () => { privateCalls += 1; return {}; },
@@ -469,7 +471,73 @@ it('观察员使用原总览筛选和计划统计，同时跳过内部待办与�
     expect(page.data.canViewTodos).toBe(false);
     expect(privateCalls).toBe(0);
     expect(planCalls).toBe(1);
+    expect(page.data.coachTeams[0].coaches[0].displayName).toBe('教练甲');
   } finally {
     contextData.user = previousUser;
   }
+});
+
+
+it('观察员的空队仍显示全部负责教练，切队后名单跟随队伍', async () => {
+  const api = {
+    overviewTeams: async () => ({ teams: [{ id: 10, name: '空队' }, { id: 11, name: '二队' }] }),
+    observerTeams: async () => ({ teams: [
+      { id: 10, project: 'ROWING', name: '空队', coaches: [{ id: 21, displayName: '教练甲' }] },
+      { id: 11, project: 'ROWING', name: '二队', coaches: [{ id: 22, displayName: '教练乙' }] },
+      { id: 12, project: 'CANOE_SPRINT', name: '空队', coaches: [{ id: 23, displayName: '其他项目教练' }] }
+    ] }),
+    overview: async () => ({ overview: {} })
+  };
+  const formatDependencies = { './format': formatModule, './pagination': paginationModule };
+  const { page } = createPageModule(new URL('./index/index.js', import.meta.url), api, {
+    '../../utils/today-status': loadCjs(new URL('../utils/today-status.js', import.meta.url), formatDependencies),
+    '../../utils/wellness-form': loadCjs(new URL('../utils/wellness-form.js', import.meta.url), { './date': dateModule }),
+    '../../utils/morning-check': loadCjs(new URL('../utils/morning-check.js', import.meta.url), formatDependencies),
+    '../../utils/today-plan': loadCjs(new URL('../utils/today-plan.js', import.meta.url), formatDependencies)
+  });
+  page.setData({ canBrowseTeam: true });
+  const scope = { user: { role: 'OBS' }, project: 'ROWING', athletes: [], from: '2026-10-01', to: '2026-10-31' };
+  await page.loadPageData(scope);
+  expect(page.data.scopeAthletes).toEqual([]);
+  expect(page.data.coachTeams.map(team => team.coaches[0].displayName)).toEqual(['教练甲']);
+  page.setData({ teamId: 11 });
+  await page.loadPageData(scope);
+  expect(page.data.coachTeams.map(team => team.coaches[0].displayName)).toEqual(['教练乙']);
+});
+
+it('专项测试在切队和选择运动员后同步传递筛选条件', async () => {
+  const calls = [];
+  const api = specialApi();
+  api.specialTests = async (...args) => { calls.push(args); return { events: [] }; };
+  api.specialTrainingOverview = async () => ({ training: {}, athletes: [{ id: 31, name: '甲' }] });
+  const { page } = createPageModule(new URL('./special/special.js', import.meta.url), api);
+  page._guard = requestGuard.createRequestGuard();
+  page._loadedProject = 'ROWING';
+  page.setData({ user: { role: 'OBS' }, project: 'ROWING', projects: ['ROWING'],
+    from: '2026-10-01', to: '2026-10-31', teamItems: [{ id: 0, name: '全部' }, { id: 10, name: '一队' }], viewAthleteId: 99 });
+  await page.onTeamChange({ detail: { value: 1 } });
+  expect(calls.at(-1)).toEqual(['2026-10-01', '2026-10-31', 'ROWING', 0, 10]);
+  expect(page.data.viewAthleteId).toBe(0);
+  await page.onAthleteSelect({ detail: { id: 31 } });
+  expect(calls.at(-1)).toEqual(['2026-10-01', '2026-10-31', 'ROWING', 31, 10]);
+});
+
+it('观察员计划详情读取实施确认和执行情况，不请求修改接口', async () => {
+  let checkCalls = 0;
+  let executionCalls = 0;
+  const plan = { id: 7, rootId: 7, version: 1, project: 'ROWING', teamId: 10, status: 'published',
+    data: { sessions: [{ id: 's1', content: '有氧', items: [] }], overrides: [] } };
+  const api = {
+    teamPlanChecks: async () => { checkCalls += 1; return { checks: [{ sessionId: 's1', itemId: '', status: 'executed', revision: 1 }] }; },
+    planExecution: async () => { executionCalls += 1; return { athletes: [] }; }
+  };
+  const { page } = createPageModule(new URL('./team-plans/team-plans.js', import.meta.url), api, {
+    './model': loadCjs(new URL('./team-plans/model.js', import.meta.url), {})
+  });
+  page.setData({ readOnly: true, canManage: false, plans: [plan], athletes: [] });
+  page.selectPlan(plan);
+  await flushAsync();
+  expect(checkCalls).toBe(1);
+  expect(executionCalls).toBe(1);
+  expect(page.data.checks[0].statusLabel).toBe('已执行');
 });

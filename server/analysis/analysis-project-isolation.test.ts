@@ -280,3 +280,23 @@ it('训练记录按真实队伍过滤并拒绝非法及跨项目队伍', async (
     expect(response.status).toBe(status);
   }
 });
+
+
+it('测功仪参考要求登录并按观察员队伍所属项目授权', async () => {
+  const path = '/api/special-champion-models/ergometer?project=ROWING';
+  expect((await fetch(baseUrl + path)).status).toBe(401);
+  db.prepare("UPDATE users SET role='OBS' WHERE id=9001").run();
+  db.prepare('DELETE FROM user_project_permissions WHERE user_id=9001').run();
+  db.prepare('DELETE FROM user_team_permissions WHERE user_id=9001').run();
+  db.prepare("INSERT INTO user_project_permissions(user_id,project,granted_by) VALUES(9001,'ROWING',9001)").run();
+  db.prepare("INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES(9001,'ROWING','甲队',9001)").run();
+  const headers = { Authorization: `Bearer ${jwt.sign({ id: 9001, sessionVersion: 1 }, secret)}` };
+  expect((await fetch(baseUrl + '/api/analysis/model?project=ROWING', { headers })).status).toBe(200);
+  expect((await fetch(baseUrl + '/api/analysis/model?project=CANOE_SPRINT', { headers })).status).toBe(403);
+  const allowed = await fetch(baseUrl + path, { headers });
+  expect(allowed.status).toBe(200);
+  expect(await allowed.json()).toMatchObject({ project: 'ROWING', gender: 'MALE', testType: '2000M' });
+  expect((await fetch(baseUrl + '/api/special-champion-models/ergometer?project=CANOE_SPRINT', { headers })).status).toBe(403);
+  db.prepare('DELETE FROM user_team_permissions WHERE user_id=9001').run();
+  expect((await fetch(baseUrl + path, { headers })).status).toBe(403);
+});

@@ -20,10 +20,12 @@ const observerReads = new Set([
   '/api/analysis/summary',
   '/api/physical-champion',
   '/api/special-champion-models',
+  '/api/special-champion-models/ergometer',
   '/api/enode/data',
   '/api/team-training-stats',
   '/api/coach/plan-execution',
 ]);
+const teamPlanChecksRead = /^\/api\/team-plans\/[1-9]\d*\/checks$/;
 const athleteRead =
   /^\/api\/athletes\/[1-9]\d*\/(?:overview|training-sessions|body-composition|photo|wellness-trends|aerobic-endurance|profile-comparison|radar-models|champion-model|reports(?:\/[a-f0-9-]{36})?)$/;
 
@@ -31,7 +33,10 @@ export function observerRequestAllowed(method: string, path: string) {
   if (method === 'POST' && ['/api/auth/logout', '/api/auth/change-password'].includes(path))
     return true;
   if (method === 'PUT' && path === '/api/preferences/current-project') return true;
-  return method === 'GET' && (observerReads.has(path) || athleteRead.test(path));
+  return (
+    method === 'GET' &&
+    (observerReads.has(path) || athleteRead.test(path) || teamPlanChecksRead.test(path))
+  );
 }
 
 // 已有聚合接口和历史快照也必须经过同一字段边界，避免嵌套数据泄露。
@@ -55,6 +60,7 @@ const privateFields = new Set([
   'phone',
   'emergencyContact',
   'emergencyPhone',
+  'education',
   'homeAddress',
   'home_address',
   'nativePlace',
@@ -141,12 +147,18 @@ const observerAthleteFields = new Set([
   'bodyMeasurementDate',
 ]);
 
-export function observerResponse(value: unknown, roster = false): unknown {
-  if (Array.isArray(value)) return value.map((item) => observerResponse(item));
+const trainingPlanReads = new Set([
+  '/api/team-plans',
+  '/api/training-plans',
+  '/api/training-plans/catalog',
+]);
+
+export function observerResponse(value: unknown, path = ''): unknown {
+  if (Array.isArray(value)) return value.map((item) => observerResponse(item, path));
   if (!value || typeof value !== 'object') return value;
   const result: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (roster && key === 'athletes' && Array.isArray(item)) {
+    if (path === '/api/athletes' && key === 'athletes' && Array.isArray(item)) {
       result[key] = item.map((athlete) => {
         if (!athlete || typeof athlete !== 'object') return athlete;
         return Object.fromEntries(
@@ -161,8 +173,11 @@ export function observerResponse(value: unknown, roster = false): unknown {
       );
     } else if (key === 'commentary') {
       result[key] = { highlights: [], concerns: [], suggestions: [] };
-    } else if (!privateFields.has(key)) {
-      result[key] = observerResponse(item);
+    } else if (
+      !privateFields.has(key) ||
+      (trainingPlanReads.has(path) && (key === 'notes' || key === 'note'))
+    ) {
+      result[key] = observerResponse(item, path);
     }
   }
   return result;

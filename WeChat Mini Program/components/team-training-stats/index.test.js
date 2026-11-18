@@ -31,7 +31,7 @@ function setup() {
     { id: 2, project: 'ROWING', name: '空队', athleteCount: 0 },
   ] }));
   const mocks = {
-    '../../services/api': { teamTrainingStats }, '../../services/data-import': { teams },
+    '../../services/api': { teamTrainingStats, overviewTeams: teams },
     '../../data/register-data': { sportRules: { ROWING: { activities: ['on_water'] } } },
     '../../utils/project-label': { projectLabel: (project) => project }, './view': view,
   };
@@ -43,12 +43,13 @@ function setup() {
     ...definition.methods, data: structuredClone(definition.data),
     setData(values) { Object.assign(this.data, values); },
   };
-  return { component, teamTrainingStats };
+  return { component, teamTrainingStats, teams };
 }
 
 it('接收实际导入项目、空队和日期，月和年选择发送完整日期', async () => {
-  const { component, teamTrainingStats } = setup();
+  const { component, teamTrainingStats, teams } = setup();
   await component.applyScope({ project: 'ROWING', teamId: 2, date: '2024-02-29', open: true });
+  expect(teams).toHaveBeenCalledWith('ROWING');
   expect(component.data.teamName).toBe('空队');
   expect(teamTrainingStats).toHaveBeenLastCalledWith('ROWING', 2, 'week', '2024-02-29');
   await component.onPeriodChange({ currentTarget: { dataset: { period: 'month' } } });
