@@ -190,8 +190,15 @@ export function registerAuthRoutes(
         if (!permissionsAllowProjectTeam(permissions, team.project, team.name))
           return res.status(403).json({ message: '无权修改该队伍。' });
         if (name === team.name) return res.json({ message: '队伍名称未变化。' });
-        if (db.prepare('SELECT 1 FROM project_teams WHERE project = ? AND name = ?').get(team.project, name))
-          return res.status(409).json({ message: '该项目下已存在同名队伍。' });
+        const existing = db.prepare('SELECT active FROM project_teams WHERE project = ? AND name = ?')
+          .get(team.project, name) as { active: number } | undefined;
+        if (existing) {
+          return res.status(409).json({
+            message: existing.active
+              ? '该项目下已存在同名队伍。'
+              : '该名称属于已删除的历史队伍，因此未显示在列表中。请通过“新增队伍”恢复该队伍，或使用其他名称。',
+          });
+        }
         if (db.prepare("SELECT 1 FROM user_team_permissions WHERE project IN (?, '*') AND team = ?")
           .get(team.project, name))
           return res.status(409).json({ message: '该名称存在队伍授权冲突，请换一个名称。' });

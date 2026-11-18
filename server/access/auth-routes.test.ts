@@ -523,6 +523,12 @@ describe('队伍改名', () => {
     expect((await patch('TD', '新队名')).status).toBe(403);
     db.exec("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, '*', '旧队名', 1)");
     expect((await patch('TD', '同名冲突')).status).toBe(409);
+    db.exec("UPDATE project_teams SET active = 0 WHERE id = 98");
+    const archivedConflict = await patch('TD', '同名冲突');
+    expect(archivedConflict.status).toBe(409);
+    expect(await archivedConflict.json()).toMatchObject({ message: expect.stringContaining('已删除的历史队伍') });
+    expect(db.prepare('SELECT name FROM project_teams WHERE id = 99').get()).toEqual({ name: '旧队名' });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 0 });
     db.exec("CREATE TRIGGER reject_import_update BEFORE UPDATE ON data_import_athlete_candidates BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
     expect((await patch('TD', '新队名')).status).toBe(500);
     expect(db.prepare('SELECT name FROM project_teams WHERE id = 99').get()).toEqual({ name: '旧队名' });
