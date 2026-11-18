@@ -62,6 +62,7 @@ beforeAll(async () => {
     CREATE TABLE user_area_permissions (user_id INTEGER,area_level TEXT,province TEXT,city TEXT,county TEXT,granted_by INTEGER);
     CREATE TABLE user_project_permissions (user_id INTEGER,project TEXT,granted_by INTEGER);
     CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, project, team));
+    CREATE TABLE training_plans (id INTEGER PRIMARY KEY, team_id INTEGER);
     CREATE TABLE data_import_batches (id TEXT PRIMARY KEY, status TEXT);
     CREATE TABLE data_import_athlete_candidates (batch_id TEXT, project TEXT, team TEXT);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY,parent_user_id INTEGER,account_code TEXT);
@@ -526,7 +527,7 @@ describe('队伍改名', () => {
     db.exec("UPDATE project_teams SET active = 0 WHERE id = 98");
     const archivedConflict = await patch('TD', '同名冲突');
     expect(archivedConflict.status).toBe(409);
-    expect(await archivedConflict.json()).toMatchObject({ message: expect.stringContaining('已删除的历史队伍') });
+    expect(await archivedConflict.json()).toMatchObject({ message: expect.stringContaining('合并') });
     expect(db.prepare('SELECT name FROM project_teams WHERE id = 99').get()).toEqual({ name: '旧队名' });
     expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 0 });
     db.exec("CREATE TRIGGER reject_import_update BEFORE UPDATE ON data_import_athlete_candidates BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
@@ -540,5 +541,28 @@ describe('队伍改名', () => {
     expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('ROWING')).toEqual({ team: '新队名' });
     expect(db.prepare('SELECT team FROM registration_requests ORDER BY id').all()).toEqual([{ team: '新队名' }, { team: '旧队名' }]);
     expect(db.prepare('SELECT team FROM data_import_athlete_candidates ORDER BY batch_id').all()).toEqual([{ team: '旧队名' }, { team: '新队名' }]);
+    const merge = async () => {
+      const { body } = await login('active_user', correctPassword);
+      return fetch(`${baseUrl}/api/admin/teams/99`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${body.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: '同名冲突', merge: true }),
+      });
+    };
+    expect((await merge()).status).toBe(403);
+    db.exec("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, 'ROWING', '同名冲突', 1)");
+    db.exec("INSERT INTO training_plans VALUES (99,99)");
+    db.exec("CREATE TRIGGER reject_merge_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
+    expect((await merge()).status).toBe(500);
+    expect(db.prepare('SELECT team_id FROM athletes WHERE id = 99').get()).toEqual({ team_id: 99 });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 0 });
+    db.exec('DROP TRIGGER reject_merge_audit');
+    expect((await merge()).status).toBe(200);
+    expect(db.prepare('SELECT team, team_id FROM athletes WHERE id = 99').get()).toEqual({ team: '同名冲突', team_id: 98 });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 99').get()).toEqual({ active: 0 });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 1 });
+    expect(db.prepare('SELECT team_id FROM training_plans WHERE id = 99').get()).toEqual({ team_id: 98 });
+    expect(db.prepare("SELECT team FROM user_team_permissions WHERE project = 'ROWING'").all()).toEqual([{ team: '同名冲突' }]);
+    expect(db.prepare("SELECT action FROM audit_logs").get()).toEqual({ action: 'MERGE_TEAM' });
   });
 });

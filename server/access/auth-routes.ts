@@ -177,7 +177,7 @@ export function registerAuthRoutes(
     requireRole('TD', 'DMD'),
     (req, res) => {
       const id = Number(req.params.id);
-      const input = z.object({ name: z.string().trim().min(2).max(30) }).strict().safeParse(req.body);
+      const input = z.object({ name: z.string().trim().min(2).max(30), merge: z.boolean().optional() }).strict().safeParse(req.body);
       if (!Number.isSafeInteger(id) || id < 1 || !input.success || input.data.name === '*')
         return res.status(400).json({ message: '请提供有效队伍和2—30个字符的队伍名称。' });
       const { name } = input.data;
@@ -190,21 +190,35 @@ export function registerAuthRoutes(
         if (!permissionsAllowProjectTeam(permissions, team.project, team.name))
           return res.status(403).json({ message: '无权修改该队伍。' });
         if (name === team.name) return res.json({ message: '队伍名称未变化。' });
-        const existing = db.prepare('SELECT active FROM project_teams WHERE project = ? AND name = ?')
-          .get(team.project, name) as { active: number } | undefined;
-        if (existing) {
+        const existing = db.prepare('SELECT id, active FROM project_teams WHERE project = ? AND name = ?')
+          .get(team.project, name) as { id: number; active: number } | undefined;
+        if (existing && !input.data.merge) {
           return res.status(409).json({
-            message: existing.active
-              ? '该项目下已存在同名队伍。'
-              : '该名称属于已删除的历史队伍，因此未显示在列表中。请通过“新增队伍”恢复该队伍，或使用其他名称。',
+            code: 'TEAM_MERGE_REQUIRED',
+            message: '该项目下存在同名队伍，可确认将当前队伍合并到该队伍。',
           });
         }
-        if (db.prepare("SELECT 1 FROM user_team_permissions WHERE project IN (?, '*') AND team = ?")
+        if (existing && !permissionsAllowProjectTeam(permissions, team.project, name))
+          return res.status(403).json({ message: '无权合并到目标队伍。' });
+        if (existing && db.prepare(`
+          SELECT 1 FROM athletes a JOIN athletes b
+          ON b.project = a.project AND b.team = ? AND b.name = a.name AND b.id != a.id
+          WHERE a.team_id = ? LIMIT 1
+        `).get(name, id))
+          return res.status(409).json({ message: '两个队伍存在同名运动员，请先核对人员并区分姓名后再合并。' });
+        if (!existing && db.prepare("SELECT 1 FROM user_team_permissions WHERE project IN (?, '*') AND team = ?")
           .get(team.project, name))
           return res.status(409).json({ message: '该名称存在队伍授权冲突，请换一个名称。' });
 
-        db.prepare('UPDATE project_teams SET name = ? WHERE id = ?').run(name, id);
-        db.prepare('UPDATE athletes SET team = ? WHERE team_id = ?').run(name, id);
+        if (existing) {
+          db.prepare('UPDATE project_teams SET active = 1 WHERE id = ?').run(existing.id);
+          db.prepare('UPDATE athletes SET team = ?, team_id = ? WHERE team_id = ?').run(name, existing.id, id);
+          db.prepare('UPDATE training_plans SET team_id = ? WHERE team_id = ?').run(existing.id, id);
+          db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
+        } else {
+          db.prepare('UPDATE project_teams SET name = ? WHERE id = ?').run(name, id);
+          db.prepare('UPDATE athletes SET team = ? WHERE team_id = ?').run(name, id);
+        }
         const copyPermissions = db.prepare(`
           INSERT INTO user_team_permissions (user_id, project, team, granted_by, created_at)
           SELECT user_id, ?, ?, granted_by, created_at FROM user_team_permissions
@@ -222,8 +236,14 @@ export function registerAuthRoutes(
           UPDATE data_import_athlete_candidates SET team = ? WHERE project = ? AND team = ?
           AND batch_id IN (SELECT id FROM data_import_batches WHERE status = 'reviewing')
         `).run(name, team.project, team.name);
+        if (existing) {
+          db.prepare(`
+            INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail)
+            VALUES (?, 'MERGE_TEAM', 'project_team', ?, ?)
+          `).run(req.authUser!.id, id, JSON.stringify({ project: team.project, sourceName: team.name, targetId: existing.id, targetName: name }));
+        }
         db.exec('COMMIT');
-        return res.json({ message: '队伍名称已更新。' });
+        return res.json({ message: existing ? '队伍已合并。' : '队伍名称已更新。' });
       } finally {
         if (db.isTransaction) db.exec('ROLLBACK');
       }

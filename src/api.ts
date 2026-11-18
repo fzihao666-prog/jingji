@@ -374,10 +374,10 @@ export const api = {
       body: JSON.stringify({ project, name }),
     });
   },
-  async renameTeam(id: number, name: string) {
+  async renameTeam(id: number, name: string, merge = false) {
     return request<{ message: string }>(`/api/admin/teams/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, merge }),
     });
   },
   async deleteTeam(id: number) {

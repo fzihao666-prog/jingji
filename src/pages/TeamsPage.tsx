@@ -1,7 +1,7 @@
 import { ArrowDownRight, Layers3, Pencil, Plus, Search, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PROJECTS, projectLabel, type Project } from '../../shared/projects';
-import { api } from '../api';
+import { api, ApiRequestError } from '../api';
 import type { ProjectTeam } from '../types';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 
@@ -29,8 +29,15 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
     setBusy(true);
     setRenameError('');
     try {
-      const result = await api.renameTeam(renameTarget.id, name);
-      setTeams((current) => current.map((team) => team.id === renameTarget.id ? { ...team, name } : team));
+      let result;
+      try {
+        result = await api.renameTeam(renameTarget.id, name);
+      } catch (error) {
+        if (!(error instanceof ApiRequestError) || error.code !== 'TEAM_MERGE_REQUIRED') throw error;
+        if (!window.confirm(`确认将“${renameTarget.name}”合并到“${name}”？运动员、教练授权及训练计划将转到目标队伍，原队伍停用。已删除的目标队伍会恢复。`)) return;
+        result = await api.renameTeam(renameTarget.id, name, true);
+      }
+      await load();
       setMessage(result.message);
       renameDialog.current?.close();
       onChanged();
