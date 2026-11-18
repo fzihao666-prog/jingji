@@ -2729,3 +2729,16 @@ describe('简洁统一模板业务映射', () => {
     expect(() => commit(batch.id, 'skip')).toThrow();
   });
 });
+
+it('训练年限按年月换算为年，非法值阻止导入', () => {
+  const batch = analyze({ 其他测试: [
+    ['姓名', '测试日期', '指标代码', '测试类型', '数值', '单位'],
+    ['张某', '2026-11-18', 'training_years', '体能测试', '2年8个月', '年'],
+  ] });
+  expect(batch.items[0].valueNum).toBeCloseTo(2 + 8 / 12);
+  const invalid = analyze({ 其他测试: [
+    ['姓名', '测试日期', '指标代码', '测试类型', '数值', '单位'],
+    ['张某', '2026-11-18', 'training_years', '体能测试', '不详', '年'],
+  ] });
+  expect(invalid.errorCount).toBeGreaterThan(0);
+});

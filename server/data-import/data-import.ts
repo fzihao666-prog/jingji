@@ -1,3 +1,4 @@
+import { parseTrainingYears } from '../../shared/training-years.ts';
 import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { assertImportWorkbookSize } from './import-workbook-limits.ts';
 import { isIdentityField } from '../core/identity-removal.ts';
@@ -604,8 +605,16 @@ function parseSummarySheet(
     if (!rawName || /平均|合计|备注/.test(rawName)) continue;
     const athlete = matchAthlete(rawName, project, athletes);
     for (const [column, code, side] of mapping) {
-      const value = numberValue(matrix[row]?.[column]);
-      if (value === null) continue;
+      const value = code === 'training_years' ? parseTrainingYears(matrix[row]?.[column]) : numberValue(matrix[row]?.[column]);
+      if (value === null) {
+        if (code === 'training_years' && text(matrix[row]?.[column])) {
+          items.push(itemBase({ itemType: 'invalid_row', sourceSheet: sheet,
+            sourceAddress: cellAddress(row, column), rawAthleteName: rawName,
+            rawValue: text(matrix[row]?.[column]), quality: 'error',
+            messages: ['错误：训练年限须填写年数或年月，如2.5、2年8个月'] }));
+        }
+        continue;
+      }
       items.push(
         testItem({
           athlete,
@@ -682,8 +691,16 @@ function parseComparisonSheet(
     const athlete = matchAthlete(rawName, project, athletes);
     for (const [column, code] of columnMetrics) {
       if (column <= nameColumn + 4) continue;
-      const value = numberValue(matrix[row]?.[column]);
-      if (value === null) continue;
+      const value = code === 'training_years' ? parseTrainingYears(matrix[row]?.[column]) : numberValue(matrix[row]?.[column]);
+      if (value === null) {
+        if (code === 'training_years' && text(matrix[row]?.[column])) {
+          items.push(itemBase({ itemType: 'invalid_row', sourceSheet: sheet,
+            sourceAddress: cellAddress(row, column), rawAthleteName: rawName,
+            rawValue: text(matrix[row]?.[column]), quality: 'error',
+            messages: ['错误：训练年限须填写年数或年月，如2.5、2年8个月'] }));
+        }
+        continue;
+      }
       const labelTokens = [matrix[1]?.[column], matrix[2]?.[column], matrix[3]?.[column]]
         .map(text)
         .join('|');
@@ -1078,7 +1095,10 @@ function parseStandardSheet(
     const readNumber = (label: string): number | null => {
       const raw = standardValue(row, header.columns, label);
       if (text(raw) === '') return null;
-      const value = standardNumberValue(raw);
+      const isTrainingYears = label === '数值' &&
+        (standardText(row, header.columns, '指标代码') === 'training_years' ||
+          /^训练年限(?:[（(]年[）)])?$/.test(standardText(row, header.columns, '指标名称')));
+      const value = isTrainingYears ? parseTrainingYears(raw) : standardNumberValue(raw);
       if (value === null) {
         const address = cellAddress(rowIndex, header.columns.get(normalizedText(label)) ?? 0);
         numericErrors.set(label, {

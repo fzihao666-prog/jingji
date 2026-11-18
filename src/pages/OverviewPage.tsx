@@ -340,7 +340,7 @@ export function OverviewPage(props: Props) {
           title="输送单位"
           subtitle={`${scopeLabel} · 省份分布 · 运动员成绩与竞技状态`}
         />
-        <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} />
+        <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} asOf={props.to} />
         <p className="analysis-method-note">
           生源地读取运动员籍贯档案，用于档案和统计；地图仅展示当前账号有权访问的运动员。
         </p>

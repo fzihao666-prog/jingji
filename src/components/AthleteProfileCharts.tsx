@@ -1,3 +1,4 @@
+import { trainingYearsFromDate } from '../../shared/training-years';
 import ChinaData from 'china-map-geojson/lib/china.js';
 import { geoMercator, geoPath } from 'd3-geo';
 import { scaleBand, scaleLinear } from 'd3-scale';
@@ -67,13 +68,7 @@ function compositionBand(value: number | null, lower: number, upper: number): Co
   return '目标范围';
 }
 
-function sportYears(startDate: string | null, asOf: string) {
-  if (!startDate) return null;
-  const start = new Date(`${startDate}T00:00:00`).getTime();
-  const end = new Date(`${asOf}T00:00:00`).getTime();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
-  return (end - start) / 31_557_600_000;
-}
+const sportYears = trainingYearsFromDate;
 
 function bodyCompositionStatus(profile: OverviewAthleteProfile) {
   const heightM = profile.heightCm === null ? null : profile.heightCm / 100;
@@ -1410,9 +1405,11 @@ const chinaProvincePaths = ChinaData.features.map((feature) => ({
 export function BirthplaceMapOverview({
   profiles,
   individual,
+  asOf = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()),
 }: {
   profiles: OverviewAthleteProfile[];
   individual: boolean;
+  asOf?: string;
 }) {
   const available = profiles.filter((profile) => profile.province && profile.province !== '未设置');
   const provinces = useMemo(() => {
@@ -1553,17 +1550,8 @@ export function BirthplaceMapOverview({
                 aria-label={`${activeProvince}运动员名单，共${activeAthletes.length}人`}
               >
                 {activeAthletes.map((profile) => {
-                  const trainingYears =
-                    profile.startSportDate &&
-                    !Number.isNaN(new Date(profile.startSportDate).getTime())
-                      ? Math.max(
-                          0,
-                          Math.floor(
-                            (Date.now() - new Date(profile.startSportDate).getTime()) /
-                              (365.25 * 86400000)
-                          )
-                        )
-                      : null;
+                  const years = sportYears(profile.startSportDate, asOf);
+                  const trainingYears = years === null ? null : Math.floor(years);
                   return (
                     <div key={profile.athleteId}>
                       <i>{profile.athleteName.slice(0, 1)}</i>
