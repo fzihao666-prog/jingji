@@ -33,6 +33,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { EditableName } from '../components/EditableName';
+import { ObserverTeamSelector } from '../components/ObserverTeamSelector';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 import type {
   AccessAccount,
@@ -798,31 +799,12 @@ export function RegionAccessPage({ user }: { user: User }) {
                   </label>
                 )}
                 {createForm.role === 'OBS' ? (
-                  <fieldset className="wide">
-                    <legend>可阅览队伍</legend>
-                    {teamOptions.map((team) => (
-                      <label key={team.id}>
-                        <input
-                          type="checkbox"
-                          checked={createObserverTeams.some(
-                            (scope) => scope.project === team.project && scope.team === team.name
-                          )}
-                          onChange={(event) =>
-                            setCreateObserverTeams((current) =>
-                              event.target.checked
-                                ? [...current, { project: team.project, team: team.name }]
-                                : current.filter(
-                                    (scope) =>
-                                      scope.project !== team.project || scope.team !== team.name
-                                  )
-                            )
-                          }
-                        />{' '}
-                        {team.name} · {projectLabel(team.project)}
-                      </label>
-                    ))}
-                    {!teamOptions.length && <p>暂无可授权队伍</p>}
-                  </fieldset>
+                  <ObserverTeamSelector
+                    options={teamOptions}
+                    selected={createObserverTeams}
+                    onChange={setCreateObserverTeams}
+                    disabled={loading || saving}
+                  />
                 ) : (
                   <>
                 <label>
@@ -1259,46 +1241,23 @@ export function RegionAccessPage({ user }: { user: User }) {
               )}
 
               <section className="coordinate-section">
-                <div className="coordinate-title">
-                  <Activity size={18} />
-                  <div>
-                    <h3>{role === 'OBS' ? '可阅览队伍' : '项目与队伍范围'}</h3>
-                    <p>
-                      {role === 'OBS'
-                        ? '选择该账号可以在线阅览的队伍'
-                        : '访问范围需同时满足项目与队伍授权'}
-                    </p>
+                {role !== 'OBS' && (
+                  <div className="coordinate-title">
+                    <Activity size={18} />
+                    <div>
+                      <h3>项目与队伍范围</h3>
+                      <p>访问范围需同时满足项目与队伍授权</p>
+                    </div>
                   </div>
-                </div>
+                )}
                 {role === 'OBS' ? (
-                  <div className="team-scope-list">
-                    {teamOptions.map((team) => (
-                      <label key={team.id}>
-                        <input
-                          type="checkbox"
-                          disabled={!canEditAccess || saving}
-                          checked={teams.some(
-                            (scope) => scope.project === team.project && scope.team === team.name
-                          )}
-                          onChange={(event) =>
-                            setTeams((current) =>
-                              event.target.checked
-                                ? [
-                                    ...current.filter((scope) => scope.team),
-                                    { project: team.project, team: team.name },
-                                  ]
-                                : current.filter(
-                                    (scope) =>
-                                      scope.project !== team.project || scope.team !== team.name
-                                  )
-                            )
-                          }
-                        />{' '}
-                        {team.name} · {projectLabel(team.project)}
-                      </label>
-                    ))}
-                    {!teamOptions.length && <p>暂无可授权队伍</p>}
-                  </div>
+                  <ObserverTeamSelector
+                    key={selected.id}
+                    options={teamOptions}
+                    selected={teams}
+                    onChange={setTeams}
+                    disabled={!canEditAccess || saving}
+                  />
                 ) : (
                   <>
                 <div className="project-options">
