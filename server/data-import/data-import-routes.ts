@@ -1,3 +1,4 @@
+import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { buildCompactAthleteWorkbook } from './compact-athlete-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
@@ -207,7 +208,9 @@ export function registerDataImportRoutes(app: Express) {
           .filter((athlete) => athlete.project === project && (!team || athlete.team === team))
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
         const metrics = kind === 'test' || kind === 'unified' ? readImportMetricDefinitions(project) : undefined;
-        const workbook = buildPurposeTemplate(kind, project, athletes, metrics);
+        const workbook = kind === 'profile' && team
+          ? buildBasicProfileWorkbook(project, team, athletes)
+          : buildPurposeTemplate(kind, project, athletes, metrics);
         workbook
           .xlsx.writeBuffer()
           .then((buffer) => {

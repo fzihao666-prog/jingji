@@ -98,8 +98,9 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       expect(content).toContain('模板虚构队员');
       expect(content).not.toContain('"虚构队员"');
       if (kind === 'profile') {
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基本资料'], { header: 1 }) as unknown[][];
-        expect(rows[2]).not.toContain('所属队伍');
+        expect(workbook.SheetNames).toEqual(['运动员基础档案']);
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础档案'], { header: 1 });
+        expect(rows[1]).toEqual(['799', '模板虚构队员', '赛艇', addedTeams[0]]);
       }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'unified', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
@@ -270,7 +271,7 @@ it('人员确认后撤回队伍授权，最终HTTP提交拒绝新建及业务写
 
 it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', async () => {
   const { templateHeaderKey, IMPORT_TEMPLATE_VERSION } = await import('../../shared/import-template-fields.ts');
-  for (const kind of ['profile', 'training', 'test', 'unified']) {
+  for (const kind of ['training', 'test', 'unified']) {
     const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING&team=${encodeURIComponent('HTTP甲队')}`, { headers: { authorization: `Bearer ${token}` } });
     expect(response.status).toBe(200);
     const workbook = XLSX.read(Buffer.from(await response.arrayBuffer()), { type: 'buffer' });
@@ -279,7 +280,7 @@ it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', asy
       continue;
     }
     expect(workbook.Sheets['填写说明'].B1.v).toBe(IMPORT_TEMPLATE_VERSION);
-    if (kind === 'test' || kind === 'unified') {
+    if (kind === 'test') {
       const metricRows = XLSX.utils.sheet_to_json(workbook.Sheets['其他测试'], { header: 1 }) as unknown[][];
       const metricHeaders = metricRows[2].map(value => String(value).split('\n')[0]);
       expect(metricHeaders).toContain('测试项目');
@@ -518,4 +519,95 @@ it('P1.5：新增、更新、无变化、排除及未填报口径统一，回执
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).body.receipt).toEqual(result.body.receipt);
   expect(db.prepare("SELECT weight_kg FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2050-01-01'").get()).toEqual({ weight_kg: 71 });
   expect(db.prepare("SELECT COUNT(*) AS count FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2050-01-04'").get()).toEqual({ count: 0 });
+});
+
+const profileSheet = '运动员基础档案';
+const profileHeaders = ['运动员编号', '姓名', '运动项目', '所属队伍', '学历', '备注', '身体测量日期', '身高（cm）'];
+
+it('基础档案合并非空资料，新建人员归入所选队伍，身高按实测日期保存', async () => {
+  db.prepare("INSERT INTO athlete_profiles (athlete_id, notes) VALUES (701, '原备注') ON CONFLICT(athlete_id) DO UPDATE SET notes = '原备注'").run();
+  const batch = await upload([
+    profileHeaders,
+    ['701', '虚构队员', '赛艇', 'HTTP甲队', '本科', '', '2026-09-18', 179],
+    ['701', '虚构队员', '赛艇', 'HTTP甲队'],
+    ['', '档案虚构新人'],
+  ], profileSheet, 'HTTP甲队');
+  expect(batch.items.map(item => item.itemType)).toEqual(['athlete_profile', 'body_measurement', 'athlete_profile']);
+  expect(batch.athleteCandidates).toHaveLength(2);
+  expect(db.prepare("SELECT id FROM athletes WHERE name='档案虚构新人'").get()).toBeUndefined();
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(result.body.createdAthletes).toBe(1);
+  expect(db.prepare('SELECT education, notes FROM athlete_profiles WHERE athlete_id=701').get()).toEqual({ education: '本科', notes: '原备注' });
+  expect(db.prepare("SELECT height_cm FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2026-09-18'").get()).toEqual({ height_cm: 179 });
+  expect(db.prepare("SELECT project, team, team_id FROM athletes WHERE name='档案虚构新人'").get()).toEqual(
+    db.prepare('SELECT project, team, team_id FROM athletes WHERE id=701').get(),
+  );
+});
+
+it('基础档案拒绝项目队伍冲突及没有真实测量日期的身高', async () => {
+  const batch = await upload([
+    profileHeaders,
+    ['701', '虚构队员', '举重', 'HTTP甲队', '错误项目'],
+    ['', '档案错误队伍', '赛艇', 'HTTP乙队', '本科'],
+    ['701', '虚构队员', '赛艇', 'HTTP甲队', '', '', '', 170],
+  ], profileSheet, 'HTTP甲队');
+  expect(batch.items.map(item => item.quality)).toEqual(['error', 'error', 'error']);
+  expect(batch.items[0].messages.join('')).toContain('运动项目');
+  expect(batch.items[1].messages.join('')).toContain('所属队伍');
+  expect(batch.items[2].messages.join('')).toContain('身体测量日期');
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(400);
+  expect(db.prepare("SELECT id FROM athletes WHERE name='档案错误队伍'").get()).toBeUndefined();
+});
+
+it('基础档案中没有编号的同名行须指定已有档案', async () => {
+  const batch = await upload([profileHeaders, ['', '虚构队员', '', '', '', '已核实备注']], profileSheet, 'HTTP甲队');
+  const [person] = batch.athleteCandidates;
+  expect(person).toMatchObject({ matchedAthleteId: null, confirmed: false, suggested: [{ id: 701 }] });
+  const path = `/batches/${batch.id}`;
+  expect((await request(`${path}/athletes`, 'PUT', { corrections: [{ id: person.id, confirmed: true }] })).status).toBe(400);
+  expect((await request(`${path}/commit`, 'POST', {})).status).toBe(400);
+  expect((await request(`${path}/athletes`, 'PUT', { corrections: [{ id: person.id, matchedAthleteId: 701, confirmed: true }] })).status).toBe(200);
+  expect((await request(`${path}/commit`, 'POST', {})).status).toBe(200);
+});
+
+it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并能回传实际下载的工作簿', async () => {
+  db.exec(`
+    INSERT INTO user_project_permissions (user_id, project, granted_by) VALUES (701, 'WEIGHTLIFTING', 701);
+    INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (701, 'WEIGHTLIFTING', 'HTTP甲队', 701);
+    INSERT INTO project_teams (project, name) VALUES ('WEIGHTLIFTING', 'HTTP甲队');
+    INSERT INTO athletes (name, project, team, team_id)
+      SELECT '举重虚构队员', project, name, id FROM project_teams WHERE project='WEIGHTLIFTING' AND name='HTTP甲队';
+  `);
+  const download = async (project: string, team?: string) => {
+    const params = new URLSearchParams({ kind: 'profile', project });
+    if (team) params.set('team', team);
+    const response = await fetch(`${base}/api/data-import/template?${params}`, { headers: { authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(200);
+    return XLSX.read(await response.arrayBuffer(), { type: 'array' });
+  };
+  const rowing = await download('ROWING', 'HTTP甲队');
+  const lifting = await download('WEIGHTLIFTING', 'HTTP甲队');
+  const sheet = lifting.Sheets[profileSheet];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+  expect(rows[0]).toEqual((XLSX.utils.sheet_to_json(rowing.Sheets[profileSheet], { header: 1 }) as string[][])[0]);
+  expect(rows).toHaveLength(2);
+  expect(rows[1].slice(1)).toEqual(['举重虚构队员', '举重', 'HTTP甲队']);
+  expect((await download('ROWING')).SheetNames).toContain('运动员基本资料');
+
+  XLSX.utils.sheet_add_aoa(sheet, [[172.5, 68, new Date('2026-09-19T00:00:00Z')]], { origin: 'G2', cellDates: true });
+  const form = new FormData();
+  form.set('file', new Blob([XLSX.write(lifting, { type: 'buffer', bookType: 'xlsx' })]), '举重档案.xlsx');
+  form.set('project', 'WEIGHTLIFTING');
+  expect((await request('/analyze', 'POST', form)).status).toBe(400);
+  form.set('team', 'HTTP甲队');
+  expect((await request('/analyze', 'POST', form, otherToken)).status).toBe(403);
+  const preview = await request('/analyze', 'POST', form);
+  expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+  const batch = preview.body.batch!;
+  expect(batch.items).toHaveLength(1);
+  expect(batch.items[0]).toMatchObject({ athleteId: Number(rows[1][0]), eventDate: '2026-09-19', quality: 'valid' });
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+  expect(db.prepare('SELECT height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=? AND measurement_date=?')
+    .get(Number(rows[1][0]), '2026-09-19')).toEqual({ height_cm: 172.5, weight_kg: 68 });
 });
