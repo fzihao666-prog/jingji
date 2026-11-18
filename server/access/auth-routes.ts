@@ -1,3 +1,4 @@
+import { readTeamCoaches } from '../core/coach-team-responsibility.ts';
 import { isCoachCategory } from '../../shared/coach-categories.ts';
 import { z } from 'zod';
 import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
@@ -46,6 +47,20 @@ export function registerAuthRoutes(
   app: Express,
   passwords: Pick<typeof passwordPool, 'hash' | 'compare'> = passwordPool
 ) {
+  app.get('/api/observer/teams', requireAuth, (req, res) => {
+    const permissions = accountPermissions(req.authUser!.id);
+    const teams = (
+      db
+        .prepare(
+          'SELECT id, project, name FROM project_teams WHERE active = 1 ORDER BY project, name'
+        )
+        .all() as Array<{ id: number; project: string; name: string }>
+    )
+      .filter((team) => permissionsAllowProjectTeam(permissions, team.project, team.name))
+      .map((team) => ({ ...team, coaches: readTeamCoaches(db, team.project, team.name) }));
+    res.json({ teams });
+  });
+
   app.get('/api/registration/teams', (_req, res) => {
     const teams = db.prepare('SELECT id, project, name FROM project_teams WHERE active = 1 ORDER BY project, name').all();
     res.json({ teams });
@@ -54,9 +69,10 @@ export function registerAuthRoutes(
   app.get('/api/teams', requireAuth, (req, res) => {
     const permissions = accountPermissions(req.authUser!.id);
     const athleteIds = accessibleAthleteIds(req.authUser!);
-    const scopedCounts = athleteIds.length ? db.prepare(`SELECT team_id AS teamId, COUNT(*) AS count
+    const scopedCounts = athleteIds.length ? (db.prepare(`SELECT team_id AS teamId, COUNT(*) AS count
       FROM athletes WHERE active = 1 AND id IN (${athleteIds.map(() => '?').join(',')}) GROUP BY team_id`)
-      .all(...athleteIds) as Array<{ teamId: number; count: number }> : [];
+      .all(...athleteIds) as Array<{ teamId: number; count: number }>)
+      : [];
     const countByTeam = new Map(scopedCounts.map((row) => [row.teamId, row.count]));
     const teams = (db
       .prepare(

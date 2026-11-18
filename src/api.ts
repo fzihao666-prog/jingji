@@ -593,6 +593,9 @@ export const api = {
     if (teamId) params.set('teamId', String(teamId));
     return request<{ overview: OverviewPayload }>(`/api/overview?${params}`);
   },
+  async observerTeams() {
+    return request<{ teams: Array<{ id: number; project: Project; name: string; coaches: Array<{ id: number; displayName: string }> }> }>('/api/observer/teams');
+  },
   async overviewTeams(project: Project) {
     const params = new URLSearchParams({ project });
     return request<{ teams: ProjectTeam[] }>(`/api/overview/teams?${params}`);

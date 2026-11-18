@@ -83,7 +83,7 @@ describe('运动员个人资料编辑', () => {
       chooseMedia() { mediaOpened = true; },
     };
     vm.runInNewContext(pageSource, {
-      Page(value) { definition = value; }, wx,
+      Page(value) { definition = value; }, wx, getApp: () => ({ globalData: { user: { role: 'ATL' } } }),
       require(path) { return path === '../../utils/date' ? { todayBeijing() { return '2026-10-12'; } } : {}; },
     });
     const page = { ...definition, data: { ...definition.data }, setData(values) { Object.assign(this.data, values); }, loadPage() {} };

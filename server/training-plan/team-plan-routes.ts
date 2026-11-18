@@ -104,6 +104,7 @@ export function registerTeamPlanRoutes(app: Express) {
             }
           : plan
       );
+    if (user.role === 'OBS') plans = plans.map((plan) => ({ ...plan, aiMetadata: null }));
     res.json({
       plans,
       teams: user.role === 'ATL' ? [] : allowed.teams,

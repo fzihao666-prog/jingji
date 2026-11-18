@@ -74,7 +74,6 @@ it.each([
       const beforeScopes = scopeTables.map((table) =>
         db.prepare(`SELECT * FROM ${table} WHERE user_id = 9001`).all()
       );
-      const beforeSchema = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'users'").get();
       const options = { databasePath: ':memory:', databaseExistedBeforeStartup: true };
       if (interruptStartup) {
         db.exec(`CREATE TRIGGER interrupt_access_seed BEFORE INSERT ON account_profiles
@@ -100,10 +99,13 @@ it.each([
       expect(
         scopeTables.map((table) => db.prepare(`SELECT * FROM ${table} WHERE user_id = 9001`).all())
       ).toEqual(beforeScopes);
-      if (!hasProjectRole)
-        expect(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'users'").get()).toEqual(
-          beforeSchema
-        );
+      expect(
+        (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'users'").get() as { sql: string })
+          .sql
+      ).toContain("'OBS'");
+      db.prepare("UPDATE users SET role = 'OBS' WHERE id = 9001").run();
+      initializeDatabase(db, options);
+      expect(db.prepare('SELECT role FROM users WHERE id = 9001').get()).toEqual({ role: 'OBS' });
       expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
       expect(db.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 });
       expect(() => db.prepare("UPDATE users SET role = 'INVALID' WHERE id = 9001").run()).toThrow();

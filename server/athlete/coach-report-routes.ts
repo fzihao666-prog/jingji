@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { TrainingInputError } from './training-session-service.ts';
 import { TrainingPlanLinkError } from '../core/training-plan-links.ts';
 import type { Express, Request } from 'express';
@@ -37,15 +38,23 @@ function audit(userId: number, action: string, entityType: string, entityId: num
 
 // 教练代填报：管理角色在访问范围内为运动员录入训练课次与恢复日报，source 统一标记 coach_report。
 export function registerCoachReportRoutes(app: Express) {
-  app.get('/api/athletes/:id/training-sessions', requireAuth, requireRole(...MANAGER_ROLES), (req, res) => {
+  app.get('/api/athletes/:id/training-sessions', requireAuth, requireRole(...MANAGER_ROLES, 'OBS'), (req, res) => {
     const athleteId = targetAthleteId(req);
     if (!athleteId) return res.status(403).json({ message: '无权查看该运动员的训练记录。' });
-    const rows = listSessions(athleteId);
+    const range = z
+        .object({ from: z.iso.date(), to: z.iso.date() })
+        .refine((value) => value.from <= value.to)
+        .safeParse(req.query);
+      if ((req.query.from !== undefined || req.query.to !== undefined) && !range.success)
+        return res.status(400).json({ message: '请选择有效的训练日期范围。' });
+      const rows = range.success
+        ? listSessions(athleteId, -1, range.data)
+        : listSessions(athleteId);
     res.json({
       sessions: rows.map((row) => ({
         ...row,
         // 本人自评仍归运动员本人维护；教练侧只展示代填记录的修改入口。
-        editable: row.source === 'coach_report',
+        editable: req.authUser!.role !== 'OBS' && row.source === 'coach_report',
       })),
     });
   });

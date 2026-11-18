@@ -154,7 +154,11 @@ describe('账号接口行政区域从属校验', () => {
     const response = await fetch(`${baseUrl}/api/access/accounts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
-      body: JSON.stringify({ ...input([validArea], 'REG'), ...credentials, displayName: '新建测试' }),
+      body: JSON.stringify({
+        ...input([validArea], 'REG'),
+        ...credentials,
+        displayName: '新建测试',
+      }),
     });
     expect(response.status).toBe(400);
     expect(db.prepare('SELECT COUNT(*) AS count FROM users').get()).toEqual(before);
@@ -165,25 +169,37 @@ describe('账号接口行政区域从属校验', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
       body: JSON.stringify({
-        ...input([validArea]), role: 'PRJ', username: 'old_role_test',
-        password: initialPassword, displayName: '旧角色测试',
+        ...input([validArea]),
+        role: 'PRJ',
+        username: 'old_role_test',
+        password: initialPassword,
+        displayName: '旧角色测试',
       }),
     });
     expect(response.status).toBe(400);
-    expect(db.prepare("SELECT id FROM users WHERE username = 'old_role_test'").get()).toBeUndefined();
+    expect(
+      db.prepare("SELECT id FROM users WHERE username = 'old_role_test'").get()
+    ).toBeUndefined();
   });
 
   it('仅用项目和队伍创建账号，新编号无区域前缀，编辑保留旧编号', async () => {
     const existing = db.prepare('SELECT account_code FROM account_profiles WHERE user_id=4').get();
     expect((await createArea([])).status).toBe(201);
-    expect(db.prepare(`SELECT account_code FROM account_profiles JOIN users
-      ON users.id=account_profiles.user_id WHERE username='newtest'`).get()).toEqual({
+    expect(
+      db
+        .prepare(
+          `SELECT account_code FROM account_profiles JOIN users
+      ON users.id=account_profiles.user_id WHERE username='newtest'`
+        )
+        .get()
+    ).toEqual({
       account_code: expect.stringMatching(/^ROWING-REG-\d+$/),
     });
     expect((await updateArea([])).status).toBe(200);
-    expect(db.prepare('SELECT account_code FROM account_profiles WHERE user_id=4').get()).toEqual(existing);
+    expect(db.prepare('SELECT account_code FROM account_profiles WHERE user_id=4').get()).toEqual(
+      existing
+    );
   });
-
 });
 
 async function updateAthlete(body: unknown, actor = 8, id = '2') {
@@ -242,7 +258,9 @@ describe('运动员待完善行政归属', () => {
     db.exec(
       "UPDATE user_area_permissions SET area_level='county',province='',city='',county='' WHERE user_id=2"
     );
-    expect((await updateAthlete({ ...input([validArea], 'ATL'), parentUserId: 1 }, 1)).status).toBe(200);
+    expect((await updateAthlete({ ...input([validArea], 'ATL'), parentUserId: 1 }, 1)).status).toBe(
+      200
+    );
   });
   it('已知省市的待完善账号可由覆盖该范围的上级补全', async () => {
     db.exec(
@@ -298,7 +316,9 @@ describe('运动员待完善行政归属', () => {
         )
       ).status
     ).toBe(200);
-    expect(db.prepare('SELECT province FROM athlete_origins WHERE athlete_id=2').get()).toEqual({ province: '浙江' });
+    expect(db.prepare('SELECT province FROM athlete_origins WHERE athlete_id=2').get()).toEqual({
+      province: '浙江',
+    });
   });
   it('审计写入失败时账号范围、运动员归属和上级一起回滚', async () => {
     db.exec(
@@ -326,5 +346,64 @@ describe('运动员待完善行政归属', () => {
     } finally {
       db.exec('DROP TRIGGER reject_area_audit');
     }
+  });
+});
+
+describe('特邀观察员账号配置', () => {
+  it('按队伍自动推导项目并由管理员建立账号', async () => {
+    const response = await fetch(`${baseUrl}/api/access/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
+      body: JSON.stringify({
+        role: 'OBS',
+        username: 'observer_test',
+        password: initialPassword,
+        displayName: '观察测试',
+        teams: [{ project: 'ROWING', team: 'A队' }],
+      }),
+    });
+    const body = (await response.json()) as { id: number; message?: string };
+    expect(response.status, JSON.stringify(body)).toBe(201);
+    expect(db.prepare('SELECT role FROM users WHERE id = ?').get(body.id)).toEqual({ role: 'OBS' });
+    expect(
+      db.prepare('SELECT project FROM user_project_permissions WHERE user_id = ?').all(body.id)
+    ).toEqual([{ project: 'ROWING' }]);
+  });
+  it('撤销全部队伍后保留账号并清除项目，原管理员仍可继续配置', async () => {
+    db.prepare("UPDATE users SET role = 'OBS' WHERE id = 4").run();
+    db.prepare("INSERT INTO account_profiles VALUES (4,8,'obs-test',NULL)").run();
+    for (const teams of [[], [{ project: 'ROWING', team: 'A队' }]]) {
+      const response = await fetch(`${baseUrl}/api/access/accounts/4`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
+        body: JSON.stringify({ role: 'OBS', parentUserId: 8, teams }),
+      });
+      expect(response.status).toBe(200);
+      expect(
+        db.prepare('SELECT project, team FROM user_team_permissions WHERE user_id = 4').all()
+      ).toEqual(teams);
+    }
+  });
+  it('观察员请求内部管理接口被服务端拒绝', async () => {
+    db.prepare("UPDATE users SET role = 'OBS' WHERE id = 4").run();
+    const response = await fetch(`${baseUrl}/api/access/accounts`, {
+      headers: { Authorization: `Bearer ${token(4)}` },
+    });
+    expect(response.status).toBe(403);
+  });
+  it('拒绝同名但未获管理授权的另一项目队伍', async () => {
+    db.prepare("INSERT INTO project_teams VALUES (2,'CANOE_SPRINT','A队',1)").run();
+    const response = await fetch(`${baseUrl}/api/access/accounts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
+      body: JSON.stringify({
+        role: 'OBS',
+        username: 'outside_test',
+        password: initialPassword,
+        displayName: '范围测试',
+        teams: [{ project: 'CANOE_SPRINT', team: 'A队' }],
+      }),
+    });
+    expect(response.status).toBe(400);
   });
 });

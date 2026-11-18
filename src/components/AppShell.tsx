@@ -49,7 +49,8 @@ export type StrengthPageKey =
   | 'strength-analysis'
   | 'strength-assessment'
   | 'strength-enode';
-export type DataCollectionPageKey = 'bluetooth' | 'data-import' | 'data-management' | 'reports' | 'submission-report';
+export type DataCollectionPageKey =
+  'bluetooth' | 'data-import' | 'data-management' | 'reports' | 'submission-report';
 export type PageKey =
   | 'overview'
   | 'training-plans'
@@ -99,6 +100,19 @@ const organizationGroups: Array<{
   },
   { key: 'coaches', label: '教练管理', icon: Network, roles: ['SCC', 'REG', 'TD', 'DMD'] },
   { key: 'teams', label: '队伍管理', icon: Layers3, roles: ['SCC', 'REG', 'TD', 'DMD'] },
+];
+
+export const observerNavigation: Array<{
+  key: PageKey;
+  label: string;
+  icon: typeof ChartNoAxesCombined;
+}> = [
+  { key: 'overview', label: '训练总览', icon: ChartNoAxesCombined },
+  { key: 'personal', label: '队伍人员', icon: UsersRound },
+  { key: 'special-records', label: '训练明细', icon: TimerReset },
+  { key: 'strength-assessment', label: '测试结果', icon: Dumbbell },
+  { key: 'training-plans', label: '训练计划', icon: ClipboardList },
+  { key: 'reports', label: '训练报告', icon: FileSpreadsheet },
 ];
 
 const systemGroups: Array<{
@@ -155,7 +169,10 @@ export function AppShell({
     item.roles.includes(user.role)
   );
   const visibleSystemGroups = systemGroups.filter((item) => item.roles.includes(user.role));
-  const current = page.startsWith('special-')
+  const current =
+    user.role === 'OBS'
+      ? observerNavigation.find((item) => item.key === page) || observerNavigation[0]
+      : page.startsWith('special-')
     ? { label: '专项训练', icon: TimerReset }
     : page.startsWith('strength-')
       ? { label: '体能训练', icon: Dumbbell }
@@ -226,6 +243,25 @@ export function AppShell({
         </div>
 
         <nav className="primary-nav" aria-label="主导航">
+          {user.role === 'OBS' ? (
+            observerNavigation.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  type="button"
+                  key={item.key}
+                  className={page === item.key ? 'active' : ''}
+                  onClick={() => choosePage(item.key)}
+                >
+                  <Icon size={19} aria-hidden="true" />
+                  <span>
+                    <strong>{item.label}</strong>
+                  </span>
+                </button>
+              );
+            })
+          ) : (
+            <>
           {directNavItems.slice(0, 1).map((item) => {
             const Icon = item.icon;
             return (
@@ -364,6 +400,8 @@ export function AppShell({
               )}
             </div>
           )}
+            </>
+          )}
         </nav>
 
         <div className="sidebar-footer">
@@ -372,7 +410,7 @@ export function AppShell({
             <strong>
               <EditableName
                 value={user.displayName}
-                canEdit
+                canEdit={user.role !== 'OBS'}
                 onSave={onProfileNameChange}
                 label="本人姓名"
               />
@@ -481,7 +519,11 @@ export function AppShell({
 
 function isDataCollectionPage(page: PageKey) {
   return (
-    page === 'bluetooth' || page === 'data-import' || page === 'data-management' || page === 'reports' || page === 'submission-report'
+    page === 'bluetooth' ||
+    page === 'data-import' ||
+    page === 'data-management' ||
+    page === 'reports' ||
+    page === 'submission-report'
   );
 }
 

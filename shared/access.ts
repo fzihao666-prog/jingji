@@ -1,4 +1,10 @@
 export const ROLE_META = {
+  OBS: {
+    code: 'OBS',
+    label: '特邀观察员',
+    level: 1,
+    scope: '授权队伍在线阅览',
+  },
   ATL: {
     code: 'ATL',
     label: '运动员',
@@ -37,7 +43,7 @@ export const ROLES = Object.keys(ROLE_META) as Role[];
 
 export const SYSTEM_MANAGEMENT_ROLES: readonly Role[] = ['REG', 'TD', 'DMD'];
 
-export const ROLE_HIERARCHY: Role[][] = [['DMD'], ['TD'], ['REG'], ['SCC'], ['ATL']];
+export const ROLE_HIERARCHY: Role[][] = [['DMD'], ['TD'], ['REG'], ['SCC'], ['ATL', 'OBS']];
 
 export const AREA_LEVEL_META = {
   national: { label: '全国', rank: 4 },
@@ -51,5 +57,7 @@ export type AreaLevel = keyof typeof AREA_LEVEL_META;
 export const AREA_LEVELS = Object.keys(AREA_LEVEL_META) as AreaLevel[];
 
 export function canManageRole(manager: Role, target: Role) {
+  if (manager === 'OBS') return false;
+  if (target === 'OBS') return SYSTEM_MANAGEMENT_ROLES.includes(manager);
   return ROLE_META[manager].level > ROLE_META[target].level;
 }

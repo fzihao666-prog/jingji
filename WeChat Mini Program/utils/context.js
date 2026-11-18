@@ -18,6 +18,11 @@ async function loadContext(options = {}) {
     wx.setStorageSync('jingji-mini-user', user);
   }
 
+  if (user.role === 'OBS' && !options.allowObserver) {
+    wx.reLaunch({ url: '/pages/observer/observer' });
+    throw new Error('请使用特邀观察员阅览入口。');
+  }
+
   const [projectResult, athleteResult] = await Promise.all([
     api.currentProject(),
     api.athletes()

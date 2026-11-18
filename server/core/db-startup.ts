@@ -16,8 +16,14 @@ export function initializeStartupDatabase(
       '数据库包含历史身份证字段。请先停止服务，运行身份证清理工具并确认迁移后再启动。'
     );
   }
-  const backupPath = `${options.databasePath}.before-reconstruction-v1`;
-  if (options.databaseExistedBeforeStartup && !existsSync(backupPath)) {
+  const usersSchema = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+    .get() as { sql: string } | undefined;
+  const backups = [`${options.databasePath}.before-reconstruction-v1`];
+  if (usersSchema && !usersSchema.sql.includes("'OBS'"))
+    backups.push(`${options.databasePath}.before-observer-role-v1`);
+  for (const backupPath of backups) {
+    if (!options.databaseExistedBeforeStartup || existsSync(backupPath)) continue;
     const descriptor = openSync(backupPath, 'wx', 0o600);
     closeSync(descriptor);
     try {

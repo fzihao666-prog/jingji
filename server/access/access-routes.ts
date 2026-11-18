@@ -86,7 +86,7 @@ const accountAccessUpdateSchema = z.strictObject({
     )
     .max(100)
     .default([]),
-  projects: z.array(z.string().trim().min(1).max(100)).min(1).max(100),
+  projects: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
   teams: z
     .array(
       z.strictObject({
@@ -94,7 +94,6 @@ const accountAccessUpdateSchema = z.strictObject({
         team: z.string().trim().min(1).max(160),
       })
     )
-    .min(1)
     .max(1000),
 });
 
@@ -153,6 +152,7 @@ export function resolveParent(
     return { error: '不能选择权限范围外的上级账号。', parent: null };
   }
   if (
+    !(targetRole === 'OBS' && !targetPermissions.teams.length) &&
     !(targetRole === 'ATL'
       ? parentCoversAthleteScope(parent.id, targetPermissions)
       : permissionsContain(accountPermissions(parent.id), targetPermissions))
@@ -696,19 +696,24 @@ export function registerAccessRoutes(app: Express) {
       const roleResult = z.enum(ROLES).safeParse(cleanString(req.body?.role));
       if (!roleResult.success) return res.status(400).json({ message: '请选择有效的账号角色。' });
       const role = roleResult.data;
-      const parentUserId = Number(req.body?.parentUserId);
+        const parentUserId = role === 'OBS' ? currentUser.id : Number(req.body?.parentUserId);
       const gender = cleanString(req.body?.gender);
       const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
       const permissions = parseScopePayload(req.body);
       if (role !== 'ATL') permissions.areas = [];
+      if (role === 'OBS')
+        permissions.projects = [...new Set(permissions.teams.map((team) => team.project))];
       const errors: string[] = [];
       if (displayNameResult.error) errors.push(displayNameResult.error);
       if (!canManageRole(currentUser.role, role))
         errors.push('不能创建该层级的账号');
       const scopeError =
-        validateScopePayload(permissions) || validateAccountAreas(permissions.areas);
+        (role === 'OBS' && !permissions.teams.length ? '' : validateScopePayload(permissions)) || validateAccountAreas(permissions.areas);
       if (scopeError) errors.push(scopeError);
-      if (!permissionsContain(accountPermissions(currentUser.id), permissions))
+      if (
+        !(role === 'OBS' && !permissions.teams.length) &&
+        !permissionsContain(accountPermissions(currentUser.id), permissions)
+      )
         errors.push('账号权限范围不能超出当前账号');
       if (role === 'ATL') {
         if (permissions.areas.length && (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county')) {
@@ -720,6 +725,17 @@ export function registerAccessRoutes(app: Express) {
           errors.push('运动员必须绑定一个具体队伍');
         if (!['男', '女'].includes(gender)) errors.push('请选择运动员性别');
       }
+      if (
+        role === 'OBS' &&
+        permissions.teams.some(
+          (team) =>
+            !db
+              .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+              .get(team.project, team.team)
+        )
+      ) {
+        return res.status(400).json({ message: '请选择有效的具体队伍。' });
+        }
       if (role === 'SCC') {
         if (!isCoachCategory(coachCategory)) errors.push('请选择有效的教练类别');
         if (permissions.projects.includes('*')) errors.push('教练必须绑定具体项目，不能使用通配符');
@@ -743,8 +759,8 @@ export function registerAccessRoutes(app: Express) {
       try {
         let athleteId: number | null = null;
         const area = permissions.areas[0];
-        const project = permissions.projects[0];
-        const team = permissions.teams[0].team;
+        const project = permissions.projects[0] || '';
+        const team = permissions.teams[0]?.team || '';
         if (role === 'ATL') {
           const teamRow = db
             .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
@@ -833,12 +849,15 @@ export function registerAccessRoutes(app: Express) {
       if (!target || !canManageAccount(currentUser, target)) {
         return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
       }
-      const { role, parentUserId } = input.data;
+      const { role } = input.data;
+      const parentUserId = role === 'OBS' ? currentUser.id : input.data.parentUserId;
       const permissions = parseScopePayload(input.data);
       if (target.role !== 'ATL') permissions.areas = [];
+      if (role === 'OBS')
+        permissions.projects = [...new Set(permissions.teams.map((team) => team.project))];
       const previousAreas = accountPermissions(targetId).areas;
       const scopeError =
-        validateScopePayload(permissions) || validateAccountAreas(permissions.areas, previousAreas);
+        (role === 'OBS' && !permissions.teams.length ? '' : validateScopePayload(permissions)) || validateAccountAreas(permissions.areas, previousAreas);
       if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) {
         return res.status(400).json({ message: '目标角色层级无效。' });
       }
@@ -846,7 +865,10 @@ export function registerAccessRoutes(app: Express) {
         return res.status(400).json({ message: '运动员账号不能与管理岗位相互转换。' });
       }
       if (scopeError) return res.status(400).json({ message: scopeError });
-      if (!permissionsContain(accountPermissions(currentUser.id), permissions)) {
+      if (
+        !(role === 'OBS' && !permissions.teams.length) &&
+        !permissionsContain(accountPermissions(currentUser.id), permissions)
+      ) {
         return res.status(403).json({ message: '新的权限范围不能超出当前账号。' });
       }
       const parentResult = resolveParent(currentUser, role, parentUserId, permissions);
@@ -864,6 +886,17 @@ export function registerAccessRoutes(app: Express) {
         ) {
           return res.status(400).json({ message: '运动员必须绑定一个具体项目和队伍，填写生源地时须选择区县。' });
         }
+      }
+      if (
+        role === 'OBS' &&
+        permissions.teams.some(
+          (team) =>
+            !db
+              .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+              .get(team.project, team.team)
+        )
+      ) {
+        return res.status(400).json({ message: '请选择有效的具体队伍。' });
       }
       if (role === 'SCC') {
         if (permissions.projects.includes('*')) {

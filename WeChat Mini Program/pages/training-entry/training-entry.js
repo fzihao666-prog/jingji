@@ -101,6 +101,10 @@ Page({
   },
 
   onLoad(options) {
+    if (getApp().globalData.user?.role === 'OBS') {
+      wx.reLaunch({ url: '/pages/observer/observer' });
+      return;
+    }
     // 教练代填入口可携带目标运动员；本人填报忽略该参数。
     this._targetAthleteId = Number(options && options.athleteId) || 0;
     this._planRequest =

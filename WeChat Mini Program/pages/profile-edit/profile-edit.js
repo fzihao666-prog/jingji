@@ -69,6 +69,10 @@ Page({
   },
 
   onLoad(options = {}) {
+    if (getApp().globalData.user?.role === 'OBS') {
+      wx.reLaunch({ url: '/pages/observer/observer' });
+      return;
+    }
     this._requestedId = Number(options.athleteId) || 0;
     this.setData({ today: currentDate() });
     if (wx.onNeedPrivacyAuthorization) {

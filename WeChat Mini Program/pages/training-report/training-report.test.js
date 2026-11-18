@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 
-function setup() {
+function setup(role = 'SCC') {
   let definition;
   const utilsModule = { exports: {} };
   vm.runInNewContext(readFileSync(new URL('../../utils/training-report.js', import.meta.url), 'utf8'), { module: utilsModule });
@@ -14,7 +14,7 @@ function setup() {
     reportCommentary: vi.fn(async () => ({ highlights: ['表现'], concerns: [], suggestions: [] })),
     saveReport: vi.fn(async () => ({ createdAt: '2026-10-19T00:00:00Z' })),
     reportHistory: vi.fn(async () => []), reportDetail: vi.fn(async () => ({ data: report, createdAt: 'saved', commentary: { highlights: ['历史点评'], concerns: [], suggestions: [] } })) };
-  const mocks = { '../../services/api': api, '../../utils/context': { loadContext: async () => ({ projectAthletes: [{ id: 1, name: '合成', project: 'ROWING' }] }) },
+  const mocks = { '../../services/api': api, '../../utils/context': { loadContext: async () => ({ user: { role }, projectAthletes: [{ id: 1, name: '合成', project: 'ROWING' }], athletes: [{ id: 1, name: '合成', project: 'ROWING' }] }) },
     '../../utils/date': { todayBeijing: () => '2026-10-05' }, '../../utils/project-label': { projectLabel: () => '赛艇' }, '../../utils/training-report': utilsModule.exports };
   const wx = { showModal: vi.fn(({ success }) => success({ confirm: true })), showToast() {},
     openDocument: vi.fn(({ success }) => success({})) };
@@ -121,5 +121,25 @@ describe('小程序训练报告页面流程', () => {
     page.data.athleteId = 1; page.preview(); page.onUnload(); resolve(preview);
     await Promise.resolve(); await Promise.resolve();
     expect(page.data.report).toBeNull();
+  });
+});
+
+
+describe('观察员报告只读入口', () => {
+  it('直接打开历史列表且不发起预览、生成、保存或下载请求', async () => {
+    const { page, api } = setup('OBS');
+    page.onLoad({ athleteId: '1' });
+    await vi.waitFor(() => expect(page.data.busy).toBe(false));
+    expect(page.data.observer).toBe(true);
+    expect(page.data.showHistory).toBe(true);
+    expect(api.reportHistory).toHaveBeenCalledWith(1);
+    page.preview();
+    page.generate();
+    page.save();
+    page.exportPdf({ currentTarget: { dataset: { id: 'history' } } });
+    expect(api.reportPreview).not.toHaveBeenCalled();
+    expect(api.reportCommentary).not.toHaveBeenCalled();
+    expect(api.saveReport).not.toHaveBeenCalled();
+    expect(api.reportPdf).not.toHaveBeenCalled();
   });
 });

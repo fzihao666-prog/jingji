@@ -69,6 +69,10 @@ Page({
   },
 
   onLoad(options) {
+    if (getApp().globalData.user?.role === 'OBS') {
+      wx.reLaunch({ url: '/pages/observer/observer' });
+      return;
+    }
     this._mode = options && options.mode === 'special' ? 'special' : 'strength';
     this._targetAthleteId = Number(options && options.athleteId) || 0;
     this.loadPage();

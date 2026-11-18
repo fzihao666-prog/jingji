@@ -92,6 +92,10 @@ Page({
     wx.showToast({ title: message, icon: 'none', duration: 2500 });
   },
   onShow() {
+    if (getApp().globalData.user?.role === 'OBS') {
+      wx.reLaunch({ url: '/pages/observer/observer' });
+      return;
+    }
     this.load();
   },
   async load() {

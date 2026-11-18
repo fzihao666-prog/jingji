@@ -117,7 +117,9 @@ export function readSession(athleteId: number, id: number): SessionRow | undefin
     .get(id, athleteId) as SessionRow | undefined;
 }
 
-export function listSessions(athleteId: number, limit = 200): SessionRow[] {
+export function listSessions(athleteId: number, limit = 200,
+  range?: { from: string; to: string }
+): SessionRow[] {
   return db
     .prepare(
       `SELECT id, project_code AS projectCode, activity_code AS activityCode, intensity_system AS intensitySystem,
@@ -131,10 +133,11 @@ export function listSessions(athleteId: number, limit = 200): SessionRow[] {
     (SELECT plan_id FROM training_plan_execution_links WHERE training_session_id = training_sessions.id) AS teamPlanId,
     (SELECT session_id FROM training_plan_execution_links WHERE training_session_id = training_sessions.id) AS planSessionId
     FROM training_sessions WHERE athlete_id = ? AND is_demo = 0
+      AND session_date BETWEEN ? AND ?
       AND (project_code IS NULL OR project_code=(SELECT project FROM athletes WHERE athletes.id=training_sessions.athlete_id))
     ORDER BY session_date DESC, session_order DESC LIMIT ?`
     )
-    .all(athleteId, limit) as SessionRow[];
+    .all(athleteId, range?.from || '0000-01-01', range?.to || '9999-12-31', limit) as SessionRow[];
 }
 
 export function parseSessionId(value: string): number | null {

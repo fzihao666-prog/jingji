@@ -508,7 +508,9 @@ export function OverviewPage(props: Props) {
         <ContentState kind="error" title="训练总览数据读取失败" description={overviewError} />
       ) : (
         <section className="professional-dashboard-grid">
-          {defaultOrder.filter((id) => cardMeta[id]).map((id) => renderShell(id, cards[id]))}
+          {defaultOrder
+            .filter((id) => cardMeta[id] && (props.user.role !== 'OBS' || !['recovery-time', 'injury-analysis', 'birthplace-map'].includes(id)))
+            .map((id) => renderShell(id, cards[id]))}
         </section>
       )}
     </PageContainer>

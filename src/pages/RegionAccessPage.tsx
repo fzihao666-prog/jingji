@@ -104,6 +104,7 @@ export function RegionAccessPage({ user }: { user: User }) {
   >([]);
   const teamSelectRefs = useRef<Array<HTMLSelectElement | null>>([]);
   const [teamOptions, setTeamOptions] = useState<ProjectTeam[]>([]);
+  const [createObserverTeams, setCreateObserverTeams] = useState<TeamPermission[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [auditPage, setAuditPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -276,9 +277,11 @@ export function RegionAccessPage({ user }: { user: User }) {
 
   const save = async () => {
     if (!selected) return;
-    const athleteAreas = selected.role === 'ATL' &&
+    const athleteAreas =
+      selected.role === 'ATL' &&
       JSON.stringify(areas[0]) !== JSON.stringify(athleteAccountAreaForEdit(selected.areas))
-      ? areas.filter((area) => area.province) : [];
+        ? areas.filter((area) => area.province)
+        : [];
     const areaError = validateAccountAreas(athleteAreas, selected.areas);
     if (areaError) {
       setError(areaError);
@@ -307,7 +310,7 @@ export function RegionAccessPage({ user }: { user: User }) {
         role,
         parentUserId,
         areas: athleteAreas,
-        projects,
+        projects: role === 'OBS' ? [...new Set(teams.map((team) => team.project))] : projects,
         teams,
       });
       await load(selected.id);
@@ -322,6 +325,7 @@ export function RegionAccessPage({ user }: { user: User }) {
   const closeCreate = () => {
     if (saving) return;
     setCreateOpen(false);
+    setCreateObserverTeams([]);
     setCreateConfirm('');
     setCreateError('');
     setCreateInvalid(null);
@@ -378,11 +382,18 @@ export function RegionAccessPage({ user }: { user: User }) {
         parentUserId: createForm.parentUserId,
         gender: createForm.role === 'ATL' ? createForm.gender : undefined,
         areas: createAreas,
-        projects: [createForm.project],
-        teams: [{ project: createForm.project, team: createForm.team }],
+        projects:
+          createForm.role === 'OBS'
+            ? [...new Set(createObserverTeams.map((team) => team.project))]
+            : [createForm.project],
+        teams:
+          createForm.role === 'OBS'
+            ? createObserverTeams
+            : [{ project: createForm.project, team: createForm.team }],
       });
       setMessage(result.message);
       setCreateOpen(false);
+    setCreateObserverTeams([]);
       setCreateConfirm('');
       setCreateError('');
       restoreCreateFocusRef.current = true;
@@ -476,7 +487,10 @@ export function RegionAccessPage({ user }: { user: User }) {
   const auditPageSize = 6;
   const auditPageCount = Math.max(1, Math.ceil(logs.length / auditPageSize));
   const currentAuditPage = Math.min(auditPage, auditPageCount - 1);
-  const visibleLogs = logs.slice(currentAuditPage * auditPageSize, (currentAuditPage + 1) * auditPageSize);
+  const visibleLogs = logs.slice(
+    currentAuditPage * auditPageSize,
+    (currentAuditPage + 1) * auditPageSize
+  );
 
   const canEditAccess = user.role !== 'SCC';
   const feedbackInFooter = canEditAccess && Boolean(selected);
@@ -783,6 +797,34 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </select>
                   </label>
                 )}
+                {createForm.role === 'OBS' ? (
+                  <fieldset className="wide">
+                    <legend>可阅览队伍</legend>
+                    {teamOptions.map((team) => (
+                      <label key={team.id}>
+                        <input
+                          type="checkbox"
+                          checked={createObserverTeams.some(
+                            (scope) => scope.project === team.project && scope.team === team.name
+                          )}
+                          onChange={(event) =>
+                            setCreateObserverTeams((current) =>
+                              event.target.checked
+                                ? [...current, { project: team.project, team: team.name }]
+                                : current.filter(
+                                    (scope) =>
+                                      scope.project !== team.project || scope.team !== team.name
+                                  )
+                            )
+                          }
+                        />{' '}
+                        {team.name} · {projectLabel(team.project)}
+                      </label>
+                    ))}
+                    {!teamOptions.length && <p>暂无可授权队伍</p>}
+                  </fieldset>
+                ) : (
+                  <>
                 <label>
                   <span>项目</span>
                   <select
@@ -802,7 +844,9 @@ export function RegionAccessPage({ user }: { user: User }) {
                   <span>队伍</span>
                   <select
                     value={createForm.team}
-                    onChange={(event) => setCreateForm({ ...createForm, team: event.target.value })}
+                        onChange={(event) =>
+                          setCreateForm({ ...createForm, team: event.target.value })
+                        }
                     required
                     disabled={loading || saving}
                   >
@@ -822,6 +866,8 @@ export function RegionAccessPage({ user }: { user: User }) {
                     )}
                   </select>
                 </label>
+                  </>
+                )}
                 {createForm.role === 'ATL' && (
                   <label>
                     <span>性别</span>
@@ -853,7 +899,8 @@ export function RegionAccessPage({ user }: { user: User }) {
             />
           </label>
           <div className="visually-hidden" role="status">
-            {!loading && accountQuery &&
+            {!loading &&
+              accountQuery &&
               `找到 ${accountGroups.reduce((count, group) => count + group.accounts.length, 0)} 个账号`}
           </div>
           <div className="account-tree-scroll">
@@ -1049,6 +1096,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                       onChange={(event) => {
                         const nextRole = event.target.value as Role;
                         setRole(nextRole);
+                        if (nextRole === 'OBS') setTeams((current) => current.filter((team) => team.project !== '*' && team.team !== '*'));
                         const nextParents = visibleParentOptions(nextRole);
                         if (!nextParents.some((parent) => parent.id === parentUserId))
                           setParentUserId(nextParents[0]?.id || user.id);
@@ -1084,7 +1132,8 @@ export function RegionAccessPage({ user }: { user: User }) {
                 </div>
               </section>
 
-              {selected.role === 'ATL' && <section className="coordinate-section" aria-label="运动员生源地">
+              {selected.role === 'ATL' && (
+                <section className="coordinate-section" aria-label="运动员生源地">
                 <div className="coordinate-title">
                   <MapPinned size={18} />
                   <div>
@@ -1206,16 +1255,52 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </div>
                   ))}
                 </div>
-              </section>}
+                </section>
+              )}
 
               <section className="coordinate-section">
                 <div className="coordinate-title">
                   <Activity size={18} />
                   <div>
-                    <h3>项目与队伍范围</h3>
-                    <p>访问范围需同时满足项目与队伍授权</p>
+                    <h3>{role === 'OBS' ? '可阅览队伍' : '项目与队伍范围'}</h3>
+                    <p>
+                      {role === 'OBS'
+                        ? '选择该账号可以在线阅览的队伍'
+                        : '访问范围需同时满足项目与队伍授权'}
+                    </p>
                   </div>
                 </div>
+                {role === 'OBS' ? (
+                  <div className="team-scope-list">
+                    {teamOptions.map((team) => (
+                      <label key={team.id}>
+                        <input
+                          type="checkbox"
+                          disabled={!canEditAccess || saving}
+                          checked={teams.some(
+                            (scope) => scope.project === team.project && scope.team === team.name
+                          )}
+                          onChange={(event) =>
+                            setTeams((current) =>
+                              event.target.checked
+                                ? [
+                                    ...current.filter((scope) => scope.team),
+                                    { project: team.project, team: team.name },
+                                  ]
+                                : current.filter(
+                                    (scope) =>
+                                      scope.project !== team.project || scope.team !== team.name
+                                  )
+                            )
+                          }
+                        />{' '}
+                        {team.name} · {projectLabel(team.project)}
+                      </label>
+                    ))}
+                    {!teamOptions.length && <p>暂无可授权队伍</p>}
+                  </div>
+                ) : (
+                  <>
                 <div className="project-options">
                   {selected.role !== 'ATL' && (
                     <button
@@ -1295,7 +1380,8 @@ export function RegionAccessPage({ user }: { user: User }) {
                             allowsAllTeams(team.project)
                           ) && (
                             <option value={team.team} disabled>
-                              {team.team === '*' ? '全部队伍' : team.team}（已有授权，当前不可选）
+                                  {team.team === '*' ? '全部队伍' : team.team}
+                                  （已有授权，当前不可选）
                             </option>
                           )}
                         {!availableTeamNames(team.project).length && (
@@ -1310,7 +1396,9 @@ export function RegionAccessPage({ user }: { user: User }) {
                           onClick={() => {
                             setTeams(teams.filter((_, itemIndex) => itemIndex !== index));
                             requestAnimationFrame(() => {
-                              teamSelectRefs.current[Math.min(index, teams.length - 2)]?.focus();
+                                  teamSelectRefs.current[
+                                    Math.min(index, teams.length - 2)
+                                  ]?.focus();
                             });
                           }}
                         >
@@ -1329,6 +1417,8 @@ export function RegionAccessPage({ user }: { user: User }) {
                     </button>
                   )}
                 </div>
+                  </>
+                )}
               </section>
 
               {canEditAccess && (
@@ -1348,9 +1438,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                         {error}
                       </div>
                     )}
-                    {!message && !error && (
-                      <span>保存后，服务端查询会立即应用新的权限条件。</span>
-                    )}
+                    {!message && !error && <span>保存后，服务端查询会立即应用新的权限条件。</span>}
                   </div>
                   <button className="primary-button" disabled={saving || resetBusy} onClick={save}>
                     <Save size={16} />

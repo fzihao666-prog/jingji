@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { observerRequestAllowed, observerResponse } from './observer-access.ts';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -68,6 +69,13 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       .status(401)
       .json({ message: '登录状态已失效，请重新登录。', code: 'SESSION_EXPIRED' });
   req.authUser = user;
+  if (user.role === 'OBS') {
+    if (!observerRequestAllowed(req.method, req.path))
+      return res.status(403).json({ message: '该账号仅可阅览授权队伍的信息。' });
+    res.setHeader('Cache-Control', 'no-store');
+    const sendJson = res.json.bind(res);
+    res.json = (body: unknown) => sendJson(observerResponse(body));
+  }
   next();
 }
 

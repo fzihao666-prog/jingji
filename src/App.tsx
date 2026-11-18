@@ -87,6 +87,8 @@ const DataManagementPage = lazy(() =>
   import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage }))
 );
 
+const ObserverPortal = lazy(() => import('./pages/ObserverPortal').then((module) => ({ default: module.ObserverPortal })));
+
 const today = toIsoDate(new Date());
 const pageKeys: PageKey[] = [
   'overview',
@@ -169,7 +171,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
-    if (!user || !project) return;
+    if (!user || user.role === 'OBS' || !project) return;
     let active = true;
     setTeamError('');
     api.overviewTeams(project).then(({ teams }) => {
@@ -233,7 +235,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.role === 'OBS') return;
     // 同账号刷新保留页面和导入回执；账号变化仍等待新名册。
     if (rosterUserRef.current !== user) setAthletesReady(false);
     rosterUserRef.current = user;
@@ -270,7 +272,7 @@ export default function App() {
   const recordsAthleteId = recordScope?.athleteId ?? null;
 
   useEffect(() => {
-    if (!user || !athletesReady || !project) return;
+    if (!user || user.role === 'OBS' || !athletesReady || !project) return;
     const selected = recordsAthleteId
       ? athletes.find((athlete) => athlete.id === recordsAthleteId)
       : null;
@@ -371,6 +373,11 @@ export default function App() {
       </div>
     );
   if (!user) return <LoginPage onLogin={login} />;
+  if (user.role === 'OBS') return (
+    <Suspense fallback={<p role="status">正在加载队伍阅览…</p>}>
+      <ObserverPortal user={user} onLogout={logout} />
+    </Suspense>
+  );
   if (!athletesReady)
     return (
       <div className="boot-screen">

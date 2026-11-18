@@ -1,6 +1,7 @@
 // 由 scripts/sync-mini-register-data.mjs 从 shared/ 生成，请勿手工修改。
 module.exports = {
   "roleLabels": {
+    "OBS": "特邀观察员",
     "ATL": "运动员",
     "SCC": "队伍教练",
     "REG": "业务负责人",

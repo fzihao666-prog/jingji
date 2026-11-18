@@ -268,14 +268,15 @@ export function readSpecialTestEvents(user: AuthUser, project: string, from: str
             ? row.memberAthleteIds.some((id) => allowed.has(id))
             : row.memberAthleteIds.every((id) => allowed.has(id))
         );
-      const leaderMs = all[0]?.bestMs || 0;
+      const leaderMs = (user.role === 'OBS' ? visible[0] : all[0])?.bestMs || 0;
       return {
         ...event,
         project,
         dataSource: 'legacy_special_test',
         dataQuality: 'unverified' as const,
-        results: visible.map((row) => ({
+        results: visible.map((row, index) => ({
           ...row,
+          rank: user.role === 'OBS' ? index + 1 : row.rank,
           crewName: user.role === 'ATL' ? user.displayName : row.crewName,
           memberNames: user.role === 'ATL' ? [user.displayName] : row.memberNames,
           memberAthleteIds:

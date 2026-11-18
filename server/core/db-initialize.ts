@@ -25,7 +25,7 @@ import { initializePhysicalChampionReferences } from './physical-champion-refere
 const coachCategoryValues = COACH_CATEGORIES.map((category) => `'${category}'`).join(', ');
 
 const compactTestMetricCodes = new Set<string>(
-  COMPACT_ATHLETE_COLUMNS.filter(field => field.kind === 'test').map(field => field.code)
+  COMPACT_ATHLETE_COLUMNS.filter((field) => field.kind === 'test').map((field) => field.code)
 );
 const legacyBaseMetricProjects = '["赛艇","皮划艇","激流"]';
 const commonMetricProjects = '["*"]';
@@ -79,7 +79,7 @@ export function initializeDatabase(
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'REG', 'TD', 'DMD')),
+    role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'REG', 'TD', 'DMD', 'OBS')),
     athlete_id INTEGER,
     active INTEGER NOT NULL DEFAULT 1,
     session_version INTEGER NOT NULL DEFAULT 1,
@@ -791,7 +791,7 @@ export function initializeDatabase(
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'")
     .get() as { sql: string } | undefined;
   // 合并旧项目角色为业务负责人，保留账号及原有授权关联。
-  if (usersTable && (!usersTable.sql.includes("'DMD'") || usersTable.sql.includes("'PRJ'"))) {
+  if (usersTable && (!usersTable.sql.includes("'OBS'") || usersTable.sql.includes("'PRJ'"))) {
     const activeExpression = hasColumn('users', 'active') ? 'active' : '1';
     db.exec('PRAGMA foreign_keys = OFF');
     try {
@@ -806,7 +806,7 @@ export function initializeDatabase(
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         display_name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'REG', 'TD', 'DMD')),
+        role TEXT NOT NULL CHECK(role IN ('ATL', 'SCC', 'REG', 'TD', 'DMD', 'OBS')),
         athlete_id INTEGER,
         active INTEGER NOT NULL DEFAULT 1,
         session_version INTEGER NOT NULL DEFAULT 1,
@@ -2159,7 +2159,7 @@ export function initializeDatabase(
       .all() as Array<{
       id: number;
       username: string;
-      role: 'ATL' | 'SCC' | 'REG' | 'TD' | 'DMD';
+      role: 'ATL' | 'SCC' | 'REG' | 'TD' | 'DMD' | 'OBS';
       athleteId: number | null;
     }>;
     const insertProfile = db.prepare(`
@@ -5996,7 +5996,7 @@ export function initializeDatabase(
   db.exec('BEGIN IMMEDIATE');
   try {
     if (!db.prepare("SELECT 1 FROM app_metadata WHERE key='project_metric_applicability_v1'").get()) {
-      const previous = OVERVIEW_METRICS.flatMap(metric=> {
+      const previous = OVERVIEW_METRICS.flatMap((metric) => {
         const row=db.prepare('SELECT code,projects_json FROM metric_definitions WHERE code=?').get(metric.code);
         return row ? [row] : [];
       });

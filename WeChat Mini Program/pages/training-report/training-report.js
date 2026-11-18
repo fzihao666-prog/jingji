@@ -6,19 +6,24 @@ const { reportPeriod, reportView } = require('../../utils/training-report');
 const kinds = ['week', 'month', 'custom'];
 const emptyCommentary = () => ({ highlights: '', concerns: '', suggestions: '' });
 Page({
-  data: { athleteId: 0, athleteName: '', projectName: '', busy: false, error: '', saved: '',
+  data: { observer: false, athleteId: 0, athleteName: '', projectName: '', busy: false, error: '', saved: '',
     range: reportPeriod('week', todayBeijing()), kindIndex: 0, kinds: ['周报告', '月报告', '阶段报告'],
     report: null, view: null, history: [], showHistory: false, showDaily: false, exportingId: '', commentary: emptyCommentary(),
     commentaryFields: [{ key: 'highlights', label: '主要表现' }, { key: 'concerns', label: '需要关注' }, { key: 'suggestions', label: '下一步建议' }] },
   onLoad(options) {
     this._alive = true;
     this.run(async () => {
-      const context = await loadContext({ refreshUser: true });
+      const context = await loadContext({ refreshUser: true, allowObserver: true });
       if (!this._alive) return;
       const id = Number(options.athleteId);
-      const athlete = (context.projectAthletes || []).find(a => Number(a.id) === id);
+      const available = context.user?.role === 'OBS' ? context.athletes : context.projectAthletes;
+      const athlete = (available || []).find(a => Number(a.id) === id);
       if (!athlete) throw new Error('当前项目无此运动员的访问权限，请返回档案重新选择。');
-      this.setData({ athleteId: id, athleteName: athlete.name, projectName: projectLabel(athlete.project) });
+      this.setData({ athleteId: id, athleteName: athlete.name, projectName: projectLabel(athlete.project), observer: context.user?.role === 'OBS' });
+      if (this.data.observer) {
+        const history = await api.reportHistory(id);
+        if (this._alive) this.setData({ history, showHistory: true });
+      }
     });
   },
   onUnload() { this._alive = false; },
@@ -46,6 +51,7 @@ Page({
   },
   onTo(event) { this.changeRange({ ...this.data.range, to: event.detail.value }); },
   preview() {
+    if (this.data.observer) return;
     this.run(async () => {
       if (!this.data.athleteId) throw new Error('请返回档案选择运动员。');
       const range = this.data.range;
@@ -63,6 +69,7 @@ Page({
     this.setData({ [`commentary.${key}`]: event.detail.value });
   },
   generate() {
+    if (this.data.observer) return;
     this.run(async () => {
       if (!this._preview || this.data.saved) throw new Error('请先预览图表。');
       if (!this._preview.data.totals.sessions) throw new Error('当前日期范围暂无有效训练记录，请调整日期后重新预览。');
@@ -79,6 +86,7 @@ Page({
     });
   },
   save() {
+    if (this.data.observer) return;
     if (this.data.busy || this.data.saved || !this._preview) return;
     wx.showModal({ title: '确认保存报告', content: '请核对图表与点评。保存为历史快照，不修改训练记录，两端都可查看。', success: (result) => {
       if (!result.confirm || !this._alive) return;
@@ -111,6 +119,7 @@ Page({
     });
   },
   exportPdf(event) {
+    if (this.data.observer) return;
     this.run(async () => {
       const id = event.currentTarget.dataset.id;
       if (!this.data.athleteId || !this.data.history.some(row => row.id === id)) return;

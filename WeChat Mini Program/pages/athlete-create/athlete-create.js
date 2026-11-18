@@ -14,6 +14,10 @@ Page({
   },
 
   onLoad(options = {}) {
+    if (getApp().globalData.user?.role === 'OBS') {
+      wx.reLaunch({ url: '/pages/observer/observer' });
+      return;
+    }
     this._preferred = { project: options.project || '', teamId: Number(options.teamId) || 0 };
     this.setData({ today: todayBeijing() });
     this.loadPage();

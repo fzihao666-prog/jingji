@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('页面上下文并发', () => {
   it('项目保存尚未完成时，新页面继续使用刚选择的项目', async () => {
@@ -47,4 +47,17 @@ describe('页面上下文并发', () => {
     expect(result.selectedAthleteId).toBe(2);
     expect(app.globalData.currentProject).toBe('皮划艇');
   });
+});
+
+
+it('观察员打开内部业务页面时跳转专属阅览入口', async () => {
+  const app = { globalData: { token: 'token', user: { role: 'OBS' } } };
+  const api = { currentProject: vi.fn(), athletes: vi.fn() };
+  const wx = { reLaunch: vi.fn() };
+  const context = { module: { exports: {} }, require: () => api, getApp: () => app, wx };
+  vm.runInNewContext(readFileSync(new URL('./context.js', import.meta.url), 'utf8'), context);
+  await expect(context.module.exports.loadContext()).rejects.toThrow('阅览入口');
+  expect(wx.reLaunch).toHaveBeenCalledWith({ url: '/pages/observer/observer' });
+  expect(api.currentProject).not.toHaveBeenCalled();
+  expect(api.athletes).not.toHaveBeenCalled();
 });

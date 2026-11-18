@@ -175,9 +175,7 @@ describe('专项测试成绩保存的范围保护', () => {
     expect(first.status).toBe(200);
     expect(first.payload.imported).toBe(2);
     // Act：第二次导入只携带“甲二”，模拟用户上传局部更新文件。
-    const second = await commitAs(coachA, [
-      importRow('甲二', [9102], ['测试甲桨手B'], 58000, 1),
-    ]);
+    const second = await commitAs(coachA, [importRow('甲二', [9102], ['测试甲桨手B'], 58000, 1)]);
     expect(second.payload.imported).toBe(1);
     // Assert：“甲一”应保留，“甲二”应覆盖，防止实现误删整个事件下的成绩。
     const rows = savedResults();
@@ -189,9 +187,7 @@ describe('专项测试成绩保存的范围保护', () => {
   it('跨队伍同名组合导入不覆盖范围外成绩，冲突行跳过并提示', async () => {
     // 甲队先占用组合名“甲一”，随后乙队教练在同一事件下导入同名组合。
     await commitAs(coachA, [importRow('甲一', [9101], ['测试甲桨手A'], 57150)]);
-    const response = await commitAs(coachB, [
-      importRow('甲一', [9201], ['测试乙桨手A'], 56000),
-    ]);
+    const response = await commitAs(coachB, [importRow('甲一', [9201], ['测试乙桨手A'], 56000)]);
     expect(response.status).toBe(200);
     // HTTP 200 表示这批导入流程正常结束；imported=0 和 conflicts 才表示该行被安全跳过。
     expect(response.payload.imported).toBe(0);
@@ -205,9 +201,7 @@ describe('专项测试成绩保存的范围保护', () => {
 
   it('导入行成员不在当前账户范围时跳过且不写入', async () => {
     // 即使没有同名旧记录，只要新行包含当前教练不可访问的运动员，也不得落库。
-    const response = await commitAs(coachA, [
-      importRow('越权艇', [9201], ['测试乙桨手A'], 56000),
-    ]);
+    const response = await commitAs(coachA, [importRow('越权艇', [9201], ['测试乙桨手A'], 56000)]);
     expect(response.payload.imported).toBe(0);
     expect(response.payload.conflicts).toEqual([{ rowNumber: 1, crewName: '越权艇' }]);
     expect(savedResults()).toHaveLength(0);
@@ -237,4 +231,27 @@ describe('专项测试成绩保存的范围保护', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].bestMs).toBe(55900);
   });
+});
+
+it('观察员的专项成绩排名与领跑差值仅使用授权队伍', async () => {
+  await commitAs(coachA, [importRow('甲一', [9101], ['测试甲桨手A'], 60000)]);
+  await commitAs(coachB, [importRow('乙一', [9201], ['测试乙桨手A'], 50000)]);
+  db.prepare("UPDATE users SET role = 'OBS' WHERE id = ?").run(coachA);
+  try {
+    const response = await fetch(
+      `${baseUrl}/api/special-tests?project=ROWING&from=2026-07-01&to=2026-07-31`,
+      {
+        headers: { Authorization: `Bearer ${token(coachA)}` },
+      }
+    );
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      events: Array<{ results: Array<{ bestMs: number; gapLeaderMs: number; rank: number }> }>;
+    };
+    expect(payload.events).toHaveLength(1);
+    expect(payload.events[0].results).toHaveLength(1);
+    expect(payload.events[0].results[0]).toMatchObject({ bestMs: 60000, gapLeaderMs: 0, rank: 1 });
+  } finally {
+    db.prepare("UPDATE users SET role = 'SCC' WHERE id = ?").run(coachA);
+  }
 });

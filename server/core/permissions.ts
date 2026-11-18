@@ -53,11 +53,17 @@ export function canManageAccount(manager: AuthUser, target: AuthUser) {
   if (!canManageRole(manager.role, target.role)) return false;
   const managerPermissions = accountPermissions(manager.id);
   const targetPermissions = accountPermissions(target.id);
-  if (target.role === 'SCC' && !targetPermissions.teams.length) {
+  if ((target.role === 'SCC' || target.role === 'OBS') && !targetPermissions.teams.length) {
     // 无归属历史账号仅允许全部项目和队伍授权的上级修复，不能猜测其组织范围。
     const globalManager = managerPermissions.projects.includes('*') &&
       managerPermissions.teams.some((team) => team.project === '*' && team.team === '*');
     if (globalManager) return true;
+    if (target.role === 'OBS') {
+      const profile = db
+        .prepare('SELECT parent_user_id AS parentId FROM account_profiles WHERE user_id = ?')
+        .get(target.id);
+      return profile?.parentId === manager.id;
+    }
     // 已有项目但尚未绑队的教练，须由覆盖其项目全部队伍的上级管理。
     return permissionsContain(managerPermissions, {
       ...targetPermissions,
@@ -155,7 +161,7 @@ export function parseScopePayload(body: any) {
         ),
       ]
     : [];
-  const teams = Array.isArray(body?.teams)
+  const teams: Array<{ project: string; team: string }> = Array.isArray(body?.teams)
     ? body.teams
         .map((team: any) => ({
           project: cleanString(team?.project),
@@ -262,6 +268,10 @@ export function selectableProjects(user: AuthUser): Project[] {
     return athlete && isProject(athlete.project) ? [athlete.project] : [];
   }
   const permissions = accountPermissions(user.id);
+  if (user.role === 'OBS')
+    return PROJECTS.filter((project) =>
+      permissions.teams.some((team) => team.project === project && team.team !== '*')
+    );
   return PROJECTS.filter(
     (project) => permissions.projects.includes('*') || permissions.projects.includes(project)
   );

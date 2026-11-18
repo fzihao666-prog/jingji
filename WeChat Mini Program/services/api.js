@@ -18,6 +18,7 @@ function requestAiPlan(path, data) {
 }
 
 module.exports = {
+  observerTeams() { return request('/api/observer/teams'); },
   projectRules(project) { return request(`/api/projects/rules?${query({ project })}`); },
   reportPreview(id, range) { return request(`/api/athletes/${encodeURIComponent(id)}/reports/preview?${query(range)}`); },
   reportHistory(id) { return request(`/api/athletes/${encodeURIComponent(id)}/reports`); },
@@ -86,8 +87,8 @@ module.exports = {
   saveWellness(data) {
     return request('/api/me/wellness', { method: 'POST', data });
   },
-  athleteTrainingSessions(athleteId) {
-    return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`);
+  athleteTrainingSessions(athleteId, from, to) {
+    return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions?${query({ from, to })}`);
   },
   createAthleteTrainingSession(athleteId, data) {
     return request(`/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`, { method: 'POST', data });

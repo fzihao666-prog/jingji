@@ -4,7 +4,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Express, Request, RequestHandler } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../core/shared-server.ts';
-import { reportRangeSchema, reportCommentarySchema } from '../../shared/training-report.ts';
+import { reportRangeSchema, reportCommentarySchema,
+  reportDataSchema,
+} from '../../shared/training-report.ts';
 import { readReport, reportFingerprint, reportAiInput } from './report-service.ts';
 import { renderReportPdf } from './report-pdf.ts';
 
@@ -212,6 +214,16 @@ export function registerReportRoutes(app: Express, deps: Dependencies) {
       .get(parsed.data, id, project) as
       { id: string; createdAt: string; data: string; commentary: string } | undefined;
     if (!row) return res.status(404).json({ message: '报告不存在或不在当前权限范围。' });
+    if (req.authUser!.role === 'OBS') {
+      const data = reportDataSchema.safeParse(JSON.parse(row.data));
+      if (!data.success)
+        return res.status(503).json({ message: '该历史报告暂无法安全展示，请联系管理员。' });
+      return res.json({
+        ...row,
+        data: data.data,
+        commentary: { highlights: [], concerns: [], suggestions: [] },
+      });
+    }
     return res.json({ ...row, data: JSON.parse(row.data), commentary: JSON.parse(row.commentary) });
   });
 }

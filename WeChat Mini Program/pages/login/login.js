@@ -79,7 +79,7 @@ Page({
     this.setData({
       username: remembered
     });
-    if (wx.getStorageSync(TOKEN_KEY)) wx.reLaunch({ url: '/pages/index/index' });
+    if (wx.getStorageSync(TOKEN_KEY)) wx.reLaunch({ url: getApp().globalData.user?.role === 'OBS' ? '/pages/observer/observer' : '/pages/index/index' });
   },
 
   onShow() {
@@ -153,7 +153,7 @@ Page({
       stage = '跳转训练总览';
       traceNetwork('登录跳转开始', { traceId, page: '/pages/index/index' });
       wx.reLaunch({
-        url: '/pages/index/index',
+        url: result.user.role === 'OBS' ? '/pages/observer/observer' : '/pages/index/index',
         success: () => traceNetwork('登录跳转成功', { traceId }),
         fail: () => {
           traceNetwork('登录跳转失败', { traceId, stage: '跳转训练总览' });
