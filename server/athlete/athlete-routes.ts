@@ -469,7 +469,7 @@ export function registerAthleteRoutes(app: Express) {
   app.post(
     '/api/admin/athletes/bulk/delete',
     requireAuth,
-    requireRole('REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const ids = Array.isArray(req.body?.ids)
         ? ([...new Set(req.body.ids.map(Number).filter(Number.isFinite))] as number[])
@@ -498,7 +498,7 @@ export function registerAthleteRoutes(app: Express) {
   app.delete(
     '/api/admin/athletes/:id',
     requireAuth,
-    requireRole('REG', 'TD', 'DMD'),
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const athleteId = Number(req.params.id);
       if (!hasAthleteAccess(req.authUser!, athleteId))

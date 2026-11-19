@@ -214,6 +214,7 @@ export function AthleteManagementPage({
 
   const canEdit = user.role === 'SCC' || ROLE_META[user.role].level >= ROLE_META.REG.level;
   const canAdmin = ROLE_META[user.role].level >= ROLE_META.REG.level;
+  const canDelete = user.role === 'SCC' || canAdmin;
 
   const load = async () => {
     setLoading(true);
@@ -666,11 +667,12 @@ export function AthleteManagementPage({
         )}
       </FilterBar>
 
-      {canAdmin && (
+      {canDelete && (
         <section className={`athlete-batch-bar ${selectedIds.size ? 'visible' : ''}`}>
           <span>
             已选择 <strong>{selectedIds.size}</strong> 名运动员
           </span>
+          {canAdmin && (
           <button
             onClick={() => {
               setBulkForm({
@@ -688,6 +690,7 @@ export function AthleteManagementPage({
             <PencilLine size={15} />
             批量修改
           </button>
+          )}
           <button
             className="danger"
             onClick={() => void deleteSelected()}
@@ -710,7 +713,7 @@ export function AthleteManagementPage({
         <div className="athlete-table-wrap">
           <table className="athlete-directory-table">
             <colgroup>
-              {canAdmin && <col className="athlete-col-selection" />}
+              {canDelete && <col className="athlete-col-selection" />}
               <col className="athlete-col-person" />
               <col className="athlete-col-team" />
               <col className="athlete-col-position" />
@@ -723,7 +726,7 @@ export function AthleteManagementPage({
             </colgroup>
             <thead>
               <tr>
-                {canAdmin && (
+                {canDelete && (
                   <th scope="col" className="athlete-selection-cell">
                     <button
                       className={`athlete-checkbox ${pageAllSelected ? 'checked' : ''}`}
@@ -748,7 +751,7 @@ export function AthleteManagementPage({
             <tbody>
               {paged.map((athlete) => (
                 <tr key={athlete.id}>
-                  {canAdmin && (
+                  {canDelete && (
                     <td className="athlete-selection-cell">
                       <button
                         className={`athlete-checkbox ${selectedIds.has(athlete.id) ? 'checked' : ''}`}
@@ -848,7 +851,7 @@ export function AthleteManagementPage({
                           编辑
                         </button>
                       )}
-                      {canAdmin && (
+                      {canDelete && (
                         <button className="danger" onClick={() => void deleteOne(athlete)}>
                           <Trash2 size={14} />
                           删除

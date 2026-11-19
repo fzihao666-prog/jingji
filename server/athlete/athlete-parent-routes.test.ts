@@ -272,3 +272,47 @@ describe('小程序管理者复用运动员编辑接口', () => {
     expect(database.prepare('SELECT name, team_id FROM athletes WHERE id=101').get()).toEqual({ name: '测试队员', team_id: 10 });
   });
 });
+
+
+describe('教练删除队员权限', () => {
+  function remove(actor: number, ids?: number[]) {
+    return fetch(`${baseUrl}/api/admin/athletes/${ids ? 'bulk/delete' : '101'}`, {
+      method: ids ? 'POST' : 'DELETE',
+      headers: {
+        Authorization: `Bearer ${jwt.sign({ id: actor, sessionVersion: 0 }, secret, { expiresIn: '5m' })}`,
+        'Content-Type': 'application/json',
+      },
+      body: ids ? JSON.stringify({ ids }) : undefined,
+    });
+  }
+
+  it.each([false, true])('教练删除本队队员并停用账号，批量=%s', async (bulk) => {
+    expect((await remove(2, bulk ? [101] : undefined)).status).toBe(200);
+    expect(database.prepare('SELECT active FROM athletes WHERE id=101').get()).toEqual({ active: 0 });
+    expect(database.prepare('SELECT active, session_version FROM users WHERE id=4').get()).toEqual({ active: 0, session_version: 1 });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes WHERE id=101').get()).toEqual({ count: 1 });
+  });
+
+  it('其他队伍和运动员本人均不能删除', async () => {
+    expect((await remove(3)).status).toBe(404);
+    expect((await remove(4)).status).toBe(403);
+    expect((await remove(3, [101])).status).toBe(400);
+    expect(database.prepare('SELECT active FROM athletes WHERE id=101').get()).toEqual({ active: 1 });
+  });
+
+  it('批量包含越权成员时整体拒绝', async () => {
+    expect((await remove(2, [101, 999])).status).toBe(400);
+    expect(database.prepare('SELECT active FROM athletes WHERE id=101').get()).toEqual({ active: 1 });
+  });
+
+  it('审计写入失败时恢复队员和账号状态', async () => {
+    database.exec("CREATE TRIGGER reject_delete_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
+    try {
+      expect((await remove(2)).status).toBe(500);
+      expect(database.prepare('SELECT active FROM athletes WHERE id=101').get()).toEqual({ active: 1 });
+      expect(database.prepare('SELECT active, session_version FROM users WHERE id=4').get()).toEqual({ active: 1, session_version: 0 });
+    } finally {
+      database.exec('DROP TRIGGER reject_delete_audit');
+    }
+  });
+});
