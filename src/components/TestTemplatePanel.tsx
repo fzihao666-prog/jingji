@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, Download, Plus, Save } from 'lucide-react';
-import { testTemplateHeaders, type TestTemplateGroupInput, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
+import { testTemplateHeaders, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
 import { api } from '../api';
 import type { Project } from '../types';
+import type { TrainingRecordTemplate } from '../../shared/training-record-template';
+import { blankTemplateField, TemplateProjectEditor } from './TemplateProjectEditor';
 import { TemplatePreviewColumns, TemplatePreviewDialog } from './TemplatePreviewDialog';
 
 const emptyMetric: TestTemplateMetricInput = {
@@ -21,12 +23,10 @@ export function TestTemplatePanel({ project, team, onClose }: {
   const [candidate, setCandidate] = useState('');
   const addButton = useRef<HTMLButtonElement>(null);
   const newGroupButton = useRef<HTMLButtonElement>(null);
-  const groupNameInput = useRef<HTMLInputElement>(null);
   const [adding, setAdding] = useState(false);
   const [groupDraft, setGroupDraft] = useState<{
-    name: string; protocol: string; fields: Array<TestTemplateGroupInput['fields'][number] & { id: number }>;
+    name: string; protocol: string; fields: TrainingRecordTemplate['fields'];
   } | null>(null);
-  const nextFieldId = useRef(0);
   const [editor, setEditor] = useState<{ mode: 'create' | 'rename' | 'version'; metric?: TestTemplateMetric } | null>(null);
   const [draft, setDraft] = useState<TestTemplateMetricInput>(emptyMetric);
   const [pending, setPending] = useState(false);
@@ -131,7 +131,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
     void run(async () => {
       const { name, protocol, fields } = groupDraft;
       const { group, metrics } = await api.createTestTemplateGroup(project, team, {
-        name, protocol, fields: fields.map(({ label, unit }) => ({ label, unit })),
+        name, protocol, fields: fields.map(({ name: label, unit, kind }) => ({ label, unit, valueKind: kind === 'time' ? 'time' : 'number' })),
       });
       const added = new Set(metrics.map(metric => metric.code));
       setPreview(current => current && {
@@ -143,12 +143,6 @@ export function TestTemplatePanel({ project, team, onClose }: {
       setCodes(current => [...new Set([...current, ...group.codes])]);
       finishAdding();
       setStatus(`「${group.name}」已保存并加入模板。`);
-    });
-  }
-
-  function setGroupField(id: number, key: 'label' | 'unit', value: string) {
-    setGroupDraft(current => current && {
-      ...current, fields: current.fields.map(field => field.id === id ? { ...field, [key]: value } : field),
     });
   }
 
@@ -242,7 +236,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
           }}><Plus size={16} aria-hidden />加入模板</button>
           <button ref={newGroupButton} type="button" className="secondary-button" disabled={pending} onClick={() => {
             setEditor(null);
-            setGroupDraft({ name: '', protocol: '', fields: [{ id: nextFieldId.current++, label: '', unit: '' }] });
+            setGroupDraft({ name: '', protocol: '', fields: [blankTemplateField] });
           }}>新建测试项目</button>
           <details>
             <summary>高级设置</summary>
@@ -253,33 +247,9 @@ export function TestTemplatePanel({ project, team, onClose }: {
           <fieldset disabled={pending}>
             <legend>新建测试项目</legend>
             <div className="test-template-group-fields">
-              <label className="data-import-template-team">项目名称
-                <input ref={groupNameInput} autoFocus required maxLength={40} placeholder="例如：抓举" value={groupDraft.name}
-                  onChange={event => setGroupDraft({ ...groupDraft, name: event.target.value })} />
-              </label>
-              {groupDraft.fields.map((field, index) => (
-                <div key={field.id} className="test-template-actions">
-                  <label className="data-import-template-team">字段名称
-                    <input required maxLength={40} placeholder={index === 0 ? '例如：重量' : undefined}
-                      value={field.label} onChange={event => setGroupField(field.id, 'label', event.target.value)} />
-                  </label>
-                  <label className="data-import-template-team">单位（选填）
-                    <input maxLength={24} placeholder={index === 0 ? '例如：kg' : undefined}
-                      value={field.unit} onChange={event => setGroupField(field.id, 'unit', event.target.value)} />
-                  </label>
-                  {groupDraft.fields.length > 1 && <button type="button" className="secondary-button" aria-label={`删除第 ${index + 1} 项字段`}
-                    onClick={() => {
-                      setGroupDraft({ ...groupDraft, fields: groupDraft.fields.filter(entry => entry.id !== field.id) });
-                      groupNameInput.current?.focus();
-                    }}>删除</button>}
-                </div>
-              ))}
-              <div>
-                <button type="button" className="secondary-button" disabled={groupDraft.fields.length >= 100}
-                  onClick={() => setGroupDraft({ ...groupDraft, fields: [...groupDraft.fields, { id: nextFieldId.current++, label: '', unit: '' }] })}>
-                  <Plus size={16} aria-hidden />再加一项
-                </button>
-              </div>
+              <TemplateProjectEditor name={groupDraft.name} fields={groupDraft.fields} nameLimit={40} fieldLimit={100} autoFocus
+                onName={name => setGroupDraft({ ...groupDraft, name })}
+                onFields={fields => setGroupDraft({ ...groupDraft, fields })} />
               <details>
                 <summary>测试协议（选填）</summary>
                 <label className="data-import-template-team">测试协议
@@ -288,7 +258,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
                 </label>
               </details>
               <div className="test-template-actions">
-                <button type="submit" className="primary-button"><Save size={16} aria-hidden />保存并加入模板</button>
+                <button type="submit" className="primary-button" disabled={!groupDraft.fields.length}><Save size={16} aria-hidden />保存并加入模板</button>
                 <button type="button" className="secondary-button" onClick={() => {
                   setGroupDraft(null);
                   requestAnimationFrame(() => newGroupButton.current?.focus());

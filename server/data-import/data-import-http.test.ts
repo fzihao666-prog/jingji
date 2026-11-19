@@ -901,7 +901,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   const path = '/test-template';
   const projectInput = {
     name: '自建力量测试',
-    fields: [{ label: '重量', unit: 'kg' }, { label: '组数', unit: '组' }, { label: '次数', unit: '次' }],
+    fields: [{ label: '重量', unit: 'kg' }, { label: '组数', unit: '组' }, { label: '次数', unit: '次' }, { label: '用时', unit: '', valueKind: 'time' }],
   };
   const create = await request(`${path}/groups${scope}`, 'POST', projectInput);
   expect(create.status, JSON.stringify(create.body)).toBe(201);
@@ -910,7 +910,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   };
   expect(group).toEqual({ name: projectInput.name, codes: metrics.map(metric => metric.code) });
   expect(metrics.map(metric => [metric.label, metric.protocol])).toEqual([
-    ['自建力量测试重量', ''], ['自建力量测试组数', ''], ['自建力量测试次数', ''],
+    ['自建力量测试重量', ''], ['自建力量测试组数', ''], ['自建力量测试次数', ''], ['自建力量测试用时', ''],
   ]);
   expect((await request(`${path}/groups?project=ROWING&team=HTTP乙队`, 'POST', projectInput)).status).toBe(403);
   expect((await request(`${path}/groups${scope}`, 'POST', projectInput)).status).toBe(400);
@@ -934,8 +934,8 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   const book = XLSX.read(await response.arrayBuffer(), { type: 'array' });
   const sheet = book.Sheets['运动员测试成绩'];
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
-  expect(matrix[0].slice(4, 7)).toEqual(['自建力量测试重量（kg）', '自建力量测试组数（组）', '自建力量测试次数（次）']);
-  expect(matrix[0].slice(7)).toHaveLength(7);
+  expect(matrix[0].slice(4, 8)).toEqual(['自建力量测试重量（kg）', '自建力量测试组数（组）', '自建力量测试次数（次）', '自建力量测试用时（s）']);
+  expect(matrix[0].slice(8)).toHaveLength(7);
   const spreadsheetRow = matrix.findIndex(row => row[0] === '701') + 1;
   expect(spreadsheetRow).toBeGreaterThan(1);
   const send = async () => {
@@ -945,19 +945,19 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
     form.set('team', 'HTTP甲队');
     return request('/analyze', 'POST', form);
   };
-  XLSX.utils.sheet_add_aoa(sheet, [['2026-11-19', 75, 3, 5, 4, 1, 2, 3, 2, 1, 3]], { origin: `D${spreadsheetRow}` });
+  XLSX.utils.sheet_add_aoa(sheet, [['2026-11-19', 75, 3, 5, '1:02.5', 4, 1, 2, 3, 2, 1, 3]], { origin: `D${spreadsheetRow}` });
   const invalid = await send();
   expect(invalid.status).toBe(200);
   expect(invalid.body.batch?.items.find(item => item.metricCode === 'fms_deep_squat')?.quality).toBe('error');
   expect((await request(`/batches/${invalid.body.batch!.id}/commit`, 'POST', {})).status).toBe(400);
-  XLSX.utils.sheet_add_aoa(sheet, [[0]], { origin: `H${spreadsheetRow}` });
+  XLSX.utils.sheet_add_aoa(sheet, [[0]], { origin: `I${spreadsheetRow}` });
   const ready = await send();
   expect(ready.status).toBe(200);
-  expect(ready.body.batch?.items).toHaveLength(10);
+  expect(ready.body.batch?.items).toHaveLength(11);
   expect((await request(`/batches/${ready.body.batch!.id}/commit`, 'POST', {})).status).toBe(200);
   const values = db.prepare(`SELECT m.metric_code AS code, m.value_num AS value, t.test_type AS type, t.protocol
     FROM test_measurements m JOIN test_sessions t ON t.id=m.test_session_id WHERE t.athlete_id=701 AND t.test_date='2026-11-19'`).all();
-  expect(values).toHaveLength(10);
+  expect(values).toHaveLength(11);
   const progress = `/test-template/progress${scope}&from=2026-11-19&to=2026-11-19`;
   const collection = await request(progress);
   expect(collection.status).toBe(200);
@@ -974,7 +974,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   expect((await request(progress.replace('HTTP甲队', '不存在的队伍'))).status).toBe(403);
   expect((await request(progress.replace('2026-11-19', '2026-11-20'))).status).toBe(400);
   expect(values).toEqual(expect.arrayContaining([
-    ...group.codes.map((code, index) => ({ code, value: [75, 3, 5][index], type: '专项测试', protocol: '' })),
+    ...group.codes.map((code, index) => ({ code, value: [75, 3, 5, 62.5][index], type: '专项测试', protocol: '' })),
     { code: 'fms_deep_squat', value: 0, type: 'FMS测试', protocol: '功能动作筛查（FMS）' },
   ]));
   const trendTeam = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get() as { id: number };

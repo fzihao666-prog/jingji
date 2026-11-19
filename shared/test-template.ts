@@ -15,7 +15,7 @@ export type TestTemplateMetric = TestTemplateMetricInput & {
 
 export type TestTemplateGroupInput = {
   name: string;
-  fields: Array<{ label: string; unit: string }>;
+  fields: Array<{ label: string; unit: string; valueKind?: TestTemplateMetricInput['valueKind'] }>;
   protocol?: string;
 };
 

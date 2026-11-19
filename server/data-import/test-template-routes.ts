@@ -36,6 +36,7 @@ const groupSchema = z.object({
   fields: z.array(z.object({
     label: z.string().trim().min(1).max(40),
     unit: z.string().trim().max(24).default(''),
+    valueKind: z.enum(['number', 'time']).optional(),
   }).strict()).min(1).max(100),
   protocol: z.string().trim().max(160).optional(),
 }).strict();

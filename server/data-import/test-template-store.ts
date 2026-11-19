@@ -174,9 +174,9 @@ export function createTestTemplateGroup(db: DatabaseSync, project: string, input
     const codes = input.fields.map(field => {
       const metric: TestTemplateMetricInput = {
         label: `${input.name}${field.label}`,
-        unit: field.unit,
+        unit: field.valueKind === 'time' ? 's' : field.unit,
         protocol: input.protocol ?? '',
-        valueKind: 'number',
+        valueKind: field.valueKind ?? 'number',
         direction: 'neutral',
       };
       const matches = catalog.filter(item => item.label === metric.label && item.unit === metric.unit && item.protocol === metric.protocol);
