@@ -926,9 +926,12 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   const fms = groups.find(entry => entry.name === 'FMS')!;
   expect(fms.codes).toHaveLength(7);
 
+  const savedConfig = await request(`${path}/config${scope}`, 'PUT', { action: 'team', codes: [...group.codes, ...fms.codes] });
+  expect(savedConfig.status).toBe(200);
+  expect(savedConfig.body).toMatchObject({ source: 'team', codes: [...group.codes, ...fms.codes] });
   const response = await fetch(`${base}/api/data-import${path}/download${scope}`, {
     method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ codes: [...group.codes, ...fms.codes], saveTeam: true }),
+    body: JSON.stringify({ codes: [...group.codes, ...fms.codes], saveTeam: false }),
   });
   expect(response.status).toBe(200);
   const book = XLSX.read(await response.arrayBuffer(), { type: 'array' });
@@ -1001,9 +1004,21 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
   `);
   async function roundTrip(project: string, team: string, athleteId: number, template: object, examples: Record<string, unknown>[], excludeRow?: string, expectedError?: string) {
     const query = new URLSearchParams({ project, team });
+    if (!expectedError) {
+      const downloadsBefore = db.prepare('SELECT COUNT(*) AS count FROM training_record_downloads').get();
+      const saved = await request(`/training-template?${query}`, 'PUT', template);
+      if (saved.status === 409) {
+        const { name } = template as { name: string };
+        expect((await request(`/training-template?${query}`, 'PUT', { ...template, sourceName: name })).status).toBe(200);
+      } else {
+        expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+        expect(saved.body).toMatchObject({ template });
+      }
+      expect(db.prepare('SELECT COUNT(*) AS count FROM training_record_downloads').get()).toEqual(downloadsBefore);
+    }
     const response = await fetch(`${base}/api/data-import/training-template?${query}`, {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ ...template, saveTeam: true }),
+      body: JSON.stringify({ ...template, saveTeam: false }),
     });
     expect(response.status).toBe(200);
     const book = XLSX.read(await response.arrayBuffer());

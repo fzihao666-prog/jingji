@@ -951,6 +951,10 @@ export const api = {
     return request<{ templates: TrainingRecordTemplate[]; athleteCount: number }>(
       `/api/data-import/training-template?${new URLSearchParams({ project, team })}`, { signal });
   },
+  saveTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, sourceName: string) {
+    return request<{ template: TrainingRecordTemplate }>(`/api/data-import/training-template?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify({ ...template, sourceName }) });
+  },
   async downloadTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, saveTeam: boolean) {
     const blob = await request<Blob>(`/api/data-import/training-template?${new URLSearchParams({ project, team })}`,
       { method: 'POST', body: JSON.stringify({ ...template, saveTeam }), responseType: 'xlsx' });
@@ -979,7 +983,7 @@ export const api = {
     return request<{ metric: TestTemplateMetric }>(`/api/data-import/test-template/metrics/${encodeURIComponent(code)}?${new URLSearchParams({ project, team })}`,
       { method: 'PUT', body: JSON.stringify({ label }) });
   },
-  saveTestTemplateConfig(project: Project, team: string, input: { action: 'project'; codes: string[] } | { action: 'inherit' }) {
+  saveTestTemplateConfig(project: Project, team: string, input: { action: 'project' | 'team'; codes: string[] } | { action: 'inherit' }) {
     return request<Pick<TestTemplatePreview, 'source' | 'codes' | 'projectCodes'>>(
       `/api/data-import/test-template/config?${new URLSearchParams({ project, team })}`,
       { method: 'PUT', body: JSON.stringify(input) });

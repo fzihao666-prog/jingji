@@ -63,6 +63,31 @@ function roster(s: ReturnType<typeof scope>) {
     .all(s.project, s.teamId) as Array<{ id: number; name: string }>).filter(athlete => allowed.has(athlete.id));
 }
 
+const trainingTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  standard: z.array(z.enum(TRAINING_RECORD_OPTIONS)).max(TRAINING_RECORD_OPTIONS.length),
+  fields: z.array(z.object({
+    name: z.string().trim().min(1).max(80), unit: z.string().trim().max(24), kind: z.enum(['number', 'text', 'time']),
+  }).strict()).max(60),
+}).strict();
+
+function validateTrainingTemplate(template: z.infer<typeof trainingTemplateSchema>) {
+  if (!template.standard.length && !template.fields.length)
+    throw new ImportRequestError('请至少添加一个训练字段。', 400);
+  for (const field of template.fields) if (field.kind === 'time') field.unit = 's';
+  if (template.standard.some(field => TRAINING_SET_COLUMNS.some(key => key === field)))
+    template.standard = [...new Set([...template.standard, ...TRAINING_SET_COLUMNS])];
+  const headers = trainingRecordHeaders(template);
+  if (new Set(headers.map(label => label.normalize('NFKC').replace(/\s+/g, '').toLowerCase())).size !== headers.length)
+    throw new ImportRequestError('字段名称与已有列重复，请修改名称。', 400);
+  return headers;
+}
+
+function saveTrainingTemplate(teamId: number, template: z.infer<typeof trainingTemplateSchema>) {
+  db.prepare(`INSERT INTO training_record_templates(team_id,name,config_json) VALUES (?,?,?)
+    ON CONFLICT(team_id,name) DO UPDATE SET config_json=excluded.config_json`).run(teamId, template.name, JSON.stringify(template));
+}
+
 function throwOnInvalidCodes(project: string, codes: string[]) {
   const catalog = new Map(testTemplateCatalog(db, project).map(metric => [metric.code, metric]));
   if (codes.length !== new Set(codes).size || codes.some(code => !catalog.has(code)))
@@ -96,23 +121,30 @@ export function registerTestTemplateRoutes(app: Express) {
       res.json({ templates, athleteCount: roster(s).length });
     } catch (error) { errorResponse(res, error); }
   });
+  app.put(trainingPath, ...access, (req, res) => {
+    try {
+      const s = scope(req);
+      const { sourceName, ...template } = trainingTemplateSchema.extend({
+        sourceName: z.string().trim().max(80).optional(),
+      }).parse(req.body);
+      validateTrainingTemplate(template);
+      if (sourceName !== template.name && db.prepare('SELECT 1 FROM training_record_templates WHERE team_id=? AND name=?').get(s.teamId, template.name))
+        throw new ImportRequestError('本队已有同名训练项目，请换个名称或选择已有项目编辑。', 409);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        saveTrainingTemplate(s.teamId, template);
+        if (sourceName && sourceName !== template.name)
+          db.prepare('DELETE FROM training_record_templates WHERE team_id=? AND name=?').run(s.teamId, sourceName);
+        db.exec('COMMIT');
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+      res.json({ template });
+    } catch (error) { errorResponse(res, error); }
+  });
   app.post(trainingPath, ...access, async (req, res) => {
     try {
       const s = scope(req);
-      const { saveTeam, ...template } = z.object({
-        name: z.string().trim().min(1).max(80),
-        standard: z.array(z.enum(TRAINING_RECORD_OPTIONS)).max(TRAINING_RECORD_OPTIONS.length),
-        fields: z.array(z.object({
-          name: z.string().trim().min(1).max(80), unit: z.string().trim().max(24), kind: z.enum(['number', 'text', 'time']),
-        }).strict()).max(60),
-        saveTeam: z.boolean(),
-      }).strict().parse(req.body);
-      for (const field of template.fields) if (field.kind === 'time') field.unit = 's';
-      if (template.standard.some(field => TRAINING_SET_COLUMNS.some(key => key === field)))
-        template.standard = [...new Set([...template.standard, ...TRAINING_SET_COLUMNS])];
-      const headers = trainingRecordHeaders(template);
-      if (new Set(headers.map(label => label.normalize('NFKC').replace(/\s+/g, '').toLowerCase())).size !== headers.length)
-        throw new ImportRequestError('字段名称与已有列重复，请修改名称。', 400);
+      const { saveTeam, ...template } = trainingTemplateSchema.extend({ saveTeam: z.boolean() }).parse(req.body);
+      const headers = validateTrainingTemplate(template);
       const book = new ExcelJS.Workbook();
       const sheet = book.addWorksheet(TRAINING_RECORD_SHEET, { views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }] });
       sheet.columns = headers.map(header => ({ header, width: 22, style: { numFmt: '@' } }));
@@ -137,8 +169,7 @@ export function registerTestTemplateRoutes(app: Express) {
       db.exec('BEGIN IMMEDIATE');
       try {
         const config = JSON.stringify(template);
-        if (saveTeam) db.prepare(`INSERT INTO training_record_templates(team_id,name,config_json) VALUES (?,?,?)
-          ON CONFLICT(team_id,name) DO UPDATE SET config_json=excluded.config_json`).run(s.teamId, template.name, config);
+        if (saveTeam) saveTrainingTemplate(s.teamId, template);
         db.prepare('INSERT INTO training_record_downloads(id,project,team_id,config_json) VALUES (?,?,?,?)').run(id, s.project, s.teamId, config);
         db.exec('COMMIT');
       } catch (error) { db.exec('ROLLBACK'); throw error; }
@@ -275,12 +306,16 @@ export function registerTestTemplateRoutes(app: Express) {
       const input = z.discriminatedUnion('action', [
         z.object({ action: z.literal('project'), codes: codesSchema }).strict(),
         z.object({ action: z.literal('inherit') }).strict(),
+        z.object({ action: z.literal('team'), codes: codesSchema }).strict(),
       ]).parse(req.body);
       if (input.action === 'project') {
         if (!s.canManageProject) throw new ImportRequestError('当前账号没有维护项目默认组合的权限。', 403);
         throwOnInvalidCodes(s.project, input.codes);
         db.prepare(`INSERT INTO test_template_projects (project,codes_json) VALUES (?,?)
           ON CONFLICT(project) DO UPDATE SET codes_json=excluded.codes_json`).run(s.project, JSON.stringify(input.codes));
+      } else if (input.action === 'team') {
+        throwOnInvalidCodes(s.project, input.codes);
+        saveTeamCodes(s.teamId, input.codes);
       } else {
         db.prepare('DELETE FROM test_template_teams WHERE team_id=?').run(s.teamId);
       }

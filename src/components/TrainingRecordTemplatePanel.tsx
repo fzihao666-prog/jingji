@@ -43,20 +43,24 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
     }));
   }
 
-  async function download(saveTeam: boolean) {
+  async function submit(action: 'save' | 'download') {
     setBusy(true);
     setError('');
     setStatus('');
     try {
       const selected = { ...template, name: template.name.trim() };
-      await api.downloadTrainingRecordTemplate(project, team, selected, saveTeam);
-      if (saveTeam) {
-        setSaved(current => [...current.filter(item => item.name !== selected.name), selected]);
-        setSourceName(selected.name);
+      if (action === 'save') {
+        const { template: savedTemplate } = await api.saveTrainingRecordTemplate(project, team, selected, sourceName);
+        setSaved(current => [...current.filter(item => item.name !== sourceName && item.name !== savedTemplate.name), savedTemplate]);
+        setSourceName(savedTemplate.name);
+        setTemplate(savedTemplate);
+        setStatus(`「${savedTemplate.name}」已保存到本队，可随时下载。`);
+      } else {
+        await api.downloadTrainingRecordTemplate(project, team, selected, false);
+        setStatus('训练模板已开始下载。');
       }
-      setStatus(saveTeam ? '本队模板已保存，下载已开始。' : '训练模板已开始下载。');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '模板下载失败。');
+      setError(cause instanceof Error ? cause.message : '训练项目操作失败。');
     } finally {
       setBusy(false);
     }
@@ -106,9 +110,12 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
           </div>
         </details>
       </TemplateProjectEditor>
+      {!valid && <p>填写项目名称，并至少添加一个完整的字段或选择一个常用训练字段，即可保存。</p>}
     </fieldset>}
     <footer className="test-template-actions">
-      <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
+      <details><summary>旧版模板</summary>
+        <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
+      </details>
       {editing && <>
         <button type="button" className="secondary-button" disabled={busy} onClick={() => {
           setEditing(false);
@@ -116,10 +123,10 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
           setStatus('');
           newProjectButton.current?.focus();
         }}>取消编辑</button>
-        <button type="button" className="secondary-button" disabled={busy || !valid} onClick={() => void download(false)}>
-          <Download size={16} aria-hidden />仅下载本次模板</button>
-        <button type="button" className="primary-button" disabled={busy || !valid} onClick={() => void download(true)}>
-          <Download size={16} aria-hidden />保存为本队模板并下载</button>
+        <button type="button" className="secondary-button" disabled={busy || !valid} onClick={() => void submit('download')}>
+          <Download size={16} aria-hidden />下载 Excel</button>
+        <button type="button" className="primary-button" disabled={busy || !valid} onClick={() => void submit('save')}>
+          保存到本队</button>
       </>}
     </footer>
   </TemplatePreviewDialog>;
