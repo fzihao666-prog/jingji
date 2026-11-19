@@ -200,3 +200,32 @@
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
+
+.template-project-field-toolbar {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.template-project-field {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.template-project-field > span {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.template-project-field :is(input, select, button) {
+  scroll-margin-top: 88px;
+}

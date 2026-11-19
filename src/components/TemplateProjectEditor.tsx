@@ -24,10 +24,22 @@ export function TemplateProjectEditor({ name, fields, onName, onFields, fieldLim
         <input required autoFocus={autoFocus} maxLength={nameLimit} value={name} onChange={event => onName(event.target.value)} />
       </label>
       {children}
+      <div className="template-project-field-toolbar">
+        <strong>项目字段（{fields.length}）</strong>
+        <button ref={addButton} type="button" className="secondary-button" disabled={fields.length >= fieldLimit} onClick={() => {
+          onFields([...fields, { ...blankTemplateField }]);
+          requestAnimationFrame(() => {
+            const input = fieldInputs.current[fields.length];
+            input?.scrollIntoView({ block: 'nearest' });
+            input?.focus({ preventScroll: true });
+          });
+        }}><Plus size={16} aria-hidden />{fields.length ? '继续添加字段' : '添加字段'}</button>
+      </div>
       {fields.map((field, index) => {
         const change = (patch: Partial<Field>) => onFields(fields.map((entry, position) => position === index ? { ...entry, ...patch } : entry));
         return (
-          <div key={index} className="test-template-actions">
+          <div key={index} className="test-template-actions template-project-field">
+            <span>字段 {index + 1}</span>
             <label className="data-import-template-team">字段名称
               <input ref={input => { fieldInputs.current[index] = input; }} required maxLength={nameLimit}
                 value={field.name} onChange={event => change({ name: event.target.value })} />
@@ -53,10 +65,6 @@ export function TemplateProjectEditor({ name, fields, onName, onFields, fieldLim
           </div>
         );
       })}
-      <div><button ref={addButton} type="button" className="secondary-button" disabled={fields.length >= fieldLimit} onClick={() => {
-        onFields([...fields, blankTemplateField]);
-        requestAnimationFrame(() => fieldInputs.current[fields.length]?.focus());
-      }}><Plus size={16} aria-hidden />添加字段</button></div>
     </div>
   );
 }
