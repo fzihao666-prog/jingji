@@ -14,16 +14,21 @@
   gap: 8px;
 }
 
-.test-template-panel :is(input, select) {
+.template-preview-dialog .test-template-panel :is(input:not([type="checkbox"]), select) {
   padding: 8px 10px;
   min-width: 0;
   min-height: 40px;
   max-width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid #82959b;
   border-radius: 8px;
   background: var(--paper);
-  color: var(--text);
+  color: var(--ink);
   font: inherit;
+}
+
+.template-preview-dialog .test-template-panel :is(input:not([type="checkbox"]), select):focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 2px;
 }
 
 .test-template-panel label {
@@ -44,13 +49,13 @@
   justify-content: space-between;
   gap: 8px;
   padding: 8px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
 }
 
 .test-template-editor fieldset {
   min-width: 0;
   margin: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
 
@@ -73,10 +78,10 @@
   max-height: min(820px, calc(100dvh - 32px));
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--border, #dbe5e7);
+  border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--paper, #fff);
-  color: var(--text);
+  color: var(--ink);
 }
 
 .template-preview-dialog[open] {
@@ -96,7 +101,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px clamp(12px, 3vw, 24px);
-  border-bottom: 1px solid var(--border, #dbe5e7);
+  border-bottom: 1px solid var(--line);
 }
 
 .template-preview-heading h2 {
@@ -135,8 +140,8 @@
   min-width: 112px;
   max-width: 240px;
   padding: 10px 12px;
-  background: var(--surface-2, #edf4f5);
-  color: var(--text);
+  background: var(--mist);
+  color: var(--ink);
   text-align: start;
   overflow-wrap: anywhere;
 }
@@ -146,7 +151,7 @@
 }
 
 .test-template-columns:not(:empty) {
-  border: 1px solid var(--border, #dbe5e7);
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
 
@@ -162,7 +167,7 @@
 .test-template-panel :is(.test-template-editor fieldset, fieldset.test-template-group-fields) {
   min-width: 0;
   padding: 12px;
-  border: 1px solid var(--border, #dbe5e7);
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
 
@@ -172,7 +177,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  border: 1px solid var(--border, #dbe5e7);
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
 
@@ -183,5 +188,5 @@
 
 .template-preview-body footer {
   padding-top: 12px;
-  border-top: 1px solid var(--border, #dbe5e7);
+  border-top: 1px solid var(--line);
 }
