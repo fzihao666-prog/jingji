@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, Download, Plus, Save } from 'lucide-react';
-import { testTemplateHeaders, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
+import { TEST_TEMPLATE_IDENTITY_HEADERS, testTemplateHeaders, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
 import { api } from '../api';
 import type { Project } from '../types';
 import type { TrainingRecordTemplate } from '../../shared/training-record-template';
@@ -80,6 +80,16 @@ export function TestTemplatePanel({ project, team, onClose }: {
     }
   }
 
+  async function updateColumns(next: string[], message: string) {
+    setCodes(next);
+    if (!projectMode) {
+      const config = await api.saveTestTemplateConfig(project, team, { action: 'team', codes: next });
+      setPreview(current => current && { ...current, ...config });
+      setCodes(config.codes);
+    }
+    setStatus(message);
+  }
+
   function move(index: number, change: number) {
     const next = [...codes];
     [next[index], next[index + change]] = [next[index + change], next[index]];
@@ -107,13 +117,15 @@ export function TestTemplatePanel({ project, team, onClose }: {
         catalog: [...current.catalog.filter(metric => metric.code !== result.metric.code), result.metric]
           .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
       });
-      if (editor.mode === 'version')
-        setCodes(current => editor.metric && current.includes(editor.metric.code)
-          ? current.map(code => code === editor.metric?.code ? result.metric.code : code)
-          : [...current, result.metric.code]);
-      else if (editor.mode === 'create') setCodes(current => [...current, result.metric.code]);
       setEditor(null);
-      setStatus(editor.mode === 'rename' ? '指标名称已更新。' : '指标已保存并加入当前预览。');
+      if (editor.mode === 'rename') {
+        setStatus('指标名称已更新。');
+        return;
+      }
+      const next = editor.mode === 'version' && editor.metric && codes.includes(editor.metric.code)
+        ? codes.map(code => code === editor.metric?.code ? result.metric.code : code)
+        : [...codes, result.metric.code];
+      await updateColumns(next, '指标已添加到 Excel 列。');
     });
   }
 
@@ -140,9 +152,8 @@ export function TestTemplatePanel({ project, team, onClose }: {
           .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
         groups: [...current.groups, group],
       });
-      setCodes(current => [...new Set([...current, ...group.codes])]);
       finishAdding();
-      setStatus(`「${group.name}」已保存并加入模板。`);
+      await updateColumns([...new Set([...codes, ...group.codes])], `「${group.name}」已添加到 Excel 列。`);
     });
   }
 
@@ -167,7 +178,9 @@ export function TestTemplatePanel({ project, team, onClose }: {
 
   return (
     <TemplatePreviewDialog title="测试成绩模板预览" busy={pending} onClose={onClose}
-      preview={preview && <TemplatePreviewColumns headers={testTemplateHeaders(selected)} />}>
+      preview={preview && <TemplatePreviewColumns headers={testTemplateHeaders(selected)}
+        fixedColumns={TEST_TEMPLATE_IDENTITY_HEADERS.length} busy={pending}
+        onRemove={index => void run(() => updateColumns(codes.filter((_, position) => position !== index), 'Excel 列已移除。'))} />}>
       <div role="status">{status || (!loaded ? '正在加载测试指标…' : '')}</div>
       {error && <p role="alert">{error}</p>}
       {loaded && !preview && <button type="button" className="secondary-button" onClick={() => {
@@ -208,9 +221,8 @@ export function TestTemplatePanel({ project, team, onClose }: {
           </label>
           <button type="button" className="primary-button" disabled={pending || (!selectedGroup && !selectedOption)} onClick={() => {
             const chosen = selectedGroup?.codes ?? (selectedOption ? [selectedOption.code] : []);
-            setCodes(current => [...new Set([...current, ...chosen])]);
-            setStatus(`「${selectedGroup?.name || selectedOption?.label}」已加入模板。`);
             finishAdding();
+            void run(() => updateColumns([...new Set([...codes, ...chosen])], '已添加到 Excel 列。'));
           }}><Plus size={16} aria-hidden />加入模板</button>
           <details>
             <summary>高级设置</summary>
@@ -232,7 +244,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
                 </label>
               </details>
               <div className="test-template-actions">
-                <button type="submit" className="primary-button" disabled={!groupDraft.fields.length}><Save size={16} aria-hidden />保存并加入模板</button>
+                <button type="submit" className="primary-button" disabled={!groupDraft.fields.length}><Save size={16} aria-hidden />添加</button>
                 <button type="button" className="secondary-button" onClick={() => {
                   setGroupDraft(null);
                   setAdding(false);
@@ -259,7 +271,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
                 }}><option value="neutral">不评价</option><option value="higher_better">越大越好</option><option value="lower_better">越小越好</option></select></label>
                 <label className="data-import-template-team test-template-protocol">测试协议（选填）<input maxLength={160} value={draft.protocol} onChange={event => setDraft({ ...draft, protocol: event.target.value })} /></label>
               </>}
-              <button type="submit" className="primary-button"><Save size={16} aria-hidden />保存指标</button>
+              <button type="submit" className="primary-button">{editor.mode === 'rename' ? '保存名称' : '添加'}</button>
               <button type="button" className="secondary-button" onClick={() => setEditor(null)}>取消</button>
             </div>
           </fieldset>
@@ -277,7 +289,6 @@ export function TestTemplatePanel({ project, team, onClose }: {
                 {metric.editable &&
                   <button type="button" className="secondary-button" disabled={pending} aria-label={`修改${metric.label}名称`} onClick={() => openEditor('rename', metric)}>改名</button>}
                 <button type="button" className="secondary-button" disabled={pending} aria-label={`为${metric.label}建新版本`} onClick={() => openEditor('version', metric)}>建新版本</button>
-                <button type="button" className="secondary-button" disabled={pending} aria-label={`移除${metric.label}`} onClick={() => setCodes(current => current.filter(code => code !== metric.code))}>移除</button>
               </div>
             </li>
           ))}
@@ -299,7 +310,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
         <footer className="test-template-actions">
           {projectMode ? <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('project')}><Save size={16} aria-hidden />保存项目默认</button> : <>
             <button type="button" className="secondary-button" disabled={pending || columnsChanged || !codes.length} onClick={download}><Download size={16} aria-hidden />下载 Excel</button>
-            <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('team')}><Save size={16} aria-hidden />保存到本队</button>
+            <button type="button" className="primary-button" disabled={pending || !columnsChanged} onClick={() => configure('team')}><Save size={16} aria-hidden />保存到本队</button>
           </>}
         </footer>
       </>}

@@ -990,6 +990,9 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
     metrics: expect.arrayContaining(group.codes.map(code => expect.objectContaining({ code }))),
     points: [{ date: '2026-11-19', value: 3 }],
   });
+  const removed = await request(`${path}/config${scope}`, 'PUT', { action: 'team', codes: [] });
+  expect(removed.status).toBe(200);
+  expect((await request(`${path}${scope}`)).body).toMatchObject({ codes: [] });
 });
 
 it('训练记录单表在举重和赛艇分别归并整课，保存力量组次和逐段自定义值', async () => {
@@ -1160,6 +1163,13 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
       { template_name: '赛艇分段', field: '分段时间', value_num: 62.5, value_text: null },
       { template_name: '赛艇技术', field: '备注', value_num: null, value_text: '动作稳定' },
     ]);
+    const remainingConfig = { ...config, columns: columns.slice(1) };
+    expect((await request(`/training-template/config${scope}`, 'PUT', remainingConfig)).status).toBe(200);
+    const updatedDownload = await fetch(`${base}/api/data-import/training-template/download${scope}`, { headers: otherHeaders });
+    expect(updatedDownload.status).toBe(200);
+    const updatedBook = XLSX.read(await updatedDownload.arrayBuffer());
+    const updatedRows = XLSX.utils.sheet_to_json(updatedBook.Sheets['训练记录'], { header: 1 }) as unknown[][];
+    expect(updatedRows[0].slice(5)).toEqual(remainingConfig.columns);
   } finally {
     if (permission.changes) db.prepare("DELETE FROM user_team_permissions WHERE user_id=702 AND project='ROWING' AND team='HTTP甲队'").run();
   }

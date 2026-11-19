@@ -172,7 +172,7 @@ export function registerTestTemplateRoutes(app: Express) {
         columns: z.array(z.string().min(1).max(210)).max(1000).optional(),
       }).strict().parse(req.body);
       const projects = selectedTrainingProjects(s.teamId, names);
-      if (projects.length) validateTrainingTemplate(combineTrainingProjects(projects, columns));
+      if (projects.length && columns?.length !== 0) validateTrainingTemplate(combineTrainingProjects(projects, columns));
       db.prepare(`INSERT INTO training_record_team_columns(team_id,names_json) VALUES (?,?)
         ON CONFLICT(team_id) DO UPDATE SET names_json=excluded.names_json`).run(s.teamId, JSON.stringify({ names, columns }));
       res.json({ names, columns });
@@ -349,7 +349,7 @@ export function registerTestTemplateRoutes(app: Express) {
       const input = z.discriminatedUnion('action', [
         z.object({ action: z.literal('project'), codes: codesSchema }).strict(),
         z.object({ action: z.literal('inherit') }).strict(),
-        z.object({ action: z.literal('team'), codes: codesSchema }).strict(),
+        z.object({ action: z.literal('team'), codes: z.array(z.string().min(1).max(96)).max(100) }).strict(),
       ]).parse(req.body);
       if (input.action === 'project') {
         if (!s.canManageProject) throw new ImportRequestError('当前账号没有维护项目默认组合的权限。', 403);

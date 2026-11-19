@@ -74,10 +74,10 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
     void run(async () => {
       const { template: created } = await api.saveTrainingRecordTemplate(project, team, template, '');
       setSaved(current => [...current, created]);
-      includeProject(created);
       setEditing(false);
-      setStatus(`「${created.name}」已创建并加入模板。`);
-      newProjectButton.current?.focus();
+      await includeProject(created);
+      setStatus(`「${created.name}」已添加到 Excel 列。`);
+      requestAnimationFrame(() => newProjectButton.current?.focus());
     });
   }
 
@@ -87,10 +87,16 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
   const changed = names.length !== published.length || names.some((name, index) => name !== published[index])
     || columns.length !== publishedColumns.length || columns.some((column, index) => column !== publishedColumns[index]);
 
+  async function updateColumns(nextNames: string[], nextColumns: string[]) {
+    setNames(nextNames);
+    setColumns(nextColumns);
+    const config = await api.saveTrainingTeamColumns(project, team, nextNames, nextColumns);
+    setPublished(config.names);
+    setPublishedColumns(config.columns);
+  }
+
   function includeProject(item: TrainingRecordTemplate) {
-    setNames(current => [...current, item.name]);
-    const extra = availableColumns([item]);
-    setColumns(current => [...new Set([...current, ...extra])]);
+    return updateColumns([...names, item.name], [...new Set([...columns, ...availableColumns([item])])]);
   }
 
   function move(index: number, offset: number) {
@@ -103,7 +109,12 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
   const valid = template.name.trim() && (template.standard.length > 0 || template.fields.length > 0) && template.fields.every(field => field.name.trim());
 
   return <TemplatePreviewDialog title="训练记录模板预览" busy={busy} onClose={onClose}
-    preview={<TemplatePreviewColumns headers={trainingRecordHeaders(combineTrainingProjects(selected, columns))} />}>
+    preview={<TemplatePreviewColumns headers={trainingRecordHeaders(combineTrainingProjects(selected, columns))}
+      fixedColumns={TRAINING_RECORD_IDENTITY.length} busy={busy}
+      onRemove={index => void run(async () => {
+        await updateColumns(names, columns.filter((_, position) => position !== index));
+        setStatus('Excel 列已移除。');
+      })} />}>
     <p>{team}{athleteCount !== undefined && ` · 预填 ${athleteCount} 名运动员`}</p>
     {error && <p role="alert">{error}</p>}
     <div role="status">{status}</div>
@@ -116,7 +127,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
       </label>
       <button type="button" className="secondary-button" disabled={busy || editing || !candidate} onClick={() => {
         const item = saved.find(entry => entry.name === candidate);
-        if (item) includeProject(item);
+        if (item) void run(() => includeProject(item));
         setCandidate('');
       }}>加入模板</button>
       <button ref={newProjectButton} type="button" className="secondary-button" disabled={busy || editing || athleteCount === undefined} onClick={() => {
@@ -145,7 +156,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
       {!valid && <p>填写项目名称，并至少添加一个完整的字段或选择一个常用训练字段，即可保存。</p>}
       <div className="test-template-actions">
         <button type="button" className="primary-button" disabled={busy || !valid} onClick={createProject}>
-          <Save size={16} aria-hidden />保存并加入模板
+          <Save size={16} aria-hidden />添加
         </button>
         <button type="button" className="secondary-button" onClick={() => {
           setEditing(false);
@@ -173,8 +184,6 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
           <div className="test-template-actions">
             <button type="button" className="secondary-button" aria-label={`上移${column}`} disabled={busy || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} aria-hidden /></button>
             <button type="button" className="secondary-button" aria-label={`下移${column}`} disabled={busy || index === columns.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} aria-hidden /></button>
-            <button type="button" className="secondary-button" disabled={busy} aria-label={`移除${column}`}
-              onClick={() => setColumns(current => current.filter(value => value !== column))}>移除</button>
           </div>
         </li>)}
       </ol>
@@ -186,20 +195,20 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
           </select>
         </label>
         <button type="button" className="secondary-button" disabled={busy || !available.includes(columnCandidate)} onClick={() => {
-          setColumns(current => [...new Set([...current, columnCandidate])]);
+          void run(() => updateColumns(names, [...new Set([...columns, columnCandidate])]));
           setColumnCandidate('');
         }}>添加到 Excel</button>
       </div>}
     </>}
     {changed && <p>Excel 列已修改，保存到本队后即可下载并供本队使用。</p>}
     <footer className="test-template-actions">
-      <button type="button" className="primary-button" disabled={busy || editing || !changed || (names.length > 0 && !columns.length)} onClick={() => void run(async () => {
+      <button type="button" className="primary-button" disabled={busy || editing || !changed} onClick={() => void run(async () => {
         const config = await api.saveTrainingTeamColumns(project, team, names, columns);
         setPublished(config.names);
         setPublishedColumns(config.columns);
         setStatus('Excel 列已保存到本队。');
       })}>保存到本队</button>
-      <button type="button" className="secondary-button" disabled={busy || editing || changed || !published.length} onClick={() => void run(async () => {
+      <button type="button" className="secondary-button" disabled={busy || editing || changed || !publishedColumns.length} onClick={() => void run(async () => {
         await api.downloadTrainingRecordTemplate(project, team);
         setStatus('训练模板已开始下载。');
       })}><Download size={16} aria-hidden />下载 Excel</button>

@@ -229,3 +229,17 @@
 .template-project-field :is(input, select, button) {
   scroll-margin-top: 88px;
 }
+
+.template-preview-column {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.template-preview-column .template-preview-remove {
+  flex: none;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px;
+}
