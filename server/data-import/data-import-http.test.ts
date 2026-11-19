@@ -930,8 +930,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   expect(savedConfig.status).toBe(200);
   expect(savedConfig.body).toMatchObject({ source: 'team', codes: [...group.codes, ...fms.codes] });
   const response = await fetch(`${base}/api/data-import${path}/download${scope}`, {
-    method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ codes: [...group.codes, ...fms.codes], saveTeam: false }),
+    headers: { authorization: `Bearer ${token}` },
   });
   expect(response.status).toBe(200);
   const book = XLSX.read(await response.arrayBuffer(), { type: 'array' });
@@ -1119,5 +1118,49 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
     ]);
   } finally {
     db.prepare("UPDATE athletes SET team='HTTP甲队',team_id=? WHERE id=701").run(team.id);
+  }
+  const scope = '?project=ROWING&team=HTTP甲队';
+  const before = await request(`/training-template${scope}`);
+  expect((await request(`/training-template${scope}`, 'PUT', {
+    name: '赛艇技术', standard: [], fields: [{ name: '备注', unit: '', kind: 'text' }],
+  })).status).toBe(200);
+  const draft = await request(`/training-template${scope}`);
+  expect(draft.body).toMatchObject({ names: (before.body as { names?: string[] }).names });
+  const columns = ['赛艇技术 · 备注', '赛艇分段 · 分段时间（s）', '时长分钟'];
+  const config = { names: ['赛艇分段', '赛艇技术'], columns };
+  expect((await request(`/training-template/config${scope}`, 'PUT', { ...config, columns: ['未知列'] })).status).toBe(400);
+  expect((await request(`/training-template/config${scope}`, 'PUT', config)).status).toBe(200);
+  const permission = db.prepare("INSERT OR IGNORE INTO user_team_permissions(user_id,project,team,granted_by) VALUES(702,'ROWING','HTTP甲队',701)").run();
+  try {
+    const otherHeaders = { authorization: `Bearer ${otherToken}` };
+    const other = await fetch(`${base}/api/data-import/training-template${scope}`, { headers: otherHeaders });
+    expect(other.status).toBe(200);
+    expect(await other.json()).toMatchObject(config);
+    const download = await fetch(`${base}/api/data-import/training-template/download${scope}`, { headers: otherHeaders });
+    expect(download.status).toBe(200);
+    const book = XLSX.read(await download.arrayBuffer());
+    const sheet = book.Sheets['训练记录'];
+    const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+    expect(matrix[0].slice(5)).toEqual(columns);
+    XLSX.utils.sheet_add_aoa(sheet, [
+      ['701', '虚构队员', '2026-11-20', '合并课次', 1, null, '1:02.5', 30],
+      ['701', '虚构队员', '2026-11-20', '合并课次', 1, '动作稳定'],
+    ], { origin: 'A2' });
+    const form = new FormData();
+    form.set('project', 'ROWING');
+    form.set('team', 'HTTP甲队');
+    form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '本队训练.xlsx');
+    const analyzed = await request('/analyze', 'POST', form);
+    expect(analyzed.status).toBe(200);
+    const commit = await request(`/batches/${analyzed.body.batch!.id}/commit`, 'POST', {});
+    expect(commit.status, JSON.stringify(commit.body)).toBe(200);
+    expect(db.prepare(`SELECT d.template_name, d.field, d.value_num, d.value_text
+      FROM training_record_details d JOIN training_sessions s ON s.id=d.session_id
+      WHERE s.athlete_id=701 AND s.session_date='2026-11-20' ORDER BY d.template_name`).all()).toEqual([
+      { template_name: '赛艇分段', field: '分段时间', value_num: 62.5, value_text: null },
+      { template_name: '赛艇技术', field: '备注', value_num: null, value_text: '动作稳定' },
+    ]);
+  } finally {
+    if (permission.changes) db.prepare("DELETE FROM user_team_permissions WHERE user_id=702 AND project='ROWING' AND team='HTTP甲队'").run();
   }
 });

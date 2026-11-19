@@ -948,20 +948,24 @@ export const api = {
       truncated: boolean }>(`/api/athletes/${athleteId}/custom-training-details?${params}`, { signal });
   },
   trainingRecordTemplates(project: Project, team: string, signal?: AbortSignal) {
-    return request<{ templates: TrainingRecordTemplate[]; athleteCount: number }>(
+    return request<{ templates: TrainingRecordTemplate[]; names: string[]; columns?: string[]; athleteCount: number }>(
       `/api/data-import/training-template?${new URLSearchParams({ project, team })}`, { signal });
   },
   saveTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, sourceName: string) {
     return request<{ template: TrainingRecordTemplate }>(`/api/data-import/training-template?${new URLSearchParams({ project, team })}`,
       { method: 'PUT', body: JSON.stringify({ ...template, sourceName }) });
   },
-  async downloadTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, saveTeam: boolean) {
-    const blob = await request<Blob>(`/api/data-import/training-template?${new URLSearchParams({ project, team })}`,
-      { method: 'POST', body: JSON.stringify({ ...template, saveTeam }), responseType: 'xlsx' });
+  saveTrainingTeamColumns(project: Project, team: string, names: string[], columns: string[]) {
+    return request<{ names: string[]; columns: string[] }>(`/api/data-import/training-template/config?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify({ names, columns }) });
+  },
+  async downloadTrainingRecordTemplate(project: Project, team: string) {
+    const blob = await request<Blob>(`/api/data-import/training-template/download?${new URLSearchParams({ project, team })}`,
+      { responseType: 'xlsx' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${template.name}训练记录.xlsx`;
+    link.download = `竞迹${team}训练记录模板.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -988,9 +992,9 @@ export const api = {
       `/api/data-import/test-template/config?${new URLSearchParams({ project, team })}`,
       { method: 'PUT', body: JSON.stringify(input) });
   },
-  async downloadTestTemplate(project: Project, team: string, codes: string[], saveTeam: boolean) {
+  async downloadTestTemplate(project: Project, team: string) {
     const blob = await request<Blob>(`/api/data-import/test-template/download?${new URLSearchParams({ project, team })}`,
-      { method: 'POST', body: JSON.stringify({ codes, saveTeam }), responseType: 'xlsx' });
+      { responseType: 'xlsx' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.href = url;

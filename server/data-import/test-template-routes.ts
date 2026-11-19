@@ -1,6 +1,6 @@
 import { testTemplateHeaders } from '../../shared/test-template.ts';
 import {
-  TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingRecordHeaders,
+  combineTrainingProjects, TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
   type TrainingRecordTemplate,
 } from '../../shared/training-record-template.ts';
 import { isValidIsoDate } from '../core/date-utils.ts';
@@ -71,21 +71,44 @@ const trainingTemplateSchema = z.object({
   }).strict()).max(60),
 }).strict();
 
-function validateTrainingTemplate(template: z.infer<typeof trainingTemplateSchema>) {
+function validateTrainingTemplate(template: TrainingRecordTemplate) {
   if (!template.standard.length && !template.fields.length)
     throw new ImportRequestError('请至少添加一个训练字段。', 400);
   for (const field of template.fields) if (field.kind === 'time') field.unit = 's';
   if (template.standard.some(field => TRAINING_SET_COLUMNS.some(key => key === field)))
     template.standard = [...new Set([...template.standard, ...TRAINING_SET_COLUMNS])];
-  const headers = trainingRecordHeaders(template);
+  const headers = trainingRecordHeaders({ ...template, columnOrder: undefined });
   if (new Set(headers.map(label => label.normalize('NFKC').replace(/\s+/g, '').toLowerCase())).size !== headers.length)
     throw new ImportRequestError('字段名称与已有列重复，请修改名称。', 400);
-  return headers;
+  const requested = template.columnOrder;
+  if (requested && (!requested.length || new Set(requested).size !== requested.length ||
+    requested.some(header => !template.standard.includes(header) && !template.fields.some(field => trainingDetailHeader(field) === header))))
+    throw new ImportRequestError('Excel 列配置已变化，请重新选择字段。', 400);
+  return trainingRecordHeaders(template);
 }
 
-function saveTrainingTemplate(teamId: number, template: z.infer<typeof trainingTemplateSchema>) {
+function saveTrainingTemplate(teamId: number, template: TrainingRecordTemplate) {
   db.prepare(`INSERT INTO training_record_templates(team_id,name,config_json) VALUES (?,?,?)
     ON CONFLICT(team_id,name) DO UPDATE SET config_json=excluded.config_json`).run(teamId, template.name, JSON.stringify(template));
+}
+
+function trainingTeamConfig(teamId: number) {
+  const templates = db.prepare('SELECT config_json AS config FROM training_record_templates WHERE team_id=? ORDER BY name')
+    .all(teamId).map(row => JSON.parse(String(row.config)) as TrainingRecordTemplate);
+  const saved = db.prepare('SELECT names_json AS names FROM training_record_team_columns WHERE team_id=?').get(teamId);
+  const config = saved ? JSON.parse(String(saved.names)) : templates.map(template => template.name);
+  const names: string[] = Array.isArray(config) ? config : config.names;
+  return { templates, names: names.filter(name => templates.some(template => template.name === name)),
+    columns: Array.isArray(config) ? undefined : config.columns as string[] | undefined };
+}
+
+function selectedTrainingProjects(teamId: number, names?: string[]) {
+  const config = trainingTeamConfig(teamId);
+  const selected = names ?? config.names;
+  const catalog = new Map(config.templates.map(template => [template.name, template]));
+  if (new Set(selected).size !== selected.length || selected.some(name => !catalog.has(name)))
+    throw new ImportRequestError('训练项目已变化，请重新打开模板配置。', 400);
+  return selected.map(name => catalog.get(name)!);
 }
 
 function throwOnInvalidCodes(project: string, codes: string[]) {
@@ -115,10 +138,8 @@ export function registerTestTemplateRoutes(app: Express) {
   app.get(trainingPath, ...access, (req, res) => {
     try {
       const s = scope(req);
-      const templates = db.prepare('SELECT config_json AS config FROM training_record_templates WHERE team_id=? ORDER BY name')
-        .all(s.teamId).map(row => JSON.parse(String(row.config)) as TrainingRecordTemplate);
       res.setHeader('Cache-Control', 'no-store');
-      res.json({ templates, athleteCount: roster(s).length });
+      res.json({ ...trainingTeamConfig(s.teamId), athleteCount: roster(s).length });
     } catch (error) { errorResponse(res, error); }
   });
   app.put(trainingPath, ...access, (req, res) => {
@@ -130,8 +151,11 @@ export function registerTestTemplateRoutes(app: Express) {
       validateTrainingTemplate(template);
       if (sourceName !== template.name && db.prepare('SELECT 1 FROM training_record_templates WHERE team_id=? AND name=?').get(s.teamId, template.name))
         throw new ImportRequestError('本队已有同名训练项目，请换个名称或选择已有项目编辑。', 409);
+      const previouslyPublished = trainingTeamConfig(s.teamId).names;
       db.exec('BEGIN IMMEDIATE');
       try {
+        db.prepare('INSERT OR IGNORE INTO training_record_team_columns (team_id,names_json) VALUES (?,?)')
+          .run(s.teamId, JSON.stringify(previouslyPublished));
         saveTrainingTemplate(s.teamId, template);
         if (sourceName && sourceName !== template.name)
           db.prepare('DELETE FROM training_record_templates WHERE team_id=? AND name=?').run(s.teamId, sourceName);
@@ -140,10 +164,29 @@ export function registerTestTemplateRoutes(app: Express) {
       res.json({ template });
     } catch (error) { errorResponse(res, error); }
   });
-  app.post(trainingPath, ...access, async (req, res) => {
+  app.put(`${trainingPath}/config`, ...access, (req, res) => {
     try {
       const s = scope(req);
-      const { saveTeam, ...template } = trainingTemplateSchema.extend({ saveTeam: z.boolean() }).parse(req.body);
+      const { names, columns } = z.object({
+        names: z.array(z.string().min(1).max(80)).max(100),
+        columns: z.array(z.string().min(1).max(210)).max(1000).optional(),
+      }).strict().parse(req.body);
+      const projects = selectedTrainingProjects(s.teamId, names);
+      if (projects.length) validateTrainingTemplate(combineTrainingProjects(projects, columns));
+      db.prepare(`INSERT INTO training_record_team_columns(team_id,names_json) VALUES (?,?)
+        ON CONFLICT(team_id) DO UPDATE SET names_json=excluded.names_json`).run(s.teamId, JSON.stringify({ names, columns }));
+      res.json({ names, columns });
+    } catch (error) { errorResponse(res, error); }
+  });
+  app.get(`${trainingPath}/download`, ...access, trainingDownload);
+  app.post(trainingPath, ...access, trainingDownload);
+
+  async function trainingDownload(req: Request, res: Response) {
+    try {
+      const s = scope(req);
+      const { saveTeam, ...template } = req.method === 'GET'
+        ? { ...combineTrainingProjects(selectedTrainingProjects(s.teamId), trainingTeamConfig(s.teamId).columns), saveTeam: false }
+        : trainingTemplateSchema.extend({ saveTeam: z.boolean() }).parse(req.body);
       const headers = validateTrainingTemplate(template);
       const book = new ExcelJS.Workbook();
       const sheet = book.addWorksheet(TRAINING_RECORD_SHEET, { views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }] });
@@ -151,9 +194,9 @@ export function registerTestTemplateRoutes(app: Express) {
       sheet.getRow(1).font = { bold: true };
       sheet.getCell('D1').note = '同一运动员同日同课次填同一个名称。整课时长和 RPE 填一次即可。';
       sheet.getCell('E1').note = '逐段或逐组记录时，为同一课次各明细填写不同的正整数序号。';
-      template.fields.forEach((field, index) => {
-        if (field.kind === 'time')
-          sheet.getRow(1).getCell(headers.length - template.fields.length + index + 1).note =
+      template.fields.forEach(field => {
+        if (field.kind === 'time' && headers.includes(trainingDetailHeader(field)))
+          sheet.getRow(1).getCell(headers.indexOf(trainingDetailHeader(field)) + 1).note =
             '填写秒数或分:秒（例如 6:42.5），系统按秒保存。';
       });
       const athletes = roster(s);
@@ -176,7 +219,7 @@ export function registerTestTemplateRoutes(app: Express) {
       res.setHeader('Cache-Control', 'no-store');
       res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(buffer));
     } catch (error) { errorResponse(res, error); }
-  });
+  }
 
   app.get(path, ...access, (req, res) => {
     try {
@@ -323,10 +366,15 @@ export function registerTestTemplateRoutes(app: Express) {
     } catch (error) { errorResponse(res, error); }
   });
 
-  app.post(`${path}/download`, ...access, async (req, res) => {
+  app.get(`${path}/download`, ...access, testDownload);
+  app.post(`${path}/download`, ...access, testDownload);
+  async function testDownload(req: Request, res: Response) {
     try {
       const s = scope(req);
-      const { codes, saveTeam } = z.object({ codes: codesSchema, saveTeam: z.boolean() }).strict().parse(req.body);
+      const { codes, saveTeam } = req.method === 'GET'
+        ? { codes: testTemplateCodes(db, s.project, s.teamId, testTemplateCatalog(db, s.project)).codes, saveTeam: false }
+        : z.object({ codes: codesSchema, saveTeam: z.boolean() }).strict().parse(req.body);
+      if (!codes.length) throw new ImportRequestError('请先保存本队 Excel 列。', 400);
       const metrics = throwOnInvalidCodes(s.project, codes);
       const headers = testTemplateHeaders(metrics).slice(TEST_TEMPLATE_IDENTITY_HEADERS.length);
       const columns: TestTemplateColumn[] = metrics.map(({ code, label, unit, protocol, protocolVersion, valueKind, testType }, index) => ({
@@ -375,5 +423,5 @@ export function registerTestTemplateRoutes(app: Express) {
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
       res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').send(Buffer.from(buffer));
     } catch (error) { errorResponse(res, error); }
-  });
+  }
 }

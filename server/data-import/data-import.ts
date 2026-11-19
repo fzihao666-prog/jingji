@@ -1,5 +1,5 @@
 import {
-  TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_RECORD_IDENTITY, TRAINING_SET_COLUMNS, trainingRecordHeaders,
+  TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
 } from '../../shared/training-record-template.ts';
 import { readTrainingRecordDownload, type TrainingRecordDownload } from './test-template-store.ts';
 import {
@@ -1984,7 +1984,7 @@ function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemVi
   }
 }
 
-type TrainingRecordDetail = { order: number; field: string; unit: string; number: number | null; text: string | null };
+type TrainingRecordDetail = { template?: string; order: number; field: string; unit: string; number: number | null; text: string | null };
 
 function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownload, filename: string, athletes: ImportAthlete[], team: string) {
   const headers = trainingRecordHeaders(template);
@@ -2048,23 +2048,25 @@ function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownlo
       if (!text(read('组序')) && !text(row[4])) fail('填写力量组次时须提供组序或明细序号。');
       sets[index] = [...common, ...TRAINING_SET_COLUMNS.map(column => column === '组序' ? read(column) ?? row[4] : read(column))];
     }
-    const fields = template.fields.map((field, fieldIndex) => ({ field, raw: row[TRAINING_RECORD_IDENTITY.length + template.standard.length + fieldIndex] }))
+    const fields = template.fields.map((field, fieldIndex) => ({ field, source: template.fieldSources?.[fieldIndex], raw: read(trainingDetailHeader(field)) }))
       .filter(({ raw }) => text(raw));
     if (fields.length) {
       const details: TrainingRecordDetail[] = [];
       const detailOrder = text(row[4]) ? standardNumberValue(row[4]) : 1;
       if (detailOrder === null || !Number.isSafeInteger(detailOrder) || detailOrder < 1)
         fail('明细序号须为正整数。');
-      const detailKey = JSON.stringify([groupKey, detailOrder]);
-      if (usedDetails.has(detailKey)) fail('同一课次的明细序号重复。请为不同明细填写不同序号。');
-      usedDetails.add(detailKey);
-      for (const { field, raw } of fields) {
+      for (const name of new Set(fields.map(({ source }) => source?.project ?? template.name))) {
+        const detailKey = JSON.stringify([groupKey, name, detailOrder]);
+        if (usedDetails.has(detailKey)) fail('同一课次、训练项目的明细序号重复。请为不同明细填写不同序号。');
+        usedDetails.add(detailKey);
+      }
+      for (const { field, source, raw } of fields) {
         const numeric = field.kind === 'time' ? templateTimeValue(raw)
           : field.kind === 'number' ? standardNumberValue(raw) : null;
         if (field.kind === 'time' && (numeric === null || numeric < 0))
           fail(`「${field.name}」须填写非负秒数或分:秒（如 6:42.5）。`);
         if (field.kind === 'number' && numeric === null) fail(`「${field.name}」须为数字。`);
-        details.push({ order: detailOrder!, field: field.name, unit: field.unit, number: numeric, text: field.kind === 'text' ? text(raw) : null });
+        details.push({ template: source?.project, order: detailOrder!, field: source?.name ?? field.name, unit: field.unit, number: numeric, text: field.kind === 'text' ? text(raw) : null });
       }
       groupsWithDetails.add(groupKey);
       detailsPerRow.set(index, details);
@@ -5303,7 +5305,7 @@ export function commitDataImport(input: {
             SET value_num=excluded.value_num,value_text=excluded.value_text
             WHERE value_num IS NOT excluded.value_num OR value_text IS NOT excluded.value_text`);
           const changes = details.reduce((total, entry) => total + Number(save.run(result.entityId,
-            Number(item.payload.trainingRecordTeamId), text(item.payload.trainingRecordName),
+            Number(item.payload.trainingRecordTeamId), entry.template ?? text(item.payload.trainingRecordName),
             entry.order, entry.field, entry.unit, entry.number, entry.text).changes), 0);
           if (changes) result.skipped = false;
         }

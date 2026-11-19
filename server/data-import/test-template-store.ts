@@ -55,6 +55,10 @@ export function initializeTestTemplates(db: DatabaseSync) {
         config_json TEXT NOT NULL,
         PRIMARY KEY(team_id,name)
       );
+      CREATE TABLE IF NOT EXISTS training_record_team_columns (
+        team_id INTEGER PRIMARY KEY REFERENCES project_teams(id) ON DELETE CASCADE,
+        names_json TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS training_record_downloads (
         id TEXT PRIMARY KEY, project TEXT NOT NULL, team_id INTEGER NOT NULL, config_json TEXT NOT NULL
       );
@@ -231,7 +235,7 @@ export function testTemplateTeamId(db: DatabaseSync, project: string, team: stri
     .get(project, team) as { id: number } | undefined)?.id;
 }
 
-export type TrainingRecordDownload = TrainingRecordTemplate & { project: string; teamId: number };
+export type TrainingRecordDownload = TrainingRecordTemplate & { fieldSources?: Array<{ project: string; name: string }>; project: string; teamId: number };
 export function readTrainingRecordDownload(db: DatabaseSync, id: string): TrainingRecordDownload | undefined {
   const row = db.prepare('SELECT project,team_id AS teamId,config_json AS config FROM training_record_downloads WHERE id=?')
     .get(id) as { project: string; teamId: number; config: string } | undefined;

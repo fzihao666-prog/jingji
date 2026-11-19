@@ -156,9 +156,11 @@ export function TestTemplatePanel({ project, team, onClose }: {
     });
   }
 
+  const columnsChanged = Boolean(preview && (codes.length !== preview.codes.length || codes.some((code, index) => code !== preview.codes[index])));
+
   function download() {
     void run(async () => {
-      await api.downloadTestTemplate(project, team, codes, false);
+      await api.downloadTestTemplate(project, team);
       setStatus('测试模板已开始下载。');
     });
   }
@@ -293,9 +295,10 @@ export function TestTemplatePanel({ project, team, onClose }: {
           {!projectMode && preview.source === 'team' && <button type="button" className="secondary-button" disabled={pending} onClick={() => configure('inherit')}>恢复项目默认</button>}
         </div>
         </details>
+        {!projectMode && columnsChanged && <p>Excel 列已修改，保存到本队后即可下载并供本队使用。</p>}
         <footer className="test-template-actions">
           {projectMode ? <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('project')}><Save size={16} aria-hidden />保存项目默认</button> : <>
-            <button type="button" className="secondary-button" disabled={pending || !codes.length} onClick={download}><Download size={16} aria-hidden />下载 Excel</button>
+            <button type="button" className="secondary-button" disabled={pending || columnsChanged || !codes.length} onClick={download}><Download size={16} aria-hidden />下载 Excel</button>
             <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('team')}><Save size={16} aria-hidden />保存到本队</button>
           </>}
         </footer>

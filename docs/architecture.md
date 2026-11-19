@@ -833,7 +833,7 @@ v1 快照继续按保存内容只读渲染及导出，不根据新口径重算�
 
 动态测试模板由 `server/data-import/test-template-routes.ts` 管理。指标复用 `metric_definitions`，`test_template_metric_details` 保存新增指标的成绩格式、协议和版本关系；`test_template_projects` 与 `test_template_teams` 分别保存项目默认与队伍完整列组合。下载时 `test_template_downloads` 保存项目、稳定队伍编号和有序列定义。工作簿只携带匹配该定义的编号，导入暂存时记录下载编号并在校对、提交时重新校验范围。解析产出的成绩继续通过统一导入事务写入 `test_sessions` 和 `test_measurements`，不引入新的测试事实源。 教练创建的测试项目存于 `test_template_groups`，按运动项目保存名称和有序指标编码。项目只定义常用字段组合，各字段仍使用标准指标编码。内置 FMS 引用既有七项编码与测试协议。
 
-单表训练模板用 `training_record_templates` 保存队伍常用字段，用 `training_record_downloads` 保存下载时的项目、队伍和列定义。导入复用统一预览和提交事务，标准课次和力量组次仍写入 `training_sessions`、`strength_result_sets`，`training_record_session_scope` 记录单表课次的稳定队伍归属。自定义数值和文字以课次、模板及明细序号存入 `training_record_details`，供个人专项训练分析按字段查询。
+单表训练模板用 `training_record_templates` 保存队伍训练项目及其字段，`training_record_team_columns` 存放本队发布的项目和有序 Excel 列，用 `training_record_downloads` 保存下载时的项目、队伍和列定义。导入复用统一预览和提交事务，标准课次和力量组次仍写入 `training_sessions`、`strength_result_sets`，`training_record_session_scope` 记录单表课次的稳定队伍归属。自定义数值和文字以课次、模板及明细序号存入 `training_record_details`，供个人专项训练分析按字段查询。
 
 自定义指标趋势通过 `GET /api/athletes/:id/custom-test-trend` 读取正式测试成绩。服务端结合现有运动员访问权限、当前项目队伍和成绩写入批次所关联的模板快照核对范围，仅查询所选队伍的已确认实测。同一指标编码使用既有定义的单位和协议版本，不跨版本合并。图表和明细共用按测试日期返回的实测值。
 

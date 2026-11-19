@@ -7,10 +7,21 @@ export const TRAINING_RECORD_OPTIONS = [...TRAINING_SESSION_COLUMNS, ...TRAINING
 
 export type TrainingRecordTemplate = {
   name: string;
+  columnOrder?: string[];
   standard: string[];
   fields: Array<{ name: string; unit: string; kind: 'number' | 'text' | 'time' }>;
 };
 export const trainingDetailHeader = (field: TrainingRecordTemplate['fields'][number]) =>
   field.unit ? `${field.name}（${field.unit}）` : field.name;
 export const trainingRecordHeaders = (template: TrainingRecordTemplate) =>
-  [...TRAINING_RECORD_IDENTITY, ...template.standard, ...template.fields.map(trainingDetailHeader)];
+  [...TRAINING_RECORD_IDENTITY, ...(template.columnOrder ?? [...template.standard, ...template.fields.map(trainingDetailHeader)])];
+
+export function combineTrainingProjects(projects: readonly TrainingRecordTemplate[], columnOrder?: string[]) {
+  return {
+    name: '本队训练记录',
+    columnOrder,
+    standard: [...new Set(projects.flatMap(project => project.standard))],
+    fields: projects.flatMap(project => project.fields.map(field => ({ ...field, name: `${project.name} · ${field.name}` }))),
+    fieldSources: projects.flatMap(project => project.fields.map(field => ({ project: project.name, name: field.name }))),
+  };
+}
