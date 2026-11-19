@@ -102,10 +102,11 @@ export function registerTestTemplateRoutes(app: Express) {
         name: z.string().trim().min(1).max(80),
         standard: z.array(z.enum(TRAINING_RECORD_OPTIONS)).max(TRAINING_RECORD_OPTIONS.length),
         fields: z.array(z.object({
-          name: z.string().trim().min(1).max(80), unit: z.string().trim().max(24), kind: z.enum(['number','text']),
+          name: z.string().trim().min(1).max(80), unit: z.string().trim().max(24), kind: z.enum(['number', 'text', 'time']),
         }).strict()).max(60),
         saveTeam: z.boolean(),
       }).strict().parse(req.body);
+      for (const field of template.fields) if (field.kind === 'time') field.unit = 's';
       if (template.standard.some(field => TRAINING_SET_COLUMNS.some(key => key === field)))
         template.standard = [...new Set([...template.standard, ...TRAINING_SET_COLUMNS])];
       const headers = trainingRecordHeaders(template);
@@ -117,6 +118,11 @@ export function registerTestTemplateRoutes(app: Express) {
       sheet.getRow(1).font = { bold: true };
       sheet.getCell('D1').note = '同一运动员同日同课次填同一个名称。整课时长和 RPE 填一次即可。';
       sheet.getCell('E1').note = '逐段或逐组记录时，为同一课次各明细填写不同的正整数序号。';
+      template.fields.forEach((field, index) => {
+        if (field.kind === 'time')
+          sheet.getRow(1).getCell(headers.length - template.fields.length + index + 1).note =
+            '填写秒数或分:秒（例如 6:42.5），系统按秒保存。';
+      });
       const athletes = roster(s);
       for (const athlete of athletes) sheet.addRow([String(athlete.id), athlete.name]);
       const id = randomUUID();

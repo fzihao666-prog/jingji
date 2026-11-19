@@ -89,10 +89,14 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         }));
         return <div className="test-template-actions" key={index}>
           <label className="data-import-template-team">字段名称<input maxLength={80} value={field.name} onChange={event => change({ name: event.target.value })} /></label>
-          <label className="data-import-template-team">单位（选填）<input maxLength={24} value={field.unit} onChange={event => change({ unit: event.target.value })} /></label>
+          <label className="data-import-template-team">单位（选填）<input maxLength={24} value={field.unit} readOnly={field.kind === 'time'} onChange={event => change({ unit: event.target.value })} /></label>
           <label className="data-import-template-team">格式
-            <select value={field.kind} onChange={event => change({ kind: event.target.value === 'text' ? 'text' : 'number' })}>
-              <option value="number">数字</option><option value="text">文字</option>
+            <select value={field.kind} onChange={event => {
+              const value = event.target.value;
+              const kind = value === 'time' || value === 'text' ? value : 'number';
+              change({ kind, unit: kind === 'time' ? 's' : field.kind === 'time' ? '' : field.unit });
+            }}>
+              <option value="number">数字</option><option value="text">文字</option><option value="time">计时（秒或分:秒）</option>
             </select>
           </label>
           <button type="button" className="secondary-button" aria-label={`移除第 ${index + 1} 个自定义字段`}

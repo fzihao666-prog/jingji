@@ -999,7 +999,7 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
     INSERT INTO athletes(id,name,project,team,team_id)
       SELECT 1901,'单表举重队员',project,name,id FROM project_teams WHERE name='${lifting}';
   `);
-  async function roundTrip(project: string, team: string, athleteId: number, template: object, examples: Record<string, unknown>[], excludeRow?: string) {
+  async function roundTrip(project: string, team: string, athleteId: number, template: object, examples: Record<string, unknown>[], excludeRow?: string, expectedError?: string) {
     const query = new URLSearchParams({ project, team });
     const response = await fetch(`${base}/api/data-import/training-template?${query}`, {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
@@ -1017,6 +1017,11 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
     form.set('team', team);
     form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '单表训练.xlsx');
     const parsed = await request('/analyze', 'POST', form);
+    if (expectedError) {
+      expect(parsed.status).toBe(400);
+      expect(parsed.body.message).toContain(expectedError);
+      return;
+    }
     expect(parsed.status, JSON.stringify(parsed.body)).toBe(200);
     if (excludeRow) {
       const target = parsed.body.batch!.items.find(item => item.itemType === 'training_session' && item.sourceAddress === excludeRow);
@@ -1046,16 +1051,21 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
 
   const rowingTemplate = {
     name: '赛艇分段', standard: ['时长分钟'], fields: [
-      { name: '分段时间', unit: '秒', kind: 'number' }, { name: '桨频', unit: '', kind: 'number' },
+      { name: '分段时间', unit: 's', kind: 'time' }, { name: '桨频', unit: '', kind: 'number' },
       { name: '备注', unit: '', kind: 'text' },
     ],
   };
-  await roundTrip('ROWING', 'HTTP甲队', 701, rowingTemplate, [230, 232, 237, 242].map((seconds, index) => ({
-    ...when, 时长分钟: index === 0 ? 60 : undefined, 明细序号: index + 1, '分段时间（秒）': seconds, 桨频: 24, 备注: '虚构段',
+  await roundTrip('ROWING', 'HTTP甲队', 701, rowingTemplate, [230, '3:52', 237, '4:02.5'].map((seconds, index) => ({
+    ...when, 时长分钟: index === 0 ? 60 : undefined, 明细序号: index + 1, '分段时间（s）': seconds, 桨频: 24, 备注: '虚构段',
   })));
+  for (const invalidTime of ['3:65', -1]) {
+    await roundTrip('ROWING', 'HTTP甲队', 701, rowingTemplate, [
+      { ...when, 明细序号: 1, '分段时间（s）': invalidTime },
+    ], undefined, '须填写非负秒数或分:秒');
+  }
   const rows = db.prepare(`SELECT d.detail_order, d.value_num FROM training_record_details d
     JOIN training_sessions s ON s.id=d.session_id WHERE s.athlete_id=701 AND d.field='分段时间' ORDER BY d.detail_order`).all();
-  expect(rows).toEqual([230, 232, 237, 242].map((value_num, index) => ({ detail_order: index + 1, value_num })));
+  expect(rows).toEqual([230, 232, 237, 242.5].map((value_num, index) => ({ detail_order: index + 1, value_num })));
   const team = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get() as { id: number };
   const query = new URLSearchParams({
     project: 'ROWING', teamId: String(team.id), from: '2026-11-19', to: '2026-11-19',
@@ -1064,15 +1074,15 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
   const details = await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers });
   expect(details.status).toBe(200);
   expect(await details.json()).toMatchObject({ truncated: false, rows: expect.arrayContaining([
-    expect.objectContaining({ detailOrder: 4, field: '分段时间', unit: '秒', value: 242 }),
+    expect.objectContaining({ detailOrder: 4, field: '分段时间', unit: 's', value: 242.5 }),
     expect.objectContaining({ detailOrder: 4, field: '备注', text: '虚构段' }),
   ]) });
   query.set('project', 'WEIGHTLIFTING');
   const denied = await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers });
   expect(denied.status).toBe(403);
   await roundTrip('ROWING', 'HTTP甲队', 701, rowingTemplate, [
-    { ...when, 时长分钟: 60, 明细序号: 5, '分段时间（秒）': 246 },
-    { ...when, 明细序号: 6, '分段时间（秒）': 250 },
+    { ...when, 时长分钟: 60, 明细序号: 5, '分段时间（s）': 246 },
+    { ...when, 明细序号: 6, '分段时间（s）': 250 },
   ], 'B3');
   expect(db.prepare("SELECT detail_order FROM training_record_details WHERE field='分段时间' AND detail_order>=5").all())
     .toEqual([{ detail_order: 5 }]);
@@ -1084,7 +1094,7 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
   db.prepare('UPDATE athletes SET team=?,team_id=? WHERE id=701').run(nextTeam, nextId.id);
   try {
     await roundTrip('ROWING', nextTeam, 701, rowingTemplate, [
-      { ...when, 时长分钟: 75, 明细序号: 1, '分段时间（秒）': 260 },
+      { ...when, 时长分钟: 75, 明细序号: 1, '分段时间（s）': 260 },
     ]);
     expect(db.prepare(`SELECT scope.team_id, s.duration_min FROM training_sessions s
       JOIN training_record_session_scope scope ON scope.session_id=s.id

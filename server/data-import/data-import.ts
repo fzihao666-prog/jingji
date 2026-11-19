@@ -967,6 +967,12 @@ function standardText(row: unknown[], columns: Map<string, number>, ...labels: s
 }
 
 /** 标准模板与校对共用：空白保持缺失，非数字文本不得当作数值。 */
+function templateTimeValue(raw: unknown) {
+  const timer = typeof raw === 'string' ? /^(\d+):([0-5]\d(?:\.\d+)?)$/.exec(text(raw)) : null;
+  const value = timer ? 60 * Number(timer[1]) + Number(timer[2]) : standardNumberValue(raw);
+  return value !== null && Number.isFinite(value) ? value : null;
+}
+
 function standardNumberValue(value: unknown): number | null {
   if (text(value) === '') return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -1013,9 +1019,7 @@ function parseTestTemplateSheet(
       const raw = row[columnIndex];
       const rawValue = text(raw);
       if (!rawValue) return;
-      const timer = column.valueKind === 'time' && typeof raw === 'string'
-        ? /^(\d+):([0-5]\d(?:\.\d+)?)$/.exec(rawValue) : null;
-      const value = timer ? 60 * Number(timer[1]) + Number(timer[2]) : standardNumberValue(raw);
+      const value = column.valueKind === 'time' ? templateTimeValue(raw) : standardNumberValue(raw);
       items.push(itemBase({
         itemType: 'test_measurement', eventDate, rawAthleteName,
         sourceSheet: TEST_TEMPLATE_SHEET, sourceAddress: cellAddress(rowIndex, columnIndex),
@@ -2055,7 +2059,10 @@ function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownlo
       if (usedDetails.has(detailKey)) fail('同一课次的明细序号重复。请为不同明细填写不同序号。');
       usedDetails.add(detailKey);
       for (const { field, raw } of fields) {
-        const numeric = field.kind === 'number' ? standardNumberValue(raw) : null;
+        const numeric = field.kind === 'time' ? templateTimeValue(raw)
+          : field.kind === 'number' ? standardNumberValue(raw) : null;
+        if (field.kind === 'time' && (numeric === null || numeric < 0))
+          fail(`「${field.name}」须填写非负秒数或分:秒（如 6:42.5）。`);
         if (field.kind === 'number' && numeric === null) fail(`「${field.name}」须为数字。`);
         details.push({ order: detailOrder!, field: field.name, unit: field.unit, number: numeric, text: field.kind === 'text' ? text(raw) : null });
       }

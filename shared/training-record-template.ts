@@ -8,7 +8,7 @@ export const TRAINING_RECORD_OPTIONS = [...TRAINING_SESSION_COLUMNS, ...TRAINING
 export type TrainingRecordTemplate = {
   name: string;
   standard: string[];
-  fields: Array<{ name: string; unit: string; kind: 'number' | 'text' }>;
+  fields: Array<{ name: string; unit: string; kind: 'number' | 'text' | 'time' }>;
 };
 export const trainingDetailHeader = (field: TrainingRecordTemplate['fields'][number]) =>
   field.unit ? `${field.name}（${field.unit}）` : field.name;
