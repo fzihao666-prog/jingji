@@ -299,7 +299,7 @@ describe('队伍责任范围 HTTP 集成', () => {
       method: 'PUT',
       headers: headers(1),
       body: JSON.stringify({
-        role: 'SCC', parentUserId: 1, areas: [], projects: ['ROWING'],
+        role: 'SCC', parentUserId: 1, areas: [], projects: ['ROWING', 'CANOE_SLALOM'],
         teams: [
           { project: 'ROWING', team: 'A队' },
           { project: 'CANOE_SPRINT', team: 'A队' },
@@ -312,6 +312,19 @@ describe('队伍责任范围 HTTP 集成', () => {
     const { readTeamCoaches } = await import('../core/coach-team-responsibility.ts');
     expect(readTeamCoaches(database, 'CANOE_SPRINT', 'A队').map(coach => coach.id)).toContain(2);
     expect((await assignments(2)).athletes.map(athlete => athlete.id)).toContain(201);
+    const narrowed = await fetch(`${baseUrl}/api/access/accounts/2`, {
+      method: 'PUT', headers: headers(1),
+      body: JSON.stringify({
+        role: 'SCC', parentUserId: 1, areas: [],
+        projects: ['ROWING', 'CANOE_SPRINT'],
+        teams: [{ project: 'ROWING', team: 'A队' }],
+      }),
+    });
+    expect(narrowed.status).toBe(200);
+    expect(database.prepare('SELECT project FROM user_project_permissions WHERE user_id=2').all())
+      .toEqual([{ project: 'ROWING' }]);
+    expect(readTeamCoaches(database, 'CANOE_SPRINT', 'A队').map(coach => coach.id)).not.toContain(2);
+
   });
 
   it.each([

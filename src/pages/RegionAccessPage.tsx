@@ -94,7 +94,6 @@ export function RegionAccessPage({ user }: { user: User }) {
   const [role, setRole] = useState<Role>('ATL');
   const [parentUserId, setParentUserId] = useState<number>(user.id);
   const [areas, setAreas] = useState<AreaPermission[]>([blankArea()]);
-  const [projects, setProjects] = useState<string[]>([DEFAULT_PROJECT]);
   const [teams, setTeams] = useState<TeamPermission[]>([blankTeam()]);
   const [areaValidationError, setAreaValidationError] = useState<{
     index: number;
@@ -218,7 +217,6 @@ export function RegionAccessPage({ user }: { user: User }) {
         ? [athleteAccountAreaForEdit(account.areas)]
         : account.areas.map((area) => ({ ...area }))
     );
-    setProjects([...account.projects]);
     setTeams(account.teams.map((team) => ({ ...team })));
     setMessage('');
     setError('');
@@ -242,16 +240,6 @@ export function RegionAccessPage({ user }: { user: User }) {
         return next;
       })
     );
-  };
-
-  const toggleProject = (project: string) => {
-    setProjects((current) => {
-      if (project === '*') return current.includes('*') ? [DEFAULT_PROJECT] : ['*'];
-      const withoutAll = current.filter((item) => item !== '*');
-      return withoutAll.includes(project)
-        ? withoutAll.filter((item) => item !== project)
-        : [...withoutAll, project];
-    });
   };
 
   const availableTeamNames = (project: string) => [
@@ -311,11 +299,7 @@ export function RegionAccessPage({ user }: { user: User }) {
         role,
         parentUserId,
         areas: athleteAreas,
-        projects: role === 'OBS'
-          ? [...new Set(teams.map((team) => team.project))]
-          : role === 'SCC' && !projects.includes('*')
-            ? [...new Set([...projects, ...teams.map((team) => team.project)])]
-            : projects,
+        projects: [...new Set(teams.map((team) => team.project))],
         teams,
       });
       await load(selected.id);
@@ -1250,7 +1234,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                     <Activity size={18} />
                     <div>
                       <h3>项目与队伍范围</h3>
-                      <p>访问范围需同时满足项目与队伍授权</p>
+                      <p>选择项目和队伍后自动赋予对应权限</p>
                     </div>
                   </div>
                 )}
@@ -1264,27 +1248,6 @@ export function RegionAccessPage({ user }: { user: User }) {
                   />
                 ) : (
                   <>
-                <div className="project-options">
-                  {selected.role !== 'ATL' && (
-                    <button
-                      disabled={!canEditAccess}
-                      className={projects.includes('*') ? 'selected' : ''}
-                      onClick={() => toggleProject('*')}
-                    >
-                      全部项目
-                    </button>
-                  )}
-                  {payload?.meta.projects.map((project) => (
-                    <button
-                      disabled={!canEditAccess}
-                      key={project}
-                      className={projects.includes(project) ? 'selected' : ''}
-                      onClick={() => toggleProject(project)}
-                    >
-                      {projectLabel(project)}
-                    </button>
-                  ))}
-                </div>
                 <div className="team-scope-list">
                   {teams.map((team, index) => (
                     <div className="team-scope-row" key={index}>
@@ -1302,7 +1265,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                           )
                         }
                       >
-                        {selected.role !== 'ATL' && <option value="*">全部项目</option>}
+                        {!['ATL', 'SCC'].includes(role) && <option value="*">全部项目</option>}
                         {payload?.meta.projects.map((project) => (
                           <option key={project} value={project}>
                             {projectLabel(project)}
@@ -1327,7 +1290,7 @@ export function RegionAccessPage({ user }: { user: User }) {
                         }
                       >
                         <option value="">请选择队伍</option>
-                        {role !== 'ATL' && allowsAllTeams(team.project) && (
+                        {!['ATL', 'SCC'].includes(role) && allowsAllTeams(team.project) && (
                           <option value="*">全部队伍</option>
                         )}
                         {availableTeamNames(team.project).map((name) => (
