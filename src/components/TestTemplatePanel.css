@@ -232,6 +232,7 @@
 
 .template-preview-column {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
@@ -242,4 +243,10 @@
   min-width: 28px;
   min-height: 28px;
   padding: 4px;
+}
+
+.template-preview-column-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
 }

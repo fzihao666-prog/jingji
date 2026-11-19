@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import './TestTemplatePanel.css';
 
@@ -35,9 +35,10 @@ export function TemplatePreviewDialog({ title, busy, onClose, preview, children 
   );
 }
 
-export function TemplatePreviewColumns({ headers, fixedColumns = headers.length, onRemove, busy }: {
+export function TemplatePreviewColumns({ headers, fixedColumns = headers.length, onRemove, onMove, busy }: {
   headers: readonly string[];
   fixedColumns?: number;
+  onMove?: (index: number, offset: number) => void;
   onRemove?: (index: number) => void;
   busy?: boolean;
 }) {
@@ -50,13 +51,21 @@ export function TemplatePreviewColumns({ headers, fixedColumns = headers.length,
         <thead><tr>{headers.map((header, index) => <th key={header} scope="col">
           <div className="template-preview-column">
             <span>{header}</span>
-            {onRemove && index >= fixedColumns && (
-              <button type="button" className="secondary-button template-preview-remove" disabled={busy}
-                aria-label={`删除列：${header}`} onClick={() => {
-                  region.current?.focus({ preventScroll: true });
-                  onRemove(index - fixedColumns);
-                }}><X size={16} aria-hidden /></button>
-            )}
+            {index >= fixedColumns && <div className="template-preview-column-actions">
+              {onMove && <>
+                <button type="button" className="secondary-button template-preview-remove" disabled={busy || index === fixedColumns}
+                  aria-label={`左移列：${header}`} onClick={() => onMove(index - fixedColumns, -1)}><ArrowLeft size={16} aria-hidden /></button>
+                <button type="button" className="secondary-button template-preview-remove" disabled={busy || index === headers.length - 1}
+                  aria-label={`右移列：${header}`} onClick={() => onMove(index - fixedColumns, 1)}><ArrowRight size={16} aria-hidden /></button>
+              </>}
+              {onRemove && (
+                <button type="button" className="secondary-button template-preview-remove" disabled={busy}
+                  aria-label={`删除列：${header}`} onClick={() => {
+                    region.current?.focus({ preventScroll: true });
+                    onRemove(index - fixedColumns);
+                  }}><X size={16} aria-hidden /></button>
+              )}
+            </div>}
           </div>
         </th>)}</tr></thead>
       </table>

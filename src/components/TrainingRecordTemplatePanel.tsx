@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, Plus, Save } from 'lucide-react';
+import { Download, Plus, Save } from 'lucide-react';
 import { combineTrainingProjects, TRAINING_RECORD_IDENTITY, TRAINING_RECORD_OPTIONS, TRAINING_SET_COLUMNS, trainingRecordHeaders, type TrainingRecordTemplate } from '../../shared/training-record-template';
 import { api } from '../api';
 import type { Project } from '../types';
@@ -28,6 +28,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
   const [columns, setColumns] = useState<string[]>([]);
   const [publishedColumns, setPublishedColumns] = useState<string[]>([]);
   const [candidate, setCandidate] = useState('');
+  const projectForm = useRef<HTMLFieldSetElement>(null);
   const newProjectButton = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -74,10 +75,10 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
     void run(async () => {
       const { template: created } = await api.saveTrainingRecordTemplate(project, team, template, '');
       setSaved(current => [...current, created]);
-      setEditing(false);
+      setTemplate(emptyTemplate);
       await includeProject(created);
       setStatus(`「${created.name}」已添加到 Excel 列。`);
-      requestAnimationFrame(() => newProjectButton.current?.focus());
+      requestAnimationFrame(() => projectForm.current?.querySelector('input')?.focus());
     });
   }
 
@@ -110,7 +111,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
 
   return <TemplatePreviewDialog title="训练记录模板预览" busy={busy} onClose={onClose}
     preview={<TemplatePreviewColumns headers={trainingRecordHeaders(combineTrainingProjects(selected, columns))}
-      fixedColumns={TRAINING_RECORD_IDENTITY.length} busy={busy}
+      fixedColumns={TRAINING_RECORD_IDENTITY.length} busy={busy} onMove={move}
       onRemove={index => void run(async () => {
         await updateColumns(names, columns.filter((_, position) => position !== index));
         setStatus('Excel 列已移除。');
@@ -136,7 +137,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         setEditing(true);
       }}><Plus size={16} aria-hidden />新建训练项目</button>
     </div>
-    {editing && <fieldset disabled={busy} className="test-template-group-fields">
+    {editing && <fieldset ref={projectForm} disabled={busy} className="test-template-group-fields">
       <legend>新建训练项目</legend>
       <TemplateProjectEditor name={template.name} fields={template.fields} nameLimit={80} fieldLimit={60} allowText autoFocus
         onName={name => setTemplate(current => ({ ...current, name }))}
@@ -161,32 +162,10 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         <button type="button" className="secondary-button" onClick={() => {
           setEditing(false);
           requestAnimationFrame(() => newProjectButton.current?.focus());
-        }}>取消</button>
+        }}>结束新建</button>
       </div>
     </fieldset>}
     {!!selected.length && <>
-      <p>已加入的训练项目</p>
-      <ul className="test-template-columns">
-        {selected.map(item => <li key={item.name}>
-          <strong>{item.name}</strong>
-          <button type="button" className="secondary-button" disabled={busy} onClick={() => {
-            const remaining = selected.filter(entry => entry.name !== item.name);
-            setNames(remaining.map(entry => entry.name));
-            setColumns(current => current.filter(column => availableColumns(remaining).includes(column)));
-            setColumnCandidate('');
-          }}>从模板移除</button>
-        </li>)}
-      </ul>
-      <p>Excel 可填写列</p>
-      <ol className="test-template-columns">
-        {columns.map((column, index) => <li key={column}>
-          <strong>{column}</strong>
-          <div className="test-template-actions">
-            <button type="button" className="secondary-button" aria-label={`上移${column}`} disabled={busy || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} aria-hidden /></button>
-            <button type="button" className="secondary-button" aria-label={`下移${column}`} disabled={busy || index === columns.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} aria-hidden /></button>
-          </div>
-        </li>)}
-      </ol>
       {available.some(column => !columns.includes(column)) && <div className="test-template-actions">
         <label className="data-import-template-team">添加已有字段
           <select value={columnCandidate} disabled={busy} onChange={event => setColumnCandidate(event.target.value)}>
@@ -202,13 +181,13 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
     </>}
     {changed && <p>Excel 列已修改，保存到本队后即可下载并供本队使用。</p>}
     <footer className="test-template-actions">
-      <button type="button" className="primary-button" disabled={busy || editing || !changed} onClick={() => void run(async () => {
+      <button type="button" className="primary-button" disabled={busy || !changed} onClick={() => void run(async () => {
         const config = await api.saveTrainingTeamColumns(project, team, names, columns);
         setPublished(config.names);
         setPublishedColumns(config.columns);
         setStatus('Excel 列已保存到本队。');
       })}>保存到本队</button>
-      <button type="button" className="secondary-button" disabled={busy || editing || changed || !publishedColumns.length} onClick={() => void run(async () => {
+      <button type="button" className="secondary-button" disabled={busy || changed || !publishedColumns.length} onClick={() => void run(async () => {
         await api.downloadTrainingRecordTemplate(project, team);
         setStatus('训练模板已开始下载。');
       })}><Download size={16} aria-hidden />下载 Excel</button>
