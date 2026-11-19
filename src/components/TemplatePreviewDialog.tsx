@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import './TestTemplatePanel.css';
 
-export function TemplatePreviewDialog({ title, busy, onClose, children }: {
+export function TemplatePreviewDialog({ title, busy, onClose, preview, children }: {
   title: string;
   busy: boolean;
   onClose: () => void;
+  preview?: ReactNode;
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -27,6 +28,7 @@ export function TemplatePreviewDialog({ title, busy, onClose, children }: {
         <h2 ref={heading} tabIndex={-1} id={titleId}>{title}</h2>
         <button type="button" className="secondary-button" disabled={busy} onClick={onClose}>关闭预览</button>
       </header>
+      {preview && <div className="template-preview-pinned">{preview}</div>}
       <div className="template-preview-body test-template-panel">{children}</div>
     </dialog>
   );

@@ -57,7 +57,8 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
 
   const valid = template.name.trim() && (template.standard.length > 0 || template.fields.length > 0) && template.fields.every(field => field.name.trim());
 
-  return <TemplatePreviewDialog title="训练记录模板预览" busy={busy} onClose={onClose}>
+  return <TemplatePreviewDialog title="训练记录模板预览" busy={busy} onClose={onClose}
+    preview={<TemplatePreviewColumns headers={trainingRecordHeaders({ ...template, fields: template.fields.filter(field => field.name.trim()) })} />}>
     <p>{team}{athleteCount !== undefined && ` · 预填 ${athleteCount} 名运动员`}</p>
     {error && <p role="alert">{error}</p>}
     <div role="status">{status}</div>
@@ -102,7 +103,6 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         onClick={() => setTemplate(current => ({ ...current, fields: [...current.fields, { name: '', unit: '', kind: 'number' }] }))}>
         <Plus size={16} aria-hidden />添加自定义字段</button></div>
     </fieldset>
-    <TemplatePreviewColumns headers={trainingRecordHeaders({ ...template, fields: template.fields.filter(field => field.name.trim()) })} />
     <footer className="test-template-actions">
       <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
       <button type="button" className="secondary-button" disabled={busy || !valid} onClick={() => void download(false)}>

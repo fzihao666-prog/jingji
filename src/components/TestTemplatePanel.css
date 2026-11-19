@@ -109,6 +109,16 @@
   font-size: 18px;
 }
 
+.template-preview-pinned {
+  flex: none;
+  padding: 12px clamp(12px, 3vw, 24px) 0;
+}
+
+.template-preview-pinned .template-preview-sheet {
+  max-height: 26dvh;
+  overflow: auto;
+}
+
 .template-preview-body {
   min-height: 0;
   padding: 16px clamp(12px, 3vw, 24px);
