@@ -12,7 +12,12 @@ export function buildSubmissionReport(
   db: DatabaseSync,
   { projects, permissions }: SubmissionReportInput
 ): SubmissionReport {
-  const report: SubmissionReport = { teams: [], coaches: [], records: [], types: [] };
+  const report: SubmissionReport = {
+    teams: [],
+    coaches: [],
+    records: [],
+    types: ['训练课次', '力量训练组次', '体能测试', 'FMS测试', '日常监测', '康复伤病'],
+  };
   const categories = db.prepare(
     'SELECT category FROM coach_profiles WHERE user_id=? ORDER BY category'
   );
@@ -32,7 +37,7 @@ export function buildSubmissionReport(
     },
   }));
   const included = new Set<number>();
-  const types = new Map<string, number>();
+  const types = new Map(report.types.map((type, index) => [type, index]));
   for (const project of projects) {
     const visible = (team: string) => allowsTeam(permissions, project, team);
     const athletes = (
@@ -70,7 +75,12 @@ export function buildSubmissionReport(
               .map(({ id }) => id)
           : [];
       responsible.forEach((id) => included.add(id));
-      report.teams.push({ name, project, coaches: responsible });
+      report.teams.push({
+        name,
+        project,
+        coaches: responsible,
+        athletes: athletes.filter((athlete) => athlete.team === name).length,
+      });
       teamIds.set(name, index);
       return index;
     };
@@ -91,6 +101,7 @@ export function buildSubmissionReport(
         type,
         fact.businessDate ?? '',
         `${fact.entity}:${fact.id}`,
+        fact.athleteId || undefined,
       ]);
     }
   }

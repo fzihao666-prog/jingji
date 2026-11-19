@@ -13,6 +13,11 @@ const teamName = (row: SubmissionReport['teams'][number]) =>
   `${projectLabel(row.project)} · ${row.name || '未分队'}`;
 
 export default function SubmissionReportPage({ projects }: { projects: Project[] }) {
+  const [sort, setSort] = useState('recent');
+  const [today] = useState(() =>
+    new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
+  );
+  const recentFrom = new Date(Date.parse(today) - 29 * 86400000).toISOString().slice(0, 10);
   const [report, setReport] = useState<SubmissionReport>();
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -54,13 +59,30 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
     const totals = new Map(
       options
         .filter(({ index }) => !team || String(index) === team)
-        .map((value) => [value.index, { ...value, total: 0, counts: new Map<number, number>() }])
+        .map((value) => [
+          value.index,
+          {
+            ...value,
+            total: 0,
+            recent: 0,
+            counts: new Map<number, number>(),
+            coverage: new Map<number, Set<number>>(),
+            latest: new Map<number, string>(),
+          },
+        ])
     );
-    const records = report.records.filter(([index, type, date]) => {
+    const records = report.records.filter(([index, type, date, , athleteId]) => {
       const row = totals.get(index);
       if (!row || ((from || to) && (!date || (from && date < from) || (to && date > to))))
         return false;
       row.total++;
+      if (date >= recentFrom && date <= today) row.recent++;
+      if (athleteId) {
+        const covered = row.coverage.get(type) ?? new Set<number>();
+        covered.add(athleteId);
+        row.coverage.set(type, covered);
+      }
+      if (date > (row.latest.get(type) ?? '')) row.latest.set(type, date);
       row.counts.set(type, (row.counts.get(type) ?? 0) + 1);
       return true;
     });
@@ -85,13 +107,14 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
             ...coach,
             teams: assigned,
             counts,
+            recent: assigned.reduce((sum, row) => sum + row.recent, 0),
             total: assigned.reduce((sum, row) => sum + row.total, 0),
           },
         ];
       })
       .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'zh-CN'));
     return { teams, coaches, records };
-  }, [report, valid, options, team, role, from, to]);
+  }, [report, valid, options, team, role, from, to, recentFrom, today]);
 
   const resetDetails = () => {
     setCoachId(undefined);
@@ -99,11 +122,19 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
     setPage(1);
   };
   const coachQuery = coachSearch.trim().toLowerCase();
-  const visibleCoaches = view?.coaches.filter(({ name, teams }) =>
-    !coachQuery ||
-    name.toLowerCase().includes(coachQuery) ||
-    teams.some((row) => teamName(row).toLowerCase().includes(coachQuery))
-  ) ?? [];
+  const visibleCoaches =
+    view?.coaches.filter(
+      ({ name, teams }) =>
+        !coachQuery ||
+        name.toLowerCase().includes(coachQuery) ||
+        teams.some((row) => teamName(row).toLowerCase().includes(coachQuery))
+    ) ?? [];
+  visibleCoaches.sort(
+    (a, b) =>
+      (sort === 'recent' ? b.recent - a.recent : b.total - a.total) ||
+      a.name.localeCompare(b.name, 'zh-CN')
+  );
+  const columns = report?.types ?? [];
   const selected = visibleCoaches.find(({ id }) => id === coachId);
   const detail = useMemo(
     () =>
@@ -123,14 +154,15 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
       const workbook = xlsx.utils.book_new();
       const add = (name: string, rows: (string | number)[][]) =>
         xlsx.utils.book_append_sheet(workbook, xlsx.utils.aoa_to_sheet(rows), name);
-      add('教练汇总', [
-        ['教练', '岗位', '所带队伍', '队伍数据总量', '各类数据数量'],
-        ...view.coaches.map((row) => [
+      add('教练总览', [
+        ['教练', '岗位', '所带队伍', ...columns, '全部数据', '近30天'],
+        ...visibleCoaches.map((row) => [
           row.name,
           row.roles.join('、'),
           row.teams.map(teamName).join('、'),
+          ...columns.map((_, index) => row.counts.get(index) ?? 0),
           row.total,
-          kinds(row.counts),
+          row.recent,
         ]),
       ]);
       add('队伍汇总', [
@@ -163,7 +195,7 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
 
   return (
     <PageContainer className="submission-report">
-      <PageHeader title="队伍数据检查" />
+      <PageHeader title="教练带队数据总览" />
       <div className="submission-filters">
         <label>
           项目
@@ -265,7 +297,31 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
       )}
       {view && (
         <>
-          <h2>系统总数（去重） {count(view.records.length)} 条</h2>
+          <div className="submission-kpis">
+            <div>
+              <span>覆盖教练</span>
+              <strong>{count(view.coaches.length)} 人</strong>
+            </div>
+            <div>
+              <span>覆盖队伍</span>
+              <strong>{count(view.teams.length)} 支</strong>
+            </div>
+            <div>
+              <span>系统总数（去重）</span>
+              <strong>{count(view.records.length)} 条</strong>
+            </div>
+            <div>
+              <span>近30天业务记录</span>
+              <strong>{count(view.teams.reduce((sum, row) => sum + row.recent, 0))} 条</strong>
+            </div>
+          </div>
+          <label>
+            排序
+            <select value={sort} onChange={(event) => setSort(event.target.value)}>
+              <option value="recent">近30天数据量</option>
+              <option value="total">全部数据量</option>
+            </select>
+          </label>
           <p>数据量按当前带队关系展示。同队有多位教练时，每人显示该队的完整数量。</p>
           <div className="submission-filters">
             <label>
@@ -285,7 +341,7 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
             <table>
               <thead>
                 <tr>
-                  {['教练', '岗位', '所带队伍', '队伍数据总量', '各类数据数量'].map((text) => (
+                  {['教练', '岗位', '所带队伍', ...columns, '全部数据', '近30天'].map((text) => (
                     <th key={text} scope="col">
                       {text}
                     </th>
@@ -295,16 +351,26 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
               <tbody>
                 {visibleCoaches.length === 0 && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={columns.length + 5}>
                       {coachQuery ? '没有匹配的教练或队伍。' : '当前范围无关联教练。'}
                     </td>
                   </tr>
                 )}
                 {visibleCoaches.map((row) => (
                   <tr key={row.id}>
-                    <th scope="row" className="submission-coach-name">{row.name}</th>
+                    <th scope="row" className="submission-coach-name">
+                      {row.name}
+                    </th>
                     <td>{row.roles.join('、') || '—'}</td>
                     <td>{row.teams.map(teamName).join('、')}</td>
+                    {columns.map((type, index) => (
+                      <td
+                        key={type}
+                        className={(row.counts.get(index) ?? 0) === 0 ? 'submission-zero' : ''}
+                      >
+                        {count(row.counts.get(index) ?? 0)}
+                      </td>
+                    ))}
                     <td>
                       <button
                         type="button"
@@ -318,7 +384,9 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
                         {count(row.total)}
                       </button>
                     </td>
-                    <td>{kinds(row.counts)}</td>
+                    <td className={row.recent === 0 ? 'submission-zero' : ''}>
+                      {count(row.recent)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -334,6 +402,46 @@ export default function SubmissionReportPage({ projects }: { projects: Project[]
                   </li>
                 ))}
               </ul>
+              <p>
+                在队及历史关联运动员{' '}
+                {count(selected.teams.reduce((sum, row) => sum + row.athletes, 0))} 人
+              </p>
+              <div
+                className="submission-table"
+                role="region"
+                aria-label="运动员数据覆盖"
+                tabIndex={0}
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">数据类型</th>
+                      <th scope="col">记录量</th>
+                      <th scope="col">涉及运动员</th>
+                      <th scope="col">最近业务日期</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {columns.map((type, index) => {
+                      const covered = new Set<number>();
+                      let latest = '';
+                      for (const team of selected.teams) {
+                        for (const id of team.coverage.get(index) ?? []) covered.add(id);
+                        if ((team.latest.get(index) ?? '') > latest)
+                          latest = team.latest.get(index)!;
+                      }
+                      return (
+                        <tr key={type}>
+                          <th scope="row">{type}</th>
+                          <td>{count(selected.counts.get(index) ?? 0)}</td>
+                          <td>{count(covered.size)}</td>
+                          <td>{latest || '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
               <button type="button" className="secondary-button" onClick={resetDetails}>
                 关闭
               </button>
