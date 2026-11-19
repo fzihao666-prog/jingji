@@ -7,7 +7,7 @@ const { PAGE_SIZE, reviewPeople, reviewIssues, issuePreview, sourceFields } = re
 const MiB = 1024 * 1024;
 const templates = [
   { id: 'profile', label: '队员资料' }, { id: 'training', label: '训练记录' },
-  { id: 'test', label: '测试成绩' }, { id: 'unified', label: '统一数据' },
+  { id: 'test', label: '测试成绩' },
   { id: 'team', label: '队伍训练统计' }
 ];
 

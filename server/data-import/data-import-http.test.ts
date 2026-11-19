@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import type { Server } from 'node:http';
@@ -94,7 +96,7 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
   const teamId = (db.prepare('SELECT id FROM project_teams WHERE name=?').get(addedTeams[0]) as { id: number }).id;
   db.prepare("INSERT INTO athletes (id, name, project, team, team_id) VALUES (799, '模板虚构队员', 'ROWING', ?, ?)").run(addedTeams[0], teamId);
   try {
-    for (const kind of ['profile', 'training', 'test', 'unified']) {
+    for (const kind of ['profile', 'training', 'test']) {
       const response = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind, project: 'ROWING', team: addedTeams[0] })}`, { headers: { authorization: `Bearer ${token}` } });
       expect(response.status).toBe(200);
       const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array' });
@@ -107,11 +109,11 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
         expect(rows[1]).toEqual(['799', '模板虚构队员', '赛艇', addedTeams[0]]);
       }
     }
-    const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'unified', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
+    const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'profile', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
     expect(empty.status).toBe(200);
     const workbook = XLSX.read(await empty.arrayBuffer(), { type: 'array' });
     expect(JSON.stringify(workbook.Sheets)).not.toContain('虚构队员');
-    for (const query of ['project=ROWING&team=HTTP乙队', 'project=ROWING&team=不存在的队伍'])
+    for (const query of ['kind=profile&project=ROWING&team=HTTP乙队', 'kind=profile&project=ROWING&team=不存在的队伍'])
       expect((await request(`/template?${query}`)).status).toBe(403);
     for (const query of ['team=HTTP甲队', 'project=ROWING&team=', 'project=ROWING&team=a&team=b'])
       expect((await request(`/template?${query}`)).status).toBe(400);
@@ -275,14 +277,10 @@ it('人员确认后撤回队伍授权，最终HTTP提交拒绝新建及业务写
 
 it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', async () => {
   const { templateHeaderKey, IMPORT_TEMPLATE_VERSION } = await import('../../shared/import-template-fields.ts');
-  for (const kind of ['training', 'test', 'unified']) {
+  for (const kind of ['training', 'test']) {
     const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING&team=${encodeURIComponent('HTTP甲队')}`, { headers: { authorization: `Bearer ${token}` } });
     expect(response.status).toBe(200);
     const workbook = XLSX.read(Buffer.from(await response.arrayBuffer()), { type: 'buffer' });
-    if (kind === 'unified') {
-      expect(workbook.SheetNames).toEqual(['运动员基础体能测试']);
-      continue;
-    }
     expect(workbook.Sheets['填写说明'].B1.v).toBe(IMPORT_TEMPLATE_VERSION);
     if (kind === 'test') {
       const metricRows = XLSX.utils.sheet_to_json(workbook.Sheets['其他测试'], { header: 1 }) as unknown[][];
@@ -316,22 +314,16 @@ it('简化模板HTTP下载预填正确，缺日期自动补齐并可校对', asy
   }
   expect((await fetch(`${base}/api/data-import/template?kind=training&project=ROWING`)).status).toBe(401);
   expect((await fetch(`${base}/api/data-import/template?kind=training&project=CANOE_SLALOM`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(403);
-  expect((await fetch(`${base}/api/data-import/template?kind=unified&project=CANOE_SLALOM`, { headers: { authorization: `Bearer ${token}` } })).status).toBe(403);
+  for (const path of ['/template', '/template?kind=unified', '/template?kind=unified&project=ROWING'])
+    expect((await request(path)).status).toBe(400);
 });
 
-it('统一单表模板预填授权队伍，空行不入库且按姓名关联已有运动员', async () => {
-  const download = async (kind: string) => {
-    const response = await fetch(`${base}/api/data-import/template?kind=${kind}&project=ROWING&team=${encodeURIComponent('HTTP甲队')}`, { headers: { authorization: `Bearer ${token}` } });
-    expect(response.status).toBe(200);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    const styled = XLSX.read(bytes, {type:'buffer',cellStyles:true});
-    for (const name of ['运动员基本资料', '训练课次']) if (styled.Sheets[name]) expect(styled.Sheets[name].A3.v).toMatch(/^姓名\n/);
-    return XLSX.read(bytes, {type:'buffer'});
-  };
+it('已下载的旧统一单表仍可提交，空行不入库且按姓名关联已有运动员', async () => {
+  const unified = XLSX.read(readFileSync('server/data-import/fixtures/legacy-unified-template.xlsx'), { type: 'buffer' });
+  const sheet = unified.Sheets['运动员基础体能测试'];
+  XLSX.utils.sheet_add_aoa(sheet, [['虚构队员', 'HTTP甲队'], ['另一预填队员', 'HTTP甲队']], { origin: 'A2' });
   const rowsOf = (book: ReturnType<typeof XLSX.read>, sheetName: string) =>
     XLSX.utils.sheet_to_json(book.Sheets[sheetName], { header: 1 }) as unknown[][];
-  const unified = await download('unified');
-  expect(unified.SheetNames).toEqual(['运动员基础体能测试']);
   const matrix = rowsOf(unified, '运动员基础体能测试');
   expect(matrix[0]).toHaveLength(15);
   const dataRow = matrix.findIndex(row => row[0] === '虚构队员');

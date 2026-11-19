@@ -265,8 +265,8 @@ try {
     adminAthletesForAnalysis.payload.athletes.every((athlete) => !('identityNumber' in athlete)),
     '运动员接口仍返回身份证字段'
   );
-  const downloadedTemplate = await fetch(`${base}/api/data-import/template`, { headers: { authorization: `Bearer ${adminToken}` } });
-  assert(downloadedTemplate.status === 200, '统一模板下载失败');
+  const downloadedTemplate = await fetch(`${base}/api/data-import/template?kind=profile&project=${encodeURIComponent(analysisAthlete.project)}`, { headers: { authorization: `Bearer ${adminToken}` } });
+  assert(downloadedTemplate.status === 200, '队员资料模板下载失败');
   const templateWorkbook = XLSX.read(await downloadedTemplate.arrayBuffer(), { type: 'array' });
   assert(templateWorkbook.SheetNames.every((name) => !JSON.stringify(XLSX.utils.sheet_to_json(templateWorkbook.Sheets[name], { header: 1 })).includes('身份证')), '下载模板仍含身份证字段');
   const legacyWorkbook = XLSX.utils.book_new();

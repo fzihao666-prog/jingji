@@ -1074,7 +1074,7 @@ it('校对接口不能将非法可选数值静默丢弃，修正后可提交', (
 });
 
 it('实际单表模板往返导入，预填空行不产生业务记录', () => {
-  const workbook = XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'), { type:'buffer' });
+  const workbook = XLSX.read(readFileSync('server/data-import/fixtures/legacy-unified-template.xlsx'), { type:'buffer' });
   XLSX.utils.sheet_add_aoa(workbook.Sheets['运动员基础体能测试'], [
     ['张某','A队','2025-09-05',180], ['赵某','B队','2025-09-05']
   ], {origin:'A2'});
@@ -1305,7 +1305,7 @@ describe('统一模板按业务归属整理', () => {
     expect(() => commit(batch.id, 'skip')).toThrow();
   });
   it('新统一模板只有一张15列工作表', () => {
-    const workbook=XLSX.read(readFileSync('public/templates/竞迹统一数据导入模板.xlsx'),{type:'buffer'});
+    const workbook=XLSX.read(readFileSync('server/data-import/fixtures/legacy-unified-template.xlsx'),{type:'buffer'});
     expect(workbook.SheetNames).toEqual(['运动员基础体能测试']);
     const rows=XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础体能测试'],{header:1});
     expect(rows[0]).toEqual(COMPACT_ATHLETE_COLUMNS.filter(field => field.key !== '运动员编号').map(compactAthleteHeader));

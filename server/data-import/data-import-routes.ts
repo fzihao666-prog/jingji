@@ -1,6 +1,5 @@
 import { registerTestTemplateRoutes } from './test-template-routes.ts';
 import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
-import { buildCompactAthleteWorkbook } from './compact-athlete-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import type { ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
@@ -54,14 +53,12 @@ function dataImportCandidates(user: AuthUser) {
     .map(athlete => ({ ...athlete, active: false }))];
 }
 
-export const unifiedTemplateName = '竞迹统一数据导入模板.xlsx';
 const importTemplatePath = (name: string) =>
   ['public', 'dist'].map(directory => resolve(process.cwd(), directory, 'templates', name)).find(existsSync);
-export const unifiedTemplatePath = () => importTemplatePath(unifiedTemplateName);
 
 export const unifiedExportHeaders = UNIFIED_IMPORT_HEADERS;
 
-export type TemplateKind = 'profile' | 'training' | 'test' | 'unified';
+export type TemplateKind = 'profile' | 'training' | 'test';
 
 const PURPOSE_SHEETS = IMPORT_PURPOSE_SHEETS;
 
@@ -69,13 +66,11 @@ const PURPOSE_TITLES: Record<TemplateKind, string> = {
   profile: '队员资料模板',
   training: '训练记录模板',
   test: '测试成绩模板',
-  unified: '统一数据模板',
 };
 
 /**
- * 统一模板与分用途模板：复用统一模板的表头与解析规则，并按当前项目和权限预填
- * 姓名、所属队伍，教练无需导出历史数据即可填报。统一模板
- * 采用单表基础体能格式，其余按用途取表。
+ * 分用途模板复用现有表头与解析规则，并按当前项目和权限预填
+ * 姓名、所属队伍，教练无需导出历史数据即可填报。
  */
 export function buildPurposeTemplate(
   kind: TemplateKind,
@@ -83,7 +78,6 @@ export function buildPurposeTemplate(
   athletes: Array<{ id: number; name: string; team: string }>,
   metrics?: readonly ImportMetricDefinition[]
 ) {
-  if (kind === 'unified') return buildCompactAthleteWorkbook(athletes);
   const sheetNames = PURPOSE_SHEETS[kind];
   const workbook = buildImportWorkbook(sheetNames, { metrics, project, omitProfileTeam: kind === 'profile' });
   for (const sheetName of sheetNames) {
@@ -175,8 +169,8 @@ export function registerDataImportRoutes(app: Express) {
     requireAuth,
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
-      const kind = (cleanString(req.query.kind) || 'unified') as TemplateKind | 'team';
-      if (!['profile', 'training', 'test', 'unified', 'team'].includes(kind))
+      const kind = cleanString(req.query.kind) as TemplateKind | 'team';
+      if (!['profile', 'training', 'test', 'team'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {
         const team = cleanString(req.query.team);
@@ -184,13 +178,6 @@ export function registerDataImportRoutes(app: Express) {
           return res.status(400).json({ message: '请选择有效的队伍。' });
         if (team && !cleanString(req.query.project))
           return res.status(400).json({ message: '选择队伍时必须指定运动项目。' });
-        if (kind === 'unified' && !cleanString(req.query.project)) {
-          // 本地开发从 public 读取；生产环境可能只保留 dist，因此提供构建产物兜底。
-          const templatePath = unifiedTemplatePath();
-          if (!templatePath) return res.status(404).json({ message: '统一数据导入模板尚未部署。' });
-          res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-          return res.download(templatePath, unifiedTemplateName);
-        }
         const project = normalizeProject(cleanString(req.query.project));
         if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
         const scope = dataImportScope(req.authUser!, project);
@@ -209,7 +196,7 @@ export function registerDataImportRoutes(app: Express) {
         const athletes = strengthImportCandidates(req.authUser!)
           .filter((athlete) => athlete.project === project && (!team || athlete.team === team))
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
-        const metrics = kind === 'test' || kind === 'unified' ? readImportMetricDefinitions(project) : undefined;
+        const metrics = kind === 'test' ? readImportMetricDefinitions(project) : undefined;
         const workbook = kind === 'profile' && team
           ? buildBasicProfileWorkbook(project, team, athletes)
           : buildPurposeTemplate(kind, project, athletes, metrics);

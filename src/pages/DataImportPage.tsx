@@ -89,7 +89,7 @@ type AthleteCorrection = {
   confirmed?: boolean;
 };
 
-type TemplateKind = 'profile' | 'training' | 'test' | 'unified';
+type TemplateKind = 'profile' | 'training' | 'test';
 
 const ITEM_LABELS: Record<DataImportItem['itemType'], string> = {
   athlete_profile: '运动员档案',
@@ -350,11 +350,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     setMessage('');
     try {
       await api.downloadDataImportTemplate(kind, project, templateTeam || undefined);
-      setMessage(
-        kind === 'unified'
-          ? '统一数据模板已开始下载（含已有人员预填）。'
-          : '分用途模板已开始下载（含已有人员预填）。'
-      );
+      setMessage('分用途模板已开始下载（含已有人员预填）。');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '模板下载失败。');
     } finally {
@@ -962,18 +958,6 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             <div>
               <strong>测试成绩模板</strong>
               <span>预览并配置本队测试指标</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => downloadTemplate('unified')}
-          >
-            <FileSpreadsheet size={19} />
-            <div>
-              <strong>统一数据模板</strong>
-              <span>单表填写身体指标、实测1RM及基础体能，预填已有人员</span>
             </div>
           </button>
           <button
