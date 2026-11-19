@@ -2045,22 +2045,29 @@ function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownlo
     const common = [String(athlete!.id), athlete!.name, date, order, name];
     sessions[index] = [...common, start, ...sessionHeaders.slice(6).map(read)];
     if (TRAINING_SET_COLUMNS.some(column => text(read(column)))) {
-      if (!text(read('组序')) && !text(row[4])) fail('填写力量组次时须提供组序或明细序号。');
-      sets[index] = [...common, ...TRAINING_SET_COLUMNS.map(column => column === '组序' ? read(column) ?? row[4] : read(column))];
+      if (!text(read('组序')) && !text(read('明细序号'))) fail('填写力量组次时须提供组序或明细序号。');
+      sets[index] = [...common, ...TRAINING_SET_COLUMNS.map(column => column === '组序' ? (text(read(column)) ? read(column) : read('明细序号')) : read(column))];
     }
     const fields = template.fields.map((field, fieldIndex) => ({ field, source: template.fieldSources?.[fieldIndex], raw: read(trainingDetailHeader(field)) }))
       .filter(({ raw }) => text(raw));
     if (fields.length) {
       const details: TrainingRecordDetail[] = [];
-      const detailOrder = text(row[4]) ? standardNumberValue(row[4]) : 1;
-      if (detailOrder === null || !Number.isSafeInteger(detailOrder) || detailOrder < 1)
-        fail('明细序号须为正整数。');
-      for (const name of new Set(fields.map(({ source }) => source?.project ?? template.name))) {
-        const detailKey = JSON.stringify([groupKey, name, detailOrder]);
-        if (usedDetails.has(detailKey)) fail('同一课次、训练项目的明细序号重复。请为不同明细填写不同序号。');
-        usedDetails.add(detailKey);
-      }
+      const detailOrders = new Map<string, number>();
       for (const { field, source, raw } of fields) {
+        const name = source?.project ?? template.name;
+        let detailOrder = detailOrders.get(name);
+        if (detailOrder === undefined) {
+          const sequenceName = template.compactIdentity ? (source?.sequence ?? '段序') : '明细序号';
+          const sequence = sequenceName ? read(sequenceName) : undefined;
+          const orderValue = text(sequence) ? standardNumberValue(sequence) : 1;
+          if (orderValue === null || !Number.isSafeInteger(orderValue) || orderValue < 1)
+            fail(`「${sequenceName}」须为正整数。`);
+          detailOrder = orderValue!;
+          const detailKey = JSON.stringify([groupKey, name, detailOrder]);
+          if (usedDetails.has(detailKey)) fail(`同一课次的「${name}」有重复明细。逐组或逐段记录时，请加入相应序号列并为每行填写不同序号。`);
+          usedDetails.add(detailKey);
+          detailOrders.set(name, detailOrder);
+        }
         const numeric = field.kind === 'time' ? templateTimeValue(raw)
           : field.kind === 'number' ? standardNumberValue(raw) : null;
         if (field.kind === 'time' && (numeric === null || numeric < 0))

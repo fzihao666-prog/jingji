@@ -1144,10 +1144,10 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
     const book = XLSX.read(await download.arrayBuffer());
     const sheet = book.Sheets['训练记录'];
     const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
-    expect(matrix[0].slice(5)).toEqual(columns);
+    expect(matrix[0]).toEqual(['运动员编号', '姓名', '日期', '课次', ...columns]);
     XLSX.utils.sheet_add_aoa(sheet, [
-      ['701', '虚构队员', '2026-11-20', '合并课次', 1, null, '1:02.5', 30],
-      ['701', '虚构队员', '2026-11-20', '合并课次', 1, '动作稳定'],
+      ['701', '虚构队员', '2026-11-20', '合并课次', null, '1:02.5', 30],
+      ['701', '虚构队员', '2026-11-20', '合并课次', '动作稳定'],
     ], { origin: 'A2' });
     const form = new FormData();
     form.set('project', 'ROWING');
@@ -1169,8 +1169,77 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
     expect(updatedDownload.status).toBe(200);
     const updatedBook = XLSX.read(await updatedDownload.arrayBuffer());
     const updatedRows = XLSX.utils.sheet_to_json(updatedBook.Sheets['训练记录'], { header: 1 }) as unknown[][];
-    expect(updatedRows[0].slice(5)).toEqual(remainingConfig.columns);
+    expect(updatedRows[0].slice(4)).toEqual(remainingConfig.columns);
   } finally {
     if (permission.changes) db.prepare("DELETE FROM user_team_permissions WHERE user_id=702 AND project='ROWING' AND team='HTTP甲队'").run();
   }
+});
+
+it('常用项目支持整课、深蹲三组、赛艇四段和体能成绩回传', async () => {
+  const scope = '?project=ROWING&team=HTTP甲队';
+  const headers = { authorization: `Bearer ${token}` };
+  async function workbook(kind: 'training' | 'test', sheetName: string) {
+    const response = await fetch(`${base}/api/data-import/${kind}-template/download${scope}`, { headers });
+    expect(response.status).toBe(200);
+    const book = XLSX.read(await response.arrayBuffer());
+    const sheet = book.Sheets[sheetName];
+    const columns = (XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][])[0];
+    return { book, sheet, columns };
+  }
+  async function submit(book: XLSX.WorkBook) {
+    const form = new FormData();
+    form.set('project', 'ROWING');
+    form.set('team', 'HTTP甲队');
+    form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '常用项目.xlsx');
+    const parsed = await request('/analyze', 'POST', form);
+    expect(parsed.status, JSON.stringify(parsed.body)).toBe(200);
+    const committed = await request(`/batches/${parsed.body.batch!.id}/commit`, 'POST', {});
+    expect(committed.status, JSON.stringify(committed.body)).toBe(200);
+  }
+
+  const config = await request(`/training-template${scope}`);
+  expect(config.body).toMatchObject({ commonNames: ['整课训练', '力量训练', '间歇与分段训练'] });
+  expect((await request(`/training-template/config${scope}`, 'PUT', { names: ['整课训练'] })).status).toBe(200);
+  const simple = await workbook('training', '训练记录');
+  expect(simple.columns).toEqual(['运动员编号', '姓名', '日期', '课次', '时长分钟', 'RPE', '整课训练 · 备注']);
+
+  expect((await request(`/training-template/config${scope}`, 'PUT', { names: ['整课训练', '力量训练', '间歇与分段训练'] })).status).toBe(200);
+  const training = await workbook('training', '训练记录');
+  expect(training.columns).toEqual(expect.arrayContaining(['组序', '段序']));
+  expect(training.columns).not.toContain('明细序号');
+  const identity = { 运动员编号: '701', 姓名: '虚构队员', 日期: '2026-11-21' };
+  const rows: Record<string, string | number>[] = [
+    ...[60, 65, 70].map((weight, index) => ({
+      ...identity, 课次: '深蹲训练', ...(index === 0 ? { 时长分钟: 60, RPE: 6 } : {}),
+      动作: '深蹲', 组序: index + 1, 实际重量kg: weight, 实际次数: 3,
+    })),
+    ...[60, 61.5, 62, 63].map((seconds, index) => ({
+      ...identity, 课次: '赛艇分段', 段序: index + 1, '间歇与分段训练 · 分段用时（s）': seconds,
+    })),
+  ];
+  XLSX.utils.sheet_add_aoa(training.sheet, rows.map(row => training.columns.map(column => row[column] ?? null)), { origin: 'A2' });
+  await submit(training.book);
+  expect(db.prepare(`SELECT s.duration_min, s.srpe, COUNT(r.id) AS sets FROM training_sessions s
+    JOIN strength_result_sets r ON r.training_session_id=s.id
+    WHERE s.athlete_id=701 AND s.session_date='2026-11-21' AND s.content='深蹲训练' GROUP BY s.id`).get())
+    .toEqual({ duration_min: 60, srpe: 360, sets: 3 });
+  expect(db.prepare(`SELECT d.detail_order,d.value_num FROM training_record_details d
+    JOIN training_sessions s ON s.id=d.session_id
+    WHERE s.athlete_id=701 AND s.session_date='2026-11-21' AND s.content='赛艇分段' ORDER BY d.detail_order`).all())
+    .toEqual([60, 61.5, 62, 63].map((value_num, index) => ({ detail_order: index + 1, value_num })));
+
+  const testConfig = await request(`/test-template${scope}`);
+  expect(testConfig.body).toMatchObject({ groups: expect.arrayContaining([
+    expect.objectContaining({ name: '实测最大力量（1RM）', common: true, codes: expect.arrayContaining(['squat_kg']) }),
+    expect.objectContaining({ name: '跳跃能力', common: true, codes: expect.arrayContaining(['vertical_jump_cm']) }),
+  ]) });
+  expect((await request(`/test-template/config${scope}`, 'PUT', { action: 'team', codes: ['squat_kg', 'vertical_jump_cm'] })).status).toBe(200);
+  const tests = await workbook('test', '运动员测试成绩');
+  XLSX.utils.sheet_add_aoa(tests.sheet, [['701', '虚构队员', 'HTTP甲队', '2026-11-21', 95, 41]], { origin: 'A2' });
+  await submit(tests.book);
+  expect(db.prepare(`SELECT m.metric_code,m.value_num,t.protocol FROM test_measurements m JOIN test_sessions t ON t.id=m.test_session_id
+    WHERE t.athlete_id=701 AND t.test_date='2026-11-21' ORDER BY m.metric_code`).all()).toEqual([
+    { metric_code: 'squat_kg', value_num: 95, protocol: '实测1RM' },
+    { metric_code: 'vertical_jump_cm', value_num: 41, protocol: 'CMJ' },
+  ]);
 });

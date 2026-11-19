@@ -22,6 +22,7 @@ export type TestTemplateGroupInput = {
 export type TestTemplateGroup = {
   name: string;
   codes: string[];
+  common?: boolean;
 };
 
 export type TestTemplatePreview = {

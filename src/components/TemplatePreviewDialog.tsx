@@ -72,3 +72,26 @@ export function TemplatePreviewColumns({ headers, fixedColumns = headers.length,
     </div>
   );
 }
+
+export function TemplateWorkspace({ title, team, athleteCount, busy, onClose, preview, error, status, children, actions }: {
+  title: string;
+  team: string;
+  athleteCount?: number;
+  busy: boolean;
+  onClose: () => void;
+  preview: ReactNode;
+  error: string;
+  status: string;
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <TemplatePreviewDialog title={title} busy={busy} onClose={onClose} preview={preview}>
+      <p>{team}{athleteCount !== undefined && ` · 预填 ${athleteCount} 名运动员`}</p>
+      {error && <p role="alert">{error}</p>}
+      <div role="status">{status}</div>
+      {children}
+      {actions && <footer className="test-template-actions">{actions}</footer>}
+    </TemplatePreviewDialog>
+  );
+}

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowDown, ArrowUp, Download, Plus, Save } from 'lucide-react';
+import { Download, Save } from 'lucide-react';
 import { TEST_TEMPLATE_IDENTITY_HEADERS, testTemplateHeaders, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
 import { api } from '../api';
 import type { Project } from '../types';
 import type { TrainingRecordTemplate } from '../../shared/training-record-template';
-import { blankTemplateField, TemplateProjectEditor } from './TemplateProjectEditor';
-import { TemplatePreviewColumns, TemplatePreviewDialog } from './TemplatePreviewDialog';
+import { TemplateProjectPicker } from './TemplateProjectPicker';
+import { TemplateProjectEditor } from './TemplateProjectEditor';
+import { TemplatePreviewColumns, TemplateWorkspace } from './TemplatePreviewDialog';
 
 const emptyMetric: TestTemplateMetricInput = {
   label: '', unit: '', protocol: '', valueKind: 'number', direction: 'neutral',
@@ -19,11 +20,9 @@ export function TestTemplatePanel({ project, team, onClose }: {
   const [preview, setPreview] = useState<TestTemplatePreview | null>(null);
   const [codes, setCodes] = useState<string[]>([]);
   const [projectMode, setProjectMode] = useState(false);
-  const [query, setQuery] = useState('');
   const [candidate, setCandidate] = useState('');
-  const addButton = useRef<HTMLButtonElement>(null);
   const newGroupButton = useRef<HTMLButtonElement>(null);
-  const [adding, setAdding] = useState(false);
+  const groupForm = useRef<HTMLFormElement>(null);
   const [groupDraft, setGroupDraft] = useState<{
     name: string; protocol: string; fields: TrainingRecordTemplate['fields'];
   } | null>(null);
@@ -50,19 +49,10 @@ export function TestTemplatePanel({ project, team, onClose }: {
     return () => controller.abort();
   }, [project, retry, team]);
 
-  const search = query.trim().toLowerCase();
-  const matchesSearch = (...values: string[]) => values.join(' ').toLowerCase().includes(search);
   const catalog = new Map(preview?.catalog.map(metric => [metric.code, metric]));
-  const options = preview?.catalog.filter(metric =>
-    !codes.includes(metric.code) && matchesSearch(metric.label, metric.protocol, metric.unit),
-  ) ?? [];
-  const groups = preview?.groups.filter(group =>
-    group.codes.some(code => !codes.includes(code)) &&
-    matchesSearch(group.name, ...group.codes.flatMap(code => {
-      const metric = catalog.get(code);
-      return metric ? [metric.label, metric.protocol] : [];
-    })),
-  ) ?? [];
+  const options = preview?.catalog.filter(metric => !codes.includes(metric.code)) ?? [];
+  const groups = preview?.groups.filter(group => group.codes.some(code => !codes.includes(code))) ?? [];
+  const projectOptions = groups.map(group => ({ value: `group:${group.name}`, label: group.name, common: group.common }));
   const selectedGroup = groups.find(group => candidate === `group:${group.name}`);
   const selectedOption = options.find(metric => candidate === metric.code);
   const selected = codes.flatMap(code => catalog.get(code) ?? []);
@@ -93,7 +83,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
   function move(index: number, change: number) {
     const next = [...codes];
     [next[index], next[index + change]] = [next[index + change], next[index]];
-    setCodes(next);
+    void run(() => updateColumns(next, 'Excel 列顺序已更新。'));
   }
 
   function openEditor(mode: 'create' | 'rename' | 'version', metric?: TestTemplateMetric) {
@@ -129,14 +119,6 @@ export function TestTemplatePanel({ project, team, onClose }: {
     });
   }
 
-  function finishAdding() {
-    setCandidate('');
-    setGroupDraft(null);
-    setAdding(false);
-    setEditor(current => current?.mode === 'create' ? null : current);
-    requestAnimationFrame(() => addButton.current?.focus());
-  }
-
   function saveGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!groupDraft) return;
@@ -152,8 +134,9 @@ export function TestTemplatePanel({ project, team, onClose }: {
           .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN')),
         groups: [...current.groups, group],
       });
-      finishAdding();
+      setGroupDraft({ name: '', protocol: '', fields: [] });
       await updateColumns([...new Set([...codes, ...group.codes])], `「${group.name}」已添加到 Excel 列。`);
+      requestAnimationFrame(() => groupForm.current?.querySelector('input')?.focus());
     });
   }
 
@@ -177,59 +160,39 @@ export function TestTemplatePanel({ project, team, onClose }: {
   }
 
   return (
-    <TemplatePreviewDialog title="测试成绩模板预览" busy={pending} onClose={onClose}
+    <TemplateWorkspace title="测试成绩模板预览" team={team} athleteCount={preview?.athleteCount} busy={pending} onClose={onClose}
+      error={error} status={status || (!loaded ? '正在加载测试指标…' : '')}
       preview={preview && <TemplatePreviewColumns headers={testTemplateHeaders(selected)}
-        fixedColumns={TEST_TEMPLATE_IDENTITY_HEADERS.length} busy={pending}
-        onRemove={index => void run(() => updateColumns(codes.filter((_, position) => position !== index), 'Excel 列已移除。'))} />}>
-      <div role="status">{status || (!loaded ? '正在加载测试指标…' : '')}</div>
-      {error && <p role="alert">{error}</p>}
+        fixedColumns={TEST_TEMPLATE_IDENTITY_HEADERS.length} busy={pending} onMove={move}
+        onRemove={index => void run(() => updateColumns(codes.filter((_, position) => position !== index), 'Excel 列已移除。'))} />}
+      actions={preview && <>
+          {projectMode ? <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('project')}><Save size={16} aria-hidden />保存项目默认</button> : <>
+            <button type="button" className="primary-button" disabled={pending || columnsChanged || !codes.length} onClick={download}><Download size={16} aria-hidden />下载 Excel</button>
+            {columnsChanged && <button type="button" className="secondary-button" disabled={pending} onClick={() => configure('team')}>重试保存</button>}
+          </>}
+      </>}>
       {loaded && !preview && <button type="button" className="secondary-button" onClick={() => {
         setLoaded(false);
         setError('');
         setRetry(value => value + 1);
       }}>重试</button>}
       {preview && <>
-        <p>{team} · 预填 {preview.athleteCount} 名运动员 · {projectMode ? '编辑项目默认组合' : preview.source === 'team' ? '队伍自定义组合' : '继承项目默认组合'}</p>
-        <div className="test-template-actions">
-          <button ref={addButton} type="button" className="secondary-button" disabled={pending}
-            aria-expanded={adding} onClick={() => adding ? finishAdding() : setAdding(true)}>
-            <Plus size={16} aria-hidden />选择已有项目
-          </button>
-          <button ref={newGroupButton} type="button" className="secondary-button" disabled={pending} onClick={() => {
-            setAdding(true);
-            setEditor(null);
-            setGroupDraft({ name: '', protocol: '', fields: [blankTemplateField] });
-          }}>新建测试项目</button>
-        </div>
-        {adding && !groupDraft && <div className="test-template-actions">
-          <label className="data-import-template-team">搜索项目或指标
-            <input type="search" autoFocus disabled={pending} value={query} onChange={event => {
-              setQuery(event.target.value);
-              setCandidate('');
-            }} />
-          </label>
-          <label className="data-import-template-team">项目或指标
-            <select value={candidate} onChange={event => setCandidate(event.target.value)} disabled={pending}>
-              <option value="">请选择</option>
-              {groups.length > 0 && <optgroup label="测试项目">
-                {groups.map(group => <option key={group.name} value={`group:${group.name}`}>{group.name}（{group.codes.length}项）</option>)}
-              </optgroup>}
-              {options.length > 0 && <optgroup label="单项指标">
-                {options.map(metric => <option key={metric.code} value={metric.code}>{metric.label}{metric.unit && `（${metric.unit}）`}{metric.protocol && ` · ${metric.protocol}`}</option>)}
-              </optgroup>}
-            </select>
-          </label>
-          <button type="button" className="primary-button" disabled={pending || (!selectedGroup && !selectedOption)} onClick={() => {
+        {projectMode && <p>正在编辑运动项目的默认组合。</p>}
+        <TemplateProjectPicker groups={[
+          { label: '常用项目', options: projectOptions.filter(option => option.common) },
+          { label: '已有项目', options: projectOptions.filter(option => !option.common) },
+          { label: '单项指标', options: options.map(metric => ({
+            value: metric.code, label: `${metric.label}${metric.unit ? `（${metric.unit}）` : ''}${metric.protocol ? ` · ${metric.protocol}` : ''}`,
+          })) },
+        ]} value={candidate} onChange={setCandidate} disabled={pending || Boolean(groupDraft || editor)}
+          newLabel="新建测试项目" newButton={newGroupButton} onNew={() => {
+            setGroupDraft({ name: '', protocol: '', fields: [] });
+          }} onAdd={() => {
             const chosen = selectedGroup?.codes ?? (selectedOption ? [selectedOption.code] : []);
-            finishAdding();
+            setCandidate('');
             void run(() => updateColumns([...new Set([...codes, ...chosen])], '已添加到 Excel 列。'));
-          }}><Plus size={16} aria-hidden />加入模板</button>
-          <details>
-            <summary>高级设置</summary>
-            <button type="button" className="secondary-button" disabled={pending} onClick={() => openEditor('create')}>新建单项指标</button>
-          </details>
-        </div>}
-        {groupDraft && <form className="test-template-editor" onSubmit={saveGroup}>
+          }} />
+        {groupDraft && <form ref={groupForm} className="test-template-editor" onSubmit={saveGroup}>
           <fieldset disabled={pending}>
             <legend>新建测试项目</legend>
             <div className="test-template-group-fields">
@@ -247,9 +210,8 @@ export function TestTemplatePanel({ project, team, onClose }: {
                 <button type="submit" className="primary-button" disabled={!groupDraft.fields.length}><Save size={16} aria-hidden />添加</button>
                 <button type="button" className="secondary-button" onClick={() => {
                   setGroupDraft(null);
-                  setAdding(false);
                   requestAnimationFrame(() => newGroupButton.current?.focus());
-                }}>取消</button>
+                }}>结束新建</button>
               </div>
             </div>
           </fieldset>
@@ -277,43 +239,38 @@ export function TestTemplatePanel({ project, team, onClose }: {
           </fieldset>
         </form>}
         {!codes.length && <p>添加本次要测的项目，系统会生成填写列。</p>}
-        <ol className="test-template-columns">
-          {selected.map((metric, index) => (
-            <li key={metric.code}>
-              <div><strong>{metric.label}{metric.unit && `（${metric.unit}）`}</strong>
-                <div>协议 {metric.protocol || '未登记'}{metric.protocolVersion && ` · 版本 ${metric.protocolVersion}`}</div>
-              </div>
-              <div className="test-template-actions">
-                <button type="button" className="secondary-button" aria-label={`上移${metric.label}`} disabled={pending || index === 0} onClick={() => move(index, -1)}><ArrowUp size={16} aria-hidden /></button>
-                <button type="button" className="secondary-button" aria-label={`下移${metric.label}`} disabled={pending || index === codes.length - 1} onClick={() => move(index, 1)}><ArrowDown size={16} aria-hidden /></button>
-                {metric.editable &&
-                  <button type="button" className="secondary-button" disabled={pending} aria-label={`修改${metric.label}名称`} onClick={() => openEditor('rename', metric)}>改名</button>}
-                <button type="button" className="secondary-button" disabled={pending} aria-label={`为${metric.label}建新版本`} onClick={() => openEditor('version', metric)}>建新版本</button>
-              </div>
-            </li>
-          ))}
-        </ol>
         <details>
           <summary>模板设置</summary>
-        <div className="test-template-actions">
-          {preview.canManageProject && <button type="button" className="secondary-button" disabled={pending} onClick={() => {
-            setProjectMode(!projectMode);
-            setCodes(projectMode ? preview.codes : preview.projectCodes);
-            setEditor(null);
-            setGroupDraft(null);
-            setStatus('');
-          }}>{projectMode ? '返回队伍模板' : '编辑项目默认'}</button>}
-          {!projectMode && preview.source === 'team' && <button type="button" className="secondary-button" disabled={pending} onClick={() => configure('inherit')}>恢复项目默认</button>}
-        </div>
+          <button type="button" className="secondary-button" disabled={pending || Boolean(groupDraft || editor)} onClick={() => openEditor('create')}>新建单项指标</button>
+          <ol className="test-template-columns">
+            {selected.map((metric) => (
+              <li key={metric.code}>
+                <div><strong>{metric.label}{metric.unit && `（${metric.unit}）`}</strong>
+                  <div>协议 {metric.protocol || '未登记'}{metric.protocolVersion && ` · 版本 ${metric.protocolVersion}`}</div>
+                </div>
+                <div className="test-template-actions">
+                  {metric.editable &&
+                    <button type="button" className="secondary-button" disabled={pending} aria-label={`修改${metric.label}名称`} onClick={() => openEditor('rename', metric)}>改名</button>}
+                  <button type="button" className="secondary-button" disabled={pending} aria-label={`为${metric.label}建新版本`} onClick={() => openEditor('version', metric)}>建新版本</button>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <div className="test-template-actions">
+            {preview.canManageProject && <button type="button" className="secondary-button" disabled={pending} onClick={() => {
+              setProjectMode(!projectMode);
+              setCodes(projectMode ? preview.codes : preview.projectCodes);
+              setEditor(null);
+              setGroupDraft(null);
+              setStatus('');
+            }}>{projectMode ? '返回队伍模板' : '编辑项目默认'}</button>}
+            {!projectMode && preview.source === 'team' && <button type="button" className="secondary-button" disabled={pending} onClick={() => configure('inherit')}>恢复项目默认</button>}
+          </div>
         </details>
-        {!projectMode && columnsChanged && <p>Excel 列已修改，保存到本队后即可下载并供本队使用。</p>}
-        <footer className="test-template-actions">
-          {projectMode ? <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('project')}><Save size={16} aria-hidden />保存项目默认</button> : <>
-            <button type="button" className="secondary-button" disabled={pending || columnsChanged || !codes.length} onClick={download}><Download size={16} aria-hidden />下载 Excel</button>
-            <button type="button" className="primary-button" disabled={pending || !columnsChanged} onClick={() => configure('team')}><Save size={16} aria-hidden />保存到本队</button>
-          </>}
-        </footer>
+        {!projectMode && columnsChanged && <p>Excel 列尚未保存，重试保存后即可下载。</p>}
+
       </>}
-    </TemplatePreviewDialog>
+    </TemplateWorkspace>
   );
 }

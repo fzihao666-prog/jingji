@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Plus, Save } from 'lucide-react';
-import { combineTrainingProjects, TRAINING_RECORD_IDENTITY, TRAINING_RECORD_OPTIONS, TRAINING_SET_COLUMNS, trainingRecordHeaders, type TrainingRecordTemplate } from '../../shared/training-record-template';
+import { Download, Save } from 'lucide-react';
+import { combineTrainingProjects, TRAINING_RECORD_IDENTITY, TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SEGMENT, TRAINING_SET_COLUMNS, trainingRecordHeaders, type TrainingRecordTemplate } from '../../shared/training-record-template';
 import { api } from '../api';
 import type { Project } from '../types';
+import { TemplateProjectPicker } from './TemplateProjectPicker';
 import { TemplateProjectEditor } from './TemplateProjectEditor';
-import { TemplatePreviewColumns, TemplatePreviewDialog } from './TemplatePreviewDialog';
+import { TemplatePreviewColumns, TemplateWorkspace } from './TemplatePreviewDialog';
 
 function availableColumns(projects: TrainingRecordTemplate[]) {
   return trainingRecordHeaders(combineTrainingProjects(projects)).slice(TRAINING_RECORD_IDENTITY.length);
@@ -20,6 +21,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
   project: Project; team: string; onLegacy: () => void; onClose: () => void;
 }) {
   const [saved, setSaved] = useState<TrainingRecordTemplate[]>([]);
+  const [commonNames, setCommonNames] = useState<string[]>([]);
   const [athleteCount, setAthleteCount] = useState<number>();
   const [template, setTemplate] = useState<TrainingRecordTemplate>(emptyTemplate);
   const [editing, setEditing] = useState(false);
@@ -38,6 +40,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
     void api.trainingRecordTemplates(project, team, controller.signal).then(data => {
       if (controller.signal.aborted) return;
       setSaved(data.templates);
+      setCommonNames(data.commonNames);
       setNames(data.names);
       setPublished(data.names);
       const initial = data.columns ?? availableColumns(data.templates.filter(item => data.names.includes(item.name))
@@ -83,7 +86,8 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
   }
 
   const selected = names.flatMap(name => saved.find(item => item.name === name) ?? []);
-  const available = availableColumns(selected);
+  const available = [...new Set([...availableColumns(selected),
+    ...(selected.some(item => item.fields.length) ? [TRAINING_RECORD_SEGMENT] : [])])];
   const [columnCandidate, setColumnCandidate] = useState('');
   const changed = names.length !== published.length || names.some((name, index) => name !== published[index])
     || columns.length !== publishedColumns.length || columns.some((column, index) => column !== publishedColumns[index]);
@@ -101,42 +105,49 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
   }
 
   function move(index: number, offset: number) {
-    setColumns(current => {
-      const next = [...current];
-      [next[index], next[index + offset]] = [next[index + offset], next[index]];
-      return next;
-    });
+    const next = [...columns];
+    [next[index], next[index + offset]] = [next[index + offset], next[index]];
+    void run(() => updateColumns(names, next));
   }
+
+  const projectOptions = saved.filter(item => !names.includes(item.name)).map(item => ({ value: item.name, label: item.name }));
   const valid = template.name.trim() && (template.standard.length > 0 || template.fields.length > 0) && template.fields.every(field => field.name.trim());
 
-  return <TemplatePreviewDialog title="训练记录模板预览" busy={busy} onClose={onClose}
+  return <TemplateWorkspace title="训练记录模板预览" team={team} athleteCount={athleteCount} busy={busy} onClose={onClose} error={error} status={status}
     preview={<TemplatePreviewColumns headers={trainingRecordHeaders(combineTrainingProjects(selected, columns))}
       fixedColumns={TRAINING_RECORD_IDENTITY.length} busy={busy} onMove={move}
       onRemove={index => void run(async () => {
         await updateColumns(names, columns.filter((_, position) => position !== index));
         setStatus('Excel 列已移除。');
-      })} />}>
-    <p>{team}{athleteCount !== undefined && ` · 预填 ${athleteCount} 名运动员`}</p>
-    {error && <p role="alert">{error}</p>}
-    <div role="status">{status}</div>
-    <div className="test-template-actions">
-      <label className="data-import-template-team">选择已有项目
-        <select disabled={busy || editing} value={candidate} onChange={event => setCandidate(event.target.value)}>
-          <option value="">选择训练项目</option>
-          {saved.filter(item => !names.includes(item.name)).map(item => <option key={item.name}>{item.name}</option>)}
-        </select>
-      </label>
-      <button type="button" className="secondary-button" disabled={busy || editing || !candidate} onClick={() => {
+      })} />}
+    actions={<>
+      {changed && <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async () => {
+        const config = await api.saveTrainingTeamColumns(project, team, names, columns);
+        setPublished(config.names);
+        setPublishedColumns(config.columns);
+        setStatus('Excel 列已保存到本队。');
+      })}>重试保存</button>}
+      <button type="button" className="primary-button" disabled={busy || changed || !publishedColumns.length} onClick={() => void run(async () => {
+        await api.downloadTrainingRecordTemplate(project, team);
+        setStatus('训练模板已开始下载。');
+      })}><Download size={16} aria-hidden />下载 Excel</button>
+      <details><summary>旧版模板</summary>
+        <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
+      </details>
+    </>}>
+    <TemplateProjectPicker groups={[
+      { label: '常用项目', options: projectOptions.filter(option => commonNames.includes(option.value)) },
+      { label: '本队已有', options: projectOptions.filter(option => !commonNames.includes(option.value)) },
+    ]} value={candidate} onChange={setCandidate} disabled={busy || editing || athleteCount === undefined}
+      newLabel="新建训练项目" newButton={newProjectButton} onAdd={() => {
         const item = saved.find(entry => entry.name === candidate);
         if (item) void run(() => includeProject(item));
         setCandidate('');
-      }}>加入模板</button>
-      <button ref={newProjectButton} type="button" className="secondary-button" disabled={busy || editing || athleteCount === undefined} onClick={() => {
+      }} onNew={() => {
         setTemplate(emptyTemplate);
         setStatus('');
         setEditing(true);
-      }}><Plus size={16} aria-hidden />新建训练项目</button>
-    </div>
+      }} />
     {editing && <fieldset ref={projectForm} disabled={busy} className="test-template-group-fields">
       <legend>新建训练项目</legend>
       <TemplateProjectEditor name={template.name} fields={template.fields} nameLimit={80} fieldLimit={60} allowText autoFocus
@@ -179,21 +190,6 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         }}>添加到 Excel</button>
       </div>}
     </>}
-    {changed && <p>Excel 列已修改，保存到本队后即可下载并供本队使用。</p>}
-    <footer className="test-template-actions">
-      <button type="button" className="primary-button" disabled={busy || !changed} onClick={() => void run(async () => {
-        const config = await api.saveTrainingTeamColumns(project, team, names, columns);
-        setPublished(config.names);
-        setPublishedColumns(config.columns);
-        setStatus('Excel 列已保存到本队。');
-      })}>保存到本队</button>
-      <button type="button" className="secondary-button" disabled={busy || changed || !publishedColumns.length} onClick={() => void run(async () => {
-        await api.downloadTrainingRecordTemplate(project, team);
-        setStatus('训练模板已开始下载。');
-      })}><Download size={16} aria-hidden />下载 Excel</button>
-      <details><summary>旧版模板</summary>
-        <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
-      </details>
-    </footer>
-  </TemplatePreviewDialog>;
+    {changed && <p>Excel 列尚未保存，重试保存后即可下载。</p>}
+  </TemplateWorkspace>;
 }

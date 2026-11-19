@@ -148,7 +148,14 @@ export function testTemplateGroups(db: DatabaseSync, project: string, catalog: T
   const available = new Set(catalog.map(metric => metric.code));
   const stored = db.prepare('SELECT name,codes_json AS codes FROM test_template_groups WHERE project=? ORDER BY name')
     .all(project) as Array<{ name: string; codes: string }>;
-  return [fmsGroup, ...stored.map((row): TestTemplateGroup => ({ name: row.name, codes: JSON.parse(row.codes) }))]
+  const usedNames = new Set(stored.map(row => row.name));
+  const common = [
+    { name: '实测最大力量（1RM）', codes: ['squat_kg', 'bench_press_kg', 'bench_pull_kg', 'deadlift_kg', 'clean_kg'] },
+    { name: '跳跃能力', codes: ['vertical_jump_cm', 'cmj_peak_power_w'] },
+    { name: '速度与计时', codes: catalog.filter(metric => metric.valueKind === 'time' && /^(sprint_|run_)/.test(metric.code)).map(metric => metric.code) },
+  ].filter(group => !usedNames.has(group.name)).map(group => ({ ...group, codes: group.codes.filter(code => available.has(code)), common: true }))
+    .filter(group => group.codes.length);
+  return [{ ...fmsGroup, common: true }, ...common, ...stored.map((row): TestTemplateGroup => ({ name: row.name, codes: JSON.parse(row.codes) }))]
     .filter(group => group.codes.every(code => available.has(code)));
 }
 
@@ -235,7 +242,7 @@ export function testTemplateTeamId(db: DatabaseSync, project: string, team: stri
     .get(project, team) as { id: number } | undefined)?.id;
 }
 
-export type TrainingRecordDownload = TrainingRecordTemplate & { fieldSources?: Array<{ project: string; name: string }>; project: string; teamId: number };
+export type TrainingRecordDownload = TrainingRecordTemplate & { fieldSources?: Array<{ project: string; name: string; sequence?: string }>; project: string; teamId: number };
 export function readTrainingRecordDownload(db: DatabaseSync, id: string): TrainingRecordDownload | undefined {
   const row = db.prepare('SELECT project,team_id AS teamId,config_json AS config FROM training_record_downloads WHERE id=?')
     .get(id) as { project: string; teamId: number; config: string } | undefined;

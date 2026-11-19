@@ -948,7 +948,7 @@ export const api = {
       truncated: boolean }>(`/api/athletes/${athleteId}/custom-training-details?${params}`, { signal });
   },
   trainingRecordTemplates(project: Project, team: string, signal?: AbortSignal) {
-    return request<{ templates: TrainingRecordTemplate[]; names: string[]; columns?: string[]; athleteCount: number }>(
+    return request<{ templates: TrainingRecordTemplate[]; commonNames: string[]; names: string[]; columns?: string[]; athleteCount: number }>(
       `/api/data-import/training-template?${new URLSearchParams({ project, team })}`, { signal });
   },
   saveTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, sourceName: string) {

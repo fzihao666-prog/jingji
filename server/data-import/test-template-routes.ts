@@ -1,6 +1,6 @@
 import { testTemplateHeaders } from '../../shared/test-template.ts';
 import {
-  combineTrainingProjects, TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
+  combineTrainingProjects, commonTrainingProjects, TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
   type TrainingRecordTemplate,
 } from '../../shared/training-record-template.ts';
 import { isValidIsoDate } from '../core/date-utils.ts';
@@ -84,7 +84,11 @@ function validateTrainingTemplate(template: TrainingRecordTemplate) {
   if (requested && (!requested.length || new Set(requested).size !== requested.length ||
     requested.some(header => !template.standard.includes(header) && !template.fields.some(field => trainingDetailHeader(field) === header))))
     throw new ImportRequestError('Excel 列配置已变化，请重新选择字段。', 400);
-  return trainingRecordHeaders(template);
+  const visible = trainingRecordHeaders(template);
+  if ((visible.includes('实际重量kg') || visible.includes('实际次数')) &&
+    (!visible.includes('动作') || !visible.includes('组序')))
+    throw new ImportRequestError('保留实际重量或次数时，也需保留动作和组序列。', 400);
+  return visible;
 }
 
 function saveTrainingTemplate(teamId: number, template: TrainingRecordTemplate) {
@@ -95,10 +99,13 @@ function saveTrainingTemplate(teamId: number, template: TrainingRecordTemplate) 
 function trainingTeamConfig(teamId: number) {
   const templates = db.prepare('SELECT config_json AS config FROM training_record_templates WHERE team_id=? ORDER BY name')
     .all(teamId).map(row => JSON.parse(String(row.config)) as TrainingRecordTemplate);
+  const namesInLibrary = templates.map(template => template.name);
+  const commonNames = commonTrainingProjects.filter(template => !namesInLibrary.includes(template.name)).map(template => template.name);
+  templates.push(...commonTrainingProjects.filter(template => commonNames.includes(template.name)));
   const saved = db.prepare('SELECT names_json AS names FROM training_record_team_columns WHERE team_id=?').get(teamId);
-  const config = saved ? JSON.parse(String(saved.names)) : templates.map(template => template.name);
+  const config = saved ? JSON.parse(String(saved.names)) : namesInLibrary;
   const names: string[] = Array.isArray(config) ? config : config.names;
-  return { templates, names: names.filter(name => templates.some(template => template.name === name)),
+  return { templates, commonNames, names: names.filter(name => templates.some(template => template.name === name)),
     columns: Array.isArray(config) ? undefined : config.columns as string[] | undefined };
 }
 
@@ -149,6 +156,8 @@ export function registerTestTemplateRoutes(app: Express) {
         sourceName: z.string().trim().max(80).optional(),
       }).parse(req.body);
       validateTrainingTemplate(template);
+      if (!sourceName && commonTrainingProjects.some(project => project.name === template.name))
+        throw new ImportRequestError('本队可直接选用这个常用项目，请为新项目使用其他名称。', 409);
       if (sourceName !== template.name && db.prepare('SELECT 1 FROM training_record_templates WHERE team_id=? AND name=?').get(s.teamId, template.name))
         throw new ImportRequestError('本队已有同名训练项目，请换个名称或选择已有项目编辑。', 409);
       const previouslyPublished = trainingTeamConfig(s.teamId).names;
@@ -193,7 +202,10 @@ export function registerTestTemplateRoutes(app: Express) {
       sheet.columns = headers.map(header => ({ header, width: 22, style: { numFmt: '@' } }));
       sheet.getRow(1).font = { bold: true };
       sheet.getCell('D1').note = '同一运动员同日同课次填同一个名称。整课时长和 RPE 填一次即可。';
-      sheet.getCell('E1').note = '逐段或逐组记录时，为同一课次各明细填写不同的正整数序号。';
+      for (const column of ['明细序号', '组序', '段序']) {
+        const index = headers.indexOf(column);
+        if (index >= 0) sheet.getRow(1).getCell(index + 1).note = '同一课次的每组或每段填写不同的正整数序号。';
+      }
       template.fields.forEach(field => {
         if (field.kind === 'time' && headers.includes(trainingDetailHeader(field)))
           sheet.getRow(1).getCell(headers.indexOf(trainingDetailHeader(field)) + 1).note =
