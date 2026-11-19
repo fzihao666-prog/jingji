@@ -33,3 +33,22 @@ export type TestTemplatePreview = {
   athleteCount: number;
   canManageProject: boolean;
 };
+
+export const TEST_TEMPLATE_IDENTITY_HEADERS = ['运动员编号', '姓名', '所属队伍', '测试日期'] as const;
+
+export function testTemplateHeaders(metrics: readonly Pick<TestTemplateMetric, 'label' | 'unit' | 'testType'>[]) {
+  const labels = metrics.map(metric => {
+    const label = metric.testType === 'FMS测试' ? `FMS ${metric.label}` : metric.label;
+    return metric.unit ? `${label}（${metric.unit}）` : label;
+  });
+  const used = new Set<string>(TEST_TEMPLATE_IDENTITY_HEADERS);
+  const columns = labels.map((label, index) => {
+    let header = label;
+    if (used.has(header) || labels.indexOf(label) !== labels.lastIndexOf(label))
+      header = `${label} [${index + 1}]`;
+    while (used.has(header)) header += '·';
+    used.add(header);
+    return header;
+  });
+  return [...TEST_TEMPLATE_IDENTITY_HEADERS, ...columns];
+}

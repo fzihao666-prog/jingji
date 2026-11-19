@@ -937,8 +937,8 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
             ref={trainingTemplateButton}
-            aria-expanded={trainingTemplateOpen}
-            onClick={() => setTrainingTemplateOpen(open => !open)}
+            aria-haspopup="dialog"
+            onClick={() => setTrainingTemplateOpen(true)}
           >
             <Download size={19} />
             <div>
@@ -951,8 +951,8 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
             ref={testTemplateButton}
-            aria-expanded={testTemplateOpen}
-            onClick={() => setTestTemplateOpen(open => !open)}
+            aria-haspopup="dialog"
+            onClick={() => setTestTemplateOpen(true)}
           >
             <Download size={19} />
             <div>
@@ -979,14 +979,14 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
         <TrainingRecordTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
           onLegacy={() => void downloadTemplate('training')} onClose={() => {
             setTrainingTemplateOpen(false);
-            trainingTemplateButton.current?.focus();
+            requestAnimationFrame(() => trainingTemplateButton.current?.focus());
           }} />
       )}
       {testTemplateOpen && selectedTeam && (
         <TestTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
           onClose={() => {
             setTestTemplateOpen(false);
-            testTemplateButton.current?.focus();
+            requestAnimationFrame(() => testTemplateButton.current?.focus());
           }}
         />
       )}

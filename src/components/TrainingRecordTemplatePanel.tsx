@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Plus } from 'lucide-react';
 import { TRAINING_RECORD_OPTIONS, TRAINING_SET_COLUMNS, trainingRecordHeaders, type TrainingRecordTemplate } from '../../shared/training-record-template';
 import { api } from '../api';
 import type { Project } from '../types';
-import './TestTemplatePanel.css';
+import { TemplatePreviewColumns, TemplatePreviewDialog } from './TemplatePreviewDialog';
 
 const emptyTemplate: TrainingRecordTemplate = { name: '', standard: [], fields: [] };
 const labels: Record<string, string> = {
@@ -14,15 +14,12 @@ const labels: Record<string, string> = {
 export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }: {
   project: Project; team: string; onLegacy: () => void; onClose: () => void;
 }) {
-  const titleId = useId();
-  const heading = useRef<HTMLHeadingElement>(null);
   const [saved, setSaved] = useState<TrainingRecordTemplate[]>([]);
   const [athleteCount, setAthleteCount] = useState<number>();
   const [template, setTemplate] = useState<TrainingRecordTemplate>(emptyTemplate);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
-  useEffect(() => heading.current?.focus(), []);
   useEffect(() => {
     const controller = new AbortController();
     void api.trainingRecordTemplates(project, team, controller.signal).then(data => {
@@ -60,11 +57,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
 
   const valid = template.name.trim() && (template.standard.length > 0 || template.fields.length > 0) && template.fields.every(field => field.name.trim());
 
-  return <section className="data-import-template-panel test-template-panel" aria-labelledby={titleId}>
-    <header className="test-template-actions">
-      <h2 ref={heading} tabIndex={-1} id={titleId}>训练记录模板预览</h2>
-      <button type="button" className="secondary-button" disabled={busy} onClick={onClose}>关闭预览</button>
-    </header>
+  return <TemplatePreviewDialog title="训练记录模板预览" busy={busy} onClose={onClose}>
     <p>{team}{athleteCount !== undefined && ` · 预填 ${athleteCount} 名运动员`}</p>
     {error && <p role="alert">{error}</p>}
     <div role="status">{status}</div>
@@ -81,7 +74,7 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
           <input maxLength={80} value={template.name} onChange={event => setTemplate({ ...template, name: event.target.value })} />
         </label>
       </div>
-      <div className="test-template-actions">
+      <div className="test-template-actions template-field-options">
         {TRAINING_RECORD_OPTIONS.filter(field => !TRAINING_SET_COLUMNS.some(key => key === field)).map(field => <label key={field}>
           <input type="checkbox" checked={template.standard.includes(field)} onChange={event => toggle(field, event.target.checked)} />
           {labels[field] ?? field}
@@ -109,13 +102,13 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         onClick={() => setTemplate(current => ({ ...current, fields: [...current.fields, { name: '', unit: '', kind: 'number' }] }))}>
         <Plus size={16} aria-hidden />添加自定义字段</button></div>
     </fieldset>
-    <p>Excel 列：{trainingRecordHeaders({ ...template, fields: template.fields.filter(field => field.name.trim()) }).join('、')}</p>
-    <div className="test-template-actions">
+    <TemplatePreviewColumns headers={trainingRecordHeaders({ ...template, fields: template.fields.filter(field => field.name.trim()) })} />
+    <footer className="test-template-actions">
       <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
       <button type="button" className="secondary-button" disabled={busy || !valid} onClick={() => void download(false)}>
         <Download size={16} aria-hidden />仅下载本次模板</button>
       <button type="button" className="primary-button" disabled={busy || !valid} onClick={() => void download(true)}>
         <Download size={16} aria-hidden />保存为本队模板并下载</button>
-    </div>
-  </section>;
+    </footer>
+  </TemplatePreviewDialog>;
 }

@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, Download, Plus, Save } from 'lucide-react';
-import type { TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../../shared/test-template';
+import { testTemplateHeaders, type TestTemplateGroupInput, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
 import { api } from '../api';
 import type { Project } from '../types';
-import './TestTemplatePanel.css';
+import { TemplatePreviewColumns, TemplatePreviewDialog } from './TemplatePreviewDialog';
 
 const emptyMetric: TestTemplateMetricInput = {
   label: '', unit: '', protocol: '', valueKind: 'number', direction: 'neutral',
@@ -14,8 +14,6 @@ export function TestTemplatePanel({ project, team, onClose }: {
   team: string;
   onClose: () => void;
 }) {
-  const titleId = useId();
-  const heading = useRef<HTMLHeadingElement>(null);
   const [preview, setPreview] = useState<TestTemplatePreview | null>(null);
   const [codes, setCodes] = useState<string[]>([]);
   const [projectMode, setProjectMode] = useState(false);
@@ -37,7 +35,6 @@ export function TestTemplatePanel({ project, team, onClose }: {
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
 
-  useEffect(() => heading.current?.focus(), []);
   useEffect(() => {
     const controller = new AbortController();
     void api.testTemplatePreview(project, team, controller.signal).then(result => {
@@ -174,11 +171,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
   }
 
   return (
-    <section className="data-import-template-panel test-template-panel" aria-labelledby={titleId}>
-      <header className="test-template-actions">
-        <h2 ref={heading} id={titleId} tabIndex={-1}>测试成绩模板预览</h2>
-        <button type="button" className="secondary-button" disabled={pending} onClick={onClose}>关闭预览</button>
-      </header>
+    <TemplatePreviewDialog title="测试成绩模板预览" busy={pending} onClose={onClose}>
       <div role="status">{status || (!loaded ? '正在加载测试指标…' : '')}</div>
       {error && <p role="alert">{error}</p>}
       {loaded && !preview && <button type="button" className="secondary-button" onClick={() => {
@@ -198,6 +191,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
           }}>{projectMode ? '返回队伍模板' : '编辑项目默认'}</button>}
           {!projectMode && preview.source === 'team' && <button type="button" className="secondary-button" disabled={pending} onClick={() => configure('inherit')}>恢复项目默认</button>}
         </div>
+        <TemplatePreviewColumns headers={testTemplateHeaders(selected)} />
         {!codes.length && <p>添加本次要测的项目，系统会生成填写列。</p>}
         <ol className="test-template-columns">
           {selected.map((metric, index) => (
@@ -332,6 +326,6 @@ export function TestTemplatePanel({ project, team, onClose }: {
           </>}
         </footer>
       </>}
-    </section>
+    </TemplatePreviewDialog>
   );
 }

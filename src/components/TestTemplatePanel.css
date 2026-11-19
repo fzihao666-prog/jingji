@@ -7,10 +7,6 @@
   margin: 0;
 }
 
-.test-template-panel header {
-  justify-content: space-between;
-}
-
 .test-template-actions {
   display: flex;
   align-items: end;
@@ -70,4 +66,122 @@
 .test-template-group-fields > label,
 .test-template-group-fields details label {
   max-width: 360px;
+}
+
+.template-preview-dialog {
+  width: min(880px, calc(100% - 24px));
+  max-height: min(820px, calc(100dvh - 32px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border, #dbe5e7);
+  border-radius: 16px;
+  background: var(--paper, #fff);
+  color: var(--text);
+}
+
+.template-preview-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.template-preview-dialog::backdrop {
+  background: rgb(15 23 42 / 48%);
+}
+
+.template-preview-heading {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px clamp(12px, 3vw, 24px);
+  border-bottom: 1px solid var(--border, #dbe5e7);
+}
+
+.template-preview-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.template-preview-body {
+  min-height: 0;
+  padding: 16px clamp(12px, 3vw, 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.template-preview-sheet {
+  overflow-x: auto;
+  border: 1px solid #82959b;
+  border-radius: 8px;
+}
+
+.template-preview-sheet table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.template-preview-sheet caption {
+  padding: 8px 12px;
+  border-bottom: 1px solid #82959b;
+  text-align: start;
+  font-weight: 600;
+}
+
+.template-preview-sheet th {
+  min-width: 112px;
+  max-width: 240px;
+  padding: 10px 12px;
+  background: var(--surface-2, #edf4f5);
+  color: var(--text);
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.template-preview-sheet th + th {
+  border-inline-start: 1px solid #82959b;
+}
+
+.test-template-columns:not(:empty) {
+  border: 1px solid var(--border, #dbe5e7);
+  border-radius: 8px;
+}
+
+.test-template-columns li {
+  padding-inline: 12px;
+  overflow-wrap: anywhere;
+}
+
+.test-template-columns li:last-child {
+  border-bottom: 0;
+}
+
+.test-template-panel :is(.test-template-editor fieldset, fieldset.test-template-group-fields) {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border, #dbe5e7);
+  border-radius: 8px;
+}
+
+.template-field-options label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border, #dbe5e7);
+  border-radius: 8px;
+}
+
+.test-template-panel input[type="checkbox"] {
+  min-height: 0;
+  padding: 0;
+}
+
+.template-preview-body footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #dbe5e7);
 }

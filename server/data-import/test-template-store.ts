@@ -12,7 +12,7 @@ export class TestTemplateInputError extends Error {}
 export const TEST_TEMPLATE_SHEET = '运动员测试成绩';
 export const TEST_TEMPLATE_META = '模板识别';
 export const TEST_TEMPLATE_FORMAT = 'jingji:test-template:v1';
-export const TEST_TEMPLATE_IDENTITY_HEADERS = ['运动员编号', '姓名', '所属队伍', '测试日期'] as const;
+export { TEST_TEMPLATE_IDENTITY_HEADERS } from '../../shared/test-template.ts';
 
 export function initializeTestTemplates(db: DatabaseSync) {
   db.exec('BEGIN IMMEDIATE');

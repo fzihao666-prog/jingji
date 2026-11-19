@@ -1,3 +1,4 @@
+import { testTemplateHeaders } from '../../shared/test-template.ts';
 import {
   TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingRecordHeaders,
   type TrainingRecordTemplate,
@@ -285,19 +286,10 @@ export function registerTestTemplateRoutes(app: Express) {
       const s = scope(req);
       const { codes, saveTeam } = z.object({ codes: codesSchema, saveTeam: z.boolean() }).strict().parse(req.body);
       const metrics = throwOnInvalidCodes(s.project, codes);
-      const headers = metrics.map(metric => {
-        const label = metric.testType === 'FMS测试' ? `FMS ${metric.label}` : metric.label;
-        return metric.unit ? `${label}（${metric.unit}）` : label;
-      });
-      const usedHeaders = new Set<string>(TEST_TEMPLATE_IDENTITY_HEADERS);
-      const columns: TestTemplateColumn[] = metrics.map(({ code, label, unit, protocol, protocolVersion, valueKind, testType }, index) => {
-        let header = headers[index];
-        if (usedHeaders.has(header) || headers.indexOf(header) !== headers.lastIndexOf(header))
-          header = `${header} [${index + 1}]`;
-        while (usedHeaders.has(header)) header += '·';
-        usedHeaders.add(header);
-        return { code, label, unit, protocol, protocolVersion, valueKind, testType, header };
-      });
+      const headers = testTemplateHeaders(metrics).slice(TEST_TEMPLATE_IDENTITY_HEADERS.length);
+      const columns: TestTemplateColumn[] = metrics.map(({ code, label, unit, protocol, protocolVersion, valueKind, testType }, index) => ({
+        code, label, unit, protocol, protocolVersion, valueKind, testType, header: headers[index],
+      }));
       const id = randomUUID();
       const book = new ExcelJS.Workbook();
       const sheet = book.addWorksheet(TEST_TEMPLATE_SHEET, { views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }] });
