@@ -311,7 +311,11 @@ export function RegionAccessPage({ user }: { user: User }) {
         role,
         parentUserId,
         areas: athleteAreas,
-        projects: role === 'OBS' ? [...new Set(teams.map((team) => team.project))] : projects,
+        projects: role === 'OBS'
+          ? [...new Set(teams.map((team) => team.project))]
+          : role === 'SCC' && !projects.includes('*')
+            ? [...new Set([...projects, ...teams.map((team) => team.project)])]
+            : projects,
         teams,
       });
       await load(selected.id);

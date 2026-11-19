@@ -703,6 +703,11 @@ export function registerAccessRoutes(app: Express) {
       if (role !== 'ATL') permissions.areas = [];
       if (role === 'OBS')
         permissions.projects = [...new Set(permissions.teams.map((team) => team.project))];
+      if (role === 'SCC' && !permissions.projects.includes('*'))
+        permissions.projects = [...new Set([
+          ...permissions.projects,
+          ...permissions.teams.map((team) => team.project),
+        ])];
       const errors: string[] = [];
       if (displayNameResult.error) errors.push(displayNameResult.error);
       if (!canManageRole(currentUser.role, role))
@@ -855,6 +860,11 @@ export function registerAccessRoutes(app: Express) {
       if (target.role !== 'ATL') permissions.areas = [];
       if (role === 'OBS')
         permissions.projects = [...new Set(permissions.teams.map((team) => team.project))];
+      if (role === 'SCC' && !permissions.projects.includes('*'))
+        permissions.projects = [...new Set([
+          ...permissions.projects,
+          ...permissions.teams.map((team) => team.project),
+        ])];
       const previousAreas = accountPermissions(targetId).areas;
       const scopeError =
         (role === 'OBS' && !permissions.teams.length ? '' : validateScopePayload(permissions)) || validateAccountAreas(permissions.areas, previousAreas);

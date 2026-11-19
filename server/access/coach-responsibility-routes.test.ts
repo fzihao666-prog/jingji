@@ -277,6 +277,43 @@ describe('队伍责任范围 HTTP 集成', () => {
     expect(database.prepare('SELECT * FROM audit_logs').all()).toEqual([]);
   });
 
+  it('补齐队伍所属项目后仍拒绝超出授权人范围的保存', async () => {
+    database.exec("UPDATE user_project_permissions SET project='ROWING' WHERE user_id=1");
+    const before = database.prepare('SELECT * FROM user_team_permissions WHERE user_id=2').all();
+    const response = await fetch(`${baseUrl}/api/access/accounts/2`, {
+      method: 'PUT', headers: headers(1),
+      body: JSON.stringify({
+        role: 'SCC', parentUserId: 1, areas: [], projects: ['ROWING'],
+        teams: [{ project: 'CANOE_SPRINT', team: 'A队' }],
+      }),
+    });
+    expect(response.status).toBe(403);
+    expect(database.prepare('SELECT * FROM user_team_permissions WHERE user_id=2').all()).toEqual(before);
+  });
+
+  it('保存教练队伍授权时补齐所属项目，其他页面即时查询到负责教练', async () => {
+    database.exec(`
+      INSERT INTO account_profiles (user_id,parent_user_id,account_code) VALUES (2,1,'scope-sync');
+    `);
+    const response = await fetch(`${baseUrl}/api/access/accounts/2`, {
+      method: 'PUT',
+      headers: headers(1),
+      body: JSON.stringify({
+        role: 'SCC', parentUserId: 1, areas: [], projects: ['ROWING'],
+        teams: [
+          { project: 'ROWING', team: 'A队' },
+          { project: 'CANOE_SPRINT', team: 'A队' },
+        ],
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(database.prepare('SELECT project FROM user_project_permissions WHERE user_id=2 ORDER BY project').all())
+      .toEqual([{ project: 'CANOE_SPRINT' }, { project: 'ROWING' }]);
+    const { readTeamCoaches } = await import('../core/coach-team-responsibility.ts');
+    expect(readTeamCoaches(database, 'CANOE_SPRINT', 'A队').map(coach => coach.id)).toContain(2);
+    expect((await assignments(2)).athletes.map(athlete => athlete.id)).toContain(201);
+  });
+
   it.each([
     { coachIds: ['2'] },
     { coachIds: [-1] },
