@@ -603,6 +603,9 @@ export function registerAthleteRoutes(app: Express) {
       COALESCE(ap.emergency_phone, '') AS emergencyPhone, COALESCE(ap.education, '') AS education,
       COALESCE(ap.technical_level, '') AS technicalLevel, COALESCE(ap.position, '') AS athletePosition,
       COALESCE(ap.best_result, '') AS bestResult,
+      COALESCE(ap.event_item, '') AS eventItem, COALESCE(ap.representative_unit, '') AS representativeUnit,
+      ap.training_years AS trainingYears, COALESCE(ap.best_result_event, '') AS bestResultEvent,
+      COALESCE(ap.best_result_date, '') AS bestResultDate,
       COALESCE(ap.native_place, '') AS nativePlace, COALESCE(ap.home_address, '') AS homeAddress,
       COALESCE(ap.athlete_status, '在训') AS athleteStatus, COALESCE(ap.start_sport_date, '') AS startSportDate,
       COALESCE(ap.training_venue, '') AS trainingVenue, COALESCE(ap.current_event, '') AS currentEvent,
@@ -698,6 +701,11 @@ export function registerAthleteRoutes(app: Express) {
       athletePosition: string;
       healthStatus: string;
       bestResult: string;
+      eventItem: string;
+      representativeUnit: string;
+      trainingYears: number | null;
+      bestResultEvent: string;
+      bestResultDate: string;
       nativePlace: string;
       homeAddress: string;
       athleteStatus: string;

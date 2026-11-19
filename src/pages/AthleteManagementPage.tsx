@@ -48,6 +48,11 @@ type AthleteForm = {
   athletePosition: string;
   healthStatus: string;
   bestResult: string;
+  eventItem: string;
+  representativeUnit: string;
+  trainingYears: string;
+  bestResultEvent: string;
+  bestResultDate: string;
   nativePlace: string;
   homeAddress: string;
   project: string;
@@ -85,6 +90,11 @@ const blankForm: AthleteForm = {
   athletePosition: '',
   healthStatus: '健康',
   bestResult: '',
+  eventItem: '',
+  representativeUnit: '',
+  trainingYears: '',
+  bestResultEvent: '',
+  bestResultDate: '',
   nativePlace: '',
   homeAddress: '',
   project: '',
@@ -381,7 +391,12 @@ export function AthleteManagementPage({
     setMessage('');
     try {
       if (!selectedFormTeam) throw new Error('请选择有效的所属队伍。');
-      const payload = { ...form, project: selectedFormTeam.project, team: selectedFormTeam.name };
+      const payload = {
+        ...form,
+        project: selectedFormTeam.project,
+        team: selectedFormTeam.name,
+        trainingYears: form.trainingYears === '' ? null : Number(form.trainingYears),
+      };
       let athleteId = editingAthlete?.id || 0;
       if (editingAthlete) await api.updateAthlete(editingAthlete.id, payload);
       else athleteId = (await api.createAthlete(payload)).id;
@@ -1282,6 +1297,18 @@ export function AthleteManagementPage({
                         </select>
                       </label>
                       <label>
+                        <span>具体小项</span>
+                        <input maxLength={120} value={form.eventItem} onChange={event => setForm({ ...form, eventItem: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>代表单位</span>
+                        <input maxLength={120} value={form.representativeUnit} onChange={event => setForm({ ...form, representativeUnit: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>填报训练年限（年）</span>
+                        <input type="number" min={0} step="any" value={form.trainingYears} onChange={event => setForm({ ...form, trainingYears: event.target.value })} />
+                      </label>
+                      <label>
                         <span>开始运动日期</span>
                         <input
                           type="date"
@@ -1355,6 +1382,14 @@ export function AthleteManagementPage({
                           value={form.bestResult}
                           onChange={(event) => setForm({ ...form, bestResult: event.target.value })}
                         />
+                      </label>
+                      <label>
+                        <span>最好成绩对应赛事</span>
+                        <input maxLength={120} value={form.bestResultEvent} onChange={event => setForm({ ...form, bestResultEvent: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>成绩日期</span>
+                        <input type="date" value={form.bestResultDate} onChange={event => setForm({ ...form, bestResultDate: event.target.value })} />
                       </label>
                       <label>
                         <span>输送地</span>

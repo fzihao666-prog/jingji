@@ -1,3 +1,6 @@
+import { TrainingRecordTemplatePanel } from '../components/TrainingRecordTemplatePanel';
+import { CollectionProgress } from '../components/CollectionProgress';
+import { TestTemplatePanel } from '../components/TestTemplatePanel';
 import { TeamTrainingImport } from '../components/TeamTrainingImport';
 import { EnodeImport } from '../components/EnodeImport';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics';
@@ -137,6 +140,10 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [templateTeam, setTemplateTeam] = useState('');
+  const [testTemplateOpen, setTestTemplateOpen] = useState(false);
+  const [trainingTemplateOpen, setTrainingTemplateOpen] = useState(false);
+  const trainingTemplateButton = useRef<HTMLButtonElement>(null);
+  const testTemplateButton = useRef<HTMLButtonElement>(null);
   const [templateTeamsProject, setTemplateTeamsProject] = useState<Project | null>(null);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
@@ -933,24 +940,28 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             type="button"
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => downloadTemplate('training')}
+            ref={trainingTemplateButton}
+            aria-expanded={trainingTemplateOpen}
+            onClick={() => setTrainingTemplateOpen(open => !open)}
           >
             <Download size={19} />
             <div>
               <strong>训练记录模板</strong>
-              <span>课次、组次与恢复，预填已有人员</span>
+              <span>选择字段并预览，一堂课可填多行</span>
             </div>
           </button>
           <button
             type="button"
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => downloadTemplate('test')}
+            ref={testTemplateButton}
+            aria-expanded={testTemplateOpen}
+            onClick={() => setTestTemplateOpen(open => !open)}
           >
             <Download size={19} />
             <div>
               <strong>测试成绩模板</strong>
-              <span>专项测试与体能测试，预填已有人员</span>
+              <span>预览并配置本队测试指标</span>
             </div>
           </button>
           <button
@@ -979,6 +990,22 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
           </button>
         </div>
       </section>
+      {selectedTeam && <CollectionProgress key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name} lastCommit={batch?.status === 'committed' ? batch.id : undefined} />}
+      {trainingTemplateOpen && selectedTeam && (
+        <TrainingRecordTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
+          onLegacy={() => void downloadTemplate('training')} onClose={() => {
+            setTrainingTemplateOpen(false);
+            trainingTemplateButton.current?.focus();
+          }} />
+      )}
+      {testTemplateOpen && selectedTeam && (
+        <TestTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
+          onClose={() => {
+            setTestTemplateOpen(false);
+            testTemplateButton.current?.focus();
+          }}
+        />
+      )}
 
       <div className="data-import-grid">
         <div className="data-import-sources">
@@ -1419,7 +1446,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                         )}
                       </td>
                       <td>
-                        {item.itemType === 'test_measurement' && batch.status === 'reviewing' && !item.payload.valueReviewDecision && (!item.payload.sourceRow || item.payload.sourceRowOutdated) ? <label>
+                        {item.itemType === 'test_measurement' && !item.payload.testTemplateColumn && batch.status === 'reviewing' && !item.payload.valueReviewDecision && (!item.payload.sourceRow || item.payload.sourceRowOutdated) ? <label>
                           <span>测试项目</span>
                           <select value={item.metricCode} disabled={Boolean(busy)} onChange={event => patchItem(item.id, { metricCode: event.target.value })}>
                             {!metrics.some(metric => metric.code === item.metricCode) && <option value={item.metricCode}>{item.metricLabel || '请选择有效项目'}</option>}

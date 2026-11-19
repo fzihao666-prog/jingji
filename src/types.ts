@@ -106,6 +106,11 @@ export type Athlete = {
   athletePosition: string;
   healthStatus: string;
   bestResult: string;
+  eventItem?: string;
+  representativeUnit?: string;
+  trainingYears?: number | null;
+  bestResultEvent?: string;
+  bestResultDate?: string;
   nativePlace: string;
   homeAddress: string;
   athleteStatus: string;

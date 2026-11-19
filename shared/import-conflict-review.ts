@@ -134,7 +134,7 @@ const schemas: Record<string, ReviewField[]> = {
     }),
     ...textual({ stateLevel: '等级', note: '备注' }),
   ],
-  athlete_profile: textual({
+  athlete_profile: [...textual({
     gender: '性别',
     birthDate: '出生日期',
     region: '省份',
@@ -150,6 +150,10 @@ const schemas: Record<string, ReviewField[]> = {
     position: '位置号位',
     healthStatus: '身体状态',
     bestResult: '最好成绩',
+    eventItem: '具体小项',
+    representativeUnit: '代表单位',
+    bestResultEvent: '对应赛事',
+    bestResultDate: '成绩日期',
     nativePlace: '籍贯',
     homeAddress: '家庭住址',
     athleteStatus: '训练状态',
@@ -163,7 +167,7 @@ const schemas: Record<string, ReviewField[]> = {
     originCoach: '输送教练',
     specialties: '优势项',
     notes: '备注',
-  }),
+  }), ...numeric({ trainingYears: '训练年限' })],
   scoring_rule: [...numeric({ valueNum: '评分阈值' }), ...textual({ comparison: '比较方式' })],
 };
 const topFields = new Set([

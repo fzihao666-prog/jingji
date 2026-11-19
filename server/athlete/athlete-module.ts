@@ -44,6 +44,11 @@ export function readAthleteAdminPayload(body: Record<string, unknown>) {
     athletePosition: cleanString(body.athletePosition),
     healthStatus: cleanString(body.healthStatus) || '健康',
     bestResult: cleanString(body.bestResult),
+    eventItem: typeof body.eventItem === 'string' ? cleanString(body.eventItem) : undefined,
+    representativeUnit: typeof body.representativeUnit === 'string' ? cleanString(body.representativeUnit) : undefined,
+    trainingYears: typeof body.trainingYears === 'number' || body.trainingYears === null ? body.trainingYears : undefined,
+    bestResultEvent: typeof body.bestResultEvent === 'string' ? cleanString(body.bestResultEvent) : undefined,
+    bestResultDate: typeof body.bestResultDate === 'string' ? cleanString(body.bestResultDate) : undefined,
     nativePlace: cleanString(body.nativePlace),
     homeAddress: cleanString(body.homeAddress),
     athleteStatus: cleanString(body.athleteStatus) || '在训',
@@ -150,6 +155,20 @@ export function upsertAthleteProfile(
     payload.specialties,
     payload.notes
   );
+  // 旧客户端未发送这些字段时保留档案原值，支持新表单显式清空。
+  const basicProfileFields = {
+    event_item: payload.eventItem,
+    representative_unit: payload.representativeUnit,
+    training_years: payload.trainingYears,
+    best_result_event: payload.bestResultEvent,
+    best_result_date: payload.bestResultDate,
+  };
+  const changes = Object.entries(basicProfileFields).flatMap(([column, value]) =>
+    value === undefined ? [] : [[column, value] as const],
+  );
+  if (changes.length)
+    db.prepare(`UPDATE athlete_profiles SET ${changes.map(([column]) => `${column} = ?`).join(', ')} WHERE athlete_id = ?`)
+      .run(...changes.map(([, value]) => value), athleteId);
 }
 
 export const athleteProfileText = (max: number) => z.string().trim().max(max);
@@ -173,6 +192,11 @@ export const selfAthleteProfileSchema = z.strictObject({
   athletePosition: athleteProfileText(80),
   healthStatus: athleteProfileText(20),
   bestResult: athleteProfileText(500),
+  eventItem: athleteProfileText(120).optional(),
+  representativeUnit: athleteProfileText(120).optional(),
+  trainingYears: z.number().nonnegative().nullable().optional(),
+  bestResultEvent: athleteProfileText(120).optional(),
+  bestResultDate: optionalIsoDate.optional(),
   nativePlace: athleteProfileText(120),
   homeAddress: athleteProfileText(300),
   athleteStatus: athleteProfileText(20),
@@ -203,6 +227,8 @@ export function selfAthleteProfileValidationMessage(error: z.ZodError) {
   const field = String(issue?.path[0] || '');
   if (issue?.code === 'unrecognized_keys') return '个人资料包含不支持的字段。';
   if (field === 'birthDate') return '出生日期须使用 YYYY-MM-DD 格式。';
+  if (field === 'bestResultDate') return '成绩日期须使用 YYYY-MM-DD 格式。';
+  if (field === 'trainingYears') return '训练年限须为非负数值。';
   if (field === 'startSportDate') return '开始运动日期须使用 YYYY-MM-DD 格式。';
   const labels: Record<string, string> = {
     name: '姓名',
@@ -222,6 +248,9 @@ export function selfAthleteProfileValidationMessage(error: z.ZodError) {
     athletePosition: '位置/号位',
     healthStatus: '健康状态',
     bestResult: '最好成绩',
+    eventItem: '具体小项',
+    representativeUnit: '代表单位',
+    bestResultEvent: '对应赛事',
     nativePlace: '籍贯',
     homeAddress: '家庭住址',
     athleteStatus: '在训状态',

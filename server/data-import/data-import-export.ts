@@ -30,7 +30,8 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
       ap.ethnicity, ap.phone, ap.blood_type, ap.emergency_contact, ap.emergency_phone,
       ap.education, ap.technical_level, ap.position, ap.health_status, ap.best_result, ap.native_place,
       ap.home_address, ap.athlete_status, ap.start_sport_date, ap.training_venue, ap.current_event,
-      ap.training_phase, ap.camp_period, ap.origin_place, ap.origin_unit, ap.origin_coach, ap.specialties, ap.notes
+      ap.training_phase, ap.camp_period, ap.origin_place, ap.origin_unit, ap.origin_coach, ap.specialties, ap.notes,
+      ap.event_item, ap.representative_unit, ap.training_years, ap.best_result_event, ap.best_result_date
     FROM athletes a LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
     LEFT JOIN project_teams pt ON pt.id = a.team_id LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
     WHERE a.id IN (${placeholders}) AND a.project = ? AND a.active = 1 ORDER BY pt.name, a.name
@@ -75,6 +76,11 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
       row.origin_coach,
       row.specialties,
       row.notes,
+      row.event_item,
+      row.representative_unit,
+      row.training_years,
+      row.best_result_event,
+      row.best_result_date,
     ])
   );
   const bodyRows = db

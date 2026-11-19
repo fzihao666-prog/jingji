@@ -1,3 +1,4 @@
+import { readTrainingRecordDownload, readTestTemplateDownload, testTemplateTeamId } from './test-template-store.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { db } from '../core/db.ts';
 import { accountPermissions, permissionsAllowProjectTeam, permissionsAllowAthlete } from '../core/permissions.ts';
@@ -31,9 +32,16 @@ export function assertDataImportBatchAccess(user: AuthUser, batchId: string, can
   const scope = dataImportScope(user, batch.project);
   const deny = () => { throw new ImportRequestError('当前授权已变化，无法访问该批次，请核对项目、队伍及人员权限。', 403); };
   if (!scope.allowed) deny();
-  const { accessTeams: originalTeams, team: selectedTeam } = JSON.parse(batch.summary || '{}') as Record<string, unknown>;
+  const { accessTeams: originalTeams, team: selectedTeam, testTemplateId, trainingTemplateId } = JSON.parse(batch.summary || '{}') as Record<string, unknown>;
   const team = typeof selectedTeam === 'string' ? selectedTeam : '';
   if (team && !scope.allowedTeams.has(team)) deny();
+  if (typeof testTemplateId === 'string' || typeof trainingTemplateId === 'string') {
+    const snapshot = typeof testTemplateId === 'string' ? readTestTemplateDownload(db, testTemplateId)
+      : readTrainingRecordDownload(db, String(trainingTemplateId));
+    if (!snapshot || snapshot.project !== batch.project || snapshot.teamId !== testTemplateTeamId(db, batch.project, team)) deny();
+    if (db.prepare(`SELECT 1 FROM data_import_items i JOIN athletes a ON a.id=i.athlete_id
+      WHERE i.batch_id=? AND (a.team_id IS NOT ? OR a.project<>?) LIMIT 1`).get(batchId, snapshot?.teamId ?? null, batch.project)) deny();
+  }
   const allowed = new Set(candidates.filter(candidate => !team || candidate.team === team && candidate.project === batch.project).map(candidate => candidate.id));
   const ids = db.prepare('SELECT DISTINCT athlete_id AS id FROM data_import_items WHERE batch_id=? AND athlete_id IS NOT NULL').all(batchId) as { id: number }[];
   if (ids.some(row => !allowed.has(row.id))) deny();

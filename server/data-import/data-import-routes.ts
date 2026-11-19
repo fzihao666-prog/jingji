@@ -1,3 +1,4 @@
+import { registerTestTemplateRoutes } from './test-template-routes.ts';
 import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { buildCompactAthleteWorkbook } from './compact-athlete-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
@@ -158,6 +159,7 @@ function authorizeImportBatch(user: AuthUser, batchId: string) {
 }
 
 export function registerDataImportRoutes(app: Express) {
+  registerTestTemplateRoutes(app);
   app.get('/api/data-import/metrics', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     const project = normalizeProject(cleanString(req.query.project));
     if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
@@ -570,6 +572,14 @@ export function registerDataImportRoutes(app: Express) {
       const active = req.body?.active === false ? 0 : 1;
       if (!/^[a-z][a-z0-9_]{1,80}$/.test(code) || !label || label.length > 80 || unit.length > 24)
         return res.status(400).json({ message: '指标编码、名称或单位不合法。' });
+      const current = db.prepare('SELECT unit FROM metric_definitions WHERE code=?').get(code) as { unit: string } | undefined;
+      if (current && current.unit !== unit && db.prepare(`
+        SELECT 1 WHERE EXISTS (SELECT 1 FROM test_measurements WHERE metric_code=?)
+          OR EXISTS (SELECT 1 FROM test_template_metric_details WHERE metric_code=?)
+          OR EXISTS (SELECT 1 FROM test_template_downloads d, json_each(d.columns_json) c
+            WHERE json_extract(c.value,'$.code')=?)
+      `).get(code, code, code))
+        return res.status(409).json({ message: '此指标已有正式定义、模板或成绩，请创建新版本以更改单位。' });
       const result = db
         .prepare(
           `UPDATE metric_definitions SET label = ?, unit = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?`

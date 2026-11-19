@@ -34,6 +34,11 @@ export const UNIFIED_IMPORT_HEADERS: Array<[string, string[]]> = [
       '输送教练',
       '优势项',
       '备注',
+      '具体小项',
+      '代表单位',
+      '训练年限',
+      '对应赛事',
+      '成绩日期',
     ],
   ],
   [
@@ -271,6 +276,7 @@ export const EVALUATION_SCORE_METRICS = [
   ['一般耐力评分', 'general_endurance_score', '一般耐力', '分'],
   ['核心力量评分', 'core_strength_score', '核心力量', '分'],
 ] as const;
+export const FMS_TEST_PROTOCOL = '功能动作筛查（FMS）';
 export const FMS_TEMPLATE_METRICS = [
   ['深蹲', 'fms_deep_squat', '深蹲'],
   ['跨栏步', 'fms_hurdle_step', '跨栏步'],

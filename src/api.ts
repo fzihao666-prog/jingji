@@ -1,3 +1,6 @@
+import type { TrainingRecordTemplate } from '../shared/training-record-template';
+import type { CustomTestTrend } from '../shared/custom-test-trend';
+import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
 import type { SubmissionReport } from '../shared/submission-report';
 import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
 import type { AiManagementData, AiSettings } from '../shared/ai-management';
@@ -108,7 +111,7 @@ export class ApiRequestError extends Error {
 type ApiRequestOptions = RequestInit & {
   /** 为 false 时不附加令牌，401 也不触发会话清理与刷新（登录、注册等免登录接口）。 */
   auth?: boolean;
-  responseType?: 'json' | 'blob' | 'image' | 'docx';
+  responseType?: 'json' | 'blob' | 'image' | 'docx' | 'xlsx';
   /** 请求超时毫秒数；仅对需要快速失败的接口（如登录）启用。 */
   timeoutMs?: number;
 };
@@ -184,13 +187,15 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
       throw new ApiRequestError('照片响应格式异常。');
     return (await response.blob()) as T;
   }
-  if (responseType === 'blob' || responseType === 'docx') {
+  if (responseType === 'blob' || responseType === 'docx' || responseType === 'xlsx') {
     const expectedType =
       responseType === 'docx'
         ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        : 'application/pdf';
+        : responseType === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/pdf';
     if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== expectedType)
-      throw new ApiRequestError('报告响应格式异常，请重试。');
+      throw new ApiRequestError(responseType === 'xlsx' ? '测试模板响应格式异常，请重试。' : '报告响应格式异常，请重试。');
     return (await response.blob()) as T;
   }
   return payload as T;
@@ -920,6 +925,77 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ conflictPolicy, expectedRevision }),
     });
+  },
+  customTestTrend(athleteId: number, query: {
+    project: Project; teamId: number; from: string; to: string; metricCode?: string;
+  }, signal?: AbortSignal) {
+    const { project, teamId, from, to, metricCode } = query;
+    const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
+    if (metricCode) params.set('metricCode', metricCode);
+    return request<CustomTestTrend>(`/api/athletes/${athleteId}/custom-test-trend?${params}`, { signal });
+  },
+  collectionProgress(project: Project, team: string, from: string, to: string, signal?: AbortSignal, expected?: { athleteIds: number[]; metricCodes: string[] }) {
+    type Person = { id: number; name: string };
+    return request<{ athleteCount: number; profileCompleteCount: number; athletes: Person[]; missingProfiles: Array<Person & { missing: string[] }>;
+      expectation: { athleteIds: number[]; metricCodes: string[] } | null;
+      metrics: Array<{ code: string; label: string; inTemplate: boolean; measured: number; missing: Person[];
+        coverage: { total: number; completed: number } | null }> }>(
+      `/api/data-import/test-template/progress?${new URLSearchParams({ project, team, from, to })}`, { signal, ...(expected ? { method: 'PUT', body: JSON.stringify(expected) } : {}) });
+  },
+  customTrainingDetails(athleteId: number, project: Project, teamId: number, from: string, to: string, signal?: AbortSignal) {
+    const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
+    return request<{ rows: Array<{ date: string; session: string; sessionOrder: number; template: string;
+      detailOrder: number; field: string; unit: string; value: number | null; text: string | null }>;
+      truncated: boolean }>(`/api/athletes/${athleteId}/custom-training-details?${params}`, { signal });
+  },
+  trainingRecordTemplates(project: Project, team: string, signal?: AbortSignal) {
+    return request<{ templates: TrainingRecordTemplate[]; athleteCount: number }>(
+      `/api/data-import/training-template?${new URLSearchParams({ project, team })}`, { signal });
+  },
+  async downloadTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, saveTeam: boolean) {
+    const blob = await request<Blob>(`/api/data-import/training-template?${new URLSearchParams({ project, team })}`,
+      { method: 'POST', body: JSON.stringify({ ...template, saveTeam }), responseType: 'xlsx' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${template.name}训练记录.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
+  testTemplatePreview(project: Project, team: string, signal?: AbortSignal) {
+    return request<TestTemplatePreview>(`/api/data-import/test-template?${new URLSearchParams({ project, team })}`, { signal });
+  },
+  createTestTemplateGroup(project: Project, team: string, input: TestTemplateGroupInput) {
+    return request<{ group: TestTemplateGroup; metrics: TestTemplateMetric[] }>(
+      `/api/data-import/test-template/groups?${new URLSearchParams({ project, team })}`,
+      { method: 'POST', body: JSON.stringify(input) });
+  },
+  createTestTemplateMetric(project: Project, team: string, input: TestTemplateMetricInput & { previousCode?: string }) {
+    return request<{ metric: TestTemplateMetric }>(`/api/data-import/test-template/metrics?${new URLSearchParams({ project, team })}`,
+      { method: 'POST', body: JSON.stringify(input) });
+  },
+  renameTestTemplateMetric(project: Project, team: string, code: string, label: string) {
+    return request<{ metric: TestTemplateMetric }>(`/api/data-import/test-template/metrics/${encodeURIComponent(code)}?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify({ label }) });
+  },
+  saveTestTemplateConfig(project: Project, team: string, input: { action: 'project'; codes: string[] } | { action: 'inherit' }) {
+    return request<Pick<TestTemplatePreview, 'source' | 'codes' | 'projectCodes'>>(
+      `/api/data-import/test-template/config?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify(input) });
+  },
+  async downloadTestTemplate(project: Project, team: string, codes: string[], saveTeam: boolean) {
+    const blob = await request<Blob>(`/api/data-import/test-template/download?${new URLSearchParams({ project, team })}`,
+      { method: 'POST', body: JSON.stringify({ codes, saveTeam }), responseType: 'xlsx' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `竞迹${team}测试成绩模板.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   },
   async dataImportMetrics(project: Project) {
     return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(

@@ -1,3 +1,5 @@
+import { CustomTrainingDetailsCard } from '../components/CustomTrainingDetailsCard';
+import { CustomTestTrendCard } from '../components/CustomTestTrendCard';
 import { specialWeeklyOption } from '../components/special-weekly-option';
 import './SpecialTrainingPage.css';
 import { Activity } from 'lucide-react';
@@ -33,6 +35,7 @@ type Props = {
   teamTraining?: { teamId: number | null; date?: string; focus: boolean; onImport?: () => void };
   teamId?: number | null;
   onPlanOpen: () => void;
+  showCustomTestTrend?: boolean;
   project: Project;
   from: string;
   to: string;
@@ -44,7 +47,7 @@ const empty = (title: string) => (
   <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
 );
 
-export function SpecialTrainingDashboard({ project, from, to, teamId = null, filters, onPlanOpen, teamTraining: teamTrainingStats }: Props) {
+export function SpecialTrainingDashboard({ project, from, to, teamId = null, filters, onPlanOpen, teamTraining: teamTrainingStats, showCustomTestTrend = false }: Props) {
   const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(
     null
   );
@@ -253,6 +256,17 @@ export function SpecialTrainingDashboard({ project, from, to, teamId = null, fil
             </ChartCard>
           </>
         )
+      )}
+      {showCustomTestTrend && (
+        teamId !== null && selectedAthleteId !== null
+          ? <CustomTestTrendCard key={`${project}:${teamId}:${selectedAthleteId}`} project={project} teamId={teamId} athleteId={selectedAthleteId} from={from} to={to} />
+          : <ChartCard title="自定义指标趋势">
+              <ContentState kind="empty" title={teamId === null ? '先在上方选择队伍' : '先在上方选择运动员'} />
+            </ChartCard>
+      )}
+      {showCustomTestTrend && teamId !== null && selectedAthleteId !== null && (
+        <CustomTrainingDetailsCard key={`${project}:${teamId}:${selectedAthleteId}`} project={project}
+          teamId={teamId} athleteId={selectedAthleteId} from={from} to={to} />
       )}
       {teamTrainingStats && (
         <Suspense fallback={<ContentState kind="loading" title="正在打开队伍训练统计" />}>

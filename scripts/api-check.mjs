@@ -124,11 +124,11 @@ try {
   const metric = dictionaryBefore.payload.metrics[0];
   assert(dictionaryBefore.status === 200 && metric, '指标字典应有可编辑指标');
   const metricPath = `/api/data-management/metrics/${encodeURIComponent(metric.code)}`;
-  const editedMetric = { label: '指标编辑回归', unit: '回归单位', active: false };
+  const editedMetric = { label: '指标编辑回归', unit: metric.unit, active: false };
   assert((await request(metricPath, { method: 'PUT', body: JSON.stringify(editedMetric) }, adminToken)).status === 200, 'DMD应能编辑指标');
   const dictionaryAfter = await request('/api/data-management/metrics', {}, adminToken);
   const savedMetric = dictionaryAfter.payload.metrics.find((item) => item.code === metric.code);
-  assert(savedMetric.label === editedMetric.label && savedMetric.unit === editedMetric.unit && savedMetric.active === 0, '指标名称、单位和停用状态应持久化');
+  assert(savedMetric.label === editedMetric.label && savedMetric.unit === editedMetric.unit && savedMetric.active === 0, '指标名称和停用状态应持久化，原单位应保留');
   assert((await request(metricPath, { method: 'PUT', body: JSON.stringify({ ...editedMetric, label: '   ' }) }, adminToken)).status === 400, '指标名称不得仅含空白');
   assert((await request(metricPath, { method: 'PUT', body: JSON.stringify(editedMetric) })).status === 401, '未登录者不能编辑指标');
   assert((await request(metricPath, { method: 'PUT', body: JSON.stringify({ label: metric.label, unit: metric.unit, active: Boolean(metric.active) }) }, adminToken)).status === 200, '指标编辑回归应恢复原值');

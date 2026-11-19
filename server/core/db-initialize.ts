@@ -1,3 +1,4 @@
+import { initializeTestTemplates } from '../data-import/test-template-store.ts';
 import { initializeAthleteLastTeam, initializeSubmissionProvenance } from '../report/submission-provenance.ts';
 import { initializeTeamTrainingStatistics } from '../team-training/team-training-stats.ts';
 import { initializeEnodeDatabase } from '../enode/enode.ts';
@@ -1004,6 +1005,25 @@ export function initializeDatabase(
 
   if (!hasColumn('athlete_profiles', 'position')) {
     db.exec("ALTER TABLE athlete_profiles ADD COLUMN position TEXT NOT NULL DEFAULT ''");
+  }
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const basicProfileColumns = {
+      event_item: "TEXT NOT NULL DEFAULT ''",
+      representative_unit: "TEXT NOT NULL DEFAULT ''",
+      training_years: 'REAL CHECK(training_years >= 0)',
+      best_result_event: "TEXT NOT NULL DEFAULT ''",
+      best_result_date: "TEXT NOT NULL DEFAULT ''",
+    };
+    for (const [column, definition] of Object.entries(basicProfileColumns)) {
+      if (!hasColumn('athlete_profiles', column))
+        db.exec(`ALTER TABLE athlete_profiles ADD COLUMN ${column} ${definition}`);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
   }
 
   // 训练总览采用“每日恢复—训练课次—测试批次—测试指标”的分层结构。
@@ -5990,6 +6010,7 @@ export function initializeDatabase(
   initializeTeamPlanChecks(db);
   initializeTrainingReports(db);
   // 旧初始化和历史种子完成后调整测试唯一键；部署时在开始接受写入前完成迁移。
+  initializeTestTemplates(db);
   migrateMultiSportFacts(db, databaseExistedBeforeStartup && databasePath !== ':memory:'
     ? join(dirname(databasePath), 'backups', `before-multi-sport-${randomUUID()}.db`) : undefined);
   migrateNullableSrpe(db, databaseExistedBeforeStartup && databasePath !== ':memory:' ? join(dirname(databasePath), 'backups', `before-nullable-srpe-${randomUUID()}.db`) : undefined);

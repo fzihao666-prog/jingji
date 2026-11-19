@@ -495,6 +495,7 @@ export default function App() {
             from={from}
             to={to}
             onPlanOpen={() => changePage('special-schedule')}
+            showCustomTestTrend={user.role !== 'OBS'}
             teamTraining={canViewTrainingStats ? {
               teamId: importedTeamId ?? teamId,
               date: importedTeamId && importedDate && /^\d{4}-\d{2}-\d{2}$/.test(importedDate)

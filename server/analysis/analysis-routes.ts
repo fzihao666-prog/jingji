@@ -1,3 +1,4 @@
+import { registerCustomTestTrendRoutes } from './custom-test-trend-routes.ts';
 import { registerPhysicalChampionRoutes } from './physical-champion-routes.ts';
 import { z } from 'zod';
 import type { Express } from 'express';
@@ -171,6 +172,7 @@ export function firstRadarMeasurement(
 
 export function registerAnalysisRoutes(app: Express) {
   registerPhysicalChampionRoutes(app);
+  registerCustomTestTrendRoutes(app);
   app.get('/api/overview/teams', requireAuth, (req, res) => {
     const user = req.authUser!;
     const project = cleanString(req.query.project);

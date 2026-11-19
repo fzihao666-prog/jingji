@@ -510,13 +510,19 @@ export function PersonalPage(props: Props) {
           fields: [
             { label: '运动项目', value: projectLabel(selectedAthlete.project) },
             { label: '所属队伍', value: selectedAthlete.team },
+            { label: '具体小项', value: selectedAthlete.eventItem },
+            { label: '代表单位', value: selectedAthlete.representativeUnit },
             { label: '负责教练', value: selectedAthlete.coaches || selectedAthlete.headCoaches || '—' },
             {
               label: '训练年限',
-              value: trainingExperience(selectedAthlete.startSportDate, props.to),
+              value: selectedAthlete.trainingYears == null
+                ? trainingExperience(selectedAthlete.startSportDate, props.to)
+                : `${selectedAthlete.trainingYears} 年`,
             },
             { label: '技术等级', value: selectedAthlete.technicalLevel },
             { label: '最佳成绩', value: selectedAthlete.bestResult },
+            { label: '对应赛事', value: selectedAthlete.bestResultEvent },
+            { label: '成绩日期', value: selectedAthlete.bestResultDate },
             {
               label: '位置/号位',
               value: athletePositionValue(selectedAthlete.athletePosition),

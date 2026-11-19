@@ -59,10 +59,14 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['骨骼肌', athlete.skeletalMuscleKg == null ? '--' : `${number(athlete.skeletalMuscleKg)} kg`],
     ['技术等级', athlete.technicalLevel || '--'],
     ['运动员位置', athlete.athletePosition || '--'],
-    ['当前小项', athlete.currentEvent || '--'],
+    ['当前小项', athlete.eventItem || athlete.currentEvent || '--'],
+    ['代表单位', athlete.representativeUnit || '--'],
+    ['训练年限', athlete.trainingYears == null ? '--' : `${number(athlete.trainingYears)} 年`],
     ['训练阶段', athlete.trainingPhase || '--'],
     ['健康状态', athlete.healthStatus || '--'],
     ['最好成绩', athlete.bestResult || '--'],
+    ['对应赛事', athlete.bestResultEvent || '--'],
+    ['成绩日期', athlete.bestResultDate || '--'],
     ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--']
   ].map(([label, value]) => ({ label, value })).filter(item => period.user?.role !== 'OBS' || !['健康状态', '联系电话'].includes(item.label));
   const primaryLabels = new Set(['项目', '队伍', '负责教练', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
@@ -104,7 +108,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
   return {
     athleteName: athlete.name || '档案资料待补充',
     athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '--'}`,
-    athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.currentEvent || '小项未录入'}`,
+    athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.eventItem || athlete.currentEvent || '小项未录入'}`,
     athleteInitial: athlete.name ? athlete.name.slice(0, 1) : '运',
     primaryCells,
     moreCells,
