@@ -76,7 +76,6 @@ const AccountsPage = lazy(() =>
 const RegionAccessPage = lazy(() =>
   import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage }))
 );
-const SubmissionReportPage = lazy(() => import('./pages/SubmissionReportPage'));
 const DataImportPage = lazy(() =>
   import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage }))
 );
@@ -118,7 +117,6 @@ const pageKeys: PageKey[] = [
   'ai-management',
   'bluetooth',
   'data-import',
-  'submission-report',
   'data-management',
   'reports',
 ];
@@ -151,7 +149,7 @@ export default function App() {
   const restrictedPage =
     (requestedPage === 'ai-management' && user?.role !== 'DMD') ||
     (!canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts')) ||
-    (user?.role === 'OBS' && ['athletes', 'coaches', 'teams', 'data-import', 'data-management', 'reports', 'submission-report', 'bluetooth'].includes(requestedPage));
+    (user?.role === 'OBS' && ['athletes', 'coaches', 'teams', 'data-import', 'data-management', 'reports', 'bluetooth'].includes(requestedPage));
   const page = restrictedPage ? 'overview' : requestedPage;
   const [routeHash, setRouteHash] = useState(() => window.location.hash);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
@@ -560,9 +558,6 @@ export default function App() {
             athletes={projectAthletes}
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
-        )}
-        {page === 'submission-report' && ['REG', 'TD', 'DMD'].includes(user.role) && (
-          <SubmissionReportPage projects={shared.projects} />
         )}
         {page === 'reports' && user.role !== 'ATL' && (
           <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />

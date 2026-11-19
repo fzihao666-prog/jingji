@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Filter, RefreshCw, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Download, RefreshCw, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   AI_FEATURES,
@@ -6,7 +6,7 @@ import {
   type AiManagementData,
   type AiSettings,
 } from '../../shared/ai-management';
-import { getAiManagement, saveAiSettings } from '../api';
+import { api, getAiManagement, saveAiSettings } from '../api';
 import {
   AppCard,
   ContentState,
@@ -32,6 +32,21 @@ const beijingTime = new Intl.DateTimeFormat('zh-CN', {
 const emptySettings = { enabled: false, budgetYuan: 10 };
 
 export function AiManagementPage() {
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  async function exportTeamData() {
+    setExporting(true);
+    setExportError('');
+    try {
+      const report = await api.submissionReport();
+      const { downloadSubmissionExcel } = await import('../submission-report-excel');
+      await downloadSubmissionExcel(report);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Excel 导出失败，请重试。');
+    } finally {
+      setExporting(false);
+    }
+  }
   const [data, setData] = useState<AiManagementData>();
   const [settings, setSettings] = useState<AiSettings>(emptySettings);
   const [budget, setBudget] = useState('10');
@@ -75,17 +90,29 @@ export function AiManagementPage() {
         title="AI 管理"
         supportingContent={<p>预算和用量按北京时间统计。</p>}
         actions={
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={loading || saving}
-            onClick={reload}
-          >
-            <RefreshCw size={16} aria-hidden="true" />
-            刷新
-          </button>
+          <>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={exporting}
+              onClick={exportTeamData}
+            >
+              <Download size={16} aria-hidden="true" />
+              {exporting ? '正在生成 Excel…' : '队伍数据检查Excel'}
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={loading || saving}
+              onClick={reload}
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              刷新
+            </button>
+          </>
         }
       />
+      {exportError && <p role="alert">{exportError}</p>}
       <div role="status" className="ai-management-status">
         {loading ? <ContentState kind="loading" title="正在读取 AI 用量…" /> : notice}
       </div>
