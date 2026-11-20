@@ -5017,6 +5017,8 @@ function resolvePendingAthletes(input: {
   const candidatesByName = new Map(
     input.batch.athleteCandidates.map((candidate) => [candidate.normalizedName, candidate])
   );
+  const namesByTeam = new Map<number, Map<string, Array<{ id: number; active: number }>>>();
+  const createdHere = new Set<number>();
   let createdCount = 0;
   let linkedCount = 0;
   for (const candidate of input.batch.athleteCandidates) {
@@ -5025,14 +5027,40 @@ function resolvePendingAthletes(input: {
       continue;
     }
     if (candidate.status !== 'pending' || !requiredNames.has(candidate.normalizedName)) continue;
-    if (!candidate.confirmed)
+    let targetId = candidate.matchedAthleteId;
+    const team = !targetId ? db
+      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+      .get(candidate.project, candidate.team) as { id: number } | undefined : undefined;
+    let teamNames = team && namesByTeam.get(team.id);
+    const personName = normalizedName(candidate.name);
+    if (team && !teamNames) {
+      teamNames = new Map();
+      const roster = db.prepare('SELECT id, name, active FROM athletes WHERE project = ? AND team_id = ?')
+        .all(candidate.project, team.id) as Array<{ id: number; name: string; active: number }>;
+      for (const athlete of roster) {
+        const name = normalizedName(athlete.name);
+        const entries = teamNames.get(name) ?? [];
+        entries.push(athlete);
+        teamNames.set(name, entries);
+      }
+      namesByTeam.set(team.id, teamNames);
+    }
+    if (!targetId) {
+      const sameName = teamNames?.get(personName) ?? [];
+      if (sameName.length > 1)
+        throw new Error(`“${candidate.name}”在该队伍匹配到多个同名档案，请选择具体队员。`);
+      if (sameName[0]?.active === 1) targetId = sameName[0].id;
+      else if (sameName.length)
+        throw new Error(`“${candidate.name}”在该队伍的同名档案已停用，请确认后恢复关联。`);
+    }
+    if (!candidate.confirmed && (!targetId || candidate.matchedAthleteId))
       throw new Error(`请先在人员确认中确认“${candidate.name}”的建档或关联方式。`);
-    if (candidate.matchedAthleteId) {
+    if (targetId) {
       // 关联已有运动员：服务端重新验证存在性与权限，不覆盖已有档案。
       const target = db
         .prepare('SELECT id, name, project, active FROM athletes WHERE id = ?')
-        .get(candidate.matchedAthleteId) as { id: number; name: string; project: string; active: number } | undefined;
-      if (!target || target.project !== candidate.project || !input.allowedAthletes.has(target.id))
+        .get(targetId) as { id: number; name: string; project: string; active: number } | undefined;
+      if (!target || target.project !== candidate.project || (!input.allowedAthletes.has(target.id) && !createdHere.has(target.id)))
         throw new Error(`“${candidate.name}”关联的已有运动员无效或不在当前权限范围内。`);
       if (target.active === 0) {
         db.prepare('UPDATE athletes SET active = 1 WHERE id = ?').run(target.id);
@@ -5040,24 +5068,16 @@ function resolvePendingAthletes(input: {
           .run(input.userId, 'RESTORE_ATHLETE_FROM_IMPORT', 'athlete', target.id);
       }
       db.prepare(
-        `UPDATE data_import_athlete_candidates SET status = 'matched', matched_athlete_id = ?, created_athlete_id = NULL WHERE id = ?`
+        `UPDATE data_import_athlete_candidates SET status = 'matched', matched_athlete_id = ?, created_athlete_id = NULL, confirmed = 1 WHERE id = ?`
       ).run(target.id, candidate.id);
       resolved.set(candidate.normalizedName, target.id);
       linkedCount += 1;
       continue;
     }
-    const team = db
-      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
-      .get(candidate.project, candidate.team) as { id: number } | undefined;
     if (!team)
       throw new Error(
         `请先在人员确认中为“${candidate.name}”选择所属队伍（${candidate.project}下未找到“${candidate.team}”）。`
       );
-    const existing = db
-      .prepare(`SELECT id FROM athletes WHERE name = ? AND project = ? AND team_id = ?`)
-      .get(candidate.name, candidate.project, team.id);
-    if (existing)
-      throw new Error(`“${candidate.name}”在该队伍已有同名档案，请在人员确认中明确选择关联人员，不能自动合并。`);
     // 最小建档：仅姓名、项目、队伍与可选性别；不伪造生日等身份信息，不创建登录账号。
     const result = db
       .prepare(
@@ -5077,6 +5097,8 @@ function resolvePendingAthletes(input: {
         input.batch.id
       );
     const athlete = { id: Number(result.lastInsertRowid) };
+    createdHere.add(athlete.id);
+    teamNames?.set(personName, [{ id: athlete.id, active: 1 }]);
     db.prepare(
       `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo)
       VALUES (?, ?, ?, ?, 'file_import', 'valid', 0)`

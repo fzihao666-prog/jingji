@@ -1242,3 +1242,20 @@ it('常用项目支持整课、深蹲三组、赛艇四段和体能成绩回传'
     { metric_code: 'vertical_jump_cm', value_num: 41, protocol: 'CMJ' },
   ]);
 });
+
+it('提交时自动关联预览后出现的同队唯一同名档案', async () => {
+  const name = '预览后补建队员';
+  const batch = await upload([
+    ['姓名', '日期', '时长分钟'], [name, '2026-11-22', 45],
+  ], '训练课次', 'HTTP甲队');
+  expect(batch.athleteCandidates[0]).toMatchObject({ status: 'pending', matchedAthleteId: null, confirmed: true });
+
+  const athlete = db.prepare(`INSERT INTO athletes (name,project,team,team_id)
+    SELECT ?,project,name,id FROM project_teams WHERE project='ROWING' AND name='HTTP甲队'`).run(name);
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(result.body).toMatchObject({ createdAthletes: 0, linkedAthletes: 1 });
+  expect(db.prepare('SELECT COUNT(*) AS count FROM athletes WHERE name=?').get(name)).toEqual({ count: 1 });
+  expect(db.prepare("SELECT athlete_id,duration_min FROM training_sessions WHERE session_date='2026-11-22' AND athlete_id=?")
+    .get(athlete.lastInsertRowid)).toEqual({ athlete_id: Number(athlete.lastInsertRowid), duration_min: 45 });
+});
