@@ -1288,3 +1288,36 @@ it('修正待建档姓名后可直接关联同队已有档案', async () => {
   expect(result.body.batch?.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 701, confirmed: true });
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
 });
+
+it('停用档案阻止重复建档，授权管理者重新打开草稿后可显式恢复', async () => {
+  const name = '停用草稿队员';
+  const athlete = db.prepare(`INSERT INTO athletes (name,project,team,team_id,active)
+    SELECT ?,project,name,id,0 FROM project_teams WHERE project='ROWING' AND name='HTTP甲队'`).run(name);
+  const athleteId = Number(athlete.lastInsertRowid);
+  const batch = await upload([['姓名', '日期', '时长分钟'], [name, '2026-11-24', 40]], '训练课次', 'HTTP甲队');
+  const path = `/batches/${batch.id}`;
+  const rejected = await request(`${path}/commit`, 'POST', {});
+  expect(rejected.status).toBe(400);
+  expect(rejected.body.message).toContain('联系有权限的人员');
+  const coach = await request(`${path}/athletes`, 'PUT', { autoMatch: true });
+  expect(coach.body.batch?.athleteCandidates[0].suggested).toEqual([]);
+
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    const refreshed = await request(`${path}/athletes`, 'PUT', { autoMatch: true });
+    expect(refreshed.status).toBe(200);
+    const [person] = refreshed.body.batch!.athleteCandidates;
+    expect(person).toMatchObject({ confirmed: false, matchedAthleteId: null, suggested: [{ id: athleteId }] });
+    expect(db.prepare('SELECT active FROM athletes WHERE id=?').get(athleteId)).toEqual({ active: 0 });
+    const confirmed = await request(`${path}/athletes`, 'PUT', {
+      corrections: [{ id: person.id, matchedAthleteId: athleteId, confirmed: true }],
+    });
+    expect(confirmed.status).toBe(200);
+    const committed = await request(`${path}/commit`, 'POST', {});
+    expect(committed.status, JSON.stringify(committed.body)).toBe(200);
+    expect(committed.body).toMatchObject({ createdAthletes: 0, linkedAthletes: 1 });
+    expect(db.prepare('SELECT active FROM athletes WHERE id=?').get(athleteId)).toEqual({ active: 1 });
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
+  }
+});

@@ -376,6 +376,8 @@ function toSuggestion(athlete: ImportAthlete & { birthDate?: string }): DataImpo
   };
 }
 
+const inactiveImportPersonMessage = '该运动员档案已停用。选择原档案并确认导入后，将恢复档案和历史数据，登录账号状态仍按原设置。';
+
 function activeTeamNameMatches(athletes: ImportAthlete[], project: string, team: string, name: string) {
   const key = normalizedName(name);
   return key && team ? athletes.filter(athlete =>
@@ -2792,7 +2794,7 @@ export function analyzeDataImport(input: {
     if (resolution.kind === 'matched' && resolution.athlete.active === false) {
       person.suggested = [toSuggestion(resolution.athlete)];
       person.team = person.team || resolution.athlete.team;
-      person.messages.push('该运动员档案已停用，确认关联后将恢复原档案及其历史数据，不启用登录账号');
+      person.messages.push(inactiveImportPersonMessage);
     } else if (resolution.kind === 'matched') {
       person.matched = true;
       person.matchedAthleteId = resolution.athlete.id;
@@ -3946,13 +3948,27 @@ export function updateDataImportAthleteCandidates(input: {
     const corrections = [...input.corrections];
     if (input.autoMatch) {
       const explicit = new Set(corrections.map(correction => correction.id));
+      const flagInactive = db.prepare(`UPDATE data_import_athlete_candidates SET confirmed=0, suggested_json=?, messages_json=?
+        WHERE id=? AND batch_id=? AND status='pending'`);
+      let flaggedInactive = false;
       for (const candidate of batch.athleteCandidates) {
         if (explicit.has(candidate.id) || candidate.status !== 'pending' || candidate.excluded ||
           candidate.matchedAthleteId || !input.allowedTeams.has(candidate.team)) continue;
         const matches = activeTeamNameMatches(input.athletes, candidate.project, candidate.team, candidate.name);
-        if (matches.length === 1) corrections.push({ id: candidate.id, matchedAthleteId: matches[0].id, confirmed: true });
+        if (matches.length === 1) {
+          corrections.push({ id: candidate.id, matchedAthleteId: matches[0].id, confirmed: true });
+        } else if (!matches.length) {
+          const inactive = input.athletes.filter(athlete => athlete.active === false &&
+            athlete.project === candidate.project && athlete.team === candidate.team &&
+            normalizedName(athlete.name) === normalizedName(candidate.name)).map(toSuggestion);
+          if (inactive.length && (candidate.confirmed || candidate.messages[0] !== inactiveImportPersonMessage ||
+            JSON.stringify(candidate.suggested) !== JSON.stringify(inactive))) {
+            flagInactive.run(JSON.stringify(inactive), JSON.stringify([inactiveImportPersonMessage]), candidate.id, input.batchId);
+            flaggedInactive = true;
+          }
+        }
       }
-      if (!corrections.length) {
+      if (!corrections.length && !flaggedInactive) {
         db.exec('COMMIT');
         return batch;
       }
@@ -5070,8 +5086,12 @@ function resolvePendingAthletes(input: {
       if (active.length > 1)
         throw new Error(`“${candidate.name}”在该队伍匹配到多个同名档案，请选择具体队员。`);
       if (active.length === 1) targetId = active[0].id;
-      else if (sameName.length)
-        throw new Error(`“${candidate.name}”在该队伍的同名档案已停用，请确认后恢复关联。`);
+      else if (sameName.length) {
+        const canRestore = sameName.some(athlete => input.allowedAthletes.has(athlete.id));
+        throw new Error(canRestore
+          ? `“${candidate.name}”的档案已停用。请重新打开该导入批次，在人员确认中选择原档案后提交。`
+          : `“${candidate.name}”的档案已停用。请联系有权限的人员恢复原档案，再继续本次导入。`);
+      }
     }
     if (!candidate.confirmed && (!targetId || candidate.matchedAthleteId))
       throw new Error(`请先在人员确认中确认“${candidate.name}”的建档或关联方式。`);
