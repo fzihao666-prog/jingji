@@ -143,7 +143,9 @@ function orderedProjects(values: string[]) {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
+  const [sessionStatus, setSessionStatus] = useState<'loading' | 'failed' | 'ready'>(() =>
+    getToken() ? 'loading' : 'ready'
+  );
   const [requestedPage, setPage] = useState<PageKey>(() => pageFromHash());
   const canOpenSystemPages = Boolean(user && SYSTEM_MANAGEMENT_ROLES.includes(user.role));
   const restrictedPage =
@@ -224,12 +226,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!getToken()) return;
+    if (!getToken()) {
+      setSessionStatus('ready');
+      return;
+    }
+    let active = true;
     api
       .me()
-      .then(({ user: current }) => setUser(current))
-      .catch(() => setToken(null))
-      .finally(() => setAuthLoading(false));
+      .then(({ user: current }) => {
+        if (!active) return;
+        setUser(current);
+        setSessionStatus('ready');
+      })
+      .catch(() => {
+        if (active) setSessionStatus(getToken() ? 'failed' : 'ready');
+      });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -362,12 +374,17 @@ export default function App() {
     setRefreshKey((key) => key + 1);
   };
 
-  if (authLoading)
+  if (sessionStatus !== 'ready')
     return (
       <div className="boot-screen">
         <BrandLogo className="large" />
         <strong>竞迹</strong>
-        <p>正在恢复训练数据会话…</p>
+        <p>{sessionStatus === 'loading' ? '正在恢复训练数据会话…' : '暂时无法恢复登录状态，请重试。'}</p>
+        {sessionStatus === 'failed' && (
+          <button type="button" className="secondary-button" onClick={() => window.location.reload()}>
+            重试
+          </button>
+        )}
       </div>
     );
   if (!user) return <LoginPage onLogin={login} />;

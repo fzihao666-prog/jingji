@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Request, Response, NextFunction } from 'express';
 import { db } from './db.ts';
+import { logger } from './logger.ts';
 import type { AuthUser } from './shared-server.ts';
 import type { Role } from '../../shared/access.ts';
 
@@ -44,26 +45,37 @@ export function clearRateLimit(req: Request, scope: string) {
 export function getAuthUser(req: Request): AuthUser | null {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) return null;
+  let tokenUser: AuthUser;
   try {
-    const tokenUser = jwt.verify(header.slice(7), jwtSecret) as AuthUser;
-    if (typeof tokenUser.sessionVersion !== 'number') return null;
-    const current = db
-      .prepare(
-        `
-      SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId, session_version AS sessionVersion
-      FROM users WHERE id = ? AND active = 1
-    `
-      )
-      .get(tokenUser.id) as AuthUser | undefined;
-    if (!current || current.sessionVersion !== tokenUser.sessionVersion) return null;
-    return current;
+    tokenUser = jwt.verify(header.slice(7), jwtSecret) as AuthUser;
   } catch {
     return null;
   }
+  if (typeof tokenUser.id !== 'number' || typeof tokenUser.sessionVersion !== 'number')
+    return null;
+  const current = db
+    .prepare(
+      `
+      SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId, session_version AS sessionVersion
+      FROM users WHERE id = ? AND active = 1
+    `
+    )
+    .get(tokenUser.id) as AuthUser | undefined;
+  if (!current || current.sessionVersion !== tokenUser.sessionVersion) return null;
+  return current;
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const user = getAuthUser(req);
+  let user: AuthUser | null;
+  try {
+    user = getAuthUser(req);
+  } catch {
+    logger.error('session account lookup failed');
+    return res.status(503).json({
+      message: '暂时无法检查登录状态，请稍后重试。',
+      code: 'SERVICE_BUSY',
+    });
+  }
   if (!user)
     return res
       .status(401)

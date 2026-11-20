@@ -142,15 +142,6 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   } finally {
     if (timer) clearTimeout(timer);
   }
-  // 仅已登录会话的 401 视为 Token 失效；登录接口自身的 401 是认证失败，不得刷新页面。
-  if (response.status === 401 && auth !== false && token) {
-    setToken(null);
-    window.location.reload();
-    throw new ApiRequestError('登录已过期，请重新登录。', {
-      status: 401,
-      code: 'SESSION_EXPIRED',
-    });
-  }
   const isJson = response.headers.get('content-type')?.includes('application/json');
   let payload: unknown = null;
   if (isJson) {
@@ -164,6 +155,11 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
   const code = typeof body?.code === 'string' ? body.code : undefined;
   const serverMessage = typeof body?.message === 'string' ? body.message : '';
   if (!response.ok) {
+    // 只清除服务端已确认失效的当前令牌，避免旧请求影响新会话。
+    if (response.status === 401 && code === 'SESSION_EXPIRED' && auth && token && token === getToken()) {
+      setToken(null);
+      window.location.reload();
+    }
     throw new ApiRequestError(serverMessage || `请求失败（${response.status}）`, {
       code,
       status: response.status,

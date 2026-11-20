@@ -185,6 +185,30 @@ describe('登录接口错误码', () => {
     const body = (await response.json()) as { message: string; code?: string };
     expect(body.code).toBe('SESSION_EXPIRED');
   });
+
+  it('账号查询暂时失败后，同一令牌仍能恢复会话', async () => {
+    const { body } = await login('active_user', correctPassword);
+    const headers = { Authorization: `Bearer ${body.token}` };
+    fixture.db = new DatabaseSync(':memory:');
+    try {
+      const failure = await fetch(`${baseUrl}/api/me`, { headers });
+      expect(failure.status).toBe(503);
+      await expect(failure.json()).resolves.toEqual({
+        code: 'SERVICE_BUSY',
+        message: '暂时无法检查登录状态，请稍后重试。',
+      });
+    } finally {
+      fixture.db.close();
+      fixture.db = db;
+    }
+
+    const recovered = await fetch(`${baseUrl}/api/me`, { headers });
+    expect(recovered.status).toBe(200);
+    db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = 1').run();
+    const revoked = await fetch(`${baseUrl}/api/me`, { headers });
+    expect(revoked.status).toBe(401);
+    await expect(revoked.json()).resolves.toMatchObject({ code: 'SESSION_EXPIRED' });
+  });
 });
 
 describe('异步密码校验期间账户变化', () => {
