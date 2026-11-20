@@ -936,28 +936,24 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             type="button"
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            ref={trainingTemplateButton}
-            aria-haspopup="dialog"
-            onClick={() => setTrainingTemplateOpen(true)}
+            onClick={() => downloadTemplate('training')}
           >
-            <Download size={19} />
+            <Download size={19} aria-hidden />
             <div>
               <strong>训练记录模板</strong>
-              <span>选择字段并预览，一堂课可填多行</span>
+              <span>训练课次、力量组次和每日恢复</span>
             </div>
           </button>
           <button
             type="button"
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            ref={testTemplateButton}
-            aria-haspopup="dialog"
-            onClick={() => setTestTemplateOpen(true)}
+            onClick={() => downloadTemplate('test')}
           >
-            <Download size={19} />
+            <Download size={19} aria-hidden />
             <div>
               <strong>测试成绩模板</strong>
-              <span>预览并配置本队测试指标</span>
+              <span>使用现有测试字段填写成绩</span>
             </div>
           </button>
           <button
@@ -974,10 +970,43 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
           </button>
         </div>
       </section>
+      <section className="data-import-template-panel" aria-labelledby="data-import-custom-template-title">
+        <h2 id="data-import-custom-template-title">自定义模板</h2>
+        <div className="data-import-hero-actions">
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
+            ref={trainingTemplateButton}
+            aria-haspopup="dialog"
+            onClick={() => setTrainingTemplateOpen(true)}
+          >
+            <Download size={19} aria-hidden />
+            <div>
+              <strong>自定义训练记录模板</strong>
+              <span>选择字段并预览，一堂课可填多行</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
+            ref={testTemplateButton}
+            aria-haspopup="dialog"
+            onClick={() => setTestTemplateOpen(true)}
+          >
+            <Download size={19} aria-hidden />
+            <div>
+              <strong>自定义测试成绩模板</strong>
+              <span>预览并配置本队测试指标</span>
+            </div>
+          </button>
+        </div>
+      </section>
       {selectedTeam && <CollectionProgress key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name} lastCommit={batch?.status === 'committed' ? batch.id : undefined} />}
       {trainingTemplateOpen && selectedTeam && (
         <TrainingRecordTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
-          onLegacy={() => void downloadTemplate('training')} onClose={() => {
+          onClose={() => {
             setTrainingTemplateOpen(false);
             requestAnimationFrame(() => trainingTemplateButton.current?.focus());
           }} />

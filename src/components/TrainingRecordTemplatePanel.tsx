@@ -17,8 +17,8 @@ const labels: Record<string, string> = {
   实际次数: '每组次数', 开始时间: '课次开始时间',
 };
 
-export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }: {
-  project: Project; team: string; onLegacy: () => void; onClose: () => void;
+export function TrainingRecordTemplatePanel({ project, team, onClose }: {
+  project: Project; team: string; onClose: () => void;
 }) {
   const [saved, setSaved] = useState<TrainingRecordTemplate[]>([]);
   const [commonNames, setCommonNames] = useState<string[]>([]);
@@ -131,9 +131,6 @@ export function TrainingRecordTemplatePanel({ project, team, onLegacy, onClose }
         await api.downloadTrainingRecordTemplate(project, team);
         setStatus('训练模板已开始下载。');
       })}><Download size={16} aria-hidden />下载 Excel</button>
-      <details><summary>旧版模板</summary>
-        <button type="button" className="secondary-button" disabled={busy} onClick={onLegacy}>下载旧三表模板</button>
-      </details>
     </>}>
     <TemplateProjectPicker groups={[
       { label: '常用项目', options: projectOptions.filter(option => commonNames.includes(option.value)) },
