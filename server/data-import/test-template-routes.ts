@@ -201,6 +201,7 @@ export function registerTestTemplateRoutes(app: Express) {
       const sheet = book.addWorksheet(TRAINING_RECORD_SHEET, { views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }] });
       sheet.columns = headers.map(header => ({ header, width: 22, style: { numFmt: '@' } }));
       sheet.getRow(1).font = { bold: true };
+      sheet.getCell('A1').note = '系统预填，可留空。按所选队伍和姓名自动关联。';
       sheet.getCell('D1').note = '同一运动员同日同课次填同一个名称。整课时长和 RPE 填一次即可。';
       for (const column of ['明细序号', '组序', '段序']) {
         const index = headers.indexOf(column);
@@ -404,6 +405,7 @@ export function registerTestTemplateRoutes(app: Express) {
       heading.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       heading.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183655' } };
       heading.alignment = { vertical: 'middle', wrapText: true };
+      heading.getCell(1).note = '系统预填，可留空。按所选队伍和姓名自动关联。';
       columns.forEach((column, index) => {
         const instructions = column.testType === 'FMS测试' ? '评分填 0、1、2 或 3，未测留空。'
           : column.valueKind === 'time' ? '填写秒数或分:秒（例如 6:42.5）。' : '填写实际成绩，未测留空。';

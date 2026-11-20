@@ -376,13 +376,7 @@ function toSuggestion(athlete: ImportAthlete & { birthDate?: string }): DataImpo
   };
 }
 
-/**
- * 人员识别与匹配（SPEC 四）：
- * 1. 系统运动员编号精确匹配（与姓名冲突时不忽略冲突，转人工确认）；
- * 2. 项目 + 队伍 + 姓名；
- * 3. 出生日期辅助消歧；
- * 4. 仍不唯一则人工确认；不使用身份证号，不跨项目、跨队伍仅凭姓名合并。
- */
+// 所选项目和队伍内姓名唯一时直接关联。编号和生日用于同名消歧及旧表兼容。
 function resolvePerson(
   hint: {
     name: string;
@@ -390,11 +384,18 @@ function resolvePerson(
     team?: string;
     birthDate?: string;
     athleteCode?: string;
-    requireProfileIdentity?: boolean;
   },
   athletes: ImportAthlete[]
 ): PersonResolution {
   const normalized = normalizedName(hint.name);
+  const pool = athletes.filter(
+    (athlete) =>
+      athlete.project === hint.project && normalizedName(athlete.name) === normalized
+  );
+  const team = text(hint.team);
+  const sameTeam = team ? pool.filter(athlete => text(athlete.team) === team) : [];
+  if (sameTeam.length === 1)
+    return { kind: 'matched', athlete: sameTeam[0], method: '项目+队伍+姓名' };
   const code = text(hint.athleteCode);
   if (code) {
     const byCode = athletes.find((athlete) => String(athlete.id) === code);
@@ -419,19 +420,11 @@ function resolvePerson(
       message: `系统运动员编号${code}不存在或不在当前权限范围内，请人工确认`,
     };
   }
-  const pool = athletes.filter(
-    (athlete) =>
-      athlete.project === hint.project && normalizedName(athlete.name) === normalized
-  );
-  const team = text(hint.team);
   const withBirth = (list: ImportAthlete[]) =>
     hint.birthDate && validIsoDate(hint.birthDate)
       ? list.filter((athlete) => athlete.birthDate && athlete.birthDate === hint.birthDate)
       : list;
   if (team) {
-    const sameTeam = pool.filter((athlete) => text(athlete.team) === team);
-    if (sameTeam.length === 1 && !hint.requireProfileIdentity)
-      return { kind: 'matched', athlete: sameTeam[0], method: '项目+队伍+姓名' };
     if (sameTeam.length) {
       const narrowed = withBirth(sameTeam);
       if (narrowed.length === 1 && hint.birthDate && validIsoDate(hint.birthDate))
@@ -439,9 +432,7 @@ function resolvePerson(
       return {
         kind: 'ambiguous',
         suggested: sameTeam.map(toSuggestion),
-        message: hint.requireProfileIdentity
-          ? `“${hint.name}”（${team}）缺少可核实的系统运动员编号或出生日期，请选择要关联的人员`
-          : `“${hint.name}”（${team}）匹配到多名已有运动员，请选择要关联的人员`,
+        message: `“${hint.name}”（${team}）匹配到多名已有运动员，请选择要关联的人员`,
       };
     }
     if (pool.length)
@@ -1002,11 +993,12 @@ function parseTestTemplateSheet(
     const athleteCode = text(id);
     const athlete = athletesById.get(athleteCode);
     const rawAthleteName = text(name) || athlete?.name || '';
+    const person = resolvePerson({ name: rawAthleteName, project: snapshot.project, team, athleteCode }, athletes);
     const eventDate = typeof date === 'string' ? text(date) : parseDate(date, 0);
     const invalid = !rawAthleteName ? '请填写运动员姓名'
       : text(teamCell) && ![team, snapshot.teamName].includes(text(teamCell)) ? '所属队伍与所选队伍不一致'
-      : athleteCode && (!athlete || normalizedName(athlete.name) !== normalizedName(rawAthleteName))
-        ? '系统运动员编号和姓名必须对应所选队伍中有权访问的人员' : '';
+      : athleteCode && person.kind !== 'matched'
+        ? '无法在所选队伍中识别该姓名，请核对姓名与导入范围' : '';
     if (invalid) {
       const sourceAddress = cellAddress(rowIndex, athleteCode ? 0 : 1);
       items.push(itemBase({ itemType: 'invalid_row', rawAthleteName, sourceSheet: TEST_TEMPLATE_SHEET,
@@ -1026,7 +1018,7 @@ function parseTestTemplateSheet(
         testType: column.testType, metricCode: column.code, metricLabel: column.label, unit: column.unit,
         valueNum: value !== null && Number.isFinite(value) ? value : null, rawValue,
         payload: {
-          athleteCode, team, projectCode: snapshot.project, protocol: column.protocol,
+          athleteCode: person.kind === 'matched' ? String(person.athlete.id) : athleteCode, team, projectCode: snapshot.project, protocol: column.protocol,
           protocolVersion: column.protocolVersion, rawDate: text(date), dateAddress: cellAddress(rowIndex, 3),
           testTemplateColumn: column,
         },
@@ -1990,7 +1982,6 @@ function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownlo
   const headers = trainingRecordHeaders(template);
   if (headers.some((header, index) => matrix[0]?.[index] !== header))
     throw new Error('训练记录模板表头已变更，请保留原列和列序。');
-  const roster = new Map(athletes.map(athlete => [String(athlete.id), athlete]));
   const sessionHeaders = ['运动员编号','姓名','日期','课次序号','训练内容','开始时间','训练类型','时长分钟','距离千米','RPE'];
   const setHeaders = ['运动员编号','姓名','日期','课次序号','课次名称', ...TRAINING_SET_COLUMNS];
   const sessions: Matrix = [sessionHeaders];
@@ -2008,12 +1999,12 @@ function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownlo
       throw new Error(`训练记录第 ${index + 1} 行包含模板外的列。`);
     if (!row.slice(2).some(value => text(value))) continue;
     const read = (header: string) => row[headers.indexOf(header)];
-    const athlete = roster.get(text(row[0]));
+    const person = resolvePerson({ name: text(row[1]), project: template.project, team, athleteCode: text(row[0]) }, athletes);
+    const athlete = person.kind === 'matched' ? person.athlete : undefined;
     const date = typeof row[2] === 'string' ? text(row[2]) : parseDate(row[2], 0);
     const name = text(row[3]);
     const fail = (message: string): never => { throw new Error(`训练记录第 ${index + 1} 行：${message}`); };
-    if (!athlete || (text(row[1]) && normalizedName(row[1]) !== normalizedName(athlete.name)))
-      fail('运动员编号与所选队伍名单不一致，请使用模板预填编号。');
+    if (!athlete) fail('无法在所选队伍中唯一匹配该姓名，请核对队员名单。');
     if (!validIsoDate(date) || !name || name.length > 120) fail('请填写有效的日期和课次名称。');
     const dayKey = JSON.stringify([athlete!.id, date]);
     let orders = dayOrders.get(dayKey);
@@ -2725,10 +2716,21 @@ export function analyzeDataImport(input: {
   const matchingAthletes = team ? input.athletes.filter(athlete => athlete.team === team) : input.athletes;
   const athletesByCode = new Map(input.athletes.map(athlete => [String(athlete.id), athlete]));
   if (team) {
+    const rosterByName = new Map<string, ImportAthlete[]>();
+    for (const athlete of matchingAthletes) {
+      if (athlete.project !== input.project) continue;
+      const name = normalizedName(athlete.name);
+      const matches = rosterByName.get(name) ?? [];
+      matches.push(athlete);
+      rosterByName.set(name, matches);
+    }
     for (const item of items) {
       if (item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
+      const matches = rosterByName.get(normalizedName(item.rawAthleteName));
       const numbered = athletesByCode.get(text(item.payload.athleteCode));
-      if (numbered && numbered.team !== team) {
+      if (matches?.length === 1) {
+        item.payload = { ...item.payload, team, athleteCode: String(matches[0].id) };
+      } else if (numbered && numbered.team !== team) {
         item.itemType = 'invalid_row';
         item.athleteId = null;
         item.payload = {};
@@ -2769,7 +2771,6 @@ export function analyzeDataImport(input: {
         team: person.team,
         birthDate: person.birthDate,
         athleteCode: person.athleteCode,
-        requireProfileIdentity: person.sourceSheet === BASIC_PROFILE_SHEET || person.sourceSheet === TEST_TEMPLATE_SHEET,
       },
       matchingAthletes
     );
@@ -3850,7 +3851,6 @@ export function updateDataImportItems(input: {
             team: text(entry.payload.team),
             athleteCode: text(entry.payload.athleteCode),
             birthDate: text(entry.payload.birthDate),
-            requireProfileIdentity: entry.sourceSheet === BASIC_PROFILE_SHEET,
           }, input.athletes);
           if (person.kind === 'conflict' || person.kind === 'ambiguous') throw new Error(person.message);
           entry.athleteId = person.kind === 'matched' ? person.athlete.id : null;

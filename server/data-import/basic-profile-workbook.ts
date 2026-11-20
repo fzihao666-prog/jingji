@@ -26,7 +26,7 @@ export function buildBasicProfileWorkbook(
   sheet.getRow(1).height = 26;
   sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183655' } };
-  sheet.getCell('A1').note = '已有人员保留系统编号。新人员编号留空，填写姓名，项目及队伍沿用上传时的选择。';
+  sheet.getCell('A1').note = '编号由系统预填，可留空。按上传所选队伍和姓名关联已有队员；新增队员只需填写姓名。';
   sheet.getRow(1).getCell(BASIC_PROFILE_HEADERS.indexOf('训练年限') + 1).note = '以年填写，可写 3.5 或 3年6个月，未提供时留空。';
   sheet.getRow(1).getCell(BASIC_PROFILE_HEADERS.indexOf('身体测量日期') + 1).note = '填写身高或体重时，须同时填写实际测量日期（YYYY-MM-DD）。';
   for (const athlete of athletes) {

@@ -612,15 +612,13 @@ it('基础档案拒绝项目队伍冲突及没有真实测量日期的身高', a
   expect(db.prepare("SELECT id FROM athletes WHERE name='档案错误队伍'").get()).toBeUndefined();
 });
 
-it('基础档案中没有编号的同名行须指定已有档案', async () => {
-  const batch = await upload([profileHeaders, ['', '虚构队员', '', '', '', '已核实备注']], profileSheet, 'HTTP甲队');
-  const [person] = batch.athleteCandidates;
-  expect(person).toMatchObject({ matchedAthleteId: null, confirmed: false, suggested: [{ id: 701 }] });
-  const path = `/batches/${batch.id}`;
-  expect((await request(`${path}/athletes`, 'PUT', { corrections: [{ id: person.id, confirmed: true }] })).status).toBe(400);
-  expect((await request(`${path}/commit`, 'POST', {})).status).toBe(400);
-  expect((await request(`${path}/athletes`, 'PUT', { corrections: [{ id: person.id, matchedAthleteId: 701, confirmed: true }] })).status).toBe(200);
-  expect((await request(`${path}/commit`, 'POST', {})).status).toBe(200);
+it('基础档案按所选队伍和姓名直接关联，空白或旧编号无需人工核对', async () => {
+  for (const code of ['', '999999']) {
+    const batch = await upload([profileHeaders, [code, '虚构队员', '', '', '', `档案备注${code}`]], profileSheet, 'HTTP甲队');
+    expect(batch.athleteCandidates).toHaveLength(1);
+    expect(batch.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 701, status: 'matched' });
+    expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+  }
 });
 
 it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并能回传实际下载的工作簿', async () => {
@@ -947,6 +945,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
     form.set('team', 'HTTP甲队');
     return request('/analyze', 'POST', form);
   };
+  XLSX.utils.sheet_add_aoa(sheet, [['999999']], { origin: `A${spreadsheetRow}` });
   XLSX.utils.sheet_add_aoa(sheet, [['2026-11-19', 75, 3, 5, '1:02.5', 4, 1, 2, 3, 2, 1, 3]], { origin: `D${spreadsheetRow}` });
   const invalid = await send();
   expect(invalid.status).toBe(200);
@@ -1207,7 +1206,7 @@ it('常用项目支持整课、深蹲三组、赛艇四段和体能成绩回传'
   const training = await workbook('training', '训练记录');
   expect(training.columns).toEqual(expect.arrayContaining(['组序', '段序']));
   expect(training.columns).not.toContain('明细序号');
-  const identity = { 运动员编号: '701', 姓名: '虚构队员', 日期: '2026-11-21' };
+  const identity = { 运动员编号: '', 姓名: '虚构队员', 日期: '2026-11-21' };
   const rows: Record<string, string | number>[] = [
     ...[60, 65, 70].map((weight, index) => ({
       ...identity, 课次: '深蹲训练', ...(index === 0 ? { 时长分钟: 60, RPE: 6 } : {}),

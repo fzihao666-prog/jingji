@@ -1169,10 +1169,9 @@ describe('跨表新队员人员确认', () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM athletes WHERE name = '新队员'").get()).toEqual({ count: 1 });
     expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
   });
-  it('编号无效时仍提供可访问的同名人员供人工关联', () => {
+  it('文件明确队伍时同队唯一同名者无需核对无效编号', () => {
     const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [999, '张某', 'A队']] });
-    expect(batch.athleteCandidates[0].status).toBe('pending');
-    expect(batch.athleteCandidates[0].suggested.map(person => person.id)).toEqual([1]);
+    expect(batch.athleteCandidates[0]).toMatchObject({ status: 'matched', matchedAthleteId: 1 });
   });
 });
 
