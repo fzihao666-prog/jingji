@@ -385,6 +385,12 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     }
   };
 
+  const refreshPendingMatches = async (draft: DataImportBatch) =>
+    draft.status === 'reviewing' && draft.athleteCandidates.some(candidate =>
+      candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId && candidate.team)
+      ? (await api.updateDataImportAthletes(draft.id, [], expectedRevision(draft), true)).batch
+      : draft;
+
   const loadBatch = async (id: string) => {
     if (hasUnsavedChanges && !window.confirm('当前批次有未保存修改，切换批次会丢失这些修改。是否继续？')) return;
     setBusy('load');
@@ -392,7 +398,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     setMessage('');
     try {
       const info = await api.dataImportBatch(id);
-      startReview(info.batch);
+      startReview(await refreshPendingMatches(info.batch));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '批次加载失败。');
     } finally {
@@ -1786,10 +1792,8 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
               <button
                 type="button"
                 className="data-import-primary"
-                onClick={() => {
-                  setDuplicateDialogOpen(false);
-                  startReview(batch);
-                }}
+                disabled={Boolean(busy)}
+                onClick={() => void loadBatch(batch.id)}
               >
                 继续上次校对
               </button>

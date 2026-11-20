@@ -9,6 +9,12 @@
       <picker range="{{projects}}" range-key="label" value="{{projectIndex}}" disabled="{{!!busy}}" bindchange="onProjectChange">
         <view class="import-picker"><text class="import-picker-label">当前项目：{{projects[projectIndex].label}}</text><text class="import-picker-arrow" aria-hidden="true">›</text></view>
       </picker>
+        <picker wx:if="{{teams.length > 1}}" range="{{teams}}" range-key="name" value="{{teamIndex < 0 ? 0 : teamIndex}}"
+          disabled="{{!!busy}}" bindchange="onTeamChange">
+          <view class="import-picker"><text class="import-picker-label">{{teamIndex < 0 ? '选择队伍' : '当前队伍：' + teams[teamIndex].name}}</text><text class="import-picker-arrow" aria-hidden="true">›</text></view>
+        </picker>
+        <view wx:elif="{{teams.length === 1}}">当前队伍：{{teams[0].name}}</view>
+        <view wx:else class="card-head-note">当前项目暂无授权队伍。</view>
     </view>
     <view id="import-error" wx:if="{{error}}" class="error-box" aria-role="alert">{{error}}</view>
     <view wx:if="{{busy}}" class="import-status" aria-live="polite">正在{{busy}}…</view>
@@ -18,7 +24,7 @@
         <view class="card-head-title">模板下载</view>
         <view class="import-template-grid">
           <button wx:for="{{templates}}" wx:key="id" class="secondary-button"
-            disabled="{{!!busy}}" data-kind="{{item.id}}" bindtap="downloadTemplate"><text>{{item.label}}</text></button>
+            disabled="{{!!busy || teamIndex < 0}}" data-kind="{{item.id}}" bindtap="downloadTemplate"><text>{{item.label}}</text></button>
         </view>
       </view>
 
@@ -31,8 +37,7 @@
       <view wx:if="{{activeImport === 'excel'}}" class="card import-card">
         <view class="card-head-title">Excel 导入</view>
         <view class="card-head-note">导入队员资料、训练记录和测试成绩。</view>
-        <button class="secondary-button" disabled="{{!!busy || !teams.length}}" bindtap="uploadExcel">{{excel ? '重新选文件' : '选择 Excel'}}</button>
-        <view wx:if="{{!teams.length}}" class="card-head-note">当前项目暂无授权队伍。</view>
+        <button class="secondary-button" disabled="{{!!busy || teamIndex < 0}}" bindtap="uploadExcel">{{excel ? '重新选文件' : '选择 Excel'}}</button>
         <block wx:if="{{excel}}">
           <view class="import-review">
             <view class="import-filename">{{excel.filename}}</view>
@@ -55,7 +60,7 @@
                 disabled="{{!!busy}}" data-id="{{item.id}}" data-kind="match" bindchange="changeExcelPerson">
                 <view class="import-picker"><text class="import-picker-label">选择对应档案</text><text class="import-picker-arrow" aria-hidden="true">›</text></view>
               </picker>
-              <view wx:if="{{item.needsMatch && !item.candidates.length}}" class="card-head-note">请核对原文件中的运动员编号后重新上传。</view>
+              <view wx:if="{{item.needsMatch && !item.candidates.length}}" class="card-head-note">请核对原文件姓名和所选队伍后重新上传。</view>
             </view>
             <view wx:if="{{peopleBack || peopleMore}}" class="import-actions">
               <button wx:if="{{peopleBack}}" class="secondary-button" disabled="{{!!busy}}" data-list="people" data-step="-1" bindtap="pageReview">上一组</button>
@@ -103,12 +108,6 @@
       <view wx:elif="{{activeImport === 'team'}}" class="card import-card">
         <view class="card-head-title">队伍训练统计</view>
         <view class="card-head-note">导入队伍每日训练分项。无日期的行自动跳过。</view>
-        <picker wx:if="{{teams.length > 1}}" range="{{teams}}" range-key="name" value="{{teamIndex < 0 ? 0 : teamIndex}}"
-          disabled="{{!!busy}}" bindchange="onTeamChange">
-          <view class="import-picker"><text class="import-picker-label">{{teamIndex < 0 ? '选择队伍' : teams[teamIndex].name}}</text><text class="import-picker-arrow" aria-hidden="true">›</text></view>
-        </picker>
-        <view wx:elif="{{teams.length === 1}}">{{teams[0].name}}</view>
-        <view wx:else class="card-head-note">当前项目暂无授权队伍。</view>
         <button class="secondary-button" disabled="{{!!busy || teamIndex < 0}}" bindtap="uploadTeam">选择队伍训练 Excel</button>
         <block wx:if="{{mappings.length}}">
           <view class="import-subtitle">确认首次出现的分项</view>

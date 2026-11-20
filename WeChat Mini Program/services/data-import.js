@@ -20,15 +20,17 @@ function updateBatch(batch, suffix, method, data) {
   });
 }
 
-function template(kind, project) {
-  return downloadFile(`/api/data-import/template?kind=${encodeURIComponent(kind)}&project=${encodeURIComponent(project)}`);
+function template(kind, project, team) {
+  const teamQuery = team ? `&team=${encodeURIComponent(team)}` : '';
+  return downloadFile(`/api/data-import/template?kind=${encodeURIComponent(kind)}&project=${encodeURIComponent(project)}${teamQuery}`);
 }
 
 module.exports = {
   canImport,
   template,
   teams: () => request('/api/admin/teams'),
-  excel: (file, project) => upload('/api/data-import/analyze', [file], { project }),
+  excel: (file, project, team) => upload('/api/data-import/analyze', [file], { project, team }),
+  refreshPeople: (batch) => updateBatch(batch, 'athletes', 'PUT', { autoMatch: true }),
   updatePeople: (batch, corrections) => updateBatch(batch, 'athletes', 'PUT', { corrections }),
   updateItems: (batch, corrections) => updateBatch(batch, 'items', 'PUT', { corrections }),
   commitExcel: (batch) => updateBatch(batch, 'commit', 'POST', { conflictPolicy: 'update' }),

@@ -1259,3 +1259,32 @@ it('提交时自动关联预览后出现的同队唯一同名档案', async () =
   expect(db.prepare("SELECT athlete_id,duration_min FROM training_sessions WHERE session_date='2026-11-22' AND athlete_id=?")
     .get(athlete.lastInsertRowid)).toEqual({ athlete_id: Number(athlete.lastInsertRowid), duration_min: 45 });
 });
+
+it('继续校对旧档案草稿时自动关联同队唯一同名者，并能直接提交', async () => {
+  const batch = await upload([profileHeaders, ['', '虚构队员', '', '', '', '旧草稿修复']], profileSheet, 'HTTP甲队');
+  const person = batch.athleteCandidates[0];
+  db.prepare(`UPDATE data_import_athlete_candidates
+    SET status='pending', matched_athlete_id=NULL, confirmed=0, messages_json=? WHERE id=?`)
+    .run(JSON.stringify(['系统运动员编号不在当前权限范围内，请人工确认']), person.id);
+  db.prepare('UPDATE data_import_items SET athlete_id=NULL WHERE batch_id=?').run(batch.id);
+  const path = `/batches/${batch.id}`;
+  const refreshed = await request(`${path}/athletes`, 'PUT', { autoMatch: true, expectedRevision: batch.revision });
+  expect(refreshed.status, JSON.stringify(refreshed.body)).toBe(200);
+  expect(refreshed.body.batch?.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 701, confirmed: true });
+  expect(refreshed.body.batch?.items[0]).toMatchObject({ athleteId: 701 });
+  const revision = refreshed.body.batch!.revision;
+  const unchanged = await request(`${path}/athletes`, 'PUT', { autoMatch: true, expectedRevision: revision });
+  expect(unchanged.body.batch?.revision).toBe(revision);
+  expect((await request(`${path}/commit`, 'POST', { expectedRevision: revision })).status).toBe(200);
+});
+
+it('修正待建档姓名后可直接关联同队已有档案', async () => {
+  const batch = await upload([profileHeaders, ['', '原文件笔误', '', '', '', '修正后合并']], profileSheet, 'HTTP甲队');
+  const person = batch.athleteCandidates[0];
+  const result = await request(`/batches/${batch.id}/athletes`, 'PUT', {
+    corrections: [{ id: person.id, name: '虚构队员', confirmed: false }],
+  });
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(result.body.batch?.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 701, confirmed: true });
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+});

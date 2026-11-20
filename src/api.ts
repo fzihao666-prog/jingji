@@ -893,13 +893,14 @@ export const api = {
       excluded?: boolean;
       confirmed?: boolean;
     }>,
-    expectedRevision: number
+    expectedRevision: number,
+    autoMatch = false
   ) {
     return request<{ batch: DataImportBatch }>(
       `/api/data-import/batches/${encodeURIComponent(id)}/athletes`,
       {
         method: 'PUT',
-        body: JSON.stringify({ corrections, expectedRevision }),
+        body: JSON.stringify({ corrections, expectedRevision, autoMatch }),
       }
     );
   },

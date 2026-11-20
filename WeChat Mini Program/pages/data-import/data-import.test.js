@@ -59,7 +59,7 @@ it('运动员进入页面后不请求管理数据，授权教练能下载并打�
   const { page, importer, wx } = setup();
   await page.onLoad();
   await page.downloadTemplate(event({ kind: 'team' }));
-  expect(importer.template).toHaveBeenCalledWith('team', 'ROWING');
+  expect(importer.template).toHaveBeenCalledWith('team', 'ROWING', '测试队伍');
   expect(wx.openDocument).toHaveBeenCalledWith(expect.objectContaining({ fileType: 'xlsx', showMenu: true }));
 });
 
@@ -72,6 +72,7 @@ it('Excel 只展示需修正项，最终一次确认使用修正后的最新修�
   } };
   importer.excel.mockResolvedValue({ batch: { ...batch, items: [wrong] } });
   await page.uploadExcel();
+  expect(importer.excel).toHaveBeenCalledWith(file, 'ROWING', '测试队伍');
   expect(page.data.excel).toMatchObject({ newPeople: 1, issues: 1 });
   await page.commitExcel();
   expect(importer.commitExcel).not.toHaveBeenCalled();

@@ -482,6 +482,7 @@ export function registerDataImportRoutes(app: Express) {
             (athlete) => athlete.project === batch.project && (!scope.team || scope.allowedTeams.has(athlete.team))
           ),
           corrections,
+          autoMatch: req.body?.autoMatch === true,
         });
         res.json({ batch: updated });
       } catch (error) {

@@ -134,14 +134,16 @@ Page({
 
   onTeamChange(event) {
     if (this.data.busy) return;
-    this._teamFile = null;
-    this.setData({ teamIndex: Number(event.detail.value), mappings: [], error: '', 'receipts.team': '', teamStatsTarget: null });
+    this._batch = this._teamFile = null;
+    this.setData({ excel: null, people: [], issues: [], editor: null, teamIndex: Number(event.detail.value), mappings: [], error: '', 'receipts.team': '', teamStatsTarget: null });
   },
 
   downloadTemplate(event) {
     const { kind } = event.currentTarget.dataset;
+    const team = this.data.teams[this.data.teamIndex];
+    if (!team) return;
     return this.run('下载模板', async () => {
-      const path = await importer.template(kind, this.data.project);
+      const path = await importer.template(kind, this.data.project, team.name);
       if (this._closed) return;
       await new Promise((resolve, reject) => wx.openDocument({
         filePath: path, fileType: 'xlsx', showMenu: true, success: resolve,
@@ -151,10 +153,16 @@ Page({
   },
 
   uploadExcel() {
+    const team = this.data.teams[this.data.teamIndex];
+    if (!team) return;
     return this.run('解析 Excel', async () => {
       const [file] = await chooseFiles(false);
       if (!file || this._closed) return;
-      const { batch } = await importer.excel(file, this.data.project);
+      let { batch } = await importer.excel(file, this.data.project, team.name);
+      if (batch.status === 'reviewing' && batch.summary?.duplicateFile &&
+        batch.athleteCandidates.some(person => person.status === 'pending' && !person.excluded && !person.matchedAthleteId && person.team)) {
+        ({ batch } = await importer.refreshPeople(batch));
+      }
       if (this._closed) return;
       this.setData({ 'receipts.excel': '' });
       this.renderExcel(batch, true);
