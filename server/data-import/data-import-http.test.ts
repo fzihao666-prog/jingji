@@ -1321,3 +1321,37 @@ it('停用档案阻止重复建档，授权管理者重新打开草稿后可显�
     db.exec("UPDATE users SET role='SCC' WHERE id=701");
   }
 });
+
+it('力量训练组次模板的组次列记录每组次数，并按次数和重量计算训练量', async () => {
+  const query = new URLSearchParams({ kind: 'training', project: 'ROWING', team: 'HTTP甲队' });
+  const download = await fetch(`${base}/api/data-import/template?${query}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(download.status).toBe(200);
+  const book = XLSX.read(await download.arrayBuffer());
+  const sheet = book.Sheets['力量训练组次'];
+  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+  const columns = matrix[2].map(header => header.split('\n')[0]);
+  expect(columns).toContain('组次（每组实际次数）');
+  expect(columns).toContain('组序');
+  const rows = [
+    { 系统运动员编号: '701', 姓名: '虚构队员', 日期: '2026-11-25', 课次名称: '组次验证', 动作: '深蹲', 组序: 1, '组次（每组实际次数）': 6, 实际重量kg: 60 },
+    { 系统运动员编号: '701', 姓名: '虚构队员', 日期: '2026-11-25', 课次名称: '组次验证', 动作: '深蹲', 组序: 2, '组次（每组实际次数）': 4, 实际重量kg: 65 },
+  ] as Record<string, string | number>[];
+  XLSX.utils.sheet_add_aoa(sheet, rows.map(row => columns.map(column => row[column] ?? null)), { origin: 'A4' });
+  const form = new FormData();
+  form.set('project', 'ROWING');
+  form.set('team', 'HTTP甲队');
+  form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '力量组次.xlsx');
+  const parsed = await request('/analyze', 'POST', form);
+  expect(parsed.status, JSON.stringify(parsed.body)).toBe(200);
+  const committed = await request(`/batches/${parsed.body.batch!.id}/commit`, 'POST', {});
+  expect(committed.status, JSON.stringify(committed.body)).toBe(200);
+  expect(db.prepare(`SELECT r.set_index,r.actual_reps,s.smvl FROM strength_result_sets r
+    JOIN training_sessions s ON s.id=r.training_session_id
+    WHERE s.athlete_id=701 AND s.project_code='ROWING' AND s.session_date='2026-11-25'
+    ORDER BY r.set_index`).all()).toEqual([
+    { set_index: 1, actual_reps: 6, smvl: 620 },
+    { set_index: 2, actual_reps: 4, smvl: 620 },
+  ]);
+});

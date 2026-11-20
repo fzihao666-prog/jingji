@@ -37,9 +37,12 @@ export type ImportTemplateField = {
   guidance?: ImportFieldGuidance;
 };
 
-/** 提取首行字段名；教练使用的中文测试项目映射到既有指标名称字段。 */
+const strengthSetRepsLabel = '组次（每组实际次数）';
+
+/** 提取首行字段名，并把面向教练的表头映射到正式字段。 */
 export function templateHeaderKey(value: string): string {
   const key = value.split(/\r?\n/)[0].trim();
+  if (key === strengthSetRepsLabel) return '实际次数';
   return key === '测试项目' ? '指标名称' : key;
 }
 
@@ -463,6 +466,8 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
           ? '真实外加重量；徒手可填0，未采集留空并纠错，不能编造0。'
           : '填写实际记录。';
     }
+    if (sheet === '力量训练组次' && key === '实际次数')
+      hint = '填写这一组实际完成的次数，例如做了6次就填6。组序单独填写第几组。';
     if (key === '事实项目') hint = '完整导出的发生时项目，不能用当前档案项目替换；新建记录可留空。';
     if (key === '项目归属状态') hint = '完整导出的归属状态；pending_verification须先核实，不能直接回导为已确认。新建记录可留空。';
     if (key === '训练活动') hint = '按本次实际活动选择；交叉训练不改变运动员项目。未提供保持未分类，不从文字猜测。';
@@ -567,7 +572,8 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
     }
     return {
       key,
-      displayName: sheet === '其他测试' && key === '指标名称' ? '测试项目' : undefined,
+      displayName: sheet === '其他测试' && key === '指标名称' ? '测试项目'
+        : sheet === '力量训练组次' && key === '实际次数' ? strengthSetRepsLabel : undefined,
       requirement,
       unit,
       example,
