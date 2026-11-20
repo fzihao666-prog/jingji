@@ -2309,6 +2309,34 @@ it('中文测试项目使用当前启用字典，未知、同名歧义、项目�
   }
 });
 
+it('场地自行车两段和总时间同日分别入库，未识别名称不产生伪冲突', () => {
+  const project = 'CYCLING_TRACK';
+  const athlete = { ...athletes[0], project };
+  const teamId = db.prepare('INSERT INTO project_teams (project,name) VALUES (?,?)').run(project, athlete.team).lastInsertRowid;
+  db.prepare('UPDATE athletes SET project=?, team_id=? WHERE id=?').run(project, teamId, athlete.id);
+  const codes = ['track_flying_200_split_1', 'track_flying_200_split_2', 'track_flying_200_total'];
+  const values = [5.13, 5.25, 10.38];
+  const sheet = (names: string[], header: string) => ({ 其他测试: [
+    ['姓名', '测试日期', '测试类型', header, '数值', '单位', '协议', '备注'],
+    ...names.map((name, index) => [athlete.name, '2026-11-14', '专项测试', name, values[index], 's', '俯冲200米测试', name]),
+  ] });
+  const options = { athletes: [athlete], project, team: athlete.team };
+  const invalid = analyze(sheet(['未注册分段一', '未注册分段二', '未注册总时间'], '指标名称'), options);
+  expect(invalid.errorCount).toBe(3);
+  for (const item of invalid.items) {
+    expect(item.messages.join(' ')).toContain('未识别测试项目');
+    expect(item.messages.join(' ')).not.toMatch(/冲突|不适用|停用/);
+  }
+  const otherProject = analyze(sheet(codes, '指标代码'));
+  expect(otherProject.errorCount).toBe(3);
+  const batch = analyze(sheet(codes, '指标代码'), options);
+  expect(batch.errorCount).toBe(0);
+  const result = commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'SCC', athletes: [athlete], allowedTeams: new Set([athlete.team]), conflictPolicy: 'skip' });
+  expect(result.imported).toBe(3);
+  expect(db.prepare('SELECT metric_code, value_num FROM test_measurements WHERE metric_code LIKE ? ORDER BY metric_code').all('track_flying_200_%'))
+    .toEqual(codes.map((metric_code, index) => ({ metric_code, value_num: values[index] })));
+});
+
 it.each([['正常', 'normal'], ['休息', 'rest'], ['关注', 'attention'], ['警报', 'alert'], ['缺失', 'missing']])('恢复状态下拉中文%s按既有代码%s入库', (label, code) => {
   const batch = analyze({ 每日恢复: [['姓名', '日期', '状态'], ['张某', '2026-10-23', label]] });
   expect(batch.errorCount).toBe(0);

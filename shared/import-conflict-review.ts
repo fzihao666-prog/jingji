@@ -322,6 +322,8 @@ export function reviewComparisonRecords<T extends ImportReviewItem>(items: T[], 
 export function importReviewGroups<T extends ImportReviewItem>(items: T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const item of items) {
+    // 未确定指标身份时保留逐行校验，避免把不同项目合并到同一个空代码。
+    if (item.itemType === 'test_measurement' && !item.metricCode) continue;
     if (!reviewFields([item]).length || (item.quality === 'skipped' && item.resolution !== 'skip'))
       continue;
     if (

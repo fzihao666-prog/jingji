@@ -3353,7 +3353,7 @@ function validateImportItem(
     if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
   } else if (item.itemType === 'test_measurement') {
     const templateColumn = payload.testTemplateColumn as TestTemplateDownload['columns'][number] | undefined;
-    if (!templateColumn && !readImportMetricDefinitions(text(payload.projectCode) || text((db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined)?.project)).some(metric => metric.code === item.metricCode)) messages.push('错误：测试项目不适用于当前运动项目');
+    if (!templateColumn && item.metricCode && !readImportMetricDefinitions(text(payload.projectCode) || text((db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined)?.project)).some(metric => metric.code === item.metricCode)) messages.push('错误：测试项目不适用于当前运动项目');
     const attempt = optionalNumber(payload.attemptOrder);
     if (isProvided(payload.attemptOrder) && (attempt === null || !Number.isInteger(attempt) || attempt < 1)) messages.push('错误：试次序号须为正整数');
     const metricDefinition = db.prepare('SELECT unit, active FROM metric_definitions WHERE code=?').get(item.metricCode) as { unit: string; active: number } | undefined;
@@ -3364,8 +3364,8 @@ function validateImportItem(
         messages.push('错误：测试指标和协议必须与下载模板一致。');
       if (templateColumn.valueKind === 'time' && item.valueNum !== null && item.valueNum < 0)
         messages.push('错误：计时成绩须填写非负秒数或分:秒。');
-    } else if (!metricDefinition || !metricDefinition.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
-    else if (item.unit !== metricDefinition.unit) messages.push(`错误：测试项目单位已变更或不匹配，应为${metricDefinition.unit}，请重新校验`);
+    } else if (item.metricCode && !metricDefinition?.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
+    else if (metricDefinition && item.unit !== metricDefinition.unit) messages.push(`错误：测试项目单位已变更或不匹配，应为${metricDefinition.unit}，请重新校验`);
     if (payload.metricSelectionError) messages.push(String(payload.metricSelectionError));
     if (!item.metricCode && !payload.metricSelectionError) messages.push('错误：请选择测试项目');
     if (!templateColumn && !item.unit && !payload.metricSelectionError) {

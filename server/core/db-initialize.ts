@@ -5,6 +5,7 @@ import { initializeEnodeDatabase } from '../enode/enode.ts';
 import { migrateNullableSrpe } from './srpe-migration.ts';
 import { COMPACT_ATHLETE_COLUMNS } from '../../shared/compact-athlete-template.ts';
 import { IMPORT_BASE_METRICS } from '../../shared/import-base-metrics.ts';
+import { TRACK_CYCLING_TIMING_METRICS } from '../../shared/track-cycling-timing.ts';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { migrateNullableInjuryPainScore } from './injury-pain-score-migration.ts';
@@ -1843,6 +1844,14 @@ export function initializeDatabase(
       compactTestMetricCodes.has(code) ? commonMetricProjects : legacyBaseMetricProjects,
       metric.min, metric.max
     );
+
+  runInitializationOnce('track_cycling_timing_metrics_v1', () => {
+    const insert = db.prepare(`INSERT OR IGNORE INTO metric_definitions
+      (code,label,domain,unit,direction,frequency,projects_json,minimum)
+      VALUES (?,?,'fitness','s','lower_better','phase',?,0)`);
+    for (const { code, label } of TRACK_CYCLING_TIMING_METRICS)
+      insert.run(code, label, '["CYCLING_TRACK"]');
+  });
 
   function seed() {
     const athleteCount = db.prepare('SELECT COUNT(*) AS count FROM athletes').get() as {
