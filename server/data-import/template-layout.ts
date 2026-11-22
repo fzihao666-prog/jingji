@@ -44,7 +44,8 @@ export function addTemplateSheet(
   workbook: ExcelJS.Workbook,
   name: string,
   fields: ImportTemplateField[],
-  note: string
+  note: string,
+  collapseAdvanced = false
 ): ExcelJS.Worksheet {
   fields = fields.filter(field => field.key !== '系统运动员编号');
   const sheet = workbook.addWorksheet(name, {
@@ -57,17 +58,22 @@ export function addTemplateSheet(
   sheet.getRow(1).height = 30;
   sheet.mergeCells(2, 1, 2, fields.length);
   sheet.getCell('A2').value =
-    `${note} 必填项在前，选填项在后；业务数据列直接显示，按需填写。填写要求见表头。`;
+    `${note} ${collapseAdvanced ? '选填专业列可点击列上方的「+」展开。' : '必填项在前，选填项在后，按需填写。'}填写要求见表头。`;
   sheet.getCell('A2').alignment = { wrapText: true, vertical: 'middle' };
   sheet.getRow(2).height = 48;
   sheet.getRow(3).height = 82;
   fields.forEach((field, index) => {
     const column = sheet.getColumn(index + 1);
+    if (collapseAdvanced && field.advanced) {
+      column.outlineLevel = 1;
+      column.hidden = true;
+    }
     column.width = /备注|协议|内容|地址|姓名|组合/.test(field.key) ? 28 : 22;
     if (/日期/.test(field.key)) column.numFmt = 'yyyy-mm-dd';
     if (/编号|手机|电话/.test(field.key) || field.key === '最好成绩') column.numFmt = '@';
     const cell = sheet.getCell(3, index + 1);
     cell.value = templateFieldHeader(field);
+    cell.numFmt = '@';
     const wrappedLines = String(cell.value)
       .split('\n')
       .reduce(

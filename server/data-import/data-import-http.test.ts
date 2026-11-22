@@ -1355,3 +1355,65 @@ it('力量训练组次模板的组次列记录每组次数，并按次数和重�
     { set_index: 2, actual_reps: 4, smvl: 620 },
   ]);
 });
+
+it('标准模板支持补充档案、相同力量组填一行与常用体能宽表', async () => {
+  async function download(kind: string) {
+    const query = new URLSearchParams({ kind, project: 'ROWING', team: 'HTTP甲队' });
+    const response = await fetch(`${base}/api/data-import/template?${query}`, { headers: { authorization: `Bearer ${token}` } });
+    expect(response.status).toBe(200);
+    return XLSX.read(await response.arrayBuffer(), { cellStyles: true });
+  }
+  function fill(book: XLSX.WorkBook, sheetName: string, row: Record<string, string | number>, heading = 3) {
+    const sheet = book.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+    XLSX.utils.sheet_add_aoa(sheet, [rows[heading - 1].map(value => row[String(value).split('\n')[0]] ?? null)], { origin: `A${heading + 1}` });
+  }
+  async function preview(book: XLSX.WorkBook) {
+    const form = new FormData();
+    form.set('project', 'ROWING');
+    form.set('team', 'HTTP甲队');
+    form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '标准模板.xlsx');
+    const result = await request('/analyze', 'POST', form);
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    return result.body.batch!;
+  }
+  async function submit(book: XLSX.WorkBook) {
+    const batch = await preview(book);
+    expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
+
+    const saved = await request(`/batches/${batch.id}/commit`, 'POST', {});
+    expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+  }
+
+  const profile = await download('profile');
+  fill(profile, profileSheet, { 姓名: '虚构队员', 技术等级: '二级', 开始运动日期: '2018-09-01' }, 1);
+  await submit(profile);
+  expect(db.prepare('SELECT technical_level,start_sport_date FROM athlete_profiles WHERE athlete_id=701').get())
+    .toMatchObject({ technical_level: '二级运动员', start_sport_date: '2018-09-01' });
+
+  const training = await download('training');
+  const sheet = training.Sheets['训练课次'];
+  const headings = (XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][])[2];
+  expect(sheet['!cols']?.[headings.findIndex(value => String(value).startsWith('事实项目\n'))]).toMatchObject({ hidden: true, level: 1 });
+  const sets = { 姓名: '虚构队员', 日期: '2026-11-26', 动作: '深蹲', 组数: 3, '组次（每组实际次数）': 6, 实际重量kg: 60 };
+  fill(training, '力量训练组次', sets);
+  await submit(training);
+  expect(db.prepare(`SELECT r.set_index,r.actual_reps,s.smvl FROM strength_result_sets r
+    JOIN training_sessions s ON s.id=r.training_session_id
+    WHERE s.athlete_id=701 AND s.session_date='2026-11-26' ORDER BY r.set_index`).all())
+    .toEqual([1, 2, 3].map(set_index => ({ set_index, actual_reps: 6, smvl: 1080 })));
+  const invalid = await download('training');
+  fill(invalid, '力量训练组次', { ...sets, '组次（每组实际次数）': 6.5 });
+  const bad = await preview(invalid);
+  expect(bad.items[0].messages.join('')).toContain('实际次数须为非负整数');
+  expect((await request(`/batches/${bad.id}/commit`, 'POST', {})).status).toBe(400);
+
+  const tests = await download('test');
+  fill(tests, '体能测试', { 姓名: '虚构队员', 测试日期: '2026-11-26', '深蹲1RM（kg）': 95, 'CMJ跳高（cm）': 42 });
+  await submit(tests);
+  expect(db.prepare(`SELECT m.metric_code,m.value_num,t.protocol FROM test_measurements m JOIN test_sessions t ON t.id=m.test_session_id
+    WHERE t.athlete_id=701 AND t.test_date='2026-11-26' ORDER BY m.metric_code`).all()).toEqual([
+    { metric_code: 'squat_kg', value_num: 95, protocol: '实测1RM' },
+    { metric_code: 'vertical_jump_cm', value_num: 42, protocol: 'CMJ' },
+  ]);
+});

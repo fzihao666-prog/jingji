@@ -272,6 +272,15 @@ export const FITNESS_TEMPLATE_METRICS = [
   ['无氧功率W/kg', 'anaerobic_power_wkg', '无氧功率', 'W/kg'],
   ['IMTP峰值力量N', 'imtp_peak_force_n', 'IMTP峰值力量', 'N'],
 ] as const;
+export const COMMON_FITNESS_TEMPLATE_METRICS = [
+  ['深蹲1RM（kg）', 'squat_kg', '深蹲最大力量', 'kg', '力量素质测试', '实测1RM'],
+  ['卧推1RM（kg）', 'bench_press_kg', '卧推最大力量', 'kg', '力量素质测试', '实测1RM'],
+  ['卧拉1RM（kg）', 'bench_pull_kg', '卧拉最大力量', 'kg', '力量素质测试', '实测1RM'],
+  ['硬拉1RM（kg）', 'deadlift_kg', '硬拉最大力量', 'kg', '力量素质测试', '实测1RM'],
+  ['高翻1RM（kg）', 'clean_kg', '高翻最大力量', 'kg', '力量素质测试', '实测1RM'],
+  ['CMJ跳高（cm）', 'vertical_jump_cm', '反向纵跳高度', 'cm', '体能测试', 'CMJ'],
+] as const;
+export const MAX_REPEATED_STRENGTH_SETS = 100;
 export const EVALUATION_SCORE_METRICS = [
   ['一般耐力评分', 'general_endurance_score', '一般耐力', '分'],
   ['核心力量评分', 'core_strength_score', '核心力量', '分'],
@@ -299,7 +308,7 @@ export const IMPORT_PURPOSE_SHEETS = {
 };
 export const IMPORT_SHEET_NOTES: Record<string, string> = {
   运动员基本资料:
-    '建档仅需姓名和所属队伍，运动项目由当前项目与所属队伍确定；已有人员优先按系统编号匹配，出生日期等选填，导入不调队。',
+    '建档仅需姓名和所属队伍，运动项目由当前项目与所属队伍确定；同队唯一同名自动匹配，出生日期等选填，导入不调队。',
   身体测量:
     '每人每次测量一行；身高、臂展、体重及身体成分按实测填写，不要在其它表重复填写。档案展示最近有效值。',
   体能测试: '每人每次测试一行；只填已测成绩，并填写测试协议；不对称指数须注明测试方法。',
@@ -315,7 +324,7 @@ export const IMPORT_SHEET_NOTES: Record<string, string> = {
 export const TEMPLATE_INSTRUCTIONS = [
   '一个文件按需填写，不选择导入用途；只建档仅填运动员基本资料，其余表无需删除。',
   '所有业务表第1—3行为说明和表头，请勿删除；第4行起填写。仅有预填人员信息的业务行自动忽略。',
-  '已有人员编号优先匹配；无编号按项目、队伍、姓名识别，有歧义时人工确认。编号不可自行编造。',
+  '同项目、同队伍内姓名唯一时自动关联；系统预填编号可留空。',
   '日期使用YYYY-MM-DD；缺失记录日期使用解析当天的北京时间日期；非法日期报错。出生日期不自动补。',
   '数值只填数字，单位见表头；空白表示未提供，真实0保留；非法值会标明单元格并阻止该行入库。',
   '同一事实只填一次；本次导入非空值自动更新已有记录，空白保留原值；同一文件内不同值需审查；已有运动员不通过导入调队。',

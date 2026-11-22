@@ -10,6 +10,8 @@ import {
   UNIFIED_IMPORT_HEADERS,
   BODY_TEMPLATE_FIELDS,
   FITNESS_TEMPLATE_METRICS,
+  COMMON_FITNESS_TEMPLATE_METRICS,
+  MAX_REPEATED_STRENGTH_SETS,
   FMS_TEMPLATE_METRICS,
 } from './data-import-template.js';
 import {
@@ -401,7 +403,7 @@ const choices: Record<string, readonly string[]> = {
   是否完成: ['是', '否'],
 };
 
-export function importTemplateFields(sheet: string): ImportTemplateField[] {
+export function importTemplateFields(sheet: string, options?: { coachView?: boolean; metricCodes?: ReadonlySet<string> }): ImportTemplateField[] {
   const original =
     UNIFIED_IMPORT_HEADERS.find(([name]) => name === sheet)?.[1] ??
     (sheet === '训练结果数据'
@@ -409,7 +411,11 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
       : sheet === '专项训练成绩'
         ? SPECIAL_IMPORT_HEADERS
         : []);
-  const common = commonColumns[sheet] || original;
+  const extra = options?.coachView && sheet === '力量训练组次' ? ['组数']
+    : options?.coachView && sheet === '体能测试'
+      ? COMMON_FITNESS_TEMPLATE_METRICS.filter(([, code]) => !options.metricCodes || options.metricCodes.has(code)).map(([key]) => key)
+      : [];
+  const common = [...(commonColumns[sheet] || original), ...extra];
   const ordered = [...common, ...original.filter((key) => !common.includes(key))].filter(
     (key) => (sheet !== '其他测试' || !['指标代码', '单位'].includes(key)) &&
       (sheet !== '训练课次' || key !== '课次序号')
@@ -417,7 +423,7 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
   const fields: ImportTemplateField[] = ordered.map((key) => {
     let requirement: TemplateRequirement = '选填';
     let hint = '仅填写实际已采集数据，未提供留空。';
-    const unit = /日期$/.test(key) ? 'YYYY-MM-DD' : units[key] || '无单位';
+    let unit = /日期$/.test(key) ? 'YYYY-MM-DD' : units[key] || '无单位';
     let example =
       examples[key] ||
       (/日期$/.test(key)
@@ -430,7 +436,7 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
     let fieldChoices = key === '训练类型' && sheet === '训练课次' ? undefined : choices[key];
     if (key === '系统运动员编号') {
       requirement = '系统预填';
-      hint = '已有人员编号优先定位，不可自行编造；无编号时按当前项目下的姓名和所属队伍确认。';
+      hint = '系统预填编号可留空；按所选项目、队伍和姓名关联。';
     }
     if (['姓名', '运动员'].includes(key)) {
       requirement = '条件必填';
@@ -465,6 +471,17 @@ export function importTemplateFields(sheet: string): ImportTemplateField[] {
         key === '实际重量kg'
           ? '真实外加重量；徒手可填0，未采集留空并纠错，不能编造0。'
           : '填写实际记录。';
+    }
+    const commonMetric = COMMON_FITNESS_TEMPLATE_METRICS.find(([name]) => name === key);
+    if (commonMetric) {
+      unit = commonMetric[3];
+      example = unit === 'kg' ? '60' : '35';
+      hint = '填写实测值。测量方法不同或同日重复测试时，可在其他测试中分开填写。';
+    }
+    if (key === '组数') {
+      unit = '组';
+      example = '3';
+      hint = `仅在各组次数、重量及其他填写值完全相同时填写，允许1—${MAX_REPEATED_STRENGTH_SETS}组；留空按1组。组序填写起始组，留空从1开始。`;
     }
     if (sheet === '力量训练组次' && key === '实际次数')
       hint = '填写这一组实际完成的次数，例如做了6次就填6。组序单独填写第几组。';

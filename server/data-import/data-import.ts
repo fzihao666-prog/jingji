@@ -24,7 +24,7 @@ import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import { IMPORT_TEMPLATE_VERSION, IMPORT_TEMPLATE_VERSION_NAME, templateHeaderKey } from '../../shared/import-template-fields.ts';
 import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import { importRecordPolicy, importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
-import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, EVALUATION_SCORE_METRICS, FMS_TEST_PROTOCOL, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
+import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, COMMON_FITNESS_TEMPLATE_METRICS, MAX_REPEATED_STRENGTH_SETS, EVALUATION_SCORE_METRICS, FMS_TEST_PROTOCOL, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import * as XLSX from '@e965/xlsx';
 import { db } from '../core/db.ts';
@@ -1294,6 +1294,7 @@ function parseStandardSheet(
       const rawTrainingYears = standardValue(row, header.columns, '训练年限');
       const trainingYears = parseTrainingYears(rawTrainingYears);
       const rawBestResultDate = standardValue(row, header.columns, '成绩日期');
+      const rawStartSportDate = standardValue(row, header.columns, '开始运动日期');
       if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
       const payload = {
         ...base.payload,
@@ -1323,7 +1324,7 @@ function parseStandardSheet(
         nativePlace: standardText(row, header.columns, '籍贯'),
         homeAddress: standardText(row, header.columns, '家庭住址'),
         athleteStatus: standardText(row, header.columns, '训练状态'),
-        startSportDate: parseDate(standardValue(row, header.columns, '开始运动日期'), year),
+        startSportDate: (basicProfile ? parseStandardDate(rawStartSportDate, year) : parseDate(rawStartSportDate, year)) || text(rawStartSportDate),
         trainingVenue: standardText(row, header.columns, '训练场地'),
         currentEvent: standardText(row, header.columns, '备战赛事'),
         trainingPhase: standardText(row, header.columns, '备战阶段'),
@@ -1336,7 +1337,8 @@ function parseStandardSheet(
       };
       const hasProfileData = [payload.gender, payload.birthDate, payload.nativePlace,
         payload.education, payload.originUnit, payload.bestResult, payload.notes, payload.eventItem,
-        payload.representativeUnit, payload.trainingYears, payload.bestResultEvent, payload.bestResultDate].some(isProvided);
+        payload.representativeUnit, payload.trainingYears, payload.bestResultEvent, payload.bestResultDate,
+        payload.technicalLevel, payload.startSportDate].some(isProvided);
       if (!basicProfile || !athleteCode || hasProfileData) items.push(
         itemBase({
           ...base,
@@ -1526,43 +1528,58 @@ function parseStandardSheet(
       if (!exerciseName) messages.push('错误：训练动作不能为空');
       if (actualReps === null || actualWeightKg === null)
         messages.push('错误：实际次数和实际重量不能为空');
-      items.push(
-        itemBase({
-          ...base,
-          itemType: 'training_set',
-          eventDate: rowDate,
-          sessionLabel: standardText(row, header.columns, '课次名称') || '力量训练',
-          exerciseName,
-          setIndex: readNumber('组序') || 1,
-          targetReps: readNumber('计划次数'),
-          actualReps,
-          actualWeightKg,
-          intensityPercent: readNumber('强度百分比'),
-          payload: {
-            ...base.payload,
-            sessionOrder: readNumber('课次序号'),
-            setIndexProvided: text(standardValue(row, header.columns, '组序')) !== '',
-            exerciseCode: standardText(row, header.columns, '动作代码'),
-            plannedWeightKg: readNumber('计划重量kg'),
-            completed: ({ '已完成': 1, '未完成': 0, '是': 1, '否': 0 } as Record<string, number>)[standardText(row, header.columns, '完成状态')] ?? readNumber('完成状态'),
-            trainingEnvironment: standardText(row, header.columns, '训练环境'),
-            durationMin: readNumber('组次时长分钟'),
-            distanceKm: readNumber('组次距离千米'),
-            intensityZone: standardText(row, header.columns, '强度区间'),
-            rpe: readNumber('RPE'),
-            trainingCategory:
-              standardText(row, header.columns, '类别') || inferStrengthCategory(exerciseName),
-            bodyPosition:
-              standardText(row, header.columns, '身体部位') ||
-              inferStrengthBodyPosition(exerciseName),
-            note: standardText(row, header.columns, '备注'),
-          },
-          rawValue: `${actualWeightKg || ''}kg×${actualReps || ''}`,
-          quality: makeQuality(messages),
-          messages,
-          businessKey: `${athlete?.id || 0}|${rowDate}|${exerciseName}|${readNumber('组序') || 1}`,
-        })
-      );
+      const rawSetCount = standardValue(row, header.columns, '组数');
+      const count = readNumber('组数') ?? 1;
+      const rawSetIndex = standardValue(row, header.columns, '组序');
+      const startingSet = readNumber('组序') ?? 1;
+      const canRepeat = Number.isSafeInteger(count) && count >= 1 && count <= MAX_REPEATED_STRENGTH_SETS &&
+        Number.isSafeInteger(startingSet + count - 1) && startingSet >= 1;
+      if (!Number.isSafeInteger(count) || count < 1 || count > MAX_REPEATED_STRENGTH_SETS)
+        messages.push(`错误：组数须为1至${MAX_REPEATED_STRENGTH_SETS}的整数`);
+      if (!Number.isSafeInteger(startingSet) || startingSet < 1 || !Number.isSafeInteger(startingSet + count - 1))
+        messages.push('错误：组序须为有效正整数，展开后也须在范围内');
+      if (canRepeat && count > 1 && items.length + count > 400_000)
+        throw new Error('力量训练组次展开后超过工作表处理上限，请拆分文件。');
+      for (let offset = 0; offset < (canRepeat ? count : 1); offset += 1) {
+        const setIndex = startingSet + offset;
+        items.push(
+          itemBase({
+            ...base,
+            itemType: 'training_set',
+            eventDate: rowDate,
+            sessionLabel: standardText(row, header.columns, '课次名称') || '力量训练',
+            exerciseName,
+            setIndex,
+            targetReps: readNumber('计划次数'),
+            actualReps,
+            actualWeightKg,
+            intensityPercent: readNumber('强度百分比'),
+            payload: {
+              ...base.payload,
+              sessionOrder: readNumber('课次序号'),
+              setIndexProvided: Boolean(text(rawSetIndex) || text(rawSetCount)),
+              exerciseCode: standardText(row, header.columns, '动作代码'),
+              plannedWeightKg: readNumber('计划重量kg'),
+              completed: ({ '已完成': 1, '未完成': 0, '是': 1, '否': 0 } as Record<string, number>)[standardText(row, header.columns, '完成状态')] ?? readNumber('完成状态'),
+              trainingEnvironment: standardText(row, header.columns, '训练环境'),
+              durationMin: readNumber('组次时长分钟'),
+              distanceKm: readNumber('组次距离千米'),
+              intensityZone: standardText(row, header.columns, '强度区间'),
+              rpe: readNumber('RPE'),
+              trainingCategory:
+                standardText(row, header.columns, '类别') || inferStrengthCategory(exerciseName),
+              bodyPosition:
+                standardText(row, header.columns, '身体部位') ||
+                inferStrengthBodyPosition(exerciseName),
+              note: standardText(row, header.columns, '备注'),
+            },
+            rawValue: `${actualWeightKg ?? ''}kg×${actualReps ?? ''}`,
+            quality: makeQuality(messages),
+            messages,
+            businessKey: `${athlete?.id || 0}|${rowDate}|${exerciseName}|${setIndex}`,
+          })
+        );
+      }
     } else if (sheet === 'FMS测试') {
       const fmsItems = FMS_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel]) => {
         const valueNum = readNumber(headerName);
@@ -1624,6 +1641,8 @@ function parseStandardSheet(
       const protocol = standardText(row, header.columns, '测试协议');
       for (const [headerName, code, label, unit] of FITNESS_TEMPLATE_METRICS)
         appendMetric(headerName, code, label, unit, '体能测试', protocol);
+      for (const [headerName, code, label, unit, type, method] of COMMON_FITNESS_TEMPLATE_METRICS)
+        appendMetric(headerName, code, label, unit, type, method);
       if (items.length === rowStart && !numericErrors.size)
         items.push(itemBase({ ...base, itemType: 'invalid_row', eventDate: rowDate, quality: 'error',
           messages: ['错误：体能测试至少填写一项实测数值'], rawValue: row.map(text).join(' | ') }));
@@ -3289,6 +3308,8 @@ function validateImportItem(
       messages.push('错误：成绩日期须为实际日期，格式为YYYY-MM-DD');
     for (const [field, label] of [['eventItem', '具体小项'], ['representativeUnit', '代表单位'], ['bestResultEvent', '对应赛事']])
       if (text(payload[field]).length > 120) messages.push(`错误：${label}不能超过120个字符`);
+    if (isProvided(payload.startSportDate) && !validIsoDate(text(payload.startSportDate)))
+      messages.push('错误：开始运动日期须为实际日期，格式为YYYY-MM-DD');
     const technicalLevel = text(payload.technicalLevel);
     if (
       technicalLevel &&
@@ -3346,8 +3367,8 @@ function validateImportItem(
       messages.push('错误：距离千米须为 0—500 的数字。');
   } else if (item.itemType === 'training_set') {
     if (!item.exerciseName) messages.push('错误：训练动作不能为空');
-    if (item.actualReps === null || item.actualReps < 0)
-      messages.push('错误：实际次数不能为空且不能小于0');
+    if (item.actualReps === null || !Number.isSafeInteger(item.actualReps) || item.actualReps < 0)
+      messages.push('错误：实际次数须为非负整数');
     if (item.actualWeightKg === null || item.actualWeightKg < 0)
       messages.push('错误：实际重量不能为空且不能小于0');
 

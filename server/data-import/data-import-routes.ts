@@ -79,7 +79,7 @@ export function buildPurposeTemplate(
   metrics?: readonly ImportMetricDefinition[]
 ) {
   const sheetNames = PURPOSE_SHEETS[kind];
-  const workbook = buildImportWorkbook(sheetNames, { metrics, project, omitProfileTeam: kind === 'profile' });
+  const workbook = buildImportWorkbook(sheetNames, { metrics, project, omitProfileTeam: kind === 'profile', coachView: kind !== 'profile' });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));

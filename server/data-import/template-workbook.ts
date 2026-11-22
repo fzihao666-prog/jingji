@@ -14,7 +14,7 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; omitProfileTeam?: boolean } = {}) {
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; omitProfileTeam?: boolean; coachView?: boolean } = {}) {
   const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook();
   workbook.creator = '竞迹训练监控系统';
   const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
@@ -22,7 +22,7 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
     if (!sheetNames.includes(name)) continue;
     if (options.mode !== 'export') {
       const profileUsesPageTeam = options.omitProfileTeam && name === '运动员基本资料';
-      const fields = importTemplateFields(name)
+      const fields = importTemplateFields(name, { coachView: options.coachView, metricCodes: options.metrics && new Set(options.metrics.map(metric => metric.code)) })
         .filter(field => !profileUsesPageTeam || field.key !== '所属队伍')
         .map(field => {
           if (name === '其他测试' && field.key === '指标名称' && metricChoices.length) return { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' };
@@ -32,10 +32,16 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
         });
       const note = name === '其他测试'
         ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。'
-        : IMPORT_SHEET_NOTES[name];
+        : options.coachView && name === '训练课次'
+          ? '普通训练每人每课只填一行。本表记录整课时长、距离及RPE；有力量细节才填力量训练组次，有恢复测量才填每日恢复。同日多课填实际开始时间。'
+          : options.coachView && name === '力量训练组次'
+            ? '仅记录力量细节时填写。组序是第几组，组次是每组完成次数。同一动作各组的填写值完全一致时可填一行并填写组数；有差异时逐组填写。整课时长只填在训练课次。'
+            : options.coachView && name === '体能测试'
+              ? '每人每次测试一行，只填实测值。1RM和CMJ跳高按各自的测试口径入库；不对称指数须注明测试方法。身高体重与档案中的同次测量只填一处。'
+              : IMPORT_SHEET_NOTES[name];
       addTemplateSheet(workbook, name, fields, profileUsesPageTeam
         ? '建档仅需姓名，所属项目和队伍使用导入页面的选择。已有人员按姓名匹配。'
-        : note);
+        : note, options.coachView && ['训练课次', '力量训练组次', '每日恢复', '身体测量', '体能测试', 'FMS测试', '其他测试'].includes(name));
       continue;
     }
     const sheet = workbook.addWorksheet(name, {
