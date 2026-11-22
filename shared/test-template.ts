@@ -1,3 +1,4 @@
+import { fmsInputFields, type FmsInputKey } from './fms-import.js';
 export type TestTemplateMetricInput = {
   label: string;
   unit: string;
@@ -37,11 +38,16 @@ export type TestTemplatePreview = {
 
 export const TEST_TEMPLATE_IDENTITY_HEADERS = ['运动员编号', '姓名', '所属队伍', '测试日期'] as const;
 
-export function testTemplateHeaders(metrics: readonly Pick<TestTemplateMetric, 'label' | 'unit' | 'testType'>[]) {
-  const labels = metrics.map(metric => {
-    const label = metric.testType === 'FMS测试' ? `FMS ${metric.label}` : metric.label;
-    return metric.unit ? `${label}（${metric.unit}）` : label;
-  });
+export function testTemplateInputColumns(metrics: readonly TestTemplateMetric[]) {
+  return metrics.flatMap<{ metric: TestTemplateMetric; metricIndex: number; fmsInput?: FmsInputKey; label: string }>((metric, metricIndex) => metric.testType === 'FMS测试'
+    ? fmsInputFields(metric.code, `FMS ${metric.label}`).map(field => ({
+        metric, metricIndex, fmsInput: field.key, label: field.header,
+      }))
+    : [{ metric, metricIndex, fmsInput: undefined, label: metric.unit ? `${metric.label}（${metric.unit}）` : metric.label }]);
+}
+
+export function testTemplateHeaders(metrics: readonly TestTemplateMetric[]) {
+  const labels = testTemplateInputColumns(metrics).map(column => column.label);
   const used = new Set<string>(TEST_TEMPLATE_IDENTITY_HEADERS);
   const columns = labels.map((label, index) => {
     let header = label;

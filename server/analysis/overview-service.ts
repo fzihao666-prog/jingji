@@ -1272,6 +1272,14 @@ export function buildOverviewPayload(input: {
       AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
       AND lower(ts.source) NOT LIKE '%estimated%' AND lower(tm.source) NOT LIKE '%estimated%'
       AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
+      AND (ts.test_type <> 'FMS测试' OR NOT EXISTS (
+        SELECT 1 FROM test_sessions newer
+        WHERE newer.athlete_id=ts.athlete_id AND newer.project_code=ts.project_code
+          AND newer.test_type=ts.test_type AND newer.project_status='confirmed'
+          AND newer.is_demo=0 AND newer.quality IN ('valid','partial')
+          AND (newer.test_date>ts.test_date OR (newer.test_date=ts.test_date AND newer.id>ts.id))
+          AND EXISTS (SELECT 1 FROM fms_import_observations raw WHERE raw.test_session_id=newer.id)
+      ))
     ORDER BY ts.test_date DESC, ts.id DESC, tm.metric_code
   `
     )

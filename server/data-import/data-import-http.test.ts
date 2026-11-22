@@ -935,7 +935,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   const sheet = book.Sheets['运动员测试成绩'];
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
   expect(matrix[0].slice(4, 8)).toEqual(['自建力量测试重量（kg）', '自建力量测试组数（组）', '自建力量测试次数（次）', '自建力量测试用时（s）']);
-  expect(matrix[0].slice(8)).toHaveLength(7);
+  expect(matrix[0].slice(8)).toHaveLength(16);
   const spreadsheetRow = matrix.findIndex(row => row[0] === '701') + 1;
   expect(spreadsheetRow).toBeGreaterThan(1);
   const send = async () => {
@@ -946,7 +946,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
     return request('/analyze', 'POST', form);
   };
   XLSX.utils.sheet_add_aoa(sheet, [['999999']], { origin: `A${spreadsheetRow}` });
-  XLSX.utils.sheet_add_aoa(sheet, [['2026-11-19', 75, 3, 5, '1:02.5', 4, 1, 2, 3, 2, 1, 3]], { origin: `D${spreadsheetRow}` });
+  XLSX.utils.sheet_add_aoa(sheet, [['2026-11-19', 75, 3, 5, '1:02.5', 4, 3, 2, 2, 3, 3, 3, '阴性', '阳性', 2, 3, 3, '阴性', 1, 2, '阴性']], { origin: `D${spreadsheetRow}` });
   const invalid = await send();
   expect(invalid.status).toBe(200);
   expect(invalid.body.batch?.items.find(item => item.metricCode === 'fms_deep_squat')?.quality).toBe('error');
@@ -959,6 +959,9 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   const values = db.prepare(`SELECT m.metric_code AS code, m.value_num AS value, t.test_type AS type, t.protocol
     FROM test_measurements m JOIN test_sessions t ON t.id=m.test_session_id WHERE t.athlete_id=701 AND t.test_date='2026-11-19'`).all();
   expect(values).toHaveLength(11);
+  const fmsValues = values.filter(row => row.type === 'FMS测试');
+  expect(fmsValues).toHaveLength(7);
+  expect(fmsValues.reduce((total, row) => total + Number(row.value), 0)).toBe(10);
   const progress = `/test-template/progress${scope}&from=2026-11-19&to=2026-11-19`;
   const collection = await request(progress);
   expect(collection.status).toBe(200);
@@ -977,7 +980,12 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   expect(values).toEqual(expect.arrayContaining([
     ...group.codes.map((code, index) => ({ code, value: [75, 3, 5, 62.5][index], type: '专项测试', protocol: '' })),
     { code: 'fms_deep_squat', value: 0, type: 'FMS测试', protocol: '功能动作筛查（FMS）' },
+    { code: 'fms_hurdle_step', value: 2, type: 'FMS测试', protocol: '功能动作筛查（FMS）' },
+    { code: 'fms_shoulder_mobility', value: 0, type: 'FMS测试', protocol: '功能动作筛查（FMS）' },
   ]));
+  const raw = db.prepare(`SELECT o.observation_json AS observation FROM fms_import_observations o JOIN test_sessions t ON t.id=o.test_session_id
+    WHERE t.athlete_id=701 AND t.test_date='2026-11-19' AND o.metric_code='fms_shoulder_mobility'`).get() as { observation: string };
+  expect(JSON.parse(raw.observation)).toEqual({ left: 3, right: 3, clearingLeft: '阴性', clearingRight: '阳性' });
   const trendTeam = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get() as { id: number };
   const query = new URLSearchParams({
     project: 'ROWING', teamId: String(trendTeam.id), from: '2026-11-19', to: '2026-11-19', metricCode: group.codes[1],
@@ -1415,5 +1423,42 @@ it('标准模板支持补充档案、相同力量组填一行与常用体能宽�
     WHERE t.athlete_id=701 AND t.test_date='2026-11-26' ORDER BY m.metric_code`).all()).toEqual([
     { metric_code: 'squat_kg', value_num: 95, protocol: '实测1RM' },
     { metric_code: 'vertical_jump_cm', value_num: 42, protocol: 'CMJ' },
+  ]);
+});
+
+it('标准 FMS 表先保存单侧原始结果，补录后计算最终分且保留实测零分', async () => {
+  const download = async () => {
+    const response = await fetch(`${base}/api/data-import/template?kind=test&project=ROWING&team=HTTP甲队`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    return XLSX.read(await response.arrayBuffer());
+  };
+  async function submit(values: Record<string, unknown>) {
+    const book = await download();
+    const sheet = book.Sheets['FMS测试'];
+    const columns = (XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][])[2].map(header => header.split('\n')[0]);
+    expect(columns).toContain('肩部灵活性（左侧疼痛排查）');
+    expect(columns).toContain('跨栏步（右）');
+    const row: Record<string, unknown> = { 姓名: '虚构队员', 测试日期: '2026-11-28', ...values };
+    XLSX.utils.sheet_add_aoa(sheet, [columns.map(column => row[column] ?? null)], { origin: 'A4' });
+    const form = new FormData();
+    form.set('project', 'ROWING');
+    form.set('team', 'HTTP甲队');
+    form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '左右FMS.xlsx');
+    const parsed = await request('/analyze', 'POST', form);
+    expect(parsed.status).toBe(200);
+    expect(parsed.body.batch?.errorCount, JSON.stringify(parsed.body.batch?.items.map(item => item.messages))).toBe(0);
+    const result = await request(`/batches/${parsed.body.batch!.id}/commit`, 'POST', {});
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+  }
+  const final = () => db.prepare(`SELECT m.metric_code,m.value_num FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    WHERE s.athlete_id=701 AND s.test_date='2026-11-28' ORDER BY m.metric_code`).all();
+  await submit({ '跨栏步（左）': 0, 躯干稳定俯卧撑: 3 });
+  expect(final()).toEqual([]);
+  await submit({ '跨栏步（右）': 2, '躯干稳定俯卧撑（疼痛排查）': '阳性' });
+  expect(final()).toEqual([
+    { metric_code: 'fms_hurdle_step', value_num: 0 },
+    { metric_code: 'fms_trunk_stability_pushup', value_num: 0 },
   ]);
 });

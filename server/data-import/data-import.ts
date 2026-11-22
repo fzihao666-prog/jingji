@@ -1,3 +1,4 @@
+import { fmsFinalScore, fmsInputFields, type FmsInputKey, type FmsObservation } from '../../shared/fms-import.ts';
 import {
   TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
 } from '../../shared/training-record-template.ts';
@@ -983,6 +984,42 @@ function standardNumberValue(value: unknown): number | null {
   return numberValue(value);
 }
 
+function assertUniqueFmsObservations(items: (ParsedImportItem | DataImportItemView)[]) {
+  const seen = new Map<string, string>();
+  for (const item of items) {
+    if (!item.payload.fmsObservation || item.resolution === 'skip') continue;
+    const key = JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, item.metricCode,
+      item.payload.protocol, item.payload.protocolVersion || '', item.payload.testContext || '', item.payload.attemptOrder ?? 1]);
+    const previous = seen.get(key);
+    if (previous) throw new Error(`同一次FMS的「${item.metricLabel}」重复填写（${previous}、${item.sourceSheet}!${item.sourceAddress}），请将左右和疼痛排查填在同一行。`);
+    seen.set(key, `${item.sourceSheet}!${item.sourceAddress}`);
+  }
+}
+
+function storedFmsObservation(sessionId: number, metricCode: string): FmsObservation | undefined {
+  const stored = db.prepare('SELECT observation_json AS observation FROM fms_import_observations WHERE test_session_id=? AND metric_code=?')
+    .get(sessionId, metricCode) as { observation: string } | undefined;
+  return stored && JSON.parse(stored.observation) as FmsObservation;
+}
+
+function readFmsObservation(entries: Array<{ key: FmsInputKey; raw: unknown }>) {
+  const observation: FmsObservation = {};
+  const errors: string[] = [];
+  for (const { key, raw } of entries) {
+    const value = text(raw);
+    if (!value) continue;
+    if (key === 'clearing' || key === 'clearingLeft' || key === 'clearingRight') {
+      if (value === '阴性' || value === '阳性') observation[key] = value;
+      else errors.push('疼痛排查须填写阴性或阳性');
+    } else {
+      const score = standardNumberValue(raw);
+      if (score === null || !Number.isInteger(score) || score < 0 || score > 3) errors.push('动作评分须填写0、1、2或3分');
+      else observation[key] = score;
+    }
+  }
+  return { observation, errors };
+}
+
 function parseTestTemplateSheet(
   matrix: Matrix,
   snapshot: TestTemplateDownload,
@@ -1016,11 +1053,18 @@ function parseTestTemplateSheet(
         messages: [`错误：${TEST_TEMPLATE_SHEET}!${sourceAddress} ${invalid}`] }));
       continue;
     }
+    const fmsRows = new Map<string, { column: TestTemplateDownload['columns'][number]; index: number; entries: Array<{ key: FmsInputKey; raw: unknown }> }>();
     snapshot.columns.forEach((column, index) => {
       const columnIndex = index + TEST_TEMPLATE_IDENTITY_HEADERS.length;
       const raw = row[columnIndex];
       const rawValue = text(raw);
       if (!rawValue) return;
+      if (column.fmsInput) {
+        const group = fmsRows.get(column.code) ?? { column, index: columnIndex, entries: [] };
+        group.entries.push({ key: column.fmsInput, raw });
+        fmsRows.set(column.code, group);
+        return;
+      }
       const value = column.valueKind === 'time' ? templateTimeValue(raw) : standardNumberValue(raw);
       items.push(itemBase({
         itemType: 'test_measurement', eventDate, rawAthleteName,
@@ -1034,6 +1078,18 @@ function parseTestTemplateSheet(
         },
       }));
     });
+    for (const { column, index, entries } of fmsRows.values()) {
+      const { observation, errors } = readFmsObservation(entries);
+      items.push(itemBase({
+        itemType: 'test_measurement', eventDate, rawAthleteName, sourceSheet: TEST_TEMPLATE_SHEET,
+        sourceAddress: cellAddress(rowIndex, index), testType: column.testType, metricCode: column.code,
+        metricLabel: column.label, unit: column.unit, side: 'center', valueNum: fmsFinalScore(column.code, observation),
+        rawValue: entries.map(entry => text(entry.raw)).join(' / '),
+        payload: { athleteCode: person.kind === 'matched' ? String(person.athlete.id) : athleteCode, team, projectCode: snapshot.project,
+          protocol: column.protocol, protocolVersion: column.protocolVersion, rawDate: text(date),
+          testTemplateColumn: column, fmsObservation: observation, fmsErrors: errors },
+      }));
+    }
   }
   return items;
 }
@@ -1582,10 +1638,15 @@ function parseStandardSheet(
       }
     } else if (sheet === 'FMS测试') {
       const fmsItems = FMS_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel]) => {
-        const valueNum = readNumber(headerName);
-        if (valueNum === null) return [];
+        const inputs = fmsInputFields(metricCode, headerName);
+        const detailed = inputs.some(field => field.header !== headerName && header.columns.has(normalizedText(field.header)));
+        const entries = inputs.map(field => ({ key: field.key, raw: standardValue(row, header.columns, field.header) }));
+        const hasDetail = detailed && entries.some(entry => text(entry.raw));
+        const fms = hasDetail ? readFmsObservation(entries) : undefined;
+        const valueNum = fms ? fmsFinalScore(metricCode, fms.observation) : readNumber(headerName);
+        if (valueNum === null && !fms) return [];
         const metricMessages = [...messages];
-        if (!Number.isInteger(valueNum) || valueNum < 0 || valueNum > 3)
+        if (valueNum !== null && (!Number.isInteger(valueNum) || valueNum < 0 || valueNum > 3))
           metricMessages.push(`错误：${metricLabel}须填写0、1、2或3分`);
         return [
           itemBase({
@@ -1601,6 +1662,7 @@ function parseStandardSheet(
             payload: {
               ...base.payload,
               protocol: FMS_TEST_PROTOCOL,
+              ...(fms ? { fmsObservation: fms.observation, fmsErrors: fms.errors } : {}),
               note: standardText(row, header.columns, '备注'),
             },
             rawValue: String(valueNum),
@@ -1630,7 +1692,7 @@ function parseStandardSheet(
           })
         );
       } else {
-        if (fmsItems.length < FMS_TEMPLATE_METRICS.length)
+        if (fmsItems.filter(item => item.valueNum !== null).length < FMS_TEMPLATE_METRICS.length)
           fmsItems.forEach((item) => {
             item.messages.push('警告：建议一次录齐FMS七项，以便生成完整21分分析');
             item.quality = makeQuality(item.messages);
@@ -2351,12 +2413,17 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
           .get(session.id, item.metricCode, item.side) as Record<string, unknown> | undefined)
       : undefined;
     if (!session) return empty;
+    const raw = p.fmsObservation as FmsObservation | undefined;
+    const previousRaw = raw ? storedFmsObservation(session.id, item.metricCode) : undefined;
+    const rawFields = raw ? fmsInputFields(item.metricCode, item.metricLabel).map(({ key, header }) =>
+      conflictField(`fmsObservation.${key}`, header, previousRaw?.[key], raw[key])) : [];
     const fields = push([
       ...(existing ? [conflictField('valueNum', item.metricLabel || item.metricCode, existing.value_num, item.valueNum), conflictField('targetValue', '目标值', existing.target_value, p.targetValue), conflictField('unit', '单位', existing.unit, item.unit), conflictField('note', '备注', existing.note, p.note)] : []),
+      ...rawFields,
       conflictField('protocol', '测试协议', session.protocol, p.protocol),
       conflictField('durationMin', '测试时长分钟', session.durationMin, p.durationMin),
     ]);
-    if (!existing && !fields.some(field => field.overwrites)) return empty;
+    if (!existing && !previousRaw && !fields.some(field => field.overwrites)) return empty;
     return {
       exists: true,
       entityType: existing ? 'test_measurement' : 'test_session',
@@ -2851,6 +2918,7 @@ export function analyzeDataImport(input: {
     if (item.itemType === 'athlete_profile' && person.team && !text(item.payload.team))
       item.payload = { ...item.payload, team: person.team };
   }
+  assertUniqueFmsObservations(items);
   const mergedItems = consolidateImportFacts(items);
   items.splice(0, items.length, ...mergedItems);
   // ---- 统一校验（与校对、提交同一规则）----
@@ -3404,7 +3472,12 @@ function validateImportItem(
       const definition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(item.metricCode) as { unit: string } | undefined;
       if (!definition || definition.unit !== '') messages.push('错误：指标单位无法由字典确定，请填写单位');
     }
-    if (item.valueNum === null || !Number.isFinite(item.valueNum))
+    if (payload.fmsObservation && item.testType === 'FMS测试') {
+      if (Array.isArray(payload.fmsErrors))
+        for (const error of payload.fmsErrors) messages.push(`错误：${item.metricLabel} ${error}`);
+      item.valueNum = fmsFinalScore(item.metricCode, payload.fmsObservation as FmsObservation);
+      if (item.valueNum === null) messages.push('警告：仅保存已填写的FMS原始结果，该项暂不计分');
+    } else if (item.valueNum === null || !Number.isFinite(item.valueNum))
       messages.push(templateColumn
         ? `错误：${item.sourceSheet}!${item.sourceAddress} “${item.rawValue}”不是有效的${templateColumn.valueKind === 'time' ? '秒数或分:秒' : '数值'}`
         : '错误：测试值不能为空');
@@ -4249,6 +4322,26 @@ function upsertTestItem(
   userId: number,
   batchPolicy: 'skip' | 'update'
 ): UpsertResult {
+  if (item.payload.fmsObservation && item.testType === 'FMS测试') {
+    const identity = importedTestIdentity(item);
+    const session = findTestSession(db, identity) ?? saveTestSession(db, {
+      ...identity, source: 'file_import', quality: 'partial', createdBy: userId,
+    });
+    const stored = storedFmsObservation(session.id, item.metricCode);
+    const before = stored ?? {};
+    const current = item.payload.fmsObservation as FmsObservation;
+    const observation = resolveItemPolicy(item, batchPolicy) === 'skip' ? { ...current, ...before } : { ...before, ...current };
+    const changed = !stored || Object.entries(observation).some(([key, value]) => before[key as FmsInputKey] !== value);
+    if (changed) db.prepare(`INSERT INTO fms_import_observations(test_session_id,metric_code,observation_json,data_import_batch_id)
+      VALUES(?,?,?,?) ON CONFLICT(test_session_id,metric_code) DO UPDATE SET
+      observation_json=excluded.observation_json,data_import_batch_id=excluded.data_import_batch_id`)
+      .run(session.id, item.metricCode, JSON.stringify(observation), batchId);
+    const score = fmsFinalScore(item.metricCode, observation);
+    if (score === null) return { entityId: session.id, sessionId: session.id, skipped: !changed, created: !stored, filled: 0, overwritten: Number(Boolean(stored && changed)) };
+    const result = upsertTestItem({ ...item, valueNum: score, payload: { ...item.payload, fmsObservation: undefined } }, batchId, userId, batchPolicy);
+    if (changed) result.skipped = false;
+    return result;
+  }
   const existingConflict = detectItemConflict(item);
   if (existingConflict.identical && existingConflict.entityType === 'test_measurement' && existingConflict.entityId !== null)
     return { skipped: true, entityId: existingConflict.entityId, created: false, filled: 0, overwritten: 0 };
@@ -5339,6 +5432,7 @@ export function commitDataImport(input: {
     for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && revalidateItem(item, allowed, candidateNames).quality === 'error'))
       throw new Error('数据或指标配置已变化，请重新校验后提交。');
+    assertUniqueFmsObservations(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
     refreshImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
     if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.missingSessionOrder || item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
       throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
@@ -5407,7 +5501,7 @@ export function commitDataImport(input: {
         if (result.sessionId && !result.skipped) sessionIds.add(result.sessionId);
       } else if (item.itemType === 'test_measurement') {
         result = upsertTestItem(item, input.batchId, input.userId, input.conflictPolicy);
-        entityType = 'test_measurement';
+        entityType = item.payload.fmsObservation && result.sessionId === result.entityId ? 'test_session' : 'test_measurement';
       } else if (item.itemType === 'body_measurement') {
         result = upsertBodyItem(item, input.batchId, input.conflictPolicy);
         entityType = 'athlete_body_measurement';

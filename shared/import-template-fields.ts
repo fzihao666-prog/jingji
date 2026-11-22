@@ -1,3 +1,4 @@
+import { fmsInputFields } from './fms-import.js';
 import { ACTIVITY_LABELS } from './sport-rules.js';
 import { INTENSITY_ZONE_SYSTEMS } from './training-intensity.js';
 import { PROJECT_DEFINITIONS } from './projects.js';
@@ -414,11 +415,12 @@ export function importTemplateFields(sheet: string, options?: { coachView?: bool
   const extra = options?.coachView && sheet === '力量训练组次' ? ['组数']
     : options?.coachView && sheet === '体能测试'
       ? COMMON_FITNESS_TEMPLATE_METRICS.filter(([, code]) => !options.metricCodes || options.metricCodes.has(code)).map(([key]) => key)
-      : [];
-  const common = [...(commonColumns[sheet] || original), ...extra];
+      : options?.coachView && sheet === 'FMS测试' ? FMS_TEMPLATE_METRICS.flatMap(([label, code]) => fmsInputFields(code, label).map(field => field.header)) : [];
+  const common = [...(options?.coachView && sheet === 'FMS测试' ? ['系统运动员编号', '姓名', '测试日期'] : (commonColumns[sheet] || original)), ...extra];
   const ordered = [...common, ...original.filter((key) => !common.includes(key))].filter(
     (key) => (sheet !== '其他测试' || !['指标代码', '单位'].includes(key)) &&
-      (sheet !== '训练课次' || key !== '课次序号')
+      (sheet !== '训练课次' || key !== '课次序号') &&
+      (!options?.coachView || sheet !== 'FMS测试' || !FMS_TEMPLATE_METRICS.some(([header]) => header === key) || extra.includes(key))
   );
   const fields: ImportTemplateField[] = ordered.map((key) => {
     let requirement: TemplateRequirement = '选填';
@@ -507,7 +509,13 @@ export function importTemplateFields(sheet: string, options?: { coachView?: bool
       } else if (FITNESS_TEMPLATE_METRICS.some(([header]) => header === key))
         hint = '本表至少一项实测成绩；不得以0代表未测。';
     }
-    if (sheet === 'FMS测试' && FMS_TEMPLATE_METRICS.some(([header]) => header === key)) {
+    if (sheet === 'FMS测试' && key.endsWith('疼痛排查）')) {
+      example = '阴性';
+      fieldChoices = ['阴性', '阳性'];
+      hint = '阳性时对应动作记0分；未测留空。';
+    }
+    if (sheet === 'FMS测试' && (FMS_TEMPLATE_METRICS.some(([header]) => header === key) || /（[左右]）$/.test(key))) {
+      unit = '分';
       example = '2';
       hint = '整数0—3，未测留空；至少一项；七项齐全才生成完整21分制总分。';
       fieldChoices = ['0', '1', '2', '3'];

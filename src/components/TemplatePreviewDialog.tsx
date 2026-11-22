@@ -35,39 +35,46 @@ export function TemplatePreviewDialog({ title, busy, onClose, preview, children 
   );
 }
 
-export function TemplatePreviewColumns({ headers, fixedColumns = headers.length, onRemove, onMove, busy }: {
+export function TemplatePreviewColumns({ headers, fixedColumns = headers.length, onRemove, onMove, busy, columnGroups }: {
   headers: readonly string[];
   fixedColumns?: number;
+  columnGroups?: readonly number[];
   onMove?: (index: number, offset: number) => void;
   onRemove?: (index: number) => void;
   busy?: boolean;
 }) {
   const captionId = useId();
   const region = useRef<HTMLDivElement>(null);
+  const lastGroup = columnGroups?.at(-1) ?? headers.length - fixedColumns - 1;
   return (
     <div ref={region} className="template-preview-sheet" role="region" aria-labelledby={captionId} tabIndex={0}>
       <table>
         <caption id={captionId}>Excel 列预览</caption>
-        <thead><tr>{headers.map((header, index) => <th key={header} scope="col">
+        <thead><tr>{headers.map((header, index) => {
+          const position = index - fixedColumns;
+          const group = columnGroups?.[position] ?? position;
+          const showControls = position >= 0 && (!columnGroups || columnGroups[position - 1] !== group);
+          return <th key={header} scope="col">
           <div className="template-preview-column">
             <span>{header}</span>
-            {index >= fixedColumns && <div className="template-preview-column-actions">
+            {showControls && <div className="template-preview-column-actions">
               {onMove && <>
-                <button type="button" className="secondary-button template-preview-remove" disabled={busy || index === fixedColumns}
-                  aria-label={`左移列：${header}`} onClick={() => onMove(index - fixedColumns, -1)}><ArrowLeft size={16} aria-hidden /></button>
-                <button type="button" className="secondary-button template-preview-remove" disabled={busy || index === headers.length - 1}
-                  aria-label={`右移列：${header}`} onClick={() => onMove(index - fixedColumns, 1)}><ArrowRight size={16} aria-hidden /></button>
+                <button type="button" className="secondary-button template-preview-remove" disabled={busy || group === 0}
+                  aria-label={`左移列：${header}`} onClick={() => onMove(group, -1)}><ArrowLeft size={16} aria-hidden /></button>
+                <button type="button" className="secondary-button template-preview-remove" disabled={busy || group === lastGroup}
+                  aria-label={`右移列：${header}`} onClick={() => onMove(group, 1)}><ArrowRight size={16} aria-hidden /></button>
               </>}
               {onRemove && (
                 <button type="button" className="secondary-button template-preview-remove" disabled={busy}
                   aria-label={`删除列：${header}`} onClick={() => {
                     region.current?.focus({ preventScroll: true });
-                    onRemove(index - fixedColumns);
+                    onRemove(group);
                   }}><X size={16} aria-hidden /></button>
               )}
             </div>}
           </div>
-        </th>)}</tr></thead>
+        </th>;
+        })}</tr></thead>
       </table>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Download, Save } from 'lucide-react';
-import { TEST_TEMPLATE_IDENTITY_HEADERS, testTemplateHeaders, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
+import { TEST_TEMPLATE_IDENTITY_HEADERS, testTemplateHeaders, testTemplateInputColumns, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
 import { api } from '../api';
 import type { Project } from '../types';
 import type { TrainingRecordTemplate } from '../../shared/training-record-template';
@@ -163,7 +163,7 @@ export function TestTemplatePanel({ project, team, onClose }: {
     <TemplateWorkspace title="测试成绩模板预览" team={team} athleteCount={preview?.athleteCount} busy={pending} onClose={onClose}
       error={error} status={status || (!loaded ? '正在加载测试指标…' : '')}
       preview={preview && <TemplatePreviewColumns headers={testTemplateHeaders(selected)}
-        fixedColumns={TEST_TEMPLATE_IDENTITY_HEADERS.length} busy={pending} onMove={move}
+        fixedColumns={TEST_TEMPLATE_IDENTITY_HEADERS.length} columnGroups={testTemplateInputColumns(selected).map(column => column.metricIndex)} busy={pending} onMove={move}
         onRemove={index => void run(() => updateColumns(codes.filter((_, position) => position !== index), 'Excel 列已移除。'))} />}
       actions={preview && <>
           {projectMode ? <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('project')}><Save size={16} aria-hidden />保存项目默认</button> : <>

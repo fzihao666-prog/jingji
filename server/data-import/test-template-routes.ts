@@ -1,4 +1,4 @@
-import { testTemplateHeaders } from '../../shared/test-template.ts';
+import { testTemplateHeaders, testTemplateInputColumns } from '../../shared/test-template.ts';
 import {
   combineTrainingProjects, commonTrainingProjects, TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
   type TrainingRecordTemplate,
@@ -390,15 +390,15 @@ export function registerTestTemplateRoutes(app: Express) {
       if (!codes.length) throw new ImportRequestError('请先保存本队 Excel 列。', 400);
       const metrics = throwOnInvalidCodes(s.project, codes);
       const headers = testTemplateHeaders(metrics).slice(TEST_TEMPLATE_IDENTITY_HEADERS.length);
-      const columns: TestTemplateColumn[] = metrics.map(({ code, label, unit, protocol, protocolVersion, valueKind, testType }, index) => ({
-        code, label, unit, protocol, protocolVersion, valueKind, testType, header: headers[index],
+      const columns: TestTemplateColumn[] = testTemplateInputColumns(metrics).map(({ metric, fmsInput }, index) => ({
+        ...metric, fmsInput, header: headers[index],
       }));
       const id = randomUUID();
       const book = new ExcelJS.Workbook();
       const sheet = book.addWorksheet(TEST_TEMPLATE_SHEET, { views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }] });
       sheet.columns = [
         ...TEST_TEMPLATE_IDENTITY_HEADERS.map((header, index) => ({ header, width: 20, style: { numFmt: index === 3 ? 'yyyy-mm-dd' : '@' } })),
-        ...columns.map(column => ({ header: column.header, width: 24, style: { numFmt: column.valueKind === 'time' ? '@' : '0.###' } })),
+        ...columns.map(column => ({ header: column.header, width: 24, style: { numFmt: column.valueKind === 'time' || column.fmsInput?.startsWith('clearing') ? '@' : '0.###' } })),
       ];
       const heading = sheet.getRow(1);
       heading.height = 34;
@@ -407,13 +407,21 @@ export function registerTestTemplateRoutes(app: Express) {
       heading.alignment = { vertical: 'middle', wrapText: true };
       heading.getCell(1).note = '系统预填，可留空。按所选队伍和姓名自动关联。';
       columns.forEach((column, index) => {
-        const instructions = column.testType === 'FMS测试' ? '评分填 0、1、2 或 3，未测留空。'
+        const instructions = column.fmsInput?.startsWith('clearing') ? '填写阴性或阳性。阳性时该动作计0分。'
+          : column.testType === 'FMS测试' ? '评分填 0、1、2 或 3，未测留空。'
           : column.valueKind === 'time' ? '填写秒数或分:秒（例如 6:42.5）。' : '填写实际成绩，未测留空。';
         const notes = [column.protocol, instructions];
         heading.getCell(TEST_TEMPLATE_IDENTITY_HEADERS.length + index + 1).note = notes.filter(Boolean).join('\n');
       });
       const athletes = roster(s);
       for (const athlete of athletes) sheet.addRow([String(athlete.id), athlete.name, s.team]);
+      columns.forEach((column, index) => {
+        if (!column.fmsInput) return;
+        const choices = column.fmsInput.startsWith('clearing') ? '阴性,阳性' : '0,1,2,3';
+        for (let row = 2; row <= Math.max(501, athletes.length + 1); row += 1)
+          sheet.getRow(row).getCell(TEST_TEMPLATE_IDENTITY_HEADERS.length + index + 1).dataValidation =
+            { type: 'list', allowBlank: true, formulae: [`"${choices}"`], showErrorMessage: true };
+      });
       const meta = book.addWorksheet(TEST_TEMPLATE_META, { state: 'veryHidden' });
       meta.getCell('A1').value = TEST_TEMPLATE_FORMAT;
       meta.getCell('A2').value = id;

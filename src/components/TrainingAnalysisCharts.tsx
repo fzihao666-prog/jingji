@@ -1200,7 +1200,7 @@ export function FmsPersonalChart({ measurements }: { measurements: OverviewMeasu
   const isPlaceholder = available.length === 0;
   const hasMissingScores = available.length < data.length;
   const chartData = data;
-  const total = available.length ? available.reduce((sum, row) => sum + (row.score || 0), 0) : null;
+  const total = hasMissingScores ? null : available.reduce((sum, row) => sum + (row.score ?? 0), 0);
   const weakest = [...available]
     .sort((left, right) => (left.gap || 0) - (right.gap || 0))
     .slice(0, 2);

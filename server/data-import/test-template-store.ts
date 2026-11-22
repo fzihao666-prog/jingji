@@ -1,3 +1,4 @@
+import type { FmsInputKey } from '../../shared/fms-import.ts';
 import type { TrainingRecordTemplate } from '../../shared/training-record-template.ts';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
@@ -24,6 +25,13 @@ export function initializeTestTemplates(db: DatabaseSync) {
         protocol TEXT NOT NULL,
         version INTEGER NOT NULL,
         previous_code TEXT REFERENCES metric_definitions(code)
+      );
+      CREATE TABLE IF NOT EXISTS fms_import_observations (
+        test_session_id INTEGER NOT NULL REFERENCES test_sessions(id) ON DELETE CASCADE,
+        metric_code TEXT NOT NULL REFERENCES metric_definitions(code),
+        observation_json TEXT NOT NULL,
+        data_import_batch_id TEXT NOT NULL,
+        PRIMARY KEY(test_session_id, metric_code)
       );
       CREATE TABLE IF NOT EXISTS test_template_projects (
         project TEXT PRIMARY KEY,
@@ -228,7 +236,7 @@ export function createTestTemplateMetric(db: DatabaseSync, project: string, inpu
   }
 }
 
-export type TestTemplateColumn = Pick<TestTemplateMetric, 'code' | 'label' | 'unit' | 'protocol' | 'protocolVersion' | 'valueKind' | 'testType'> & { header: string };
+export type TestTemplateColumn = Pick<TestTemplateMetric, 'code' | 'label' | 'unit' | 'protocol' | 'protocolVersion' | 'valueKind' | 'testType'> & { header: string; fmsInput?: FmsInputKey };
 export type TestTemplateDownload = { id: string; project: string; teamId: number; teamName: string; columns: TestTemplateColumn[] };
 
 export function readTestTemplateDownload(db: DatabaseSync, id: string): TestTemplateDownload | undefined {
