@@ -2,6 +2,7 @@ import { TrainingRecordTemplatePanel } from '../components/TrainingRecordTemplat
 import { CollectionProgress } from '../components/CollectionProgress';
 import { TestTemplatePanel } from '../components/TestTemplatePanel';
 import { TeamTrainingImport } from '../components/TeamTrainingImport';
+import { TeamPlanImport } from '../components/TeamPlanImport';
 import { EnodeImport } from '../components/EnodeImport';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics';
 import { isImportException, importReviewGroups, selectImportReviewRecord, importSessionChoices } from '../../shared/import-conflict-review';
@@ -1092,6 +1093,13 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             <TeamTrainingImport key={`${project}:${selectedTeam?.id ?? ''}`} project={project} team={selectedTeam}
               disabled={Boolean(busy) || enodeBusy}
               onBusyChange={setTeamTrainingBusy} onView={onViewTeamTraining} />
+          </section>
+          <section className="data-import-upload-card data-import-device-card" aria-label="队伍训练计划导入">
+            <div className="data-import-card-heading">
+              <div><strong>队伍训练计划</strong><span>下载周计划模板，上传后生成队伍计划草稿。</span></div>
+            </div>
+            <TeamPlanImport key={`${project}:${selectedTeam?.id ?? ''}`} project={project} team={selectedTeam}
+              disabled={Boolean(busy) || enodeBusy || teamTrainingBusy} />
           </section>
         </div>
 

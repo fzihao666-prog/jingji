@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import express from 'express';
 import type { Server } from 'node:http';
 import type { TeamPlan } from '../../shared/team-plan.ts';
+import ExcelJS from 'exceljs';
 const fixture = vi.hoisted(() => ({ db: null as DatabaseSync | null, ids: [1, 2], role: 'SCC' }));
 vi.mock('../core/db.ts', () => ({
   get db() {
@@ -76,6 +77,53 @@ const data = {
     { athleteId: 2, sessionId: 's', changes: { durationMin: 70 }, reason: '调整' },
   ],
 };
+
+it('下载模板并导入多个队伍计划草稿，按整队和项目授权校验，重传不重复写入', async () => {
+  fixture.ids = [1, 2];
+  fixture.role = 'SCC';
+  const template = await fetch(base + '/api/team-plans/template');
+  expect(template.status).toBe(200);
+  expect(template.headers.get('content-type')).toContain('spreadsheetml.sheet');
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(Buffer.from(await template.arrayBuffer()) as unknown as Parameters<typeof book.xlsx.load>[0]);
+  const first = book.getWorksheet(1)!;
+  first.name = '第48周';
+  first.getRow(2).values = ['2026-11-16', '星期一', '', '专项：水上划 30 分钟', '体能：力量训练'];
+  first.getRow(3).values = ['2026-11-22', '星期日', '', '休息'];
+  const second = book.addWorksheet('第49周');
+  second.addRows([first.getRow(1).values as unknown[], ['2026-11-23', '星期一', '', '水上250米X6'], ['2026-11-29', '星期日', '', '休息']]);
+  const upload = async (project = '赛艇') => {
+    const payload = new FormData();
+    const bytes = new Uint8Array(await book.xlsx.writeBuffer());
+    payload.append('file', new Blob([bytes]), '队伍计划.xlsx');
+    const response = await fetch(base + '/api/team-plans/import?' + new URLSearchParams({ project, teamId: '1' }), { method: 'POST', body: payload });
+    const result = await response.json() as { drafts?: { sessions: number }[]; skipped?: number };
+    return { status: response.status, ...result };
+  };
+  fixture.role = 'ATL';
+  expect((await upload()).status).toBe(403);
+  fixture.role = 'SCC';
+  fixture.ids = [1];
+  expect((await upload()).status).toBe(403);
+  fixture.ids = [1, 2];
+  expect((await upload('激流')).status).toBe(403);
+  second.getCell('A2').value = '错误日期';
+  expect((await upload()).status).toBe(400);
+  expect((await call('', undefined, 'GET')).plans).toHaveLength(0);
+  second.getCell('A2').value = '2026-11-23';
+  expect(await upload()).toMatchObject({ status: 200, drafts: [{ sessions: 2 }, { sessions: 1 }], skipped: 0 });
+  const drafts = (await call('', undefined, 'GET')).plans;
+  expect(drafts).toHaveLength(2);
+  expect(drafts.every((plan) => plan.status === 'draft')).toBe(true);
+  expect(drafts[1].data.focus).toContain('2026-11-22 上午：休息');
+  expect(drafts[1].data.sessions.map((session) => session.category)).toEqual(['special', 'physical']);
+  expect(await upload()).toMatchObject({ status: 200, drafts: [], skipped: 2 });
+  first.getCell('D2').value = '不同的计划内容';
+  expect((await upload()).status).toBe(409);
+  expect((await call('', undefined, 'GET')).plans).toHaveLength(2);
+  // 同文件既有测试共用内存库，恢复本用例新增的计划。
+  fixture.db?.exec('DELETE FROM training_plans; DELETE FROM audit_logs');
+});
 it('整队授权、草稿隔离、CAS、确认发布和修订版本保留', async () => {
   fixture.ids = [1];
   expect(

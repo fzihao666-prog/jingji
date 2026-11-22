@@ -209,6 +209,15 @@ export const api = {
     body.append('mappings', JSON.stringify(mappings));
     return request<TeamTrainingImportResult>('/api/team-training-stats/import', { method: 'POST', body });
   },
+  teamPlanTemplate() {
+    return request<Blob>('/api/team-plans/template', { responseType: 'xlsx' });
+  },
+  importTeamPlanWorkbook(file: File, project: Project, teamId: number) {
+    const query = new URLSearchParams({ project, teamId: String(teamId) });
+    const body = new FormData();
+    body.append('file', file);
+    return request<{ drafts: { id: number; title: string; sessions: number }[]; skipped: number }>(`/api/team-plans/import?${query}`, { method: 'POST', body });
+  },
   teamTrainingStats(project: Project, teamId: number, period: TeamTrainingPeriod, date?: string, signal?: AbortSignal) {
     const params = new URLSearchParams({ project, teamId: String(teamId), period, view: 'board' });
     if (date) params.set('date', date);

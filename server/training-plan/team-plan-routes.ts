@@ -1,11 +1,19 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Express, Request, Response } from 'express';
+import multer from 'multer';
 import { db } from '../core/db.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { readTeamPlans, teamPlanInput, validateTeamPlanContext } from './team-plan-service.ts';
 import { teamPlanScope } from './team-plan-scope.ts';
 import type { TeamPlanData } from '../../shared/team-plan.ts';
+import { buildTeamPlanWorkbook, readTeamPlanWorkbook } from './team-plan-workbook.ts';
+
+const planUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 0, parts: 2 },
+}).single('file');
+const xlsxType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export function registerTeamPlanRoutes(app: Express) {
   const positiveId = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -27,6 +35,20 @@ export function registerTeamPlanRoutes(app: Express) {
   }
   function scope(req: Request) {
     return teamPlanScope(db, req.authUser!);
+  }
+  function insertDraft(
+    req: Request,
+    teamId: number,
+    athleteId: number,
+    plan: { title: string; startDate: string; endDate: string },
+    data: TeamPlanData
+  ) {
+    const result = db.prepare(
+      `INSERT INTO training_plans (athlete_id,plan_date,start_date,end_date,title,plan_data,created_by,updated_by,model,team_id) VALUES (?,?,?,?,?,?,?,?,'team',?)`
+    ).run(athleteId, randomUUID(), plan.startDate, plan.endDate, plan.title, JSON.stringify(data), req.authUser!.id, req.authUser!.id, teamId);
+    const id = Number(result.lastInsertRowid);
+    db.prepare('UPDATE training_plans SET root_id=? WHERE id=?').run(id, id);
+    return id;
   }
   app.get('/api/team-plans', requireAuth, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -282,23 +304,7 @@ export function registerTeamPlanRoutes(app: Express) {
         );
       else {
         const anchor = allowed.athletes.find((athlete) => athlete.teamId === teamId)!;
-        const result = db
-          .prepare(
-            `INSERT INTO training_plans (athlete_id,plan_date,start_date,end_date,title,plan_data,created_by,updated_by,model,team_id) VALUES (?,?,?,?,?,?,?,?,'team',?)`
-          )
-          .run(
-            anchor.id,
-            randomUUID(),
-            parsed.data.startDate,
-            parsed.data.endDate,
-            parsed.data.title,
-            JSON.stringify(data),
-            req.authUser!.id,
-            req.authUser!.id,
-            teamId
-          );
-        savedId = Number(result.lastInsertRowid);
-        db.prepare('UPDATE training_plans SET root_id=? WHERE id=?').run(savedId, savedId);
+        savedId = insertDraft(req, teamId, anchor.id, parsed.data, data);
       }
       audit(req, existing ? 'update' : 'create', savedId, {
         teamId,
@@ -316,6 +322,63 @@ export function registerTeamPlanRoutes(app: Express) {
     }
   }
   const roles = requireRole('SCC', 'REG', 'TD', 'DMD');
+  app.get('/api/team-plans/template', requireAuth, roles, async (_req, res) => {
+    const buffer = Buffer.from(await buildTeamPlanWorkbook().xlsx.writeBuffer());
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', "attachment; filename=\"team-plan-template.xlsx\"; filename*=UTF-8''" + encodeURIComponent('竞迹队伍训练计划模板.xlsx'));
+    return res.type(xlsxType).send(buffer);
+  });
+  app.post('/api/team-plans/import', requireAuth, roles, (req, res, next) => {
+    const id = positiveId.safeParse(Number(req.query.teamId));
+    const project = z.string().min(1).safeParse(req.query.project);
+    if (!id.success || !project.success) return res.status(400).json({ message: '请选择运动项目和队伍。' });
+    const teamId = id.data;
+    const matches = (team: { id: number; project: string }) => team.id === teamId && team.project === project.data;
+    if (!scope(req).teams.some(matches)) return res.status(403).json({ message: '无权维护所选项目的整支队伍计划。' });
+    planUpload(req, res, (error: unknown) => {
+      if (error || !req.file || !/\.xlsx$/i.test(req.file.originalname))
+        return res.status(400).json({ message: '请选择不超过 2 MB 的 .xlsx 计划文件。' });
+      let plans: ReturnType<typeof readTeamPlanWorkbook>;
+      try {
+        plans = readTeamPlanWorkbook(req.file.buffer);
+        for (const plan of plans) validateTeamPlanContext(project.data, plan.data);
+      } catch (failure) {
+        return res.status(400).json({ message: failure instanceof Error ? failure.message : '计划文件无效。' });
+      }
+      try {
+        db.exec('BEGIN IMMEDIATE');
+        const allowed = scope(req);
+        const anchor = allowed.athletes.find((athlete) => athlete.teamId === teamId);
+        if (!anchor || !allowed.teams.some(matches)) {
+          db.exec('ROLLBACK');
+          return res.status(403).json({ message: '队伍访问范围已变化，请刷新。' });
+        }
+        const existing = readTeamPlans(db, teamId).filter((plan) => plan.status !== 'archived');
+        const drafts = [];
+        let skipped = 0;
+        for (const plan of plans) {
+          const samePeriod = existing.filter((current) => current.startDate === plan.startDate && current.endDate === plan.endDate);
+          if (samePeriod.some((current) => current.title === plan.title && JSON.stringify(current.data) === JSON.stringify(plan.data))) {
+            skipped++;
+            continue;
+          }
+          if (samePeriod.length) {
+            db.exec('ROLLBACK');
+            return res.status(409).json({ message: `${plan.startDate} 至 ${plan.endDate} 已有队伍计划，请在训练计划中处理该周期。` });
+          }
+          const draftId = insertDraft(req, teamId, anchor.id, plan, plan.data);
+          audit(req, 'import', draftId, { teamId, revision: 1 });
+          drafts.push({ id: draftId, title: plan.title, sessions: plan.data.sessions.length });
+        }
+        db.exec('COMMIT');
+        return res.json({ drafts, skipped });
+      } catch (failure) {
+        if (db.isTransaction) db.exec('ROLLBACK');
+        next(failure);
+      }
+    });
+  });
   app.post('/api/team-plans', requireAuth, roles, write);
   app.put('/api/team-plans/:id', requireAuth, roles, write);
   app.post('/api/team-plans/:id/transition', requireAuth, roles, write);

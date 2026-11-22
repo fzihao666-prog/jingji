@@ -279,6 +279,8 @@ sequenceDiagram
 
 `/api/team-plans` 由 Web 与小程序共用：GET 返回权限内计划，POST 创建草稿，PUT 携带 `revision` 更新草稿，`/:id/transition` 处理提交、退回、确认发布、归档和修订。教练维护计划须拥有整支队伍的访问范围；运动员不得读取草稿或他人 Override。运动员可读取本人执行关联的旧发布版本，转队不会丢失已关联历史。保存、发布、修订及审计使用写事务与 revision 检查，重复发布和并发覆盖返回冲突。修订发布归档原版本，保留原始 JSON 与发布时间。旧个人写入及 AI 计划接口返回 410；历史 `/api/training-plans`、目录和导出明确排除 `model='team'`，防止通过旧接口绕过审核或泄漏差异。
 
+网页队伍计划 Excel 通过 `GET /api/team-plans/template` 下载，`POST /api/team-plans/import` 接收。上传按页面所选项目和整队授权校验，按工作表生成草稿，共用既有计划 Schema、训练规则和审计。整批在同一事务保存，相同内容重传跳过，已有同周期计划的不同内容返回冲突。
+
 AI 训练计划草稿复用队伍计划结构与发布流程：`/api/team-plans/ai/generate` 读取队伍真实数据摘要（近 28 天负荷、昨日计划/勾选/实际、RPE、晨检、测试）并按固定 Prompt（`server/prompts/training-plan-system.md`）生成单日草稿，`/revise` 按教练自然语言要求修改并返回差异，`/undo` 从服务端历史快照撤销；草稿写 `training_plans`（`status='draft'`）与 `ai_metadata`（模型、Prompt 版本、对话摘要、撤销历史），同队同日只维护一份单日草稿。AI 输出按竞迹强度字典与计划 Schema 校验后才保存，生成失败保留上一版有效草稿；发布必须走既有 transition 审核链路，未审核草稿不进入运动员任务列表。每日调度 `startAiPlanScheduler` 默认 18:00 为下一训练日生成草稿，教练手工草稿不被自动任务覆盖。
 
 `team_plan_item_checks` 是最小训练实施确认表，按 `(plan_id, session_id, item_id)` 记录教练勾选（`pending`/`executed`/`cancelled`），带操作人、时间与 `revision` 乐观锁；取消需填写原因，撤销勾选回到 `pending`。勾选仅代表教练确认队伍已组织实施该训练项，不生成也不覆盖运动员个人时长、距离、RPE、负荷与完成率，个人完成情况继续以实际训练记录与 `plan-execution.ts` 口径为准。仅教练及以上角色可写，运动员只读。
