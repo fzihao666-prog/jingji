@@ -171,8 +171,18 @@ export function AthleteManagementPage({
   const [eventFilter, setEventFilter] = useState('');
   const [advanced, setAdvanced] = useState({
     venue: '',
+    coach: '',
+    region: '',
+    eventItem: '',
+    position: '',
+    trainingPhase: '',
+    gender: '',
     technicalLevel: '',
     athleteStatus: '',
+    profileStatus: '',
+    accountStatus: '',
+    ageMin: '',
+    ageMax: '',
     createdFrom: '',
     createdTo: '',
   });
@@ -252,6 +262,18 @@ export function AthleteManagementPage({
     () => [...new Set(athletes.map((athlete) => athlete.currentEvent).filter(Boolean))],
     [athletes]
   );
+  const eventItems = useMemo(
+    () => [...new Set(athletes.map((athlete) => athlete.eventItem).filter(Boolean))],
+    [athletes]
+  );
+  const trainingPhases = useMemo(
+    () => [...new Set(athletes.map((athlete) => athlete.trainingPhase).filter(Boolean))],
+    [athletes]
+  );
+  const genders = useMemo(
+    () => [...new Set(athletes.map((athlete) => athlete.gender).filter(Boolean))],
+    [athletes]
+  );
   const currentMonth = monthKey(new Date().toISOString());
 
   const stats = useMemo(
@@ -282,12 +304,40 @@ export function AthleteManagementPage({
         )
           return false;
         if (
+          advanced.coach &&
+          !athlete.coaches.toLocaleLowerCase().includes(advanced.coach.toLocaleLowerCase())
+        )
+          return false;
+        if (
+          advanced.region &&
+          ![athlete.region, athlete.province, athlete.city, athlete.county]
+            .filter(Boolean)
+            .join(' ')
+            .toLocaleLowerCase()
+            .includes(advanced.region.toLocaleLowerCase())
+        )
+          return false;
+        if (advanced.eventItem && athlete.eventItem !== advanced.eventItem) return false;
+        if (
+          advanced.position &&
+          !athlete.athletePosition.toLocaleLowerCase().includes(advanced.position.toLocaleLowerCase())
+        )
+          return false;
+        if (advanced.trainingPhase && athlete.trainingPhase !== advanced.trainingPhase) return false;
+        if (advanced.gender && athlete.gender !== advanced.gender) return false;
+        if (
           advanced.technicalLevel &&
           (athlete.technicalLevel || '未定级') !== advanced.technicalLevel
         )
           return false;
         if (advanced.athleteStatus && athlete.athleteStatus !== advanced.athleteStatus)
           return false;
+        if (advanced.profileStatus && athlete.profileStatus !== advanced.profileStatus) return false;
+        if (advanced.accountStatus === 'has' && !athlete.hasAccount) return false;
+        if (advanced.accountStatus === 'none' && athlete.hasAccount) return false;
+        const age = Number(ageFromBirthDate(athlete.birthDate));
+        if (advanced.ageMin && (!Number.isFinite(age) || age < Number(advanced.ageMin))) return false;
+        if (advanced.ageMax && (!Number.isFinite(age) || age > Number(advanced.ageMax))) return false;
         if (advanced.createdFrom && athlete.createdAt.slice(0, 10) < advanced.createdFrom)
           return false;
         if (advanced.createdTo && athlete.createdAt.slice(0, 10) > advanced.createdTo) return false;
@@ -338,8 +388,18 @@ export function AthleteManagementPage({
     setEventFilter('');
     setAdvanced({
       venue: '',
+      coach: '',
+      region: '',
+      eventItem: '',
+      position: '',
+      trainingPhase: '',
+      gender: '',
       technicalLevel: '',
       athleteStatus: '',
+      profileStatus: '',
+      accountStatus: '',
+      ageMin: '',
+      ageMax: '',
       createdFrom: '',
       createdTo: '',
     });
@@ -922,7 +982,7 @@ export function AthleteManagementPage({
               <div>
                 <span>ADVANCED FILTER</span>
                 <h2 id="athlete-filter-title">高级筛选</h2>
-                <p>进一步按训练属性和建档时间缩小范围。</p>
+                <p>按训练属性、档案状态、基本信息和建档时间精确筛选。</p>
               </div>
               <button
                 className="icon-button"
@@ -940,6 +1000,66 @@ export function AthleteManagementPage({
                   onChange={(event) => setAdvanced({ ...advanced, venue: event.target.value })}
                   placeholder="例如：水上基地"
                 />
+              </label>
+              <label>
+                <span>负责教练</span>
+                <input
+                  value={advanced.coach}
+                  onChange={(event) => setAdvanced({ ...advanced, coach: event.target.value })}
+                  placeholder="输入教练姓名"
+                />
+              </label>
+              <label>
+                <span>所属区域</span>
+                <input
+                  value={advanced.region}
+                  onChange={(event) => setAdvanced({ ...advanced, region: event.target.value })}
+                  placeholder="省、市或区域名称"
+                />
+              </label>
+              <label>
+                <span>具体小项</span>
+                <select
+                  value={advanced.eventItem}
+                  onChange={(event) => setAdvanced({ ...advanced, eventItem: event.target.value })}
+                >
+                  <option value="">全部小项</option>
+                  {eventItems.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>位置/号位</span>
+                <input
+                  value={advanced.position}
+                  onChange={(event) => setAdvanced({ ...advanced, position: event.target.value })}
+                  placeholder="例如：一号位"
+                />
+              </label>
+              <label>
+                <span>训练阶段</span>
+                <select
+                  value={advanced.trainingPhase}
+                  onChange={(event) => setAdvanced({ ...advanced, trainingPhase: event.target.value })}
+                >
+                  <option value="">全部阶段</option>
+                  {trainingPhases.map((phase) => (
+                    <option key={phase}>{phase}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>性别</span>
+                <select
+                  value={advanced.gender}
+                  onChange={(event) => setAdvanced({ ...advanced, gender: event.target.value })}
+                >
+                  <option value="">全部性别</option>
+                  {genders.map((gender) => (
+                    <option key={gender}>{gender}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>技术等级</span>
@@ -976,6 +1096,48 @@ export function AthleteManagementPage({
                 </select>
               </label>
               <label>
+                <span>档案状态</span>
+                <select
+                  value={advanced.profileStatus}
+                  onChange={(event) => setAdvanced({ ...advanced, profileStatus: event.target.value })}
+                >
+                  <option value="">全部档案</option>
+                  <option value="complete">资料完整</option>
+                  <option value="incomplete">待补全</option>
+                </select>
+              </label>
+              <label>
+                <span>登录账号</span>
+                <select
+                  value={advanced.accountStatus}
+                  onChange={(event) => setAdvanced({ ...advanced, accountStatus: event.target.value })}
+                >
+                  <option value="">全部账号状态</option>
+                  <option value="has">已创建账号</option>
+                  <option value="none">未创建账号</option>
+                </select>
+              </label>
+              <label>
+                <span>最小年龄</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advanced.ageMin}
+                  onChange={(event) => setAdvanced({ ...advanced, ageMin: event.target.value })}
+                  placeholder="不限"
+                />
+              </label>
+              <label>
+                <span>最大年龄</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advanced.ageMax}
+                  onChange={(event) => setAdvanced({ ...advanced, ageMax: event.target.value })}
+                  placeholder="不限"
+                />
+              </label>
+              <label>
                 <span>建档开始日期</span>
                 <input
                   type="date"
@@ -1003,8 +1165,18 @@ export function AthleteManagementPage({
                 onClick={() =>
                   setAdvanced({
                     venue: '',
+                    coach: '',
+                    region: '',
+                    eventItem: '',
+                    position: '',
+                    trainingPhase: '',
+                    gender: '',
                     technicalLevel: '',
                     athleteStatus: '',
+                    profileStatus: '',
+                    accountStatus: '',
+                    ageMin: '',
+                    ageMax: '',
                     createdFrom: '',
                     createdTo: '',
                   })

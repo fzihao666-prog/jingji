@@ -752,6 +752,11 @@
   gap: 14px;
 }
 
+.athlete-filter-grid {
+  max-height: min(560px, calc(100vh - 250px));
+  overflow-y: auto;
+}
+
 .athlete-filter-grid label > span,
 .athlete-injury-grid label > span,
 .athlete-form-grid label > span {
