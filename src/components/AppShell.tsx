@@ -35,7 +35,6 @@ export type SpecialPageKey =
   | 'special-overview'
   | 'special-volume'
   | 'special-time'
-  | 'special-distance'
   | 'special-load'
   | 'special-rate'
   | 'special-heart'

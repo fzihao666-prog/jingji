@@ -1,7 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it, vi } from 'vitest';
-vi.mock('../components/SpecialPerformancePanel', () => ({ SpecialPerformancePanel: () => null }));
+import { expect, it } from 'vitest';
 import { SpecialTestsPage } from './SpecialTestsPage';
 import { StrengthTrainingAnalysisPage } from './StrengthTrainingAnalysisPage';
 

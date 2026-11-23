@@ -1165,37 +1165,6 @@
   width: 14px;
 }
 
-.project-notes > span {
-  padding: 5px 8px;
-  border-radius: 5px;
-  display: inline-flex;
-  color: #137b75;
-  background: #e8f5f3;
-  font-size: 8px;
-  font-weight: 800;
-}
-
-.project-notes > div {
-  min-height: 49px;
-  border-bottom: 1px solid #e6edef;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-
-.project-notes b {
-  color: #189288;
-  font:
-    800 12px Bahnschrift,
-    sans-serif;
-}
-
-.project-notes p {
-  color: #536e76;
-  font-size: 9px;
-}
-
 .technique-note {
   margin-top: 10px;
   padding: 9px;

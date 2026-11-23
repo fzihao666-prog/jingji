@@ -20,7 +20,6 @@ import {
   YAxis,
 } from 'recharts';
 import type { SpecialPageKey } from '../components/AppShell';
-import { SpecialPerformancePanel } from '../components/SpecialPerformancePanel';
 import {
   AppCard,
   ContentState,
@@ -29,14 +28,13 @@ import {
   SectionHeader,
 } from '../components/PageLayout';
 import type { Project, TrainingRecord } from '../types';
-import { projectCapability, projectLabel } from '../../shared/projects';
+import { projectCapability } from '../../shared/projects';
 import { ProjectSpecialTraining } from '../components/ProjectSpecialTraining';
 import './SpecialTrainingPage.css';
 import '../components/EChart.css';
 
 type Props = {
   filters?: ReactNode;
-  teamId?: number | null;
   records: TrainingRecord[];
   project: Project;
   from: string;
@@ -81,11 +79,6 @@ const SECTION_META: Record<
     group: '综合分析',
     title: '时间分析',
     description: '按周期、训练类型和运动员拆解专项训练时长与完成质量。',
-  },
-  'special-distance': {
-    group: '综合分析',
-    title: '距离分析',
-    description: '监测专项里程、强度分布与运动员距离完成情况。',
   },
   'special-load': {
     group: '综合分析',
@@ -580,30 +573,6 @@ function InsightList({ items, warning = false }: { items: string[]; warning?: bo
     </div>
   );
 }
-function ProjectNotes({ project }: { project: Project }) {
-  const items =
-    project === 'ROWING'
-      ? ['以 500m / 2000m 分段为核心', '关注艇速、桨频与功率同步', '单桨 / 双桨分组比较']
-      : project === 'CANOE_SPRINT'
-        ? [
-            '以 200m / 500m / 1000m 分段为核心',
-            '关注左右侧输出与高划频保持',
-            '单艇 / 双艇 / 四艇分组比较',
-          ]
-        : ['距离之外增加门区通过质量', '关注逆水门、顺水门耗时', '结合罚分与线路偏差评价'];
-  return (
-    <div className="project-notes">
-      <span>{projectLabel(project)}专项口径</span>
-      {items.map((item, index) => (
-        <div key={item}>
-          <b>0{index + 1}</b>
-          <p>{item}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function AnalysisPage({
   section,
   sessions,
@@ -668,58 +637,6 @@ function AnalysisPage({
                 `单次平均训练 ${round(total / Math.max(sessions.length, 1))} 分钟，建议同步观察恢复评分。`,
               ]}
             />
-          </SectionCard>
-        </div>
-      </>
-    );
-  }
-  if (section === 'special-distance') {
-    const total = sum(sessions, 'distance');
-    const highIntensityDistance = sum(
-      sessions.filter((item) => item.rpe !== null && item.rpe >= 8),
-      'distance'
-    );
-    const highShare = total ? round((highIntensityDistance / total) * 100) : 0;
-    return (
-      <>
-        <div className="special-metrics">
-          <MetricCard
-            label="总训练距离"
-            value={round(total, 1)}
-            unit="km"
-            change={`来自 ${sessions.length} 条训练记录`}
-          />
-          <MetricCard
-            label="日均距离"
-            value={round(total / Math.max(days.length, 1))}
-            unit="km"
-            change={`${days.length} 个有效训练日`}
-          />
-          <MetricCard
-            label="最长单次"
-            value={round(Math.max(...sessions.map((item) => item.distance), 0))}
-            unit="km"
-            change="按单次训练记录统计"
-          />
-          <MetricCard
-            label="高强度距离"
-            value={round(highIntensityDistance)}
-            unit="km"
-            change={`RPE ≥ 8，占总距离 ${highShare}%`}
-          />
-        </div>
-        <div className="special-grid">
-          <SectionCard title="专项距离趋势" note="公里 · 按日" className="span-8">
-            <TrendChart data={days} metric="distance" color="#167d9b" />
-          </SectionCard>
-          <SectionCard title="距离训练构成" note="技术 / 耐力 / 力量 / 恢复" className="span-4">
-            <TypeDonut sessions={sessions} valueKey="distance" />
-          </SectionCard>
-          <SectionCard title="距离完成排名" note="连接运动员档案与训练记录" className="span-8">
-            <AthleteTable sessions={sessions} metric="distance" />
-          </SectionCard>
-          <SectionCard title={`${projectLabel(project)}距离模型`} note="项目差异" className="span-4">
-            <ProjectNotes project={project} />
           </SectionCard>
         </div>
       </>
@@ -874,7 +791,6 @@ function MetricPage({ section, sessions, days, project }: {
 
 export function SpecialTestsPage({
   filters,
-  teamId = null,
   records,
   project,
   from,
@@ -913,7 +829,6 @@ export function SpecialTestsPage({
   const analysisTabs: Array<{ key: SpecialPageKey; label: string }> = [
     { key: 'special-volume', label: '训练量' },
     { key: 'special-time', label: '时间' },
-    { key: 'special-distance', label: '距离' },
     { key: 'special-load', label: '负荷' },
   ];
   const metricTabs: Array<{ key: SpecialPageKey; label: string }> = [
@@ -952,13 +867,8 @@ export function SpecialTestsPage({
         />
       ) : section === 'special-volume' ? (
         <TrainingVolumePage sessions={sessions} days={days} />
-      ) : ['special-time', 'special-distance', 'special-load'].includes(section) ? (
-        <>
-          <AnalysisPage section={section} sessions={sessions} days={days} project={project} />
-          {section === 'special-distance' && (
-            <SpecialPerformancePanel project={project} from={from} to={to} teamId={teamId} />
-          )}
-        </>
+      ) : ['special-time', 'special-load'].includes(section) ? (
+        <AnalysisPage section={section} sessions={sessions} days={days} project={project} />
       ) : ['special-rate', 'special-heart', 'special-power'].includes(section) ? (
         <MetricPage section={section} sessions={sessions} days={days} project={project} />
       ) : section === 'special-records' ? (

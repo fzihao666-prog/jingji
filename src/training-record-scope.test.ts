@@ -21,7 +21,7 @@ describe('页面训练记录请求范围', () => {
     expect(trainingRecordScope('personal', 7)).toEqual({ athleteId: 7 });
     expect(trainingRecordScope('personal', null)).toBeUndefined();
   });
-  it.each(['special-volume', 'special-distance', 'special-records'] as const)(
+  it.each(['special-volume', 'special-records'] as const)(
     '%s 保留项目范围记录，切换运动员不改变范围',
     (page) => {
       expect(trainingRecordScope(page, 7)).toEqual({ athleteId: null });
