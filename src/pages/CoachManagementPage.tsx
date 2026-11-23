@@ -4,6 +4,7 @@ import {
   Eye,
   Filter,
   LockKeyhole,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -53,13 +54,16 @@ function uniqueById<T extends { id: number }>(items: T[]) {
 export function CoachManagementPage({
   user,
   onChanged,
+  onEditScope,
 }: {
   user: User;
   athletes: Athlete[];
   onChanged: () => void;
+  onEditScope: (id: number) => void;
 }) {
   const [athletes, setAthletes] = useState<AssignmentAthlete[]>([]);
   const [coaches, setCoaches] = useState<CoachAccount[]>([]);
+  const [manageableCoachIds, setManageableCoachIds] = useState<number[]>([]);
   const [currentAccount, setCurrentAccount] = useState<AccessAccount | null>(null);
   const [teamDirectory, setTeamDirectory] = useState<ProjectTeam[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
@@ -89,6 +93,7 @@ export function CoachManagementPage({
       setAthletes(assignmentResult.athletes);
       setCurrentAccount(accessResult.current);
       setTeamDirectory(teamResult.teams);
+      setManageableCoachIds(accessResult.accounts.filter((account) => account.role === 'SCC').map(({ id }) => id));
       const categoryByCoachId = new Map(
         assignmentResult.coaches.map((coach) => [coach.id, coach.categories])
       );
@@ -199,6 +204,7 @@ export function CoachManagementPage({
   }, [coachProfiles, projectFilter, categoryFilter, statusFilter, searchTerm]);
 
   const selectedCoach = coachProfiles.find((coach) => coach.id === selectedCoachId) || null;
+  const canManageSelected = canManage && !!selectedCoach && manageableCoachIds.includes(selectedCoach.id);
   const activeCount = coachProfiles.filter((coach) => coach.active).length;
   const coveredTeams = new Set(
     coachProfiles.flatMap((coach) => coach.responsibilityTeams.map((team) => team.id))
@@ -283,7 +289,7 @@ export function CoachManagementPage({
   };
 
   const toggleCoachStatus = async () => {
-    if (!selectedCoach) return;
+    if (!selectedCoach || !canManageSelected) return;
     const nextActive = !selectedCoach.active;
     if (
       !window.confirm(`${nextActive ? '启用' : '停用'} ${selectedCoach.displayName} 的登录账号？`)
@@ -319,8 +325,12 @@ export function CoachManagementPage({
         actions={
           <div className="coach-directory-summary" aria-label="教练管理概览">
             <div>
-              <span>在岗教练</span>
+              <span>已启用教练</span>
               <strong>{activeCount}</strong>
+            </div>
+            <div>
+              <span>已停用教练</span>
+              <strong>{coachProfiles.length - activeCount}</strong>
             </div>
             <div>
               <span>关联队伍</span>
@@ -391,7 +401,7 @@ export function CoachManagementPage({
             aria-label="筛选教练状态"
           >
             <option value="all">全部状态</option>
-            <option value="active">在岗</option>
+            <option value="active">已启用</option>
             <option value="inactive">已停用</option>
           </select>
         </label>
@@ -439,7 +449,7 @@ export function CoachManagementPage({
                 <th>执教项目</th>
                 <th>关联队伍</th>
                 <th>负责运动员（当前权限内）</th>
-                <th>状态</th>
+                <th>账号状态</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -486,7 +496,7 @@ export function CoachManagementPage({
                   <td>
                     <span className={`coach-status ${coach.active ? 'active' : 'inactive'}`}>
                       <i />
-                      {coach.active ? '在岗' : '已停用'}
+                      {coach.active ? '已启用' : '已停用'}
                     </span>
                   </td>
                   <td>
@@ -559,9 +569,31 @@ export function CoachManagementPage({
                 </p>
               </div>
               <b className={selectedCoach.active ? 'active' : 'inactive'}>
-                {selectedCoach.active ? '在岗' : '已停用'}
+                {selectedCoach.active ? '已启用' : '已停用'}
               </b>
             </div>
+            {canManageSelected && (
+              <div className="coach-detail-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => onEditScope(selectedCoach.id)}
+                  disabled={saving}
+                >
+                  <Pencil size={16} aria-hidden="true" />
+                  修改项目与队伍
+                </button>
+                <button
+                  type="button"
+                  className={`coach-status-button ${selectedCoach.active ? 'danger' : ''}`}
+                  onClick={() => void toggleCoachStatus()}
+                  disabled={saving}
+                >
+                  <LockKeyhole size={16} aria-hidden="true" />
+                  {selectedCoach.active ? '停用账号' : '启用账号'}
+                </button>
+              </div>
+            )}
             <div className="coach-detail-facts">
               <div>
                 <span>执教项目</span>
@@ -616,7 +648,7 @@ export function CoachManagementPage({
                 )}
               </div>
             </section>
-            {canManage && (
+            {canManageSelected && (
               <fieldset className="coach-detail-category" disabled={saving}>
                 <legend>教练类别</legend>
                 {COACH_CATEGORIES.map((category) => (
@@ -639,16 +671,6 @@ export function CoachManagementPage({
               </fieldset>
             )}
             <footer>
-              {canManage && (
-                <button
-                  className={`coach-status-button ${selectedCoach.active ? 'danger' : ''}`}
-                  onClick={() => void toggleCoachStatus()}
-                  disabled={saving}
-                >
-                  <LockKeyhole size={15} />
-                  {selectedCoach.active ? '停用教练账号' : '重新启用账号'}
-                </button>
-              )}
               <button className="primary-button" onClick={() => setDetailOpen(false)}>
                 完成
               </button>

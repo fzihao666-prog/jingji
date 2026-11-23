@@ -853,8 +853,15 @@
   gap: 8px;
 }
 
+.coach-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 12px;
+}
+
 .coach-status-button {
-  margin-right: auto;
   min-height: 38px;
   padding: 0 10px;
   border: 1px solid #9fcfc7;
@@ -864,7 +871,7 @@
   gap: 6px;
   color: #217666;
   background: #eef8f5;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
 }

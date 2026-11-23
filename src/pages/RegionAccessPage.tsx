@@ -87,7 +87,7 @@ const auditLabels: Record<string, string> = {
   IMPORT_RECORDS: '导入训练数据',
 };
 
-export function RegionAccessPage({ user }: { user: User }) {
+export function RegionAccessPage({ user, preferredAccountId }: { user: User; preferredAccountId?: number }) {
   const [payload, setPayload] = useState<AccessPayload | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [accountSearch, setAccountSearch] = useState('');
@@ -201,8 +201,8 @@ export function RegionAccessPage({ user }: { user: User }) {
   };
 
   useEffect(() => {
-    void load();
-  }, []);
+    void load(preferredAccountId);
+  }, [preferredAccountId]);
 
   const applyAccount = (account: AccessAccount) => {
     setAreaValidationError(null);

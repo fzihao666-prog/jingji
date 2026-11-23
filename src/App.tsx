@@ -598,11 +598,14 @@ export default function App() {
           <CoachManagementPage
             user={user}
             athletes={projectAthletes}
+            onEditScope={(id) => changePage('regions', `?accountId=${id}`)}
             onChanged={() => setRefreshKey((key) => key + 1)}
           />
         )}
         {page === 'teams' && user.role !== 'ATL' && <TeamsPage onChanged={() => setRefreshKey((key) => key + 1)} />}
-        {page === 'regions' && canOpenSystemPages && <RegionAccessPage user={user} />}
+        {page === 'regions' && canOpenSystemPages && (
+          <RegionAccessPage user={user} preferredAccountId={Number(trainingQuery.get('accountId')) || undefined} />
+        )}
         {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
         {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}
       </Suspense>
