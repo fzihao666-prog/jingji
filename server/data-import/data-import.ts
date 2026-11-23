@@ -1408,6 +1408,30 @@ function parseStandardSheet(
       );
       if (!basicProfile) continue;
 
+      const rawStrength = standardText(row, header.columns, '最大力量');
+      if (rawStrength) {
+        const address = cellAddress(rowIndex, header.columns.get(normalizedText('最大力量')) ?? nameColumn);
+        const entries = rawStrength.normalize('NFKC').split(/[;\n]+/).map(entry => entry.trim()).filter(Boolean);
+        if (!entries.length) numericErrors.set('最大力量', { address, raw: rawStrength, message: `错误：${rawSheet}!${address} 请填写实际日期、动作和重量，例如 2026-11-20 深蹲 95kg` });
+        for (const entry of entries) {
+          const match = /^(\d{4}-\d{2}-\d{2})\s+([^\d]+?)(?:1RM)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*kg$/i.exec(entry);
+          const metric = match && COMMON_FITNESS_TEMPLATE_METRICS.find(([label, , , , , protocol]) =>
+            protocol === '实测1RM' && label.split('1RM')[0] === match[2].trim());
+          const value = match ? standardNumberValue(match[3]) : null;
+          if (!match || !validIsoDate(match[1]) || !metric || value === null || value <= 0) {
+            numericErrors.set('最大力量', { address, raw: rawStrength,
+              message: `错误：${rawSheet}!${address} 最大力量须填实测日期、动作和正数重量，例：2026-11-20 深蹲 95kg` });
+            break;
+          }
+          const [, metricCode, metricLabel, unit, testType, protocol] = metric;
+          items.push(itemBase({
+            ...base, sourceAddress: address, itemType: 'test_measurement', eventDate: match[1],
+            metricCode, metricLabel, valueNum: value, unit, testType, side: 'center', rawValue: entry,
+            payload: { ...base.payload, birthDate, protocol, rawDate: match[1], dateAddress: address },
+            quality: 'valid',
+          }));
+        }
+      }
       const heightCm = readNumber('身高cm');
       const weightKg = readNumber('体重kg');
       if (heightCm !== null || weightKg !== null) items.push(itemBase({

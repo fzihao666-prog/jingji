@@ -1462,3 +1462,29 @@ it('标准 FMS 表先保存单侧原始结果，补录后计算最终分且保�
     { metric_code: 'fms_trunk_stability_pushup', value_num: 0 },
   ]);
 });
+
+it('基础档案最大力量列按实际日期和动作入库为实测1RM', async () => {
+  const response = await fetch(`${base}/api/data-import/template?kind=profile&project=ROWING&team=HTTP甲队`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(response.status).toBe(200);
+  const book = XLSX.read(await response.arrayBuffer());
+  const sheet = book.Sheets[profileSheet];
+  const headers = (XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][])[0];
+  const column = headers.findIndex(header => header.startsWith('最大力量\n'));
+  expect(column).toBeGreaterThanOrEqual(0);
+  const batch = await upload([headers, headers.map((header, index) => index === column
+    ? '2026-11-23 深蹲 95kg；2026-11-24 卧推 65.5kg'
+    : header.startsWith('姓名') ? '虚构队员' : '')], profileSheet, 'HTTP甲队');
+  expect(batch.items.filter(item => item.itemType === 'test_measurement')).toHaveLength(2);
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+  expect(db.prepare(`SELECT t.test_date,t.protocol,m.metric_code,m.value_num FROM test_sessions t
+    JOIN test_measurements m ON m.test_session_id=t.id WHERE t.athlete_id=701 AND t.protocol='实测1RM'
+    AND t.test_date IN ('2026-11-23','2026-11-24') ORDER BY t.test_date`).all()).toEqual([
+    { test_date: '2026-11-23', protocol: '实测1RM', metric_code: 'squat_kg', value_num: 95 },
+    { test_date: '2026-11-24', protocol: '实测1RM', metric_code: 'bench_press_kg', value_num: 65.5 },
+  ]);
+  const invalid = await upload([['姓名', '最大力量'], ['虚构队员', '深蹲 95kg']], profileSheet, 'HTTP甲队');
+  expect(invalid.items[0].messages.join('')).toContain('实测日期');
+  expect((await request(`/batches/${invalid.id}/commit`, 'POST', {})).status).toBe(400);
+});
