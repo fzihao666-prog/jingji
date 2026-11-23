@@ -490,18 +490,6 @@ export function PersonalPage(props: Props) {
         .filter(Boolean)
         .join('')
     : '';
-  const athleteAffiliationLocation = selectedAthlete
-    ? [
-        ...new Set(
-          [
-            selectedAthlete.region,
-            selectedAthlete.province,
-            selectedAthlete.city,
-            selectedAthlete.county,
-          ].filter(Boolean)
-        ),
-      ].join(' · ')
-    : '';
   const dossierGroups = selectedAthlete
     ? [
         {
@@ -522,7 +510,6 @@ export function PersonalPage(props: Props) {
             { label: '技术等级', value: selectedAthlete.technicalLevel },
             { label: '最佳成绩', value: selectedAthlete.bestResult },
             { label: '对应赛事', value: selectedAthlete.bestResultEvent },
-            { label: '成绩日期', value: selectedAthlete.bestResultDate },
             {
               label: '位置/号位',
               value: athletePositionValue(selectedAthlete.athletePosition),
@@ -544,9 +531,7 @@ export function PersonalPage(props: Props) {
                   : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}`,
             },
             ...(props.user.role === 'OBS' ? [] : [
-              { label: '血型', value: selectedAthlete.bloodType },
               { label: '籍贯', value: selectedAthlete.nativePlace },
-              { label: '所属区域', value: athleteAffiliationLocation },
             ]),
             { label: '专项特长', value: selectedAthlete.specialties },
           ] satisfies ProfileDetail[],
