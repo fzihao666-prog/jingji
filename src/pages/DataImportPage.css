@@ -1344,6 +1344,32 @@
 
 
 /* 指标字典按内容分配列宽，不继承导入明细表的宽表限制。 */
+.metric-dictionary-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-block: 12px;
+}
+
+.metric-dictionary-aliases {
+  margin-block-start: 16px;
+}
+
+.metric-dictionary-aliases dl {
+  display: grid;
+  gap: 10px;
+}
+
+.metric-dictionary-aliases dt {
+  font-weight: 600;
+}
+
+.metric-dictionary-aliases dd {
+  margin-inline-start: 0;
+  overflow-wrap: anywhere;
+}
+
 .metric-dictionary-table-wrap {
   min-width: 0;
   max-width: 100%;

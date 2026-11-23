@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Database, Plus, Save, Tags } from 'lucide-react';
+import { Database, Plus, RefreshCw, Tags } from 'lucide-react';
 import { api } from '../api';
 import type { User } from '../types';
 import { PageContainer, PageHeader } from '../components/PageLayout';
@@ -34,7 +34,23 @@ export function DataManagementPage({ user }: Props) {
   const [savingMetric, setSavingMetric] = useState(false);
   const [alias, setAlias] = useState('');
   const [metricCode, setMetricCode] = useState('');
+  const [search, setSearch] = useState('');
+  const [domain, setDomain] = useState('');
+  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(true);
   const editable = user.role === 'TD' || user.role === 'DMD';
+  const domains = [...new Set(metrics.map((item) => item.domain))].sort();
+  const keyword = search.trim().toLowerCase();
+  const matchingAliases = aliases.filter((item) => item.alias.toLowerCase().includes(keyword));
+  const aliasCodes = new Set(matchingAliases.map((item) => item.metricCode));
+  const visibleMetrics = metrics.filter((item) =>
+    (!domain || item.domain === domain) &&
+    (!status || Boolean(item.active) === (status === 'active')) &&
+    (!keyword || [item.code, item.label].some((value) => value.toLowerCase().includes(keyword)) ||
+      aliasCodes.has(item.code))
+  );
+  const visibleMetricCodes = new Set(visibleMetrics.map((item) => item.code));
+  const visibleAliases = aliases.filter((item) => visibleMetricCodes.has(item.metricCode));
   const load = async () => {
     const [dictionary, standard] = await Promise.all([
       api.dataManagementMetrics(),
@@ -46,9 +62,9 @@ export function DataManagementPage({ user }: Props) {
     setMetricCode((value) => value || dictionary.metrics.find((item) => item.active)?.code || '');
   };
   useEffect(() => {
-    load().catch((error) =>
-      setMessage(error instanceof Error ? error.message : '数据管理加载失败。')
-    );
+    load()
+      .catch((error) => setMessage(error instanceof Error ? error.message : '指标与标准加载失败。'))
+      .finally(() => setLoading(false));
   }, []);
   const saveAlias = async () => {
     try {
@@ -91,12 +107,9 @@ export function DataManagementPage({ user }: Props) {
   return (
     <PageContainer className="data-import-page">
       <PageHeader
-        eyebrow="METRICS & STANDARDS"
         title="指标与标准"
       />
-      <p className="data-import-message" role="status">
-        {message}
-      </p>
+      <p className="data-import-message" role="status">{message}</p>
       <div className="data-import-grid">
         <section className="data-import-upload-card">
           <div className="data-import-card-heading">
@@ -109,10 +122,16 @@ export function DataManagementPage({ user }: Props) {
           {standards && (
             <div className="data-import-safety">
               <div>
-                <strong>权威对象</strong>
+                <strong>运动员数据</strong>
                 <span>{standards.athlete.join('、')}</span>
+                <strong>训练类型与记录结构</strong>
+                <span>{[...standards.training.types, ...standards.training.structures].join('、')}</span>
                 <strong>训练强度体系</strong>
                 <span>{standards.training.zoneSystems.join('；')}</span>
+                <strong>测试数据</strong>
+                <span>{standards.testing.join('、')}</span>
+                <strong>数据来源</strong>
+                <span>{standards.sources.join('、')}</span>
                 <strong>质量状态</strong>
                 <span>{standards.qualities.join('、')}</span>
                 <strong>已退役表</strong>
@@ -126,7 +145,7 @@ export function DataManagementPage({ user }: Props) {
             <Tags size={20} />
             <div>
               <strong>指标别名</strong>
-              <span>导入时统一映射到 metric_definitions</span>
+              <span>将导入文件里的不同名称对应到同一个标准指标</span>
             </div>
           </div>
           <label className="data-import-date">
@@ -156,11 +175,11 @@ export function DataManagementPage({ user }: Props) {
           </label>
           <button
             type="button"
-            className="data-import-primary"
+            className="primary-button"
             onClick={saveAlias}
             disabled={!editable || !alias || !metricCode}
           >
-            <Plus size={16} />
+            <Plus size={16} aria-hidden="true" />
             保存别名
           </button>
         </section>
@@ -169,7 +188,7 @@ export function DataManagementPage({ user }: Props) {
         <div className="data-import-review-head">
           <div>
             <h2>指标字典</h2>
-            <p>动态测试指标唯一来源：metric_definitions</p>
+            <p role="status">显示 {visibleMetrics.length} / {metrics.length} 项指标</p>
           </div>
           <button
             type="button"
@@ -180,9 +199,31 @@ export function DataManagementPage({ user }: Props) {
             }
             disabled={savingMetric}
           >
-            <Save size={15} />
+            <RefreshCw size={16} aria-hidden="true" />
             刷新
           </button>
+        </div>
+        <div className="metric-dictionary-filters">
+          <label className="data-import-date">
+            <span>搜索指标</span>
+            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)}
+              placeholder="名称、编码或别名" />
+          </label>
+          <label className="data-import-date">
+            <span>领域</span>
+            <select value={domain} onChange={(event) => setDomain(event.target.value)}>
+              <option value="">全部领域</option>
+              {domains.map((value) => <option key={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="data-import-date">
+            <span>状态</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">全部状态</option>
+              <option value="active">启用</option>
+              <option value="inactive">停用</option>
+            </select>
+          </label>
         </div>
         {editable && editingMetric && (
           <form
@@ -254,7 +295,12 @@ export function DataManagementPage({ user }: Props) {
               </tr>
             </thead>
             <tbody>
-              {metrics.map((item) => (
+              {visibleMetrics.length === 0 && (
+                <tr><td colSpan={editable ? 8 : 7}>
+                  {loading ? '正在加载指标…' : metrics.length ? '没有符合条件的指标。' : '暂无指标可展示。'}
+                </td></tr>
+              )}
+              {visibleMetrics.map((item) => (
                 <tr key={item.code}>
                   <td>{item.code}</td>
                   <td>{item.label}</td>
@@ -283,17 +329,19 @@ export function DataManagementPage({ user }: Props) {
             </tbody>
           </table>
         </div>
-        <h2>已维护别名</h2>
-        <div className="data-import-history-list">
-          {aliases.slice(0, 80).map((item) => (
-            <button key={item.alias} type="button">
-              <strong>{item.alias}</strong>
-              <small>
-                {item.canonicalLabel} · {item.metricCode} · {item.unit}
-              </small>
-            </button>
-          ))}
-        </div>
+        <details className="metric-dictionary-aliases">
+          <summary>当前指标的导入别名（{visibleAliases.length}）</summary>
+          {visibleAliases.length ? (
+            <dl>
+              {visibleAliases.map((item) => (
+                <div key={item.alias}>
+                  <dt>{item.alias}</dt>
+                  <dd>{[item.canonicalLabel, item.metricCode, item.unit, item.side].filter(Boolean).join(' · ')}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : <p>当前指标没有已维护的别名。</p>}
+        </details>
       </section>
     </PageContainer>
   );
