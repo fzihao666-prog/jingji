@@ -508,8 +508,13 @@ export function PersonalPage(props: Props) {
                 : `${selectedAthlete.trainingYears} 年`,
             },
             { label: '技术等级', value: selectedAthlete.technicalLevel },
-            { label: '最佳成绩', value: selectedAthlete.bestResult },
-            { label: '对应赛事', value: selectedAthlete.bestResultEvent },
+            {
+              label: '最佳成绩',
+              value: [selectedAthlete.bestResult, selectedAthlete.bestResultEvent]
+                .map((value) => value?.trim())
+                .filter(Boolean)
+                .join(' · '),
+            },
             {
               label: '位置/号位',
               value: athletePositionValue(selectedAthlete.athletePosition),
