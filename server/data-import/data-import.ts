@@ -1252,7 +1252,7 @@ function parseStandardSheet(
             rawValue: row.map((value) => text(value)).filter(Boolean).slice(0, 6).join(' | '),
             quality: 'error',
             messages: [
-              `错误：${rawSheet}!${cellAddress(rowIndex, nameColumn)} 该行有内容但缺少姓名，无法关联运动员；请补充姓名或移除该行后重新导入`,
+              `错误：${rawSheet}!${cellAddress(rowIndex, nameColumn)} 这行缺少姓名，请填写运动员姓名。`,
             ],
             businessKey: `invalid|${sheet}|${rowIndex}`,
           })
@@ -3393,7 +3393,9 @@ function validateImportItem(
     if (item.athleteId && !ctx.allowedAthletes.has(item.athleteId))
       messages.push('错误：所选运动员不在当前权限范围内');
     else if (!item.athleteId && !ctx.candidateNames.has(dataImportPersonKey(item)))
-      messages.push('错误：缺少可创建或可匹配的运动员姓名');
+      messages.push(text(item.rawAthleteName)
+        ? `错误：姓名“${text(item.rawAthleteName)}”未关联到本次导入的运动员，请核对姓名和队伍。`
+        : '错误：姓名未填写，请补填运动员姓名。');
     if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate)) {
       const location = `${item.sourceSheet}!${text(payload.dateAddress) || item.sourceAddress}`;
       if (item.sourceSheet === BASIC_PROFILE_SHEET)
