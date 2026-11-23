@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { Save } from 'lucide-react';
 import { importTemplateFields, templateHeaderKey } from '../../shared/import-template-fields';
 import type { DataImportItem } from '../types';
+
+const RECORD_DATE_HEADERS = new Set(['日期', '身体测量日期', '测量日期', '测试日期', '发生日期', '评估日期', '训练日期']);
 
 type SourceRow = { columns: [string, number][]; values: (string | number)[] };
 function sourceRow(value: unknown): SourceRow | null {
@@ -25,65 +28,54 @@ export function ImportSourceRowEditor({
   item,
   disabled,
   pending,
+  describedBy,
   metrics,
   onChange,
   onSave,
 }: {
-  item: DataImportItem;
+  item: Pick<DataImportItem, 'itemType' | 'sourceSheet' | 'payload' | 'messages'>;
   disabled: boolean;
+  describedBy?: string;
   pending?: Record<string, string | number | null>;
   metrics: Array<{ code: string; label: string; unit: string }>;
   onChange: (cells: Record<string, string | number | null>) => void;
   onSave: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const fieldsId = useId();
   const row = sourceRow(item.payload.sourceRow);
-  if (item.payload.sourceRowOutdated)
-    return <p>此行已有单项校对，请继续使用上方字段修改；如需重修原行，请重新上传文件。</p>;
-  if (!row)
+  if (item.payload.sourceRowOutdated || !row)
     return item.itemType === 'invalid_row' ? (
-      <p>此草稿缺少可编辑的源字段，请修正原文件后重新上传，或排除此行。</p>
+      <p>此行无法在页面上修改。请在 Excel 修正后重新上传，或排除此行。</p>
     ) : null;
+
   const definitions = importTemplateFields(item.sourceSheet);
-  const dateHeader = row.columns.find(([header]) =>
-    ['日期', '测量日期', '测试日期', '发生日期', '评估日期'].includes(templateHeaderKey(header))
-  )?.[0];
-  const needsDate =
-    dateHeader &&
-    item.messages.some((message) => message.includes('无效或缺失') && message.includes('日期'));
-  const correctedDate = dateHeader ? String(pending?.[dateHeader] ?? '') : '';
+  const errors = item.messages.filter(message => message.startsWith('错误：'));
+  const locations = new Set(errors.flatMap(message => {
+    const prefix = `错误：${item.sourceSheet}!`;
+    if (!message.startsWith(prefix)) return [];
+    const cell = /^([A-Z]+)\d+\s/.exec(message.slice(prefix.length));
+    return cell ? [cell[1]] : [];
+  }));
+  const unlocatedReasons = errors.filter(message => !message.startsWith(`错误：${item.sourceSheet}!`))
+    .map(message => message.slice('错误：'.length));
+  const problemColumns = row.columns.filter(([header, index]) => {
+    let letters = '';
+    for (let column = index + 1; column > 0; column = Math.floor((column - 1) / 26)) {
+      letters = String.fromCharCode(65 + (column - 1) % 26) + letters;
+    }
+    const key = templateHeaderKey(header);
+    return locations.has(letters) || unlocatedReasons.some(reason =>
+      (key.length > 1 && reason.startsWith(key)) ||
+      (RECORD_DATE_HEADERS.has(key) && reason.startsWith('缺少有效') && reason.includes('日期'))
+    );
+  });
+  const visibleColumns = showAll ? row.columns : problemColumns;
   return (
-    <>
-      {needsDate && dateHeader && (
-        <div className="import-source-editor-fields">
-          <label>
-            <span>修正日期</span>
-            <input
-              type="date"
-              disabled={disabled}
-              value={correctedDate}
-              onChange={(event) => onChange({ [dateHeader]: event.target.value })}
-            />
-          </label>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={disabled || !correctedDate}
-            onClick={onSave}
-          >
-            保存日期并校验
-          </button>
-        </div>
-      )}
-      <details
-        className="import-source-editor"
-        open={open}
-        onToggle={(event) => setOpen(event.currentTarget.open)}
-      >
-        <summary>编辑原行字段</summary>
-        <p>修改完成后点击保存并校验，该源行的全部记录会一起重新校验。</p>
-        <div className="import-source-editor-fields">
-          {row.columns.map(([header, index]) => {
+    <div className="import-source-editor">
+      {visibleColumns.length > 0 && (
+        <div id={fieldsId} className="import-source-editor-fields">
+          {visibleColumns.map(([header, index]) => {
             const key = templateHeaderKey(header);
             const field = definitions.find((definition) => definition.key === key);
             const value =
@@ -94,6 +86,7 @@ export function ImportSourceRowEditor({
               ? metrics.map((metric) => `${metric.label}${metric.unit ? `（${metric.unit}）` : ''}`)
               : null;
             const choices = metricNames?.length ? metricNames : field?.choices;
+            const invalid = problemColumns.some(([, column]) => column === index);
             return (
               <label key={`${header}-${index}`}>
                 <span>
@@ -102,6 +95,8 @@ export function ImportSourceRowEditor({
                 </span>
                 {choices?.length ? (
                   <select
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={invalid ? describedBy : undefined}
                     disabled={disabled}
                     value={String(value)}
                     onChange={(event) => onChange({ [header]: event.target.value })}
@@ -118,24 +113,40 @@ export function ImportSourceRowEditor({
                   </select>
                 ) : (
                   <input
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={invalid ? describedBy : undefined}
                     disabled={disabled}
                     value={String(value)}
                     onChange={(event) => onChange({ [header]: event.target.value })}
                   />
                 )}
-                {field?.fillCondition && <small>{field.fillCondition}</small>}
+                {showAll && field?.fillCondition && <small>{field.fillCondition}</small>}
               </label>
             );
           })}
         </div>
-        <button
+      )}
+      <div className="import-source-editor-actions">
+        {visibleColumns.length > 0 && <button
           type="button"
+          className="primary-button"
           disabled={disabled || !pending || !Object.keys(pending).length}
           onClick={onSave}
         >
+          <Save size={16} aria-hidden="true" />
           保存并校验
-        </button>
-      </details>
-    </>
+        </button>}
+        {row.columns.length > problemColumns.length && <button
+          type="button"
+          className="secondary-button"
+          aria-expanded={showAll}
+          aria-controls={visibleColumns.length ? fieldsId : undefined}
+          disabled={disabled}
+          onClick={() => setShowAll(current => !current)}
+        >
+          {showAll ? '收起其他字段' : problemColumns.length ? '修改其他字段' : '修改本行'}
+        </button>}
+      </div>
+    </div>
   );
 }

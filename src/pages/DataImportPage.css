@@ -2018,3 +2018,60 @@
     flex: 1;
   }
 }
+
+.data-import-page .data-import-review-table .data-import-error-row {
+  padding: 16px;
+}
+
+.data-import-review-table .data-import-error-row::before {
+  content: none;
+}
+
+.data-import-error-heading,
+.import-source-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.data-import-issue {
+  margin-block: 8px;
+}
+
+.data-import-issue ul {
+  margin-block: 6px 12px;
+  padding-inline-start: 1.25em;
+}
+
+.data-import-issue li + li {
+  margin-top: 4px;
+}
+
+.data-import-review-table .import-source-editor-fields {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}
+
+.data-import-review-table .import-source-editor-fields [aria-invalid='true'] {
+  border-color: #b33f35;
+}
+
+.import-source-editor-actions,
+.data-import-error-action {
+  margin-top: 12px;
+}
+
+.data-import-error-action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-import-inline-error {
+  margin: 0;
+  padding: 8px 16px;
+  color: #b33f35;
+  background: #ffebe7;
+  overflow-wrap: anywhere;
+}

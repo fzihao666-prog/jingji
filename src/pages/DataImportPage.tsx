@@ -687,7 +687,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     }
     if (currentBatch.errorCount > 0) {
       setError(
-        `仍有${currentBatch.errorCount}条红色错误：可编辑的红色字段请修正，无法修改的错误行请在列表中排除后再提交。`
+        `还有 ${currentBatch.errorCount} 条错误。请按列表中的位置和原因修正后再提交。`
       );
       return;
     }
@@ -813,7 +813,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     const needle = query.trim().toLowerCase();
     return batch.items
       .filter((item) => {
-        if (reviewGroupIds.has(item.id) || item.payload.valueAutoMerged) return false;
+        if ((reviewGroupIds.has(item.id) && item.quality !== 'error') || item.payload.valueAutoMerged) return false;
         if (filter !== 'all' && item.payload.valueAutoMergeSources && item.quality === 'valid' && !item.conflict?.fields.some(field => field.overwrites)) return false;
         if (filter === 'exception' && !isImportException(item))
           return false;
@@ -854,6 +854,38 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     setMobileIndex(0);
     reviewScrollRef.current?.scrollTo({ top: 0 });
     reviewRef.current?.focus({ preventScroll: true });
+  };
+
+  const renderReviewIssue = (item: DataImportItem) => {
+    const errors = item.messages.filter(message => message.startsWith('错误：'));
+    const reasons = errors.length ? errors : item.messages;
+    const source = `${item.sourceSheet}!`;
+    const reasonId = `import-issue-${item.id}`;
+    const hasCellLocation = reasons.some(message => message.replace(/^(错误|警告)：/, '').startsWith(source));
+    const canEditSource = batch?.status === 'reviewing' && item.payload.sourceRow && !item.payload.sourceRowOutdated && !item.payload.valueReviewDecision;
+    return (
+      <div className="data-import-issue">
+        <strong>{item.sourceSheet}{!hasCellLocation && ` · ${item.sourceAddress}`}</strong>
+        {reasons.length > 0 && <ul id={reasonId}>
+          {Array.from(new Set(reasons)).map(message => {
+            const raw = message.replace(/^(错误|警告)：/, '');
+            const located = raw.startsWith(source) ? /^([A-Z]+\d+)\s+(.+)$/.exec(raw.slice(source.length)) : null;
+            const description = located?.[2] ?? raw;
+            const reason = canEditSource ? description.replace(/；请修正原文件后重新上传.*$/, '') : description;
+            return <li key={message}>{located && <strong>{located[1]}　</strong>}{reason}</li>;
+          })}
+        </ul>}
+        {batch?.status === 'reviewing' && item.quality === 'error' && <ImportSourceRowEditor
+          item={item}
+          metrics={metrics}
+          disabled={Boolean(busy) || Boolean(item.payload.valueReviewDecision) || corrections.get(item.id)?.resolution !== undefined}
+          describedBy={reasons.length ? reasonId : undefined}
+          pending={corrections.get(sourceCorrectionId(item))?.sourceCells}
+          onChange={sourceCells => patchItem(sourceCorrectionId(item), { sourceCells })}
+          onSave={() => void saveCorrections()}
+        />}
+      </div>
+    );
   };
 
   const summaryPreview = useMemo(() => {
@@ -1158,7 +1190,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
 
       {createPortal(
         <div className="data-import-notifications" aria-live="polite" aria-atomic="true">
-          {(message || error) && (
+          {!showReview && (message || error) && (
             <div key={error ? `error:${error}` : message}
               className={`data-import-message ${error ? 'error' : 'success'}`}
               role={error ? 'alert' : 'status'}>
@@ -1296,10 +1328,9 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                 role="dialog" aria-modal="true" aria-labelledby="data-import-review-title" tabIndex={-1}>
             <div className="data-import-review-head">
               <div>
-                <span>REVIEW QUEUE</span>
-                <h2 id="data-import-review-title">数据审查与校对</h2>
+                <h2 id="data-import-review-title">数据校对</h2>
                 <p>
-                  修改后自动保存并重新校验；空白不覆盖已有数据，真实0值会保留。
+                  查看错误位置和原因，修改后重新校验。
                   {unconfirmedPersons.length > 0 && (
                     <strong className="data-import-gate">
                       还有{unconfirmedPersons.length}名运动员待确认，
@@ -1339,8 +1370,9 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
               </div>
             </div>
             <p role="status" aria-live="polite" className="data-import-save-status">
-              {busy === 'save' ? '正在保存修改并重新校验…' : saveFailed ? '保存失败，修改仍保留在当前页面，请重试保存。' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
+              {busy === 'save' ? '正在保存修改并重新校验…' : saveFailed ? '保存失败，请修改后重试。' : hasUnsavedChanges ? '尚有未保存修改；校验完成后才能确认最终数量。' : '当前校对已保存；正常数据无需逐行确认。'}
             </p>
+            {error && <p className="data-import-inline-error" role="alert">{error}</p>}
             <div className="data-import-filters">
               {(
                 [
@@ -1366,40 +1398,6 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             </div>
             <div className="data-import-review-scroll" ref={reviewScrollRef}
               onScroll={event => { reviewScrollTop.current = event.currentTarget.scrollTop; }}>
-            {matchingReviewGroups.length > 0 && <div className="import-value-review-groups">
-              <div className="import-value-review-heading">
-                <h3>导入数据集中审查 · {matchingReviewGroups.length} 组</h3>
-                {recordCount > 0 && <div className="import-value-review-actions" role="group" aria-label="全选待审查记录">
-                  <span>全选：</span>
-                  {Array.from({ length: recordCount }, (_, index) => <button
-                    key={index} type="button"
-                    disabled={Boolean(busy) || savingReviewGroups.size > 0 || batch.items.some(item => pendingSelections.has(item.id)) || batch.status !== 'reviewing'}
-                    title={`将记录 ${index + 1} 应用到所有页面的待审查组；缺少该记录的组保持不变`}
-                    onClick={() => {
-                      const updates = selectImportReviewRecord(bulkReviewGroups, index);
-                      if (updates.length) void handleValueReview(updates, true);
-                    }}
-                  >记录 {index + 1}</button>)}
-                </div>}
-              </div>
-              {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
-                key={`${reviewRevision}-${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
-                items={group} disabled={Boolean(busy) || group.some(item => savingReviewGroups.has(item.id)) || batch.status !== 'reviewing'}
-                onSeparateTrainingSession={id => void handleValueReview([{ id, payload: { separateTrainingSession: true } }])}
-                onStartTimeChange={(id, startTime) => void handleValueReview([{ id, payload: { startTime } }])}
-                onAssignSession={(id, sessionOrder) => void handleValueReview([{ id, payload: { sessionOrder } }])}
-                onPending={id => setPendingSelections(current => new Set(current).add(id))}
-                onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}
-                onDraft={(id, choices, manual) => void handleValueReview([{ id, payload: { valueReview: { action: 'draft', choices, manual } } }])}
-                onExclude={id => void handleValueReview([{ id, resolution: 'skip' }])}
-                onSplit={dates => void handleValueReview(dates)}
-              />)}
-              {reviewGroupPages > 1 && <nav className="import-value-review-heading" aria-label="数据冲突审查分页">
-                <button type="button" disabled={currentReviewPage === 0 || Boolean(busy)} onClick={() => setReviewGroupPage(currentReviewPage - 1)}>上一组页</button>
-                <span>第 {currentReviewPage + 1} / {reviewGroupPages} 页 · 每页 8 组</span>
-                <button type="button" disabled={currentReviewPage >= reviewGroupPages - 1 || Boolean(busy)} onClick={() => setReviewGroupPage(currentReviewPage + 1)}>下一组页</button>
-              </nav>}
-            </div>}
             {isCompact && pageItems.length > 0 && <nav className="data-import-compact-navigation" aria-label="逐条校对">
               <button type="button" disabled={compactIndex === 0} onClick={() => setMobileIndex(compactIndex - 1)}>上一条</button>
               <span>本页第{compactIndex + 1} / {pageItems.length}条</span>
@@ -1426,11 +1424,31 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                     <th>动作/指标</th>
                     <th>数值（最终入库值）</th>
                     <th>重复处理</th>
-                    <th>校验与冲突</th>
+                    <th>问题与修改</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayedItems.map((item) => (
+                    batch.status === 'reviewing' && item.quality === 'error' && item.payload.sourceRow && !item.payload.sourceRowOutdated && !item.payload.valueReviewDecision ? (
+                      <tr key={item.id} className="error">
+                        <td colSpan={8} className="data-import-error-row">
+                          <div className="data-import-error-heading">
+                            <span className="quality-pill error">待修正</span>
+                            <strong>{item.athleteName || item.rawAthleteName || '未填写姓名'}</strong>
+                            <span>{ITEM_LABELS[item.itemType]}</span>
+                          </div>
+                          {renderReviewIssue(item)}
+                          <label className="data-import-error-action">
+                            <span>处理方式</span>
+                            <select disabled={Boolean(busy) || Boolean(corrections.get(sourceCorrectionId(item))?.sourceCells)} value={item.resolution}
+                              onChange={event => patchItem(item.id, { resolution: event.target.value === 'skip' ? 'skip' : '' })}>
+                              <option value="">修正后导入</option>
+                              <option value="skip">排除此条记录</option>
+                            </select>
+                          </label>
+                        </td>
+                      </tr>
+                    ) : (
                     <tr key={item.id} className={item.quality}>
                       <td>
                         <span className={`quality-pill ${item.quality}`}>
@@ -1463,6 +1481,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                           <input
                             disabled={Boolean(busy) || batch.status !== 'reviewing' || Boolean(item.payload.valueReviewDecision) || Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated}
                             type="date"
+                            aria-label="记录日期"
                             value={item.eventDate}
                             onChange={(event) =>
                               patchItem(item.id, {
@@ -1656,25 +1675,19 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                         )}
                       </td>
                       <td>
-                        <div className="import-messages">
-                          {item.conflict?.fields.filter(field => field.oldValue !== field.newValue).map((field) => (
-                            <span
-                              key={field.field}
-                              className={field.overwrites ? 'conflict-overwrite' : ''}
-                            >
-                              {field.label}：{field.oldValue || '空'} → {field.newValue}
-                              {field.overwrites ? '（按本次导入更新）' : ''}
-                            </span>
-                          ))}
-                          {item.messages.length ? (
-                            item.messages.map((entry, index) => (
-                              <span key={index}>{entry.replace(/^错误：|^警告：/, '')}</span>
-                            ))
-                          ) : !item.conflict?.fields.length ? (
-                            <span>校验通过</span>
-                          ) : null}
-                        </div>
-                        {batch.status === 'reviewing' && <ImportSourceRowEditor
+                        {item.messages.length > 0 && renderReviewIssue(item)}
+                        {item.quality !== 'error' && Boolean(item.conflict?.fields.some(field => field.oldValue !== field.newValue)) && (
+                          <details className="import-source-details">
+                            <summary>查看将更新的字段</summary>
+                            <ul>
+                              {item.conflict?.fields.filter(field => field.oldValue !== field.newValue).map(field => (
+                                <li key={field.field}>{field.label}：{field.oldValue || '空'} → {field.newValue}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                        {item.quality !== 'error' && !item.messages.length && !item.conflict?.fields.some(field => field.oldValue !== field.newValue) && <span>—</span>}
+                        {batch.status === 'reviewing' && item.quality !== 'error' && Boolean(item.payload.sourceRow) && !item.payload.sourceRowOutdated && <ImportSourceRowEditor
                           item={item}
                           metrics={metrics}
                           disabled={Boolean(busy) || Boolean(item.payload.valueReviewDecision)}
@@ -1682,20 +1695,13 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                           onChange={sourceCells => patchItem(sourceCorrectionId(item), { sourceCells })}
                           onSave={() => void saveCorrections()}
                         />}
-                        <details className="import-source-details">
-                          <summary>查看原始记录</summary>
-                          <div>
-                            <strong>{item.sourceSheet} · {item.sourceAddress}</strong>
-                            <p>原值：{item.rawValue || '空'}</p>
-                          </div>
-                        </details>
                       </td>
                     </tr>
-                  ))}
+                  )))}
                   {!pageItems.length && (
                     <tr>
                       <td colSpan={8} className="data-import-empty">
-                        {matchingReviewGroups.length ? '重复数据请在上方卡片中审查。' : filter === 'exception' && !batch.errorCount ? '没有待处理记录，可切换到“全部”查看数据。' : '当前筛选条件下没有数据。'}
+                        {matchingReviewGroups.length ? '请在下方处理重复记录或选择课次。' : filter === 'exception' && !batch.errorCount ? '没有待处理记录，可切换到“全部”查看数据。' : '当前筛选条件下没有数据。'}
                       </td>
                     </tr>
                   )}
@@ -1725,6 +1731,40 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                 </button>
               </div>
             </footer>
+            {matchingReviewGroups.length > 0 && <div className="import-value-review-groups">
+              <div className="import-value-review-heading">
+                <h3>处理重复记录与课次 · {matchingReviewGroups.length} 组</h3>
+                {recordCount > 0 && <div className="import-value-review-actions" role="group" aria-label="全选待审查记录">
+                  <span>全选：</span>
+                  {Array.from({ length: recordCount }, (_, index) => <button
+                    key={index} type="button"
+                    disabled={Boolean(busy) || savingReviewGroups.size > 0 || batch.items.some(item => pendingSelections.has(item.id)) || batch.status !== 'reviewing'}
+                    title={`将记录 ${index + 1} 应用到所有页面的待审查组；缺少该记录的组保持不变`}
+                    onClick={() => {
+                      const updates = selectImportReviewRecord(bulkReviewGroups, index);
+                      if (updates.length) void handleValueReview(updates, true);
+                    }}
+                  >记录 {index + 1}</button>)}
+                </div>}
+              </div>
+              {matchingReviewGroups.slice(currentReviewPage * 8, (currentReviewPage + 1) * 8).map(group => <ImportConflictReview
+                key={`${reviewRevision}-${group.map(item => item.id).join('-')}-${Boolean(group.find(item => item.payload.valueReviewDecision))}`}
+                items={group} disabled={Boolean(busy) || group.some(item => savingReviewGroups.has(item.id)) || batch.status !== 'reviewing'}
+                onSeparateTrainingSession={id => void handleValueReview([{ id, payload: { separateTrainingSession: true } }])}
+                onStartTimeChange={(id, startTime) => void handleValueReview([{ id, payload: { startTime } }])}
+                onAssignSession={(id, sessionOrder) => void handleValueReview([{ id, payload: { sessionOrder } }])}
+                onPending={id => setPendingSelections(current => new Set(current).add(id))}
+                onMerge={(targetId, memberIds, values, includeDatabase) => void handleValueReview([...(group.some(item => item.payload.valueReviewDecision) ? [{ id: targetId, payload: { valueReview: { action: 'reopen' } } }] : []), { id: targetId, payload: { valueReview: { action: 'merge', memberIds, values, includeDatabase } } }])}
+                onDraft={(id, choices, manual) => void handleValueReview([{ id, payload: { valueReview: { action: 'draft', choices, manual } } }])}
+                onExclude={id => void handleValueReview([{ id, resolution: 'skip' }])}
+                onSplit={dates => void handleValueReview(dates)}
+              />)}
+              {reviewGroupPages > 1 && <nav className="import-value-review-heading" aria-label="数据冲突审查分页">
+                <button type="button" disabled={currentReviewPage === 0 || Boolean(busy)} onClick={() => setReviewGroupPage(currentReviewPage - 1)}>上一组页</button>
+                <span>第 {currentReviewPage + 1} / {reviewGroupPages} 页 · 每页 8 组</span>
+                <button type="button" disabled={currentReviewPage >= reviewGroupPages - 1 || Boolean(busy)} onClick={() => setReviewGroupPage(currentReviewPage + 1)}>下一组页</button>
+              </nav>}
+            </div>}
             </div>
             {batch.status === 'reviewing' && <footer className="data-import-commit-bar">
               <div className="data-import-next-actions" aria-live="polite">
