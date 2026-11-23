@@ -4,6 +4,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { initializeDatabase } from '../core/db-initialize.ts';
+import { PROJECTS } from '../../shared/projects.ts';
 
 const fixture = vi.hoisted(() => ({ db: null as DatabaseSync | null }));
 vi.mock('../core/db.ts', () => ({
@@ -252,16 +253,31 @@ it('有氧趋势只连接相同明确协议版本、条件与侧别，未知版�
   });
 });
 
-it.each(['CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(
+it.each(PROJECTS.filter((project) => project !== 'ROWING'))(
   '%s个人档案展示本项目实测成绩而不套用赛艇维度',
   async (project) => {
     db.prepare('UPDATE athletes SET project=? WHERE id=9001').run(project);
     test('2026-01-01', project, 'confirmed', 0);
     test('2026-01-02', project, 'confirmed', 45);
     test('2026-01-03', 'ROWING', 'confirmed', 99);
+    db.exec(`
+      INSERT INTO metric_definitions(code,label,domain,unit,direction,frequency)
+      VALUES('profile_special_test','专项合成指标','project','s','lower_better','session');
+    `);
+    const specialSession = db.prepare(`
+      INSERT INTO test_sessions(athlete_id,test_date,test_type,project_code,project_status)
+      VALUES(9001,'2026-01-04','专项测试',?,'confirmed')
+    `).run(project);
+    db.prepare(`
+      INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit)
+      VALUES(?,'profile_special_test',42,'s')
+    `).run(specialSession.lastInsertRowid);
     const result = await read(`/api/athletes/9001/radar-models?${range}`);
     expect(result).toMatchObject({
-      special: { dimensions: [], series: [] },
+      special: { dimensions: [], series: [{
+        label: '专项合成指标', unit: 's',
+        points: [{ date: '2026-01-04', value: 42 }],
+      }] },
       physical: { dimensions: [], series: [{
         unit: 'cm', protocol: 'CMJ双手叉腰',
         points: [{ date: '2026-01-02', value: 45 }, { date: '2026-01-01', value: 0 }],

@@ -1,4 +1,5 @@
 import { buildPhysicalChampion } from './physical-champion-service.ts';
+import { PHYSICAL_CHAMPION_DIMENSIONS } from '../../shared/physical-champion.ts';
 import { registerCustomTestTrendRoutes } from './custom-test-trend-routes.ts';
 import { registerPhysicalChampionRoutes } from './physical-champion-routes.ts';
 import { z } from 'zod';
@@ -140,16 +141,24 @@ type ProfileRadarMeasurement = {
   code: string; value: number; testDate: string; testType: string; label: string; unit: string;
   protocol: string; protocolVersion: string; testContext: string; side: string; domain: string | null;
 };
-type ProfileRadarSeries = Omit<ProfileRadarMeasurement, 'code' | 'value' | 'testDate' | 'testType' | 'domain'> & {
+type ProfileRadarSeries = Omit<ProfileRadarMeasurement, 'code' | 'value' | 'testDate' | 'domain'> & {
   key: string;
   points: Array<{ date: string; value: number }>;
 };
+
+const physicalTestCodes = new Set<string>(
+  PHYSICAL_CHAMPION_DIMENSIONS.flatMap(({ codes }) => [...codes])
+);
+const physicalTestDomains = new Set([
+  'strength', 'strength_endurance', 'explosive', 'core', 'flexibility',
+  'endurance', 'anaerobic', 'vo2max', 'asymmetry',
+]);
 
 function profileRadarKind(row: ProfileRadarMeasurement) {
   if (/体能|力量素质/.test(row.testType)) return 'physical';
   if (!/专项/.test(row.testType)) return null;
   // 「其他测试」历史行可能使用默认的专项测试类型，按通用体能指标归类。
-  return ['strength', 'strength_endurance', 'explosive', 'core', 'flexibility'].includes(row.domain ?? '')
+  return physicalTestCodes.has(row.code) || physicalTestDomains.has(row.domain ?? '')
     ? 'physical'
     : 'special';
 }
@@ -688,10 +697,14 @@ export function registerAnalysisRoutes(app: Express) {
       if (!Number.isFinite(row.value)) continue;
       const kind = profileRadarKind(row);
       if (!kind) continue;
-      const key = JSON.stringify([row.code, row.unit, row.protocol, row.protocolVersion, row.testContext, row.side]);
+      const key = JSON.stringify([row.code, row.unit, row.testType, row.protocol, row.protocolVersion, row.testContext, row.side]);
       let metric = series[kind].get(key);
       if (!metric) {
-        metric = { key, label: row.label, unit: row.unit, protocol: row.protocol, protocolVersion: row.protocolVersion, testContext: row.testContext, side: row.side, points: [] };
+        metric = {
+          key, label: row.label, unit: row.unit, testType: row.testType,
+          protocol: row.protocol, protocolVersion: row.protocolVersion,
+          testContext: row.testContext, side: row.side, points: [],
+        };
         series[kind].set(key, metric);
       }
       metric.points.push({ date: row.testDate, value: row.value });

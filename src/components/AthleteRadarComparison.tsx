@@ -235,24 +235,31 @@ function AthleteTestResults({ series }: { series: AthleteTestSeries[] }) {
   const [selectedKey, setSelectedKey] = useState('');
   const trends = series.filter(({ points }) => points.length >= 2);
   const selected = trends.find(({ key }) => key === selectedKey) ?? trends[0];
-  const describe = ({ label, unit, protocol, protocolVersion, testContext, side }: AthleteTestSeries) =>
-    [label, unit, protocol, protocolVersion, testContext,
+  const conditions = ({ testType, protocol, protocolVersion, testContext, side }: AthleteTestSeries) =>
+    [testType, protocol, protocolVersion, testContext,
       side === 'left' ? '左侧' : side === 'right' ? '右侧' : side === 'bilateral' ? '双侧' : '',
     ].filter(Boolean).join(' · ');
+  const describe = (metric: AthleteTestSeries) =>
+    [metric.label, metric.unit, conditions(metric)].filter(Boolean).join(' · ');
   const points = selected ? [...selected.points].reverse() : [];
   return (
     <section className="athlete-test-results" aria-label="当前周期实测成绩">
       <h4>当前周期实测成绩</h4>
-      <dl className="athlete-radar-details">
+      <dl className="athlete-test-metrics">
         {series.map((metric) => (
           <div key={metric.key}>
-            <dt><strong>{describe(metric)}</strong></dt>
-            <dd>{formatMetric(metric.points[0].value, metric.unit)} · {metric.points[0].date}</dd>
+            <dt>{metric.label}</dt>
+            <dd>
+              <strong>{formatMetric(metric.points[0].value, metric.unit)}</strong>
+              <time dateTime={metric.points[0].date}>{metric.points[0].date}</time>
+              <small>{conditions(metric)}</small>
+            </dd>
           </div>
         ))}
       </dl>
       {selected && (
-        <>
+        <details className="athlete-test-trend">
+          <summary>查看成绩趋势</summary>
           <label className="athlete-test-trend-filter">
             <span>成绩趋势</span>
             <select value={selected.key} onChange={(event) => setSelectedKey(event.target.value)}>
@@ -277,7 +284,7 @@ function AthleteTestResults({ series }: { series: AthleteTestSeries[] }) {
               <li key={index}>{date} · {formatMetric(value, selected.unit)}</li>
             ))}</ul>
           </details>
-        </>
+        </details>
       )}
     </section>
   );

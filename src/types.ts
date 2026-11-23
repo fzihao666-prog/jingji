@@ -657,6 +657,7 @@ export type AthleteTestSeries = {
   key: string;
   label: string;
   unit: string;
+  testType: string;
   protocol: string;
   protocolVersion: string | null;
   testContext: string;

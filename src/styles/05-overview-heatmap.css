@@ -869,7 +869,43 @@
 
 .athlete-test-results {
   min-width: 0;
-  padding: 18px 20px;
+  padding: 12px 16px;
+}
+
+.athlete-test-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.athlete-test-metrics > div {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.athlete-test-metrics dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 2px 0 0;
+}
+
+.athlete-test-metrics :is(time, small) {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.athlete-test-metrics small {
+  flex-basis: 100%;
+}
+
+.athlete-test-trend {
+  margin-top: 8px;
 }
 
 .athlete-test-trend-filter {
@@ -887,11 +923,11 @@
 
 .athlete-radar-comparison {
   min-width: 0;
-  padding: 18px 20px 20px;
+  padding: 12px 16px 16px;
   display: grid;
   grid-template-columns: minmax(0, 58fr) minmax(300px, 42fr);
   align-items: start;
-  gap: 20px;
+  gap: 12px;
 }
 
 .athlete-radar-chart,
