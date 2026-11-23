@@ -30,7 +30,7 @@ export function buildBasicProfileWorkbook(
   sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183655' } };
   sheet.getCell('A1').note = '项目和队伍使用上传页面的选择。同队已有队员按姓名关联；新队员仅需填写姓名。';
   sheet.getRow(1).getCell(BASIC_PROFILE_HEADERS.indexOf('训练年限') + 1).note = '以年填写，可写 3.5 或 3年6个月，未提供时留空。';
-  sheet.getRow(1).getCell(BASIC_PROFILE_HEADERS.indexOf('身体测量日期') + 1).note = '填写身高或体重时，须同时填写实际测量日期（YYYY-MM-DD）。';
+  sheet.getRow(1).getCell(BASIC_PROFILE_HEADERS.indexOf('身体测量日期') + 1).note = '填写身高或体重时，须同时填写实际测量日期（支持2026-11-23、2026/11/23、2026.11.23）。';
   const strengthProjectColumn = BASIC_PROFILE_HEADERS.indexOf('最大力量项目') + 1;
   const strengthColumn = BASIC_PROFILE_HEADERS.indexOf('最大力量') + 1;
   sheet.getColumn(strengthProjectColumn).width = 22;

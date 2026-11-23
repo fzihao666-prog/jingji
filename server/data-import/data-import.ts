@@ -293,23 +293,25 @@ function parseDate(value: unknown, yearHint: number): string {
   return '';
 }
 
+function parseImportFullDate(value: unknown): string {
+  let candidate: string;
+  if (value instanceof Date || typeof value === 'number') {
+    candidate = parseDate(value, 0);
+  } else {
+    const raw = text(value).normalize('NFKC');
+    const match = /^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})$/.exec(raw);
+    const chinese = /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/.exec(raw);
+    const parts = match ?? chinese;
+    candidate = parts ? `${parts[1]}-${parts[2].padStart(2, '0')}-${parts[3].padStart(2, '0')}` : '';
+  }
+  return validIsoDate(candidate) ? candidate : '';
+}
+
 export function parseImportBirthDate(
   value: unknown,
   today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
 ): string {
-  let candidate = '';
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    candidate = dateToIso(value);
-  } else if (typeof value === 'number') {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) {
-      candidate = `${String(parsed.y).padStart(4, '0')}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
-    }
-  } else {
-    const normalized = text(value).replace(/年|\//g, '-').replace(/月|\./g, '-').replace(/日/g, '');
-    const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (match) candidate = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-  }
+  const candidate = parseImportFullDate(value);
   return validateRegistrationDemographics({ gender: '男', birthDate: candidate }, today).birthDate
     ? ''
     : candidate;
@@ -1097,12 +1099,13 @@ function parseTestTemplateSheet(
 /** 非空非法日期保留原文供校对；默认日期仅用于真正空白的单元格。 */
 function parseStandardDate(value: unknown, year: number): string {
   const raw = text(value);
-  if (typeof value === 'string') {
-    const normalized = raw.replace(/年|\//g, '-').replace(/月|\./g, '-').replace(/日/g, '');
-    if (!/^(?:\d{4}-)?\d{1,2}-\d{1,2}$/.test(normalized)) return raw;
-  }
-  const parsed = parseDate(value, year);
-  return validIsoDate(parsed) ? parsed : raw;
+  const full = parseImportFullDate(value);
+  if (full) return full;
+  const normalized = raw.normalize('NFKC');
+  const short = /^(\d{1,2})\s*[-/.]\s*(\d{1,2})$/.exec(normalized) ??
+    /^(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/.exec(normalized);
+  if (!short) return raw;
+  return parseImportFullDate(`${year}-${short[1]}-${short[2]}`) || raw;
 }
 
 /** 模板枚举可读中文、数据库存规范代码；解析期即归一，冲突比较、校对与入库共用同一口径。 */
@@ -1279,7 +1282,7 @@ function parseStandardSheet(
     const rawDate = standardValue(row, header.columns, ...dateLabels);
     const dateColumn = dateLabels.map(label => header.columns.get(normalizedText(label))).find(column => column !== undefined);
     const rowDate = basicProfile
-      ? (typeof rawDate === 'string' ? text(rawDate) : parseDate(rawDate, year))
+      ? (parseImportFullDate(rawDate) || text(rawDate))
       : text(rawDate) === '' ? fallbackDate : parseStandardDate(rawDate, year);
     const messages: string[] = [];
     const base = {
@@ -1379,12 +1382,11 @@ function parseStandardSheet(
         representativeUnit: standardText(row, header.columns, '代表单位'),
         trainingYears: trainingYears !== null && Number.isFinite(trainingYears) ? trainingYears : text(rawTrainingYears),
         bestResultEvent: standardText(row, header.columns, '对应赛事'),
-        bestResultDate: typeof rawBestResultDate === 'string' ? text(rawBestResultDate)
-          : parseDate(rawBestResultDate, year) || text(rawBestResultDate),
+        bestResultDate: parseImportFullDate(rawBestResultDate) || text(rawBestResultDate),
         nativePlace: standardText(row, header.columns, '籍贯'),
         homeAddress: standardText(row, header.columns, '家庭住址'),
         athleteStatus: standardText(row, header.columns, '训练状态'),
-        startSportDate: (basicProfile ? parseStandardDate(rawStartSportDate, year) : parseDate(rawStartSportDate, year)) || text(rawStartSportDate),
+        startSportDate: (basicProfile ? parseImportFullDate(rawStartSportDate) : parseDate(rawStartSportDate, year)) || text(rawStartSportDate),
         trainingVenue: standardText(row, header.columns, '训练场地'),
         currentEvent: standardText(row, header.columns, '备战赛事'),
         trainingPhase: standardText(row, header.columns, '备战阶段'),
@@ -3395,7 +3397,7 @@ function validateImportItem(
     if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate)) {
       const location = `${item.sourceSheet}!${text(payload.dateAddress) || item.sourceAddress}`;
       if (item.sourceSheet === BASIC_PROFILE_SHEET)
-        messages.push(`错误：${location} 身体测量日期无效或缺失，请按YYYY-MM-DD填写实际测量日期`);
+        messages.push(`错误：${location} 身体测量日期无效或缺失，请填写实际测量日期，例如2026-11-23、2026/11/23或2026.11.23`);
       else
         messages.push(`错误：${location} 日期“${text(payload.rawDate) || item.eventDate}”无效或缺失，请按YYYY-MM-DD填写；默认日期仅补空白`);
     }

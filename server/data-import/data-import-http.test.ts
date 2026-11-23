@@ -1516,3 +1516,17 @@ it('姓名模板回传时跳过未修改的在册队员，新姓名按页面所�
   expect(db.prepare("SELECT project,team FROM athletes WHERE name='仅填姓名虚构新队员'").get())
     .toEqual({ project: 'ROWING', team: 'HTTP甲队' });
 });
+
+it('基础档案日期接受常见分隔符，统一保存为 ISO 日期并拒绝不存在的日期', async () => {
+  const headers = ['姓名', '身体测量日期', '身高（cm）', '出生日期', '开始运动日期', '成绩日期'];
+  const batch = await upload([headers, ['虚构队员', '2024/2/29', 178, '2009.9.6', '2019年7月13日', '2024．10．2']], profileSheet, 'HTTP甲队');
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.find(item => item.itemType === 'body_measurement')?.eventDate).toBe('2024-02-29');
+  expect(batch.items.find(item => item.itemType === 'athlete_profile')?.payload).toMatchObject({
+    birthDate: '2009-09-06', startSportDate: '2019-07-13', bestResultDate: '2024-10-02',
+  });
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+  const invalid = await upload([headers, ['虚构队员', '2024.2.30', 178]], profileSheet, 'HTTP甲队');
+  expect(invalid.items[0].messages.join('')).toContain('身体测量日期无效');
+  expect((await request(`/batches/${invalid.id}/commit`, 'POST', {})).status).toBe(400);
+});
