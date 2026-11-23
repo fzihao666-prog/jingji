@@ -138,28 +138,37 @@ export function CoachManagementPage({
         const ownedAthletes = shownAthletes.filter((athlete) =>
           assignedCoachIds(athlete).includes(coach.id)
         );
-        const projectNames = [
-          ...new Set(
-            [
-              ...ownedAthletes.map((athlete) => athlete.project),
-              ...coach.projects.filter((project) => project !== '*'),
-            ].filter(Boolean)
-          ),
-        ];
-        const responsibilityTeams = teamDirectory.filter(
-          (team) =>
-            ownedAthletes.some((athlete) => athlete.teamId === team.id) ||
-            (coach.active &&
-              coach.projects.some((project) => project === '*' || project === team.project) &&
-              coach.teams.some(
-                (scope) =>
-                  (scope.project === '*' || scope.project === team.project) &&
-                  (scope.team === '*' || scope.team === team.name)
-              ))
-        );
+        const athletesByTeam = new Map<number, AssignmentAthlete[]>();
+        for (const athlete of ownedAthletes) {
+          if (athlete.teamId == null) continue;
+          const members = athletesByTeam.get(athlete.teamId) ?? [];
+          members.push(athlete);
+          athletesByTeam.set(athlete.teamId, members);
+        }
+        const responsibilityTeams = teamDirectory
+          .filter(
+            (team) =>
+              athletesByTeam.has(team.id) ||
+              (coach.active &&
+                coach.projects.some((project) => project === '*' || project === team.project) &&
+                coach.teams.some(
+                  (scope) =>
+                    (scope.project === '*' || scope.project === team.project) &&
+                    (scope.team === '*' || scope.team === team.name)
+                ))
+          )
+          .map((team) => ({
+            ...team,
+            athletes: athletesByTeam.get(team.id) ?? [],
+          }));
         const teamNames = responsibilityTeams.map(
           (team) => `${projectLabel(team.project)} · ${team.name}`
         );
+        const projectNames = [...new Set([
+          ...responsibilityTeams.map((team) => team.project),
+          ...ownedAthletes.map((athlete) => athlete.project),
+          ...coach.projects.filter((project) => project !== '*'),
+        ].filter(Boolean))];
         return { ...coach, athletes: ownedAthletes, projectNames, teamNames, responsibilityTeams };
       }),
     [coaches, shownAthletes, teamDirectory]
@@ -197,25 +206,6 @@ export function CoachManagementPage({
   const coveredAthletes = new Set(
     coachProfiles.flatMap((coach) => coach.athletes.map((athlete) => athlete.id))
   ).size;
-
-  const selectedGroups = useMemo(() => {
-    if (!selectedCoach) return [];
-    const groups = new Map<
-      string,
-      { project: string; team: string; athletes: AssignmentAthlete[] }
-    >();
-    selectedCoach.athletes.forEach((athlete) => {
-      const key = String(athlete.teamId);
-      const group = groups.get(key) || {
-        project: athlete.project,
-        team: athlete.team || '未分队',
-        athletes: [],
-      };
-      group.athletes.push(athlete);
-      groups.set(key, group);
-    });
-    return [...groups.values()];
-  }, [selectedCoach]);
 
   const formTeams = teamDirectory.filter(
     (team) => !coachForm.project || team.project === coachForm.project
@@ -480,12 +470,16 @@ export function CoachManagementPage({
                     </div>
                   </td>
                   <td>
-                    <div className="coach-team-copy">
-                      <strong>{coach.teamNames[0] || '未绑定负责队伍'}</strong>
-                      {coach.teamNames.length > 1 && (
-                        <small>另有 {coach.teamNames.length - 1} 支队伍</small>
-                      )}
-                    </div>
+                    {coach.responsibilityTeams.length ? (
+                      <ul className="coach-team-copy">
+                        {coach.responsibilityTeams.map((team) => (
+                          <li key={team.id}>
+                            <strong>{projectLabel(team.project)} · {team.name}</strong>
+                            <small>{team.athletes.length} 人</small>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : '未绑定负责队伍'}
                   </td>
                   <td>
                     <div className="coach-athlete-count">
@@ -550,7 +544,6 @@ export function CoachManagementPage({
           >
             <header>
               <div>
-                <span>COACH PROFILE</span>
                 <h2 id="coach-detail-title">教练档案</h2>
               </div>
               <button
@@ -597,6 +590,43 @@ export function CoachManagementPage({
                 <strong>{selectedCoach.athletes.length} 人</strong>
               </div>
             </div>
+            <section className="coach-detail-section">
+              <header>
+                <div>
+                  <h3>关联队伍与人数</h3>
+                  <p>人数按当前权限内可见运动员统计。</p>
+                </div>
+              </header>
+              <div className="coach-detail-groups">
+                {selectedCoach.responsibilityTeams.length ? (
+                  selectedCoach.responsibilityTeams.map((team) => (
+                    <article key={team.id}>
+                      <header>
+                        <span>{projectLabel(team.project)}</span>
+                        <strong>{team.name}</strong>
+                        <small>{team.athletes.length} 人</small>
+                      </header>
+                      {team.athletes.length > 0 && (
+                        <details>
+                          <summary>查看运动员</summary>
+                          <div className="coach-team-members">
+                            {team.athletes.map((athlete) => (
+                              <span key={athlete.id}>
+                                <i aria-hidden="true">{athlete.name.slice(0, 1)}</i>
+                                <b>{athlete.name}</b>
+                                <small>{athlete.gender}</small>
+                              </span>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </article>
+                  ))
+                ) : (
+                  <p>暂无关联队伍。</p>
+                )}
+              </div>
+            </section>
             {canManage && (
               <fieldset className="coach-detail-category" disabled={saving}>
                 <legend>教练类别</legend>
@@ -619,38 +649,6 @@ export function CoachManagementPage({
                 ))}
               </fieldset>
             )}
-            <section className="coach-detail-section">
-              <header>
-                <div>
-                  <span>RESPONSIBILITY</span>
-                  <h3>责任队伍与运动员</h3>
-                </div>
-              </header>
-              <div className="coach-detail-groups">
-                {selectedGroups.length ? (
-                  selectedGroups.map((group) => (
-                    <article key={`${group.project}-${group.team}`}>
-                      <header>
-                        <span>{projectLabel(group.project)}</span>
-                        <strong>{group.team}</strong>
-                        <small>{group.athletes.length} 人</small>
-                      </header>
-                      <div>
-                        {group.athletes.map((athlete) => (
-                          <span key={athlete.id}>
-                            <i>{athlete.name.slice(0, 1)}</i>
-                            <b>{athlete.name}</b>
-                            <small>{athlete.gender}</small>
-                          </span>
-                        ))}
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <p>当前权限内暂无负责运动员。</p>
-                )}
-              </div>
-            </section>
             <footer>
               {canManage && (
                 <button

@@ -385,23 +385,31 @@
   font-style: normal;
 }
 
-.coach-team-copy strong,
-.coach-team-copy small {
-  display: block;
+.coach-team-copy {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-team-copy li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .coach-team-copy strong {
-  overflow: hidden;
-  color: #264c57;
+  overflow-wrap: anywhere;
+  color: var(--ink);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .coach-team-copy small {
-  margin-top: 4px;
-  color: #7d9197;
-  font-size: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .coach-athlete-count {
@@ -798,18 +806,26 @@
 .coach-detail-groups article > header small {
   grid-column: 2;
   grid-row: 1 / span 2;
-  color: #71868d;
-  font-size: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.coach-detail-groups article > div {
+.coach-detail-groups summary {
+  padding: 7px 11px;
+  color: var(--ink);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.coach-team-members {
   padding: 6px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
 }
 
-.coach-detail-groups article > div > span {
+.coach-team-members > span {
   min-height: 35px;
   padding: 5px 6px;
   border-radius: 6px;
@@ -819,7 +835,7 @@
   gap: 6px;
 }
 
-.coach-detail-groups article > div > span:hover {
+.coach-team-members > span:hover {
   background: #eff7f5;
 }
 
@@ -1087,7 +1103,7 @@
     width: 100vw;
   }
 
-  .coach-detail-groups article > div {
+  .coach-team-members {
     grid-template-columns: 1fr;
   }
 
