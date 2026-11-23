@@ -1172,7 +1172,7 @@ function parseStandardSheet(
     }
   }
   if (basicProfile) {
-    const knownHeaders = new Set(BASIC_PROFILE_HEADERS.map(normalizedText));
+    const knownHeaders = new Set([...BASIC_PROFILE_HEADERS, '运动员编号', '运动项目', '所属队伍'].map(normalizedText));
     for (const label of header.columns.keys()) {
       if (!knownHeaders.has(label)) header.columns.delete(label);
     }
@@ -1187,6 +1187,9 @@ function parseStandardSheet(
     identityHeaders.add('身体测量日期');
     dateLabels.unshift('身体测量日期');
   }
+  const knownProfileNames = new Set(basicProfile ? athletes.filter(athlete =>
+    athlete.active !== false && athlete.project === project && athlete.team === selectedTeam
+  ).map(athlete => normalizedName(athlete.name)) : []);
   for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
     const rawRow = matrix[rowIndex] || [];
     const row = header.identityColumns.size
@@ -1195,6 +1198,7 @@ function parseStandardSheet(
     const athleteCode = standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号');
     const numberedAthlete = athletes.find(athlete => String(athlete.id) === athleteCode);
     const rawName = standardText(row, header.columns, '姓名') || numberedAthlete?.name || '';
+    const existingProfileName = knownProfileNames.has(normalizedName(rawName));
     const hasBusiness = sheet === COMPACT_ATHLETE_SHEET
       ? COMPACT_ATHLETE_COLUMNS.some(field =>
           (field.kind === 'body' || field.kind === 'test') &&
@@ -1229,8 +1233,8 @@ function parseStandardSheet(
         }));
         continue;
       }
-      if (!hasBusiness && numberedAthlete?.team === selectedTeam &&
-          normalizedName(numberedAthlete.name) === normalizedName(rawName)) continue;
+      if (!hasBusiness && (existingProfileName || (numberedAthlete?.team === selectedTeam &&
+          normalizedName(numberedAthlete.name) === normalizedName(rawName)))) continue;
     }
     const rowHasContent = row.some((value) => text(value) !== '');
     if (!rawName) {
@@ -1395,7 +1399,7 @@ function parseStandardSheet(
         payload.education, payload.originUnit, payload.bestResult, payload.notes, payload.eventItem,
         payload.representativeUnit, payload.trainingYears, payload.bestResultEvent, payload.bestResultDate,
         payload.technicalLevel, payload.startSportDate].some(isProvided);
-      if (!basicProfile || !athleteCode || hasProfileData) items.push(
+      if (!basicProfile || (!existingProfileName && !athleteCode) || hasProfileData) items.push(
         itemBase({
           ...base,
           itemType: 'athlete_profile',

@@ -198,7 +198,7 @@ export function registerDataImportRoutes(app: Express) {
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
         const metrics = kind === 'test' ? readImportMetricDefinitions(project) : undefined;
         const workbook = kind === 'profile' && team
-          ? buildBasicProfileWorkbook(project, team, athletes)
+          ? buildBasicProfileWorkbook(athletes)
           : buildPurposeTemplate(kind, project, athletes, metrics);
         workbook
           .xlsx.writeBuffer()

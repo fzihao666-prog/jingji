@@ -23,7 +23,7 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
     if (options.mode !== 'export') {
       const profileUsesPageTeam = options.omitProfileTeam && name === '运动员基本资料';
       const fields = importTemplateFields(name, { coachView: options.coachView, metricCodes: options.metrics && new Set(options.metrics.map(metric => metric.code)) })
-        .filter(field => !profileUsesPageTeam || field.key !== '所属队伍')
+        .filter(field => !profileUsesPageTeam || !['运动项目', '所属队伍'].includes(field.key))
         .map(field => {
           if (name === '其他测试' && field.key === '指标名称' && metricChoices.length) return { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' };
           const rules = options.project ? projectRules(options.project) : null;

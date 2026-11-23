@@ -106,7 +106,9 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       if (kind === 'profile') {
         expect(workbook.SheetNames).toEqual(['运动员基础档案']);
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础档案'], { header: 1 });
-        expect(rows[1]).toEqual(['799', '模板虚构队员', '赛艇', addedTeams[0]]);
+        expect(rows[1]).toEqual(['模板虚构队员']);
+        for (const removed of ['运动员编号', '运动项目', '所属队伍'])
+          expect((rows[0] as string[]).map(header => header.split('\n')[0])).not.toContain(removed);
       }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'profile', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
@@ -554,7 +556,7 @@ it('基础档案新增字段按正式模板入库并在档案显示，空白保�
     具体小项: '虚构双桨', 代表单位: '虚构代表单位', 输送单位: '虚构输送单位',
     训练年限: '3年6个月', 最好竞技成绩: '6:42.50', 对应赛事: '虚构锦标赛', 成绩日期: '2026-10-18',
   };
-  const prefilled = rows.find(row => row[0] === '701')!;
+  const prefilled = rows.find(row => row[0] === '虚构队员')!;
   const rowWith = (fields: Record<string, unknown>) => headers.map((header, index) => fields[header] ?? prefilled[index]);
   db.prepare("INSERT INTO athlete_profiles(athlete_id,current_event,start_sport_date) VALUES(701,'虚构备战赛事','2020-01-01') ON CONFLICT(athlete_id) DO UPDATE SET current_event=excluded.current_event,start_sport_date=excluded.start_sport_date").run();
   const submit = async (fields: Record<string, unknown>) => {
@@ -642,7 +644,8 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
   expect(rows[0]).toEqual((XLSX.utils.sheet_to_json(rowing.Sheets[profileSheet], { header: 1 }) as string[][])[0]);
   expect(rows).toHaveLength(2);
-  expect(rows[1].slice(1)).toEqual(['举重虚构队员', '举重', 'HTTP甲队']);
+  expect(rows[1]).toEqual(['举重虚构队员']);
+  const athlete = db.prepare("SELECT id FROM athletes WHERE name='举重虚构队员' AND project='WEIGHTLIFTING'").get() as { id: number };
   expect((await download('ROWING')).SheetNames).toContain('运动员基本资料');
 
   for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],
@@ -659,10 +662,10 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   expect(preview.status, JSON.stringify(preview.body)).toBe(200);
   const batch = preview.body.batch!;
   expect(batch.items).toHaveLength(1);
-  expect(batch.items[0]).toMatchObject({ athleteId: Number(rows[1][0]), eventDate: '2026-09-19', quality: 'valid' });
+  expect(batch.items[0]).toMatchObject({ athleteId: athlete.id, eventDate: '2026-09-19', quality: 'valid' });
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
   expect(db.prepare('SELECT height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=? AND measurement_date=?')
-    .get(Number(rows[1][0]), '2026-09-19')).toEqual({ height_cm: 172.5, weight_kg: 68 });
+    .get(athlete.id, '2026-09-19')).toEqual({ height_cm: 172.5, weight_kg: 68 });
 });
 
 it('测试模板预览列使用授权项目与队伍，交给队伍教练配置', async () => {
@@ -1503,4 +1506,13 @@ it('基础档案最大力量分列填报，自动按标准测试默认日期入�
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
   const invalid = await upload([headers, body('', 65)], profileSheet, 'HTTP甲队');
   expect(invalid.items[0].messages.join('')).toContain('请选择最大力量项目');
+});
+
+it('姓名模板回传时跳过未修改的在册队员，新姓名按页面所选项目和队伍建档', async () => {
+  const batch = await upload([['姓名'], ['虚构队员'], ['仅填姓名虚构新队员']], profileSheet, 'HTTP甲队');
+  expect(batch.items.map(item => item.rawAthleteName)).toEqual(['仅填姓名虚构新队员']);
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(db.prepare("SELECT project,team FROM athletes WHERE name='仅填姓名虚构新队员'").get())
+    .toEqual({ project: 'ROWING', team: 'HTTP甲队' });
 });
