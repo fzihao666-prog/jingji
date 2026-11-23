@@ -17,7 +17,7 @@
 .coach-directory-summary {
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -44,14 +44,6 @@
     'Microsoft YaHei UI',
     sans-serif;
   font-variant-numeric: tabular-nums;
-}
-
-.coach-directory-summary .coach-summary-enabled {
-  background: #edf8f5;
-}
-
-.coach-directory-summary .coach-summary-disabled {
-  background: #f5f7f8;
 }
 
 .coach-directory-toolbar {
@@ -865,25 +857,37 @@
   padding: 0 20px 12px;
 }
 
-.coach-status-button {
-  min-height: 38px;
-  padding: 0 10px;
-  border: 1px solid #9fcfc7;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #217666;
-  background: #eef8f5;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
+.coach-work-status-editor {
+  padding: 0 20px 12px;
 }
 
-.coach-status-button.danger {
-  border-color: #e1bbb4;
-  color: #a64638;
-  background: #fff5f3;
+.coach-work-status-editor form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.coach-work-status-editor label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.coach-work-status-editor select {
+  min-height: 36px;
+  max-width: 100%;
+  padding-inline: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.coach-work-status-editor p {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .coach-create-backdrop {

@@ -53,6 +53,8 @@ beforeAll(async () => {
       password_hash TEXT, display_name TEXT, requested_role TEXT, coach_category TEXT, project TEXT, team TEXT, create_team INTEGER NOT NULL DEFAULT 0, gender TEXT,
       birth_date TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
       reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE coach_work_status (user_id INTEGER PRIMARY KEY, status TEXT, team_id INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE team_work_status (team_id INTEGER PRIMARY KEY, status TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
     INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
     CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT, source TEXT DEFAULT 'manual', profile_status TEXT DEFAULT 'complete',region TEXT,city TEXT,county TEXT,active INTEGER DEFAULT 1);

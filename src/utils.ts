@@ -95,3 +95,9 @@ export function groupByDate(records: TrainingRecord[]) {
 export function percentage(value: number, total: number) {
   return total ? Math.round((value / total) * 1000) / 10 : 0;
 }
+
+const workStatusDateFormat = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' });
+
+export function formatWorkStatusDate(updatedAt: string) {
+  return workStatusDateFormat.format(new Date(updatedAt.replace(' ', 'T') + 'Z'));
+}

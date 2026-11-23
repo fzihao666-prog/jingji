@@ -51,6 +51,8 @@ beforeAll(async () => {
     CREATE TABLE user_team_permissions (user_id INTEGER, project TEXT, team TEXT, granted_by INTEGER);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT, updated_at TEXT);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE coach_work_status (user_id INTEGER PRIMARY KEY, status TEXT, team_id INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE team_work_status (team_id INTEGER PRIMARY KEY, status TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
     CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER,
       active INTEGER, gender TEXT);
@@ -84,7 +86,7 @@ beforeEach(() => {
     DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions;
     DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;
     DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins;
-    DELETE FROM coach_profiles; DELETE FROM coach_athletes;
+    DELETE FROM coach_profiles; DELETE FROM coach_athletes; DELETE FROM coach_work_status; DELETE FROM team_work_status;
     DELETE FROM training_plans; DELETE FROM special_training_plans; DELETE FROM special_training_plan_sessions;
     INSERT INTO users (id,username,display_name,role,athlete_id) VALUES
       (1,'manager','全国管理者','DMD',NULL), (2,'coach2','教练甲','SCC',NULL),
@@ -289,6 +291,41 @@ describe('队伍责任范围 HTTP 集成', () => {
     });
     expect(response.status).toBe(403);
     expect(database.prepare('SELECT * FROM user_team_permissions WHERE user_id=2').all()).toEqual(before);
+  });
+
+  it('工作状态独立于账号启用状态和队伍权限，并拒绝越权修改', async () => {
+    const put = (path: string, actor: number, body: object) => fetch(`${baseUrl}${path}`, {
+      method: 'PUT', headers: headers(actor), body: JSON.stringify(body),
+    });
+    const coachPath = '/api/admin/coaches/2/work-status';
+    const teamPath = '/api/admin/teams/10/work-status';
+    expect((await put(coachPath, 2, { status: 'resting', teamId: null })).status).toBe(403);
+    expect((await put(coachPath, 1, { status: 'inactive', teamId: null })).status).toBe(400);
+    expect((await put(teamPath, 2, { status: 'on_leave' })).status).toBe(403);
+    expect((await put('/api/admin/teams/11/work-status', 5, { status: 'on_leave' })).status).toBe(403);
+    const teamResponse = await put(teamPath, 1, { status: 'on_leave' });
+    expect(teamResponse.status).toBe(200);
+    const coachResponse = await put(coachPath, 1, { status: 'substituting', teamId: 11 });
+    expect(coachResponse.status).toBe(200);
+    expect(await coachResponse.json()).toMatchObject({
+      workStatus: { status: 'substituting', teamId: 11, updatedAt: expect.any(String) },
+    });
+    const response = await fetch(`${baseUrl}/api/admin/assignments`, { headers: headers(1) });
+    expect(await response.json()).toMatchObject({ coaches: expect.arrayContaining([
+      expect.objectContaining({ id: 2, workStatus: expect.objectContaining({ status: 'substituting', teamId: 11 }) }),
+    ]) });
+    const coachView = await fetch(`${baseUrl}/api/admin/assignments`, { headers: headers(2) });
+    expect(await coachView.json()).toMatchObject({ coaches: expect.arrayContaining([
+      expect.objectContaining({ id: 2, workStatus: expect.objectContaining({ status: 'substituting', teamId: null }) }),
+    ]) });
+    const teamsResponse = await fetch(`${baseUrl}/api/admin/teams`, { headers: headers(1) });
+    expect(await teamsResponse.json()).toMatchObject({ teams: expect.arrayContaining([
+      expect.objectContaining({ id: 10, workStatus: 'on_leave' }),
+    ]) });
+    expect((await assignments(2)).athletes.map(({ id }) => id).sort()).toEqual([101, 102, 103]);
+    expect(database.prepare('SELECT active FROM users WHERE id=2').get()).toMatchObject({ active: 1 });
+    const ended = await put(coachPath, 1, { status: 'at_center', teamId: null });
+    expect(await ended.json()).toMatchObject({ workStatus: { status: 'at_center', teamId: null } });
   });
 
   it('保存教练队伍授权时补齐所属项目，其他页面即时查询到负责教练', async () => {

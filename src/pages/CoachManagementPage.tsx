@@ -19,17 +19,22 @@ import {
   DEFAULT_COACH_CATEGORY,
   type CoachCategory,
 } from '../../shared/coach-categories';
+import {
+  COACH_WORK_STATUS_LABELS, TEAM_WORK_STATUS_LABELS,
+  type CoachWorkStatus, type CoachWorkStatusRecord,
+} from '../../shared/coach-work-status';
 import { api } from '../api';
 import { EditableName } from '../components/EditableName';
 import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
+import { formatWorkStatusDate } from '../utils';
 import type { AccessAccount, Athlete, ProjectTeam, User } from '../types';
 
 type AssignmentAthlete = Athlete & { coachIds: string };
 type CoachAccount = Pick<
   AccessAccount,
   'id' | 'username' | 'displayName' | 'active' | 'projects' | 'teams'
-> & { categories: CoachCategory[] };
-type StatusFilter = 'all' | 'active' | 'inactive';
+> & { categories: CoachCategory[]; workStatus: CoachWorkStatusRecord | null };
+type StatusFilter = 'all' | 'unset' | CoachWorkStatus;
 
 const emptyCoachForm = {
   displayName: '',
@@ -71,6 +76,9 @@ export function CoachManagementPage({
   const [projectFilter, setProjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [workStatusDraft, setWorkStatusDraft] = useState<CoachWorkStatus | ''>('');
+  const [substituteTeam, setSubstituteTeam] = useState('');
+  const [workStatusFeedback, setWorkStatusFeedback] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [coachForm, setCoachForm] = useState(emptyCoachForm);
@@ -94,9 +102,7 @@ export function CoachManagementPage({
       setCurrentAccount(accessResult.current);
       setTeamDirectory(teamResult.teams);
       setManageableCoachIds(accessResult.accounts.filter((account) => account.role === 'SCC').map(({ id }) => id));
-      const categoryByCoachId = new Map(
-        assignmentResult.coaches.map((coach) => [coach.id, coach.categories])
-      );
+      const assignmentByCoachId = new Map(assignmentResult.coaches.map((coach) => [coach.id, coach]));
       const accessCoaches = [
         ...(accessResult.current?.role === 'SCC' ? [accessResult.current] : []),
         ...accessResult.accounts.filter((account) => account.role === 'SCC'),
@@ -107,7 +113,8 @@ export function CoachManagementPage({
         active: account.active,
         projects: account.projects,
         teams: account.teams,
-        categories: categoryByCoachId.get(account.id) ?? [],
+        categories: assignmentByCoachId.get(account.id)?.categories ?? [],
+        workStatus: assignmentByCoachId.get(account.id)?.workStatus ?? null,
       }));
       const assignmentCoaches = assignmentResult.coaches.map((coach) => ({
         ...coach,
@@ -194,8 +201,7 @@ export function CoachManagementPage({
     return coachProfiles.filter((coach) => {
       if (projectFilter && !coach.projectNames.includes(projectFilter)) return false;
       if (categoryFilter && !coach.categories.some((category) => category === categoryFilter)) return false;
-      if (statusFilter === 'active' && !coach.active) return false;
-      if (statusFilter === 'inactive' && coach.active) return false;
+      if (statusFilter !== 'all' && statusFilter !== (coach.workStatus?.status ?? 'unset')) return false;
       if (!query) return true;
       return [coach.displayName, coach.username, ...coach.projectNames, ...coach.teamNames].some(
         (value) => value.toLocaleLowerCase().includes(query)
@@ -205,18 +211,15 @@ export function CoachManagementPage({
 
   const selectedCoach = coachProfiles.find((coach) => coach.id === selectedCoachId) || null;
   const canManageSelected = canManage && !!selectedCoach && manageableCoachIds.includes(selectedCoach.id);
-  const activeCount = coachProfiles.filter((coach) => coach.active).length;
-  const coveredTeams = new Set(
-    coachProfiles.flatMap((coach) => coach.responsibilityTeams.map((team) => team.id))
-  ).size;
-  const coveredAthletes = new Set(
-    coachProfiles.flatMap((coach) => coach.athletes.map((athlete) => athlete.id))
-  ).size;
-
+  const selectedSubstituteTeam = teamDirectory.find((team) => team.id === selectedCoach?.workStatus?.teamId);
   const formTeams = teamDirectory.filter(
     (team) => !coachForm.project || team.project === coachForm.project
   );
   const openDetail = (coachId: number) => {
+    const status = coachProfiles.find(({ id }) => id === coachId)?.workStatus;
+    setWorkStatusDraft(status?.status ?? '');
+    setSubstituteTeam(status?.teamId?.toString() ?? '');
+    setWorkStatusFeedback('');
     setSelectedCoachId(coachId);
     setDetailOpen(true);
   };
@@ -288,23 +291,23 @@ export function CoachManagementPage({
     }
   };
 
-  const toggleCoachStatus = async () => {
-    if (!selectedCoach || !canManageSelected) return;
-    const nextActive = !selectedCoach.active;
-    if (
-      !window.confirm(`${nextActive ? '启用' : '停用'} ${selectedCoach.displayName} 的登录账号？`)
-    )
-      return;
+  const saveWorkStatus = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedCoach || !canManageSelected || !workStatusDraft || saving) return;
     setSaving(true);
+    setWorkStatusFeedback('');
     try {
-      const result = await api.setAccessAccountStatus(selectedCoach.id, nextActive);
-      await load();
-      onChanged();
-      setMessageTone('success');
-      setMessage(result.message);
+      const { workStatus, message } = await api.updateCoachWorkStatus(
+        selectedCoach.id,
+        workStatusDraft,
+        workStatusDraft === 'substituting' && substituteTeam ? Number(substituteTeam) : null
+      );
+      setCoaches((current) => current.map((coach) =>
+        coach.id === selectedCoach.id ? { ...coach, workStatus } : coach
+      ));
+      setWorkStatusFeedback(message);
     } catch (error) {
-      setMessageTone('error');
-      setMessage(error instanceof Error ? error.message : '账号状态更新失败。');
+      setWorkStatusFeedback(error instanceof Error ? error.message : '工作状态保存失败。');
     } finally {
       setSaving(false);
     }
@@ -324,22 +327,16 @@ export function CoachManagementPage({
         title="教练管理"
         actions={
           <div className="coach-directory-summary" aria-label="教练管理概览">
-            <div className="coach-summary-enabled">
-              <span>已启用教练</span>
-              <strong>{activeCount}</strong>
-            </div>
-            <div className="coach-summary-disabled">
-              <span>已停用教练</span>
-              <strong>{coachProfiles.length - activeCount}</strong>
-            </div>
             <div>
-              <span>关联队伍</span>
-              <strong>{coveredTeams}</strong>
+              <span>教练总数</span>
+              <strong>{coachProfiles.length}</strong>
             </div>
-            <div>
-              <span>覆盖运动员（当前权限内）</span>
-              <strong>{coveredAthletes}</strong>
-            </div>
+            {Object.entries(COACH_WORK_STATUS_LABELS).map(([status, label]) => (
+              <div key={status}>
+                <span>{label}</span>
+                <strong>{coachProfiles.filter((coach) => coach.workStatus?.status === status).length}</strong>
+              </div>
+            ))}
           </div>
         }
       />
@@ -401,8 +398,10 @@ export function CoachManagementPage({
             aria-label="筛选教练状态"
           >
             <option value="all">全部状态</option>
-            <option value="active">已启用</option>
-            <option value="inactive">已停用</option>
+            {Object.entries(COACH_WORK_STATUS_LABELS).map(([status, label]) => (
+              <option key={status} value={status}>{label}</option>
+            ))}
+            <option value="unset">未设置</option>
           </select>
         </label>
         {(searchTerm || projectFilter || categoryFilter || statusFilter !== 'all') && (
@@ -449,13 +448,13 @@ export function CoachManagementPage({
                 <th>执教项目</th>
                 <th>关联队伍</th>
                 <th>负责运动员（当前权限内）</th>
-                <th>账号状态</th>
+                <th>工作状态</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {filteredCoaches.map((coach) => (
-                <tr key={coach.id} className={!coach.active ? 'inactive' : ''}>
+                <tr key={coach.id}>
                   <td>
                     <div className="coach-directory-person">
                       <span>{coach.displayName.slice(0, 1)}</span>
@@ -494,9 +493,8 @@ export function CoachManagementPage({
                     </div>
                   </td>
                   <td>
-                    <span className={`coach-status ${coach.active ? 'active' : 'inactive'}`}>
-                      <i />
-                      {coach.active ? '已启用' : '已停用'}
+                    <span className={`coach-status ${coach.workStatus?.status === 'training' ? 'active' : 'inactive'}`}>
+                      {coach.workStatus ? COACH_WORK_STATUS_LABELS[coach.workStatus.status] : '未设置'}
                     </span>
                   </td>
                   <td>
@@ -523,7 +521,6 @@ export function CoachManagementPage({
         </div>
         <footer>
           <span>共 {filteredCoaches.length} 条</span>
-          <span>教练停用后无法登录，已有训练数据仍会保留。</span>
         </footer>
       </section>
 
@@ -568,8 +565,8 @@ export function CoachManagementPage({
                   {selectedCoach.categories.join('、') || '未设置'} · @{selectedCoach.username || '账号未登记'}
                 </p>
               </div>
-              <b className={selectedCoach.active ? 'active' : 'inactive'}>
-                {selectedCoach.active ? '已启用' : '已停用'}
+              <b className={selectedCoach.workStatus?.status === 'training' ? 'active' : 'inactive'}>
+                {selectedCoach.workStatus ? COACH_WORK_STATUS_LABELS[selectedCoach.workStatus.status] : '未设置'}
               </b>
             </div>
             {canManageSelected && (
@@ -583,17 +580,48 @@ export function CoachManagementPage({
                   <Pencil size={16} aria-hidden="true" />
                   修改项目与队伍
                 </button>
-                <button
-                  type="button"
-                  className={`coach-status-button ${selectedCoach.active ? 'danger' : ''}`}
-                  onClick={() => void toggleCoachStatus()}
-                  disabled={saving}
-                >
-                  <LockKeyhole size={16} aria-hidden="true" />
-                  {selectedCoach.active ? '停用账号' : '启用账号'}
-                </button>
               </div>
             )}
+            <section className="coach-work-status-editor" aria-label="教练工作状态">
+              {selectedCoach.workStatus && (
+                <p>
+                  {selectedSubstituteTeam && `代训队伍 ${projectLabel(selectedSubstituteTeam.project)} · ${selectedSubstituteTeam.name} · `}
+                  更新日期 {formatWorkStatusDate(selectedCoach.workStatus.updatedAt)}
+                </p>
+              )}
+              {canManageSelected && (
+                <form onSubmit={saveWorkStatus}>
+                  <label>
+                    <span>工作状态</span>
+                    <select value={workStatusDraft} disabled={saving}
+                      onChange={(event) => setWorkStatusDraft(event.target.value as CoachWorkStatus | '')}>
+                      <option value="" disabled>选择工作状态</option>
+                      {Object.entries(COACH_WORK_STATUS_LABELS).map(([status, label]) => (
+                        <option key={status} value={status}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {workStatusDraft === 'substituting' && (
+                    <label>
+                      <span>代训队伍（选填）</span>
+                      <select value={substituteTeam} disabled={saving}
+                        onChange={(event) => setSubstituteTeam(event.target.value)}>
+                        <option value="">未指定队伍</option>
+                        {teamDirectory.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {projectLabel(team.project)} · {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <button type="submit" className="secondary-button" disabled={saving || !workStatusDraft}>
+                    保存工作状态
+                  </button>
+                </form>
+              )}
+              {workStatusFeedback && <p role="status">{workStatusFeedback}</p>}
+            </section>
             <div className="coach-detail-facts">
               <div>
                 <span>执教项目</span>
@@ -623,7 +651,9 @@ export function CoachManagementPage({
                   selectedCoach.responsibilityTeams.map((team) => (
                     <article key={team.id}>
                       <header>
-                        <span>{projectLabel(team.project)}</span>
+                        <span>
+                          {projectLabel(team.project)} · {team.workStatus ? TEAM_WORK_STATUS_LABELS[team.workStatus] : '队伍状态未设置'}
+                        </span>
                         <strong>{team.name}</strong>
                         <small>{team.athletes.length} 人</small>
                       </header>

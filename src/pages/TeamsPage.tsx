@@ -1,7 +1,9 @@
 import { ArrowDownRight, Layers3, Pencil, Plus, Search, Trash2, UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PROJECTS, projectLabel, type Project } from '../../shared/projects';
+import { TEAM_WORK_STATUS_LABELS, type TeamWorkStatus } from '../../shared/coach-work-status';
 import { api, ApiRequestError } from '../api';
+import { formatWorkStatusDate } from '../utils';
 import type { ProjectTeam } from '../types';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 
@@ -21,6 +23,25 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
   const [renameTarget, setRenameTarget] = useState<ProjectTeam>();
   const [renameName, setRenameName] = useState('');
   const [renameError, setRenameError] = useState('');
+
+  async function updateWorkStatus(team: ProjectTeam, status: TeamWorkStatus) {
+    if (busy || status === team.workStatus) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await api.updateTeamWorkStatus(team.id, status);
+      setTeams((current) => current.map((row) => row.id === team.id
+        ? { ...row, workStatus: result.workStatus.status, workStatusUpdatedAt: result.workStatus.updatedAt }
+        : row
+      ));
+      setMessage(result.message);
+      onChanged();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '队伍状态更新失败。');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function rename(event: FormEvent) {
     event.preventDefault();
@@ -281,8 +302,25 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
                                 ? `${team.athleteCount}名运动员 · 仍有运动员，不能删除`
                                 : `${team.athleteCount}名运动员`}
                             </small>
+                            <small>
+                              {team.workStatus ? TEAM_WORK_STATUS_LABELS[team.workStatus] : '队伍状态未设置'}
+                              {team.workStatusUpdatedAt && ` · 更新于 ${formatWorkStatusDate(team.workStatusUpdatedAt)}`}
+                            </small>
                           </span>
                           <div className="team-row-actions">
+                            {team.canEditWorkStatus && (
+                              <select
+                                aria-label={`修改${team.name}的队伍状态`}
+                                value={team.workStatus ?? ''}
+                                disabled={busy}
+                                onChange={(event) => void updateWorkStatus(team, event.target.value as TeamWorkStatus)}
+                              >
+                                <option value="" disabled>设置状态</option>
+                                {Object.entries(TEAM_WORK_STATUS_LABELS).map(([status, label]) => (
+                                  <option key={status} value={status}>{label}</option>
+                                ))}
+                              </select>
+                            )}
                             {team.canRename && (
                               <button
                                 type="button"

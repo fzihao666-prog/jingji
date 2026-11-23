@@ -1,3 +1,4 @@
+import { COACH_WORK_STATUS_LABELS, type CoachWorkStatusRecord } from '../../shared/coach-work-status.ts';
 import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
 import {
   accountCredentialsSchema,
@@ -509,13 +510,61 @@ export function registerAccessRoutes(app: Express) {
     `
         )
         .all() as Array<AuthUser & { displayName: string; categories: string | null }>;
+      const permissions = accountPermissions(req.authUser!.id);
+      const readWorkStatus = db.prepare(`
+        SELECT ws.status, ws.updated_at AS updatedAt,
+          CASE WHEN pt.active = 1 THEN ws.team_id END AS teamId, pt.project, pt.name
+        FROM coach_work_status ws LEFT JOIN project_teams pt ON pt.id = ws.team_id
+        WHERE ws.user_id = ?
+      `);
       const coaches = allCoaches
         .filter((coach) => coach.id === req.authUser!.id || canManageAccount(req.authUser!, coach))
         .map(({ id, displayName, categories }) => {
           const roles = (categories ?? '').split(',').filter(isCoachCategory);
-          return { id, displayName, categories: roles, category: roles[0] ?? null };
+          const record = readWorkStatus.get(id) as (CoachWorkStatusRecord & { project: string | null; name: string | null }) | undefined;
+          const workStatus = record ? {
+            status: record.status,
+            updatedAt: record.updatedAt,
+            teamId: record.project && record.name && permissionsAllowProjectTeam(permissions, record.project, record.name)
+              ? record.teamId
+              : null,
+          } : null;
+          return { id, displayName, categories: roles, category: roles[0] ?? null, workStatus };
         });
       res.json({ athletes, coaches });
+    }
+  );
+
+  app.put(
+    '/api/admin/coaches/:id/work-status',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const id = Number(req.params.id);
+      const input = z.strictObject({
+        status: z.enum(Object.keys(COACH_WORK_STATUS_LABELS) as [keyof typeof COACH_WORK_STATUS_LABELS]),
+        teamId: z.number().int().positive().nullable(),
+      }).safeParse(req.body);
+      if (!Number.isSafeInteger(id) || id < 1 || !input.success)
+        return res.status(400).json({ message: '请选择有效的教练工作状态。' });
+      const currentUser = req.authUser!;
+      const coach = userById(id);
+      if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))
+        return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
+      const teamId = input.data.status === 'substituting' ? input.data.teamId : null;
+      if (teamId !== null) {
+        const team = db.prepare('SELECT project, name FROM project_teams WHERE id=? AND active=1')
+          .get(teamId) as { project: string; name: string } | undefined;
+        if (!team || !permissionsAllowProjectTeam(accountPermissions(currentUser.id), team.project, team.name))
+          return res.status(403).json({ message: '请选择管理范围内的代训队伍。' });
+      }
+      const workStatus = db.prepare(`
+        INSERT INTO coach_work_status(user_id,status,team_id) VALUES(?,?,?)
+        ON CONFLICT(user_id) DO UPDATE SET status=excluded.status, team_id=excluded.team_id,
+          updated_at=CURRENT_TIMESTAMP
+        RETURNING status, team_id AS teamId, updated_at AS updatedAt
+      `).get(id, input.data.status, teamId);
+      res.json({ message: '教练工作状态已更新。', workStatus });
     }
   );
 

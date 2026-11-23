@@ -64,6 +64,7 @@ import type {
 } from './types';
 import type { RowingPeriodAnalysis } from '../shared/rowing-model';
 import type { SportRules, SPORT_MODULES } from '../shared/sport-rules';
+import type { CoachWorkStatus, CoachWorkStatusRecord, TeamWorkStatus, WorkStatusRecord } from '../shared/coach-work-status';
 import type { CoachCategory } from '../shared/coach-categories';
 
 const TOKEN_KEY = 'training-monitor-token';
@@ -380,6 +381,12 @@ export const api = {
   },
   async adminTeams() {
     return request<{ teams: ProjectTeam[]; canCreateProjects: Project[] }>('/api/admin/teams');
+  },
+  async updateTeamWorkStatus(id: number, status: TeamWorkStatus) {
+    return request<{ message: string; workStatus: WorkStatusRecord<TeamWorkStatus> }>(
+      `/api/admin/teams/${id}/work-status`,
+      { method: 'PUT', body: JSON.stringify({ status }) }
+    );
   },
   async createTeam(project: string, name: string) {
     return request<{ message: string; id: number }>('/api/admin/teams', {
@@ -1132,7 +1139,7 @@ export const api = {
   async assignments() {
     return request<{
       athletes: Array<Athlete & { coachIds: string }>;
-      coaches: Array<{ id: number; displayName: string; categories: CoachCategory[] }>;
+      coaches: Array<{ id: number; displayName: string; categories: CoachCategory[]; workStatus: CoachWorkStatusRecord | null }>;
     }>('/api/admin/assignments');
   },
   async updateAssignment(athleteId: number, region: string, city: string, county: string) {
@@ -1230,6 +1237,12 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ active }),
     });
+  },
+  async updateCoachWorkStatus(id: number, status: CoachWorkStatus, teamId: number | null) {
+    return request<{ message: string; workStatus: CoachWorkStatusRecord }>(
+      `/api/admin/coaches/${id}/work-status`,
+      { method: 'PUT', body: JSON.stringify({ status, teamId }) }
+    );
   },
   async updateCoachCategory(id: number, categories: CoachCategory[]) {
     return request<{ message: string; categories: CoachCategory[] }>(

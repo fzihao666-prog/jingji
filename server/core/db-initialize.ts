@@ -141,6 +141,19 @@ export function initializeDatabase(
     UNIQUE (project, name)
   );
 
+  CREATE TABLE IF NOT EXISTS coach_work_status (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('training','substituting','at_center','resting')),
+    team_id INTEGER REFERENCES project_teams(id) ON DELETE SET NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS team_work_status (
+    team_id INTEGER PRIMARY KEY REFERENCES project_teams(id) ON DELETE CASCADE,
+    status TEXT NOT NULL CHECK (status IN ('training','on_leave','phase_ended')),
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS coach_athletes (
     coach_user_id INTEGER NOT NULL,
     athlete_id INTEGER NOT NULL,
