@@ -6,7 +6,10 @@ const { buildSubmissionReport } = await tsImport('./submission-report-build.ts',
 const db = new DatabaseSync(workerData.path, { readOnly: true });
 try {
   db.exec('PRAGMA busy_timeout=3000; BEGIN');
-  const result = await buildSubmissionReport(db, workerData.input);
+  const build = workerData.basic
+    ? (await tsImport('./basic-submission-report.ts', import.meta.url)).buildBasicSubmissionReport
+    : buildSubmissionReport;
+  const result = build(db, workerData.input);
   parentPort.postMessage(result);
 } finally {
   db.close();

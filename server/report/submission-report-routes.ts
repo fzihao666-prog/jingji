@@ -1,20 +1,21 @@
 import type { Express } from 'express';
 import { Worker } from 'node:worker_threads';
 import type { Response } from 'express';
-import type { SubmissionReport } from '../../shared/submission-report.ts';
+import type { BasicSubmissionReport, SubmissionReport } from '../../shared/submission-report.ts';
 import { requireAuth, requireRole } from '../core/auth.ts';
 import { db } from '../core/db.ts';
 import { accountPermissions, selectableProjects } from '../core/permissions.ts';
+import { buildBasicSubmissionReport } from './basic-submission-report.ts';
 import { buildSubmissionReport, type SubmissionReportInput } from './submission-report-build.ts';
 
 class SubmissionReportBusy extends Error {}
 
 let activeWorkers = 0;
-function runSubmissionReport(path: string, input: SubmissionReportInput, response: Response) {
+function runSubmissionReport(path: string, input: SubmissionReportInput, response: Response, basic: boolean) {
   if (activeWorkers >= 2) throw new SubmissionReportBusy();
-  return new Promise<SubmissionReport>((resolve, reject) => {
+  return new Promise<SubmissionReport | BasicSubmissionReport>((resolve, reject) => {
     const worker = new Worker(new URL('./submission-report-worker.mjs', import.meta.url), {
-      workerData: { path, input },
+      workerData: { path, input, basic },
       execArgv: [],
     });
     activeWorkers++;
@@ -39,11 +40,12 @@ function runSubmissionReport(path: string, input: SubmissionReportInput, respons
 
 export function registerSubmissionReportRoutes(app: Express) {
   app.get(
-    '/api/reports/submissions',
+    ['/api/reports/submissions', '/api/reports/submissions/basic'],
     requireAuth,
     requireRole('REG', 'TD', 'DMD'),
     async (req, res) => {
       const user = req.authUser!;
+      const basic = req.path.endsWith('/basic');
       const input = {
         projects: selectableProjects(user),
         permissions: accountPermissions(user.id),
@@ -52,8 +54,8 @@ export function registerSubmissionReportRoutes(app: Express) {
       let output;
       try {
         output = path
-          ? await runSubmissionReport(path, input, res)
-          : await buildSubmissionReport(db, input);
+          ? await runSubmissionReport(path, input, res, basic)
+          : basic ? buildBasicSubmissionReport(db, input) : buildSubmissionReport(db, input);
       } catch (error) {
         if (res.destroyed) return;
         if (error instanceof SubmissionReportBusy) {

@@ -1,7 +1,7 @@
 import type { TrainingRecordTemplate } from '../shared/training-record-template';
 import type { CustomTestTrend } from '../shared/custom-test-trend';
 import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
-import type { SubmissionReport } from '../shared/submission-report';
+import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
 import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
 import type { AiManagementData, AiSettings } from '../shared/ai-management';
 import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
@@ -200,6 +200,9 @@ async function request<T>(path: string, options: ApiRequestOptions = {}): Promis
 export const api = {
   submissionReport(signal?: AbortSignal) {
     return request<SubmissionReport>('/api/reports/submissions', { signal, timeoutMs: 35_000 });
+  },
+  basicSubmissionReport(signal?: AbortSignal) {
+    return request<BasicSubmissionReport>('/api/reports/submissions/basic', { signal, timeoutMs: 35_000 });
   },
   async importTeamTrainingStats(file: File, project: Project, teamId: number, mappings: Record<string, TeamTrainingColumnMapping>) {
     const body = new FormData();

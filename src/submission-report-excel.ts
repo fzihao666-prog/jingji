@@ -1,5 +1,5 @@
 import { projectLabel } from '../shared/projects';
-import type { SubmissionReport } from '../shared/submission-report';
+import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
 
 export async function downloadSubmissionExcel(report: SubmissionReport) {
   const xlsx = await import('@e965/xlsx');
@@ -58,4 +58,18 @@ export async function downloadSubmissionExcel(report: SubmissionReport) {
     ]),
   ]);
   xlsx.writeFile(workbook, '队伍数据检查.xlsx');
+}
+
+export async function downloadBasicSubmissionExcel(report: BasicSubmissionReport) {
+  const xlsx = await import('@e965/xlsx');
+  const workbook = xlsx.utils.book_new();
+  for (const { name, rows } of report.sheets) {
+    const sheet = xlsx.utils.aoa_to_sheet(rows);
+    sheet['!cols'] = rows[0].map((heading, column) => ({
+      wch: Math.min(52, Math.max(14, String(heading).length * 2 + 2, ...rows.slice(1, 101).map(row => String(row[column] ?? '').length + 3))),
+    }));
+    if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
+    xlsx.utils.book_append_sheet(workbook, sheet, name);
+  }
+  xlsx.writeFile(workbook, `基本信息检查_${report.asOf}.xlsx`);
 }

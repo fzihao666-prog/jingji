@@ -32,19 +32,19 @@ const beijingTime = new Intl.DateTimeFormat('zh-CN', {
 const emptySettings = { enabled: false, budgetYuan: 10 };
 
 export function AiManagementPage() {
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'team' | 'basic' | null>(null);
   const [exportError, setExportError] = useState('');
-  async function exportTeamData() {
-    setExporting(true);
+  async function exportTeamData(kind: 'team' | 'basic') {
+    setExporting(kind);
     setExportError('');
     try {
-      const report = await api.submissionReport();
-      const { downloadSubmissionExcel } = await import('../submission-report-excel');
-      await downloadSubmissionExcel(report);
+      const exporter = await import('../submission-report-excel');
+      if (kind === 'basic') await exporter.downloadBasicSubmissionExcel(await api.basicSubmissionReport());
+      else await exporter.downloadSubmissionExcel(await api.submissionReport());
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'Excel 导出失败，请重试。');
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   }
   const [data, setData] = useState<AiManagementData>();
@@ -94,11 +94,16 @@ export function AiManagementPage() {
             <button
               type="button"
               className="primary-button"
-              disabled={exporting}
-              onClick={exportTeamData}
+              disabled={Boolean(exporting)}
+              onClick={() => void exportTeamData('team')}
             >
               <Download size={16} aria-hidden="true" />
-              {exporting ? '正在生成 Excel…' : '队伍数据检查Excel'}
+              {exporting === 'team' ? '正在生成 Excel…' : '队伍数据检查Excel'}
+            </button>
+            <button type="button" className="secondary-button" disabled={Boolean(exporting)}
+              onClick={() => void exportTeamData('basic')}>
+              <Download size={16} aria-hidden="true" />
+              {exporting === 'basic' ? '正在生成 Excel…' : '基本信息检查'}
             </button>
             <button
               className="secondary-button"

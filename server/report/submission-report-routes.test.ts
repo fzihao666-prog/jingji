@@ -126,3 +126,62 @@ it('转队后历史随新队，离队清空归最后一队', async () => {
   const original = (await (await request('')).json()) as SubmissionReport;
   expect(original.records.some(([, , , id]) => id === 'training_session:9301')).toBe(false);
 });
+
+it('基本信息检查使用在册名单、正式数据和提交凭据，按队伍授权导出', async () => {
+  db.exec(`
+    INSERT INTO athletes(id,name,project,team,team_id,gender,birth_date)
+      SELECT 9310,'检查用合成队员','ROWING',name,id,'女','2000-01-01' FROM project_teams WHERE name='合成一队';
+    INSERT INTO athlete_profiles(athlete_id,training_years,best_result,native_place,education,event_item)
+      VALUES(9310,0,'6:50.0','合成籍贯','本科','双桨');
+    INSERT INTO athlete_body_measurements(athlete_id,measurement_date,height_cm,weight_kg,is_demo)
+      VALUES(9310,'2025-12-01',175,68,0),(9310,'2025-12-02',193,90,1);
+    INSERT INTO test_sessions(id,athlete_id,test_date,test_type,protocol,project_code,project_status)
+      VALUES(9310,9310,'2025-12-01','力量素质测试','实测1RM','ROWING','confirmed'),
+      (9311,9310,'2025-12-02','FMS测试','功能动作筛查（FMS）','ROWING','confirmed');
+    INSERT INTO metric_definitions(code,label,domain,unit,direction,frequency)
+      VALUES('ybt_left','YBT 左前伸','fitness','cm','neutral','session');
+    INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit)
+      VALUES(9310,'squat_kg',95,'kg'),(9310,'ybt_left',64,'cm');
+    INSERT INTO injury_records(athlete_id,record_type,injury_name,body_part,status,onset_date,created_by)
+      VALUES(9310,'formal','合成伤病','膝','rehab','2025-11-30',9302);
+    INSERT INTO fms_import_observations(test_session_id,metric_code,observation_json,data_import_batch_id)
+      VALUES(9311,'fms_hurdle_step','{"left":0}','synthetic');
+    INSERT INTO training_sessions(id,athlete_id,session_date,training_type,structure_type,intensity_zone,content,duration_min,duration_reported,created_by,project_code,project_status)
+      VALUES(9310,9310,'2025-12-01','体能训练','','','核心稳定',45,1,9302,'ROWING','confirmed'),
+      (9311,9310,'2025-12-02','体能训练','','','力量训练',0,0,9301,'ROWING','confirmed');
+    INSERT INTO strength_result_sets(training_session_id,exercise_name,actual_reps,actual_weight_kg,training_category,created_by)
+      VALUES(9310,'平板支撑',2,0,'核心力量',9302);
+    INSERT INTO training_plans(athlete_id,plan_date,start_date,end_date,title,plan_data,created_by,updated_by,model,team_id,status)
+      SELECT 9310,'2025-12-01','2025-12-01','2025-12-07','合成安排',
+        '{"sessions":[{"date":"2025-12-01","category":"physical","content":"深蹲","durationMin":35,"items":[{"title":"深蹲"}]}]}',
+        9302,9302,'team',id,'published' FROM project_teams WHERE name='合成一队';
+  `);
+  const fetchBasic = (id?: number) => fetch(`${url}/basic`, id ? {
+    headers: { Authorization: `Bearer ${jwt.sign({ id, sessionVersion: 1 }, secret)}` },
+  } : {});
+  const response = await fetchBasic(9301);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  const report = await response.json() as import('../../shared/submission-report.ts').BasicSubmissionReport;
+  const rows = (name: string) => report.sheets.find(sheet => sheet.name === name)!.rows.slice(1);
+  expect(JSON.stringify(report)).not.toContain('其他队运动员');
+  expect(rows('运动员基本信息')).toContainEqual([
+    '赛艇', '合成一队', '检查用合成队员', '女', expect.any(Number), 175, 68, 0, '6:50.0',
+    '合成籍贯', '合成一队', '本科', '双桨', '合成伤病（康复中）', '',
+  ]);
+  expect(rows('测试成绩明细')).toContainEqual([
+    '赛艇', '合成一队', '检查用合成队员', '最大力量', expect.any(String), '2025-12-01', 95, 'kg', '实测1RM',
+  ]);
+  expect(rows('运动员测试检查')).toContainEqual([
+    '赛艇', '合成一队', '检查用合成队员', '2025-12-01 · 1项', '未录', '未录', '未录',
+    '2025-12-02 · 0/7项', '2025-12-01 · 1项', '未录', expect.stringContaining('FMS待补'),
+  ]);
+  expect(rows('运动员训练统计')).toContainEqual(['赛艇', '合成一队', '检查用合成队员', 2, 1, 45, '平板支撑', 1]);
+  expect(rows('力量和体能训练安排')).toContainEqual(['赛艇', '合成一队', '2025-12-01', '深蹲', '深蹲', 35]);
+  expect(rows('体能教练提交记录')).toContainEqual(['赛艇', '合成一队', '甲教练', 2, expect.any(String)]);
+  const other = await fetchBasic(9304);
+  expect(other.status).toBe(200);
+  expect(JSON.stringify(await other.json())).not.toContain('检查用合成队员');
+  expect((await fetchBasic(9302)).status).toBe(403);
+  expect((await fetchBasic()).status).toBe(401);
+});

@@ -6,3 +6,8 @@ export type SubmissionReport = {
   records: [team: number, type: number, date: string, reference: string, athleteId?: number][];
   types: string[];
 };
+
+export type BasicSubmissionReport = {
+  asOf: string;
+  sheets: { name: string; rows: (string | number)[][] }[];
+};
