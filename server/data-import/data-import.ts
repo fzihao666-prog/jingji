@@ -1409,27 +1409,46 @@ function parseStandardSheet(
       if (!basicProfile) continue;
 
       const rawStrength = standardText(row, header.columns, '最大力量');
-      if (rawStrength) {
+      const strengthProject = standardText(row, header.columns, '最大力量项目');
+      const findStrengthMetric = (action: string) => COMMON_FITNESS_TEMPLATE_METRICS.find(([label, , , , , protocol]) =>
+        protocol === '实测1RM' && label.split('1RM')[0] === action.normalize('NFKC').trim().replace(/1RM$/i, '').trim());
+      const appendStrength = (metric: NonNullable<ReturnType<typeof findStrengthMetric>>, value: number, date: string, address: string, rawValue: string, explicitDate: boolean) => {
+        const [, metricCode, metricLabel, unit, testType, protocol] = metric;
+        items.push(itemBase({
+          ...base, sourceAddress: address, itemType: 'test_measurement', eventDate: date,
+          metricCode, metricLabel, valueNum: value, unit, testType, side: 'center', rawValue,
+          payload: { ...base.payload, birthDate, protocol, rawDate: explicitDate ? date : '', dateAddress: address,
+            dateSource: explicitDate ? 'row' : defaultDate ? 'selected' : 'legacy_today', defaultedDate: explicitDate ? '' : date },
+          quality: 'valid',
+        }));
+      };
+      if ((strengthProject || rawStrength) && header.columns.has(normalizedText('最大力量项目'))) {
+        const metric = findStrengthMetric(strengthProject);
+        const value = standardNumberValue(rawStrength);
+        const invalidField = metric ? '最大力量' : '最大力量项目';
+        const address = cellAddress(rowIndex, header.columns.get(normalizedText(invalidField)) ?? nameColumn);
+        if (!metric || value === null || value <= 0) {
+          numericErrors.set(invalidField, { address, raw: metric ? rawStrength : strengthProject,
+            message: `错误：${rawSheet}!${address} ${metric ? '最大力量须填写实测公斤数，例如 95' : '请选择最大力量项目：深蹲、卧推、卧拉、硬拉或高翻'}` });
+        } else {
+          appendStrength(metric, value, fallbackDate, address, rawStrength, false);
+        }
+      } else if (rawStrength) {
+        // 兼容此前下载的单列格式，继续保留其中的实际测试日期。
         const address = cellAddress(rowIndex, header.columns.get(normalizedText('最大力量')) ?? nameColumn);
         const entries = rawStrength.normalize('NFKC').split(/[;\n]+/).map(entry => entry.trim()).filter(Boolean);
-        if (!entries.length) numericErrors.set('最大力量', { address, raw: rawStrength, message: `错误：${rawSheet}!${address} 请填写实际日期、动作和重量，例如 2026-11-20 深蹲 95kg` });
+        const badStrength = () => numericErrors.set('最大力量', { address, raw: rawStrength,
+          message: `错误：${rawSheet}!${address} 最大力量须填实测日期、动作和正数重量，例：2026-11-20 深蹲 95kg` });
+        if (!entries.length) badStrength();
         for (const entry of entries) {
           const match = /^(\d{4}-\d{2}-\d{2})\s+([^\d]+?)(?:1RM)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*kg$/i.exec(entry);
-          const metric = match && COMMON_FITNESS_TEMPLATE_METRICS.find(([label, , , , , protocol]) =>
-            protocol === '实测1RM' && label.split('1RM')[0] === match[2].trim());
+          const metric = match && findStrengthMetric(match[2]);
           const value = match ? standardNumberValue(match[3]) : null;
           if (!match || !validIsoDate(match[1]) || !metric || value === null || value <= 0) {
-            numericErrors.set('最大力量', { address, raw: rawStrength,
-              message: `错误：${rawSheet}!${address} 最大力量须填实测日期、动作和正数重量，例：2026-11-20 深蹲 95kg` });
+            badStrength();
             break;
           }
-          const [, metricCode, metricLabel, unit, testType, protocol] = metric;
-          items.push(itemBase({
-            ...base, sourceAddress: address, itemType: 'test_measurement', eventDate: match[1],
-            metricCode, metricLabel, valueNum: value, unit, testType, side: 'center', rawValue: entry,
-            payload: { ...base.payload, birthDate, protocol, rawDate: match[1], dateAddress: address },
-            quality: 'valid',
-          }));
+          appendStrength(metric, value, match[1], address, entry, true);
         }
       }
       const heightCm = readNumber('身高cm');

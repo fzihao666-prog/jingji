@@ -1463,19 +1463,10 @@ it('标准 FMS 表先保存单侧原始结果，补录后计算最终分且保�
   ]);
 });
 
-it('基础档案最大力量列按实际日期和动作入库为实测1RM', async () => {
-  const response = await fetch(`${base}/api/data-import/template?kind=profile&project=ROWING&team=HTTP甲队`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  expect(response.status).toBe(200);
-  const book = XLSX.read(await response.arrayBuffer());
-  const sheet = book.Sheets[profileSheet];
-  const headers = (XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][])[0];
-  const column = headers.findIndex(header => header.startsWith('最大力量\n'));
-  expect(column).toBeGreaterThanOrEqual(0);
-  const batch = await upload([headers, headers.map((header, index) => index === column
-    ? '2026-11-23 深蹲 95kg；2026-11-24 卧推 65.5kg'
-    : header.startsWith('姓名') ? '虚构队员' : '')], profileSheet, 'HTTP甲队');
+it('基础档案旧单列最大力量保留实测日期', async () => {
+  const batch = await upload([
+    ['姓名', '最大力量'], ['虚构队员', '2026-11-23 深蹲 95kg；2026-11-24 卧推 65.5kg'],
+  ], profileSheet, 'HTTP甲队');
   expect(batch.items.filter(item => item.itemType === 'test_measurement')).toHaveLength(2);
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
   expect(db.prepare(`SELECT t.test_date,t.protocol,m.metric_code,m.value_num FROM test_sessions t
@@ -1487,4 +1478,29 @@ it('基础档案最大力量列按实际日期和动作入库为实测1RM', asyn
   const invalid = await upload([['姓名', '最大力量'], ['虚构队员', '深蹲 95kg']], profileSheet, 'HTTP甲队');
   expect(invalid.items[0].messages.join('')).toContain('实测日期');
   expect((await request(`/batches/${invalid.id}/commit`, 'POST', {})).status).toBe(400);
+});
+
+it('基础档案最大力量分列填报，自动按标准测试默认日期入库', async () => {
+  const response = await fetch(`${base}/api/data-import/template?kind=profile&project=ROWING&team=HTTP甲队`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(response.status).toBe(200);
+  const book = XLSX.read(await response.arrayBuffer());
+  const headers = (XLSX.utils.sheet_to_json(book.Sheets[profileSheet], { header: 1 }) as string[][])[0];
+  expect(headers).toContain('最大力量项目');
+  expect(headers).toContain('最大力量\n实测1RM（kg）');
+  expect(headers).not.toContain('最大力量日期');
+  const body = (action: string, weight: number) => headers.map(header => {
+    const key = header.split('\n')[0];
+    return key === '最大力量项目' ? action : key === '最大力量' ? weight : key === '姓名' ? '虚构队员' : '';
+  });
+  const batch = await upload([headers, body('高翻', 70), body('卧拉', 61.5)], profileSheet, 'HTTP甲队');
+  const date = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  expect(batch.items.filter(item => item.itemType === 'test_measurement')).toEqual(expect.arrayContaining([
+    expect.objectContaining({ metricCode: 'clean_kg', valueNum: 70, eventDate: date }),
+    expect.objectContaining({ metricCode: 'bench_pull_kg', valueNum: 61.5, eventDate: date }),
+  ]));
+  expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
+  const invalid = await upload([headers, body('', 65)], profileSheet, 'HTTP甲队');
+  expect(invalid.items[0].messages.join('')).toContain('请选择最大力量项目');
 });
