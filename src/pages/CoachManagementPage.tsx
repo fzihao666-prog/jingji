@@ -469,18 +469,7 @@ export function CoachManagementPage({
                       )}
                     </div>
                   </td>
-                  <td>
-                    {coach.responsibilityTeams.length ? (
-                      <ul className="coach-team-copy">
-                        {coach.responsibilityTeams.map((team) => (
-                          <li key={team.id}>
-                            <strong>{projectLabel(team.project)} · {team.name}</strong>
-                            <small>{team.athletes.length} 人</small>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : '未绑定负责队伍'}
-                  </td>
+                  <td>{coach.responsibilityTeams.length} 支</td>
                   <td>
                     <div className="coach-athlete-count">
                       <div>

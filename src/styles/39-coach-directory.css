@@ -385,33 +385,6 @@
   font-style: normal;
 }
 
-.coach-team-copy {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.coach-team-copy li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.coach-team-copy strong {
-  overflow-wrap: anywhere;
-  color: var(--ink);
-  font-size: 11px;
-}
-
-.coach-team-copy small {
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .coach-athlete-count {
   display: flex;
   align-items: center;
