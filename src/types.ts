@@ -839,7 +839,7 @@ export type WellnessTrendPoint = {
 };
 
 export type WellnessTrend = {
-  key: 'rpe' | 'sleepHours' | 'morningPulse' | 'weightKg';
+  key: 'rpe' | 'sleepHours' | 'morningPulse' | 'weightKg' | 'fatigue';
   label: string;
   unit: string;
   points: WellnessTrendPoint[];

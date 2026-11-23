@@ -1097,10 +1097,11 @@ function WellnessTrendCards({
   const displayedTrends: WellnessTrend[] = trends.length
     ? trends
     : [
-        { key: 'rpe', label: 'RPE', unit: '分', points: [] },
+        { key: 'rpe', label: 'RPE', unit: '', points: [] },
         { key: 'sleepHours', label: '睡眠时长', unit: 'h', points: [] },
         { key: 'morningPulse', label: '晨脉', unit: 'bpm', points: [] },
         { key: 'weightKg', label: '体重', unit: 'kg', points: [] },
+        { key: 'fatigue', label: '疲劳', unit: '', points: [] },
       ];
   const hasData = trends.some((trend) =>
     trend.points.some((point) => point.personalValue !== null)
@@ -1145,7 +1146,7 @@ function WellnessTrendCards({
                   className="professional-panel personal-wellness-card"
                 >
                   <header>
-                    <h3>{trend.label}</h3>
+                    <h3>{wellnessTrendTitle(trend)}</h3>
                     <small>{trend.unit || '0–10 分'}</small>
                   </header>
                   {latest ? (
@@ -1227,8 +1228,14 @@ function WellnessTrendCards({
   );
 }
 
+function wellnessTrendTitle(trend: WellnessTrend) {
+  if (trend.key === 'rpe') return '训练主观强度（RPE）';
+  if (trend.key === 'fatigue') return '恢复日报疲劳程度';
+  return trend.label;
+}
+
 function wellnessAxisLabel(trend: WellnessTrend) {
-  return trend.key === 'rpe' ? 'RPE（分）' : `${trend.label}（${trend.unit}）`;
+  return `${trend.label}（${trend.unit || '分'}）`;
 }
 
 function wellnessValue(value: number, trend: WellnessTrend) {
@@ -1277,9 +1284,9 @@ function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EC
     },
     yAxis: {
       type: 'value',
-      name: trend.unit || 'RPE',
+      name: trend.unit || '分',
       scale: true,
-      ...(trend.key === 'rpe' ? { min: 0, max: 10 } : {}),
+      ...(trend.key === 'rpe' || trend.key === 'fatigue' ? { min: 0, max: 10 } : {}),
       nameTextStyle: { color: '#092b39' },
       axisLabel: { color: '#092b39' },
       splitLine: { lineStyle: { color: '#e0e9e9' } },
