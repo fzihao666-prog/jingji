@@ -152,10 +152,11 @@ const priority = (ref: PhysicalReference) =>
   ).length;
 export function buildPhysicalChampion(
   db: DatabaseSync,
-  scope: { project: string; from: string; to: string; athleteIds: number[]; canEdit: boolean }
+  scope: { project: string; from: string; to: string; athleteIds: number[]; canEdit: boolean; includeTrend?: boolean; formalOnly?: boolean }
 ): PhysicalChampionPayload {
   const { project, from, to, canEdit } = scope;
   const references = readPhysicalReferences(db, project);
+  const referenceIsAvailable = scope.formalOnly ? isUsablePhysicalReference : isDisplayPhysicalReference;
   const ids = new Set(scope.athleteIds);
   const athletes = (
     db
@@ -192,7 +193,7 @@ export function buildPhysicalChampion(
   );
   const effective = references.filter(
     (ref) =>
-      isDisplayPhysicalReference(
+      referenceIsAvailable(
         ref,
         ref.effectiveFrom && ref.effectiveFrom > from ? ref.effectiveFrom : from
       ) &&
@@ -228,7 +229,7 @@ export function buildPhysicalChampion(
         const row = rows.find((item) =>
           all.some(
             (ref) =>
-              isDisplayPhysicalReference(ref, item.date) &&
+              referenceIsAvailable(ref, item.date) &&
               applies(ref, athlete, item.date) &&
               ref.measurementCodes.includes(item.code) &&
               item.unit === ref.measurementUnit &&
@@ -238,7 +239,7 @@ export function buildPhysicalChampion(
         const compatible = row
           ? all.filter(
               (ref) =>
-                isDisplayPhysicalReference(ref, row.date) &&
+                referenceIsAvailable(ref, row.date) &&
                 applies(ref, athlete, row.date) &&
                 ref.measurementCodes.includes(row.code) &&
                 row.unit === ref.measurementUnit &&
@@ -328,7 +329,7 @@ export function buildPhysicalChampion(
       };
     });
     const trend: PhysicalChampionPayload['groups'][number]['trend'] = [];
-    const dates = [
+    const dates = scope.includeTrend === false ? [] : [
       ...new Set(
         measurements
           .filter((row) => members.some((member) => member.id === row.athleteId))

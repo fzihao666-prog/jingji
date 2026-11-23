@@ -253,16 +253,50 @@ it('有氧趋势只连接相同明确协议版本、条件与侧别，未知版�
 });
 
 it.each(['CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(
-  '%s个人雷达返回可展示空状态，不泄漏赛艇维度',
+  '%s个人档案展示本项目实测成绩而不套用赛艇维度',
   async (project) => {
     db.prepare('UPDATE athletes SET project=? WHERE id=9001').run(project);
+    test('2026-01-01', project, 'confirmed', 0);
+    test('2026-01-02', project, 'confirmed', 45);
+    test('2026-01-03', 'ROWING', 'confirmed', 99);
     const result = await read(`/api/athletes/9001/radar-models?${range}`);
     expect(result).toMatchObject({
-      special: { dimensions: [], unavailableReason: expect.stringContaining('尚未配置') },
-      physical: { dimensions: [] },
+      special: { dimensions: [], series: [] },
+      physical: { dimensions: [], series: [{
+        unit: 'cm', protocol: 'CMJ双手叉腰',
+        points: [{ date: '2026-01-02', value: 45 }, { date: '2026-01-01', value: 0 }],
+      }] },
     });
   }
 );
+
+it('非赛艇体能雷达仅使用已审核且协议匹配的正式参考', async () => {
+  db.exec(`
+    UPDATE athletes SET project='VOLLEYBALL' WHERE id=9001;
+    INSERT INTO radar_reference_sources(id,project,name,url,source_year,protocol,verified_at)
+    VALUES(9001,'VOLLEYBALL','合成标准','https://example.com',2025,'CMJ双手叉腰','2025-01-01');
+    INSERT INTO radar_reference_values(source_id,project,radar_kind,metric_key,gender,applicability,
+      value_num,unit,protocol,direction,source_type,review_status,source_nature,effective_from,
+      dimension_version,measurement_codes,measurement_unit)
+    VALUES(9001,'VOLLEYBALL','physical','vertical_jump','男','成人组',50,'cm','CMJ双手叉腰',
+      'higher_better','public_reference','reviewed','official_research','2025-01-01',
+      'v1','["vertical_jump_cm"]','cm');
+  `);
+  test('2026-01-02', 'VOLLEYBALL', 'confirmed', 40);
+  test('2026-01-03', 'VOLLEYBALL', 'confirmed', 90);
+  db.exec("UPDATE test_sessions SET protocol_version='' WHERE athlete_id=9001; UPDATE test_sessions SET protocol='助跑跳' WHERE test_date='2026-01-03'");
+  const path = `/api/athletes/9001/radar-models?${range}`;
+  expect(await read(path)).toMatchObject({
+    physical: {
+      dimensions: [{ key: 'vertical_jump', currentValue: 40, referenceValue: 50, achievedPercent: 80 }],
+      series: expect.arrayContaining([
+        expect.objectContaining({ protocol: '助跑跳', points: [{ date: '2026-01-03', value: 90 }] }),
+      ]),
+    },
+  });
+  db.exec("UPDATE radar_reference_values SET review_status='draft' WHERE source_id=9001");
+  expect(await read(path)).toMatchObject({ physical: { dimensions: [] } });
+});
 
 it('训练记录按真实队伍过滤并拒绝非法及跨项目队伍', async () => {
   db.exec(`INSERT INTO project_teams(id,project,name) VALUES(9901,'ROWING','合成甲队'),(9902,'ROWING','合成乙队'),(9903,'CANOE_SPRINT','合成跨项目队');

@@ -883,17 +883,16 @@ export function PersonalPage(props: Props) {
                 <header className="personal-analysis-card-heading">
                   <div>
                     <span>
-                      <h3>专项测试雷达</h3>
-                      <p>当前周期测试与正式参考标准的可达成度对照</p>
+                      <h3>专项测试</h3>
+                      <p>当前周期实测成绩与正式参考标准对照</p>
                     </span>
                   </div>
                 </header>
-                <DeferredProfileContent label="专项测试雷达">
+                <DeferredProfileContent label="专项测试">
                   <AthleteRadarComparison
-                    title="专项测试雷达"
+                    title="专项测试"
                     model={radarModels?.special ?? null}
                     loading={radarModelsLoading}
-                    unavailableReason={radarModels?.special.unavailableReason}
                   />
                 </DeferredProfileContent>
               </AppCard>
@@ -904,17 +903,16 @@ export function PersonalPage(props: Props) {
                 <header className="personal-analysis-card-heading">
                   <div>
                     <span>
-                      <h3>体能测试雷达</h3>
-                      <p>力量、爆发力与核心能力的正式参考标准对照</p>
+                      <h3>体能测试</h3>
+                      <p>当前周期体能成绩、趋势与正式参考标准对照</p>
                     </span>
                   </div>
                 </header>
-                <DeferredProfileContent label="体能测试雷达">
+                <DeferredProfileContent label="体能测试">
                   <AthleteRadarComparison
-                    title="体能测试雷达"
+                    title="体能测试"
                     model={radarModels?.physical ?? null}
                     loading={radarModelsLoading}
-                    unavailableReason={radarModels?.physical.unavailableReason}
                   />
                 </DeferredProfileContent>
               </AppCard>

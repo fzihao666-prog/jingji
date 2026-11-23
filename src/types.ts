@@ -1,7 +1,7 @@
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { ProfilePhysiologyRecord } from '../shared/profile-physiology';
 import type { AreaLevel, Role } from '../shared/access';
-import type { RadarDimensionDefinition, RadarDirection } from '../shared/athlete-radar-model';
+import type { RadarDirection } from '../shared/athlete-radar-model';
 import type { ChampionModelStandardType } from '../shared/champion-model';
 import type { Project } from '../shared/projects';
 import type { StrengthMetricValues } from '../shared/strength-model';
@@ -642,7 +642,7 @@ export type AthleteRadarReferenceSource = {
 };
 
 export type AthleteRadarDimension = {
-  key: RadarDimensionDefinition['key'];
+  key: string;
   label: string;
   unit: string;
   direction: RadarDirection;
@@ -653,10 +653,21 @@ export type AthleteRadarDimension = {
   status: 'ready' | 'measurement_pending' | 'reference_pending';
 };
 
+export type AthleteTestSeries = {
+  key: string;
+  label: string;
+  unit: string;
+  protocol: string;
+  protocolVersion: string | null;
+  testContext: string;
+  side: string;
+  points: Array<{ date: string; value: number }>;
+};
+
 export type AthleteRadarModel = {
-  unavailableReason?: string;
   kind: 'special' | 'physical';
   dimensions: AthleteRadarDimension[];
+  series?: AthleteTestSeries[];
 };
 
 export type AthleteRadarModelsPayload = {

@@ -867,6 +867,24 @@
   grid-column: 1 / -1;
 }
 
+.athlete-test-results {
+  min-width: 0;
+  padding: 18px 20px;
+}
+
+.athlete-test-trend-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.athlete-test-trend-filter select {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .athlete-radar-comparison {
   min-width: 0;
   padding: 18px 20px 20px;

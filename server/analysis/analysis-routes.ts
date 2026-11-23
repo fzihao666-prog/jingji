@@ -1,3 +1,4 @@
+import { buildPhysicalChampion } from './physical-champion-service.ts';
 import { registerCustomTestTrendRoutes } from './custom-test-trend-routes.ts';
 import { registerPhysicalChampionRoutes } from './physical-champion-routes.ts';
 import { z } from 'zod';
@@ -130,6 +131,28 @@ export const radarMetricAliases: Partial<
 
   front_plank: ['front_plank_sec', 'frontPlankSec'],
 };
+
+const RADAR_DIMENSIONS_BY_PROJECT: Partial<
+  Record<string, Record<'special' | 'physical', readonly RadarDimensionDefinition[]>>
+> = { ROWING: ROWING_RADAR_DIMENSIONS };
+
+type ProfileRadarMeasurement = {
+  code: string; value: number; testDate: string; testType: string; label: string; unit: string;
+  protocol: string; protocolVersion: string; testContext: string; side: string; domain: string | null;
+};
+type ProfileRadarSeries = Omit<ProfileRadarMeasurement, 'code' | 'value' | 'testDate' | 'testType' | 'domain'> & {
+  key: string;
+  points: Array<{ date: string; value: number }>;
+};
+
+function profileRadarKind(row: ProfileRadarMeasurement) {
+  if (/体能|力量素质/.test(row.testType)) return 'physical';
+  if (!/专项/.test(row.testType)) return null;
+  // 「其他测试」历史行可能使用默认的专项测试类型，按通用体能指标归类。
+  return ['strength', 'strength_endurance', 'explosive', 'core', 'flexibility'].includes(row.domain ?? '')
+    ? 'physical'
+    : 'special';
+}
 
 export type RadarMeasurementRow = {
   code: (typeof radarMeasurementCodes)[number];
@@ -635,34 +658,21 @@ export function registerAnalysisRoutes(app: Express) {
       { project: string; gender: string | null; currentEvent: string } | undefined;
     if (!athlete) return res.status(404).json({ message: '运动员不存在。' });
     res.setHeader('Cache-Control', 'no-store');
-    if (athlete.project !== 'ROWING') {
-      return res.json({
-        special: {
-          kind: 'special',
-          dimensions: [],
-          unavailableReason: '该项目的专项雷达维度尚未配置。',
-        },
-        physical: {
-          kind: 'physical',
-          dimensions: [],
-          unavailableReason: '该项目的体能雷达维度尚未配置，请查看体能冠军参考模型。',
-        },
-      });
-    }
-
-    const metricPlaceholders = radarMeasurementCodes.map(() => '?').join(',');
+    const configured = RADAR_DIMENSIONS_BY_PROJECT[athlete.project];
     const measurementRows = db
       .prepare(
         `
-        SELECT tm.metric_code AS code, tm.value_num AS value, ts.test_date AS testDate
+        SELECT tm.metric_code AS code, tm.value_num AS value, ts.test_date AS testDate,
+          ts.test_type AS testType, ts.protocol, ts.protocol_version AS protocolVersion,
+          ts.context_key AS testContext, tm.side, tm.unit, md.domain,
+          COALESCE(md.label, tm.metric_code) AS label
         FROM test_sessions ts
         JOIN test_measurements tm ON tm.test_session_id = ts.id
+        LEFT JOIN metric_definitions md ON md.code = tm.metric_code
         WHERE ts.athlete_id = ? AND ts.test_date BETWEEN ? AND ?
           AND ts.project_code = ? AND ts.project_status = 'confirmed'
-          AND tm.metric_code IN (${metricPlaceholders})
           AND ts.quality = 'valid' AND tm.quality = 'valid'
           AND ts.is_demo = 0 AND tm.is_demo = 0
-          AND tm.value_num > 0
           AND trim(ts.source) <> '' AND trim(tm.source) <> ''
           AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
           AND lower(ts.source) NOT LIKE '%seed%' AND lower(tm.source) NOT LIKE '%seed%'
@@ -672,10 +682,24 @@ export function registerAnalysisRoutes(app: Express) {
         ORDER BY ts.test_date DESC, ts.id DESC, tm.id DESC
       `
       )
-      .all(athleteId, from, to, athlete.project, ...radarMeasurementCodes) as RadarMeasurementRow[];
+      .all(athleteId, from, to, athlete.project) as ProfileRadarMeasurement[];
+    const series = { special: new Map<string, ProfileRadarSeries>(), physical: new Map<string, ProfileRadarSeries>() };
+    for (const row of measurementRows) {
+      if (!Number.isFinite(row.value)) continue;
+      const kind = profileRadarKind(row);
+      if (!kind) continue;
+      const key = JSON.stringify([row.code, row.unit, row.protocol, row.protocolVersion, row.testContext, row.side]);
+      let metric = series[kind].get(key);
+      if (!metric) {
+        metric = { key, label: row.label, unit: row.unit, protocol: row.protocol, protocolVersion: row.protocolVersion, testContext: row.testContext, side: row.side, points: [] };
+        series[kind].set(key, metric);
+      }
+      metric.points.push({ date: row.testDate, value: row.value });
+    }
     const latestMeasurements = new Map<string, RadarMeasurementRow>();
     for (const row of measurementRows) {
-      if (!latestMeasurements.has(row.code)) latestMeasurements.set(row.code, row);
+      const code = radarMeasurementCodes.find((candidate) => candidate === row.code);
+      if (code && row.value > 0 && !latestMeasurements.has(code)) latestMeasurements.set(code, { ...row, code });
     }
 
     const weightStatement = db.prepare(`
@@ -726,7 +750,8 @@ export function registerAnalysisRoutes(app: Express) {
 
     const buildModel = (kind: 'special' | 'physical') => ({
       kind,
-      dimensions: ROWING_RADAR_DIMENSIONS[kind].map((definition) => {
+      series: [...series[kind].values()],
+      dimensions: (configured?.[kind] ?? []).map((definition) => {
         const measurement = firstRadarMeasurement(latestMeasurements, definition.key);
         let currentValue: number | null = measurement?.value ?? null;
         if (
@@ -773,7 +798,36 @@ export function registerAnalysisRoutes(app: Express) {
       }),
     });
 
-    return res.json({ special: buildModel('special'), physical: buildModel('physical') });
+    const special = buildModel('special');
+    const physical = buildModel('physical');
+    const official = buildPhysicalChampion(db, {
+      project: athlete.project, from, to, athleteIds: [athleteId], canEdit: false,
+      includeTrend: false, formalOnly: true,
+    });
+    const dimensions = new Map<string, Omit<(typeof physical.dimensions)[number], 'key'> & {
+      key: string;
+      referenceId: number;
+    }>();
+    const ambiguous = new Set<string>();
+    for (const group of official.groups) {
+      for (const dimension of group.athletes.find((entry) => entry.athleteId === athleteId)?.dimensions ?? []) {
+        const ref = dimension.appliedReference;
+        if (!ref || !dimension.scoringEligible || dimension.achievedPercent === null) continue;
+        const previous = dimensions.get(dimension.key);
+        if (previous && previous.referenceId !== ref.id) ambiguous.add(dimension.key);
+        dimensions.set(dimension.key, {
+          key: dimension.key, label: ref.label, unit: ref.unit, direction: ref.direction,
+          currentValue: dimension.value, referenceValue: ref.value, achievedPercent: dimension.achievedPercent,
+          signedDifference: dimension.difference, status: 'ready', referenceId: ref.id,
+        });
+      }
+    }
+    const modern = [...dimensions.values()].filter((dimension) => !ambiguous.has(dimension.key));
+    const modernKeys = new Set(dimensions.keys());
+    return res.json({
+      special,
+      physical: { ...physical, dimensions: [...modern, ...physical.dimensions.filter((dimension) => !modernKeys.has(dimension.key))] },
+    });
   });
 
   app.get('/api/athletes/:id/champion-model', requireAuth, (req, res) => {
