@@ -324,11 +324,11 @@ export function CoachManagementPage({
         title="教练管理"
         actions={
           <div className="coach-directory-summary" aria-label="教练管理概览">
-            <div>
+            <div className="coach-summary-enabled">
               <span>已启用教练</span>
               <strong>{activeCount}</strong>
             </div>
-            <div>
+            <div className="coach-summary-disabled">
               <span>已停用教练</span>
               <strong>{coachProfiles.length - activeCount}</strong>
             </div>
