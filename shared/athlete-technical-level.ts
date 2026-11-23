@@ -4,6 +4,7 @@ export function normalizeTechnicalLevel(value: unknown): string {
   const level = String(value ?? '').trim().replace(/\s/g, '');
   if (!level) return '';
   const aliases: Record<string, string> = {
+    无: '未定级',
     健将: '运动健将',
     国家健将: '运动健将',
     国家运动健将: '运动健将',
