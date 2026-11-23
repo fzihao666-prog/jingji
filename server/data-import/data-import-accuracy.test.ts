@@ -2769,3 +2769,28 @@ it('训练年限按年月换算为年，非法值阻止导入', () => {
   ] });
   expect(invalid.errorCount).toBeGreaterThan(0);
 });
+
+it('基础档案忽略未填写重量的选填项目，完整日期自动归一，缺少月日可在线修正', () => {
+  const batch = analyze({
+    运动员基础档案: [
+      ['姓名', '出生日期', '开始运动日期', '最大力量项目', '最大力量'],
+      ['虚构新队员', 1990, '2010.2.3.', '深蹲', ''],
+      ['钱某', 19920229, '', '深蹲', '95 公斤'],
+    ],
+  }, { team: 'A队' });
+
+  expect(batch.errorCount).toBe(1);
+  const incomplete = batch.items.find(item => item.itemType === 'athlete_profile' && item.quality === 'error');
+  expect(incomplete?.messages.join('')).toContain('运动员基础档案!B2 出生日期请填写完整的年月日');
+  expect(incomplete?.payload).toMatchObject({ birthDate: '1990', startSportDate: '2010-02-03' });
+  expect(batch.items.filter(item => item.itemType === 'test_measurement').map(item => item.valueNum)).toEqual([95]);
+
+  const fixed = updateDataImportItems({
+    batchId: batch.id, userId: USER_ID, athletes,
+    corrections: [{ id: incomplete!.id, sourceCells: { 出生日期: '1990/1/1' } }],
+  });
+  expect(fixed.errorCount).toBe(0);
+  const corrected = fixed.items.find(item => item.rawAthleteName === '虚构新队员');
+  expect(corrected?.payload.birthDate).toBe('1990-01-01');
+  expect(corrected?.payload.personKey).toBe(incomplete?.payload.personKey);
+});

@@ -294,16 +294,15 @@ function parseDate(value: unknown, yearHint: number): string {
 }
 
 function parseImportFullDate(value: unknown): string {
-  let candidate: string;
-  if (value instanceof Date || typeof value === 'number') {
-    candidate = parseDate(value, 0);
-  } else {
-    const raw = text(value).normalize('NFKC');
-    const match = /^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})$/.exec(raw);
-    const chinese = /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/.exec(raw);
-    const parts = match ?? chinese;
-    candidate = parts ? `${parts[1]}-${parts[2].padStart(2, '0')}-${parts[3].padStart(2, '0')}` : '';
-  }
+  const raw = text(value).normalize('NFKC');
+  // 四位年份缺少月日，即使 Excel 将其保存成数字，也不能当作日期序号。
+  if (/^(?:19|20)\d{2}$/.test(raw) && !(value instanceof Date)) return '';
+  const parts = /^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*\.?$/.exec(raw) ??
+    /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/.exec(raw) ??
+    /^(\d{4})(\d{2})(\d{2})$/.exec(raw);
+  const candidate = parts
+    ? `${parts[1]}-${parts[2].padStart(2, '0')}-${parts[3].padStart(2, '0')}`
+    : value instanceof Date || typeof value === 'number' ? parseDate(value, 0) : '';
   return validIsoDate(candidate) ? candidate : '';
 }
 
@@ -1428,9 +1427,9 @@ function parseStandardSheet(
           quality: 'valid',
         }));
       };
-      if ((strengthProject || rawStrength) && header.columns.has(normalizedText('最大力量项目'))) {
+      if (rawStrength && header.columns.has(normalizedText('最大力量项目'))) {
         const metric = findStrengthMetric(strengthProject);
-        const value = standardNumberValue(rawStrength);
+        const value = standardNumberValue(rawStrength.normalize('NFKC').replace(/\s*(?:kg|公斤|千克)$/i, ''));
         const invalidField = metric ? '最大力量' : '最大力量项目';
         const address = cellAddress(rowIndex, header.columns.get(normalizedText(invalidField)) ?? nameColumn);
         if (!metric || value === null || value <= 0) {
@@ -3405,6 +3404,14 @@ function validateImportItem(
     }
   }
   if (item.itemType === 'athlete_profile') {
+    const source = payload.sourceRow as { rowIndex?: number; columns?: [string, number][] } | undefined;
+    const profileError = (label: string, reason: string) => {
+      const column = source?.columns?.find(([header]) => header === normalizedText(label))?.[1];
+      const address = column !== undefined && source?.rowIndex !== undefined
+        ? `${item.sourceSheet}!${cellAddress(source.rowIndex, column)} `
+        : '';
+      messages.push(`错误：${address}${label}${reason}`);
+    };
     if (item.athleteId && text(payload.team)) {
       const current = db.prepare(`SELECT COALESCE(pt.name, a.team, '') AS team FROM athletes a
         LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id = ?`).get(item.athleteId) as { team: string } | undefined;
@@ -3416,7 +3423,7 @@ function validateImportItem(
     const birthDate = text(payload.birthDate);
     if (birthDate && (!validIsoDate(birthDate) ||
         (item.sourceSheet === BASIC_PROFILE_SHEET && !parseImportBirthDate(birthDate))))
-      messages.push('错误：出生日期须为有效日期且不能晚于今天');
+      profileError('出生日期', '请填写完整的年月日，且不能晚于今天');
     if (isProvided(payload.trainingYears)) {
       const years = parseTrainingYears(payload.trainingYears);
       if (years === null || !Number.isFinite(years))
@@ -3424,11 +3431,11 @@ function validateImportItem(
       else payload.trainingYears = years;
     }
     if (isProvided(payload.bestResultDate) && !validIsoDate(text(payload.bestResultDate)))
-      messages.push('错误：成绩日期须为实际日期，格式为YYYY-MM-DD');
+      profileError('成绩日期', '请填写实际日期，例如 2024/2/29');
     for (const [field, label] of [['eventItem', '具体小项'], ['representativeUnit', '代表单位'], ['bestResultEvent', '对应赛事']])
       if (text(payload[field]).length > 120) messages.push(`错误：${label}不能超过120个字符`);
     if (isProvided(payload.startSportDate) && !validIsoDate(text(payload.startSportDate)))
-      messages.push('错误：开始运动日期须为实际日期，格式为YYYY-MM-DD');
+      profileError('开始运动日期', '请填写实际日期，例如 2024/2/29');
     const technicalLevel = text(payload.technicalLevel);
     if (
       technicalLevel &&
@@ -3995,10 +4002,26 @@ export function updateDataImportItems(input: {
       if (!parsed.length) throw new Error('修复后没有可导入业务记录；如不需导入请明确排除此行');
       const projectColumn = source.columns.find(([label]) => label === '运动项目')?.[1];
       if (projectColumn !== undefined && text(values[projectColumn]) && normalizeProject(text(values[projectColumn])) !== normalizeProject(batch.project)) throw new Error('源行运动项目与当前批次不一致');
+      for (const entry of parsed) if (batch.summary.team) entry.payload.team = batch.summary.team;
+      collectPersons(parsed);
+      const identityEdited = Object.keys(cells).some(label =>
+        ['所属队伍', '运动项目', '系统运动员编号', '运动员编号', '编号'].includes(normalizedText(label))
+      );
       for (const entry of parsed) {
-        if (batch.summary.team) entry.payload.team = batch.summary.team;
+        if (!identityEdited && entry.itemType !== 'invalid_row' && entry.itemType !== 'scoring_rule') {
+          const previousKeys = new Set(related.filter(previous =>
+            previous.itemType !== 'invalid_row' && previous.itemType !== 'scoring_rule' &&
+            normalizedName(previous.rawAthleteName) === normalizedName(entry.rawAthleteName)
+          ).map(dataImportPersonKey));
+          // 校对生日和业务字段时沿用该源行已选定的人员，避免生成一个新的暂存身份。
+          if (previousKeys.size === 1) entry.payload.personKey = [...previousKeys][0];
+        }
         const candidate = batch.athleteCandidates.find(person => person.normalizedName === dataImportPersonKey(entry));
         if (candidate?.status === 'pending' && candidate.confirmed) entry.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
+        else if (candidate?.status === 'matched' && input.athletes.some(athlete =>
+          athlete.id === candidate.matchedAthleteId && athlete.active !== false && athlete.project === batch.project &&
+          (!batch.summary.team || athlete.team === batch.summary.team)
+        )) entry.athleteId = candidate.matchedAthleteId;
         else if (entry.itemType !== 'invalid_row') {
           const person = resolvePerson({
             name: entry.rawAthleteName,
