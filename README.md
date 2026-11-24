@@ -379,11 +379,11 @@ SQLite 单文件数据库，默认路径 `data/training-monitor.db`，由 `serve
 
 | 字段      | 含义                                                                                                                                                                              |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source`  | 数据来源：`athlete_self_report` / `coach_report`（正式填报）、导入批次、`metric_gap_seed`（雷达展示补种）、`synthetic_30d_current_v1` / `user_requested_simulation`（模拟补充）等 |
+| `source`  | 数据来源：`athlete_self_report` / `coach_report`（正式填报）、导入批次、`metric_gap_seed`（历史雷达展示补数）、`synthetic_30d_current_v1` / `user_requested_simulation`（模拟补充）等 |
 | `quality` | 质量：`valid` / `estimated`                                                                                                                                                       |
 | `is_demo` | 是否演示记录（演示记录不进入正式统计与导出）                                                                                                                                      |
 
-**注意**：当前 `data/training-monitor.db` 内含 2026-10-08 一次性写入的模拟批次（覆盖 79 名运动员 2026-09-09 至 2026-10-08 的训练、恢复、力量、测试与专项测试记录）。其中 `source=synthetic_30d_current_v1` / `user_requested_simulation` 的历史记录**并非实测采集**，不能因非演示标识视为实测，参考评分排除此类模拟来源；正式试点前应以确认过的真实数据替换。新库初始化还会为缺少数据的运动员补种带“估算/演示”标记的指标用于雷达展示，这些记录不会覆盖导入或手工填写的真实数据。临时生成与导入这批数据的服务代码已移除，不提供重跑命令。
+**注意**：当前 `data/training-monitor.db` 内含 2026-10-08 一次性写入的模拟批次（覆盖 79 名运动员 2026-09-09 至 2026-10-08 的训练、恢复、力量、测试与专项测试记录）。其中 `source=synthetic_30d_current_v1` / `user_requested_simulation` 的历史记录**并非实测采集**，不能因非演示标识视为实测，参考评分排除此类模拟来源；正式试点前应以确认过的真实数据替换。临时生成与导入这批数据的服务代码已移除，不提供重跑命令。
 
 ## 7. 本地开发
 
