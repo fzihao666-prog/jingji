@@ -1,4 +1,3 @@
-import { TEAM_WORK_STATUS_LABELS, type TeamWorkStatus } from '../../shared/coach-work-status.ts';
 import { readTeamCoaches } from '../core/coach-team-responsibility.ts';
 import { isCoachCategory } from '../../shared/coach-categories.ts';
 import { z } from 'zod';
@@ -78,8 +77,8 @@ export function registerAuthRoutes(
     const teams = (db
       .prepare(
         `
-      SELECT pt.id, pt.project, pt.name, ws.status AS workStatus, ws.updated_at AS workStatusUpdatedAt
-      FROM project_teams pt LEFT JOIN team_work_status ws ON ws.team_id = pt.id
+      SELECT pt.id, pt.project, pt.name
+      FROM project_teams pt
       WHERE pt.active = 1 ORDER BY pt.project, pt.name
     `
       )
@@ -99,8 +98,8 @@ export function registerAuthRoutes(
       const allTeams = db
         .prepare(
           `
-      SELECT pt.id, pt.project, pt.name, ws.status AS workStatus, ws.updated_at AS workStatusUpdatedAt
-      FROM project_teams pt LEFT JOIN team_work_status ws ON ws.team_id = pt.id
+      SELECT pt.id, pt.project, pt.name
+      FROM project_teams pt
       WHERE pt.active = 1 ORDER BY pt.project, pt.name
     `
         )
@@ -125,7 +124,6 @@ export function registerAuthRoutes(
         .map((team) => ({
           ...team,
           athleteCount: athleteCounts.get(`${team.project}\u0000${team.name}`) || 0,
-          canEditWorkStatus: currentUser.role !== 'SCC',
           canRename: currentUser.role === 'TD' || currentUser.role === 'DMD',
           canDelete: currentUser.role !== 'SCC',
         }));
@@ -173,31 +171,6 @@ export function registerAuthRoutes(
         .prepare('INSERT INTO project_teams (project, name) VALUES (?, ?)')
         .run(project, name);
       res.status(201).json({ message: '队伍已添加。', id: Number(result.lastInsertRowid) });
-    }
-  );
-
-  app.put(
-    '/api/admin/teams/:id/work-status',
-    requireAuth,
-    requireRole('REG', 'TD', 'DMD'),
-    (req, res) => {
-      const id = Number(req.params.id);
-      const input = z.strictObject({
-        status: z.enum(Object.keys(TEAM_WORK_STATUS_LABELS) as [TeamWorkStatus]),
-      }).safeParse(req.body);
-      if (!Number.isSafeInteger(id) || id < 1 || !input.success)
-        return res.status(400).json({ message: '请选择有效的队伍状态。' });
-      const team = db.prepare('SELECT project, name FROM project_teams WHERE id=? AND active=1')
-        .get(id) as { project: string; name: string } | undefined;
-      if (!team) return res.status(404).json({ message: '队伍不存在。' });
-      if (!permissionsAllowProjectTeam(accountPermissions(req.authUser!.id), team.project, team.name))
-        return res.status(403).json({ message: '无权修改该队伍。' });
-      const workStatus = db.prepare(`
-        INSERT INTO team_work_status(team_id,status) VALUES(?,?)
-        ON CONFLICT(team_id) DO UPDATE SET status=excluded.status, updated_at=CURRENT_TIMESTAMP
-        RETURNING status, updated_at AS updatedAt
-      `).get(id, input.data.status);
-      res.json({ message: '队伍状态已更新。', workStatus });
     }
   );
 
