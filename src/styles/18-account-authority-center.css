@@ -723,6 +723,11 @@
   backdrop-filter: blur(9px);
 }
 
+.access-editor-footer .access-delete-account {
+  color: #a64638;
+  white-space: nowrap;
+}
+
 .access-editor-footer span {
   color: #72878e;
   font-size: 9px;

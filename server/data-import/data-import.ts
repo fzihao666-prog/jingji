@@ -1,3 +1,4 @@
+import { removedAccountUsernamePattern } from '../core/removed-account.ts';
 import { fmsFinalScore, fmsInputFields, type FmsInputKey, type FmsObservation } from '../../shared/fms-import.ts';
 import {
   TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
@@ -5291,6 +5292,10 @@ function resolvePendingAthletes(input: {
       if (!target || target.project !== candidate.project || (!input.allowedAthletes.has(target.id) && !createdHere.has(target.id)))
         throw new Error(`“${candidate.name}”关联的已有运动员无效或不在当前权限范围内。`);
       if (target.active === 0) {
+        if (db.prepare(
+          "SELECT 1 FROM users WHERE athlete_id = ? AND role = 'ATL' AND username LIKE ?"
+        ).get(target.id, removedAccountUsernamePattern))
+          throw new Error('该运动员账号已删除，不能通过导入恢复该档案。');
         db.prepare('UPDATE athletes SET active = 1 WHERE id = ?').run(target.id);
         db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
           .run(input.userId, 'RESTORE_ATHLETE_FROM_IMPORT', 'athlete', target.id);

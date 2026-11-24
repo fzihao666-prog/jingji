@@ -1,3 +1,4 @@
+import { removedAccountUsernamePattern } from './removed-account.ts';
 import { db } from './db.ts';
 import {
   intensityZones,
@@ -26,10 +27,10 @@ export function userById(userId: number): AuthUser | null {
     .prepare(
       `
     SELECT id, username, display_name AS displayName, role, athlete_id AS athleteId, session_version AS sessionVersion
-    FROM users WHERE id = ?
+    FROM users WHERE id = ? AND username NOT LIKE ?
   `
     )
-    .get(userId) as AuthUser | undefined;
+    .get(userId, removedAccountUsernamePattern) as AuthUser | undefined;
   return row || null;
 }
 

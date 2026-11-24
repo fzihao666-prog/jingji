@@ -1,3 +1,4 @@
+import { removedAccountUsernamePattern } from './removed-account.ts';
 import { initializeTestTemplates } from '../data-import/test-template-store.ts';
 import { initializeAthleteLastTeam, initializeSubmissionProvenance } from '../report/submission-provenance.ts';
 import { initializeTeamTrainingStatistics } from '../team-training/team-training-stats.ts';
@@ -2195,10 +2196,10 @@ export function initializeDatabase(
       .prepare(
         `
     SELECT id, username, role, athlete_id AS athleteId
-    FROM users ORDER BY id
+    FROM users WHERE username NOT LIKE ? ORDER BY id
   `
       )
-      .all() as Array<{
+      .all(removedAccountUsernamePattern) as Array<{
       id: number;
       username: string;
       role: 'ATL' | 'SCC' | 'REG' | 'TD' | 'DMD' | 'OBS';

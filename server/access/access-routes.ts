@@ -1,3 +1,4 @@
+import { removedAccountUsernamePattern, removedAccountUsernamePrefix } from '../core/removed-account.ts';
 import { COACH_WORK_STATUS_LABELS, type CoachWorkStatusRecord } from '../../shared/coach-work-status.ts';
 import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
 import {
@@ -109,12 +110,13 @@ export function allAccountRows() {
     FROM users u
     LEFT JOIN account_profiles ap ON ap.user_id = u.id
     LEFT JOIN users parent ON parent.id = ap.parent_user_id
+    WHERE u.username NOT LIKE ?
     ORDER BY CASE u.role
       WHEN 'DMD' THEN 5 WHEN 'TD' THEN 4 WHEN 'REG' THEN 3 WHEN 'SCC' THEN 2 ELSE 1 END DESC,
       u.display_name, u.id
   `
     )
-    .all() as AccountRow[];
+    .all(removedAccountUsernamePattern) as AccountRow[];
 }
 
 export function serializeAccount(row: AccountRow) {
@@ -506,29 +508,18 @@ export function registerAccessRoutes(app: Express) {
         GROUP_CONCAT(cp.category) AS categories
       FROM users u
       LEFT JOIN coach_profiles cp ON cp.user_id = u.id
-      WHERE u.role = 'SCC' GROUP BY u.id ORDER BY u.id
+      WHERE u.role = 'SCC' AND u.username NOT LIKE ? GROUP BY u.id ORDER BY u.id
     `
         )
-        .all() as Array<AuthUser & { displayName: string; categories: string | null }>;
-      const permissions = accountPermissions(req.authUser!.id);
-      const readWorkStatus = db.prepare(`
-        SELECT ws.status, ws.updated_at AS updatedAt,
-          CASE WHEN pt.active = 1 THEN ws.team_id END AS teamId, pt.project, pt.name
-        FROM coach_work_status ws LEFT JOIN project_teams pt ON pt.id = ws.team_id
-        WHERE ws.user_id = ?
-      `);
+        .all(removedAccountUsernamePattern) as Array<AuthUser & { displayName: string; categories: string | null }>;
+      const readWorkStatus = db.prepare(
+        'SELECT status, updated_at AS updatedAt FROM coach_work_status WHERE user_id = ?'
+      );
       const coaches = allCoaches
         .filter((coach) => coach.id === req.authUser!.id || canManageAccount(req.authUser!, coach))
         .map(({ id, displayName, categories }) => {
           const roles = (categories ?? '').split(',').filter(isCoachCategory);
-          const record = readWorkStatus.get(id) as (CoachWorkStatusRecord & { project: string | null; name: string | null }) | undefined;
-          const workStatus = record ? {
-            status: record.status,
-            updatedAt: record.updatedAt,
-            teamId: record.project && record.name && permissionsAllowProjectTeam(permissions, record.project, record.name)
-              ? record.teamId
-              : null,
-          } : null;
+          const workStatus = (readWorkStatus.get(id) as CoachWorkStatusRecord | undefined) ?? null;
           return { id, displayName, categories: roles, category: roles[0] ?? null, workStatus };
         });
       res.json({ athletes, coaches });
@@ -543,7 +534,7 @@ export function registerAccessRoutes(app: Express) {
       const id = Number(req.params.id);
       const input = z.strictObject({
         status: z.enum(Object.keys(COACH_WORK_STATUS_LABELS) as [keyof typeof COACH_WORK_STATUS_LABELS]),
-        teamId: z.number().int().positive().nullable(),
+        teamId: z.number().int().positive().nullable().optional(),
       }).safeParse(req.body);
       if (!Number.isSafeInteger(id) || id < 1 || !input.success)
         return res.status(400).json({ message: '请选择有效的教练工作状态。' });
@@ -551,19 +542,12 @@ export function registerAccessRoutes(app: Express) {
       const coach = userById(id);
       if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))
         return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
-      const teamId = input.data.status === 'substituting' ? input.data.teamId : null;
-      if (teamId !== null) {
-        const team = db.prepare('SELECT project, name FROM project_teams WHERE id=? AND active=1')
-          .get(teamId) as { project: string; name: string } | undefined;
-        if (!team || !permissionsAllowProjectTeam(accountPermissions(currentUser.id), team.project, team.name))
-          return res.status(403).json({ message: '请选择管理范围内的代训队伍。' });
-      }
       const workStatus = db.prepare(`
-        INSERT INTO coach_work_status(user_id,status,team_id) VALUES(?,?,?)
-        ON CONFLICT(user_id) DO UPDATE SET status=excluded.status, team_id=excluded.team_id,
+        INSERT INTO coach_work_status(user_id,status) VALUES(?,?)
+        ON CONFLICT(user_id) DO UPDATE SET status=excluded.status, team_id=NULL,
           updated_at=CURRENT_TIMESTAMP
-        RETURNING status, team_id AS teamId, updated_at AS updatedAt
-      `).get(id, input.data.status, teamId);
+        RETURNING status, updated_at AS updatedAt
+      `).get(id, input.data.status);
       res.json({ message: '教练工作状态已更新。', workStatus });
     }
   );
@@ -1008,6 +992,55 @@ export function registerAccessRoutes(app: Express) {
         res
           .status(error instanceof AthleteProjectChangeError ? 409 : 500)
           .json({ message: error instanceof Error ? error.message : '权限更新失败。' });
+      }
+    }
+  );
+
+  app.delete(
+    '/api/access/accounts/:id',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id < 1)
+        return res.status(400).json({ message: '账号编号无效。' });
+      db.exec('BEGIN IMMEDIATE');
+      let committed = false;
+      try {
+        const actor = req.authUser!;
+        const target = userById(id);
+        if (!target || !canManageAccount(actor, target))
+          return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+        if (db.prepare('SELECT 1 FROM account_profiles WHERE parent_user_id = ? LIMIT 1').get(id))
+          return res.status(409).json({ message: '该账号还有下级账号，请先为下级更换上级。' });
+        const athleteId = target.role === 'ATL' ? target.athleteId : null;
+        if (athleteId && db.prepare(
+          "SELECT 1 FROM users WHERE athlete_id = ? AND role = 'ATL' AND id <> ? AND username NOT LIKE ?"
+        ).get(athleteId, id, removedAccountUsernamePattern))
+          return res.status(409).json({ message: '该运动员还绑定了其他账号，请先核对账号归属。' });
+        for (const table of [
+          'user_project_permissions', 'user_team_permissions', 'user_area_permissions',
+          'coach_profiles', 'coach_work_status', 'account_profiles', 'user_dashboard_preferences',
+        ]) {
+          db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(id);
+        }
+        db.prepare('DELETE FROM coach_athletes WHERE coach_user_id = ?').run(id);
+        db.prepare('DELETE FROM registration_requests WHERE username = ?').run(target.username);
+        if (athleteId) db.prepare('UPDATE athletes SET active = 0 WHERE id = ?').run(athleteId);
+        db.prepare(`
+          UPDATE users SET username = ?, display_name = '已删除账号', password_hash = '',
+            active = 0, session_version = session_version + 1 WHERE id = ?
+        `).run(`${removedAccountUsernamePrefix}${id}`, id);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+        ).run(actor.id, 'DELETE_ACCOUNT', 'user', id);
+        db.exec('COMMIT');
+        committed = true;
+        res.json({ message: '账号已删除。' });
+      } catch {
+        res.status(500).json({ message: '账号删除失败，请重试。' });
+      } finally {
+        if (!committed) db.exec('ROLLBACK');
       }
     }
   );

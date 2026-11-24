@@ -604,7 +604,11 @@ export default function App() {
         )}
         {page === 'teams' && user.role !== 'ATL' && <TeamsPage onChanged={() => setRefreshKey((key) => key + 1)} />}
         {page === 'regions' && canOpenSystemPages && (
-          <RegionAccessPage user={user} preferredAccountId={Number(trainingQuery.get('accountId')) || undefined} />
+          <RegionAccessPage
+            user={user}
+            preferredAccountId={Number(trainingQuery.get('accountId')) || undefined}
+            onAccountDeleted={() => setRefreshKey((key) => key + 1)}
+          />
         )}
         {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
         {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}

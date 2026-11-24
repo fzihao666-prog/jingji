@@ -1232,16 +1232,19 @@ export const api = {
       })
     );
   },
+  async deleteAccessAccount(id: number) {
+    return request<{ message: string }>(`/api/access/accounts/${id}`, { method: 'DELETE' });
+  },
   async setAccessAccountStatus(id: number, active: boolean) {
     return request<{ message: string; active: boolean }>(`/api/access/accounts/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ active }),
     });
   },
-  async updateCoachWorkStatus(id: number, status: CoachWorkStatus, teamId: number | null) {
+  async updateCoachWorkStatus(id: number, status: CoachWorkStatus) {
     return request<{ message: string; workStatus: CoachWorkStatusRecord }>(
       `/api/admin/coaches/${id}/work-status`,
-      { method: 'PUT', body: JSON.stringify({ status, teamId }) }
+      { method: 'PUT', body: JSON.stringify({ status }) }
     );
   },
   async updateCoachCategory(id: number, categories: CoachCategory[]) {

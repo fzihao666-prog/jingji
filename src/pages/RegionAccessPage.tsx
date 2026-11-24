@@ -26,6 +26,7 @@ import {
   Plus,
   Save,
   ShieldCheck,
+  Trash2,
   UserRoundPlus,
   UsersRound,
   X,
@@ -71,6 +72,7 @@ const auditLabels: Record<string, string> = {
   COMPLETE_ATHLETE_AREA: '完善运动员行政归属',
   ENABLE_ACCOUNT: '启用账号',
   DISABLE_ACCOUNT: '停用账号',
+  DELETE_ACCOUNT: '删除账号',
   UPDATE_NAME: '修改姓名',
   UPDATE_ATHLETE_NAME: '修改运动员姓名',
   UPDATE_REGIONAL_ACCESS: '调整区域权限',
@@ -87,7 +89,11 @@ const auditLabels: Record<string, string> = {
   IMPORT_RECORDS: '导入训练数据',
 };
 
-export function RegionAccessPage({ user, preferredAccountId }: { user: User; preferredAccountId?: number }) {
+export function RegionAccessPage({ user, preferredAccountId, onAccountDeleted }: {
+  user: User;
+  preferredAccountId?: number;
+  onAccountDeleted?: () => void;
+}) {
   const [payload, setPayload] = useState<AccessPayload | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [accountSearch, setAccountSearch] = useState('');
@@ -459,6 +465,24 @@ export function RegionAccessPage({ user, preferredAccountId }: { user: User; pre
       await load(selected.id);
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : '账号状态更新失败。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!selected || !canManageRole(user.role, selected.role) || saving || resetBusy) return;
+    if (!window.confirm(`确认永久删除 ${selected.displayName} 的账号？账号和关联人员将从管理名册移除，历史业务记录会保留。`)) return;
+    setSaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const result = await api.deleteAccessAccount(selected.id);
+      onAccountDeleted?.();
+      await load();
+      setMessage(result.message);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '账号删除失败，请重试。');
     } finally {
       setSaving(false);
     }
@@ -1366,6 +1390,17 @@ export function RegionAccessPage({ user, preferredAccountId }: { user: User; pre
                     )}
                     {!message && !error && <span>保存后，服务端查询会立即应用新的权限条件。</span>}
                   </div>
+                  {canManageRole(user.role, selected.role) && (
+                    <button
+                      type="button"
+                      className="secondary-button access-delete-account"
+                      disabled={saving || resetBusy}
+                      onClick={() => void deleteAccount()}
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                      删除账号
+                    </button>
+                  )}
                   <button className="primary-button" disabled={saving || resetBusy} onClick={save}>
                     <Save size={16} />
                     {saving ? '保存中…' : '保存账号权限'}

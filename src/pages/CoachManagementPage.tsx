@@ -77,7 +77,6 @@ export function CoachManagementPage({
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [workStatusDraft, setWorkStatusDraft] = useState<CoachWorkStatus | ''>('');
-  const [substituteTeam, setSubstituteTeam] = useState('');
   const [workStatusFeedback, setWorkStatusFeedback] = useState('');
   const [detailOpen, setDetailOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -211,14 +210,12 @@ export function CoachManagementPage({
 
   const selectedCoach = coachProfiles.find((coach) => coach.id === selectedCoachId) || null;
   const canManageSelected = canManage && !!selectedCoach && manageableCoachIds.includes(selectedCoach.id);
-  const selectedSubstituteTeam = teamDirectory.find((team) => team.id === selectedCoach?.workStatus?.teamId);
   const formTeams = teamDirectory.filter(
     (team) => !coachForm.project || team.project === coachForm.project
   );
   const openDetail = (coachId: number) => {
     const status = coachProfiles.find(({ id }) => id === coachId)?.workStatus;
     setWorkStatusDraft(status?.status ?? '');
-    setSubstituteTeam(status?.teamId?.toString() ?? '');
     setWorkStatusFeedback('');
     setSelectedCoachId(coachId);
     setDetailOpen(true);
@@ -291,21 +288,21 @@ export function CoachManagementPage({
     }
   };
 
-  const saveWorkStatus = async (event: FormEvent) => {
+  const finishDetails = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedCoach || !canManageSelected || !workStatusDraft || saving) return;
+    if (saving) return;
+    if (!selectedCoach || !canManageSelected || !workStatusDraft || workStatusDraft === selectedCoach.workStatus?.status) {
+      setDetailOpen(false);
+      return;
+    }
     setSaving(true);
     setWorkStatusFeedback('');
     try {
-      const { workStatus, message } = await api.updateCoachWorkStatus(
-        selectedCoach.id,
-        workStatusDraft,
-        workStatusDraft === 'substituting' && substituteTeam ? Number(substituteTeam) : null
-      );
+      const { workStatus } = await api.updateCoachWorkStatus(selectedCoach.id, workStatusDraft);
       setCoaches((current) => current.map((coach) =>
         coach.id === selectedCoach.id ? { ...coach, workStatus } : coach
       ));
-      setWorkStatusFeedback(message);
+      setDetailOpen(false);
     } catch (error) {
       setWorkStatusFeedback(error instanceof Error ? error.message : '工作状态保存失败。');
     } finally {
@@ -529,7 +526,7 @@ export function CoachManagementPage({
           className="coach-detail-backdrop"
           role="presentation"
           onPointerDown={(event) => {
-            if (event.target === event.currentTarget) setDetailOpen(false);
+            if (!saving && event.target === event.currentTarget) setDetailOpen(false);
           }}
         >
           <aside
@@ -545,6 +542,7 @@ export function CoachManagementPage({
               <button
                 className="icon-button"
                 onClick={() => setDetailOpen(false)}
+                disabled={saving}
                 aria-label="关闭"
               >
                 <X size={19} />
@@ -585,12 +583,11 @@ export function CoachManagementPage({
             <section className="coach-work-status-editor" aria-label="教练工作状态">
               {selectedCoach.workStatus && (
                 <p>
-                  {selectedSubstituteTeam && `代训队伍 ${projectLabel(selectedSubstituteTeam.project)} · ${selectedSubstituteTeam.name} · `}
                   更新日期 {formatWorkStatusDate(selectedCoach.workStatus.updatedAt)}
                 </p>
               )}
               {canManageSelected && (
-                <form onSubmit={saveWorkStatus}>
+                <form id="coach-work-status-form" onSubmit={finishDetails}>
                   <label>
                     <span>工作状态</span>
                     <select value={workStatusDraft} disabled={saving}
@@ -601,23 +598,6 @@ export function CoachManagementPage({
                       ))}
                     </select>
                   </label>
-                  {workStatusDraft === 'substituting' && (
-                    <label>
-                      <span>代训队伍（选填）</span>
-                      <select value={substituteTeam} disabled={saving}
-                        onChange={(event) => setSubstituteTeam(event.target.value)}>
-                        <option value="">未指定队伍</option>
-                        {teamDirectory.map((team) => (
-                          <option key={team.id} value={team.id}>
-                            {projectLabel(team.project)} · {team.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                  <button type="submit" className="secondary-button" disabled={saving || !workStatusDraft}>
-                    保存工作状态
-                  </button>
                 </form>
               )}
               {workStatusFeedback && <p role="status">{workStatusFeedback}</p>}
@@ -701,9 +681,15 @@ export function CoachManagementPage({
               </fieldset>
             )}
             <footer>
-              <button className="primary-button" onClick={() => setDetailOpen(false)}>
-                完成
-              </button>
+              {canManageSelected ? (
+                <button type="submit" form="coach-work-status-form" className="primary-button" disabled={saving}>
+                  {saving ? '保存中…' : '完成'}
+                </button>
+              ) : (
+                <button type="button" className="primary-button" onClick={() => setDetailOpen(false)}>
+                  完成
+                </button>
+              )}
             </footer>
           </aside>
         </div>
