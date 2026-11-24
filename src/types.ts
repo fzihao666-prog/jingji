@@ -1,4 +1,3 @@
-import type { TeamWorkStatus } from '../shared/coach-work-status';
 import type { ImportStatistics } from '../shared/import-statistics';
 import type { ProfilePhysiologyRecord } from '../shared/profile-physiology';
 import type { AreaLevel, Role } from '../shared/access';
@@ -32,9 +31,6 @@ export type ProjectTeam = {
   project: Project;
   name: string;
   athleteCount: number;
-  workStatus?: TeamWorkStatus | null;
-  workStatusUpdatedAt?: string | null;
-  canEditWorkStatus?: boolean;
   canRename?: boolean;
   canDelete?: boolean;
 };

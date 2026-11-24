@@ -20,7 +20,7 @@ import {
   type CoachCategory,
 } from '../../shared/coach-categories';
 import {
-  COACH_WORK_STATUS_LABELS, TEAM_WORK_STATUS_LABELS,
+  COACH_WORK_STATUS_LABELS,
   type CoachWorkStatus, type CoachWorkStatusRecord,
 } from '../../shared/coach-work-status';
 import { api } from '../api';
@@ -632,7 +632,7 @@ export function CoachManagementPage({
                     <article key={team.id}>
                       <header>
                         <span>
-                          {projectLabel(team.project)} · {team.workStatus ? TEAM_WORK_STATUS_LABELS[team.workStatus] : '队伍状态未设置'}
+                          {projectLabel(team.project)}
                         </span>
                         <strong>{team.name}</strong>
                         <small>{team.athletes.length} 人</small>
