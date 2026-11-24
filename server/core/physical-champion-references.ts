@@ -11,8 +11,14 @@ import {
   physicalChampionValuesSchema,
   physicalChampionGroupScope,
 } from '../../shared/physical-champion.ts';
+import { PROJECTS } from '../../shared/projects.ts';
 
 const tables = ['radar_reference_sources', 'radar_reference_values'] as const;
+// 与前端项目字典保持一致，同时兼容历史数据中的皮划艇旧项目码。
+const referenceProjects = [...PROJECTS, 'CANOE', 'SLALOM'];
+const projectCheckSql = `CHECK(project IN (${referenceProjects
+  .map((project) => `'${project}'`)
+  .join(', ')}))`;
 
 /** 扩展原有参考表；事务重建保留记录、外键、索引和触发器。 */
 function migrateReferenceTables(db: DatabaseSync) {
@@ -32,11 +38,8 @@ function migrateReferenceTables(db: DatabaseSync) {
         /CHECK\s*\(\s*gender\s+IN/i.test(schema.sql!) &&
         !/gender\s+IN\s*\([^)]*'open'/i.test(schema.sql!)) ||
       (schema.name === 'radar_reference_sources' && /CHECK\s*\(\s*url\s+LIKE/i.test(schema.sql!)) ||
-      constraints.some(
-        (constraint) =>
-          !constraint.includes("'VOLLEYBALL'") ||
-          !constraint.includes("'CYCLING_ROAD'") ||
-          !constraint.includes("'CYCLING_TRACK'")
+      constraints.some((constraint) =>
+        referenceProjects.some((project) => !constraint.includes(`'${project}'`))
       )
     );
   });
@@ -59,10 +62,7 @@ function migrateReferenceTables(db: DatabaseSync) {
       for (const schema of schemas) {
         const next = `${schema.name}_physical_next`;
         const sql = schema
-          .sql!.replace(
-            projectCheck,
-            "CHECK(project IN ('ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CANOE', 'SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'))"
-          )
+          .sql!.replace(projectCheck, projectCheckSql)
           .replace(
             /CHECK\s*\(\s*gender\s+IN\s*\([^)]*\)\s*\)/gi,
             "CHECK(gender IN ('男','女','open'))"
@@ -384,7 +384,9 @@ export function savePhysicalReferenceDraft(
       .prepare(
         "SELECT id FROM radar_reference_sources WHERE project=? AND name=? AND url='' AND source_year=? AND protocol=?"
       )
-      .get(draft.project, draft.sourceNote, sourceYear, sourceProtocol) as { id: number };
+      .get(draft.project, draft.sourceNote, sourceYear, sourceProtocol) as { id: number } | undefined;
+    if (!source)
+      throw new PhysicalReferenceError(400, '该项目的参考来源无法创建，请刷新后重试。');
     const result = db
       .prepare(
         `INSERT INTO radar_reference_values(source_id,project,radar_kind,metric_key,gender,boat_class,applicability,value_num,unit,
@@ -496,7 +498,9 @@ function manualPhysicalSource(db: DatabaseSync, project: string, protocol: strin
     .prepare(
       "SELECT id,active FROM radar_reference_sources WHERE project=? AND name=? AND url='' AND source_year=? AND protocol=?"
     )
-    .get(project, name, year, protocol) as { id: number; active: number };
+    .get(project, name, year, protocol) as { id: number; active: number } | undefined;
+  if (!source)
+    throw new PhysicalReferenceError(400, '该项目的手工参考来源无法创建，请刷新后重试。');
   if (!source.active) throw new PhysicalReferenceError(409, '手工参考来源已停用，请联系管理员。');
   return source.id;
 }
