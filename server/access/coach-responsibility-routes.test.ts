@@ -49,6 +49,9 @@ beforeAll(async () => {
     CREATE TABLE user_area_permissions (user_id INTEGER, area_level TEXT, province TEXT, city TEXT, county TEXT, granted_by INTEGER);
     CREATE TABLE user_project_permissions (user_id INTEGER, project TEXT, granted_by INTEGER);
     CREATE TABLE user_team_permissions (user_id INTEGER, project TEXT, team TEXT, granted_by INTEGER);
+    ALTER TABLE users ADD COLUMN password_hash TEXT NOT NULL DEFAULT '';
+    CREATE TABLE user_dashboard_preferences (user_id INTEGER);
+    CREATE TABLE registration_requests (username TEXT);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT, updated_at TEXT);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE coach_work_status (user_id INTEGER PRIMARY KEY, status TEXT, team_id INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -86,7 +89,7 @@ beforeEach(() => {
     DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions;
     DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;
     DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins;
-    DELETE FROM coach_profiles; DELETE FROM coach_athletes; DELETE FROM coach_work_status; DELETE FROM team_work_status;
+    DELETE FROM coach_profiles; DELETE FROM coach_athletes; DELETE FROM coach_work_status; DELETE FROM team_work_status; DELETE FROM user_dashboard_preferences; DELETE FROM registration_requests;
     DELETE FROM training_plans; DELETE FROM special_training_plans; DELETE FROM special_training_plan_sessions;
     INSERT INTO users (id,username,display_name,role,athlete_id) VALUES
       (1,'manager','全国管理者','DMD',NULL), (2,'coach2','教练甲','SCC',NULL),
@@ -305,18 +308,18 @@ describe('队伍责任范围 HTTP 集成', () => {
     expect((await put('/api/admin/teams/11/work-status', 5, { status: 'on_leave' })).status).toBe(403);
     const teamResponse = await put(teamPath, 1, { status: 'on_leave' });
     expect(teamResponse.status).toBe(200);
-    const coachResponse = await put(coachPath, 1, { status: 'substituting', teamId: 11 });
+    const coachResponse = await put(coachPath, 1, { status: 'substituting' });
     expect(coachResponse.status).toBe(200);
     expect(await coachResponse.json()).toMatchObject({
-      workStatus: { status: 'substituting', teamId: 11, updatedAt: expect.any(String) },
+      workStatus: { status: 'substituting', updatedAt: expect.any(String) },
     });
     const response = await fetch(`${baseUrl}/api/admin/assignments`, { headers: headers(1) });
     expect(await response.json()).toMatchObject({ coaches: expect.arrayContaining([
-      expect.objectContaining({ id: 2, workStatus: expect.objectContaining({ status: 'substituting', teamId: 11 }) }),
+      expect.objectContaining({ id: 2, workStatus: expect.objectContaining({ status: 'substituting' }) }),
     ]) });
     const coachView = await fetch(`${baseUrl}/api/admin/assignments`, { headers: headers(2) });
     expect(await coachView.json()).toMatchObject({ coaches: expect.arrayContaining([
-      expect.objectContaining({ id: 2, workStatus: expect.objectContaining({ status: 'substituting', teamId: null }) }),
+      expect.objectContaining({ id: 2, workStatus: expect.objectContaining({ status: 'substituting' }) }),
     ]) });
     const teamsResponse = await fetch(`${baseUrl}/api/admin/teams`, { headers: headers(1) });
     expect(await teamsResponse.json()).toMatchObject({ teams: expect.arrayContaining([
@@ -325,7 +328,42 @@ describe('队伍责任范围 HTTP 集成', () => {
     expect((await assignments(2)).athletes.map(({ id }) => id).sort()).toEqual([101, 102, 103]);
     expect(database.prepare('SELECT active FROM users WHERE id=2').get()).toMatchObject({ active: 1 });
     const ended = await put(coachPath, 1, { status: 'at_center', teamId: null });
-    expect(await ended.json()).toMatchObject({ workStatus: { status: 'at_center', teamId: null } });
+    expect(await ended.json()).toMatchObject({ workStatus: { status: 'at_center' } });
+  });
+
+  it('从管理名册删除离职教练和运动员，撤销账号访问并保留训练记录', async () => {
+    database.exec(`
+      INSERT INTO coach_work_status(user_id,status) VALUES (2,'training');
+      INSERT INTO registration_requests(username) VALUES ('coach2');
+      INSERT INTO training_plans(id,athlete_id,created_by) VALUES (42,101,2);
+    `);
+    const remove = (id: number, actor: number) => fetch(`${baseUrl}/api/access/accounts/${id}`, {
+      method: 'DELETE', headers: headers(actor),
+    });
+    expect((await remove(2, 2)).status).toBe(403);
+    expect((await remove(2, 1)).status).toBe(200);
+    expect((await remove(2, 1)).status).toBe(404);
+    const enable = await fetch(`${baseUrl}/api/access/accounts/2/status`, {
+      method: 'PUT', headers: headers(1), body: JSON.stringify({ active: true }),
+    });
+    expect(enable.status).toBe(404);
+    expect((await fetch(`${baseUrl}/api/admin/assignments`, { headers: headers(2) })).status).toBe(401);
+    expect((await assignments(1)).coaches.map(({ id }) => id)).not.toContain(2);
+    expect(database.prepare('SELECT 1 FROM coach_work_status WHERE user_id=2').get()).toBeUndefined();
+    expect(database.prepare("SELECT 1 FROM registration_requests WHERE username='coach2'").get()).toBeUndefined();
+    expect((await remove(6, 1)).status).toBe(200);
+    expect((await assignments(1)).athletes.map(({ id }) => id)).not.toContain(101);
+    const list = await fetch(`${baseUrl}/api/access/accounts`, { headers: headers(1) });
+    const payload = (await list.json()) as { accounts: Array<{ id: number }> };
+    expect(payload.accounts.some(({ id }) => id === 2 || id === 6)).toBe(false);
+    expect(database.prepare('SELECT created_by FROM training_plans WHERE id=42').get()).toMatchObject({ created_by: 2 });
+  });
+
+  it('下级账号未移交时拒绝删除上级', async () => {
+    database.exec("INSERT INTO account_profiles(user_id,parent_user_id,account_code) VALUES(2,5,'child-account')");
+    const result = await fetch(`${baseUrl}/api/access/accounts/5`, { method: 'DELETE', headers: headers(1) });
+    expect(result.status).toBe(409);
+    expect(database.prepare('SELECT active FROM users WHERE id=5').get()).toMatchObject({ active: 1 });
   });
 
   it('保存教练队伍授权时补齐所属项目，其他页面即时查询到负责教练', async () => {
