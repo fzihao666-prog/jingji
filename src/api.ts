@@ -820,8 +820,10 @@ export const api = {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
-  async exportUnifiedData(project: Project) {
-    const response = await fetch(`/api/data-import/export?project=${encodeURIComponent(project)}`, {
+  async exportUnifiedData(project: Project, basicTeam?: string) {
+    const query = new URLSearchParams({ project });
+    if (basicTeam) { query.set('format', 'basic'); query.set('team', basicTeam); }
+    const response = await fetch(`/api/data-import/export?${query}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!response.ok) {
@@ -832,7 +834,7 @@ export const api = {
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = `竞迹${project}统一数据导出.xlsx`;
+    link.download = `竞迹${project}${basicTeam ? "基础数据" : "统一数据"}导出.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

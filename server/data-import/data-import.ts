@@ -1240,7 +1240,8 @@ function parseStandardSheet(
     const rawRow = matrix[rowIndex] || [];
     if (basicWorkbookSheet && (rawRow.every(value => !text(value) || /^示例[：:]/.test(text(value))) ||
         (rowIndex === header.rowIndex + 1 &&
-          standardText(rawRow, header.columns, '运动员编号').startsWith('使用队内固定唯一编号')))) continue;
+          (standardText(rawRow, header.columns, '运动员编号').startsWith('使用队内固定唯一编号') ||
+            /^填写(?:档案中使用的姓名|与运动员档案一致的姓名|姓名；本队同名自动匹配)/.test(standardText(rawRow, header.columns, '姓名')))))) continue;
     const row = header.identityColumns.size
       ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
       : rawRow;
@@ -2661,7 +2662,8 @@ function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
     const payload = item.payload || {};
     const code = text(payload.athleteCode);
     const team = text(payload.team);
-    const birth = text(payload.birthDate);
+    const nameOnly = [ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET].includes(item.sourceSheet);
+    const birth = nameOnly ? '' : text(payload.birthDate);
     const key = code
       ? JSON.stringify(['code', String(parseAthleteNumber(code) ?? code), name])
       : team || birth

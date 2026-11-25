@@ -13,7 +13,7 @@ vi.mock('../core/db.ts', async () => {
 });
 import { db } from '../core/db.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
-import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_TEST_SHEET, BASIC_TEST_HEADERS, BASIC_SCREENING_SHEET, BASIC_SCREENING_HEADERS } from './basic-profile-workbook.ts';
+import { BASIC_DOWNLOAD_SHEETS, ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET } from './basic-profile-workbook.ts';
 import type { DataImportPreview } from './data-import.ts';
 import type { ImportStatistics } from '../../shared/import-statistics.js';
 
@@ -108,8 +108,12 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       if (kind === 'profile') {
         expect(workbook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }) as string[][];
-        expect(rows[0]).toEqual([...ATHLETE_PROFILE_HEADERS]);
-        expect(rows[1]).toEqual(['ATL00799', '模板虚构队员']);
+        expect(rows[0]).toEqual([...BASIC_DOWNLOAD_SHEETS[0][1]]);
+        expect(rows[1][0]).toContain('新队员由系统分配编号');
+        expect(rows[2][0]).toBe('示例：示例甲');
+        expect(rows[3][0]).toBe('模板虚构队员');
+        expect(workbook.Sheets[ATHLETE_PROFILE_SHEET].A1.c?.[0].t).toBeTruthy();
+        expect(workbook.Sheets[BASIC_SCREENING_SHEET].T4.f).toBeTruthy();
       }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'profile', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
@@ -584,14 +588,14 @@ it('运动员档案识别附件说明与示例并按新列入库', async () => {
 it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员并忽略公式总分', async () => {
   const book = XLSX.utils.book_new();
   for (const [sheet, headers, rows] of [
-    [ATHLETE_PROFILE_SHEET, ATHLETE_PROFILE_HEADERS, [{ 姓名: '整表虚构新人', 备战赛事: '虚构杯' }]],
-    [BASIC_TEST_SHEET, BASIC_TEST_HEADERS, [
-      { 运动员编号: 'ATL00701', 测试日期: '2026-10-23', 测试项目: '引体向上', 实测值: 0, '备注／未测原因': '实测为零' },
-      { '姓名（自动）': '整表虚构新人', 测试日期: '2026-10-23', 测试项目: '引体向上', 实测值: 5 },
-      { '姓名（自动）': '整表虚构新人', 测试日期: '2026-10-24', 测试项目: '引体向上', '备注／未测原因': '未参加' },
+    [ATHLETE_PROFILE_SHEET, BASIC_DOWNLOAD_SHEETS[0][1], [{ 姓名: '整表虚构新人', 出生年月: '2004-08', 备战赛事: '虚构杯' }]],
+    [BASIC_TEST_SHEET, BASIC_DOWNLOAD_SHEETS[1][1], [
+      { 姓名: '虚构队员', 测试日期: '2026-10-23', 测试项目: '引体向上', 实测值: 0, '备注／未测原因': '实测为零' },
+      { 姓名: '整表虚构新人', 测试日期: '2026-10-23', 测试项目: '引体向上', 实测值: 5 },
+      { 姓名: '整表虚构新人', 测试日期: '2026-10-24', 测试项目: '引体向上', '备注／未测原因': '未参加' },
     ]],
-    [BASIC_SCREENING_SHEET, BASIC_SCREENING_HEADERS, [
-      { '姓名（自动）': '整表虚构新人', 筛查日期: '2026-10-23', 深蹲: 2, '跨栏步 左': 2, '跨栏步 右': 3,
+    [BASIC_SCREENING_SHEET, BASIC_DOWNLOAD_SHEETS[2][1], [
+      { 姓名: '整表虚构新人', 筛查日期: '2026-10-23', 深蹲: 2, '跨栏步 左': 2, '跨栏步 右': 3,
         '直线弓步 左': 2, '直线弓步 右': 2, '肩灵活性 左': 3, '肩灵活性 右': 2, '肩灵活性 左筛查': '有痛',
         '肩灵活性 右筛查': '无痛', '主动直腿抬高 左': 3, '主动直腿抬高 右': 2, 躯干稳定俯卧撑: 2,
         '躯干稳定俯卧撑 筛查': '无痛', '旋转稳定 左': 2, '旋转稳定 右': 2, '旋转稳定 筛查': '无痛', 'FMS 总分': 21 },
@@ -625,6 +629,15 @@ it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员�
     JOIN athletes a ON a.id=s.athlete_id WHERE s.test_date IN ('2026-10-23','2026-10-24') AND m.metric_code='pull_ups_reps'
     AND a.name IN ('虚构队员','整表虚构新人') ORDER BY m.value_num`).all();
   expect(fitness).toEqual([{ name: '虚构队员', value: 0 }, { name: '整表虚构新人', value: 5 }]);
+  const exported = await fetch(`${base}/api/data-import/export?format=basic&${new URLSearchParams({ project: 'ROWING', team: 'HTTP甲队' })}`, { headers: { authorization: `Bearer ${token}` } });
+  expect(exported.status).toBe(200);
+  const exportedBook = XLSX.read(await exported.arrayBuffer(), { type: 'array' });
+  expect(exportedBook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
+  const screening = XLSX.utils.sheet_to_json<unknown[]>(exportedBook.Sheets[BASIC_SCREENING_SHEET], { header: 1 });
+  expect(screening[2][0]).toBe('示例：示例甲');
+  expect(screening.find(row => row[0] === '整表虚构新人')?.[10]).toBe('有痛');
+  expect(exportedBook.Sheets[BASIC_TEST_SHEET].A1.c?.[0].t).toBeTruthy();
+
 });
 
 it('基础档案新增字段按正式模板入库并在档案显示，空白保留原值', async () => {
@@ -731,17 +744,16 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   const sheet = lifting.Sheets[ATHLETE_PROFILE_SHEET];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
   expect(rows[0]).toEqual((XLSX.utils.sheet_to_json(rowing.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }) as string[][])[0]);
-  expect(rows).toHaveLength(2);
-  expect(rows[1][1]).toBe('举重虚构队员');
+  expect(rows.slice(3).map(row => row[0]).filter(Boolean)).toEqual(['举重虚构队员']);
   const athlete = db.prepare("SELECT id FROM athletes WHERE name='举重虚构队员' AND project='WEIGHTLIFTING'").get() as { id: number };
-  expect(rows[1][rows[0].indexOf('运动员编号')]).toBe(formatAthleteNumber(athlete.id));
+  expect(rows[0]).not.toContain('运动员编号');
   const empty = await download('ROWING');
   expect(empty.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
-  expect(XLSX.utils.sheet_to_json(empty.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 })).toHaveLength(1);
+  expect(XLSX.utils.sheet_to_json<unknown[]>(empty.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }).slice(3).some(row => row[0])).toBe(false);
 
   for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],
     ['身体测量日期', new Date('2026-09-19T00:00:00Z')]] as const) {
-    XLSX.utils.sheet_add_aoa(sheet, [[sample]], { origin: { r: 1, c: rows[0].indexOf(header) }, cellDates: true });
+    XLSX.utils.sheet_add_aoa(sheet, [[sample]], { origin: { r: 3, c: rows[0].indexOf(header) }, cellDates: true });
   }
   const form = new FormData();
   form.set('file', new Blob([XLSX.write(lifting, { type: 'buffer', bookType: 'xlsx' })]), '举重档案.xlsx');
@@ -1470,7 +1482,7 @@ it('标准模板支持补充档案、相同力量组填一行与常用体能宽�
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
     const headers = rows[heading - 1].map(value => String(value).split('\n')[0]);
     const numberColumn = headers.indexOf('系统运动员编号');
-    const athleteRow = numberColumn < 0 ? -1 : rows.findIndex(cells => cells[numberColumn] === 'ATL00701');
+    const athleteRow = numberColumn < 0 ? rows.findIndex(cells => cells[0] === row.姓名) : rows.findIndex(cells => cells[numberColumn] === 'ATL00701');
     XLSX.utils.sheet_add_aoa(sheet, [headers.map(key => key === '系统运动员编号' ? '701' : row[key] ?? null)],
       { origin: `A${athleteRow >= heading ? athleteRow + 1 : heading + 1}` });
   }

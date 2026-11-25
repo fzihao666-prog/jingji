@@ -1,6 +1,8 @@
 import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import ExcelJS from 'exceljs';
+import { fmsInputFields, type FmsObservation } from '../../shared/fms-import.ts';
+import { ATHLETE_PROFILE_SHEET, BASIC_DOWNLOAD_SHEETS, BASIC_SCREENING_SHEET, BASIC_TEST_SHEET, buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { db } from '../core/db.ts';
 import { buildImportWorkbook } from './template-workbook.ts';
 import {
@@ -357,5 +359,79 @@ export async function buildUnifiedDataExport(project: string, athleteIds: number
   scoreRows.forEach((values, index) => {
     assessmentSheet.getRow(stateRows.length + index + 4).values = values as ExcelJS.CellValue[];
   });
+  return workbook;
+}
+
+
+export function buildBasicDataExport(project: string, athleteIds: number[]) {
+  const workbook = buildBasicProfileWorkbook([]);
+  if (!athleteIds.length) return workbook;
+  const ids = athleteIds.map(() => '?').join(',');
+  const profiles = db.prepare(`SELECT a.id AS roster_id,a.name,a.birth_date,a.gender,a.project,ap.*,
+    b.height_cm,b.weight_kg,b.measurement_date FROM athletes a
+    LEFT JOIN athlete_profiles ap ON ap.athlete_id=a.id
+    LEFT JOIN athlete_body_measurements b ON b.id=(SELECT id FROM athlete_body_measurements
+      WHERE athlete_id=a.id AND (height_cm IS NOT NULL OR weight_kg IS NOT NULL)
+      ORDER BY measurement_date DESC,id DESC LIMIT 1)
+    WHERE a.active=1 AND a.project=? AND a.id IN (${ids}) ORDER BY a.name,a.id`).all(project, ...athleteIds);
+  const names = new Map(profiles.map(row => [row.roster_id, String(row.name)]));
+  const date = (value: unknown) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T00:00:00Z`) : null;
+  const write = (sheet: string, row: number, values: Record<string, ExcelJS.CellValue>) => {
+    const headers = BASIC_DOWNLOAD_SHEETS.find(([name]) => name === sheet)![1];
+    const target = workbook.getWorksheet(sheet)!.getRow(row);
+    headers.forEach((header, index) => {
+      if (Object.hasOwn(values, header)) target.getCell(index + 1).value = values[header];
+    });
+  };
+  profiles.forEach((row, index) => {
+    const notes = String(row.notes ?? '');
+    write(ATHLETE_PROFILE_SHEET, index + 4, {
+      姓名: String(row.name), 性别: String(row.gender ?? ''),
+      出生年月: /^出生年月：(.+)$/m.exec(notes)?.[1] ?? String(row.birth_date ?? '').slice(0, 7),
+      '身高（cm）': row.height_cm == null ? null : Number(row.height_cm),
+      '体重（kg）': row.weight_kg == null ? null : Number(row.weight_kg),
+      运动项目: String(row.project), 代表队伍: String(row.representative_unit ?? ''),
+      '小项／场上位置': String(row.event_item || row.position || ''),
+      技术等级: String(row.technical_level ?? ''), 最好成绩: String(row.best_result ?? ''),
+      最好成绩对应赛事: String(row.best_result_event ?? ''), 成绩日期: date(row.best_result_date),
+      备战赛事: String(row.current_event ?? ''), 当前训练限制: /^当前训练限制：(.+)$/m.exec(notes)?.[1] ?? '',
+      身体测量日期: date(row.measurement_date),
+    });
+  });
+  const tests = db.prepare(`SELECT s.athlete_id,s.test_date,m.metric_code,m.value_num,m.unit,m.note
+    FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    WHERE s.athlete_id IN (${ids}) AND (s.project_code=? OR s.project_code IS NULL)
+      AND s.test_type<>'FMS测试' AND m.value_num IS NOT NULL
+    ORDER BY s.test_date,s.id,m.id`).all(...athleteIds, project);
+  let testRow = 4;
+  for (const row of tests) {
+    const name = names.get(row.athlete_id);
+    if (!name) continue;
+    write(BASIC_TEST_SHEET, testRow++, {
+      姓名: name, 测试日期: date(row.test_date), 测试项目: String(row.metric_code),
+      实测值: Number(row.value_num), 单位: String(row.unit ?? ''), '备注／未测原因': String(row.note ?? ''),
+    });
+  }
+  const observations = db.prepare(`SELECT s.id,s.athlete_id,s.test_date,o.metric_code,o.observation_json
+    FROM fms_import_observations o JOIN test_sessions s ON s.id=o.test_session_id
+    WHERE s.athlete_id IN (${ids}) AND (s.project_code=? OR s.project_code IS NULL)
+    ORDER BY s.test_date,s.id`).all(...athleteIds, project);
+  const screening = new Map<unknown, Record<string, ExcelJS.CellValue>>();
+  for (const row of observations) {
+    const name = names.get(row.athlete_id);
+    const metricIndex = FMS_TEMPLATE_METRICS.findIndex(([, code]) => code === row.metric_code);
+    if (!name || metricIndex < 0) continue;
+    const label = ['深蹲', '跨栏步', '直线弓步', '肩灵活性', '主动直腿抬高', '躯干稳定俯卧撑', '旋转稳定'][metricIndex];
+    const values = screening.get(row.id) ?? { 姓名: name, 筛查日期: date(row.test_date) };
+    const observation = JSON.parse(String(row.observation_json)) as FmsObservation;
+    for (const { key, header } of fmsInputFields(String(row.metric_code), label)) {
+      const target = header.replace(/（(左|右)）$/, ' $1').replace(/（(左|右)侧疼痛排查）$/, ' $1筛查').replace(/（疼痛排查）$/, ' 筛查');
+      const value = observation[key];
+      values[target] = value === '阳性' ? '有痛' : value === '阴性' ? '无痛' : value ?? null;
+    }
+    screening.set(row.id, values);
+  }
+  [...screening.values()].forEach((row, index) => write(BASIC_SCREENING_SHEET, index + 4, row));
   return workbook;
 }

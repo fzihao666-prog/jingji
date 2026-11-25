@@ -1,4 +1,4 @@
-import { formatAthleteNumber } from '../../shared/athlete-number.ts';
+import { BASIC_PROFILE_LAYOUT } from './basic-profile-layout.ts';
 import ExcelJS from 'exceljs';
 
 export const BASIC_PROFILE_SHEET = '运动员基础档案';
@@ -28,59 +28,48 @@ export const BASIC_SCREENING_HEADERS = [
   '旋转稳定 左', '旋转稳定 右', '旋转稳定 筛查', 'FMS 总分',
 ] as const;
 
-export function buildBasicProfileWorkbook(athletes: ReadonlyArray<{ id: number; name: string }>) {
+export const BASIC_DOWNLOAD_SHEETS = [
+  [ATHLETE_PROFILE_SHEET, ATHLETE_PROFILE_HEADERS.filter(header => header !== '运动员编号')],
+  [BASIC_TEST_SHEET, ['姓名', ...BASIC_TEST_HEADERS.slice(2)]],
+  [BASIC_SCREENING_SHEET, ['姓名', ...BASIC_SCREENING_HEADERS.slice(2)]],
+] as const;
+
+export function buildBasicProfileWorkbook(athletes: ReadonlyArray<{ name: string }>) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '竞迹训练监控系统';
-  const sheet = workbook.addWorksheet(ATHLETE_PROFILE_SHEET, {
-    views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }],
-  });
-  sheet.columns = ATHLETE_PROFILE_HEADERS.map((header, index) => ({
-    header,
-    width: index >= 11 ? 23 : 17,
-    style: { numFmt: header.endsWith('日期') ? 'yyyy-mm-dd' : /（/.test(header) ? '0.##' : '@' },
-  }));
-  sheet.getRow(1).height = 26;
-  sheet.getRow(1).alignment = { vertical: 'middle' };
-  sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183655' } };
-  sheet.getCell('A1').note = '已有队员使用系统编号。新增队员请留空。';
-  sheet.getCell('B1').note = '姓名必填。新队员按上传时所选的项目和队伍建档。';
-  sheet.getCell('C1').note = '此列可留空，上传后由系统校验。';
-  sheet.getCell('E1').note = '按 YYYY-MM 填写，保存在档案备注中。';
-  sheet.getCell('H1').note = '可留空，填写时应与上传所选项目一致。';
-  sheet.getCell('I1').note = '写入档案的代表单位，队伍归属以导入页面所选队伍为准。';
-  sheet.getCell('P1').note = '写入档案备注。';
-  sheet.getCell('Q1').note = '填写身高或体重时，请同时填写实际测量日期。';
-  for (const athlete of athletes) sheet.addRow([formatAthleteNumber(athlete.id), athlete.name]);
-  for (const [name, headers] of [[BASIC_TEST_SHEET, BASIC_TEST_HEADERS], [BASIC_SCREENING_SHEET, BASIC_SCREENING_HEADERS]] as const) {
-    const tests = workbook.addWorksheet(name, { views: [{ state: 'frozen', xSplit: 2, ySplit: 1 }] });
-    tests.columns = headers.map(header => ({
-      header, width: 21,
-      style: { numFmt: header.endsWith('日期') ? 'yyyy-mm-dd' : header === '运动员编号' ? '@' : 'General' },
+  BASIC_DOWNLOAD_SHEETS.forEach(([name, headers], index) => {
+    const layout = BASIC_PROFILE_LAYOUT[index];
+    const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', xSplit: 1, ySplit: 3 }] });
+    sheet.columns = headers.map(header => ({
+      header, width: header.includes('备注') || header.includes('限制') ? 29 : 20,
+      style: { numFmt: header.endsWith('日期') ? 'yyyy-mm-dd' : 'General' },
     }));
-    tests.getRow(1).height = 26;
-    tests.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    tests.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183655' } };
-    tests.getCell('A1').note = '填写系统运动员编号。为同批新建队员录入记录时，编号留空并手工填写同一姓名。';
-    tests.getCell('B1').note = '按编号从运动员档案查找姓名，也可填写与档案一致的姓名。';
-    for (let row = 2; row <= 501; row++) {
-      tests.getCell(`B${row}`).value = {
-        formula: `IF(A${row}="","",IFERROR(VLOOKUP(A${row},'${ATHLETE_PROFILE_SHEET}'!A:B,2,FALSE),""))`,
-        result: '',
-      };
-      if (name === BASIC_SCREENING_SHEET) {
-        const scores = ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'N', 'O', 'P', 'R', 'S'].map(column => `${column}${row}`);
-        const pain = ['L', 'M', 'Q', 'T'].map(column => `${column}${row}`);
-        const validScores = scores.map(cell => `AND(${cell}>=0,${cell}<=3,INT(${cell})=${cell})`);
-        const validPain = pain.map(cell => `OR(${cell}="有痛",${cell}="无痛")`);
-        tests.getCell(`U${row}`).value = {
-          formula: `IFERROR(IF(AND(COUNT(${scores.join(',')})=12,${[...validScores, ...validPain].join(',')}),E${row}+MIN(F${row}:G${row})+MIN(H${row}:I${row})+IF(OR(L${row}="有痛",M${row}="有痛"),0,MIN(J${row}:K${row}))+MIN(N${row}:O${row})+IF(Q${row}="有痛",0,P${row})+IF(T${row}="有痛",0,MIN(R${row}:S${row})),""),"")`,
-          result: '',
-        };
-      }
+    const instructions = layout.notes.map(note => note.split("\n示例：")[0]);
+    const examples = layout.notes.map(note => `示例：${note.split("\n示例：")[1]}`);
+    const notes = [...layout.notes];
+    if (name === ATHLETE_PROFILE_SHEET) {
+      instructions[0] = '填写姓名；本队同名自动匹配，新队员由系统分配编号。';
+      instructions[6] = '以导入页面所选项目为准；此列可留空。';
+      instructions.push('填写身高或体重时，请填写实际测量日期。');
+      examples.push('示例：2026-11-20');
+      for (const index of [0, 6, 15]) notes[index] = `${instructions[index]}\n${examples[index]}`;
     }
-  }
-  workbook.getWorksheet(BASIC_TEST_SHEET)!.getCell('G1').note = '实测时作为测试备注导入。仅填写未测原因的记录不生成成绩。';
-  workbook.getWorksheet(BASIC_SCREENING_SHEET)!.getCell('U1').note = '系统按动作成绩和疼痛筛查计算，上传时忽略此列。';
+    sheet.addRow(instructions);
+    sheet.addRow(examples);
+    sheet.getRow(1).height = 26;
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183655' } };
+    sheet.getRow(2).height = 48;
+    sheet.getRow(2).alignment = { vertical: 'middle', wrapText: true };
+    notes.forEach((note, column) => { sheet.getCell(1, column + 1).note = note; });
+    for (const [column, formula] of Object.entries(layout.formulas)) {
+      if (!formula) continue;
+      // 项目由导入页面选择，档案检查无需要求教练再填一次。
+      const source = name === ATHLETE_PROFILE_SHEET ? formula.replace('IF(G4="","缺运动项目",', '').slice(0, -1) : formula;
+      sheet.fillFormula(`${column}4:${column}503`, source, () => '');
+    }
+    if (name === ATHLETE_PROFILE_SHEET)
+      athletes.forEach((athlete, index) => { sheet.getCell(index + 4, 1).value = athlete.name; });
+  });
   return workbook;
 }

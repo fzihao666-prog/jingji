@@ -4,7 +4,7 @@ import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
 import type { ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
-import { buildUnifiedDataExport } from './data-import-export.ts';
+import { buildBasicDataExport, buildUnifiedDataExport } from './data-import-export.ts';
 export { buildUnifiedDataExport, writeUnifiedExportRows } from './data-import-export.ts';
 import { UNIFIED_IMPORT_HEADERS, IMPORT_PURPOSE_SHEETS } from '../../shared/data-import-template.ts';
 import { templateHeaderKey } from '../../shared/import-template-fields.ts';
@@ -283,12 +283,18 @@ export function registerDataImportRoutes(app: Express) {
         const scope = dataImportScope(req.authUser!, project);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号无权导出该项目数据。' });
+        const basic = req.query.format === 'basic';
+        const team = cleanString(req.query.team);
+        if (basic && (!team || typeof req.query.team !== 'string'))
+          return res.status(400).json({ message: '请先选择队伍。' });
+        if (basic && !scope.allowedTeams.has(team))
+          return res.status(403).json({ message: '所选队伍不在当前授权范围内。' });
         const athleteIds = strengthImportCandidates(req.authUser!)
-          .filter((athlete) => athlete.project === project)
-          .map((athlete) => athlete.id);
-        const workbook = await buildUnifiedDataExport(project, athleteIds);
+          .filter(athlete => athlete.project === project && (!basic || athlete.team === team))
+          .map(athlete => athlete.id);
+        const workbook = basic ? buildBasicDataExport(project, athleteIds) : await buildUnifiedDataExport(project, athleteIds);
         const buffer = await workbook.xlsx.writeBuffer();
-        const filename = `竞迹${project}统一数据导出_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        const filename = `竞迹${project}${basic ? '基础数据' : '统一数据'}导出_${new Date().toISOString().slice(0, 10)}.xlsx`;
         res.setHeader(
           'Content-Type',
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

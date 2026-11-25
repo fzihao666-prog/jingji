@@ -360,13 +360,13 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     }
   };
 
-  const exportUnifiedData = async () => {
+  const exportUnifiedData = async (basicTeam?: string) => {
     setBusy('export');
     setError('');
     setMessage('');
     try {
-      await api.exportUnifiedData(project);
-      setMessage('当前权限范围内的运动员数据已开始导出，可直接作为统一导入模板使用。');
+      await api.exportUnifiedData(project, basicTeam);
+      setMessage(basicTeam ? '本队基础数据已开始导出。' : '当前权限范围内的运动员数据已开始导出。');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '统一数据导出失败。');
     } finally {
@@ -999,8 +999,20 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
           <button
             type="button"
             className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
+            onClick={() => void exportUnifiedData(templateTeam)}
+          >
+            <Database size={19} aria-hidden="true" />
+            <div>
+              <strong>导出本队基础数据</strong>
+              <span>使用基础数据模板，保留注释和示例</span>
+            </div>
+          </button>
+          <button
+            type="button"
+            className="data-import-template"
             disabled={Boolean(busy)}
-            onClick={exportUnifiedData}
+            onClick={() => void exportUnifiedData()}
           >
             <Database size={19} />
             <div>
