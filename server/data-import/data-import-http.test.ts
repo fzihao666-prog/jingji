@@ -1,3 +1,4 @@
+import { formatAthleteNumber, parseAthleteNumber } from '../../shared/athlete-number.ts';
 import { readFileSync } from 'node:fs';
 
 import express from 'express';
@@ -107,7 +108,7 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
         expect(workbook.SheetNames).toEqual(['运动员基础档案']);
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础档案'], { header: 1 }) as string[][];
         expect(rows[1][0]).toBe('模板虚构队员');
-        expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe('799');
+        expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe('ATL00799');
         for (const removed of ['运动员编号', '运动项目', '所属队伍'])
           expect((rows[0] as string[]).map(header => header.split('\n')[0])).not.toContain(removed);
       }
@@ -592,7 +593,7 @@ it('基础档案新增字段按正式模板入库并在档案显示，空白保�
   expect(exported.status).toBe(200);
   const standardSheet = XLSX.read(await exported.arrayBuffer()).Sheets['运动员基本资料'];
   const standardRows = XLSX.utils.sheet_to_json(standardSheet, { header: 1 }) as unknown[][];
-  const source = standardRows.find(row => String(row[0]) === '701')!;
+  const source = standardRows.find(row => row[0] === 'ATL00701')!;
   const roundTrip = await upload([standardRows[2], source], '运动员基本资料', 'HTTP甲队');
   expect(roundTrip.items[0]).toMatchObject({ quality: 'valid', payload: {
     eventItem: '虚构双桨', representativeUnit: '虚构代表单位', trainingYears: 0,
@@ -659,7 +660,7 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   expect(rows).toHaveLength(2);
   expect(rows[1][0]).toBe('举重虚构队员');
   const athlete = db.prepare("SELECT id FROM athletes WHERE name='举重虚构队员' AND project='WEIGHTLIFTING'").get() as { id: number };
-  expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe(String(athlete.id));
+  expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe(formatAthleteNumber(athlete.id));
   expect((await download('ROWING')).SheetNames).toContain('运动员基本资料');
 
   for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],
@@ -802,7 +803,8 @@ it('动态模板实际回传按下载时的范围、指标单位和协议入库�
   ]);
 
   const [lifterCode] = XLSX.utils.sheet_to_json(lifting.Sheets[sheetName], { header: 1 })[1] as string[];
-  const teamId = (db.prepare('SELECT team_id AS id FROM athletes WHERE id=?').get(Number(lifterCode)) as { id: number }).id;
+  const lifterId = parseAthleteNumber(lifterCode);
+  const teamId = (db.prepare('SELECT team_id AS id FROM athletes WHERE id=?').get(lifterId) as { id: number }).id;
   const trendQuery = new URLSearchParams({
     project: lifter, teamId: String(teamId), from: '2026-11-17', to: '2026-11-20', metricCode: snatch.code,
   });
@@ -811,7 +813,7 @@ it('动态模板实际回传按下载时的范围、指标单位和协议入库�
   expect(zero.status).toBe(200);
   expect((await request(`/batches/${zero.body.batch!.id}/commit`, 'POST', {})).status).toBe(200);
   const readTrend = (params: URLSearchParams, auth: string) => fetch(
-    `${base}/api/athletes/${lifterCode}/custom-test-trend?${params}`, { headers: { authorization: `Bearer ${auth}` } },
+    `${base}/api/athletes/${lifterId}/custom-test-trend?${params}`, { headers: { authorization: `Bearer ${auth}` } },
   );
   const trend = await readTrend(trendQuery, token);
   expect(trend.status).toBe(200);
@@ -953,7 +955,7 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
   const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
   expect(matrix[0].slice(4, 8)).toEqual(['自建力量测试重量（kg）', '自建力量测试组数（组）', '自建力量测试次数（次）', '自建力量测试用时（s）']);
   expect(matrix[0].slice(8)).toHaveLength(16);
-  const spreadsheetRow = matrix.findIndex(row => row[0] === '701') + 1;
+  const spreadsheetRow = matrix.findIndex(row => row[0] === 'ATL00701') + 1;
   expect(spreadsheetRow).toBeGreaterThan(1);
   const send = async () => {
     const form = new FormData();
@@ -1049,7 +1051,7 @@ it('训练记录单表在举重和赛艇分别归并整课，保存力量组次�
     const book = XLSX.read(await response.arrayBuffer());
     const sheet = book.Sheets['训练记录'];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
-    const id = String(athleteId);
+    const id = formatAthleteNumber(athleteId);
     const athlete = rows.find(row => row[0] === id)!;
     XLSX.utils.sheet_add_aoa(sheet, examples.map(example => rows[0].map((header, index) => example[header] ?? (index < 2 ? athlete[index] : null))), { origin: 'A2' });
     const form = new FormData();
@@ -1392,7 +1394,7 @@ it('标准模板支持补充档案、相同力量组填一行与常用体能宽�
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
     const headers = rows[heading - 1].map(value => String(value).split('\n')[0]);
     const numberColumn = headers.indexOf('系统运动员编号');
-    const athleteRow = numberColumn < 0 ? -1 : rows.findIndex(cells => String(cells[numberColumn]) === '701');
+    const athleteRow = numberColumn < 0 ? -1 : rows.findIndex(cells => cells[numberColumn] === 'ATL00701');
     XLSX.utils.sheet_add_aoa(sheet, [headers.map(key => key === '系统运动员编号' ? '701' : row[key] ?? null)],
       { origin: `A${athleteRow >= heading ? athleteRow + 1 : heading + 1}` });
   }
@@ -1462,7 +1464,7 @@ it('标准 FMS 表先保存单侧原始结果，补录后计算最终分且保�
     expect(columns).toContain('肩部灵活性（左侧疼痛排查）');
     expect(columns).toContain('跨栏步（右）');
     const numberColumn = columns.indexOf('系统运动员编号');
-    const athleteRow = rows.findIndex(cells => String(cells[numberColumn]) === '701');
+    const athleteRow = rows.findIndex(cells => cells[numberColumn] === 'ATL00701');
     expect(athleteRow).toBeGreaterThanOrEqual(3);
     const row: Record<string, unknown> = { 系统运动员编号: '701', 姓名: '虚构队员', 测试日期: '2026-11-28', ...values };
     XLSX.utils.sheet_add_aoa(sheet, [columns.map(column => row[column] ?? null)], { origin: `A${athleteRow + 1}` });

@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { registerTestTemplateRoutes } from './test-template-routes.ts';
 import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
@@ -85,7 +86,7 @@ export function buildPurposeTemplate(
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
     athletes.forEach((athlete, index) => {
       sheet.getRow(index + 4).values = headers.map(label => {
-        if (label === '系统运动员编号') return String(athlete.id);
+        if (label === '系统运动员编号') return formatAthleteNumber(athlete.id);
         if (label === '姓名') return athlete.name;
         if (label === '所属队伍') return athlete.team;
         if (label === '运动项目') return project;

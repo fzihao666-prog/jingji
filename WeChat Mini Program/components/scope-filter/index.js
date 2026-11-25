@@ -44,7 +44,7 @@ Component({
         (item.name || '').toLowerCase().includes(kw) || (item.team || '').toLowerCase().includes(kw)
       ).sort((left, right) => Number(left.id) - Number(right.id)).map(item => ({
         ...item,
-        label: `${item.name} · ${formatAthleteNumber(item.id)}`
+        label: `${item.name} · ${item.athleteNumber || formatAthleteNumber(item.id)}`
       }));
       const athleteItems = (allowAll ? [{ id: 0, name: '全部运动员（整体分析）', label: '全部运动员（整体分析）' }] : []).concat(filtered);
       const index = athleteItems.findIndex((item) => Number(item.id) === Number(athleteId));

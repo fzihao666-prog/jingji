@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { projectLabel } from '../../shared/projects.ts';
 import { readFileSync } from 'node:fs';
 import { jsPDF } from 'jspdf';
@@ -81,7 +82,7 @@ export function renderReportPdf(input: SavedReport, athleteId: number): Buffer {
   text('竞迹·报告', 16, y, 23); y += 10;
   text(`${d.range.from} - ${d.range.to}`, 16, y, 12); y += 7;
   const project = projectLabel(d.project);
-  text(`运动员编号 ${athleteId}  /  ${project}  /  已保存快照`, 16, y, 9, muted); y += 12;
+  text(`运动员编号 ${formatAthleteNumber(athleteId)}  /  ${project}  /  已保存快照`, 16, y, 9, muted); y += 12;
   heading('公共训练与恢复');
   paragraph(d.version === 2 ? `${d.sourceNote} 规则版本：${d.rulesVersion}；参考标准版本：${d.referenceVersion || '未接入'}。` : '历史版本未记录规则与参考标准版本；按原快照展示。');
   paragraph(`记录覆盖：训练 ${d.trainingDays}/${d.days} 天，恢复日报 ${d.wellnessDays}/${d.days} 天；有效时长 ${d.totals.durationCount}/${d.totals.sessions} 课次，距离 ${d.totals.distanceCount}/${d.totals.sessions} 课次，SRPE ${d.totals.srpeCount}/${d.totals.sessions} 课次。缺失不代表零。`);

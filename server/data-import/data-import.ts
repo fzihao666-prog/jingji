@@ -1,3 +1,4 @@
+import { parseAthleteNumber } from '../../shared/athlete-number.ts';
 import { removedAccountUsernamePattern } from '../core/removed-account.ts';
 import { fmsFinalScore, fmsInputFields, type FmsInputKey, type FmsObservation } from '../../shared/fms-import.ts';
 import {
@@ -409,7 +410,8 @@ function resolvePerson(
   const sameTeam = team ? pool.filter(athlete => text(athlete.team) === team) : [];
   const code = text(hint.athleteCode);
   if (code) {
-    const numbered = athletes.filter(athlete => String(athlete.id) === code);
+    const id = parseAthleteNumber(code);
+    const numbered = athletes.filter(athlete => athlete.id === id);
     if (numbered.length > 1)
       return { kind: 'conflict', suggested: numbered.map(toSuggestion), message: `系统运动员编号${code}重复，请人工确认` };
     const [byCode] = numbered;
@@ -1036,7 +1038,7 @@ function parseTestTemplateSheet(
   const headers = [...TEST_TEMPLATE_IDENTITY_HEADERS, ...snapshot.columns.map(column => column.header)];
   if (headers.some((label, index) => matrix[0]?.[index] !== label))
     throw new Error('测试模板表头已变更，请使用原模板列并保留原顺序。');
-  const athletesById = new Map(athletes.map(athlete => [String(athlete.id), athlete]));
+  const athletesById = new Map(athletes.map(athlete => [athlete.id, athlete]));
   const items: ParsedImportItem[] = [];
   for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
     const row = matrix[rowIndex] ?? [];
@@ -1045,7 +1047,7 @@ function parseTestTemplateSheet(
     if (!row.slice(TEST_TEMPLATE_IDENTITY_HEADERS.length).some(value => text(value))) continue;
     const [id, name, teamCell, date] = row;
     const athleteCode = text(id);
-    const athlete = athletesById.get(athleteCode);
+    const athlete = athletesById.get(parseAthleteNumber(athleteCode) ?? 0);
     const rawAthleteName = text(name) || athlete?.name || '';
     const person = resolvePerson({ name: rawAthleteName, project: snapshot.project, team, athleteCode }, athletes);
     const eventDate = typeof date === 'string' ? text(date) : parseDate(date, 0);
@@ -1204,7 +1206,8 @@ function parseStandardSheet(
       ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
       : rawRow;
     const athleteCode = standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号');
-    const numberedAthlete = athletes.find(athlete => String(athlete.id) === athleteCode);
+    const numberedId = parseAthleteNumber(athleteCode);
+    const numberedAthlete = athletes.find(athlete => athlete.id === numberedId);
     const rawName = standardText(row, header.columns, '姓名') || numberedAthlete?.name || '';
     const existingProfileName = knownProfileNames.has(normalizedName(rawName));
     const hasBusiness = sheet === COMPACT_ATHLETE_SHEET
@@ -2596,7 +2599,7 @@ function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
     const team = text(payload.team);
     const birth = text(payload.birthDate);
     const key = code
-      ? JSON.stringify(['code', code, name])
+      ? JSON.stringify(['code', String(parseAthleteNumber(code) ?? code), name])
       : team || birth
         ? JSON.stringify(['person', name, team, birth])
         : name;
@@ -2891,7 +2894,8 @@ export function analyzeDataImport(input: {
   }
   const identitiesByCode = new Map<string, { names: Set<string>; births: Set<string>; genders: Set<string> }>();
   for (const item of items) {
-    const code = text(item.payload.athleteCode);
+    const rawCode = text(item.payload.athleteCode);
+    const code = String(parseAthleteNumber(rawCode) ?? rawCode);
     if (!code || item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
     const identity = identitiesByCode.get(code) ?? { names: new Set<string>(), births: new Set<string>(), genders: new Set<string>() };
     const birth = text(item.payload.birthDate);
@@ -2906,7 +2910,7 @@ export function analyzeDataImport(input: {
     const prior = priorIds.get(person.key);
     const priorId = prior?.size === 1 ? [...prior][0] : null;
     const priorAthlete = matchingAthletes.find(athlete => athlete.id === priorId && athlete.project === input.project);
-    const identity = identitiesByCode.get(person.athleteCode);
+    const identity = identitiesByCode.get(String(parseAthleteNumber(person.athleteCode) ?? person.athleteCode));
     const duplicateConflict = identity && [identity.names, identity.births, identity.genders].some(values => values.size > 1);
     const implicitTeam = !person.athleteCode && allowedTeams?.size === 1 ? [...allowedTeams][0] : '';
     const resolution: PersonResolution = duplicateConflict

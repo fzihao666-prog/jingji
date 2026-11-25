@@ -1,3 +1,4 @@
+import { parseAthleteNumber } from '../../shared/athlete-number.ts';
 import { runAiJob } from '../core/ai-usage.ts';
 import { strengthReadScope } from './strength-read-scope.ts';
 import { normalizeProject } from '../../shared/projects.ts';
@@ -134,8 +135,9 @@ export function validateStrengthImportRow(
   );
   const team = cleanString(source.team ?? strengthRecordValue(source, ['队伍', '组别', 'team']));
   const rawAthleteId = source.athleteId || strengthRecordValue(source, ['系统运动员编号']);
-  const requestedAthleteId = Number(rawAthleteId || 0);
-  let matches = requestedAthleteId
+  const athleteNumber = String(rawAthleteId ?? '').trim();
+  const requestedAthleteId = parseAthleteNumber(athleteNumber);
+  let matches = athleteNumber
     ? athletes.filter((athlete) => athlete.id === requestedAthleteId)
     : athletes.filter((athlete) => athlete.name === athleteName);
   if (matches.length > 1 && team) matches = matches.filter((athlete) => athlete.team === team);
@@ -247,7 +249,7 @@ export function validateStrengthImportRow(
   }
   if (source._missingSetIndex) errors.push('同动作多组须填写不同组次，请修正文件后重新上传');
   if (!isValidIsoDate(trainingDate)) errors.push('训练日期须为真实有效的YYYY-MM-DD日期');
-  if (cleanString(rawAthleteId) && (!Number.isSafeInteger(requestedAthleteId) || requestedAthleteId < 1)) errors.push('系统运动员编号无效');
+  if (athleteNumber && requestedAthleteId === null) errors.push('系统运动员编号无效');
   if (matched && athleteName && athleteName !== matched.name) errors.push('系统运动员编号与姓名不一致，请核对身份');
   if (requestedAthleteId && matched && team && matched.team !== team) errors.push('系统运动员编号与队伍不一致，导入不能调队');
   if (!athleteName && !requestedAthleteId) errors.push('缺少运动员姓名');

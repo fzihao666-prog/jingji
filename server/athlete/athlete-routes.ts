@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
 import { normalizeTechnicalLevel, validTechnicalLevel } from '../../shared/athlete-technical-level.ts';
 import bcrypt from 'bcryptjs';
@@ -286,6 +287,7 @@ export function registerAthleteRoutes(app: Express) {
             ? '运动员及登录账号已创建。'
             : '运动员档案已创建，暂未创建登录账号。',
           id: athleteId,
+          athleteNumber: formatAthleteNumber(athleteId),
           accountId: userId,
         });
       } catch (error) {
@@ -747,6 +749,7 @@ export function registerAthleteRoutes(app: Express) {
     res.json({
       athletes: athletes.map((athlete) => ({
         ...athlete,
+        athleteNumber: formatAthleteNumber(athlete.id),
         affiliatedTeams: affiliationsByAthlete.get(athlete.id) ?? [],
         headCoaches: headCoachRows.filter((coach) => coach.athleteId === athlete.id)
           .map((coach) => coach.displayName).join('、'),

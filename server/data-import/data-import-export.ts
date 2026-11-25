@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import ExcelJS from 'exceljs';
 import { db } from '../core/db.ts';
@@ -13,8 +14,13 @@ import {
 
 export function writeUnifiedExportRows(sheet: ExcelJS.Worksheet | undefined, rows: unknown[][]) {
   if (!sheet) return;
+  const numberColumn = sheet.getRow(3).values as ExcelJS.CellValue[];
+  const numberIndex = numberColumn.indexOf('系统运动员编号') - 1;
   rows.forEach((values, index) => {
-    sheet.getRow(index + 4).values = values as ExcelJS.CellValue[];
+    const row = [...values] as ExcelJS.CellValue[];
+    if (numberIndex >= 0 && typeof row[numberIndex] === 'number')
+      row[numberIndex] = formatAthleteNumber(Number(row[numberIndex]));
+    sheet.getRow(index + 4).values = row;
   });
 }
 

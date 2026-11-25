@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { testTemplateHeaders, testTemplateInputColumns } from '../../shared/test-template.ts';
 import {
   combineTrainingProjects, commonTrainingProjects, TRAINING_RECORD_OPTIONS, TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
@@ -213,7 +214,7 @@ export function registerTestTemplateRoutes(app: Express) {
             '填写秒数或分:秒（例如 6:42.5），系统按秒保存。';
       });
       const athletes = roster(s);
-      for (const athlete of athletes) sheet.addRow([String(athlete.id), athlete.name]);
+      for (const athlete of athletes) sheet.addRow([formatAthleteNumber(athlete.id), athlete.name]);
       const id = randomUUID();
       const meta = book.addWorksheet(TEST_TEMPLATE_META, { state: 'veryHidden' });
       meta.getCell('A1').value = TRAINING_RECORD_FORMAT;
@@ -414,7 +415,7 @@ export function registerTestTemplateRoutes(app: Express) {
         heading.getCell(TEST_TEMPLATE_IDENTITY_HEADERS.length + index + 1).note = notes.filter(Boolean).join('\n');
       });
       const athletes = roster(s);
-      for (const athlete of athletes) sheet.addRow([String(athlete.id), athlete.name, s.team]);
+      for (const athlete of athletes) sheet.addRow([formatAthleteNumber(athlete.id), athlete.name, s.team]);
       columns.forEach((column, index) => {
         if (!column.fmsInput) return;
         const choices = column.fmsInput.startsWith('clearing') ? '阴性,阳性' : '0,1,2,3';
