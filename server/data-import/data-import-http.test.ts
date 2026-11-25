@@ -13,7 +13,7 @@ vi.mock('../core/db.ts', async () => {
 });
 import { db } from '../core/db.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
-import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS } from './basic-profile-workbook.ts';
+import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_TEST_SHEET, BASIC_TEST_HEADERS, BASIC_SCREENING_SHEET, BASIC_SCREENING_HEADERS } from './basic-profile-workbook.ts';
 import type { DataImportPreview } from './data-import.ts';
 import type { ImportStatistics } from '../../shared/import-statistics.js';
 
@@ -106,7 +106,7 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       expect(content).toContain('模板虚构队员');
       expect(content).not.toContain('"虚构队员"');
       if (kind === 'profile') {
-        expect(workbook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET]);
+        expect(workbook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }) as string[][];
         expect(rows[0]).toEqual([...ATHLETE_PROFILE_HEADERS]);
         expect(rows[1]).toEqual(['ATL00799', '模板虚构队员']);
@@ -581,6 +581,52 @@ it('运动员档案识别附件说明与示例并按新列入库', async () => {
   }
 });
 
+it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员并忽略公式总分', async () => {
+  const book = XLSX.utils.book_new();
+  for (const [sheet, headers, rows] of [
+    [ATHLETE_PROFILE_SHEET, ATHLETE_PROFILE_HEADERS, [{ 姓名: '整表虚构新人', 备战赛事: '虚构杯' }]],
+    [BASIC_TEST_SHEET, BASIC_TEST_HEADERS, [
+      { 运动员编号: 'ATL00701', 测试日期: '2026-10-23', 测试项目: '引体向上', 实测值: 0, '备注／未测原因': '实测为零' },
+      { '姓名（自动）': '整表虚构新人', 测试日期: '2026-10-23', 测试项目: '引体向上', 实测值: 5 },
+      { '姓名（自动）': '整表虚构新人', 测试日期: '2026-10-24', 测试项目: '引体向上', '备注／未测原因': '未参加' },
+    ]],
+    [BASIC_SCREENING_SHEET, BASIC_SCREENING_HEADERS, [
+      { '姓名（自动）': '整表虚构新人', 筛查日期: '2026-10-23', 深蹲: 2, '跨栏步 左': 2, '跨栏步 右': 3,
+        '直线弓步 左': 2, '直线弓步 右': 2, '肩灵活性 左': 3, '肩灵活性 右': 2, '肩灵活性 左筛查': '有痛',
+        '肩灵活性 右筛查': '无痛', '主动直腿抬高 左': 3, '主动直腿抬高 右': 2, 躯干稳定俯卧撑: 2,
+        '躯干稳定俯卧撑 筛查': '无痛', '旋转稳定 左': 2, '旋转稳定 右': 2, '旋转稳定 筛查': '无痛', 'FMS 总分': 21 },
+    ]],
+  ] as Array<[string, readonly string[], Array<Record<string, string | number>>]>) {
+    XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([[...headers], ...rows.map(row => headers.map(header => row[header]))]), sheet);
+  }
+  const form = new FormData();
+  form.set('project', 'ROWING');
+  form.set('team', 'HTTP甲队');
+  form.set('file', new Blob([XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })]), '虚构基础数据.xlsx');
+  const preview = await request('/analyze', 'POST', form);
+  expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+  const batch = preview.body.batch!;
+  expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
+  expect(batch.items).toHaveLength(10);
+  expect(batch.athleteCandidates).toHaveLength(2);
+  expect(batch.items.find(item => item.metricCode === 'fms_shoulder_mobility')).toMatchObject({
+    sourceSheet: BASIC_SCREENING_SHEET, valueNum: 0,
+    payload: { fmsObservation: { left: 3, right: 2, clearingLeft: '阳性', clearingRight: '阴性' } },
+  });
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  expect(result.body.createdAthletes).toBe(1);
+  const measures = db.prepare(`SELECT m.value_num AS score FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    JOIN athletes a ON a.id=s.athlete_id WHERE a.name='整表虚构新人' AND s.test_date='2026-10-23' AND s.test_type='FMS测试'`).all();
+  expect(measures).toHaveLength(7);
+  expect(measures).toContainEqual({ score: 0 });
+  expect(measures.reduce((sum, row) => sum + Number((row as { score: number }).score), 0)).toBe(12);
+  const fitness = db.prepare(`SELECT a.name, m.value_num AS value FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    JOIN athletes a ON a.id=s.athlete_id WHERE s.test_date IN ('2026-10-23','2026-10-24') AND m.metric_code='pull_ups_reps'
+    AND a.name IN ('虚构队员','整表虚构新人') ORDER BY m.value_num`).all();
+  expect(fitness).toEqual([{ name: '虚构队员', value: 0 }, { name: '整表虚构新人', value: 5 }]);
+});
+
 it('基础档案新增字段按正式模板入库并在档案显示，空白保留原值', async () => {
   const headers = [...BASIC_PROFILE_HEADERS];
   const filled = {
@@ -690,7 +736,7 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   const athlete = db.prepare("SELECT id FROM athletes WHERE name='举重虚构队员' AND project='WEIGHTLIFTING'").get() as { id: number };
   expect(rows[1][rows[0].indexOf('运动员编号')]).toBe(formatAthleteNumber(athlete.id));
   const empty = await download('ROWING');
-  expect(empty.SheetNames).toEqual([ATHLETE_PROFILE_SHEET]);
+  expect(empty.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
   expect(XLSX.utils.sheet_to_json(empty.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 })).toHaveLength(1);
 
   for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],

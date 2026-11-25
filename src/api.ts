@@ -796,7 +796,7 @@ export const api = {
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = `竞迹${project || ''}分用途导入模板.xlsx`;
+    link.download = kind === 'profile' ? '基础数据模板.xlsx' : `竞迹${project || ''}分用途导入模板.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

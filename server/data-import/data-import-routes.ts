@@ -64,7 +64,7 @@ export type TemplateKind = 'profile' | 'training' | 'test';
 const PURPOSE_SHEETS = IMPORT_PURPOSE_SHEETS;
 
 const PURPOSE_TITLES: Record<TemplateKind, string> = {
-  profile: '队员资料模板',
+  profile: '基础数据模板',
   training: '训练记录模板',
   test: '测试成绩模板',
 };

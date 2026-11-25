@@ -9,7 +9,7 @@ import {
   readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
   TEST_TEMPLATE_IDENTITY_HEADERS, type TestTemplateDownload,
 } from './test-template-store.ts';
-import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET } from './basic-profile-workbook.ts';
+import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET } from './basic-profile-workbook.ts';
 import { parseTrainingYears } from '../../shared/training-years.ts';
 import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { assertImportWorkbookSize } from './import-workbook-limits.ts';
@@ -933,6 +933,8 @@ const isProfileSheet = (name: string) => name === BASIC_PROFILE_SHEET || name ==
 
 const STANDARD_SHEETS = new Set([
   ATHLETE_PROFILE_SHEET,
+  BASIC_TEST_SHEET,
+  BASIC_SCREENING_SHEET,
   BASIC_PROFILE_SHEET,
   COMPACT_ATHLETE_SHEET,
   ...UNIFIED_IMPORT_HEADERS.map(([name]) => name),
@@ -949,10 +951,35 @@ const STANDARD_SHEETS = new Set([
   '竞技状态',
 ]);
 
-function standardHeader(matrix: Matrix, compact = false) {
+const basicTestAliases: Record<string, string> = {
+  '姓名（自动）': '姓名', '测试项目': '指标名称', '实测值': '数值', '备注／未测原因': '备注',
+};
+const basicScreeningAliases: Record<string, string> = {
+  '姓名（自动）': '姓名', '筛查日期': '测试日期',
+  '跨栏步 左': '跨栏步（左）', '跨栏步 右': '跨栏步（右）',
+  '直线弓步 左': '直线弓步蹲（左）', '直线弓步 右': '直线弓步蹲（右）',
+  '肩灵活性 左': '肩部灵活性（左）', '肩灵活性 右': '肩部灵活性（右）',
+  '肩灵活性 左筛查': '肩部灵活性（左侧疼痛排查）', '肩灵活性 右筛查': '肩部灵活性（右侧疼痛排查）',
+  '主动直腿抬高 左': '主动直腿上抬（左）', '主动直腿抬高 右': '主动直腿上抬（右）',
+  '躯干稳定俯卧撑 筛查': '躯干稳定俯卧撑（疼痛排查）',
+  '旋转稳定 左': '旋转稳定性（左）', '旋转稳定 右': '旋转稳定性（右）',
+  '旋转稳定 筛查': '旋转稳定性（疼痛排查）',
+};
+const normalizedAliases = (aliases: Record<string, string>) =>
+  new Map(Object.entries(aliases).map(([source, target]) => [normalizedText(source), normalizedText(target)]));
+const basicTestHeaderAliases = normalizedAliases(basicTestAliases);
+const basicScreeningHeaderAliases = normalizedAliases(basicScreeningAliases);
+
+function standardHeader(matrix: Matrix, compact = false, sheet = '') {
+  const aliases = sheet === BASIC_TEST_SHEET ? basicTestHeaderAliases : sheet === BASIC_SCREENING_SHEET ? basicScreeningHeaderAliases : undefined;
+  const headerKey = (value: unknown) => {
+    const label = templateHeaderKey(String(value ?? ''));
+    const key = normalizedText(compact ? compactAthleteHeaderKey(label) : label);
+    return aliases?.get(key) ?? key;
+  };
   const rowIndex = matrix
     .slice(0, 12)
-    .findIndex((row) => row?.some((value) => ['姓名', '系统运动员编号'].includes(normalizedText(templateHeaderKey(String(value ?? ''))))));
+    .findIndex((row) => row?.some((value) => ['姓名', '系统运动员编号'].includes(headerKey(value))));
   if (rowIndex < 0) return null;
   const columns = new Map<string, number>();
   const identityColumns = new Set<number>();
@@ -962,7 +989,8 @@ function standardHeader(matrix: Matrix, compact = false) {
       identityColumns.add(column);
       continue;
     }
-    const key = normalizedText(compact ? compactAthleteHeaderKey(label) : label);
+    const key = headerKey(label);
+    if ((aliases || sheet === ATHLETE_PROFILE_SHEET) && ['录入检查', 'fms总分'].includes(key)) continue;
     if (key) columns.set(key, column);
   }
   return { rowIndex, columns, identityColumns };
@@ -1175,9 +1203,12 @@ function parseStandardSheet(
 ) {
   const basicProfile = isProfileSheet(rawSheet);
   const athleteProfile = rawSheet === ATHLETE_PROFILE_SHEET;
-  if (basicProfile && !selectedTeam) throw new Error('上传运动员基础档案前请选择项目和队伍。');
-  const sheet = basicProfile ? '运动员信息' : IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
-  const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET);
+  const basicTest = rawSheet === BASIC_TEST_SHEET;
+  const basicScreening = rawSheet === BASIC_SCREENING_SHEET;
+  const basicWorkbookSheet = athleteProfile || basicTest || basicScreening;
+  if ((basicProfile || basicTest || basicScreening) && !selectedTeam) throw new Error(basicProfile ? '上传运动员基础档案前请选择项目和队伍。' : '上传基础数据前请选择项目和队伍。');
+  const sheet = basicProfile ? '运动员信息' : basicTest ? '测试指标' : basicScreening ? 'FMS测试' : IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
+  const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET, rawSheet);
   if (!header) return [];
   if (sheet === COMPACT_ATHLETE_SHEET) {
     const knownHeaders = new Set<string>(COMPACT_ATHLETE_COLUMNS.map(field => normalizedText(field.key)));
@@ -1207,8 +1238,8 @@ function parseStandardSheet(
   ).map(athlete => normalizedName(athlete.name)) : []);
   for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
     const rawRow = matrix[rowIndex] || [];
-    if (athleteProfile && (rawRow.every(value => !text(value) || /^示例[：:]/.test(text(value))) ||
-        (rowIndex === header.rowIndex + 1 && standardText(rawRow, header.columns, '姓名') === '填写档案中使用的姓名。' &&
+    if (basicWorkbookSheet && (rawRow.every(value => !text(value) || /^示例[：:]/.test(text(value))) ||
+        (rowIndex === header.rowIndex + 1 &&
           standardText(rawRow, header.columns, '运动员编号').startsWith('使用队内固定唯一编号')))) continue;
     const row = header.identityColumns.size
       ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
@@ -1256,7 +1287,7 @@ function parseStandardSheet(
         ? resolvePerson({ name: rawName, project, team: selectedTeam, athleteCode }, athletes).kind === 'matched'
         : existingProfileName && activeTeamNameMatches(athletes, project, selectedTeam!, rawName).length === 1)) continue;
     }
-    const rowHasContent = athleteProfile
+    const rowHasContent = basicWorkbookSheet
       ? [...header.columns.values()].some(column => text(row[column]) !== '')
       : row.some(value => text(value) !== '');
     if (!rawName) {
@@ -1300,7 +1331,7 @@ function parseStandardSheet(
     const athlete = matchAthlete(rawName, project, athletes);
     const rawDate = standardValue(row, header.columns, ...dateLabels);
     const dateColumn = dateLabels.map(label => header.columns.get(normalizedText(label))).find(column => column !== undefined);
-    const rowDate = basicProfile
+    const rowDate = (basicProfile || basicWorkbookSheet)
       ? (parseImportFullDate(rawDate) || text(rawDate))
       : text(rawDate) === '' ? fallbackDate : parseStandardDate(rawDate, year);
     const messages: string[] = [];
@@ -1319,8 +1350,8 @@ function parseStandardSheet(
         team: standardText(row, header.columns, '所属队伍'),
         templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
         rawDate: text(rawDate),
-        dateSource: basicProfile || text(rawDate) ? 'row' : defaultDate ? 'selected' : 'legacy_today',
-        defaultedDate: basicProfile || text(rawDate) ? '' : rowDate,
+        dateSource: basicProfile || basicWorkbookSheet || text(rawDate) ? 'row' : defaultDate ? 'selected' : 'legacy_today',
+        defaultedDate: basicProfile || basicWorkbookSheet || text(rawDate) ? '' : rowDate,
         dateAddress: cellAddress(rowIndex, dateColumn ?? nameColumn),
         ...(simplified ? { fieldAddresses: Object.fromEntries([...header.columns].map(([label, column]) => [label, cellAddress(rowIndex, column)])) } : {}),
       } as Record<string, unknown>,
@@ -1712,8 +1743,12 @@ function parseStandardSheet(
       const fmsItems = FMS_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel]) => {
         const inputs = fmsInputFields(metricCode, headerName);
         const detailed = inputs.some(field => field.header !== headerName && header.columns.has(normalizedText(field.header)));
-        const entries = inputs.map(field => ({ key: field.key, raw: standardValue(row, header.columns, field.header) }));
-        const hasDetail = detailed && entries.some(entry => text(entry.raw));
+        const entries = inputs.map(field => {
+          const raw = standardValue(row, header.columns, field.header);
+          const pain = basicScreening && field.key.startsWith('clearing') ? text(raw) : '';
+          return { key: field.key, raw: pain === '有痛' ? '阳性' : pain === '无痛' ? '阴性' : raw };
+        });
+        const hasDetail = (detailed || basicScreening) && entries.some(entry => text(entry.raw));
         const fms = hasDetail ? readFmsObservation(entries) : undefined;
         const valueNum = fms ? fmsFinalScore(metricCode, fms.observation) : readNumber(headerName);
         if (valueNum === null && !fms) return [];
@@ -1781,12 +1816,17 @@ function parseStandardSheet(
         items.push(itemBase({ ...base, itemType: 'invalid_row', eventDate: rowDate, quality: 'error',
           messages: ['错误：体能测试至少填写一项实测数值'], rawValue: row.map(text).join(' | ') }));
     } else if (sheet === '测试指标') {
+      if (basicTest && !standardText(row, header.columns, '数值') && standardText(row, header.columns, '备注')) continue;
       const explicitTestType = standardText(row, header.columns, '测试类型');
       const rawCode = standardText(row, header.columns, '指标代码');
       // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
       const selected = rawCode ? undefined : resolveImportMetricName(standardText(row, header.columns, '指标名称'), standardText(row, header.columns, '单位'), metricCatalog);
       const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || '';
       const valueNum = readNumber('数值');
+      const fitnessType = basicTest && (
+        FITNESS_TEMPLATE_METRICS.some(([, code]) => code === metricCode) ||
+        COMMON_FITNESS_TEMPLATE_METRICS.some(([, code, , , type]) => code === metricCode && type === '体能测试')
+      ) ? '体能测试' : '专项测试';
       const metricDefinition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(metricCode) as { unit: string } | undefined;
       const providedUnit = standardText(row, header.columns, '单位');
       const metricUnit = providedUnit || metricDefinition?.unit || '';
@@ -1813,7 +1853,7 @@ function parseStandardSheet(
           ...base,
           itemType: 'test_measurement',
           eventDate: rowDate,
-          testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : '专项测试'),
+          testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : fitnessType),
           metricCode,
           metricLabel: selected?.metric?.label || standardText(row, header.columns, '指标名称') || metricCode,
           valueNum,
@@ -2816,9 +2856,6 @@ export function analyzeDataImport(input: {
       );
       type = `统一模板·${sheetName}`;
       note = '按稳定字段名识别模板，支持字段说明及列重排';
-    } else if (workbook.SheetNames.includes(ATHLETE_PROFILE_SHEET) && ['体能与专项测试', '功能筛查'].includes(sheetName)) {
-      ignoredSheets.push({ name: sheetName, reason: '此工作簿仅导入运动员档案；测试和筛查请使用测试成绩模板' });
-      continue;
     } else if (/个人档案/.test(sheetName)) {
       ignoredSheets.push({ name: sheetName, reason: '公式与图表展示页，不作为原始数据导入' });
       continue;
@@ -2874,7 +2911,7 @@ export function analyzeDataImport(input: {
       note = '仅提取各日期原始值，忽略差值公式';
     }
     if (STANDARD_SHEETS.has(sheetName) && sheetName !== COMPACT_ATHLETE_SHEET) {
-      const header = standardHeader(matrix);
+      const header = standardHeader(matrix, false, sheetName);
       if (header) {
         const represented = new Set(parsed.map(item => XLSX.utils.decode_cell(item.sourceAddress).r));
         unfilledRows += matrix.slice(header.rowIndex + 1).filter((row, offset) => {
@@ -2887,7 +2924,7 @@ export function analyzeDataImport(input: {
       items.push(...parsed);
       recognizedSheets.push({ name: sheetName, type, items: parsed.length, note });
     } else {
-      const reason = STANDARD_SHEETS.has(sheetName) && standardHeader(matrix)
+      const reason = STANDARD_SHEETS.has(sheetName) && standardHeader(matrix, false, sheetName)
         ? '未填写业务数据（仅有表头或预填人员信息）'
         : !firstRows.replace(/\|/g, '') ? '空白工作表' : '未识别为支持的数据模板';
       ignoredSheets.push({ name: sheetName, reason });

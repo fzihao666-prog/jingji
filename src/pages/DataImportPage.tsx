@@ -968,8 +968,8 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
           >
             <Download size={19} />
             <div>
-              <strong>{busy === 'template' ? '正在准备模板…' : '队员资料模板'}</strong>
-              <span>批量建档与补全，预填已有人员</span>
+              <strong>{busy === 'template' ? '正在准备模板…' : '基础数据模板'}</strong>
+              <span>运动员档案、体能与专项测试、功能筛查</span>
             </div>
           </button>
           <button
