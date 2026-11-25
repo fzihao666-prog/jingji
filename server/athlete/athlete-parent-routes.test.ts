@@ -45,6 +45,7 @@ beforeAll(async () => {
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
     CREATE TABLE athletes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, project TEXT, team TEXT, team_id INTEGER,
       active INTEGER DEFAULT 1, gender TEXT, birth_date TEXT, region TEXT, city TEXT, county TEXT, profile_status TEXT, source TEXT);
+    CREATE TABLE training_sessions (athlete_id INTEGER, session_date TEXT, is_demo INTEGER DEFAULT 0);
     CREATE TABLE athlete_team_affiliations (athlete_id INTEGER, team_id INTEGER, PRIMARY KEY (athlete_id, team_id));
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, ethnicity TEXT, phone TEXT,
@@ -71,7 +72,7 @@ beforeEach(() =>
   database.exec(`
   DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions;
   DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;
-  DELETE FROM athlete_team_affiliations; DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM athlete_profiles;
+  DELETE FROM training_sessions; DELETE FROM athlete_team_affiliations; DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM athlete_profiles;
   INSERT INTO users (id, username, display_name, role, athlete_id) VALUES
     (1,'manager','管理者','DMD',NULL),(2,'old','原队教练','SCC',NULL),
     (3,'new','新队教练','SCC',NULL),(4,'athlete','测试队员','ATL',101),(5,'regional','区域管理','REG',NULL);
@@ -326,5 +327,28 @@ describe('教练删除队员权限', () => {
     } finally {
       database.exec('DROP TRIGGER reject_delete_audit');
     }
+  });
+});
+
+describe('停用运动员恢复', () => {
+  it('保留训练记录，校验原队及目标队权限，转队恢复后账号仍停用', async () => {
+    database.exec(`
+      UPDATE athletes SET active = 0 WHERE id = 101;
+      UPDATE users SET active = 0 WHERE id = 4;
+      UPDATE project_teams SET active = 0 WHERE id = 10;
+      INSERT INTO training_sessions VALUES (101, '2026-11-24', 0);
+      UPDATE user_team_permissions SET team = 'B队' WHERE user_id = 5;
+    `);
+    const list = await creationRequest('/api/admin/athletes/inactive', 1);
+    expect(await list.json()).toMatchObject({ athletes: [{ id: 101, sessionCount: 1, recentSessionDates: '2026-11-24' }] });
+    const hidden = await creationRequest('/api/admin/athletes/inactive', 5);
+    expect(await hidden.json()).toEqual({ athletes: [] });
+    expect((await creationRequest('/api/admin/athletes/101/restore', 5, { teamId: 11 })).status).toBe(404);
+    expect((await creationRequest('/api/admin/athletes/101/restore', 1, { teamId: 10 })).status).toBe(400);
+    expect((await creationRequest('/api/admin/athletes/101/restore', 1, { teamId: 11 })).status).toBe(200);
+    expect(database.prepare('SELECT active, team_id FROM athletes WHERE id = 101').get()).toEqual({ active: 1, team_id: 11 });
+    expect(database.prepare('SELECT active FROM users WHERE id = 4').get()).toEqual({ active: 0 });
+    expect(database.prepare('SELECT team FROM user_team_permissions WHERE user_id = 4').get()).toEqual({ team: 'B队' });
+    expect(database.prepare('SELECT athlete_id FROM training_sessions').all()).toEqual([{ athlete_id: 101 }]);
   });
 });

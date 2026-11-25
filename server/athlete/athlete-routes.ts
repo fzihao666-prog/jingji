@@ -1,3 +1,4 @@
+import { AthleteReactivationError, reactivateAthlete } from '../core/athlete-reactivation.ts';
 import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
 import { normalizeTechnicalLevel, validTechnicalLevel } from '../../shared/athlete-technical-level.ts';
@@ -57,6 +58,77 @@ import {
 } from '../core/coach-team-responsibility.ts';
 
 export function registerAthleteRoutes(app: Express) {
+  app.get('/api/admin/athletes/inactive', requireAuth, requireRole('REG', 'TD', 'DMD'), (req, res) => {
+    const permissions = accountPermissions(req.authUser!.id);
+    const athletes = db.prepare(`
+      SELECT a.id, a.name, a.project, a.team_id AS teamId, COALESCE(t.name, a.team, '') AS team,
+        (SELECT COUNT(*) FROM training_sessions s WHERE s.athlete_id = a.id AND s.is_demo = 0) AS sessionCount,
+        (SELECT group_concat(session_date, ',') FROM (
+          SELECT DISTINCT session_date FROM training_sessions WHERE athlete_id = a.id AND is_demo = 0
+          ORDER BY session_date DESC LIMIT 5
+        )) AS recentSessionDates
+      FROM athletes a LEFT JOIN project_teams t ON t.id = a.team_id
+      WHERE a.active = 0 ORDER BY a.project, team, a.name
+    `).all() as Array<{ id: number; name: string; project: string; teamId: number | null; team: string; sessionCount: number; recentSessionDates: string | null }>;
+    res.json({ athletes: athletes.filter(a => permissionsAllowProjectTeam(permissions, a.project, a.team)) });
+  });
+
+  app.post('/api/admin/athletes/:id/restore', requireAuth, requireRole('REG', 'TD', 'DMD'), (req, res) => {
+    const actor = req.authUser!;
+    const id = Number(req.params.id);
+    const teamId = req.body?.teamId;
+    if (!Number.isSafeInteger(id) || !Number.isSafeInteger(teamId) || teamId < 1)
+      return res.status(400).json({ message: '请选择有效的运动员和队伍。' });
+    db.exec('BEGIN IMMEDIATE');
+    let committed = false;
+    try {
+      const permissions = accountPermissions(actor.id);
+      const athlete = db.prepare(`
+        SELECT a.project, a.team_id AS teamId, COALESCE(t.name, a.team, '') AS team
+        FROM athletes a LEFT JOIN project_teams t ON t.id = a.team_id WHERE a.id = ? AND a.active = 0
+      `).get(id) as { project: string; team: string; teamId: number | null } | undefined;
+      if (!athlete || !permissionsAllowProjectTeam(permissions, athlete.project, athlete.team))
+        return res.status(404).json({ message: '停用档案不存在或不在可管理范围内。' });
+      const team = db.prepare('SELECT name FROM project_teams WHERE id = ? AND project = ? AND active = 1')
+        .get(teamId, athlete.project) as { name: string } | undefined;
+      if (!team || !permissionsAllowProjectTeam(permissions, athlete.project, team.name))
+        return res.status(400).json({ message: '请选择同项目且在管理范围内的启用队伍。' });
+      reactivateAthlete(id, teamId);
+      if (teamId !== athlete.teamId) {
+        const accounts = db.prepare(`
+          SELECT u.id, ap.parent_user_id AS parentUserId FROM users u
+          LEFT JOIN account_profiles ap ON ap.user_id = u.id WHERE u.role = 'ATL' AND u.athlete_id = ?
+        `).all(id) as Array<{ id: number; parentUserId: number | null }>;
+        for (const account of accounts) {
+          const scope = {
+            areas: accountPermissions(account.id).areas,
+            projects: [athlete.project],
+            teams: [{ project: athlete.project, team: team.name }],
+          };
+          replaceAccountScope({
+            userId: account.id,
+            role: 'ATL',
+            parentUserId: resolveAthleteParent({
+              athleteId: id, parentUserId: account.parentUserId, currentUser: actor, permissions: scope,
+            }),
+            permissions: scope,
+            grantedBy: actor.id,
+          });
+        }
+      }
+      db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
+        .run(actor.id, 'RESTORE_ATHLETE', 'athlete', id);
+      db.exec('COMMIT');
+      committed = true;
+      res.json({ message: '运动员档案已恢复，登录账号可按需启用。' });
+    } catch (error) {
+      res.status(error instanceof AthleteReactivationError ? 409 : 500)
+        .json({ message: error instanceof AthleteReactivationError ? error.message : '恢复运动员失败。' });
+    } finally {
+      if (!committed) db.exec('ROLLBACK');
+    }
+  });
+
   app.put('/api/me/athlete-profile', requireAuth, (req, res) => {
     const currentUser = req.authUser!;
     if (currentUser.role !== 'ATL' || !currentUser.athleteId) {
@@ -497,10 +569,10 @@ export function registerAthleteRoutes(app: Express) {
             'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
           ).run(req.authUser!.id, 'DELETE_ATHLETE', 'athlete', id);
         db.exec('COMMIT');
-        res.json({ message: `已删除 ${ids.length} 名运动员。` });
+        res.json({ message: `已停用 ${ids.length} 名运动员。` });
       } catch {
         db.exec('ROLLBACK');
-        res.status(500).json({ message: '运动员删除失败。' });
+        res.status(500).json({ message: '运动员停用失败。' });
       }
     }
   );
@@ -522,10 +594,10 @@ export function registerAthleteRoutes(app: Express) {
           'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
         ).run(req.authUser!.id, 'DELETE_ATHLETE', 'athlete', athleteId);
         db.exec('COMMIT');
-        res.json({ message: '运动员已删除。' });
+        res.json({ message: '运动员已停用。' });
       } catch {
         db.exec('ROLLBACK');
-        res.status(500).json({ message: '运动员删除失败。' });
+        res.status(500).json({ message: '运动员停用失败。' });
       }
     }
   );

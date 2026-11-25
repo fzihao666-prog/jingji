@@ -380,12 +380,30 @@ export const api = {
     return request<{ teams: ProjectTeam[] }>('/api/registration/teams', { auth: false });
   },
   async adminTeams() {
-    return request<{ teams: ProjectTeam[]; canCreateProjects: Project[] }>('/api/admin/teams');
+    return request<{ teams: ProjectTeam[]; canCreateProjects: Project[]; canViewInactive: boolean }>('/api/admin/teams');
   },
-  async createTeam(project: string, name: string) {
+  async inactiveTeams() {
+    return request<{ teams: Array<Pick<ProjectTeam, 'id' | 'project' | 'name'> & { planCount: number; latestPublishedPlan: string | null }> }>(
+      '/api/admin/teams/inactive'
+    );
+  },
+  async inactiveAthletes() {
+    return request<{ athletes: Array<Pick<Athlete, 'id' | 'name' | 'project' | 'team'> & {
+      teamId: number | null;
+      sessionCount: number;
+      recentSessionDates: string | null;
+    }> }>('/api/admin/athletes/inactive');
+  },
+  async restoreAthlete(id: number, teamId: number) {
+    return request<{ message: string }>(`/api/admin/athletes/${id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ teamId }),
+    });
+  },
+  async createTeam(project: string, name: string, restore = false) {
     return request<{ message: string; id: number }>('/api/admin/teams', {
       method: 'POST',
-      body: JSON.stringify({ project, name }),
+      body: JSON.stringify({ project, name, restore }),
     });
   },
   async renameTeam(id: number, name: string, merge = false) {

@@ -228,6 +228,34 @@ export function AthleteManagementPage({
   const canAdmin = ROLE_META[user.role].level >= ROLE_META.REG.level;
   const canDelete = user.role === 'SCC' || canAdmin;
 
+  const [inactiveAthletes, setInactiveAthletes] = useState<Awaited<ReturnType<typeof api.inactiveAthletes>>['athletes'] | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const showInactive = async () => {
+    try {
+      setInactiveAthletes((await api.inactiveAthletes()).athletes);
+    } catch (error) {
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '停用运动员加载失败。');
+    }
+  };
+
+  const restore = async (id: number, teamId: number) => {
+    setRestoreBusy(true);
+    try {
+      const result = await api.restoreAthlete(id, teamId);
+      setInactiveAthletes(rows => rows?.filter(row => row.id !== id) ?? null);
+      setMessageTone('success');
+      setMessage(result.message);
+      await load();
+      onChanged();
+    } catch (error) {
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '恢复运动员失败。');
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -493,7 +521,7 @@ export function AthleteManagementPage({
   };
 
   const deleteOne = async (athlete: Athlete) => {
-    if (!window.confirm(`确认删除运动员“${athlete.name}”？账号将同步停用，历史数据继续保留。`))
+    if (!window.confirm(`确认停用运动员“${athlete.name}”？账号将同步停用，历史数据继续保留。`))
       return;
     try {
       const result = await api.deleteAthlete(athlete.id);
@@ -503,13 +531,13 @@ export function AthleteManagementPage({
       onChanged();
     } catch (error) {
       setMessageTone('error');
-      setMessage(error instanceof Error ? error.message : '删除失败。');
+      setMessage(error instanceof Error ? error.message : '停用失败。');
     }
   };
 
   const deleteSelected = async () => {
     const ids = [...selectedIds];
-    if (!ids.length || !window.confirm(`确认删除选中的 ${ids.length} 名运动员？`)) return;
+    if (!ids.length || !window.confirm(`确认停用选中的 ${ids.length} 名运动员？账号将同步停用，历史数据继续保留。`)) return;
     try {
       const result = await api.bulkDeleteAthletes(ids);
       setMessageTone('success');
@@ -519,7 +547,7 @@ export function AthleteManagementPage({
       onChanged();
     } catch (error) {
       setMessageTone('error');
-      setMessage(error instanceof Error ? error.message : '批量删除失败。');
+      setMessage(error instanceof Error ? error.message : '批量停用失败。');
     }
   };
 
@@ -594,6 +622,38 @@ export function AthleteManagementPage({
           <Check size={16} />
           {message}
         </div>
+      )}
+
+      {canAdmin && (
+        <button type="button" className="secondary-button" aria-pressed={inactiveAthletes !== null}
+          onClick={() => inactiveAthletes ? setInactiveAthletes(null) : void showInactive()}>
+          已停用运动员
+        </button>
+      )}
+      {canAdmin && inactiveAthletes && (
+        <section aria-label="已停用运动员">
+          {inactiveAthletes.length ? <ul>{inactiveAthletes.map(athlete => {
+            const options = teams.filter(team => team.project === athlete.project);
+            return (
+              <li key={athlete.id}>
+                <span>{athlete.name} · {athlete.team || '未设队伍'} · {athlete.sessionCount} 条训练记录</span>
+                {athlete.recentSessionDates && <div>最近训练日期：{athlete.recentSessionDates.split(',').join('、')}</div>}
+                <form onSubmit={(event) => {
+                  event.preventDefault();
+                  const teamId = Number(new FormData(event.currentTarget).get('teamId'));
+                  if (teamId && !restoreBusy) void restore(athlete.id, teamId);
+                }}>
+                  <select name="teamId" aria-label={`${athlete.name}的恢复队伍`} required
+                    defaultValue={options.some(team => team.id === athlete.teamId) ? athlete.teamId ?? '' : ''}>
+                    <option value="">选择启用队伍</option>
+                    {options.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+                  </select>
+                  <button type="submit" className="primary-button" disabled={restoreBusy || !options.length}>恢复档案</button>
+                </form>
+              </li>
+            );
+          })}</ul> : <p>暂无已停用运动员。</p>}
+        </section>
       )}
 
       <section className="athlete-pulse-rail" aria-label="运动员状态统计">
@@ -763,7 +823,7 @@ export function AthleteManagementPage({
             disabled={!selectedIds.size}
           >
             <Trash2 size={15} />
-            批量删除
+            批量停用
           </button>
         </section>
       )}
@@ -920,7 +980,7 @@ export function AthleteManagementPage({
                       {canDelete && (
                         <button className="danger" onClick={() => void deleteOne(athlete)}>
                           <Trash2 size={14} />
-                          删除
+                          停用
                         </button>
                       )}
                     </div>
