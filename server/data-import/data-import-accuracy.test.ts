@@ -2805,7 +2805,7 @@ it('编号区分同队同名者，并将重复编号的冲突身份留待人工�
   const matched = analyze({ 训练课次: [header, [101, '张某', 'A队', '2025-09-01', 60]] }, { athletes: roster });
   expect(matched.athleteCandidates[0]).toMatchObject({ status: 'matched', matchedAthleteId: 101 });
   const conflict = analyze({ 训练课次: [header,
-    [101, '张某', 'A队', '2025-09-01', 60], [101, '钱某', 'A队', '2025-09-02', 60],
+    ['ATL00101', '张某', 'A队', '2025-09-01', 60], [101, '钱某', 'A队', '2025-09-02', 60],
   ] }, { athletes: roster });
   expect(conflict.athleteCandidates).toHaveLength(2);
   for (const candidate of conflict.athleteCandidates) {

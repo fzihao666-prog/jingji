@@ -838,7 +838,7 @@ export function AthleteManagementPage({
                       <div className="athlete-person-details">
                         <strong>{athlete.name}</strong>
                         <div className="athlete-person-meta">
-                          <span>编号 {formatAthleteNumber(athlete.id)}</span>
+                          <span>编号 {athlete.athleteNumber || formatAthleteNumber(athlete.id)}</span>
                           <span>{athlete.gender || '性别未填'}</span>
                           <span>{ageFromBirthDate(athlete.birthDate)} 岁</span>
                         </div>

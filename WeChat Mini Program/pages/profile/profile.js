@@ -108,7 +108,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
 
   return {
     athleteName: athlete.name || '档案资料待补充',
-    athleteNumber: athlete.id ? formatAthleteNumber(athlete.id) : '',
+    athleteNumber: athlete.athleteNumber || (athlete.id ? formatAthleteNumber(athlete.id) : ''),
     athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '--'}`,
     athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.eventItem || athlete.currentEvent || '小项未录入'}`,
     athleteInitial: athlete.name ? athlete.name.slice(0, 1) : '运',

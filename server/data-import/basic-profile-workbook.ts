@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import ExcelJS from 'exceljs';
 import { COMMON_FITNESS_TEMPLATE_METRICS } from '../../shared/data-import-template.ts';
 
@@ -44,7 +45,7 @@ export function buildBasicProfileWorkbook(
   const actions = COMMON_FITNESS_TEMPLATE_METRICS.filter(metric => metric[5] === '实测1RM').map(([label]) => label.split('1RM')[0]);
   for (const athlete of athletes) {
     const row = sheet.addRow([athlete.name]);
-    row.getCell(numberColumn).value = String(athlete.id);
+    row.getCell(numberColumn).value = formatAthleteNumber(athlete.id);
     row.getCell(strengthProjectColumn).dataValidation = { type: 'list', allowBlank: true,
       formulae: [`"${actions.join(',')}"`], showErrorMessage: true };
   }

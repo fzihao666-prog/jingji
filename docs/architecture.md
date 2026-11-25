@@ -927,7 +927,7 @@ AI 管理页点击「队伍数据检查Excel」时，通过只读 SQLite 工作�
 
 ### 运动员编号和队伍关联
 
-系统运动员编号沿用 `athletes.id`。SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` 统一分配全局唯一编号，保留已有编号和序列高水位。移除旧库姓名、项目、队伍组合的唯一索引，保留普通查询索引。训练、测试、登录账号仍通过原运动员 ID 关联。
+系统运动员编号由 `athletes.id` 生成，档案接口及 Excel 使用 `ATL00001` 格式。旧数字编号可继续导入。SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` 统一分配全局唯一编号，保留已有编号和序列高水位。移除旧库姓名、项目、队伍组合的唯一索引，保留普通查询索引。训练、测试、登录账号仍通过原运动员 ID 关联。
 
 `athletes.team_id` 仍是运动员所属队伍。`athlete_team_affiliations` 以运动员 ID、队伍 ID 记录同项目的兼属关系，组织管理保存时校验队伍权限；主队变化时移除与主队重复及跨项目关联。兼属关系用于组织名册，训练归属和授权沿用主队规则。
 

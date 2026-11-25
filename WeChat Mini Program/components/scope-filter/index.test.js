@@ -36,11 +36,11 @@ function createFilter() {
 }
 
 describe('运动员搜索无需父页面回写关键词', () => {
-  it.each([['张', [1]], ['二队', [2]], [' ALICE ', [3]], ['2', [2]], [' atl-000002 ', [2]], ['', [1, 2, 3]]])('输入 %s 按姓名、编号或队伍过滤', (keyword, expected) => {
+  it.each([['张', [1]], ['二队', [2]], [' ALICE ', [3]], ['2', [2]], [' atl00002 ', [2]], ['ATL-000002', [2]], ['', [1, 2, 3]]])('输入 %s 按姓名、编号或队伍过滤', (keyword, expected) => {
     const { component, events } = createFilter();
     component.onKeywordInput({ detail: { value: keyword } });
     expect(component.data.athleteItems.map((item) => item.id)).toEqual(expected);
-    expect(component.data.athleteItems.every(item => item.label.includes(`ATL-00000${item.id}`))).toBe(true);
+    expect(component.data.athleteItems.every(item => item.label.includes(`ATL0000${item.id}`))).toBe(true);
     expect(component.data.athleteId).toBe(1);
     expect(events).toEqual([{ type: 'keywordchange', detail: { value: keyword } }]);
   });
