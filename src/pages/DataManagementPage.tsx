@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Database, Plus, RefreshCw, Tags } from 'lucide-react';
 import { api } from '../api';
-import type { User } from '../types';
+import type { Project, ProjectTeam, User } from '../types';
+import { TestTemplatePanel } from '../components/TestTemplatePanel';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 import './DataImportPage.css';
 
-type Props = { user: User };
+type Props = { user: User; project: Project; teamId?: number | null };
 type ImportedTest = Awaited<ReturnType<typeof api.dataManagementImportedTests>>['items'][number];
 type Metric = {
   code: string;
@@ -24,7 +25,25 @@ type Alias = {
   side: string;
 };
 
-export function DataManagementPage({ user }: Props) {
+export function DataManagementPage({ user, project, teamId }: Props) {
+  const [teams, setTeams] = useState<ProjectTeam[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [teamError, setTeamError] = useState('');
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const templateButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.adminTeams().then(({ teams }) => {
+      if (cancelled) return;
+      const scoped = teams.filter(team => team.project === project);
+      setTeams(scoped);
+      setSelectedTeam(scoped.find(team => team.id === teamId)?.name ?? scoped[0]?.name ?? '');
+      setTeamsLoaded(true);
+    }, () => { if (!cancelled) setTeamError('队伍读取失败，请刷新页面重试。'); });
+    return () => { cancelled = true; };
+  }, [project, teamId]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [aliases, setAliases] = useState<Alias[]>([]);
   const [standards, setStandards] = useState<Awaited<
@@ -133,6 +152,33 @@ export function DataManagementPage({ user }: Props) {
         title="指标与标准"
       />
       <p className="data-import-message" role="status">{message}</p>
+      <section className="data-import-upload-card" aria-labelledby="test-project-management-title">
+        <div className="data-import-card-heading">
+          <Tags size={20} aria-hidden="true" />
+          <div>
+            <h2 id="test-project-management-title">测试项目、指标与模板</h2>
+            <span>在此创建测试项目、添加指标或配置本队测试成绩模板。</span>
+          </div>
+        </div>
+        {teams.length > 1 && <label className="data-import-template-team">
+          选择队伍
+          <select value={selectedTeam} onChange={event => setSelectedTeam(event.target.value)}>
+            {teams.map(team => <option key={team.id} value={team.name}>{team.name}</option>)}
+          </select>
+        </label>}
+        <button ref={templateButton} type="button" className="primary-button" aria-haspopup="dialog"
+          disabled={!selectedTeam} onClick={() => setTemplateOpen(true)}>
+          <Tags size={16} aria-hidden="true" />
+          管理测试项目与模板
+        </button>
+        {teamError ? <p role="alert">{teamError}</p> : teamsLoaded && !teams.length && <p>当前项目没有可管理的队伍。</p>}
+      </section>
+      {templateOpen && selectedTeam && <TestTemplatePanel key={selectedTeam} project={project} team={selectedTeam}
+        onClose={() => {
+          setTemplateOpen(false);
+          requestAnimationFrame(() => templateButton.current?.focus());
+          void load().catch(() => setMessage('指标字典刷新失败，请重试。'));
+        }} />}
       <div className="data-import-grid">
         <section className="data-import-upload-card">
           <div className="data-import-card-heading">

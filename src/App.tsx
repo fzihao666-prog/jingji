@@ -563,6 +563,7 @@ export default function App() {
             projects={shared.projects}
             onProjectChange={shared.onProjectChange}
             onViewEnode={() => changePage('strength-enode')}
+            onManageTests={() => changePage('data-management')}
             onViewTeamTraining={(id, date) => {
               const params = new URLSearchParams({ teamTraining: String(id), project });
               if (date) params.set('date', date);
@@ -578,7 +579,7 @@ export default function App() {
         {page === 'reports' && user.role !== 'ATL' && (
           <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />
         )}
-        {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage user={user} />}
+        {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage key={project} user={user} project={project} teamId={teamId} />}
         {page === 'athletes' && user.role !== 'ATL' && (
           <AthleteManagementPage
             user={user}

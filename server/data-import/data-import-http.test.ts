@@ -697,9 +697,16 @@ it('基础数据模板可使用自行创建的测试项目、指标与协议，�
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const headers = [...BASIC_DOWNLOAD_SHEETS[1][1]];
   expect(headers.slice(2, 5)).toEqual(['测试项目', '指标', '测试协议']);
+  const unregistered = await upload([headers,
+    ['虚构队员', '2026-10-27', '虚构尚未创建项目', '', '', 0, '次'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(unregistered.errorCount).toBe(1);
+  expect(unregistered.items[0].messages.join(' ')).toContain('指标与标准');
+  expect(unregistered.items[0].messages.join(' ')).not.toContain('下拉列表');
   const batch = await upload([headers,
     ['虚构队员', '2026-10-27', '虚构划船阶梯', '峰值功率', '高阻力', 250, 'W'],
     ['虚构队员', '2026-10-27', '虚构划船阶梯', '持续时间', '', 60, 's'],
+    ['虚构队员', '2026-10-27', '虚构未测项目', '', '', '', '次'],
   ], BASIC_TEST_SHEET, 'HTTP甲队');
   expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
   expect(batch.items.map(item => item.payload.protocol)).toEqual(['高阻力', '标准阻力']);

@@ -1252,6 +1252,8 @@ function parseStandardSheet(
     const row = header.identityColumns.size
       ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
       : rawRow;
+    // 基础测试表留空表示未测，实测 0 与无效的非空值仍须解析。
+    if (basicTest && !standardText(row, header.columns, '数值')) continue;
     const athleteCode = standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号');
     const numberedId = parseAthleteNumber(athleteCode);
     const numberedAthlete = athletes.find(athlete => athlete.id === numberedId);
@@ -1824,7 +1826,6 @@ function parseStandardSheet(
         items.push(itemBase({ ...base, itemType: 'invalid_row', eventDate: rowDate, quality: 'error',
           messages: ['错误：体能测试至少填写一项实测数值'], rawValue: row.map(text).join(' | ') }));
     } else if (sheet === '测试指标') {
-      if (basicTest && !standardText(row, header.columns, '数值') && standardText(row, header.columns, '备注')) continue;
       const explicitTestType = standardText(row, header.columns, '测试类型');
       const rawCode = standardText(row, header.columns, '指标代码');
       // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
@@ -1840,7 +1841,7 @@ function parseStandardSheet(
       const sameProtocol = basicTest && protocol ? options.filter(metric => metric.protocol === protocol) : [];
       const selected = rawCode ? undefined : (() => {
         if (basicTest && !grouped.length && field && normalizedText(field) !== normalizedText(projectName))
-          return { error: '错误：测试项目与指标未在系统中配对，请先在「自定义测试成绩模板」中创建。' };
+          return { error: '错误：测试项目与指标未在系统中配对，请在「指标与标准」中新建项目与指标，或核对名称。' };
         if (!basicTest) return resolveImportMetricName(projectName, providedUnit, metricCatalog);
         const preferred = resolveImportMetricName(lookupName, providedUnit, sameProtocol);
         return preferred.metric ? preferred : resolveImportMetricName(lookupName, providedUnit, options);
