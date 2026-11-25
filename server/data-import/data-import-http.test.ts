@@ -43,7 +43,10 @@ beforeAll(async () => {
   otherToken = jwt.sign({ id: 702, sessionVersion: 1 }, jwtSecret);
   const app = express();
   app.use(express.json());
-  registerDataImportRoutes(app);
+  registerDataImportRoutes(app, true);
+  const currentImport = express();
+  registerDataImportRoutes(currentImport);
+  app.use('/current', currentImport);
   const { registerAthleteRoutes } = await import('../athlete/athlete-routes.ts');
   registerAthleteRoutes(app);
   const { registerAnalysisRoutes } = await import('../analysis/analysis-routes.ts');
@@ -687,6 +690,16 @@ it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员�
 
 });
 
+it('正式入口关闭旧测试模板下载，基础数据模板可继续下载', async () => {
+  const headers = { authorization: `Bearer ${token}` };
+  const scope = new URLSearchParams({ project: 'ROWING', team: 'HTTP甲队' });
+  for (const path of [`/template?kind=test&${scope}`, `/test-template/download?${scope}`]) {
+    const response = await fetch(`${base}/current/api/data-import${path}`, { headers });
+    expect(response.status).toBe(410);
+  }
+  expect((await fetch(`${base}/current/api/data-import/template?kind=profile&${scope}`, { headers })).status).toBe(200);
+});
+
 it('基础数据模板可使用自行创建的测试项目、指标与协议，并分列导出', async () => {
   const created = await request('/test-template/groups?project=ROWING&team=HTTP甲队', 'POST', {
     name: '虚构划船阶梯', protocol: '标准阻力', fields: [
@@ -713,6 +726,19 @@ it('基础数据模板可使用自行创建的测试项目、指标与协议，�
   const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
   expect(committed.status, JSON.stringify(committed.body)).toBe(200);
 
+  const team = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get() as { id: number };
+  const query = new URLSearchParams({
+    project: 'ROWING', teamId: String(team.id), from: '2026-10-27', to: '2026-10-27',
+    protocol: '高阻力',
+  });
+  const trend = await fetch(`${base}/api/athletes/701/custom-test-trend?${query}`, { headers: { authorization: `Bearer ${token}` } });
+  expect(trend.status).toBe(200);
+  const series = await trend.json() as import('../../shared/custom-test-trend.ts').CustomTestTrend;
+  const metric = series.metrics.find(entry => entry.label === '虚构划船阶梯峰值功率');
+  expect(metric).toMatchObject({ protocol: '高阻力', version: 0 });
+  query.set('metricCode', metric!.code);
+  const selected = await fetch(`${base}/api/athletes/701/custom-test-trend?${query}`, { headers: { authorization: `Bearer ${token}` } });
+  expect(await selected.json()).toMatchObject({ points: [{ date: '2026-10-27', value: 250 }] });
   const response = await fetch(`${base}/api/data-import/export?format=basic&${new URLSearchParams({ project: 'ROWING', team: 'HTTP甲队' })}`, { headers: { authorization: `Bearer ${token}` } });
   expect(response.status).toBe(200);
   const book = XLSX.read(await response.arrayBuffer());

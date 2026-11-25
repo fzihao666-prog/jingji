@@ -778,7 +778,7 @@ export const api = {
     });
   },
   async downloadDataImportTemplate(
-    kind: 'profile' | 'training' | 'test',
+    kind: 'profile' | 'training',
     project?: string,
     team?: string
   ) {
@@ -936,11 +936,13 @@ export const api = {
     });
   },
   customTestTrend(athleteId: number, query: {
-    project: Project; teamId: number; from: string; to: string; metricCode?: string;
+    project: Project; teamId: number; from: string; to: string; metricCode?: string; protocol?: string; version?: number;
   }, signal?: AbortSignal) {
-    const { project, teamId, from, to, metricCode } = query;
+    const { project, teamId, from, to, metricCode, protocol, version } = query;
     const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
     if (metricCode) params.set('metricCode', metricCode);
+    if (protocol !== undefined) params.set('protocol', protocol);
+    if (version !== undefined) params.set('version', String(version));
     return request<CustomTestTrend>(`/api/athletes/${athleteId}/custom-test-trend?${params}`, { signal });
   },
   collectionProgress(project: Project, team: string, from: string, to: string, signal?: AbortSignal, expected?: { athleteIds: number[]; metricCodes: string[] }) {
@@ -1001,18 +1003,6 @@ export const api = {
     return request<Pick<TestTemplatePreview, 'source' | 'codes' | 'projectCodes'>>(
       `/api/data-import/test-template/config?${new URLSearchParams({ project, team })}`,
       { method: 'PUT', body: JSON.stringify(input) });
-  },
-  async downloadTestTemplate(project: Project, team: string) {
-    const blob = await request<Blob>(`/api/data-import/test-template/download?${new URLSearchParams({ project, team })}`,
-      { responseType: 'xlsx' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.download = `竞迹${team}测试成绩模板.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   },
   async dataImportMetrics(project: Project) {
     return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(

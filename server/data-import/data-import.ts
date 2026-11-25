@@ -1847,13 +1847,13 @@ function parseStandardSheet(
         return preferred.metric ? preferred : resolveImportMetricName(lookupName, providedUnit, options);
       })();
       const basicMetric = basicCatalog.find(metric => metric.code === selected?.metric?.code);
-      const configuredProtocol = basicMetric?.protocolVersion ? basicMetric.protocol : '';
+      const configuredProtocol = basicMetric?.protocolVersion || basicMetric?.protocol === '实测1RM' ? basicMetric.protocol : '';
       const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || '';
       const valueNum = readNumber('数值');
-      const fitnessType = basicTest && (
-        FITNESS_TEMPLATE_METRICS.some(([, code]) => code === metricCode) ||
-        COMMON_FITNESS_TEMPLATE_METRICS.some(([, code, , , type]) => code === metricCode && type === '体能测试')
-      ) ? '体能测试' : '专项测试';
+      const basicTestType = basicTest
+        ? COMMON_FITNESS_TEMPLATE_METRICS.find(([, code]) => code === metricCode)?.[4] ??
+          (FITNESS_TEMPLATE_METRICS.some(([, code]) => code === metricCode) ? '体能测试' : '专项测试')
+        : '专项测试';
       const metricDefinition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(metricCode) as { unit: string } | undefined;
       const metricUnit = providedUnit || metricDefinition?.unit || '';
       const durationMin = readNumber('测试时长分钟');
@@ -1884,7 +1884,7 @@ function parseStandardSheet(
           ...base,
           itemType: 'test_measurement',
           eventDate: rowDate,
-          testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : fitnessType),
+          testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : basicTestType),
           metricCode,
           metricLabel: basicMetric?.label || selected?.metric?.label || projectName || metricCode,
           valueNum,
@@ -3086,7 +3086,8 @@ export function analyzeDataImport(input: {
     item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item as DataImportItemView);
   }
   const counts = summarizeItems(items);
-  const summary = { recognizedSheets, ignoredSheets, unfilledRows, ...(team ? { team } : {}), ...(testTemplate ? { testTemplateId: testTemplate.id } : {}), ...(trainingTemplateId ? { trainingTemplateId } : {}), accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
+  const teamId = team ? db.prepare('SELECT id FROM project_teams WHERE project=? AND name=? AND active=1').get(input.project, team)?.id : undefined;
+  const summary = { recognizedSheets, ignoredSheets, unfilledRows, ...(team ? { team, teamId } : {}), ...(testTemplate ? { testTemplateId: testTemplate.id } : {}), ...(trainingTemplateId ? { trainingTemplateId } : {}), accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
   db.exec('BEGIN IMMEDIATE');
   try {
     if (replacing) {

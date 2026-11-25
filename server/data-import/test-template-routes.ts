@@ -1,3 +1,4 @@
+import { basicTestInTeam } from './basic-test-scope.ts';
 import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { testTemplateHeaders, testTemplateInputColumns } from '../../shared/test-template.ts';
 import {
@@ -138,7 +139,7 @@ function errorResponse(res: Response, error: unknown) {
   return res.status(500).json({ message: '测试模板操作失败，请稍后重试。' });
 }
 
-export function registerTestTemplateRoutes(app: Express) {
+export function registerTestTemplateRoutes(app: Express, legacyTestFixtures: boolean) {
   const access = [requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD')];
   const path = '/api/data-import/test-template';
 
@@ -305,11 +306,13 @@ export function registerTestTemplateRoutes(app: Express) {
         FROM test_sessions t JOIN test_measurements m ON m.test_session_id=t.id
         JOIN athletes a ON a.id=t.athlete_id
         JOIN data_import_batches b ON b.id=m.data_import_batch_id AND b.status='committed' AND b.project=t.project_code
-        JOIN test_template_downloads d ON d.id=json_extract(
+        LEFT JOIN test_template_downloads d ON d.id=json_extract(
           CASE WHEN json_valid(b.summary_json) THEN b.summary_json ELSE '{}' END, '$.testTemplateId'
         )
+        JOIN project_teams team ON team.id=a.team_id AND team.project=t.project_code
         WHERE a.team_id=? AND a.active=1 AND t.project_code=? AND t.project_status='confirmed'
-          AND d.team_id=a.team_id AND d.project=t.project_code AND t.test_date BETWEEN ? AND ?
+          AND ((d.team_id=team.id AND d.project=t.project_code) OR ${basicTestInTeam})
+          AND t.test_date BETWEEN ? AND ? AND m.value_num IS NOT NULL
           AND t.is_demo=0 AND m.is_demo=0 AND t.quality IN ('valid','partial') AND m.quality IN ('valid','partial')
       `).all(s.teamId, s.project, from, to).filter(row => ids.has(Number(row.athleteId)));
       const metrics = [...new Set([...codes, ...expectedCodes])].flatMap(code => {
@@ -380,8 +383,12 @@ export function registerTestTemplateRoutes(app: Express) {
     } catch (error) { errorResponse(res, error); }
   });
 
-  app.get(`${path}/download`, ...access, testDownload);
-  app.post(`${path}/download`, ...access, testDownload);
+  // 正式运行停发旧模板，兼容测试仍可生成旧版样张来验证回传解析。
+  app.all(`${path}/download`, ...access, (req, res) => {
+    if (!legacyTestFixtures) return res.status(410).json({ message: '请使用基础数据模板填写测试成绩。' });
+    if (req.method === 'GET' || req.method === 'POST') return testDownload(req, res);
+    return res.sendStatus(405);
+  });
   async function testDownload(req: Request, res: Response) {
     try {
       const s = scope(req);

@@ -180,8 +180,8 @@ function authorizeImportBatch(user: AuthUser, batchId: string) {
   return assertDataImportBatchAccess(user, batchId, dataImportCandidates(user));
 }
 
-export function registerDataImportRoutes(app: Express) {
-  registerTestTemplateRoutes(app);
+export function registerDataImportRoutes(app: Express, legacyTestFixtures = false) {
+  registerTestTemplateRoutes(app, legacyTestFixtures);
   app.get('/api/data-import/metrics', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     const project = normalizeProject(cleanString(req.query.project));
     if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
@@ -198,6 +198,8 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       const kind = cleanString(req.query.kind) as TemplateKind | 'team';
+      if (kind === 'test' && !legacyTestFixtures)
+        return res.status(410).json({ message: '请下载基础数据模板，在「体能与专项测试」填写成绩。' });
       if (!['profile', 'training', 'test', 'team'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {

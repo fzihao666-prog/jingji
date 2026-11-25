@@ -91,7 +91,7 @@ type AthleteCorrection = {
   confirmed?: boolean;
 };
 
-type TemplateKind = 'profile' | 'training' | 'test';
+type TemplateKind = 'profile' | 'training';
 
 const ITEM_LABELS: Record<DataImportItem['itemType'], string> = {
   athlete_profile: '运动员档案',
@@ -966,18 +966,6 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             <div>
               <strong>训练记录模板</strong>
               <span>训练课次、力量组次和每日恢复</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => downloadTemplate('test')}
-          >
-            <Download size={19} aria-hidden />
-            <div>
-              <strong>测试成绩模板</strong>
-              <span>使用现有测试字段填写成绩</span>
             </div>
           </button>
         </div>

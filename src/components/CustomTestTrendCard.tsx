@@ -39,38 +39,40 @@ function trendOption(points: CustomTestTrend['points'], from: string, to: string
 export function CustomTestTrendCard({ project, teamId, athleteId, from, to }: {
   project: Project; teamId: number; athleteId: number; from: string; to: string;
 }) {
-  const [metricCode, setMetricCode] = useState('');
+  const [selected, setSelected] = useState<CustomTestTrend['metrics'][number]>();
+  const seriesKey = (metric: CustomTestTrend['metrics'][number]) => JSON.stringify([metric.code, metric.protocol, metric.version]);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<{ key: string; data?: CustomTestTrend; error?: string } | null>(null);
-  const key = JSON.stringify([project, teamId, athleteId, from, to, metricCode, retry]);
+  const key = JSON.stringify([project, teamId, athleteId, from, to, selected, retry]);
   useEffect(() => {
     const controller = new AbortController();
-    void api.customTestTrend(athleteId, { project, teamId, from, to, metricCode }, controller.signal)
+    void api.customTestTrend(athleteId, { project, teamId, from, to, metricCode: selected?.code, protocol: selected?.protocol, version: selected?.version }, controller.signal)
       .then(data => {
         if (!controller.signal.aborted) setResult({ key, data });
       }).catch(error => {
         if (!controller.signal.aborted) setResult({ key, error: error instanceof Error ? error.message : '成绩加载失败。' });
       });
     return () => controller.abort();
-  }, [project, teamId, athleteId, from, to, metricCode, key]);
+  }, [project, teamId, athleteId, from, to, selected, key]);
 
   const current = result?.key === key ? result : null;
   const catalog = result?.data?.metrics ?? [];
-  const selection = (current?.data?.metricCode ?? metricCode) || result?.data?.metricCode || '';
-  const metric = catalog.find(entry => entry.code === selection);
+  const metric = selected
+    ? catalog.find(entry => seriesKey(entry) === seriesKey(selected))
+    : catalog.find(entry => entry.code === result?.data?.metricCode);
   const points = current?.data?.points ?? [];
   const latest = points.at(-1);
   const show = (value: number) => `${numberFormat.format(value)}${metric?.unit ? ` ${metric.unit}` : ''}`;
 
   return (
-    <ChartCard title="自定义指标趋势" actions={catalog.length > 0 && (
+    <ChartCard title="导入测试成绩趋势" actions={catalog.length > 0 && (
       <label className="custom-test-trend-select">
         <span>测试指标</span>
-        <select value={metric?.code ?? ''} onChange={event => setMetricCode(event.target.value)}>
+        <select value={metric ? seriesKey(metric) : ''} onChange={event => setSelected(catalog.find(entry => seriesKey(entry) === event.target.value))}>
           {!metric && <option value="" disabled>请选择指标</option>}
           {catalog.map(entry => (
-            <option key={entry.code} value={entry.code}>
-              {entry.label}{entry.unit ? `（${entry.unit}）` : ''} · 版本 {entry.version}{entry.protocol ? ` · ${entry.protocol}` : ''}
+            <option key={seriesKey(entry)} value={seriesKey(entry)}>
+              {entry.label}{entry.unit ? `（${entry.unit}）` : ''}{entry.version ? ` · 版本 ${entry.version}` : ''}{entry.protocol ? ` · ${entry.protocol}` : ''}
             </option>
           ))}
         </select>
@@ -79,7 +81,7 @@ export function CustomTestTrendCard({ project, teamId, athleteId, from, to }: {
       {!current ? <div role="status"><ContentState kind="loading" title="正在加载指标成绩" /></div>
         : current.error ? <ContentState kind="error" title="指标成绩加载失败" description={current.error}
           action={<button type="button" className="secondary-button" onClick={() => setRetry(count => count + 1)}>重试</button>} />
-        : !catalog.length ? <ContentState kind="empty" title="该运动员暂无自定义指标成绩" description="提交测试成绩模板后，测得的指标会显示在这里。" />
+        : !catalog.length ? <ContentState kind="empty" title="该运动员暂无导入的测试成绩" description="提交基础数据模板后，测得的指标会显示在这里。" />
         : !latest || !metric ? <ContentState kind="empty" title="所选日期内暂无该指标成绩" description="可切换指标或调整上方日期范围。" />
         : <>
           <p className="custom-test-trend-summary" role="status">
