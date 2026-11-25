@@ -29,7 +29,7 @@ export const BASIC_SCREENING_HEADERS = [
 ] as const;
 
 export const BASIC_DOWNLOAD_SHEETS = [
-  [ATHLETE_PROFILE_SHEET, ATHLETE_PROFILE_HEADERS.filter(header => header !== '运动员编号')],
+  [ATHLETE_PROFILE_SHEET, ATHLETE_PROFILE_HEADERS.filter(header => header !== '运动员编号' && header !== '身体测量日期')],
   [BASIC_TEST_SHEET, ['姓名', ...BASIC_TEST_HEADERS.slice(2)]],
   [BASIC_SCREENING_SHEET, ['姓名', ...BASIC_SCREENING_HEADERS.slice(2)]],
 ] as const;
@@ -50,9 +50,8 @@ export function buildBasicProfileWorkbook(athletes: ReadonlyArray<{ name: string
     if (name === ATHLETE_PROFILE_SHEET) {
       instructions[0] = '填写姓名；本队同名自动匹配，新队员由系统分配编号。';
       instructions[6] = '以导入页面所选项目为准；此列可留空。';
-      instructions.push('填写身高或体重时，请填写实际测量日期。');
-      examples.push('示例：2026-11-20');
-      for (const index of [0, 6, 15]) notes[index] = `${instructions[index]}\n${examples[index]}`;
+      for (const index of [4, 5]) instructions[index] += ' 按提交当天记录，同一天以最后提交的值为准。';
+      for (const index of [0, 4, 5, 6]) notes[index] = `${instructions[index]}\n${examples[index]}`;
     }
     sheet.addRow(instructions);
     sheet.addRow(examples);

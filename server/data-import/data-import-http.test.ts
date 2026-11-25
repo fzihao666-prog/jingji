@@ -572,12 +572,13 @@ it('运动员档案识别附件说明与示例并按新列入库', async () => {
     expect(db.prepare('SELECT event_item, representative_unit, best_result, best_result_event, current_event, notes FROM athlete_profiles WHERE athlete_id=701').get())
       .toEqual({ event_item: '单人艇', representative_unit: '虚构代表队', best_result: '7:22.50',
         best_result_event: '虚构赛事', current_event: '虚构目标赛事', notes: '原备注\n出生年月：2000-08\n当前训练限制：避免最大强度划行' });
-    expect(db.prepare("SELECT height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2026-11-12'").get())
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    expect(db.prepare('SELECT height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date=?').get(today))
       .toEqual({ height_cm: 176, weight_kg: 68.5 });
     const invalid = await upload([[...ATHLETE_PROFILE_HEADERS], row({
       姓名: '虚构队员', 出生年月: '2000-13', '身高（cm）': 176,
     })], ATHLETE_PROFILE_SHEET, 'HTTP甲队');
-    expect(invalid.items.flatMap(item => item.messages).join(' ')).toMatch(/E2 出生年月.*身体测量日期/);
+    expect(invalid.items.flatMap(item => item.messages).join(' ')).toMatch(/E2 出生年月/);
     expect((await request(`/batches/${invalid.id}/commit`, 'POST', {})).status).toBe(400);
   } finally {
     db.prepare("UPDATE athletes SET birth_date='' WHERE id=701").run();
@@ -751,8 +752,8 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   expect(empty.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
   expect(XLSX.utils.sheet_to_json<unknown[]>(empty.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }).slice(3).some(row => row[0])).toBe(false);
 
-  for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],
-    ['身体测量日期', new Date('2026-09-19T00:00:00Z')]] as const) {
+  expect(rows[0]).not.toContain('身体测量日期');
+  for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68]] as const) {
     XLSX.utils.sheet_add_aoa(sheet, [[sample]], { origin: { r: 3, c: rows[0].indexOf(header) }, cellDates: true });
   }
   const form = new FormData();
@@ -765,10 +766,21 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   expect(preview.status, JSON.stringify(preview.body)).toBe(200);
   const batch = preview.body.batch!;
   expect(batch.items).toHaveLength(1);
-  expect(batch.items[0]).toMatchObject({ athleteId: athlete.id, eventDate: '2026-09-19', quality: 'valid' });
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  expect(batch.items[0]).toMatchObject({ athleteId: athlete.id, eventDate: today, quality: 'valid' });
+  XLSX.utils.sheet_add_aoa(sheet, [[69]], { origin: { r: 3, c: rows[0].indexOf('体重（kg）') } });
+  form.set('file', new Blob([XLSX.write(lifting, { type: 'buffer', bookType: 'xlsx' })]), '举重档案更新.xlsx');
+  const later = await request('/analyze', 'POST', form);
+  expect(later.status).toBe(200);
+  const laterBatch = later.body.batch!;
+  // 模拟昨天预览、当天提交，并验证较晚提交的草稿能覆盖先提交的值。
+  db.prepare("UPDATE data_import_items SET event_date='2000-01-01' WHERE batch_id=?").run(laterBatch.id);
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
   expect(db.prepare('SELECT height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=? AND measurement_date=?')
-    .get(athlete.id, '2026-09-19')).toEqual({ height_cm: 172.5, weight_kg: 68 });
+    .get(athlete.id, today)).toEqual({ height_cm: 172.5, weight_kg: 68 });
+  expect((await request(`/batches/${laterBatch.id}/commit`, 'POST', {})).status).toBe(200);
+  expect(db.prepare('SELECT measurement_date, height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=?').all(athlete.id))
+    .toEqual([{ measurement_date: today, height_cm: 172.5, weight_kg: 69 }]);
 });
 
 it('测试模板预览列使用授权项目与队伍，交给队伍教练配置', async () => {

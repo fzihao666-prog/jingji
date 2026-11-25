@@ -295,6 +295,10 @@ function parseDate(value: unknown, yearHint: number): string {
   return '';
 }
 
+function currentImportDate() {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+}
+
 function parseImportFullDate(value: unknown): string {
   const raw = text(value).normalize('NFKC');
   // 四位年份缺少月日，即使 Excel 将其保存成数字，也不能当作日期序号。
@@ -1219,6 +1223,7 @@ function parseStandardSheet(
   if (basicProfile) {
     const knownHeaders = new Set([...BASIC_PROFILE_HEADERS, ...ATHLETE_PROFILE_HEADERS, '编号', '所属队伍']
       .filter(label => label !== '录入检查').map(normalizedText));
+    if (athleteProfile) knownHeaders.delete(normalizedText('身体测量日期'));
     for (const label of header.columns.keys()) {
       if (!knownHeaders.has(label)) header.columns.delete(label);
     }
@@ -1332,7 +1337,7 @@ function parseStandardSheet(
     const athlete = matchAthlete(rawName, project, athletes);
     const rawDate = standardValue(row, header.columns, ...dateLabels);
     const dateColumn = dateLabels.map(label => header.columns.get(normalizedText(label))).find(column => column !== undefined);
-    const rowDate = (basicProfile || basicWorkbookSheet)
+    const rowDate = athleteProfile ? currentImportDate() : (basicProfile || basicWorkbookSheet)
       ? (parseImportFullDate(rawDate) || text(rawDate))
       : text(rawDate) === '' ? fallbackDate : parseStandardDate(rawDate, year);
     const messages: string[] = [];
@@ -5564,6 +5569,13 @@ export function commitDataImport(input: {
   );
   if (candidateTeamOutOfScope)
     throw new Error(`“${candidateTeamOutOfScope.name}”选择的所属队伍不在当前账号权限范围内。`);
+  const isDailyProfileMeasurement = (item: DataImportItemView) =>
+    item.itemType === 'body_measurement' && item.sourceSheet === ATHLETE_PROFILE_SHEET;
+  const setDailyProfileDates = () => {
+    const today = currentImportDate();
+    for (const item of importable) if (isDailyProfileMeasurement(item)) item.eventDate = today;
+  };
+  setDailyProfileDates();
   refreshImportConflicts(importable);
   const invalid = importable.filter(
     (item) =>
@@ -5592,6 +5604,7 @@ export function commitDataImport(input: {
   try {
     input.authorizeBatch?.();
     assertImportRevision(input.batchId, input.userId, input.expectedRevision);
+    setDailyProfileDates();
     const resolution = resolvePendingAthletes({
       batch,
       userId: input.userId,
@@ -5636,7 +5649,7 @@ export function commitDataImport(input: {
       const snapshot = decision?.databaseSnapshots?.find(snapshot => snapshot.id === item.id);
       // 新建档案在本事务产生，不与建档前的空快照比较。
       const recorded = snapshot?.conflict ?? savedConflicts.get(item.id);
-      if ((item.itemType === 'scoring_rule' || previewAthleteIds.has(item.id)) && recorded)
+      if (!isDailyProfileMeasurement(item) && (item.itemType === 'scoring_rule' || previewAthleteIds.has(item.id)) && recorded)
         assertConflictUnchanged({ ...item, conflict: recorded }, fresh);
       let result: UpsertResult;
       let entityType = '';
@@ -5673,7 +5686,10 @@ export function commitDataImport(input: {
         result = upsertTestItem(item, input.batchId, input.userId, input.conflictPolicy);
         entityType = item.payload.fmsObservation && result.sessionId === result.entityId ? 'test_session' : 'test_measurement';
       } else if (item.itemType === 'body_measurement') {
-        result = upsertBodyItem(item, input.batchId, input.conflictPolicy);
+        // 档案身高体重按当日最后一次成功提交更新。
+        const dailyProfile = isDailyProfileMeasurement(item);
+        result = upsertBodyItem(item, input.batchId, dailyProfile ? 'update' : input.conflictPolicy);
+        if (dailyProfile) db.prepare('UPDATE data_import_items SET event_date = ? WHERE id = ?').run(item.eventDate, item.id);
         entityType = 'athlete_body_measurement';
       } else if (item.itemType === 'injury_record') {
         result = upsertInjuryItem(item, input.userId, input.conflictPolicy);

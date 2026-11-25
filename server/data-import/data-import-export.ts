@@ -368,7 +368,7 @@ export function buildBasicDataExport(project: string, athleteIds: number[]) {
   if (!athleteIds.length) return workbook;
   const ids = athleteIds.map(() => '?').join(',');
   const profiles = db.prepare(`SELECT a.id AS roster_id,a.name,a.birth_date,a.gender,a.project,ap.*,
-    b.height_cm,b.weight_kg,b.measurement_date FROM athletes a
+    b.height_cm,b.weight_kg FROM athletes a
     LEFT JOIN athlete_profiles ap ON ap.athlete_id=a.id
     LEFT JOIN athlete_body_measurements b ON b.id=(SELECT id FROM athlete_body_measurements
       WHERE athlete_id=a.id AND (height_cm IS NOT NULL OR weight_kg IS NOT NULL)
@@ -396,7 +396,6 @@ export function buildBasicDataExport(project: string, athleteIds: number[]) {
       技术等级: String(row.technical_level ?? ''), 最好成绩: String(row.best_result ?? ''),
       最好成绩对应赛事: String(row.best_result_event ?? ''), 成绩日期: date(row.best_result_date),
       备战赛事: String(row.current_event ?? ''), 当前训练限制: /^当前训练限制：(.+)$/m.exec(notes)?.[1] ?? '',
-      身体测量日期: date(row.measurement_date),
     });
   });
   const tests = db.prepare(`SELECT s.athlete_id,s.test_date,m.metric_code,m.value_num,m.unit,m.note
