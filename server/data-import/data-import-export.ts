@@ -398,8 +398,9 @@ export function buildBasicDataExport(project: string, athleteIds: number[]) {
       备战赛事: String(row.current_event ?? ''), 当前训练限制: /^当前训练限制：(.+)$/m.exec(notes)?.[1] ?? '',
     });
   });
-  const tests = db.prepare(`SELECT s.athlete_id,s.test_date,m.metric_code,m.value_num,m.unit,m.note
+  const tests = db.prepare(`SELECT s.athlete_id,s.test_date,m.metric_code,md.label AS metric_label,m.value_num,m.unit,m.note
     FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    LEFT JOIN metric_definitions md ON md.code=m.metric_code
     WHERE s.athlete_id IN (${ids}) AND (s.project_code=? OR s.project_code IS NULL)
       AND s.test_type<>'FMS测试' AND m.value_num IS NOT NULL
     ORDER BY s.test_date,s.id,m.id`).all(...athleteIds, project);
@@ -408,7 +409,7 @@ export function buildBasicDataExport(project: string, athleteIds: number[]) {
     const name = names.get(row.athlete_id);
     if (!name) continue;
     write(BASIC_TEST_SHEET, testRow++, {
-      姓名: name, 测试日期: date(row.test_date), 测试项目: String(row.metric_code),
+      姓名: name, 测试日期: date(row.test_date), 测试项目: String(row.metric_label ?? '').trim() || String(row.metric_code),
       实测值: Number(row.value_num), 单位: String(row.unit ?? ''), '备注／未测原因': String(row.note ?? ''),
     });
   }

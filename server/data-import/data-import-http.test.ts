@@ -639,6 +639,8 @@ it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员�
   expect(exported.status).toBe(200);
   const exportedBook = XLSX.read(await exported.arrayBuffer(), { type: 'array' });
   expect(exportedBook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
+  const exportedTests = XLSX.utils.sheet_to_json<unknown[]>(exportedBook.Sheets[BASIC_TEST_SHEET], { header: 1 });
+  expect(exportedTests.find(row => row[0] === '整表虚构新人')).toMatchObject({ 2: '引体向上', 3: 5 });
   const screening = XLSX.utils.sheet_to_json<unknown[]>(exportedBook.Sheets[BASIC_SCREENING_SHEET], { header: 1 });
   expect(screening[2][0]).toBe('示例：示例甲');
   expect(screening.find(row => row[0] === '整表虚构新人')?.[10]).toBe('有痛');
