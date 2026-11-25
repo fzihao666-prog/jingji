@@ -43,8 +43,9 @@ beforeAll(async () => {
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY, parent_user_id INTEGER, account_code TEXT, updated_at TEXT);
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
-    CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER,
+    CREATE TABLE athletes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, project TEXT, team TEXT, team_id INTEGER,
       active INTEGER DEFAULT 1, gender TEXT, birth_date TEXT, region TEXT, city TEXT, county TEXT, profile_status TEXT, source TEXT);
+    CREATE TABLE athlete_team_affiliations (athlete_id INTEGER, team_id INTEGER, PRIMARY KEY (athlete_id, team_id));
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, ethnicity TEXT, phone TEXT,
       blood_type TEXT, emergency_contact TEXT, emergency_phone TEXT, education TEXT, technical_level TEXT,
@@ -70,7 +71,7 @@ beforeEach(() =>
   database.exec(`
   DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions;
   DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;
-  DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM athlete_profiles;
+  DELETE FROM athlete_team_affiliations; DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM athlete_profiles;
   INSERT INTO users (id, username, display_name, role, athlete_id) VALUES
     (1,'manager','管理者','DMD',NULL),(2,'old','原队教练','SCC',NULL),
     (3,'new','新队教练','SCC',NULL),(4,'athlete','测试队员','ATL',101),(5,'regional','区域管理','REG',NULL);
@@ -223,13 +224,15 @@ describe('小程序复用运动员创建接口', () => {
     expect(accessibleAthleteIds(coach(3))).not.toContain(id);
     expect(database.prepare('SELECT notes FROM athlete_profiles WHERE athlete_id=?').get(id)).toEqual({ notes: '' });
   });
-  it('拒绝重复创建、跨队、跨项目和运动员角色提交', async () => {
-    expect((await creationRequest('/api/admin/athletes', 2, minimalAthlete)).status).toBe(201);
-    expect((await creationRequest('/api/admin/athletes', 2, minimalAthlete)).status).toBe(400);
+  it('允许同队同名并发创建，同时拒绝越权队伍、项目和角色', async () => {
+    const responses = await Promise.all(Array.from({ length: 5 }, () => creationRequest('/api/admin/athletes', 2, minimalAthlete)));
+    expect(responses.map(response => response.status)).toEqual([201, 201, 201, 201, 201]);
+    const created = await Promise.all(responses.map(response => response.json() as Promise<{ id: number }>));
+    expect(new Set(created.map(athlete => athlete.id)).size).toBe(created.length);
     expect((await creationRequest('/api/admin/athletes', 2, { ...minimalAthlete, team: 'B队' })).status).toBe(400);
     expect((await creationRequest('/api/admin/athletes', 2, { ...minimalAthlete, project: 'CANOE' })).status).toBe(400);
     expect((await creationRequest('/api/admin/athletes', 4, minimalAthlete)).status).toBe(403);
-    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 2 });
+    expect(database.prepare('SELECT COUNT(*) AS count FROM athletes').get()).toEqual({ count: 6 });
   });
   it('无效日期、不支持字段和教练创建账号均拒绝，不部分写入', async () => {
     for (const body of [
@@ -251,6 +254,15 @@ describe('小程序复用运动员创建接口', () => {
 });
 
 describe('小程序管理者复用运动员编辑接口', () => {
+  it('兼属队伍关联同一个运动员 ID 并校验目标队伍权限', async () => {
+    expect((await update({ ...payload, team: 'A队', affiliatedTeamIds: [11] }, 2)).status).toBe(400);
+    expect((await update({ ...payload, team: 'A队', affiliatedTeamIds: [11, 11] })).status).toBe(200);
+    expect(database.prepare('SELECT athlete_id, team_id FROM athlete_team_affiliations').all()).toEqual([{ athlete_id: 101, team_id: 11 }]);
+    expect(database.prepare('SELECT id, team_id FROM athletes').all()).toEqual([{ id: 101, team_id: 10 }]);
+    expect((await update({ ...payload, team: 'A队', affiliatedTeamIds: [] })).status).toBe(200);
+    expect(database.prepare('SELECT athlete_id, team_id FROM athlete_team_affiliations').all()).toEqual([]);
+  });
+
   it.each([2, 5, 1])('管理者 %s 可更新已有运动员，保留档案 ID 和账号关联', async (actor) => {
     const response = await update({ ...payload, team: 'A队', name: '更新队员', notes: '完善资料', phone: '13800000000', currentEvent: '单人双桨' }, actor);
     expect(response.status).toBe(200);

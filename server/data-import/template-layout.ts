@@ -47,7 +47,6 @@ export function addTemplateSheet(
   note: string,
   collapseAdvanced = false
 ): ExcelJS.Worksheet {
-  fields = fields.filter(field => field.key !== '系统运动员编号');
   const sheet = workbook.addWorksheet(name, {
     views: [{ state: 'frozen', ySplit: 3, xSplit: 1 }],
   });

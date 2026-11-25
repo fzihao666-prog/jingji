@@ -14,7 +14,7 @@ import {
 } from '../../shared/data-import-template.ts';
 
 /** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
-export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; omitProfileTeam?: boolean; coachView?: boolean } = {}) {
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; omitProfileTeam?: boolean; coachView?: boolean; includeAthleteNumber?: boolean } = {}) {
   const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook();
   workbook.creator = '竞迹训练监控系统';
   const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
@@ -23,6 +23,7 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
     if (options.mode !== 'export') {
       const profileUsesPageTeam = options.omitProfileTeam && name === '运动员基本资料';
       const fields = importTemplateFields(name, { coachView: options.coachView, metricCodes: options.metrics && new Set(options.metrics.map(metric => metric.code)) })
+        .filter(field => options.includeAthleteNumber || field.key !== '系统运动员编号')
         .filter(field => !profileUsesPageTeam || !['运动项目', '所属队伍'].includes(field.key))
         .map(field => {
           if (name === '其他测试' && field.key === '指标名称' && metricChoices.length) return { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' };
@@ -40,7 +41,7 @@ export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([na
               ? '每人每次测试一行，只填实测值。1RM和CMJ跳高按各自的测试口径入库；不对称指数须注明测试方法。身高体重与档案中的同次测量只填一处。'
               : IMPORT_SHEET_NOTES[name];
       addTemplateSheet(workbook, name, fields, profileUsesPageTeam
-        ? '建档仅需姓名，所属项目和队伍使用导入页面的选择。已有人员按姓名匹配。'
+        ? '建档仅需姓名，所属项目和队伍使用导入页面的选择。已有人员优先按系统编号匹配。'
         : note, options.coachView && ['训练课次', '力量训练组次', '每日恢复', '身体测量', '体能测试', 'FMS测试', '其他测试'].includes(name));
       continue;
     }

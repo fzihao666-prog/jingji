@@ -734,7 +734,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
       nextMap.set(candidate.id, { ...(nextMap.get(candidate.id) || { id: candidate.id }), confirmed: true });
     }
     const pendingFix = batch.athleteCandidates.find(candidate =>
-      candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId &&
+      candidate.status === 'pending' && !candidate.excluded && !candidate.matchedAthleteId && !candidate.confirmed &&
       (!candidate.team || needsIdentityChoice(candidate)) &&
       importPersonNeedsConfirmation(candidate, batch.items)
     );
@@ -1919,9 +1919,15 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                             {chooseAthlete && (
                               <div className="data-import-person-exception">
                                 <p className="data-import-person-hint">{candidate.messages[0] || '请确认对应的运动员档案。'}</p>
-                                <select aria-label={`${candidate.name}对应档案`} disabled={Boolean(busy)} value={candidate.matchedAthleteId ?? ''}
-                                  onChange={event => patchAthleteCandidate(candidate.id, { matchedAthleteId: Number(event.target.value), confirmed: true })}>
+                                <select aria-label={`${candidate.name}对应档案`} disabled={Boolean(busy)} value={candidate.matchedAthleteId ?? (candidate.confirmed ? 'new' : '')}
+                                  onChange={event => patchAthleteCandidate(candidate.id, {
+                                    matchedAthleteId: event.target.value === 'new' ? null : Number(event.target.value),
+                                    confirmed: true,
+                                  })}>
                                   <option value="" disabled>选择对应档案</option>
+                                  {candidate.messages.some(message => message.includes('系统运动员编号')) && (
+                                    <option value="new">新建运动员档案</option>
+                                  )}
                                   {(suggestions.length ? suggestions : candidate.suggested).map(entry => (
                                     <option key={entry.id} value={entry.id}>{entry.name} · {entry.team || '未分队'} · 编号 {entry.id}</option>
                                   ))}

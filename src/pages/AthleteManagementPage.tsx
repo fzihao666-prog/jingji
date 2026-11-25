@@ -166,6 +166,7 @@ export function AthleteManagementPage({
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [search, setSearch] = useState('');
   const [projectFilter, setProjectFilter] = useState('');
+  const [affiliatedTeamIds, setAffiliatedTeamIds] = useState<number[]>([]);
   const [teamFilter, setTeamFilter] = useState('');
   const [healthFilter, setHealthFilter] = useState('');
   const [eventFilter, setEventFilter] = useState('');
@@ -293,7 +294,7 @@ export function AthleteManagementPage({
       athletes.filter((athlete) => {
         const query = search.trim().toLocaleLowerCase();
         if (projectFilter && athlete.project !== projectFilter) return false;
-        if (teamFilter && athlete.team !== teamFilter) return false;
+        if (teamFilter && athlete.team !== teamFilter && !athlete.affiliatedTeams?.some(team => team.name === teamFilter)) return false;
         if (healthFilter === '__risk' && athlete.healthStatus === '健康') return false;
         if (healthFilter && healthFilter !== '__risk' && athlete.healthStatus !== healthFilter)
           return false;
@@ -428,6 +429,7 @@ export function AthleteManagementPage({
 
   const openEdit = (athlete: Athlete) => {
     setEditingAthlete(athlete);
+    setAffiliatedTeamIds(athlete.affiliatedTeams?.map(team => team.id) ?? []);
     setForm(formFromAthlete(athlete));
     setPhotoFile(null);
     setPhotoPreview('');
@@ -459,7 +461,12 @@ export function AthleteManagementPage({
         trainingYears: form.trainingYears === '' ? null : Number(form.trainingYears),
       };
       let athleteId = editingAthlete?.id || 0;
-      if (editingAthlete) await api.updateAthlete(editingAthlete.id, payload);
+      if (editingAthlete) await api.updateAthlete(editingAthlete.id, {
+        ...payload,
+        affiliatedTeamIds: affiliatedTeamIds.filter(id => teams.some(team =>
+          team.id === id && team.project === selectedFormTeam.project && team.id !== selectedFormTeam.id
+        )),
+      });
       else athleteId = (await api.createAthlete(payload)).id;
       if (photoFile) await api.uploadAthletePhoto(athleteId, photoFile);
       await load();
@@ -1394,6 +1401,23 @@ export function AthleteManagementPage({
                         </select>
                         <small>运动项目由所属队伍自动确定，无需填写。</small>
                       </label>
+                      {editingAthlete && selectedFormTeam && teams.some(team =>
+                        team.project === selectedFormTeam.project && team.id !== selectedFormTeam.id
+                      ) && (
+                        <label>
+                          <span>兼属队伍</span>
+                          <select
+                            multiple
+                            value={affiliatedTeamIds.map(String)}
+                            onChange={event => setAffiliatedTeamIds(
+                              Array.from(event.currentTarget.selectedOptions, option => Number(option.value))
+                            )}
+                          >
+                            {teams.filter(team => team.project === selectedFormTeam.project && team.id !== selectedFormTeam.id)
+                              .map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+                          </select>
+                        </label>
+                      )}
                       <label>
                         <span>负责教练</span>
                         <input

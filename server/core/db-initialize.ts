@@ -1471,7 +1471,8 @@ export function initializeDatabase(
   CREATE INDEX IF NOT EXISTS idx_athlete_aliases_lookup ON athlete_aliases (normalized_alias, project);
   CREATE INDEX IF NOT EXISTS idx_athlete_origins_province_city ON athlete_origins (province, city, athlete_id);
   CREATE INDEX IF NOT EXISTS idx_special_plan_sessions_date ON special_training_plan_sessions (session_date, specialty_id);
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_athletes_identity ON athletes (name, project, team);
+  DROP INDEX IF EXISTS idx_athletes_identity;
+  CREATE INDEX IF NOT EXISTS idx_athletes_roster_name ON athletes (name, project, team);
 `);
 
   // 时长、距离数值沿用既有字段；单独保存是否填报，避免将导入空单元格误判为真实 0。
@@ -1644,8 +1645,14 @@ export function initializeDatabase(
       SELECT id, name, project, team, gender, region, city, county, birth_date, photo_url,
         'complete', 'manual', NULL, active
       FROM athletes_legacy_unique_name;
+      INSERT INTO sqlite_sequence(name, seq)
+      SELECT 'athletes', seq FROM sqlite_sequence WHERE name = 'athletes_legacy_unique_name'
+        AND NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'athletes');
+      UPDATE sqlite_sequence
+      SET seq = MAX(seq, COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'athletes_legacy_unique_name'), 0))
+      WHERE name = 'athletes';
       DROP TABLE athletes_legacy_unique_name;
-      CREATE UNIQUE INDEX idx_athletes_identity ON athletes (name, project, team);
+      CREATE INDEX idx_athletes_roster_name ON athletes (name, project, team);
       COMMIT;
     `);
     } catch (error) {
@@ -1785,6 +1792,18 @@ export function initializeDatabase(
     }
 
     db.exec(`
+  CREATE TABLE IF NOT EXISTS athlete_team_affiliations (
+    athlete_id INTEGER NOT NULL REFERENCES athletes(id) ON DELETE CASCADE,
+    team_id INTEGER NOT NULL REFERENCES project_teams(id) ON DELETE CASCADE,
+    PRIMARY KEY (athlete_id, team_id)
+  );
+  CREATE TRIGGER IF NOT EXISTS prune_athlete_team_affiliations
+  AFTER UPDATE OF project, team_id ON athletes
+  BEGIN
+    DELETE FROM athlete_team_affiliations WHERE athlete_id = NEW.id AND (
+      team_id = NEW.team_id OR team_id IN (SELECT id FROM project_teams WHERE project <> NEW.project)
+    );
+  END;
   CREATE INDEX IF NOT EXISTS idx_athletes_team_id ON athletes (team_id);
   CREATE INDEX IF NOT EXISTS idx_strength_result_sets_data_batch ON strength_result_sets (data_import_batch_id);
   CREATE TRIGGER IF NOT EXISTS sync_athlete_team_id_after_insert

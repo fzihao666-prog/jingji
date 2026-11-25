@@ -55,6 +55,7 @@ export type TrainingBreakdown = {
 export type Athlete = {
   id: number;
   teamId?: number | null;
+  affiliatedTeams?: Array<{ id: number; name: string }>;
   name: string;
   project: string;
   team: string;

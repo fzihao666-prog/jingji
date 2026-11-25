@@ -872,7 +872,7 @@ describe('P0：人员确认及旧草稿保护', () => {
   });
 });
 
-it('选择队伍后唯一同队同名档案自动关联，无需手动选择', () => {
+it('无效编号即使同队姓名唯一仍需明确选择原档案', () => {
   const batch = analyze({
     训练课次: [
       ['系统运动员编号', '姓名', '日期', '时长分钟'],
@@ -884,7 +884,7 @@ it('选择队伍后唯一同队同名档案自动关联，无需手动选择', (
     userId: USER_ID,
     allowedTeams: new Set(['A队']),
     athletes,
-    corrections: [{ id: batch.athleteCandidates[0].id, team: 'A队', confirmed: true }],
+    corrections: [{ id: batch.athleteCandidates[0].id, team: 'A队', matchedAthleteId: 1, confirmed: true }],
   });
   expect(updated.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 1, confirmed: true });
   expect(commit(batch.id, 'skip').createdRecords).toBe(1);
@@ -1169,9 +1169,9 @@ describe('跨表新队员人员确认', () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM athletes WHERE name = '新队员'").get()).toEqual({ count: 1 });
     expect(db.prepare('SELECT COUNT(*) AS count FROM athlete_body_measurements').get()).toEqual({ count: 1 });
   });
-  it('文件明确队伍时同队唯一同名者无需核对无效编号', () => {
+  it('文件明确队伍时仍保留无效编号待确认', () => {
     const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [999, '张某', 'A队']] });
-    expect(batch.athleteCandidates[0]).toMatchObject({ status: 'matched', matchedAthleteId: 1 });
+    expect(batch.athleteCandidates[0]).toMatchObject({ status: 'pending', matchedAthleteId: null, confirmed: false });
   });
 });
 
@@ -1240,7 +1240,7 @@ it('恢复后的业务写入失败时，档案恢复和审计同事务回滚', (
 });
 
 it('重传同一文件沿用已提交的人员关联，只让已停用人员重新确认', () => {
-  const buffer = workbookBuffer({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], [991, '张某', 'A队'], [992, '赵某', 'B队']] });
+  const buffer = workbookBuffer({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], ['', '张某', 'A队'], ['', '赵某', 'B队']] });
   const input = { buffer, filename: '历史人员映射.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']) };
   const first = analyzeDataImport(input);
   updateDataImportAthleteCandidates({ batchId: first.id, userId: USER_ID, athletes, allowedTeams: input.allowedTeams, corrections: first.athleteCandidates.map(person => ({ id: person.id, matchedAthleteId: person.name === '张某' ? 1 : 2, confirmed: true })) });
@@ -1258,10 +1258,13 @@ it('已关联档案的队伍不被导入文件或默认队伍覆盖，即使使�
   const originalTeam = db.prepare('SELECT team_id AS teamId, team FROM athletes WHERE id = 1').get();
   const batch = analyze({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍', '最好成绩'], [1, '张某', 'B队', '新成绩']] });
   expect(batch.items[0].conflict?.fields.some(field => field.field === 'team')).toBe(false);
+  expect(batch.athleteCandidates[0]).toMatchObject({ status: 'pending', confirmed: false });
+  updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, allowedTeams: new Set(['A队', 'B队']),
+    athletes, corrections: [{ id: batch.athleteCandidates[0].id, matchedAthleteId: 1, confirmed: true }] });
   const result = commit(batch.id, 'update');
   expect(result.updatedRecords).toBe(1);
   expect(db.prepare('SELECT team_id AS teamId, team FROM athletes WHERE id = 1').get()).toEqual(originalTeam);
-  expect(batch.items[0].messages.join('；')).toContain('保留已有队伍');
+
 });
 
 it('已有运动员未填写文件队伍时不会套用唯一可选的其他队伍', () => {
@@ -2793,4 +2796,23 @@ it('基础档案忽略未填写重量的选填项目，完整日期自动归一�
   const corrected = fixed.items.find(item => item.rawAthleteName === '虚构新队员');
   expect(corrected?.payload.birthDate).toBe('1990-01-01');
   expect(corrected?.payload.personKey).toBe(incomplete?.payload.personKey);
+});
+
+it('编号区分同队同名者，并将重复编号的冲突身份留待人工确认', () => {
+  db.prepare('INSERT INTO athletes (id, name, project, team) VALUES (101, ?, ?, ?)').run('张某', PROJECT, 'A队');
+  const roster = [...athletes, { ...athletes[0], id: 101, birthDate: '1991-01-01' }];
+  const header = ['系统运动员编号', '姓名', '所属队伍', '日期', '时长分钟'];
+  const matched = analyze({ 训练课次: [header, [101, '张某', 'A队', '2025-09-01', 60]] }, { athletes: roster });
+  expect(matched.athleteCandidates[0]).toMatchObject({ status: 'matched', matchedAthleteId: 101 });
+  const conflict = analyze({ 训练课次: [header,
+    [101, '张某', 'A队', '2025-09-01', 60], [101, '钱某', 'A队', '2025-09-02', 60],
+  ] }, { athletes: roster });
+  expect(conflict.athleteCandidates).toHaveLength(2);
+  for (const candidate of conflict.athleteCandidates) {
+    expect(candidate).toMatchObject({ status: 'pending', confirmed: false, matchedAthleteId: null });
+    expect(candidate.messages.join('')).toContain('对应多组身份资料');
+  }
+  const duplicate = analyze({ 训练课次: [header, [101, '张某', 'A队', '2025-09-01', 60]] },
+    { athletes: [...roster, { ...roster.at(-1)!, name: '另一人' }] });
+  expect(duplicate.athleteCandidates[0].messages.join('')).toContain('编号101重复');
 });

@@ -203,12 +203,6 @@ export function registerAuthRoutes(
         }
         if (existing && !permissionsAllowProjectTeam(permissions, team.project, name))
           return res.status(403).json({ message: '无权合并到目标队伍。' });
-        if (existing && db.prepare(`
-          SELECT 1 FROM athletes a JOIN athletes b
-          ON b.project = a.project AND b.team = ? AND b.name = a.name AND b.id != a.id
-          WHERE a.team_id = ? LIMIT 1
-        `).get(name, id))
-          return res.status(409).json({ message: '两个队伍存在同名运动员，请先核对人员并区分姓名后再合并。' });
         if (!existing && db.prepare("SELECT 1 FROM user_team_permissions WHERE project IN (?, '*') AND team = ?")
           .get(team.project, name))
           return res.status(409).json({ message: '该名称存在队伍授权冲突，请换一个名称。' });
@@ -216,6 +210,10 @@ export function registerAuthRoutes(
         if (existing) {
           db.prepare('UPDATE project_teams SET active = 1 WHERE id = ?').run(existing.id);
           db.prepare('UPDATE athletes SET team = ?, team_id = ? WHERE team_id = ?').run(name, existing.id, id);
+          db.prepare(`INSERT INTO athlete_team_affiliations (athlete_id, team_id)
+            SELECT l.athlete_id, ? FROM athlete_team_affiliations l JOIN athletes a ON a.id = l.athlete_id
+            WHERE l.team_id = ? AND a.team_id IS NOT ? ON CONFLICT DO NOTHING`).run(existing.id, id, existing.id);
+          db.prepare('DELETE FROM athlete_team_affiliations WHERE team_id = ?').run(id);
           db.prepare('UPDATE training_plans SET team_id = ? WHERE team_id = ?').run(existing.id, id);
           db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
         } else {
